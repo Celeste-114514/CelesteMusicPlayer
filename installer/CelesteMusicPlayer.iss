@@ -20,7 +20,7 @@ DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
 OutputDir=C:\Users\admin\Desktop
 OutputBaseFilename=CelesteMusicPlayer-Setup-{#MyAppVersion}
-SetupIconFile={#PublishDir}\Assets\AppIcon.ico
+SetupIconFile=C:\Users\admin\source\repos\CelesteMusicPlayer\CelesteMusicPlayer\Assets\AppIcon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Compression=lzma2
 SolidCompression=yes
@@ -30,7 +30,6 @@ PrivilegesRequired=lowest
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "chinesesimplified"; MessagesFile: "compiler:Languages\ChineseSimplified.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
