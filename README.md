@@ -1,6 +1,6 @@
 ﻿# CelesteMusicPlayer
 
-一个基于 **WinUI 3 / .NET 8** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 设计开发。代码全部由AI生成，由Cursor和Reasonix开发
+一个基于 **WinUI 3 / .NET 8** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 设计开发。代码全部由AI生成，由Cursor和Reasonix辅助开发。
 
 ## ✨ 功能特性
 
@@ -20,7 +20,7 @@
 
 ## 🖥️ 截图
 
-> 截图待补充
+<img width="2255" height="1368" alt="QQ20260808-172857" src="https://github.com/user-attachments/assets/49b4e965-5f6e-4563-b9a4-8e2b547e885d" />
 
 ## 🛠️ 技术栈
 
@@ -56,3 +56,8 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 
 - [FFmpeg](https://ffmpeg.org/)（gyan.dev 构建）
 - [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2)（功能参考）
+
+
+## 🙏 一些作者的碎碎念
+
+这个播放器是因为目前网上的播放器没有能完全符合我需求的，几乎所有播放器都不支持我想要把专辑按照时间顺序排列（foobar和musicbee支持但是有点丑），musicplayer2在我高中时候就在用了，基本上就缺一个排序功能，外观也一般般，正好最近AI浪潮，就先借朋友的cursor账号试了一下改了一下musicplayer2，于是后续继续开发下去了，我自己对代码一无所知，只有最基础最基础的入门知识。这个播放器也算是我用AI花了蛮久开发的，用的开心就点个赞吧♥
