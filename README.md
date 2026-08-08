@@ -1,0 +1,58 @@
+﻿# CelesteMusicPlayer
+
+一个基于 **WinUI 3 / .NET 8** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 设计开发。
+
+## ✨ 功能特性
+
+- 🎵 本地音乐库：扫描文件夹 / 多选导入，自动读取标签（标题、艺术家、专辑、年份、封面）
+- 🎧 广泛格式支持：MP3 / FLAC / WAV / M4A / APE / WavPack / TTA / DSD 等
+  - 内置 [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) 转码引擎，系统无法解码的格式自动转码播放
+- 📋 播放控制：顺序 / 单曲 / 随机播放、AB 重复、淡入淡出、倍速、进度拖动
+- 🎚️ 均衡器（AudioGraph 预览）、音量条自绘、任务栏进度
+- 📝 歌词：自动下载（网易云 / QQ / 酷狗）、在线搜索、桌面歌词窗口、卡拉 OK 高亮
+- 🖼️ 封面：自动下载并嵌入标签、专辑 / 艺术家视图、封面文件夹
+- 🎨 主题：主题预设 / 自定义主题色、毛玻璃背景、波形进度条（Poweramp 风格）
+- 🪟 迷你播放器、当前播放列表窗口（拖拽排序）、睡眠定时器
+- ⌨️ 全局快捷键、媒体键（SMTC）、系统托盘、开机自启
+- 📊 播放统计（播放次数 / 收听时长 / 收藏 / 评分 / 最近播放）
+- 🌐 在线搜索（网易云 / QQ / 酷狗）、Last.fm 记录
+- 🏷️ 标签编辑器（批量编辑、按文件名填充、批量下载歌词封面）
+
+## 🖥️ 截图
+
+> 截图待补充
+
+## 🛠️ 技术栈
+
+- WinUI 3（Microsoft.WindowsAppSDK 1.8）
+- .NET 8 / C#
+- [TagLibSharp](https://github.com/mono/taglib-sharp) 标签读取
+- [H.NotifyIcon](https://github.com/HavenDV/H.NotifyIcon) 系统托盘
+- FFmpeg（内置，仅用于解码转码）
+
+## 🔨 构建与发布
+
+需要：.NET 8 SDK + Visual Studio 2022（含 WinUI 工作负载）
+
+```bash
+# 开发运行
+dotnet build -c Debug
+
+# 发布自包含（免安装，含 Windows App SDK 运行时）
+dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x64 -o publish
+```
+
+发布产物为自包含目录：目标机器 **无需安装 .NET 运行时或 Windows App SDK**，拷贝即可运行（推荐压缩后分发）。
+
+## 📦 安装包
+
+使用 [Inno Setup](https://jrsoftware.org/isinfo.php) 将发布目录打包为 `setup.exe`（见 `installer/CelesteMusicPlayer.iss`）。
+
+## 📄 许可证
+
+[MIT](LICENSE)
+
+## 🙏 致谢
+
+- [FFmpeg](https://ffmpeg.org/)（gyan.dev 构建）
+- [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2)（功能参考）
