@@ -1,0 +1,11186 @@
+﻿using Microsoft.UI;
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Windowing;
+using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives;
+using Microsoft.UI.Xaml.Data;
+using Microsoft.UI.Input;
+using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Shapes = Microsoft.UI.Xaml.Shapes;
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.Diagnostics;
+using System.IO;
+using System.Linq;
+using System.Net.Http;
+using System.Text.Json;
+using System.Numerics;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
+using System.Threading;
+// TagLibSharp：包名 TagLibSharp，命名空间 TagLib
+using TagLib;
+using Windows.Media.Core;
+using Windows.Media;
+using Windows.Media.Playback;
+using Windows.Storage;
+using Windows.Storage.Pickers;
+using Windows.Storage.Streams;
+using Windows.ApplicationModel.DataTransfer;
+using Windows.UI;
+using Color = Windows.UI.Color;
+
+namespace CelesteMusicPlayer
+{
+    /// <summary>列表排序依据</summary>
+    public enum SortField
+    {
+        Title,
+        Artist,
+        Album,
+        Year,
+        Duration
+    }
+
+    /// <summary>
+    /// 播放列表一行：标题、艺术家、专辑、年份、时长 + 本地路径。
+    /// </summary>
+    public sealed class PlaylistItem
+    {
+        public int Index { get; set; }
+
+        public string Title { get; set; } = string.Empty;
+
+        public string Artist { get; set; } = "未知艺术家";
+
+        /// <summary>专辑艺术家（Tag AlbumArtist）；缺省时与 Artist 相同</summary>
+        public string AlbumArtist { get; set; } = "未知艺术家";
+
+        public string Album { get; set; } = "未知专辑";
+
+        /// <summary>音轨号（Tag.Track）；0 表示未知</summary>
+        public uint Track { get; set; }
+
+        /// <summary>年份数值；0 表示未知</summary>
+        public uint Year { get; set; }
+
+        /// <summary>流派（Tag.Genre）；空视为未知流派</summary>
+        public string Genre { get; set; } = "未知流派";
+
+        /// <summary>列表上显示的年份文字（由 Year 推导，避免复制条目时漏设）</summary>
+        public string YearText => Year > 0 ? Year.ToString() : "-";
+
+        public string DurationText { get; set; } = "00:00";
+
+        public TimeSpan Duration { get; set; }
+
+        public string FilePath { get; set; } = string.Empty;
+
+        /// <summary>CUE 分轨起始秒；0 表示整曲。</summary>
+        public double StartTimeSeconds { get; set; }
+
+        public string DisplayName => Title;
+
+        /// <summary>按设置 PlaylistDisplayFormat 生成的列表显示名。</summary>
+        public string DisplayTitle
+        {
+            get
+            {
+                string fmt = AppSettingsStore.Load().PlaylistDisplayFormat;
+                string title = string.IsNullOrWhiteSpace(Title) ? Path.GetFileNameWithoutExtension(FilePath) : Title;
+                bool hasArtist = !string.IsNullOrWhiteSpace(Artist) && !string.Equals(Artist, "未知艺术家", StringComparison.Ordinal);
+                return fmt switch
+                {
+                    "FileName" => string.IsNullOrWhiteSpace(Path.GetFileNameWithoutExtension(FilePath))
+                        ? title
+                        : Path.GetFileNameWithoutExtension(FilePath),
+                    "Title" => title,
+                    "TitleArtist" => hasArtist ? title + " - " + Artist : title,
+                    _ => hasArtist ? Artist + " - " + title : title
+                };
+            }
+        }
+
+        /// <summary>专辑详情列表显示的音轨号（未知则 "-"）</summary>
+        public string TrackText => Track > 0 ? Track.ToString() : "-";
+    }
+
+    /// <summary>专辑浏览项：唯一专辑名 + 封面（优先取音轨 1 的内嵌图）</summary>
+    public sealed class AlbumEntry : INotifyPropertyChanged
+    {
+        private BitmapImage? _coverImage;
+
+        public string Name { get; set; } = string.Empty;
+
+        public string Artist { get; set; } = "未知艺术家";
+
+        /// <summary>发行年份（取专辑内曲目年份的最大值；0 表示未知）</summary>
+        public uint Year { get; set; }
+
+        public string YearText => Year > 0 ? Year.ToString() : "未知年份";
+
+        public int TrackCount { get; set; }
+
+        public TimeSpan TotalDuration { get; set; }
+
+        public string TotalDurationText { get; set; } = "00:00";
+
+        /// <summary>用来提取封面的音频路径（优先音轨 1）</summary>
+        public string CoverSourcePath { get; set; } = string.Empty;
+
+        public BitmapImage? CoverImage
+        {
+            get => _coverImage;
+            set
+            {
+                if (_coverImage == value)
+                {
+                    return;
+                }
+
+                _coverImage = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void OnPropertyChanged([CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
+    /// <summary>艺术家浏览项：唯一艺人 + 可自定义圆形头像</summary>
+    public sealed class ArtistEntry : INotifyPropertyChanged
+    {
+        private BitmapImage? _avatarImage;
+
+        public string Name { get; set; } = string.Empty;
+
+        public int TrackCount { get; set; }
+
+        public BitmapImage? AvatarImage
+        {
+            get => _avatarImage;
+            set
+            {
+                if (_avatarImage == value)
+                {
+                    return;
+                }
+
+                _avatarImage = value;
+                OnPropertyChanged();
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void OnPropertyChanged([CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
+    /// <summary>专辑墙排序方式</summary>
+    public enum AlbumSortMode
+    {
+        TitleAsc,
+        TitleDesc,
+        YearAsc,
+        YearDesc,
+        /// <summary>先按专辑主艺术家升序，同艺术家再按专辑标题升序</summary>
+        ArtistTitleAsc,
+        /// <summary>先按专辑主艺术家升序，同艺术家再按发行年份升序</summary>
+        ArtistYearAsc
+    }
+
+    /// <summary>艺术家详情内歌曲列表排序</summary>
+    public enum ArtistSongSortMode
+    {
+        Title,
+        AlbumTitleThenTrack,
+        AlbumYearThenTrack
+    }
+
+    /// <summary>艺术家详情内专辑列表排序</summary>
+    public enum ArtistAlbumSortMode
+    {
+        Title,
+        Year
+    }
+
+    /// <summary>播放顺序 / 循环方式</summary>
+    public enum PlaybackOrder
+    {
+        /// <summary>顺序播放：按列表顺序播完即停</summary>
+        Sequential,
+        /// <summary>随机播放：每首结束后随机选下一首</summary>
+        Random,
+        /// <summary>列表循环：按列表顺序循环</summary>
+        ListLoop,
+        /// <summary>单曲循环：重复当前曲目</summary>
+        TrackLoop,
+        /// <summary>单曲播放：播完当前曲目后停止</summary>
+        TrackOnce
+    }
+
+    /// <summary>文件夹浏览树中的一行（文件夹或音频文件）</summary>
+    public sealed class FolderBrowserItem : INotifyPropertyChanged
+    {
+        private bool _isExpanded;
+
+        public string DisplayName { get; init; } = string.Empty;
+
+        public string FullPath { get; init; } = string.Empty;
+
+        public bool IsFolder { get; init; }
+
+        public int Depth { get; init; }
+
+        /// <summary>子项是否已从磁盘枚举过</summary>
+        public bool ChildrenLoaded { get; set; }
+
+        public bool IsExpanded
+        {
+            get => _isExpanded;
+            set
+            {
+                if (_isExpanded == value)
+                {
+                    return;
+                }
+
+                _isExpanded = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(ChevronGlyph));
+            }
+        }
+
+        /// <summary>按深度缩进</summary>
+        public Thickness Indent => new(Depth * 16, 0, 0, 0);
+
+        /// <summary>文件夹左侧朝下小箭头（表示可展开的文件夹）；文件不显示</summary>
+        public string ChevronGlyph => IsFolder ? "\uE70D" : string.Empty;
+
+        public Visibility ChevronVisibility =>
+            IsFolder ? Visibility.Visible : Visibility.Collapsed;
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
+        private void OnPropertyChanged([CallerMemberName] string? name = null)
+            => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    }
+
+    public sealed partial class MainWindow : Window
+    {
+        /// <summary>设置页等子窗口用来回写主窗口状态。</summary>
+        internal static MainWindow? Instance { get; private set; }
+
+        internal bool IsEnginePlayingNow => _audioEngine?.IsPlaying == true;
+
+        internal bool IsEngineActiveNow => _audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused);
+
+        internal TimeSpan EnginePositionValue => _audioEngine?.Position ?? TimeSpan.Zero;
+
+        internal TimeSpan EngineDurationValue => _audioEngine?.Duration ?? TimeSpan.Zero;
+
+        private static readonly string[] AudioExtensions =
+        {
+            ".mp3", ".wav", ".m4a", ".flac", ".wma", ".ogg", ".aac",
+            ".ape", ".wv", ".tta", ".dsf", ".dff", ".mpc", ".tak", ".opus",
+            ".mp2", ".amr", ".au", ".mod", ".s3m", ".xm"
+        };
+
+        private readonly ObservableCollection<PlaylistItem> _playlist = new();
+        private ObservableCollection<PlaylistItem> _userPlaylist = new();
+        private TaskbarProgressHelper? _taskbarProgress;
+        private IntPtr _mainWindowHwnd;
+        private string? _genreYearFilter;
+        private readonly ObservableCollection<AlbumEntry> _albums = new();
+        private readonly ObservableCollection<PlaylistItem> _albumTracks = new();
+        private readonly ObservableCollection<ArtistEntry> _artists = new();
+        private readonly ObservableCollection<PlaylistItem> _artistTracks = new();
+        private readonly ObservableCollection<AlbumEntry> _artistAlbums = new();
+        private readonly ObservableCollection<FolderBrowserItem> _folderBrowserItems = new();
+
+        /// <summary>「选择文件夹」选定的根目录；文件夹分类只展示其内容</summary>
+        private string? _browseFolderPath;
+
+        private ArtistEntry? _avatarContextArtist;
+        private PlaylistItem? _contextMenuSong;
+        private bool _isMultiSelectMode;
+        private bool _isEnginePaused;
+        private bool _usingEnginePlayback;
+
+        private float[]? _waveformData;
+        private string? _waveformPath;
+        private string _progressBarStyle = "Gradient";
+        // 主题波形强调色（ResolveAccentColor 的缓存，避免频繁解析）
+        private static Color _waveAccentColor = Color.FromArgb(255, 0, 120, 212);
+        private SystemMediaTransportControls? _engineSmtc;
+        private Style? _playlistItemDefaultStyle;
+        private Style? _artistTrackItemDefaultStyle;
+        private Style? _albumTrackItemDefaultStyle;
+        private Style? _artistAlbumItemDefaultStyle;
+        private Style? _libraryAlbumItemDefaultStyle;
+        private Style? _folderItemDefaultStyle;
+        /// <summary>多选当前作用的歌曲列表（歌曲库 / 艺术家详情 / 专辑详情曲目）</summary>
+        private ListView? _multiSelectTargetList;
+        /// <summary>多选当前作用的专辑网格（音乐库专辑 / 艺术家详情专辑）</summary>
+        private GridView? _multiSelectAlbumGrid;
+        /// <summary>多选当前作用的文件夹浏览列表</summary>
+        private ListView? _multiSelectFolderList;
+        /// <summary>批量改选中时跳过 SelectionChanged 里的昂贵 UI 刷新</summary>
+        private bool _suppressSelectionUiUpdates;
+        private Brush? _cachedMultiSelectFrostBrush;
+
+        private int _currentIndex = -1;
+        /// <summary>当前播放在用户播放列表中的下标（播放顺序以播放列表为准）</summary>
+        private int _userPlaylistIndex = -1;
+        private CurrentPlaylistWindow? _currentPlaylistWindow;
+        private DesktopLyricsOverlay? _desktopLyricsWindow;
+        private bool _desktopLyricsEnabled;
+        private MiniPlayerWindow? _miniPlayerWindow;
+        private bool _miniPlayerEnabled;
+        private double? _pendingRestorePositionSeconds;
+        private DateTime _lastPlaybackPersistUtc = DateTime.MinValue;
+        private ArtistAvatarEditorWindow? _artistAvatarEditorWindow;
+        private AppTrayIcon? _trayIcon;
+        private bool _allowClose;
+        private bool _closePromptOpen;
+        private bool _applyingSettingsVolume;
+        private DispatcherQueueTimer? _volumeSaveTimer;
+        private double _volumeToSave;
+        private DispatcherQueueTimer? _libraryWatchDebounce;
+        private bool _libraryRescanInProgress;
+        private PlaybackOrder _playbackOrder = PlaybackOrder.ListLoop;
+        private readonly Random _playbackRandom = new();
+        private string _librarySearchText = string.Empty;
+        private DispatcherQueueTimer? _librarySearchDebounceTimer;
+        private readonly List<string> _folderSearchMatches = new();
+        private int _folderSearchIndex = -1;
+        private string? _folderSearchHighlightPath;
+        private MediaPlayer? _mediaPlayer;
+        private DispatcherQueueTimer? _positionTimer;
+        private bool _isUserSeeking;
+        private bool _isUpdatingProgressUi;
+
+        // ---------- 排序状态 ----------
+        private SortField _sortField = SortField.Title;
+        private bool _sortAscending = true;
+        private AlbumSortMode _albumSortMode = AlbumSortMode.TitleAsc;
+        private ArtistSongSortMode _artistSongSortMode = ArtistSongSortMode.Title;
+        private ArtistAlbumSortMode _artistAlbumSortMode = ArtistAlbumSortMode.Title;
+        private bool _artistAlbumSortAscending = true;
+        private AlbumEntry? _openedAlbum;
+        private ArtistEntry? _openedArtist;
+        /// <summary>当前艺术家详情是否按「专辑艺术家」匹配曲目</summary>
+        private bool _artistDetailUsesAlbumArtist;
+        /// <summary>专辑详情是否从艺术家详情进入（返回时回到艺术家页）</summary>
+        private bool _albumOpenedFromArtist;
+
+        // ---------- 左侧分类（Songs / Albums / Artists / Folders / UserPlaylist）----------
+        private string _currentCategory = "Songs";
+
+        /// <summary>中间区域浏览历史（鼠标侧键前进/后退，类似资源管理器）</summary>
+        private sealed class LibraryNavState
+        {
+            public string Category { get; init; } = "Songs";
+            public string? ArtistName { get; init; }
+            public string? AlbumName { get; init; }
+            public bool AlbumFromArtist { get; init; }
+            public bool UsesAlbumArtist { get; init; }
+        }
+
+        private readonly List<LibraryNavState> _navBackStack = new();
+        private readonly List<LibraryNavState> _navForwardStack = new();
+        private LibraryNavState? _navCurrent;
+        private bool _suppressNavHistory;
+
+        // ---------- 主区域分割线拖动 ----------
+        private bool _isDraggingMainSplitter;
+        private double _mainSplitStartX;
+        private double _playlistColStartWidth;
+        private double _rightColStartWidth;
+
+        // ---------- 列表列分割线拖动 ----------
+        private bool _isDraggingColumnSplitter;
+        private string? _columnSplitPair;
+        private double _columnSplitStartX;
+        private double _columnLeftStartWidth;
+        private double _columnRightStartWidth;
+
+        // ---------- 单元格悬停详情 ----------
+        private DispatcherQueueTimer? _hoverTipTimer;
+        private FrameworkElement? _hoverElement;
+        private string? _hoverTipText;
+        private ToolTip? _activeHoverTip;
+
+        // ---------- 右侧正在播放 / 波形 / 歌词 ----------
+        private DispatcherQueueTimer? _waveformTimer;
+        private const int WaveBarCount = 40;
+        private readonly double[] _waveLevels = new double[WaveBarCount];
+        private readonly double[] _wavePhases = new double[WaveBarCount];
+        private readonly Random _waveRandom = new();
+        private int _waveformIdleSettleTicks;
+        private List<LyricLine> _lyricLines = new();
+        private int _currentLyricIndex = -1;
+        private readonly List<TextBlock> _lyricTextBlocks = new();
+        private string? _nowPlayingPath;
+
+        // 歌词平滑滚动
+        private DispatcherQueueTimer? _lyricScrollTimer;
+        private double _lyricScrollFrom;
+        private double _lyricScrollTo;
+        private long _lyricScrollStartMs;
+        private const int LyricScrollDurationMs = 480;
+
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(IntPtr hwnd);
+
+        public MainWindow()
+        {
+            StartupLog.Write("MainWindow ctor begin");
+            Instance = this;
+            InitializeComponent();
+            StartupLog.Write("MainWindow InitializeComponent done");
+            try
+            {
+                _mainWindowHwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            }
+            catch
+            {
+                _mainWindowHwnd = IntPtr.Zero;
+            }
+
+            // 默认约原 1900×900 的 2/3；Resize 按 DPI 换算为物理像素
+            ResizeWindowToDips(1270, 600);
+            // 标题栏扩展放到 Activated 之后，避免资源管理器直接启动时黑窗闪退（0xC000027B）
+            Activated += MainWindow_FirstActivated;
+            Closed += MainWindow_Closed;
+            AppWindow.Closing += AppWindow_Closing;
+            ApplyCapsuleSortButtonStyle(accent: true);
+            ApplyPlaylistHeaderChipStyle();
+            ApplyCapsuleToControl(
+                AlbumDetailPlayButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyCapsuleToControl(
+                AlbumDetailAddToPlaylistButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyCapsuleToControl(
+                SavePlaylistButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyCapsuleToControl(
+                OpenPlaylistButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyCapsuleToControl(
+                ClearPlaylistButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyCapsuleToControl(
+                PlayUserPlaylistButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyCapsuleToControl(
+                PlayArtistWorksButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyCapsuleToControl(
+                AddArtistWorksToPlaylistButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyCapsuleToControl(
+                PlayArtistSongsButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyCapsuleToControl(
+                AddArtistSongsToPlaylistButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyCapsuleToControl(
+                PlayAllArtistAlbumsButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyCapsuleToControl(
+                AddAllArtistAlbumsToPlaylistButton,
+                32,
+                new CornerRadius(16),
+                ResolveCapsuleFillBrush(),
+                foreground: null);
+            ApplyAccentSelectionResources(PlaylistView);
+            UpdateLibraryNavHighlight();
+            PlaylistView.SelectionChanged += PlaylistView_SelectionChromeChanged;
+            PlaylistView.ContainerContentChanging += PlaylistView_ContainerContentChanging;
+            PlaylistView.ItemsSource = _playlist;
+            AlbumGridView.ItemsSource = _albums;
+            AlbumGridView.ContainerContentChanging += AlbumGridView_ContainerContentChanging;
+            ApplyAccentSelectionResources(AlbumGridView);
+            AlbumTrackListView.ItemsSource = _albumTracks;
+            ApplyAccentSelectionResources(AlbumTrackListView);
+            AlbumTrackListView.ContainerContentChanging += AlbumTrackListView_ContainerContentChanging;
+            ArtistGridView.ItemsSource = _artists;
+            ArtistTrackListView.ItemsSource = _artistTracks;
+            ApplyAccentSelectionResources(ArtistTrackListView);
+            ArtistTrackListView.ContainerContentChanging += ArtistTrackListView_ContainerContentChanging;
+            ArtistAlbumGridView.ItemsSource = _artistAlbums;
+            ArtistAlbumGridView.ContainerContentChanging += ArtistAlbumGridView_ContainerContentChanging;
+            ApplyAccentSelectionResources(ArtistAlbumGridView);
+            FolderBrowserView.ItemsSource = _folderBrowserItems;
+            FolderBrowserView.ContainerContentChanging += FolderBrowserView_ContainerContentChanging;
+            ApplyAccentSelectionResources(FolderBrowserView);
+
+            SyncHeaderColumnsFromState();
+            _currentCategory = "Songs";
+            UpdateLibraryNavHighlight();
+            _navCurrent = CaptureLibraryNavState();
+
+            LibraryPaneRoot.AddHandler(
+                UIElement.PointerPressedEvent,
+                new PointerEventHandler(LibraryPaneRoot_PointerPressed),
+                handledEventsToo: true);
+
+            for (int i = 0; i < WaveBarCount; i++)
+            {
+                _wavePhases[i] = _waveRandom.NextDouble() * Math.PI * 2;
+            }
+
+            if (Content is FrameworkElement root)
+            {
+                root.Loaded += MainWindow_Loaded;
+            }
+
+            StartupLog.Write("MainWindow ctor end");
+        }
+
+        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        {
+            StartupLog.Write("MainWindow_Loaded begin");
+            try
+            {
+                InitializePlayerAndTimers();
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("MainWindow_Loaded", ex);
+            }
+            finally
+            {
+                StartupLog.Write("MainWindow_Loaded end");
+            }
+        }
+
+        private void InitializePlayerAndTimers()
+        {
+            if (_mediaPlayer != null)
+            {
+                return;
+            }
+
+            if (PlayerElement == null)
+            {
+                _ = ShowErrorAsync("初始化失败", "PlayerElement 未生成，请检查 MainWindow.xaml 中的 x:Name。");
+                return;
+            }
+
+            _mediaPlayer = new MediaPlayer();
+            PlayerElement.SetMediaPlayer(_mediaPlayer);
+            ApplyAudioChannelFromSettings();
+            _mediaPlayer.CommandManager.IsEnabled = false;
+
+            _mediaPlayer.MediaOpened += Player_MediaOpened;
+            _mediaPlayer.MediaEnded += Player_MediaEnded;
+            _mediaPlayer.MediaFailed += Player_MediaFailed;
+            _mediaPlayer.PlaybackSession.PlaybackStateChanged += PlaybackSession_PlaybackStateChanged;
+
+            VolumeSlider.ValueChanged += VolumeSlider_ValueChanged;
+            ApplyStartupPlaybackSettings();
+            _mediaPlayer.Volume = VolumeSlider.Value / 100.0;
+            UpdateVolumeIcon(VolumeSlider.Value);
+            UpdateDesktopLyricsBadge();
+            UpdateMiniPlayerBadge();
+            InitializeMusicPlayer2Features();
+
+            ProgressSlider.AddHandler(
+                UIElement.PointerPressedEvent,
+                new PointerEventHandler(ProgressSlider_PointerPressed),
+                handledEventsToo: true);
+            ProgressSlider.AddHandler(
+                UIElement.PointerReleasedEvent,
+                new PointerEventHandler(ProgressSlider_PointerReleased),
+                handledEventsToo: true);
+            ProgressSlider.AddHandler(
+                UIElement.PointerCaptureLostEvent,
+                new PointerEventHandler(ProgressSlider_PointerCaptureLost),
+                handledEventsToo: true);
+
+            _positionTimer = DispatcherQueue.CreateTimer();
+            _positionTimer.Interval = TimeSpan.FromMilliseconds(200);
+            _positionTimer.Tick += PositionTimer_Tick;
+            _positionTimer.Start();
+
+            // 悬停提示定时器（满 1 秒才弹出）
+            _hoverTipTimer = DispatcherQueue.CreateTimer();
+            _hoverTipTimer.IsRepeating = false;
+            _hoverTipTimer.Interval = TimeSpan.FromMilliseconds(500);
+            _hoverTipTimer.Tick += HoverTipTimer_Tick;
+
+            _waveformTimer = DispatcherQueue.CreateTimer();
+            _waveformTimer.Interval = TimeSpan.FromMilliseconds(50);
+            _waveformTimer.Tick += WaveformTimer_Tick;
+            // 不在启动时常开：仅播放中驱动，避免定时改视觉树导致全窗光标闪烁
+            // 未播放时也填充静态频谱，保证信息卡波形始终可见
+            for (int i = 0; i < WaveBarCount; i++)
+            {
+                _waveLevels[i] = IdleLevel(i);
+            }
+
+            ApplyPlaybackOrderToPlayer();
+            UpdatePlaybackOrderButtonUi();
+            ClearNowPlayingPanel();
+            ApplyNowPlayingCardChrome();
+            if (Content is FrameworkElement root)
+            {
+                root.ActualThemeChanged += (_, _) =>
+                {
+                    ApplyNowPlayingCardChrome();
+                    ApplyArtistSongsFrostChrome();
+                    UpdateLibraryNavHighlight();
+                    ApplyAccentSelectionResources(PlaylistView);
+                    RefreshPlaylistSelectionChrome();
+                    ApplyCapsuleSortButtonStyle(accent: true);
+                    ApplyPlaylistHeaderChipStyle();
+                };
+            }
+
+            NowPlayingPane.SizeChanged += (_, _) => UpdateNowPlayingCardLayout();
+            MainContentGrid.SizeChanged += (_, _) => FitColumnsToAvailableWidth();
+            AppWindow.Changed += (_, args) =>
+            {
+                if (args.DidSizeChange || args.DidPresenterChange)
+                {
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        FitColumnsToAvailableWidth();
+                        UpdateNowPlayingCardLayout();
+                    });
+                }
+            };
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                FitColumnsToAvailableWidth();
+                UpdateNowPlayingCardLayout();
+            });
+
+            _ = RestoreLastLibraryAsync();
+        }
+
+        /// <summary>音量、播放模式等可立即应用的启动设置。</summary>
+        private void ApplyStartupPlaybackSettings()
+        {
+            AppSettingsState settings = AppSettingsStore.Load();
+            _applyingSettingsVolume = true;
+            try
+            {
+                VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
+            }
+            finally
+            {
+                _applyingSettingsVolume = false;
+            }
+
+            if (Enum.TryParse(settings.PlaybackOrder, ignoreCase: true, out PlaybackOrder order))
+            {
+                _playbackOrder = order;
+            }
+        }
+
+        /// <summary>设置页变更后即时生效。</summary>
+        internal void ApplySettingsLive(AppSettingsState settings)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                _applyingSettingsVolume = true;
+                try
+                {
+                    VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
+                    MediaPlayer? player = GetPlayer();
+                    if (player != null)
+                    {
+                        player.Volume = VolumeSlider.Value / 100.0;
+                    }
+
+                    UpdateVolumeIcon(VolumeSlider.Value);
+                }
+                finally
+                {
+                    _applyingSettingsVolume = false;
+                }
+
+                if (Enum.TryParse(settings.PlaybackOrder, ignoreCase: true, out PlaybackOrder order)
+                    && order != _playbackOrder)
+                {
+                    SetPlaybackOrder(order, persist: false);
+                }
+
+                ApplyFrostedGlassPreference(settings.EnableFrostedGlass);
+                _miniPlayerWindow?.SetAlwaysOnTop(settings.MiniPlayerAlwaysOnTop);
+                _miniPlayerWindow?.ApplyBackdropPreference(settings.EnableFrostedGlass);
+                SettingsWindow.ApplyBackdropIfOpen();
+                ApplyExtendedSettingsLive(settings);
+            });
+        }
+
+        internal void ApplyOverlayPreferenceFromSettings(AppSettingsState settings)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (settings.OpenMiniPlayerOnStartup != _miniPlayerEnabled)
+                {
+                    SetMiniPlayerEnabled(settings.OpenMiniPlayerOnStartup, persistPreference: false);
+                }
+
+                if (settings.OpenDesktopLyricsOnStartup != _desktopLyricsEnabled)
+                {
+                    SetDesktopLyricsEnabled(settings.OpenDesktopLyricsOnStartup, persistPreference: false);
+                }
+            });
+        }
+
+        private void ApplyFrostedGlassPreference(bool enabled)
+        {
+            try
+            {
+                if (enabled)
+                {
+                    FrostedGlass.ApplyWindowBackdrop(this);
+                }
+                else
+                {
+                    SystemBackdrop = null;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void ApplyStartupOverlayWindows()
+        {
+            AppSettingsState settings = AppSettingsStore.Load();
+            if (settings.OpenDesktopLyricsOnStartup)
+            {
+                SetDesktopLyricsEnabled(true, persistPreference: false);
+            }
+
+            if (settings.OpenMiniPlayerOnStartup)
+            {
+                SetMiniPlayerEnabled(true, persistPreference: false);
+            }
+        }
+
+        /// <summary>按 DIP 调整窗口客户区大小（内部换算为物理像素）。</summary>
+        private void ResizeWindowToDips(int widthDip, int heightDip)
+        {
+            try
+            {
+                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                uint dpi = GetDpiForWindow(hwnd);
+                if (dpi == 0)
+                {
+                    dpi = 96;
+                }
+
+                double scale = dpi / 96.0;
+                AppWindow.Resize(new Windows.Graphics.SizeInt32(
+                    (int)Math.Round(widthDip * scale),
+                    (int)Math.Round(heightDip * scale)));
+            }
+            catch
+            {
+                AppWindow.Resize(new Windows.Graphics.SizeInt32(widthDip, heightDip));
+            }
+        }
+
+        private void NowPlayingCard_SizeChanged(object sender, SizeChangedEventArgs e)
+            => UpdateNowPlayingCardLayout();
+
+        /// <summary>
+        /// 右侧信息卡始终限制在面板内；宽度不足时改为封面在上、文字在下按行排列。
+        /// </summary>
+        private void UpdateNowPlayingCardLayout()
+        {
+            double paneWidth = NowPlayingPane.ActualWidth;
+            double paneHeight = NowPlayingPane.ActualHeight;
+            if (paneWidth <= 0)
+            {
+                return;
+            }
+
+            if (paneHeight > 0)
+            {
+                NowPlayingPaneContent.Clip = new RectangleGeometry
+                {
+                    Rect = new Windows.Foundation.Rect(0, 0, paneWidth, paneHeight)
+                };
+            }
+
+            // Pane Padding 12×2 + Card Margin 4×2，保证卡片不越出右侧区域
+            double maxCardWidth = Math.Max(0, paneWidth - 32);
+            NowPlayingCard.MaxWidth = maxCardWidth;
+            NowPlayingCard.ClearValue(FrameworkElement.WidthProperty);
+            NowPlayingCard.HorizontalAlignment = HorizontalAlignment.Stretch;
+
+            double innerWidth = Math.Max(
+                0,
+                maxCardWidth - 28); // 内层 Padding 14 × 2
+            // 封面 176 + 间距 16 + 文字至少约 120 → 不足则纵向排列
+            bool stack = innerWidth < 320;
+
+            const double coverWide = 176;
+            double coverSize = stack
+                ? Math.Clamp(innerWidth, 72, coverWide)
+                : coverWide;
+            if (stack)
+            {
+                // 窄布局：封面高度受面板限制，避免信息卡底部波形被 NowPlayingPaneContent.Clip 裁剪
+                double panelHeight = NowPlayingPaneContent?.ActualHeight ?? 320;
+                coverSize = Math.Max(72, Math.Min(coverSize, panelHeight - 150));
+                WaveformCanvas.Height = 28;
+            }
+            else
+            {
+                WaveformCanvas.Height = 44;
+            }
+
+            NowPlayingCoverBorder.Width = coverSize;
+            NowPlayingCoverBorder.Height = coverSize;
+
+            if (stack)
+            {
+                Grid.SetRow(NowPlayingCoverBorder, 0);
+                Grid.SetColumn(NowPlayingCoverBorder, 0);
+                Grid.SetColumnSpan(NowPlayingCoverBorder, 2);
+                NowPlayingCoverBorder.HorizontalAlignment = HorizontalAlignment.Center;
+
+                Grid.SetRow(NowPlayingSidePanel, 1);
+                Grid.SetColumn(NowPlayingSidePanel, 0);
+                Grid.SetColumnSpan(NowPlayingSidePanel, 2);
+                NowPlayingSidePanel.VerticalAlignment = VerticalAlignment.Top;
+                Grid.SetRow(WaveformCanvas, 2);
+
+                NowPlayingTitleText.MaxLines = 4;
+                NowPlayingTitleText.TextTrimming = TextTrimming.None;
+                NowPlayingArtistAlbumText.TextWrapping = TextWrapping.WrapWholeWords;
+                NowPlayingArtistAlbumText.TextTrimming = TextTrimming.None;
+            }
+            else
+            {
+                Grid.SetRow(NowPlayingCoverBorder, 0);
+                Grid.SetColumn(NowPlayingCoverBorder, 0);
+                Grid.SetColumnSpan(NowPlayingCoverBorder, 1);
+                NowPlayingCoverBorder.HorizontalAlignment = HorizontalAlignment.Left;
+
+                // 文字紧贴封面；波形固定在卡片底部
+                Grid.SetRow(NowPlayingSidePanel, 0);
+                Grid.SetColumn(NowPlayingSidePanel, 1);
+                Grid.SetColumnSpan(NowPlayingSidePanel, 1);
+                NowPlayingSidePanel.VerticalAlignment = VerticalAlignment.Center;
+                Grid.SetRow(WaveformCanvas, 1);
+
+                NowPlayingTitleText.MaxLines = 2;
+                NowPlayingTitleText.TextTrimming = TextTrimming.CharacterEllipsis;
+                NowPlayingArtistAlbumText.TextWrapping = TextWrapping.NoWrap;
+                NowPlayingArtistAlbumText.TextTrimming = TextTrimming.CharacterEllipsis;
+            }
+        }
+
+        private bool _windowChromeConfigured;
+
+        private void MainWindow_FirstActivated(object sender, WindowActivatedEventArgs args)
+        {
+            Activated -= MainWindow_FirstActivated;
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    // 订阅主题色变化事件(统一刷新强调元素)
+                    ThemeColorService.ThemeColorChanged -= OnThemeColorChanged;
+                    ThemeColorService.ThemeColorChanged += OnThemeColorChanged;
+
+                    // 音量条自绘:尺寸变化/初始绘制/交互
+                    if (VolumeStyleCanvas != null)
+                    {
+                        VolumeStyleCanvas.SizeChanged -= VolumeStyleCanvas_SizeChanged;
+                        VolumeStyleCanvas.SizeChanged += VolumeStyleCanvas_SizeChanged;
+                        VolumeStyleCanvas.PointerPressed -= VolumeStyleCanvas_PointerPressed;
+                        VolumeStyleCanvas.PointerPressed += VolumeStyleCanvas_PointerPressed;
+                        VolumeStyleCanvas.PointerMoved -= VolumeStyleCanvas_PointerMoved;
+                        VolumeStyleCanvas.PointerMoved += VolumeStyleCanvas_PointerMoved;
+                        VolumeStyleCanvas.PointerReleased -= VolumeStyleCanvas_PointerReleased;
+                        VolumeStyleCanvas.PointerReleased += VolumeStyleCanvas_PointerReleased;
+                        DrawVolumeStyle();
+                    }
+
+                    // 缓存波形主题色(信息卡频谱用)
+                    try
+                    {
+                        _waveAccentColor = ThemeColorService.CurrentAccent;
+                    }
+                    catch
+                    {
+                    }
+
+                    // 进度条悬停提示:分:秒格式(替代默认秒数)
+                    try
+                    {
+                        if (ProgressSlider != null)
+                        {
+                            ProgressSlider.ThumbToolTipValueConverter = new SecondsToTimeSpanConverter();
+                        }
+                    }
+                    catch
+                    {
+                    }
+
+                    // 自定义背景图片
+                    try
+                    {
+                        ApplyCustomBackground(AppSettingsStore.Load().CustomBackgroundPath);
+                    }
+                    catch
+                    {
+                    }
+
+                    // 播放列表列显隐/密度
+                    try
+                    {
+                        ApplyPlaylistColumnSettings(AppSettingsStore.Load());
+                    }
+                    catch
+                    {
+                    }
+
+                    // 进度条样式:启动时读取设置(否则默认显示系统进度条)
+                    try
+                    {
+                        _progressBarStyle = AppSettingsStore.Load().ProgressBarStyle;
+                    }
+                    catch
+                    {
+                    }
+
+                    // 进度条画布尺寸变化时重绘(首次布局/窗口缩放)
+                    if (ProgressStyleCanvas != null)
+                    {
+                        ProgressStyleCanvas.SizeChanged -= ProgressStyleCanvas_SizeChanged;
+                        ProgressStyleCanvas.SizeChanged += ProgressStyleCanvas_SizeChanged;
+                        RedrawProgressStyle();
+                    }
+
+                    // 启动即为波形模式:加载选中/第一首歌曲的波形预览(媒体库恢复完成后重试)
+                    TryLoadWaveformPreview();
+                    _ = RetryWaveformPreviewLaterAsync();
+                    _playlist.CollectionChanged -= OnPlaylistForWaveformPreview;
+                    _playlist.CollectionChanged += OnPlaylistForWaveformPreview;
+
+                    // 首次激活兜底：确保信息卡波形已绘制（无论是否播放）
+                    if (WaveformCanvas != null
+                        && (WaveformCanvas.Children.Count == 0 || _waveLevels.All(v => v < 0.05)))
+                    {
+                        for (int i = 0; i < WaveBarCount; i++)
+                        {
+                            _waveLevels[i] = IdleLevel(i);
+                        }
+
+                        DrawWaveformBars();
+                    }
+                }
+                catch
+                {
+                }
+            });
+            if (_windowChromeConfigured)
+            {
+                return;
+            }
+
+            _windowChromeConfigured = true;
+            StartupLog.Write("MainWindow_FirstActivated");
+            try
+            {
+                TryApplySystemBackdrop();
+                ConfigureWindowChrome();
+                StartupLog.Write("Window chrome configured");
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("ConfigureWindowChrome", ex);
+            }
+        }
+
+        /// <summary>延后设置 Desktop Acrylic（壁纸色毛玻璃）；失败则回退 Mica / 纯色。</summary>
+        private void TryApplySystemBackdrop()
+        {
+            try
+            {
+                AppSettingsState settings = AppSettingsStore.Load();
+                if (!settings.EnableFrostedGlass)
+                {
+                    SystemBackdrop = null;
+                    StartupLog.Write("SystemBackdrop disabled by settings");
+                    return;
+                }
+
+                FrostedGlass.ApplyWindowBackdrop(this);
+                StartupLog.Write(
+                    SystemBackdrop is DesktopAcrylicBackdrop
+                        ? "DesktopAcrylicBackdrop applied"
+                        : SystemBackdrop is MicaBackdrop
+                            ? "MicaBackdrop fallback applied"
+                            : "SystemBackdrop cleared");
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("ApplyWindowBackdrop", ex);
+            }
+        }
+
+        /// <summary>应用图标 + 标题栏与内容区合并（系统按钮浮在背景上）</summary>
+        private void ConfigureWindowChrome()
+        {
+            try
+            {
+                ExtendsContentIntoTitleBar = true;
+                SetTitleBar(AppTitleBar);
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("ExtendsContentIntoTitleBar", ex);
+            }
+
+            try
+            {
+                if (AppWindowTitleBar.IsCustomizationSupported())
+                {
+                    AppWindowTitleBar titleBar = AppWindow.TitleBar;
+                    titleBar.ButtonBackgroundColor = Colors.Transparent;
+                    titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+                    titleBar.ButtonHoverBackgroundColor = Color.FromArgb(36, 255, 255, 255);
+                    titleBar.ButtonPressedBackgroundColor = Color.FromArgb(60, 255, 255, 255);
+                    titleBar.ButtonForegroundColor = Color.FromArgb(255, 220, 220, 220);
+                    titleBar.ButtonInactiveForegroundColor = Color.FromArgb(255, 140, 140, 140);
+                    titleBar.ButtonHoverForegroundColor = Colors.White;
+                    titleBar.ButtonPressedForegroundColor = Colors.White;
+                }
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("TitleBar colors", ex);
+            }
+
+            try
+            {
+                string iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+                if (System.IO.File.Exists(iconPath))
+                {
+                    AppWindow.SetIcon(iconPath);
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>信息卡：更深毛玻璃 + 阴影立体感</summary>
+        private void ApplyNowPlayingCardChrome()
+        {
+            if (NowPlayingPane != null)
+            {
+                // 无外框：透明背景、无圆角（右侧面板不显示独立边框）
+                NowPlayingPane.Background = null;
+                NowPlayingPane.BorderBrush = null;
+                NowPlayingPane.BorderThickness = new Thickness(0);
+                NowPlayingPane.CornerRadius = new CornerRadius(0);
+                NowPlayingPane.Padding = new Thickness(12);
+            }
+
+            if (NowPlayingCard != null)
+            {
+                FrostedGlass.StyleElevatedPanel(NowPlayingCard, new CornerRadius(12));
+                try
+                {
+                    if (NowPlayingCardShadow != null && NowPlayingShadowReceiver != null)
+                    {
+                        NowPlayingCard.Shadow = NowPlayingCardShadow;
+                        if (!NowPlayingCardShadow.Receivers.Contains(NowPlayingShadowReceiver))
+                        {
+                            NowPlayingCardShadow.Receivers.Add(NowPlayingShadowReceiver);
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
+            ApplyArtistSongsFrostChrome();
+        }
+
+        /// <summary>
+        /// 右侧信息卡 / 艺术家歌曲区共用的透明毛玻璃（纯色 Tint，无额外高光层）。
+        /// </summary>
+        private Brush CreateNowPlayingStyleAcrylicBrush()
+            => FrostedGlass.CreatePanelBrush(ResolveUiBaseTintColor());
+
+        /// <summary>
+        /// 深色 Tint 的 Acrylic：提高霜化/模糊感，色调跟整体 UI，避免发白。
+        /// </summary>
+        private void ApplyNowPlayingCardAcrylic()
+        {
+            if (NowPlayingCard != null)
+            {
+                NowPlayingCard.Background = CreateNowPlayingStyleAcrylicBrush();
+            }
+        }
+
+        /// <summary>外围阴影（ThemeShadow + Z，失败则仅靠描边）</summary>
+        private void ApplyNowPlayingCardShadow()
+        {
+            // 由 StyleElevatedPanel / ApplyNowPlayingCardChrome 统一处理
+        }
+
+        private Color ResolveUiBaseTintColor()
+        {
+            // 优先取右侧面板实际底色（用户看到的整体 UI 区域色）
+            if (TryGetBrushColor(NowPlayingPane?.Background, out Color paneColor)
+                && paneColor.A > 0
+                && !IsNearWhite(paneColor))
+            {
+                return Color.FromArgb(255, paneColor.R, paneColor.G, paneColor.B);
+            }
+
+            FrameworkElement? anchor = Content as FrameworkElement ?? NowPlayingCard;
+            string[] keys =
+            {
+                "CardBackgroundFillColorDefault",
+                "CardBackgroundFillColorDefaultBrush",
+                "SolidBackgroundFillColorBase",
+                "SolidBackgroundFillColorBaseBrush",
+                "ApplicationPageBackgroundThemeBrush"
+            };
+
+            foreach (string key in keys)
+            {
+                if (TryGetThemeColor(anchor, key, out Color themeColor)
+                    && themeColor.A > 0
+                    && !IsNearWhite(themeColor))
+                {
+                    return Color.FromArgb(255, themeColor.R, themeColor.G, themeColor.B);
+                }
+            }
+
+            // 深色 Mica / 深灰 UI 回退（勿用浅灰，否则矩形发白）
+            return Color.FromArgb(255, 42, 42, 42);
+        }
+
+        private static bool IsNearWhite(Color color)
+        {
+            return color.R >= 220 && color.G >= 220 && color.B >= 220;
+        }
+
+        private static bool TryGetBrushColor(Brush? brush, out Color color)
+        {
+            if (brush is SolidColorBrush solid)
+            {
+                color = solid.Color;
+                return true;
+            }
+
+            if (brush is AcrylicBrush acrylic)
+            {
+                color = acrylic.TintColor;
+                return true;
+            }
+
+            color = default;
+            return false;
+        }
+
+        private static bool TryGetThemeColor(FrameworkElement? element, string key, out Color color)
+        {
+            color = default;
+            try
+            {
+                object? value = null;
+                if (element != null && element.Resources.TryGetValue(key, out object local))
+                {
+                    value = local;
+                }
+                else if (Application.Current.Resources.TryGetValue(key, out object app))
+                {
+                    value = app;
+                }
+
+                if (value is Color c)
+                {
+                    color = c;
+                    return true;
+                }
+
+                if (value is SolidColorBrush solid)
+                {
+                    color = solid.Color;
+                    return true;
+                }
+            }
+            catch
+            {
+            }
+
+            return false;
+        }
+
+        /// <summary>启动时恢复上次打开的文件夹或音频文件列表。</summary>
+        private async Task RestoreLastLibraryAsync()
+        {
+            try
+            {
+                AppSettingsState settings = AppSettingsStore.Load();
+                if (!settings.RestoreLibrary)
+                {
+                    await RestoreLastPlayingTrackAsync();
+                    ApplyStartupOverlayWindows();
+                    return;
+                }
+
+                LibrarySessionState? state = LibrarySessionStore.TryLoad();
+                if (state == null)
+                {
+                    await RestoreLastPlayingTrackAsync();
+                    ApplyStartupOverlayWindows();
+                    return;
+                }
+
+                // 文件夹分类根目录：只要曾选择过文件夹就恢复
+                if (!string.IsNullOrWhiteSpace(state.FolderPath) && Directory.Exists(state.FolderPath))
+                {
+                    _browseFolderPath = state.FolderPath;
+                }
+
+                string[] paths;
+                if (string.Equals(state.Mode, "folder", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(state.FolderPath)
+                    && Directory.Exists(state.FolderPath))
+                {
+                    string folderPath = state.FolderPath;
+                    paths = await Task.Run(() => EnumerateAudioFiles(folderPath).ToArray());
+                    if (paths.Length == 0)
+                    {
+                        await RestoreLastPlayingTrackAsync();
+                        ApplyStartupOverlayWindows();
+                        return;
+                    }
+
+                    LoadAndAddFiles(paths, persist: false);
+                    LibrarySessionStore.SaveFolder(folderPath, paths);
+                    await RestoreLastPlayingTrackAsync();
+                    ApplyStartupOverlayWindows();
+                    return;
+                }
+
+                paths = (state.FilePaths ?? new List<string>())
+                    .Where(p => !string.IsNullOrWhiteSpace(p) && System.IO.File.Exists(p))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                if (paths.Length == 0)
+                {
+                    await RestoreLastPlayingTrackAsync();
+                    ApplyStartupOverlayWindows();
+                    return;
+                }
+
+                LoadAndAddFiles(paths, persist: false);
+                await RestoreLastPlayingTrackAsync();
+                ApplyStartupOverlayWindows();
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"恢复曲库失败: {ex.Message}");
+                try
+                {
+                    ApplyStartupOverlayWindows();
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        /// <summary>恢复上次正在播放的歌曲到界面（暂停，不自动开播）。</summary>
+        private async Task RestoreLastPlayingTrackAsync()
+        {
+            try
+            {
+                if (!AppSettingsStore.Load().RestorePlayback)
+                {
+                    return;
+                }
+
+                PlaybackSessionState? session = PlaybackSessionStore.TryLoad();
+                if (session == null
+                    || string.IsNullOrWhiteSpace(session.FilePath)
+                    || !System.IO.File.Exists(session.FilePath))
+                {
+                    return;
+                }
+
+                string path = session.FilePath;
+                PlaylistItem? item = null;
+                int userIdx = FindUserPlaylistIndex(path);
+                if (userIdx >= 0)
+                {
+                    item = _userPlaylist[userIdx];
+                }
+                else
+                {
+                    int libIdx = FindLibraryIndex(path);
+                    if (libIdx >= 0)
+                    {
+                        item = _playlist[libIdx];
+                        AddSongsToUserPlaylist(new[] { item });
+                        userIdx = FindUserPlaylistIndex(path);
+                    }
+                    else
+                    {
+                        item = CreatePlaylistItemFromPath(path);
+                        AddSongsToUserPlaylist(new[] { item });
+                        userIdx = FindUserPlaylistIndex(path);
+                    }
+                }
+
+                if (item == null || userIdx < 0)
+                {
+                    return;
+                }
+
+                await PrepareTrackPausedAsync(userIdx, session.PositionSeconds);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"恢复播放曲目失败: {ex.Message}");
+            }
+        }
+
+        private async Task PrepareTrackPausedAsync(int userPlaylistIndex, double positionSeconds)
+        {
+            if (userPlaylistIndex < 0 || userPlaylistIndex >= _userPlaylist.Count)
+            {
+                return;
+            }
+
+            PlaylistItem item = _userPlaylist[userPlaylistIndex];
+            _userPlaylistIndex = userPlaylistIndex;
+            _currentIndex = FindLibraryIndex(item.FilePath);
+            _pendingRestorePositionSeconds = Math.Max(0, positionSeconds);
+
+            NowPlayingText.Text = "已就绪：" + item.Title + " - " + item.Artist;
+            await UpdateNowPlayingPanelAsync(item);
+
+            // 扩展格式（APE/WavPack 等）：系统 Media Foundation 无法解码，启动时不预加载，
+            // 避免触发 MediaFailed 弹窗；点击播放时由 FFmpeg 引擎转码播放。
+            if (AudioPlaybackEngine.NeedsFfmpeg(item.FilePath))
+            {
+                return;
+            }
+
+            MediaPlayer? player = GetPlayer();
+            if (player == null)
+            {
+                return;
+            }
+
+            try
+            {
+                MediaSource source = MediaSource.CreateFromUri(CreateFileMediaUri(item.FilePath));
+                player.Source = source;
+                if (AppSettingsStore.Load().AutoPlayWhenStart)
+                {
+                    player.Play();
+                }
+                else
+                {
+                    player.Pause();
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("恢复加载媒体失败: " + ex.Message);
+            }
+
+            NotifyCurrentPlaylistWindow();
+            _miniPlayerWindow?.RefreshFromOwner();
+        }
+
+        private void PersistPlaybackSession()
+        {
+            try
+            {
+                if (!AppSettingsStore.Load().RestorePlayback)
+                {
+                    return;
+                }
+
+                PlaylistItem? item = GetCurrentPlayingItem();
+                if (item == null)
+                {
+                    return;
+                }
+
+                double pos = GetPlayer()?.PlaybackSession.Position.TotalSeconds ?? 0;
+                PlaybackSessionStore.Save(item.FilePath, pos);
+            }
+            catch
+            {
+            }
+        }
+
+
+        private void PlaybackRateButton_Click(object sender, RoutedEventArgs e)
+        {
+            // 引擎（FFmpeg 转码播放）暂不支持变速
+            if (_audioEngine?.IsPlaying == true || _isEnginePaused)
+            {
+                NowPlayingText.Text = "引擎播放暂不支持变速，请使用系统原生格式";
+                return;
+            }
+
+            var flyout = new MenuFlyout();
+            double current = Math.Clamp(AppSettingsStore.Load().PlaybackRate, 0.5, 2.0);
+            foreach (double rate in new[] { 0.5, 0.75, 1.0, 1.25, 1.5, 2.0 })
+            {
+                double r = rate;
+                var item = new MenuFlyoutItem { Text = r.ToString("0.##") + "x" };
+                item.Click += (_, _) => SetPlaybackRate(r);
+                flyout.Items.Add(item);
+            }
+
+            flyout.ShowAt(sender as FrameworkElement);
+        }
+
+        private void SetPlaybackRate(double rate)
+        {
+            AppSettingsStore.Update(s => s.PlaybackRate = Math.Clamp(rate, 0.5, 2.0));
+            ApplyPlaybackRateFromSettings();
+            UpdatePlaybackRateButtonText();
+        }
+
+        private void UpdatePlaybackRateButtonText()
+        {
+            if (PlaybackRateText == null)
+            {
+                return;
+            }
+
+            double rate = Math.Clamp(AppSettingsStore.Load().PlaybackRate, 0.5, 2.0);
+            PlaybackRateText.Text = rate.ToString("0.##") + "x";
+        }
+
+        private void ApplyAudioChannelFromSettings()
+        {
+            MediaPlayer? player = GetPlayer();
+            if (player == null)
+            {
+                return;
+            }
+
+            string channel = AppSettingsStore.Load().AudioChannel;
+            player.AudioBalance = channel switch
+            {
+                "Left" => -1f,
+                "Right" => 1f,
+                _ => 0f
+            };
+        }
+
+        private void ApplyAlwaysOnTopFromSettings()
+        {
+            try
+            {
+                if (AppWindow.Presenter is OverlappedPresenter presenter)
+                {
+                    presenter.IsAlwaysOnTop = AppSettingsStore.Load().AlwaysOnTop;
+                }
+            }
+            catch
+            {
+            }
+        }
+        private MediaPlayer? GetPlayer() => _mediaPlayer ?? PlayerElement?.MediaPlayer;
+
+        /// <summary>汉堡菜单：选择文件 / 文件夹 / 重新扫描</summary>
+        private void SelectLocalAudioButton_Click(object sender, RoutedEventArgs e)
+        {
+            var flyout = new MenuFlyout
+            {
+                Placement = FlyoutPlacementMode.Bottom
+            };
+
+            var fileItem = new MenuFlyoutItem { Text = "选择文件…" };
+            fileItem.Icon = new FontIcon { Glyph = "\uE710" }; // Add
+            fileItem.Click += OpenFileButton_Click;
+
+            var folderItem = new MenuFlyoutItem { Text = "选择文件夹…" };
+            folderItem.Icon = new FontIcon { Glyph = "\uE8B7" }; // Folder
+            folderItem.Click += OpenFolderButton_Click;
+
+            var rescanItem = new MenuFlyoutItem { Text = "重新扫描本地文件" };
+            rescanItem.Icon = new FontIcon { Glyph = "\uE72C" }; // Refresh
+            rescanItem.Click += RescanLocalLibraryButton_Click;
+
+            flyout.Items.Add(fileItem);
+            flyout.Items.Add(folderItem);
+            flyout.Items.Add(rescanItem);
+            AppendHamburgerFeatureItems(flyout);
+            flyout.Items.Add(new MenuFlyoutSeparator());
+
+            var settingsItem = new MenuFlyoutItem { Text = "选项设置" };
+            settingsItem.Icon = new FontIcon { Glyph = "\uE713" };
+            settingsItem.Click += (_, _) => SettingsWindow.ShowOrActivate();
+            flyout.Items.Add(settingsItem);
+
+            flyout.ShowAt(SelectLocalAudioButton, new FlyoutShowOptions
+            {
+                Placement = FlyoutPlacementMode.Bottom
+            });
+        }
+
+        // =====================================================================
+        // 打开文件 / 选择文件夹
+        // =====================================================================
+
+        private async void OpenFileButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                FileOpenPicker picker = new();
+                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                picker.ViewMode = PickerViewMode.List;
+                picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
+                picker.FileTypeFilter.Add(".mp3");
+                picker.FileTypeFilter.Add(".wav");
+                picker.FileTypeFilter.Add(".m4a");
+                picker.FileTypeFilter.Add(".flac");
+                picker.FileTypeFilter.Add(".wma");
+                picker.FileTypeFilter.Add(".ogg");
+                picker.FileTypeFilter.Add(".aac");
+                picker.FileTypeFilter.Add(".ape");
+                picker.FileTypeFilter.Add(".wv");
+                picker.FileTypeFilter.Add(".tta");
+                picker.FileTypeFilter.Add(".dsf");
+                picker.FileTypeFilter.Add(".dff");
+                picker.FileTypeFilter.Add(".mpc");
+                picker.FileTypeFilter.Add(".tak");
+                picker.FileTypeFilter.Add(".opus");
+
+                var files = await picker.PickMultipleFilesAsync();
+                if (files == null || files.Count == 0)
+                {
+                    return;
+                }
+
+                string[] paths = files
+                    .Select(f => f.Path)
+                    .Where(p => !string.IsNullOrWhiteSpace(p))
+                    .ToArray();
+
+                LoadAndAddFiles(paths, persistAsFiles: true, replace: true);
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync("打开文件失败", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 选择文件夹：递归扫描其中所有支持的音频，再交给 LoadAndAddFiles。
+        /// </summary>
+        private async void OpenFolderButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                FolderPicker picker = new();
+                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
+                // FolderPicker 至少要加一个过滤器，常用 "*"
+                picker.FileTypeFilter.Add("*");
+
+                StorageFolder? folder = await picker.PickSingleFolderAsync();
+                if (folder == null || string.IsNullOrWhiteSpace(folder.Path))
+                {
+                    return;
+                }
+
+                // 后台枚举路径，避免大文件夹卡住 UI 太久；读标签仍在 LoadAndAddFiles
+                string folderPath = folder.Path;
+                _browseFolderPath = folderPath;
+
+                string[] paths = await System.Threading.Tasks.Task.Run(() =>
+                    EnumerateAudioFiles(folderPath).ToArray());
+
+                LibrarySessionStore.SaveFolder(folderPath, paths);
+                if (_currentCategory == "Folders")
+                {
+                    RefreshFolderBrowserRoots();
+                }
+
+                if (paths.Length == 0)
+                {
+                    await ShowErrorAsync("未找到音频", "该文件夹（含子文件夹）中没有支持的音频文件。");
+                    return;
+                }
+
+                LoadAndAddFiles(paths, persist: false, replace: true);
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync("选择文件夹失败", ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 按上次会话的文件夹或文件列表重新扫描，清空并替换当前音乐库展示。
+        /// </summary>
+        /// <summary>按媒体库设置过滤路径：移除缺失文件 / 忽略过短文件。</summary>
+        private static string[] FilterLibraryPaths(IEnumerable<string> paths)
+        {
+            AppSettingsState s = AppSettingsStore.Load();
+            var result = new List<string>();
+            foreach (string path in paths
+                         .Where(p => !string.IsNullOrWhiteSpace(p))
+                         .Distinct(StringComparer.OrdinalIgnoreCase))
+            {
+                if (s.RemoveMissingOnUpdate && !System.IO.File.Exists(path))
+                {
+                    continue;
+                }
+
+                if (s.IgnoreTooShortOnUpdate && s.FileTooShortSec > 0 && System.IO.File.Exists(path))
+                {
+                    try
+                    {
+                        using TagLib.File tagFile = TagLib.File.Create(path);
+                        if (tagFile.Properties.Duration.TotalSeconds < s.FileTooShortSec)
+                        {
+                            continue;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                result.Add(path);
+            }
+
+            return result.ToArray();
+        }
+
+        private async void RescanLocalLibraryButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_libraryRescanInProgress)
+            {
+                return;
+            }
+
+            _libraryRescanInProgress = true;
+            try
+            {
+                try
+                {
+                    await RescanLocalLibraryCoreAsync();
+                }
+                catch (Exception ex)
+                {
+                    await ShowErrorAsync("重新扫描失败", ex.Message);
+                }
+            }
+            finally
+            {
+                _libraryRescanInProgress = false;
+            }
+        }
+
+        private async Task RescanLocalLibraryCoreAsync()
+        {
+            try
+            {
+                LibrarySessionState? state = LibrarySessionStore.TryLoad();
+                string? folderPath = !string.IsNullOrWhiteSpace(state?.FolderPath)
+                    ? state!.FolderPath
+                    : _browseFolderPath;
+
+                bool folderMode = state != null
+                    && string.Equals(state.Mode, "folder", StringComparison.OrdinalIgnoreCase)
+                    && !string.IsNullOrWhiteSpace(folderPath)
+                    && Directory.Exists(folderPath);
+
+                string[] paths;
+                if (folderMode)
+                {
+                    string scanRoot = folderPath!;
+                    _browseFolderPath = scanRoot;
+                    paths = await Task.Run(() => FilterLibraryPaths(EnumerateAudioFiles(scanRoot)));
+                    LibrarySessionStore.SaveFolder(scanRoot, paths);
+                }
+                else
+                {
+                    // 文件列表模式：重读已保存路径；若会话缺失则用当前曲库路径
+                    IEnumerable<string> sourcePaths = (state?.FilePaths != null && state.FilePaths.Count > 0)
+                        ? state.FilePaths
+                        : _playlist.Select(p => p.FilePath);
+
+                    paths = FilterLibraryPaths(sourcePaths);
+
+                    if (!string.IsNullOrWhiteSpace(folderPath) && Directory.Exists(folderPath))
+                    {
+                        _browseFolderPath = folderPath;
+                    }
+
+                    if (paths.Length > 0)
+                    {
+                        LibrarySessionStore.SaveFiles(paths);
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(_browseFolderPath))
+                {
+                    RefreshFolderBrowserRoots();
+                }
+
+                if (paths.Length == 0)
+                {
+                    ReplaceLibraryWithPaths(Array.Empty<string>(), persist: false);
+                    await ShowErrorAsync("重新扫描", "未找到可读取的本地音频。请先通过「选择文件」或「选择文件夹」导入。");
+                    return;
+                }
+
+                ReplaceLibraryWithPaths(paths, persist: false);
+                NowPlayingText.Text = $"已重新扫描，共 {_playlist.Count} 首";
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync("重新扫描失败", ex.Message);
+            }
+        }
+
+        /// <summary>把本地路径构造成 file URI,转义 # % ? 避免被解析为 fragment/query。</summary>
+        private static Uri CreateFileMediaUri(string path)
+        {
+            string escaped = path
+                .Replace("%", "%25")
+                .Replace("#", "%23")
+                .Replace("?", "%3F");
+            return new Uri(escaped, UriKind.Absolute);
+        }
+
+        /// <summary>清空音乐库后按路径重建元数据，并刷新当前分类界面。</summary>
+        private void ReplaceLibraryWithPaths(string[] filePaths, bool persist)
+        {
+            string? playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
+                ? _playlist[_currentIndex].FilePath
+                : null;
+
+            bool rebindPlaylistView = ReferenceEquals(PlaylistView.ItemsSource, _playlist);
+            if (rebindPlaylistView)
+            {
+                PlaylistView.ItemsSource = null;
+            }
+
+            _playlist.Clear();
+            _albums.Clear();
+            _artists.Clear();
+            _albumTracks.Clear();
+            _artistTracks.Clear();
+            _artistAlbums.Clear();
+            CloseAlbumDetailUi();
+            CloseArtistDetailUi();
+
+            if (filePaths.Length > 0)
+            {
+                var knownPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (string path in filePaths)
+                {
+                    if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+                    {
+                        continue;
+                    }
+
+                    if (!knownPaths.Add(path))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        _playlist.Add(CreatePlaylistItemFromPath(path));
+                    }
+                    catch (Exception ex)
+                    {
+                        knownPaths.Remove(path);
+                        System.Diagnostics.Debug.WriteLine($"重新扫描加载失败: {path} → {ex.Message}");
+                    }
+                }
+            }
+
+            if (rebindPlaylistView
+                || string.Equals(_currentCategory, "Songs", StringComparison.Ordinal))
+            {
+                PlaylistView.ItemsSource = _playlist;
+            }
+
+            if (!string.IsNullOrWhiteSpace(playingPath))
+            {
+                UpdateCurrentIndexByPath(playingPath);
+            }
+            else
+            {
+                _currentIndex = -1;
+            }
+
+            ApplyCategoryView();
+
+            if (persist)
+            {
+                LibrarySessionStore.SaveFiles(_playlist.Select(i => i.FilePath));
+            }
+        }
+
+        /// <summary>递归枚举文件夹内所有音频路径</summary>
+        private static IEnumerable<string> EnumerateAudioFiles(string folderPath)
+        {
+            if (!Directory.Exists(folderPath))
+            {
+                yield break;
+            }
+
+            // 逐目录递归:某个受保护子目录(无权限)只跳过该目录,不影响其它文件
+            foreach (string path in EnumerateAudioFilesRecursive(folderPath))
+            {
+                yield return path;
+            }
+        }
+
+        private static IEnumerable<string> EnumerateAudioFilesRecursive(string folder)
+        {
+            string[] subDirs;
+            string[] files;
+            try
+            {
+                subDirs = Directory.GetDirectories(folder);
+                files = Directory.GetFiles(folder);
+            }
+            catch
+            {
+                yield break;
+            }
+
+            foreach (string path in files)
+            {
+                string ext = Path.GetExtension(path);
+                if (AudioExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+                {
+                    yield return path;
+                }
+            }
+
+            foreach (string sub in subDirs)
+            {
+                foreach (string path in EnumerateAudioFilesRecursive(sub))
+                {
+                    yield return path;
+                }
+            }
+        }
+
+        /// <summary>根据路径读元数据并加入列表，然后按当前排序规则重排。</summary>
+        /// <param name="persist">为 true 时写入上次会话（默认）。</param>
+        /// <param name="persistAsFiles">为 true 时按「文件列表」模式保存整份播放列表。</param>
+        private void LoadAndAddFiles(string[] filePaths, bool persist = true, bool persistAsFiles = false, bool replace = false)
+        {
+            if (filePaths == null || filePaths.Length == 0)
+            {
+                return;
+            }
+
+            string? playingPath = null;
+            if (replace)
+            {
+                // 替换模式：停止当前播放并清空媒体库，再载入新内容
+                MediaPlayer? player = GetPlayer();
+                if (player != null)
+                {
+                    player.Pause();
+                    player.Source = null;
+                }
+
+                StopEngineIfActive();
+                _playlist.Clear();
+                _currentIndex = -1;
+                ClearNowPlayingPanel();
+            }
+            else
+            {
+                // 记住当前正在播的文件，排序后要能找回下标
+                playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
+                    ? _playlist[_currentIndex].FilePath
+                    : null;
+            }
+
+            // HashSet 去重，避免大批量导入时对 _playlist 反复线性扫描
+            var knownPaths = new HashSet<string>(
+                _playlist.Select(i => i.FilePath),
+                StringComparer.OrdinalIgnoreCase);
+
+            int added = 0;
+
+            foreach (string path in filePaths)
+            {
+                if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+                {
+                    continue;
+                }
+
+                if (!knownPaths.Add(path))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    PlaylistItem item = CreatePlaylistItemFromPath(path);
+                    _playlist.Add(item);
+                    added++;
+                }
+                catch (Exception ex)
+                {
+                    knownPaths.Remove(path);
+                    System.Diagnostics.Debug.WriteLine($"加载失败: {path} → {ex.Message}");
+                }
+            }
+
+            if (added == 0)
+            {
+                if (replace)
+                {
+                    ApplyCategoryView();
+                }
+
+                return;
+            }
+
+            // 当前在「歌曲」分类时，按标题默认排序刷新列表
+            if (_currentCategory == "Songs")
+            {
+                ApplyCategoryView();
+            }
+            else if (_currentCategory == "Albums")
+            {
+                ApplyCategoryView();
+            }
+            else if (_currentCategory == "Artists" || _currentCategory == "AlbumArtists")
+            {
+                ApplyCategoryView();
+            }
+            else
+            {
+                ApplySort(preservePlayingPath: playingPath);
+            }
+
+            // 不自动播放：用户双击或点播放后再开始
+            if (added > 0)
+            {
+                NowPlayingText.Text = $"已添加 {added} 首，共 {_playlist.Count} 首";
+            }
+
+            if (persist && persistAsFiles)
+            {
+                LibrarySessionStore.SaveFiles(_playlist.Select(i => i.FilePath));
+            }
+        }
+
+        /// <summary>TagLib 读取标题 / 艺术家 / 专辑 / 音轨号 / 年份 / 时长</summary>
+        private static PlaylistItem CreatePlaylistItemFromPath(string path)
+        {
+            string fileName = Path.GetFileNameWithoutExtension(path);
+            string title = fileName;
+            string artist = "未知艺术家";
+            string albumArtist = "未知艺术家";
+            string album = "未知专辑";
+            uint track = 0;
+            uint year = 0;
+            string genre = "未知流派";
+            TimeSpan duration = TimeSpan.Zero;
+
+            using (TagLib.File tagFile = TagLib.File.Create(path))
+            {
+                if (!string.IsNullOrWhiteSpace(tagFile.Tag.Title))
+                {
+                    title = tagFile.Tag.Title.Trim();
+                }
+
+                string? performer = tagFile.Tag.FirstPerformer;
+                if (string.IsNullOrWhiteSpace(performer))
+                {
+                    performer = tagFile.Tag.JoinedPerformers;
+                }
+
+                if (!string.IsNullOrWhiteSpace(performer))
+                {
+                    artist = performer.Trim();
+                }
+
+                string? albumPerformer = tagFile.Tag.FirstAlbumArtist;
+                if (string.IsNullOrWhiteSpace(albumPerformer))
+                {
+                    albumPerformer = tagFile.Tag.JoinedAlbumArtists;
+                }
+
+                if (!string.IsNullOrWhiteSpace(albumPerformer))
+                {
+                    albumArtist = albumPerformer.Trim();
+                }
+                else
+                {
+                    albumArtist = artist;
+                }
+
+                if (!string.IsNullOrWhiteSpace(tagFile.Tag.Album))
+                {
+                    album = tagFile.Tag.Album.Trim();
+                }
+
+                track = tagFile.Tag.Track;
+                year = tagFile.Tag.Year;
+                if (!string.IsNullOrWhiteSpace(tagFile.Tag.FirstGenre))
+                {
+                    genre = tagFile.Tag.FirstGenre.Trim();
+                }
+
+                duration = tagFile.Properties.Duration;
+            }
+
+            return new PlaylistItem
+            {
+                Title = title,
+                Artist = artist,
+                AlbumArtist = albumArtist,
+                Album = album,
+                Track = track,
+                Year = year,
+                Genre = genre,
+                Duration = duration,
+                DurationText = FormatTime(duration),
+                FilePath = path
+            };
+        }
+
+        // =====================================================================
+        // 左侧分类导航
+        // =====================================================================
+
+        private void CategoryNavButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { Tag: string tag } || string.IsNullOrWhiteSpace(tag))
+            {
+                return;
+            }
+
+            if (string.Equals(_currentCategory, tag, StringComparison.Ordinal)
+                && _openedAlbum == null
+                && _openedArtist == null)
+            {
+                return;
+            }
+
+            ExitMultiSelectMode();
+            CommitLibraryNavigation(() =>
+            {
+                _currentCategory = tag;
+                ApplyCategoryView();
+            });
+            ApplySwitchPlaylistPausePreference();
+        }
+
+        private void UserPlaylistNavButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
+                && _openedAlbum == null
+                && _openedArtist == null)
+            {
+                return;
+            }
+
+            ExitMultiSelectMode();
+            CommitLibraryNavigation(() =>
+            {
+                _currentCategory = "UserPlaylist";
+                ApplyCategoryView();
+            });
+            ApplySwitchPlaylistPausePreference();
+        }
+
+        private void LibraryPaneRoot_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            PointerUpdateKind kind = e.GetCurrentPoint(LibraryPaneRoot).Properties.PointerUpdateKind;
+            if (kind == PointerUpdateKind.XButton1Pressed)
+            {
+                NavigateLibraryHistoryBack();
+                e.Handled = true;
+            }
+            else if (kind == PointerUpdateKind.XButton2Pressed)
+            {
+                NavigateLibraryHistoryForward();
+                e.Handled = true;
+            }
+        }
+
+        private LibraryNavState CaptureLibraryNavState()
+            => new()
+            {
+                Category = _currentCategory,
+                ArtistName = _openedArtist?.Name,
+                AlbumName = _openedAlbum?.Name,
+                AlbumFromArtist = _albumOpenedFromArtist,
+                UsesAlbumArtist = _artistDetailUsesAlbumArtist
+            };
+
+        private static bool LibraryNavStatesEqual(LibraryNavState a, LibraryNavState b)
+            => string.Equals(a.Category, b.Category, StringComparison.Ordinal)
+               && string.Equals(a.ArtistName, b.ArtistName, StringComparison.OrdinalIgnoreCase)
+               && string.Equals(a.AlbumName, b.AlbumName, StringComparison.OrdinalIgnoreCase)
+               && a.AlbumFromArtist == b.AlbumFromArtist
+               && a.UsesAlbumArtist == b.UsesAlbumArtist;
+
+        /// <summary>执行会改变中间界面的导航，并写入后退栈（清空前进栈）。</summary>
+        private void CommitLibraryNavigation(Action navigate)
+        {
+            if (_suppressNavHistory)
+            {
+                navigate();
+                _navCurrent = CaptureLibraryNavState();
+                return;
+            }
+
+            LibraryNavState before = _navCurrent ?? CaptureLibraryNavState();
+            navigate();
+            LibraryNavState after = CaptureLibraryNavState();
+            if (!LibraryNavStatesEqual(before, after))
+            {
+                _navBackStack.Add(before);
+                _navForwardStack.Clear();
+            }
+
+            _navCurrent = after;
+        }
+
+        private void NavigateLibraryHistoryBack()
+        {
+            if (_navBackStack.Count == 0)
+            {
+                return;
+            }
+
+            LibraryNavState current = CaptureLibraryNavState();
+            LibraryNavState target = _navBackStack[^1];
+            _navBackStack.RemoveAt(_navBackStack.Count - 1);
+            _navForwardStack.Add(current);
+            RestoreLibraryNavState(target);
+        }
+
+        private void NavigateLibraryHistoryForward()
+        {
+            // 从未前进过 / 前进栈为空：保持当前界面
+            if (_navForwardStack.Count == 0)
+            {
+                return;
+            }
+
+            LibraryNavState current = CaptureLibraryNavState();
+            LibraryNavState target = _navForwardStack[^1];
+            _navForwardStack.RemoveAt(_navForwardStack.Count - 1);
+            _navBackStack.Add(current);
+            RestoreLibraryNavState(target);
+        }
+
+        private void RestoreLibraryNavState(LibraryNavState state)
+        {
+            _suppressNavHistory = true;
+            try
+            {
+                ExitMultiSelectMode();
+                _currentCategory = state.Category;
+                ApplyCategoryView();
+
+                if (!string.IsNullOrWhiteSpace(state.ArtistName)
+                    && (string.Equals(state.Category, "Artists", StringComparison.Ordinal)
+                        || string.Equals(state.Category, "AlbumArtists", StringComparison.Ordinal)))
+                {
+                    _artistDetailUsesAlbumArtist = state.UsesAlbumArtist
+                        || string.Equals(state.Category, "AlbumArtists", StringComparison.Ordinal);
+                    ArtistEntry? artist = _artists.FirstOrDefault(a =>
+                        string.Equals(a.Name, state.ArtistName, StringComparison.CurrentCultureIgnoreCase));
+                    if (artist == null)
+                    {
+                        artist = new ArtistEntry { Name = state.ArtistName };
+                        _artists.Add(artist);
+                    }
+
+                    OpenArtistDetailCore(artist);
+                }
+
+                if (!string.IsNullOrWhiteSpace(state.AlbumName))
+                {
+                    AlbumEntry? album = FindAlbumEntryByName(state.AlbumName);
+                    if (album != null)
+                    {
+                        OpenAlbumDetailCore(album, state.AlbumFromArtist);
+                    }
+                }
+
+                _navCurrent = CaptureLibraryNavState();
+                UpdateLibraryNavHighlight();
+            }
+            finally
+            {
+                _suppressNavHistory = false;
+            }
+        }
+
+        private AlbumEntry? FindAlbumEntryByName(string albumName)
+        {
+            AlbumEntry? fromWall = _albums.FirstOrDefault(a =>
+                string.Equals(a.Name, albumName, StringComparison.CurrentCultureIgnoreCase));
+            if (fromWall != null)
+            {
+                return fromWall;
+            }
+
+            AlbumEntry? fromArtist = _artistAlbums.FirstOrDefault(a =>
+                string.Equals(a.Name, albumName, StringComparison.CurrentCultureIgnoreCase));
+            if (fromArtist != null)
+            {
+                return fromArtist;
+            }
+
+            List<PlaylistItem> tracks = _playlist
+                .Where(t => string.Equals(t.Album, albumName, StringComparison.CurrentCultureIgnoreCase))
+                .ToList();
+            return tracks.Count == 0 ? null : BuildAlbumEntriesFromTracks(tracks).FirstOrDefault();
+        }
+
+        /// <summary>切换播放列表时：若设置不允许继续播放，则暂停当前播放。</summary>
+        private void ApplySwitchPlaylistPausePreference()
+        {
+            if (AppSettingsStore.Load().ContinueWhenSwitchPlaylist)
+            {
+                return;
+            }
+
+            MediaPlayer? player = GetPlayer();
+            if (player?.Source != null && player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
+            {
+                try
+                {
+                    player.Pause();
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        /// <summary>根据当前左侧分类刷新中间区域</summary>
+        private void ApplyCategoryView()
+        {
+            string? playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
+                ? _playlist[_currentIndex].FilePath
+                : null;
+
+            UpdateLibraryNavHighlight();
+
+            switch (_currentCategory)
+            {
+                case "Songs":
+                    LibraryPaneTitle.Text = "歌曲";
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Visible;
+                    SetSongSortUiForCategory(isUserPlaylist: false);
+                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Visible;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    PlaylistView.ItemsSource = _playlist;
+
+                    _sortField = SortField.Title;
+                    _sortAscending = true;
+                    SortFieldButton.Content = "排序：标题";
+                    SortOrderButton.Content = "升序";
+                    ApplySort(playingPath);
+                    break;
+
+                case "UserPlaylist":
+                    LibraryPaneTitle.Text = "播放列表";
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Visible;
+                    SetSongSortUiForCategory(isUserPlaylist: true);
+                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Visible;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    PlaylistView.ItemsSource = _userPlaylist;
+                    // 播放列表默认不排序：保持添加顺序（后添加批次在前，批内相对顺序不变）
+                    RenumberCollection(_userPlaylist);
+                    break;
+
+                case "Albums":
+                    LibraryPaneTitle.Text = "专辑";
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Collapsed;
+                    AlbumSortButton.Visibility = Visibility.Visible;
+                    PlaylistListBorder.Visibility = Visibility.Collapsed;
+                    AlbumListBorder.Visibility = Visibility.Visible;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    _ = RefreshAlbumViewAsync();
+                    break;
+
+                case "Artists":
+                case "AlbumArtists":
+                    LibraryPaneTitle.Text = _currentCategory == "AlbumArtists" ? "专辑艺术家" : "艺术家";
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Collapsed;
+                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Collapsed;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Visible;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    _ = RefreshArtistViewAsync();
+                    break;
+
+                case "Folders":
+                    LibraryPaneTitle.Text = "文件夹";
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Collapsed;
+                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Collapsed;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Visible;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    RefreshFolderBrowserRoots();
+                    break;
+
+                case "Favorites":
+                case "Recent":
+                    ApplyFavoritesOrRecentCategory();
+                    break;
+
+                case "MostPlayed":
+                    ApplyMostPlayedCategory();
+                    break;
+
+                case "Genres":
+                case "Years":
+                    LibraryPaneTitle.Text = _currentCategory == "Genres" ? "流派" : "年份";
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Collapsed;
+                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Collapsed;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Visible;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    ArtistGridView.Visibility = Visibility.Visible;
+                    ArtistDetailPanel.Visibility = Visibility.Collapsed;
+                    _ = RefreshGenreYearViewAsync();
+                    break;
+
+                case "GenreSongs":
+                case "YearSongs":
+                    LibraryPaneTitle.Text = (_currentCategory == "GenreSongs" ? "流派：" : "年份：") + (_genreYearFilter ?? "");
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Visible;
+                    SetSongSortUiForCategory(isUserPlaylist: false);
+                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Visible;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    var groupedSongs = _currentCategory == "GenreSongs"
+                        ? _playlist
+                            .Where(t => string.Equals(t.Genre, _genreYearFilter, StringComparison.OrdinalIgnoreCase)
+                                        || (string.IsNullOrWhiteSpace(t.Genre) && _genreYearFilter == "未知流派"))
+                            .ToList()
+                        : _playlist
+                            .Where(t => (t.Year > 0 ? t.Year.ToString() : "未知年份") == _genreYearFilter)
+                            .ToList();
+                    var groupedCollection = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>(groupedSongs);
+                    RenumberCollection(groupedCollection);
+                    PlaylistView.ItemsSource = groupedCollection;
+                    break;
+            }
+
+            UpdateUserPlaylistActionBarVisibility();
+            UpdateLibrarySearchUi();
+        }
+
+        private async Task RefreshGenreYearViewAsync()
+        {
+            List<ArtistEntry> entries = await Task.Run(() =>
+            {
+                if (_currentCategory == "Genres")
+                {
+                    return _playlist
+                        .GroupBy(t => string.IsNullOrWhiteSpace(t.Genre) || t.Genre == "未知流派" ? "未知流派" : t.Genre)
+                        .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+                        .Select(g => new ArtistEntry { Name = g.Key, TrackCount = g.Count() })
+                        .ToList();
+                }
+
+                return _playlist
+                    .GroupBy(t => t.Year > 0 ? t.Year.ToString() : "未知年份")
+                    .OrderByDescending(g => g.Key == "未知年份"
+                        ? -1
+                        : int.TryParse(g.Key, out int year) ? year : -1)
+                    .Select(g => new ArtistEntry { Name = g.Key, TrackCount = g.Count() })
+                    .ToList();
+            });
+
+            if (_currentCategory is "Genres" or "Years")
+            {
+                ArtistGridView.ItemsSource = entries;
+                RefreshPlaylistSelectionChrome();
+            }
+        }
+
+        private void OpenGenreYearSongs(string groupName)
+        {
+            _genreYearFilter = groupName;
+            ExitMultiSelectMode();
+            CommitLibraryNavigation(() =>
+            {
+                _currentCategory = _currentCategory == "Genres" ? "GenreSongs" : "YearSongs";
+                ApplyCategoryView();
+            });
+        }
+
+        // =====================================================================
+        // 库搜索（歌曲 / 专辑 / 文件夹）
+        // =====================================================================
+
+        private void UpdateLibrarySearchUi()
+        {
+            if (LibrarySearchPanel == null)
+            {
+                return;
+            }
+
+            bool show = !_isMultiSelectMode
+                && _openedAlbum == null
+                && _openedArtist == null
+                && (_currentCategory is "Songs" or "Albums" or "Artists" or "AlbumArtists" or "Folders" or "UserPlaylist" or "Favorites" or "Recent");
+
+            LibrarySearchPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            if (!show)
+            {
+                if (FolderSearchNavPanel != null)
+                {
+                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
+                }
+
+                if (_currentCategory != "Folders")
+                {
+                    ClearFolderSearchHighlightOnly();
+                }
+
+                return;
+            }
+
+            LibrarySearchBox.PlaceholderText = _currentCategory switch
+            {
+                "Songs" => "搜索标题、专辑、艺术家",
+                "Albums" => "搜索专辑、艺术家",
+                "Artists" => "搜索艺术家",
+                "AlbumArtists" => "搜索专辑艺术家",
+                "Folders" => "搜索文件名",
+                "UserPlaylist" => "搜索标题、艺术家、专辑、年份",
+                _ => "搜索"
+            };
+
+            ApplyLibrarySearchNow();
+        }
+
+        private void LibrarySearchBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            _librarySearchText = LibrarySearchBox.Text ?? string.Empty;
+
+            if (_librarySearchDebounceTimer == null)
+            {
+                _librarySearchDebounceTimer = DispatcherQueue.CreateTimer();
+                _librarySearchDebounceTimer.IsRepeating = false;
+                _librarySearchDebounceTimer.Interval = TimeSpan.FromMilliseconds(180);
+                _librarySearchDebounceTimer.Tick += (_, _) => ApplyLibrarySearchNow();
+            }
+
+            _librarySearchDebounceTimer.Stop();
+            _librarySearchDebounceTimer.Start();
+        }
+
+        private void ApplyLibrarySearchNow()
+        {
+            switch (_currentCategory)
+            {
+                case "Songs":
+                    ApplySongsSearchFilter();
+                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
+                    ClearFolderSearchHighlightOnly();
+                    break;
+                case "Albums":
+                    ApplyAlbumsSearchFilter();
+                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
+                    ClearFolderSearchHighlightOnly();
+                    break;
+                case "Artists":
+                case "AlbumArtists":
+                    ApplyArtistsSearchFilter();
+                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
+                    ClearFolderSearchHighlightOnly();
+                    break;
+                case "Folders":
+                    ApplyFolderSearch();
+                    break;
+                case "UserPlaylist":
+                    ApplyUserPlaylistSearchFilter();
+                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
+                    ClearFolderSearchHighlightOnly();
+                    break;
+                default:
+                    FolderSearchNavPanel.Visibility = Visibility.Collapsed;
+                    break;
+            }
+        }
+
+        private static bool ContainsIgnoreCase(string? source, string query)
+        {
+            if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(query))
+            {
+                return false;
+            }
+
+            return source.Contains(query, StringComparison.CurrentCultureIgnoreCase);
+        }
+
+        private void ApplySongsSearchFilter()
+        {
+            if (_currentCategory != "Songs" || PlaylistView == null)
+            {
+                return;
+            }
+
+            string q = _librarySearchText.Trim();
+            if (string.IsNullOrEmpty(q))
+            {
+                if (!ReferenceEquals(PlaylistView.ItemsSource, _playlist))
+                {
+                    PlaylistView.ItemsSource = _playlist;
+                }
+
+                RefreshPlaylistSelectionChrome();
+                return;
+            }
+
+            List<PlaylistItem> filtered = _playlist
+                .Where(p =>
+                    ContainsIgnoreCase(p.Title, q)
+                    || ContainsIgnoreCase(p.Album, q)
+                    || ContainsIgnoreCase(p.Artist, q))
+                .ToList();
+
+            PlaylistView.ItemsSource = filtered;
+            RefreshPlaylistSelectionChrome();
+        }
+
+        /// <summary>播放列表搜索：标题 / 艺术家 / 专辑 / 年份。</summary>
+        private void ApplyUserPlaylistSearchFilter()
+        {
+            if (_currentCategory != "UserPlaylist" || PlaylistView == null)
+            {
+                return;
+            }
+
+            string q = _librarySearchText.Trim();
+            if (string.IsNullOrEmpty(q))
+            {
+                if (!ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist))
+                {
+                    PlaylistView.ItemsSource = _userPlaylist;
+                }
+
+                RefreshPlaylistSelectionChrome();
+                return;
+            }
+
+            List<PlaylistItem> filtered = _userPlaylist
+                .Where(p => MatchesPlaylistSearch(p, q))
+                .ToList();
+
+            PlaylistView.ItemsSource = filtered;
+            RefreshPlaylistSelectionChrome();
+        }
+
+        internal static bool MatchesPlaylistSearch(PlaylistItem item, string query)
+        {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                return true;
+            }
+
+            string q = query.Trim();
+            return ContainsIgnoreCase(item.Title, q)
+                || ContainsIgnoreCase(item.Artist, q)
+                || ContainsIgnoreCase(item.Album, q)
+                || ContainsIgnoreCase(item.YearText, q)
+                || (item.Year > 0 && ContainsIgnoreCase(item.Year.ToString(), q));
+        }
+
+        private void ApplyAlbumsSearchFilter()
+        {
+            if (_currentCategory != "Albums" || AlbumGridView == null)
+            {
+                return;
+            }
+
+            string q = _librarySearchText.Trim();
+            if (string.IsNullOrEmpty(q))
+            {
+                if (!ReferenceEquals(AlbumGridView.ItemsSource, _albums))
+                {
+                    AlbumGridView.ItemsSource = _albums;
+                }
+
+                RefreshAlbumWallSelectionChrome(AlbumGridView, _albums);
+                return;
+            }
+
+            List<AlbumEntry> filtered = _albums
+                .Where(a =>
+                    ContainsIgnoreCase(a.Name, q)
+                    || ContainsIgnoreCase(a.Artist, q))
+                .ToList();
+
+            AlbumGridView.ItemsSource = filtered;
+            RefreshAlbumWallSelectionChrome(AlbumGridView, filtered);
+        }
+
+        private void ApplyArtistsSearchFilter()
+        {
+            if ((_currentCategory != "Artists" && _currentCategory != "AlbumArtists") || ArtistGridView == null)
+            {
+                return;
+            }
+
+            string q = _librarySearchText.Trim();
+            if (string.IsNullOrEmpty(q))
+            {
+                if (!ReferenceEquals(ArtistGridView.ItemsSource, _artists))
+                {
+                    ArtistGridView.ItemsSource = _artists;
+                }
+
+                return;
+            }
+
+            List<ArtistEntry> filtered = _artists
+                .Where(a => ContainsIgnoreCase(a.Name, q))
+                .ToList();
+
+            ArtistGridView.ItemsSource = filtered;
+        }
+
+        private void FolderSearchPrevButton_Click(object sender, RoutedEventArgs e)
+            => NavigateFolderSearchMatch(-1);
+
+        private void FolderSearchNextButton_Click(object sender, RoutedEventArgs e)
+            => NavigateFolderSearchMatch(+1);
+
+        private void ApplyFolderSearch()
+        {
+            string q = _librarySearchText.Trim();
+            _folderSearchMatches.Clear();
+            _folderSearchIndex = -1;
+            _folderSearchHighlightPath = null;
+
+            if (string.IsNullOrEmpty(q)
+                || string.IsNullOrWhiteSpace(_browseFolderPath)
+                || !Directory.Exists(_browseFolderPath))
+            {
+                UpdateFolderSearchNavUi();
+                RefreshFolderBrowserSelectionChrome();
+                return;
+            }
+
+            try
+            {
+                foreach (string file in Directory.EnumerateFiles(
+                             _browseFolderPath,
+                             "*.*",
+                             SearchOption.AllDirectories))
+                {
+                    if (!IsSupportedAudioFile(file))
+                    {
+                        continue;
+                    }
+
+                    string name = Path.GetFileNameWithoutExtension(file);
+                    string fullName = Path.GetFileName(file);
+                    if (ContainsIgnoreCase(name, q) || ContainsIgnoreCase(fullName, q))
+                    {
+                        _folderSearchMatches.Add(file);
+                    }
+                }
+
+                _folderSearchMatches.Sort(StringComparer.CurrentCultureIgnoreCase);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("文件夹搜索失败: " + ex.Message);
+            }
+
+            UpdateFolderSearchNavUi();
+
+            if (_folderSearchMatches.Count > 0)
+            {
+                NavigateFolderSearchMatchToIndex(0);
+            }
+            else
+            {
+                RefreshFolderBrowserRoots();
+                RefreshFolderBrowserSelectionChrome();
+            }
+        }
+
+        private void NavigateFolderSearchMatch(int delta)
+        {
+            if (_folderSearchMatches.Count == 0)
+            {
+                return;
+            }
+
+            int next = _folderSearchIndex + delta;
+            if (next < 0)
+            {
+                next = _folderSearchMatches.Count - 1;
+            }
+            else if (next >= _folderSearchMatches.Count)
+            {
+                next = 0;
+            }
+
+            NavigateFolderSearchMatchToIndex(next);
+        }
+
+        private void NavigateFolderSearchMatchToIndex(int index)
+        {
+            if (index < 0 || index >= _folderSearchMatches.Count)
+            {
+                return;
+            }
+
+            _folderSearchIndex = index;
+            string targetPath = _folderSearchMatches[index];
+            _folderSearchHighlightPath = targetPath;
+            UpdateFolderSearchNavUi();
+
+            // PDF 式：先收起全部，再展开到目标歌曲所在路径
+            RefreshFolderBrowserRoots();
+            ExpandFolderPathToFile(targetPath);
+
+            FolderBrowserItem? item = _folderBrowserItems.FirstOrDefault(i =>
+                !i.IsFolder
+                && string.Equals(i.FullPath, targetPath, StringComparison.OrdinalIgnoreCase));
+
+            if (item != null)
+            {
+                try
+                {
+                    FolderBrowserView.SelectedItem = item;
+                    FolderBrowserView.ScrollIntoView(item);
+                }
+                catch
+                {
+                }
+            }
+
+            RefreshFolderBrowserSelectionChrome();
+        }
+
+        private void ExpandFolderPathToFile(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(_browseFolderPath) || string.IsNullOrWhiteSpace(filePath))
+            {
+                return;
+            }
+
+            string root = Path.GetFullPath(_browseFolderPath)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+            string fullFile = Path.GetFullPath(filePath);
+            string? parent = Path.GetDirectoryName(fullFile);
+            if (string.IsNullOrEmpty(parent))
+            {
+                return;
+            }
+
+            string parentFull = Path.GetFullPath(parent)
+                .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+            if (!parentFull.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            string relative = parentFull.Length == root.Length
+                ? string.Empty
+                : parentFull[(root.Length + 1)..];
+
+            if (string.IsNullOrEmpty(relative))
+            {
+                return;
+            }
+
+            string[] segments = relative.Split(
+                new[] { Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar },
+                StringSplitOptions.RemoveEmptyEntries);
+
+            string current = root;
+            foreach (string segment in segments)
+            {
+                current = Path.Combine(current, segment);
+                FolderBrowserItem? folder = _folderBrowserItems.FirstOrDefault(i =>
+                    i.IsFolder
+                    && string.Equals(i.FullPath, current, StringComparison.OrdinalIgnoreCase));
+
+                if (folder == null)
+                {
+                    break;
+                }
+
+                if (!folder.IsExpanded)
+                {
+                    ToggleFolderExpand(folder);
+                }
+            }
+        }
+
+        private void UpdateFolderSearchNavUi()
+        {
+            if (FolderSearchNavPanel == null || FolderSearchCountText == null)
+            {
+                return;
+            }
+
+            bool show = _currentCategory == "Folders"
+                && !_isMultiSelectMode
+                && _folderSearchMatches.Count > 0
+                && !string.IsNullOrWhiteSpace(_librarySearchText);
+
+            FolderSearchNavPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+            if (!show)
+            {
+                FolderSearchCountText.Text = "0/0";
+                return;
+            }
+
+            FolderSearchCountText.Text = $"{_folderSearchIndex + 1}/{_folderSearchMatches.Count}";
+        }
+
+        private void ClearFolderSearchHighlightOnly()
+        {
+            if (_folderSearchHighlightPath == null && _folderSearchMatches.Count == 0)
+            {
+                return;
+            }
+
+            _folderSearchHighlightPath = null;
+            _folderSearchMatches.Clear();
+            _folderSearchIndex = -1;
+            if (FolderBrowserView != null && _currentCategory == "Folders")
+            {
+                RefreshFolderBrowserSelectionChrome();
+            }
+        }
+
+        private static bool IsSupportedAudioFile(string path)
+        {
+            string ext = Path.GetExtension(path);
+            foreach (string supported in AudioExtensions)
+            {
+                if (string.Equals(ext, supported, StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+        /// <summary>显示已选文件夹的直接子项；未选择则提示「请选择文件夹」</summary>
+        private void RefreshFolderBrowserRoots()
+        {
+            _folderBrowserItems.Clear();
+
+            if (string.IsNullOrWhiteSpace(_browseFolderPath) || !Directory.Exists(_browseFolderPath))
+            {
+                FolderBrowserView.Visibility = Visibility.Collapsed;
+                FolderBrowserEmptyHint.Visibility = Visibility.Visible;
+                return;
+            }
+
+            FolderBrowserEmptyHint.Visibility = Visibility.Collapsed;
+            FolderBrowserView.Visibility = Visibility.Visible;
+
+            // 从所选文件夹内部开始：如 本地音乐 → artist1、artist2…
+            foreach (FolderBrowserItem child in EnumerateFolderChildren(_browseFolderPath, depth: 0))
+            {
+                _folderBrowserItems.Add(child);
+            }
+        }
+
+        private void FolderBrowserItem_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            // 多选时：整行留给 ListView 选中；展开只走左侧箭头
+            if (_isMultiSelectMode && _multiSelectFolderList != null)
+            {
+                return;
+            }
+
+            if (sender is not FrameworkElement { DataContext: FolderBrowserItem item })
+            {
+                return;
+            }
+
+            FolderBrowserView.SelectedItem = item;
+
+            if (item.IsFolder)
+            {
+                ToggleFolderExpand(item);
+                e.Handled = true;
+            }
+        }
+
+        /// <summary>左侧朝下箭头：展开/折叠；多选时不改变选中状态。</summary>
+        private void FolderBrowserChevron_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement fe)
+            {
+                return;
+            }
+
+            FolderBrowserItem? item = fe.DataContext as FolderBrowserItem
+                ?? FindFolderBrowserItem(fe);
+            if (item == null || !item.IsFolder)
+            {
+                return;
+            }
+
+            ToggleFolderExpand(item);
+            e.Handled = true;
+        }
+
+        private void ToggleFolderExpand(FolderBrowserItem item)
+        {
+            int index = _folderBrowserItems.IndexOf(item);
+            if (index < 0)
+            {
+                return;
+            }
+
+            if (item.IsExpanded)
+            {
+                CollapseFolderAt(index);
+                item.IsExpanded = false;
+                return;
+            }
+
+            List<FolderBrowserItem> children = EnumerateFolderChildren(item.FullPath, item.Depth + 1);
+            for (int i = 0; i < children.Count; i++)
+            {
+                _folderBrowserItems.Insert(index + 1 + i, children[i]);
+            }
+
+            item.ChildrenLoaded = true;
+            item.IsExpanded = true;
+        }
+
+        private void CollapseFolderAt(int index)
+        {
+            int depth = _folderBrowserItems[index].Depth;
+            int removeAt = index + 1;
+            while (removeAt < _folderBrowserItems.Count && _folderBrowserItems[removeAt].Depth > depth)
+            {
+                _folderBrowserItems.RemoveAt(removeAt);
+            }
+        }
+
+        /// <summary>枚举一层：子文件夹 + 支持的音频文件（不递归）</summary>
+        private static List<FolderBrowserItem> EnumerateFolderChildren(string folderPath, int depth)
+        {
+            var result = new List<FolderBrowserItem>();
+            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            {
+                return result;
+            }
+
+            try
+            {
+                foreach (string dir in Directory.EnumerateDirectories(folderPath)
+                             .OrderBy(p => Path.GetFileName(p), StringComparer.CurrentCultureIgnoreCase))
+                {
+                    string name = Path.GetFileName(dir);
+                    if (string.IsNullOrEmpty(name))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        System.IO.FileAttributes attrs = System.IO.File.GetAttributes(dir);
+                        if ((attrs & System.IO.FileAttributes.Hidden) != 0 ||
+                            (attrs & System.IO.FileAttributes.System) != 0)
+                        {
+                            continue;
+                        }
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    result.Add(new FolderBrowserItem
+                    {
+                        DisplayName = name,
+                        FullPath = dir,
+                        IsFolder = true,
+                        Depth = depth
+                    });
+                }
+            }
+            catch
+            {
+                // 无权限等：跳过子目录
+            }
+
+            try
+            {
+                foreach (string file in Directory.EnumerateFiles(folderPath)
+                             .OrderBy(p => Path.GetFileName(p), StringComparer.CurrentCultureIgnoreCase))
+                {
+                    string ext = Path.GetExtension(file);
+                    if (!AudioExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+
+                    result.Add(new FolderBrowserItem
+                    {
+                        DisplayName = Path.GetFileName(file),
+                        FullPath = file,
+                        IsFolder = false,
+                        Depth = depth
+                    });
+                }
+            }
+            catch
+            {
+            }
+
+            return result;
+        }
+
+        private void FolderBrowserView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            if (_isMultiSelectMode)
+            {
+                return;
+            }
+
+            if (FolderBrowserView.SelectedItem is not FolderBrowserItem item || item.IsFolder)
+            {
+                return;
+            }
+
+            PlaylistItem? track = EnsureTrackInLibrary(item.FullPath);
+            if (track != null)
+            {
+                PlayPlaylistItem(track);
+            }
+        }
+
+        private void FolderBrowserView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSelectionUiUpdates)
+            {
+                return;
+            }
+
+            RefreshFolderBrowserSelectionChrome();
+            UpdateSelectAllMultiSelectButtonState();
+        }
+
+        private void FolderBrowserView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            if (args.Item is FolderBrowserItem item && args.ItemContainer is ListViewItem container)
+            {
+                ApplyFolderBrowserItemSelectionChrome(container, item);
+            }
+        }
+
+        private void FolderBrowserView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            FolderBrowserItem? item = FindFolderBrowserItem(e.OriginalSource as DependencyObject);
+            if (item == null)
+            {
+                return;
+            }
+
+            if (!_isMultiSelectMode)
+            {
+                FolderBrowserView.SelectedItem = item;
+            }
+
+            if (item.IsFolder)
+            {
+                ShowFolderItemContextMenu(item, e);
+            }
+            else
+            {
+                ShowFolderAudioContextMenu(item, e);
+            }
+
+            e.Handled = true;
+        }
+
+        private FolderBrowserItem? FindFolderBrowserItem(DependencyObject? source)
+        {
+            DependencyObject? current = source;
+            while (current != null)
+            {
+                if (current is FrameworkElement { DataContext: FolderBrowserItem fromContext })
+                {
+                    return fromContext;
+                }
+
+                if (current is ListViewItem container)
+                {
+                    return FolderBrowserView.ItemFromContainer(container) as FolderBrowserItem;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+
+        private void ShowFolderItemContextMenu(FolderBrowserItem folder, RightTappedRoutedEventArgs e)
+        {
+            FolderBrowserItem folderRef = folder;
+            var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
+
+            var playItem = new MenuFlyoutItem { Text = "播放该文件夹内的音频" };
+            playItem.Icon = new FontIcon { Glyph = "\uE768" };
+            playItem.Click += (_, _) =>
+            {
+                ExitMultiSelectMode();
+                PlayFolderAudio(folderRef.FullPath, replacePlaylist: true);
+            };
+
+            var multiItem = new MenuFlyoutItem { Text = "多选" };
+            multiItem.Icon = new FontIcon { Glyph = "\uE700" };
+            multiItem.Click += (_, _) => EnterFolderMultiSelectMode(folderRef);
+
+            var addItem = new MenuFlyoutItem { Text = "添加至播放列表" };
+            addItem.Icon = new FontIcon { Glyph = "\uE710" };
+            addItem.Click += (_, _) => PlayFolderAudio(folderRef.FullPath, replacePlaylist: false);
+
+            flyout.Items.Add(playItem);
+            flyout.Items.Add(multiItem);
+            flyout.Items.Add(addItem);
+
+            if (e.OriginalSource is FrameworkElement fe)
+            {
+                flyout.ShowAt(fe, e.GetPosition(fe));
+            }
+            else
+            {
+                flyout.ShowAt(FolderBrowserView, e.GetPosition(FolderBrowserView));
+            }
+        }
+
+        private void ShowFolderAudioContextMenu(FolderBrowserItem fileItem, RightTappedRoutedEventArgs e)
+        {
+            PlaylistItem? track = EnsureTrackInLibrary(fileItem.FullPath);
+            if (track == null)
+            {
+                return;
+            }
+
+            _contextMenuSong = track;
+            var flyout = BuildPlaylistItemContextMenu(track, false, () => EnterFolderMultiSelectMode(fileItem));
+
+            if (e.OriginalSource is FrameworkElement fe)
+            {
+                flyout.ShowAt(fe, e.GetPosition(fe));
+            }
+            else
+            {
+                flyout.ShowAt(FolderBrowserView, e.GetPosition(FolderBrowserView));
+            }
+        }
+
+        /// <summary>深度优先：子文件夹顺序与界面一致，文件夹内音频按文件名排序。</summary>
+        private static List<string> EnumerateAudioFilesRecursiveOrdered(string folderPath)
+        {
+            var result = new List<string>();
+            CollectAudioFilesRecursiveOrdered(folderPath, result);
+            return result;
+        }
+
+        private static void CollectAudioFilesRecursiveOrdered(string folderPath, List<string> sink)
+        {
+            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
+            {
+                return;
+            }
+
+            try
+            {
+                foreach (string dir in Directory.EnumerateDirectories(folderPath)
+                             .OrderBy(p => Path.GetFileName(p), StringComparer.CurrentCultureIgnoreCase))
+                {
+                    try
+                    {
+                        System.IO.FileAttributes attrs = System.IO.File.GetAttributes(dir);
+                        if ((attrs & System.IO.FileAttributes.Hidden) != 0 ||
+                            (attrs & System.IO.FileAttributes.System) != 0)
+                        {
+                            continue;
+                        }
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    CollectAudioFilesRecursiveOrdered(dir, sink);
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                foreach (string file in Directory.EnumerateFiles(folderPath)
+                             .OrderBy(p => Path.GetFileName(p), StringComparer.CurrentCultureIgnoreCase))
+                {
+                    string ext = Path.GetExtension(file);
+                    if (AudioExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+                    {
+                        sink.Add(file);
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private PlaylistItem? EnsureTrackInLibrary(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || !System.IO.File.Exists(filePath))
+            {
+                return null;
+            }
+
+            PlaylistItem? existing = _playlist.FirstOrDefault(p =>
+                string.Equals(p.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
+            {
+                return existing;
+            }
+
+            LoadAndAddFiles(new[] { filePath }, persistAsFiles: true);
+            return _playlist.FirstOrDefault(p =>
+                string.Equals(p.FilePath, filePath, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private List<PlaylistItem> GetOrImportTracksByPaths(IReadOnlyList<string> paths)
+        {
+            var uniquePaths = paths
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (uniquePaths.Count == 0)
+            {
+                return new List<PlaylistItem>();
+            }
+
+            var libraryMap = new Dictionary<string, PlaylistItem>(StringComparer.OrdinalIgnoreCase);
+            foreach (PlaylistItem item in _playlist)
+            {
+                libraryMap.TryAdd(item.FilePath, item);
+            }
+
+            var missing = uniquePaths.Where(p => !libraryMap.ContainsKey(p) && System.IO.File.Exists(p)).ToList();
+            if (missing.Count > 0)
+            {
+                LoadAndAddFiles(missing.ToArray(), persistAsFiles: true);
+                libraryMap.Clear();
+                foreach (PlaylistItem item in _playlist)
+                {
+                    libraryMap.TryAdd(item.FilePath, item);
+                }
+            }
+
+            var result = new List<PlaylistItem>(uniquePaths.Count);
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (string path in uniquePaths)
+            {
+                if (!seen.Add(path))
+                {
+                    continue;
+                }
+
+                if (libraryMap.TryGetValue(path, out PlaylistItem? track))
+                {
+                    result.Add(track);
+                }
+            }
+
+            return result;
+        }
+
+        private void PlayFolderAudio(string folderPath, bool replacePlaylist)
+        {
+            List<string> paths = EnumerateAudioFilesRecursiveOrdered(folderPath);
+            List<PlaylistItem> tracks = GetOrImportTracksByPaths(paths);
+            if (tracks.Count == 0)
+            {
+                return;
+            }
+
+            if (replacePlaylist)
+            {
+                _userPlaylist.Clear();
+                AddSongsToUserPlaylist(tracks);
+                PlayUserPlaylistAt(0);
+            }
+            else
+            {
+                AddSongsToUserPlaylist(tracks);
+            }
+        }
+
+        private List<PlaylistItem> CollectTracksFromSelectedFolderItems(IEnumerable<FolderBrowserItem> items)
+        {
+            var paths = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (FolderBrowserItem item in items)
+            {
+                if (item.IsFolder)
+                {
+                    foreach (string path in EnumerateAudioFilesRecursiveOrdered(item.FullPath))
+                    {
+                        if (seen.Add(path))
+                        {
+                            paths.Add(path);
+                        }
+                    }
+                }
+                else if (seen.Add(item.FullPath))
+                {
+                    paths.Add(item.FullPath);
+                }
+            }
+
+            return GetOrImportTracksByPaths(paths);
+        }
+
+        private void EnterFolderMultiSelectMode(FolderBrowserItem? preselect)
+        {
+            if (_multiSelectTargetList != null)
+            {
+                ExitSongMultiSelectUiOnly();
+            }
+
+            if (_multiSelectAlbumGrid != null)
+            {
+                ExitAlbumMultiSelectUiOnly();
+            }
+
+            _folderItemDefaultStyle ??= FolderBrowserView.ItemContainerStyle;
+            _multiSelectFolderList = FolderBrowserView;
+            _multiSelectTargetList = null;
+            _multiSelectAlbumGrid = null;
+            _isMultiSelectMode = true;
+
+            SetListSelectionMode(FolderBrowserView, ListViewSelectionMode.Multiple);
+
+            LibraryPaneTitle.Visibility = Visibility.Collapsed;
+            SongSortPanel.Visibility = Visibility.Collapsed;
+            AlbumSortButton.Visibility = Visibility.Collapsed;
+            MultiSelectTitlePanel.Visibility = Visibility.Visible;
+            MultiSelectTitleText.Text = "选择项目";
+            MultiSelectActionBar.Visibility = Visibility.Visible;
+            ConfigureMultiSelectPrimaryAction();
+            UpdateSelectAllMultiSelectButtonState();
+            UpdateUserPlaylistActionBarVisibility();
+            ApplyAccentSelectionResources(FolderBrowserView);
+            ApplyMultiSelectFolderItemStyle();
+            UpdateLibrarySearchUi();
+
+            if (preselect != null)
+            {
+                try
+                {
+                    FolderBrowserView.SelectedItems.Add(preselect);
+                }
+                catch
+                {
+                    FolderBrowserView.SelectedItem = preselect;
+                }
+            }
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                RefreshFolderBrowserSelectionChrome();
+                UpdateSelectAllMultiSelectButtonState();
+            });
+        }
+
+        private void ApplyMultiSelectFolderItemStyle()
+        {
+            ApplyAccentSelectionResources(FolderBrowserView);
+            var style = new Style(typeof(ListViewItem));
+            style.Setters.Add(new Setter(ListViewItem.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
+            style.Setters.Add(new Setter(ListViewItem.VerticalContentAlignmentProperty, VerticalAlignment.Stretch));
+            style.Setters.Add(new Setter(ListViewItem.PaddingProperty, new Thickness(0)));
+            style.Setters.Add(new Setter(ListViewItem.MinHeightProperty, 36.0));
+            style.Setters.Add(new Setter(ListViewItem.BackgroundProperty, new SolidColorBrush(Colors.Transparent)));
+            style.Setters.Add(new Setter(ListViewItem.CornerRadiusProperty, new CornerRadius(8)));
+            style.Setters.Add(new Setter(ListViewItem.MarginProperty, new Thickness(0, 2, 0, 2)));
+            style.Setters.Add(new Setter(ListViewItem.BorderThicknessProperty, new Thickness(0)));
+            FolderBrowserView.ItemContainerStyle = style;
+            RefreshFolderBrowserSelectionChrome();
+        }
+
+        private void ApplyFolderBrowserItemSelectionChrome(
+            ListViewItem container,
+            FolderBrowserItem item,
+            HashSet<object>? selectedSet = null)
+        {
+            Brush accent = ResolveAccentBrush();
+            Brush selectedFg = ResolveContrastingForeground(accent);
+            bool multiOnThisList = _isMultiSelectMode && _multiSelectFolderList == FolderBrowserView;
+            Brush unselectedBg = multiOnThisList
+                ? CreateMultiSelectFrostBrush()
+                : new SolidColorBrush(Colors.Transparent);
+
+            container.Background = new SolidColorBrush(Colors.Transparent);
+            container.CornerRadius = new CornerRadius(8);
+            container.BorderThickness = new Thickness(0);
+            DisableContainerSelectionCheckMark(container);
+
+            bool selected = multiOnThisList
+                ? IsItemSelected(FolderBrowserView, item, selectedSet)
+                : ReferenceEquals(FolderBrowserView.SelectedItem, item);
+
+            bool searchHit = !multiOnThisList
+                && !string.IsNullOrEmpty(_folderSearchHighlightPath)
+                && string.Equals(item.FullPath, _folderSearchHighlightPath, StringComparison.OrdinalIgnoreCase);
+
+            Border? chrome = FindTaggedBorder(container, "FolderRowChrome");
+            if (chrome != null)
+            {
+                chrome.MinHeight = 36;
+                chrome.CornerRadius = new CornerRadius(8);
+                if (selected || searchHit)
+                {
+                    chrome.Background = accent;
+                    ApplyForegroundToDescendants(chrome, selectedFg);
+                }
+                else
+                {
+                    chrome.Background = unselectedBg;
+                    ClearForegroundOnDescendants(chrome);
+                }
+            }
+            else if (selected || searchHit)
+            {
+                container.Background = accent;
+                container.Foreground = selectedFg;
+            }
+            else
+            {
+                container.Background = unselectedBg;
+                container.ClearValue(Control.ForegroundProperty);
+            }
+        }
+
+        /// <summary>汇总唯一艺术家 / 专辑艺术家，按名字升序；加载已保存的自定义头像</summary>
+        private async Task RefreshArtistViewAsync()
+        {
+            _artists.Clear();
+            bool albumArtistMode = string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal);
+
+            if (_playlist.Count == 0)
+            {
+                return;
+            }
+
+            var groups = _playlist
+                .GroupBy(
+                    p => albumArtistMode ? p.AlbumArtist : p.Artist,
+                    StringComparer.CurrentCultureIgnoreCase)
+                .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            foreach (var group in groups)
+            {
+                var entry = new ArtistEntry
+                {
+                    Name = albumArtistMode ? group.First().AlbumArtist : group.First().Artist,
+                    TrackCount = group.Count()
+                };
+                _artists.Add(entry);
+            }
+
+            ApplyArtistsSearchFilter();
+
+            foreach (ArtistEntry entry in _artists.ToList())
+            {
+                if (_currentCategory != "Artists" && _currentCategory != "AlbumArtists")
+                {
+                    return;
+                }
+
+                entry.AvatarImage = await ResolveArtistAvatarAsync(entry.Name, albumArtistMode);
+            }
+        }
+
+        private static string ArtistAvatarStoreKey(string artistName, bool albumArtistMode)
+            => albumArtistMode ? "aa|" + artistName.Trim() : artistName.Trim();
+
+        /// <summary>
+        /// 自定义头像优先；否则取该艺术家年份最晚专辑中音轨 1 的封面。
+        /// </summary>
+        private async Task<BitmapImage?> ResolveArtistAvatarAsync(string artistName, bool? albumArtistMode = null)
+        {
+            bool useAlbumArtist = albumArtistMode
+                ?? (_artistDetailUsesAlbumArtist
+                    || string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal));
+            string storeKey = ArtistAvatarStoreKey(artistName, useAlbumArtist);
+            BitmapImage? custom = await ArtistAvatarStore.TryLoadAsync(storeKey);
+            if (custom != null)
+            {
+                return custom;
+            }
+
+            return await ResolveArtistDefaultAvatarAsync(artistName, useAlbumArtist);
+        }
+
+        private async Task<BitmapImage?> ResolveArtistDefaultAvatarAsync(string artistName, bool useAlbumArtist)
+        {
+            // 默认优先使用网络头像（网易云），失败再回退本地专辑封面
+            BitmapImage? web = await TryLoadWebArtistAvatarAsync(artistName);
+            if (web != null)
+            {
+                return web;
+            }
+
+            List<PlaylistItem> tracks = _playlist
+                .Where(t => TrackMatchesArtistName(t, artistName, useAlbumArtist))
+                .ToList();
+            if (tracks.Count == 0)
+            {
+                return null;
+            }
+
+            AlbumEntry? latestAlbum = BuildAlbumEntriesFromTracks(tracks)
+                .OrderByDescending(a => a.Year)
+                .ThenByDescending(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+                .FirstOrDefault();
+            if (latestAlbum == null || string.IsNullOrWhiteSpace(latestAlbum.CoverSourcePath))
+            {
+                return null;
+            }
+
+            byte[]? bytes = await Task.Run(() => ExtractCoverBytes(latestAlbum.CoverSourcePath));
+            if (bytes == null || bytes.Length == 0)
+            {
+                return null;
+            }
+
+            return await CreateBitmapFromBytesAsync(bytes);
+        }
+
+        private static bool TrackMatchesArtistName(PlaylistItem track, string artistName, bool useAlbumArtist)
+        {
+            string key = useAlbumArtist ? track.AlbumArtist : track.Artist;
+            return string.Equals(key, artistName, StringComparison.CurrentCultureIgnoreCase);
+        }
+
+
+        private static readonly Dictionary<string, BitmapImage?> WebArtistAvatarCache = new();
+        private static readonly SemaphoreSlim WebArtistAvatarGate = new(1, 1);
+
+        /// <summary>按歌手名从网络加载头像（缓存，失败返回 null）。</summary>
+        private static async Task<BitmapImage?> TryLoadWebArtistAvatarAsync(string artistName)
+        {
+            string key = artistName?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                return null;
+            }
+
+            if (WebArtistAvatarCache.TryGetValue(key, out BitmapImage? cached))
+            {
+                return cached;
+            }
+
+            await WebArtistAvatarGate.WaitAsync();
+            try
+            {
+                if (WebArtistAvatarCache.TryGetValue(key, out cached))
+                {
+                    return cached;
+                }
+
+                BitmapImage? result = null;
+                try
+                {
+                    string? url = await OnlineMusicApi.SearchArtistAvatarUrlAsync(key);
+                    if (!string.IsNullOrWhiteSpace(url))
+                    {
+                        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
+                        http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
+                        byte[] bytes = await http.GetByteArrayAsync(url);
+                        if (bytes.Length > 0)
+                        {
+                            result = await CreateBitmapFromBytesAsync(bytes);
+                        }
+                    }
+                }
+                catch
+                {
+                }
+
+                if (WebArtistAvatarCache.Count > 500)
+            {
+                WebArtistAvatarCache.Clear();
+            }
+
+            WebArtistAvatarCache[key] = result;
+                return result;
+            }
+            finally
+            {
+                WebArtistAvatarGate.Release();
+            }
+        }
+        /// <summary>圆形头像上右键：选择本地头像 / 恢复默认</summary>
+        private void ArtistAvatar_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            ArtistEntry? artist = FindArtistEntry(sender as DependencyObject);
+            if (artist == null)
+            {
+                return;
+            }
+
+            ShowArtistAvatarFlyout(artist, sender as FrameworkElement, e);
+        }
+
+        private void ArtistDetailAvatar_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            if (_openedArtist == null)
+            {
+                return;
+            }
+
+            ShowArtistAvatarFlyout(_openedArtist, sender as FrameworkElement, e);
+        }
+
+        private void ShowArtistAvatarFlyout(ArtistEntry artist, FrameworkElement? element, RightTappedRoutedEventArgs e)
+        {
+            _avatarContextArtist = artist;
+
+            var flyout = new MenuFlyout();
+
+            var playWorks = new MenuFlyoutItem { Text = "播放该艺术家的作品" };
+            playWorks.Icon = new FontIcon { Glyph = "\uE768" };
+            playWorks.Click += (_, _) =>
+            {
+                if (_avatarContextArtist != null)
+                {
+                    PlayArtistWorks(_avatarContextArtist.Name, replacePlaylist: true);
+                }
+            };
+            flyout.Items.Add(playWorks);
+
+            var addWorks = new MenuFlyoutItem { Text = "添加该艺术家的作品至播放列表" };
+            addWorks.Icon = new FontIcon { Glyph = "\uE710" };
+            addWorks.Click += (_, _) =>
+            {
+                if (_avatarContextArtist != null)
+                {
+                    PlayArtistWorks(_avatarContextArtist.Name, replacePlaylist: false);
+                }
+            };
+            flyout.Items.Add(addWorks);
+
+            flyout.Items.Add(new MenuFlyoutSeparator());
+
+            var webAvatarItem = new MenuFlyoutItem { Text = "从网络获取头像…" };
+            webAvatarItem.Icon = new FontIcon { Glyph = "\uE774" };
+            webAvatarItem.Click += async (_, _) => await DownloadArtistAvatarFromWebAsync(_avatarContextArtist);
+            flyout.Items.Add(webAvatarItem);
+
+            var selectItem = new MenuFlyoutItem { Text = "从本地选择艺术家头像" };
+            selectItem.Click += SelectArtistAvatarMenu_Click;
+            flyout.Items.Add(selectItem);
+
+            var restoreItem = new MenuFlyoutItem { Text = "恢复默认头像" };
+            restoreItem.Click += RestoreArtistAvatarMenu_Click;
+            flyout.Items.Add(restoreItem);
+
+            if (element != null)
+            {
+                flyout.ShowAt(element, e.GetPosition(element));
+            }
+
+            e.Handled = true;
+        }
+
+        private static ArtistEntry? FindArtistEntry(DependencyObject? start)
+        {
+            DependencyObject? current = start;
+            while (current != null)
+            {
+                if (current is FrameworkElement fe)
+                {
+                    if (fe.DataContext is ArtistEntry fromContext)
+                    {
+                        return fromContext;
+                    }
+
+                    if (fe is GridViewItem { Content: ArtistEntry fromContent })
+                    {
+                        return fromContent;
+                    }
+                }
+
+                current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+
+        private async Task DownloadArtistAvatarFromWebAsync(ArtistEntry? artist)
+        {
+            if (artist == null)
+            {
+                return;
+            }
+
+            try
+            {
+                NowPlayingText.Text = "正在从网络获取头像…";
+                string? imageUrl = await OnlineMusicApi.SearchArtistAvatarUrlAsync(artist.Name);
+                if (string.IsNullOrWhiteSpace(imageUrl))
+                {
+                    NowPlayingText.Text = "未找到该艺术家的头像";
+                    return;
+                }
+
+                string tmp = Path.Combine(Path.GetTempPath(), "celeste-avatar-" + Guid.NewGuid().ToString("N") + ".jpg");
+                using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) })
+                {
+                    http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
+                    byte[] bytes = await http.GetByteArrayAsync(imageUrl);
+                    await System.IO.File.WriteAllBytesAsync(tmp, bytes);
+                }
+
+                bool albumArtistMode = _artistDetailUsesAlbumArtist
+                    || string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal);
+                var editor = new ArtistAvatarEditorWindow(ArtistAvatarStoreKey(artist.Name, albumArtistMode), tmp);
+                _artistAvatarEditorWindow = editor;
+                editor.Closed += (_, _) =>
+                {
+                    if (ReferenceEquals(_artistAvatarEditorWindow, editor))
+                    {
+                        _artistAvatarEditorWindow = null;
+                    }
+
+                    NowPlayingText.Text = string.Empty;
+                };
+                editor.AvatarConfirmed += image =>
+                {
+                    artist.AvatarImage = image;
+                    ApplyArtistAvatarToDetailIfOpen(artist, image);
+                };
+                editor.Activate();
+            }
+            catch
+            {
+                NowPlayingText.Text = "获取头像失败";
+            }
+        }
+
+        private async void SelectArtistAvatarMenu_Click(object sender, RoutedEventArgs e)
+        {
+            if (_avatarContextArtist == null)
+            {
+                return;
+            }
+
+            ArtistEntry artist = _avatarContextArtist;
+
+            try
+            {
+                FileOpenPicker picker = new();
+                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+
+                picker.ViewMode = PickerViewMode.Thumbnail;
+                picker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
+                picker.FileTypeFilter.Add(".jpg");
+                picker.FileTypeFilter.Add(".jpeg");
+
+                StorageFile? file = await picker.PickSingleFileAsync();
+                if (file == null || string.IsNullOrWhiteSpace(file.Path))
+                {
+                    return;
+                }
+
+                var editor = new ArtistAvatarEditorWindow(
+                    ArtistAvatarStoreKey(artist.Name, _artistDetailUsesAlbumArtist
+                        || string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal)),
+                    file.Path);
+                _artistAvatarEditorWindow = editor;
+                editor.Closed += (_, _) =>
+                {
+                    if (ReferenceEquals(_artistAvatarEditorWindow, editor))
+                    {
+                        _artistAvatarEditorWindow = null;
+                    }
+                };
+                editor.AvatarConfirmed += image =>
+                {
+                    artist.AvatarImage = image;
+                    ApplyArtistAvatarToDetailIfOpen(artist, image);
+                };
+                editor.Activate();
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync("选择头像失败", ex.Message);
+            }
+        }
+
+        private async void RestoreArtistAvatarMenu_Click(object sender, RoutedEventArgs e)
+        {
+            if (_avatarContextArtist == null)
+            {
+                return;
+            }
+
+            ArtistEntry artist = _avatarContextArtist;
+            try
+            {
+                bool albumArtistMode = _artistDetailUsesAlbumArtist
+                    || string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal);
+                ArtistAvatarStore.DeleteCustomAvatar(ArtistAvatarStoreKey(artist.Name, albumArtistMode));
+                BitmapImage? image = await ResolveArtistDefaultAvatarAsync(artist.Name, albumArtistMode);
+                artist.AvatarImage = image;
+                ApplyArtistAvatarToDetailIfOpen(artist, image);
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync("恢复默认头像失败", ex.Message);
+            }
+        }
+
+        private void ApplyArtistAvatarToDetailIfOpen(ArtistEntry artist, BitmapImage? image)
+        {
+            if (_openedArtist == null
+                || !string.Equals(_openedArtist.Name, artist.Name, StringComparison.CurrentCultureIgnoreCase))
+            {
+                return;
+            }
+
+            ArtistDetailAvatarBrush.ImageSource = image;
+            ArtistDetailAvatarPlaceholder.Visibility =
+                image == null ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void ArtistGridView_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (e.ClickedItem is ArtistEntry artist)
+            {
+                if (_currentCategory is "Genres" or "Years")
+                {
+                    OpenGenreYearSongs(artist.Name);
+                }
+                else
+                {
+                    OpenArtistDetail(artist);
+                }
+            }
+        }
+
+        private void OpenArtistDetail(ArtistEntry artist)
+            => CommitLibraryNavigation(() => OpenArtistDetailCore(artist));
+
+        private void OpenArtistDetailCore(ArtistEntry artist)
+        {
+            _openedArtist = artist;
+            _artistDetailUsesAlbumArtist = string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal);
+            _artistSongSortMode = ArtistSongSortMode.Title;
+            _artistAlbumSortMode = ArtistAlbumSortMode.Title;
+            _artistAlbumSortAscending = true;
+            ArtistSongSortButton.Content = "排序";
+            ArtistAlbumSortFieldButton.Content = "按标题排序";
+            ArtistAlbumSortOrderButton.Content = "升序";
+
+            ArtistGridView.Visibility = Visibility.Collapsed;
+            ArtistDetailPanel.Visibility = Visibility.Visible;
+            LibraryPaneTitle.Text = artist.Name;
+
+            ArtistDetailNameText.Text = artist.Name;
+            ArtistDetailAvatarBrush.ImageSource = artist.AvatarImage;
+            ArtistDetailAvatarPlaceholder.Visibility =
+                artist.AvatarImage == null ? Visibility.Visible : Visibility.Collapsed;
+
+            RebuildArtistTracks();
+            _ = RebuildArtistAlbumsAsync();
+            ApplyArtistSongsFrostChrome();
+            UpdateLibrarySearchUi();
+        }
+
+        private void ApplyArtistSongsFrostChrome()
+        {
+            if (ArtistSongsFrostPanel == null)
+            {
+                return;
+            }
+
+            FrostedGlass.StyleElevatedPanel(ArtistSongsFrostPanel, new CornerRadius(12));
+
+            if (ArtistTrackListView != null)
+            {
+                ArtistTrackListView.Background = new SolidColorBrush(Colors.Transparent);
+                ArtistTrackListView.BorderThickness = new Thickness(0);
+                ApplyAccentSelectionResources(ArtistTrackListView);
+            }
+        }
+
+        private List<PlaylistItem> GetTracksForArtist(string artistName, bool useCurrentSongSort)
+        {
+            List<PlaylistItem> tracks = _playlist
+                .Where(t => TrackMatchesArtistName(t, artistName, _artistDetailUsesAlbumArtist))
+                .ToList();
+
+            if (useCurrentSongSort
+                && _openedArtist != null
+                && string.Equals(_openedArtist.Name, artistName, StringComparison.CurrentCultureIgnoreCase))
+            {
+                return ApplyArtistSongSort(tracks);
+            }
+
+            return tracks
+                .OrderBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+        }
+
+        /// <summary>
+        /// replace=true：清空播放列表后写入并从头播放；
+        /// replace=false：按「添加至播放列表」规则插到最前。
+        /// </summary>
+        private void PlayArtistWorks(string artistName, bool replacePlaylist)
+        {
+            List<PlaylistItem> tracks = GetTracksForArtist(artistName, useCurrentSongSort: true);
+            if (tracks.Count == 0)
+            {
+                return;
+            }
+
+            if (replacePlaylist)
+            {
+                _userPlaylist.Clear();
+                AddSongsToUserPlaylist(tracks);
+                PlayUserPlaylistAt(0);
+            }
+            else
+            {
+                AddSongsToUserPlaylist(tracks);
+            }
+        }
+
+        private void PlayArtistWorksButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_openedArtist != null)
+            {
+                PlayArtistWorks(_openedArtist.Name, replacePlaylist: true);
+            }
+        }
+
+        private void AddArtistWorksToPlaylistButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_openedArtist != null)
+            {
+                PlayArtistWorks(_openedArtist.Name, replacePlaylist: false);
+            }
+        }
+
+        private void PlayArtistSongsButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_artistTracks.Count == 0)
+            {
+                return;
+            }
+
+            _userPlaylist.Clear();
+            AddSongsToUserPlaylist(_artistTracks.ToList());
+            PlayUserPlaylistAt(0);
+        }
+
+        private void AddArtistSongsToPlaylistButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_artistTracks.Count == 0)
+            {
+                return;
+            }
+
+            AddSongsToUserPlaylist(_artistTracks.ToList());
+        }
+
+        private void PlayAllArtistAlbumsButton_Click(object sender, RoutedEventArgs e)
+        {
+            List<PlaylistItem> tracks = CollectArtistAlbumTracksInOrder();
+            if (tracks.Count == 0)
+            {
+                return;
+            }
+
+            _userPlaylist.Clear();
+            AddSongsToUserPlaylist(tracks);
+            PlayUserPlaylistAt(0);
+        }
+
+        private void AddAllArtistAlbumsToPlaylistButton_Click(object sender, RoutedEventArgs e)
+        {
+            List<PlaylistItem> tracks = CollectArtistAlbumTracksInOrder();
+            if (tracks.Count == 0)
+            {
+                return;
+            }
+
+            AddSongsToUserPlaylist(tracks);
+        }
+
+        /// <summary>
+        /// 按当前界面中的专辑顺序，各专辑内按音轨号收集曲目（去重）。
+        /// 例：Album1(曲1,曲2) → Album2(曲a,曲b) ⇒ 曲1,曲2,曲a,曲b。
+        /// </summary>
+        private List<PlaylistItem> CollectArtistAlbumTracksInOrder()
+        {
+            return CollectTracksFromAlbumsInDisplayOrder(_artistAlbums);
+        }
+
+        /// <summary>按传入专辑集合顺序，各专辑内按音轨号收集曲目。</summary>
+        private List<PlaylistItem> CollectTracksFromAlbumsInDisplayOrder(IEnumerable<AlbumEntry> albums)
+        {
+            var tracks = new List<PlaylistItem>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (AlbumEntry album in albums)
+            {
+                foreach (PlaylistItem track in GetTracksForAlbum(album))
+                {
+                    if (seen.Add(track.FilePath))
+                    {
+                        tracks.Add(track);
+                    }
+                }
+            }
+
+            return tracks;
+        }
+
+        private void ArtistAlbumGridView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            AlbumEntry? album = null;
+            if (e.OriginalSource is DependencyObject source)
+            {
+                DependencyObject? current = source;
+                while (current != null)
+                {
+                    if (current is FrameworkElement { DataContext: AlbumEntry fromContext })
+                    {
+                        album = fromContext;
+                        break;
+                    }
+
+                    if (current is GridViewItem container)
+                    {
+                        album = ArtistAlbumGridView.ItemFromContainer(container) as AlbumEntry;
+                        break;
+                    }
+
+                    current = VisualTreeHelper.GetParent(current);
+                }
+            }
+
+            if (album == null)
+            {
+                return;
+            }
+
+            AlbumEntry albumRef = album;
+            if (!_isMultiSelectMode)
+            {
+                ArtistAlbumGridView.SelectedItem = albumRef;
+            }
+
+            var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
+
+            var playItem = new MenuFlyoutItem { Text = "播放该专辑" };
+            playItem.Icon = new FontIcon { Glyph = "\uE768" };
+            playItem.Click += (_, _) =>
+            {
+                ExitMultiSelectMode();
+                PlayAlbum(albumRef, replacePlaylist: true);
+            };
+
+            var multiItem = new MenuFlyoutItem { Text = "多选" };
+            multiItem.Icon = new FontIcon { Glyph = "\uE700" };
+            multiItem.Click += (_, _) => EnterAlbumWallMultiSelectMode(ArtistAlbumGridView, albumRef);
+
+            var addItem = new MenuFlyoutItem { Text = "添加至播放列表" };
+            addItem.Icon = new FontIcon { Glyph = "\uE710" };
+            addItem.Click += (_, _) => AddSongsToUserPlaylist(GetTracksForAlbum(albumRef));
+
+            flyout.Items.Add(playItem);
+            flyout.Items.Add(multiItem);
+            flyout.Items.Add(addItem);
+
+            AppendAlbumContextItems(flyout, albumRef, fromArtist: true);
+
+            if (e.OriginalSource is FrameworkElement fe)
+            {
+                flyout.ShowAt(fe, e.GetPosition(fe));
+            }
+            else
+            {
+                flyout.ShowAt(ArtistAlbumGridView, e.GetPosition(ArtistAlbumGridView));
+            }
+
+            e.Handled = true;
+        }
+
+        private void CloseArtistDetailUi()
+        {
+            ExitMultiSelectMode();
+            _openedArtist = null;
+            _artistDetailUsesAlbumArtist = false;
+            _artistTracks.Clear();
+            _artistAlbums.Clear();
+            ArtistDetailPanel.Visibility = Visibility.Collapsed;
+            ArtistGridView.Visibility = Visibility.Visible;
+            ArtistDetailAvatarBrush.ImageSource = null;
+            ArtistDetailAvatarPlaceholder.Visibility = Visibility.Visible;
+            _albumOpenedFromArtist = false;
+        }
+
+        private void ArtistDetailBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            CommitLibraryNavigation(() =>
+            {
+                CloseArtistDetailUi();
+                if (_currentCategory == "Artists")
+                {
+                    LibraryPaneTitle.Text = "艺术家";
+                }
+                else if (_currentCategory == "AlbumArtists")
+                {
+                    LibraryPaneTitle.Text = "专辑艺术家";
+                }
+
+                UpdateLibrarySearchUi();
+            });
+        }
+
+        private void RebuildArtistTracks()
+        {
+            _artistTracks.Clear();
+            if (_openedArtist == null)
+            {
+                return;
+            }
+
+            string artistName = _openedArtist.Name;
+            List<PlaylistItem> tracks = _playlist
+                .Where(t => TrackMatchesArtistName(t, artistName, _artistDetailUsesAlbumArtist))
+                .ToList();
+
+            foreach (PlaylistItem track in ApplyArtistSongSort(tracks))
+            {
+                _artistTracks.Add(track);
+            }
+        }
+
+        private List<PlaylistItem> ApplyArtistSongSort(List<PlaylistItem> tracks)
+        {
+            Dictionary<string, uint> albumYears = tracks
+                .GroupBy(t => t.Album, StringComparer.CurrentCultureIgnoreCase)
+                .ToDictionary(
+                    g => g.Key,
+                    g => g.Where(t => t.Year > 0).Select(t => t.Year).DefaultIfEmpty(0u).Max(),
+                    StringComparer.CurrentCultureIgnoreCase);
+
+            return _artistSongSortMode switch
+            {
+                ArtistSongSortMode.AlbumTitleThenTrack => tracks
+                    .OrderBy(t => t.Album, StringComparer.CurrentCultureIgnoreCase)
+                    .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
+                    .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList(),
+                ArtistSongSortMode.AlbumYearThenTrack => tracks
+                    .OrderBy(t =>
+                    {
+                        albumYears.TryGetValue(t.Album, out uint y);
+                        return y == 0 ? uint.MaxValue : y;
+                    })
+                    .ThenBy(t => t.Album, StringComparer.CurrentCultureIgnoreCase)
+                    .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
+                    .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList(),
+                _ => tracks
+                    .OrderBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList()
+            };
+        }
+
+        private void ArtistSongSortMenu_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuFlyoutItem item || item.Tag is not string tag)
+            {
+                return;
+            }
+
+            _artistSongSortMode = tag switch
+            {
+                "AlbumTitle" => ArtistSongSortMode.AlbumTitleThenTrack,
+                "AlbumYear" => ArtistSongSortMode.AlbumYearThenTrack,
+                _ => ArtistSongSortMode.Title
+            };
+
+            ArtistSongSortButton.Content = tag switch
+            {
+                "AlbumTitle" => "排序：专辑（标题）",
+                "AlbumYear" => "排序：专辑（时间）",
+                _ => "排序：标题"
+            };
+
+            RebuildArtistTracks();
+        }
+
+        private async Task RebuildArtistAlbumsAsync()
+        {
+            _artistAlbums.Clear();
+            if (_openedArtist == null)
+            {
+                return;
+            }
+
+            string artistName = _openedArtist.Name;
+            List<PlaylistItem> tracks = _playlist
+                .Where(t => TrackMatchesArtistName(t, artistName, _artistDetailUsesAlbumArtist))
+                .ToList();
+
+            List<AlbumEntry> entries = BuildAlbumEntriesFromTracks(tracks);
+            entries = ApplyArtistAlbumSort(entries);
+
+            foreach (AlbumEntry entry in entries)
+            {
+                _artistAlbums.Add(entry);
+            }
+
+            foreach (AlbumEntry entry in entries)
+            {
+                if (_openedArtist == null ||
+                    !string.Equals(_openedArtist.Name, artistName, StringComparison.CurrentCultureIgnoreCase))
+                {
+                    return;
+                }
+
+                byte[]? bytes = await Task.Run(() => ExtractCoverBytes(entry.CoverSourcePath));
+                if (bytes == null || bytes.Length == 0)
+                {
+                    continue;
+                }
+
+                BitmapImage? image = await CreateBitmapFromBytesAsync(bytes);
+                if (image != null)
+                {
+                    entry.CoverImage = image;
+                    if (_openedAlbum != null &&
+                        string.Equals(_openedAlbum.Name, entry.Name, StringComparison.CurrentCultureIgnoreCase))
+                    {
+                        AlbumDetailCoverImage.Source = image;
+                    }
+                }
+            }
+        }
+
+        private List<AlbumEntry> ApplyArtistAlbumSort(List<AlbumEntry> source)
+        {
+            bool asc = _artistAlbumSortAscending;
+            return _artistAlbumSortMode switch
+            {
+                ArtistAlbumSortMode.Year => asc
+                    ? source
+                        .OrderBy(a => a.Year == 0 ? uint.MaxValue : a.Year)
+                        .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+                        .ToList()
+                    : source
+                        .OrderByDescending(a => a.Year)
+                        .ThenByDescending(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+                        .ToList(),
+                _ => asc
+                    ? source
+                        .OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+                        .ToList()
+                    : source
+                        .OrderByDescending(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+                        .ToList()
+            };
+        }
+
+        private void ArtistAlbumSortFieldButton_Click(object sender, RoutedEventArgs e)
+        {
+            _artistAlbumSortMode = _artistAlbumSortMode == ArtistAlbumSortMode.Title
+                ? ArtistAlbumSortMode.Year
+                : ArtistAlbumSortMode.Title;
+            ArtistAlbumSortFieldButton.Content = _artistAlbumSortMode == ArtistAlbumSortMode.Year
+                ? "按年份排序"
+                : "按标题排序";
+            RefreshArtistAlbumListOrder();
+        }
+
+        private void ArtistAlbumSortOrderButton_Click(object sender, RoutedEventArgs e)
+        {
+            _artistAlbumSortAscending = !_artistAlbumSortAscending;
+            ArtistAlbumSortOrderButton.Content = _artistAlbumSortAscending ? "升序" : "降序";
+            RefreshArtistAlbumListOrder();
+        }
+
+        private void RefreshArtistAlbumListOrder()
+        {
+            if (_artistAlbums.Count <= 1)
+            {
+                return;
+            }
+
+            List<AlbumEntry> sorted = ApplyArtistAlbumSort(_artistAlbums.ToList());
+            _artistAlbums.Clear();
+            foreach (AlbumEntry entry in sorted)
+            {
+                _artistAlbums.Add(entry);
+            }
+        }
+
+        private void ArtistTrackListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            if (_isMultiSelectMode)
+            {
+                return;
+            }
+
+            if (ArtistTrackListView.SelectedItem is PlaylistItem track)
+            {
+                PlayPlaylistItem(track);
+            }
+        }
+
+        private void ArtistTrackListView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSelectionUiUpdates)
+            {
+                return;
+            }
+
+            RefreshArtistTrackSelectionChrome();
+            UpdateSelectAllMultiSelectButtonState();
+        }
+
+        private void ArtistTrackListView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
+            {
+                ApplySongListItemSelectionChrome(ArtistTrackListView, container, song);
+            }
+        }
+
+        private void ArtistTrackListView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            PlaylistItem? song = null;
+            if (e.OriginalSource is DependencyObject source)
+            {
+                song = FindPlaylistItem(source);
+                if (song == null)
+                {
+                    ListViewItem? container = FindAncestorListViewItem(source);
+                    if (container != null)
+                    {
+                        song = ArtistTrackListView.ItemFromContainer(container) as PlaylistItem;
+                    }
+                }
+            }
+
+            if (song == null)
+            {
+                return;
+            }
+
+            // 右键也先选中，显示主题色圆角
+            if (!_isMultiSelectMode)
+            {
+                ArtistTrackListView.SelectedItem = song;
+            }
+
+            _contextMenuSong = song;
+            var flyout = BuildPlaylistItemContextMenu(song, false);
+
+            if (e.OriginalSource is FrameworkElement fe)
+            {
+                flyout.ShowAt(fe, e.GetPosition(fe));
+            }
+            else
+            {
+                flyout.ShowAt(ArtistTrackListView, e.GetPosition(ArtistTrackListView));
+            }
+
+            e.Handled = true;
+        }
+
+        private void ArtistAlbumGridView_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (_isMultiSelectMode && ReferenceEquals(_multiSelectAlbumGrid, ArtistAlbumGridView))
+            {
+                return;
+            }
+
+            if (e.ClickedItem is AlbumEntry album)
+            {
+                OpenAlbumDetail(album, fromArtist: true);
+            }
+        }
+
+        private void ArtistAlbumGridView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSelectionUiUpdates)
+            {
+                return;
+            }
+
+            RefreshAlbumWallSelectionChrome(ArtistAlbumGridView, _artistAlbums);
+            UpdateSelectAllMultiSelectButtonState();
+        }
+
+        private void ArtistAlbumGridView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            if (args.Item is AlbumEntry album && args.ItemContainer is GridViewItem container)
+            {
+                ApplyAlbumGridItemSelectionChrome(ArtistAlbumGridView, container, album);
+            }
+        }
+
+        /// <summary>从曲目集合汇总专辑条目（封面优先音轨 1）</summary>
+        private static List<AlbumEntry> BuildAlbumEntriesFromTracks(IEnumerable<PlaylistItem> sourceTracks)
+        {
+            var groups = sourceTracks
+                .GroupBy(p => p.Album, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+
+            var entries = new List<AlbumEntry>();
+            foreach (var group in groups)
+            {
+                PlaylistItem coverTrack =
+                    group.FirstOrDefault(t => t.Track == 1)
+                    ?? group.OrderBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
+                        .ThenBy(t => t.FilePath, StringComparer.OrdinalIgnoreCase)
+                        .First();
+
+                uint year = group.Where(t => t.Year > 0).Select(t => t.Year).DefaultIfEmpty(0u).Max();
+                TimeSpan total = TimeSpan.FromTicks(group.Sum(t => t.Duration.Ticks));
+
+                string artist = group
+                    .GroupBy(t => t.Artist, StringComparer.CurrentCultureIgnoreCase)
+                    .OrderByDescending(g => g.Count())
+                    .Select(g => g.First().Artist)
+                    .FirstOrDefault() ?? "未知艺术家";
+
+                entries.Add(new AlbumEntry
+                {
+                    Name = group.First().Album,
+                    Artist = artist,
+                    Year = year,
+                    TrackCount = group.Count(),
+                    TotalDuration = total,
+                    TotalDurationText = FormatTime(total),
+                    CoverSourcePath = coverTrack.FilePath
+                });
+            }
+
+            return entries;
+        }
+
+        /// <summary>
+        /// 播放单曲：先加入（或提前到）播放列表最前，再按播放列表播放。
+        /// </summary>
+        private void PlayPlaylistItem(PlaylistItem track)
+        {
+            AddSongsToUserPlaylist(new[] { track });
+            int userIndex = FindUserPlaylistIndex(track.FilePath);
+            if (userIndex >= 0)
+            {
+                PlayUserPlaylistAt(userIndex);
+                return;
+            }
+
+            int libraryIndex = FindLibraryIndex(track.FilePath);
+            if (libraryIndex >= 0)
+            {
+                PlayLibraryItemAt(libraryIndex, syncUserPlaylistIndex: false);
+            }
+            else
+            {
+                StartPlayback(track);
+                _userPlaylistIndex = -1;
+            }
+        }
+
+        private int FindUserPlaylistIndex(string filePath)
+        {
+            for (int i = 0; i < _userPlaylist.Count; i++)
+            {
+                if (string.Equals(_userPlaylist[i].FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        private int FindLibraryIndex(string filePath)
+        {
+            for (int i = 0; i < _playlist.Count; i++)
+            {
+                if (string.Equals(_playlist[i].FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
+
+        /// <summary>
+        /// 从曲库汇总唯一专辑；封面优先取该专辑音轨号为 1 的文件。
+        /// </summary>
+        private async Task RefreshAlbumViewAsync()
+        {
+            _albums.Clear();
+
+            if (_playlist.Count == 0)
+            {
+                return;
+            }
+
+            List<AlbumEntry> entries = BuildAlbumEntriesFromTracks(_playlist);
+            entries = ApplyAlbumSortToList(entries);
+
+            foreach (AlbumEntry entry in entries)
+            {
+                _albums.Add(entry);
+            }
+
+            ApplyAlbumsSearchFilter();
+
+            foreach (AlbumEntry entry in entries)
+            {
+                if (_currentCategory != "Albums")
+                {
+                    return;
+                }
+
+                byte[]? bytes = await Task.Run(() => ExtractCoverBytes(entry.CoverSourcePath));
+                if (bytes == null || bytes.Length == 0)
+                {
+                    continue;
+                }
+
+                BitmapImage? image = await CreateBitmapFromBytesAsync(bytes);
+                if (image != null)
+                {
+                    entry.CoverImage = image;
+                    if (_openedAlbum != null &&
+                        string.Equals(_openedAlbum.Name, entry.Name, StringComparison.CurrentCultureIgnoreCase))
+                    {
+                        AlbumDetailCoverImage.Source = image;
+                    }
+                }
+            }
+        }
+
+        private void AlbumSortMenu_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuFlyoutItem item || item.Tag is not string tag)
+            {
+                return;
+            }
+
+            _albumSortMode = tag switch
+            {
+                "TitleDesc" => AlbumSortMode.TitleDesc,
+                "YearAsc" => AlbumSortMode.YearAsc,
+                "YearDesc" => AlbumSortMode.YearDesc,
+                "ArtistTitleAsc" => AlbumSortMode.ArtistTitleAsc,
+                "ArtistYearAsc" => AlbumSortMode.ArtistYearAsc,
+                _ => AlbumSortMode.TitleAsc
+            };
+
+            AlbumSortButton.Content = "排序：" + GetAlbumSortDisplayName(_albumSortMode);
+            ResortAlbumsInPlace();
+        }
+
+        private static string GetAlbumSortDisplayName(AlbumSortMode mode) => mode switch
+        {
+            AlbumSortMode.TitleDesc => "按标题（降序）",
+            AlbumSortMode.YearAsc => "按发行时间（从早到晚）",
+            AlbumSortMode.YearDesc => "按发行时间（从晚到早）",
+            AlbumSortMode.ArtistTitleAsc => "按艺术家排列（按标题）",
+            AlbumSortMode.ArtistYearAsc => "按艺术家排列（按时间）",
+            _ => "按标题（升序）"
+        };
+
+        private void ResortAlbumsInPlace()
+        {
+            if (_albums.Count <= 1)
+            {
+                ApplyAlbumsSearchFilter();
+                return;
+            }
+
+            List<AlbumEntry> sorted = ApplyAlbumSortToList(_albums.ToList());
+            _albums.Clear();
+            foreach (AlbumEntry entry in sorted)
+            {
+                _albums.Add(entry);
+            }
+
+            ApplyAlbumsSearchFilter();
+        }
+
+        private List<AlbumEntry> ApplyAlbumSortToList(List<AlbumEntry> source)
+        {
+            IOrderedEnumerable<AlbumEntry> ordered = _albumSortMode switch
+            {
+                AlbumSortMode.TitleDesc =>
+                    source.OrderByDescending(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
+                AlbumSortMode.YearAsc =>
+                    source.OrderBy(a => a.Year == 0 ? uint.MaxValue : a.Year)
+                        .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
+                AlbumSortMode.YearDesc =>
+                    source.OrderByDescending(a => a.Year)
+                        .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
+                // 主艺术家升序 → 同艺术家按专辑标题升序
+                AlbumSortMode.ArtistTitleAsc =>
+                    source.OrderBy(a => a.Artist, StringComparer.CurrentCultureIgnoreCase)
+                        .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
+                // 主艺术家升序 → 同艺术家按年份升序（未知年份靠后）→ 再按标题
+                AlbumSortMode.ArtistYearAsc =>
+                    source.OrderBy(a => a.Artist, StringComparer.CurrentCultureIgnoreCase)
+                        .ThenBy(a => a.Year == 0 ? uint.MaxValue : a.Year)
+                        .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
+                _ =>
+                    source.OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+            };
+
+            return ordered.ToList();
+        }
+
+        private void AlbumGridView_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (_isMultiSelectMode && ReferenceEquals(_multiSelectAlbumGrid, AlbumGridView))
+            {
+                return;
+            }
+
+            if (e.ClickedItem is AlbumEntry album)
+            {
+                OpenAlbumDetail(album, fromArtist: false);
+            }
+        }
+
+        private void AlbumGridView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSelectionUiUpdates)
+            {
+                return;
+            }
+
+            RefreshAlbumWallSelectionChrome(AlbumGridView, _albums);
+            UpdateSelectAllMultiSelectButtonState();
+        }
+
+        private void AlbumGridView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            if (args.Item is AlbumEntry album && args.ItemContainer is GridViewItem container)
+            {
+                ApplyAlbumGridItemSelectionChrome(AlbumGridView, container, album);
+            }
+        }
+
+
+        /// <summary>专辑墙右键附加操作（音乐库专辑墙 / 艺术家详情专辑共用）。</summary>
+        private void AppendAlbumContextItems(MenuFlyout flyout, AlbumEntry album, bool fromArtist)
+        {
+            var dlLyric = new MenuFlyoutItem { Text = "批量下载歌词" };
+            dlLyric.Icon = new FontIcon { Glyph = "" };
+            dlLyric.Click += async (_, _) =>
+            {
+                var tracks = GetTracksForAlbum(album);
+                int ok = 0;
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    PlaylistItem song = tracks[i];
+                    NowPlayingText.Text = $"正在批量下载歌词 ({i + 1}/{tracks.Count})…";
+                    string? path = await OnlineMusicApi.SearchAndDownloadLyricAsync(song.Title, song.Artist, song.FilePath);
+                    if (path != null)
+                    {
+                        ok++;
+                    }
+                }
+
+                NowPlayingText.Text = $"歌词下载完成：{ok}/{tracks.Count}";
+            };
+            flyout.Items.Add(dlLyric);
+
+            var dlCover = new MenuFlyoutItem { Text = "批量下载封面" };
+            dlCover.Icon = new FontIcon { Glyph = "" };
+            dlCover.Click += async (_, _) =>
+            {
+                var tracks = GetTracksForAlbum(album);
+                int ok = 0;
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    PlaylistItem song = tracks[i];
+                    NowPlayingText.Text = $"正在批量下载封面 ({i + 1}/{tracks.Count})…";
+                    if (await OnlineMusicApi.DownloadAndEmbedCoverAsync(song.Title, song.Artist, song.FilePath))
+                    {
+                        InvalidateCoverCache(song.FilePath);
+                        ok++;
+                    }
+                }
+
+                NowPlayingText.Text = $"封面下载完成：{ok}/{tracks.Count}";
+            };
+            flyout.Items.Add(dlCover);
+
+            var copyInfo = new MenuFlyoutItem { Text = "复制专辑信息" };
+            copyInfo.Icon = new FontIcon { Glyph = "" };
+            copyInfo.Click += (_, _) =>
+            {
+                var data = new DataPackage();
+                data.SetText(string.IsNullOrWhiteSpace(album.Artist) ? album.Name : album.Name + " - " + album.Artist);
+                Clipboard.SetContent(data);
+                NowPlayingText.Text = "已复制专辑信息";
+            };
+            flyout.Items.Add(copyInfo);
+
+            var openDetail = new MenuFlyoutItem { Text = "打开专辑详情" };
+            openDetail.Icon = new FontIcon { Glyph = "" };
+            openDetail.Click += (_, _) => OpenAlbumDetail(album, fromArtist);
+            flyout.Items.Add(openDetail);
+        }
+        private void AlbumGridView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            AlbumEntry? album = null;
+            if (e.OriginalSource is DependencyObject source)
+            {
+                DependencyObject? current = source;
+                while (current != null)
+                {
+                    if (current is FrameworkElement { DataContext: AlbumEntry fromContext })
+                    {
+                        album = fromContext;
+                        break;
+                    }
+
+                    if (current is GridViewItem container)
+                    {
+                        album = AlbumGridView.ItemFromContainer(container) as AlbumEntry;
+                        break;
+                    }
+
+                    current = VisualTreeHelper.GetParent(current);
+                }
+            }
+
+            if (album == null)
+            {
+                return;
+            }
+
+            AlbumEntry albumRef = album;
+            if (!_isMultiSelectMode)
+            {
+                AlbumGridView.SelectedItem = albumRef;
+            }
+
+            var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
+
+            var playItem = new MenuFlyoutItem { Text = "播放该专辑" };
+            playItem.Icon = new FontIcon { Glyph = "\uE768" };
+            playItem.Click += (_, _) =>
+            {
+                ExitMultiSelectMode();
+                PlayAlbum(albumRef, replacePlaylist: true);
+            };
+
+            var multiItem = new MenuFlyoutItem { Text = "多选" };
+            multiItem.Icon = new FontIcon { Glyph = "\uE700" };
+            multiItem.Click += (_, _) => EnterAlbumWallMultiSelectMode(AlbumGridView, albumRef);
+
+            var addItem = new MenuFlyoutItem { Text = "添加至播放列表" };
+            addItem.Icon = new FontIcon { Glyph = "\uE710" };
+            addItem.Click += (_, _) => AddSongsToUserPlaylist(GetTracksForAlbum(albumRef));
+
+            flyout.Items.Add(playItem);
+            flyout.Items.Add(multiItem);
+            flyout.Items.Add(addItem);
+
+            AppendAlbumContextItems(flyout, albumRef, fromArtist: false);
+
+            if (e.OriginalSource is FrameworkElement fe)
+            {
+                flyout.ShowAt(fe, e.GetPosition(fe));
+            }
+            else
+            {
+                flyout.ShowAt(AlbumGridView, e.GetPosition(AlbumGridView));
+            }
+
+            e.Handled = true;
+        }
+
+        private List<PlaylistItem> GetTracksForAlbum(AlbumEntry album)
+        {
+            return _playlist
+                .Where(t =>
+                    string.Equals(t.Album, album.Name, StringComparison.CurrentCultureIgnoreCase)
+                    && (string.IsNullOrWhiteSpace(album.Artist)
+                        || string.Equals(t.Artist, album.Artist, StringComparison.CurrentCultureIgnoreCase)))
+                .OrderBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
+                .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
+        }
+
+        /// <summary>
+        /// 播放专辑：可替换用户播放列表，并从音轨 1（若无则第一首）开始播放。
+        /// </summary>
+        private void PlayAlbum(AlbumEntry album, bool replacePlaylist)
+        {
+            List<PlaylistItem> tracks = GetTracksForAlbum(album);
+            if (tracks.Count == 0)
+            {
+                return;
+            }
+
+            PlaylistItem first =
+                tracks.FirstOrDefault(t => t.Track == 1) ?? tracks[0];
+
+            if (replacePlaylist)
+            {
+                _userPlaylist.Clear();
+                AddSongsToUserPlaylist(tracks);
+                int index = FindUserPlaylistIndex(first.FilePath);
+                if (index >= 0)
+                {
+                    PlayUserPlaylistAt(index);
+                }
+
+                return;
+            }
+
+            PlayPlaylistItem(first);
+        }
+
+        private void AlbumDetailPlayButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_openedAlbum != null)
+            {
+                PlayAlbum(_openedAlbum, replacePlaylist: true);
+            }
+        }
+
+        private void AlbumDetailAddToPlaylistButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_openedAlbum != null)
+            {
+                AddSongsToUserPlaylist(GetTracksForAlbum(_openedAlbum));
+            }
+        }
+
+        private void OpenAlbumDetail(AlbumEntry album, bool fromArtist)
+            => CommitLibraryNavigation(() => OpenAlbumDetailCore(album, fromArtist));
+
+        private void OpenAlbumDetailCore(AlbumEntry album, bool fromArtist)
+        {
+            _openedAlbum = album;
+            _albumOpenedFromArtist = fromArtist;
+
+            if (fromArtist)
+            {
+                ArtistListBorder.Visibility = Visibility.Collapsed;
+                AlbumListBorder.Visibility = Visibility.Visible;
+                AlbumDetailBackButton.Content = "← 返回艺术家";
+            }
+            else
+            {
+                AlbumDetailBackButton.Content = "← 返回专辑";
+            }
+
+            AlbumGridView.Visibility = Visibility.Collapsed;
+            AlbumDetailPanel.Visibility = Visibility.Visible;
+            AlbumSortButton.Visibility = Visibility.Collapsed;
+            LibraryPaneTitle.Text = album.Name;
+            UpdateLibrarySearchUi();
+
+            AlbumDetailCoverImage.Source = album.CoverImage;
+            AlbumDetailNameText.Text = album.Name;
+            AlbumDetailArtistText.Text = "艺术家：" + album.Artist;
+            AlbumDetailYearText.Text = "发行时间：" + album.YearText;
+            AlbumDetailMetaText.Text = $"{album.TrackCount} 首 · 总时长 {album.TotalDurationText}";
+
+            _albumTracks.Clear();
+            IEnumerable<PlaylistItem> tracks = _playlist
+                .Where(t => string.Equals(t.Album, album.Name, StringComparison.CurrentCultureIgnoreCase))
+                .OrderBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
+                .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase);
+
+            foreach (PlaylistItem track in tracks)
+            {
+                _albumTracks.Add(track);
+            }
+        }
+
+        private void AlbumDetailBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            CommitLibraryNavigation(() =>
+            {
+                if (_albumOpenedFromArtist && _openedArtist != null)
+                {
+                    CloseAlbumDetailUi();
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Visible;
+                    ArtistGridView.Visibility = Visibility.Collapsed;
+                    ArtistDetailPanel.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Text = _openedArtist.Name;
+                    UpdateLibrarySearchUi();
+                    return;
+                }
+
+                CloseAlbumDetailUi();
+                if (_currentCategory == "Albums")
+                {
+                    LibraryPaneTitle.Text = "专辑";
+                    AlbumSortButton.Visibility = Visibility.Visible;
+                }
+
+                UpdateLibrarySearchUi();
+            });
+        }
+
+        private void CloseAlbumDetailUi()
+        {
+            _openedAlbum = null;
+            _albumOpenedFromArtist = false;
+            _albumTracks.Clear();
+            AlbumDetailPanel.Visibility = Visibility.Collapsed;
+            AlbumGridView.Visibility = Visibility.Visible;
+            AlbumDetailCoverImage.Source = null;
+            AlbumDetailBackButton.Content = "← 返回专辑";
+        }
+
+        private void AlbumTrackListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            if (_isMultiSelectMode)
+            {
+                return;
+            }
+
+            if (AlbumTrackListView.SelectedItem is PlaylistItem track)
+            {
+                PlayPlaylistItem(track);
+            }
+        }
+
+        private void AlbumTrackListView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSelectionUiUpdates)
+            {
+                return;
+            }
+
+            RefreshAlbumTrackSelectionChrome();
+            UpdateSelectAllMultiSelectButtonState();
+        }
+
+        private void AlbumTrackListView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
+            {
+                ApplySongListItemSelectionChrome(AlbumTrackListView, container, song);
+            }
+        }
+
+        private void AlbumTrackListView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            PlaylistItem? song = null;
+            if (e.OriginalSource is DependencyObject source)
+            {
+                song = FindPlaylistItem(source);
+                if (song == null)
+                {
+                    ListViewItem? container = FindAncestorListViewItem(source);
+                    if (container != null)
+                    {
+                        song = AlbumTrackListView.ItemFromContainer(container) as PlaylistItem;
+                    }
+                }
+            }
+
+            if (song == null)
+            {
+                return;
+            }
+
+            if (!_isMultiSelectMode)
+            {
+                AlbumTrackListView.SelectedItem = song;
+            }
+
+            _contextMenuSong = song;
+            var flyout = BuildPlaylistItemContextMenu(song, false);
+
+            if (e.OriginalSource is FrameworkElement fe)
+            {
+                flyout.ShowAt(fe, e.GetPosition(fe));
+            }
+            else
+            {
+                flyout.ShowAt(AlbumTrackListView, e.GetPosition(AlbumTrackListView));
+            }
+
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// 提取封面字节（可在后台线程调用）。按 UseInnerCoverFirst 设置决定
+        /// 内嵌标签封面与外置封面（folder.jpg / cover.jpg / 同名图）的优先级。
+        /// </summary>
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]?> CoverBytesCache = new();
+        private const int CoverBytesCacheMax = 200;
+
+        private static byte[]? ExtractCoverBytes(string audioPath)
+        {
+            if (string.IsNullOrWhiteSpace(audioPath))
+            {
+                return null;
+            }
+
+            if (CoverBytesCache.TryGetValue(audioPath, out byte[]? cached))
+            {
+                return cached;
+            }
+
+            byte[]? inner = TryLoadInnerCover(audioPath);
+            byte[]? outer = TryLoadOuterCover(audioPath);
+            byte[]? result = AppSettingsStore.Load().UseInnerCoverFirst ? inner ?? outer : outer ?? inner;
+
+            if (CoverBytesCache.Count >= CoverBytesCacheMax)
+            {
+                CoverBytesCache.Clear();
+            }
+
+            CoverBytesCache[audioPath] = result;
+            return result;
+        }
+
+        /// <summary>封面写入磁盘后使缓存失效（下载封面后调用）。</summary>
+        internal static void InvalidateCoverCache(string audioPath)
+        {
+            if (!string.IsNullOrWhiteSpace(audioPath))
+            {
+                CoverBytesCache.TryRemove(audioPath, out _);
+            }
+        }
+
+        private static byte[]? TryLoadInnerCover(string audioPath)
+        {
+            try
+            {
+                using TagLib.File tagFile = TagLib.File.Create(audioPath);
+                IPicture[]? pictures = tagFile.Tag.Pictures;
+                if (pictures == null || pictures.Length == 0)
+                {
+                    return null;
+                }
+
+                IPicture pic = pictures.FirstOrDefault(p => p.Type == PictureType.FrontCover)
+                               ?? pictures[0];
+                byte[] data = pic.Data.Data;
+                return data is { Length: > 0 } ? data : null;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"提取封面失败 [{audioPath}]: {ex.Message}");
+                return null;
+            }
+        }
+
+        private static byte[]? TryLoadOuterCover(string audioPath)
+        {
+            try
+            {
+                string dir = Path.GetDirectoryName(audioPath) ?? string.Empty;
+                string name = Path.GetFileNameWithoutExtension(audioPath);
+                string[] candidates =
+                {
+                    Path.Combine(dir, "folder.jpg"),
+                    Path.Combine(dir, "folder.png"),
+                    Path.Combine(dir, "cover.jpg"),
+                    Path.Combine(dir, "cover.png"),
+                    Path.Combine(dir, name + ".jpg"),
+                    Path.Combine(dir, name + ".png")
+                };
+
+                foreach (string candidate in candidates.Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    if (System.IO.File.Exists(candidate))
+                    {
+                        return System.IO.File.ReadAllBytes(candidate);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        /// <summary>字节 → BitmapImage（须在 UI 线程）</summary>
+        private static async Task<BitmapImage?> CreateBitmapFromBytesAsync(byte[] bytes)
+        {
+            try
+            {
+                var image = new BitmapImage();
+                using InMemoryRandomAccessStream stream = new();
+                await stream.WriteAsync(bytes.AsBuffer());
+                stream.Seek(0);
+                await image.SetSourceAsync(stream);
+                return image;
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("封面解码失败: " + ex.Message);
+                return null;
+            }
+        }
+
+        // =====================================================================
+        // 排序
+        // =====================================================================
+
+        private void SetSongSortUiForCategory(bool isUserPlaylist)
+        {
+            Visibility librarySort = isUserPlaylist ? Visibility.Collapsed : Visibility.Visible;
+            Visibility playlistSort = isUserPlaylist ? Visibility.Visible : Visibility.Collapsed;
+            SortFieldButton.Visibility = librarySort;
+            SortOrderButton.Visibility = librarySort;
+            ChangeSortButton.Visibility = playlistSort;
+        }
+
+        private void SortFieldMenu_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuFlyoutItem item || item.Tag is not string tag)
+            {
+                return;
+            }
+
+            _sortField = tag switch
+            {
+                "Artist" => SortField.Artist,
+                "Album" => SortField.Album,
+                "Year" => SortField.Year,
+                "Duration" => SortField.Duration,
+                _ => SortField.Title
+            };
+
+            SortFieldButton.Content = "排序：" + GetSortFieldDisplayName(_sortField);
+
+            string? playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
+                ? _playlist[_currentIndex].FilePath
+                : null;
+            ApplySort(playingPath);
+        }
+
+        private void SortOrderButton_Click(object sender, RoutedEventArgs e)
+        {
+            _sortAscending = !_sortAscending;
+            SortOrderButton.Content = _sortAscending ? "升序" : "降序";
+
+            string? playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
+                ? _playlist[_currentIndex].FilePath
+                : null;
+            ApplySort(playingPath);
+        }
+
+        private async void ChangeSortButton_Click(object sender, RoutedEventArgs e)
+            => await ChangeUserPlaylistSortAsync(Content.XamlRoot);
+
+        /// <summary>播放列表「更改排序」对话框（主界面与当前播放列表窗口共用）。</summary>
+        internal async Task ChangeUserPlaylistSortAsync(XamlRoot xamlRoot)
+        {
+            var fieldBox = new ComboBox
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                SelectedIndex = _sortField switch
+                {
+                    SortField.Album => 1,
+                    SortField.Artist => 2,
+                    SortField.Year => 3,
+                    SortField.Duration => 4,
+                    _ => 0
+                }
+            };
+            fieldBox.Items.Add("标题");
+            fieldBox.Items.Add("专辑");
+            fieldBox.Items.Add("艺术家");
+            fieldBox.Items.Add("年份");
+            fieldBox.Items.Add("时长");
+
+            var orderBox = new ComboBox
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                SelectedIndex = _sortAscending ? 0 : 1
+            };
+            orderBox.Items.Add("升序");
+            orderBox.Items.Add("降序");
+
+            var panel = new StackPanel { Spacing = 12 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "若更改排序，原有的顺序则会被打乱",
+                TextWrapping = TextWrapping.WrapWholeWords,
+                Opacity = 0.85
+            });
+            panel.Children.Add(new TextBlock { Text = "排序字段", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            panel.Children.Add(fieldBox);
+            panel.Children.Add(new TextBlock { Text = "排序方向", FontWeight = Microsoft.UI.Text.FontWeights.SemiBold });
+            panel.Children.Add(orderBox);
+
+            ContentDialog dialog = new()
+            {
+                Title = "更改排序",
+                Content = panel,
+                PrimaryButtonText = "应用",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = xamlRoot
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            _sortField = fieldBox.SelectedIndex switch
+            {
+                1 => SortField.Album,
+                2 => SortField.Artist,
+                3 => SortField.Year,
+                4 => SortField.Duration,
+                _ => SortField.Title
+            };
+            _sortAscending = orderBox.SelectedIndex == 0;
+
+            string? playingPath = _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
+                ? _userPlaylist[_userPlaylistIndex].FilePath
+                : null;
+
+            SortCollection(_userPlaylist, playingPath);
+            NotifyCurrentPlaylistWindow();
+            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+            {
+                ApplyUserPlaylistSearchFilter();
+            }
+        }
+
+        private static string GetSortFieldDisplayName(SortField field) => field switch
+        {
+            SortField.Artist => "艺术家",
+            SortField.Album => "专辑",
+            SortField.Year => "年份",
+            SortField.Duration => "时长",
+            _ => "标题"
+        };
+
+        private ObservableCollection<PlaylistItem> GetActiveSongCollection()
+            => string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
+                ? _userPlaylist
+                : _playlist;
+
+        /// <summary>
+        /// 按当前字段与升/降序重排当前中间列表，并刷新序号与当前播放下标。
+        /// </summary>
+        private void ApplySort(string? preservePlayingPath)
+        {
+            ObservableCollection<PlaylistItem> target = GetActiveSongCollection();
+            SortCollection(target, preservePlayingPath);
+            if (_currentCategory == "Songs")
+            {
+                ApplySongsSearchFilter();
+            }
+        }
+
+        private void SortCollection(ObservableCollection<PlaylistItem> target, string? preservePlayingPath)
+        {
+            if (target.Count <= 1)
+            {
+                RenumberCollection(target);
+                SyncIndicesAfterSort(target, preservePlayingPath);
+                return;
+            }
+
+            IOrderedEnumerable<PlaylistItem> ordered = _sortField switch
+            {
+                SortField.Artist => target.OrderBy(i => i.Artist, StringComparer.CurrentCultureIgnoreCase),
+                SortField.Album => target.OrderBy(i => i.Album, StringComparer.CurrentCultureIgnoreCase),
+                SortField.Year => target.OrderBy(i => i.Year),
+                SortField.Duration => target.OrderBy(i => i.Duration),
+                _ => target.OrderBy(i => i.Title, StringComparer.CurrentCultureIgnoreCase)
+            };
+
+            // 次要关键字：标题，同字段时顺序更稳定
+            ordered = ordered.ThenBy(i => i.Title, StringComparer.CurrentCultureIgnoreCase);
+
+            List<PlaylistItem> sorted = (_sortAscending
+                ? ordered.AsEnumerable()
+                : ordered.Reverse()).ToList();
+
+            target.Clear();
+            foreach (PlaylistItem item in sorted)
+            {
+                target.Add(item);
+            }
+
+            RenumberCollection(target);
+            SyncIndicesAfterSort(target, preservePlayingPath);
+        }
+
+        private void SyncIndicesAfterSort(ObservableCollection<PlaylistItem> target, string? preservePlayingPath)
+        {
+            if (ReferenceEquals(target, _playlist))
+            {
+                UpdateCurrentIndexByPath(preservePlayingPath);
+                if (_currentIndex >= 0 && _currentIndex < _playlist.Count
+                    && string.Equals(_currentCategory, "Songs", StringComparison.Ordinal))
+                {
+                    PlaylistView.SelectedIndex = _currentIndex;
+                }
+            }
+            else if (ReferenceEquals(target, _userPlaylist) && !string.IsNullOrEmpty(preservePlayingPath))
+            {
+                _userPlaylistIndex = FindUserPlaylistIndex(preservePlayingPath);
+                if (_userPlaylistIndex >= 0
+                    && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+                {
+                    PlaylistView.SelectedIndex = _userPlaylistIndex;
+                }
+            }
+        }
+
+        private void RenumberIndices() => RenumberCollection(_playlist);
+
+        private static void RenumberCollection(ObservableCollection<PlaylistItem> items)
+        {
+            for (int i = 0; i < items.Count; i++)
+            {
+                items[i].Index = i + 1;
+            }
+        }
+
+        private void UpdateCurrentIndexByPath(string? path)
+        {
+            if (string.IsNullOrEmpty(path))
+            {
+                return;
+            }
+
+            for (int i = 0; i < _playlist.Count; i++)
+            {
+                if (string.Equals(_playlist[i].FilePath, path, StringComparison.OrdinalIgnoreCase))
+                {
+                    _currentIndex = i;
+                    return;
+                }
+            }
+        }
+
+        // =====================================================================
+        // 播放列表交互 / 右键菜单 / 多选
+        // =====================================================================
+
+        private void PlaylistView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            if (_isMultiSelectMode)
+            {
+                return;
+            }
+
+            if (PlaylistView.SelectedItem is not PlaylistItem item)
+            {
+                return;
+            }
+
+            // 播放列表界面：按当前顺序播放，不把歌曲提前到最前
+            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+            {
+                int index = FindUserPlaylistIndex(item.FilePath);
+                if (index >= 0)
+                {
+                    PlayUserPlaylistAt(index);
+                }
+
+                return;
+            }
+
+            PlayPlaylistItem(item);
+        }
+
+        private void PlaylistView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            if (PlaylistListBorder.Visibility != Visibility.Visible)
+            {
+                return;
+            }
+
+            PlaylistItem? song = null;
+            if (e.OriginalSource is DependencyObject source)
+            {
+                song = FindPlaylistItem(source);
+                if (song == null)
+                {
+                    ListViewItem? container = FindAncestorListViewItem(source);
+                    if (container != null)
+                    {
+                        song = PlaylistView.ItemFromContainer(container) as PlaylistItem;
+                    }
+                }
+            }
+
+            if (song == null)
+            {
+                return;
+            }
+
+            _contextMenuSong = song;
+
+            // 右键也先选中，主题色圆角与左键一致
+            if (!_isMultiSelectMode)
+            {
+                PlaylistView.SelectedItem = song;
+            }
+
+            var flyout = BuildPlaylistItemContextMenu(song, string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal));
+
+            if (e.OriginalSource is FrameworkElement fe)
+            {
+                flyout.ShowAt(fe, e.GetPosition(fe));
+            }
+            else
+            {
+                flyout.ShowAt(PlaylistView, e.GetPosition(PlaylistView));
+            }
+
+            e.Handled = true;
+        }
+
+        /// <summary>构建歌曲右键菜单（所有歌曲列表视图共用）。inUserPlaylist 为 true 时含用户播放列表专属项。</summary>
+        private MenuFlyout BuildPlaylistItemContextMenu(PlaylistItem song, bool inUserPlaylist, Action? multiSelectAction = null)
+        {
+            _contextMenuSong = song;
+            var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
+
+            var playItem = new MenuFlyoutItem { Text = "播放" };
+            playItem.Icon = new FontIcon { Glyph = "\uE768" };
+            playItem.Click += (_, _) =>
+            {
+                if (_contextMenuSong == null)
+                {
+                    return;
+                }
+
+                ExitMultiSelectMode();
+                // 播放列表内：仅播放，不提前到最前；其它界面仍走加入并播放
+                if (inUserPlaylist)
+                {
+                    int index = FindUserPlaylistIndex(_contextMenuSong.FilePath);
+                    if (index >= 0)
+                    {
+                        PlayUserPlaylistAt(index);
+                    }
+                }
+                else
+                {
+                    PlayPlaylistItem(_contextMenuSong);
+                }
+            };
+
+            var multiItem = new MenuFlyoutItem { Text = "多选" };
+            multiItem.Icon = new FontIcon { Glyph = "\uE700" };
+            multiItem.Click += (_, _) =>
+            {
+                if (multiSelectAction != null)
+                {
+                    multiSelectAction();
+                }
+                else
+                {
+                    EnterMultiSelectMode(_contextMenuSong);
+                }
+            };
+
+            flyout.Items.Add(playItem);
+
+            if (inUserPlaylist)
+            {
+                var pinItem = new MenuFlyoutItem { Text = "置顶" };
+                // Upload：上箭头 + 顶栏横线，近似「横线下朝上箭头」
+                pinItem.Icon = new FontIcon { Glyph = "\uE898" };
+                pinItem.Click += (_, _) =>
+                {
+                    if (_contextMenuSong != null)
+                    {
+                        PinSongToUserPlaylistTop(_contextMenuSong);
+                    }
+                };
+                flyout.Items.Add(pinItem);
+            }
+
+            flyout.Items.Add(multiItem);
+
+            if (inUserPlaylist)
+            {
+                var removeItem = new MenuFlyoutItem { Text = "从播放列表中删除" };
+                removeItem.Icon = new FontIcon { Glyph = "\uE74D" };
+                removeItem.Click += (_, _) =>
+                {
+                    if (_contextMenuSong != null)
+                    {
+                        RemoveSongsFromUserPlaylist(new[] { _contextMenuSong });
+                    }
+                };
+                flyout.Items.Add(removeItem);
+            }
+            else
+            {
+                var addItem = new MenuFlyoutItem { Text = "添加至播放列表" };
+                addItem.Icon = new FontIcon { Glyph = "\uE710" };
+                addItem.Click += (_, _) =>
+                {
+                    if (_contextMenuSong != null)
+                    {
+                        AddSongsToUserPlaylist(new[] { _contextMenuSong });
+                    }
+                };
+                flyout.Items.Add(addItem);
+            }
+
+            AppendPlaylistContextFeatureItems(flyout, song, inUserPlaylist);
+
+            var deleteDiskItem = new MenuFlyoutItem { Text = "从磁盘删除（回收站）" };
+            deleteDiskItem.Icon = new FontIcon { Glyph = "\uE74D" };
+            bool disableDelete = AppSettingsStore.Load().DisableDeleteFromDisk;
+            if (disableDelete)
+            {
+                deleteDiskItem.Text = "从磁盘删除（已在设置中禁用）";
+                deleteDiskItem.IsEnabled = false;
+            }
+            else
+            {
+                deleteDiskItem.Click += async (_, _) =>
+                {
+                    if (_contextMenuSong != null)
+                    {
+                        await DeleteSongFromDiskAsync(_contextMenuSong);
+                    }
+                };
+            }
+
+            flyout.Items.Add(deleteDiskItem);
+
+            flyout.Items.Add(CreateOpenFileLocationMenuItem());
+            return flyout;
+        }
+
+        /// <summary>将歌曲移到用户播放列表最前（已在最前则不变）。</summary>
+        internal void PinSongToUserPlaylistTop(PlaylistItem song)
+        {
+            int index = FindUserPlaylistIndex(song.FilePath);
+            if (index <= 0)
+            {
+                return;
+            }
+
+            string? playingPath = _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
+                ? _userPlaylist[_userPlaylistIndex].FilePath
+                : null;
+
+            PlaylistItem item = _userPlaylist[index];
+            _userPlaylist.RemoveAt(index);
+            _userPlaylist.Insert(0, item);
+            RenumberCollection(_userPlaylist);
+
+            if (!string.IsNullOrWhiteSpace(playingPath))
+            {
+                _userPlaylistIndex = FindUserPlaylistIndex(playingPath);
+            }
+
+            NotifyCurrentPlaylistWindow();
+            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+            {
+                ApplyUserPlaylistSearchFilter();
+            }
+        }
+
+        private void ShowCurrentPlaylistButton_Click(object sender, RoutedEventArgs e)
+            => ShowCurrentPlaylistWindow();
+
+        internal void ShowCurrentPlaylistWindow()
+        {
+            if (_currentPlaylistWindow != null)
+            {
+                _currentPlaylistWindow.Activate();
+                return;
+            }
+
+            _currentPlaylistWindow = new CurrentPlaylistWindow(this);
+            _currentPlaylistWindow.Closed += (_, _) => _currentPlaylistWindow = null;
+            _currentPlaylistWindow.Activate();
+        }
+
+        internal void NotifyCurrentPlaylistWindow()
+            => _currentPlaylistWindow?.RefreshFromOwner();
+
+        internal ObservableCollection<PlaylistItem> UserPlaylist => _userPlaylist;
+
+        /// <summary>媒体库全部歌曲（供重复文件检测等窗口使用）。</summary>
+        internal IReadOnlyList<PlaylistItem> LibraryTracks => _playlist;
+
+        internal int UserPlaylistPlayingIndex => _userPlaylistIndex;
+
+        internal Brush GetAccentBrush() => ResolveAccentBrush();
+
+        internal Brush GetAccentForegroundBrush() => ResolveAccentForegroundBrush();
+
+        internal Brush GetCapsuleFillBrush() => ResolveCapsuleFillBrush();
+
+        internal Brush GetMultiSelectFrostBrush() => CreateMultiSelectFrostBrush();
+
+        internal int FindUserPlaylistIndexPublic(string filePath) => FindUserPlaylistIndex(filePath);
+
+        internal void PlayUserPlaylistAtPublic(int index) => PlayUserPlaylistAt(index);
+
+        internal void RemoveSongsFromUserPlaylistPublic(IEnumerable<PlaylistItem> songs)
+            => RemoveSongsFromUserPlaylist(songs);
+
+        internal static void OpenFileLocationInExplorerPublic(string? filePath)
+            => OpenFileLocationInExplorer(filePath);
+
+        internal void PlayUserPlaylistFromStart()
+        {
+            if (_userPlaylist.Count == 0)
+            {
+                return;
+            }
+
+            ExitMultiSelectMode();
+            PlayUserPlaylistAt(0);
+            NotifyCurrentPlaylistWindow();
+        }
+
+        private void EnterMultiSelectMode(PlaylistItem? preselect)
+        {
+            // 退出专辑 / 文件夹多选，避免两套多选并存
+            if (_multiSelectAlbumGrid != null)
+            {
+                ExitAlbumMultiSelectUiOnly();
+            }
+
+            if (_multiSelectFolderList != null)
+            {
+                ExitFolderMultiSelectUiOnly();
+            }
+
+            ListView? target = ResolveMultiSelectTargetList();
+            if (target == null)
+            {
+                return;
+            }
+
+            _multiSelectTargetList = target;
+            _multiSelectAlbumGrid = null;
+            if (target == PlaylistView)
+            {
+                _playlistItemDefaultStyle ??= PlaylistView.ItemContainerStyle;
+            }
+            else if (target == ArtistTrackListView)
+            {
+                _artistTrackItemDefaultStyle ??= ArtistTrackListView.ItemContainerStyle;
+            }
+            else if (target == AlbumTrackListView)
+            {
+                _albumTrackItemDefaultStyle ??= AlbumTrackListView.ItemContainerStyle;
+            }
+
+            _isMultiSelectMode = true;
+            SetListSelectionMode(target, ListViewSelectionMode.Multiple);
+
+            LibraryPaneTitle.Visibility = Visibility.Collapsed;
+            SongSortPanel.Visibility = Visibility.Collapsed;
+            MultiSelectTitlePanel.Visibility = Visibility.Visible;
+            MultiSelectTitleText.Text = "选择歌曲";
+            MultiSelectActionBar.Visibility = Visibility.Visible;
+            ConfigureMultiSelectPrimaryAction();
+            UpdateSelectAllMultiSelectButtonState();
+            UpdateUserPlaylistActionBarVisibility();
+            ApplyAccentSelectionResources(target);
+            ApplyMultiSelectItemStyle(target);
+            UpdateLibrarySearchUi();
+            if (target == PlaylistView)
+            {
+                ApplyCapsuleSortButtonStyle(accent: true);
+            }
+
+            if (preselect != null)
+            {
+                try
+                {
+                    target.SelectedItems.Add(preselect);
+                }
+                catch
+                {
+                    target.SelectedItem = preselect;
+                }
+            }
+
+            DispatcherQueue.TryEnqueue(RefreshMultiSelectItemBackgrounds);
+        }
+
+        /// <summary>专辑墙多选（音乐库专辑 / 艺术家详情专辑）。</summary>
+        private void EnterAlbumWallMultiSelectMode(GridView grid, AlbumEntry? preselect)
+        {
+            if (_multiSelectTargetList != null)
+            {
+                ExitSongMultiSelectUiOnly();
+            }
+
+            if (_multiSelectFolderList != null)
+            {
+                ExitFolderMultiSelectUiOnly();
+            }
+
+            if (ReferenceEquals(grid, ArtistAlbumGridView))
+            {
+                _artistAlbumItemDefaultStyle ??= ArtistAlbumGridView.ItemContainerStyle;
+            }
+            else
+            {
+                _libraryAlbumItemDefaultStyle ??= AlbumGridView.ItemContainerStyle;
+            }
+
+            _multiSelectAlbumGrid = grid;
+            _multiSelectTargetList = null;
+            _multiSelectFolderList = null;
+            _isMultiSelectMode = true;
+
+            SetGridSelectionMode(grid, ListViewSelectionMode.Multiple);
+            grid.IsItemClickEnabled = false;
+
+            LibraryPaneTitle.Visibility = Visibility.Collapsed;
+            SongSortPanel.Visibility = Visibility.Collapsed;
+            AlbumSortButton.Visibility = Visibility.Collapsed;
+            MultiSelectTitlePanel.Visibility = Visibility.Visible;
+            MultiSelectTitleText.Text = "选择专辑";
+            MultiSelectActionBar.Visibility = Visibility.Visible;
+            ConfigureMultiSelectPrimaryAction();
+            UpdateSelectAllMultiSelectButtonState();
+            UpdateUserPlaylistActionBarVisibility();
+            ApplyAccentSelectionResources(grid);
+            ApplyMultiSelectAlbumItemStyle(grid);
+            UpdateLibrarySearchUi();
+
+            if (preselect != null)
+            {
+                try
+                {
+                    grid.SelectedItems.Add(preselect);
+                }
+                catch
+                {
+                    grid.SelectedItem = preselect;
+                }
+            }
+
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                RefreshAlbumWallSelectionChrome(grid, GetAlbumCollectionForGrid(grid));
+                UpdateSelectAllMultiSelectButtonState();
+            });
+        }
+
+        private ObservableCollection<AlbumEntry> GetAlbumCollectionForGrid(GridView grid)
+            => ReferenceEquals(grid, AlbumGridView) ? _albums : _artistAlbums;
+
+        private ListView? ResolveMultiSelectTargetList()
+        {
+            if (AlbumDetailPanel.Visibility == Visibility.Visible
+                && AlbumTrackListView != null)
+            {
+                return AlbumTrackListView;
+            }
+
+            if (ArtistDetailPanel.Visibility == Visibility.Visible
+                && ArtistTrackListView != null)
+            {
+                return ArtistTrackListView;
+            }
+
+            if (PlaylistListBorder.Visibility == Visibility.Visible)
+            {
+                return PlaylistView;
+            }
+
+            return null;
+        }
+
+        private void ConfigureMultiSelectPrimaryAction()
+        {
+            bool isUserPlaylist = _multiSelectTargetList == PlaylistView
+                && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal);
+            if (isUserPlaylist)
+            {
+                MultiSelectPrimaryActionIcon.Glyph = "\uE74D"; // Delete
+                MultiSelectPrimaryActionText.Text = "从播放列表中删除";
+                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲从播放列表移除");
+            }
+            else if (_multiSelectAlbumGrid != null)
+            {
+                MultiSelectPrimaryActionIcon.Glyph = "\uE710";
+                MultiSelectPrimaryActionText.Text = "添加至播放列表";
+                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "按当前专辑顺序、音轨号将选中专辑加入播放列表");
+            }
+            else if (_multiSelectFolderList != null)
+            {
+                MultiSelectPrimaryActionIcon.Glyph = "\uE710";
+                MultiSelectPrimaryActionText.Text = "添加至播放列表";
+                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中文件夹/音频按顺序加入播放列表");
+            }
+            else
+            {
+                MultiSelectPrimaryActionIcon.Glyph = "\uE710"; // Add
+                MultiSelectPrimaryActionText.Text = "添加至播放列表";
+                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲添加至播放列表");
+            }
+
+            if (MultiSelectDeleteMenuItem != null)
+            {
+                MultiSelectDeleteMenuItem.IsEnabled = !AppSettingsStore.Load().DisableDeleteFromDisk;
+            }
+        }
+
+        private void SelectAllMultiSelectButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_isMultiSelectMode)
+            {
+                return;
+            }
+
+            if (_multiSelectAlbumGrid != null)
+            {
+                GridView grid = _multiSelectAlbumGrid;
+                ObservableCollection<AlbumEntry> allAlbums = GetAlbumCollectionForGrid(grid);
+                bool allSelected = allAlbums.Count > 0
+                    && grid.SelectedItems.Count >= allAlbums.Count;
+                if (allSelected)
+                {
+                    ClearListViewBaseSelection(grid);
+                }
+                else
+                {
+                    SelectAllInListViewBase(grid, allAlbums.Count);
+                }
+
+                RefreshAlbumWallSelectionChrome(grid, allAlbums);
+                UpdateSelectAllMultiSelectButtonState();
+                return;
+            }
+
+            if (_multiSelectFolderList != null)
+            {
+                bool allSelected = _folderBrowserItems.Count > 0
+                    && FolderBrowserView.SelectedItems.Count >= _folderBrowserItems.Count;
+                if (allSelected)
+                {
+                    ClearListViewBaseSelection(FolderBrowserView);
+                }
+                else
+                {
+                    SelectAllInListViewBase(FolderBrowserView, _folderBrowserItems.Count);
+                }
+
+                RefreshFolderBrowserSelectionChrome();
+                UpdateSelectAllMultiSelectButtonState();
+                return;
+            }
+
+            ListView? target = _multiSelectTargetList;
+            if (target == null)
+            {
+                return;
+            }
+
+            IReadOnlyList<PlaylistItem> allSongs = GetMultiSelectSongSource(target);
+            bool songsAllSelected = target.SelectedItems.Count >= allSongs.Count && allSongs.Count > 0;
+            if (songsAllSelected)
+            {
+                ClearListViewBaseSelection(target);
+            }
+            else
+            {
+                SelectAllInListViewBase(target, allSongs.Count);
+            }
+
+            RefreshSongListSelectionChrome(target);
+            UpdateSelectAllMultiSelectButtonState();
+        }
+
+        /// <summary>用 SelectRange 一次选中全部，避免逐项 Add 触发数千次 SelectionChanged。</summary>
+        private void SelectAllInListViewBase(ListViewBase list, int count)
+        {
+            if (count <= 0)
+            {
+                return;
+            }
+
+            _suppressSelectionUiUpdates = true;
+            try
+            {
+                list.SelectRange(new ItemIndexRange(0, (uint)count));
+            }
+            catch
+            {
+                // 少数控件/状态不支持 SelectRange 时回退逐项添加
+                for (int i = 0; i < count; i++)
+                {
+                    object? item = list.Items[i];
+                    if (item == null || list.SelectedItems.Contains(item))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        list.SelectedItems.Add(item);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
+            finally
+            {
+                _suppressSelectionUiUpdates = false;
+            }
+        }
+
+        private void ClearListViewBaseSelection(ListViewBase list)
+        {
+            _suppressSelectionUiUpdates = true;
+            try
+            {
+                if (list is ListView lv)
+                {
+                    SetListSelectionMode(lv, ListViewSelectionMode.Multiple);
+                }
+                else if (list is GridView gv)
+                {
+                    SetGridSelectionMode(gv, ListViewSelectionMode.Multiple);
+                }
+                else
+                {
+                    list.SelectedIndex = -1;
+                }
+            }
+            finally
+            {
+                _suppressSelectionUiUpdates = false;
+            }
+        }
+
+        private IReadOnlyList<PlaylistItem> GetMultiSelectSongSource(ListView target)
+        {
+            if (target == ArtistTrackListView)
+            {
+                return _artistTracks;
+            }
+
+            if (target == AlbumTrackListView)
+            {
+                return _albumTracks;
+            }
+
+            return GetActiveSongCollection();
+        }
+
+        private void UpdateSelectAllMultiSelectButtonState()
+        {
+            if (SelectAllMultiSelectIcon == null || !_isMultiSelectMode)
+            {
+                return;
+            }
+
+            bool allSelected;
+            if (_multiSelectAlbumGrid != null)
+            {
+                ObservableCollection<AlbumEntry> all = GetAlbumCollectionForGrid(_multiSelectAlbumGrid);
+                allSelected = all.Count > 0
+                    && _multiSelectAlbumGrid.SelectedItems.Count >= all.Count;
+            }
+            else if (_multiSelectFolderList != null)
+            {
+                allSelected = _folderBrowserItems.Count > 0
+                    && FolderBrowserView.SelectedItems.Count >= _folderBrowserItems.Count;
+            }
+            else if (_multiSelectTargetList != null)
+            {
+                IReadOnlyList<PlaylistItem> all = GetMultiSelectSongSource(_multiSelectTargetList);
+                allSelected = all.Count > 0
+                    && _multiSelectTargetList.SelectedItems.Count >= all.Count;
+            }
+            else
+            {
+                allSelected = false;
+            }
+
+            // E73A CheckboxCompositeChecked / E739 CheckboxComposite
+            SelectAllMultiSelectIcon.Glyph = allSelected ? "\uE73A" : "\uE739";
+        }
+
+        private void UpdateUserPlaylistActionBarVisibility()
+        {
+            bool show = !_isMultiSelectMode
+                && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
+                && PlaylistListBorder.Visibility == Visibility.Visible;
+            UserPlaylistActionBar.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void ExitMultiSelectButton_Click(object sender, RoutedEventArgs e)
+            => ExitMultiSelectMode();
+
+        private void ExitMultiSelectMode()
+        {
+            if (!_isMultiSelectMode)
+            {
+                MultiSelectActionBar.Visibility = Visibility.Collapsed;
+                MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                if (LibraryPaneTitle != null
+                    && (_currentCategory == "Songs"
+                        || _currentCategory == "UserPlaylist"
+                        || _currentCategory == "Artists"
+                        || _currentCategory == "AlbumArtists"
+                        || _currentCategory == "Albums"))
+                {
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                }
+
+                return;
+            }
+
+            ExitSongMultiSelectUiOnly();
+            ExitAlbumMultiSelectUiOnly();
+            ExitFolderMultiSelectUiOnly();
+
+            _isMultiSelectMode = false;
+            ApplyCapsuleSortButtonStyle(accent: true);
+            MultiSelectActionBar.Visibility = Visibility.Collapsed;
+            MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+            LibraryPaneTitle.Visibility = Visibility.Visible;
+            if (_currentCategory == "Songs" || _currentCategory == "UserPlaylist")
+            {
+                SongSortPanel.Visibility = Visibility.Visible;
+                SetSongSortUiForCategory(isUserPlaylist: string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal));
+            }
+            else if (_currentCategory == "Albums")
+            {
+                AlbumSortButton.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                SongSortPanel.Visibility = Visibility.Collapsed;
+                AlbumSortButton.Visibility = Visibility.Collapsed;
+            }
+
+            UpdateUserPlaylistActionBarVisibility();
+            DispatcherQueue.TryEnqueue(RefreshAllSongListSelectionChrome);
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                RefreshAlbumWallSelectionChrome(ArtistAlbumGridView, _artistAlbums);
+                RefreshAlbumWallSelectionChrome(AlbumGridView, _albums);
+                RefreshFolderBrowserSelectionChrome();
+            });
+            UpdateLibrarySearchUi();
+        }
+
+        private void ExitSongMultiSelectUiOnly()
+        {
+            if (_multiSelectTargetList == null)
+            {
+                return;
+            }
+
+            ListView target = _multiSelectTargetList;
+            SetListSelectionMode(target, ListViewSelectionMode.Single);
+
+            if (target == PlaylistView && _playlistItemDefaultStyle != null)
+            {
+                PlaylistView.ItemContainerStyle = _playlistItemDefaultStyle;
+            }
+            else if (target == ArtistTrackListView && _artistTrackItemDefaultStyle != null)
+            {
+                ArtistTrackListView.ItemContainerStyle = _artistTrackItemDefaultStyle;
+            }
+            else if (target == AlbumTrackListView && _albumTrackItemDefaultStyle != null)
+            {
+                AlbumTrackListView.ItemContainerStyle = _albumTrackItemDefaultStyle;
+            }
+
+            ApplyAccentSelectionResources(target);
+            _multiSelectTargetList = null;
+        }
+
+        private void ExitAlbumMultiSelectUiOnly()
+        {
+            if (_multiSelectAlbumGrid == null)
+            {
+                return;
+            }
+
+            GridView grid = _multiSelectAlbumGrid;
+            SetGridSelectionMode(grid, ListViewSelectionMode.Single);
+            grid.IsItemClickEnabled = true;
+            if (ReferenceEquals(grid, ArtistAlbumGridView) && _artistAlbumItemDefaultStyle != null)
+            {
+                ArtistAlbumGridView.ItemContainerStyle = _artistAlbumItemDefaultStyle;
+            }
+            else if (ReferenceEquals(grid, AlbumGridView) && _libraryAlbumItemDefaultStyle != null)
+            {
+                AlbumGridView.ItemContainerStyle = _libraryAlbumItemDefaultStyle;
+            }
+
+            ApplyAccentSelectionResources(grid);
+            _multiSelectAlbumGrid = null;
+        }
+
+        private void ExitFolderMultiSelectUiOnly()
+        {
+            if (_multiSelectFolderList == null)
+            {
+                return;
+            }
+
+            SetListSelectionMode(FolderBrowserView, ListViewSelectionMode.Single);
+            if (_folderItemDefaultStyle != null)
+            {
+                FolderBrowserView.ItemContainerStyle = _folderItemDefaultStyle;
+            }
+
+            ApplyAccentSelectionResources(FolderBrowserView);
+            _multiSelectFolderList = null;
+        }
+
+        /// <summary>
+        /// 通过 None 中转切换选择模式，安全清空选中项，避免 SelectedItems.Clear 崩溃。
+        /// </summary>
+        private void SetListSelectionMode(ListView list, ListViewSelectionMode mode)
+        {
+            try
+            {
+                list.SelectionMode = ListViewSelectionMode.None;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                list.SelectionMode = mode;
+            }
+            catch
+            {
+            }
+
+            // 本应用用主题色圆角底表示选中，关闭 Multiple 模式左侧系统复选框（否则会显示小黑块）
+            list.IsMultiSelectCheckBoxEnabled = false;
+
+            try
+            {
+                list.SelectedItem = null;
+            }
+            catch
+            {
+            }
+        }
+
+        private void SetGridSelectionMode(GridView grid, ListViewSelectionMode mode)
+        {
+            try
+            {
+                grid.SelectionMode = ListViewSelectionMode.None;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                grid.SelectionMode = mode;
+            }
+            catch
+            {
+            }
+
+            grid.IsMultiSelectCheckBoxEnabled = false;
+
+            try
+            {
+                grid.SelectedItem = null;
+            }
+            catch
+            {
+            }
+        }
+
+        private void SetPlaylistSelectionMode(ListViewSelectionMode mode)
+            => SetListSelectionMode(PlaylistView, mode);
+
+        private void MultiSelectPrimaryActionButton_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = GetSelectedMultiSelectSongs();
+            if (selected.Count == 0)
+            {
+                return;
+            }
+
+            bool isUserPlaylist = _multiSelectTargetList == PlaylistView
+                && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal);
+            if (isUserPlaylist)
+            {
+                RemoveSongsFromUserPlaylist(selected);
+            }
+            else
+            {
+                AddSongsToUserPlaylist(selected);
+            }
+
+            ExitMultiSelectMode();
+        }
+
+        /// <summary>获取当前多选模式下选中的歌曲（专辑墙 / 文件夹 / 歌曲列表统一出口）。</summary>
+        private List<PlaylistItem> GetSelectedMultiSelectSongs()
+        {
+            if (_multiSelectAlbumGrid != null)
+            {
+                GridView grid = _multiSelectAlbumGrid;
+                var selectedAlbums = grid.SelectedItems.OfType<AlbumEntry>().ToList();
+                List<AlbumEntry> ordered = GetAlbumCollectionForGrid(grid)
+                    .Where(a => selectedAlbums.Contains(a))
+                    .ToList();
+                return CollectTracksFromAlbumsInDisplayOrder(ordered);
+            }
+
+            if (_multiSelectFolderList != null)
+            {
+                var selectedItems = FolderBrowserView.SelectedItems.OfType<FolderBrowserItem>().ToList();
+                List<FolderBrowserItem> ordered = _folderBrowserItems
+                    .Where(i => selectedItems.Contains(i))
+                    .ToList();
+                return CollectTracksFromSelectedFolderItems(ordered);
+            }
+
+            ListView target = _multiSelectTargetList ?? PlaylistView;
+            return target.SelectedItems.OfType<PlaylistItem>().ToList();
+        }
+
+        private void MultiSelectFavoriteButton_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = GetSelectedMultiSelectSongs();
+            if (selected.Count == 0)
+            {
+                return;
+            }
+
+            foreach (PlaylistItem song in selected)
+            {
+                TrackStatsStore.SetFavorite(song.FilePath, true);
+            }
+
+            NamedPlaylistStore.SyncFavoritesPlaylist();
+            UpdateFavoriteButtonUi();
+            NowPlayingText.Text = $"已收藏 {selected.Count} 首歌曲";
+            if (string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal))
+            {
+                ApplyCategoryView();
+            }
+
+            ExitMultiSelectMode();
+        }
+
+        private async void MultiSelectDownloadLyricButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+
+            var selected = GetSelectedMultiSelectSongs();
+            if (selected.Count == 0)
+            {
+                return;
+            }
+
+            int ok = 0;
+            for (int i = 0; i < selected.Count; i++)
+            {
+                PlaylistItem song = selected[i];
+                NowPlayingText.Text = $"正在下载歌词 ({i + 1}/{selected.Count})…";
+                string? path = await OnlineMusicApi.SearchAndDownloadLyricAsync(song.Title, song.Artist, song.FilePath);
+                if (path != null)
+                {
+                    ok++;
+                }
+            }
+
+            NowPlayingText.Text = $"歌词下载完成：{ok}/{selected.Count}";
+        
+            }
+            catch
+            {
+            }}
+
+        private async void MultiSelectDownloadCoverButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+
+            var selected = GetSelectedMultiSelectSongs();
+            if (selected.Count == 0)
+            {
+                return;
+            }
+
+            int ok = 0;
+            for (int i = 0; i < selected.Count; i++)
+            {
+                PlaylistItem song = selected[i];
+                NowPlayingText.Text = $"正在下载封面 ({i + 1}/{selected.Count})…";
+                if (await OnlineMusicApi.DownloadAndEmbedCoverAsync(song.Title, song.Artist, song.FilePath))
+                {
+                    ok++;
+                }
+            }
+
+            NowPlayingText.Text = $"封面下载完成：{ok}/{selected.Count}";
+        
+            }
+            catch
+            {
+            }}
+
+        private void MultiSelectEditTagsButton_Click(object sender, RoutedEventArgs e)
+        {
+            var items = GetSelectedMultiSelectSongs();
+            if (items.Count == 0)
+            {
+                return;
+            }
+
+            TagEditorWindow.ShowBatch(items.Select(i => i.FilePath).ToList());
+        }
+
+        private void MultiSelectCopyPathButton_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = GetSelectedMultiSelectSongs();
+            if (selected.Count == 0)
+            {
+                return;
+            }
+
+            var sb = new System.Text.StringBuilder();
+            foreach (PlaylistItem song in selected)
+            {
+                sb.AppendLine(song.FilePath);
+            }
+
+            var data = new DataPackage();
+            data.SetText(sb.ToString().TrimEnd());
+            Clipboard.SetContent(data);
+            NowPlayingText.Text = $"已复制 {selected.Count} 个文件位置";
+        }
+
+        private async void MultiSelectDeleteButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+
+            var selected = GetSelectedMultiSelectSongs();
+            if (selected.Count == 0)
+            {
+                return;
+            }
+
+            if (AppSettingsStore.Load().DisableDeleteFromDisk)
+            {
+                NowPlayingText.Text = "已在设置中禁用从磁盘删除";
+                return;
+            }
+
+            var dialog = new ContentDialog
+            {
+                Title = "删除歌曲",
+                Content = $"确定要将选中的 {selected.Count} 首歌曲移动到回收站吗？",
+                PrimaryButtonText = "删除",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = Content.XamlRoot
+            };
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            foreach (PlaylistItem song in selected)
+            {
+                await DeleteSongFromDiskAsync(song);
+            }
+
+            NowPlayingText.Text = $"已将 {selected.Count} 首歌曲移入回收站";
+            ExitMultiSelectMode();
+        
+            }
+            catch
+            {
+            }}
+
+        private void RemoveSongsFromUserPlaylist(IEnumerable<PlaylistItem> songs)
+        {
+            var paths = new HashSet<string>(
+                songs.Select(s => s.FilePath),
+                StringComparer.OrdinalIgnoreCase);
+
+            for (int i = _userPlaylist.Count - 1; i >= 0; i--)
+            {
+                if (paths.Contains(_userPlaylist[i].FilePath))
+                {
+                    _userPlaylist.RemoveAt(i);
+                    if (i < _userPlaylistIndex)
+                    {
+                        _userPlaylistIndex--;
+                    }
+                }
+            }
+
+            if (_userPlaylistIndex >= _userPlaylist.Count)
+            {
+                _userPlaylistIndex = _userPlaylist.Count - 1;
+            }
+
+            RenumberCollection(_userPlaylist);
+            NotifyCurrentPlaylistWindow();
+            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+            {
+                ApplyUserPlaylistSearchFilter();
+            }
+        }
+
+        private async void SavePlaylistButton_Click(object sender, RoutedEventArgs e)
+            => await SaveUserPlaylistAsync(Content.XamlRoot);
+
+        internal async Task SaveUserPlaylistAsync(XamlRoot xamlRoot)
+        {
+            try
+            {
+                if (_userPlaylist.Count == 0)
+                {
+                    await ShowErrorAsync("保存播放列表", "当前播放列表为空。", xamlRoot);
+                    return;
+                }
+
+                string folder = UserPlaylistFileStore.EnsurePlayListFolder();
+                string? name = await AskPlaylistFileNameAsync(xamlRoot);
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    return;
+                }
+
+                string safeName = UserPlaylistFileStore.SanitizeFileName(name);
+                string path = Path.Combine(folder, safeName + UserPlaylistFileStore.FileExtension);
+
+                var dto = new UserPlaylistFileDto
+                {
+                    Name = safeName,
+                    SavedAt = DateTimeOffset.Now,
+                    Songs = _userPlaylist.Select(s => new UserPlaylistSongDto
+                    {
+                        FilePath = s.FilePath,
+                        Title = s.Title,
+                        Artist = s.Artist,
+                        Album = s.Album,
+                        Year = s.Year,
+                        DurationSeconds = s.Duration.TotalSeconds
+                    }).ToList()
+                };
+
+                UserPlaylistFileStore.SaveToPath(path, dto);
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync("保存播放列表失败", ex.Message, xamlRoot);
+            }
+        }
+
+        private async void OpenPlaylistButton_Click(object sender, RoutedEventArgs e)
+            => await OpenUserPlaylistAsync(Content.XamlRoot, navigateToPlaylist: true);
+
+        internal async Task OpenUserPlaylistAsync(XamlRoot xamlRoot, bool navigateToPlaylist)
+        {
+            try
+            {
+                string folder = UserPlaylistFileStore.EnsurePlayListFolder();
+                string? path = await PickPlaylistPathFromFolderAsync(folder, xamlRoot);
+                if (string.IsNullOrWhiteSpace(path))
+                {
+                    return;
+                }
+
+                UserPlaylistFileDto? dto = UserPlaylistFileStore.LoadFromPath(path);
+                if (dto?.Songs == null)
+                {
+                    await ShowErrorAsync("打开播放列表失败", "文件格式无效。", xamlRoot);
+                    return;
+                }
+
+                ApplyLoadedUserPlaylist(dto, navigateToPlaylist);
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync("打开播放列表失败", ex.Message, xamlRoot);
+            }
+        }
+
+        private async void ClearPlaylistButton_Click(object sender, RoutedEventArgs e)
+            => await ClearUserPlaylistAsync(Content.XamlRoot);
+
+        internal async Task ClearUserPlaylistAsync(XamlRoot xamlRoot)
+        {
+            if (_userPlaylist.Count == 0)
+            {
+                return;
+            }
+
+            ContentDialog dialog = new()
+            {
+                Title = "清空播放列表",
+                Content = "确定清空当前播放列表中的全部歌曲吗？",
+                PrimaryButtonText = "清空",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = xamlRoot
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            ExitMultiSelectMode();
+            _userPlaylist.Clear();
+            _userPlaylistIndex = -1;
+            NotifyCurrentPlaylistWindow();
+            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+            {
+                ApplyUserPlaylistSearchFilter();
+            }
+        }
+
+        private void PlayUserPlaylistButton_Click(object sender, RoutedEventArgs e)
+            => PlayUserPlaylistFromStart();
+
+        private async Task<string?> AskPlaylistFileNameAsync(XamlRoot xamlRoot)
+        {
+            var box = new Microsoft.UI.Xaml.Controls.TextBox
+            {
+                Text = "我的播放列表",
+                PlaceholderText = "输入播放列表名称"
+            };
+
+            ContentDialog dialog = new()
+            {
+                Title = "保存播放列表",
+                Content = box,
+                PrimaryButtonText = "保存",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = xamlRoot
+            };
+
+            ContentDialogResult result = await dialog.ShowAsync();
+            return result == ContentDialogResult.Primary ? box.Text?.Trim() : null;
+        }
+
+        private async Task<string?> PickPlaylistPathFromFolderAsync(string folderPath, XamlRoot xamlRoot)
+        {
+            string[] files;
+            try
+            {
+                files = Directory.GetFiles(folderPath, "*.json")
+                    .OrderByDescending(System.IO.File.GetLastWriteTimeUtc)
+                    .ToArray();
+            }
+            catch
+            {
+                files = Array.Empty<string>();
+            }
+
+            if (files.Length == 0)
+            {
+                await ShowErrorAsync("打开播放列表", "PlayList 文件夹中还没有已保存的播放列表。", xamlRoot);
+                return null;
+            }
+
+            var list = new ListView
+            {
+                ItemsSource = files.Select(Path.GetFileName).ToList(),
+                SelectionMode = ListViewSelectionMode.Single,
+                Height = 220
+            };
+            list.SelectedIndex = 0;
+
+            ContentDialog dialog = new()
+            {
+                Title = "选择播放列表",
+                Content = list,
+                PrimaryButtonText = "打开",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = xamlRoot
+            };
+
+            ContentDialogResult result = await dialog.ShowAsync();
+            if (result != ContentDialogResult.Primary || list.SelectedIndex < 0)
+            {
+                return null;
+            }
+
+            return files[list.SelectedIndex];
+        }
+
+        private void ApplyLoadedUserPlaylist(UserPlaylistFileDto dto, bool navigateToPlaylist = true)
+        {
+            // 按文件顺序追加，不走「插到最前」逻辑，避免顺序颠倒
+            _userPlaylist.Clear();
+            foreach (UserPlaylistSongDto song in dto.Songs)
+            {
+                if (string.IsNullOrWhiteSpace(song.FilePath) || !System.IO.File.Exists(song.FilePath))
+                {
+                    continue;
+                }
+
+                if (_userPlaylist.Any(p =>
+                        string.Equals(p.FilePath, song.FilePath, StringComparison.OrdinalIgnoreCase)))
+                {
+                    continue;
+                }
+
+                PlaylistItem? fromLibrary = _playlist.FirstOrDefault(p =>
+                    string.Equals(p.FilePath, song.FilePath, StringComparison.OrdinalIgnoreCase));
+
+                if (fromLibrary != null)
+                {
+                    _userPlaylist.Add(ClonePlaylistItem(fromLibrary));
+                    continue;
+                }
+
+                TimeSpan duration = TimeSpan.FromSeconds(Math.Max(0, song.DurationSeconds));
+                _userPlaylist.Add(new PlaylistItem
+                {
+                    Title = string.IsNullOrWhiteSpace(song.Title)
+                        ? Path.GetFileNameWithoutExtension(song.FilePath)
+                        : song.Title,
+                    Artist = string.IsNullOrWhiteSpace(song.Artist) ? "未知艺术家" : song.Artist,
+                    AlbumArtist = string.IsNullOrWhiteSpace(song.Artist) ? "未知艺术家" : song.Artist,
+                    Album = string.IsNullOrWhiteSpace(song.Album) ? "未知专辑" : song.Album,
+                    Year = song.Year,
+                    Duration = duration,
+                    DurationText = FormatTime(duration),
+                    FilePath = song.FilePath
+                });
+            }
+
+            RenumberCollection(_userPlaylist);
+            NotifyCurrentPlaylistWindow();
+
+            if (!navigateToPlaylist)
+            {
+                return;
+            }
+
+            CommitLibraryNavigation(() =>
+            {
+                _currentCategory = "UserPlaylist";
+                ApplyCategoryView();
+            });
+        }
+
+        /// <summary>
+        /// 将歌曲插入播放列表最前（保持传入顺序）。
+        /// 若已存在则先移除再提前，避免重复。大批量时整表重建，避免反复 Insert(0) 导致卡死/崩溃。
+        /// </summary>
+        private void AddSongsToUserPlaylist(IEnumerable<PlaylistItem> songs)
+        {
+            List<PlaylistItem> incoming = songs
+                .Where(s => !string.IsNullOrWhiteSpace(s.FilePath))
+                .GroupBy(s => s.FilePath, StringComparer.OrdinalIgnoreCase)
+                .Select(g => g.First())
+                .ToList();
+            if (incoming.Count == 0)
+            {
+                return;
+            }
+
+            string? playingPath = _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
+                ? _userPlaylist[_userPlaylistIndex].FilePath
+                : null;
+
+            var incomingPaths = new HashSet<string>(
+                incoming.Select(s => s.FilePath),
+                StringComparer.OrdinalIgnoreCase);
+
+            // 保留未出现在本批次中的旧项（相对顺序不变）
+            var kept = new List<PlaylistItem>(_userPlaylist.Count);
+            foreach (PlaylistItem existing in _userPlaylist)
+            {
+                if (!incomingPaths.Contains(existing.FilePath))
+                {
+                    kept.Add(existing);
+                }
+            }
+
+            var rebuilt = new List<PlaylistItem>(incoming.Count + kept.Count);
+            bool insertBegin = AppSettingsStore.Load().InsertPlaylistAtBegin;
+            if (insertBegin)
+            {
+                foreach (PlaylistItem song in incoming)
+                {
+                    rebuilt.Add(ClonePlaylistItem(song));
+                }
+
+                rebuilt.AddRange(kept);
+            }
+            else
+            {
+                rebuilt.AddRange(kept);
+                foreach (PlaylistItem song in incoming)
+                {
+                    rebuilt.Add(ClonePlaylistItem(song));
+                }
+            }
+            for (int i = 0; i < rebuilt.Count; i++)
+            {
+                rebuilt[i].Index = i + 1;
+            }
+
+            // 整表替换，避免 Clear + N 次 Add 触发数千次 UI/集合通知导致卡死崩溃
+            bool rebindPlaylistView = ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist);
+            if (rebindPlaylistView)
+            {
+                PlaylistView.ItemsSource = null;
+            }
+
+            _userPlaylist = new ObservableCollection<PlaylistItem>(rebuilt);
+
+            if (rebindPlaylistView
+                || string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+            {
+                PlaylistView.ItemsSource = _userPlaylist;
+            }
+
+            if (!string.IsNullOrWhiteSpace(playingPath))
+            {
+                _userPlaylistIndex = FindUserPlaylistIndex(playingPath);
+            }
+
+            NotifyCurrentPlaylistWindow();
+            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+            {
+                ApplyUserPlaylistSearchFilter();
+            }
+        }
+
+        /// <summary>在资源管理器中选中并显示该文件。</summary>
+        private static void OpenFileLocationInExplorer(string? filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath) || !System.IO.File.Exists(filePath))
+            {
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = "/select,\"" + filePath + "\"",
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine("打开文件位置失败: " + ex.Message);
+            }
+        }
+
+        /// <summary>将歌曲文件移入回收站，并从各列表移除。</summary>
+        private async Task DeleteSongFromDiskAsync(PlaylistItem item)
+        {
+            if (AppSettingsStore.Load().DisableDeleteFromDisk)
+            {
+                return;
+            }
+
+            ContentDialog dialog = new()
+            {
+                Title = "从磁盘删除",
+                Content = $"确定将以下文件移到回收站吗？\n\n{item.FilePath}",
+                PrimaryButtonText = "删除",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Close,
+                XamlRoot = Content.XamlRoot
+            };
+
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+            {
+                return;
+            }
+
+            try
+            {
+                if (!MoveToRecycleBin(item.FilePath))
+                {
+                    await ShowErrorAsync("删除失败", "无法将文件移到回收站。");
+                    return;
+                }
+
+                RemoveSongFromAllCollections(item);
+                if (string.Equals(_nowPlayingPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _nowPlayingPath = null;
+                    _currentIndex = -1;
+                    try
+                    {
+                        MediaPlayer? player = GetPlayer();
+                        player?.Pause();
+                        if (player != null)
+                        {
+                            player.PlaybackSession.Position = TimeSpan.Zero;
+                            player.Source = null;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                NotifyCurrentPlaylistWindow();
+                NowPlayingText.Text = "已删除：" + item.Title;
+            }
+            catch (Exception ex)
+            {
+                await ShowErrorAsync("删除失败", ex.Message);
+            }
+        }
+
+        private static bool MoveToRecycleBin(string path)
+        {
+            try
+            {
+                SHFILEOPSTRUCT op = new()
+                {
+                    wFunc = 3, // FO_DELETE
+                    pFrom = path + "\0\0",
+                    fFlags = 0x40 | 0x10 | 0x04 // FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT
+                };
+                return SHFileOperation(ref op) == 0;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>从当前曲库、用户播放列表与统计记录中移除该歌曲。</summary>
+        private void RemoveSongFromAllCollections(PlaylistItem item)
+        {
+            bool curWasDeleted = _currentIndex >= 0 && _currentIndex < _playlist.Count
+                && string.Equals(_playlist[_currentIndex].FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase);
+            bool userWasDeleted = _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
+                && string.Equals(_userPlaylist[_userPlaylistIndex].FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase);
+
+            for (int i = _playlist.Count - 1; i >= 0; i--)
+            {
+                if (string.Equals(_playlist[i].FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _playlist.RemoveAt(i);
+                    if (i < _currentIndex)
+                    {
+                        _currentIndex--;
+                    }
+                }
+            }
+
+            for (int i = _userPlaylist.Count - 1; i >= 0; i--)
+            {
+                if (string.Equals(_userPlaylist[i].FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _userPlaylist.RemoveAt(i);
+                    if (i < _userPlaylistIndex)
+                    {
+                        _userPlaylistIndex--;
+                    }
+                }
+            }
+
+            if (curWasDeleted)
+            {
+                _currentIndex = -1;
+            }
+
+            if (userWasDeleted)
+            {
+                _userPlaylistIndex = -1;
+            }
+
+            RenumberCollection(_playlist);
+            RenumberCollection(_userPlaylist);
+            _ = RefreshAlbumViewAsync();
+            _ = RefreshArtistViewAsync();
+        }
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
+        private static extern int SHFileOperation(ref SHFILEOPSTRUCT lpFileOp);
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct SHFILEOPSTRUCT
+        {
+            public IntPtr hwnd;
+            public uint wFunc;
+            public string pFrom;
+            public string pTo;
+            public ushort fFlags;
+            [MarshalAs(UnmanagedType.Bool)] public bool fAnyOperationsAborted;
+            public IntPtr hNameMappings;
+            public string lpszProgressTitle;
+        }
+
+        private MenuFlyoutItem CreateOpenFileLocationMenuItem()
+        {
+            var item = new MenuFlyoutItem { Text = "打开文件位置" };
+            item.Icon = new FontIcon { Glyph = "\uE8DA" };
+            item.Click += (_, _) =>
+            {
+                if (_contextMenuSong != null)
+                {
+                    OpenFileLocationInExplorer(_contextMenuSong.FilePath);
+                }
+            };
+            return item;
+        }
+
+        private static PlaylistItem ClonePlaylistItem(PlaylistItem song)
+            => new()
+            {
+                Title = song.Title,
+                Artist = song.Artist,
+                AlbumArtist = song.AlbumArtist,
+                Album = song.Album,
+                Track = song.Track,
+                Year = song.Year,
+                Genre = song.Genre,
+                Duration = song.Duration,
+                DurationText = song.DurationText,
+                FilePath = song.FilePath,
+                StartTimeSeconds = song.StartTimeSeconds
+            };
+
+        /// <summary>
+        /// 左侧分类：歌曲/专辑/艺术家/文件夹为圆角选中；
+        /// 播放列表为胶囊框，选中时填主题色、文字对比色。
+        /// </summary>
+        private void UpdateLibraryNavHighlight()
+        {
+            Brush accent = ResolveAccentBrush();
+            Brush fg = ResolveContrastingForeground(accent);
+            var transparent = new SolidColorBrush(Colors.Transparent);
+            Brush capsuleIdle = ResolveCapsuleFillBrush();
+            Brush capsuleBorder = ResolveNavCapsuleBorderBrush();
+
+            Button[] libraryButtons =
+            {
+                NavSongsButton,
+                NavAlbumsButton,
+                NavArtistsButton,
+                NavAlbumArtistsButton,
+                NavFoldersButton,
+                NavFavoritesButton,
+                NavRecentButton,
+                NavGenreButton,
+                NavYearButton
+            };
+
+            foreach (Button button in libraryButtons)
+            {
+                button.CornerRadius = new CornerRadius(8);
+                button.BorderThickness = new Thickness(0);
+                string tag = button.Tag as string ?? string.Empty;
+                bool active = string.Equals(_currentCategory, tag, StringComparison.Ordinal)
+                    || (tag == "Genres" && _currentCategory is "Genres" or "GenreSongs")
+                    || (tag == "Years" && _currentCategory is "Years" or "YearSongs");
+                if (active)
+                {
+                    button.Background = accent;
+                    button.Foreground = fg;
+                }
+                else
+                {
+                    button.Background = transparent;
+                    button.ClearValue(Control.ForegroundProperty);
+                }
+            }
+
+            const double playlistCapsuleHeight = 40;
+            UserPlaylistNavButton.Height = playlistCapsuleHeight;
+            UserPlaylistNavButton.MinHeight = playlistCapsuleHeight;
+            UserPlaylistNavButton.CornerRadius = new CornerRadius(playlistCapsuleHeight / 2.0);
+            UserPlaylistNavButton.HorizontalContentAlignment = HorizontalAlignment.Center;
+            bool playlistActive = string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal);
+            if (playlistActive)
+            {
+                UserPlaylistNavButton.Background = accent;
+                UserPlaylistNavButton.Foreground = fg;
+                UserPlaylistNavButton.BorderThickness = new Thickness(0);
+                UserPlaylistNavButton.ClearValue(Control.BorderBrushProperty);
+            }
+            else
+            {
+                UserPlaylistNavButton.Background = capsuleIdle;
+                UserPlaylistNavButton.BorderThickness = new Thickness(1);
+                UserPlaylistNavButton.BorderBrush = capsuleBorder;
+                UserPlaylistNavButton.ClearValue(Control.ForegroundProperty);
+            }
+        }
+
+        private Brush ResolveNavCapsuleBorderBrush()
+        {
+            if (Application.Current.Resources.TryGetValue("ControlStrokeColorDefaultBrush", out object? brushObj)
+                && brushObj is Brush brush)
+            {
+                return brush;
+            }
+
+            if (Application.Current.Resources.TryGetValue("CardStrokeColorDefaultBrush", out object? card)
+                && card is Brush c)
+            {
+                return c;
+            }
+
+            return new SolidColorBrush(Color.FromArgb(60, 128, 128, 128));
+        }
+
+        /// <summary>
+        /// 隐藏系统默认选中底（方角），选中态改由模板内 SongRowChrome / AlbumRowChrome 圆角 Border 绘制。
+        /// </summary>
+        private void ApplyAccentSelectionResources(FrameworkElement host)
+        {
+            Brush transparent = new SolidColorBrush(Colors.Transparent);
+            Brush accent = ResolveAccentBrush();
+            Brush fg = ResolveContrastingForeground(accent);
+
+            string[] backgroundKeys =
+            {
+                "ListViewItemBackgroundSelected",
+                "ListViewItemBackgroundSelectedPointerOver",
+                "ListViewItemBackgroundSelectedPressed",
+                "ListViewItemBackgroundSelectedDisabled",
+                "GridViewItemBackgroundSelected",
+                "GridViewItemBackgroundSelectedPointerOver",
+                "GridViewItemBackgroundSelectedPressed",
+                "GridViewItemBackgroundSelectedDisabled"
+            };
+
+            string[] foregroundKeys =
+            {
+                "ListViewItemForegroundSelected",
+                "ListViewItemForegroundSelectedPointerOver",
+                "ListViewItemForegroundSelectedPressed",
+                "GridViewItemForegroundSelected",
+                "GridViewItemForegroundSelectedPointerOver",
+                "GridViewItemForegroundSelectedPressed"
+            };
+
+            foreach (string key in backgroundKeys)
+            {
+                host.Resources[key] = transparent;
+            }
+
+            foreach (string key in foregroundKeys)
+            {
+                host.Resources[key] = fg;
+            }
+
+            // 关闭系统选中勾（多选时默认会出现在词条左侧）
+            host.Resources["ListViewItemSelectionCheckMarkVisualEnabled"] = false;
+            host.Resources["GridViewItemSelectionCheckMarkVisualEnabled"] = false;
+        }
+
+        /// <summary>
+        /// 排序按钮统一为操场形胶囊（高 32、圆角 16 = 两头半圆），底色为系统主题色。
+        /// </summary>
+        private void ApplyCapsuleSortButtonStyle(bool accent)
+        {
+            const double height = 32;
+            var capsule = new CornerRadius(height / 2.0); // 半高等于半径 → 两头圆、中间直
+
+            // 排序相关按钮始终使用主题色；accent 参数保留以兼容旧调用
+            Brush background = ResolveAccentBrush();
+            Brush foreground = ResolveAccentForegroundBrush();
+
+            ApplyCapsuleToControl(SortFieldButton, height, capsule, background, foreground);
+            ApplyCapsuleToControl(SortOrderButton, height, capsule, background, foreground);
+            ApplyCapsuleToControl(ChangeSortButton, height, capsule, background, foreground);
+            ApplyCapsuleToControl(AlbumSortButton, height, capsule, background, foreground);
+            if (ArtistSongSortButton != null)
+            {
+                ApplyCapsuleToControl(ArtistSongSortButton, height, capsule, background, foreground);
+            }
+
+            if (ArtistAlbumSortFieldButton != null)
+            {
+                ApplyCapsuleToControl(ArtistAlbumSortFieldButton, height, capsule, background, foreground);
+            }
+
+            if (ArtistAlbumSortOrderButton != null)
+            {
+                ApplyCapsuleToControl(ArtistAlbumSortOrderButton, height, capsule, background, foreground);
+            }
+
+            if (SelectAllMultiSelectButton != null)
+            {
+                Brush selectAllBg = accent ? background : ResolveCapsuleFillBrush();
+                Brush? selectAllFg = accent ? foreground : null;
+                ApplyCapsuleToControl(
+                    SelectAllMultiSelectButton,
+                    height,
+                    new CornerRadius(8),
+                    selectAllBg,
+                    selectAllFg);
+            }
+        }
+
+        private static void ApplyCapsuleToControl(
+            Control control,
+            double height,
+            CornerRadius capsule,
+            Brush background,
+            Brush? foreground)
+        {
+            control.Height = height;
+            control.MinHeight = height;
+            control.CornerRadius = capsule;
+            control.Background = background;
+            control.BorderThickness = new Thickness(0);
+            control.Padding = new Thickness(14, 0, 14, 0);
+
+            if (foreground != null)
+            {
+                control.Foreground = foreground;
+            }
+            else
+            {
+                control.ClearValue(Control.ForegroundProperty);
+            }
+        }
+
+        private Brush ResolveCapsuleFillBrush()
+        {
+            if (Application.Current.Resources.TryGetValue("SubtleFillColorSecondaryBrush", out object? brushObj)
+                && brushObj is Brush brush)
+            {
+                return brush;
+            }
+
+            if (Application.Current.Resources.TryGetValue("ControlFillColorDefaultBrush", out object? controlBrush)
+                && controlBrush is Brush c)
+            {
+                return c;
+            }
+
+            return new SolidColorBrush(Color.FromArgb(40, 255, 255, 255));
+        }
+
+        /// <summary>
+        /// 歌曲列表表头五词条：与「播放所有专辑」同色半透明底，操场形圆角（高 32 / 半径 16）。
+        /// </summary>
+        private void ApplyPlaylistHeaderChipStyle()
+        {
+            Brush fill = ResolveCapsuleFillBrush();
+            foreach (Border? chip in new[]
+                     {
+                         HeaderTitleChip,
+                         HeaderArtistChip,
+                         HeaderAlbumChip,
+                         HeaderYearChip,
+                         HeaderDurationChip
+                     })
+            {
+                if (chip == null)
+                {
+                    continue;
+                }
+
+                chip.Height = 32;
+                chip.MinHeight = 32;
+                chip.CornerRadius = new CornerRadius(16);
+                chip.Background = fill;
+                chip.BorderThickness = new Thickness(0);
+            }
+        }
+
+        private Brush CreateMultiSelectFrostBrush()
+        {
+            if (_cachedMultiSelectFrostBrush != null)
+            {
+                return _cachedMultiSelectFrostBrush;
+            }
+
+            // 使用半透明纯色，避免 Acrylic 采样悬停高亮后越来越白、移开也不恢复
+            Color baseTint = ResolveUiBaseTintColor();
+            _cachedMultiSelectFrostBrush = new SolidColorBrush(
+                Color.FromArgb(70, baseTint.R, baseTint.G, baseTint.B));
+            return _cachedMultiSelectFrostBrush;
+        }
+
+        private void ApplyMultiSelectItemStyle(ListView target)
+        {
+            ApplyAccentSelectionResources(target);
+
+            var style = new Style(typeof(ListViewItem));
+            style.Setters.Add(new Setter(ListViewItem.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
+            style.Setters.Add(new Setter(ListViewItem.VerticalContentAlignmentProperty, VerticalAlignment.Stretch));
+            style.Setters.Add(new Setter(ListViewItem.PaddingProperty, new Thickness(0)));
+            style.Setters.Add(new Setter(ListViewItem.MinHeightProperty, 40.0));
+            style.Setters.Add(new Setter(ListViewItem.BackgroundProperty, new SolidColorBrush(Colors.Transparent)));
+            style.Setters.Add(new Setter(ListViewItem.CornerRadiusProperty, new CornerRadius(8)));
+            style.Setters.Add(new Setter(ListViewItem.MarginProperty, new Thickness(0, 2, 0, 2)));
+            style.Setters.Add(new Setter(ListViewItem.BorderThicknessProperty, new Thickness(0)));
+            target.ItemContainerStyle = style;
+            RefreshAllSongListSelectionChrome();
+        }
+
+        private void ApplyMultiSelectAlbumItemStyle(GridView grid)
+        {
+            ApplyAccentSelectionResources(grid);
+
+            double margin = ReferenceEquals(grid, AlbumGridView) ? 8 : 6;
+            var style = new Style(typeof(GridViewItem));
+            style.Setters.Add(new Setter(GridViewItem.MarginProperty, new Thickness(margin)));
+            style.Setters.Add(new Setter(GridViewItem.PaddingProperty, new Thickness(0)));
+            style.Setters.Add(new Setter(GridViewItem.CornerRadiusProperty, new CornerRadius(8)));
+            style.Setters.Add(new Setter(GridViewItem.BackgroundProperty, new SolidColorBrush(Colors.Transparent)));
+            style.Setters.Add(new Setter(GridViewItem.BorderThicknessProperty, new Thickness(0)));
+            grid.ItemContainerStyle = style;
+            RefreshAlbumWallSelectionChrome(grid, GetAlbumCollectionForGrid(grid));
+        }
+
+        private void PlaylistView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_suppressSelectionUiUpdates)
+            {
+                return;
+            }
+
+            RefreshPlaylistSelectionChrome();
+            UpdateSelectAllMultiSelectButtonState();
+
+            // 未播放时:预览选中歌曲的波形(波形进度条模式)
+            if (string.IsNullOrEmpty(_nowPlayingPath)
+                && _progressBarStyle == "Waveform"
+                && e.AddedItems.Count > 0
+                && e.AddedItems[0] is PlaylistItem selItem
+                && !string.Equals(_waveformPath, selItem.FilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                LoadWaveformForCurrentAsync(selItem.FilePath);
+            }
+        }
+
+        private void PlaylistView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
+            {
+                ApplySongListItemSelectionChrome(PlaylistView, container, song);
+            }
+        }
+
+        private void RefreshMultiSelectItemBackgrounds() => RefreshAllSongListSelectionChrome();
+
+        private void RefreshAllSongListSelectionChrome()
+        {
+            RefreshPlaylistSelectionChrome();
+            RefreshArtistTrackSelectionChrome();
+            RefreshAlbumTrackSelectionChrome();
+        }
+
+        private void RefreshSongListSelectionChrome(ListView list)
+        {
+            if (ReferenceEquals(list, ArtistTrackListView))
+            {
+                RefreshArtistTrackSelectionChrome();
+            }
+            else if (ReferenceEquals(list, AlbumTrackListView))
+            {
+                RefreshAlbumTrackSelectionChrome();
+            }
+            else
+            {
+                RefreshPlaylistSelectionChrome();
+            }
+        }
+
+        private void RefreshAlbumTrackSelectionChrome()
+            => RefreshRealizedSongListSelectionChrome(AlbumTrackListView);
+
+        /// <summary>
+        /// 歌曲列表 / 多选：选中为圆角主题色矩形（画在 SongRowChrome 上）；
+        /// 多选未选中为浅霜色底；再次点击取消选择时恢复常态。
+        /// 仅刷新已实现容器，避免对全库做 ContainerFromItem。
+        /// </summary>
+        private void RefreshPlaylistSelectionChrome()
+            => RefreshRealizedSongListSelectionChrome(PlaylistView);
+
+        private void RefreshArtistTrackSelectionChrome()
+            => RefreshRealizedSongListSelectionChrome(ArtistTrackListView);
+
+        private void RefreshRealizedSongListSelectionChrome(ListView list)
+        {
+            HashSet<object>? selectedSet = BuildSelectedItemsLookup(list);
+            foreach (ListViewItem container in EnumerateRealizedListViewItems(list))
+            {
+                if (list.ItemFromContainer(container) is PlaylistItem song)
+                {
+                    ApplySongListItemSelectionChrome(list, container, song, selectedSet);
+                }
+            }
+        }
+
+        private void RefreshFolderBrowserSelectionChrome()
+        {
+            HashSet<object>? selectedSet = BuildSelectedItemsLookup(FolderBrowserView);
+            foreach (ListViewItem container in EnumerateRealizedListViewItems(FolderBrowserView))
+            {
+                if (FolderBrowserView.ItemFromContainer(container) is FolderBrowserItem item)
+                {
+                    ApplyFolderBrowserItemSelectionChrome(container, item, selectedSet);
+                }
+            }
+        }
+
+        private void RefreshArtistAlbumSelectionChrome()
+            => RefreshAlbumWallSelectionChrome(ArtistAlbumGridView, _artistAlbums);
+
+        private void RefreshAlbumWallSelectionChrome(GridView grid, IEnumerable<AlbumEntry> albums)
+        {
+            HashSet<object>? selectedSet = BuildSelectedItemsLookup(grid);
+            bool anyRealized = false;
+            foreach (GridViewItem container in EnumerateRealizedGridViewItems(grid))
+            {
+                anyRealized = true;
+                if (grid.ItemFromContainer(container) is AlbumEntry album)
+                {
+                    ApplyAlbumGridItemSelectionChrome(grid, container, album, selectedSet);
+                }
+            }
+
+            // 面板尚未生成时回退（极少见）
+            if (!anyRealized)
+            {
+                foreach (AlbumEntry album in albums)
+                {
+                    if (grid.ContainerFromItem(album) is GridViewItem container)
+                    {
+                        ApplyAlbumGridItemSelectionChrome(grid, container, album, selectedSet);
+                    }
+                }
+            }
+        }
+
+        private static HashSet<object>? BuildSelectedItemsLookup(ListViewBase list)
+        {
+            int count = list.SelectedItems.Count;
+            if (count <= 64)
+            {
+                return null;
+            }
+
+            var set = new HashSet<object>();
+            foreach (object item in list.SelectedItems)
+            {
+                set.Add(item);
+            }
+
+            return set;
+        }
+
+        private static bool IsItemSelected(ListViewBase list, object item, HashSet<object>? selectedSet)
+        {
+            if (selectedSet != null)
+            {
+                return selectedSet.Contains(item);
+            }
+
+            return list.SelectedItems.Contains(item);
+        }
+
+        private static IEnumerable<ListViewItem> EnumerateRealizedListViewItems(ListView list)
+        {
+            Panel? panel = FindItemsPanel(list);
+            if (panel == null)
+            {
+                yield break;
+            }
+
+            foreach (UIElement child in panel.Children)
+            {
+                if (child is ListViewItem item)
+                {
+                    yield return item;
+                }
+            }
+        }
+
+        private static IEnumerable<GridViewItem> EnumerateRealizedGridViewItems(GridView grid)
+        {
+            Panel? panel = FindItemsPanel(grid);
+            if (panel == null)
+            {
+                yield break;
+            }
+
+            foreach (UIElement child in panel.Children)
+            {
+                if (child is GridViewItem item)
+                {
+                    yield return item;
+                }
+            }
+        }
+
+        private static Panel? FindItemsPanel(DependencyObject root)
+        {
+            if (root is ItemsStackPanel stack)
+            {
+                return stack;
+            }
+
+            if (root is ItemsWrapGrid wrap)
+            {
+                return wrap;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                Panel? found = FindItemsPanel(VisualTreeHelper.GetChild(root, i));
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
+
+        private void ApplySongListItemSelectionChrome(
+            ListView list,
+            ListViewItem container,
+            PlaylistItem song,
+            HashSet<object>? selectedSet = null)
+        {
+            Brush accent = ResolveAccentBrush();
+            Brush selectedFg = ResolveContrastingForeground(accent);
+            bool multiOnThisList = _isMultiSelectMode && ReferenceEquals(_multiSelectTargetList, list);
+            Brush unselectedBg = multiOnThisList
+                ? CreateMultiSelectFrostBrush()
+                : new SolidColorBrush(Colors.Transparent);
+
+            // 容器本身保持透明，避免 Presenter 方角选中层
+            container.Background = new SolidColorBrush(Colors.Transparent);
+            container.CornerRadius = new CornerRadius(8);
+            container.BorderThickness = new Thickness(0);
+            DisableContainerSelectionCheckMark(container);
+
+            bool selected = multiOnThisList
+                ? IsItemSelected(list, song, selectedSet)
+                : ReferenceEquals(list.SelectedItem, song);
+
+            Border? chrome = FindTaggedBorder(container, "SongRowChrome");
+            if (chrome != null)
+            {
+                chrome.MinHeight = 40;
+                chrome.CornerRadius = new CornerRadius(8);
+                chrome.VerticalAlignment = VerticalAlignment.Stretch;
+                if (selected)
+                {
+                    chrome.Background = accent;
+                    ApplyForegroundToDescendants(chrome, selectedFg);
+                }
+                else
+                {
+                    chrome.Background = unselectedBg;
+                    ClearForegroundOnDescendants(chrome);
+                }
+            }
+            else if (selected)
+            {
+                // 兜底：无模板 Border 时仍尽量圆角
+                container.Background = accent;
+                container.Foreground = selectedFg;
+                ApplyForegroundToDescendants(container, selectedFg);
+            }
+            else
+            {
+                container.Background = unselectedBg;
+                container.ClearValue(Control.ForegroundProperty);
+                ClearForegroundOnDescendants(container);
+            }
+        }
+
+        private void ApplyAlbumGridItemSelectionChrome(
+            GridView grid,
+            GridViewItem container,
+            AlbumEntry album,
+            HashSet<object>? selectedSet = null)
+        {
+            Brush accent = ResolveAccentBrush();
+            Brush selectedFg = ResolveContrastingForeground(accent);
+            bool multiOnThisGrid = _isMultiSelectMode && ReferenceEquals(_multiSelectAlbumGrid, grid);
+            Brush unselectedBg = multiOnThisGrid
+                ? CreateMultiSelectFrostBrush()
+                : new SolidColorBrush(Colors.Transparent);
+
+            container.Background = new SolidColorBrush(Colors.Transparent);
+            container.CornerRadius = new CornerRadius(8);
+            container.BorderThickness = new Thickness(0);
+            DisableContainerSelectionCheckMark(container);
+
+            bool selected = multiOnThisGrid
+                ? IsItemSelected(grid, album, selectedSet)
+                : ReferenceEquals(grid.SelectedItem, album);
+
+            Border? chrome = FindTaggedBorder(container, "AlbumRowChrome");
+            if (chrome != null)
+            {
+                chrome.CornerRadius = new CornerRadius(8);
+                if (selected)
+                {
+                    chrome.Background = accent;
+                    ApplyForegroundToDescendants(chrome, selectedFg);
+                }
+                else
+                {
+                    chrome.Background = unselectedBg;
+                    ClearForegroundOnDescendants(chrome);
+                }
+            }
+            else if (selected)
+            {
+                container.Background = accent;
+                container.Foreground = selectedFg;
+            }
+            else
+            {
+                container.Background = unselectedBg;
+                container.ClearValue(Control.ForegroundProperty);
+            }
+        }
+
+        private void ApplyPlaylistItemSelectionChrome(ListViewItem container, PlaylistItem song)
+            => ApplySongListItemSelectionChrome(PlaylistView, container, song);
+
+        private static Border? FindTaggedBorder(DependencyObject root, string tag)
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is Border border
+                    && border.Tag is string t
+                    && string.Equals(t, tag, StringComparison.Ordinal))
+                {
+                    return border;
+                }
+
+                Border? nested = FindTaggedBorder(child, tag);
+                if (nested != null)
+                {
+                    return nested;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>关闭勾选标记，并尽量给 Presenter 圆角，避免系统方角选中层。</summary>
+        private static void SoftenItemPresenterCorners(DependencyObject root)
+        {
+            if (root is ListViewItemPresenter listPresenter)
+            {
+                listPresenter.CornerRadius = new CornerRadius(8);
+                listPresenter.SelectionCheckMarkVisualEnabled = false;
+                try
+                {
+                    listPresenter.CheckBrush = new SolidColorBrush(Colors.Transparent);
+                    listPresenter.CheckHintBrush = new SolidColorBrush(Colors.Transparent);
+                    listPresenter.CheckSelectingBrush = new SolidColorBrush(Colors.Transparent);
+                }
+                catch
+                {
+                }
+
+                return;
+            }
+
+            if (root is GridViewItemPresenter gridPresenter)
+            {
+                gridPresenter.CornerRadius = new CornerRadius(8);
+                gridPresenter.SelectionCheckMarkVisualEnabled = false;
+                try
+                {
+                    gridPresenter.CheckBrush = new SolidColorBrush(Colors.Transparent);
+                    gridPresenter.CheckHintBrush = new SolidColorBrush(Colors.Transparent);
+                    gridPresenter.CheckSelectingBrush = new SolidColorBrush(Colors.Transparent);
+                }
+                catch
+                {
+                }
+
+                return;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                SoftenItemPresenterCorners(VisualTreeHelper.GetChild(root, i));
+            }
+        }
+
+        /// <summary>在容器已加载后关闭系统选中勾（避免与词条文字重叠）。</summary>
+        private void DisableContainerSelectionCheckMark(Control container)
+        {
+            SoftenItemPresenterCorners(container);
+            if (!container.IsLoaded)
+            {
+                void OnLoaded(object sender, RoutedEventArgs e)
+                {
+                    container.Loaded -= OnLoaded;
+                    SoftenItemPresenterCorners(container);
+                }
+
+                container.Loaded += OnLoaded;
+            }
+            else
+            {
+                DispatcherQueue.TryEnqueue(() => SoftenItemPresenterCorners(container));
+            }
+        }
+
+        private static void ApplyForegroundToDescendants(DependencyObject root, Brush foreground)
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is TextBlock tb)
+                {
+                    tb.Foreground = foreground;
+                }
+                else if (child is Control control)
+                {
+                    control.Foreground = foreground;
+                }
+
+                ApplyForegroundToDescendants(child, foreground);
+            }
+        }
+
+        private static void ClearForegroundOnDescendants(DependencyObject root)
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is TextBlock tb)
+                {
+                    tb.ClearValue(TextBlock.ForegroundProperty);
+                }
+                else if (child is Control control)
+                {
+                    control.ClearValue(Control.ForegroundProperty);
+                }
+
+                ClearForegroundOnDescendants(child);
+            }
+        }
+
+                private Brush ResolveAccentBrush()
+        {
+            AppSettingsState settings = AppSettingsStore.Load();
+            if (settings.AccentSource == "Custom")
+            {
+                return new SolidColorBrush(ParseHexColor(settings.CustomAccentColor) ?? Color.FromArgb(255, 0, 120, 212));
+            }
+
+            if (Application.Current.Resources.TryGetValue("AccentFillColorDefaultBrush", out object? brushObj)
+                && brushObj is Brush brush)
+            {
+                return brush;
+            }
+
+            if (Application.Current.Resources.TryGetValue("SystemAccentColor", out object? colorObj)
+                && colorObj is Color color)
+            {
+                return new SolidColorBrush(color);
+            }
+
+            return new SolidColorBrush(Color.FromArgb(255, 0, 120, 212));
+        }
+
+        private Brush ResolveAccentForegroundBrush()
+            => ResolveContrastingForeground(ResolveAccentBrush());
+
+        /// <summary>解析 "#RRGGBB" 十六进制颜色。</summary>
+        private static Color? ParseHexColor(string? hex)
+        {
+            if (string.IsNullOrWhiteSpace(hex))
+            {
+                return null;
+            }
+
+            string h = hex.Trim().TrimStart('#');
+            if (h.Length != 6 || !int.TryParse(h, System.Globalization.NumberStyles.HexNumber, null, out int value))
+            {
+                return null;
+            }
+
+            return Color.FromArgb(255, (byte)(value >> 16), (byte)(value >> 8), (byte)value);
+        }
+
+        /// <summary>主题色偏深用白字，偏浅用黑字。</summary>
+        private static Brush ResolveContrastingForeground(Brush background)
+        {
+            Color color = Colors.DodgerBlue;
+            if (background is SolidColorBrush solid)
+            {
+                color = solid.Color;
+            }
+            else if (Application.Current.Resources.TryGetValue("SystemAccentColor", out object? colorObj)
+                && colorObj is Color accent)
+            {
+                color = accent;
+            }
+
+            double luminance = (0.299 * color.R) + (0.587 * color.G) + (0.114 * color.B);
+            return new SolidColorBrush(luminance < 140 ? Colors.White : Colors.Black);
+        }
+
+        private static ListViewItem? FindAncestorListViewItem(DependencyObject start)
+        {
+            DependencyObject? current = start;
+            while (current != null)
+            {
+                if (current is ListViewItem item)
+                {
+                    return item;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+
+        // =====================================================================
+        // 底部控制按钮
+        // =====================================================================
+
+        private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_audioEngine?.IsPlaying == true)
+            {
+                _audioEngine.Pause();
+                _isEnginePaused = true;
+                UpdateWaveformTimerForPlaybackState(false);
+                UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
+                if (PlayPauseIcon != null)
+                {
+                    PlayPauseIcon.Glyph = "\uE768";
+                }
+
+                _miniPlayerWindow?.RefreshFromOwner();
+                return;
+            }
+
+            if (_isEnginePaused && _audioEngine != null)
+            {
+                _audioEngine.Resume();
+                _isEnginePaused = false;
+                UpdateWaveformTimerForPlaybackState(true);
+                UpdateEngineSmtcStatus(MediaPlaybackStatus.Playing);
+                if (PlayPauseIcon != null)
+                {
+                    PlayPauseIcon.Glyph = "\uE769";
+                }
+
+                _miniPlayerWindow?.RefreshFromOwner();
+                return;
+            }
+
+            MediaPlayer? player = GetPlayer();
+            if (player == null)
+            {
+                return;
+            }
+
+            if (player.Source == null)
+            {
+                if (_userPlaylist.Count > 0)
+                {
+                    PlayUserPlaylistAt(0);
+                }
+                else if (_playlist.Count > 0)
+                {
+                    PlayAtIndex(0);
+                }
+
+                return;
+            }
+
+            if (player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
+            {
+                player.Pause();
+            }
+            else
+            {
+                player.Play();
+            }
+        }
+
+        private void PreviousButton_Click(object sender, RoutedEventArgs e)
+            => PlayPrevious();
+
+        private void NextButton_Click(object sender, RoutedEventArgs e)
+            => PlayNext();
+
+        // =====================================================================
+        // 进度条 / 音量
+        // =====================================================================
+
+        private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            _isUserSeeking = true;
+        }
+
+        private void ProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            SeekToSliderValue();
+            _isUserSeeking = false;
+        }
+
+        private void ProgressSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+        {
+            SeekToSliderValue();
+            _isUserSeeking = false;
+        }
+
+        private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (_isUpdatingProgressUi)
+            {
+                return;
+            }
+
+            RedrawProgressStyle();
+
+            if (_isUserSeeking)
+            {
+                CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(e.NewValue));
+            }
+        }
+
+        private void SeekToSliderValue()
+        {
+            if (_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
+            {
+                try
+                {
+                    _audioEngine.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
+                }
+                catch
+                {
+                }
+
+                return;
+            }
+
+            MediaPlayer? player = GetPlayer();
+            if (player?.Source == null)
+            {
+                return;
+            }
+
+            try
+            {
+                player.PlaybackSession.Position = TimeSpan.FromSeconds(ProgressSlider.Value);
+            }
+            catch
+            {
+            }
+        }
+
+        private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            UpdateVolumeIcon(e.NewValue);
+            MediaPlayer? player = GetPlayer();
+            if (player != null)
+            {
+                player.Volume = e.NewValue / 100.0;
+            }
+
+            _audioEngine?.SetVolume(e.NewValue / 100.0);
+
+            if (!_applyingSettingsVolume)
+            {
+                ScheduleVolumeSave(e.NewValue);
+            }
+
+            DrawVolumeStyle();
+        }
+
+        /// <summary>音量写盘去抖:停止拖动 300ms 后才保存一次,避免每 tick 全量写盘。</summary>
+        private void ScheduleVolumeSave(double value)
+        {
+            _volumeToSave = value;
+            _volumeSaveTimer ??= DispatcherQueue.CreateTimer();
+            _volumeSaveTimer.Interval = TimeSpan.FromMilliseconds(300);
+            _volumeSaveTimer.IsRepeating = false;
+            _volumeSaveTimer.Tick -= OnVolumeSaveTick;
+            _volumeSaveTimer.Tick += OnVolumeSaveTick;
+            _volumeSaveTimer.Start();
+        }
+
+        private void OnVolumeSaveTick(DispatcherQueueTimer sender, object args)
+        {
+            try
+            {
+                AppSettingsStore.Update(s => s.Volume = _volumeToSave);
+            }
+            catch
+            {
+            }
+        }
+
+        private void UpdateVolumeIcon(double volumePercent)
+        {
+            if (VolumeIcon == null)
+            {
+                return;
+            }
+
+            // E74F mute / E992 low / E993 mid / E767 high
+            if (volumePercent <= 0.5)
+            {
+                VolumeIcon.Glyph = "\uE74F";
+            }
+            else if (volumePercent < 34)
+            {
+                VolumeIcon.Glyph = "\uE992";
+            }
+            else if (volumePercent < 67)
+            {
+                VolumeIcon.Glyph = "\uE993";
+            }
+            else
+            {
+                VolumeIcon.Glyph = "\uE767";
+            }
+        }
+
+        private void DesktopLyricsButton_Click(object sender, RoutedEventArgs e)
+            => SetDesktopLyricsEnabled(!_desktopLyricsEnabled);
+
+        private void MiniPlayerButton_Click(object sender, RoutedEventArgs e)
+            => SetMiniPlayerEnabled(!_miniPlayerEnabled);
+
+        private void SetMiniPlayerEnabled(bool enabled, bool persistPreference = true)
+        {
+            _miniPlayerEnabled = enabled;
+            if (_miniPlayerEnabled)
+            {
+                EnsureMiniPlayerWindow();
+                AppSettingsState settings = AppSettingsStore.Load();
+                _miniPlayerWindow!.SetAlwaysOnTop(settings.MiniPlayerAlwaysOnTop);
+                _miniPlayerWindow.ApplyBackdropPreference(settings.EnableFrostedGlass);
+                _miniPlayerWindow.RefreshFromOwner();
+                _miniPlayerWindow.Activate();
+            }
+            else if (_miniPlayerWindow != null)
+            {
+                MiniPlayerWindow closing = _miniPlayerWindow;
+                _miniPlayerWindow = null;
+                closing.ClosedByUser -= OnMiniPlayerClosedByUser;
+                closing.Close();
+            }
+
+            if (persistPreference)
+            {
+                AppSettingsStore.Update(s => s.OpenMiniPlayerOnStartup = _miniPlayerEnabled);
+            }
+
+            UpdateMiniPlayerBadge();
+        }
+
+        private void EnsureMiniPlayerWindow()
+        {
+            if (_miniPlayerWindow != null)
+            {
+                return;
+            }
+
+            _miniPlayerWindow = new MiniPlayerWindow(this);
+            AppSettingsState settings = AppSettingsStore.Load();
+            _miniPlayerWindow.SetAlwaysOnTop(settings.MiniPlayerAlwaysOnTop);
+            _miniPlayerWindow.ApplyBackdropPreference(settings.EnableFrostedGlass);
+            _miniPlayerWindow.ClosedByUser += OnMiniPlayerClosedByUser;
+        }
+
+        private void OnMiniPlayerClosedByUser()
+        {
+            _miniPlayerWindow = null;
+            _miniPlayerEnabled = false;
+            AppSettingsStore.Update(s => s.OpenMiniPlayerOnStartup = false);
+            DispatcherQueue.TryEnqueue(UpdateMiniPlayerBadge);
+        }
+
+        private void UpdateMiniPlayerBadge()
+        {
+            if (MiniPlayerStateBadge == null)
+            {
+                return;
+            }
+
+            bool on = _miniPlayerEnabled && _miniPlayerWindow != null;
+            MiniPlayerStateBadge.Text = on ? "on" : "off";
+            MiniPlayerStateBadge.Foreground = on
+                ? new SolidColorBrush(Color.FromArgb(255, 80, 200, 120))
+                : new SolidColorBrush(Color.FromArgb(255, 176, 176, 176));
+        }
+
+        // ---- Mini player / desktop lyrics helpers ----
+
+        internal PlaylistItem? GetCurrentPlayingItem()
+        {
+            if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+            {
+                return _userPlaylist[_userPlaylistIndex];
+            }
+
+            if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
+            {
+                return _playlist[_currentIndex];
+            }
+
+            return null;
+        }
+
+        internal ImageSource? GetCurrentCoverImage() => TransportCoverImage?.Source;
+
+        internal MediaPlayer? GetMediaPlayerPublic() => GetPlayer();
+
+        internal string GetPlaybackOrderGlyphPublic()
+            => _playbackOrder switch
+            {
+                PlaybackOrder.Sequential => "\uE8FD",
+                PlaybackOrder.Random => "\uE8B1",
+                PlaybackOrder.ListLoop => "\uE8EE",
+                PlaybackOrder.TrackLoop => "\uE8ED",
+                PlaybackOrder.TrackOnce => "\uE72A",
+                _ => "\uE8EE"
+            };
+
+        internal string GetCurrentLyricTextPublic()
+        {
+            if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricLines.Count)
+            {
+                return _lyricLines[_currentLyricIndex].Text;
+            }
+
+            return string.Empty;
+        }
+
+        internal void CyclePlaybackOrderPublic() => PlaybackOrderButton_Click(PlaybackOrderButton!, new RoutedEventArgs());
+
+        internal void PreviousPublic() => PlayPrevious();
+
+        internal void NextPublic() => PlayNext();
+
+        internal void TogglePlayPausePublic() => PlayPauseButton_Click(PlayPauseButton!, new RoutedEventArgs());
+
+        internal void SeekPublic(TimeSpan position)
+        {
+            MediaPlayer? player = GetPlayer();
+            if (player?.Source == null)
+            {
+                return;
+            }
+
+            try
+            {
+                player.PlaybackSession.Position = position;
+            }
+            catch
+            {
+            }
+        }
+
+        private void DesktopLyricsButton_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            if (_desktopLyricsWindow?.IsLocked == true)
+            {
+                _desktopLyricsWindow.SetLocked(false);
+                e.Handled = true;
+            }
+        }
+
+        private void SetDesktopLyricsEnabled(bool enabled, bool persistPreference = true)
+        {
+            _desktopLyricsEnabled = enabled;
+            if (_desktopLyricsEnabled)
+            {
+                EnsureDesktopLyricsWindow();
+                _desktopLyricsWindow!.SetLyrics(_lyricLines);
+                MediaPlayer? player = GetPlayer();
+                if (player?.Source != null)
+                {
+                    _desktopLyricsWindow.Sync(player.PlaybackSession.Position);
+                }
+
+                _desktopLyricsWindow.Show();
+            }
+            else
+            {
+                if (_desktopLyricsWindow != null)
+                {
+                    DesktopLyricsOverlay closing = _desktopLyricsWindow;
+                    _desktopLyricsWindow = null;
+                    closing.ClosedByUser -= OnDesktopLyricsClosedByUser;
+                    closing.Close();
+                    closing.Dispose();
+                }
+            }
+
+            if (persistPreference)
+            {
+                AppSettingsStore.Update(s => s.OpenDesktopLyricsOnStartup = _desktopLyricsEnabled);
+            }
+
+            UpdateDesktopLyricsBadge();
+        }
+
+        private void EnsureDesktopLyricsWindow()
+        {
+            if (_desktopLyricsWindow != null)
+            {
+                return;
+            }
+
+            _desktopLyricsWindow = new DesktopLyricsOverlay
+            {
+                PositionProvider = () => GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero
+            };
+            _desktopLyricsWindow.ClosedByUser += OnDesktopLyricsClosedByUser;
+            _desktopLyricsWindow.ApplySettings(AppSettingsStore.Load());
+        }
+
+        private void OnDesktopLyricsClosedByUser()
+        {
+            // 可能从桌面歌词关闭按钮触发；确保主界面 badge 回到 off
+            if (_desktopLyricsWindow != null)
+            {
+                _desktopLyricsWindow.ClosedByUser -= OnDesktopLyricsClosedByUser;
+                _desktopLyricsWindow.PositionProvider = null;
+                _desktopLyricsWindow.Dispose();
+            }
+
+            _desktopLyricsWindow = null;
+            _desktopLyricsEnabled = false;
+            AppSettingsStore.Update(s => s.OpenDesktopLyricsOnStartup = false);
+            DispatcherQueue.TryEnqueue(UpdateDesktopLyricsBadge);
+        }
+
+        private void UpdateDesktopLyricsBadge()
+        {
+            if (DesktopLyricsStateBadge == null)
+            {
+                return;
+            }
+
+            bool on = _desktopLyricsEnabled && _desktopLyricsWindow != null;
+            DesktopLyricsStateBadge.Text = on ? "on" : "off";
+            DesktopLyricsStateBadge.Foreground = on
+                ? new SolidColorBrush(Color.FromArgb(255, 80, 200, 120))
+                : new SolidColorBrush(Color.FromArgb(255, 176, 176, 176));
+        }
+
+        private void MainWindow_Closed(object sender, WindowEventArgs args)
+        {
+            _taskbarProgress?.Dispose();
+            _taskbarProgress = null;
+            try
+            {
+                TrackStatsStore.Flush();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                _volumeSaveTimer?.Stop();
+                AppSettingsStore.Update(s => s.Volume = _volumeToSave);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                _audioEngine?.Dispose();
+                _audioEngine = null;
+            }
+            catch
+            {
+            }
+
+            PersistPlaybackSession();
+            if (ReferenceEquals(Instance, this))
+            {
+                Instance = null;
+            }
+
+            try
+            {
+                _trayIcon?.Dispose();
+                _trayIcon = null;
+            }
+            catch
+            {
+            }
+
+            CloseAllChildWindows();
+            DisposeMusicPlayer2Features();
+        }
+
+        /// <summary>保存全部状态后重启播放器(用于主题色等需重启生效的更改)。</summary>
+        internal void RestartApp()
+        {
+            try
+            {
+                TrackStatsStore.Flush();
+                _volumeSaveTimer?.Stop();
+                AppSettingsStore.Update(s => s.Volume = _volumeToSave);
+                PersistPlaybackSession();
+
+                string? exe = Environment.ProcessPath
+                    ?? System.Reflection.Assembly.GetExecutingAssembly().Location;
+                if (!string.IsNullOrWhiteSpace(exe))
+                {
+                    Process.Start(new ProcessStartInfo
+                    {
+                        FileName = exe,
+                        UseShellExecute = true,
+                        WorkingDirectory = string.IsNullOrWhiteSpace(System.IO.Path.GetDirectoryName(exe))
+                            ? string.Empty
+                            : System.IO.Path.GetDirectoryName(exe)!
+                    });
+                }
+            }
+            catch
+            {
+            }
+
+            // 直接退出当前进程(由新进程接管,绕过托盘/关闭提示逻辑)
+            Environment.Exit(0);
+        }
+
+        private void AppWindow_Closing(AppWindow sender, AppWindowClosingEventArgs args)
+        {
+            if (_allowClose)
+            {
+                return;
+            }
+
+            args.Cancel = true;
+            if (_closePromptOpen)
+            {
+                return;
+            }
+
+            _ = HandleCloseRequestAsync();
+        }
+
+        private async Task HandleCloseRequestAsync()
+        {
+            if (_closePromptOpen)
+            {
+                return;
+            }
+
+            _closePromptOpen = true;
+            try
+            {
+                AppClosePreferencesState prefs = AppClosePreferences.Load();
+                CloseWindowAction action = AppClosePreferences.ResolveAction(prefs);
+                if (action == CloseWindowAction.Ask)
+                {
+                    action = await ShowCloseChoiceDialogAsync();
+                }
+
+                switch (action)
+                {
+                    case CloseWindowAction.MinimizeToTray:
+                        MinimizeToTray();
+                        break;
+                    case CloseWindowAction.Exit:
+                        ExitApplication();
+                        break;
+                }
+            }
+            finally
+            {
+                _closePromptOpen = false;
+            }
+        }
+
+        private async Task<CloseWindowAction> ShowCloseChoiceDialogAsync()
+        {
+            if (Content?.XamlRoot == null)
+            {
+                return CloseWindowAction.Exit;
+            }
+
+            var dontAsk = new CheckBox
+            {
+                Content = "下次不再询问",
+                Margin = new Thickness(0, 8, 0, 0)
+            };
+            var panel = new StackPanel { Spacing = 8 };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "关闭主界面时，要将播放器缩小到系统托盘继续在后台运行，还是退出播放器？",
+                TextWrapping = TextWrapping.WrapWholeWords
+            });
+            panel.Children.Add(dontAsk);
+
+            var dialog = new ContentDialog
+            {
+                Title = "关闭 CelesteMusicPlayer",
+                Content = panel,
+                PrimaryButtonText = "缩小到托盘",
+                SecondaryButtonText = "退出播放器",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = Content.XamlRoot
+            };
+
+            // 关闭对话框按钮用当前主题色(ContentDialog 局部资源)
+            try
+            {
+                Windows.UI.Color closeAccent = ThemeColorService.CurrentAccent;
+                var closeBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(closeAccent);
+                dialog.Resources["AccentButtonBackground"] = closeBrush;
+                dialog.Resources["AccentButtonBackgroundPointerOver"] = closeBrush;
+                dialog.Resources["AccentButtonBackgroundPressed"] = closeBrush;
+            }
+            catch
+            {
+            }
+
+            ContentDialogResult result = await dialog.ShowAsync();
+            if (result == ContentDialogResult.None)
+            {
+                return CloseWindowAction.Ask; // 取消：不做事
+            }
+
+            CloseWindowAction chosen = result == ContentDialogResult.Primary
+                ? CloseWindowAction.MinimizeToTray
+                : CloseWindowAction.Exit;
+
+            if (dontAsk.IsChecked == true)
+            {
+                AppClosePreferences.Save(new AppClosePreferencesState
+                {
+                    DontAskAgain = true,
+                    PreferredAction = chosen == CloseWindowAction.Exit
+                        ? nameof(CloseWindowAction.Exit)
+                        : nameof(CloseWindowAction.MinimizeToTray)
+                });
+            }
+
+            return chosen;
+        }
+
+        private void MinimizeToTray()
+        {
+            try
+            {
+                _trayIcon ??= new AppTrayIcon(this);
+                _trayIcon.Show();
+                AppWindow.Hide();
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("MinimizeToTray", ex);
+                // 托盘失败则直接退出，避免关不掉
+                ExitApplication();
+            }
+        }
+
+        internal void RestoreFromTray()
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    AppWindow.Show();
+                    Activate();
+                    _trayIcon?.Hide();
+                }
+                catch (Exception ex)
+                {
+                    StartupLog.WriteException("RestoreFromTray", ex);
+                }
+            });
+        }
+
+        internal void ExitFromTray()
+        {
+            DispatcherQueue.TryEnqueue(ExitApplication);
+        }
+
+        private void ExitApplication()
+        {
+            PersistPlaybackSession();
+            _allowClose = true;
+            try
+            {
+                _trayIcon?.Dispose();
+                _trayIcon = null;
+            }
+            catch
+            {
+            }
+
+            Close();
+        }
+
+        private void CloseAllChildWindows()
+        {
+            try
+            {
+                if (_currentPlaylistWindow != null)
+                {
+                    CurrentPlaylistWindow playlist = _currentPlaylistWindow;
+                    _currentPlaylistWindow = null;
+                    playlist.Close();
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (_desktopLyricsWindow != null)
+                {
+                    DesktopLyricsOverlay lyrics = _desktopLyricsWindow;
+                    _desktopLyricsWindow = null;
+                    _desktopLyricsEnabled = false;
+                    lyrics.ClosedByUser -= OnDesktopLyricsClosedByUser;
+                    lyrics.Close();
+                    lyrics.Dispose();
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                SettingsWindow.CloseIfOpen();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (_miniPlayerWindow != null)
+                {
+                    MiniPlayerWindow mini = _miniPlayerWindow;
+                    _miniPlayerWindow = null;
+                    _miniPlayerEnabled = false;
+                    mini.ClosedByUser -= OnMiniPlayerClosedByUser;
+                    mini.Close();
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                if (_artistAvatarEditorWindow != null)
+                {
+                    ArtistAvatarEditorWindow editor = _artistAvatarEditorWindow;
+                    _artistAvatarEditorWindow = null;
+                    editor.Close();
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        // =====================================================================
+        // MediaPlayer 事件
+        // =====================================================================
+
+        private void Player_MediaOpened(MediaPlayer sender, object args)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                TimeSpan duration = sender.PlaybackSession.NaturalDuration;
+
+                if ((duration.TotalSeconds <= 0 || double.IsNaN(duration.TotalSeconds))
+                    && _currentIndex >= 0 && _currentIndex < _playlist.Count)
+                {
+                    duration = _playlist[_currentIndex].Duration;
+                }
+
+                _isUpdatingProgressUi = true;
+                try
+                {
+                    double totalSeconds = duration.TotalSeconds;
+                    if (totalSeconds <= 0 || double.IsNaN(totalSeconds) || double.IsInfinity(totalSeconds))
+                    {
+                        ProgressSlider.Maximum = 100;
+                        TotalTimeText.Text = "00:00";
+                    }
+                    else
+                    {
+                        ProgressSlider.Maximum = totalSeconds;
+                        TotalTimeText.Text = FormatTime(duration);
+                    }
+
+                    double start = 0;
+                    if (_pendingRestorePositionSeconds is double pending && pending > 0.5)
+                    {
+                        start = Math.Min(pending, Math.Max(0, totalSeconds - 0.5));
+                        _pendingRestorePositionSeconds = null;
+                        try
+                        {
+                            sender.PlaybackSession.Position = TimeSpan.FromSeconds(start);
+                        }
+                        catch
+                        {
+                        }
+                    }
+
+                    ProgressSlider.Value = start;
+                    CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(start));
+                }
+                finally
+                {
+                    _isUpdatingProgressUi = false;
+                }
+            });
+        }
+
+        private void PlaybackSession_PlaybackStateChanged(MediaPlaybackSession sender, object args)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                // E768=播放，E769=暂停
+                bool playing = sender.PlaybackState == MediaPlaybackState.Playing;
+                PlayPauseIcon.Glyph = playing ? "\uE769" : "\uE768";
+                UpdateWaveformTimerForPlaybackState(playing);
+                _desktopLyricsWindow?.SetPlaybackPaused(!playing && sender.PlaybackState != MediaPlaybackState.Opening);
+            });
+        }
+
+        private void UpdateWaveformTimerForPlaybackState(bool playing)
+        {
+            if (_waveformTimer == null)
+            {
+                return;
+            }
+
+            if (playing)
+            {
+                _waveformIdleSettleTicks = 0;
+                if (!_waveformTimer.IsRunning)
+                {
+                    _waveformTimer.Start();
+                }
+            }
+            else if (!_waveformTimer.IsRunning)
+            {
+                DrawWaveformBars();
+            }
+            // 暂停/停止：若定时器仍在跑，由 Tick 做回落动画后自行 Stop
+        }
+
+        private void Player_MediaEnded(MediaPlayer sender, object args)
+        {
+            DispatcherQueue.TryEnqueue(HandleMediaEnded);
+        }
+
+        private void Player_MediaFailed(MediaPlayer sender, MediaPlayerFailedEventArgs args)
+        {
+            DispatcherQueue.TryEnqueue(async () =>
+            {
+                NowPlayingText.Text = "播放失败";
+                if (AppSettingsStore.Load().StopWhenError)
+                {
+                    try
+                    {
+                        sender.Pause();
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                await ShowErrorAsync("无法播放", args.ErrorMessage);
+            });
+        }
+
+        private void UpdateTaskbarProgress(TimeSpan position)
+        {
+            if (!AppSettingsStore.Load().ShowTaskbarProgress)
+            {
+                _taskbarProgress?.Clear();
+                return;
+            }
+
+            if (_mainWindowHwnd == IntPtr.Zero)
+            {
+                return;
+            }
+
+            _taskbarProgress ??= new TaskbarProgressHelper(_mainWindowHwnd);
+            MediaPlayer? player = GetPlayer();
+            bool paused = player?.PlaybackSession.PlaybackState != MediaPlaybackState.Playing;
+            _taskbarProgress.SetProgress(position.TotalSeconds, ProgressSlider.Maximum, paused);
+        }
+
+        private void PositionTimer_Tick(DispatcherQueueTimer sender, object args)
+        {
+            if (_usingEnginePlayback)
+            {
+                return;
+            }
+
+            MediaPlayer? player = GetPlayer();
+            if (player?.Source == null || _isUserSeeking)
+            {
+                return;
+            }
+
+            TimeSpan position = player.PlaybackSession.Position;
+            UpdateTaskbarProgress(position);
+
+            _isUpdatingProgressUi = true;
+            try
+            {
+                double seconds = position.TotalSeconds;
+                if (seconds <= ProgressSlider.Maximum
+                    && Math.Abs(ProgressSlider.Value - seconds) >= 0.05)
+                {
+                    ProgressSlider.Value = seconds;
+                }
+
+                string timeText = FormatTime(position);
+                if (!string.Equals(CurrentTimeText.Text, timeText, StringComparison.Ordinal))
+                {
+                    CurrentTimeText.Text = timeText;
+                }
+            }
+            finally
+            {
+                _isUpdatingProgressUi = false;
+            }
+
+            SyncLyricsToPosition(position);
+            _desktopLyricsWindow?.Sync(position);
+            _miniPlayerWindow?.SyncPosition(position, player.PlaybackSession.NaturalDuration);
+            TickFeaturePlaybackExtras(position);
+
+            if ((DateTime.UtcNow - _lastPlaybackPersistUtc).TotalSeconds >= 4)
+            {
+                _lastPlaybackPersistUtc = DateTime.UtcNow;
+                PersistPlaybackSession();
+            }
+        }
+
+        // =====================================================================
+        // 右侧：正在播放信息 / 波形 / 歌词
+        // =====================================================================
+
+                private void ProgressStyleCanvas_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        {
+            RedrawProgressStyle();
+        }
+
+        /// <summary>按设置的样式重绘进度条(4 种可切换)。</summary>
+        private void RedrawProgressStyle()
+        {
+            if (ProgressStyleCanvas == null || ProgressSlider == null)
+            {
+                return;
+            }
+
+            bool waveform = _progressBarStyle == "Waveform";
+            if (!waveform)
+            {
+                // 默认样式:恢复系统进度条(主题色跟随主题设置)
+                ProgressSlider.Opacity = 1;
+                ProgressStyleCanvas.Visibility = Visibility.Collapsed;
+                ProgressStyleCanvas.Children.Clear();
+                return;
+            }
+
+            // 波形进度条:底层 Slider 透明(交互保留),自绘画布显示波形
+            ProgressSlider.Opacity = 0;
+            ProgressStyleCanvas.Visibility = Visibility.Visible;
+
+            double max = ProgressSlider.Maximum;
+            double ratio = max > 0 ? ProgressSlider.Value / max : 0;
+            ratio = Math.Clamp(ratio, 0, 1);
+
+            var canvas = ProgressStyleCanvas;
+            canvas.Children.Clear();
+            double w = canvas.ActualWidth;
+            double h = canvas.ActualHeight;
+            if (w <= 0 || h <= 0)
+            {
+                return;
+            }
+
+            Color accent = ResolveAccentColor();
+            DrawWaveformStyle(canvas, w, h, ratio, accent);
+        }
+
+        private Color ResolveAccentColor()
+        {
+            if (ResolveAccentBrush() is SolidColorBrush scb && scb.Color.A > 0)
+            {
+                return scb.Color;
+            }
+
+            return Color.FromArgb(255, 0, 120, 212);
+        }
+
+        private static Color Lighten(Color c, double t)
+            => Color.FromArgb(255, (byte)(c.R + (255 - c.R) * t), (byte)(c.G + (255 - c.G) * t), (byte)(c.B + (255 - c.B) * t));
+
+        private static Color Darken(Color c, double t)
+            => Color.FromArgb(255, (byte)(c.R * (1 - t)), (byte)(c.G * (1 - t)), (byte)(c.B * (1 - t)));
+
+        /// <summary>渐变光晕：渐变填充 + 圆角轨道 + 光晕滑块。</summary>
+        private void DrawGradientStyle(Canvas canvas, double w, double h, double ratio, Color accent, bool hasSong)
+        {
+            Color light = Lighten(accent, 0.55);
+            Color dark = Darken(accent, 0.35);
+
+            var track = new Shapes.Rectangle
+            {
+                Width = w,
+                Height = 4,
+                RadiusX = 2,
+                RadiusY = 2,
+                Fill = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B))
+            };
+            Canvas.SetTop(track, (h - 4) / 2);
+            canvas.Children.Add(track);
+
+            if (ratio > 0.01)
+            {
+                var fill = new Shapes.Rectangle { Width = Math.Max(2, w * ratio), Height = 4, RadiusX = 2, RadiusY = 2 };
+                var grad = new LinearGradientBrush
+                {
+                    StartPoint = new Windows.Foundation.Point(0, 0.5),
+                    EndPoint = new Windows.Foundation.Point(1, 0.5)
+                };
+                grad.GradientStops.Add(new GradientStop { Color = accent, Offset = 0 });
+                grad.GradientStops.Add(new GradientStop { Color = light, Offset = 1 });
+                fill.Fill = grad;
+                Canvas.SetTop(fill, (h - 4) / 2);
+                canvas.Children.Add(fill);
+            }
+
+            if (hasSong)
+            {
+                double cx = Math.Clamp(w * ratio, 8, Math.Max(8, w - 8));
+                var glow = new Shapes.Ellipse
+                {
+                    Width = 16,
+                    Height = 16,
+                    Fill = new SolidColorBrush(Color.FromArgb(64, accent.R, accent.G, accent.B))
+                };
+                Canvas.SetLeft(glow, cx - 8);
+                Canvas.SetTop(glow, (h - 16) / 2);
+                canvas.Children.Add(glow);
+
+                var dot = new Shapes.Ellipse
+                {
+                    Width = 10,
+                    Height = 10,
+                    Stroke = new SolidColorBrush(dark),
+                    StrokeThickness = 2,
+                    Fill = new SolidColorBrush(accent)
+                };
+                Canvas.SetLeft(dot, cx - 5);
+                Canvas.SetTop(dot, (h - 10) / 2);
+                canvas.Children.Add(dot);
+            }
+        }
+
+        /// <summary>波形(Poweramp)：波形条已播主题色/未播灰色，当前位置竖线。</summary>
+        private void DrawWaveformStyle(Canvas canvas, double w, double h, double ratio, Color accent)
+        {
+            if (_waveformData == null || _waveformData.Length == 0)
+            {
+                // 波形未就绪:只画一条中性细线(加载完成后再显示真实波形,不闪占位)
+                var idleLine = new Shapes.Rectangle
+                {
+                    Width = w,
+                    Height = 2,
+                    RadiusX = 1,
+                    RadiusY = 1,
+                    Fill = new SolidColorBrush(Color.FromArgb(48, 128, 128, 128))
+                };
+                Canvas.SetTop(idleLine, (h - 2) / 2);
+                canvas.Children.Add(idleLine);
+                return;
+            }
+
+            int n = _waveformData.Length;
+            double barW = w / n;
+            var unplayedBrush = new SolidColorBrush(Color.FromArgb(70, 150, 150, 150));
+            double playedEdge = w * ratio;
+            Color light = Lighten(accent, 0.55);
+
+            for (int i = 0; i < n; i++)
+            {
+                double bh = Math.Max(2, _waveformData[i] * h * 0.95);
+                var rect = new Shapes.Rectangle
+                {
+                    Width = Math.Max(1, barW - 1),
+                    Height = bh,
+                    RadiusX = 1,
+                    RadiusY = 1
+                };
+                Canvas.SetLeft(rect, i * barW);
+                Canvas.SetTop(rect, (h - bh) / 2);
+
+                double centerX = (i + 0.5) * barW;
+                if (centerX <= playedEdge)
+                {
+                    // 已播部分:主题色(两端浅色渐变)
+                    double t = centerX / Math.Max(1, playedEdge);
+                    rect.Fill = new SolidColorBrush(Color.FromArgb(
+                        255,
+                        (byte)(accent.R + (light.R - accent.R) * t),
+                        (byte)(accent.G + (light.G - accent.G) * t),
+                        (byte)(accent.B + (light.B - accent.B) * t)));
+                }
+                else
+                {
+                    rect.Fill = unplayedBrush;
+                }
+
+                canvas.Children.Add(rect);
+            }
+
+            // 当前位置细线(echo next 风格:波形上一条细竖线)
+            var line = new Shapes.Rectangle
+            {
+                Width = 2,
+                Height = h * 0.96,
+                RadiusX = 1,
+                RadiusY = 1,
+                Fill = new SolidColorBrush(Colors.White)
+            };
+            Canvas.SetLeft(line, Math.Clamp(playedEdge - 1, 0, Math.Max(0, w - 2)));
+            Canvas.SetTop(line, (h - h * 0.96) / 2);
+            canvas.Children.Add(line);
+        }
+
+        /// <summary>波形未就绪时的渐变兜底(仅波形模式内部使用)。</summary>
+        private void DrawGradientFallback(Canvas canvas, double w, double h, double ratio, Color accent)
+        {
+            var track = new Shapes.Rectangle
+            {
+                Width = w,
+                Height = 4,
+                RadiusX = 2,
+                RadiusY = 2,
+                Fill = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B))
+            };
+            Canvas.SetTop(track, (h - 4) / 2);
+            canvas.Children.Add(track);
+
+            if (ratio > 0.01)
+            {
+                var fill = new Shapes.Rectangle { Width = Math.Max(2, w * ratio), Height = 4, RadiusX = 2, RadiusY = 2 };
+                var grad = new LinearGradientBrush
+                {
+                    StartPoint = new Windows.Foundation.Point(0, 0.5),
+                    EndPoint = new Windows.Foundation.Point(1, 0.5)
+                };
+                grad.GradientStops.Add(new GradientStop { Color = accent, Offset = 0 });
+                grad.GradientStops.Add(new GradientStop { Color = Lighten(accent, 0.55), Offset = 1 });
+                fill.Fill = grad;
+                Canvas.SetTop(fill, (h - 4) / 2);
+                canvas.Children.Add(fill);
+            }
+        }
+
+        /// <summary>Spotify 圆环：细轨道 + 白色圆环滑块。</summary>
+        private void DrawSpotifyStyle(Canvas canvas, double w, double h, double ratio, Color accent, bool hasSong)
+        {
+            var track = new Shapes.Rectangle
+            {
+                Width = w,
+                Height = 3,
+                RadiusX = 1.5,
+                RadiusY = 1.5,
+                Fill = new SolidColorBrush(Color.FromArgb(48, accent.R, accent.G, accent.B))
+            };
+            Canvas.SetTop(track, (h - 3) / 2);
+            canvas.Children.Add(track);
+
+            if (ratio > 0.01)
+            {
+                var fill = new Shapes.Rectangle
+                {
+                    Width = Math.Max(2, w * ratio),
+                    Height = 3,
+                    RadiusX = 1.5,
+                    RadiusY = 1.5,
+                    Fill = new SolidColorBrush(accent)
+                };
+                Canvas.SetTop(fill, (h - 3) / 2);
+                canvas.Children.Add(fill);
+            }
+
+            if (hasSong)
+            {
+                double cx = Math.Clamp(w * ratio, 6, Math.Max(6, w - 6));
+                var ring = new Shapes.Ellipse
+                {
+                    Width = 12,
+                    Height = 12,
+                    Stroke = new SolidColorBrush(Colors.White),
+                    StrokeThickness = 2,
+                    Fill = new SolidColorBrush(Color.FromArgb(180, accent.R, accent.G, accent.B))
+                };
+                Canvas.SetLeft(ring, cx - 6);
+                Canvas.SetTop(ring, (h - 12) / 2);
+                canvas.Children.Add(ring);
+            }
+        }
+
+        /// <summary>Apple 细线：2px 细线 + 圆点滑块。</summary>
+        private void DrawAppleLineStyle(Canvas canvas, double w, double h, double ratio, Color accent, bool hasSong)
+        {
+            var track = new Shapes.Rectangle
+            {
+                Width = w,
+                Height = 2,
+                Fill = new SolidColorBrush(Color.FromArgb(40, accent.R, accent.G, accent.B))
+            };
+            Canvas.SetTop(track, (h - 2) / 2);
+            canvas.Children.Add(track);
+
+            if (ratio > 0.01)
+            {
+                var fill = new Shapes.Rectangle
+                {
+                    Width = Math.Max(2, w * ratio),
+                    Height = 2,
+                    Fill = new SolidColorBrush(accent)
+                };
+                Canvas.SetTop(fill, (h - 2) / 2);
+                canvas.Children.Add(fill);
+            }
+
+            if (hasSong)
+            {
+                double cx = Math.Clamp(w * ratio, 4, Math.Max(4, w - 4));
+                var dot = new Shapes.Ellipse
+                {
+                    Width = 8,
+                    Height = 8,
+                    Fill = new SolidColorBrush(accent)
+                };
+                Canvas.SetLeft(dot, cx - 4);
+                Canvas.SetTop(dot, (h - 8) / 2);
+                canvas.Children.Add(dot);
+            }
+        }
+
+        /// <summary>播放列表内容变化时,若未播放则尝试预览波形(列表恢复完成后自动触发)。</summary>
+        private void OnPlaylistForWaveformPreview(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+        {
+            TryLoadWaveformPreview();
+        }
+
+        /// <summary>未播放时加载列表选中(或第一首)歌曲的波形预览。</summary>
+        private void TryLoadWaveformPreview()
+        {
+            if (_progressBarStyle != "Waveform" || !string.IsNullOrEmpty(_nowPlayingPath))
+            {
+                return;
+            }
+
+            PlaylistItem? item = PlaylistView.SelectedItem as PlaylistItem;
+            if (item == null && _playlist.Count > 0)
+            {
+                item = _playlist[0];
+            }
+
+            if (item != null
+                && !string.Equals(_waveformPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                LoadWaveformForCurrentAsync(item.FilePath);
+            }
+        }
+
+        /// <summary>延迟重试:等媒体库异步恢复完成后再尝试加载预览波形。</summary>
+        private async System.Threading.Tasks.Task RetryWaveformPreviewLaterAsync()
+        {
+            try
+            {
+                await System.Threading.Tasks.Task.Delay(1200);
+                TryLoadWaveformPreview();
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>异步加载当前歌曲波形(供波形进度条)，完成后重绘。</summary>
+        private async void LoadWaveformForCurrentAsync(string path)
+        {
+            try
+            {
+
+            _waveformPath = path;
+            float[] wave = await WaveformDataProvider.GetWaveformAsync(path, 180);
+            if (!string.Equals(_waveformPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                return; // 已切歌
+            }
+
+            _waveformData = wave;
+            StartupLog.Write("波形回调: " + (wave?.Length > 0 ? "有数据" : "空") + " style=" + _progressBarStyle);
+            if (_progressBarStyle == "Waveform")
+            {
+                RedrawProgressStyle();
+            }
+        
+            }
+            catch
+            {
+            }}
+
+                /// <summary>应用自定义背景图片(设置里选择);无路径时恢复封面背景。</summary>
+        private void ApplyCustomBackground(string? path)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+                {
+                    CustomBackgroundImage.Source = null;
+                    CustomBackgroundImage.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                var bmp = new BitmapImage();
+                bmp.DecodePixelWidth = 1920;
+                using (System.IO.FileStream fs = System.IO.File.OpenRead(path))
+                {
+                    bmp.SetSource(fs.AsRandomAccessStream());
+                }
+
+                CustomBackgroundImage.Source = bmp;
+                CustomBackgroundImage.Visibility = Visibility.Visible;
+            }
+            catch
+            {
+            }
+        }
+
+                /// <summary>应用播放列表列显隐与密度。</summary>
+        private void ApplyPlaylistColumnSettings(AppSettingsState settings)
+        {
+            try
+            {
+                var cols = PlaylistColumnWidths.Instance;
+                cols.Title = settings.ShowPlaylistTitle ? 140 : 0;
+                cols.Artist = settings.ShowPlaylistArtist ? 110 : 0;
+                cols.Album = settings.ShowPlaylistAlbum ? 110 : 0;
+                cols.Year = settings.ShowPlaylistYear ? 52 : 0;
+                cols.Duration = settings.ShowPlaylistDuration ? 60 : 0;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                // 密度:切换 ListView 行高(资源键通过 RootShell.Resources 查找)
+                Style? style = null;
+                if (RootShell != null && RootShell.Resources != null)
+                {
+                    string key = settings.PlaylistDensity == "Compact" ? "CompactListItemStyle" : "ComfortableListItemStyle";
+                    if (RootShell.Resources.TryGetValue(key, out object? res) && res is Style s)
+                    {
+                        style = s;
+                    }
+                }
+
+                foreach (ListView list in new[] { PlaylistView, AlbumTrackListView, ArtistTrackListView, FolderBrowserView })
+                {
+                    list.ItemContainerStyle = style;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>主题色变化事件处理:统一刷新信息卡波形/歌词/进度条/迷你播放器/桌面歌词。</summary>
+        private void OnThemeColorChanged(Windows.UI.Color accent)
+        {
+            try
+            {
+                _waveAccentColor = accent;
+                DrawWaveformBars();
+            }
+            catch
+            {
+            }
+
+            // 音量条(自绘)/进度条
+            try
+            {
+                DrawVolumeStyle();
+                ThemeColorService.ApplySliderAccent(ProgressSlider, accent);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                TimeSpan pos = _audioEngine?.IsPlaying == true
+                    ? EnginePositionValue
+                    : (GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero);
+                SyncLyricsToPosition(pos, force: true);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                _miniPlayerWindow?.RefreshAccentFromOwner();
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                _desktopLyricsWindow?.ApplySettings(AppSettingsStore.Load());
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>当前播放列表拖拽重排后的回调(UserPlaylist 与主窗口共享,集合顺序已自动更新)。</summary>
+        internal void RefreshFromPlaylistReorder()
+        {
+            // 用户播放列表顺序变化由共享 ObservableCollection 自动反映到主窗口;
+            // 这里只需按当前播放曲目重新定位 _userPlaylistIndex,保证下一首播放方向正确。
+            if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
+            {
+                for (int i = 0; i < _userPlaylist.Count; i++)
+                {
+                    if (string.Equals(_userPlaylist[i].FilePath, _nowPlayingPath, StringComparison.OrdinalIgnoreCase))
+                    {
+                        _userPlaylistIndex = i;
+                        return;
+                    }
+                }
+            }
+
+            if (_userPlaylistIndex >= _userPlaylist.Count)
+            {
+                _userPlaylistIndex = _userPlaylist.Count - 1;
+            }
+        }
+
+                /// <summary>自绘音量条:恒定波形竖线样式(已填充主题色/未填充灰色),无重影。</summary>
+        private void DrawVolumeStyle()
+        {
+            if (VolumeStyleCanvas == null || VolumeSlider == null)
+            {
+                return;
+            }
+
+            var canvas = VolumeStyleCanvas;
+            canvas.Children.Clear();
+            double w = canvas.ActualWidth;
+            double h = canvas.ActualHeight;
+            if (w <= 1 || h <= 1)
+            {
+                return;
+            }
+
+            Color accent = ThemeColorService.CurrentAccent;
+            double ratio = VolumeSlider.Maximum > 0 ? VolumeSlider.Value / VolumeSlider.Maximum : 0;
+            ratio = Math.Clamp(ratio, 0, 1);
+
+            const int n = 28;
+            double barW = w / n;
+            var filledBrush = new SolidColorBrush(accent);
+            var emptyBrush = new SolidColorBrush(Color.FromArgb(90, 150, 150, 150));
+            double filledEdge = w * ratio;
+
+            for (int i = 0; i < n; i++)
+            {
+                // 恒定高度竖线(无起伏)
+                double bh = Math.Max(3, h * 0.85);
+                var rect = new Shapes.Rectangle
+                {
+                    Width = Math.Max(1, barW - 1),
+                    Height = bh,
+                    RadiusX = 1,
+                    RadiusY = 1,
+                    Fill = (i + 0.5) * barW <= filledEdge ? filledBrush : emptyBrush
+                };
+                Canvas.SetLeft(rect, i * barW);
+                Canvas.SetTop(rect, (h - bh) / 2);
+                canvas.Children.Add(rect);
+            }
+        }
+
+        /// <summary>音量条点击/拖动定位。</summary>
+        private void VolumeStyleCanvas_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            SetVolumeFromPointer(e);
+            try
+            {
+                VolumeStyleCanvas.CapturePointer(e.Pointer);
+            }
+            catch
+            {
+            }
+        }
+
+        private void VolumeStyleCanvas_PointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            if (VolumeStyleCanvas.PointerCaptures != null && VolumeStyleCanvas.PointerCaptures.Count > 0)
+            {
+                SetVolumeFromPointer(e);
+            }
+        }
+
+        private void VolumeStyleCanvas_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            try
+            {
+                VolumeStyleCanvas.ReleasePointerCapture(e.Pointer);
+            }
+            catch
+            {
+            }
+        }
+
+        private void SetVolumeFromPointer(PointerRoutedEventArgs e)
+        {
+            try
+            {
+                double px = e.GetCurrentPoint(VolumeStyleCanvas).Position.X;
+                double ratio = Math.Clamp(px / Math.Max(1, VolumeStyleCanvas.ActualWidth), 0, 1);
+                VolumeSlider.Value = ratio * VolumeSlider.Maximum; // 触发 ValueChanged -> 音量
+            }
+            catch
+            {
+            }
+        }
+
+        private void VolumeStyleCanvas_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        {
+            DrawVolumeStyle();
+        }
+
+        private void ClearNowPlayingPanel()
+        {
+            // 保留旧波形:停止/切歌时进度条静态显示上次波形,不闪占位
+            _waveformPath = null;
+            RedrawProgressStyle();
+            _nowPlayingPath = null;
+            NowPlayingTitleText.Text = "未在播放";
+            NowPlayingArtistAlbumText.Text = "艺术家 · 专辑";
+            NowPlayingCoverImage.Source = null;
+            ClearNowPlayingCardBackdrop();
+            UpdateTransportNowPlaying(null, null);
+            ClearLyricsUi("开始播放后显示歌词");
+            // 未播放时也填充静态频谱，保证信息卡波形始终可见
+            for (int i = 0; i < WaveBarCount; i++)
+            {
+                _waveLevels[i] = IdleLevel(i);
+            }
+
+            DrawWaveformBars();
+            ClearAlbumArtBackground();
+        }
+
+        private void UpdateTransportNowPlaying(PlaylistItem? item, ImageSource? cover)
+        {
+            if (item == null)
+            {
+                TransportTitleText.Text = "目前未播放音乐";
+                TransportArtistText.Text = string.Empty;
+                TransportArtistText.Visibility = Visibility.Collapsed;
+                TransportCoverImage.Source = null;
+                _miniPlayerWindow?.RefreshFromOwner();
+                return;
+            }
+
+            TransportTitleText.Text = item.Title;
+            TransportArtistText.Text = item.Artist;
+            TransportArtistText.Visibility = Visibility.Visible;
+            TransportCoverImage.Source = cover;
+            _miniPlayerWindow?.RefreshFromOwner();
+        }
+
+        private async Task UpdateNowPlayingPanelAsync(PlaylistItem item)
+        {
+            _nowPlayingPath = item.FilePath;
+            NowPlayingTitleText.Text = item.Title;
+            UpdateNowPlayingArtistAlbumText(item);
+            UpdateTransportNowPlaying(item, null);
+
+            byte[]? coverBytes = await Task.Run(() => ExtractCoverBytes(item.FilePath));
+            if (_nowPlayingPath != item.FilePath)
+            {
+                return;
+            }
+
+            BitmapImage? coverImage = null;
+            if (coverBytes != null && coverBytes.Length > 0)
+            {
+                coverImage = await CreateBitmapFromBytesAsync(coverBytes);
+            }
+
+            if (_nowPlayingPath != item.FilePath)
+            {
+                return;
+            }
+
+            NowPlayingCoverImage.Source = coverImage;
+            UpdateTransportNowPlaying(item, coverImage);
+            _ = ApplyAlbumArtBackgroundAsync(coverBytes, item.FilePath);
+            _ = UpdateNowPlayingCardBackdropAsync(coverBytes, item.FilePath);
+
+            List<LyricLine> lyrics = await Task.Run(() => LyricsLoader.LoadForAudio(item.FilePath));
+            if (_nowPlayingPath != item.FilePath)
+            {
+                return;
+            }
+
+            BuildLyricsUi(lyrics);
+            _ = MaybeAutoDownloadExtrasAsync(item, lyrics, coverBytes);
+        }
+
+        private void UpdateNowPlayingArtistAlbumText(PlaylistItem item)
+        {
+            string artist = string.IsNullOrWhiteSpace(item.Artist) || item.Artist == "未知艺术家"
+                ? string.Empty
+                : item.Artist.Trim();
+            string album = string.IsNullOrWhiteSpace(item.Album) || item.Album == "未知专辑"
+                ? string.Empty
+                : item.Album.Trim();
+            NowPlayingArtistAlbumText.Text = string.Join(" · ", new[] { artist, album }.Where(s => s.Length > 0));
+        }
+
+        /// <summary>信息卡动态背景：封面高斯模糊图 + 深色渐变遮罩（方案 A + C）。</summary>
+        private async Task UpdateNowPlayingCardBackdropAsync(byte[]? coverBytes, string forPath)
+        {
+            try
+            {
+                if (NowPlayingCardBackdrop == null || NowPlayingCardScrim == null)
+                {
+                    return;
+                }
+
+                if (coverBytes == null || coverBytes.Length == 0)
+                {
+                    ClearNowPlayingCardBackdrop();
+                    return;
+                }
+
+                byte[]? blurred = await Task.Run(() =>
+                    AlbumArtBackground.CreateHeavilyBlurredPng(coverBytes, workSize: 128, blurRadius: 3));
+                if (_nowPlayingPath != forPath || blurred == null || blurred.Length == 0)
+                {
+                    return;
+                }
+
+                BitmapImage? image = await CreateBitmapFromBytesAsync(blurred);
+                if (_nowPlayingPath != forPath || image == null)
+                {
+                    return;
+                }
+
+                NowPlayingCardBackdrop.Background = new ImageBrush
+                {
+                    ImageSource = image,
+                    Stretch = Stretch.UniformToFill
+                };
+                NowPlayingCardScrim.Background = new LinearGradientBrush
+                {
+                    StartPoint = new Windows.Foundation.Point(0, 0),
+                    EndPoint = new Windows.Foundation.Point(0, 1),
+                    GradientStops =
+                    {
+                        new GradientStop { Color = Color.FromArgb(120, 14, 12, 24), Offset = 0 },
+                        new GradientStop { Color = Color.FromArgb(235, 8, 8, 14), Offset = 1 }
+                    }
+                };
+                NowPlayingCard.Background = null;
+            }
+            catch
+            {
+            }
+        }
+
+        private void ClearNowPlayingCardBackdrop()
+        {
+            try
+            {
+                if (NowPlayingCardBackdrop != null)
+                {
+                    NowPlayingCardBackdrop.Background = null;
+                }
+
+                if (NowPlayingCardScrim != null)
+                {
+                    NowPlayingCardScrim.Background = null;
+                }
+
+                NowPlayingCard.Background = CreateNowPlayingStyleAcrylicBrush();
+            }
+            catch
+            {
+            }
+        }
+
+        private async Task ApplyAlbumArtBackgroundAsync(byte[]? coverBytes, string forPath)
+        {
+            if (AlbumArtBackgroundImage == null)
+            {
+                return;
+            }
+
+            AppSettingsState settings = AppSettingsStore.Load();
+            if (!settings.EnableBackground || !settings.AlbumCoverAsBackground)
+            {
+                ClearAlbumArtBackground();
+                return;
+            }
+
+            if (coverBytes == null || coverBytes.Length == 0)
+            {
+                ClearAlbumArtBackground();
+                return;
+            }
+
+            int blurRadius = settings.BackgroundGaussBlur ? settings.GaussBlurRadius : 0;
+            byte[]? blurred = await Task.Run(() =>
+                blurRadius > 0
+                    ? AlbumArtBackground.CreateHeavilyBlurredPng(coverBytes, blurRadius: blurRadius)
+                    : coverBytes);
+            if (_nowPlayingPath != forPath || blurred == null || blurred.Length == 0)
+            {
+                return;
+            }
+
+            BitmapImage? image = await CreateBitmapFromBytesAsync(blurred);
+            if (_nowPlayingPath != forPath)
+            {
+                return;
+            }
+
+            AlbumArtBackgroundImage.Source = image;
+            if (AlbumArtBackgroundScrim != null)
+            {
+                AlbumArtBackgroundScrim.Opacity = 1;
+            }
+        }
+
+        private void ClearAlbumArtBackground()
+        {
+            if (AlbumArtBackgroundImage != null)
+            {
+                AlbumArtBackgroundImage.Source = null;
+            }
+        }
+
+        private void BuildLyricsUi(List<LyricLine> lyrics)
+        {
+            _lyricLines = lyrics;
+            _currentLyricIndex = -1;
+            _lyricTextBlocks.Clear();
+            LyricsPanel.Children.Clear();
+
+            if (lyrics.Count == 0)
+            {
+                AppSettingsState lyricSettings = AppSettingsStore.Load();
+                string hint = "暂无歌词";
+                if (lyricSettings.ShowSongInfoIfNoLyric)
+                {
+                    string title = NowPlayingTitleText?.Text ?? "未知曲目";
+                    string artistAlbum = NowPlayingArtistAlbumText?.Text ?? "";
+                    hint = title + "\n" + artistAlbum;
+                }
+
+                ClearLyricsUi(hint);
+                return;
+            }
+
+            LyricsEmptyHint.Visibility = Visibility.Collapsed;
+            LyricsScrollViewer.Visibility = Visibility.Visible;
+
+            // 上下垫高，便于首尾句也能滚到中间
+            double pad = Math.Max(80, LyricsScrollViewer.ActualHeight / 2);
+            LyricsPanel.Padding = new Thickness(8, pad, 8, pad);
+
+            AppSettingsState uiSettings = AppSettingsStore.Load();
+            TextAlignment align = uiSettings.LyricAlign switch
+            {
+                "Left" => TextAlignment.Left,
+                "Right" => TextAlignment.Right,
+                _ => TextAlignment.Center
+            };
+            LyricsPanel.Spacing = uiSettings.LyricLineSpacing;
+
+            foreach (LyricLine line in lyrics)
+            {
+                var tb = new TextBlock
+                {
+                    Text = line.Text,
+                    TextAlignment = align,
+                    TextWrapping = TextWrapping.WrapWholeWords,
+                    FontSize = 14,
+                    Foreground = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154)),
+                    Opacity = 0.55,
+                    Tag = line
+                };
+                _lyricTextBlocks.Add(tb);
+                LyricsPanel.Children.Add(tb);
+            }
+
+            SyncLyricsToPosition(GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero);
+            _desktopLyricsWindow?.SetLyrics(_lyricLines);
+            _miniPlayerWindow?.RefreshFromOwner();
+        }
+
+        private void ClearLyricsUi(string hint)
+        {
+            _lyricLines = new List<LyricLine>();
+            _currentLyricIndex = -1;
+            _lyricTextBlocks.Clear();
+            LyricsPanel.Children.Clear();
+            LyricsPanel.Padding = new Thickness(0);
+            LyricsScrollViewer.Visibility = Visibility.Collapsed;
+            LyricsEmptyHint.Text = hint;
+            LyricsEmptyHint.Visibility = Visibility.Visible;
+            _desktopLyricsWindow?.SetLyrics(_lyricLines);
+        }
+
+        private void SyncLyricsToPosition(TimeSpan position, bool force = false)
+        {
+            if (_lyricLines.Count == 0 || _lyricTextBlocks.Count == 0)
+            {
+                return;
+            }
+
+            int index = 0;
+            for (int i = 0; i < _lyricLines.Count; i++)
+            {
+                if (_lyricLines[i].Time <= position)
+                {
+                    index = i;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (!force && index == _currentLyricIndex)
+            {
+                return;
+            }
+
+            _currentLyricIndex = index;
+            if (force)
+            {
+                StartupLog.Write("歌词强制重渲染 index=" + index + " 行数=" + _lyricTextBlocks.Count);
+            }
+
+            // 方案A：当前句主题色强调 + 相邻句微亮（纯属性调整，不改行结构、不用 Inlines）
+            Brush accent = ResolveAccentBrush();
+            for (int i = 0; i < _lyricTextBlocks.Count; i++)
+            {
+                TextBlock row = _lyricTextBlocks[i];
+                int dist = Math.Abs(i - index);
+                if (dist == 0)
+                {
+                    row.FontSize = 19;
+                    row.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
+                    row.Foreground = accent;
+                    row.Opacity = 1.0;
+                }
+                else if (dist == 1)
+                {
+                    row.FontSize = 15;
+                    row.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
+                    row.Foreground = new SolidColorBrush(Color.FromArgb(255, 205, 205, 205));
+                    row.Opacity = 0.85;
+                }
+                else
+                {
+                    row.FontSize = 14;
+                    row.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
+                    row.Foreground = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
+                    row.Opacity = 0.55;
+                }
+            }
+
+            ScrollLyricToCenter(_lyricTextBlocks[index]);
+        }
+
+        private void ScrollLyricToCenter(FrameworkElement line)
+        {
+            LyricsScrollViewer.UpdateLayout();
+            line.UpdateLayout();
+
+            double viewport = LyricsScrollViewer.ViewportHeight;
+            if (viewport <= 0)
+            {
+                return;
+            }
+
+            GeneralTransform transform = line.TransformToVisual(LyricsPanel);
+            Windows.Foundation.Point topLeft = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+            double lineCenter = topLeft.Y + line.ActualHeight / 2;
+            double target = lineCenter - viewport / 2;
+            target = Math.Max(0, Math.Min(target, LyricsScrollViewer.ScrollableHeight));
+
+            _lyricScrollFrom = LyricsScrollViewer.VerticalOffset;
+            _lyricScrollTo = target;
+            if (Math.Abs(_lyricScrollTo - _lyricScrollFrom) < 0.5)
+            {
+                return;
+            }
+
+            _lyricScrollStartMs = Environment.TickCount64;
+            if (_lyricScrollTimer == null)
+            {
+                _lyricScrollTimer = DispatcherQueue.CreateTimer();
+                _lyricScrollTimer.Interval = TimeSpan.FromMilliseconds(8);
+                _lyricScrollTimer.Tick += LyricScrollTimer_Tick;
+            }
+
+            _lyricScrollTimer.Start();
+        }
+
+        private void LyricScrollTimer_Tick(DispatcherQueueTimer sender, object args)
+        {
+            double elapsed = Environment.TickCount64 - _lyricScrollStartMs;
+            double t = Math.Clamp(elapsed / LyricScrollDurationMs, 0, 1);
+            // ease-in-out cubic，比系统默认滚动更柔和
+            double eased = t < 0.5
+                ? 4 * t * t * t
+                : 1 - Math.Pow(-2 * t + 2, 3) / 2;
+
+            double y = _lyricScrollFrom + (_lyricScrollTo - _lyricScrollFrom) * eased;
+            LyricsScrollViewer.ChangeView(null, y, null, disableAnimation: true);
+
+            if (t >= 1)
+            {
+                _lyricScrollTimer?.Stop();
+                LyricsScrollViewer.ChangeView(null, _lyricScrollTo, null, disableAnimation: true);
+            }
+        }
+
+        private void WaveformCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            DrawWaveformBars();
+        }
+
+        private void WaveformTimer_Tick(DispatcherQueueTimer sender, object args)
+        {
+            MediaPlayer? player = GetPlayer();
+            bool enginePlaying = _audioEngine?.IsPlaying == true;
+            bool playing = (player?.Source != null
+                    && player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
+                || enginePlaying;
+
+            double t = Environment.TickCount64 / 1000.0;
+            double volume = enginePlaying ? VolumeSlider.Value / 100.0 : (player?.Volume ?? 0.8);
+            bool changed = false;
+
+            for (int i = 0; i < WaveBarCount; i++)
+            {
+                double target;
+                if (playing)
+                {
+                    // 对称呼吸式频谱：中间高两边低、每柱各自节奏，无横向滚动
+                    double rhythm = 0.5 + 0.5 * Math.Sin(t * 1.8 + _wavePhases[i]);
+                    double halfSpan = Math.Max(1.0, (WaveBarCount - 1) / 2.0);
+                    double pos = (i - (WaveBarCount - 1) / 2.0) / halfSpan;
+                    double symmetry = 0.5 + 0.5 * (1.0 - Math.Min(1.0, Math.Abs(pos)));
+                    double n = rhythm * symmetry;
+                    target = Math.Clamp(n * (0.55 + 0.45 * volume), 0.1, 1.0);
+                }
+                else
+                {
+                    target = IdleLevel(i);
+                }
+
+                double next = _waveLevels[i] + (target - _waveLevels[i]) * (playing ? 0.35 : 0.18);
+                if (Math.Abs(next - _waveLevels[i]) > 0.002)
+                {
+                    changed = true;
+                }
+
+                _waveLevels[i] = next;
+            }
+
+            if (changed || playing)
+            {
+                DrawWaveformBars();
+            }
+
+            if (!playing)
+            {
+                _waveformIdleSettleTicks++;
+                if (_waveformIdleSettleTicks >= 12 || !changed)
+                {
+                    _waveformTimer?.Stop();
+                    _waveformIdleSettleTicks = 0;
+                }
+            }
+            else
+            {
+                _waveformIdleSettleTicks = 0;
+            }
+        }
+
+        private static Color WaveColorFor(int index) => _waveAccentColor;
+
+        /// <summary>频谱包络：中间高、两边低。</summary>
+        private static double SpectrumEnvelope(int index)
+        {
+            double center = (WaveBarCount - 1) / 2.0;
+            double envelope = 1.0 - 0.55 * Math.Abs(index - center) / Math.Max(1.0, center);
+            return Math.Max(0.2, envelope);
+        }
+
+        /// <summary>未播放时的静态频谱形状（始终可见，中间高两边低）。</summary>
+        private static double IdleLevel(int index)
+        {
+            double shape = 0.22 + 0.28 * (0.5 + 0.5 * Math.Sin(index * 1.7 + 1.3));
+            return Math.Max(0.18, shape * SpectrumEnvelope(index));
+        }
+
+        private void DrawWaveformBars()
+        {
+            if (WaveformCanvas == null)
+            {
+                return;
+            }
+
+            double width = WaveformCanvas.ActualWidth;
+            double height = WaveformCanvas.ActualHeight;
+            if (width <= 1 || height <= 1)
+            {
+                return;
+            }
+
+            // 兜底：_waveLevels 全为 0 时填充静态频谱
+            bool allFlat = true;
+            for (int i = 0; i < WaveBarCount; i++)
+            {
+                if (_waveLevels[i] > 0.05)
+                {
+                    allFlat = false;
+                    break;
+                }
+            }
+
+            if (allFlat)
+            {
+                for (int i = 0; i < WaveBarCount; i++)
+                {
+                    _waveLevels[i] = IdleLevel(i);
+                }
+            }
+
+            double gap = 2;
+            double barWidth = Math.Max(2, (width - gap * (WaveBarCount - 1)) / WaveBarCount);
+
+            while (WaveformCanvas.Children.Count < WaveBarCount)
+            {
+                int idx = WaveformCanvas.Children.Count;
+                WaveformCanvas.Children.Add(new Border
+                {
+                    Background = new SolidColorBrush(WaveColorFor(idx)),
+                    CornerRadius = new CornerRadius(2.5),
+                    IsHitTestVisible = false
+                });
+            }
+
+            while (WaveformCanvas.Children.Count > WaveBarCount)
+            {
+                WaveformCanvas.Children.RemoveAt(WaveformCanvas.Children.Count - 1);
+            }
+
+            for (int i = 0; i < WaveBarCount; i++)
+            {
+                if (WaveformCanvas.Children[i] is not Border bar)
+                {
+                    continue;
+                }
+
+                // 每次重绘都更新颜色(主题色变化后生效,不能只在新柱子创建时设置)
+                bar.Background = new SolidColorBrush(WaveColorFor(i));
+
+                double level = Math.Clamp(_waveLevels[i], 0.12, 1.0);
+                double barHeight = Math.Max(10, Math.Min(height, height * level * 1.15));
+                double left = i * (barWidth + gap);
+                double top = (height - barHeight) / 2;
+
+                // 直接赋值（Border 未设置时 Width/Height 为 NaN，比较判断恒 false 会导致柱子 0×0 不可见）
+                bar.Width = barWidth;
+                bar.Height = barHeight;
+                Canvas.SetLeft(bar, left);
+                Canvas.SetTop(bar, top);
+            }
+        }
+
+        // =====================================================================
+        // 播放核心
+        // =====================================================================
+
+        private void PlayAtIndex(int index)
+            => PlayLibraryItemAt(index, syncUserPlaylistIndex: true);
+
+        private void PlayLibraryItemAt(int index, bool syncUserPlaylistIndex)
+        {
+            if (index < 0 || index >= _playlist.Count)
+            {
+                return;
+            }
+
+            PlaylistItem item = _playlist[index];
+            _currentIndex = index;
+            if (syncUserPlaylistIndex)
+            {
+                _userPlaylistIndex = FindUserPlaylistIndex(item.FilePath);
+            }
+
+            if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
+                && !_isMultiSelectMode
+                && index >= 0
+                && PlaylistView.ItemsSource is System.Collections.IList songsList
+                && index < songsList.Count)
+            {
+                PlaylistView.SelectedIndex = index;
+                PlaylistView.ScrollIntoView(item);
+            }
+
+            StartPlayback(item);
+        }
+
+        private void PlayUserPlaylistAt(int index)
+        {
+            if (index < 0 || index >= _userPlaylist.Count)
+            {
+                return;
+            }
+
+            PlaylistItem item = _userPlaylist[index];
+            _userPlaylistIndex = index;
+            _currentIndex = FindLibraryIndex(item.FilePath);
+
+            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
+                && !_isMultiSelectMode)
+            {
+                PlaylistView.SelectedIndex = index;
+                PlaylistView.ScrollIntoView(item);
+            }
+            else if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
+                && !_isMultiSelectMode
+                && _currentIndex >= 0
+                && PlaylistView.ItemsSource is System.Collections.IList songsList2
+                && _currentIndex < songsList2.Count)
+            {
+                PlaylistView.SelectedIndex = _currentIndex;
+                PlaylistView.ScrollIntoView(_playlist[_currentIndex]);
+            }
+
+            StartPlayback(item);
+            PersistPlaybackSession();
+            NotifyCurrentPlaylistWindow();
+        }
+
+        private void StartPlayback(PlaylistItem item)
+        {
+            ScrobblePreviousIfAny();
+
+            // 进度条样式(读设置缓存) + 异步加载波形(波形样式用)
+            _progressBarStyle = AppSettingsStore.Load().ProgressBarStyle;
+            // 保留旧波形直到新波形解码完成(避免加载过程闪占位)
+            _waveformPath = null;
+            StartupLog.Write("波形加载开始: " + item.FilePath + " style=" + _progressBarStyle);
+            LoadWaveformForCurrentAsync(item.FilePath);
+
+            // 系统 Media Foundation 不支持的格式：走 FFmpeg 引擎
+            if (AudioPlaybackEngine.NeedsFfmpeg(item.FilePath))
+            {
+                // 停掉 MediaPlayer，避免与引擎同时出声
+                MediaPlayer? curPlayer = GetPlayer();
+                if (curPlayer != null && curPlayer.Source != null)
+                {
+                    try
+                    {
+                        curPlayer.Pause();
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                _ = PlayExtendedWithEngineAsync(item);
+                return;
+            }
+
+            // 普通格式：停掉引擎，避免残留引擎声音
+            StopEngineIfActive();
+
+            MediaPlayer? player = GetPlayer();
+            if (player == null)
+            {
+                return;
+            }
+
+            _pendingRestorePositionSeconds = null;
+            NowPlayingText.Text = "正在播放：" + item.Title + " - " + item.Artist;
+            _ = UpdateNowPlayingPanelAsync(item);
+            RecordPlaybackStatsOnStart(item);
+
+            AppSettingsState settings = AppSettingsStore.Load();
+            double targetVolume = VolumeSlider.Value / 100.0;
+
+            void BeginSource()
+            {
+                try
+                {
+                    MediaSource source = MediaSource.CreateFromUri(CreateFileMediaUri(item.FilePath));
+                    player.Source = source;
+                    if (item.StartTimeSeconds > 0)
+                    {
+                        _pendingRestorePositionSeconds = item.StartTimeSeconds;
+                    }
+
+                    ApplyPlaybackRateFromSettings();
+                    player.Play();
+                    if (settings.EnableFade && _fadeController != null)
+                    {
+                        player.Volume = 0;
+                        _fadeController.FadeIn(player, targetVolume, settings.FadeMilliseconds);
+                    }
+                    else
+                    {
+                        player.Volume = targetVolume;
+                    }
+
+                    PlaybackSessionStore.Save(item.FilePath, 0);
+                }
+                catch (Exception ex)
+                {
+                    NowPlayingText.Text = "播放失败：" + item.Title;
+                    _ = ShowErrorAsync("播放失败", ex.Message);
+                }
+            }
+
+            if (settings.EnableFade && _fadeController != null && player.Source != null
+                && player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
+            {
+                _fadeController.FadeOutThen(player, settings.FadeMilliseconds, BeginSource);
+            }
+            else
+            {
+                BeginSource();
+            }
+        }
+
+
+        /// <summary>用 FFmpeg 引擎播放扩展格式（APE/WavPack/DSD 等）。</summary>
+        private async Task PlayExtendedWithEngineAsync(PlaylistItem item)
+        {
+            NowPlayingText.Text = "正在转码：" + item.Title;
+            _audioEngine ??= new AudioPlaybackEngine();
+            _audioEngine.PlaybackEnded -= OnEnginePlaybackEnded;
+            _audioEngine.PlaybackEnded += OnEnginePlaybackEnded;
+
+            try
+            {
+                _audioEngine.SetEqualizer(EqualizerStore.Load().BandGains);
+            }
+            catch
+            {
+            }
+
+            bool ok = await _audioEngine.PlayFileWithFfmpegAsync(item.FilePath, s =>
+                DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }));
+            if (ok)
+            {
+                _isEnginePaused = false;
+                _usingEnginePlayback = true;
+                NowPlayingText.Text = "正在播放（引擎）：" + item.Title + " - " + item.Artist;
+                _ = UpdateNowPlayingPanelAsync(item);
+                RecordPlaybackStatsOnStart(item);
+                if (PlayPauseIcon != null)
+                {
+                    PlayPauseIcon.Glyph = "\uE769";
+                }
+
+                // 引擎桥接：时长 / 进度条 / 波形
+                ProgressSlider.Maximum = Math.Max(1, _audioEngine.Duration.TotalSeconds);
+                TotalTimeText.Text = FormatTime(_audioEngine.Duration);
+                _audioEngine.PositionChanged -= EnginePositionChanged;
+                _audioEngine.PositionChanged += EnginePositionChanged;
+                UpdateWaveformTimerForPlaybackState(true);
+                _ = FadeInEngineAsync();
+                _miniPlayerWindow?.RefreshFromOwner();
+                ConfigureEngineSmtc(item, playing: true);
+            }
+            else
+            {
+                string? reason = _audioEngine?.LastError;
+                NowPlayingText.Text = string.IsNullOrWhiteSpace(reason)
+                    ? "播放失败（FFmpeg 转码或打开出错）"
+                    : "播放失败：" + reason;
+
+                if (reason != null && reason.Contains("未找到内置 ffmpeg.exe"))
+                {
+                    _ = ShowErrorAsync(
+                        "无法播放该格式",
+                        "内置 FFmpeg 解码器未找到。\n\n这通常是被杀毒软件（如火绒/360）拦截删除。\n请将程序目录下 Assets\\ffmpeg 文件夹加入杀毒软件信任区，然后重新打开程序。");
+                }
+            }
+        }
+
+
+        /// <summary>引擎开播淡入（约 320ms 渐入到当前音量）。</summary>
+        private async Task FadeInEngineAsync()
+        {
+            try
+            {
+                double target = VolumeSlider.Value / 100.0;
+                const int steps = 8;
+                for (int i = 1; i <= steps; i++)
+                {
+                    _audioEngine?.SetVolume(target * i / steps);
+                    await Task.Delay(40);
+                }
+
+                _audioEngine?.SetVolume(target);
+            }
+            catch
+            {
+            }
+        }
+
+        private void OnEnginePlaybackEnded()
+        {
+            _ = DispatcherQueue.TryEnqueue(() =>
+            {
+                _isEnginePaused = false;
+                _usingEnginePlayback = false;
+                UpdateWaveformTimerForPlaybackState(false);
+                UpdateEngineSmtcStatus(MediaPlaybackStatus.Stopped);
+                _miniPlayerWindow?.RefreshFromOwner();
+                HandleMediaEnded();
+            });
+        }
+
+        /// <summary>配置引擎播放的系统媒体控件（SMTC）。</summary>
+        private void ConfigureEngineSmtc(PlaylistItem item, bool playing)
+        {
+            try
+            {
+                if (!AppSettingsStore.Load().EnableSmtc)
+                {
+                    return;
+                }
+
+                _engineSmtc ??= SystemMediaTransportControls.GetForCurrentView();
+                SystemMediaTransportControls smtc = _engineSmtc;
+                smtc.IsEnabled = true;
+                smtc.IsPlayEnabled = true;
+                smtc.IsPauseEnabled = true;
+                smtc.IsNextEnabled = true;
+                smtc.IsPreviousEnabled = true;
+                smtc.IsStopEnabled = true;
+                smtc.ButtonPressed -= Smtc_ButtonPressed;
+                smtc.ButtonPressed += Smtc_ButtonPressed;
+                smtc.PlaybackStatus = playing ? MediaPlaybackStatus.Playing : MediaPlaybackStatus.Paused;
+
+                SystemMediaTransportControlsDisplayUpdater updater = smtc.DisplayUpdater;
+                updater.Type = MediaPlaybackType.Music;
+                updater.MusicProperties.Title = item.Title;
+                updater.MusicProperties.Artist = item.Artist;
+                updater.MusicProperties.AlbumTitle = item.Album;
+                updater.Thumbnail = null;
+                updater.Update();
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>更新引擎 SMTC 播放状态（暂停/恢复/结束）。</summary>
+        private void UpdateEngineSmtcStatus(MediaPlaybackStatus status)
+        {
+            if (_engineSmtc == null)
+            {
+                return;
+            }
+
+            try
+            {
+                _engineSmtc.PlaybackStatus = status;
+                if (status == MediaPlaybackStatus.Stopped)
+                {
+                    _engineSmtc.IsEnabled = false;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>引擎播放位置 → 进度条 / 时间 / 任务栏进度。</summary>
+        private void EnginePositionChanged(TimeSpan position)
+        {
+            try
+            {
+                if (!_usingEnginePlayback)
+                {
+                    return;
+                }
+
+                // 用户正在拖动/点击进度条时不覆盖，避免跳动
+                if (_isUserSeeking)
+                {
+                    return;
+                }
+
+                // 时长变化时同步进度条上限
+                double duration = _audioEngine?.Duration.TotalSeconds ?? 0;
+                if (duration > 1 && Math.Abs(ProgressSlider.Maximum - duration) > 1)
+                {
+                    ProgressSlider.Maximum = duration;
+                    TotalTimeText.Text = FormatTime(_audioEngine!.Duration);
+                }
+
+                double seconds = position.TotalSeconds;
+                if (seconds >= 0
+                    && seconds <= ProgressSlider.Maximum
+                    && Math.Abs(ProgressSlider.Value - seconds) >= 0.05)
+                {
+                    _isUpdatingProgressUi = true;
+                    try
+                    {
+                        ProgressSlider.Value = seconds;
+                    }
+                    finally
+                    {
+                        _isUpdatingProgressUi = false;
+                    }
+                }
+
+                string timeText = FormatTime(position);
+                if (CurrentTimeText != null
+                    && !string.Equals(CurrentTimeText.Text, timeText, StringComparison.Ordinal))
+                {
+                    CurrentTimeText.Text = timeText;
+                }
+
+                _desktopLyricsWindow?.Sync(position);
+                _miniPlayerWindow?.SyncPosition(position, _audioEngine?.Duration ?? TimeSpan.Zero);
+                _taskbarProgress?.SetProgress(position.TotalSeconds, ProgressSlider.Maximum, paused: false);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>停止引擎播放并复位相关 UI 状态（切到普通格式时调用）。</summary>
+        private void StopEngineIfActive()
+        {
+            if (_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
+            {
+                _audioEngine.PositionChanged -= EnginePositionChanged;
+                _audioEngine.Stop();
+                _isEnginePaused = false;
+                _usingEnginePlayback = false;
+                UpdateWaveformTimerForPlaybackState(false);
+                UpdateEngineSmtcStatus(MediaPlaybackStatus.Stopped);
+                _miniPlayerWindow?.RefreshFromOwner();
+            }
+        }
+
+        private void HandleMediaEnded()
+        {
+            switch (_playbackOrder)
+            {
+                case PlaybackOrder.TrackLoop:
+                    // IsLooping 为 true 时通常不会触发；兜底再播当前曲
+                    if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                    {
+                        PlayUserPlaylistAt(_userPlaylistIndex);
+                    }
+                    break;
+
+                case PlaybackOrder.TrackOnce:
+                    break;
+
+                case PlaybackOrder.Sequential:
+                    PlayNext(autoAdvance: true);
+                    break;
+
+                default:
+                    PlayNext(autoAdvance: true);
+                    break;
+            }
+        }
+
+        private void PlayNext()
+            => PlayNext(autoAdvance: false);
+
+        private void PlayNext(bool autoAdvance)
+        {
+            if (_userPlaylist.Count == 0)
+            {
+                return;
+            }
+
+            int? nextIndex = ResolveNextIndex(autoAdvance);
+            if (nextIndex == null)
+            {
+                return;
+            }
+
+            PlayUserPlaylistAt(nextIndex.Value);
+        }
+
+        private void PlayPrevious()
+        {
+            if (_userPlaylist.Count == 0)
+            {
+                return;
+            }
+
+            int? prevIndex = ResolvePreviousIndex();
+            if (prevIndex == null)
+            {
+                return;
+            }
+
+            PlayUserPlaylistAt(prevIndex.Value);
+        }
+
+        private int? ResolveNextIndex(bool autoAdvance)
+        {
+            int count = _userPlaylist.Count;
+            if (count == 0)
+            {
+                return null;
+            }
+
+            int baseIndex = _userPlaylistIndex >= 0 ? _userPlaylistIndex : 0;
+
+            switch (_playbackOrder)
+            {
+                case PlaybackOrder.TrackOnce:
+                    if (autoAdvance)
+                    {
+                        return null;
+                    }
+                    return baseIndex + 1 < count ? baseIndex + 1 : null;
+
+                case PlaybackOrder.TrackLoop:
+                    if (autoAdvance)
+                    {
+                        return baseIndex;
+                    }
+                    return baseIndex + 1 < count ? baseIndex + 1 : 0;
+
+                case PlaybackOrder.Sequential:
+                {
+                    int next = baseIndex + 1;
+                    return next >= count ? null : next;
+                }
+
+                case PlaybackOrder.ListLoop:
+                    return (baseIndex + 1) % count;
+
+                case PlaybackOrder.Random:
+                {
+                    if (count == 1)
+                    {
+                        return 0;
+                    }
+
+                    int next = _playbackRandom.Next(count);
+                    if (next == baseIndex)
+                    {
+                        next = (next + 1) % count;
+                    }
+                    return next;
+                }
+
+                default:
+                    return (baseIndex + 1) % count;
+            }
+        }
+
+        private int? ResolvePreviousIndex()
+        {
+            int count = _userPlaylist.Count;
+            if (count == 0)
+            {
+                return null;
+            }
+
+            int baseIndex = _userPlaylistIndex >= 0 ? _userPlaylistIndex : 0;
+
+            switch (_playbackOrder)
+            {
+                case PlaybackOrder.Sequential:
+                case PlaybackOrder.TrackOnce:
+                    return baseIndex > 0 ? baseIndex - 1 : null;
+
+                case PlaybackOrder.Random:
+                case PlaybackOrder.ListLoop:
+                case PlaybackOrder.TrackLoop:
+                default:
+                    return baseIndex <= 0 ? count - 1 : baseIndex - 1;
+            }
+        }
+
+        // =====================================================================
+        // 播放顺序按钮
+        // =====================================================================
+
+        private void PlaybackOrderButton_Click(object sender, RoutedEventArgs e)
+        {
+            PlaybackOrder[] order =
+            {
+                PlaybackOrder.Sequential,
+                PlaybackOrder.Random,
+                PlaybackOrder.ListLoop,
+                PlaybackOrder.TrackLoop,
+                PlaybackOrder.TrackOnce
+            };
+
+            int index = Array.IndexOf(order, _playbackOrder);
+            int next = index < 0 ? 0 : (index + 1) % order.Length;
+            SetPlaybackOrder(order[next]);
+        }
+
+        private void PlaybackOrderButton_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            e.Handled = true;
+            ShowPlaybackOrderMenu(PlaybackOrderButton, e.GetPosition(PlaybackOrderButton));
+        }
+
+        private void ShowPlaybackOrderMenu(FrameworkElement target, Windows.Foundation.Point position)
+        {
+            var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Top };
+
+            AddPlaybackOrderMenuItem(flyout, PlaybackOrder.Sequential, "\uE8FD", "顺序播放");
+            AddPlaybackOrderMenuItem(flyout, PlaybackOrder.Random, "\uE8B1", "随机播放");
+            AddPlaybackOrderMenuItem(flyout, PlaybackOrder.ListLoop, "\uE8EE", "列表循环");
+            AddPlaybackOrderMenuItem(flyout, PlaybackOrder.TrackLoop, "\uE8ED", "单曲循环");
+            AddPlaybackOrderMenuItem(flyout, PlaybackOrder.TrackOnce, "\uE72A", "单曲播放");
+
+            flyout.ShowAt(target, new FlyoutShowOptions
+            {
+                Position = position,
+                Placement = FlyoutPlacementMode.Top
+            });
+        }
+
+        private void AddPlaybackOrderMenuItem(MenuFlyout flyout, PlaybackOrder order, string glyph, string label)
+        {
+            var item = new ToggleMenuFlyoutItem
+            {
+                Text = label,
+                Icon = new FontIcon { Glyph = glyph, FontSize = 16 },
+                IsChecked = _playbackOrder == order,
+                Tag = order
+            };
+            item.Click += PlaybackOrderMenuItem_Click;
+            flyout.Items.Add(item);
+        }
+
+        private void PlaybackOrderMenuItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuFlyoutItem { Tag: PlaybackOrder order })
+            {
+                SetPlaybackOrder(order);
+            }
+        }
+
+        private void SetPlaybackOrder(PlaybackOrder order, bool persist = true)
+        {
+            _playbackOrder = order;
+            ApplyPlaybackOrderToPlayer();
+            UpdatePlaybackOrderButtonUi();
+            _miniPlayerWindow?.RefreshFromOwner();
+            if (persist)
+            {
+                AppSettingsStore.Update(s => s.PlaybackOrder = order.ToString());
+            }
+        }
+
+        private void ApplyPlaybackOrderToPlayer()
+        {
+            MediaPlayer? player = GetPlayer();
+            if (player == null)
+            {
+                return;
+            }
+
+            player.IsLoopingEnabled = _playbackOrder == PlaybackOrder.TrackLoop;
+        }
+
+        private void UpdatePlaybackOrderButtonUi()
+        {
+            bool trackOnce = _playbackOrder == PlaybackOrder.TrackOnce;
+            PlaybackOrderIcon.Visibility = trackOnce ? Visibility.Collapsed : Visibility.Visible;
+            PlaybackOrderTrackOnceGlyph.Visibility = trackOnce ? Visibility.Visible : Visibility.Collapsed;
+
+            (string glyph, string name) = _playbackOrder switch
+            {
+                PlaybackOrder.Sequential => ("\uE8FD", "顺序播放"),
+                PlaybackOrder.Random => ("\uE8B1", "随机播放"),
+                PlaybackOrder.ListLoop => ("\uE8EE", "列表循环"),
+                PlaybackOrder.TrackLoop => ("\uE8ED", "单曲循环"),
+                PlaybackOrder.TrackOnce => ("\uE72A", "单曲播放"),
+                _ => ("\uE8EE", "列表循环")
+            };
+
+            if (!trackOnce)
+            {
+                PlaybackOrderIcon.Glyph = glyph;
+            }
+
+            ToolTipService.SetToolTip(PlaybackOrderButton, name + "（左键切换，右键选择）");
+        }
+
+        private static string FormatTime(TimeSpan time)
+        {
+            if (time < TimeSpan.Zero)
+            {
+                time = TimeSpan.Zero;
+            }
+
+            if (time.TotalHours >= 1)
+            {
+                return time.ToString(@"h\:mm\:ss");
+            }
+
+            return time.ToString(@"mm\:ss");
+        }
+
+        private async System.Threading.Tasks.Task ShowErrorAsync(string title, string message, XamlRoot? xamlRoot = null)
+        {
+            try
+            {
+                ContentDialog dialog = new()
+                {
+                    Title = title,
+                    Content = message,
+                    CloseButtonText = "确定",
+                    XamlRoot = xamlRoot ?? Content.XamlRoot
+                };
+                await dialog.ShowAsync();
+            }
+            catch
+            {
+            }
+        }
+
+        // =====================================================================
+        // 主区域：播放列表 / 右侧 可拖分割线
+        // =====================================================================
+
+        private void MainSplitter_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            _isDraggingMainSplitter = true;
+            _mainSplitStartX = e.GetCurrentPoint(MainContentGrid).Position.X;
+            _playlistColStartWidth = PlaylistColumn.ActualWidth;
+            // 右侧用 * 吃剩余，按下时记下当时实际宽度便于计算
+            _rightColStartWidth = RightPaneColumn.ActualWidth;
+            MainSplitter.CapturePointer(e.Pointer);
+            e.Handled = true;
+        }
+
+        private void MainSplitter_PointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_isDraggingMainSplitter)
+            {
+                return;
+            }
+
+            double delta = e.GetCurrentPoint(MainContentGrid).Position.X - _mainSplitStartX;
+            double total = _playlistColStartWidth + _rightColStartWidth;
+            double newRight = Math.Clamp(
+                _rightColStartWidth - delta,
+                RightPaneColumn.MinWidth,
+                Math.Max(RightPaneColumn.MinWidth, total - PlaylistColumn.MinWidth));
+
+            // 右侧固定像素宽（默认约 800）；播放列表用 * 占满剩余
+            RightPaneColumn.Width = new GridLength(newRight);
+            PlaylistColumn.Width = new GridLength(1, GridUnitType.Star);
+            e.Handled = true;
+        }
+
+        private void MainSplitter_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            _isDraggingMainSplitter = false;
+            try
+            {
+                MainSplitter.ReleasePointerCapture(e.Pointer);
+            }
+            catch
+            {
+            }
+
+            FitColumnsToAvailableWidth();
+            e.Handled = true;
+        }
+
+        private void MainSplitter_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+        {
+            _isDraggingMainSplitter = false;
+            FitColumnsToAvailableWidth();
+        }
+
+        /// <summary>播放列表区域尺寸变化：保证各列完整可见且不过度拉宽。</summary>
+        private void PlaylistListBorder_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (e.NewSize.Width <= 0 || e.NewSize.Height <= 0)
+            {
+                return;
+            }
+
+            FitColumnsToAvailableWidth();
+        }
+
+        /// <summary>
+        /// 列宽适配中间区域：按首选比例缩放，使标题～时长始终铺满中间可视宽度。
+        /// </summary>
+        private void FitColumnsToAvailableWidth()
+        {
+            if (_isDraggingColumnSplitter)
+            {
+                return;
+            }
+
+            double available = GetPlaylistColumnsViewportWidth();
+            if (available <= 0)
+            {
+                return;
+            }
+
+            // 4 根列间间隙 + 时长右侧留白（避免胶囊右圆角被裁切）
+            const double splitterTotal = HorizontalResizeSplitter.HitWidth * 4;
+            const double endPad = 12;
+            double usable = Math.Max(0, available - splitterTotal - endPad);
+
+            // 首选比例（与默认密度一致）
+            const double prefTitle = 140;
+            const double prefArtist = 110;
+            const double prefAlbum = 110;
+            const double prefYear = 52;
+            const double prefDuration = 60;
+            const double preferredSum = prefTitle + prefArtist + prefAlbum + prefYear + prefDuration;
+
+            double scale = usable / preferredSum;
+            double title = Math.Max(48, prefTitle * scale);
+            double artist = Math.Max(48, prefArtist * scale);
+            double album = Math.Max(48, prefAlbum * scale);
+            double year = Math.Max(40, prefYear * scale);
+            double duration = Math.Max(40, prefDuration * scale);
+
+            // Min 截断后校正总和，确保刚好铺满
+            double again = title + artist + album + year + duration;
+            if (again > usable)
+            {
+                double deficit = again - usable;
+                double take = Math.Min(deficit, Math.Max(0, title - 48));
+                title -= take;
+                deficit -= take;
+                if (deficit > 0)
+                {
+                    take = Math.Min(deficit, Math.Max(0, artist - 48));
+                    artist -= take;
+                    deficit -= take;
+                }
+
+                if (deficit > 0)
+                {
+                    take = Math.Min(deficit, Math.Max(0, album - 48));
+                    album -= take;
+                    deficit -= take;
+                }
+
+                if (deficit > 0)
+                {
+                    take = Math.Min(deficit, Math.Max(0, year - 40));
+                    year -= take;
+                    deficit -= take;
+                }
+
+                if (deficit > 0)
+                {
+                    duration = Math.Max(40, duration - deficit);
+                }
+            }
+            else if (usable - again > 0.5)
+            {
+                // 剩余补给标题列，保证铺满中间区域
+                title += usable - again;
+            }
+
+            var w = PlaylistColumnWidths.Instance;
+            w.Title = title;
+            w.Artist = artist;
+            w.Album = album;
+            w.Year = year;
+            w.Duration = duration;
+            SyncHeaderColumnsFromState();
+            if (HeaderEndPadCol != null
+                && (!HeaderEndPadCol.Width.IsAbsolute
+                    || Math.Abs(HeaderEndPadCol.Width.Value - endPad) >= 0.5))
+            {
+                HeaderEndPadCol.Width = new GridLength(endPad);
+            }
+        }
+
+        private double GetPlaylistColumnsViewportWidth()
+        {
+            double border = PlaylistListBorder.ActualWidth;
+            if (border > 0)
+            {
+                // Header Margin="4,4,4,4"
+                return Math.Max(0, border - 8);
+            }
+
+            if (PlaylistHeaderGrid.ActualWidth > 0)
+            {
+                return PlaylistHeaderGrid.ActualWidth;
+            }
+
+            return PlaylistColumn.ActualWidth > 0 ? Math.Max(0, PlaylistColumn.ActualWidth - 24) : 0;
+        }
+
+        // =====================================================================
+        // 播放列表列：可拖分割线
+        // =====================================================================
+
+        private void SyncHeaderColumnsFromState()
+        {
+            var w = PlaylistColumnWidths.Instance;
+            SetColumnWidthIfChanged(HeaderTitleCol, w.Title);
+            SetColumnWidthIfChanged(HeaderArtistCol, w.Artist);
+            SetColumnWidthIfChanged(HeaderAlbumCol, w.Album);
+            SetColumnWidthIfChanged(HeaderYearCol, w.Year);
+            SetColumnWidthIfChanged(HeaderDurationCol, w.Duration);
+        }
+
+        private static void SetColumnWidthIfChanged(ColumnDefinition column, double width)
+        {
+            if (column.Width.IsAbsolute && Math.Abs(column.Width.Value - width) < 0.5)
+            {
+                return;
+            }
+
+            column.Width = new GridLength(width);
+        }
+
+        private void ColumnSplitter_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement splitter || splitter.Tag is not string pair)
+            {
+                return;
+            }
+
+            _isDraggingColumnSplitter = true;
+            _columnSplitPair = pair;
+            _columnSplitStartX = e.GetCurrentPoint(PlaylistHeaderGrid).Position.X;
+
+            GetColumnWidths(pair, out _columnLeftStartWidth, out _columnRightStartWidth);
+            splitter.CapturePointer(e.Pointer);
+            e.Handled = true;
+        }
+
+        private void ColumnSplitter_PointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_isDraggingColumnSplitter || _columnSplitPair == null)
+            {
+                return;
+            }
+
+            double delta = e.GetCurrentPoint(PlaylistHeaderGrid).Position.X - _columnSplitStartX;
+
+            const double minLeft = 48;
+            const double minRight = 40;
+
+            double left = Math.Max(minLeft, _columnLeftStartWidth + delta);
+            double right = Math.Max(minRight, _columnRightStartWidth - delta);
+            double total = _columnLeftStartWidth + _columnRightStartWidth;
+
+            if (left + right > total)
+            {
+                right = total - left;
+            }
+
+            if (right < minRight)
+            {
+                right = minRight;
+                left = total - right;
+            }
+
+            if (left < minLeft)
+            {
+                left = minLeft;
+                right = total - left;
+            }
+
+            SetColumnWidths(_columnSplitPair, left, right);
+            e.Handled = true;
+        }
+
+        private void ColumnSplitter_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            _isDraggingColumnSplitter = false;
+            _columnSplitPair = null;
+            if (sender is UIElement el)
+            {
+                try
+                {
+                    el.ReleasePointerCapture(e.Pointer);
+                }
+                catch
+                {
+                }
+            }
+
+            e.Handled = true;
+        }
+
+        private void ColumnSplitter_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+        {
+            _isDraggingColumnSplitter = false;
+            _columnSplitPair = null;
+        }
+
+        private static void GetColumnWidths(string pair, out double left, out double right)
+        {
+            var w = PlaylistColumnWidths.Instance;
+            switch (pair)
+            {
+                case "Title|Artist":
+                    left = w.Title;
+                    right = w.Artist;
+                    break;
+                case "Artist|Album":
+                    left = w.Artist;
+                    right = w.Album;
+                    break;
+                case "Album|Year":
+                    left = w.Album;
+                    right = w.Year;
+                    break;
+                case "Year|Duration":
+                    left = w.Year;
+                    right = w.Duration;
+                    break;
+                default:
+                    left = w.Year;
+                    right = w.Duration;
+                    break;
+            }
+        }
+
+        private void SetColumnWidths(string pair, double left, double right)
+        {
+            var w = PlaylistColumnWidths.Instance;
+            switch (pair)
+            {
+                case "Title|Artist":
+                    w.Title = left;
+                    w.Artist = right;
+                    HeaderTitleCol.Width = w.TitleLength;
+                    HeaderArtistCol.Width = w.ArtistLength;
+                    break;
+                case "Artist|Album":
+                    w.Artist = left;
+                    w.Album = right;
+                    HeaderArtistCol.Width = w.ArtistLength;
+                    HeaderAlbumCol.Width = w.AlbumLength;
+                    break;
+                case "Album|Year":
+                    w.Album = left;
+                    w.Year = right;
+                    HeaderAlbumCol.Width = w.AlbumLength;
+                    HeaderYearCol.Width = w.YearLength;
+                    break;
+                case "Year|Duration":
+                    w.Year = left;
+                    w.Duration = right;
+                    HeaderYearCol.Width = w.YearLength;
+                    HeaderDurationCol.Width = w.DurationLength;
+                    break;
+            }
+        }
+
+        // =====================================================================
+        // 单元格悬停 1 秒后显示该字段完整信息
+        // =====================================================================
+
+        private void PlaylistCell_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement element)
+            {
+                return;
+            }
+
+            HideHoverTip();
+            _hoverElement = element;
+            _hoverTipText = ResolveCellDetailText(element);
+
+            if (string.IsNullOrWhiteSpace(_hoverTipText) || _hoverTipTimer == null)
+            {
+                return;
+            }
+
+            _hoverTipTimer.Stop();
+            _hoverTipTimer.Start();
+        }
+
+        private void PlaylistCell_PointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            // 保留事件：移动时不重置 1 秒计时，避免轻微抖动导致提示永远不出
+        }
+
+        private void PlaylistCell_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            _hoverTipTimer?.Stop();
+            HideHoverTip();
+            _hoverElement = null;
+            _hoverTipText = null;
+        }
+
+        private void HoverTipTimer_Tick(DispatcherQueueTimer sender, object args)
+        {
+            sender.Stop();
+            if (_hoverElement == null || string.IsNullOrWhiteSpace(_hoverTipText))
+            {
+                return;
+            }
+
+            HideHoverTip();
+
+            _activeHoverTip = new ToolTip
+            {
+                Content = _hoverTipText,
+                Placement = PlacementMode.Mouse
+            };
+            ToolTipService.SetToolTip(_hoverElement, _activeHoverTip);
+            _activeHoverTip.IsOpen = true;
+        }
+
+        private void HideHoverTip()
+        {
+            if (_activeHoverTip != null)
+            {
+                _activeHoverTip.IsOpen = false;
+                _activeHoverTip = null;
+            }
+
+            if (_hoverElement != null)
+            {
+                ToolTipService.SetToolTip(_hoverElement, null);
+            }
+        }
+
+        /// <summary>根据 TextBlock.Tag 取出对应字段的完整文案</summary>
+        private static string? ResolveCellDetailText(FrameworkElement element)
+        {
+            PlaylistItem? item = FindPlaylistItem(element);
+            if (item == null || element.Tag is not string field)
+            {
+                return null;
+            }
+
+            string label;
+            string value;
+            switch (field)
+            {
+                case "Title":
+                    label = "标题";
+                    value = item.Title;
+                    break;
+                case "Artist":
+                    label = "艺术家";
+                    value = item.Artist;
+                    break;
+                case "Album":
+                    label = "专辑";
+                    value = item.Album;
+                    break;
+                case "Year":
+                    label = "年份";
+                    value = item.YearText;
+                    break;
+                case "Duration":
+                    label = "时长";
+                    value = item.DurationText;
+                    break;
+                default:
+                    return null;
+            }
+
+            return $"{label}：{value}\n文件：{Path.GetFileName(item.FilePath)}";
+        }
+
+        /// <summary>从单元格向上找所属的 PlaylistItem（兼容 x:Bind 时 DataContext 为空的情况）</summary>
+        private static PlaylistItem? FindPlaylistItem(DependencyObject start)
+        {
+            DependencyObject? current = start;
+            while (current != null)
+            {
+                if (current is FrameworkElement fe)
+                {
+                    if (fe.DataContext is PlaylistItem fromContext)
+                    {
+                        return fromContext;
+                    }
+
+                    if (fe is ListViewItem { Content: PlaylistItem fromContent })
+                    {
+                        return fromContent;
+                    }
+                }
+
+                current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
+        }
+    }
+    /// <summary>把 Slider 的秒数值转为 分:秒 显示。</summary>
+    internal sealed class SecondsToTimeSpanConverter : Microsoft.UI.Xaml.Data.IValueConverter
+    {
+        public object Convert(object value, Type targetType, object parameter, string language)
+        {
+            try
+            {
+                double seconds = value is double d ? d : System.Convert.ToDouble(value);
+                if (seconds < 0)
+                {
+                    seconds = 0;
+                }
+
+                var ts = TimeSpan.FromSeconds(seconds);
+                return ts.ToString(@"mm\:ss");
+            }
+            catch
+            {
+                return value;
+            }
+        }
+
+        public object ConvertBack(object value, Type targetType, object parameter, string language)
+            => throw new NotSupportedException();
+    }
+}

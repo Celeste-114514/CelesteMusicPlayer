@@ -1,0 +1,11 @@
+{
+  "profiles": {
+    "CelesteMusicPlayer (Unpackaged)": {
+      "commandName": "Project",
+      "workingDirectory": "$(OutDir)"
+    },
+    "CelesteMusicPlayer (Package)": {
+      "commandName": "MsixPackage"
+    }
+  }
+}

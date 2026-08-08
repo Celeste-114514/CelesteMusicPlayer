@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="CelesteMusicPlayer.ColorPickerWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="选择颜色">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid
+            x:Name="AppTitleBar"
+            Height="48"
+            Padding="16,0,0,0"
+            Background="Transparent">
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE790;" FontSize="16" />
+                <TextBlock x:Name="TitleText" Text="选择颜色" FontSize="14" VerticalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" Padding="20,8,20,12" VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="16" MaxWidth="420">
+                <TextBlock Text="预设颜色" FontSize="14" FontWeight="SemiBold" />
+                <VariableSizedWrapGrid
+                    x:Name="PresetPanel"
+                    Orientation="Horizontal"
+                    MaximumRowsOrColumns="7"
+                    ItemWidth="36"
+                    ItemHeight="36" />
+
+                <TextBlock Text="自定义" FontSize="14" FontWeight="SemiBold" Margin="0,8,0,0" />
+                <ColorPicker
+                    x:Name="MainColorPicker"
+                    ColorSpectrumShape="Box"
+                    IsColorChannelTextInputVisible="True"
+                    IsColorSliderVisible="True"
+                    IsHexInputVisible="True"
+                    IsAlphaEnabled="False"
+                    IsAlphaSliderVisible="False"
+                    IsAlphaTextInputVisible="False"
+                    ColorChanged="MainColorPicker_ColorChanged" />
+
+                <Grid ColumnSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border
+                        x:Name="PreviewSwatch"
+                        Width="48"
+                        Height="48"
+                        CornerRadius="8"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        VerticalAlignment="Center" />
+                    <TextBox
+                        x:Name="HexTextBox"
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        PlaceholderText="#RRGGBB"
+                        LostFocus="HexTextBox_LostFocus" />
+                </Grid>
+            </StackPanel>
+        </ScrollViewer>
+
+        <StackPanel
+            Grid.Row="2"
+            Orientation="Horizontal"
+            Spacing="12"
+            HorizontalAlignment="Right"
+            Padding="20,8,20,20">
+            <Button Content="取消" Click="CancelButton_Click" MinWidth="88" />
+            <Button
+                x:Name="OkButton"
+                Content="确定"
+                Style="{ThemeResource AccentButtonStyle}"
+                Click="OkButton_Click"
+                MinWidth="88" />
+        </StackPanel>
+    </Grid>
+</Window>

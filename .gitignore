@@ -1,0 +1,34 @@
+﻿# ===== .NET / Visual Studio =====
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# ===== 构建与发布输出 =====
+AppPackages/
+BundleArtifacts/
+*.appx
+*.msix
+*.msixbundle
+*.appxbundle
+*.cer
+publish/
+DesktopRelease/
+发布/
+
+# ===== 运行时生成 =====
+*.log
+*.partial.wav
+
+# ===== IDE / 系统 =====
+.vscode/
+.idea/
+Thumbs.db
+Desktop.ini
+
+# ===== 用户本地配置(不入库) =====
+local.settings.json
+*.local.json

@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="CelesteMusicPlayer.EqualizerWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="均衡器">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <Grid
+            x:Name="AppTitleBar"
+            Height="48"
+            Padding="16,0,0,0"
+            Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="138" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE9E9;" FontSize="16" />
+                <TextBlock Text="均衡器" FontSize="14" VerticalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer
+            Grid.Row="1"
+            Padding="24,8,24,24"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="20" MaxWidth="720" HorizontalAlignment="Stretch">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" MinWidth="200" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                        <TextBlock Text="预设" />
+                        <TextBlock Text="选择预设或手动调节各频段" FontSize="12" Opacity="0.65" />
+                    </StackPanel>
+                    <ComboBox
+                        x:Name="PresetCombo"
+                        Grid.Column="1"
+                        MinWidth="200"
+                        HorizontalAlignment="Stretch"
+                        SelectionChanged="PresetCombo_SelectionChanged" />
+                </Grid>
+
+                <StackPanel x:Name="BandSlidersPanel" Spacing="8" HorizontalAlignment="Center" />
+
+                <TextBlock
+                    Text="实时均衡器暂不可用（Windows SDK 未提供 MediaPlayer 音频帧输出节点）；调节会保存预设，待后续自建音频管线后接入。"
+                    FontSize="12"
+                    Opacity="0.55"
+                    TextWrapping="WrapWholeWords" />
+
+                <StackPanel
+                    Orientation="Horizontal"
+                    HorizontalAlignment="Right"
+                    Spacing="12">
+                    <Button x:Name="ApplyButton" Content="应用" Click="ApplyButton_Click" MinWidth="88" />
+                    <Button x:Name="ResetButton" Content="重置" Click="ResetButton_Click" MinWidth="88" />
+                    <Button x:Name="CloseButton" Content="关闭" Click="CloseButton_Click" MinWidth="88" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>
