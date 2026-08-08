@@ -1,6 +1,6 @@
 ﻿# CelesteMusicPlayer
 
-一个基于 **WinUI 3 / .NET 8** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 设计开发。
+一个基于 **WinUI 3 / .NET 8** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 设计开发。代码全部由AI生成，由Cursor和Reasonix开发
 
 ## ✨ 功能特性
 
