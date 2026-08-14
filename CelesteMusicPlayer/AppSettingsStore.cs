@@ -25,6 +25,9 @@ namespace CelesteMusicPlayer
         /// <summary>0–100</summary>
         public double Volume { get; set; } = 80;
 
+        /// <summary>ReplayGain 响度归一化：优先读内嵌标签，缺失时用 ffmpeg 计算并缓存。</summary>
+        public bool ReplayGainEnabled { get; set; } = true;
+
         /// <summary><see cref="PlaybackOrder"/> 名称</summary>
         public string PlaybackOrder { get; set; } = nameof(CelesteMusicPlayer.PlaybackOrder.ListLoop);
 

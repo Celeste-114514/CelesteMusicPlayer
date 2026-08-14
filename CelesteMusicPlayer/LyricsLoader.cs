@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -14,6 +14,9 @@ namespace CelesteMusicPlayer
         public TimeSpan Time { get; init; }
 
         public string Text { get; init; } = string.Empty;
+
+        /// <summary>逐字开始时间（可选）。长度与 Text 的 UTF-16 长度一致；null 表示无逐字数据。</summary>
+        public IReadOnlyList<TimeSpan>? CharTimes { get; init; }
     }
 
     /// <summary>解析同名 .lrc / 内嵌纯文本歌词（尊重设置：优先内嵌、歌词文件夹、模糊匹配、隐藏空行）。</summary>
@@ -235,6 +238,13 @@ namespace CelesteMusicPlayer
                     continue;
                 }
 
+                // 逐字内联时间戳："歌<00:12.40>词<00:12.50>文"（网易云逐字歌词格式）
+                (string plainText, IReadOnlyList<TimeSpan>? charTimes) = SplitCharTimes(text);
+                if (string.IsNullOrWhiteSpace(plainText))
+                {
+                    continue;
+                }
+
                 foreach (Match m in matches)
                 {
                     if (!int.TryParse(m.Groups[1].Value, out int min) ||
@@ -270,7 +280,10 @@ namespace CelesteMusicPlayer
                     result.Add(new LyricLine
                     {
                         Time = time,
-                        Text = text
+                        Text = plainText,
+                        CharTimes = charTimes == null
+                            ? null
+                            : charTimes.Select(t => t + time).ToArray()
                     });
                 }
             }
@@ -278,6 +291,73 @@ namespace CelesteMusicPlayer
             return result
                 .OrderBy(l => l.Time)
                 .ToList();
+        }
+
+        /// <summary>解析逐字内联时间戳："歌&lt;00:12.40&gt;词&lt;00:12.50&gt;文"。
+        /// 返回纯文本与相对行首的逐字开始时间（无内联时间戳时 CharTimes 为 null）。</summary>
+        private static (string Text, IReadOnlyList<TimeSpan>? CharTimes) SplitCharTimes(string raw)
+        {
+            if (!raw.Contains('<') || !raw.Contains('>'))
+            {
+                return (raw, null);
+            }
+
+            var sb = new StringBuilder();
+            var times = new List<TimeSpan>();
+            TimeSpan current = TimeSpan.Zero;
+            bool hasInline = false;
+            int i = 0;
+            while (i < raw.Length)
+            {
+                if (raw[i] == '<')
+                {
+                    int close = raw.IndexOf('>', i + 1);
+                    if (close > i + 1)
+                    {
+                        string inner = raw.Substring(i + 1, close - i - 1);
+                        Match tm = Regex.Match(inner, @"^(\d{1,2}):(\d{1,2})(?:\.(\d{1,3}))?$");
+                        if (tm.Success)
+                        {
+                            int min = int.Parse(tm.Groups[1].Value, CultureInfo.InvariantCulture);
+                            int sec = int.Parse(tm.Groups[2].Value, CultureInfo.InvariantCulture);
+                            int ms = 0;
+                            if (tm.Groups[3].Success)
+                            {
+                                string frac = tm.Groups[3].Value;
+                                if (frac.Length == 1)
+                                {
+                                    ms = int.Parse(frac, CultureInfo.InvariantCulture) * 100;
+                                }
+                                else if (frac.Length == 2)
+                                {
+                                    ms = int.Parse(frac, CultureInfo.InvariantCulture) * 10;
+                                }
+                                else
+                                {
+                                    ms = int.Parse(frac[..Math.Min(3, frac.Length)], CultureInfo.InvariantCulture);
+                                }
+                            }
+
+                            current = new TimeSpan(0, 0, min, sec, ms);
+                            hasInline = true;
+                            i = close + 1;
+                            continue;
+                        }
+                    }
+                }
+
+                sb.Append(raw[i]);
+                times.Add(current);
+                i++;
+            }
+
+            string text = sb.ToString();
+            if (!hasInline || times.Count != text.Length)
+            {
+                return (text, null);
+            }
+
+            return (text, times);
         }
 
         private static Encoding DetectEncoding(string path)

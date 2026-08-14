@@ -799,6 +799,17 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="响度归一化 (ReplayGain)" />
+                                <TextBlock Text="平衡不同歌曲的音量；优先读内嵌标签，缺失时后台用 ffmpeg 计算" FontSize="12" Opacity="0.65" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="ReplayGainSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="淡入淡出" />
                             </StackPanel>
                             <ToggleSwitch x:Name="EnableFadeSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />

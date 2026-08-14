@@ -80,6 +80,7 @@
                 VerticalAlignment="Center"
                 Padding="4,0,8,0">
                 <Image
+                    x:Name="AppTitleBarIcon"
                     Width="20"
                     Height="20"
                     Stretch="Uniform"

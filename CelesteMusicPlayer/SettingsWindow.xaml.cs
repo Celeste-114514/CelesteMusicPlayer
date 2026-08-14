@@ -325,6 +325,7 @@ namespace CelesteMusicPlayer
                 SetTextBlock(VolumeValueText, $"{(int)Math.Round(s.Volume)}%");
                 SelectPlaybackOrder(s.PlaybackOrder);
                 SetToggle(EnableSmtcSwitch, s.EnableSmtc);
+                SetToggle(ReplayGainSwitch, s.ReplayGainEnabled);
                 SetToggle(EnableFadeSwitch, s.EnableFade);
                 SetSlider(FadeMsSlider, s.FadeMilliseconds);
                 SetTextBlock(FadeMsValueText, $"{s.FadeMilliseconds} ms");
@@ -599,6 +600,7 @@ namespace CelesteMusicPlayer
             }
 
             s.EnableSmtc = EnableSmtcSwitch?.IsOn ?? s.EnableSmtc;
+            s.ReplayGainEnabled = ReplayGainSwitch?.IsOn ?? s.ReplayGainEnabled;
             s.EnableFade = EnableFadeSwitch?.IsOn ?? s.EnableFade;
             if (FadeMsSlider != null)
             {

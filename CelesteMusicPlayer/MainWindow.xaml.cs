@@ -366,6 +366,8 @@ namespace CelesteMusicPlayer
         private int _folderSearchIndex = -1;
         private string? _folderSearchHighlightPath;
         private MediaPlayer? _mediaPlayer;
+        private double _currentReplayGainScale = 1.0;
+        private string? _replayGainPath;
         private DispatcherQueueTimer? _positionTimer;
         private bool _isUserSeeking;
         private bool _isUpdatingProgressUi;
@@ -625,7 +627,7 @@ namespace CelesteMusicPlayer
 
             VolumeSlider.ValueChanged += VolumeSlider_ValueChanged;
             ApplyStartupPlaybackSettings();
-            _mediaPlayer.Volume = VolumeSlider.Value / 100.0;
+            _mediaPlayer.Volume = VolumeSlider.Value / 100.0 * _currentReplayGainScale;
             UpdateVolumeIcon(VolumeSlider.Value);
             UpdateDesktopLyricsBadge();
             UpdateMiniPlayerBadge();
@@ -738,7 +740,7 @@ namespace CelesteMusicPlayer
                     MediaPlayer? player = GetPlayer();
                     if (player != null)
                     {
-                        player.Volume = VolumeSlider.Value / 100.0;
+                        player.Volume = VolumeSlider.Value / 100.0 * _currentReplayGainScale;
                     }
 
                     UpdateVolumeIcon(VolumeSlider.Value);
@@ -1116,6 +1118,19 @@ namespace CelesteMusicPlayer
                 if (System.IO.File.Exists(iconPath))
                 {
                     AppWindow.SetIcon(iconPath);
+                }
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                // 非打包模式(WindowsPackageType=None)下 ms-appx:/// 不可用,标题栏图标改用文件加载
+                string pngPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.png");
+                if (System.IO.File.Exists(pngPath) && AppTitleBarIcon != null)
+                {
+                    AppTitleBarIcon.Source = new BitmapImage(new Uri(pngPath));
                 }
             }
             catch
@@ -8024,12 +8039,16 @@ namespace CelesteMusicPlayer
 
         private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
+            // 波形进度条必须随播放位置实时重绘,不能被 UI 更新标志拦截(否则播放中波形停住/错误)
+            if (_progressBarStyle == "Waveform")
+            {
+                RedrawProgressStyle();
+            }
+
             if (_isUpdatingProgressUi)
             {
                 return;
             }
-
-            RedrawProgressStyle();
 
             if (_isUserSeeking)
             {
@@ -8073,7 +8092,7 @@ namespace CelesteMusicPlayer
             MediaPlayer? player = GetPlayer();
             if (player != null)
             {
-                player.Volume = e.NewValue / 100.0;
+                player.Volume = e.NewValue / 100.0 * _currentReplayGainScale;
             }
 
             _audioEngine?.SetVolume(e.NewValue / 100.0);
@@ -8565,6 +8584,7 @@ namespace CelesteMusicPlayer
             {
                 _trayIcon ??= new AppTrayIcon(this);
                 _trayIcon.Show();
+                StartupLog.Write("托盘: MinimizeToTray 完成");
                 AppWindow.Hide();
             }
             catch (Exception ex)
@@ -8581,6 +8601,7 @@ namespace CelesteMusicPlayer
             {
                 try
                 {
+                    StartupLog.Write("托盘: RestoreFromTray 收到点击");
                     AppWindow.Show();
                     Activate();
                     _trayIcon?.Hide();
@@ -8594,7 +8615,11 @@ namespace CelesteMusicPlayer
 
         internal void ExitFromTray()
         {
-            DispatcherQueue.TryEnqueue(ExitApplication);
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                StartupLog.Write("托盘: ExitFromTray 收到点击");
+                ExitApplication();
+            });
         }
 
         private void ExitApplication()
@@ -8611,6 +8636,8 @@ namespace CelesteMusicPlayer
             }
 
             Close();
+            // 托盘/子窗口等引用可能阻止进程退出,必须显式结束进程
+            Application.Current.Exit();
         }
 
         private void CloseAllChildWindows()
@@ -9726,7 +9753,6 @@ namespace CelesteMusicPlayer
             {
                 var tb = new TextBlock
                 {
-                    Text = line.Text,
                     TextAlignment = align,
                     TextWrapping = TextWrapping.WrapWholeWords,
                     FontSize = 14,
@@ -9734,6 +9760,25 @@ namespace CelesteMusicPlayer
                     Opacity = 0.55,
                     Tag = line
                 };
+                if (line.CharTimes != null && line.CharTimes.Count == line.Text.Length)
+                {
+                    // 逐字歌词：每字一个 Run，便于按字高亮
+                    tb.Text = null;
+                    var unplayedBrush = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
+                    foreach (char c in line.Text)
+                    {
+                        tb.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run
+                        {
+                            Text = c.ToString(),
+                            Foreground = unplayedBrush
+                        });
+                    }
+                }
+                else
+                {
+                    tb.Text = line.Text;
+                }
+
                 _lyricTextBlocks.Add(tb);
                 LyricsPanel.Children.Add(tb);
             }
@@ -9778,6 +9823,7 @@ namespace CelesteMusicPlayer
 
             if (!force && index == _currentLyricIndex)
             {
+                UpdateCurrentLineCharHighlight(position);
                 return;
             }
 
@@ -9799,6 +9845,7 @@ namespace CelesteMusicPlayer
                     row.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
                     row.Foreground = accent;
                     row.Opacity = 1.0;
+                    UpdateCharHighlight(row, position);
                 }
                 else if (dist == 1)
                 {
@@ -9806,6 +9853,7 @@ namespace CelesteMusicPlayer
                     row.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
                     row.Foreground = new SolidColorBrush(Color.FromArgb(255, 205, 205, 205));
                     row.Opacity = 0.85;
+                    ResetRowRunColors(row, 205, 205, 205);
                 }
                 else
                 {
@@ -9813,10 +9861,73 @@ namespace CelesteMusicPlayer
                     row.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
                     row.Foreground = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
                     row.Opacity = 0.55;
+                    ResetRowRunColors(row, 154, 154, 154);
                 }
             }
 
             ScrollLyricToCenter(_lyricTextBlocks[index]);
+        }
+
+        /// <summary>当前行的逐字高亮刷新（无逐字数据时无操作）。</summary>
+        private void UpdateCurrentLineCharHighlight(TimeSpan position)
+        {
+            if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
+            {
+                UpdateCharHighlight(_lyricTextBlocks[_currentLyricIndex], position);
+            }
+        }
+
+        /// <summary>逐字着色：已唱字符白色，未唱灰色。仅对带 CharTimes 的行生效。</summary>
+        private void UpdateCharHighlight(TextBlock row, TimeSpan position)
+        {
+            if (row.Tag is not LyricLine line
+                || line.CharTimes == null
+                || line.CharTimes.Count != line.Text.Length
+                || row.Inlines.Count == 0)
+            {
+                return;
+            }
+
+            int n = 0;
+            for (int i = 0; i < line.CharTimes.Count; i++)
+            {
+                if (line.CharTimes[i] <= position)
+                {
+                    n = i + 1;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            var played = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
+            var unplayed = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
+            for (int i = 0; i < row.Inlines.Count; i++)
+            {
+                if (row.Inlines[i] is Microsoft.UI.Xaml.Documents.Run run)
+                {
+                    run.Foreground = i < n ? played : unplayed;
+                }
+            }
+        }
+
+        /// <summary>将行的逐字 Run 统一重置为指定颜色（用于非当前行）。</summary>
+        private void ResetRowRunColors(TextBlock row, byte r, byte g, byte b)
+        {
+            if (row.Inlines.Count == 0)
+            {
+                return;
+            }
+
+            var brush = new SolidColorBrush(Color.FromArgb(255, r, g, b));
+            foreach (Microsoft.UI.Xaml.Documents.Inline inline in row.Inlines)
+            {
+                if (inline is Microsoft.UI.Xaml.Documents.Run run)
+                {
+                    run.Foreground = brush;
+                }
+            }
         }
 
         private void ScrollLyricToCenter(FrameworkElement line)
@@ -10097,6 +10208,7 @@ namespace CelesteMusicPlayer
 
         private void StartPlayback(PlaylistItem item)
         {
+            double rgScale = ComputeAndApplyReplayGain(item.FilePath);
             ScrobblePreviousIfAny();
 
             // 进度条样式(读设置缓存) + 异步加载波形(波形样式用)
@@ -10141,7 +10253,7 @@ namespace CelesteMusicPlayer
             RecordPlaybackStatsOnStart(item);
 
             AppSettingsState settings = AppSettingsStore.Load();
-            double targetVolume = VolumeSlider.Value / 100.0;
+            double targetVolume = VolumeSlider.Value / 100.0 * rgScale;
 
             void BeginSource()
             {
@@ -10219,6 +10331,7 @@ namespace CelesteMusicPlayer
 
                 // 引擎桥接：时长 / 进度条 / 波形
                 ProgressSlider.Maximum = Math.Max(1, _audioEngine.Duration.TotalSeconds);
+                ProgressSlider.Value = 0;
                 TotalTimeText.Text = FormatTime(_audioEngine.Duration);
                 _audioEngine.PositionChanged -= EnginePositionChanged;
                 _audioEngine.PositionChanged += EnginePositionChanged;
@@ -10406,6 +10519,11 @@ namespace CelesteMusicPlayer
 
         private void HandleMediaEnded()
         {
+            if (ConsumeSleepStopIfDue())
+            {
+                return;
+            }
+
             switch (_playbackOrder)
             {
                 case PlaybackOrder.TrackLoop:

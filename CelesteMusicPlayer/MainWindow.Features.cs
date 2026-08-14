@@ -21,6 +21,18 @@ namespace CelesteMusicPlayer
         private FadePlaybackController? _fadeController;
         private readonly AbRepeatState _abRepeat = new();
         private Microsoft.UI.Dispatching.DispatcherQueueTimer? _sleepTimer;
+
+        /// <summary>睡眠定时器停止模式。</summary>
+        private enum SleepStopMode
+        {
+            None,
+            AfterMinutes,
+            AfterTrack,
+            AfterTracks
+        }
+
+        private SleepStopMode _sleepMode = SleepStopMode.None;
+        private int _sleepTracksRemaining;
         private AudioPlaybackEngine? _audioEngine;
         private readonly LibraryWatchService _libraryWatch = new();
         private DateTime _lastListenSampleUtc = DateTime.UtcNow;
@@ -843,6 +855,84 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>计算并应用当前曲目的 ReplayGain 倍率（缓存/内嵌标签同步读取；ffmpeg 实测计算放后台）。</summary>
+        private double ComputeAndApplyReplayGain(string path)
+        {
+            double scale = 1.0;
+            try
+            {
+                if (AppSettingsStore.Load().ReplayGainEnabled
+                    && !string.IsNullOrWhiteSpace(path)
+                    && File.Exists(path))
+                {
+                    (double GainDb, double Peak)? rg = ReplayGainService.TryGetQuick(path);
+                    if (rg != null)
+                    {
+                        scale = ReplayGainService.GainToScale(rg.Value.GainDb, rg.Value.Peak);
+                    }
+                    else
+                    {
+                        _ = ComputeReplayGainInBackgroundAsync(path);
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            _currentReplayGainScale = scale;
+            _replayGainPath = path;
+            _audioEngine?.SetReplayGainScale(scale);
+            return scale;
+        }
+
+        /// <summary>后台用内置 ffmpeg 计算整曲响度并写缓存；若仍在播放同一首歌则即时应用。</summary>
+        private async Task ComputeReplayGainInBackgroundAsync(string path)
+        {
+            try
+            {
+                (double GainDb, double Peak)? rg = await ReplayGainService.ComputeWithFfmpegAsync(
+                    path,
+                    FormatConvertService.TryFindFfmpeg());
+                if (rg == null)
+                {
+                    return;
+                }
+
+                ReplayGainService.Cache(path, rg.Value.GainDb, rg.Value.Peak);
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    try
+                    {
+                        if (!AppSettingsStore.Load().ReplayGainEnabled)
+                        {
+                            return;
+                        }
+
+                        if (!string.Equals(_replayGainPath, path, StringComparison.OrdinalIgnoreCase))
+                        {
+                            return;
+                        }
+
+                        double scale = ReplayGainService.GainToScale(rg.Value.GainDb, rg.Value.Peak);
+                        _currentReplayGainScale = scale;
+                        _audioEngine?.SetReplayGainScale(scale);
+                        MediaPlayer? p = GetPlayer();
+                        if (p != null && !_usingEnginePlayback)
+                        {
+                            p.Volume = VolumeSlider.Value / 100.0 * scale;
+                        }
+                    }
+                    catch
+                    {
+                    }
+                });
+            }
+            catch
+            {
+            }
+        }
+
         /// <summary>将歌曲插入当前播放项之后（下一首播放）。</summary>
         internal void PlaySongsNext(IEnumerable<PlaylistItem> songs)
         {
@@ -1174,11 +1264,28 @@ namespace CelesteMusicPlayer
             radio.Items.Add("60 分钟");
             radio.Items.Add("90 分钟");
             radio.Items.Add("120 分钟");
+            radio.Items.Add("当前曲目播完后停止");
+            radio.Items.Add("再播放指定曲目数后停止");
             radio.SelectedIndex = 2;
+
+            var numberBox = new NumberBox
+            {
+                Minimum = 1,
+                Maximum = 99,
+                Value = 1,
+                Header = "曲目数",
+                SpinButtonPlacementMode = NumberBoxSpinButtonPlacementMode.Compact,
+                Visibility = Visibility.Collapsed
+            };
+            radio.SelectionChanged += (_, _) =>
+            {
+                numberBox.Visibility = radio.SelectedIndex == 7 ? Visibility.Visible : Visibility.Collapsed;
+            };
 
             var panel = new StackPanel { Spacing = 8, MinWidth = 260 };
             panel.Children.Add(new TextBlock { Text = "睡眠定时器：到时自动暂停播放", FontWeight = FontWeights.SemiBold });
             panel.Children.Add(radio);
+            panel.Children.Add(numberBox);
 
             var dialog = new ContentDialog
             {
@@ -1197,39 +1304,88 @@ namespace CelesteMusicPlayer
 
             _sleepTimer?.Stop();
             _sleepTimer = null;
+            _sleepMode = SleepStopMode.None;
+            _sleepTracksRemaining = 0;
 
-            int minutes = radio.SelectedIndex switch
+            int sel = radio.SelectedIndex;
+            if (sel == 0)
             {
-                0 => 0,
+                NowPlayingText.Text = "睡眠定时器已关闭";
+                return;
+            }
+
+            if (sel == 6)
+            {
+                _sleepMode = SleepStopMode.AfterTrack;
+                NowPlayingText.Text = "睡眠定时器：当前曲目播完后停止";
+                return;
+            }
+
+            if (sel == 7)
+            {
+                int n = (int)Math.Clamp(Math.Round(numberBox.Value), 1, 99);
+                _sleepMode = SleepStopMode.AfterTracks;
+                _sleepTracksRemaining = n;
+                NowPlayingText.Text = $"睡眠定时器：再播放 {n} 首后停止";
+                return;
+            }
+
+            int minutes = sel switch
+            {
                 1 => 15,
                 2 => 30,
                 3 => 60,
                 4 => 90,
                 _ => 120
             };
-
-            if (minutes == 0)
-            {
-                NowPlayingText.Text = "睡眠定时器已关闭";
-                return;
-            }
-
+            _sleepMode = SleepStopMode.AfterMinutes;
             _sleepTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
             _sleepTimer.Interval = TimeSpan.FromMinutes(minutes);
-            _sleepTimer.Tick += (_, _) =>
-            {
-                _sleepTimer?.Stop();
-                _sleepTimer = null;
-                MediaPlayer? p = GetPlayer();
-                if (p != null && p.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
-                {
-                    p.Pause();
-                }
-
-                NowPlayingText.Text = "睡眠定时器到点，播放已暂停";
-            };
+            _sleepTimer.Tick += (_, _) => StopForSleep("睡眠定时器到点，播放已暂停");
             _sleepTimer.Start();
             NowPlayingText.Text = $"睡眠定时器已设置：{minutes} 分钟后停止播放";
+        }
+
+        /// <summary>播放结束拦截：返回 true 表示已按睡眠定时器停止，调用方不应继续切歌。</summary>
+        private bool ConsumeSleepStopIfDue()
+        {
+            if (_sleepMode == SleepStopMode.AfterTrack)
+            {
+                StopForSleep("睡眠定时器：当前曲目已播完，播放已停止");
+                return true;
+            }
+
+            if (_sleepMode == SleepStopMode.AfterTracks)
+            {
+                _sleepTracksRemaining--;
+                if (_sleepTracksRemaining <= 0)
+                {
+                    StopForSleep("睡眠定时器：指定曲目数已播完，播放已停止");
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>统一停止播放并清除睡眠定时器状态。</summary>
+        private void StopForSleep(string message)
+        {
+            _sleepTimer?.Stop();
+            _sleepTimer = null;
+            _sleepMode = SleepStopMode.None;
+            _sleepTracksRemaining = 0;
+            try
+            {
+                MediaPlayer? p = GetPlayer();
+                p?.Pause();
+                _audioEngine?.Pause();
+            }
+            catch
+            {
+            }
+
+            NowPlayingText.Text = message;
         }
 
 

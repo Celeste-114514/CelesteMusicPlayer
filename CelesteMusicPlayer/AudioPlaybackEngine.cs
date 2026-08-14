@@ -527,12 +527,27 @@ namespace CelesteMusicPlayer
             StopCore();
         }
 
-        private double _targetVolume = 1.0;
+        private double _userVolume = 1.0;
+
+        /// <summary>ReplayGain 响度归一化线性倍率（1.0 = 旁路）。</summary>
+        private double _replayGainScale = 1.0;
 
         /// <summary>音量 0..1：通过重建输出连接增益实现（AudioGraph 无全局音量属性）。</summary>
         public void SetVolume(double volume)
         {
-            _targetVolume = Math.Clamp(volume, 0.0, 1.0);
+            _userVolume = Math.Clamp(volume, 0.0, 1.0);
+            ApplyOutputGain();
+        }
+
+        /// <summary>设置 ReplayGain 线性倍率，与用户音量相乘后作为实际输出增益。</summary>
+        public void SetReplayGainScale(double scale)
+        {
+            _replayGainScale = scale > 0.0001 ? scale : 1.0;
+            ApplyOutputGain();
+        }
+
+        private void ApplyOutputGain()
+        {
             if (_graph == null || _inputNode == null || _deviceNode == null)
             {
                 return;
@@ -541,7 +556,7 @@ namespace CelesteMusicPlayer
             try
             {
                 _inputNode.RemoveOutgoingConnection(_deviceNode);
-                _inputNode.AddOutgoingConnection(_deviceNode, _targetVolume);
+                _inputNode.AddOutgoingConnection(_deviceNode, _userVolume * _replayGainScale);
             }
             catch
             {

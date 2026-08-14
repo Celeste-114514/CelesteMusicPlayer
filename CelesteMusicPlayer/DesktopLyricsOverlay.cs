@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -404,6 +404,11 @@ namespace CelesteMusicPlayer
             return _lines[index].Text ?? string.Empty;
         }
 
+        private LyricLine? GetLine(int index)
+        {
+            return index >= 0 && index < _lines.Count ? _lines[index] : null;
+        }
+
         private static Font CreateFont(float size, FontStyle style)
         {
             try
@@ -487,7 +492,8 @@ namespace CelesteMusicPlayer
         private void DrawLyrics(Graphics g)
         {
             string prev = GetLineText(_currentIndex > 0 ? _currentIndex - 1 : -1);
-            string cur = GetLineText(_currentIndex >= 0 ? _currentIndex : 0);
+            LyricLine? curLine = GetLine(_currentIndex >= 0 ? _currentIndex : 0);
+            string cur = curLine?.Text ?? string.Empty;
             string next = GetLineText(_currentIndex >= 0 && _currentIndex + 1 < _lines.Count ? _currentIndex + 1 : -1);
 
             float sideSize = Math.Max(12f, _fontSize * 0.72f);
@@ -517,9 +523,9 @@ namespace CelesteMusicPlayer
                 SizeF sz = MeasurePathSize(cur, family, _fontSize, FontStyle.Bold);
                 float x = centerX - sz.Width / 2f;
                 DrawTextPath(g, cur, family, _fontSize, FontStyle.Bold, shadowBrush, x + 1.5f, y + 1.5f);
-                if (_karaokeStyle)
+                if (_karaokeStyle && curLine != null)
                 {
-                    DrawKaraokeLine(g, cur, family, x, y, sz);
+                    DrawKaraokeLine(g, curLine, family, x, y, sz);
                 }
                 else
                 {
@@ -539,15 +545,44 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void DrawKaraokeLine(Graphics g, string text, FontFamily family, float x, float y, SizeF size)
+        private void DrawKaraokeLine(Graphics g, LyricLine line, FontFamily family, float x, float y, SizeF size)
         {
+            string text = line.Text;
             double progress = Math.Clamp(_displayProgress, 0, 1);
 
             using var unplayed = new SolidBrush(_unplayedColor);
             using var played = new SolidBrush(_playedColor);
             DrawTextPath(g, text, family, _fontSize, FontStyle.Bold, unplayed, x, y);
 
-            float highlightW = (float)(size.Width * progress);
+            float highlightW;
+            if (line.CharTimes != null && line.CharTimes.Count == text.Length)
+            {
+                // 逐字歌词：按字时间戳计算已唱字数，高亮到对应字符宽度
+                int n = 0;
+                for (int i = 0; i < line.CharTimes.Count; i++)
+                {
+                    if (line.CharTimes[i] <= _position)
+                    {
+                        n = i + 1;
+                    }
+                    else
+                    {
+                        break;
+                    }
+                }
+
+                if (n == 0)
+                {
+                    return;
+                }
+
+                highlightW = MeasurePathSize(text.Substring(0, n), family, _fontSize, FontStyle.Bold).Width;
+            }
+            else
+            {
+                highlightW = (float)(size.Width * progress);
+            }
+
             if (highlightW <= 0.5f)
             {
                 return;
