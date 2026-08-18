@@ -42,7 +42,7 @@ dotnet build -c Debug
 dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x64 -o publish
 ```
 
-发布产物为自包含目录：目标机器 **无需安装 .NET 运行时或 Windows App SDK**，拷贝即可运行（推荐压缩后分发）。
+发布产物为自包含目录：目标机器 **无需安装 .NET 运行时或 Windows App SDK**。
 
 ## 📦 安装包
 
