@@ -19,7 +19,6 @@ namespace CelesteMusicPlayer
     {
         private GlobalHotkeyService? _hotkeys;
         private FadePlaybackController? _fadeController;
-        private readonly AbRepeatState _abRepeat = new();
         private Microsoft.UI.Dispatching.DispatcherQueueTimer? _sleepTimer;
 
         /// <summary>睡眠定时器停止模式。</summary>
@@ -1107,39 +1106,7 @@ namespace CelesteMusicPlayer
 
             flyout.Items.Add(new MenuFlyoutSeparator());
 
-            var setA = new MenuFlyoutItem { Text = "设置 A 点" };
-            setA.Click += (_, _) =>
-            {
-                MediaPlayer? p = GetPlayer();
-                if (p?.Source != null)
-                {
-                    _abRepeat.SetA(p.PlaybackSession.Position);
-                    NowPlayingText.Text = "已设置 A 点：" + FormatTime(_abRepeat.PointA ?? TimeSpan.Zero);
-                }
-            };
-            flyout.Items.Add(setA);
 
-            var setB = new MenuFlyoutItem { Text = "设置 B 点" };
-            setB.Click += (_, _) =>
-            {
-                MediaPlayer? p = GetPlayer();
-                if (p?.Source != null)
-                {
-                    _abRepeat.SetB(p.PlaybackSession.Position);
-                    NowPlayingText.Text = _abRepeat.IsActive
-                        ? $"AB 重复：{FormatTime(_abRepeat.PointA!.Value)} – {FormatTime(_abRepeat.PointB!.Value)}"
-                        : "已设置 B 点（需 A < B）";
-                }
-            };
-            flyout.Items.Add(setB);
-
-            var clearAb = new MenuFlyoutItem { Text = "取消 AB 重复" };
-            clearAb.Click += (_, _) =>
-            {
-                _abRepeat.Clear();
-                NowPlayingText.Text = "已取消 AB 重复";
-            };
-            flyout.Items.Add(clearAb);
 
             var sleepTimer = new MenuFlyoutItem { Text = "睡眠定时器…" };
             sleepTimer.Click += async (_, _) => await ShowSleepTimerDialogAsync();
@@ -1773,21 +1740,6 @@ namespace CelesteMusicPlayer
             if (player?.Source == null)
             {
                 return;
-            }
-
-            if (_abRepeat.IsActive)
-            {
-                TimeSpan clamped = _abRepeat.ClampPosition(position);
-                if (clamped != position)
-                {
-                    try
-                    {
-                        player.PlaybackSession.Position = clamped;
-                    }
-                    catch
-                    {
-                    }
-                }
             }
 
             if (!string.IsNullOrWhiteSpace(_listenSamplePath)

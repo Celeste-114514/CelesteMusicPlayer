@@ -286,6 +286,23 @@
                         </StackPanel>
                     </Button>
                     <Button
+                        x:Name="NavPlaylistWallButton"
+                        Tag="UserPlaylist"
+                        Margin="4,2"
+                        Padding="8,10"
+                        FontSize="14"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CornerRadius="8"
+                        Click="NavPlaylistWallButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE77F;" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="播放队列" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button
                         x:Name="NavGenreButton"
                         Tag="Genres"
                         Margin="4,2"
@@ -341,7 +358,7 @@
                 <Button
                     x:Name="UserPlaylistNavButton"
                     Grid.Row="2"
-                    Tag="UserPlaylist"
+                    Tag="PlaylistWall"
                     Margin="4,8,4,4"
                     Padding="8,10"
                     FontSize="14"
@@ -549,6 +566,302 @@
                     </DropDownButton>
                 </Grid>
 
+                <!-- 播放列表墙（Poweramp 式）：命名单封面墙 -->
+                <Border
+                    x:Name="PlaylistWallBorder"
+                    Grid.Row="1"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="12"
+                    Visibility="Collapsed">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <Grid
+                            Grid.Row="0"
+                            Padding="4,0,4,8"
+                            ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="0" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Grid.Column="0"
+                                VerticalAlignment="Center"
+                                FontSize="14"
+                                Text="播放列表墙" />
+                            <Button
+                                x:Name="CreatePlaylistWallButton"
+                                Grid.Column="1"
+                                Height="32"
+                                Padding="12,0"
+                                CornerRadius="8"
+                                Content="新建播放列表"
+                                Click="CreatePlaylistWallButton_Click" />
+                            <Button
+                                x:Name="ExportPlaylistsButton"
+                                Grid.Column="2"
+                                Height="32"
+                                Padding="12,0"
+                                CornerRadius="8"
+                                Content="导出为 m3u8"
+                                Click="ExportPlaylistsButton_Click" />
+                        </Grid>
+                        <GridView
+                        x:Name="PlaylistWallGridView"
+                        Grid.Row="1"
+                        SelectionMode="None"
+                        IsItemClickEnabled="True"
+                        ItemClick="PlaylistWallGridView_ItemClick"
+                        RightTapped="PlaylistWallGridView_RightTapped">
+                        <GridView.ItemContainerStyle>
+                            <Style TargetType="GridViewItem">
+                                <Setter Property="Margin" Value="8" />
+                                <Setter Property="Padding" Value="0" />
+                                <Setter Property="CornerRadius" Value="8" />
+                                <Setter Property="Background" Value="Transparent" />
+                                <Setter Property="BorderThickness" Value="0" />
+                            </Style>
+                        </GridView.ItemContainerStyle>
+                        <GridView.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="100" />
+                            </ItemsPanelTemplate>
+                        </GridView.ItemsPanel>
+                        <GridView.ItemTemplate>
+                            <DataTemplate x:DataType="local:PlaylistCardViewModel">
+                                <StackPanel Width="132" Spacing="8">
+                                    <Border
+                                        Width="132"
+                                        Height="132"
+                                        CornerRadius="8"
+                                        Background="{ThemeResource SystemControlHighlightListAccentLowBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1">
+                                        <Grid>
+                                            <FontIcon
+                                                Glyph="&#xE8B7;"
+                                                FontSize="44"
+                                                Foreground="White"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Opacity="0.9" />
+                                            <Image
+                                                Stretch="UniformToFill"
+                                                Source="{x:Bind Cover, Mode=OneWay}" />
+                                        </Grid>
+                                    </Border>
+                                    <TextBlock
+                                        Text="{x:Bind Name}"
+                                        TextWrapping="WrapWholeWords"
+                                        TextAlignment="Center"
+                                        MaxLines="1"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        Text="{x:Bind SongCountText}"
+                                        FontSize="11"
+                                        Opacity="0.7"
+                                        TextAlignment="Center" />
+                                </StackPanel>
+                            </DataTemplate>
+                        </GridView.ItemTemplate>
+                    </GridView>
+                    <Border
+                        x:Name="PlaylistWallMultiBar"
+                        Grid.Row="2"
+                        Padding="0,8,0,0"
+                        Visibility="Collapsed">
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                            <Button
+                                x:Name="PlaylistWallMultiExitButton"
+                                Height="30"
+                                Padding="10,0"
+                                CornerRadius="15"
+                                BorderThickness="0"
+                                Content="退出"
+                                Click="PlaylistWallMultiExitButton_Click" />
+                            <Button
+                                x:Name="PlaylistWallMultiAddQueueButton"
+                                Height="30"
+                                Padding="10,0"
+                                CornerRadius="15"
+                                BorderThickness="0"
+                                Content="添加到播放队列"
+                                Click="PlaylistWallMultiAddToQueue_Click" />
+                            <Button
+                                x:Name="PlaylistWallMultiDeleteButton"
+                                Height="30"
+                                Padding="10,0"
+                                CornerRadius="15"
+                                BorderThickness="0"
+                                Content="删除所选播放列表"
+                                Click="PlaylistWallMultiDelete_Click" />
+                        </StackPanel>
+                    </Border>
+                    </Grid>
+                </Border>
+
+                <!-- 命中单详情页（主程序内，仿专辑详情：上封面/头像、下歌曲列表） -->
+                <Border
+                    x:Name="PlaylistDetailBorder"
+                    Grid.Row="1"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="12"
+                    Visibility="Collapsed">
+                    <Grid RowSpacing="12">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <StackPanel Grid.Row="0" Spacing="10">
+                            <Button
+                                x:Name="PlaylistDetailBackButton"
+                                Content="← 返回播放列表墙"
+                                HorizontalAlignment="Left"
+                                Padding="12,6"
+                                CornerRadius="8"
+                                BorderThickness="0"
+                                Click="PlaylistDetailBackButton_Click" />
+                            <StackPanel Orientation="Horizontal" Spacing="16">
+                                <Border
+                                    x:Name="PlaylistDetailCover"
+                                    Width="168"
+                                    Height="168"
+                                    CornerRadius="12"
+                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1">
+                                    <Grid>
+                                        <FontIcon
+                                            Glyph="&#xE8B7;"
+                                            FontSize="56"
+                                            HorizontalAlignment="Center"
+                                            VerticalAlignment="Center"
+                                            Opacity="0.5" />
+                                        <Image
+                                            x:Name="PlaylistDetailCoverImage"
+                                            Stretch="UniformToFill" />
+                                    </Grid>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center" Spacing="8">
+                                    <TextBlock
+                                        x:Name="PlaylistDetailNameText"
+                                        FontSize="20"
+                                        FontWeight="SemiBold"
+                                        TextTrimming="CharacterEllipsis"
+                                        MaxLines="1" />
+                                    <TextBlock
+                                        x:Name="PlaylistDetailCountText"
+                                        FontSize="12"
+                                        Opacity="0.7" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button
+                                            x:Name="PlaylistDetailPlayButton"
+                                            Height="32"
+                                            Padding="14,0"
+                                            CornerRadius="16"
+                                            BorderThickness="0"
+                                            Content="播放该列表"
+                                            Click="PlaylistDetailPlayButton_Click" />
+                                        <Button
+                                            x:Name="PlaylistDetailAddQueueButton"
+                                            Height="32"
+                                            Padding="14,0"
+                                            CornerRadius="16"
+                                            BorderThickness="0"
+                                            Content="添加至播放队列"
+                                            Click="PlaylistDetailAddQueueButton_Click" />
+                                        <Button
+                                            x:Name="PlaylistDetailAddWallButton"
+                                            Height="32"
+                                            Padding="14,0"
+                                            CornerRadius="16"
+                                            BorderThickness="0"
+                                            Content="添加到播放列表"
+                                            Click="PlaylistDetailAddWallButton_Click" />
+                                    </StackPanel>
+                                </StackPanel>
+                            </StackPanel>
+                        </StackPanel>
+                        <Grid Grid.Row="1" RowSpacing="0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Height="36" Margin="4,0" Padding="12,6,12,0" ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="56" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="72" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" FontSize="12" Opacity="0.6" VerticalAlignment="Center" Text="#" />
+                                <TextBlock Grid.Column="1" FontSize="12" Opacity="0.6" VerticalAlignment="Center" Text="标题" />
+                                <TextBlock Grid.Column="2" FontSize="12" Opacity="0.6" VerticalAlignment="Center" HorizontalAlignment="Right" Text="时长" />
+                            </Grid>
+                            <ListView
+                                x:Name="PlaylistDetailListView"
+                                Grid.Row="1"
+                                Background="Transparent"
+                                SelectionMode="Extended"
+                                HorizontalContentAlignment="Stretch"
+                                CanReorderItems="True"
+                                DoubleTapped="PlaylistDetailListView_DoubleTapped"
+                                RightTapped="PlaylistDetailListView_RightTapped"
+                                DragItemsCompleted="PlaylistDetailListView_DragItemsCompleted">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                        <Setter Property="Padding" Value="0" />
+                                        <Setter Property="MinHeight" Value="40" />
+                                        <Setter Property="CornerRadius" Value="8" />
+                                        <Setter Property="Margin" Value="0,2" />
+                                        <Setter Property="BorderThickness" Value="0" />
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="ListViewItem">
+                                                    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                                        <ContentPresenter
+                                                            Content="{TemplateBinding Content}"
+                                                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                            ContentTransitions="{TemplateBinding ContentTransitions}"
+                                                            HorizontalAlignment="Stretch"
+                                                            VerticalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Stretch"
+                                                            VerticalContentAlignment="Stretch" />
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="local:PlaylistItem">
+                                        <Border Tag="SongRowChrome" MinHeight="40" CornerRadius="8" Padding="12,0" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" MinWidth="{Binding ElementName=PlaylistDetailListView, Path=ActualWidth}" Background="Transparent" PointerEntered="PlaylistDetailRow_PointerEntered" PointerExited="PlaylistDetailRow_PointerExited">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="56" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="72" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.7" Text="{x:Bind TrackText}" />
+                                                <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Title}" />
+                                                <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.7" Text="{x:Bind DurationText}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                        </Grid>
+                    </Grid>
+                </Border>
+
                 <!-- 歌曲列表（无外框）；表头固定，仅列表滚动 -->
                 <Border
                     x:Name="PlaylistListBorder"
@@ -724,7 +1037,7 @@
                                     CornerRadius="8"
                                     Padding="12,0"
                                     VerticalAlignment="Stretch"
-                                    Background="Transparent">
+                                    Background="Transparent" PointerEntered="SongRow_PointerEntered" PointerExited="SongRow_PointerExited">
                                     <Grid VerticalAlignment="Center">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -853,7 +1166,7 @@
                                                 Width="132"
                                                 Height="132"
                                                 Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                                CornerRadius="6"
+                                                CornerRadius="8"
                                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                                 BorderThickness="1">
                                                 <Grid>
@@ -872,7 +1185,8 @@
                                                 Text="{x:Bind Name}"
                                                 TextWrapping="WrapWholeWords"
                                                 TextAlignment="Center"
-                                                MaxLines="4"
+                                                MaxLines="2"
+                                                Height="38"
                                                 TextTrimming="CharacterEllipsis"
                                                 ToolTipService.ToolTip="{x:Bind Name}" />
                                         </StackPanel>
@@ -917,8 +1231,8 @@
 
                                         <Border
                                             Grid.Column="0"
-                                            Width="160"
-                                            Height="160"
+                                            Width="132"
+                                            Height="132"
                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                             CornerRadius="8"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -970,10 +1284,10 @@
                                             CornerRadius="16"
                                             BorderThickness="0"
                                             Click="AlbumDetailAddToPlaylistButton_Click"
-                                            ToolTipService.ToolTip="将本专辑歌曲添加到播放列表最前">
+                                            ToolTipService.ToolTip="将本专辑歌曲添加到播放队列">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
                                                 <FontIcon Glyph="&#xE710;" FontSize="14" />
-                                                <TextBlock Text="添加至播放列表" VerticalAlignment="Center" />
+                                                <TextBlock Text="添加至播放队列" VerticalAlignment="Center" />
                                             </StackPanel>
                                         </Button>
                                     </StackPanel>
@@ -999,9 +1313,32 @@
                                             x:Name="AlbumTrackListView"
                                             Background="Transparent"
                                             SelectionMode="Single"
+                                            HorizontalContentAlignment="Stretch"
                                             DoubleTapped="AlbumTrackListView_DoubleTapped"
                                             RightTapped="AlbumTrackListView_RightTapped"
                                             SelectionChanged="AlbumTrackListView_SelectionChromeChanged">
+                                            <ListView.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <ItemsStackPanel Orientation="Vertical" />
+                                                </ItemsPanelTemplate>
+                                            </ListView.ItemsPanel>
+                                            <ListView.GroupStyle>
+                                                <GroupStyle HidesIfEmpty="True">
+                                                    <GroupStyle.HeaderTemplate>
+                                                        <DataTemplate>
+                                                            <Border Padding="12,10,12,4" Background="Transparent">
+                                                                <TextBlock
+                                                                    Text="{Binding Key}"
+                                                                    FontFamily="Segoe UI"
+                                                                    FontWeight="SemiBold"
+                                                                    FontSize="12"
+                                                                    Opacity="0.6"
+                                                                    HorizontalAlignment="Center" />
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </GroupStyle.HeaderTemplate>
+                                                </GroupStyle>
+                                            </ListView.GroupStyle>
                                             <ListView.ItemContainerStyle>
                                                 <Style TargetType="ListViewItem">
                                                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
@@ -1012,39 +1349,34 @@
                                                     <Setter Property="Margin" Value="0,2" />
                                                     <Setter Property="BorderThickness" Value="0" />
                                                     <Setter Property="Background" Value="Transparent" />
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="ListViewItem">
+                                                                <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                                                    <ContentPresenter
+                                                                        Content="{TemplateBinding Content}"
+                                                                        ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                        ContentTransitions="{TemplateBinding ContentTransitions}"
+                                                                        HorizontalAlignment="Stretch"
+                                                                        VerticalAlignment="Stretch"
+                                                                        HorizontalContentAlignment="Stretch"
+                                                                        VerticalContentAlignment="Stretch" />
+                                                                </Grid>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
                                                 </Style>
                                             </ListView.ItemContainerStyle>
                                             <ListView.ItemTemplate>
                                                 <DataTemplate x:DataType="local:PlaylistItem">
-                                                    <Border
-                                                        Tag="SongRowChrome"
-                                                        MinHeight="40"
-                                                        CornerRadius="8"
-                                                        Padding="12,0"
-                                                        VerticalAlignment="Stretch"
-                                                        Background="Transparent">
-                                                        <Grid ColumnSpacing="12" VerticalAlignment="Center">
+                                                    <Border Tag="SongRowChrome" MinHeight="40" CornerRadius="8" Padding="12,0" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" MinWidth="{Binding ElementName=AlbumTrackListView, Path=ActualWidth}" Background="Transparent" PointerEntered="SongRow_PointerEntered" PointerExited="SongRow_PointerExited">
+                                                        <Grid ColumnSpacing="12">
                                                             <Grid.ColumnDefinitions>
-                                                                <ColumnDefinition Width="56" />
-                                                                <ColumnDefinition Width="*" />
-                                                                <ColumnDefinition Width="72" />
+                                                                <ColumnDefinition Width="56" /><ColumnDefinition Width="*" /><ColumnDefinition Width="72" />
                                                             </Grid.ColumnDefinitions>
-                                                            <TextBlock
-                                                                Grid.Column="0"
-                                                                VerticalAlignment="Center"
-                                                                Opacity="0.7"
-                                                                Text="{x:Bind TrackText}" />
-                                                            <TextBlock
-                                                                Grid.Column="1"
-                                                                VerticalAlignment="Center"
-                                                                TextTrimming="CharacterEllipsis"
-                                                                Text="{x:Bind Title}" />
-                                                            <TextBlock
-                                                                Grid.Column="2"
-                                                                VerticalAlignment="Center"
-                                                                HorizontalAlignment="Right"
-                                                                Opacity="0.7"
-                                                                Text="{x:Bind DurationText}" />
+                                                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.7" Text="{x:Bind TrackText}" />
+                                                            <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Title}" />
+                                                            <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.7" Text="{x:Bind DurationText}" />
                                                         </Grid>
                                                     </Border>
                                                 </DataTemplate>
@@ -1217,10 +1549,10 @@
                                                 BorderThickness="0"
                                                 HorizontalAlignment="Left"
                                                 Click="AddArtistWorksToPlaylistButton_Click"
-                                                ToolTipService.ToolTip="将该艺术家全部作品添加到播放列表最前">
+                                                ToolTipService.ToolTip="将该艺术家全部作品添加到播放队列">
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <FontIcon Glyph="&#xE710;" FontSize="14" />
-                                                    <TextBlock Text="添加该艺术家的作品至播放列表" VerticalAlignment="Center" />
+                                                    <TextBlock Text="添加该艺术家的作品至播放队列" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -1266,9 +1598,9 @@
                                                     Padding="12,0"
                                                     CornerRadius="16"
                                                     BorderThickness="0"
-                                                    Content="添加至播放列表"
+                                                    Content="添加至播放队列"
                                                     Click="AddArtistSongsToPlaylistButton_Click"
-                                                    ToolTipService.ToolTip="按当前排序添加到播放列表最前" />
+                                                    ToolTipService.ToolTip="按当前排序添加到播放队列" />
                                             </StackPanel>
                                             <Button
                                                 x:Name="ArtistSongSortButton"
@@ -1301,9 +1633,15 @@
                                             Margin="0,0,4,0"
                                             Background="Transparent"
                                             SelectionMode="Single"
+                                            HorizontalContentAlignment="Stretch"
                                             DoubleTapped="ArtistTrackListView_DoubleTapped"
                                             RightTapped="ArtistTrackListView_RightTapped"
                                             SelectionChanged="ArtistTrackListView_SelectionChromeChanged">
+                                            <ListView.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <ItemsStackPanel Orientation="Vertical" />
+                                                </ItemsPanelTemplate>
+                                            </ListView.ItemsPanel>
                                             <ListView.Header>
                                                 <Grid Padding="12,8" ColumnSpacing="12" Background="Transparent">
                                                     <Grid.ColumnDefinitions>
@@ -1331,6 +1669,22 @@
                                                     <Setter Property="Margin" Value="0,2" />
                                                     <Setter Property="Background" Value="Transparent" />
                                                     <Setter Property="BorderThickness" Value="0" />
+                                                    <Setter Property="Template">
+                                                        <Setter.Value>
+                                                            <ControlTemplate TargetType="ListViewItem">
+                                                                <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                                                    <ContentPresenter
+                                                                        Content="{TemplateBinding Content}"
+                                                                        ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                                        ContentTransitions="{TemplateBinding ContentTransitions}"
+                                                                        HorizontalAlignment="Stretch"
+                                                                        VerticalAlignment="Stretch"
+                                                                        HorizontalContentAlignment="Stretch"
+                                                                        VerticalContentAlignment="Stretch" />
+                                                                </Grid>
+                                                            </ControlTemplate>
+                                                        </Setter.Value>
+                                                    </Setter>
                                                 </Style>
                                             </ListView.ItemContainerStyle>
                                             <ListView.ItemTemplate>
@@ -1341,7 +1695,9 @@
                                                         CornerRadius="8"
                                                         Padding="12,0"
                                                         VerticalAlignment="Stretch"
-                                                        Background="Transparent">
+                                                        HorizontalAlignment="Stretch"
+                                                        MinWidth="{Binding ElementName=ArtistTrackListView, Path=ActualWidth}"
+                                                        Background="Transparent" PointerEntered="SongRow_PointerEntered" PointerExited="SongRow_PointerExited">
                                                         <Grid ColumnSpacing="12" VerticalAlignment="Center">
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="*" />
@@ -1407,9 +1763,9 @@
                                                 Padding="12,0"
                                                 CornerRadius="16"
                                                 BorderThickness="0"
-                                                Content="将所有专辑添加至播放列表"
+                                                Content="将所有专辑添加至播放队列"
                                                 Click="AddAllArtistAlbumsToPlaylistButton_Click"
-                                                ToolTipService.ToolTip="按当前专辑顺序、音轨号加入播放列表最前" />
+                                                ToolTipService.ToolTip="按当前专辑顺序、音轨号加入播放队列最前" />
                                         </StackPanel>
 
                                         <StackPanel
@@ -1470,12 +1826,12 @@
                                                     CornerRadius="8"
                                                     Padding="6"
                                                     Background="Transparent">
-                                                    <StackPanel Width="88" Spacing="6">
+                                                    <StackPanel Width="132" Spacing="8">
                                                         <Border
-                                                            Width="88"
-                                                            Height="88"
+                                                            Width="132"
+                                                            Height="132"
                                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                                            CornerRadius="4"
+                                                            CornerRadius="8"
                                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                                             BorderThickness="1">
                                                             <Grid>
@@ -1495,7 +1851,8 @@
                                                             FontSize="11"
                                                             TextWrapping="WrapWholeWords"
                                                             TextAlignment="Center"
-                                                            MaxLines="3"
+                                                            MaxLines="2"
+                                                            Height="30"
                                                             TextTrimming="CharacterEllipsis"
                                                             ToolTipService.ToolTip="{x:Bind Name}" />
                                                     </StackPanel>
@@ -1617,18 +1974,18 @@
                             Padding="14,0"
                             CornerRadius="16"
                             BorderThickness="0"
-                            Content="保存播放列表"
+                            Content="保存为新的播放列表"
                             Click="SavePlaylistButton_Click"
-                            ToolTipService.ToolTip="保存到软件根目录 PlayList 文件夹" />
+                            ToolTipService.ToolTip="把当前队列保存为新播放列表" />
                         <Button
                             x:Name="OpenPlaylistButton"
                             Height="32"
                             Padding="14,0"
                             CornerRadius="16"
                             BorderThickness="0"
-                            Content="打开播放列表"
+                            Content="添加到播放列表"
                             Click="OpenPlaylistButton_Click"
-                            ToolTipService.ToolTip="从 PlayList 文件夹选择并加载" />
+                            ToolTipService.ToolTip="把当前队列添加到播放列表（列表墙）" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                         <Button
@@ -1637,9 +1994,9 @@
                             Padding="14,0"
                             CornerRadius="16"
                             BorderThickness="0"
-                            Content="清空列表"
+                            Content="清空当前队列"
                             Click="ClearPlaylistButton_Click"
-                            ToolTipService.ToolTip="清空当前播放列表" />
+                            ToolTipService.ToolTip="清空当前播放队列" />
                         <Button
                             x:Name="PlayUserPlaylistButton"
                             Height="32"
@@ -1650,7 +2007,7 @@
                             ToolTipService.ToolTip="按当前播放列表顺序开始播放">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE768;" FontSize="14" />
-                                <TextBlock Text="播放该列表" VerticalAlignment="Center" />
+                                <TextBlock Text="播放该队列" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -1699,10 +2056,23 @@
                             Background="Transparent"
                             BorderThickness="0"
                             Click="MultiSelectPrimaryActionButton_Click"
-                            ToolTipService.ToolTip="将选中歌曲添加至播放列表">
+                            ToolTipService.ToolTip="将选中歌曲添加至播放队列">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon x:Name="MultiSelectPrimaryActionIcon" Glyph="&#xE710;" FontSize="14" />
-                                <TextBlock x:Name="MultiSelectPrimaryActionText" Text="添加至播放列表" VerticalAlignment="Center" />
+                                <TextBlock x:Name="MultiSelectPrimaryActionText" Text="添加至播放队列" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button
+                            x:Name="MultiSelectAddToPlaylistButton"
+                            Padding="14,8"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Visibility="Collapsed"
+                            Click="MultiSelectAddToPlaylistButton_Click"
+                            ToolTipService.ToolTip="添加到播放列表（列表墙）">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE8B7;" FontSize="14" />
+                                <TextBlock Text="添加到播放列表" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -1797,12 +2167,12 @@
                                         x:Name="NowPlayingCoverBorder"
                                         Grid.Row="0"
                                         Grid.Column="0"
-                                        Width="176"
-                                        Height="176"
+                                        Width="132"
+                                        Height="132"
                                         VerticalAlignment="Top"
                                         HorizontalAlignment="Left"
                                         Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                        CornerRadius="14"
+                                        CornerRadius="8"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                         BorderThickness="1">
                                         <Grid>
@@ -1843,6 +2213,15 @@
                                                 TextWrapping="NoWrap"
                                                 TextTrimming="CharacterEllipsis"
                                                 Text="艺术家 · 专辑" />
+                                            <TextBlock
+                                                x:Name="NowPlayingAudioInfoText"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                FontSize="11"
+                                                Opacity="0.85"
+                                                TextWrapping="WrapWholeWords"
+                                                MaxLines="2"
+                                                TextTrimming="CharacterEllipsis"
+                                                Text="" />
                                         </StackPanel>
                                     </StackPanel>
 
@@ -2103,7 +2482,7 @@
                             Background="Transparent"
                             BorderThickness="0"
                             Click="ShowCurrentPlaylistButton_Click"
-                            ToolTipService.ToolTip="显示当前播放列表">
+                            ToolTipService.ToolTip="显示播放队列">
                             <FontIcon Glyph="&#xE700;" FontSize="18" />
                         </Button>
                         <Button

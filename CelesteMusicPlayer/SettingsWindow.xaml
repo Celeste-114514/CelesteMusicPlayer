@@ -796,6 +796,28 @@
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" MinWidth="240" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="音频输出设备" />
+                                <TextBlock Text="选择使用哪个声卡输出；留空用系统默认" FontSize="12" Opacity="0.65" />
+                            </StackPanel>
+                            <ComboBox x:Name="OutputDeviceCombo" Grid.Column="1" MinWidth="240" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" MinWidth="240" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="输出模式" />
+                                <TextBlock Text="独占 / ASIO 绕开系统混音器（HiFi）；独占时所有曲目经 FFmpeg+NAudio 输出" FontSize="12" Opacity="0.65" />
+                            </StackPanel>
+                            <ComboBox x:Name="OutputModeCombo" Grid.Column="1" MinWidth="240" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">

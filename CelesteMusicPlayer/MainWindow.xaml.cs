@@ -68,6 +68,10 @@ namespace CelesteMusicPlayer
         /// <summary>音轨号（Tag.Track）；0 表示未知</summary>
         public uint Track { get; set; }
 
+        /// <summary>碟片号（Tag.Disc）；0 表示未知</summary>
+        public uint Disc { get; set; }
+
+
         /// <summary>年份数值；0 表示未知</summary>
         public uint Year { get; set; }
 
@@ -108,8 +112,14 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>专辑详情列表显示的音轨号（未知则 "-"）</summary>
+        /// <summary>专辑详情列表显示的音轨号（纯音轨号；碟片号由独立标题行表达）</summary>
         public string TrackText => Track > 0 ? Track.ToString() : "-";
+    }
+
+    /// <summary>CollectionView 分组的单个碟片组（Apple Music 分组头，含 Key 与歌曲）。</summary>
+    public sealed class AlbumDiscGroup : System.Collections.ObjectModel.ObservableCollection<PlaylistItem>
+    {
+        public string Key { get; set; } = string.Empty;
     }
 
     /// <summary>专辑浏览项：唯一专辑名 + 封面（优先取音轨 1 的内嵌图）</summary>
@@ -302,6 +312,11 @@ namespace CelesteMusicPlayer
         private IntPtr _mainWindowHwnd;
         private string? _genreYearFilter;
         private readonly ObservableCollection<AlbumEntry> _albums = new();
+        private readonly ObservableCollection<PlaylistCardViewModel> _playlistWall = new();
+        private readonly ObservableCollection<PlaylistItem> _playlistDetailItems = new();
+        private string? _currentPlaylistDetail;
+        private static readonly Microsoft.UI.Xaml.Media.Brush PlaylistDetailHoverBg =
+            new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(20, 255, 255, 255));
         private readonly ObservableCollection<PlaylistItem> _albumTracks = new();
         private readonly ObservableCollection<ArtistEntry> _artists = new();
         private readonly ObservableCollection<PlaylistItem> _artistTracks = new();
@@ -343,6 +358,7 @@ namespace CelesteMusicPlayer
         /// <summary>当前播放在用户播放列表中的下标（播放顺序以播放列表为准）</summary>
         private int _userPlaylistIndex = -1;
         private CurrentPlaylistWindow? _currentPlaylistWindow;
+        internal PlayQueueWindow? QueueWindow { get; set; }
         private DesktopLyricsOverlay? _desktopLyricsWindow;
         private bool _desktopLyricsEnabled;
         private MiniPlayerWindow? _miniPlayerWindow;
@@ -460,8 +476,8 @@ namespace CelesteMusicPlayer
                 _mainWindowHwnd = IntPtr.Zero;
             }
 
-            // 默认约原 1900×900 的 2/3；Resize 按 DPI 换算为物理像素
-            ResizeWindowToDips(1270, 600);
+            // 默认 1400×750；Resize 按 DPI 换算为物理像素
+            ResizeWindowToDips(1400, 750);
             // 标题栏扩展放到 Activated 之后，避免资源管理器直接启动时黑窗闪退（0xC000027B）
             Activated += MainWindow_FirstActivated;
             Closed += MainWindow_Closed;
@@ -546,15 +562,26 @@ namespace CelesteMusicPlayer
             PlaylistView.ContainerContentChanging += PlaylistView_ContainerContentChanging;
             PlaylistView.ItemsSource = _playlist;
             AlbumGridView.ItemsSource = _albums;
+            PlaylistWallGridView.ItemsSource = _playlistWall;
             AlbumGridView.ContainerContentChanging += AlbumGridView_ContainerContentChanging;
             ApplyAccentSelectionResources(AlbumGridView);
             AlbumTrackListView.ItemsSource = _albumTracks;
             ApplyAccentSelectionResources(AlbumTrackListView);
             AlbumTrackListView.ContainerContentChanging += AlbumTrackListView_ContainerContentChanging;
+            PlaylistDetailListView.SizeChanged += SongListView_SizeChanged;
+            FolderBrowserView.SizeChanged += (_, _) =>
+            {
+                if (FolderBrowserView.ActualWidth > 0) RefreshFolderBrowserSelectionChrome();
+            };
+            PlaylistDetailListView.ContainerContentChanging += PlaylistDetailListView_ContainerContentChanging;
+            PlaylistDetailListView.SelectionChanged += PlaylistDetailListView_SelectionChromeChanged;
+            PlaylistDetailListView.SizeChanged += SongListView_SizeChanged;
+            AlbumTrackListView.SizeChanged += SongListView_SizeChanged; // 行内容宽度跟随列表宽度
             ArtistGridView.ItemsSource = _artists;
             ArtistTrackListView.ItemsSource = _artistTracks;
             ApplyAccentSelectionResources(ArtistTrackListView);
             ArtistTrackListView.ContainerContentChanging += ArtistTrackListView_ContainerContentChanging;
+            ArtistTrackListView.SizeChanged += SongListView_SizeChanged; // 行内容宽度跟随列表宽度
             ArtistAlbumGridView.ItemsSource = _artistAlbums;
             ArtistAlbumGridView.ContainerContentChanging += ArtistAlbumGridView_ContainerContentChanging;
             ApplyAccentSelectionResources(ArtistAlbumGridView);
@@ -716,6 +743,7 @@ namespace CelesteMusicPlayer
             try
             {
                 VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
+                _volumeToSave = Math.Clamp(settings.Volume, 0, 100); // 启动即同步，避免退出时以旧/0 值写盘
             }
             finally
             {
@@ -725,6 +753,70 @@ namespace CelesteMusicPlayer
             if (Enum.TryParse(settings.PlaybackOrder, ignoreCase: true, out PlaybackOrder order))
             {
                 _playbackOrder = order;
+            }
+
+            _ = ApplyOutputDeviceAsync(settings.OutputDeviceId);
+            ApplyEngineOutputMode(settings);
+        }
+
+        /// <summary>当前设置是否处于 HiFi 独占输出模式（WASAPI 独占 / ASIO）。</summary>
+        private static bool IsHiFiModeSelected()
+        {
+            string mode = AppSettingsStore.Load().OutputMode;
+            return string.Equals(mode, "WasapiExclusive", System.StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mode, "Asio", System.StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>把设置里的输出模式映射到引擎 HiFi 后端（Shared / WasapiExclusive / Asio）。</summary>
+        private void ApplyEngineOutputMode(AppSettingsState settings)
+        {
+            HiFiOutputBackend.OutputMode mode = string.Equals(settings.OutputMode, "WasapiExclusive", System.StringComparison.OrdinalIgnoreCase)
+                ? HiFiOutputBackend.OutputMode.WasapiExclusive
+                : string.Equals(settings.OutputMode, "Asio", System.StringComparison.OrdinalIgnoreCase)
+                    ? HiFiOutputBackend.OutputMode.Asio
+                    : HiFiOutputBackend.OutputMode.WasapiShared;
+            _audioEngine?.SetOutputMode(mode);
+        }
+
+        /// <summary>应用 HiFi 输出设备：记录到引擎偏好并设置 MediaPlayer 输出设备。</summary>
+        private async System.Threading.Tasks.Task ApplyOutputDeviceAsync(string deviceId)
+        {
+            try
+            {
+                _audioEngine?.SetOutputDevicePreference(string.IsNullOrWhiteSpace(deviceId) ? null : deviceId);
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                string? devId = string.IsNullOrWhiteSpace(deviceId) ? null : deviceId;
+                if (_mediaPlayer == null)
+                {
+                    return;
+                }
+
+                if (devId != null)
+                {
+                    try
+                    {
+                        var deviceInfo = await Windows.Devices.Enumeration.DeviceInformation.CreateFromIdAsync(devId);
+                        _mediaPlayer.AudioDevice = deviceInfo;
+                    }
+                    catch
+                    {
+                        // 设备不存在/已移除：回退默认
+                        _mediaPlayer.AudioDevice = null;
+                    }
+                }
+                else
+                {
+                    _mediaPlayer.AudioDevice = null;
+                }
+            }
+            catch
+            {
             }
         }
 
@@ -737,6 +829,7 @@ namespace CelesteMusicPlayer
                 try
                 {
                     VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
+                    _volumeToSave = Math.Clamp(settings.Volume, 0, 100); // 启动同步，避免退出误写
                     MediaPlayer? player = GetPlayer();
                     if (player != null)
                     {
@@ -1049,6 +1142,38 @@ namespace CelesteMusicPlayer
             catch (Exception ex)
             {
                 StartupLog.WriteException("ConfigureWindowChrome", ex);
+            }
+
+            // 运行标记：检测上次异常退出（崩溃/强杀残留 .running）
+            AppSettingsStore.MarkAppStart();
+            bool unclean = AppSettingsStore.WasUncleanExitLastTime;
+
+            // 设置文件损坏恢复提示：仅本次会话提示一次
+            if (AppSettingsStore.SettingsWereRecovered)
+            {
+                DispatcherQueue.TryEnqueue(async () =>
+                {
+                    try
+                    {
+                        await ShowErrorAsync("设置文件已损坏", "设置文件曾损坏，已自动备份恢复为默认设置。\n（备份文件位于设置目录的 .corrupt-* 文件）");
+                    }
+                    catch
+                    {
+                    }
+                });
+            }
+            else if (unclean)
+            {
+                DispatcherQueue.TryEnqueue(async () =>
+                {
+                    try
+                    {
+                        await ShowErrorAsync("上次可能异常退出", "检测到上次程序未正常关闭（可能崩溃或被强制结束）。\n若反复出现，请查看设置目录下的 CelesteMusicPlayer.log 排查原因。");
+                    }
+                    catch
+                    {
+                    }
+                });
             }
         }
 
@@ -1438,6 +1563,15 @@ namespace CelesteMusicPlayer
             // 避免触发 MediaFailed 弹窗；点击播放时由 FFmpeg 引擎转码播放。
             if (AudioPlaybackEngine.NeedsFfmpeg(item.FilePath))
             {
+                return;
+            }
+
+            // HiFi 独占模式：不把歌曲塞进 MediaPlayer（否则会走共享混音并出现在音量合成器）。
+            // 就绪状态保留，由用户点播放时经 StartPlayback 走独占（NAudio）路径。
+            if (IsHiFiModeSelected())
+            {
+                NotifyCurrentPlaylistWindow();
+                _miniPlayerWindow?.RefreshFromOwner();
                 return;
             }
 
@@ -2069,6 +2203,7 @@ namespace CelesteMusicPlayer
             string albumArtist = "未知艺术家";
             string album = "未知专辑";
             uint track = 0;
+            uint disc = 0;
             uint year = 0;
             string genre = "未知流派";
             TimeSpan duration = TimeSpan.Zero;
@@ -2112,6 +2247,7 @@ namespace CelesteMusicPlayer
                 }
 
                 track = tagFile.Tag.Track;
+                disc = tagFile.Tag.Disc;
                 year = tagFile.Tag.Year;
                 if (!string.IsNullOrWhiteSpace(tagFile.Tag.FirstGenre))
                 {
@@ -2128,6 +2264,7 @@ namespace CelesteMusicPlayer
                 AlbumArtist = albumArtist,
                 Album = album,
                 Track = track,
+                Disc = disc,
                 Year = year,
                 Genre = genre,
                 Duration = duration,
@@ -2165,13 +2302,16 @@ namespace CelesteMusicPlayer
 
         private void UserPlaylistNavButton_Click(object sender, RoutedEventArgs e)
         {
-            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
-                && _openedAlbum == null
-                && _openedArtist == null)
+            ExitMultiSelectMode();
+            CommitLibraryNavigation(() =>
             {
-                return;
-            }
+                _currentCategory = "PlaylistWall";
+                ApplyCategoryView();
+            });
+        }
 
+        private void NavPlaylistWallButton_Click(object sender, RoutedEventArgs e)
+        {
             ExitMultiSelectMode();
             CommitLibraryNavigation(() =>
             {
@@ -2179,6 +2319,671 @@ namespace CelesteMusicPlayer
                 ApplyCategoryView();
             });
             ApplySwitchPlaylistPausePreference();
+        }
+
+        /// <summary>填充播放列表墙（命名单封面卡片）。</summary>
+        private void ApplyPlaylistWallCategory()
+        {
+            _playlistWall.Clear();
+            PlaylistLibraryService.Refresh();
+            foreach (var p in PlaylistLibraryService.Items)
+            {
+                // 列表墙只显示用户真实命名单：过滤内建“我喜欢的音乐”与空列表
+                if (string.Equals(p.Name, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                var vm = new PlaylistCardViewModel
+                {
+                    Name = p.Name,
+                    SongCountText = NamedPlaylistStore.LoadSongs(p.Name).Count + " 首",
+                };
+                _ = LoadPlaylistWallCoverAsync(vm);
+                _playlistWall.Add(vm);
+            }
+        }
+
+        private async System.Threading.Tasks.Task LoadPlaylistWallCoverAsync(PlaylistCardViewModel vm)
+        {
+            try
+            {
+                // 优先命中单自定义封面；否则用首曲专辑封面
+                byte[]? bytes;
+                string? custom = PlaylistLibraryService.CustomCoverPath(vm.Name);
+                if (!string.IsNullOrWhiteSpace(custom))
+                {
+                    bytes = await System.Threading.Tasks.Task.Run(() => System.IO.File.ReadAllBytes(custom));
+                }
+                else
+                {
+                    // 遍历命名单所有歌曲，取第一首含有封面的（首曲可能无封面但其它曲目有）
+                    bytes = await System.Threading.Tasks.Task.Run(() =>
+                    {
+                        foreach (string path in NamedPlaylistStore.LoadSongs(vm.Name))
+                        {
+                            if (!System.IO.File.Exists(path)) continue;
+                            try
+                            {
+                                byte[]? b = ExtractCoverBytes(path);
+                                if (b is { Length: > 0 }) return b;
+                            }
+                            catch
+                            {
+                            }
+                        }
+                        return (byte[]?)null;
+                    });
+                    if (bytes is not { Length: > 0 })
+                    {
+                        // 歌曲全无封面时：生成一张含命名单名的渐变封面并持久化，让墙卡“实在显示封面”
+                        bytes = GeneratePlaylistCoverImage(vm.Name,
+                            ResolveAccentBrush() is SolidColorBrush scb ? scb.Color : Windows.UI.Color.FromArgb(255, 128, 128, 128));
+                        if (bytes is { Length: > 0 })
+                        {
+                            PlaylistLibraryService.WriteCustomCover(vm.Name, bytes);
+                        }
+                        else
+                        {
+                            return;
+                        }
+                    }
+                }
+                if (bytes is { Length: > 0 })
+                {
+                    var bmp = await CreateBitmapFromBytesAsync(bytes); // 与专辑封面同一机制
+                    if (bmp != null)
+                    {
+                        vm.Cover = bmp;
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void PlaylistWallGridView_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (e.ClickedItem is PlaylistCardViewModel vm)
+            {
+                ShowPlaylistDetail(vm.Name);
+            }
+        }
+
+        private void ShowPlaylistDetail(string name)
+        {
+            _currentPlaylistDetail = name;
+            FillPlaylistDetailItems();
+            PlaylistDetailNameText.Text = name;
+            PlaylistDetailCountText.Text = _playlistDetailItems.Count + " 首";
+            PlaylistDetailListView.ItemsSource = _playlistDetailItems;
+            _ = LoadPlaylistDetailCoverAsync(_playlistDetailItems.FirstOrDefault()?.FilePath, name);
+            ApplyCategoryView();
+        }
+
+        private void FillPlaylistDetailItems()
+        {
+            _playlistDetailItems.Clear();
+            if (string.IsNullOrEmpty(_currentPlaylistDetail)) return;
+            foreach (string path in NamedPlaylistStore.LoadSongs(_currentPlaylistDetail))
+            {
+                if (!System.IO.File.Exists(path)) continue;
+                try
+                {
+                    _playlistDetailItems.Add(CreatePlaylistItemFromPath(path));
+                }
+                catch
+                {
+                }
+            }
+        }
+
+        private void PlaylistDetailListView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+        {
+            // 顺序已由 ObservableCollection 自动更新；保存新顺序回命名单
+            if (!string.IsNullOrEmpty(_currentPlaylistDetail))
+            {
+                NamedPlaylistStore.SaveSongs(_currentPlaylistDetail, _playlistDetailItems.Select(p => p.FilePath));
+            }
+        }
+
+        private async System.Threading.Tasks.Task LoadPlaylistDetailCoverAsync(string? firstTrack, string name)
+        {
+            try
+            {
+                byte[]? bytes = null;
+                string? custom = PlaylistLibraryService.CustomCoverPath(name);
+                if (!string.IsNullOrWhiteSpace(custom))
+                {
+                    bytes = await System.Threading.Tasks.Task.Run(() => System.IO.File.ReadAllBytes(custom));
+                }
+                else if (!string.IsNullOrWhiteSpace(firstTrack))
+                {
+                    bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(firstTrack));
+                }
+
+                if (bytes is { Length: > 0 })
+                {
+                    var bmp = await CreateBitmapFromBytesAsync(bytes); // 与专辑封面同一机制
+                    if (bmp != null)
+                    {
+                        PlaylistDetailCoverImage.Source = bmp;
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void PlaylistDetailBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            _currentPlaylistDetail = null;
+            ApplyCategoryView();
+            ApplyPlaylistWallCategory();
+        }
+
+        private void PlaylistDetailPlayButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(_currentPlaylistDetail))
+            {
+                _ = LoadNamedPlaylistToQueueAndPlayAsync(_currentPlaylistDetail);
+            }
+        }
+
+        private void PlaylistDetailAddQueueButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!string.IsNullOrEmpty(_currentPlaylistDetail))
+            {
+                AddNamedPlaylistToQueue(_currentPlaylistDetail);
+            }
+        }
+
+        private void PlaylistDetailAddWallButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_currentPlaylistDetail)) return;
+            _ = ShowNamedPlaylistPickerAsync(_playlistDetailItems.ToList());
+        }
+
+        private void SongRow_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is not Border chrome) return;
+            var dc = (sender as FrameworkElement)?.DataContext as PlaylistItem;
+            if (dc == null || IsSongInListSelected(chrome, dc)) return;
+            chrome.Background = PlaylistDetailHoverBg;
+        }
+
+        private void SongRow_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is not Border chrome) return;
+            var dc = (sender as FrameworkElement)?.DataContext as PlaylistItem;
+            if (dc == null || IsSongInListSelected(chrome, dc)) return;
+            chrome.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        }
+
+        private ListView? FindAncestorListView(DependencyObject? node)
+        {
+            while (node != null)
+            {
+                if (node is ListView lv) return lv;
+                node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node);
+            }
+            return null;
+        }
+
+        private bool IsSongInListSelected(DependencyObject node, PlaylistItem song)
+        {
+            try
+            {
+                ListView? list = FindAncestorListView(node);
+                if (list == null) return false;
+                return list.SelectedItems.Contains(song);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void PlaylistDetailRow_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is not Border chrome) return;
+            var dc = (sender as FrameworkElement)?.DataContext as PlaylistItem;
+            if (dc == null || PlaylistDetailRowIsSelected(dc)) return;
+            chrome.Background = PlaylistDetailHoverBg;
+        }
+
+        private void PlaylistDetailRow_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is not Border chrome) return;
+            var dc = (sender as FrameworkElement)?.DataContext as PlaylistItem;
+            if (dc == null || PlaylistDetailRowIsSelected(dc)) return;
+            chrome.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+        }
+
+        private bool PlaylistDetailRowIsSelected(PlaylistItem song)
+        {
+            try
+            {
+                return PlaylistDetailListView.SelectedItems.Contains(song);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void PlaylistDetailListView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
+            {
+                ApplySongListItemSelectionChrome(PlaylistDetailListView, container, song);
+            }
+        }
+
+        private void PlaylistDetailListView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
+        {
+            RefreshRealizedSongListSelectionChrome(PlaylistDetailListView);
+        }
+
+        private void PlaylistDetailListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            // 仅当实际点到歌曲行时才播放（空白区/容器双击不触发整列表播放）
+            PlaylistItem? song = null;
+            if (e.OriginalSource is DependencyObject source)
+            {
+                song = FindPlaylistItem(source);
+                if (song == null)
+                {
+                    ListViewItem? container = FindAncestorListViewItem(source);
+                    if (container != null)
+                    {
+                        song = PlaylistDetailListView.ItemFromContainer(container) as PlaylistItem;
+                    }
+                }
+            }
+
+            if (song != null && !string.IsNullOrEmpty(_currentPlaylistDetail) && !string.IsNullOrEmpty(song.FilePath))
+            {
+                PlayNamedPlaylistFromTrack(_currentPlaylistDetail, song.FilePath);
+            }
+        }
+
+        /// <summary>命中单详情双击/指定某首先：把命名单载入当前队列并定位播放该首。</summary>
+        internal void PlayNamedPlaylistFromTrack(string name, string filePath)
+        {
+            try
+            {
+                var items = new List<PlaylistItem>();
+                foreach (string path in NamedPlaylistStore.LoadSongs(name))
+                {
+                    if (!System.IO.File.Exists(path)) continue;
+                    try { items.Add(CreatePlaylistItemFromPath(path)); } catch { }
+                }
+
+                if (items.Count == 0) return;
+                _userPlaylist.Clear();
+                AddSongsToUserPlaylist(items);
+                int index = FindUserPlaylistIndex(filePath);
+                PlayUserPlaylistAt(index >= 0 ? index : 0);
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("PlayNamedPlaylistFromTrack", ex);
+            }
+        }
+
+        private void PlaylistDetailListView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            var song = (e.OriginalSource as FrameworkElement)?.DataContext as PlaylistItem;
+            if (song == null) return;
+            var flyout = BuildPlaylistItemContextMenu(song, false);
+            (e.OriginalSource as FrameworkElement)?.DispatcherQueue.TryEnqueue(() => flyout.ShowAt(PlaylistDetailListView, e.GetPosition(PlaylistDetailListView)));
+        }
+
+        private void PlaylistWallGridView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            PlaylistCardViewModel? vm = (e.OriginalSource as FrameworkElement)?.DataContext as PlaylistCardViewModel;
+            if (vm == null)
+            {
+                return;
+            }
+
+            var flyout = new MenuFlyout();
+
+            var rename = new MenuFlyoutItem { Text = "重命名", Icon = new FontIcon { Glyph = "\uE8AC" } };
+            rename.Click += async (_, _) => await RenamePlaylistFromWallAsync(vm);
+            flyout.Items.Add(rename);
+            var addToQueue = new MenuFlyoutItem { Text = "添加到播放队列", Icon = new FontIcon { Glyph = "\uE710" } };
+            addToQueue.Click += (_, _) => AddNamedPlaylistToQueue(vm.Name);
+            flyout.Items.Add(addToQueue);
+            var delete = new MenuFlyoutItem { Text = "删除", Icon = new FontIcon { Glyph = "\uE74D" } };
+            delete.Click += (_, _) =>
+            {
+                if (!string.Equals(vm.Name, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
+                {
+                    NamedPlaylistStore.Delete(vm.Name);
+                    PlaylistLibraryService.ClearCustomCover(vm.Name);
+                    PlaylistLibraryService.Refresh();
+                    ApplyPlaylistWallCategory();
+                }
+            };
+            flyout.Items.Add(delete);
+            var exportOne = new MenuFlyoutItem { Text = "导出（m3u8）", Icon = new FontIcon { Glyph = "\uE896" } };
+            exportOne.Click += async (_, _) => await ExportOnePlaylistAsync(vm);
+            flyout.Items.Add(exportOne);
+            var multi = new MenuFlyoutItem { Text = "多选", Icon = new FontIcon { Glyph = "\uE8B1" } };
+            multi.Click += (_, _) => EnterPlaylistWallMultiSelect(vm);
+            flyout.Items.Add(multi);
+            flyout.Items.Add(new MenuFlyoutSeparator());
+
+            var local = new MenuFlyoutItem { Text = "设置封面（本地图片…）", Icon = new FontIcon { Glyph = "\uE710" } };
+            local.Click += async (_, _) => await SetPlaylistCoverFromLocalAsync(vm);
+            flyout.Items.Add(local);
+            var web = new MenuFlyoutItem { Text = "从网络搜索封面…", Icon = new FontIcon { Glyph = "\uE774" } };
+            web.Click += async (_, _) => await SetPlaylistCoverFromWebAsync(vm);
+            flyout.Items.Add(web);
+            var restore = new MenuFlyoutItem { Text = "恢复默认（首曲封面）", Icon = new FontIcon { Glyph = "\uE74D" } };
+            restore.Click += (_, _) =>
+            {
+                PlaylistLibraryService.ClearCustomCover(vm.Name);
+                ApplyPlaylistWallCategory();
+            };
+            flyout.Items.Add(restore);
+
+            flyout.ShowAt(PlaylistWallGridView, e.GetPosition(PlaylistWallGridView));
+        }
+
+        private async System.Threading.Tasks.Task SetPlaylistCoverFromLocalAsync(PlaylistCardViewModel vm)
+        {
+            try
+            {
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.PicturesLibrary;
+                picker.FileTypeFilter.Add(".jpg");
+                picker.FileTypeFilter.Add(".jpeg");
+                picker.FileTypeFilter.Add(".png");
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+                var file = await picker.PickSingleFileAsync();
+                if (file == null) return;
+                using var stream = await file.OpenReadAsync();
+                using var ms = new MemoryStream();
+                await stream.AsStreamForRead().CopyToAsync(ms);
+                PlaylistLibraryService.WriteCustomCover(vm.Name, ms.ToArray());
+                ApplyPlaylistWallCategory();
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>命名单歌曲全无封面时，生成一张含命名单名的渐变封面（System.Drawing）。</summary>
+        private byte[]? GeneratePlaylistCoverImage(string name, Windows.UI.Color accent)
+        {
+            try
+            {
+                const int S = 256;
+                using var bmp = new System.Drawing.Bitmap(S, S);
+                using var g = System.Drawing.Graphics.FromImage(bmp);
+                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
+                g.Clear(System.Drawing.Color.FromArgb(255, accent.R, accent.G, accent.B));
+                using (var grad = new System.Drawing.Drawing2D.LinearGradientBrush(
+                    new System.Drawing.Rectangle(0, S / 2, S, S / 2),
+                    System.Drawing.Color.FromArgb(70, 255, 255, 255),
+                    System.Drawing.Color.FromArgb(180, 0, 0, 0),
+                    System.Drawing.Drawing2D.LinearGradientMode.Vertical))
+                {
+                    g.FillRectangle(grad, 0, S / 2, S, S / 2);
+                }
+
+                string text = name;
+                const int maxChars = 16;
+                if (text.Length > maxChars) text = text.Substring(0, maxChars) + "…";
+                using var font = new System.Drawing.Font("Segoe UI", 22f, System.Drawing.FontStyle.Bold);
+                using var sf = new System.Drawing.StringFormat
+                {
+                    Alignment = System.Drawing.StringAlignment.Center,
+                    LineAlignment = System.Drawing.StringAlignment.Center,
+                };
+                g.DrawString(text, font, System.Drawing.Brushes.White, new System.Drawing.RectangleF(10, 70, S - 20, S - 140), sf);
+
+                using var ms = new MemoryStream();
+                bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
+                return ms.ToArray();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>给 ContentDialog 的按钮设置当前主题色（局部资源覆盖，不改全局、避免运行时覆盖 Application.Resources 崩溃）。</summary>
+        private static void ApplyDialogAccent(Microsoft.UI.Xaml.Controls.ContentDialog dlg)
+        {
+            try
+            {
+                Windows.UI.Color accent = ThemeColorService.CurrentAccent;
+                var accentBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(accent);
+                Windows.UI.Color pressed = Windows.UI.Color.FromArgb(255, (byte)(accent.R * 0.7), (byte)(accent.G * 0.7), (byte)(accent.B * 0.7));
+                Windows.UI.Color disabled = Windows.UI.Color.FromArgb(255, (byte)(accent.R * 0.3), (byte)(accent.G * 0.3), (byte)(accent.B * 0.3));
+                dlg.Resources["AccentButtonBackground"] = accentBrush;
+                dlg.Resources["AccentButtonBackgroundPointerOver"] = accentBrush;
+                dlg.Resources["AccentButtonBackgroundPressed"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(pressed);
+                dlg.Resources["AccentButtonBackgroundDisabled"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(disabled);
+                dlg.Resources["AccentButtonForeground"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White);
+            }
+            catch
+            {
+            }
+        }
+
+        private async System.Threading.Tasks.Task RenamePlaylistFromWallAsync(PlaylistCardViewModel vm)
+        {
+            if (string.Equals(vm.Name, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            var box = new Microsoft.UI.Xaml.Controls.TextBox { PlaceholderText = "新名称", Text = vm.Name, MinWidth = 300 };
+            var dlg = new ContentDialog
+            {
+                Title = "重命名播放列表",
+                Content = box,
+                PrimaryButtonText = "确定",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.Content?.XamlRoot,
+            };
+            ApplyDialogAccent(dlg);
+            if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
+            string newName = box.Text?.Trim() ?? string.Empty;
+            if (newName.Length == 0 || string.Equals(newName, vm.Name, StringComparison.Ordinal)) return;
+            try
+            {
+                NamedPlaylistStore.Rename(vm.Name, newName);
+            }
+            catch
+            {
+                return;
+            }
+
+            PlaylistLibraryService.Refresh();
+            ApplyPlaylistWallCategory();
+        }
+
+        private async System.Threading.Tasks.Task ExportOnePlaylistAsync(PlaylistCardViewModel vm)
+        {
+            var picker = new Windows.Storage.Pickers.FolderPicker();
+            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.MusicLibrary;
+            picker.FileTypeFilter.Add("*");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            StorageFolder folder = await picker.PickSingleFolderAsync();
+            if (folder == null) return;
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("#EXTM3U");
+            foreach (string s in NamedPlaylistStore.LoadSongs(vm.Name))
+            {
+                sb.AppendLine("#EXTINF:-1," + System.IO.Path.GetFileName(s));
+                sb.AppendLine(s);
+            }
+            string safe = vm.Name;
+            foreach (char c in System.IO.Path.GetInvalidFileNameChars()) safe = safe.Replace(c, '_');
+            StorageFile m3uFile = await folder.CreateFileAsync(safe + ".m3u8", Windows.Storage.CreationCollisionOption.ReplaceExisting);
+            await Windows.Storage.FileIO.WriteTextAsync(m3uFile, sb.ToString(), Windows.Storage.Streams.UnicodeEncoding.Utf8);
+        }
+
+        private void EnterPlaylistWallMultiSelect(PlaylistCardViewModel anchor)
+        {
+            PlaylistWallGridView.SelectionMode = ListViewSelectionMode.Multiple;
+            PlaylistWallGridView.IsItemClickEnabled = false;
+            PlaylistWallMultiBar.Visibility = Visibility.Visible;
+        }
+
+        private void ExitPlaylistWallMultiSelect()
+        {
+            PlaylistWallGridView.SelectionMode = ListViewSelectionMode.None;
+            PlaylistWallGridView.IsItemClickEnabled = true;
+            PlaylistWallMultiBar.Visibility = Visibility.Collapsed;
+            PlaylistWallGridView.SelectedItems.Clear();
+        }
+
+        private void PlaylistWallMultiExitButton_Click(object sender, RoutedEventArgs e) => ExitPlaylistWallMultiSelect();
+
+        private void PlaylistWallMultiAddToQueue_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = PlaylistWallGridView.SelectedItems.OfType<PlaylistCardViewModel>().ToList();
+            foreach (var vm in selected)
+            {
+                AddNamedPlaylistToQueue(vm.Name);
+            }
+            ExitPlaylistWallMultiSelect();
+        }
+
+        private void PlaylistWallMultiDelete_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = PlaylistWallGridView.SelectedItems.OfType<PlaylistCardViewModel>().ToList();
+            foreach (var vm in selected)
+            {
+                if (!string.Equals(vm.Name, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
+                {
+                    NamedPlaylistStore.Delete(vm.Name);
+                    PlaylistLibraryService.ClearCustomCover(vm.Name);
+                }
+            }
+            PlaylistLibraryService.Refresh();
+            ApplyPlaylistWallCategory();
+            ExitPlaylistWallMultiSelect();
+        }
+
+        private async System.Threading.Tasks.Task SetPlaylistCoverFromWebAsync(PlaylistCardViewModel vm)
+        {
+            try
+            {
+                NowPlayingText.Text = "正在从网络搜索封面…";
+                string? url = await OnlineMusicApi.SearchArtistAvatarUrlAsync(vm.Name);
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    NowPlayingText.Text = "未找到封面";
+                    return;
+                }
+
+                using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(20) };
+                http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
+                byte[] bytes = await http.GetByteArrayAsync(url);
+                if (bytes.Length > 0)
+                {
+                    PlaylistLibraryService.WriteCustomCover(vm.Name, bytes);
+                }
+
+                NowPlayingText.Text = string.Empty;
+                ApplyPlaylistWallCategory();
+            }
+            catch
+            {
+                NowPlayingText.Text = "获取封面失败";
+            }
+        }
+
+        private async void CreatePlaylistWallButton_Click(object sender, RoutedEventArgs e)
+        {
+            var box = new Microsoft.UI.Xaml.Controls.TextBox { PlaceholderText = "播放列表名称", MinWidth = 300 };
+            var dlg = new ContentDialog
+            {
+                Title = "新建播放列表",
+                Content = box,
+                PrimaryButtonText = "创建",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.Content?.XamlRoot,
+            };
+            ApplyDialogAccent(dlg);
+            if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
+            string name = box.Text?.Trim() ?? string.Empty;
+            if (name.Length == 0) return;
+            try
+            {
+                NamedPlaylistStore.Create(name);
+            }
+            catch
+            {
+                return;
+            }
+
+            PlaylistLibraryService.Refresh();
+            ApplyPlaylistWallCategory();
+        }
+
+        /// <summary>导出全部播放列表为 m3u8：每命中单写一个 .m3u8 到用户选择目录。</summary>
+        private async void ExportPlaylistsButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new Windows.Storage.Pickers.FolderPicker();
+                picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.MusicLibrary;
+                picker.FileTypeFilter.Add("*");
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+                StorageFolder folder = await picker.PickSingleFolderAsync();
+                if (folder == null) return;
+
+                int count = 0;
+                foreach (string name in NamedPlaylistStore.List())
+                {
+                    if (string.Equals(name, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
+                    {
+                        continue; // 内建“我喜欢的音乐”不导出为独立 m3u8（属收藏数据）
+                    }
+
+                    List<string> songs = NamedPlaylistStore.LoadSongs(name);
+                    if (songs.Count == 0) continue;
+                    var sb = new System.Text.StringBuilder();
+                    sb.AppendLine("#EXTM3U");
+                    foreach (string s in songs)
+                    {
+                        sb.AppendLine("#EXTINF:-1," + System.IO.Path.GetFileName(s));
+                        sb.AppendLine(s);
+                    }
+                    string safe = name;
+                    foreach (char c in System.IO.Path.GetInvalidFileNameChars()) safe = safe.Replace(c, '_');
+                    StorageFile m3uFile = await folder.CreateFileAsync(safe + ".m3u8", Windows.Storage.CreationCollisionOption.ReplaceExisting);
+                    await Windows.Storage.FileIO.WriteTextAsync(m3uFile, sb.ToString(), Windows.Storage.Streams.UnicodeEncoding.Utf8);
+                    count++;
+                }
+
+                StartupLog.Write("导出播放列表完成: " + count + " 个 .m3u8 → " + folder.Path);
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("ExportPlaylists", ex);
+            }
+        }
+
+        private async void SaveQueueToPlaylistButton_Click(object sender, RoutedEventArgs e)
+        {
+            await SaveUserPlaylistAsync(Content.XamlRoot);
+            PlaylistLibraryService.Refresh();
+            ApplyPlaylistWallCategory();
         }
 
         private void LibraryPaneRoot_PointerPressed(object sender, PointerRoutedEventArgs e)
@@ -2360,6 +3165,10 @@ namespace CelesteMusicPlayer
 
             UpdateLibraryNavHighlight();
 
+            // 列表墙/命中单详情默认隐藏：仅其它分类内按需显 Visible，避免切到其它页面残留盖层
+            PlaylistWallBorder.Visibility = Visibility.Collapsed;
+            PlaylistDetailBorder.Visibility = Visibility.Collapsed;
+
             switch (_currentCategory)
             {
                 case "Songs":
@@ -2446,6 +3255,32 @@ namespace CelesteMusicPlayer
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     RefreshFolderBrowserRoots();
+                    break;
+
+                case "PlaylistWall":
+                    LibraryPaneTitle.Text = "播放列表";
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Collapsed;
+                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Collapsed;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    if (string.IsNullOrEmpty(_currentPlaylistDetail))
+                    {
+                        PlaylistWallBorder.Visibility = Visibility.Visible;
+                        PlaylistDetailBorder.Visibility = Visibility.Collapsed;
+                        ApplyPlaylistWallCategory();
+                    }
+                    else
+                    {
+                        PlaylistWallBorder.Visibility = Visibility.Collapsed;
+                        PlaylistDetailBorder.Visibility = Visibility.Visible;
+                    }
+
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
                     break;
 
                 case "Favorites":
@@ -3279,7 +4114,7 @@ namespace CelesteMusicPlayer
             multiItem.Icon = new FontIcon { Glyph = "\uE700" };
             multiItem.Click += (_, _) => EnterFolderMultiSelectMode(folderRef);
 
-            var addItem = new MenuFlyoutItem { Text = "添加至播放列表" };
+            var addItem = new MenuFlyoutItem { Text = "添加至播放队列" };
             addItem.Icon = new FontIcon { Glyph = "\uE710" };
             addItem.Click += (_, _) => PlayFolderAudio(folderRef.FullPath, replacePlaylist: false);
 
@@ -3585,6 +4420,11 @@ namespace CelesteMusicPlayer
             {
                 chrome.MinHeight = 36;
                 chrome.CornerRadius = new CornerRadius(8);
+                chrome.VerticalAlignment = VerticalAlignment.Stretch;
+                if (FolderBrowserView != null && FolderBrowserView.ActualWidth > 0)
+                {
+                    chrome.Width = FolderBrowserView.ActualWidth; // 行内容铺满整行，选中矩形右侧铺满
+                }
                 if (selected || searchHit)
                 {
                     chrome.Background = accent;
@@ -3815,7 +4655,7 @@ namespace CelesteMusicPlayer
             {
                 if (_avatarContextArtist != null)
                 {
-                    PlayArtistWorks(_avatarContextArtist.Name, replacePlaylist: false);
+                    _ = ShowNamedPlaylistPickerAsync(GetTracksForArtist(_avatarContextArtist.Name, useCurrentSongSort: true));
                 }
             };
             flyout.Items.Add(addWorks);
@@ -4087,7 +4927,7 @@ namespace CelesteMusicPlayer
 
         /// <summary>
         /// replace=true：清空播放列表后写入并从头播放；
-        /// replace=false：按「添加至播放列表」规则插到最前。
+        /// replace=false：按「添加至播放队列」规则插到最前。
         /// </summary>
         private void PlayArtistWorks(string artistName, bool replacePlaylist)
         {
@@ -4121,7 +4961,7 @@ namespace CelesteMusicPlayer
         {
             if (_openedArtist != null)
             {
-                PlayArtistWorks(_openedArtist.Name, replacePlaylist: false);
+                AddSongsToUserPlaylist(GetTracksForArtist(_openedArtist.Name, useCurrentSongSort: true));
             }
         }
 
@@ -4248,13 +5088,17 @@ namespace CelesteMusicPlayer
             multiItem.Icon = new FontIcon { Glyph = "\uE700" };
             multiItem.Click += (_, _) => EnterAlbumWallMultiSelectMode(ArtistAlbumGridView, albumRef);
 
-            var addItem = new MenuFlyoutItem { Text = "添加至播放列表" };
+            var addItem = new MenuFlyoutItem { Text = "添加至播放队列" };
             addItem.Icon = new FontIcon { Glyph = "\uE710" };
             addItem.Click += (_, _) => AddSongsToUserPlaylist(GetTracksForAlbum(albumRef));
 
             flyout.Items.Add(playItem);
             flyout.Items.Add(multiItem);
             flyout.Items.Add(addItem);
+            var wallAlbumItem = new MenuFlyoutItem { Text = "添加到播放列表" };
+            wallAlbumItem.Icon = new FontIcon { Glyph = "" };
+            wallAlbumItem.Click += (_, _) => _ = ShowNamedPlaylistPickerAsync(GetTracksForAlbum(albumRef));
+            flyout.Items.Add(wallAlbumItem);
 
             AppendAlbumContextItems(flyout, albumRef, fromArtist: true);
 
@@ -4334,6 +5178,7 @@ namespace CelesteMusicPlayer
             {
                 ArtistSongSortMode.AlbumTitleThenTrack => tracks
                     .OrderBy(t => t.Album, StringComparer.CurrentCultureIgnoreCase)
+                    .ThenBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
                     .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
                     .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
                     .ToList(),
@@ -4344,6 +5189,7 @@ namespace CelesteMusicPlayer
                         return y == 0 ? uint.MaxValue : y;
                     })
                     .ThenBy(t => t.Album, StringComparer.CurrentCultureIgnoreCase)
+                    .ThenBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
                     .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
                     .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
                     .ToList(),
@@ -4599,8 +5445,9 @@ namespace CelesteMusicPlayer
             foreach (var group in groups)
             {
                 PlaylistItem coverTrack =
-                    group.FirstOrDefault(t => t.Track == 1)
-                    ?? group.OrderBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
+                    group.FirstOrDefault(t => (t.Disc == 0 || t.Disc == 1) && t.Track == 1)
+                    ?? group.OrderBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
+                        .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
                         .ThenBy(t => t.FilePath, StringComparer.OrdinalIgnoreCase)
                         .First();
 
@@ -4947,13 +5794,17 @@ namespace CelesteMusicPlayer
             multiItem.Icon = new FontIcon { Glyph = "\uE700" };
             multiItem.Click += (_, _) => EnterAlbumWallMultiSelectMode(AlbumGridView, albumRef);
 
-            var addItem = new MenuFlyoutItem { Text = "添加至播放列表" };
+            var addItem = new MenuFlyoutItem { Text = "添加至播放队列" };
             addItem.Icon = new FontIcon { Glyph = "\uE710" };
             addItem.Click += (_, _) => AddSongsToUserPlaylist(GetTracksForAlbum(albumRef));
 
             flyout.Items.Add(playItem);
             flyout.Items.Add(multiItem);
             flyout.Items.Add(addItem);
+            var wallAlbumItem = new MenuFlyoutItem { Text = "添加到播放列表" };
+            wallAlbumItem.Icon = new FontIcon { Glyph = "" };
+            wallAlbumItem.Click += (_, _) => _ = ShowNamedPlaylistPickerAsync(GetTracksForAlbum(albumRef));
+            flyout.Items.Add(wallAlbumItem);
 
             AppendAlbumContextItems(flyout, albumRef, fromArtist: false);
 
@@ -4976,7 +5827,8 @@ namespace CelesteMusicPlayer
                     string.Equals(t.Album, album.Name, StringComparison.CurrentCultureIgnoreCase)
                     && (string.IsNullOrWhiteSpace(album.Artist)
                         || string.Equals(t.Artist, album.Artist, StringComparison.CurrentCultureIgnoreCase)))
-                .OrderBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
+                .OrderBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
+                .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
                 .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
         }
@@ -4993,7 +5845,7 @@ namespace CelesteMusicPlayer
             }
 
             PlaylistItem first =
-                tracks.FirstOrDefault(t => t.Track == 1) ?? tracks[0];
+                tracks.FirstOrDefault(t => (t.Disc == 0 || t.Disc == 1) && t.Track == 1) ?? tracks[0];
 
             if (replacePlaylist)
             {
@@ -5059,15 +5911,64 @@ namespace CelesteMusicPlayer
             AlbumDetailMetaText.Text = $"{album.TrackCount} 首 · 总时长 {album.TotalDurationText}";
 
             _albumTracks.Clear();
-            IEnumerable<PlaylistItem> tracks = _playlist
+            List<PlaylistItem> tracks = _playlist
                 .Where(t => string.Equals(t.Album, album.Name, StringComparison.CurrentCultureIgnoreCase))
-                .OrderBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
-                .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase);
+                .OrderBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
+                .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
+                .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
 
             foreach (PlaylistItem track in tracks)
             {
                 _albumTracks.Add(track);
             }
+
+            // Apple Music 风格：按碟片分组显示（每组以 CD{n} 标题行开头）
+            AlbumTrackListView.ItemsSource = BuildAlbumGroupedView(_albumTracks);
+        }
+
+        /// <summary>构建按碟片分组的视图（Apple Music 风格 CD 标题行）。</summary>
+        private System.Collections.IEnumerable BuildAlbumGroupedView(IReadOnlyList<PlaylistItem> tracks)
+        {
+            bool hasDisc = tracks.Any(t => t.Disc > 0);
+            var groups = new List<AlbumDiscGroup>();
+
+            if (!hasDisc)
+            {
+                // 无碟号：不作分组，纯列表
+                var g = new AlbumDiscGroup { Key = string.Empty };
+                foreach (PlaylistItem t in tracks)
+                {
+                    g.Add(t);
+                }
+
+                groups.Add(g);
+            }
+            else
+            {
+                foreach (var grp in tracks
+                    .GroupBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
+                    .OrderBy(g => g.Key))
+                {
+                    var g = new AlbumDiscGroup
+                    {
+                        Key = grp.Key == uint.MaxValue ? "CD?" : "CD" + grp.Key
+                    };
+                    foreach (PlaylistItem t in grp.OrderBy(x => x.Track == 0 ? uint.MaxValue : x.Track))
+                    {
+                        g.Add(t);
+                    }
+
+                    groups.Add(g);
+                }
+            }
+
+            var cvs = new Microsoft.UI.Xaml.Data.CollectionViewSource
+            {
+                IsSourceGrouped = true
+            };
+            cvs.Source = groups;
+            return cvs.View;
         }
 
         private void AlbumDetailBackButton_Click(object sender, RoutedEventArgs e)
@@ -5188,7 +6089,7 @@ namespace CelesteMusicPlayer
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]?> CoverBytesCache = new();
         private const int CoverBytesCacheMax = 200;
 
-        private static byte[]? ExtractCoverBytes(string audioPath)
+        internal static byte[]? ExtractCoverBytes(string audioPath)
         {
             if (string.IsNullOrWhiteSpace(audioPath))
             {
@@ -5397,6 +6298,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
+            ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
@@ -5693,7 +6595,7 @@ namespace CelesteMusicPlayer
             }
             else
             {
-                var addItem = new MenuFlyoutItem { Text = "添加至播放列表" };
+                var addItem = new MenuFlyoutItem { Text = "添加至播放队列" };
                 addItem.Icon = new FontIcon { Glyph = "\uE710" };
                 addItem.Click += (_, _) =>
                 {
@@ -5703,6 +6605,16 @@ namespace CelesteMusicPlayer
                     }
                 };
                 flyout.Items.Add(addItem);
+
+                var wallItem = new MenuFlyoutItem { Text = "添加到播放列表", Icon = new FontIcon { Glyph = "\uE8B7" } };
+                wallItem.Click += (_, _) =>
+                {
+                    if (_contextMenuSong != null)
+                    {
+                        _ = ShowNamedPlaylistPickerAsync(new[] { _contextMenuSong });
+                    }
+                };
+                flyout.Items.Add(wallItem);
             }
 
             AppendPlaylistContextFeatureItems(flyout, song, inUserPlaylist);
@@ -5776,6 +6688,60 @@ namespace CelesteMusicPlayer
             _currentPlaylistWindow = new CurrentPlaylistWindow(this);
             _currentPlaylistWindow.Closed += (_, _) => _currentPlaylistWindow = null;
             _currentPlaylistWindow.Activate();
+        }
+
+        /// <summary>打开播放队列窗口（复用主播放列表，聚焦接下来的待播曲目）。</summary>
+        internal void ShowPlayQueueWindow()
+        {
+            if (QueueWindow != null)
+            {
+                QueueWindow.Activate();
+                return;
+            }
+
+            try
+            {
+                var w = new PlayQueueWindow(this);
+                w.Activate();
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("ShowPlayQueueWindow", ex);
+            }
+        }
+
+        /// <summary>从播放队列窗口清空整个播放列表（不弹确认）。</summary>
+        internal void ClearUserPlaylistPublicFromQueue()
+        {
+            try
+            {
+                _userPlaylist.Clear();
+                _userPlaylistIndex = -1;
+                if (PlaylistView.ItemsSource == _userPlaylist || PlaylistView.ItemsSource != null)
+                {
+                    ApplyCategoryView();
+                }
+
+                StopEngineIfActive();
+                MediaPlayer? p = GetPlayer();
+                if (p != null)
+                {
+                    try
+                    {
+                        p.Source = null;
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                NowPlayingTitleText.Text = "未在播放";
+                NowPlayingArtistAlbumText.Text = "艺术家 · 专辑";
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("ClearQueue", ex);
+            }
         }
 
         internal void NotifyCurrentPlaylistWindow()
@@ -5953,6 +6919,12 @@ namespace CelesteMusicPlayer
 
         private ListView? ResolveMultiSelectTargetList()
         {
+            if (PlaylistDetailBorder.Visibility == Visibility.Visible
+                && PlaylistDetailListView != null)
+            {
+                return PlaylistDetailListView;
+            }
+
             if (AlbumDetailPanel.Visibility == Visibility.Visible
                 && AlbumTrackListView != null)
             {
@@ -5977,29 +6949,45 @@ namespace CelesteMusicPlayer
         {
             bool isUserPlaylist = _multiSelectTargetList == PlaylistView
                 && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal);
+            bool isDetailSongList = _multiSelectTargetList == AlbumTrackListView
+                || _multiSelectTargetList == ArtistTrackListView
+                || _multiSelectTargetList == PlaylistDetailListView;
             if (isUserPlaylist)
             {
                 MultiSelectPrimaryActionIcon.Glyph = "\uE74D"; // Delete
                 MultiSelectPrimaryActionText.Text = "从播放列表中删除";
                 ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲从播放列表移除");
             }
+            else if (isDetailSongList)
+            {
+                // 专辑/艺术家/专辑艺术家详情页多选歌曲 → 添加到播放列表（列表墙/命名单）
+                MultiSelectPrimaryActionIcon.Glyph = "\uE8B7";
+                MultiSelectPrimaryActionText.Text = "添加到播放列表";
+                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "把选中的歌曲添加到播放列表（列表墙）");
+            }
             else if (_multiSelectAlbumGrid != null)
             {
                 MultiSelectPrimaryActionIcon.Glyph = "\uE710";
-                MultiSelectPrimaryActionText.Text = "添加至播放列表";
-                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "按当前专辑顺序、音轨号将选中专辑加入播放列表");
+                MultiSelectPrimaryActionText.Text = "添加至播放队列";
+                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "按当前专辑顺序、音轨号将选中专辑加入播放队列");
             }
             else if (_multiSelectFolderList != null)
             {
                 MultiSelectPrimaryActionIcon.Glyph = "\uE710";
-                MultiSelectPrimaryActionText.Text = "添加至播放列表";
-                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中文件夹/音频按顺序加入播放列表");
+                MultiSelectPrimaryActionText.Text = "添加至播放队列";
+                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中文件夹/音频按顺序加入播放队列");
             }
             else
             {
                 MultiSelectPrimaryActionIcon.Glyph = "\uE710"; // Add
-                MultiSelectPrimaryActionText.Text = "添加至播放列表";
-                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲添加至播放列表");
+                MultiSelectPrimaryActionText.Text = "添加至播放队列";
+                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲添加至播放队列");
+            }
+
+            // “添加到播放列表（列表墙）”按钮：仅多选专辑(专辑/艺术家/专辑艺术家详情)时显示
+            if (MultiSelectAddToPlaylistButton != null)
+            {
+                MultiSelectAddToPlaylistButton.Visibility = _multiSelectAlbumGrid != null ? Visibility.Visible : Visibility.Collapsed;
             }
 
             if (MultiSelectDeleteMenuItem != null)
@@ -6393,15 +7381,35 @@ namespace CelesteMusicPlayer
 
             bool isUserPlaylist = _multiSelectTargetList == PlaylistView
                 && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal);
+            bool isDetailSongList = _multiSelectTargetList == AlbumTrackListView
+                || _multiSelectTargetList == ArtistTrackListView
+                || _multiSelectTargetList == PlaylistDetailListView;
             if (isUserPlaylist)
             {
                 RemoveSongsFromUserPlaylist(selected);
+            }
+            else if (isDetailSongList)
+            {
+                // 专辑/艺术家/专辑艺术家详情页多选 → 添加到播放列表（列表墙/命名单）
+                _ = ShowNamedPlaylistPickerAsync(selected);
             }
             else
             {
                 AddSongsToUserPlaylist(selected);
             }
 
+            ExitMultiSelectMode();
+        }
+
+        private void MultiSelectAddToPlaylistButton_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = GetSelectedMultiSelectSongs();
+            if (selected.Count == 0)
+            {
+                return;
+            }
+
+            _ = ShowNamedPlaylistPickerAsync(selected); // 多选专辑 → 添加到播放列表（列表墙/命名单）
             ExitMultiSelectMode();
         }
 
@@ -6571,6 +7579,7 @@ namespace CelesteMusicPlayer
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = Content.XamlRoot
             };
+            ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
@@ -6667,7 +7676,10 @@ namespace CelesteMusicPlayer
         }
 
         private async void OpenPlaylistButton_Click(object sender, RoutedEventArgs e)
-            => await OpenUserPlaylistAsync(Content.XamlRoot, navigateToPlaylist: true);
+        {
+            // “添加到播放列表”：把当前队列歌曲追加到所选/新建命名单（列表墙）
+            await ShowNamedPlaylistPickerAsync(_userPlaylist.ToList());
+        }
 
         internal async Task OpenUserPlaylistAsync(XamlRoot xamlRoot, bool navigateToPlaylist)
         {
@@ -6715,6 +7727,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
+            ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
@@ -6751,6 +7764,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
+            ApplyDialogAccent(dialog);
             ContentDialogResult result = await dialog.ShowAsync();
             return result == ContentDialogResult.Primary ? box.Text?.Trim() : null;
         }
@@ -6793,6 +7807,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
+            ApplyDialogAccent(dialog);
             ContentDialogResult result = await dialog.ShowAsync();
             if (result != ContentDialogResult.Primary || list.SelectedIndex < 0)
             {
@@ -6863,6 +7878,68 @@ namespace CelesteMusicPlayer
         /// 将歌曲插入播放列表最前（保持传入顺序）。
         /// 若已存在则先移除再提前，避免重复。大批量时整表重建，避免反复 Insert(0) 导致卡死/崩溃。
         /// </summary>
+        /// <summary>弹“添加到播放列表”选择器（Poweramp 逻辑）：选命名单或新建，把歌曲追加进去。</summary>
+        private async System.Threading.Tasks.Task ShowNamedPlaylistPickerAsync(IReadOnlyList<PlaylistItem> songs)
+        {
+            if (songs == null || songs.Count == 0) return;
+
+            var paths = songs
+                .Select(s => s.FilePath)
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (paths.Count == 0) return;
+
+            var prompt = new TextBlock
+            {
+                Text = "选择要添加到的播放列表：",
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+            };
+            var panel = new StackPanel { Spacing = 8, MinWidth = 320 };
+            panel.Children.Add(prompt);
+
+            var names = NamedPlaylistStore.List();
+            bool first = true;
+            foreach (string name in names)
+            {
+                var rb = new RadioButton { Content = name, GroupName = "__addtopl" };
+                rb.Tag = name;
+                rb.IsChecked = first;
+                first = false;
+                panel.Children.Add(rb);
+            }
+
+            var newNameBox = new Microsoft.UI.Xaml.Controls.TextBox { PlaceholderText = "或输入新播放列表名称（回车即新建添加）" };
+            panel.Children.Add(newNameBox);
+
+            var dialog = new ContentDialog
+            {
+                Title = "添加到播放列表",
+                Content = new ScrollViewer { Content = panel },
+                PrimaryButtonText = "添加",
+                CloseButtonText = "取消",
+                DefaultButton = ContentDialogButton.Primary,
+                XamlRoot = this.Content?.XamlRoot,
+            };
+
+            ApplyDialogAccent(dialog);
+            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
+
+            string? chosen = (panel.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag as string)?.Trim();
+            string? typed = newNameBox.Text?.Trim();
+            string? target = string.IsNullOrEmpty(typed) ? chosen : typed;
+            if (string.IsNullOrEmpty(target)) return;
+
+            var merged = NamedPlaylistStore
+                .LoadSongs(target)
+                .Concat(paths)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            NamedPlaylistStore.SaveSongs(target, merged);
+            PlaylistLibraryService.Refresh();
+            StartupLog.Write("已添加到播放列表: " + target + " (+" + paths.Count + " 首)");
+        }
+
         private void AddSongsToUserPlaylist(IEnumerable<PlaylistItem> songs)
         {
             List<PlaylistItem> incoming = songs
@@ -6985,6 +8062,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = Content.XamlRoot
             };
 
+            ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
@@ -7160,6 +8238,7 @@ namespace CelesteMusicPlayer
                 NavFoldersButton,
                 NavFavoritesButton,
                 NavRecentButton,
+                NavPlaylistWallButton,
                 NavGenreButton,
                 NavYearButton
             };
@@ -7189,7 +8268,7 @@ namespace CelesteMusicPlayer
             UserPlaylistNavButton.MinHeight = playlistCapsuleHeight;
             UserPlaylistNavButton.CornerRadius = new CornerRadius(playlistCapsuleHeight / 2.0);
             UserPlaylistNavButton.HorizontalContentAlignment = HorizontalAlignment.Center;
-            bool playlistActive = string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal);
+            bool playlistActive = string.Equals(_currentCategory, "PlaylistWall", StringComparison.Ordinal);
             if (playlistActive)
             {
                 UserPlaylistNavButton.Background = accent;
@@ -7396,6 +8475,10 @@ namespace CelesteMusicPlayer
             return _cachedMultiSelectFrostBrush;
         }
 
+        /// <summary>
+        /// 关闭系统默认选中底（方角），选中态改由模板内 SongRowChrome / AlbumRowChrome 圆角 Border 绘制。
+        /// 多选状态下内容铺满由 ListViewItem 覆盖模板的 ContentPresenter=Stretch 保证。
+        /// </summary>
         private void ApplyMultiSelectItemStyle(ListView target)
         {
             ApplyAccentSelectionResources(target);
@@ -7495,6 +8578,17 @@ namespace CelesteMusicPlayer
 
         private void RefreshArtistTrackSelectionChrome()
             => RefreshRealizedSongListSelectionChrome(ArtistTrackListView);
+
+        /// <summary>
+        /// 列表宽度变化时，重刷已实现行的宽度，使行内容始终铺满（选中矩形铺满整行、字段对齐）。
+        /// </summary>
+        private void SongListView_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            if (sender is ListView list && list.ActualWidth > 0)
+            {
+                RefreshRealizedSongListSelectionChrome(list);
+            }
+        }
 
         private void RefreshRealizedSongListSelectionChrome(ListView list)
         {
@@ -7664,6 +8758,12 @@ namespace CelesteMusicPlayer
                 chrome.MinHeight = 40;
                 chrome.CornerRadius = new CornerRadius(8);
                 chrome.VerticalAlignment = VerticalAlignment.Stretch;
+                // 让行内容横向铺满列表宽度（选中矩形也因此铺满整行、字段对齐表头）。
+                // 用显式宽度而非仅靠 HorizontalContentAlignment，确保在 ScrollViewer 布局下也生效。
+                if (list.ActualWidth > 0)
+                {
+                    chrome.Width = list.ActualWidth;
+                }
                 if (selected)
                 {
                     chrome.Background = accent;
@@ -8095,6 +9195,7 @@ namespace CelesteMusicPlayer
                 player.Volume = e.NewValue / 100.0 * _currentReplayGainScale;
             }
 
+            // 独占下同样联动设备主音量（SetVolume 内部已做响度压缩），保证滑块可控
             _audioEngine?.SetVolume(e.NewValue / 100.0);
 
             if (!_applyingSettingsVolume)
@@ -8554,6 +9655,7 @@ namespace CelesteMusicPlayer
             {
             }
 
+            ApplyDialogAccent(dialog);
             ContentDialogResult result = await dialog.ShowAsync();
             if (result == ContentDialogResult.None)
             {
@@ -8624,6 +9726,7 @@ namespace CelesteMusicPlayer
 
         private void ExitApplication()
         {
+            AppSettingsStore.MarkAppCleanExit();
             PersistPlaybackSession();
             _allowClose = true;
             try
@@ -9379,6 +10482,99 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>将当前播放队列保存为命名播放列表（Poweramp 式持久化，不影响当前队列）。</summary>
+        internal void SaveCurrentQueueAsPlaylist(string name)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    return;
+                }
+
+                List<string> paths = _userPlaylist
+                    .Select(p => p.FilePath)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                NamedPlaylistStore.SaveSongs(name.Trim(), paths);
+                StartupLog.Write("队列已保存为播放列表: " + name.Trim() + " (" + paths.Count + " 首)");
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("SaveCurrentQueueAsPlaylist", ex);
+            }
+        }
+
+        /// <summary>把命名单歌曲追加到当前播放队列（不播放、不替换）。</summary>
+        internal void AddNamedPlaylistToQueue(string name)
+        {
+            try
+            {
+                List<string> paths = NamedPlaylistStore.LoadSongs(name);
+                var items = new List<PlaylistItem>();
+                foreach (string path in paths)
+                {
+                    if (!System.IO.File.Exists(path)) continue;
+                    try { items.Add(CreatePlaylistItemFromPath(path)); } catch { }
+                }
+                if (items.Count == 0) return;
+                AddSongsToUserPlaylist(items);
+                StartupLog.Write("已把播放列表加入队列: " + name + " (" + items.Count + " 首)");
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("AddNamedPlaylistToQueue", ex);
+            }
+        }
+
+        /// <summary>把命名播放列表载入当前队列并开始播放（队列替换为列表内容）。</summary>
+        internal async System.Threading.Tasks.Task LoadNamedPlaylistToQueueAndPlayAsync(string name)
+        {
+            try
+            {
+                List<string> paths = NamedPlaylistStore.LoadSongs(name);
+                if (paths.Count == 0)
+                {
+                    return;
+                }
+
+                var items = new List<PlaylistItem>();
+                foreach (string path in paths)
+                {
+                    if (!System.IO.File.Exists(path))
+                    {
+                        continue;
+                    }
+
+                    try
+                    {
+                        items.Add(await System.Threading.Tasks.Task.Run(() => CreatePlaylistItemFromPath(path)));
+                    }
+                    catch
+                    {
+                    }
+                }
+
+                if (items.Count == 0)
+                {
+                    return;
+                }
+
+                _userPlaylist.Clear();
+                AddSongsToUserPlaylist(items);
+                PlayUserPlaylistAt(0);
+                StartupLog.Write("已载入播放列表到队列: " + name + " (" + items.Count + " 首)");
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("LoadNamedPlaylistToQueueAndPlay", ex);
+            }
+        }
+
+        /// <summary>已保存的命名播放列表名（供 UI 列示，含“我喜欢的音乐”）。</summary>
+        internal IReadOnlyList<string> ListNamedPlaylists() => NamedPlaylistStore.List();
+
         /// <summary>当前播放列表拖拽重排后的回调(UserPlaylist 与主窗口共享,集合顺序已自动更新)。</summary>
         internal void RefreshFromPlaylistReorder()
         {
@@ -9538,12 +10734,48 @@ namespace CelesteMusicPlayer
             _miniPlayerWindow?.RefreshFromOwner();
         }
 
+        /// <summary>独占/HiFi 输出时显示实际输出格式（WASAPI 设备端采样率/位深）；无则清空该行。</summary>
+        private void UpdateNowPlayingOutputFormat()
+        {
+            try
+            {
+                string? outFmt = _audioEngine?.ActualOutputFormat;
+                if (NowPlayingAudioInfoText != null)
+                {
+                    NowPlayingAudioInfoText.Text = string.IsNullOrEmpty(outFmt) ? string.Empty : "实际输出：" + outFmt;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>读取并显示当前曲目的音频格式信息（采样率/位深/码率/声道）。</summary>
+        private async System.Threading.Tasks.Task UpdateAudioInfoTextAsync(string path)
+        {
+            try
+            {
+                string? info = await System.Threading.Tasks.Task.Run(() => AudioInfoFormatter.Format(path));
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (NowPlayingAudioInfoText != null && string.Equals(_nowPlayingPath, path, System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        NowPlayingAudioInfoText.Text = info ?? string.Empty;
+                    }
+                });
+            }
+            catch
+            {
+            }
+        }
+
         private async Task UpdateNowPlayingPanelAsync(PlaylistItem item)
         {
             _nowPlayingPath = item.FilePath;
             NowPlayingTitleText.Text = item.Title;
             UpdateNowPlayingArtistAlbumText(item);
             UpdateTransportNowPlaying(item, null);
+            _ = UpdateAudioInfoTextAsync(item.FilePath);
 
             byte[]? coverBytes = await Task.Run(() => ExtractCoverBytes(item.FilePath));
             if (_nowPlayingPath != item.FilePath)
@@ -9823,7 +11055,19 @@ namespace CelesteMusicPlayer
 
             if (!force && index == _currentLyricIndex)
             {
-                UpdateCurrentLineCharHighlight(position);
+                // 当前行未变：保持整行主题色，不把 Run 染成灰白
+                if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
+                {
+                    Brush curAccent = ResolveAccentBrush();
+                    TextBlock row = _lyricTextBlocks[_currentLyricIndex];
+                    row.Foreground = curAccent;
+                    row.Opacity = 1.0;
+                    if (curAccent is SolidColorBrush scbCur2)
+                    {
+                        ResetRowRunColors(row, scbCur2.Color.R, scbCur2.Color.G, scbCur2.Color.B);
+                    }
+                }
+
                 return;
             }
 
@@ -9845,7 +11089,15 @@ namespace CelesteMusicPlayer
                     row.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
                     row.Foreground = accent;
                     row.Opacity = 1.0;
-                    UpdateCharHighlight(row, position);
+                    // 当前行整行保持主题色（不把 Run 染成灰白，避免播放中被掩盖成灰色）
+                    if (accent is SolidColorBrush scbCur)
+                    {
+                        ResetRowRunColors(row, scbCur.Color.R, scbCur.Color.G, scbCur.Color.B);
+                    }
+                    else
+                    {
+                        ResetRowRunColors(row, 255, 255, 255);
+                    }
                 }
                 else if (dist == 1)
                 {
@@ -10218,8 +11470,10 @@ namespace CelesteMusicPlayer
             StartupLog.Write("波形加载开始: " + item.FilePath + " style=" + _progressBarStyle);
             LoadWaveformForCurrentAsync(item.FilePath);
 
-            // 系统 Media Foundation 不支持的格式：走 FFmpeg 引擎
-            if (AudioPlaybackEngine.NeedsFfmpeg(item.FilePath))
+            // HiFi 独占模式（WASAPI 独占 / ASIO）：所有曲目统一走 FFmpeg 引擎 + NAudio 输出。
+            // 直接按设置判断（而非 _audioEngine.IsHiFiMode），避免 engine 尚未创建/未设 mode 时的首次播放漏走独占。
+            bool hifiMode = IsHiFiModeSelected();
+            if (hifiMode || AudioPlaybackEngine.NeedsFfmpeg(item.FilePath))
             {
                 // 停掉 MediaPlayer，避免与引擎同时出声
                 MediaPlayer? curPlayer = GetPlayer();
@@ -10304,6 +11558,9 @@ namespace CelesteMusicPlayer
         {
             NowPlayingText.Text = "正在转码：" + item.Title;
             _audioEngine ??= new AudioPlaybackEngine();
+            AppSettingsState hifiSettings = AppSettingsStore.Load();
+            ApplyEngineOutputMode(hifiSettings);
+            _audioEngine.SetOutputDevicePreference(string.IsNullOrWhiteSpace(hifiSettings.OutputDeviceId) ? null : hifiSettings.OutputDeviceId);
             _audioEngine.PlaybackEnded -= OnEnginePlaybackEnded;
             _audioEngine.PlaybackEnded += OnEnginePlaybackEnded;
 
@@ -10322,7 +11579,10 @@ namespace CelesteMusicPlayer
                 _isEnginePaused = false;
                 _usingEnginePlayback = true;
                 NowPlayingText.Text = "正在播放（引擎）：" + item.Title + " - " + item.Artist;
+                // 独占播放：把当前滑块音量应用到设备/系统主音量（播放器内部恒 100% 直通，bit-perfect）
+                _audioEngine?.SetVolume(VolumeSlider.Value / 100.0);
                 _ = UpdateNowPlayingPanelAsync(item);
+                UpdateNowPlayingOutputFormat();
                 RecordPlaybackStatsOnStart(item);
                 if (PlayPauseIcon != null)
                 {
@@ -10496,6 +11756,10 @@ namespace CelesteMusicPlayer
                 _desktopLyricsWindow?.Sync(position);
                 _miniPlayerWindow?.SyncPosition(position, _audioEngine?.Duration ?? TimeSpan.Zero);
                 _taskbarProgress?.SetProgress(position.TotalSeconds, ProgressSlider.Maximum, paused: false);
+
+                // 引擎（HiFi 独占/ASIO）路径也要推进当前歌词行与滚动，
+                // 否则歌词不随播放滚动（普通 MediaPlayer 路径由 PositionTimer_Tick 调用）。
+                SyncLyricsToPosition(position);
             }
             catch
             {

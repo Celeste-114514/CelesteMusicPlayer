@@ -31,6 +31,8 @@ namespace CelesteMusicPlayer
         private static SettingsWindow? _instance;
         private bool _loadingUi = true;
         private bool _uiReady;
+        private bool _loadAsyncIgnore;
+        private string? _loadedOutputDeviceId;
         private List<string> _watchFolders = new();
 
         private static readonly (string Id, string Label)[] CloseOptions =
@@ -205,6 +207,10 @@ namespace CelesteMusicPlayer
             FillCombo(LyricDownloadServiceCombo, LyricServiceOptions);
             FillCombo(OnlineSearchSourceCombo, LyricServiceOptions);
             FillCombo(AudioChannelCombo, AudioChannelOptions);
+            OutputModeCombo.Items.Clear();
+            OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 共享（系统混音）", Tag = "Shared" });
+            OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 独占（HiFi）", Tag = "WasapiExclusive" });
+            OutputModeCombo.Items.Add(new ComboBoxItem { Content = "ASIO（专有声卡驱动）", Tag = "Asio" });
             FillCombo(PlaylistDisplayFormatCombo, PlaylistFormatOptions);
 
             WriteId3v23Combo.Items.Clear();
@@ -365,6 +371,12 @@ namespace CelesteMusicPlayer
                 SetSlider(LastFmLeastSecondsSlider, s.LastFmLeastSeconds);
                 SetTextBlock(LastFmLeastSecondsValueText, $"{s.LastFmLeastSeconds} 秒");
 
+                // 音频输出模式 + 设备
+                SelectComboByTag(OutputModeCombo, s.OutputMode);
+                StartupLog.Write("设置加载 输出模式=" + (s.OutputMode ?? "null") + " 下拉选中=" + (OutputModeCombo?.SelectedItem is ComboBoxItem _m && _m.Tag is string _mt ? _mt : "(null)") + " 设备=" + (s.OutputDeviceId ?? "null"));
+                _loadAsyncIgnore = true;
+                _ = InitOutputDeviceComboAsync(s.OutputDeviceId);
+
                 // 快捷键
                 SetToggle(EnableGlobalHotkeysSwitch, s.EnableGlobalHotkeys);
             }
@@ -463,6 +475,116 @@ namespace CelesteMusicPlayer
             {
                 combo.SelectedIndex = 0;
             }
+        }
+
+        /// <summary>异步枚举输出设备并填充下拉框，默认选中 OutputDeviceId（空=系统默认）。</summary>
+        private async System.Threading.Tasks.Task InitOutputDeviceComboAsync(string selectedId)
+        {
+            // 异步填充全程置 _loadingUi=true：填清空/重填/选中任何 SelectionChanged 都不触发保存，
+            // 避免把中间态（Shared/空）写回覆盖用户设置；finally 恢复。
+            _loadingUi = true;
+            try
+            {
+                var prevSelection = new HashSet<string>();
+                if (OutputDeviceCombo?.SelectedItem is ComboBoxItem cur && cur.Tag is string cid)
+                {
+                    prevSelection.Add(cid);
+                }
+
+                // 用 NAudio 枚举 WASAPI 渲染设备（与 HiFi 独占输出同源，ID 稳定）
+                var devices = HiFiOutputBackend.EnumerateWasapiDevices();
+                string defaultId = HiFiOutputBackend.GetDefaultWasapiDeviceId();
+                StartupLog.Write("输出设备下拉枚举 数量=" + devices.Count + " 默认=" + defaultId + " 已选=" + selectedId);
+                foreach (var dev in devices)
+                {
+                    StartupLog.Write("  设备 id=" + dev.Id + " name=" + dev.Name);
+                }
+
+                _loadedOutputDeviceId = selectedId;
+                if (OutputDeviceCombo == null)
+                {
+                    return;
+                }
+
+                OutputDeviceCombo.Items.Clear();
+                // 第一项：系统默认（Tag 为空字符串）
+                var defaultItem = new ComboBoxItem { Content = "系统默认", Tag = "" };
+                Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(defaultItem, "跟随 Windows 默认输出设备");
+                OutputDeviceCombo.Items.Add(defaultItem);
+                foreach ((string id, string name) in devices)
+                {
+                    string label = string.Equals(id, defaultId, System.StringComparison.OrdinalIgnoreCase)
+                        ? name + " (默认)"
+                        : name;
+                    OutputDeviceCombo.Items.Add(new ComboBoxItem { Content = label, Tag = id });
+                }
+
+                // 选中保存的设备（或系统默认）；若用户已手动选过则保留
+                string target = string.IsNullOrWhiteSpace(selectedId) ? "" : selectedId;
+                if (prevSelection.Count > 0 && string.IsNullOrEmpty(target))
+                {
+                    target = prevSelection.First();
+                }
+
+                SelectRenderDeviceCombo(OutputDeviceCombo, target);
+            }
+            finally
+            {
+                _loadAsyncIgnore = false; // 无论如何都复位，防止永真拦截用户后续保存
+                _loadingUi = false; // 异步填充完成，恢复可保存
+            }
+        }
+
+        /// <summary>选中设备下拉：空 = 系统默认；否则按去掉 \?\ 前缀的设备 ID 匹配，防回显成“系统默认”。</summary>
+        private void SelectRenderDeviceCombo(ComboBox? combo, string selectedId)
+        {
+            if (combo == null)
+            {
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(selectedId))
+            {
+                SelectComboByTag(combo, "");
+                return;
+            }
+
+            // NAudio MMDevice.ID 精确匹配（与枚举/保存/输出同源），忽略大小写
+            for (int i = 0; i < combo.Items.Count; i++)
+            {
+                if (combo.Items[i] is ComboBoxItem item && item.Tag is string id
+                    && string.Equals(id, selectedId, StringComparison.OrdinalIgnoreCase))
+                {
+                    combo.SelectedIndex = i;
+                    return;
+                }
+            }
+
+            if (combo.Items.Count > 0)
+            {
+                combo.SelectedIndex = 0; // 匹配失败回落系统默认
+            }
+        }
+
+        /// <summary>读取当前选中输出设备 ID（空字符串 = 系统默认）。</summary>
+        private string GetSelectedOutputMode()
+        {
+            if (OutputModeCombo?.SelectedItem is ComboBoxItem item && item.Tag is string mode)
+            {
+                return mode;
+            }
+
+            return "Shared";
+        }
+
+        private string GetSelectedOutputDeviceId()
+        {
+            if (OutputDeviceCombo?.SelectedItem is ComboBoxItem item && item.Tag is string id)
+            {
+                return id;
+            }
+
+            return string.Empty;
         }
 
         private void SelectWriteId3Version(bool writeV23)
@@ -600,6 +722,9 @@ namespace CelesteMusicPlayer
             }
 
             s.EnableSmtc = EnableSmtcSwitch?.IsOn ?? s.EnableSmtc;
+            s.OutputDeviceId = GetSelectedOutputDeviceId();
+            s.OutputMode = GetSelectedOutputMode();
+            StartupLog.Write("设置保存 输出模式=" + (s.OutputMode ?? "null") + " 设备=" + (s.OutputDeviceId ?? "null"));
             s.ReplayGainEnabled = ReplayGainSwitch?.IsOn ?? s.ReplayGainEnabled;
             s.EnableFade = EnableFadeSwitch?.IsOn ?? s.EnableFade;
             if (FadeMsSlider != null)
@@ -772,7 +897,7 @@ namespace CelesteMusicPlayer
 
         private void PersistAllFromUi()
         {
-            if (_loadingUi || !_uiReady)
+            if (_loadingUi || !_uiReady || _loadAsyncIgnore)
             {
                 return;
             }

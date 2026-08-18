@@ -4,7 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:local="using:CelesteMusicPlayer"
-    Title="当前播放列表">
+    Title="播放队列">
 
     <Window.SystemBackdrop>
         <DesktopAcrylicBackdrop />
@@ -42,7 +42,7 @@
                     VerticalAlignment="Center"
                     FontSize="13"
                     Opacity="0.9"
-                    Text="当前播放列表" />
+                    Text="播放队列" />
             </StackPanel>
         </Grid>
 
@@ -250,37 +250,44 @@
                             Background="Transparent">
                             <Grid VerticalAlignment="Center" ColumnSpacing="10">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="168" />
+                                    <ColumnDefinition Width="30" />
+                                    <ColumnDefinition Width="136" />
                                     <ColumnDefinition Width="120" />
                                     <ColumnDefinition Width="120" />
-                                    <ColumnDefinition Width="56" />
-                                    <ColumnDefinition Width="64" />
+                                    <ColumnDefinition Width="50" />
+                                    <ColumnDefinition Width="60" />
                                     <ColumnDefinition Width="*" />
                                 </Grid.ColumnDefinitions>
                                 <TextBlock
                                     Grid.Column="0"
                                     VerticalAlignment="Center"
-                                    TextTrimming="CharacterEllipsis"
-                                    Text="{x:Bind Title}" />
+                                    Opacity="0.45"
+                                    FontSize="12"
+                                    Text="{x:Bind Index}" />
                                 <TextBlock
                                     Grid.Column="1"
                                     VerticalAlignment="Center"
-                                    Opacity="0.85"
                                     TextTrimming="CharacterEllipsis"
-                                    Text="{x:Bind Artist}" />
+                                    Text="{x:Bind Title}" />
                                 <TextBlock
                                     Grid.Column="2"
                                     VerticalAlignment="Center"
                                     Opacity="0.85"
                                     TextTrimming="CharacterEllipsis"
-                                    Text="{x:Bind Album}" />
+                                    Text="{x:Bind Artist}" />
                                 <TextBlock
                                     Grid.Column="3"
                                     VerticalAlignment="Center"
                                     Opacity="0.85"
-                                    Text="{x:Bind YearText}" />
+                                    TextTrimming="CharacterEllipsis"
+                                    Text="{x:Bind Album}" />
                                 <TextBlock
                                     Grid.Column="4"
+                                    VerticalAlignment="Center"
+                                    Opacity="0.85"
+                                    Text="{x:Bind YearText}" />
+                                <TextBlock
+                                    Grid.Column="5"
                                     VerticalAlignment="Center"
                                     Opacity="0.85"
                                     Text="{x:Bind DurationText}" />

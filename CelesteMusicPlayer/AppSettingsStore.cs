@@ -28,6 +28,13 @@ namespace CelesteMusicPlayer
         /// <summary>ReplayGain 响度归一化：优先读内嵌标签，缺失时用 ffmpeg 计算并缓存。</summary>
         public bool ReplayGainEnabled { get; set; } = true;
 
+        /// <summary>音频输出设备 ID（HiFi 设备切换）。空 = 系统默认。</summary>
+        public string OutputDeviceId { get; set; } = string.Empty;
+
+        /// <summary>HiFi 输出模式：Shared / WasapiExclusive / Asio。独占时所有曲目经 NAudio 输出。</summary>
+        public string OutputMode { get; set; } = "Shared";
+
+
         /// <summary><see cref="PlaybackOrder"/> 名称</summary>
         public string PlaybackOrder { get; set; } = nameof(CelesteMusicPlayer.PlaybackOrder.ListLoop);
 
@@ -209,8 +216,8 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
     public static class AppSettingsStore
     {
         private const string FileName = "app-settings.json";
-        private static AppSettingsState? _cache;
         private static readonly object Gate = new();
+        private static AppSettingsState? _cache;
 
         public static event Action? Changed;
 
@@ -220,28 +227,50 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             {
                 if (_cache != null)
                 {
+                    StartupLog.Write("Load 命中缓存 _cache 已设, OutputMode=" + (_cache?.OutputMode ?? "null"));
                     return Clone(_cache);
                 }
 
+                StartupLog.Write("Load _cache==null, 准备读文件");
                 try
                 {
                     string path = GetFilePath();
                     if (File.Exists(path))
                     {
-                        AppSettingsState? loaded = JsonSerializer.Deserialize<AppSettingsState>(File.ReadAllText(path));
+                        string raw = File.ReadAllText(path);
+                        AppSettingsState? loaded = JsonSerializer.Deserialize<AppSettingsState>(raw);
+                        StartupLog.Write("Load 读文件 path=" + path + " 解析成功=" + (loaded != null) + " OutputMode=" + (loaded?.OutputMode ?? "(null)"));
                         _cache = Normalize(loaded ?? new AppSettingsState());
                     }
                     else
                     {
+                        StartupLog.Write("Load 文件不存在 path=" + path + ", 用默认+迁移");
                         _cache = MigrateFromLegacyClosePrefs(new AppSettingsState());
                         SaveCore(_cache);
                     }
                 }
-                catch
+                catch (Exception ex)
                 {
+                    StartupLog.Write("Load 反序列化/读取异常: " + ex.Message);
+                    try
+                    {
+                        string path = GetFilePath();
+                        if (File.Exists(path))
+                        {
+                            string backup = path + ".corrupt-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                            File.Copy(path, backup, overwrite: true);
+                            SettingsWereRecovered = true;
+                            StartupLog.Write("设置文件损坏，已备份到 " + backup + " 并使用默认设置");
+                        }
+                    }
+                    catch
+                    {
+                    }
+
                     _cache = new AppSettingsState();
                 }
 
+                StartupLog.Write("Load 返回 OutputMode=" + (_cache?.OutputMode ?? "null"));
                 return Clone(_cache);
             }
         }
@@ -392,6 +421,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             AutoRun = s.AutoRun,
             EnableFrostedGlass = s.EnableFrostedGlass,
             Volume = s.Volume,
+            ReplayGainEnabled = s.ReplayGainEnabled,
+            OutputDeviceId = s.OutputDeviceId,
+            OutputMode = s.OutputMode,
             PlaybackOrder = s.PlaybackOrder,
             MiniPlayerAlwaysOnTop = s.MiniPlayerAlwaysOnTop,
             OpenDesktopLyricsOnStartup = s.OpenDesktopLyricsOnStartup,
@@ -472,25 +504,83 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             ShowNavRecent = s.ShowNavRecent,
             ShowNavGenre = s.ShowNavGenre,
             ShowNavYear = s.ShowNavYear,
+            ShowPlaylistTitle = s.ShowPlaylistTitle,
+            ShowPlaylistArtist = s.ShowPlaylistArtist,
+            ShowPlaylistAlbum = s.ShowPlaylistAlbum,
+            ShowPlaylistYear = s.ShowPlaylistYear,
+            ShowPlaylistDuration = s.ShowPlaylistDuration,
+            AudioChannel = s.AudioChannel,
+            OnlineSearchDefaultSource = s.OnlineSearchDefaultSource,
             CustomHotkeys = s.CustomHotkeys.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase)
         };
 
         internal static string GetFilePath()
         {
-            string root;
+            // 固定使用普通用户目录，规避 MSIX ApplicationData 虚拟化导致的写入不稳定/多路径混乱。
+            // 打包与 unpackaged 读写完全同源，杜绝“保存正确却读回默认”的另一文件路径问题。
+            string root = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "CelesteMusicPlayer");
+            Directory.CreateDirectory(root);
+            string path = Path.Combine(root, FileName);
+            startupLogOnce(path);
+            return path;
+        }
+
+        /// <summary>上次运行是否异常退出（运行标记残留）。供启动提示。</summary>
+        public static bool WasUncleanExitLastTime { get; private set; }
+
+        /// <summary>启动时调用：写入运行标记；若标记已存在则说明上次异常退出。</summary>
+        public static void MarkAppStart()
+        {
             try
             {
-                root = ApplicationData.Current.LocalFolder.Path;
+                string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CelesteMusicPlayer");
+                Directory.CreateDirectory(dir);
+                string marker = Path.Combine(dir, ".running");
+                WasUncleanExitLastTime = File.Exists(marker);
+                File.WriteAllText(marker, DateTime.Now.ToString("o"));
             }
             catch
             {
-                root = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer");
+            }
+        }
+
+        /// <summary>正常退出时调用：清除运行标记。</summary>
+        public static void MarkAppCleanExit()
+        {
+            try
+            {
+                string marker = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CelesteMusicPlayer", ".running");
+                File.Delete(marker);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>本次进程加载时设置文件损坏并已用默认恢复（供 UI 提示一次）。</summary>
+        public static bool SettingsWereRecovered { get; private set; }
+
+        private static bool _pathLogged;
+        private static void startupLogOnce(string path)
+        {
+            if (_pathLogged)
+            {
+                return;
             }
 
-            Directory.CreateDirectory(root);
-            return Path.Combine(root, FileName);
+            _pathLogged = true;
+            try
+            {
+                System.IO.File.AppendAllText(
+                    Path.Combine(Path.GetTempPath(), "CelesteSettingsPath.log"),
+                    DateTimeOffset.Now.ToString("HH:mm:ss.fff") + " GetFilePath=" + path + Environment.NewLine);
+                System.IO.File.AppendAllText(path + ".pathlog", DateTimeOffset.Now.ToString("HH:mm:ss.fff") + " GetFilePath called" + Environment.NewLine);
+            }
+            catch
+            {
+            }
         }
 
         public static string GetConfigDirectory()

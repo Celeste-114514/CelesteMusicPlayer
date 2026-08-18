@@ -38,8 +38,8 @@
                     </Grid.ColumnDefinitions>
 
                     <Border
-                        Width="68"
-                        Height="68"
+                        Width="72"
+                        Height="72"
                         CornerRadius="6"
                         Background="#28FFFFFF">
                         <Grid>

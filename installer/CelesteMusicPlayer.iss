@@ -4,7 +4,7 @@
 ; 或直接在 Inno Setup 编译器中打开本文件编译。
 
 #define MyAppName "CelesteMusicPlayer"
-#define MyAppVersion "2.0.0"
+#define MyAppVersion "26.8.19"
 #define MyAppPublisher "CelesteMusicPlayer"
 #define MyAppExeName "CelesteMusicPlayer.exe"
 #define PublishDir "C:\Users\admin\Desktop\CelesteMusicPlayer-发布"

@@ -224,10 +224,12 @@ namespace CelesteMusicPlayer
             res["ListViewItemBackgroundSelected"] = new SolidColorBrush(Color.FromArgb(64, accent.R, accent.G, accent.B));
             res["ListViewItemBackgroundSelectedPointerOver"] = new SolidColorBrush(Color.FromArgb(96, accent.R, accent.G, accent.B));
             res["ListViewItemBackgroundSelectedPressed"] = new SolidColorBrush(Color.FromArgb(128, accent.R, accent.G, accent.B));
-            res["ListViewItemBackgroundPointerOver"] = new SolidColorBrush(Color.FromArgb(24, accent.R, accent.G, accent.B));
+            res["ListViewItemBackgroundPointerOver"] = new SolidColorBrush(Colors.Transparent);
+            res["ListViewItemBackgroundPressed"] = new SolidColorBrush(Colors.Transparent);
             res["GridViewItemBackgroundSelected"] = new SolidColorBrush(Color.FromArgb(64, accent.R, accent.G, accent.B));
             res["GridViewItemBackgroundSelectedPointerOver"] = new SolidColorBrush(Color.FromArgb(96, accent.R, accent.G, accent.B));
-            res["GridViewItemBackgroundPointerOver"] = new SolidColorBrush(Color.FromArgb(24, accent.R, accent.G, accent.B));
+            res["GridViewItemBackgroundPointerOver"] = new SolidColorBrush(Colors.Transparent);
+            res["GridViewItemBackgroundPressed"] = new SolidColorBrush(Colors.Transparent);
         }
 
         /// <summary>移除覆盖，恢复系统主题色。</summary>
@@ -263,8 +265,9 @@ namespace CelesteMusicPlayer
                 "SystemControlHighlightListAccentHighBrush", "AccentTextFillColorPrimaryBrush",
                 "ListViewItemBackgroundSelected", "ListViewItemBackgroundSelectedPointerOver",
                 "ListViewItemBackgroundSelectedPressed", "ListViewItemBackgroundPointerOver",
+                "ListViewItemBackgroundPressed",
                 "GridViewItemBackgroundSelected", "GridViewItemBackgroundSelectedPointerOver",
-                "GridViewItemBackgroundPointerOver"
+                "GridViewItemBackgroundPointerOver", "GridViewItemBackgroundPressed"
             };
             foreach (string key in keys)
             {
