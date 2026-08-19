@@ -29,6 +29,7 @@ namespace CelesteMusicPlayer
         // 且不依赖 ACM（AudioFileReader 读 24bit 等需 ACM，缺 driver 会抛 "NoDriver calling acmFormatSuggest"）。
         private WaveFileReader? _waveFile;
         private IWavePlayer? _output; // WasapiOut 或 AsioOut
+        private SeamlessWaveProvider? _seamless; // NAudio 输出（共享/ASIO）的无缝续接源（当前+下一首）
         private NativeWasapiExclusiveOut? _native; // 原生 WASAPI 独占输出器（WasapiExclusive 模式替代 NAudio WasapiOut）
         private bool _useNative; // 当前播放是否走原生独占输出
         private MMDevice? _device;     // 用于调设备/系统主音量（WASAPI）；ASIO 无统一接口为 null
@@ -45,6 +46,9 @@ namespace CelesteMusicPlayer
         /// <summary>文件播放结束。</summary>
         public event Action? PlaybackStopped;
 
+        /// <summary>共享/ASIO 无缝切到下一首（上层需更新标题/时长并继续预加载下下首）。</summary>
+        public event Action? SeamlessTrackChanged;
+
         /// <summary>失败（初始化/打开/输出）。</summary>
         public event Action<Exception>? Failed;
 
@@ -60,6 +64,55 @@ namespace CelesteMusicPlayer
         public TimeSpan Duration { get; private set; }
 
         public TimeSpan Position { get; private set; }
+
+        // 源音频实际时长（来自元数据/TagLib）。非 0 时优先用它作为 Duration 上限，
+        // 避免 DSD 转 PCM 后 WAV 尾部 padding 让进度条越过源时长。
+        private TimeSpan _sourceDuration;
+
+        /// <summary>设置源音频实际时长（可覆盖转码 WAV 计算出的更长时长，如 DSD 转 PCM 带尾部）。</summary>
+        public void SetSourceDuration(TimeSpan duration)
+        {
+            _sourceDuration = duration > TimeSpan.Zero ? duration : TimeSpan.Zero;
+            if (_sourceDuration > TimeSpan.Zero && (Duration <= TimeSpan.Zero || _sourceDuration < Duration))
+            {
+                Duration = _sourceDuration;
+            }
+        }
+
+        /// <summary>预加载下一首 WAV 到无缝源（共享/ASIO）。
+        /// 与当前同格式未读及时可无缝续接；格式不同或未就绪则由上层走重建。返回是否采纳为无缝续接。</summary>
+        public bool PrepareNextSeamless(string nextWavPath)
+        {
+            if (_seamless == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                using var probe = File.Exists(nextWavPath) ? new WaveFileReader(nextWavPath) : null;
+                if (probe == null)
+                {
+                    return false;
+                }
+
+                bool same = probe.WaveFormat.SampleRate == _seamless.WaveFormat.SampleRate
+                    && probe.WaveFormat.BitsPerSample == _seamless.WaveFormat.BitsPerSample
+                    && probe.WaveFormat.Channels == _seamless.WaveFormat.Channels;
+                if (!same)
+                {
+                    return false;
+                }
+
+                var next = new WaveFileReader(nextWavPath);
+                _seamless.PrepareNext(next);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
 
         /// <summary>最近一次失败原因。</summary>
         public string? LastError { get; private set; }
@@ -277,7 +330,7 @@ namespace CelesteMusicPlayer
                 _activeWavPath = wavPath;
                 _activeMode = mode;
                 _activeDeviceId = deviceIdentifier;
-
+                _seamless = null; // 新建播放会话，等待 NAudio 路径初始化无缝源
                 switch (mode)
                 {
                     case OutputMode.WasapiShared:
@@ -336,6 +389,11 @@ namespace CelesteMusicPlayer
                 }
 
                 Duration = _waveFile.TotalTime;
+                // 若调用了 SetSourceDuration（源元数据时长），优先用源时长，规避转码 WAV 尾部 padding 越界
+                if (_sourceDuration > TimeSpan.Zero && _sourceDuration < Duration)
+                {
+                    Duration = _sourceDuration;
+                }
                 var srcWf = _waveFile.WaveFormat;
                 SourceFormatDescription = srcWf.SampleRate + " Hz / " + srcWf.BitsPerSample + " bit / " + srcWf.Channels + "声道";
                 Position = TimeSpan.Zero;
@@ -368,7 +426,9 @@ namespace CelesteMusicPlayer
                 }
                 else
                 {
-                    _output.Init(_waveFile); // IWaveProvider：源 PCM 原样直通（严格 bit-perfect）
+                    // 共享/ASIO 用无缝源：同格式下一首可无缝续接（gapless）；无预加载则行为等同现状
+                    _seamless = new SeamlessWaveProvider(_waveFile);
+                    _output.Init(_seamless); // IWaveProvider：源 PCM 原样直通（严格 bit-perfect）
                     CaptureActualOutputFormat();
                     _output.PlaybackStopped += Output_PlaybackStopped;
                     _output.Play();
@@ -549,16 +609,60 @@ namespace CelesteMusicPlayer
 
             // NAudio WasapiOut/AsioOut 在数据源自然播放到末尾时，若不主动 Stop，PlaybackStopped 事件不会触发
             // （实测 HasReachedEnd=true 但 PlaybackState 仍为 Playing），导致“播完不自动下一首”。
-            // 此处检测源已读到末尾，主动 Stop 以触发 PlaybackStopped → 上层自动接续下一首。
-            if (_waveFile != null && Duration > TimeSpan.Zero
-                && Position >= Duration - TimeSpan.FromMilliseconds(400))
+            // 若共享/ASIO 已预加载同格式下一首，则由无缝源自动续接（不 Stop → gapless），并通知上层切换。
+            if (_seamless != null && _seamless.SwitchedToNext)
             {
-                try
+                _seamless.ResetSwitchFlag(); // 允许下一次无缝切换
+                // 同步到已无缝切入的下一首：源 reader / 时长 / 位置，保证 Position/Duration 继续正确
+                var nextReader = _seamless.Current;
+                if (nextReader != null && !ReferenceEquals(nextReader, _waveFile))
                 {
-                    _output?.Stop(); // 触发 Output_PlaybackStopped（内含 PlaybackStopped）
+                    _waveFile?.Dispose();
+                    _waveFile = nextReader;
+                    // Duration：源时长优先，否则用新 reader 的 WAV 时长
+                    Duration = _sourceDuration > TimeSpan.Zero ? _sourceDuration : _waveFile.TotalTime;
+                    if (_sourceDuration > TimeSpan.Zero && _sourceDuration < Duration)
+                    {
+                        Duration = _sourceDuration;
+                    }
                 }
-                catch
+                Position = TimeSpan.Zero;
+                SeamlessTrackChanged?.Invoke();
+            }
+
+            bool sourceExhausted = false;
+            if (_waveFile != null && _waveFile.Length > 8)
+            {
+                // 数据源已真实读到末尾（最可靠，避免依赖被源时长改短的 Duration；DSD 转码 WAV 读尽即播完）
+                sourceExhausted = _waveFile.Position >= _waveFile.Length - 1024;
+            }
+
+            if (_waveFile != null && Duration > TimeSpan.Zero
+                && (sourceExhausted || Position >= Duration - TimeSpan.FromMilliseconds(400)))
+            {
+                // 有可续接的下一首：交给无缝源，不主动 Stop（播完检测挪到切歌后）
+                if (_seamless != null && _seamless.HasReadyNext)
                 {
+                    // 本轮末尾不 Stop；切换下一首后由上层 PrepareNext 继续预加载
+                }
+                else
+                {
+                    try
+                    {
+                        if (_useNative && _native != null)
+                        {
+                            _native.Stop(); // 停止渲染线程
+                            if (!_isPlaying) { /* already stopping */ }
+                            else { PlaybackStopped?.Invoke(); } // 原生 Stop 不触发 Ended（_requestStop），手动通知上层切下一首
+                        }
+                        else
+                        {
+                            _output?.Stop(); // 触发 Output_PlaybackStopped（内含 PlaybackStopped）
+                        }
+                    }
+                    catch
+                    {
+                    }
                 }
             }
 
@@ -624,6 +728,8 @@ namespace CelesteMusicPlayer
                 _native = null;
             }
             _useNative = false;
+            _seamless?.Dispose();
+            _seamless = null;
             _waveFile?.Dispose();
             _waveFile = null;
             _positionTimer.Stop();

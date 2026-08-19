@@ -4,7 +4,7 @@
 ; 或直接在 Inno Setup 编译器中打开本文件编译。
 
 #define MyAppName "CelesteMusicPlayer"
-#define MyAppVersion "26.8.19"
+#define MyAppVersion "26.8.20"
 #define MyAppPublisher "CelesteMusicPlayer"
 #define MyAppExeName "CelesteMusicPlayer.exe"
 #define PublishDir "C:\Users\admin\Desktop\CelesteMusicPlayer-发布"
@@ -22,8 +22,8 @@ OutputDir=C:\Users\admin\Desktop
 OutputBaseFilename=CelesteMusicPlayer-Setup-{#MyAppVersion}
 SetupIconFile=C:\Users\admin\source\repos\CelesteMusicPlayer\CelesteMusicPlayer\Assets\AppIcon.ico
 UninstallDisplayIcon={app}\{#MyAppExeName}
-Compression=lzma2
-SolidCompression=yes
+Compression=lzma2/fast
+SolidCompression=no
 WizardStyle=modern
 ArchitecturesInstallIn64BitMode=x64compatible
 PrivilegesRequired=lowest

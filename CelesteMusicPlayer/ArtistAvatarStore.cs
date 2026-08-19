@@ -95,5 +95,75 @@ namespace CelesteMusicPlayer
                 File.Delete(path);
             }
         }
+
+        // ---- 网络头像磁盘缓存（与自定义头像分离，便于下次打开不重新联网搜索）----
+        private static string GetWebCacheFolderPath()
+        {
+            string root;
+            try
+            {
+                root = ApplicationData.Current.LocalFolder.Path;
+            }
+            catch
+            {
+                root = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "CelesteMusicPlayer");
+            }
+
+            string folder = Path.Combine(root, "ArtistAvatars", "Web");
+            Directory.CreateDirectory(folder);
+            return folder;
+        }
+
+        private static string GetWebCacheFilePath(string artistName)
+        {
+            byte[] hash = SHA256.HashData(Encoding.UTF8.GetBytes(artistName.Trim().ToLowerInvariant()));
+            string name = Convert.ToHexString(hash.AsSpan(0, 8));
+            return Path.Combine(GetWebCacheFolderPath(), name + ".jpg");
+        }
+
+        public static async Task<BitmapImage?> TryLoadWebAsync(string artistName)
+        {
+            string path = GetWebCacheFilePath(artistName);
+            if (!File.Exists(path))
+            {
+                return null;
+            }
+
+            try
+            {
+                var image = new BitmapImage();
+                StorageFile file = await StorageFile.GetFileFromPathAsync(path);
+                using IRandomAccessStream stream = await file.OpenReadAsync();
+                await image.SetSourceAsync(stream);
+                return image;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        public static async Task SaveWebAsync(string artistName, byte[] imageBytes)
+        {
+            if (imageBytes == null || imageBytes.Length == 0)
+            {
+                return;
+            }
+
+            try
+            {
+                string path = GetWebCacheFilePath(artistName);
+                StorageFolder folder = await StorageFolder.GetFolderFromPathAsync(GetWebCacheFolderPath());
+                StorageFile file = await folder.CreateFileAsync(
+                    Path.GetFileName(path),
+                    CreationCollisionOption.ReplaceExisting);
+                await FileIO.WriteBytesAsync(file, imageBytes);
+            }
+            catch
+            {
+            }
+        }
     }
 }

@@ -345,7 +345,7 @@ namespace CelesteMusicPlayer
             multiItem.Icon = new FontIcon { Glyph = "\uE700" };
             multiItem.Click += (_, _) => EnterMultiSelect(_contextMenuSong);
 
-            var removeItem = new MenuFlyoutItem { Text = "从播放列表中删除" };
+            var removeItem = new MenuFlyoutItem { Text = "从播放队列中删除" };
             removeItem.Icon = new FontIcon { Glyph = "\uE74D" };
             removeItem.Click += (_, _) =>
             {

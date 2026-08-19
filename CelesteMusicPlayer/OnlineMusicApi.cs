@@ -616,6 +616,9 @@ namespace CelesteMusicPlayer
 
             try
             {
+                // 头像搜索曾尝试切换 Apple Music（iTunes Search API）。实测其 musicArtist 实体
+                // 返回结果不含任何 artworkUrl 字段——Apple 不在公开 search API 暴露"艺术家头像"，
+                // 需授权/抓取页面，故不可行；维持网易云（music.163.com type=100 艺术家搜索取 picUrl）。
                 string url = "https://music.163.com/api/search/get?s={0}&type=100&limit=1";
                 url = string.Format(url, Uri.EscapeDataString(artistName.Trim()));
                 using HttpResponseMessage response = await Http.GetAsync(url, cancellationToken).ConfigureAwait(false);

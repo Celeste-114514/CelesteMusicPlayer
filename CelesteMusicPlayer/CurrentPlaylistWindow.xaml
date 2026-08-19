@@ -362,10 +362,10 @@
                 Background="Transparent"
                 BorderThickness="0"
                 Click="MultiSelectDeleteButton_Click"
-                ToolTipService.ToolTip="将选中歌曲从播放列表移除">
+                ToolTipService.ToolTip="将选中歌曲从播放队列移除">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <FontIcon Glyph="&#xE74D;" FontSize="14" />
-                    <TextBlock Text="从播放列表中删除" VerticalAlignment="Center" />
+                    <TextBlock Text="从播放队列中删除" VerticalAlignment="Center" />
                 </StackPanel>
             </Button>
         </Grid>

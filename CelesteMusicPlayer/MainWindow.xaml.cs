@@ -27,13 +27,13 @@ using System.Threading.Tasks;
 using System.Threading;
 // TagLibSharp：包名 TagLibSharp，命名空间 TagLib
 using TagLib;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Media.Core;
 using Windows.Media;
 using Windows.Media.Playback;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 using Windows.Storage.Streams;
-using Windows.ApplicationModel.DataTransfer;
 using Windows.UI;
 using Color = Windows.UI.Color;
 
@@ -120,6 +120,26 @@ namespace CelesteMusicPlayer
     public sealed class AlbumDiscGroup : System.Collections.ObjectModel.ObservableCollection<PlaylistItem>
     {
         public string Key { get; set; } = string.Empty;
+    }
+
+    /// <summary>标签排序分类墙卡片：一个分类（某字段值），封面取该分类第一首曲目封面。</summary>
+    public sealed class TagSortCategoryEntry : INotifyPropertyChanged
+    {
+        private BitmapImage? _cover;
+        public string Name { get; set; } = string.Empty;
+        public int Count { get; set; }
+        public string FirstFilePath { get; set; } = string.Empty;
+        /// <summary>面板内网格的额外语义（如 "Album"/"Artist"），用于指定该网格项的钻取字段。</summary>
+        public string Sub { get; set; } = string.Empty;
+
+        public BitmapImage? Cover
+        {
+            get => _cover;
+            set { _cover = value; PropertyChanged?.Invoke(this, new(nameof(Cover))); }
+        }
+
+        public string CountText => Count + " 首";
+        public event PropertyChangedEventHandler? PropertyChanged;
     }
 
     /// <summary>专辑浏览项：唯一专辑名 + 封面（优先取音轨 1 的内嵌图）</summary>
@@ -302,7 +322,8 @@ namespace CelesteMusicPlayer
         private static readonly string[] AudioExtensions =
         {
             ".mp3", ".wav", ".m4a", ".flac", ".wma", ".ogg", ".aac",
-            ".ape", ".wv", ".tta", ".dsf", ".dff", ".mpc", ".tak", ".opus",
+            ".ape", ".wv", ".tta", ".mpc", ".tak", ".opus",
+            ".dsf", ".dff",
             ".mp2", ".amr", ".au", ".mod", ".s3m", ".xm"
         };
 
@@ -357,6 +378,7 @@ namespace CelesteMusicPlayer
         private int _currentIndex = -1;
         /// <summary>当前播放在用户播放列表中的下标（播放顺序以播放列表为准）</summary>
         private int _userPlaylistIndex = -1;
+        private PlaylistItem? _seamlessPreloaded; // 已预加载待无缝接续的下一首记录（供 SeamlessTrackChanged 更新 UI）
         private CurrentPlaylistWindow? _currentPlaylistWindow;
         internal PlayQueueWindow? QueueWindow { get; set; }
         private DesktopLyricsOverlay? _desktopLyricsWindow;
@@ -401,6 +423,15 @@ namespace CelesteMusicPlayer
         private bool _artistDetailUsesAlbumArtist;
         /// <summary>专辑详情是否从艺术家详情进入（返回时回到艺术家页）</summary>
         private bool _albumOpenedFromArtist;
+
+        // 标签排序板块状态：分类字段、当前分类值、面板视角、面板内已选(专辑/艺术家)、自定义排序配置
+        private string _tagSortClassField = "Artist";
+        private string _tagSortClassValue = string.Empty;   // 当进入某个分类（如某艺术家）时的值
+        private string _tagSortPanelMode = "Songs";          // Songs / Albums / Artists / Sort
+        private readonly ObservableCollection<PlaylistItem> _tagSortClassSongs = new(); // 当前分类下的曲目
+        private string _tagSortPreset = "Artist / Album";    // 当前排序方式预设或自定义
+        private bool _tagSortAscending = true;
+        private List<(string field, bool asc)> _tagSortCustom = new(); // 自定义排序（最多 5 级）
 
         // ---------- 左侧分类（Songs / Albums / Artists / Folders / UserPlaylist）----------
         private string _currentCategory = "Songs";
@@ -1783,11 +1814,11 @@ namespace CelesteMusicPlayer
                 picker.FileTypeFilter.Add(".ape");
                 picker.FileTypeFilter.Add(".wv");
                 picker.FileTypeFilter.Add(".tta");
-                picker.FileTypeFilter.Add(".dsf");
-                picker.FileTypeFilter.Add(".dff");
                 picker.FileTypeFilter.Add(".mpc");
                 picker.FileTypeFilter.Add(".tak");
                 picker.FileTypeFilter.Add(".opus");
+                picker.FileTypeFilter.Add(".dsf");
+                picker.FileTypeFilter.Add(".dff");
 
                 var files = await picker.PickMultipleFilesAsync();
                 if (files == null || files.Count == 0)
@@ -2333,6 +2364,573 @@ namespace CelesteMusicPlayer
             });
         }
 
+        private void NavTagSortButton_Click(object sender, RoutedEventArgs e)
+        {
+            ExitMultiSelectMode();
+            CommitLibraryNavigation(() =>
+            {
+                _currentCategory = "TagSort";
+                ApplyCategoryView();
+            });
+        }
+
+        // ---------------- 标签排序板块（按曲目元数据字段逐级分组钻取） ----------------
+
+        private void BreakoutTagSortView()
+        {
+            TagSortBorder.Visibility = Visibility.Visible;
+            ApplyTagSortFieldButtons();
+            ShowTagSortClassWall();
+        }
+
+        /// <summary>高亮当前分类字段按钮（五个维度切换）。</summary>
+        private void ApplyTagSortFieldButtons()
+        {
+            var accent = ResolveAccentBrush();
+            var fg = ResolveContrastingForeground(accent);
+            var idleBg = ResolveCapsuleFillBrush();
+            var border = ResolveNavCapsuleBorderBrush();
+            void Update(Button b)
+            {
+                bool active = string.Equals(b.Tag as string, _tagSortClassField, StringComparison.Ordinal);
+                if (active) { b.Background = accent; b.Foreground = fg; b.BorderThickness = new Thickness(0); }
+                else { b.Background = idleBg; b.ClearValue(Control.ForegroundProperty); b.BorderThickness = new Thickness(1); b.BorderBrush = border; }
+            }
+            Update(TagSortFieldArtistButton);
+            Update(TagSortFieldAlbumArtistButton);
+            Update(TagSortFieldAlbumButton);
+            Update(TagSortFieldGenreButton);
+            Update(TagSortFieldYearButton);
+        }
+
+        /// <summary>按分类字段值取归一化键（Artist/AlbumArtist 等）。</summary>
+        private static string TagSortFieldVal(PlaylistItem p, string field)
+        {
+            return field switch
+            {
+                "Artist" => string.IsNullOrWhiteSpace(p.Artist) ? "未知" : p.Artist.Trim(),
+                "AlbumArtist" => string.IsNullOrWhiteSpace(p.AlbumArtist) ? "未知" : p.AlbumArtist.Trim(),
+                "Album" => string.IsNullOrWhiteSpace(p.Album) ? "未知" : p.Album.Trim(),
+                "Genre" => string.IsNullOrWhiteSpace(p.Genre) ? "未知" : p.Genre.Trim(),
+                "Year" => p.Year > 0 ? p.Year.ToString() : "未知",
+                _ => "未知"
+            };
+        }
+
+        private void TagSortFieldBoundButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button b && b.Tag is string field)
+            {
+                _tagSortClassField = field;
+                _tagSortClassValue = string.Empty;
+                ApplyTagSortFieldButtons();
+                ShowTagSortClassWall();
+            }
+        }
+
+        /// <summary>刷新分类墙：按 _tagSortClassField 分组 _playlist，每组分封面（首曲封面）。</summary>
+        private void ShowTagSortClassWall()
+        {
+            TagSortPanel.Visibility = Visibility.Collapsed;
+            TagSortClassScroll.Visibility = Visibility.Visible;
+            var entries = _playlist
+                .GroupBy(p => TagSortFieldVal(p, _tagSortClassField), StringComparer.CurrentCultureIgnoreCase)
+                .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+                .Select(g => new TagSortCategoryEntry
+                {
+                    Name = g.Key,
+                    Count = g.Count(),
+                    FirstFilePath = g.First().FilePath
+                })
+                .ToList();
+            TagSortClassGridView.ItemsSource = entries;
+            foreach (var e in entries)
+            {
+                _ = LoadTagSortCategoryCoverAsync(e);
+            }
+        }
+
+        private async System.Threading.Tasks.Task LoadTagSortCategoryCoverAsync(TagSortCategoryEntry entry)
+        {
+            try
+            {
+                byte[]? bytes = await Task.Run(() => string.IsNullOrWhiteSpace(entry.FirstFilePath)
+                    ? null : ExtractCoverBytes(entry.FirstFilePath));
+                if (bytes is { Length: > 0 })
+                {
+                    var bmp = await CreateBitmapFromBytesAsync(bytes);
+                    if (bmp != null) entry.Cover = bmp;
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        private void TagSortClassGridView_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            if (e.ClickedItem is TagSortCategoryEntry entry)
+            {
+                _tagSortClassValue = entry.Name;
+                _tagSortPanelMode = "Songs";
+                ShowTagSortPanel();
+            }
+        }
+
+        /// <summary>进入分类面板：过滤当前分类下的曲目，按 _tagSortPanelMode 展示。</summary>
+        private void ShowTagSortPanel()
+        {
+            TagSortClassScroll.Visibility = Visibility.Collapsed;
+            TagSortPanel.Visibility = Visibility.Visible;
+            _tagSortClassSongs.Clear();
+            foreach (var p in _playlist)
+            {
+                if (string.Equals(TagSortFieldVal(p, _tagSortClassField), _tagSortClassValue, StringComparison.Ordinal))
+                {
+                    _tagSortClassSongs.Add(p);
+                }
+            }
+            TagSortPanelTitle.Text = TagSortClassFieldLabel(_tagSortClassField) + "：" + _tagSortClassValue;
+            ApplyTagSortPanelMode();
+        }
+
+        private static string TagSortClassFieldLabel(string field)
+        {
+            return field switch
+            {
+                "Artist" => "艺术家", "AlbumArtist" => "专辑艺术家", "Album" => "专辑",
+                "Genre" => "流派", "Year" => "年份", _ => field
+            };
+        }
+
+        /// <summary>排序字段的中文标签（给排序依据状态显示用）。</summary>
+        private static string TagSortFieldLabel(string field)
+        {
+            return field switch
+            {
+                "Artist" => "艺术家", "AlbumArtist" => "专辑艺术家", "Album" => "专辑",
+                "Genre" => "流派", "Year" => "年份", "Title" => "标题",
+                "Track" => "音轨号", "Disc" => "碟片号", _ => field
+            };
+        }
+
+        /// <summary>按当前面板视角（Songs/Albums/Artists/Sort）渲染内容区。</summary>
+        private void ApplyTagSortPanelMode()
+        {
+            TagSortPanelGridView.Visibility = Visibility.Collapsed;
+            TagSortPanelSongListView.Visibility = Visibility.Collapsed;
+            TagSortSortPanel.Visibility = Visibility.Collapsed;
+            TagSortViewModeButton.Content = _tagSortPanelMode switch
+            {
+                "Albums" => "专辑", "Artists" => "艺术家", "Sort" => "排序方式", _ => "曲目"
+            };
+
+            if (_tagSortPanelMode == "Albums")
+            {
+                var albums = _tagSortClassSongs
+                    .GroupBy(p => string.IsNullOrWhiteSpace(p.Album) ? "未知" : p.Album, StringComparer.CurrentCultureIgnoreCase)
+                    .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+                    .Select(g => new TagSortCategoryEntry { Name = g.Key, Count = g.Count(), FirstFilePath = g.First().FilePath, Sub = "Album" })
+                    .ToList();
+                TagSortPanelGridView.Visibility = Visibility.Visible;
+                TagSortPanelGridView.ItemsSource = albums;
+                foreach (var e in albums) _ = LoadTagSortCategoryCoverAsync(e);
+            }
+            else if (_tagSortPanelMode == "Artists")
+            {
+                var artists = _tagSortClassSongs
+                    .GroupBy(p => string.IsNullOrWhiteSpace(p.Artist) ? "未知" : p.Artist, StringComparer.CurrentCultureIgnoreCase)
+                    .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+                    .Select(g => new TagSortCategoryEntry { Name = g.Key, Count = g.Count(), FirstFilePath = g.First().FilePath, Sub = "Artist" })
+                    .ToList();
+                TagSortPanelGridView.Visibility = Visibility.Visible;
+                TagSortPanelGridView.ItemsSource = artists;
+                foreach (var e in artists) _ = LoadTagSortCategoryCoverAsync(e);
+            }
+            else if (_tagSortPanelMode == "Sort")
+            {
+                TagSortSortPanel.Visibility = Visibility.Visible;
+                WriteTagSortStatus();
+            }
+            else // Songs
+            {
+                var songs = new ObservableCollection<PlaylistItem>();
+                for (int i = 0; i < _tagSortClassSongs.Count; i++)
+                {
+                    _tagSortClassSongs[i].Index = i + 1;
+                    songs.Add(_tagSortClassSongs[i]);
+                }
+                TagSortPanelSongListView.ItemsSource = songs;
+                TagSortPanelSongListView.Visibility = Visibility.Visible;
+            }
+        }
+
+        private void TagSortPanelBackButton_Click(object sender, RoutedEventArgs e)
+        {
+            _tagSortClassValue = string.Empty;
+            ShowTagSortClassWall();
+        }
+
+        private void TagSortViewModeItem_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuFlyoutItem item && item.Tag is string mode)
+            {
+                _tagSortPanelMode = mode;
+                ApplyTagSortPanelMode();
+            }
+        }
+
+        private void TagSortPanelGridView_ItemClick(object sender, ItemClickEventArgs e)
+        {
+            // 专辑/艺术家视角：点某项 → 钻取到该值的曲目列表（切到“曲目”视角显示该子集）
+            if (e.ClickedItem is TagSortCategoryEntry cat)
+            {
+                string field = cat.Sub == "Artist" ? "Artist" : "Album";
+                _tagSortPanelMode = "Songs";
+                // 过滤当前分类下再按该子值
+                var filtered = _tagSortClassSongs.Where(p => string.Equals(
+                    field == "Artist" ? (p.Artist ?? "") : (p.Album ?? ""), cat.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+                _tagSortClassSongs.Clear();
+                foreach (var s in filtered) _tagSortClassSongs.Add(s);
+                TagSortPanelTitle.Text = field == "Artist" ? "艺术家：" : "专辑：" + cat.Name;
+                ApplyTagSortPanelMode();
+            }
+        }
+
+        private void TagSortPanelSongListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            if ((e.OriginalSource as FrameworkElement)?.DataContext is PlaylistItem song)
+            {
+                PlayPlaylistItem(song);
+            }
+        }
+
+        private void TagSortPanelSongList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
+            {
+                ApplySongListItemSelectionChrome(TagSortPanelSongListView, container, song);
+            }
+        }
+
+        private void TagSortPanelSongList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            RefreshRealizedSongListSelectionChrome(TagSortPanelSongListView);
+        }
+
+        private void TagSortPanelSongListView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            if (_isMultiSelectMode) return;
+            if ((e.OriginalSource as FrameworkElement)?.DataContext is PlaylistItem song)
+            {
+                _multiSelectTargetList = TagSortPanelSongListView;
+                var flyout = BuildPlaylistItemContextMenu(song, inUserPlaylist: false,
+                    multiSelectAction: () => EnterMultiSelectModeFrom(TagSortPanelSongListView));
+                flyout.ShowAt(TagSortPanelSongListView, e.GetPosition(TagSortPanelSongListView));
+            }
+        }
+
+        private void TagSortClassGridView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            if (_isMultiSelectMode) return;
+            if ((e.OriginalSource as FrameworkElement)?.DataContext is TagSortCategoryEntry entry)
+            {
+                ShowTagSortCategoryMenu(entry, TagSortClassGridView, e.GetPosition(TagSortClassGridView));
+            }
+        }
+
+        private void TagSortPanelGridView_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            if (_isMultiSelectMode) return;
+            if ((e.OriginalSource as FrameworkElement)?.DataContext is TagSortCategoryEntry entry)
+            {
+                var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
+
+                var multi = new MenuFlyoutItem { Text = "多选", Icon = new FontIcon { Glyph = "\uE700" } };
+                multi.Click += (_, _) => EnterTagSortPanelGridMultiSelect();
+                flyout.Items.Add(multi);
+
+                var play = new MenuFlyoutItem
+                {
+                    Text = entry.Sub == "Artist" ? "播放该艺术家" : "播放该专辑",
+                    Icon = new FontIcon { Glyph = "\uE768" }
+                };
+                play.Click += (_, _) =>
+                {
+                    var songs = CollectTagSortCategorySongs(entry);
+                    if (songs.Count > 0)
+                    {
+                        if (entry.Sub == "Album")
+                        {
+                            var a = BuildTagSortAlbumEntry(entry);
+                            PlayAlbum(a, replacePlaylist: true);
+                        }
+                        else
+                        {
+                            PlayPlaylistItem(songs[0]);
+                        }
+                    }
+                };
+                flyout.Items.Add(play);
+
+                var addQueue = new MenuFlyoutItem { Text = "添加到播放队列", Icon = new FontIcon { Glyph = "\uE710" } };
+                addQueue.Click += (_, _) => AddSongsToUserPlaylist(CollectTagSortCategorySongs(entry));
+                flyout.Items.Add(addQueue);
+
+                if (entry.Sub == "Album")
+                {
+                    var albumEntry = BuildTagSortAlbumEntry(entry);
+
+                    var wallAlbum = new MenuFlyoutItem { Text = "添加到播放列表", Icon = new FontIcon { Glyph = "\uE8B7" } };
+                    wallAlbum.Click += (_, _) => _ = ShowNamedPlaylistPickerAsync(GetTracksForAlbum(albumEntry));
+                    flyout.Items.Add(wallAlbum);
+
+                    // 批量下载歌词 / 封面 / 复制专辑信息 / 打开专辑详情（复用专辑墙通用项）
+                    AppendAlbumContextItems(flyout, albumEntry, fromArtist: false);
+                }
+
+                flyout.ShowAt(TagSortPanelGridView, e.GetPosition(TagSortPanelGridView));
+            }
+        }
+
+        /// <summary>把标签排序面板的专辑项构造成 AlbumEntry（Artist 留空 → 按专辑名匹配曲目）供复用现有专辑操作。</summary>
+        private AlbumEntry BuildTagSortAlbumEntry(TagSortCategoryEntry entry)
+        {
+            return new AlbumEntry
+            {
+                Name = entry.Name,
+                Artist = string.Empty,
+                CoverSourcePath = entry.FirstFilePath
+            };
+        }
+
+        /// <summary>标签排序面板专辑/艺术家网格进入多选：勾选多张专辑/艺术家，主按钮添加到播放队列。</summary>
+        private void EnterTagSortPanelGridMultiSelect()
+        {
+            if (_multiSelectTargetList != null) ExitSongMultiSelectUiOnly();
+            if (_multiSelectFolderList != null) ExitFolderMultiSelectUiOnly();
+            _multiSelectAlbumGrid = TagSortPanelGridView;
+            _multiSelectTargetList = null;
+            _multiSelectFolderList = null;
+            _isMultiSelectMode = true;
+            TagSortPanelGridView.SelectionMode = ListViewSelectionMode.Multiple;
+            TagSortPanelGridView.IsItemClickEnabled = false;
+
+            LibraryPaneTitle.Visibility = Visibility.Collapsed;
+            SongSortPanel.Visibility = Visibility.Collapsed;
+            MultiSelectTitlePanel.Visibility = Visibility.Visible;
+            MultiSelectTitleText.Text = "选择项目";
+            MultiSelectActionBar.Visibility = Visibility.Visible;
+            ConfigureMultiSelectPrimaryAction();
+            UpdateSelectAllMultiSelectButtonState();
+        }
+
+        /// <summary>分类墙 / 面板网格项的右键菜单：播放该分类全部 / 添加到播放队列。</summary>
+        private void ShowTagSortCategoryMenu(TagSortCategoryEntry entry, FrameworkElement anchor, Windows.Foundation.Point point)
+        {
+            var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
+            bool isAlbumField = string.Equals(_tagSortClassField, "Album", StringComparison.Ordinal);
+
+            var multi = new MenuFlyoutItem { Text = "多选", Icon = new FontIcon { Glyph = "\uE700" } };
+            multi.Click += (_, _) => EnterTagSortClassWallMultiSelect();
+            flyout.Items.Add(multi);
+
+            var play = new MenuFlyoutItem
+            {
+                Text = isAlbumField ? "播放该专辑" : "播放该分类",
+                Icon = new FontIcon { Glyph = "\uE768" }
+            };
+            play.Click += (_, _) =>
+            {
+                var songs = CollectTagSortCategorySongs(entry);
+                if (songs.Count == 0) return;
+                if (isAlbumField)
+                {
+                    PlayAlbum(BuildTagSortAlbumEntry(entry), replacePlaylist: true);
+                }
+                else
+                {
+                    PlayPlaylistItem(songs[0]);
+                }
+            };
+            flyout.Items.Add(play);
+
+            var addQueue = new MenuFlyoutItem { Text = "添加到播放队列", Icon = new FontIcon { Glyph = "\uE710" } };
+            addQueue.Click += (_, _) => AddSongsToUserPlaylist(CollectTagSortCategorySongs(entry));
+            flyout.Items.Add(addQueue);
+
+            if (isAlbumField)
+            {
+                var albumEntry = BuildTagSortAlbumEntry(entry);
+                var wallAlbum = new MenuFlyoutItem { Text = "添加到播放列表", Icon = new FontIcon { Glyph = "\uE8B7" } };
+                wallAlbum.Click += (_, _) => _ = ShowNamedPlaylistPickerAsync(GetTracksForAlbum(albumEntry));
+                flyout.Items.Add(wallAlbum);
+                AppendAlbumContextItems(flyout, albumEntry, fromArtist: false); // 批量歌词/封面/复制信息/打开详情
+            }
+
+            flyout.ShowAt(anchor, point);
+        }
+
+        /// <summary>分类墙进入多选：把 TagSortClassGridView 设多选、勾选分组项；主按钮将选中分类曲目加入播放队列。</summary>
+        private void EnterTagSortClassWallMultiSelect()
+        {
+            if (_multiSelectTargetList != null) ExitSongMultiSelectUiOnly();
+            if (_multiSelectFolderList != null) ExitFolderMultiSelectUiOnly();
+            _multiSelectAlbumGrid = TagSortClassGridView;
+            _multiSelectTargetList = null;
+            _multiSelectFolderList = null;
+            _isMultiSelectMode = true;
+            TagSortClassGridView.SelectionMode = ListViewSelectionMode.Multiple;
+            TagSortClassGridView.IsItemClickEnabled = false;
+
+            LibraryPaneTitle.Visibility = Visibility.Collapsed;
+            SongSortPanel.Visibility = Visibility.Collapsed;
+            MultiSelectTitlePanel.Visibility = Visibility.Visible;
+            MultiSelectTitleText.Text = "选择项目";
+            MultiSelectActionBar.Visibility = Visibility.Visible;
+            ConfigureMultiSelectPrimaryAction();
+            UpdateSelectAllMultiSelectButtonState();
+        }
+
+        /// <summary>取分类墙 / 面板网格一个卡片（某字段值）对应的全部曲目。
+        /// 优先用 entry.Sub 指定的字段（面板专辑/艺术家视角），否则用当前分类字段。</summary>
+        private List<PlaylistItem> CollectTagSortCategorySongs(TagSortCategoryEntry entry)
+        {
+            string field = string.IsNullOrWhiteSpace(entry.Sub) ? _tagSortClassField : entry.Sub;
+            return _playlist
+                .Where(p => string.Equals(TagSortFieldVal(p, field), entry.Name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        /// <summary>从指定列表进入多选（标签排序面板曲目）。</summary>
+        private void EnterMultiSelectModeFrom(ListView list)
+        {
+            if (list == null) return;
+            _multiSelectTargetList = list;
+            EnterMultiSelectMode((list.SelectedItems.FirstOrDefault() as PlaylistItem) ?? null);
+        }
+
+        // ---------------- 排序方式（排序主面板歌曲顺序） ----------------
+
+        private void TagSortPresetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (TagSortPresetCombo.SelectedItem is ComboBoxItem cbi)
+            {
+                string key = cbi.Content?.ToString() ?? string.Empty;
+                _tagSortCustom = PresetToFields(key);
+                _tagSortPreset = key;
+                ApplyTagSortToLibrary();
+                WriteTagSortStatus();
+            }
+        }
+
+        private void TagSortOrderClick(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                // 由用户点击触发（Click 不会因程序化改 IsChecked 而重入）。
+                bool? asc = TagSortAscButton?.IsChecked == true;
+                bool? desc = TagSortDescButton?.IsChecked == true;
+                if ((e.OriginalSource is FrameworkElement fe && ReferenceEquals(fe, TagSortDescButton))
+                    || desc == true)
+                {
+                    _tagSortAscending = false;
+                    if (TagSortAscButton != null) TagSortAscButton.IsChecked = false;
+                    if (TagSortDescButton != null) TagSortDescButton.IsChecked = true;
+                }
+                else if (asc == true)
+                {
+                    _tagSortAscending = true;
+                    if (TagSortDescButton != null) TagSortDescButton.IsChecked = false;
+                    if (TagSortAscButton != null) TagSortAscButton.IsChecked = true;
+                }
+
+                ApplyTagSortToLibrary();
+                WriteTagSortStatus();
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("TagSortOrderClick", ex);
+            }
+        }
+
+        private void TagSortCustomSortButton_Click(object sender, RoutedEventArgs e)
+        {
+            var win = new CustomSortOrderWindow(_tagSortCustom, _tagSortAscending);
+            win.SortConfirmed += (fields, asc) =>
+            {
+                _tagSortCustom = fields;
+                _tagSortAscending = asc;
+                _tagSortPreset = "自定义";
+                TagSortPresetCombo.SelectedItem = null;
+                ApplyTagSortToLibrary();
+                WriteTagSortStatus();
+            };
+            win.Activate();
+        }
+
+        /// <summary>预设字符串 → 排序字段链。</summary>
+        private static List<(string field, bool asc)> PresetToFields(string preset)
+        {
+            var asc = new[] {
+                ("Album", "专辑"),
+                ("AlbumArtist,Album", "专辑艺术家 / 专辑"),
+                ("AlbumArtist,Year,Album", "专辑艺术家 / 年份 / 专辑"),
+                ("Artist,Album", "艺术家 / 专辑"),
+                ("Genre,Album", "流派 / 专辑"),
+                ("Year,Album", "年份 / 专辑")
+            };
+            foreach (var (fields, label) in asc)
+            {
+                if (preset == label)
+                {
+                    return fields.Split(',').Select(f => (f, true)).ToList();
+                }
+            }
+            return new List<(string, bool)>();
+        }
+
+        /// <summary>把当前排序方式应用到轨道库（主面板歌曲顺序）。</summary>
+        private void ApplyTagSortToLibrary()
+        {
+            if (_tagSortCustom == null || _tagSortCustom.Count == 0)
+            {
+                return;
+            }
+
+            IOrderedEnumerable<PlaylistItem> sorted = _tagSortAscending
+                ? _playlist.OrderBy(p => TagSortFieldVal(p, _tagSortCustom[0].field), StringComparer.CurrentCultureIgnoreCase)
+                : _playlist.OrderByDescending(p => TagSortFieldVal(p, _tagSortCustom[0].field), StringComparer.CurrentCultureIgnoreCase);
+
+            for (int i = 1; i < _tagSortCustom.Count; i++)
+            {
+                bool a = _tagSortCustom[i].asc;
+                sorted = a
+                    ? sorted.ThenBy(p => TagSortFieldVal(p, _tagSortCustom[i].field), StringComparer.CurrentCultureIgnoreCase)
+                    : sorted.ThenByDescending(p => TagSortFieldVal(p, _tagSortCustom[i].field), StringComparer.CurrentCultureIgnoreCase);
+            }
+
+            var list = sorted.ToList();
+            _playlist.Clear();
+            foreach (var p in list) _playlist.Add(p);
+            RenumberCollection(_playlist);
+            if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal))
+            {
+                PlaylistView.ItemsSource = _playlist; // 歌曲分类主列表即按此顺序
+            }
+        }
+
+        private void WriteTagSortStatus()
+        {
+            string desc = _tagSortPreset;
+            var tags = _tagSortCustom.Count == 0 ? new List<(string field, bool asc)>() : _tagSortCustom;
+            if (tags.Count > 0)
+            {
+                desc += "（" + string.Join(" → ", tags.Select(t => TagSortFieldLabel(t.field) + (t.asc ? "↑" : "↓"))) + "）";
+            }
+            TagSortSortStatusText.Text = "当前排序依据：" + desc;
+        }
+
         private void NavPlaylistWallButton_Click(object sender, RoutedEventArgs e)
         {
             ExitMultiSelectMode();
@@ -2371,54 +2969,40 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                // 优先命中单自定义封面；否则用首曲专辑封面
-                byte[]? bytes;
-                string? custom = PlaylistLibraryService.CustomCoverPath(vm.Name);
-                if (!string.IsNullOrWhiteSpace(custom))
+                // 优先从列表歌曲取首曲封面（第一首含封面的）；歌曲全无封面时才回落用户手动设的自定义封面。
+                byte[]? bytes = await System.Threading.Tasks.Task.Run(() =>
                 {
-                    bytes = await System.Threading.Tasks.Task.Run(() => System.IO.File.ReadAllBytes(custom));
-                }
-                else
-                {
-                    // 遍历命名单所有歌曲，取第一首含有封面的（首曲可能无封面但其它曲目有）
-                    bytes = await System.Threading.Tasks.Task.Run(() =>
+                    foreach (string path in NamedPlaylistStore.LoadSongs(vm.Name))
                     {
-                        foreach (string path in NamedPlaylistStore.LoadSongs(vm.Name))
+                        if (!System.IO.File.Exists(path)) continue;
+                        try
                         {
-                            if (!System.IO.File.Exists(path)) continue;
-                            try
-                            {
-                                byte[]? b = ExtractCoverBytes(path);
-                                if (b is { Length: > 0 }) return b;
-                            }
-                            catch
-                            {
-                            }
+                            byte[]? b = ExtractCoverBytes(path);
+                            if (b is { Length: > 0 }) return b;
                         }
-                        return (byte[]?)null;
-                    });
-                    if (bytes is not { Length: > 0 })
-                    {
-                        // 歌曲全无封面时：生成一张含命名单名的渐变封面并持久化，让墙卡“实在显示封面”
-                        bytes = GeneratePlaylistCoverImage(vm.Name,
-                            ResolveAccentBrush() is SolidColorBrush scb ? scb.Color : Windows.UI.Color.FromArgb(255, 128, 128, 128));
-                        if (bytes is { Length: > 0 })
+                        catch
                         {
-                            PlaylistLibraryService.WriteCustomCover(vm.Name, bytes);
-                        }
-                        else
-                        {
-                            return;
                         }
                     }
-                }
-                if (bytes is { Length: > 0 })
+                    return (byte[]?)null;
+                });
+                if (bytes is not { Length: > 0 })
                 {
-                    var bmp = await CreateBitmapFromBytesAsync(bytes); // 与专辑封面同一机制
-                    if (bmp != null)
+                    // 歌曲全无封面：回落到用户手动设置的自定义封面；仍无则以 Cover=null 由 View 图标兜底。
+                    string? custom = PlaylistLibraryService.CustomCoverPath(vm.Name);
+                    if (!string.IsNullOrWhiteSpace(custom))
                     {
-                        vm.Cover = bmp;
+                        bytes = await System.Threading.Tasks.Task.Run(() => System.IO.File.ReadAllBytes(custom));
                     }
+                }
+                if (bytes is not { Length: > 0 })
+                {
+                    return;
+                }
+                var bmp = await CreateBitmapFromBytesAsync(bytes); // 与专辑封面同一机制
+                if (bmp != null)
+                {
+                    vm.Cover = bmp;
                 }
             }
             catch
@@ -2449,12 +3033,15 @@ namespace CelesteMusicPlayer
         {
             _playlistDetailItems.Clear();
             if (string.IsNullOrEmpty(_currentPlaylistDetail)) return;
+            int ordinal = 1;
             foreach (string path in NamedPlaylistStore.LoadSongs(_currentPlaylistDetail))
             {
                 if (!System.IO.File.Exists(path)) continue;
                 try
                 {
-                    _playlistDetailItems.Add(CreatePlaylistItemFromPath(path));
+                    var item = CreatePlaylistItemFromPath(path);
+                    item.Index = ordinal++;
+                    _playlistDetailItems.Add(item);
                 }
                 catch
                 {
@@ -2467,7 +3054,94 @@ namespace CelesteMusicPlayer
             // 顺序已由 ObservableCollection 自动更新；保存新顺序回命名单
             if (!string.IsNullOrEmpty(_currentPlaylistDetail))
             {
+                for (int i = 0; i < _playlistDetailItems.Count; i++)
+                {
+                    _playlistDetailItems[i].Index = i + 1; // 拖拽后重排连续序号
+                }
+                // Index 为 x:Bind OneTime 绑定，重设后需强制刷新才会更新序号
+                PlaylistDetailListView.ItemsSource = null;
+                PlaylistDetailListView.ItemsSource = _playlistDetailItems;
                 NamedPlaylistStore.SaveSongs(_currentPlaylistDetail, _playlistDetailItems.Select(p => p.FilePath));
+            }
+        }
+
+        private void PlaylistDetailSortMenu_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is MenuFlyoutItem item && item.Tag is string field)
+            {
+                SortPlaylistDetailItems(field);
+            }
+        }
+
+        /// <summary>按指定字段对命名单详情排序并保存回命名单。排序后重排连续序号。</summary>
+        private void SortPlaylistDetailItems(string field)
+        {
+            if (_playlistDetailItems.Count <= 1) return;
+            try
+            {
+                List<PlaylistItem> sorted = field switch
+                {
+                    "Title" => _playlistDetailItems
+                        .OrderBy(p => p.Title, StringComparer.CurrentCultureIgnoreCase)
+                        .ThenBy(p => p.Title, StringComparer.Ordinal)
+                        .ToList(),
+                    "Artist" => _playlistDetailItems
+                        .OrderBy(p => p.Artist, StringComparer.CurrentCultureIgnoreCase)
+                        .ThenBy(p => p.Title, StringComparer.CurrentCultureIgnoreCase)
+                        .ThenBy(p => p.Title, StringComparer.Ordinal)
+                        .ToList(),
+                    "Album" => _playlistDetailItems
+                        .OrderBy(p => p.Album, StringComparer.CurrentCultureIgnoreCase)
+                        .ThenBy(p => p.Track).ThenBy(p => p.Title, StringComparer.Ordinal).ToList(),
+                    "Track" => _playlistDetailItems.OrderBy(p => p.Track).ThenBy(p => p.Title, StringComparer.Ordinal).ToList(),
+                    "Year" => _playlistDetailItems.OrderBy(p => p.Year).ThenBy(p => p.Title, StringComparer.Ordinal).ToList(),
+                    "Duration" => _playlistDetailItems.OrderBy(p => p.Duration).ThenBy(p => p.Title, StringComparer.Ordinal).ToList(),
+                    "FilePath" => _playlistDetailItems
+                        .OrderBy(p => p.FilePath, StringComparer.CurrentCultureIgnoreCase)
+                        .ThenBy(p => p.FilePath, StringComparer.Ordinal)
+                        .ToList(),
+                    _ => _playlistDetailItems.ToList()
+                };
+
+                for (int i = 0; i < sorted.Count; i++)
+                {
+                    sorted[i].Index = i + 1;
+                }
+                _playlistDetailItems.Clear();
+                foreach (var p in sorted) _playlistDetailItems.Add(p);
+
+                if (!string.IsNullOrEmpty(_currentPlaylistDetail))
+                {
+                    NamedPlaylistStore.SaveSongs(_currentPlaylistDetail, _playlistDetailItems.Select(p => p.FilePath));
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>从当前命名单详情删除勾选的歌曲，重排连续序号并保存回命名单。</summary>
+        private void RemoveSongsFromCurrentPlaylistDetail(IEnumerable<PlaylistItem> selected)
+        {
+            try
+            {
+                var removes = selected.Select(s => s.FilePath).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var keep = _playlistDetailItems.Where(p => !removes.Contains(p.FilePath)).ToList();
+                _playlistDetailItems.Clear();
+                for (int i = 0; i < keep.Count; i++)
+                {
+                    keep[i].Index = i + 1;
+                    _playlistDetailItems.Add(keep[i]);
+                }
+
+                if (!string.IsNullOrEmpty(_currentPlaylistDetail))
+                {
+                    NamedPlaylistStore.SaveSongs(_currentPlaylistDetail, _playlistDetailItems.Select(p => p.FilePath));
+                    PlaylistDetailCountText.Text = _playlistDetailItems.Count + " 首";
+                }
+            }
+            catch
+            {
             }
         }
 
@@ -2738,47 +3412,6 @@ namespace CelesteMusicPlayer
             }
             catch
             {
-            }
-        }
-
-        /// <summary>命名单歌曲全无封面时，生成一张含命名单名的渐变封面（System.Drawing）。</summary>
-        private byte[]? GeneratePlaylistCoverImage(string name, Windows.UI.Color accent)
-        {
-            try
-            {
-                const int S = 256;
-                using var bmp = new System.Drawing.Bitmap(S, S);
-                using var g = System.Drawing.Graphics.FromImage(bmp);
-                g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
-                g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAlias;
-                g.Clear(System.Drawing.Color.FromArgb(255, accent.R, accent.G, accent.B));
-                using (var grad = new System.Drawing.Drawing2D.LinearGradientBrush(
-                    new System.Drawing.Rectangle(0, S / 2, S, S / 2),
-                    System.Drawing.Color.FromArgb(70, 255, 255, 255),
-                    System.Drawing.Color.FromArgb(180, 0, 0, 0),
-                    System.Drawing.Drawing2D.LinearGradientMode.Vertical))
-                {
-                    g.FillRectangle(grad, 0, S / 2, S, S / 2);
-                }
-
-                string text = name;
-                const int maxChars = 16;
-                if (text.Length > maxChars) text = text.Substring(0, maxChars) + "…";
-                using var font = new System.Drawing.Font("Segoe UI", 22f, System.Drawing.FontStyle.Bold);
-                using var sf = new System.Drawing.StringFormat
-                {
-                    Alignment = System.Drawing.StringAlignment.Center,
-                    LineAlignment = System.Drawing.StringAlignment.Center,
-                };
-                g.DrawString(text, font, System.Drawing.Brushes.White, new System.Drawing.RectangleF(10, 70, S - 20, S - 140), sf);
-
-                using var ms = new MemoryStream();
-                bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                return ms.ToArray();
-            }
-            catch
-            {
-                return null;
             }
         }
 
@@ -3191,6 +3824,7 @@ namespace CelesteMusicPlayer
             // 列表墙/命中单详情默认隐藏：仅其它分类内按需显 Visible，避免切到其它页面残留盖层
             PlaylistWallBorder.Visibility = Visibility.Collapsed;
             PlaylistDetailBorder.Visibility = Visibility.Collapsed;
+            TagSortBorder.Visibility = Visibility.Collapsed;
 
             switch (_currentCategory)
             {
@@ -3313,6 +3947,21 @@ namespace CelesteMusicPlayer
 
                 case "MostPlayed":
                     ApplyMostPlayedCategory();
+                    break;
+
+                case "TagSort":
+                    LibraryPaneTitle.Text = "标签排序";
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Collapsed;
+                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Collapsed;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    BreakoutTagSortView();
                     break;
 
                 case "Genres":
@@ -4600,6 +5249,14 @@ namespace CelesteMusicPlayer
                     return cached;
                 }
 
+                // 磁盘缓存命中（重启后免联网搜索）：加载后回填内存缓存
+                BitmapImage? fromDisk = await ArtistAvatarStore.TryLoadWebAsync(key);
+                if (fromDisk != null)
+                {
+                    WebArtistAvatarCache[key] = fromDisk;
+                    return fromDisk;
+                }
+
                 BitmapImage? result = null;
                 try
                 {
@@ -4613,6 +5270,8 @@ namespace CelesteMusicPlayer
                         if (bytes.Length > 0)
                         {
                             result = await CreateBitmapFromBytesAsync(bytes);
+                            // 持久化到磁盘缓存，下次打开（含重启后）不再联网搜索
+                            await ArtistAvatarStore.SaveWebAsync(key, bytes);
                         }
                     }
                 }
@@ -4621,11 +5280,11 @@ namespace CelesteMusicPlayer
                 }
 
                 if (WebArtistAvatarCache.Count > 500)
-            {
-                WebArtistAvatarCache.Clear();
-            }
+                {
+                    WebArtistAvatarCache.Clear();
+                }
 
-            WebArtistAvatarCache[key] = result;
+                WebArtistAvatarCache[key] = result;
                 return result;
             }
             finally
@@ -6965,6 +7624,15 @@ namespace CelesteMusicPlayer
                 return PlaylistView;
             }
 
+            // 标签排序板块：面板曲目视角（Songs）时多选针对该列表
+            if (string.Equals(_currentCategory, "TagSort", StringComparison.Ordinal)
+                && _tagSortPanelMode == "Songs"
+                && TagSortPanelSongListView != null
+                && TagSortPanelSongListView.Visibility == Visibility.Visible)
+            {
+                return TagSortPanelSongListView;
+            }
+
             return null;
         }
 
@@ -6972,14 +7640,29 @@ namespace CelesteMusicPlayer
         {
             bool isUserPlaylist = _multiSelectTargetList == PlaylistView
                 && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal);
+            bool isNamedPlaylistDetail = _multiSelectTargetList == PlaylistDetailListView;
+            bool isTagSortSongs = _multiSelectTargetList == TagSortPanelSongListView;
             bool isDetailSongList = _multiSelectTargetList == AlbumTrackListView
-                || _multiSelectTargetList == ArtistTrackListView
-                || _multiSelectTargetList == PlaylistDetailListView;
+                || _multiSelectTargetList == ArtistTrackListView;
             if (isUserPlaylist)
             {
                 MultiSelectPrimaryActionIcon.Glyph = "\uE74D"; // Delete
                 MultiSelectPrimaryActionText.Text = "从播放列表中删除";
                 ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲从播放列表移除");
+            }
+            else if (isNamedPlaylistDetail)
+            {
+                // 命中单详情页多选 → 从当前命名单删除勾选的歌
+                MultiSelectPrimaryActionIcon.Glyph = "\uE74D"; // Delete
+                MultiSelectPrimaryActionText.Text = "从播放列表中删除";
+                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲从当前命名单移除");
+            }
+            else if (isTagSortSongs)
+            {
+                // 标签排序面板曲目多选 → 添加到播放队列
+                MultiSelectPrimaryActionIcon.Glyph = "\uE710";
+                MultiSelectPrimaryActionText.Text = "添加至播放队列";
+                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲按顺序加入播放队列");
             }
             else if (isDetailSongList)
             {
@@ -7404,12 +8087,18 @@ namespace CelesteMusicPlayer
 
             bool isUserPlaylist = _multiSelectTargetList == PlaylistView
                 && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal);
+            bool isNamedPlaylistDetail = _multiSelectTargetList == PlaylistDetailListView;
+            bool isTagSortSongs = _multiSelectTargetList == TagSortPanelSongListView;
             bool isDetailSongList = _multiSelectTargetList == AlbumTrackListView
-                || _multiSelectTargetList == ArtistTrackListView
-                || _multiSelectTargetList == PlaylistDetailListView;
+                || _multiSelectTargetList == ArtistTrackListView;
             if (isUserPlaylist)
             {
                 RemoveSongsFromUserPlaylist(selected);
+            }
+            else if (isNamedPlaylistDetail)
+            {
+                // 命中单详情页多选 → 从当前命名单删除勾选的歌
+                RemoveSongsFromCurrentPlaylistDetail(selected);
             }
             else if (isDetailSongList)
             {
@@ -7418,6 +8107,7 @@ namespace CelesteMusicPlayer
             }
             else
             {
+                // 含标签排序面板曲目：添加到播放队列
                 AddSongsToUserPlaylist(selected);
             }
 
@@ -7442,6 +8132,15 @@ namespace CelesteMusicPlayer
             if (_multiSelectAlbumGrid != null)
             {
                 GridView grid = _multiSelectAlbumGrid;
+                // 标签排序分类墙/面板专辑/艺术家网格：选中项是 TagSortCategoryEntry，按各自字段聚合其曲目
+                if (ReferenceEquals(grid, TagSortPanelGridView) || ReferenceEquals(grid, TagSortClassGridView))
+                {
+                    var cat = grid.SelectedItems.OfType<TagSortCategoryEntry>().ToList();
+                    var songs = new List<PlaylistItem>();
+                    foreach (var c in cat) songs.AddRange(CollectTagSortCategorySongs(c));
+                    return songs;
+                }
+
                 var selectedAlbums = grid.SelectedItems.OfType<AlbumEntry>().ToList();
                 List<AlbumEntry> ordered = GetAlbumCollectionForGrid(grid)
                     .Where(a => selectedAlbums.Contains(a))
@@ -8305,6 +9004,25 @@ namespace CelesteMusicPlayer
                 UserPlaylistNavButton.BorderThickness = new Thickness(1);
                 UserPlaylistNavButton.BorderBrush = capsuleBorder;
                 UserPlaylistNavButton.ClearValue(Control.ForegroundProperty);
+            }
+
+            // 标签排序胶囊按钮（与播放列表同款）
+            NavTagSortButton.CornerRadius = new CornerRadius(playlistCapsuleHeight / 2.0);
+            NavTagSortButton.HorizontalContentAlignment = HorizontalAlignment.Center;
+            bool tagSortActive = string.Equals(_currentCategory, "TagSort", StringComparison.Ordinal);
+            if (tagSortActive)
+            {
+                NavTagSortButton.Background = accent;
+                NavTagSortButton.Foreground = fg;
+                NavTagSortButton.BorderThickness = new Thickness(0);
+                NavTagSortButton.ClearValue(Control.BorderBrushProperty);
+            }
+            else
+            {
+                NavTagSortButton.Background = capsuleIdle;
+                NavTagSortButton.BorderThickness = new Thickness(1);
+                NavTagSortButton.BorderBrush = capsuleBorder;
+                NavTagSortButton.ClearValue(Control.ForegroundProperty);
             }
         }
 
@@ -11553,6 +12271,9 @@ namespace CelesteMusicPlayer
             bool hifiMode = IsHiFiModeSelected();
             if (hifiMode || AudioPlaybackEngine.NeedsFfmpeg(item.FilePath))
             {
+                // 用源实际时长作为进度/播完上限（规避 DSD 转 PCM 转码 WAV 尾部 padding 的时长越界）。
+                // DSD 源用 ffmpeg 探测真实音轨时长（TagLib 读 DSD 源时长可能不准）；其它用元数据时长，异步不阻塞开播。
+                _ = ApplyEngineSourceDurationAsync(item);
                 // 停掉 MediaPlayer，避免与引擎同时出声
                 MediaPlayer? curPlayer = GetPlayer();
                 if (curPlayer != null && curPlayer.Source != null)
@@ -11630,8 +12351,30 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>引擎播放前异步设置源实际时长（DSD 用 ffmpeg 探测真实音轨时长，其它用元数据时长），
+        /// 作为进度/播完上限规避 DSD 转 PCM 转码 WAV 尾部 padding 的时长越界。</summary>
+        private async System.Threading.Tasks.Task ApplyEngineSourceDurationAsync(PlaylistItem item)
+        {
+            try
+            {
+                if (_audioEngine == null || item == null) return;
+                string srcExt = System.IO.Path.GetExtension(item.FilePath).ToLowerInvariant();
+                TimeSpan src = item.Duration;
+                if (srcExt is ".dsf" or ".dff")
+                {
+                    var probed = await _audioEngine.ProbeSourceDurationAsync(item.FilePath);
+                    if (probed > TimeSpan.Zero) src = probed;
+                }
 
-        /// <summary>用 FFmpeg 引擎播放扩展格式（APE/WavPack/DSD 等）。</summary>
+                _audioEngine.SetSourceDuration(src);
+            }
+            catch
+            {
+            }
+        }
+
+
+        /// <summary>用 FFmpeg 引擎播放扩展格式（APE/WavPack 等）。</summary>
         private async Task PlayExtendedWithEngineAsync(PlaylistItem item)
         {
             NowPlayingText.Text = "正在转码：" + item.Title;
@@ -11641,6 +12384,8 @@ namespace CelesteMusicPlayer
             _audioEngine.SetOutputDevicePreference(string.IsNullOrWhiteSpace(hifiSettings.OutputDeviceId) ? null : hifiSettings.OutputDeviceId);
             _audioEngine.PlaybackEnded -= OnEnginePlaybackEnded;
             _audioEngine.PlaybackEnded += OnEnginePlaybackEnded;
+            _audioEngine.SeamlessTrackChanged -= OnSeamlessTrackChanged;
+            _audioEngine.SeamlessTrackChanged += OnSeamlessTrackChanged;
 
             try
             {
@@ -11678,6 +12423,7 @@ namespace CelesteMusicPlayer
                 _ = FadeInEngineAsync();
                 _miniPlayerWindow?.RefreshFromOwner();
                 ConfigureEngineSmtc(item, playing: true);
+                _ = PreloadSeamlessNextAsync(item);
             }
             else
             {
@@ -11735,6 +12481,118 @@ namespace CelesteMusicPlayer
             });
         }
 
+        /// <summary>引擎开播后预加载下一首到无缝源（共享/ASIO、顺序播放）。同格式可无缝续接，否则由上层重建。</summary>
+        private async System.Threading.Tasks.Task PreloadSeamlessNextAsync(PlaylistItem current)
+        {
+            if (_audioEngine == null || current == null)
+            {
+                return;
+            }
+
+            // DSD 播完自动切歌优先：DSD 源不参与无缝预加载（走原 Stop→PlayNext，避免无缝与 DSD 时长修正冲突）
+            string curExt = System.IO.Path.GetExtension(current.FilePath).ToLowerInvariant();
+            if (curExt is ".dsf" or ".dff")
+            {
+                _seamlessPreloaded = null;
+                return;
+            }
+
+            try
+            {
+                PlaylistItem? next = ResolveSequentialNextItem(current);
+                if (next == null || string.IsNullOrWhiteSpace(next.FilePath) || !System.IO.File.Exists(next.FilePath))
+                {
+                    _seamlessPreloaded = null;
+                    return;
+                }
+
+                string? wav = await _audioEngine.EnsureCachedWavAsync(next.FilePath);
+                if (string.IsNullOrWhiteSpace(wav))
+                {
+                    _seamlessPreloaded = null;
+                    return;
+                }
+
+                if (_audioEngine.PrepareNextSeamless(wav))
+                {
+                    _seamlessPreloaded = next;
+                }
+                else
+                {
+                    _seamlessPreloaded = null; // 格式不同等：无缝不启用，后续走重建
+                }
+            }
+            catch
+            {
+                _seamlessPreloaded = null;
+            }
+        }
+
+        /// <summary>顺序播放时确定"当前曲目之后"的一首（播放队列优先，否则媒体库列表）。</summary>
+        private PlaylistItem? ResolveSequentialNextItem(PlaylistItem current)
+        {
+            if (_userPlaylist.Count > 0)
+            {
+                int idx = FindUserPlaylistIndex(current.FilePath);
+                if (idx >= 0 && idx + 1 < _userPlaylist.Count)
+                {
+                    return _userPlaylist[idx + 1];
+                }
+                return null;
+            }
+
+            if (_playlist.Count > 0)
+            {
+                int idx = _playlist.ToList().FindIndex(p => string.Equals(p.FilePath, current.FilePath, StringComparison.OrdinalIgnoreCase));
+                if (idx >= 0 && idx + 1 < _playlist.Count)
+                {
+                    return _playlist[idx + 1];
+                }
+            }
+            return null;
+        }
+
+        /// <summary>无缝切到预加载的下一首：更新正在播放信息与索引，并继续预加载下下首。</summary>
+        private void OnSeamlessTrackChanged()
+        {
+            _ = DispatcherQueue.TryEnqueue(() =>
+            {
+                PlaylistItem? next = _seamlessPreloaded;
+                _seamlessPreloaded = null;
+                if (next != null)
+                {
+                    _isEnginePaused = false;
+                    _usingEnginePlayback = true;
+                    NowPlayingText.Text = "正在播放（引擎）：" + next.Title + " - " + next.Artist;
+                    _ = UpdateNowPlayingPanelAsync(next);
+                    UpdateNowPlayingOutputFormat();
+                    RecordPlaybackStatsOnStart(next);
+                    if (_audioEngine != null)
+                    {
+                        ProgressSlider.Maximum = Math.Max(1, _audioEngine.Duration.TotalSeconds);
+                        ProgressSlider.Value = 0;
+                        TotalTimeText.Text = FormatTime(_audioEngine.Duration);
+                    }
+                    ConfigureEngineSmtc(next, playing: true);
+                    AdvanceUserPlaylistIndexTo(next);
+                    _miniPlayerWindow?.RefreshFromOwner();
+                    _ = PreloadSeamlessNextAsync(next);
+                }
+            });
+        }
+
+        /// <summary>无缝切歌后同步用户播放队列当前索引（命中则设为该项）。</summary>
+        private void AdvanceUserPlaylistIndexTo(PlaylistItem item)
+        {
+            if (_userPlaylist.Count == 0) return;
+            int idx = FindUserPlaylistIndex(item.FilePath);
+            if (idx >= 0)
+            {
+                _userPlaylistIndex = idx;
+                PlaylistView.SelectedIndex = idx;
+            }
+        }
+
         /// <summary>配置引擎播放的系统媒体控件（SMTC）。</summary>
         private void ConfigureEngineSmtc(PlaylistItem item, bool playing)
         {
@@ -11763,6 +12621,29 @@ namespace CelesteMusicPlayer
                 updater.MusicProperties.Artist = item.Artist;
                 updater.MusicProperties.AlbumTitle = item.Album;
                 updater.Thumbnail = null;
+                updater.Update();
+
+                // 异步补封面缩略图（deskbox/系统媒体浮层可显示专辑封面）
+                _ = LoadAndSetSmtcThumbnailAsync(updater, item);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>异步读取曲目封面并设置到 SMTC 缩略图（失败静默）。</summary>
+        private async System.Threading.Tasks.Task LoadAndSetSmtcThumbnailAsync(SystemMediaTransportControlsDisplayUpdater updater, PlaylistItem item)
+        {
+            try
+            {
+                if (updater == null || item == null || string.IsNullOrWhiteSpace(item.FilePath)) return;
+                byte[]? bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(item.FilePath));
+                if (bytes is not { Length: > 0 }) return;
+                using var ms = new System.IO.MemoryStream(bytes);
+                ms.Position = 0;
+                var stream = ms.AsRandomAccessStream();
+                var reference = Windows.Storage.Streams.RandomAccessStreamReference.CreateFromStream(stream);
+                updater.Thumbnail = reference;
                 updater.Update();
             }
             catch

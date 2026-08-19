@@ -353,6 +353,24 @@
                             <TextBlock Text="播放最多" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
+                    <Button
+                        x:Name="NavTagSortButton"
+                        Tag="TagSort"
+                        Margin="4,8,4,2"
+                        Padding="8,10"
+                        FontSize="14"
+                        Height="40"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Background="Transparent"
+                        BorderThickness="1"
+                        CornerRadius="20"
+                        Click="NavTagSortButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8B1;" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="标签排序" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
 
                 <Button
@@ -784,6 +802,25 @@
                                             BorderThickness="0"
                                             Content="添加到播放列表"
                                             Click="PlaylistDetailAddWallButton_Click" />
+                                        <Button
+                                            x:Name="PlaylistDetailSortButton"
+                                            Height="32"
+                                            Padding="14,0"
+                                            CornerRadius="16"
+                                            BorderThickness="0"
+                                            Content="排序">
+                                            <Button.Flyout>
+                                                <MenuFlyout>
+                                                    <MenuFlyoutItem Text="按标题排序" Tag="Title" Click="PlaylistDetailSortMenu_Click" />
+                                                    <MenuFlyoutItem Text="按艺术家排序" Tag="Artist" Click="PlaylistDetailSortMenu_Click" />
+                                                    <MenuFlyoutItem Text="按专辑排序" Tag="Album" Click="PlaylistDetailSortMenu_Click" />
+                                                    <MenuFlyoutItem Text="按音轨号排序" Tag="Track" Click="PlaylistDetailSortMenu_Click" />
+                                                    <MenuFlyoutItem Text="按年份排序" Tag="Year" Click="PlaylistDetailSortMenu_Click" />
+                                                    <MenuFlyoutItem Text="按时长排序" Tag="Duration" Click="PlaylistDetailSortMenu_Click" />
+                                                    <MenuFlyoutItem Text="按文件路径排序" Tag="FilePath" Click="PlaylistDetailSortMenu_Click" />
+                                                </MenuFlyout>
+                                            </Button.Flyout>
+                                        </Button>
                                     </StackPanel>
                                 </StackPanel>
                             </StackPanel>
@@ -809,7 +846,9 @@
                                 Background="Transparent"
                                 SelectionMode="Extended"
                                 HorizontalContentAlignment="Stretch"
+                                CanDragItems="True"
                                 CanReorderItems="True"
+                                AllowDrop="True"
                                 DoubleTapped="PlaylistDetailListView_DoubleTapped"
                                 RightTapped="PlaylistDetailListView_RightTapped"
                                 DragItemsCompleted="PlaylistDetailListView_DragItemsCompleted">
@@ -850,7 +889,7 @@
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="72" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.7" Text="{x:Bind TrackText}" />
+                                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.7" Text="{x:Bind Index}" />
                                                 <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Title}" />
                                                 <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.7" Text="{x:Bind DurationText}" />
                                             </Grid>
@@ -1958,6 +1997,177 @@
                             FontSize="16"
                             Text="请选择文件夹"
                             Visibility="Collapsed" />
+                    </Grid>
+                </Border>
+
+                <!-- 标签排序：按音频元数据标签字段逐级分组钻取浏览 -->
+                <Border
+                    x:Name="TagSortBorder"
+                    Grid.Row="1"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="16,12,16,0"
+                    Visibility="Collapsed">
+                    <Grid RowSpacing="10">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <!-- 顶部：分类字段切换（分类墙维度） -->
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Padding="0,0,0,2">
+                            <TextBlock Text="分类：" VerticalAlignment="Center" Opacity="0.7" FontSize="13" />
+                            <Button x:Name="TagSortFieldArtistButton" Tag="Artist" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="艺术家" Click="TagSortFieldBoundButton_Click" />
+                            <Button x:Name="TagSortFieldAlbumArtistButton" Tag="AlbumArtist" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="专辑艺术家" Click="TagSortFieldBoundButton_Click" />
+                            <Button x:Name="TagSortFieldAlbumButton" Tag="Album" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="专辑" Click="TagSortFieldBoundButton_Click" />
+                            <Button x:Name="TagSortFieldGenreButton" Tag="Genre" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="流派" Click="TagSortFieldBoundButton_Click" />
+                            <Button x:Name="TagSortFieldYearButton" Tag="Year" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="年份" Click="TagSortFieldBoundButton_Click" />
+                        </StackPanel>
+
+                        <!-- 分类墙：一个分类一张封面卡片 -->
+                        <ScrollViewer Grid.Row="1" x:Name="TagSortClassScroll" VerticalScrollBarVisibility="Auto">
+                            <GridView
+                                x:Name="TagSortClassGridView"
+                                SelectionMode="None"
+                                IsItemClickEnabled="True"
+                                ItemClick="TagSortClassGridView_ItemClick"
+                                RightTapped="TagSortClassGridView_RightTapped">
+                                <GridView.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="100" />
+                                    </ItemsPanelTemplate>
+                                </GridView.ItemsPanel>
+                                <GridView.ItemTemplate>
+                                    <DataTemplate x:DataType="local:TagSortCategoryEntry">
+                                        <StackPanel Width="132" Spacing="8">
+                                            <Border Width="132" Height="132" CornerRadius="8"
+                                                    Background="{ThemeResource SystemControlHighlightListAccentLowBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                                <Grid>
+                                                    <FontIcon Glyph="&#xE8B7;" FontSize="44" Foreground="White"
+                                                              HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.9" />
+                                                    <Image Stretch="UniformToFill" Source="{x:Bind Cover, Mode=OneWay}" />
+                                                </Grid>
+                                            </Border>
+                                            <TextBlock Text="{x:Bind Name}" TextWrapping="WrapWholeWords" TextAlignment="Center"
+                                                       MaxLines="2" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Name}" />
+                                            <TextBlock Text="{x:Bind CountText}" FontSize="11" Opacity="0.7" TextAlignment="Center" />
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </GridView.ItemTemplate>
+                            </GridView>
+                        </ScrollViewer>
+
+                        <!-- 分类面板：进入某个分类后显示 -->
+                        <Grid Grid.Row="1" x:Name="TagSortPanel" Visibility="Collapsed" RowSpacing="8">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <!-- 顶栏：返回 + 标题 + 切换视角 -->
+                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8">
+                                <Button x:Name="TagSortPanelBackButton" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="0" Content="← 返回" Click="TagSortPanelBackButton_Click" />
+                                <TextBlock x:Name="TagSortPanelTitle" VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="" />
+                                <Button x:Name="TagSortViewModeButton" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="曲目">
+                                    <Button.Flyout>
+                                        <MenuFlyout>
+                                            <MenuFlyoutItem Text="曲目" Tag="Songs" Click="TagSortViewModeItem_Click" />
+                                            <MenuFlyoutItem Text="专辑" Tag="Albums" Click="TagSortViewModeItem_Click" />
+                                            <MenuFlyoutItem Text="艺术家" Tag="Artists" Click="TagSortViewModeItem_Click" />
+                                            <MenuFlyoutSeparator />
+                                            <MenuFlyoutItem Text="排序方式" Tag="Sort" Click="TagSortViewModeItem_Click" />
+                                        </MenuFlyout>
+                                    </Button.Flyout>
+                                </Button>
+                            </StackPanel>
+
+                            <Grid Grid.Row="1">
+                                <!-- 专辑 / 艺术家 视角：网格 -->
+                                <GridView x:Name="TagSortPanelGridView" SelectionMode="None" IsItemClickEnabled="True"
+                                          ItemClick="TagSortPanelGridView_ItemClick" Visibility="Collapsed"
+                                          RightTapped="TagSortPanelGridView_RightTapped">
+                                    <GridView.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="100" />
+                                        </ItemsPanelTemplate>
+                                    </GridView.ItemsPanel>
+                                    <GridView.ItemTemplate>
+                                        <DataTemplate x:DataType="local:TagSortCategoryEntry">
+                                            <StackPanel Width="120" Spacing="8">
+                                                <Border Width="120" Height="120" CornerRadius="8"
+                                                        Background="{ThemeResource SystemControlHighlightListAccentLowBrush}"
+                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                                    <Grid>
+                                                        <FontIcon Glyph="&#xE74A;" FontSize="40" Foreground="White"
+                                                                  HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.9" />
+                                                        <Image Stretch="UniformToFill" Source="{x:Bind Cover, Mode=OneWay}" />
+                                                    </Grid>
+                                                </Border>
+                                                <TextBlock Text="{x:Bind Name}" TextWrapping="WrapWholeWords" TextAlignment="Center"
+                                                           MaxLines="2" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Name}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </GridView.ItemTemplate>
+                                </GridView>
+
+                                <!-- 曲目 视角：列表 -->
+                                <ListView x:Name="TagSortPanelSongListView" SelectionMode="Extended"
+                                          DoubleTapped="TagSortPanelSongListView_DoubleTapped"
+                                          RightTapped="TagSortPanelSongListView_RightTapped"
+                                          ContainerContentChanging="TagSortPanelSongList_ContainerContentChanging"
+                                          SelectionChanged="TagSortPanelSongList_SelectionChanged" Visibility="Collapsed">
+                                    <ListView.ItemContainerStyle>
+                                        <Style TargetType="ListViewItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                            <Setter Property="Padding" Value="0" />
+                                            <Setter Property="MinHeight" Value="40" />
+                                            <Setter Property="CornerRadius" Value="8" />
+                                            <Setter Property="Margin" Value="0,2" />
+                                            <Setter Property="Background" Value="Transparent" />
+                                        </Style>
+                                    </ListView.ItemContainerStyle>
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="local:PlaylistItem">
+                                            <Border Tag="SongRowChrome" MinHeight="40" CornerRadius="8" Padding="12,0" Background="Transparent">
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="48" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="72" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.7" Text="{x:Bind Index}" />
+                                                    <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Title}" />
+                                                    <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.7" Text="{x:Bind DurationText}" />
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+
+                                <!-- 排序方式 视图：预设 + 自定义 + 升降序 -->
+                                <StackPanel x:Name="TagSortSortPanel" Spacing="8" Visibility="Collapsed">
+                                    <TextBlock Text="排序方式（用于排序曲库/主面板歌曲顺序）" Opacity="0.7" FontSize="13" />
+                                    <ComboBox x:Name="TagSortPresetCombo" MinWidth="280"
+                                              SelectionChanged="TagSortPresetCombo_SelectionChanged">
+                                        <ComboBoxItem Content="专辑" />
+                                        <ComboBoxItem Content="专辑艺术家 / 专辑" />
+                                        <ComboBoxItem Content="专辑艺术家 / 年份 / 专辑" />
+                                        <ComboBoxItem Content="艺术家 / 专辑" />
+                                        <ComboBoxItem Content="流派 / 专辑" />
+                                        <ComboBoxItem Content="年份 / 专辑" />
+                                    </ComboBox>
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <ToggleButton x:Name="TagSortAscButton" Content="升序" IsChecked="True"
+                                                      Click="TagSortOrderClick" />
+                                        <ToggleButton x:Name="TagSortDescButton" Content="降序"
+                                                      Click="TagSortOrderClick" />
+                                    </StackPanel>
+                                    <Button Content="自定义排序…" Click="TagSortCustomSortButton_Click" />
+                                    <TextBlock x:Name="TagSortSortStatusText" Opacity="0.7" Text="" TextWrapping="WrapWholeWords" />
+                                </StackPanel>
+                            </Grid>
+                        </Grid>
                     </Grid>
                 </Border>
 

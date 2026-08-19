@@ -16,7 +16,7 @@ namespace CelesteMusicPlayer
     /// <summary>
     /// 自建音频播放引擎（阶段 1）：
     /// AudioGraph + AudioFileInputNode + AudioDeviceOutputNode + 真实 10 段均衡器（EqualizerEffectDefinition）。
-    /// 阶段 2 将扩展为 FFmpeg 解码 + AudioFrameInputNode，以支持 APE / WavPack / TTA / DSD 等系统不支持的格式。
+    /// 阶段 2 将扩展为 FFmpeg 解码 + AudioFrameInputNode，以支持 APE / WavPack / TTA 等系统不支持的格式。
     /// </summary>
     public sealed class AudioPlaybackEngine : IDisposable
     {
@@ -64,6 +64,8 @@ namespace CelesteMusicPlayer
         /// <summary>文件播放结束。</summary>
         public event Action? PlaybackEnded;
 
+        /// <summary>共享/ASIO 无缝切到下一首（上层更新标题/时长并继续预加载下下首）。</summary>
+        public event Action? SeamlessTrackChanged;
         /// <summary>失败（初始化/打开文件/设置均衡器等）。</summary>
         public event Action<Exception>? Failed;
 
@@ -113,11 +115,12 @@ namespace CelesteMusicPlayer
             }
 
             return Path.GetExtension(path).ToLowerInvariant() is
-                ".ape" or ".wv" or ".tta" or ".dsf" or ".dff" or ".mpc" or ".tak" or
+                ".ape" or ".wv" or ".tta" or ".mpc" or ".tak" or
+                ".dsf" or ".dff" or
                 ".opus" or ".mp2" or ".amr" or ".au" or ".cda" or ".mod" or ".s3m" or ".xm";
         }
 
-        /// <summary>用内置 FFmpeg 把文件转成临时 WAV 后播放（支持 APE/WavPack/TTA/DSD 等系统不支持的格式）。</summary>
+        /// <summary>用内置 FFmpeg 把文件转成临时 WAV 后播放（支持 APE/WavPack/TTA 等系统不支持的格式）。</summary>
         public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null)
         {
             string? ffmpeg = FindFfmpeg();
@@ -244,20 +247,9 @@ namespace CelesteMusicPlayer
                 bool ok = PlayWavHiFi(targetWav);
                 if (!ok)
                 {
-                    // DSD（DSF/DFF）源：不做降级/重采样转 PCM 播放——若设备（DAC/ASIO 驱动）不支持该 DSD 规格，
-                    // 直接明确报错，等待原生 DSD（DoP）支持。避免悄悄降级而丢失 DSD 原生质量。
-                    bool isDsd = Path.GetExtension(path).ToLowerInvariant() is ".dsf" or ".dff";
-                    if (isDsd && _outputMode == HiFiOutputBackend.OutputMode.Asio)
-                    {
-                        LastError = _hifiOut?.LastError ?? "播放失败";
-                        string detail = string.IsNullOrWhiteSpace(LastError) ? "" : "（" + LastError + "）";
-                        RaiseFailed(new Exception("当前设备不支持该规格音频。" + detail));
-                        return false;
-                    }
-
-                    // 非 DSD 源：源格式设备不认时，按设备 MixFormat 重转一次重试，保证可播
-                    // （此时非 bit-perfect，属设备能力限制）。
-                    int devRate = 0, devCh = 0, devBits = 0;
+                // 源格式设备不认时，按设备 MixFormat 重转一次重试，保证可播
+                // （此时非 bit-perfect，属设备能力限制）。
+                int devRate = 0, devCh = 0, devBits = 0;
                     if (_outputMode == HiFiOutputBackend.OutputMode.Asio)
                     {
                         // ASIO 驱动不暴露统一的 MixFormat：用 44.1kHz 安全重转保底。
@@ -312,6 +304,8 @@ namespace CelesteMusicPlayer
                 _hifiOut ??= new HiFiOutputBackend();
                 _hifiOut.PlaybackStopped -= Hifi_PlaybackStopped;
                 _hifiOut.PlaybackStopped += Hifi_PlaybackStopped;
+                _hifiOut.SeamlessTrackChanged -= Hifi_SeamlessTrackChanged;
+                _hifiOut.SeamlessTrackChanged += Hifi_SeamlessTrackChanged;
                 _hifiOut.PositionChanged -= Hifi_PositionChanged;
                 _hifiOut.PositionChanged += Hifi_PositionChanged;
 
@@ -341,6 +335,13 @@ namespace CelesteMusicPlayer
             _isPlaying = false;
             Position = Duration;
             PlaybackEnded?.Invoke();
+        }
+
+        private void Hifi_SeamlessTrackChanged()
+        {
+            // 由 _hifiOut 无缝切到预加载的下一首；同步当前 Position/Duration 供上层
+            Position = TimeSpan.Zero;
+            SeamlessTrackChanged?.Invoke();
         }
 
         private void Hifi_PositionChanged(TimeSpan pos)
@@ -504,7 +505,8 @@ namespace CelesteMusicPlayer
         /// 保留源采样率与声道，供 WaveFileReader 原样直通（严格 bit-perfect）。探测失败回退 16/44.1/2。</summary>
         private static string BuildTranscodeArgs(string srcPath, string dstPath)
         {
-            // DSD（DSF/DFF）：ffmpeg 内置 dsd 解码器，解码为高采样率 PCM（DSD64→352.8kHz，DSD128→705.6kHz）。
+            // DSD（DSF/DFF）：先用 ffmpeg 转码为高质量 PCM 再播放。
+            // ffmpeg 内置 dsd 解码器解码为高采样率 PCM（DSD64→352.8kHz，DSD128→705.6kHz）。
             // 不指定 -ar，避免被降采样到 44.1kHz；用 32bit PCM（而非 24bit）——飞傲某些 ASIO 驱动下
             // NAudio AsioOut 对 24bit 缓冲格式会触发回调 NRE 崩溃（实测 16/32bit 稳定）。
             string ext = Path.GetExtension(srcPath).ToLowerInvariant();
@@ -526,7 +528,7 @@ namespace CelesteMusicPlayer
             return string.Format("-y -i \"{0}\" -vn -acodec pcm_s16le -ar 44100 -ac 2 \"{1}\"", srcPath, dstPath);
         }
 
-        /// <summary>缓存键：源路径哈希 + 最后修改时间 + 转码参数指纹（参数变化时自动失效，如 DSD 位深/采样率调整）。</summary>
+        /// <summary>缓存键：源路径哈希 + 最后修改时间 + 转码参数指纹（参数变化时自动失效，如位深/采样率调整）。</summary>
         private static string GetCacheKey(string sourcePath, string transcodeArgs)
         {
             try
@@ -930,6 +932,81 @@ namespace CelesteMusicPlayer
             }
 
             ApplyOutputGain();
+        }
+
+        /// <summary>设置源音频实际时长（元数据/TagLib）。HiFi 引擎用它作为进度/播完上限，规避 DSD 转 PCM 尾部 padding 导致时长越界。</summary>
+        public void SetSourceDuration(TimeSpan sourceDuration)
+        {
+            _hifiOut?.SetSourceDuration(sourceDuration);
+        }
+
+        /// <summary>预加载下一首 WAV 到无缝源（共享/ASIO）。同格式且未读及时可无缝续接；否则由上层重建。返回是否采纳为无缝。</summary>
+        public bool PrepareNextSeamless(string nextWavPath)
+        {
+            return _hifiOut?.PrepareNextSeamless(nextWavPath) ?? false;
+        }
+
+        /// <summary>用 ffmpeg 探测源文件真实音轨时长（秒）。失败返回 0。
+        /// 用于 DSD 转 PCM 时长可能被转码 WAV 尾部 padding 拉长的可靠源时长。</summary>
+        public async System.Threading.Tasks.Task<TimeSpan> ProbeSourceDurationAsync(string path)
+        {
+            try
+            {
+                string? ffmpeg = FindFfmpeg();
+                if (string.IsNullOrWhiteSpace(ffmpeg) || !File.Exists(path)) return TimeSpan.Zero;
+                var psi = new ProcessStartInfo(ffmpeg)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardError = true,
+                    RedirectStandardOutput = true,
+                    Arguments = "-i \"" + path + "\""
+                };
+                using (Process proc = Process.Start(psi)!)
+                {
+                    string err = await proc.StandardError.ReadToEndAsync();
+                    await proc.WaitForExitAsync();
+                    foreach (var line in err.Split('\n'))
+                    {
+                        double sec = ParseDurationSeconds(line);
+                        if (sec > 0)
+                        {
+                            return TimeSpan.FromSeconds(sec);
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+            return TimeSpan.Zero;
+        }
+
+        /// <summary>确保曲目已转码为缓存 WAV，返回缓存路径（供无缝预加载复用；失败返回 null）。</summary>
+        public async Task<string?> EnsureCachedWavAsync(string path, Action<string>? status = null)
+        {
+            try
+            {
+                if (!File.Exists(path)) return null;
+                string cacheDir = GetCacheDir();
+                string partial = Path.Combine(cacheDir, Guid.NewGuid().ToString("N") + ".partial.wav");
+                string transcodeArgs = BuildTranscodeArgs(path, partial);
+                string key = GetCacheKey(path, transcodeArgs);
+                string cachedWav = Path.Combine(cacheDir, key + ".wav");
+                if (File.Exists(cachedWav)) return cachedWav;
+
+                Directory.CreateDirectory(cacheDir);
+                if (!await RunFfmpegAsync(transcodeArgs, status)) return null;
+                if (!File.Exists(partial)) return null;
+                try { File.Move(partial, cachedWav); }
+                catch { try { File.Delete(partial); } catch { } }
+                TrimCache(cacheDir);
+                return cachedWav;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         /// <summary>设备主音量标量 0..1；未知返回 -1。</summary>
