@@ -79,7 +79,12 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 
 ## 📦 安装包
 
-使用 [Inno Setup](https://jrsoftware.org/isinfo.php) 将发布目录打包为 `setup.exe`（见 `installer/CelesteMusicPlayer.iss`）。
+使用 [NSIS](https://nsis.sourceforge.io/) 将发布目录打包为 `setup.exe`（见 `installer/CelesteMusicPlayer.nsi`）。安装为**用户级**安装到 `%LOCALAPPDATA%\Programs\CelesteMusicPlayer`，无需管理员权限，自动创建开始菜单 / 桌面快捷方式与卸载入口。
+
+```bash
+# 发布自包含（win-x64）后
+makensis.exe installer\CelesteMusicPlayer.nsi
+```
 
 ## 📄 许可证
 
