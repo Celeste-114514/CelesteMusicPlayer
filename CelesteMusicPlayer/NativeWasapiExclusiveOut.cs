@@ -56,6 +56,9 @@ namespace CelesteMusicPlayer
         public string? ActualFormatDescription { get; private set; }
         public bool IsStarted { get; private set; }
 
+        /// <summary>最近一次初始化是否触发了 AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED 对齐 dance（供日志排障）。</summary>
+        public bool LastAlignDance { get; private set; }
+
         /// <summary>用指定设备 + 源 PCM 初始化（格式协商 + Initialize + 取 render client + 绑定事件）。</summary>
         public bool Init(NativeWasapi.IMMDevice device, WaveFileReader source)
         {
@@ -72,12 +75,17 @@ namespace CelesteMusicPlayer
             _rate = src.SampleRate;
             _channels = src.Channels;
 
+            // ---- 初始化日志（排障"假 bit-perfect"）：源格式与协商轨迹 ----
+            string initLog = string.Format(
+                "WASAPI独占协商 源=\"{0}\" {1}bit/{2}Hz/{3}ch", _source.GetType().Name, src.BitsPerSample, src.SampleRate, src.Channels);
+
             // 1) 尝试「源格式直通」（bit-perfect 优先）
             var srcExt = MakeSourceFormat(src);
             NativeWasapi.IAudioClient? ac;
             NativeWasapi.IAudioRenderClient? rc;
             uint frames;
-            if (TryInitialize(device, ref srcExt, out ac, out rc, out frames) == NativeWasapi.S_OK)
+            bool srcAlignDance = false;
+            if (TryInitialize(device, ref srcExt, out ac, out rc, out frames, out srcAlignDance) == NativeWasapi.S_OK)
             {
                 _audioClient = ac;
                 _renderClient = rc;
@@ -86,6 +94,8 @@ namespace CelesteMusicPlayer
                 _dstBlock = src.BlockAlign;
                 _direct = true;
                 ActualFormatDescription = src.SampleRate + " Hz / " + src.BitsPerSample + " bit(源直通) / " + src.Channels + " ch";
+                StartupLog.Write(initLog + "  → 源直通成功 " + ActualFormatDescription + (srcAlignDance ? "（含对齐dance）" : ""));
+                LastAlignDance = srcAlignDance;
                 FinishInit();
                 return true;
             }
@@ -94,13 +104,17 @@ namespace CelesteMusicPlayer
             //    仅接受「与源同布局」的格式（保证 bit-perfect 直出，无需转换）；源采样率设备不认时交给引擎按 MixFormat 重采样。
             var cands = new[] { Kind.Float32, Kind.Pcm16, Kind.Pcm32, Kind.Pcm24In32 };
             int lastHr = NativeWasapi.AUDCLNT_E_UNSUPPORTED_FORMAT;
+            LastAlignDance = false;
             foreach (var kind in cands)
             {
                 var cand = MakeFormat(kind, src.SampleRate, src.Channels);
-                int h = TryInitialize(device, ref cand, out ac, out rc, out frames);
+                bool alignDance = false;
+                int h = TryInitialize(device, ref cand, out ac, out rc, out frames, out alignDance);
+                LastAlignDance |= alignDance;
                 if (h != NativeWasapi.S_OK)
                 {
                     if (h != NativeWasapi.AUDCLNT_E_UNSUPPORTED_FORMAT) lastHr = h;
+                    StartupLog.Write(initLog + "  降级候选 " + kind + " 失败 hr=0x" + h.ToString("X8"));
                     continue;
                 }
 
@@ -119,11 +133,13 @@ namespace CelesteMusicPlayer
                 _dstBlock = src.BlockAlign;
                 _direct = true; // 与源同布局 → 源字节整块直通（bit-perfect）
                 ActualFormatDescription = src.SampleRate + " Hz / " + src.BitsPerSample + " bit / " + src.Channels + " ch";
+                StartupLog.Write(initLog + "  → 候选降级 " + kind + " 成功 " + ActualFormatDescription + (LastAlignDance ? "（含对齐dance）" : ""));
                 FinishInit();
                 return true;
             }
 
             LastError = "设备不支持所需的独占格式（源 " + src.BitsPerSample + "bit@" + src.SampleRate + "Hz 不可用）HRESULT=0x" + lastHr.ToString("X8");
+            StartupLog.Write(initLog + "  → 全部失败 " + LastError);
             return false;
         }
 
@@ -141,7 +157,11 @@ namespace CelesteMusicPlayer
             lock (_seekLock) { _pendingSeek = pos; }
         }
 
-        public bool Play()
+        /// <summary>启动播放。若从中间位置续播（暂停恢复/续播），传入已 seek 到的起始位置，
+        /// 使 <see cref="Position"/> 从该处开始累计（保持绝对进度），而不会重置为 0。
+        /// 注意：本方法假定在**渲染线程尚未启动**的新/已停止实例上调用；活跃播放中请改用 <see cref="SeekTo"/>，
+        /// 避免把 baseline 与正在迭代累计的帧重复相加。</summary>
+        public bool Play(TimeSpan? initialPosition = null)
         {
             if (_audioClient == null) return false;
             int hr = _audioClient.Start();
@@ -149,6 +169,20 @@ namespace CelesteMusicPlayer
             {
                 LastError = "WASAPI Start 失败 HRESULT=0x" + hr.ToString("X8");
                 return false;
+            }
+
+            lock (_framesLock)
+            {
+                // 源在播放前已被 seek 到 initialPosition（见 PlayWavAsync 预seek），
+                // 故先把 framesWritten 基准设到该帧，Position = 基准 + 已写帧，保持绝对进度。
+                if (initialPosition.HasValue && initialPosition.Value > TimeSpan.Zero)
+                {
+                    _framesWritten = (long)(initialPosition.Value.TotalSeconds * _rate);
+                }
+                else
+                {
+                    _framesWritten = 0;
+                }
             }
 
             _requestStop = false;
@@ -195,9 +229,9 @@ namespace CelesteMusicPlayer
 
         /// <summary>尝试以给定独占格式初始化并取 render client；成功返回 S_OK。</summary>
         private static int TryInitialize(NativeWasapi.IMMDevice device, ref NativeWasapi.WAVEFORMATEXTENSIBLE wave,
-            out NativeWasapi.IAudioClient? ac, out NativeWasapi.IAudioRenderClient? rc, out uint frames)
+            out NativeWasapi.IAudioClient? ac, out NativeWasapi.IAudioRenderClient? rc, out uint frames, out bool alignDance)
         {
-            ac = null; rc = null; frames = 0;
+            ac = null; rc = null; frames = 0; alignDance = false;
             var c = NativeWasapi.ActivateAudioClient(device);
             if (c == null) return NativeWasapi.REGDB_E_CLASSNOTREG;
 
@@ -207,6 +241,7 @@ namespace CelesteMusicPlayer
 
             if (hr == NativeWasapi.AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED)
             {
+                alignDance = true; // 记录对齐 dance（供日志/排障"假 bit-perfect"）
                 uint aligned = 0;
                 if (c.GetBufferSize(out aligned) == NativeWasapi.S_OK && aligned > 0)
                 {
@@ -290,6 +325,9 @@ namespace CelesteMusicPlayer
         private void RenderLoop()
         {
             NativeWasapi.CoInitializeEx(IntPtr.Zero, 0); // render 线程 COM 用 MTA（对齐 ECHO com_scope_enter）
+            // Pro Audio 任务提升（foobar/Exclusive-Mode 示例做法）：降低独占音频线程的调度延迟/爆音。
+            uint taskIdx = 0;
+            IntPtr avrtTask = NativeWasapi.AvSetMmThreadCharacteristicsW("Pro Audio", out taskIdx);
             try
             {
                 var rc = _renderClient!;
@@ -355,6 +393,13 @@ namespace CelesteMusicPlayer
                 IsStarted = false;
                 try { _audioClient?.Stop(); } catch { }
                 Failed?.Invoke(ex);
+            }
+            finally
+            {
+                if (avrtTask != IntPtr.Zero)
+                {
+                    try { NativeWasapi.AvRevertMmThreadCharacteristics(avrtTask); } catch { }
+                }
             }
         }
 

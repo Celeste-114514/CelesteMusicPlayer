@@ -33,6 +33,9 @@ namespace CelesteMusicPlayer
         private bool _uiReady;
         private bool _loadAsyncIgnore;
         private string? _loadedOutputDeviceId;
+        /// <summary>设备下拉用 seed 重填时若 seed 在新模式下未能匹配，置 true；
+        /// 用于在持久化时保留用户原先保存的 OutputDeviceId，避免回落值覆盖用户记忆。</summary>
+        private bool _deviceSeedMatchFail;
         private List<string> _watchFolders = new();
 
         private static readonly (string Id, string Label)[] CloseOptions =
@@ -373,6 +376,7 @@ namespace CelesteMusicPlayer
 
                 // 音频输出模式 + 设备
                 SelectComboByTag(OutputModeCombo, s.OutputMode);
+                UpdateVolumeSettingLockForMode(); // 模式决定设置页音量条是否锁定
                 StartupLog.Write("设置加载 输出模式=" + (s.OutputMode ?? "null") + " 下拉选中=" + (OutputModeCombo?.SelectedItem is ComboBoxItem _m && _m.Tag is string _mt ? _mt : "(null)") + " 设备=" + (s.OutputDeviceId ?? "null"));
                 _loadAsyncIgnore = true;
                 _ = InitOutputDeviceComboAsync(s.OutputDeviceId);
@@ -421,6 +425,54 @@ namespace CelesteMusicPlayer
                 control.Value = value;
             }
         }
+
+        /// <summary>设置页音量滑条：HiFi 独占下调 DAC 驱动音量，共享下调数字音量；两者都可调。</summary>
+        private void UpdateVolumeSettingLockForMode()
+        {
+            if (VolumeSettingSlider == null)
+            {
+                return;
+            }
+
+            // 音量滑条在共享与 HiFi 独占下都可调：共享调 MediaPlayer 数字音量（系统混音），
+            // HiFi 独占调 DAC 设备/驱动级主音量（不破坏 bit-perfect，方便无实体音量键的小尾巴）。
+            // 因此不再锁定/禁用，仅统一用保存音量回填并显示。
+            double saved = AppSettingsStore.Load().Volume;
+            SetSlider(VolumeSettingSlider, saved);
+            SetTextBlock(VolumeValueText, $"{(int)Math.Round(saved)}%");
+        }
+
+        /// <summary>切换输出模式到 HiFi 独占（WASAPI 独占 / ASIO）时弹一次说明，提醒用户：
+        /// 播放器数字音量固定 100%（bit-perfect），请用 DAC/驱动音量或程序音量条调响（无实体音量键的小尾巴也能量轻）。</summary>
+        private void MaybeWarnHiFiVolume()
+        {
+            string mode = GetSelectedOutputMode();
+            bool hifi = string.Equals(mode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase);
+            if (!hifi)
+            {
+                return;
+            }
+
+            try
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = "HiFi 独占输出提示",
+                    Content = "已切换到 WASAPI 独占 / ASIO，播放器将尽力直通（bit-perfect）。\n\n" +
+                              "播放器内部数字音量固定为 100%（不参与衰减），音量请在你的 DAC / 耳机 / 驱动端调节，或使用右下角音量条调节 DAC 音量。\n\n" +
+                              "如果你的设备没有实体音量键（如无旋钮的小尾巴），用音量条即可调轻，不会破坏直通音质。",
+                    CloseButtonText = "知道了",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = Content.XamlRoot
+                };
+                _ = dialog.ShowAsync();
+            }
+            catch
+            {
+            }
+        }
+
 
         private void RefreshWatchFoldersList()
         {
@@ -485,13 +537,54 @@ namespace CelesteMusicPlayer
             _loadingUi = true;
             try
             {
+                _deviceSeedMatchFail = false; // 本次 seed 重填的匹配结果在下方判定
                 var prevSelection = new HashSet<string>();
                 if (OutputDeviceCombo?.SelectedItem is ComboBoxItem cur && cur.Tag is string cid)
                 {
                     prevSelection.Add(cid);
                 }
 
-                // 用 NAudio 枚举 WASAPI 渲染设备（与 HiFi 独占输出同源，ID 稳定）
+                bool asioMode = string.Equals(GetSelectedOutputMode(), "Asio", StringComparison.OrdinalIgnoreCase);
+                _loadedOutputDeviceId = selectedId;
+                if (OutputDeviceCombo == null)
+                {
+                    return;
+                }
+
+                OutputDeviceCombo.Items.Clear();
+
+                if (asioMode)
+                {
+                    // ASIO 模式：枚举 ASIO 驱动（驱动名即设备标识），无默认可选时提供“系统默认”占位
+                    var drivers = HiFiOutputBackend.EnumerateAsioDrivers();
+                    StartupLog.Write("ASIO 驱动下拉枚举 数量=" + drivers.Count + " 已选=" + selectedId);
+                    foreach (string drv in drivers)
+                    {
+                        StartupLog.Write("  ASIO driver=" + drv);
+                    }
+                    if (drivers.Count == 0)
+                    {
+                        OutputDeviceCombo.Items.Add(new ComboBoxItem { Content = "（未检测到 ASIO 驱动）", Tag = "" });
+                    }
+                    else
+                    {
+                        foreach (string drv in drivers)
+                        {
+                            OutputDeviceCombo.Items.Add(new ComboBoxItem { Content = drv, Tag = drv });
+                        }
+                    }
+
+                    // 选中已保存的驱动名；无匹配回落第一个
+                    bool asioMatched = SelectRenderDeviceCombo(OutputDeviceCombo, selectedId);
+                    if (!asioMatched && OutputDeviceCombo.Items.Count > 0)
+                    {
+                        OutputDeviceCombo.SelectedIndex = 0;
+                        _deviceSeedMatchFail = !string.IsNullOrWhiteSpace(selectedId);
+                    }
+                    return;
+                }
+
+                // WASAPI 模式：用 NAudio 枚举渲染设备（与 HiFi 独占输出同源，ID 稳定）
                 var devices = HiFiOutputBackend.EnumerateWasapiDevices();
                 string defaultId = HiFiOutputBackend.GetDefaultWasapiDeviceId();
                 StartupLog.Write("输出设备下拉枚举 数量=" + devices.Count + " 默认=" + defaultId + " 已选=" + selectedId);
@@ -500,13 +593,6 @@ namespace CelesteMusicPlayer
                     StartupLog.Write("  设备 id=" + dev.Id + " name=" + dev.Name);
                 }
 
-                _loadedOutputDeviceId = selectedId;
-                if (OutputDeviceCombo == null)
-                {
-                    return;
-                }
-
-                OutputDeviceCombo.Items.Clear();
                 // 第一项：系统默认（Tag 为空字符串）
                 var defaultItem = new ComboBoxItem { Content = "系统默认", Tag = "" };
                 Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(defaultItem, "跟随 Windows 默认输出设备");
@@ -526,7 +612,8 @@ namespace CelesteMusicPlayer
                     target = prevSelection.First();
                 }
 
-                SelectRenderDeviceCombo(OutputDeviceCombo, target);
+                bool wasapiMatched = SelectRenderDeviceCombo(OutputDeviceCombo, target);
+                _deviceSeedMatchFail = !wasapiMatched && !string.IsNullOrWhiteSpace(selectedId);
             }
             finally
             {
@@ -535,35 +622,76 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>选中设备下拉：空 = 系统默认；否则按去掉 \?\ 前缀的设备 ID 匹配，防回显成“系统默认”。</summary>
-        private void SelectRenderDeviceCombo(ComboBox? combo, string selectedId)
+        /// <summary>输出模式切换：Shared/独占/ASIO 变化时刷新设备下拉列表（WASAPI 设备 ⇄ ASIO 驱动）。</summary>
+        private void OutputModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingUi || !_uiReady)
+            {
+                return;
+            }
+
+            // 先在 _loadingUi 归位前持久化新的输出模式（切换本身必须保存），
+            // 再重填设备列表；InitOutputDeviceComboAsync 内部会置 _loadingUi=true 并复位，
+            // 若在持久化之后再调用，模式写入不会被 _loadingUi 早退拦截。
+            AppSettingsStore.Update(s => s.OutputMode = GetSelectedOutputMode());
+            UpdateVolumeSettingLockForMode(); // 切换模式即时刷新设置页音量条锁定态
+            MaybeWarnHiFiVolume(); // 切到 HiFi 独占时提醒用户（无实体音量键的小尾巴用滑块调 DAC 音量）
+
+            // 种子设备用「已持久化的 OutputDeviceId」而非当前下拉旧选择：
+            // 切换模式时旧列表里的设备 id（如 WASAPI MMDevice id / 旧 ASIO 驱动名）在新模式下不匹配，
+            // 若以它作种子会让回落覆盖用户原先保存的设备选择。持久化值才是用户真正想要保留的。
+            string seedDevice = AppSettingsStore.Load().OutputDeviceId;
+            if (string.IsNullOrWhiteSpace(seedDevice))
+            {
+                seedDevice = GetSelectedOutputDeviceId();
+            }
+
+            // InitOutputDeviceComboAsync 方法体无 await（同步执行），这里同步完成重填；
+            // 用 try/catch 兜底，避免枚举/UI 异常留下空下拉并在随后持久化时误写空设备。
+            try
+            {
+                InitOutputDeviceComboAsync(seedDevice).GetAwaiter().GetResult();
+            }
+            catch
+            {
+                _deviceSeedMatchFail = true; // 视为未匹配，保留用户已有设备设置
+            }
+
+            PersistAllFromUi();
+        }
+
+        /// <summary>选中设备下拉：空 = 系统默认；否则按去掉 \?\ 前缀的设备 ID 匹配，防回显成“系统默认”。
+        /// 返回是否成功按 <paramref name="selectedId"/> 精确命中（空串视为命中，回落时返回 false）。</summary>
+        private bool SelectRenderDeviceCombo(ComboBox? combo, string selectedId)
         {
             if (combo == null)
             {
-                return;
+                return false;
             }
 
             if (string.IsNullOrWhiteSpace(selectedId))
             {
                 SelectComboByTag(combo, "");
-                return;
+                return true;
             }
 
-            // NAudio MMDevice.ID 精确匹配（与枚举/保存/输出同源），忽略大小写
+            // NAudio MMDevice.ID / ASIO 驱动名精确匹配（与枚举/保存/输出同源），忽略大小写
             for (int i = 0; i < combo.Items.Count; i++)
             {
                 if (combo.Items[i] is ComboBoxItem item && item.Tag is string id
                     && string.Equals(id, selectedId, StringComparison.OrdinalIgnoreCase))
                 {
                     combo.SelectedIndex = i;
-                    return;
+                    return true;
                 }
             }
 
             if (combo.Items.Count > 0)
             {
-                combo.SelectedIndex = 0; // 匹配失败回落系统默认
+                combo.SelectedIndex = 0; // 匹配失败回落系统默认/首个驱动
             }
+
+            return false;
         }
 
         /// <summary>读取当前选中输出设备 ID（空字符串 = 系统默认）。</summary>
@@ -715,6 +843,8 @@ namespace CelesteMusicPlayer
             s.SaveCoverToSongFolder = SaveCoverToSongFolderSwitch?.IsOn ?? s.SaveCoverToSongFolder;
             s.AutoDownloadOnlyWhenTagFull = AutoDownloadOnlyWhenTagFullSwitch?.IsOn ?? s.AutoDownloadOnlyWhenTagFull;
 
+            // 音量滑条在共享与 HiFi 独占下都可调：HiFi 下调节的是 DAC 设备/驱动级主音量（不破坏 bit-perfect），
+            // 一并持久化，切换模式/重启后沿用用户设定。
             s.Volume = VolumeSettingSlider.Value;
             if (PlaybackOrderCombo?.SelectedItem is ComboBoxItem playbackItem && playbackItem.Tag is PlaybackOrder order)
             {
@@ -722,7 +852,17 @@ namespace CelesteMusicPlayer
             }
 
             s.EnableSmtc = EnableSmtcSwitch?.IsOn ?? s.EnableSmtc;
-            s.OutputDeviceId = GetSelectedOutputDeviceId();
+            // 若本次设备下拉是「用 seed 重填但 seed 未匹配」而回落（例如从 WASAPI 切到 ASIO 时，
+            // 旧 WASAPI MMDevice id 不在 ASIO 驱动列表），则不覆盖用户先前保存的 OutputDeviceId，
+            // 等用户在当前列表里主动选定后再写入，避免回落值静默丢失设备记忆。一次性消费后立即复位，
+            // 避免残留阻塞用户后续手动改设备。
+            bool deviceSeedFail = _deviceSeedMatchFail;
+            _deviceSeedMatchFail = false;
+            if (!deviceSeedFail)
+            {
+                s.OutputDeviceId = GetSelectedOutputDeviceId();
+            }
+
             s.OutputMode = GetSelectedOutputMode();
             StartupLog.Write("设置保存 输出模式=" + (s.OutputMode ?? "null") + " 设备=" + (s.OutputDeviceId ?? "null"));
             s.ReplayGainEnabled = ReplayGainSwitch?.IsOn ?? s.ReplayGainEnabled;

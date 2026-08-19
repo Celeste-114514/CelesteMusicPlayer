@@ -73,6 +73,9 @@ namespace CelesteMusicPlayer
         /// <summary>实际协商后的输出格式（WASAPI 设备端采样率/位深/声道），如 "176400 Hz / 24 bit / 2声道"。null=未知。</summary>
         public string? ActualOutputFormat { get; private set; }
 
+        /// <summary>当前播放源的原始格式（WAV 直通源），如 "44100 Hz / 16 bit / 2声道"。</summary>
+        public string? SourceFormatDescription { get; private set; }
+
         /// <summary>播放后从 WasapiOut/AsioOut 读取实际输出格式并更新 <see cref="ActualOutputFormat"/>。</summary>
         private void CaptureActualOutputFormat()
         {
@@ -333,6 +336,8 @@ namespace CelesteMusicPlayer
                 }
 
                 Duration = _waveFile.TotalTime;
+                var srcWf = _waveFile.WaveFormat;
+                SourceFormatDescription = srcWf.SampleRate + " Hz / " + srcWf.BitsPerSample + " bit / " + srcWf.Channels + "声道";
                 Position = TimeSpan.Zero;
                 _pausedPosition = seekTo ?? TimeSpan.Zero;
 
@@ -352,7 +357,7 @@ namespace CelesteMusicPlayer
                 if (_useNative)
                 {
                     _native!.Ended += Native_Ended;
-                    if (!_native.Play())
+                    if (!_native.Play(_pausedPosition))
                     {
                         LastError = _native.LastError ?? "原生 WASAPI 播放启动失败";
                         Cleanup();
@@ -372,6 +377,13 @@ namespace CelesteMusicPlayer
                 _isPlaying = true;
                 CurrentMode = mode;
                 _positionTimer.Start();
+                // 输出层协商日志（排障"假 bit-perfect"）：源格式 → 模式 → 设备端实际格式 → 对齐dance/降级
+                StartupLog.Write(string.Format(
+                    "输出启动 mode={0} 源={1}bit/{2}Hz/{3}ch → {4} | 对齐dance={5}",
+                    mode,
+                    _waveFile?.WaveFormat.BitsPerSample, _waveFile?.WaveFormat.SampleRate, _waveFile?.WaveFormat.Channels,
+                    ActualOutputFormat ?? OutputDeviceName ?? "?",
+                    (_native?.LastAlignDance == true) ? "是" : "否"));
                 return true;
             }
             catch (Exception ex)
@@ -432,6 +444,7 @@ namespace CelesteMusicPlayer
             Position = TimeSpan.Zero;
             OutputDeviceName = null;
             ActualOutputFormat = null;
+            SourceFormatDescription = null;
             CurrentMode = null;
         }
 
@@ -532,6 +545,21 @@ namespace CelesteMusicPlayer
             else
             {
                 return;
+            }
+
+            // NAudio WasapiOut/AsioOut 在数据源自然播放到末尾时，若不主动 Stop，PlaybackStopped 事件不会触发
+            // （实测 HasReachedEnd=true 但 PlaybackState 仍为 Playing），导致“播完不自动下一首”。
+            // 此处检测源已读到末尾，主动 Stop 以触发 PlaybackStopped → 上层自动接续下一首。
+            if (_waveFile != null && Duration > TimeSpan.Zero
+                && Position >= Duration - TimeSpan.FromMilliseconds(400))
+            {
+                try
+                {
+                    _output?.Stop(); // 触发 Output_PlaybackStopped（内含 PlaybackStopped）
+                }
+                catch
+                {
+                }
             }
 
             PositionChanged?.Invoke(Position);

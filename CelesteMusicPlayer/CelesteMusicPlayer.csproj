@@ -75,6 +75,17 @@
   </ItemGroup>
 
   <!--
+    Debug 打包（MSIX）需要有效代码签名证书，否则 VS「Package」F5 部署会因包未签名而失败
+    （0x87E80034 / 0x800B0100 / 0x800B0109），表现为主界面无响应、无报错。
+    这里用项目内自签名证书（CN=admin）对 x64 Debug 包自动签名。
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(Platform)' == 'x64' and '$(EnableMsixTooling)' == 'true'">
+    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+    <PackageCertificateKeyFile>CelesteMusicPlayer_TemporaryKey.pfx</PackageCertificateKeyFile>
+    <PackageCertificatePassword>celeste123</PackageCertificatePassword>
+  </PropertyGroup>
+
+  <!--
     Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
     Explorer "Package and Publish" context menu entry to be enabled for this project even if
     the Windows App SDK Nuget package has not yet been restored.

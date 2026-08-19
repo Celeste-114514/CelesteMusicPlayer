@@ -149,6 +149,13 @@ namespace CelesteMusicPlayer
         [DllImport("ole32.dll", ExactSpelling = true)]
         public static extern int CoCreateInstance(ref Guid rclsid, IntPtr pUnkOuter, uint dwClsContext, ref Guid riid, out IntPtr ppv);
 
+        // ---- avrt.dll：多媒体进程/线程优先级（对齐 foobar/微软 Exclusive 示例的 Pro Audio 提升）----
+        [DllImport("avrt.dll", ExactSpelling = true)]
+        public static extern IntPtr AvSetMmThreadCharacteristicsW([MarshalAs(UnmanagedType.LPWStr)] string taskName, out uint taskIndex);
+
+        [DllImport("avrt.dll", ExactSpelling = true)]
+        public static extern bool AvRevertMmThreadCharacteristics(IntPtr avrtHandle);
+
         /// <summary>诊断：最近一次设备枚举的 HRESULT/状态（供排障日志）。</summary>
         public static string? LastEnumDiag;
 

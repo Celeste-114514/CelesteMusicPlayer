@@ -656,6 +656,7 @@ namespace CelesteMusicPlayer
             ApplyStartupPlaybackSettings();
             _mediaPlayer.Volume = VolumeSlider.Value / 100.0 * _currentReplayGainScale;
             UpdateVolumeIcon(VolumeSlider.Value);
+            UpdateSignalChainDisplay();
             UpdateDesktopLyricsBadge();
             UpdateMiniPlayerBadge();
             InitializeMusicPlayer2Features();
@@ -742,6 +743,9 @@ namespace CelesteMusicPlayer
             _applyingSettingsVolume = true;
             try
             {
+                if (IsHiFiModeSelected())
+                // 音量滑条在共享与 HiFi 独占下都可用：HiFi 下调 DAC 设备/驱动级主音量（不破坏 bit-perfect），
+                // 用保存音量回填，避免切模式/重启后音量跳回 100%。
                 VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
                 _volumeToSave = Math.Clamp(settings.Volume, 0, 100); // 启动即同步，避免退出时以旧/0 值写盘
             }
@@ -825,18 +829,37 @@ namespace CelesteMusicPlayer
         {
             DispatcherQueue.TryEnqueue(() =>
             {
+                bool hifi = IsHiFiModeSelected();
                 _applyingSettingsVolume = true;
                 try
                 {
-                    VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
-                    _volumeToSave = Math.Clamp(settings.Volume, 0, 100); // 启动同步，避免退出误写
-                    MediaPlayer? player = GetPlayer();
-                    if (player != null)
+                    if (hifi)
                     {
-                        player.Volume = VolumeSlider.Value / 100.0 * _currentReplayGainScale;
-                    }
+                        // HiFi 独占（bit-perfect）：数字音量恒 100%，设备主音量（DAC 级）随滑块可调。
+                        // 回填滑块到设置音量，并应用一次到设备；切歌不重置（保持用户设定）。
+                        VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
+                        _volumeToSave = Math.Clamp(settings.Volume, 0, 100);
+                        _audioEngine?.SetVolume(VolumeSlider.Value / 100.0);
+                        MediaPlayer? hifiPlayer = GetPlayer();
+                        if (hifiPlayer != null)
+                        {
+                            hifiPlayer.Volume = 1.0; // 引擎路径下 MediaPlayer 常停用，兜底置满
+                        }
 
-                    UpdateVolumeIcon(VolumeSlider.Value);
+                        UpdateVolumeIcon(VolumeSlider.Value);
+                    }
+                    else
+                    {
+                        VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
+                        _volumeToSave = Math.Clamp(settings.Volume, 0, 100); // 启动同步，避免退出误写
+                        MediaPlayer? player = GetPlayer();
+                        if (player != null)
+                        {
+                            player.Volume = VolumeSlider.Value / 100.0 * _currentReplayGainScale;
+                        }
+
+                        UpdateVolumeIcon(VolumeSlider.Value);
+                    }
                 }
                 finally
                 {
@@ -9189,13 +9212,17 @@ namespace CelesteMusicPlayer
         private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
             UpdateVolumeIcon(e.NewValue);
+
+            // 共享模式：MediaPlayer 数字音量（跟随用户）。
             MediaPlayer? player = GetPlayer();
             if (player != null)
             {
                 player.Volume = e.NewValue / 100.0 * _currentReplayGainScale;
             }
 
-            // 独占下同样联动设备主音量（SetVolume 内部已做响度压缩），保证滑块可控
+            // 设备主音量（DAC 驱动级）随滑块：共享与 HiFi 独占都联动。
+            // 说明：HiFi 独占下这是 DAC 硬件/驱动增益（非播放器对 PCM 的数字衰减），不破坏 bit-perfect，
+            //       让无实体音量键的小尾巴用户也能调轻音量；数字音量（播放器内部）仍恒 100%。
             _audioEngine?.SetVolume(e.NewValue / 100.0);
 
             if (!_applyingSettingsVolume)
@@ -10750,6 +10777,57 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>信号链调试面板：实时显示 源格式→输出格式→是否独占→是否经过 DSP（对标 foobar 排障"假 bit-perfect"）。</summary>
+        internal void UpdateSignalChainDisplay()
+        {
+            if (SignalChainInfoText == null)
+            {
+                return;
+            }
+
+            try
+            {
+                bool hifi = _audioEngine?.IsHiFiMode == true || IsHiFiModeSelected();
+                string? srcFmt = _audioEngine?.SourceFormatDescription;
+                string? outFmt = _audioEngine?.ActualOutputFormat;
+
+                // 源格式：HiFi 直通取 WAV 源；否则为系统 MediaPlayer 解码路径
+                string src = string.IsNullOrWhiteSpace(srcFmt)
+                    ? (hifi ? "（未知/解析中）" : "MediaPlayer（系统解码）")
+                    : srcFmt;
+
+                // 输出格式 / 设备
+                string outp = string.IsNullOrWhiteSpace(outFmt)
+                    ? (hifi ? "（未知/解析中）" : "系统混音器（Shared）")
+                    : outFmt + (hifi ? "" : "（Shared）");
+
+                string exclusivo = hifi ? "独占" : "共享";
+
+                // DSP 摘要：ReplayGain 恒关；EQ 仅在 AudioGraph（非 HiFi 独占）下有效；
+                // 音量在 HiFi 独占下恒 100%。
+                string dsp;
+                if (hifi)
+                {
+                    dsp = "无（bit-perfect 直通；数字音量100%，设备音量=" + (int)Math.Round(VolumeSlider.Value) + "%）";
+                }
+                else
+                {
+                    double[] eq = EqualizerStore.Load().BandGains;
+                    bool eqFlat = eq == null || Array.TrueForAll(eq, g => Math.Abs(g) < 0.5);
+                    dsp = (eqFlat ? "EQ=off" : "EQ=on") + "，音量=" + (int)Math.Round(VolumeSlider.Value) + "%";
+                }
+
+                SignalChainInfoText.Text =
+                    "信号链：源[" + src + "] → 输出[" + outp + "] | " +
+                    "模式=" + exclusivo + (hifi ? "" : "（系统混音）") +
+                    " | DSP: " + dsp;
+            }
+            catch
+            {
+                SignalChainInfoText.Text = "信号链：—";
+            }
+        }
+
         /// <summary>读取并显示当前曲目的音频格式信息（采样率/位深/码率/声道）。</summary>
         private async System.Threading.Tasks.Task UpdateAudioInfoTextAsync(string path)
         {
@@ -11579,10 +11657,11 @@ namespace CelesteMusicPlayer
                 _isEnginePaused = false;
                 _usingEnginePlayback = true;
                 NowPlayingText.Text = "正在播放（引擎）：" + item.Title + " - " + item.Artist;
-                // 独占播放：把当前滑块音量应用到设备/系统主音量（播放器内部恒 100% 直通，bit-perfect）
-                _audioEngine?.SetVolume(VolumeSlider.Value / 100.0);
+                // 设备主音量（DAC 驱动级）只由用户拖动音量条时设置，切歌不重置，保持用户设定的响度。
+                // （播放器数字音量恒 100% 直通，bit-perfect；无实体音量键的小尾巴可拖动音量条调轻）
                 _ = UpdateNowPlayingPanelAsync(item);
                 UpdateNowPlayingOutputFormat();
+                UpdateSignalChainDisplay();
                 RecordPlaybackStatsOnStart(item);
                 if (PlayPauseIcon != null)
                 {
@@ -11623,6 +11702,12 @@ namespace CelesteMusicPlayer
             try
             {
                 double target = VolumeSlider.Value / 100.0;
+                // HiFi 独占（bit-perfect）下数字音量恒 100%；设备主音量由用户拖动音量条设置，切歌不重置。
+                if (IsHiFiModeSelected())
+                {
+                    return; // 不在此重设设备音量，避免切歌把音量拉回 100%
+                }
+
                 const int steps = 8;
                 for (int i = 1; i <= steps; i++)
                 {
@@ -11816,18 +11901,69 @@ namespace CelesteMusicPlayer
 
         private void PlayNext(bool autoAdvance)
         {
-            if (_userPlaylist.Count == 0)
+            // 优先按播放队列续播；若队列为空（例如直接从媒体库/文件夹双击播放），
+            // 则按媒体库当前列表 (_playlist) 顺序推进，保证播完能自动连续下一首。
+            if (_userPlaylist.Count > 0)
+            {
+                int? nextIndex = ResolveNextIndex(autoAdvance);
+                if (nextIndex != null)
+                {
+                    PlayUserPlaylistAt(nextIndex.Value);
+                }
+
+                return;
+            }
+
+            AdvanceInLibraryPlaylist(autoAdvance);
+        }
+
+        /// <summary>队列为空时，从媒体库当前列表推进到下一首（按播放顺序）。</summary>
+        private void AdvanceInLibraryPlaylist(bool autoAdvance)
+        {
+            if (_playlist.Count == 0 || _currentIndex < 0)
             {
                 return;
             }
 
-            int? nextIndex = ResolveNextIndex(autoAdvance);
-            if (nextIndex == null)
+            switch (_playbackOrder)
             {
-                return;
-            }
+                case PlaybackOrder.TrackOnce:
+                    return; // 单曲播放模式：不自动续播
 
-            PlayUserPlaylistAt(nextIndex.Value);
+                case PlaybackOrder.TrackLoop:
+                    PlayLibraryItemAt(_currentIndex, syncUserPlaylistIndex: false);
+                    return;
+
+                case PlaybackOrder.Sequential:
+                    if (_currentIndex + 1 < _playlist.Count)
+                    {
+                        PlayLibraryItemAt(_currentIndex + 1, syncUserPlaylistIndex: false);
+                    }
+
+                    return;
+
+                case PlaybackOrder.Random:
+                    if (_playlist.Count > 1)
+                    {
+                        int r = _playbackRandom.Next(_playlist.Count);
+                        if (r == _currentIndex)
+                        {
+                            r = (r + 1) % _playlist.Count;
+                        }
+
+                        PlayLibraryItemAt(r, syncUserPlaylistIndex: false);
+                    }
+                    else if (_playlist.Count == 1)
+                    {
+                        PlayLibraryItemAt(_currentIndex, syncUserPlaylistIndex: false);
+                    }
+
+                    return;
+
+                default: // ListLoop 等：循环到列表尾后回到开头
+                    PlayLibraryItemAt((_currentIndex + 1) % _playlist.Count, syncUserPlaylistIndex: false);
+                    return;
+            }
         }
 
         private void PlayPrevious()

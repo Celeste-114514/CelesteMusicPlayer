@@ -32,3 +32,6 @@ Desktop.ini
 # ===== 用户本地配置(不入库) =====
 local.settings.json
 *.local.json
+
+# Local dev packaging signing key (private key - never commit)
+*.pfx

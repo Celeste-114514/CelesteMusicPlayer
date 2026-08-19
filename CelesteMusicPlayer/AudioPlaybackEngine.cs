@@ -36,6 +36,9 @@ namespace CelesteMusicPlayer
         /// <summary>HiFi 输出时实际协商的输出格式（WASAPI 设备端），否则 null。</summary>
         public string? ActualOutputFormat => _hifiOut?.ActualOutputFormat;
 
+        /// <summary>当前播放源的原始格式描述（WAV 直通源）。</summary>
+        public string? SourceFormatDescription => _hifiOut?.SourceFormatDescription;
+
         private string? _devicePreference;
         private HiFiOutputBackend? _hifiOut;
         private HiFiOutputBackend.OutputMode _outputMode = HiFiOutputBackend.OutputMode.WasapiShared;
@@ -131,7 +134,9 @@ namespace CelesteMusicPlayer
             }
 
             string cacheDir = GetCacheDir();
-            string key = GetCacheKey(path);
+            string partial = Path.Combine(cacheDir, Guid.NewGuid().ToString("N") + ".partial.wav");
+            string transcodeArgs = BuildTranscodeArgs(path, partial);
+            string key = GetCacheKey(path, transcodeArgs);
             string cachedWav = Path.Combine(cacheDir, key + ".wav");
             string targetWav;
 
@@ -144,8 +149,6 @@ namespace CelesteMusicPlayer
             {
                 Directory.CreateDirectory(cacheDir);
                 // 注意：临时文件必须以 .wav 结尾，ffmpeg 靠扩展名判断输出格式
-                string partial = Path.Combine(cacheDir, key + ".partial.wav");
-                string transcodeArgs = BuildTranscodeArgs(path, partial);
                 var psi = new ProcessStartInfo(ffmpeg)
                 {
                     UseShellExecute = false,
@@ -241,10 +244,40 @@ namespace CelesteMusicPlayer
                 bool ok = PlayWavHiFi(targetWav);
                 if (!ok)
                 {
-                    // 源格式设备不认时（IsFormatSupported 已不做硬否决，真实 init/Play 失败会走到这里）：
-                    // 按设备 MixFormat 重转一次重试，保证可播（此时非 bit-perfect，属设备能力限制）。
-                    var mf = HiFiOutputBackend.GetDeviceMixFormat(_devicePreference);
-                    if (mf is (int devRate, int devCh, int devBits) && devRate > 0 && devCh > 0)
+                    // DSD（DSF/DFF）源：不做降级/重采样转 PCM 播放——若设备（DAC/ASIO 驱动）不支持该 DSD 规格，
+                    // 直接明确报错，等待原生 DSD（DoP）支持。避免悄悄降级而丢失 DSD 原生质量。
+                    bool isDsd = Path.GetExtension(path).ToLowerInvariant() is ".dsf" or ".dff";
+                    if (isDsd && _outputMode == HiFiOutputBackend.OutputMode.Asio)
+                    {
+                        LastError = _hifiOut?.LastError ?? "播放失败";
+                        string detail = string.IsNullOrWhiteSpace(LastError) ? "" : "（" + LastError + "）";
+                        RaiseFailed(new Exception("当前设备不支持该规格音频。" + detail));
+                        return false;
+                    }
+
+                    // 非 DSD 源：源格式设备不认时，按设备 MixFormat 重转一次重试，保证可播
+                    // （此时非 bit-perfect，属设备能力限制）。
+                    int devRate = 0, devCh = 0, devBits = 0;
+                    if (_outputMode == HiFiOutputBackend.OutputMode.Asio)
+                    {
+                        // ASIO 驱动不暴露统一的 MixFormat：用 44.1kHz 安全重转保底。
+                        devRate = 44100; devCh = 2; devBits = 32;
+                        var mf0 = HiFiOutputBackend.GetDeviceMixFormat(null);
+                        if (mf0 is (int r0, int c0, int b0) && r0 > 0 && (c0 == 1 || c0 == 2))
+                        {
+                            devCh = c0; devBits = b0 > 0 ? b0 : devBits;
+                        }
+                    }
+                    else
+                    {
+                        var mf = HiFiOutputBackend.GetDeviceMixFormat(_devicePreference);
+                        if (mf is (int r, int c, int b) && r > 0 && c > 0)
+                        {
+                            devRate = r; devCh = c; devBits = b;
+                        }
+                    }
+
+                    if (devRate > 0 && devCh > 0)
                     {
                         string fallback = Path.Combine(Path.GetDirectoryName(targetWav) ?? cacheDir, key + ".fallback.wav");
                         string enc2 = devBits <= 16 ? "pcm_s16le" : "pcm_s32le";
@@ -471,6 +504,15 @@ namespace CelesteMusicPlayer
         /// 保留源采样率与声道，供 WaveFileReader 原样直通（严格 bit-perfect）。探测失败回退 16/44.1/2。</summary>
         private static string BuildTranscodeArgs(string srcPath, string dstPath)
         {
+            // DSD（DSF/DFF）：ffmpeg 内置 dsd 解码器，解码为高采样率 PCM（DSD64→352.8kHz，DSD128→705.6kHz）。
+            // 不指定 -ar，避免被降采样到 44.1kHz；用 32bit PCM（而非 24bit）——飞傲某些 ASIO 驱动下
+            // NAudio AsioOut 对 24bit 缓冲格式会触发回调 NRE 崩溃（实测 16/32bit 稳定）。
+            string ext = Path.GetExtension(srcPath).ToLowerInvariant();
+            if (ext is ".dsf" or ".dff")
+            {
+                return string.Format("-y -i \"{0}\" -vn -acodec pcm_s32le \"{1}\"", srcPath, dstPath);
+            }
+
             var srcFmt = ProbeSourceFormat(srcPath);
             if (srcFmt is (int rate, int ch, int bits) && rate > 0 && ch > 0)
             {
@@ -484,15 +526,21 @@ namespace CelesteMusicPlayer
             return string.Format("-y -i \"{0}\" -vn -acodec pcm_s16le -ar 44100 -ac 2 \"{1}\"", srcPath, dstPath);
         }
 
-        /// <summary>缓存键：源路径哈希 + 最后修改时间（文件变化时自动失效）。</summary>
-        private static string GetCacheKey(string sourcePath)
+        /// <summary>缓存键：源路径哈希 + 最后修改时间 + 转码参数指纹（参数变化时自动失效，如 DSD 位深/采样率调整）。</summary>
+        private static string GetCacheKey(string sourcePath, string transcodeArgs)
         {
             try
             {
                 var fi = new FileInfo(sourcePath);
                 string hash = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(
                     System.Text.Encoding.UTF8.GetBytes(sourcePath.ToLowerInvariant())));
-                return hash + "_" + fi.LastWriteTimeUtc.Ticks;
+                // 转码参数里含随机临时输出路径，统一替换成固定占位符后再哈希，
+                // 使"转码策略"（codec/-ar/-ac 等）决定 key，而非每次不同的临时路径。
+                string sig = System.Text.RegularExpressions.Regex.Replace(
+                    transcodeArgs, @"""\\?\w+\.partial\.[^""]*""", "\"OUT.wav\"");
+                string sigHash = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(sig)));
+                return hash + "_" + fi.LastWriteTimeUtc.Ticks + "_" + sigHash.Substring(0, 12);
             }
             catch
             {

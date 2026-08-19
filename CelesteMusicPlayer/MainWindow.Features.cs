@@ -857,31 +857,12 @@ namespace CelesteMusicPlayer
         /// <summary>计算并应用当前曲目的 ReplayGain 倍率（缓存/内嵌标签同步读取；ffmpeg 实测计算放后台）。</summary>
         private double ComputeAndApplyReplayGain(string path)
         {
+            // 对标 foobar bit-perfect：ReplayGain 属信号链数字处理，按需求整体关闭。
+            // 不应用任何增益（音量固定 100%），仅保留 path 记录，避免 UI/其它逻辑引用失效。
             double scale = 1.0;
-            try
-            {
-                if (AppSettingsStore.Load().ReplayGainEnabled
-                    && !string.IsNullOrWhiteSpace(path)
-                    && File.Exists(path))
-                {
-                    (double GainDb, double Peak)? rg = ReplayGainService.TryGetQuick(path);
-                    if (rg != null)
-                    {
-                        scale = ReplayGainService.GainToScale(rg.Value.GainDb, rg.Value.Peak);
-                    }
-                    else
-                    {
-                        _ = ComputeReplayGainInBackgroundAsync(path);
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            _currentReplayGainScale = scale;
+            _currentReplayGainScale = 1.0;
             _replayGainPath = path;
-            _audioEngine?.SetReplayGainScale(scale);
+            try { _audioEngine?.SetReplayGainScale(1.0); } catch { }
             return scale;
         }
 

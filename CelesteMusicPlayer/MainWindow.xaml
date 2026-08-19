@@ -2222,6 +2222,15 @@
                                                 MaxLines="2"
                                                 TextTrimming="CharacterEllipsis"
                                                 Text="" />
+                                            <TextBlock
+                                                x:Name="SignalChainInfoText"
+                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                                FontSize="10"
+                                                Opacity="0.7"
+                                                TextWrapping="WrapWholeWords"
+                                                MaxLines="4"
+                                                TextTrimming="CharacterEllipsis"
+                                                Text="信号链：未初始化" />
                                         </StackPanel>
                                     </StackPanel>
 
