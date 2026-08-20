@@ -7845,10 +7845,10 @@ namespace CelesteMusicPlayer
                 ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲添加至播放队列");
             }
 
-            // “添加到播放列表（列表墙）”按钮：仅多选专辑(专辑/艺术家/专辑艺术家详情)时显示
+            // “添加到播放列表”按钮：多选界面右下角，与“添加至播放队列”并列显示（支持歌曲/专辑/文件夹统一添加）
             if (MultiSelectAddToPlaylistButton != null)
             {
-                MultiSelectAddToPlaylistButton.Visibility = _multiSelectAlbumGrid != null ? Visibility.Visible : Visibility.Collapsed;
+                MultiSelectAddToPlaylistButton.Visibility = Visibility.Visible;
             }
 
             if (MultiSelectDeleteMenuItem != null)
