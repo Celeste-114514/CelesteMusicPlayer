@@ -2198,10 +2198,10 @@
                                     <Border
                                         Tag="FolderRowChrome"
                                         MinHeight="36"
-                                        CornerRadius="8"
+                                        CornerRadius="10"
                                         Padding="4,0"
                                         VerticalAlignment="Stretch"
-                                        Background="Transparent">
+                                        Background="{x:Bind CapsuleBackground, Mode=OneWay}">
                                         <Grid
                                             Padding="{x:Bind Indent}"
                                             ColumnSpacing="4"

@@ -333,6 +333,15 @@ namespace CelesteMusicPlayer
         /// <summary>按深度缩进</summary>
         public Thickness Indent => new(Depth * 16, 0, 0, 0);
 
+        /// <summary>是否为媒体库根（深度 0）</summary>
+        public bool IsRoot => Depth == 0;
+
+        /// <summary>根行：浅白透明胶囊背景；子行为透明。</summary>
+        public Microsoft.UI.Xaml.Media.Brush CapsuleBackground =>
+            IsRoot
+                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(0x22, 255, 255, 255))
+                : new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+
         /// <summary>文件夹左侧朝下小箭头（表示可展开的文件夹）；文件不显示</summary>
         public string ChevronGlyph => IsFolder ? "\uE70D" : string.Empty;
 
@@ -4762,25 +4771,47 @@ namespace CelesteMusicPlayer
 
             return false;
         }
-        /// <summary>显示已选文件夹的直接子项；未选择则提示「请选择文件夹」</summary>
+        /// <summary>显示媒体库根（设置里的文件夹列表）或其直接子项；未配置则回退旧单根。</summary>
         private void RefreshFolderBrowserRoots()
         {
             _folderBrowserItems.Clear();
 
-            if (string.IsNullOrWhiteSpace(_browseFolderPath) || !Directory.Exists(_browseFolderPath))
+            List<string> roots = AppSettingsStore.Load().LibraryWatchFolders
+                ?.Where(p => !string.IsNullOrWhiteSpace(p) && Directory.Exists(p))
+                .ToList() ?? new List<string>();
+
+            if (roots.Count == 0)
             {
-                FolderBrowserView.Visibility = Visibility.Collapsed;
-                FolderBrowserEmptyHint.Visibility = Visibility.Visible;
+                // 未配置媒体库：回退旧的单文件夹树
+                if (string.IsNullOrWhiteSpace(_browseFolderPath) || !Directory.Exists(_browseFolderPath))
+                {
+                    FolderBrowserView.Visibility = Visibility.Collapsed;
+                    FolderBrowserEmptyHint.Visibility = Visibility.Visible;
+                    return;
+                }
+
+                FolderBrowserEmptyHint.Visibility = Visibility.Collapsed;
+                FolderBrowserView.Visibility = Visibility.Visible;
+                foreach (FolderBrowserItem child in EnumerateFolderChildren(_browseFolderPath, depth: 0))
+                {
+                    _folderBrowserItems.Add(child);
+                }
+
                 return;
             }
 
+            // 多根媒体库：每个根显示完整路径，点击展开其下树
             FolderBrowserEmptyHint.Visibility = Visibility.Collapsed;
             FolderBrowserView.Visibility = Visibility.Visible;
-
-            // 从所选文件夹内部开始：如 本地音乐 → artist1、artist2…
-            foreach (FolderBrowserItem child in EnumerateFolderChildren(_browseFolderPath, depth: 0))
+            foreach (string root in roots)
             {
-                _folderBrowserItems.Add(child);
+                _folderBrowserItems.Add(new FolderBrowserItem
+                {
+                    DisplayName = root,
+                    FullPath = root,
+                    IsFolder = true,
+                    Depth = 0
+                });
             }
         }
 
