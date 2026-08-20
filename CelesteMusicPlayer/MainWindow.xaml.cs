@@ -6902,10 +6902,38 @@ namespace CelesteMusicPlayer
                 _albumTracks.Add(track);
             }
 
-            // 行3：编码器 | 位深/采样率 | 总时长（总时长在本页面显示）
+            // 行3：编码器 | 位深/采样率 | 总时长（在后台线程算质量行，避免 CD 大专辑打开卡顿）
             if (AlbumDetailTechText != null)
             {
-                string quality = BuildAlbumQualityLine(_albumTracks);
+                AlbumDetailTechText.Text = string.Empty;
+                _ = FillAlbumTechTextAsync(album, tracks);
+            }
+
+            // Apple Music 风格：按碟片分组显示（每组以 CD{n} 标题行开头）
+            AlbumTrackListView.ItemsSource = BuildAlbumGroupedView(_albumTracks);
+        }
+
+        /// <summary>汇总专辑内歌曲质量行（编码器+位深/采样率，取出现最多的组合），如 "FLAC · 16bit/44kHz"。
+        /// 只采样前若干首聚合，避免 CD 大专辑逐首解析(含 ffmpeg)导致打开卡顿。</summary>
+        private static string BuildAlbumQualityLine(IEnumerable<PlaylistItem> tracks)
+        {
+            string? quality = tracks
+                .Take(15)
+                .Select(t => AudioInfoFormatter.FormatQualityLine(t.FilePath))
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .GroupBy(s => s, StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Count())
+                .Select(g => g.Key)
+                .FirstOrDefault();
+            return string.IsNullOrWhiteSpace(quality) ? string.Empty : quality;
+        }
+
+        /// <summary>后台聚合专辑质量行并回填行3 TextBlock（避免 CD 大专辑逐首解析卡 UI）。</summary>
+        private async System.Threading.Tasks.Task FillAlbumTechTextAsync(AlbumEntry album, IReadOnlyList<PlaylistItem> tracks)
+        {
+            try
+            {
+                string quality = await System.Threading.Tasks.Task.Run(() => BuildAlbumQualityLine(tracks));
                 string duration = album.TotalDurationText;
                 var segs = new System.Collections.Generic.List<string>();
                 if (!string.IsNullOrWhiteSpace(quality))
@@ -6918,25 +6946,18 @@ namespace CelesteMusicPlayer
                     segs.Add(duration);
                 }
 
-                AlbumDetailTechText.Text = string.Join(" | ", segs);
+                string text = string.Join(" | ", segs);
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (AlbumDetailTechText != null)
+                    {
+                        AlbumDetailTechText.Text = text;
+                    }
+                });
             }
-
-            // Apple Music 风格：按碟片分组显示（每组以 CD{n} 标题行开头）
-            AlbumTrackListView.ItemsSource = BuildAlbumGroupedView(_albumTracks);
-        }
-
-        /// <summary>汇总专辑内歌曲质量行：格式 + 位深/采样率（取出现最多的组合），如 "FLAC 16bit/44kHz"。</summary>
-        /// <summary>汇总专辑内歌曲质量行（编码器+位深/采样率，取出现最多的组合），如 "FLAC · 16bit/44kHz"。</summary>
-        private static string BuildAlbumQualityLine(IEnumerable<PlaylistItem> tracks)
-        {
-            string? quality = tracks
-                .Select(t => AudioInfoFormatter.FormatQualityLine(t.FilePath))
-                .Where(s => !string.IsNullOrWhiteSpace(s))
-                .GroupBy(s => s, StringComparer.OrdinalIgnoreCase)
-                .OrderByDescending(g => g.Count())
-                .Select(g => g.Key)
-                .FirstOrDefault();
-            return string.IsNullOrWhiteSpace(quality) ? string.Empty : quality;
+            catch
+            {
+            }
         }
 
         /// <summary>把专辑内歌曲按播放顺序（碟号→音轨）添加到某个播放列表。</summary>

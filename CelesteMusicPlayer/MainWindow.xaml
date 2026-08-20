@@ -1410,15 +1410,15 @@
                                 </Grid.ColumnDefinitions>
                                     <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch">
                                     <StackPanel Spacing="14" Width="570" VerticalAlignment="Center">
-                                    <Grid ColumnSpacing="16">
+                                    <Grid ColumnSpacing="16" HorizontalAlignment="Center">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <Border
                                             Grid.Column="0"
-                                            Width="216"
-                                            Height="216"
+                                            Width="232"
+                                            Height="232"
                                             VerticalAlignment="Top"
                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                             CornerRadius="14"
@@ -1486,8 +1486,9 @@
                                         x:Name="AlbumDetailNameText"
                                         FontSize="24"
                                         FontWeight="SemiBold"
+                                        TextAlignment="Center"
                                         TextWrapping="WrapWholeWords" />
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <StackPanel Orientation="Horizontal" Spacing="6" HorizontalAlignment="Center">
                                         <!-- 行2 艺术家可点击超链接（进专辑艺术家详情） -->
                                         <Button
                                             x:Name="AlbumDetailSubArtistLink"
@@ -1524,6 +1525,7 @@
                                         FontSize="14"
                                         FontWeight="SemiBold"
                                         Opacity="0.9"
+                                        TextAlignment="Center"
                                         TextWrapping="NoWrap"
                                         TextTrimming="CharacterEllipsis" />
                                     </StackPanel>
