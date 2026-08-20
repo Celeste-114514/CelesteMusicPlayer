@@ -2719,8 +2719,8 @@
         <!-- 底部播放控制 -->
         <Grid
             Grid.Row="2"
-            MinHeight="96"
-            Margin="16,14,16,16"
+            MinHeight="70"
+            Margin="16,6,16,10"
             ColumnSpacing="14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
@@ -2731,8 +2731,8 @@
             <!-- 正在播放封面 -->
             <Border
                 x:Name="TransportCoverBorder"
-                Width="72"
-                Height="72"
+                Width="58"
+                Height="58"
                 VerticalAlignment="Center"
                 Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -2784,7 +2784,7 @@
                     Visibility="Collapsed" />
             </StackPanel>
 
-            <Grid Grid.Column="2" RowSpacing="8" VerticalAlignment="Center">
+            <Grid Grid.Column="2" RowSpacing="4" VerticalAlignment="Center">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
@@ -2798,7 +2798,7 @@
                     </Grid.ColumnDefinitions>
 
                     <TextBlock x:Name="CurrentTimeText" Grid.Column="0" VerticalAlignment="Center" Text="00:00" />
-                    <Grid Grid.Column="1" VerticalAlignment="Center" Height="36">
+                    <Grid Grid.Column="1" VerticalAlignment="Center" Height="28">
                         <Slider
                             x:Name="ProgressSlider"
                             VerticalAlignment="Center"
