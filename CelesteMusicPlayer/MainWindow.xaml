@@ -119,7 +119,7 @@
         </Grid>
 
         <!-- 中部：分类 | 播放列表（右侧信息面板已停用，播放列表区扩张到底） -->
-        <Grid x:Name="MainContentGrid" Grid.Row="1" Margin="16,8,16,0">
+        <Grid x:Name="MainContentGrid" Grid.Row="1" Margin="16,8,16,0" PointerPressed="MainContentGrid_PointerPressed">
             <Grid.ColumnDefinitions>
                 <!-- 音乐库 -->
                 <ColumnDefinition x:Name="CategoryColumn" Width="156" MinWidth="148" MaxWidth="220" />
@@ -2185,12 +2185,31 @@
 
                         <!-- 左：媒体库树 -->
                         <StackPanel Grid.Column="0" Width="430" Spacing="6">
-                            <TextBlock
-                                Text="媒体库"
-                                Margin="12,0,0,4"
-                                FontSize="20"
-                                FontWeight="SemiBold"
-                                VerticalAlignment="Center" />
+                            <Grid Margin="12,0,0,4">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Grid.Column="0"
+                                    VerticalAlignment="Center"
+                                    FontSize="20"
+                                    FontWeight="SemiBold"
+                                    Text="媒体库" />
+                                <Button
+                                    x:Name="RefreshMediaFoldersButton"
+                                    Grid.Column="1"
+                                    Width="34"
+                                    Height="30"
+                                    Padding="0"
+                                    VerticalAlignment="Center"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Click="RefreshMediaFoldersButton_Click"
+                                    ToolTipService.ToolTip="刷新媒体库">
+                                    <FontIcon Glyph="&#xE72C;" FontSize="14" />
+                                </Button>
+                            </Grid>
                             <Button
                                 x:Name="AddMediaFolderButton"
                                 Height="32"

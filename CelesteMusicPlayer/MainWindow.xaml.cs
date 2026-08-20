@@ -4774,6 +4774,21 @@ namespace CelesteMusicPlayer
 
             return false;
         }
+        /// <summary>刷新媒体库：重新枚举根列表，并重载当前选中项的详情。</summary>
+        private void RefreshMediaFoldersButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentCategory != "Folders")
+            {
+                return;
+            }
+
+            RefreshFolderBrowserRoots();
+            if (FolderBrowserView.SelectedItem is FolderBrowserItem f)
+            {
+                LoadMediaFolderSongs(f);
+            }
+        }
+
         /// <summary>「添加文件夹」：选择文件夹加入媒体库(LibraryWatchFolders)并刷新根列表。</summary>
         private async void AddMediaFolderButton_Click(object sender, RoutedEventArgs e)
         {
@@ -8121,6 +8136,31 @@ namespace CelesteMusicPlayer
         // =====================================================================
         // 播放列表交互 / 右键菜单 / 多选
         // =====================================================================
+
+        /// <summary>主内容区空白点击（非歌曲项）取消当前选中，从主题色背景恢复常态。</summary>
+        private void MainContentGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            Microsoft.UI.Xaml.DependencyObject? origin = e.OriginalSource as Microsoft.UI.Xaml.DependencyObject;
+            while (origin != null)
+            {
+                if (origin is ListViewItem or GridViewItem)
+                {
+                    return;
+                }
+
+                origin = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(origin);
+            }
+
+            // 点空白：取消各歌曲列表的选中
+            if (!_isMultiSelectMode)
+            {
+                PlaylistView.SelectedItem = null;
+                if (MediaDetailsList != null && MediaDetailsList.SelectionMode != ListViewSelectionMode.Multiple)
+                {
+                    MediaDetailsList.SelectedItem = null;
+                }
+            }
+        }
 
         /// <summary>点击播放列表空白区取消当前选中（从主题色背景恢复常态）。</summary>
         private void PlaylistList_PointerPressed(object sender, PointerRoutedEventArgs e)
