@@ -7534,7 +7534,7 @@ namespace CelesteMusicPlayer
         // 播放列表交互 / 右键菜单 / 多选
         // =====================================================================
 
-        /// <summary>拖拽重排后更新歌曲序号（针对当前显示的集合）。</summary>
+        /// <summary>拖拽重排后更新歌曲序号（针对当前显示的集合），并强制刷新使序号立即生效。</summary>
         private void PlaylistView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
         {
             try
@@ -7550,6 +7550,14 @@ namespace CelesteMusicPlayer
                 else if (sender.ItemsSource is System.Collections.ObjectModel.ObservableCollection<PlaylistItem> col)
                 {
                     RenumberCollection(col);
+                }
+
+                // x:Bind Index 为 OneTime：重设 ItemsSource 强制整体刷新，使拖拽后的序号立即更新
+                if (sender is ListView lv)
+                {
+                    object? src = lv.ItemsSource;
+                    lv.ItemsSource = null;
+                    lv.ItemsSource = src;
                 }
             }
             catch

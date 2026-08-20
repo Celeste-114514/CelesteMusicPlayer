@@ -454,18 +454,25 @@ namespace CelesteMusicPlayer
                         };
                     }
 
-                    // 位深： s16 / s32 / flt (f32) / s24 （flac 显示为 s16/s24/s32）
-                    Match mbp = Regex.Match(line, @"(s16|s24|s32|s08|flt)\b");
+                    // 位深： s16 / s32 / flt (f32) / s24 （flac 显示为 s16/s24/s32；ffmpeg 常带 p 后缀如 s16p/s32p）
+                    Match mbp = Regex.Match(line, @"(s16p|s24p|s32p|s08p|s16|s24|s32|s08|fltp?)\b");
                     if (mbp.Success && bits <= 0)
                     {
-                        bits = mbp.Value switch
+                        string v = mbp.Value;
+                        if (v == "flt" || v == "fltp")
                         {
-                            "s08" => 8,
-                            "s16" => 16,
-                            "s24" => 24,
-                            "s32" or "flt" => 32,
-                            _ => 0
-                        };
+                            bits = 32;
+                        }
+                        else
+                        {
+                            bits = v switch
+                            {
+                                "s08" or "s08p" => 8,
+                                "s16" or "s16p" => 16,
+                                "s24" or "s24p" => 24,
+                                _ => 32
+                            };
+                        }
                     }
                 }
             }
