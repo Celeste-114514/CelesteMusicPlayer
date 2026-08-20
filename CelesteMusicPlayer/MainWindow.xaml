@@ -1403,22 +1403,21 @@
                                 HorizontalScrollBarVisibility="Disabled">
                                 <Grid ColumnSpacing="24" Padding="0,8,20,16">
                                     <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" MinWidth="420" />
                                         <ColumnDefinition Width="500" />
                                     </Grid.ColumnDefinitions>
                                     <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="720">
-                                    <StackPanel Spacing="16" Width="420">
-                                    <!-- 封面 + 专辑信息（居中） -->
-                                    <Grid ColumnSpacing="24" HorizontalAlignment="Left" Margin="0,8,0,0">
+                                    <StackPanel Spacing="14" Width="430" VerticalAlignment="Center">
+                                    <Grid ColumnSpacing="16">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
-
                                         <Border
                                             Grid.Column="0"
-                                            Width="240"
-                                            Height="240"
+                                            Width="216"
+                                            Height="216"
+                                            VerticalAlignment="Top"
                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                             CornerRadius="14"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -1426,7 +1425,7 @@
                                             <Grid>
                                                 <FontIcon
                                                     Glyph="&#xE93C;"
-                                                    FontSize="72"
+                                                    FontSize="60"
                                                     HorizontalAlignment="Center"
                                                     VerticalAlignment="Center"
                                                     Opacity="0.35" />
@@ -1435,112 +1434,92 @@
                                                     Stretch="UniformToFill" />
                                             </Grid>
                                         </Border>
-
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="10">
-                                            <TextBlock
-                                                x:Name="AlbumDetailNameText"
-                                                FontSize="26"
-                                                FontWeight="SemiBold"
-                                                TextWrapping="WrapWholeWords" />
-                                            <!-- 专辑艺术家：超链接（悬停显示下划线，点击进入专辑艺术家详情页） -->
                                             <Button
-                                                x:Name="AlbumDetailArtistLink"
-                                                HorizontalAlignment="Left"
-                                                Padding="0"
-                                                VerticalAlignment="Center"
-                                                Background="Transparent"
+                                                x:Name="AlbumDetailPlayButton"
+                                                Height="36"
+                                                Padding="18,0"
+                                                CornerRadius="18"
                                                 BorderThickness="0"
-                                                CornerRadius="4"
-                                                PointerEntered="AlbumDetailArtistLink_PointerEntered"
-                                                PointerExited="AlbumDetailArtistLink_PointerExited"
-                                                Click="AlbumDetailArtistLink_Click">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <FontIcon Glyph="&#xE716;" FontSize="15" Opacity="0.8" />
-                                                    <TextBlock
-                                                        x:Name="AlbumDetailArtistText"
-                                                        FontSize="14"
-                                                        FontWeight="SemiBold"
-                                                        VerticalAlignment="Center"
-                                                        TextDecorations="None" />
+                                                HorizontalAlignment="Left"
+                                                Click="AlbumDetailPlayButton_Click"
+                                                ToolTipService.ToolTip="从音轨 1 开始播放，并替换播放列表">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <FontIcon Glyph="&#xE768;" FontSize="15" />
+                                                    <TextBlock Text="播放该专辑" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </Button>
-                                            <TextBlock x:Name="AlbumDetailYearText" FontSize="14" FontWeight="SemiBold" Opacity="0.85" />
-                                            <TextBlock x:Name="AlbumDetailMetaText" FontSize="14" FontWeight="SemiBold" Opacity="0.85" />
-                                            <!-- 音频格式与歌曲质量，如 ALAC 16bit/44100Hz -->
-                                            <TextBlock
-                                                x:Name="AlbumDetailQualityText"
-                                                FontSize="14"
-                                                FontWeight="SemiBold"
-                                                Opacity="0.9" />
-                                            <!-- 总时长小字行：左“总时长” / 右【值】（与上方同字号对齐） -->
-                                            <Grid Width="200" ColumnSpacing="8" HorizontalAlignment="Left">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <TextBlock
-                                                    Grid.Column="0"
-                                                    FontSize="14"
-                                                    FontWeight="SemiBold"
-                                                    Opacity="0.85"
-                                                    VerticalAlignment="Center"
-                                                    Text="总时长" />
-                                                <TextBlock
-                                                    x:Name="AlbumDetailTotalDurationText"
-                                                    Grid.Column="1"
-                                                    FontSize="14"
-                                                    FontWeight="SemiBold"
-                                                    Opacity="0.85"
-                                                    VerticalAlignment="Center" />
-                                            </Grid>
+                                            <Button
+                                                x:Name="AlbumDetailAddToPlaylistButton"
+                                                Height="36"
+                                                Padding="18,0"
+                                                CornerRadius="18"
+                                                BorderThickness="0"
+                                                HorizontalAlignment="Left"
+                                                Click="AlbumDetailAddToPlaylistButton_Click"
+                                                ToolTipService.ToolTip="将本专辑歌曲添加到播放队列">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <FontIcon Glyph="&#xE710;" FontSize="15" />
+                                                    <TextBlock Text="添加至播放队列" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Button>
+                                            <Button
+                                                x:Name="AlbumDetailAddToNamedListButton"
+                                                Height="36"
+                                                Padding="18,0"
+                                                CornerRadius="18"
+                                                BorderThickness="0"
+                                                HorizontalAlignment="Left"
+                                                Click="AlbumDetailAddToNamedListButton_Click"
+                                                ToolTipService.ToolTip="把专辑内歌曲按播放顺序添加到某个播放列表">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <FontIcon Glyph="&#xE8B7;" FontSize="15" />
+                                                    <TextBlock Text="添加到播放列表" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Button>
                                         </StackPanel>
                                     </Grid>
 
-                                    <!-- 专辑操作：三个按钮逐行排列 -->
-                                    <StackPanel Orientation="Vertical" Spacing="10" HorizontalAlignment="Left">
-                                        <Button
-                                            x:Name="AlbumDetailPlayButton"
-                                            Height="36"
-                                            Padding="18,0"
-                                            CornerRadius="18"
-                                            BorderThickness="0"
-                                            HorizontalAlignment="Left"
-                                            Click="AlbumDetailPlayButton_Click"
-                                            ToolTipService.ToolTip="从音轨 1 开始播放，并替换播放列表">
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <FontIcon Glyph="&#xE768;" FontSize="15" />
-                                                <TextBlock Text="播放该专辑" VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </Button>
-                                        <Button
-                                            x:Name="AlbumDetailAddToPlaylistButton"
-                                            Height="36"
-                                            Padding="18,0"
-                                            CornerRadius="18"
-                                            BorderThickness="0"
-                                            HorizontalAlignment="Left"
-                                            Click="AlbumDetailAddToPlaylistButton_Click"
-                                            ToolTipService.ToolTip="将本专辑歌曲添加到播放队列">
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <FontIcon Glyph="&#xE710;" FontSize="15" />
-                                                <TextBlock Text="添加至播放队列" VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </Button>
-                                        <Button
-                                            x:Name="AlbumDetailAddToNamedListButton"
-                                            Height="36"
-                                            Padding="18,0"
-                                            CornerRadius="18"
-                                            BorderThickness="0"
-                                            HorizontalAlignment="Left"
-                                            Click="AlbumDetailAddToNamedListButton_Click"
-                                            ToolTipService.ToolTip="把专辑内歌曲按播放顺序添加到某个播放列表">
-                                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                                <FontIcon Glyph="&#xE8B7;" FontSize="15" />
-                                                <TextBlock Text="添加到播放列表" VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </Button>
-                                    </StackPanel>
+                                    <TextBlock
+                                        x:Name="AlbumDetailNameText"
+                                        FontSize="24"
+                                        FontWeight="SemiBold"
+                                        TextWrapping="WrapWholeWords" />
+                                    <TextBlock
+                                        x:Name="AlbumDetailSubInfoText"
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        Opacity="0.85"
+                                        TextWrapping="NoWrap"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <TextBlock
+                                        x:Name="AlbumDetailTechText"
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        Opacity="0.9"
+                                        TextWrapping="NoWrap"
+                                        TextTrimming="CharacterEllipsis" />
+                                    <Button
+                                        x:Name="AlbumDetailArtistLink"
+                                        HorizontalAlignment="Left"
+                                        Padding="0"
+                                        VerticalAlignment="Center"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        CornerRadius="4"
+                                        PointerEntered="AlbumDetailArtistLink_PointerEntered"
+                                        PointerExited="AlbumDetailArtistLink_PointerExited"
+                                        Click="AlbumDetailArtistLink_Click">
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <FontIcon Glyph="&#xE716;" FontSize="14" Opacity="0.8" />
+                                            <TextBlock
+                                                x:Name="AlbumDetailArtistText"
+                                                FontSize="14"
+                                                FontWeight="SemiBold"
+                                                VerticalAlignment="Center"
+                                                TextDecorations="None" />
+                                        </StackPanel>
+                                    </Button>
                                     </StackPanel>
                                     </ScrollViewer>
                                     <!-- 右栏：歌曲列表（铺满右侧，独立滚动） -->

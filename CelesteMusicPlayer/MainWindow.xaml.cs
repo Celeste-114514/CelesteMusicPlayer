@@ -370,6 +370,11 @@ namespace CelesteMusicPlayer
         private ObservableCollection<PlaylistItem> _userPlaylist = new();
         private TaskbarProgressHelper? _taskbarProgress;
         private IntPtr _mainWindowHwnd;
+        private bool _enforcingMinSize;
+
+        // 最小窗口尺寸（DIP）
+        private const int MinWindowWidthDip = 1200;
+        private const int MinWindowHeightDip = 760;
         private string? _genreYearFilter;
         private readonly ObservableCollection<AlbumEntry> _albums = new();
         private readonly ObservableCollection<PlaylistCardViewModel> _playlistWall = new();
@@ -545,8 +550,9 @@ namespace CelesteMusicPlayer
                 _mainWindowHwnd = IntPtr.Zero;
             }
 
-            // 默认 1280×720；Resize 按 DPI 换算为物理像素
-            ResizeWindowToDips(1280, 720);
+            // 默认 1350×770；Resize 按 DPI 换算为物理像素
+            ResizeWindowToDips(1350, 770);
+            // 最小窗口 1200×760：在 AppWindow.Changed 里强制（EnforceMinimumWindowSize）
             // 标题栏扩展放到 Activated 之后，避免资源管理器直接启动时黑窗闪退（0xC000027B）
             Activated += MainWindow_FirstActivated;
             Closed += MainWindow_Closed;
@@ -790,6 +796,7 @@ namespace CelesteMusicPlayer
                 {
                     DispatcherQueue.TryEnqueue(() =>
                     {
+                        EnforceMinimumWindowSize();
                         FitColumnsToAvailableWidth();
                         UpdateNowPlayingCardLayout();
                     });
@@ -1017,6 +1024,42 @@ namespace CelesteMusicPlayer
             catch
             {
                 AppWindow.Resize(new Windows.Graphics.SizeInt32(widthDip, heightDip));
+            }
+        }
+
+        /// <summary>窗口小于最小尺寸时强制涨回（1200×760，按 DPI 换算）。</summary>
+        private void EnforceMinimumWindowSize()
+        {
+            if (_enforcingMinSize || _mainWindowHwnd == IntPtr.Zero)
+            {
+                return;
+            }
+
+            try
+            {
+                uint dpi = GetDpiForWindow(_mainWindowHwnd);
+                if (dpi == 0)
+                {
+                    dpi = 96;
+                }
+
+                double scale = dpi / 96.0;
+                int minW = (int)Math.Round(MinWindowWidthDip * scale);
+                int minH = (int)Math.Round(MinWindowHeightDip * scale);
+                if (AppWindow.Size.Width < minW || AppWindow.Size.Height < minH)
+                {
+                    _enforcingMinSize = true;
+                    AppWindow.Resize(new Windows.Graphics.SizeInt32(
+                        Math.Max(AppWindow.Size.Width, minW),
+                        Math.Max(AppWindow.Size.Height, minH)));
+                }
+            }
+            catch
+            {
+            }
+            finally
+            {
+                _enforcingMinSize = false;
             }
         }
 
@@ -6784,11 +6827,10 @@ namespace CelesteMusicPlayer
             AlbumDetailCoverImage.Source = album.CoverImage;
             AlbumDetailNameText.Text = album.Name;
             AlbumDetailArtistText.Text = album.Artist;
-            AlbumDetailYearText.Text = "发行时间：" + album.YearText;
-            AlbumDetailMetaText.Text = $"{album.TrackCount} 首";
-            if (AlbumDetailTotalDurationText != null)
+            if (AlbumDetailSubInfoText != null)
             {
-                AlbumDetailTotalDurationText.Text = album.TotalDurationText;
+                AlbumDetailSubInfoText.Text =
+                    album.Artist + " | " + album.YearText + " | " + album.TrackCount + " 首";
             }
 
             _albumTracks.Clear();
@@ -6804,10 +6846,23 @@ namespace CelesteMusicPlayer
                 _albumTracks.Add(track);
             }
 
-            // 音频格式与歌曲质量行：取专辑内（多数）音轨的 格式 + 位深/采样率，如 "ALAC 16bit/44kHz"
-            if (AlbumDetailQualityText != null)
+            // 行3：编码器 | 位深/采样率 | 总时长（总时长在本页面显示）
+            if (AlbumDetailTechText != null)
             {
-                AlbumDetailQualityText.Text = BuildAlbumQualityLine(_albumTracks);
+                string quality = BuildAlbumQualityLine(_albumTracks);
+                string duration = album.TotalDurationText;
+                var segs = new System.Collections.Generic.List<string>();
+                if (!string.IsNullOrWhiteSpace(quality))
+                {
+                    segs.Add(quality.Replace(" · ", " | "));
+                }
+
+                if (!string.IsNullOrWhiteSpace(duration))
+                {
+                    segs.Add(duration);
+                }
+
+                AlbumDetailTechText.Text = string.Join(" | ", segs);
             }
 
             // Apple Music 风格：按碟片分组显示（每组以 CD{n} 标题行开头）

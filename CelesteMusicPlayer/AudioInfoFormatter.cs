@@ -37,8 +37,8 @@ namespace CelesteMusicPlayer
                     return null;
                 }
 
-                string ext = (Path.GetExtension(path)?.TrimStart('.').Trim() ?? "未知").ToUpperInvariant();
-                var parts = new System.Collections.Generic.List<string> { ext };
+                string encoder = ResolveEncoderName(path, rate);
+                var parts = new System.Collections.Generic.List<string> { encoder };
                 if (rate > 0)
                 {
                     parts.Add(FormatSampleRate(rate));
@@ -85,7 +85,7 @@ namespace CelesteMusicPlayer
                     return string.Empty;
                 }
 
-                string ext = (Path.GetExtension(path)?.TrimStart('.').Trim() ?? "未知").ToUpperInvariant();
+                string encoder = ResolveEncoderName(path, rate);
                 string bitsPart = bits > 0 ? bits + "bit" : string.Empty;
                 string ratePart = rate > 0 ? FormatSampleRate(rate) : string.Empty;
                 string bitDepth = string.Empty;
@@ -104,7 +104,7 @@ namespace CelesteMusicPlayer
 
                 string kbpsPart = kbps > 0 ? kbps + "kbps" : string.Empty;
 
-                var parts = new System.Collections.Generic.List<string> { ext };
+                var parts = new System.Collections.Generic.List<string> { encoder };
                 if (bitDepth.Length > 0)
                 {
                     parts.Add(bitDepth);
@@ -142,10 +142,10 @@ namespace CelesteMusicPlayer
                     return result;
                 }
 
-                string ext = (Path.GetExtension(path)?.TrimStart('.').Trim() ?? "").ToUpperInvariant();
-                if (ext.Length > 0)
+                string encoder = ResolveEncoderName(path, rate);
+                if (encoder.Length > 0)
                 {
-                    result.Add(ext);
+                    result.Add(encoder);
                 }
 
                 string bitsPart = bits > 0 ? bits + "bit" : string.Empty;
