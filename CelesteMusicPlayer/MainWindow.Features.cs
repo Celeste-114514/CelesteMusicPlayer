@@ -936,16 +936,28 @@ namespace CelesteMusicPlayer
 
         private void UpdateFavoriteButtonUi()
         {
-            if (FavoriteButtonIcon == null)
-            {
-                return;
-            }
-
             bool fav = !string.IsNullOrWhiteSpace(_nowPlayingPath)
                 && (TrackStatsStore.Get(_nowPlayingPath)?.IsFavorite ?? false);
-            FavoriteButtonIcon.Glyph = fav ? "\uEB52" : "\uEB51";
-            ToolTipService.SetToolTip(FavoriteButton, fav ? "取消喜欢" : "我喜欢的音乐");
+
+            if (FavoriteButtonIcon != null)
+            {
+                FavoriteButtonIcon.Glyph = fav ? "\uEB52" : "\uEB51";
+                ToolTipService.SetToolTip(FavoriteButton, fav ? "取消喜欢" : "我喜欢的音乐");
+            }
+
+            // 信息卡内的收藏按钮与底部控制条保持同步
+            if (NowPlayingFavoriteButtonIcon != null)
+            {
+                NowPlayingFavoriteButtonIcon.Glyph = fav ? "\uEB52" : "\uEB51";
+                NowPlayingFavoriteButtonText.Text = fav ? "已收藏" : "我喜欢的音乐";
+                var accent = ResolveAccentBrush();
+                NowPlayingFavoriteButtonIcon.Foreground = fav ? accent : null;
+            }
         }
+
+        private void NowPlayingFavoriteButton_Click(object sender, RoutedEventArgs e)
+            => ToggleFavoriteForCurrent();
+
 
         private void FavoriteButton_Click(object sender, RoutedEventArgs e)
             => ToggleFavoriteForCurrent();

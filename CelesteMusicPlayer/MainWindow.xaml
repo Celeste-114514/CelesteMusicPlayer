@@ -2886,6 +2886,29 @@
                                                 MaxLines="4"
                                                 TextTrimming="CharacterEllipsis"
                                                 Text="信号链：未初始化" />
+
+                                            <!-- 信息卡内收藏按钮：状态与底部控制条同步 -->
+                                            <Button
+                                                x:Name="NowPlayingFavoriteButton"
+                                                Padding="8,4"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                HorizontalAlignment="Left"
+                                                VerticalAlignment="Center"
+                                                Click="NowPlayingFavoriteButton_Click">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <FontIcon
+                                                        x:Name="NowPlayingFavoriteButtonIcon"
+                                                        Glyph="&#xEB51;"
+                                                        FontSize="16"
+                                                        VerticalAlignment="Center" />
+                                                    <TextBlock
+                                                        x:Name="NowPlayingFavoriteButtonText"
+                                                        Text="我喜欢的音乐"
+                                                        FontSize="12"
+                                                        VerticalAlignment="Center" />
+                                                </StackPanel>
+                                            </Button>
                                         </StackPanel>
                                     </StackPanel>
 
