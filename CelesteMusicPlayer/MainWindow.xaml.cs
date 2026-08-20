@@ -4901,6 +4901,8 @@ namespace CelesteMusicPlayer
             }
 
             ToggleFolderExpand(item);
+            // 点箭头：同时加载该文件夹歌曲到右侧详情区
+            LoadMediaFolderSongs(item);
             e.Handled = true;
         }
 
@@ -5021,8 +5023,17 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            if (FolderBrowserView.SelectedItem is not FolderBrowserItem item || item.IsFolder)
+            var fe = e.OriginalSource as FrameworkElement;
+            var item = fe?.DataContext as FolderBrowserItem ?? FolderBrowserView.SelectedItem as FolderBrowserItem;
+            if (item == null)
             {
+                return;
+            }
+
+            if (item.IsFolder)
+            {
+                // 双击文件夹：加载其内歌曲到右侧详情区
+                LoadMediaFolderSongs(item);
                 return;
             }
 
@@ -5045,8 +5056,7 @@ namespace CelesteMusicPlayer
             UpdateMediaDetails(FolderBrowserView.SelectedItem as FolderBrowserItem);
         }
 
-        /// <summary>根据选中的文件夹/单曲填充右侧详情区。
-        /// 文件夹 → 台头=路径 + 列表其内歌曲(文件名)；单曲 → 台头=文件路径 + 该文件。</summary>
+        /// <summary>单击选中：只更新台头，不立即枚举歌曲（大文件夹避免卡顿）。歌曲在双击/箭头时加载。</summary>
         private void UpdateMediaDetails(FolderBrowserItem? item)
         {
             if (MediaDetailsHeader == null || MediaDetailsList == null)
@@ -5062,13 +5072,28 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            MediaDetailsHeader.Text = item.FullPath;
+            MediaDetailsList.ItemsSource = null;
+            MediaDetailsEmptyHint.Visibility = Visibility.Visible;
+            MediaDetailsList.Visibility = Visibility.Visible;
+            MediaDetailsEmptyHint.Text = item.IsFolder ? "双击文件夹查看歌曲" : "双击查看";
+        }
+
+        /// <summary>双击文件夹或点箭头：枚举该文件夹内歌曲并填充右侧详情区。</summary>
+        private void LoadMediaFolderSongs(FolderBrowserItem item)
+        {
+            if (MediaDetailsHeader == null || MediaDetailsList == null)
+            {
+                return;
+            }
+
             MediaDetailsEmptyHint.Visibility = Visibility.Collapsed;
             MediaDetailsList.Visibility = Visibility.Visible;
+            MediaDetailsHeader.Text = item.FullPath;
 
             List<PlaylistItem> songs = new();
             if (item.IsFolder)
             {
-                MediaDetailsHeader.Text = item.FullPath;
                 foreach (string path in EnumerateAudioFiles(item.FullPath))
                 {
                     if (System.IO.File.Exists(path))
@@ -5079,15 +5104,11 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            else
+            else if (System.IO.File.Exists(item.FullPath))
             {
-                MediaDetailsHeader.Text = item.FullPath;
-                if (System.IO.File.Exists(item.FullPath))
-                {
-                    PlaylistItem p = CreatePlaylistItemFromPath(item.FullPath);
-                    p.DurationText = FormatTime(p.Duration);
-                    songs.Add(p);
-                }
+                PlaylistItem p = CreatePlaylistItemFromPath(item.FullPath);
+                p.DurationText = FormatTime(p.Duration);
+                songs.Add(p);
             }
 
             for (int i = 0; i < songs.Count; i++)
@@ -5096,6 +5117,7 @@ namespace CelesteMusicPlayer
             }
 
             MediaDetailsList.ItemsSource = songs;
+            MediaDetailsEmptyHint.Text = "无歌曲";
             MediaDetailsEmptyHint.Visibility =
                 songs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
