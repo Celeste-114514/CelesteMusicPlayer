@@ -5091,35 +5091,72 @@ namespace CelesteMusicPlayer
             MediaDetailsList.Visibility = Visibility.Visible;
             MediaDetailsHeader.Text = item.FullPath;
 
-            List<PlaylistItem> songs = new();
-            if (item.IsFolder)
+            // 后台线程枚举+读取标签，避免大文件夹卡 UI
+            MediaDetailsList.ItemsSource = null;
+            MediaDetailsHeader.Text = item.FullPath + "（加载中…）";
+
+            string loadedPath = item.FullPath;
+            bool isFolder = item.IsFolder;
+            _ = System.Threading.Tasks.Task.Run(() =>
             {
-                foreach (string path in EnumerateAudioFiles(item.FullPath))
+                string[] paths = isFolder
+                    ? EnumerateAudioFiles(loadedPath).ToArray()
+                    : (System.IO.File.Exists(loadedPath) ? new[] { loadedPath } : Array.Empty<string>());
+
+                var songs = new List<PlaylistItem>();
+                foreach (string path in paths)
                 {
-                    if (System.IO.File.Exists(path))
+                    if (!System.IO.File.Exists(path))
+                    {
+                        continue;
+                    }
+
+                    try
                     {
                         PlaylistItem p = CreatePlaylistItemFromPath(path);
                         p.DurationText = FormatTime(p.Duration);
                         songs.Add(p);
                     }
+                    catch
+                    {
+                    }
                 }
-            }
-            else if (System.IO.File.Exists(item.FullPath))
-            {
-                PlaylistItem p = CreatePlaylistItemFromPath(item.FullPath);
-                p.DurationText = FormatTime(p.Duration);
-                songs.Add(p);
-            }
 
-            for (int i = 0; i < songs.Count; i++)
-            {
-                songs[i].Index = i + 1;
-            }
+                for (int i = 0; i < songs.Count; i++)
+                {
+                    songs[i].Index = i + 1;
+                }
 
-            MediaDetailsList.ItemsSource = songs;
-            MediaDetailsEmptyHint.Text = "无歌曲";
-            MediaDetailsEmptyHint.Visibility =
-                songs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                return songs;
+            }).ContinueWith(t =>
+            {
+                try
+                {
+                    var songs = t.Result;
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (MediaDetailsList == null || MediaDetailsHeader == null)
+                        {
+                            return;
+                        }
+
+                        MediaDetailsList.ItemsSource = songs;
+                        if (MediaMultiSelectButton != null)
+                        {
+                            MediaMultiSelectButton.IsChecked = false;
+                        }
+
+                        MediaDetailsList.SelectionMode = ListViewSelectionMode.None;
+                        MediaDetailsHeader.Text = item.FullPath;
+                        MediaDetailsEmptyHint.Text = "无歌曲";
+                        MediaDetailsEmptyHint.Visibility =
+                            songs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+                    });
+                }
+                catch
+                {
+                }
+            }, System.Threading.Tasks.TaskScheduler.Default);
         }
 
         /// <summary>多选切换：开启后列表可多选。</summary>
