@@ -545,8 +545,8 @@ namespace CelesteMusicPlayer
                 _mainWindowHwnd = IntPtr.Zero;
             }
 
-            // 默认 1350×900；Resize 按 DPI 换算为物理像素
-            ResizeWindowToDips(1350, 900);
+            // 默认 1280×720；Resize 按 DPI 换算为物理像素
+            ResizeWindowToDips(1280, 720);
             // 标题栏扩展放到 Activated 之后，避免资源管理器直接启动时黑窗闪退（0xC000027B）
             Activated += MainWindow_FirstActivated;
             Closed += MainWindow_Closed;

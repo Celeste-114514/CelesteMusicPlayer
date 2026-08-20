@@ -1719,12 +1719,8 @@
                                     Click="ArtistDetailBackButton_Click" />
                             </Border>
 
-                            <ScrollViewer
-                                Grid.Row="1"
-                                VerticalScrollBarVisibility="Auto"
-                                HorizontalScrollBarVisibility="Disabled">
-                            <!-- 右侧留白，避免外层滚动条与内容区重叠 -->
-                            <Grid RowSpacing="16" Padding="0,8,20,12">
+                            <!-- 内容区：左栏(头像+歌曲)常显占满，右栏(专辑墙)独立滚动 -->
+                            <Grid Grid.Row="1" RowSpacing="16" Padding="0,8,20,12">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
@@ -1732,17 +1728,18 @@
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" MinWidth="280" />
                                 </Grid.ColumnDefinitions>
 
-                                <!-- 左右分隔竖线（贯穿整页） -->
+                                <!-- 左右分隔竖线（作为中间独立列，明确分隔两栏，不穿内容） -->
                                 <Border
                                     Grid.Row="0"
                                     Grid.RowSpan="3"
-                                    Grid.Column="0"
+                                    Grid.Column="1"
                                     Width="1"
-                                    Margin="0,0,14,0"
-                                    HorizontalAlignment="Right"
+                                    Margin="0,0,16,0"
+                                    HorizontalAlignment="Left"
                                     Background="{ThemeResource DividerStrokeColorDefaultBrush}"
                                     IsHitTestVisible="False" />
 
@@ -1991,7 +1988,7 @@
                                 </Border>
 
                                 <!-- 该艺术家的专辑（右栏，顶对齐、随窗口自适应） -->
-                                <Grid Grid.Row="0" Grid.Column="1" Grid.RowSpan="2" VerticalAlignment="Top" RowSpacing="8">
+                                <Grid Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" RowSpacing="8">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
@@ -2132,7 +2129,6 @@
                                     </GridView>
                                 </Grid>
                             </Grid>
-                            </ScrollViewer>
                         </Grid>
                     </Grid>
                 </Border>
