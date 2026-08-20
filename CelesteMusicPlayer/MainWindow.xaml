@@ -1028,7 +1028,7 @@
                     BorderThickness="0"
                     Padding="4"
                     SizeChanged="PlaylistListBorder_SizeChanged">
-                    <Grid RowSpacing="0">
+                    <Grid RowSpacing="0" PointerPressed="PlaylistList_PointerPressed">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />

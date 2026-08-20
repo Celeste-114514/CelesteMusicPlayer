@@ -7534,6 +7534,32 @@ namespace CelesteMusicPlayer
         // 播放列表交互 / 右键菜单 / 多选
         // =====================================================================
 
+        /// <summary>点击播放列表空白区取消当前选中（从主题色背景恢复常态）。</summary>
+        private void PlaylistList_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (_isMultiSelectMode)
+            {
+                return;
+            }
+
+            // 若点击落在某个列表项内，保留选中
+            Microsoft.UI.Xaml.DependencyObject? origin = e.OriginalSource as Microsoft.UI.Xaml.DependencyObject;
+            while (origin != null)
+            {
+                if (origin is ListViewItem)
+                {
+                    return;
+                }
+
+                origin = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(origin);
+            }
+
+            // 点空白：取消选中
+            if (PlaylistView.SelectedItem != null)
+            {
+                PlaylistView.SelectedItem = null;
+            }
+        }
         /// <summary>拖拽重排后更新歌曲序号（针对当前显示的集合），并强制刷新使序号立即生效。</summary>
         private void PlaylistView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
         {
