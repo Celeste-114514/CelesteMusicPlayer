@@ -233,23 +233,6 @@
                         </StackPanel>
                     </Button>
                     <Button
-                        x:Name="NavFoldersButton"
-                        Tag="Folders"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE8B7;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="文件夹" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
                         x:Name="NavFavoritesButton"
                         Tag="Favorites"
                         Margin="4,2"
@@ -349,6 +332,23 @@
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE768;" FontSize="14" VerticalAlignment="Center" />
                             <TextBlock Text="播放最多" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <Button
+                        x:Name="NavFoldersButton"
+                        Tag="Folders"
+                        Margin="4,2"
+                        Padding="8,10"
+                        FontSize="14"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CornerRadius="8"
+                        Click="CategoryNavButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8B7;" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="文件夹" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                 </StackPanel>
@@ -2317,29 +2317,20 @@
                                         TextTrimming="CharacterEllipsis"
                                         Text="选择文件夹查看歌曲" />
                                     <Button
-                                        x:Name="MediaAddQueueButton"
+                                        x:Name="MediaOptionsButton"
                                         Grid.Column="1"
                                         Height="30"
-                                        Padding="10,0"
-                                        CornerRadius="15"
-                                        BorderThickness="0"
-                                        Click="MediaAddQueueButton_Click"
-                                        ToolTipService.ToolTip="把选中歌曲加入播放队列">
-                                        <StackPanel Orientation="Horizontal" Spacing="5">
-                                            <FontIcon Glyph="&#xE710;" FontSize="13" />
-                                            <TextBlock Text="加入播放队列" VerticalAlignment="Center" />
-                                        </StackPanel>
-                                    </Button>
-                                    <ToggleButton
-                                        x:Name="MediaMultiSelectButton"
-                                        Grid.Column="2"
-                                        Height="30"
-                                        Padding="10,0"
+                                        Padding="14,0"
                                         CornerRadius="15"
                                         BorderThickness="1"
-                                        Content="多选"
-                                        Click="MediaMultiSelectButton_Click"
-                                        ToolTipService.ToolTip="进入/退出多选" />
+                                        Visibility="Collapsed"
+                                        Click="MediaOptionsButton_Click"
+                                        ToolTipService.ToolTip="多选操作">
+                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                            <FontIcon Glyph="&#xE712;" FontSize="13" />
+                                            <TextBlock Text="选项" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
                                 </Grid>
                             </Border>
                             <ListView
@@ -2347,6 +2338,7 @@
                                 Grid.Row="1"
                                 Background="Transparent"
                                 SelectionMode="None"
+                                RightTapped="MediaDetailsList_RightTapped"
                                 HorizontalContentAlignment="Stretch">
                                 <ListView.ItemContainerStyle>
                                     <Style TargetType="ListViewItem">

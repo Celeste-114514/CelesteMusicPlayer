@@ -5141,12 +5141,12 @@ namespace CelesteMusicPlayer
                         }
 
                         MediaDetailsList.ItemsSource = songs;
-                        if (MediaMultiSelectButton != null)
+                        MediaDetailsList.SelectionMode = ListViewSelectionMode.None;
+                        if (MediaOptionsButton != null)
                         {
-                            MediaMultiSelectButton.IsChecked = false;
+                            MediaOptionsButton.Visibility = Visibility.Collapsed;
                         }
 
-                        MediaDetailsList.SelectionMode = ListViewSelectionMode.None;
                         MediaDetailsHeader.Text = item.FullPath;
                         MediaDetailsEmptyHint.Text = "无歌曲";
                         MediaDetailsEmptyHint.Visibility =
@@ -5159,56 +5159,158 @@ namespace CelesteMusicPlayer
             }, System.Threading.Tasks.TaskScheduler.Default);
         }
 
-        /// <summary>多选切换：开启后列表可多选。</summary>
-        private void MediaMultiSelectButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>右键详情区歌曲：非多选态弹歌曲菜单；多选态进入多选。</summary>
+        private void MediaDetailsList_RightTapped(object sender, RightTappedRoutedEventArgs e)
         {
-            bool on = MediaMultiSelectButton?.IsChecked == true;
-            if (MediaDetailsList != null)
-            {
-                MediaDetailsList.SelectionMode = on
-                    ? ListViewSelectionMode.Multiple
-                    : ListViewSelectionMode.None;
-                if (!on)
-                {
-                    MediaDetailsList.SelectedItems.Clear();
-                }
-            }
-
-            if (MediaMultiSelectButton != null)
-            {
-                MediaMultiSelectButton.Content = on ? "退出多选" : "多选";
-            }
-        }
-
-        /// <summary>把右侧详情区选中的歌曲加入播放队列。</summary>
-        private void MediaAddQueueButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (MediaDetailsList?.SelectedItems == null)
+            var fe = e.OriginalSource as FrameworkElement;
+            var song = (fe?.DataContext ?? (sender as ListView)?.SelectedItem) as PlaylistItem;
+            if (song == null)
             {
                 return;
             }
 
-            List<PlaylistItem> sel = MediaDetailsList.SelectedItems.OfType<PlaylistItem>().ToList();
-            if (sel.Count == 0)
+            // 右键即进入多选状态：选中该项、列表可多选、显示「选项」按钮
+            if (MediaDetailsList != null)
             {
-                // 未多选时：默认加入当前详情列表全部
-                sel = MediaDetailsList.ItemsSource is System.Collections.ObjectModel.ObservableCollection<PlaylistItem> oc
-                    ? oc.ToList()
-                    : (MediaDetailsList.ItemsSource as System.Collections.Generic.IEnumerable<PlaylistItem>)?.ToList() ?? new List<PlaylistItem>();
+                MediaDetailsList.SelectionMode = ListViewSelectionMode.Multiple;
+                if (!MediaDetailsList.SelectedItems.Contains(song))
+                {
+                    MediaDetailsList.SelectedItems.Add(song);
+                }
             }
 
-            if (sel.Count > 0)
+            if (MediaOptionsButton != null)
             {
-                AddRangeToPlayQueue(sel);
+                MediaOptionsButton.Visibility = Visibility.Visible;
+            }
+
+            e.Handled = true;
+        }
+
+        /// <summary>询问是否把歌曲移入回收站并从磁盘删除。</summary>
+        private async System.Threading.Tasks.Task DeleteMediaSongWithConfirmAsync(PlaylistItem song)
+        {
+            try
+            {
+                var dialog = new ContentDialog
+                {
+                    Title = "从媒体库中删除",
+                    Content = $"确定要把该歌曲移动到回收站并从磁盘删除吗？\n\n{song.FilePath}",
+                    PrimaryButtonText = "删除",
+                    CloseButtonText = "取消",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = Content.XamlRoot
+                };
+                ApplyDialogAccent(dialog);
+                if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+                {
+                    await DeleteSongFromDiskAsync(song);
+                    // 重新加载当前详情列表（后台）
+                    if (FolderBrowserView.SelectedItem is FolderBrowserItem f)
+                    {
+                        LoadMediaFolderSongs(f);
+                    }
+                }
+            }
+            catch
+            {
             }
         }
 
-        /// <summary>右侧详情区歌曲双击/末选时，把歌曲加入播放队列。</summary>
-        private void AddRangeToPlayQueue(IReadOnlyList<PlaylistItem> songs)
+        /// <summary>「选项」按钮：多选态的多选操作。</summary>
+        private void MediaOptionsButton_Click(object sender, RoutedEventArgs e)
         {
-            foreach (PlaylistItem s in songs)
+            List<PlaylistItem> sel = MediaDetailsList?.SelectedItems.OfType<PlaylistItem>().ToList() ?? new List<PlaylistItem>();
+            var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
+
+            var add = new MenuFlyoutItem { Text = $"加入播放队列（{sel.Count}）" };
+            add.Icon = new FontIcon { Glyph = "\uE710" };
+            add.Click += (_, _) =>
             {
-                _ = AddToUserPlaylistBack(s);
+                foreach (PlaylistItem s in sel)
+                {
+                    AddToUserPlaylistBack(s);
+                }
+            };
+            flyout.Items.Add(add);
+
+            var edit = new MenuFlyoutItem { Text = $"编辑标签（{sel.Count}）" };
+            edit.Icon = new FontIcon { Glyph = "\uE8D2" };
+            edit.Click += (_, _) => TagEditorWindow.ShowBatch(sel.Select(i => i.FilePath).ToList());
+            flyout.Items.Add(edit);
+
+            var del = new MenuFlyoutItem { Text = $"从媒体库中删除（{sel.Count}）" };
+            del.Icon = new FontIcon { Glyph = "\uE74D" };
+            del.Click += (_, _) => _ = DeleteMediaSongsConfirmAsync(sel);
+            flyout.Items.Add(del);
+
+            var exit = new MenuFlyoutItem { Text = "退出多选" };
+            exit.Icon = new FontIcon { Glyph = "\uE711" };
+            exit.Click += (_, _) => ExitMediaMultiSelect();
+            flyout.Items.Add(exit);
+
+            flyout.ShowAt(MediaOptionsButton, new Windows.Foundation.Point(0, 0));
+        }
+
+        /// <summary>退出媒体库多选：恢复单选并隐藏选项按钮。</summary>
+        private void ExitMediaMultiSelect()
+        {
+            if (MediaDetailsList != null)
+            {
+                MediaDetailsList.SelectionMode = ListViewSelectionMode.None;
+                MediaDetailsList.SelectedItems.Clear();
+            }
+
+            if (MediaOptionsButton != null)
+            {
+                MediaOptionsButton.Visibility = Visibility.Collapsed;
+            }
+        }
+
+        /// <summary>更新右侧详情列表：中途加载完成/重载时退出多选。</summary>
+        private void ResetMediaSelectionUi()
+        {
+            ExitMediaMultiSelect();
+        }
+
+        /// <summary>多选删除：询问后把选中的歌曲移到回收站并从磁盘删除。</summary>
+        private async System.Threading.Tasks.Task DeleteMediaSongsConfirmAsync(IReadOnlyList<PlaylistItem> songs)
+        {
+            try
+            {
+                if (songs.Count == 0)
+                {
+                    return;
+                }
+
+                var dialog = new ContentDialog
+                {
+                    Title = "从媒体库中删除",
+                    Content = $"确定要把选中的 {songs.Count} 个文件移动到回收站并从磁盘删除吗？",
+                    PrimaryButtonText = "删除",
+                    CloseButtonText = "取消",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = Content.XamlRoot
+                };
+                ApplyDialogAccent(dialog);
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                {
+                    return;
+                }
+
+                foreach (PlaylistItem s in songs)
+                {
+                    await DeleteSongFromDiskAsync(s);
+                }
+
+                // 重新加载当前详情列表
+                if (FolderBrowserView.SelectedItem is FolderBrowserItem f)
+                {
+                    LoadMediaFolderSongs(f);
+                }
+            }
+            catch
+            {
             }
         }
 
@@ -5318,10 +5420,55 @@ namespace CelesteMusicPlayer
             {
                 var removeItem = new MenuFlyoutItem { Text = "从媒体库中删除" };
                 removeItem.Icon = new FontIcon { Glyph = "\uE74D" };
-                removeItem.Click += (_, _) =>
+                removeItem.Click += async (_, _) =>
                 {
-                    settings.LibraryWatchFolders?.RemoveAll(p =>
-                        string.Equals(p, folderRef.FullPath, StringComparison.OrdinalIgnoreCase));
+                    var dialog = new ContentDialog
+                    {
+                        Title = "从媒体库中删除",
+                        Content = $"将该文件夹移出媒体库？\n\n{folderRef.FullPath}\n\n是否同时把该文件夹内的音频移到回收站？",
+                        PrimaryButtonText = "删除（移到回收站）",
+                        SecondaryButtonText = "仅移出媒体库",
+                        CloseButtonText = "取消",
+                        DefaultButton = ContentDialogButton.Close,
+                        XamlRoot = Content.XamlRoot
+                    };
+                    ApplyDialogAccent(dialog);
+
+                    ContentDialogResult r;
+                    try
+                    {
+                        r = await dialog.ShowAsync();
+                    }
+                    catch
+                    {
+                        r = ContentDialogResult.None;
+                    }
+
+                    if (r == ContentDialogResult.None)
+                    {
+                        return;
+                    }
+
+                    if (r == ContentDialogResult.Primary)
+                    {
+                        // 删除源文件（移到回收站）
+                        foreach (string p in EnumerateAudioFiles(folderRef.FullPath))
+                        {
+                            if (System.IO.File.Exists(p))
+                            {
+                                try
+                                {
+                                    MoveToRecycleBin(p);
+                                }
+                                catch
+                                {
+                                }
+                            }
+                        }
+                    }
+
+                    settings.LibraryWatchFolders?.RemoveAll(q =>
+                        string.Equals(q, folderRef.FullPath, StringComparison.OrdinalIgnoreCase));
                     AppSettingsStore.Save(settings);
                     RefreshFolderBrowserRoots();
                 };
