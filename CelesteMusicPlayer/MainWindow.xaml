@@ -431,7 +431,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Grid Grid.Row="0" ColumnSpacing="12">
+                <Grid Grid.Row="0" ColumnSpacing="12" Margin="12,0,0,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" MinWidth="0" />
@@ -1397,16 +1397,14 @@
                                     Click="AlbumDetailBackButton_Click" />
                             </Border>
 
-                            <ScrollViewer
+                            <Grid
                                 Grid.Row="1"
-                                VerticalScrollBarVisibility="Auto"
-                                HorizontalScrollBarVisibility="Disabled">
-                                <Grid ColumnSpacing="24" Padding="0,8,20,16">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" MinWidth="420" />
-                                        <ColumnDefinition Width="500" />
-                                    </Grid.ColumnDefinitions>
-                                    <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="720">
+                                ColumnSpacing="24" Padding="0,8,20,16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" MinWidth="420" />
+                                    <ColumnDefinition Width="500" />
+                                </Grid.ColumnDefinitions>
+                                    <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch">
                                     <StackPanel Spacing="14" Width="430" VerticalAlignment="Center">
                                     <Grid ColumnSpacing="16">
                                         <Grid.ColumnDefinitions>
@@ -1485,13 +1483,38 @@
                                         FontSize="24"
                                         FontWeight="SemiBold"
                                         TextWrapping="WrapWholeWords" />
-                                    <TextBlock
-                                        x:Name="AlbumDetailSubInfoText"
-                                        FontSize="14"
-                                        FontWeight="SemiBold"
-                                        Opacity="0.85"
-                                        TextWrapping="NoWrap"
-                                        TextTrimming="CharacterEllipsis" />
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <!-- 行2 艺术家可点击超链接（进专辑艺术家详情） -->
+                                        <Button
+                                            x:Name="AlbumDetailSubArtistLink"
+                                            HorizontalAlignment="Left"
+                                            Padding="0"
+                                            VerticalAlignment="Center"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            CornerRadius="4"
+                                            PointerEntered="AlbumDetailArtistLink_PointerEntered"
+                                            PointerExited="AlbumDetailArtistLink_PointerExited"
+                                            Click="AlbumDetailArtistLink_Click">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <FontIcon Glyph="&#xE716;" FontSize="14" Opacity="0.8" />
+                                                <TextBlock
+                                                    x:Name="AlbumDetailArtistText"
+                                                    FontSize="14"
+                                                    FontWeight="SemiBold"
+                                                    VerticalAlignment="Center"
+                                                    TextDecorations="None" />
+                                            </StackPanel>
+                                        </Button>
+                                        <TextBlock
+                                            x:Name="AlbumDetailSubInfoText"
+                                            VerticalAlignment="Center"
+                                            FontSize="14"
+                                            FontWeight="SemiBold"
+                                            Opacity="0.85"
+                                            TextWrapping="NoWrap"
+                                            TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
                                     <TextBlock
                                         x:Name="AlbumDetailTechText"
                                         FontSize="14"
@@ -1499,27 +1522,6 @@
                                         Opacity="0.9"
                                         TextWrapping="NoWrap"
                                         TextTrimming="CharacterEllipsis" />
-                                    <Button
-                                        x:Name="AlbumDetailArtistLink"
-                                        HorizontalAlignment="Left"
-                                        Padding="0"
-                                        VerticalAlignment="Center"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        CornerRadius="4"
-                                        PointerEntered="AlbumDetailArtistLink_PointerEntered"
-                                        PointerExited="AlbumDetailArtistLink_PointerExited"
-                                        Click="AlbumDetailArtistLink_Click">
-                                        <StackPanel Orientation="Horizontal" Spacing="6">
-                                            <FontIcon Glyph="&#xE716;" FontSize="14" Opacity="0.8" />
-                                            <TextBlock
-                                                x:Name="AlbumDetailArtistText"
-                                                FontSize="14"
-                                                FontWeight="SemiBold"
-                                                VerticalAlignment="Center"
-                                                TextDecorations="None" />
-                                        </StackPanel>
-                                    </Button>
                                     </StackPanel>
                                     </ScrollViewer>
                                     <!-- 右栏：歌曲列表（铺满右侧，独立滚动） -->
@@ -1617,7 +1619,6 @@
                                     </StackPanel>
                                     </ScrollViewer>
                                 </Grid>
-                            </ScrollViewer>
                         </Grid>
                     </Grid>
                 </Border>
@@ -1809,15 +1810,15 @@
                                     x:Name="ArtistSongsFrostPanel"
                                     Grid.Row="1"
                                     Grid.Column="0"
-                                    Width="400"
+                                    Width="430"
                                     Height="300"
-                                    Margin="0,0,16,0"
-                                    MaxWidth="400"
+                                    Margin="0,0,12,0"
+                                    MaxWidth="430"
                                     MinHeight="0"
-                                    Padding="12"
-                                    CornerRadius="12"
+                                    Padding="0"
+                                    CornerRadius="0"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                    BorderThickness="1"
+                                    BorderThickness="0"
                                     Background="Transparent">
                                     <Grid RowSpacing="8" Background="Transparent">
                                         <Grid.RowDefinitions>

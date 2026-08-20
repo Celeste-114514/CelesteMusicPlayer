@@ -370,11 +370,41 @@ namespace CelesteMusicPlayer
         private ObservableCollection<PlaylistItem> _userPlaylist = new();
         private TaskbarProgressHelper? _taskbarProgress;
         private IntPtr _mainWindowHwnd;
-        private bool _enforcingMinSize;
 
         // 最小窗口尺寸（DIP）
         private const int MinWindowWidthDip = 1200;
         private const int MinWindowHeightDip = 760;
+
+        // ---- WM_GETMINMAXINFO 子类化：真正锁定最小窗口 ----
+        private const int WM_GETMINMAXINFO = 0x0024;
+        private const long GWL_WNDPROC = -4;
+        private delegate nint WndProcDelegate(nint hWnd, uint msg, nint wParam, nint lParam);
+        private static WndProcDelegate? _minMaxWndProc;
+        private static nint _prevWndProc;
+        private static double _minTrackScale = 1.0;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct POINT
+        {
+            public int X;
+            public int Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MINMAXINFO
+        {
+            public POINT ptReserved;
+            public POINT ptMaxSize;
+            public POINT ptMaxPosition;
+            public POINT ptMinTrackSize;
+            public POINT ptMaxTrackSize;
+        }
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", CharSet = CharSet.Unicode)]
+        private static extern nint SetWindowLongPtr64(nint hWnd, int nIndex, nint dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern nint CallWindowProcW(nint wndProc, nint hWnd, uint msg, nint wParam, nint lParam);
         private string? _genreYearFilter;
         private readonly ObservableCollection<AlbumEntry> _albums = new();
         private readonly ObservableCollection<PlaylistCardViewModel> _playlistWall = new();
@@ -552,7 +582,8 @@ namespace CelesteMusicPlayer
 
             // 默认 1350×770；Resize 按 DPI 换算为物理像素
             ResizeWindowToDips(1350, 770);
-            // 最小窗口 1200×760：在 AppWindow.Changed 里强制（EnforceMinimumWindowSize）
+            // 真正锁定最小窗口 1200×760（WM_GETMINMAXINFO 子类化，无闪烁）
+            SetupMinSizeHooks();
             // 标题栏扩展放到 Activated 之后，避免资源管理器直接启动时黑窗闪退（0xC000027B）
             Activated += MainWindow_FirstActivated;
             Closed += MainWindow_Closed;
@@ -1027,40 +1058,59 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>窗口小于最小尺寸时强制涨回（1200×760，按 DPI 换算）。</summary>
+        /// <summary>窗口小于最小尺寸时强制涨回（1200×760，按 DPI 换算）。
+        /// 实际通过 WM_GETMINMAXINFO 系统级锁定最小尺寸，拖到最小后不能再缩小。</summary>
         private void EnforceMinimumWindowSize()
         {
-            if (_enforcingMinSize || _mainWindowHwnd == IntPtr.Zero)
+            if (_mainWindowHwnd != IntPtr.Zero)
             {
-                return;
+                SetupMinSizeHooks();
             }
+        }
 
+        /// <summary>对主窗口进行窗口过程子类化，拦截 WM_GETMINMAXINFO 设置最小尺寸。</summary>
+        private void SetupMinSizeHooks()
+        {
             try
             {
+                if (_minMaxWndProc != null || _mainWindowHwnd == IntPtr.Zero)
+                {
+                    return;
+                }
+
                 uint dpi = GetDpiForWindow(_mainWindowHwnd);
                 if (dpi == 0)
                 {
                     dpi = 96;
                 }
 
-                double scale = dpi / 96.0;
-                int minW = (int)Math.Round(MinWindowWidthDip * scale);
-                int minH = (int)Math.Round(MinWindowHeightDip * scale);
-                if (AppWindow.Size.Width < minW || AppWindow.Size.Height < minH)
-                {
-                    _enforcingMinSize = true;
-                    AppWindow.Resize(new Windows.Graphics.SizeInt32(
-                        Math.Max(AppWindow.Size.Width, minW),
-                        Math.Max(AppWindow.Size.Height, minH)));
-                }
+                _minTrackScale = dpi / 96.0;
+                _minMaxWndProc = MainMinMaxWndProc;
+                _prevWndProc = SetWindowLongPtr64(_mainWindowHwnd, (int)GWL_WNDPROC, System.Runtime.InteropServices.Marshal.GetFunctionPointerForDelegate(_minMaxWndProc));
             }
             catch
             {
             }
-            finally
+        }
+
+        private static nint MainMinMaxWndProc(nint hWnd, uint msg, nint wParam, nint lParam)
+        {
+            if (msg == WM_GETMINMAXINFO && lParam != IntPtr.Zero)
             {
-                _enforcingMinSize = false;
+                try
+                {
+                    MINMAXINFO mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(lParam);
+                    mmi.ptMinTrackSize.X = (int)Math.Round(MinWindowWidthDip * _minTrackScale);
+                    mmi.ptMinTrackSize.Y = (int)Math.Round(MinWindowHeightDip * _minTrackScale);
+                    System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, lParam, false);
+                    return IntPtr.Zero;
+                }
+                catch
+                {
+                }
             }
+
+            return CallWindowProcW(_prevWndProc, hWnd, msg, wParam, lParam);
         }
 
         private void NowPlayingCard_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -5771,7 +5821,12 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            FrostedGlass.StyleElevatedPanel(ArtistSongsFrostPanel, new CornerRadius(12));
+            // 歌曲列表区无边框（与专辑详情页歌曲列表一致）
+            ArtistSongsFrostPanel.Background = new SolidColorBrush(Colors.Transparent);
+            ArtistSongsFrostPanel.BorderThickness = new Thickness(0);
+            ArtistSongsFrostPanel.CornerRadius = new CornerRadius(0);
+            ArtistSongsFrostPanel.Background = null;
+            ArtistSongsFrostPanel.ClearValue(Border.CornerRadiusProperty);
 
             if (ArtistTrackListView != null)
             {
@@ -6829,8 +6884,9 @@ namespace CelesteMusicPlayer
             AlbumDetailArtistText.Text = album.Artist;
             if (AlbumDetailSubInfoText != null)
             {
+                // 行2：艺术家(超链接) | 发行时间 | 曲目数
                 AlbumDetailSubInfoText.Text =
-                    album.Artist + " | " + album.YearText + " | " + album.TrackCount + " 首";
+                    " | " + album.YearText + " | " + album.TrackCount + " 首";
             }
 
             _albumTracks.Clear();
