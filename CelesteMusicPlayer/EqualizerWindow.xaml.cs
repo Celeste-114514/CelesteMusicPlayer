@@ -150,8 +150,8 @@ namespace CelesteMusicPlayer
 
                 var sliderHost = new Grid
                 {
-                    Width = 36,
-                    Height = 180,
+                    Width = 40,
+                    Height = 170,
                     HorizontalAlignment = HorizontalAlignment.Center
                 };
 
@@ -161,8 +161,8 @@ namespace CelesteMusicPlayer
                     Maximum = 15,
                     StepFrequency = 1,
                     Value = 0,
-                    Width = 180,
-                    Height = 36,
+                    Width = 200,
+                    Height = 40,
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center,
                     RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5),

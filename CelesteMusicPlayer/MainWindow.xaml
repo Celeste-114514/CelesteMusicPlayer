@@ -367,7 +367,7 @@
                         CornerRadius="20"
                         Click="NavTagSortButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE8B1;" FontSize="14" VerticalAlignment="Center" />
+                            <FontIcon Glyph="&#xE833;" FontSize="14" VerticalAlignment="Center" />
                             <TextBlock Text="标签排序" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
@@ -462,7 +462,7 @@
                         VerticalAlignment="Center"
                         Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" MaxWidth="320" />
+                            <ColumnDefinition Width="*" MaxWidth="200" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <local:StableIBeamTextBox
@@ -520,6 +520,19 @@
                         Spacing="8"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center">
+                        <Button
+                            x:Name="PlayAllLibrarySongsButton"
+                            Height="32"
+                            Padding="12,0"
+                            CornerRadius="16"
+                            BorderThickness="0"
+                            Click="PlayAllLibrarySongsButton_Click"
+                            ToolTipService.ToolTip="把当前歌曲列表全部加入队列并按当前排序播放">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE768;" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="播放所有歌曲" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <DropDownButton
                             x:Name="SortFieldButton"
                             Height="32"
@@ -2078,6 +2091,19 @@
                                             <MenuFlyoutItem Text="排序方式" Tag="Sort" Click="TagSortViewModeItem_Click" />
                                         </MenuFlyout>
                                     </Button.Flyout>
+                                </Button>
+                                <Button
+                                    x:Name="TagSortPanelPlayAllButton"
+                                    Height="32"
+                                    Padding="12,0"
+                                    CornerRadius="16"
+                                    BorderThickness="0"
+                                    Click="TagSortPanelPlayAllButton_Click"
+                                    ToolTipService.ToolTip="按当前列表顺序替换播放队列并从第一首播放">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE768;" FontSize="14" VerticalAlignment="Center" />
+                                        <TextBlock Text="播放当前列表歌曲" VerticalAlignment="Center" />
+                                    </StackPanel>
                                 </Button>
                             </StackPanel>
 

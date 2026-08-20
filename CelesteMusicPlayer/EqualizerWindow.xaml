@@ -29,7 +29,8 @@
         <ScrollViewer
             Grid.Row="1"
             Padding="24,8,24,24"
-            VerticalScrollBarVisibility="Auto">
+            VerticalScrollBarVisibility="Auto"
+            HorizontalScrollBarVisibility="Auto">
             <StackPanel Spacing="20" MaxWidth="720" HorizontalAlignment="Stretch">
                 <Grid ColumnSpacing="16">
                     <Grid.ColumnDefinitions>
@@ -51,7 +52,7 @@
                 <StackPanel x:Name="BandSlidersPanel" Spacing="8" HorizontalAlignment="Center" />
 
                 <TextBlock
-                    Text="实时均衡器暂不可用（Windows SDK 未提供 MediaPlayer 音频帧输出节点）；调节会保存预设，待后续自建音频管线后接入。"
+                    Text="EQ 在「共享」与「HiFi(ASIO/共享)」输出下实时生效；「WASAPI 独占」为保持 bit-perfect 直通不使用 EQ。启用 EQ 后输出不再是 bit-perfect。"
                     FontSize="12"
                     Opacity="0.55"
                     TextWrapping="WrapWholeWords" />

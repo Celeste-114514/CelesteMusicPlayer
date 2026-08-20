@@ -24,8 +24,9 @@ namespace CelesteMusicPlayer
 
         private NativeWasapi.IAudioClient? _audioClient;
         private NativeWasapi.IAudioRenderClient? _renderClient;
-        private WaveFileReader? _source;
+        private SeamlessWaveProvider? _provider;
         private long _framesWritten;
+        private long _lastUnderrunLogMs; // 限频记录 underrun 诊断
         private readonly object _seekLock = new();
         private TimeSpan? _pendingSeek; // 线程安全 seek 请求（由 render 线程消费）
 
@@ -52,6 +53,18 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>已写入的总帧数（累加，不随曲目切换归零；供上层按曲目相对进度换算）。</summary>
+        public long FramesWritten
+        {
+            get
+            {
+                lock (_framesLock) { return _framesWritten; }
+            }
+        }
+
+        /// <summary>协商后的采样率（帧/秒）。</summary>
+        public int SampleRateValue => _rate;
+
         public string? LastError { get; private set; }
         public string? ActualFormatDescription { get; private set; }
         public bool IsStarted { get; private set; }
@@ -59,8 +72,8 @@ namespace CelesteMusicPlayer
         /// <summary>最近一次初始化是否触发了 AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED 对齐 dance（供日志排障）。</summary>
         public bool LastAlignDance { get; private set; }
 
-        /// <summary>用指定设备 + 源 PCM 初始化（格式协商 + Initialize + 取 render client + 绑定事件）。</summary>
-        public bool Init(NativeWasapi.IMMDevice device, WaveFileReader source)
+        /// <summary>用指定设备 + 无缝源（当前+可预加载下一首）初始化（格式协商 + Initialize + 取 render client + 绑定事件）。</summary>
+        public bool Init(NativeWasapi.IMMDevice device, SeamlessWaveProvider provider)
         {
             if (_audioClient != null)
             {
@@ -68,16 +81,22 @@ namespace CelesteMusicPlayer
                 return false;
             }
 
-            _source = source;
-            Duration = source.TotalTime;
-            var src = source.WaveFormat;
+            _provider = provider;
+            Duration = provider.TotalTime;
+            var src = provider.WaveFormat;
+            if (src == null)
+            {
+                LastError = "无缝源无有效格式。";
+                return false;
+            }
+
             _srcBlock = src.BlockAlign;
             _rate = src.SampleRate;
             _channels = src.Channels;
 
             // ---- 初始化日志（排障"假 bit-perfect"）：源格式与协商轨迹 ----
             string initLog = string.Format(
-                "WASAPI独占协商 源=\"{0}\" {1}bit/{2}Hz/{3}ch", _source.GetType().Name, src.BitsPerSample, src.SampleRate, src.Channels);
+                "WASAPI独占协商 源=\"{0}\" {1}bit/{2}Hz/{3}ch", provider.GetType().Name, src.BitsPerSample, src.SampleRate, src.Channels);
 
             // 1) 尝试「源格式直通」（bit-perfect 优先）
             var srcExt = MakeSourceFormat(src);
@@ -190,7 +209,12 @@ namespace CelesteMusicPlayer
             _stopSignal.Reset();
             if (_renderThread == null || !_renderThread.IsAlive)
             {
-                _renderThread = new Thread(RenderLoop) { IsBackground = true, Name = "NativeWasapiRender" };
+                _renderThread = new Thread(RenderLoop)
+                {
+                    IsBackground = true,
+                    Name = "NativeWasapiRender",
+                    Priority = ThreadPriority.Highest // 配合 RenderLoop 内的 Pro Audio MM 提升，降低偶发调度延迟导致的微卡顿
+                };
                 _renderThread.Start();
             }
 
@@ -216,7 +240,8 @@ namespace CelesteMusicPlayer
             try { Marshal.ReleaseComObject(_audioClient!); } catch { }
             _stopSignal.Dispose();
             _renderSignal.Dispose();
-            _source?.Dispose();
+            // 注意：_provider（SeamlessWaveProvider）归 HiFiOutputBackend 所有，不在此释放。
+            _provider = null;
         }
 
         // ---------- 初始化 ----------
@@ -331,10 +356,12 @@ namespace CelesteMusicPlayer
             try
             {
                 var rc = _renderClient!;
-                var src = _source!;
+                var src = _provider;
+                if (src == null) return;
                 int maxFrames = (int)_bufferFrames;
                 if (maxFrames <= 0) return;
 
+                var srcWf = src.WaveFormat;
                 byte[] srcBuf = new byte[maxFrames * _srcBlock];
                 var waits = new WaitHandle[] { _stopSignal, _renderSignal };
 
@@ -353,7 +380,7 @@ namespace CelesteMusicPlayer
                     }
                     if (seekReq.HasValue)
                     {
-                        try { src.CurrentTime = seekReq.Value; } catch { }
+                        src.Seek(seekReq.Value);
                         lock (_framesLock) { _framesWritten = (long)(seekReq.Value.TotalSeconds * _rate); }
                     }
 
@@ -364,6 +391,14 @@ namespace CelesteMusicPlayer
                     if (got < srcBuf.Length)
                     {
                         Array.Clear(srcBuf, got, srcBuf.Length - got); // 不足部分静音，避免旧/越界数据
+                        // 诊断：本次 WASAPI 缓冲未能从数据源读满（潜在 underrun → 播放卡顿）。
+                        // 正常无缝续接时 ReadFully 可跨曲填满；此处仅当磁盘读不足或源已尽时出现。
+                        long nowMs = Environment.TickCount64;
+                        if (nowMs - _lastUnderrunLogMs > 1000) // 限频，避免刷屏
+                        {
+                            _lastUnderrunLogMs = nowMs;
+                            StartupLog.Write($"[无缝诊断] render underrun: 需要{srcBuf.Length}B 读得{got}B srcExh当前pos={ (src.Current?.Position ?? 0)}/{ (src.Current?.Length ?? 0)} nextMount={src.NextMounted}");
+                        }
                     }
 
                     if (_direct)
@@ -372,7 +407,7 @@ namespace CelesteMusicPlayer
                     }
                     else
                     {
-                        ConvertToFloat(dst, srcBuf, maxFrames, src.WaveFormat);
+                        ConvertToFloat(dst, srcBuf, maxFrames, srcWf);
                     }
 
                     rc.ReleaseBuffer((uint)maxFrames, 0);
@@ -403,7 +438,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private static int ReadFully(WaveFileReader src, byte[] buf, int count)
+        private static int ReadFully(SeamlessWaveProvider src, byte[] buf, int count)
         {
             int total = 0;
             while (total < count)

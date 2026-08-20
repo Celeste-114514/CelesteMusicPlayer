@@ -732,11 +732,14 @@ namespace CelesteMusicPlayer
 
         private void OnEqualizerApplied()
         {
-            // 实时 EQ 暂不可用：Windows SDK 的 C#/WinRT 投影未提供
-            // MediaPlayer 音频帧输出节点（MediaPlayerAudioFrameOutputNode），
-            // 无法在播放管线中插入 DSP；设置保留，待自建音频管线后接入。
             EqualizerState state = EqualizerStore.Load();
-            NowPlayingText.Text = "均衡器已保存（实时 EQ 暂不可用，将在后续版本接入）";
+            // 把增益实际应用到引擎：共享模式（AudioGraph）与 HiFi(ASIO/共享 NAudio) 均生效；
+            // WASAPI 独占为保持 bit-perfect 不使用 EQ。启用 EQ 后输出非 bit-perfect。
+            _audioEngine?.SetEqualizer(state.BandGains);
+            string onlyWEx = _audioEngine != null && _audioEngine.IsHiFiMode
+                ? "（WASAPI 独占保持 bit-perfect，不使用 EQ）"
+                : "";
+            NowPlayingText.Text = "均衡器已应用" + onlyWEx;
         }
 
         private void OnTagsSaved(string path)
@@ -851,65 +854,6 @@ namespace CelesteMusicPlayer
             catch
             {
                 Activate();
-            }
-        }
-
-        /// <summary>计算并应用当前曲目的 ReplayGain 倍率（缓存/内嵌标签同步读取；ffmpeg 实测计算放后台）。</summary>
-        private double ComputeAndApplyReplayGain(string path)
-        {
-            // 对标 foobar bit-perfect：ReplayGain 属信号链数字处理，按需求整体关闭。
-            // 不应用任何增益（音量固定 100%），仅保留 path 记录，避免 UI/其它逻辑引用失效。
-            double scale = 1.0;
-            _currentReplayGainScale = 1.0;
-            _replayGainPath = path;
-            try { _audioEngine?.SetReplayGainScale(1.0); } catch { }
-            return scale;
-        }
-
-        /// <summary>后台用内置 ffmpeg 计算整曲响度并写缓存；若仍在播放同一首歌则即时应用。</summary>
-        private async Task ComputeReplayGainInBackgroundAsync(string path)
-        {
-            try
-            {
-                (double GainDb, double Peak)? rg = await ReplayGainService.ComputeWithFfmpegAsync(
-                    path,
-                    FormatConvertService.TryFindFfmpeg());
-                if (rg == null)
-                {
-                    return;
-                }
-
-                ReplayGainService.Cache(path, rg.Value.GainDb, rg.Value.Peak);
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    try
-                    {
-                        if (!AppSettingsStore.Load().ReplayGainEnabled)
-                        {
-                            return;
-                        }
-
-                        if (!string.Equals(_replayGainPath, path, StringComparison.OrdinalIgnoreCase))
-                        {
-                            return;
-                        }
-
-                        double scale = ReplayGainService.GainToScale(rg.Value.GainDb, rg.Value.Peak);
-                        _currentReplayGainScale = scale;
-                        _audioEngine?.SetReplayGainScale(scale);
-                        MediaPlayer? p = GetPlayer();
-                        if (p != null && !_usingEnginePlayback)
-                        {
-                            p.Volume = VolumeSlider.Value / 100.0 * scale;
-                        }
-                    }
-                    catch
-                    {
-                    }
-                });
-            }
-            catch
-            {
             }
         }
 

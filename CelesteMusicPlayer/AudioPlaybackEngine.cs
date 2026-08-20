@@ -29,6 +29,10 @@ namespace CelesteMusicPlayer
         private bool _isPlaying;
         private bool _disposed;
         private string? _outputDeviceId;
+        private Microsoft.UI.Dispatching.DispatcherQueue? _graphDispatcher;
+        private AudioFileInputNode? _nextGraphNode;
+        private double[]? _equalizerGains;
+        private int _playGeneration; // 播放代次：每次新开播/无缝切换递增，用于识别 await 期间的过期预加载
 
         /// <summary>当前输出设备 ID（null = 系统默认）。</summary>
         public string? OutputDeviceId { get; private set; }
@@ -168,6 +172,8 @@ namespace CelesteMusicPlayer
                     int exitCode;
                     using (Process proc = Process.Start(psi)!)
                     {
+                        // 转码很耗 CPU；降为低优先级，避免抢占 WASAPI 独占（Pro Audio）渲染线程造成播放卡顿
+                        try { proc.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
                         proc.ErrorDataReceived += (_, e) =>
                         {
                             if (e.Data == null)
@@ -247,38 +253,78 @@ namespace CelesteMusicPlayer
                 bool ok = PlayWavHiFi(targetWav);
                 if (!ok)
                 {
-                // 源格式设备不认时，按设备 MixFormat 重转一次重试，保证可播
-                // （此时非 bit-perfect，属设备能力限制）。
-                int devRate = 0, devCh = 0, devBits = 0;
+                    // 源格式（尤其是 DSD 转出的高采样率 PCM，如 DSD128→705.6kHz）设备不认时，
+                    // 做重采样回退以保证可播。ASIO 驱动常不支持 705.6kHz，直接降到 44.1k 损失过大；
+                    // 改为按 44.1k 家族候选采样率从高到低尝试，尽量用最高受支持档位（如 352.8/176.4/88.2k）。
                     if (_outputMode == HiFiOutputBackend.OutputMode.Asio)
                     {
-                        // ASIO 驱动不暴露统一的 MixFormat：用 44.1kHz 安全重转保底。
-                        devRate = 44100; devCh = 2; devBits = 32;
-                        var mf0 = HiFiOutputBackend.GetDeviceMixFormat(null);
-                        if (mf0 is (int r0, int c0, int b0) && r0 > 0 && (c0 == 1 || c0 == 2))
+                        // DSD/44.1k 家族受支持档候选（前向兼容把 44.1k 精确倍率优先）
+                        int[] cands = { 352800, 176400, 88200, 44100 };
+                        foreach (int rate in cands)
                         {
-                            devCh = c0; devBits = b0 > 0 ? b0 : devBits;
+                            string fallback = Path.Combine(Path.GetDirectoryName(targetWav) ?? cacheDir, $"{key}.{rate}f.wav");
+                            string args2 = string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -ar {1} -ac 2 \"{2}\"", path, rate, fallback);
+                            if (!await RunFfmpegAsync(args2, status) || !File.Exists(fallback))
+                            {
+                                continue;
+                            }
+
+                            if (PlayWavHiFi(fallback))
+                            {
+                                CleanupTempWav();
+                                _lastTempWav = fallback;
+                                ok = true;
+                                break;
+                            }
+
+                            try { File.Delete(fallback); } catch { }
+                        }
+
+                        if (!ok)
+                        {
+                            // 全部候选失败：退回设备 MixFormat 保底（可能为 16/32bit、常见采样率）
+                            int devRate = 0, devCh = 0, devBits = 32;
+                            var mf0 = HiFiOutputBackend.GetDeviceMixFormat(null);
+                            if (mf0 is (int r0, int c0, int b0) && r0 > 0 && (c0 == 1 || c0 == 2))
+                            {
+                                devRate = r0; devCh = c0; devBits = b0 > 0 ? b0 : devBits;
+                            }
+
+                            if (devRate > 0 && devCh > 0)
+                            {
+                                string fallback = Path.Combine(Path.GetDirectoryName(targetWav) ?? cacheDir, key + ".fallback.wav");
+                                string enc2 = devBits <= 16 ? "pcm_s16le" : "pcm_s32le";
+                                string args2 = string.Format("-y -i \"{0}\" -vn -c:a {1} -ar {2} -ac {3} \"{4}\"", path, enc2, devRate, devCh, fallback);
+                                if (await RunFfmpegAsync(args2, status) && File.Exists(fallback))
+                                {
+                                    CleanupTempWav();
+                                    _lastTempWav = fallback;
+                                    ok = PlayWavHiFi(fallback);
+                                }
+                            }
                         }
                     }
                     else
                     {
+                        // WASAPI 独占：按设备 MixFormat 重转一次（保证可播）
+                        int devRate = 0, devCh = 0, devBits = 0;
                         var mf = HiFiOutputBackend.GetDeviceMixFormat(_devicePreference);
                         if (mf is (int r, int c, int b) && r > 0 && c > 0)
                         {
                             devRate = r; devCh = c; devBits = b;
                         }
-                    }
 
-                    if (devRate > 0 && devCh > 0)
-                    {
-                        string fallback = Path.Combine(Path.GetDirectoryName(targetWav) ?? cacheDir, key + ".fallback.wav");
-                        string enc2 = devBits <= 16 ? "pcm_s16le" : "pcm_s32le";
-                        string args2 = string.Format("-y -i \"{0}\" -vn -acodec {1} -ar {2} -ac {3} \"{4}\"", path, enc2, devRate, devCh, fallback);
-                        if (await RunFfmpegAsync(args2, status) && File.Exists(fallback))
+                        if (devRate > 0 && devCh > 0)
                         {
-                            CleanupTempWav();
-                            _lastTempWav = fallback;
-                            ok = PlayWavHiFi(fallback);
+                            string fallback = Path.Combine(Path.GetDirectoryName(targetWav) ?? cacheDir, key + ".fallback.wav");
+                            string enc2 = devBits <= 16 ? "pcm_s16le" : "pcm_s32le";
+                            string args2 = string.Format("-y -i \"{0}\" -vn -c:a {1} -ar {2} -ac {3} \"{4}\"", path, enc2, devRate, devCh, fallback);
+                            if (await RunFfmpegAsync(args2, status) && File.Exists(fallback))
+                            {
+                                CleanupTempWav();
+                                _lastTempWav = fallback;
+                                ok = PlayWavHiFi(fallback);
+                            }
                         }
                     }
 
@@ -341,6 +387,11 @@ namespace CelesteMusicPlayer
         {
             // 由 _hifiOut 无缝切到预加载的下一首；同步当前 Position/Duration 供上层
             Position = TimeSpan.Zero;
+            if (_hifiOut != null)
+            {
+                Duration = _hifiOut.Duration; // 无缝续接后更新为下一首时长，供上层进度条/时长显示
+            }
+
             SeamlessTrackChanged?.Invoke();
         }
 
@@ -457,6 +508,8 @@ namespace CelesteMusicPlayer
             {
                 using (Process proc = Process.Start(psi)!)
                 {
+                    // 转码很耗 CPU；降为低优先级，避免抢占 WASAPI 独占（Pro Audio）渲染线程造成播放卡顿
+                    try { proc.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
                     proc.ErrorDataReceived += (_, e) =>
                     {
                         if (e.Data == null)
@@ -505,14 +558,14 @@ namespace CelesteMusicPlayer
         /// 保留源采样率与声道，供 WaveFileReader 原样直通（严格 bit-perfect）。探测失败回退 16/44.1/2。</summary>
         private static string BuildTranscodeArgs(string srcPath, string dstPath)
         {
-            // DSD（DSF/DFF）：先用 ffmpeg 转码为高质量 PCM 再播放。
-            // ffmpeg 内置 dsd 解码器解码为高采样率 PCM（DSD64→352.8kHz，DSD128→705.6kHz）。
-            // 不指定 -ar，避免被降采样到 44.1kHz；用 32bit PCM（而非 24bit）——飞傲某些 ASIO 驱动下
-            // NAudio AsioOut 对 24bit 缓冲格式会触发回调 NRE 崩溃（实测 16/32bit 稳定）。
+            // DSD（DSF/DFF）：先用 ffmpeg 转码为高质量 PCM 再播放（KA13 亮黄灯）。
+            // ffmpeg 内置 dsd 解码器解码为高采样率 PCM（DSD64→352.8kHz，DSD128→705.6kHz，DSD256→1411.2kHz）。
+            // 不指定 -ar，保留 DSD 原生采样率（不降采样）；用 pcm_s32le + 显式 sample_fmt s32 锚定位深，
+            // 避免不同 ffmpeg 构建对 dsf 默认输出浮点/不同位深造成漂移。颜色码：飞傲某些 ASIO 驱动下 24bit 会回调 NRE（实测 16/32 稳）。
             string ext = Path.GetExtension(srcPath).ToLowerInvariant();
             if (ext is ".dsf" or ".dff")
             {
-                return string.Format("-y -i \"{0}\" -vn -acodec pcm_s32le \"{1}\"", srcPath, dstPath);
+                return string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -sample_fmt s32 \"{1}\"", srcPath, dstPath);
             }
 
             var srcFmt = ProbeSourceFormat(srcPath);
@@ -764,6 +817,7 @@ namespace CelesteMusicPlayer
                 _deviceNode = dev.DeviceOutputNode;
                 OutputDeviceId = _outputDeviceId;
 
+                _graphDispatcher = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
                 _positionTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
                 _positionTimer.Interval = TimeSpan.FromMilliseconds(250);
                 _positionTimer.Tick += (_, _) => UpdatePosition();
@@ -790,31 +844,20 @@ namespace CelesteMusicPlayer
 
             StopCore();
 
-            StorageFile file;
             try
             {
-                file = await StorageFile.GetFileFromPathAsync(path);
-            }
-            catch (Exception ex)
-            {
-                RaiseFailed(ex);
-                return false;
-            }
-
-            try
-            {
-                CreateAudioFileInputNodeResult r = await _graph!.CreateFileInputNodeAsync(file);
-                if (r.Status != AudioFileNodeCreationStatus.Success)
+                AudioFileInputNode? node = await BuildGraphInputNodeAsync(path);
+                if (node == null)
                 {
-                    RaiseFailed(new Exception("无法打开音频文件（格式可能不受系统支持）"));
-                    return false;
+                    return false; // BuildGraphInputNodeAsync 内部已 RaiseFailed
                 }
 
-                _inputNode = r.FileInputNode;
+                _inputNode = node;
                 Duration = _inputNode.Duration;
                 _inputNode.AddOutgoingConnection(_deviceNode);
                 _inputNode.FileCompleted += InputNode_FileCompleted;
 
+                _playGeneration++; // 新曲目开播，作废任何 await 中的旧预加载
                 _graph.Start();
                 _inputNode.Start();
                 _playStartUtc = DateTime.UtcNow;
@@ -828,6 +871,104 @@ namespace CelesteMusicPlayer
             {
                 RaiseFailed(ex);
                 return false;
+            }
+        }
+
+        /// <summary>预加载下一首到 AudioGraph（共享模式）：创建第二输入节点但保持停止、不连输出。
+        /// 当前曲目播完 FileCompleted 时若该节点已就绪则立即接手（无 graph 重建 → 共享模式 gapless）。</summary>
+        public async Task<bool> PrepareNextGraphSeamless(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return false;
+            }
+
+            if (_graph == null && !await InitializeAsync())
+            {
+                return false;
+            }
+
+            RecycleNextGraphNode(); // 旧的未用预加载先释放
+
+            // 记录发起预加载时的播放代次：await（可能含 ffmpeg 转码，耗时数百 ms~数秒）期间
+            // 用户可能切歌/停止 → 代次变化，需丢弃这条"针对旧曲目"的预加载，避免播完错切。
+            int gen = _playGeneration;
+
+            try
+            {
+                var node = await BuildGraphInputNodeAsync(path);
+                if (node == null)
+                {
+                    return false;
+                }
+
+                // await 回来后若播放代次已变化（切歌/重播/停止）→ 预加载已失效，回收
+                if (gen != _playGeneration || _disposed || _graph == null || _deviceNode == null)
+                {
+                    try { node.Stop(); node.Dispose(); } catch { }
+                    return false;
+                }
+
+                node.AddOutgoingConnection(_deviceNode); // 连好输出，但不 Start
+                node.FileCompleted += InputNode_FileCompleted;
+                _nextGraphNode = node;
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>构建一个已连接输出、尚未启动的输入节点（复用增益/均衡器配置由调用方各自应用）。</summary>
+        private async Task<AudioFileInputNode?> BuildGraphInputNodeAsync(string path)
+        {
+            StorageFile file;
+            try
+            {
+                file = await StorageFile.GetFileFromPathAsync(path);
+            }
+            catch (Exception ex)
+            {
+                RaiseFailed(ex);
+                return null;
+            }
+
+            try
+            {
+                CreateAudioFileInputNodeResult r = await _graph!.CreateFileInputNodeAsync(file);
+                if (r.Status != AudioFileNodeCreationStatus.Success)
+                {
+                    RaiseFailed(new Exception("无法打开音频文件（格式可能不受系统支持）"));
+                    return null;
+                }
+
+                return r.FileInputNode;
+            }
+            catch (Exception ex)
+            {
+                RaiseFailed(ex);
+                return null;
+            }
+        }
+
+        /// <summary>释放未消费的图预加载节点。</summary>
+        private void RecycleNextGraphNode()
+        {
+            if (_nextGraphNode != null)
+            {
+                try
+                {
+                    _nextGraphNode.FileCompleted -= InputNode_FileCompleted;
+                    _nextGraphNode.RemoveOutgoingConnection(_deviceNode);
+                    _nextGraphNode.Stop();
+                    _nextGraphNode.Dispose();
+                }
+                catch
+                {
+                }
+
+                _nextGraphNode = null;
             }
         }
 
@@ -887,6 +1028,7 @@ namespace CelesteMusicPlayer
 
             try
             {
+                RecycleNextGraphNode(); // seek 后位置已变，旧预加载作废，由上层按新曲目重新预加载
                 _inputNode.Seek(position);
                 if (_isPlaying)
                 {
@@ -918,9 +1060,6 @@ namespace CelesteMusicPlayer
 
         private double _userVolume = 1.0;
 
-        /// <summary>ReplayGain 响度归一化线性倍率（1.0 = 旁路）。</summary>
-        private double _replayGainScale = 1.0;
-
         /// <summary>音量 0..1：通过重建输出连接增益实现（AudioGraph 无全局音量属性）。</summary>
         public void SetVolume(double volume)
         {
@@ -940,10 +1079,16 @@ namespace CelesteMusicPlayer
             _hifiOut?.SetSourceDuration(sourceDuration);
         }
 
-        /// <summary>预加载下一首 WAV 到无缝源（共享/ASIO）。同格式且未读及时可无缝续接；否则由上层重建。返回是否采纳为无缝。</summary>
-        public bool PrepareNextSeamless(string nextWavPath)
+        /// <summary>预加载下一首到无缝源。HiFi（独占/ASIO）：同格式字节级续接；共享模式：预建第二个 AudioGraph 输入节点。
+        /// 返回是否采纳为无缝预加载。</summary>
+        public async Task<bool> PrepareNextSeamless(string nextWavPath)
         {
-            return _hifiOut?.PrepareNextSeamless(nextWavPath) ?? false;
+            if (IsHiFiMode)
+            {
+                return _hifiOut?.PrepareNextSeamless(nextWavPath) ?? false;
+            }
+
+            return await PrepareNextGraphSeamless(nextWavPath);
         }
 
         /// <summary>用 ffmpeg 探测源文件真实音轨时长（秒）。失败返回 0。
@@ -1015,13 +1160,6 @@ namespace CelesteMusicPlayer
             return IsHiFiMode ? (_hifiOut?.GetDeviceVolume() ?? -1f) : -1f;
         }
 
-        /// <summary>设置 ReplayGain 线性倍率，与用户音量相乘后作为实际输出增益。</summary>
-        public void SetReplayGainScale(double scale)
-        {
-            _replayGainScale = scale > 0.0001 ? scale : 1.0;
-            ApplyOutputGain();
-        }
-
         private void ApplyOutputGain()
         {
             if (_graph == null || _inputNode == null || _deviceNode == null)
@@ -1032,7 +1170,7 @@ namespace CelesteMusicPlayer
             try
             {
                 _inputNode.RemoveOutgoingConnection(_deviceNode);
-                _inputNode.AddOutgoingConnection(_deviceNode, _userVolume * _replayGainScale);
+                _inputNode.AddOutgoingConnection(_deviceNode, _userVolume);
             }
             catch
             {
@@ -1042,7 +1180,16 @@ namespace CelesteMusicPlayer
         /// <summary>应用 10 段均衡器增益（dB，-12..12）；null 表示旁路（移除 EQ 效果）。</summary>
         public void SetEqualizer(double[]? gainsDb)
         {
-            if (_graph == null || _inputNode == null)
+            _equalizerGains = gainsDb == null ? null : (double[])GainsDbClone(gainsDb);
+            ApplyEqualizerToNode(_inputNode);
+            // HiFi（ASIO/共享 NAudio 输出）：把 EQ 增益转发给后端，由 Eq10WaveProvider 在数据直通前 DSP（非 bit-perfect）
+            _hifiOut?.SetEqualizer(gainsDb);
+        }
+
+        /// <summary>对指定输入节点应用当前均衡器增益（新节点/无缝切换后调用）。</summary>
+        private void ApplyEqualizerToNode(AudioFileInputNode? node)
+        {
+            if (_graph == null || node == null)
             {
                 return;
             }
@@ -1050,22 +1197,23 @@ namespace CelesteMusicPlayer
             try
             {
                 EqualizerEffectDefinition? eq = null;
-                for (int i = _inputNode.EffectDefinitions.Count - 1; i >= 0; i--)
+                for (int i = node.EffectDefinitions.Count - 1; i >= 0; i--)
                 {
-                    if (_inputNode.EffectDefinitions[i] is EqualizerEffectDefinition existing)
+                    if (node.EffectDefinitions[i] is EqualizerEffectDefinition existing)
                     {
                         eq = existing;
-                        _inputNode.EffectDefinitions.RemoveAt(i);
+                        node.EffectDefinitions.RemoveAt(i);
                     }
                 }
 
+                double[]? gainsDb = _equalizerGains;
                 if (gainsDb == null)
                 {
                     return;
                 }
 
                 eq = new EqualizerEffectDefinition(_graph);
-                _inputNode.EffectDefinitions.Add(eq);
+                node.EffectDefinitions.Add(eq);
                 for (int i = 0; i < eq.Bands.Count && i < gainsDb.Length; i++)
                 {
                     eq.Bands[i].Gain = Math.Clamp(gainsDb[i], -12.0, 12.0);
@@ -1077,8 +1225,11 @@ namespace CelesteMusicPlayer
             }
         }
 
+        private static double[] GainsDbClone(double[] src) => (double[])src.Clone();
+
         private void StopCore()
         {
+            RecycleNextGraphNode();
             if (_inputNode != null)
             {
                 _inputNode.FileCompleted -= InputNode_FileCompleted;
@@ -1095,10 +1246,73 @@ namespace CelesteMusicPlayer
 
         private void InputNode_FileCompleted(AudioFileInputNode sender, object args)
         {
+            // 若已预加载下一首（共享模式无缝），立即在 UI 线程接手，不触发 PlaybackEnded。
+            if (_nextGraphNode != null && _graphDispatcher != null)
+            {
+                _graphDispatcher.TryEnqueue(() => PlayPreloadedGraphNext(sender));
+                return;
+            }
+
             _isPlaying = false;
             _positionTimer?.Stop();
             Position = Duration;
             PlaybackEnded?.Invoke();
+        }
+
+        /// <summary>共享模式无缝切换：停/释放当前节点，启动已预加载的下一节点（单一输出会话，避免 graph 重建间隙）。</summary>
+        private void PlayPreloadedGraphNext(AudioFileInputNode completed)
+        {
+            AudioFileInputNode? next = _nextGraphNode;
+            _nextGraphNode = null;
+            if (next == null || _graph == null || _deviceNode == null || _disposed)
+            {
+                // 预加载已被回收（如用户手动切歌/停止/seek 后）→ 不当作"播完"误切歌：
+                // 只有在确已停止播放时才触发 PlaybackEnded，其余情况（seek/切歌中）忽略本次过期切换。
+                if (!_isPlaying && ReferenceEquals(_inputNode, completed))
+                {
+                    _isPlaying = false;
+                    _positionTimer?.Stop();
+                    Position = Duration;
+                    PlaybackEnded?.Invoke();
+                }
+                return;
+            }
+
+            try
+            {
+                if (_inputNode != null)
+                {
+                    _inputNode.FileCompleted -= InputNode_FileCompleted;
+                    _inputNode.RemoveOutgoingConnection(_deviceNode);
+                    _inputNode.Stop();
+                    _inputNode.Dispose();
+                }
+
+                _inputNode = next;
+                _playGeneration++; // 无缝切到下一首，作废任何 await 中的旧预加载
+                next.FileCompleted -= InputNode_FileCompleted; // 已挂过，避免重复
+                next.FileCompleted += InputNode_FileCompleted;
+                Duration = next.Duration;
+
+                // 切换后重新应用均衡器与增益（新节点默认无 EQ）
+                ApplyEqualizerToNode(next);
+                ApplyOutputGain();
+
+                next.Start();
+                _playStartUtc = DateTime.UtcNow;
+                _pausedPosition = TimeSpan.Zero;
+                Position = TimeSpan.Zero;
+                _isPlaying = true;
+                _positionTimer?.Start();
+                SeamlessTrackChanged?.Invoke();
+            }
+            catch (Exception ex)
+            {
+                RaiseFailed(ex);
+                _isPlaying = false;
+                _positionTimer?.Stop();
+                PlaybackEnded?.Invoke();
+            }
         }
 
         private void UpdatePosition()

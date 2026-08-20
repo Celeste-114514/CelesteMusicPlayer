@@ -25,9 +25,6 @@ namespace CelesteMusicPlayer
         /// <summary>0–100</summary>
         public double Volume { get; set; } = 80;
 
-        /// <summary>ReplayGain 响度归一化：优先读内嵌标签，缺失时用 ffmpeg 计算并缓存。</summary>
-        public bool ReplayGainEnabled { get; set; } = true;
-
         /// <summary>音频输出设备 ID（HiFi 设备切换）。空 = 系统默认。</summary>
         public string OutputDeviceId { get; set; } = string.Empty;
 
@@ -421,7 +418,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             AutoRun = s.AutoRun,
             EnableFrostedGlass = s.EnableFrostedGlass,
             Volume = s.Volume,
-            ReplayGainEnabled = s.ReplayGainEnabled,
             OutputDeviceId = s.OutputDeviceId,
             OutputMode = s.OutputMode,
             PlaybackOrder = s.PlaybackOrder,

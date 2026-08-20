@@ -179,6 +179,46 @@ namespace CelesteMusicPlayer
             _instance.Activate();
         }
 
+        /// <summary>打开设置窗口并定位到「媒体库」板块。</summary>
+        public static void ShowMediaLibrary()
+        {
+            ShowOrActivate();
+            SettingsWindow? w = _instance;
+            if (w == null)
+            {
+                return;
+            }
+
+            try
+            {
+                w.DispatcherQueue.TryEnqueue(w.OpenMediaLibrary);
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>选中并显示设置窗口的「媒体库」导航板块。</summary>
+        private void OpenMediaLibrary()
+        {
+            try
+            {
+                foreach (object o in SettingsNav.MenuItems)
+                {
+                    if (o is NavigationViewItem item && item.Tag is string t && t == "MediaLib")
+                    {
+                        SettingsNav.SelectedItem = item;
+                        break;
+                    }
+                }
+
+                ShowPanel("MediaLib");
+            }
+            catch
+            {
+            }
+        }
+
         public static void CloseIfOpen()
         {
             if (_instance == null)
@@ -334,7 +374,6 @@ namespace CelesteMusicPlayer
                 SetTextBlock(VolumeValueText, $"{(int)Math.Round(s.Volume)}%");
                 SelectPlaybackOrder(s.PlaybackOrder);
                 SetToggle(EnableSmtcSwitch, s.EnableSmtc);
-                SetToggle(ReplayGainSwitch, s.ReplayGainEnabled);
                 SetToggle(EnableFadeSwitch, s.EnableFade);
                 SetSlider(FadeMsSlider, s.FadeMilliseconds);
                 SetTextBlock(FadeMsValueText, $"{s.FadeMilliseconds} ms");
@@ -865,7 +904,6 @@ namespace CelesteMusicPlayer
 
             s.OutputMode = GetSelectedOutputMode();
             StartupLog.Write("设置保存 输出模式=" + (s.OutputMode ?? "null") + " 设备=" + (s.OutputDeviceId ?? "null"));
-            s.ReplayGainEnabled = ReplayGainSwitch?.IsOn ?? s.ReplayGainEnabled;
             s.EnableFade = EnableFadeSwitch?.IsOn ?? s.EnableFade;
             if (FadeMsSlider != null)
             {

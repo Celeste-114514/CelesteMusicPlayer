@@ -404,8 +404,6 @@ namespace CelesteMusicPlayer
         private int _folderSearchIndex = -1;
         private string? _folderSearchHighlightPath;
         private MediaPlayer? _mediaPlayer;
-        private double _currentReplayGainScale = 1.0;
-        private string? _replayGainPath;
         private DispatcherQueueTimer? _positionTimer;
         private bool _isUserSeeking;
         private bool _isUpdatingProgressUi;
@@ -685,7 +683,7 @@ namespace CelesteMusicPlayer
 
             VolumeSlider.ValueChanged += VolumeSlider_ValueChanged;
             ApplyStartupPlaybackSettings();
-            _mediaPlayer.Volume = VolumeSlider.Value / 100.0 * _currentReplayGainScale;
+            _mediaPlayer.Volume = VolumeSlider.Value / 100.0;
             UpdateVolumeIcon(VolumeSlider.Value);
             UpdateSignalChainDisplay();
             UpdateDesktopLyricsBadge();
@@ -886,7 +884,7 @@ namespace CelesteMusicPlayer
                         MediaPlayer? player = GetPlayer();
                         if (player != null)
                         {
-                            player.Volume = VolumeSlider.Value / 100.0 * _currentReplayGainScale;
+                            player.Volume = VolumeSlider.Value / 100.0;
                         }
 
                         UpdateVolumeIcon(VolumeSlider.Value);
@@ -1779,6 +1777,11 @@ namespace CelesteMusicPlayer
             AppendHamburgerFeatureItems(flyout);
             flyout.Items.Add(new MenuFlyoutSeparator());
 
+            var mediaLibItem = new MenuFlyoutItem { Text = "媒体库" };
+            mediaLibItem.Icon = new FontIcon { Glyph = "\uE838" }; // MusicLibrary
+            mediaLibItem.Click += (_, _) => SettingsWindow.ShowMediaLibrary();
+            flyout.Items.Add(mediaLibItem);
+
             var settingsItem = new MenuFlyoutItem { Text = "选项设置" };
             settingsItem.Icon = new FontIcon { Glyph = "\uE713" };
             settingsItem.Click += (_, _) => SettingsWindow.ShowOrActivate();
@@ -1999,12 +2002,12 @@ namespace CelesteMusicPlayer
 
                 if (paths.Length == 0)
                 {
-                    ReplaceLibraryWithPaths(Array.Empty<string>(), persist: false);
+                    await ReplaceLibraryWithPaths(Array.Empty<string>(), persist: false);
                     await ShowErrorAsync("重新扫描", "未找到可读取的本地音频。请先通过「选择文件」或「选择文件夹」导入。");
                     return;
                 }
 
-                ReplaceLibraryWithPaths(paths, persist: false);
+                await ReplaceLibraryWithPaths(paths, persist: false);
                 NowPlayingText.Text = $"已重新扫描，共 {_playlist.Count} 首";
             }
             catch (Exception ex)
@@ -2023,8 +2026,9 @@ namespace CelesteMusicPlayer
             return new Uri(escaped, UriKind.Absolute);
         }
 
-        /// <summary>清空音乐库后按路径重建元数据，并刷新当前分类界面。</summary>
-        private void ReplaceLibraryWithPaths(string[] filePaths, bool persist)
+        /// <summary>清空音乐库后按路径重建元数据，并刷新当前分类界面。
+        /// 元数据读取放后台分批执行，并在扫描过程中以「扫描 xxx/xxx」更新左上角状态。</summary>
+        private async System.Threading.Tasks.Task ReplaceLibraryWithPaths(string[] filePaths, bool persist)
         {
             string? playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
                 ? _playlist[_currentIndex].FilePath
@@ -2047,28 +2051,48 @@ namespace CelesteMusicPlayer
 
             if (filePaths.Length > 0)
             {
-                var knownPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (string path in filePaths)
+                int total = filePaths.Length;
+                var built = new System.Collections.Generic.List<PlaylistItem>(total);
+                // 后台分批读取元数据（纯文件/TagLib，不碰 UI），每处理一批派发一次进度到左上角状态
+                await Task.Run(() =>
                 {
-                    if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+                    var knownPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                    int done = 0;
+                    foreach (string path in filePaths)
                     {
-                        continue;
-                    }
+                        if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+                        {
+                            continue;
+                        }
 
-                    if (!knownPaths.Add(path))
-                    {
-                        continue;
-                    }
+                        if (!knownPaths.Add(path))
+                        {
+                            continue;
+                        }
 
-                    try
-                    {
-                        _playlist.Add(CreatePlaylistItemFromPath(path));
+                        try
+                        {
+                            built.Add(CreatePlaylistItemFromPath(path));
+                        }
+                        catch (Exception ex)
+                        {
+                            knownPaths.Remove(path);
+                            System.Diagnostics.Debug.WriteLine($"扫描加载失败: {path} → {ex.Message}");
+                        }
+
+                        done++;
+                        if ((done & 15) == 0)
+                        {
+                            int d = done;
+                            DispatcherQueue.TryEnqueue(() => NowPlayingText.Text = $"扫描 {Math.Min(d, total)}/{total}");
+                        }
                     }
-                    catch (Exception ex)
-                    {
-                        knownPaths.Remove(path);
-                        System.Diagnostics.Debug.WriteLine($"重新扫描加载失败: {path} → {ex.Message}");
-                    }
+                });
+
+                DispatcherQueue.TryEnqueue(() => NowPlayingText.Text = $"扫描完成，共 {built.Count} 首");
+                foreach (PlaylistItem item in built)
+                {
+                    _playlist.Add(item);
                 }
             }
 
@@ -2450,12 +2474,38 @@ namespace CelesteMusicPlayer
             }
         }
 
+        // 标签排序分类封面：封面字节内存缓存 + 并发控制（缓存命中免重复读文件/解码，避免大量分类同时打满线程池与 UI 线程）
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> TagSortCoverBytesCache = new();
+        private static readonly System.Threading.SemaphoreSlim TagSortCoverGate = new(4);
+
         private async System.Threading.Tasks.Task LoadTagSortCategoryCoverAsync(TagSortCategoryEntry entry)
         {
             try
             {
-                byte[]? bytes = await Task.Run(() => string.IsNullOrWhiteSpace(entry.FirstFilePath)
-                    ? null : ExtractCoverBytes(entry.FirstFilePath));
+                string key = entry?.FirstFilePath ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(key))
+                {
+                    return;
+                }
+
+                byte[]? bytes = null;
+                await TagSortCoverGate.WaitAsync(); // 限流并发提取，避免几十个专辑同时解码拖慢 UI
+                try
+                {
+                    if (!TagSortCoverBytesCache.TryGetValue(key, out bytes) || bytes == null || bytes.Length == 0)
+                    {
+                        bytes = await Task.Run(() => ExtractCoverBytes(key));
+                        if (bytes is { Length: > 0 })
+                        {
+                            TagSortCoverBytesCache[key] = bytes;
+                        }
+                    }
+                }
+                finally
+                {
+                    TagSortCoverGate.Release();
+                }
+
                 if (bytes is { Length: > 0 })
                 {
                     var bmp = await CreateBitmapFromBytesAsync(bytes);
@@ -2595,6 +2645,19 @@ namespace CelesteMusicPlayer
                 TagSortPanelTitle.Text = field == "Artist" ? "艺术家：" : "专辑：" + cat.Name;
                 ApplyTagSortPanelMode();
             }
+        }
+
+        /// <summary>标签排序信息列表「播放当前列表歌曲」：按当前列表顺序替换播放队列并从第一首播放。</summary>
+        private void TagSortPanelPlayAllButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_tagSortClassSongs.Count == 0)
+            {
+                return;
+            }
+
+            _userPlaylist.Clear();
+            AddSongsToUserPlaylist(_tagSortClassSongs.ToList());
+            PlayUserPlaylistAt(0);
         }
 
         private void TagSortPanelSongListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
@@ -5682,6 +5745,19 @@ namespace CelesteMusicPlayer
             PlayUserPlaylistAt(0);
         }
 
+        /// <summary>歌曲面板「播放所有歌曲」：把当前歌曲列表全部加入播放队列并按当前排序播放。</summary>
+        private void PlayAllLibrarySongsButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_playlist.Count == 0)
+            {
+                return;
+            }
+
+            _userPlaylist.Clear();
+            AddSongsToUserPlaylist(_playlist.ToList());
+            PlayUserPlaylistAt(0);
+        }
+
         private void AddAllArtistAlbumsToPlaylistButton_Click(object sender, RoutedEventArgs e)
         {
             List<PlaylistItem> tracks = CollectArtistAlbumTracksInOrder();
@@ -6162,6 +6238,15 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void PlayPlaylistItem(PlaylistItem track)
         {
+            // 若已在该播放队列中：保持原顺序，仅定位到它播放（不再把它移到最前）。
+            int existing = FindUserPlaylistIndex(track.FilePath);
+            if (existing >= 0)
+            {
+                PlayUserPlaylistAt(existing);
+                return;
+            }
+
+            // 不在播放队列：加入队列（按现有 InsertPlaylistAtBegin 设置决定位置，通常放最前）再播放。
             AddSongsToUserPlaylist(new[] { track });
             int userIndex = FindUserPlaylistIndex(track.FilePath);
             if (userIndex >= 0)
@@ -7264,7 +7349,7 @@ namespace CelesteMusicPlayer
 
             if (inUserPlaylist)
             {
-                var removeItem = new MenuFlyoutItem { Text = "从播放列表中删除" };
+                var removeItem = new MenuFlyoutItem { Text = "从播放队列中删除" };
                 removeItem.Icon = new FontIcon { Glyph = "\uE74D" };
                 removeItem.Click += (_, _) =>
                 {
@@ -7647,14 +7732,14 @@ namespace CelesteMusicPlayer
             if (isUserPlaylist)
             {
                 MultiSelectPrimaryActionIcon.Glyph = "\uE74D"; // Delete
-                MultiSelectPrimaryActionText.Text = "从播放列表中删除";
+                MultiSelectPrimaryActionText.Text = "从播放队列中删除";
                 ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲从播放列表移除");
             }
             else if (isNamedPlaylistDetail)
             {
                 // 命中单详情页多选 → 从当前命名单删除勾选的歌
                 MultiSelectPrimaryActionIcon.Glyph = "\uE74D"; // Delete
-                MultiSelectPrimaryActionText.Text = "从播放列表中删除";
+                MultiSelectPrimaryActionText.Text = "从播放队列中删除";
                 ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲从当前命名单移除");
             }
             else if (isTagSortSongs)
@@ -9809,6 +9894,13 @@ namespace CelesteMusicPlayer
             if (_isEnginePaused && _audioEngine != null)
             {
                 _audioEngine.Resume();
+                // 暂停-恢复本质是一次 seek 重建会话，无缝源 _next 已被清空；
+                // 重新预加载下一首，避免恢复后播到尾因无续接而误切歌。
+                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                {
+                    _ = PreloadSeamlessNextAsync(_userPlaylist[_userPlaylistIndex]);
+                }
+
                 _isEnginePaused = false;
                 UpdateWaveformTimerForPlaybackState(true);
                 UpdateEngineSmtcStatus(MediaPlaybackStatus.Playing);
@@ -9817,6 +9909,9 @@ namespace CelesteMusicPlayer
                     PlayPauseIcon.Glyph = "\uE769";
                 }
 
+                // 恢复后把设备主音量拉回用户当前设定（避免重建时残留默认 _resumeVolume=1.0 导致音量暴增），
+                // 并以极短淡入缓解独占会话重建瞬间的爆音（仅暂停恢复时生效，不影响 bit-perfect 直通）。
+                _ = FadeInEngineAfterResumeAsync(VolumeSlider.Value / 100.0);
                 _miniPlayerWindow?.RefreshFromOwner();
                 return;
             }
@@ -9904,9 +9999,30 @@ namespace CelesteMusicPlayer
                 try
                 {
                     _audioEngine.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
+                    // seek 会丢弃无缝源里已预加载的下一首（位置已变，续接会错位）。
+                    // 重挂下一首，避免 seek 后播到尾时因 _next 为空而无法无缝续接。
+                    if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                    {
+                        _ = PreloadSeamlessNextAsync(_userPlaylist[_userPlaylistIndex]);
+                    }
                 }
                 catch
                 {
+                }
+
+                // 用户点击进度条定位后保持暂停，方便精确定位/等待（与"点进度条→暂停"一致）。
+                if (_audioEngine.IsPlaying)
+                {
+                    _audioEngine.Pause();
+                    _isEnginePaused = true;
+                    UpdateWaveformTimerForPlaybackState(false);
+                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
+                    if (PlayPauseIcon != null)
+                    {
+                        PlayPauseIcon.Glyph = "\uE768";
+                    }
+
+                    _miniPlayerWindow?.RefreshFromOwner();
                 }
 
                 return;
@@ -9935,7 +10051,7 @@ namespace CelesteMusicPlayer
             MediaPlayer? player = GetPlayer();
             if (player != null)
             {
-                player.Volume = e.NewValue / 100.0 * _currentReplayGainScale;
+                player.Volume = e.NewValue / 100.0;
             }
 
             // 设备主音量（DAC 驱动级）随滑块：共享与 HiFi 独占都联动。
@@ -11521,7 +11637,7 @@ namespace CelesteMusicPlayer
 
                 string exclusivo = hifi ? "独占" : "共享";
 
-                // DSP 摘要：ReplayGain 恒关；EQ 仅在 AudioGraph（非 HiFi 独占）下有效；
+                // DSP 摘要：EQ 仅在 AudioGraph（非 HiFi 独占）下有效；
                 // 音量在 HiFi 独占下恒 100%。
                 string dsp;
                 if (hifi)
@@ -12256,7 +12372,6 @@ namespace CelesteMusicPlayer
 
         private void StartPlayback(PlaylistItem item)
         {
-            double rgScale = ComputeAndApplyReplayGain(item.FilePath);
             ScrobblePreviousIfAny();
 
             // 进度条样式(读设置缓存) + 异步加载波形(波形样式用)
@@ -12306,7 +12421,7 @@ namespace CelesteMusicPlayer
             RecordPlaybackStatsOnStart(item);
 
             AppSettingsState settings = AppSettingsStore.Load();
-            double targetVolume = VolumeSlider.Value / 100.0 * rgScale;
+            double targetVolume = VolumeSlider.Value / 100.0;
 
             void BeginSource()
             {
@@ -12442,6 +12557,27 @@ namespace CelesteMusicPlayer
         }
 
 
+        private async Task FadeInEngineAfterResumeAsync(double target)
+        {
+            try
+            {
+                // 暂停恢复后独占会话重建，瞬时全音量可达造成爆音/音量暴增：
+                // 从较低音量极短渐变到目标，缓解瞬态。（仅暂停恢复路径调用，不影响常规切歌的 bit-perfect 直通。）
+                _audioEngine?.SetVolume(Math.Clamp(target * 0.18, 0.0, 1.0));
+                const int steps = 5;
+                for (int i = 1; i <= steps; i++)
+                {
+                    _audioEngine?.SetVolume(Math.Clamp(target * (0.18 + 0.82 * i / (double)steps), 0.0, 1.0));
+                    await Task.Delay(30);
+                }
+
+                _audioEngine?.SetVolume(Math.Clamp(target, 0.0, 1.0));
+            }
+            catch
+            {
+            }
+        }
+
         /// <summary>引擎开播淡入（约 320ms 渐入到当前音量）。</summary>
         private async Task FadeInEngineAsync()
         {
@@ -12502,6 +12638,7 @@ namespace CelesteMusicPlayer
                 PlaylistItem? next = ResolveSequentialNextItem(current);
                 if (next == null || string.IsNullOrWhiteSpace(next.FilePath) || !System.IO.File.Exists(next.FilePath))
                 {
+                    StartupLog.Write("预加载: 无下一首 or 文件不存在 next=" + (next?.Title ?? "<null>"));
                     _seamlessPreloaded = null;
                     return;
                 }
@@ -12509,11 +12646,14 @@ namespace CelesteMusicPlayer
                 string? wav = await _audioEngine.EnsureCachedWavAsync(next.FilePath);
                 if (string.IsNullOrWhiteSpace(wav))
                 {
+                    StartupLog.Write("预加载: 转码失败 无WAV next=" + next.Title);
                     _seamlessPreloaded = null;
                     return;
                 }
 
-                if (_audioEngine.PrepareNextSeamless(wav))
+                bool ok = await _audioEngine.PrepareNextSeamless(wav);
+                StartupLog.Write("预加载: \"" + current.Title + "\" → \"" + next.Title + "\" wav=" + System.IO.Path.GetFileName(wav) + " 采纳无缝=" + ok);
+                if (ok)
                 {
                     _seamlessPreloaded = next;
                 }
@@ -12522,8 +12662,9 @@ namespace CelesteMusicPlayer
                     _seamlessPreloaded = null; // 格式不同等：无缝不启用，后续走重建
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                StartupLog.Write("预加载: 异常 " + ex.Message);
                 _seamlessPreloaded = null;
             }
         }
@@ -12565,6 +12706,11 @@ namespace CelesteMusicPlayer
                     _usingEnginePlayback = true;
                     NowPlayingText.Text = "正在播放（引擎）：" + next.Title + " - " + next.Artist;
                     _ = UpdateNowPlayingPanelAsync(next);
+                    // 无缝续接后重新加载下一首的波形/进度条样式（否则会残留上一首的波形与时长）
+                    _progressBarStyle = AppSettingsStore.Load().ProgressBarStyle;
+                    _waveformPath = null;
+                    StartupLog.Write("无缝切歌 波形加载开始: " + next.FilePath + " style=" + _progressBarStyle);
+                    LoadWaveformForCurrentAsync(next.FilePath);
                     UpdateNowPlayingOutputFormat();
                     RecordPlaybackStatsOnStart(next);
                     if (_audioEngine != null)

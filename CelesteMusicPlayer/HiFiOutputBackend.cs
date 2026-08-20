@@ -30,6 +30,8 @@ namespace CelesteMusicPlayer
         private WaveFileReader? _waveFile;
         private IWavePlayer? _output; // WasapiOut 或 AsioOut
         private SeamlessWaveProvider? _seamless; // NAudio 输出（共享/ASIO）的无缝续接源（当前+下一首）
+        private double[]? _eqGains; // HiFi(ASIO/共享 NAudio) 10 段 EQ 增益(dB)，启用则包 EQ provider
+        private Eq10WaveProvider? _eqProvider; // 当前输出使用的 EQ provider（NAudio 路径），用于播放中实时更新增益
         private NativeWasapiExclusiveOut? _native; // 原生 WASAPI 独占输出器（WasapiExclusive 模式替代 NAudio WasapiOut）
         private bool _useNative; // 当前播放是否走原生独占输出
         private MMDevice? _device;     // 用于调设备/系统主音量（WASAPI）；ASIO 无统一接口为 null
@@ -37,6 +39,7 @@ namespace CelesteMusicPlayer
         private TimeSpan _pausedPosition;
         private float _resumeVolume = 1f;
         private string? _activeWavPath;
+        private long _nativePosBaselineFrames; // 原生独占下当前曲目起始帧基准（用于按曲目换算相对进度，避免跨曲累加）
         private OutputMode _activeMode;
         private string? _activeDeviceId;
 
@@ -79,6 +82,31 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>设置 HiFi（ASIO/共享 NAudio 输出）的 10 段 EQ 增益（dB，-12..12）。null / 全 0 表示直通（bit-perfect）。</summary>
+        public void SetEqualizer(double[]? gainsDb)
+        {
+            _eqGains = gainsDb == null ? null : (double[])gainsDb.Clone();
+            // 仅在播放中且为 NAudio(ASIO/共享) 输出且已在用 EQ provider 时实时更新增益；
+            // 否则仅记录，由下次 PlayWavAsync 按新增益决定是否启用 EQ provider。
+            if (_output != null && !_useNative && _isPlaying && _eqProvider != null && _eqGains != null && HasNonZeroGain(_eqGains))
+            {
+                _eqProvider.UpdateGains(_eqGains);
+            }
+        }
+
+        private static bool HasNonZeroGain(double[] gains)
+        {
+            for (int i = 0; i < gains.Length; i++)
+            {
+                if (Math.Abs(gains[i]) > 0.01)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>预加载下一首 WAV 到无缝源（共享/ASIO）。
         /// 与当前同格式未读及时可无缝续接；格式不同或未就绪则由上层走重建。返回是否采纳为无缝续接。</summary>
         public bool PrepareNextSeamless(string nextWavPath)
@@ -96,11 +124,18 @@ namespace CelesteMusicPlayer
                     return false;
                 }
 
-                bool same = probe.WaveFormat.SampleRate == _seamless.WaveFormat.SampleRate
-                    && probe.WaveFormat.BitsPerSample == _seamless.WaveFormat.BitsPerSample
-                    && probe.WaveFormat.Channels == _seamless.WaveFormat.Channels;
+                var curWf = _seamless.WaveFormat;
+                if (curWf == null)
+                {
+                    return false; // 当前 reader 无有效格式（如 seek/暂停后状态未就绪），下次重试
+                }
+
+                bool same = probe.WaveFormat.SampleRate == curWf.SampleRate
+                    && probe.WaveFormat.BitsPerSample == curWf.BitsPerSample
+                    && probe.WaveFormat.Channels == curWf.Channels;
                 if (!same)
                 {
+                    StartupLog.Write($"无缝预载 格式不符: next={probe.WaveFormat.SampleRate}/{probe.WaveFormat.BitsPerSample}bit/{probe.WaveFormat.Channels}ch cur={curWf.SampleRate}/{curWf.BitsPerSample}bit/{curWf.Channels}ch → 不采纳");
                     return false;
                 }
 
@@ -330,7 +365,9 @@ namespace CelesteMusicPlayer
                 _activeWavPath = wavPath;
                 _activeMode = mode;
                 _activeDeviceId = deviceIdentifier;
-                _seamless = null; // 新建播放会话，等待 NAudio 路径初始化无缝源
+                // 无缝源（当前+可预加载下一首）：共享/ASIO 走 NAudio wasapi/asio，独占走原生 WASAPI，
+                // 均用同一份 SeamlessWaveProvider 做同格式字节级续接 → 单输出会话 gapless。
+                _seamless = new SeamlessWaveProvider(_waveFile);
                 switch (mode)
                 {
                     case OutputMode.WasapiShared:
@@ -353,7 +390,7 @@ namespace CelesteMusicPlayer
                         }
 
                         var nat = new NativeWasapiExclusiveOut();
-                        if (!nat.Init(natDev, _waveFile))
+                        if (!nat.Init(natDev, _seamless))
                         {
                             LastError = nat.LastError ?? "原生 WASAPI 初始化失败";
                             StartupLog.Write("WasapiExclusive 原生初始化失败: " + (nat.LastError ?? "未知") + " | 源格式=" + (_waveFile?.WaveFormat.SampleRate) + "/" + (_waveFile?.WaveFormat.BitsPerSample) + "bit/" + (_waveFile?.WaveFormat.Channels) + "ch");
@@ -426,16 +463,33 @@ namespace CelesteMusicPlayer
                 }
                 else
                 {
-                    // 共享/ASIO 用无缝源：同格式下一首可无缝续接（gapless）；无预加载则行为等同现状
-                    _seamless = new SeamlessWaveProvider(_waveFile);
-                    _output.Init(_seamless); // IWaveProvider：源 PCM 原样直通（严格 bit-perfect）
-                    CaptureActualOutputFormat();
+                    // 共享/ASIO 用无缝源：同格式下一首可无缝续接（gapless）。
+                    // 若用户开启 EQ（非全 0 增益），包一层 10 段 PeakingEQ provider（数据经 DSP → 非 bit-perfect）；
+                    // 全 0 / 默认时保持源 PCM 直通。
+                    if (_eqGains != null && HasNonZeroGain(_eqGains))
+                    {
+                        _eqProvider = new Eq10WaveProvider(_seamless!, _eqGains);
+                        _output.Init(_eqProvider);
+                        CaptureActualOutputFormat();
+                        StartupLog.Write("[EQ诊断] HiFi输出已启用 EQ（gain 非全0） → 数据经 DSP，非 bit-perfect");
+                    }
+                    else
+                    {
+                        _eqProvider = null;
+                        _output.Init(_seamless); // IWaveProvider：源 PCM 原样直通（严格 bit-perfect）
+                        CaptureActualOutputFormat();
+                        StartupLog.Write("[EQ诊断] HiFi输出 EQ=false(gain 全0/未设) → bit-perfect直通");
+                    }
+
                     _output.PlaybackStopped += Output_PlaybackStopped;
                     _output.Play();
                 }
 
                 _isPlaying = true;
                 CurrentMode = mode;
+                // 新播放会话：位置基准归零（_native 已按 seekTo 初始化 _framesWritten，
+                // 基准=0 使 Position 显示为 seekTo→绝对进度；无缝续接时才重置基准到新歌起点）。
+                _nativePosBaselineFrames = 0;
                 _positionTimer.Start();
                 // 输出层协商日志（排障"假 bit-perfect"）：源格式 → 模式 → 设备端实际格式 → 对齐dance/降级
                 StartupLog.Write(string.Format(
@@ -463,7 +517,10 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            _pausedPosition = (_useNative && _native != null) ? _native.Position : (_waveFile?.CurrentTime ?? Position);
+            // 暂停点用当前显示的播放位置（Position）：seek 后 HiFiOutputBackend.Seek 已把 Position 设为用户 seek 目标，
+            // 正常播放时是 UpdatePosition 维护的实时位置。不要依赖渲染线程异步消费后的 reader 游标，
+            // 否则 seek→暂停的瞬间可能记录成错误位置（如读到文件尾）导致恢复后误判已播完而切歌。
+            _pausedPosition = Position;
 
             // 完全释放输出（Stop + Dispose），记录激活参数以便恢复时重建
             OutputMode savedMode = _activeMode;
@@ -484,6 +541,19 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 恢复前先把设备主音量压到很低，使重建起播就以低音量输出，避免恢复瞬间的全音量爆音；
+            // 之后由上层 FadeInEngineAfterResumeAsync 渐变回用户音量。
+            try
+            {
+                if (_device?.AudioEndpointVolume != null)
+                {
+                    _device.AudioEndpointVolume.MasterVolumeLevelScalar = 0.02f;
+                }
+            }
+            catch
+            {
+            }
+
             // 用缓存的激活参数完全重建输出，并在启动缓冲前定位到暂停点
             TimeSpan resumeAt = _pausedPosition;
             if (!PlayWavAsync(_activeWavPath, _activeMode, _activeDeviceId, resumeAt))
@@ -491,8 +561,8 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // 重建后恢复用户音量
-            SetVolume(_resumeVolume);
+            // 恢复用户音量的渐变由上层（MainWindow.FadeInEngineAfterResumeAsync）完成；
+            // 此处不直接 SetVolume(_resumeVolume)（否则会立刻回到全音量重新造成爆音）。
 
             _isPlaying = true;
             _positionTimer.Start();
@@ -596,7 +666,11 @@ namespace CelesteMusicPlayer
 
             if (_useNative && _native != null)
             {
-                Position = _native.Position;
+                // 用数据源 reader 的实时游标作为位置（渲染线程读取同一 reader，反映真实播放进度）：
+                // 无缝续接后 _seamless.Current 变为下一首 reader（位置从 0），seek 后 CurrentTime 即被更新，
+                // 避免依赖跨曲累加的 _framesWritten 相对基准（seek/暂停恢复/续接时不一致）。
+                var curReader = _seamless?.Current ?? _waveFile;
+                Position = curReader != null ? curReader.CurrentTime : TimeSpan.Zero;
             }
             else if (_waveFile != null)
             {
@@ -612,6 +686,7 @@ namespace CelesteMusicPlayer
             // 若共享/ASIO 已预加载同格式下一首，则由无缝源自动续接（不 Stop → gapless），并通知上层切换。
             if (_seamless != null && _seamless.SwitchedToNext)
             {
+                StartupLog.Write($"[无缝诊断] 已无缝续接到下一首 (initiator={(_useNative?"独占native":"naudio")})");
                 _seamless.ResetSwitchFlag(); // 允许下一次无缝切换
                 // 同步到已无缝切入的下一首：源 reader / 时长 / 位置，保证 Position/Duration 继续正确
                 var nextReader = _seamless.Current;
@@ -626,19 +701,27 @@ namespace CelesteMusicPlayer
                         Duration = _sourceDuration;
                     }
                 }
+                // 无缝续接到下一首：位置基准重置为当前累计帧，使下一首从 0 起算（不跨曲累加）。
+                if (_native != null)
+                {
+                    _nativePosBaselineFrames = _native.FramesWritten;
+                }
+
                 Position = TimeSpan.Zero;
                 SeamlessTrackChanged?.Invoke();
             }
 
             bool sourceExhausted = false;
-            if (_waveFile != null && _waveFile.Length > 8)
+            if (_waveFile != null && _waveFile.Length > 16
+                && (!_useNative || (_native?.IsStarted == true))) // native 模式下仅在渲染线程真正启动时判定，避免重建窗口期的旧 reader 误判为已读尽
             {
-                // 数据源已真实读到末尾（最可靠，避免依赖被源时长改短的 Duration；DSD 转码 WAV 读尽即播完）
-                sourceExhausted = _waveFile.Position >= _waveFile.Length - 1024;
+                // 数据源已真实读到末尾（最可靠，避免依赖被源时长改短的 Duration；DSD 转码 WAV 读尽即播完）。
+                // 阈值与 SeamlessWaveProvider.HasReadyNext 的 -8 对齐，避免"源已读尽但续接尚未标记"的窗口被误判为需要重建。
+                // 要求 Position>0 且 Length>16，避免空/极小缓存文件（Length 异常小）在开播即被误判为已读尽。
+                sourceExhausted = _waveFile.Position >= _waveFile.Length - 8 && _waveFile.Position > 0;
             }
 
-            if (_waveFile != null && Duration > TimeSpan.Zero
-                && (sourceExhausted || Position >= Duration - TimeSpan.FromMilliseconds(400)))
+            if (_waveFile != null && Duration > TimeSpan.Zero && sourceExhausted)
             {
                 // 有可续接的下一首：交给无缝源，不主动 Stop（播完检测挪到切歌后）
                 if (_seamless != null && _seamless.HasReadyNext)
@@ -647,6 +730,9 @@ namespace CelesteMusicPlayer
                 }
                 else
                 {
+                    bool sameObj = _seamless?.Current != null && _waveFile != null && ReferenceEquals(_seamless.Current, _waveFile);
+                    var pc = _seamless?.ProbeCurrentState;
+                    StartupLog.Write($"[无缝诊断] 决定 Stop→重建: durSec={Duration.TotalSeconds:F1} posSec={Position.TotalSeconds:F1} srcExh={sourceExhausted} wavefileLen={( _waveFile!=null?_waveFile.Length:"null")} wavefilePos={( _waveFile!=null?_waveFile.Position.ToString():"null")} seamlessCurrent{( _seamless!=null&&_seamless.Current!=null?"=wave:"+sameObj:  _seamless!=null?"=null":"无")} curPos={( pc?.Pos.ToString() ?? "-")}/{( pc?.Len.ToString() ?? "-")} nextMounted={(_seamless?.NextMounted==true)} switched={(_seamless?.SwitchedToNext==true)}");
                     try
                     {
                         if (_useNative && _native != null)
@@ -702,6 +788,8 @@ namespace CelesteMusicPlayer
             _useNative = false;
             _waveFile?.Dispose();
             _waveFile = null;
+            _seamless?.Dispose(); // 释放已预加载的 next reader，避免切歌后文件句柄延迟释放
+            _seamless = null;
             _isPlaying = false;
         }
 
