@@ -1401,9 +1401,15 @@
                                 Grid.Row="1"
                                 VerticalScrollBarVisibility="Auto"
                                 HorizontalScrollBarVisibility="Disabled">
-                                <StackPanel Spacing="16" Padding="0,8,20,16">
+                                <Grid ColumnSpacing="24" Padding="0,8,20,16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" MinWidth="360" />
+                                    </Grid.ColumnDefinitions>
+                                    <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="720">
+                                    <StackPanel Spacing="16" Width="420">
                                     <!-- 封面 + 专辑信息（居中） -->
-                                    <Grid ColumnSpacing="24" HorizontalAlignment="Center" Margin="0,8,0,0">
+                                    <Grid ColumnSpacing="24" HorizontalAlignment="Left" Margin="0,8,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
@@ -1533,10 +1539,13 @@
                                             </StackPanel>
                                         </Button>
                                     </StackPanel>
-
-                                    <!-- 专辑曲目表头 + 列表（居中、左右加宽） -->
-                                    <StackPanel Spacing="4" MaxWidth="1100" HorizontalAlignment="Center">
-                                        <Grid Padding="12,8" ColumnSpacing="12">
+                                    </StackPanel>
+                                    </ScrollViewer>
+                                    <!-- 右栏：歌曲列表（铺满右侧，独立滚动） -->
+                                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                                    <StackPanel Spacing="4" HorizontalAlignment="Stretch">
+                                    <!-- 专辑曲目表头 + 列表（铺满右栏） -->
+                                    <Grid Padding="12,8" ColumnSpacing="12">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="56" />
                                                 <ColumnDefinition Width="*" />
@@ -1625,7 +1634,8 @@
                                             </ListView.ItemTemplate>
                                         </ListView>
                                     </StackPanel>
-                                </StackPanel>
+                                    </ScrollViewer>
+                                </Grid>
                             </ScrollViewer>
                         </Grid>
                     </Grid>
