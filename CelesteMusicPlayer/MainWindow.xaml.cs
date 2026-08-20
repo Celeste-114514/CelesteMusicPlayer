@@ -1147,9 +1147,31 @@ namespace CelesteMusicPlayer
             NowPlayingCoverBorder.Width = coverSize;
             NowPlayingCoverBorder.Height = coverSize;
             WaveformCanvas.Width = coverSize;
+
+            // 左栏宽固定为封面宽（长信息在其中换行）
             if (NowPlayingLeftColumn != null)
             {
                 NowPlayingLeftColumn.MinWidth = coverSize;
+                NowPlayingLeftColumn.MaxWidth = coverSize;
+            }
+            // 艺术家/专辑超链接也限制在左栏宽度内，超长时换行
+            double linkMax = Math.Max(0, coverSize - 8);
+            if (NowPlayingArtistLinkButton != null) NowPlayingArtistLinkButton.MaxWidth = linkMax;
+            if (NowPlayingAlbumLinkButton != null) NowPlayingAlbumLinkButton.MaxWidth = linkMax;
+
+            // 封面整体右移：使封面中轴位于主UI中轴线右侧约 150px（歌词同步右移保持间距）
+            double paneLeftPad = 12;
+            double coverCenterBefore = paneLeftPad + coverSize / 2.0;
+            double targetCenter = paneWidth / 2.0 + 150.0;
+            double dx = Math.Max(0, targetCenter - coverCenterBefore);
+            if (NowPlayingLeftShift != null)
+            {
+                NowPlayingLeftShift.TranslateX = dx;
+            }
+            if (LyricsSection != null)
+            {
+                Thickness m = LyricsSection.Margin;
+                LyricsSection.Margin = new Thickness(dx, m.Top, m.Right, m.Bottom);
             }
         }
 

@@ -124,7 +124,7 @@
                 <!-- 主内容区景深退后：切出播放信息面板时缩小变暗 -->
                 <Storyboard x:Name="MainContentDepthBackStoryboard">
                     <DoubleAnimation Storyboard.TargetName="LeftCategoryGrid" Storyboard.TargetProperty="Opacity"
-                                     To="0.05" Duration="0:0:0.28">
+                                     To="0" Duration="0:0:0.28">
                         <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
                     </DoubleAnimation>
                     <DoubleAnimation Storyboard.TargetName="LeftCategoryTransform" Storyboard.TargetProperty="ScaleX"
@@ -136,7 +136,7 @@
                         <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
                     </DoubleAnimation>
                     <DoubleAnimation Storyboard.TargetName="LibraryPaneRoot" Storyboard.TargetProperty="Opacity"
-                                     To="0.05" Duration="0:0:0.28">
+                                     To="0" Duration="0:0:0.28">
                         <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
                     </DoubleAnimation>
                     <DoubleAnimation Storyboard.TargetName="LibraryPaneTransform" Storyboard.TargetProperty="ScaleX"
@@ -2907,7 +2907,11 @@
                             MinWidth="320"
                             Spacing="10"
                             HorizontalAlignment="Center"
-                            VerticalAlignment="Center">
+                            VerticalAlignment="Center"
+                            RenderTransformOrigin="0.5,0.5">
+                            <StackPanel.RenderTransform>
+                                <CompositeTransform x:Name="NowPlayingLeftShift" ScaleX="1" ScaleY="1" />
+                            </StackPanel.RenderTransform>
                             <Border
                                 x:Name="NowPlayingCoverBorder"
                                 Width="320"
@@ -3010,7 +3014,6 @@
                                     Opacity="0.7"
                                     TextAlignment="Center"
                                     TextWrapping="WrapWholeWords"
-                                    MaxLines="3"
                                     TextTrimming="CharacterEllipsis"
                                     Text="信号链：未初始化" />
                             </StackPanel>
