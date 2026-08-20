@@ -1125,96 +1125,31 @@ namespace CelesteMusicPlayer
             return CallWindowProcW(_prevWndProc, hWnd, msg, wParam, lParam);
         }
 
-        private void NowPlayingCard_SizeChanged(object sender, SizeChangedEventArgs e)
-            => UpdateNowPlayingCardLayout();
-
         /// <summary>
-        /// 右侧信息卡始终限制在面板内；宽度不足时改为封面在上、文字在下按行排列。
+        /// 播放信息页：大封面尺寸随面板高度自适应；波形与封面同宽并居中。
         /// </summary>
         private void UpdateNowPlayingCardLayout()
         {
             double paneWidth = NowPlayingPane.ActualWidth;
             double paneHeight = NowPlayingPane.ActualHeight;
-            if (paneWidth <= 0)
+            if (paneWidth <= 0 || paneHeight <= 0)
             {
                 return;
             }
 
-            if (paneHeight > 0)
+            NowPlayingPaneContent.Clip = new RectangleGeometry
             {
-                NowPlayingPaneContent.Clip = new RectangleGeometry
-                {
-                    Rect = new Windows.Foundation.Rect(0, 0, paneWidth, paneHeight)
-                };
-            }
+                Rect = new Windows.Foundation.Rect(0, 0, paneWidth, paneHeight)
+            };
 
-            // Pane Padding 12×2 + Card Margin 4×2，保证卡片不越出右侧区域
-            double maxCardWidth = Math.Max(0, paneWidth - 32);
-            NowPlayingCard.MaxWidth = maxCardWidth;
-            NowPlayingCard.ClearValue(FrameworkElement.WidthProperty);
-            NowPlayingCard.HorizontalAlignment = HorizontalAlignment.Stretch;
-
-            double innerWidth = Math.Max(
-                0,
-                maxCardWidth - 28); // 内层 Padding 14 × 2
-            // 全宽信息面板：恒用横排（封面左 + 文字右），不再根据宽度纵排
-            bool stack = false;
-
-            const double coverWide = 216;
-            double coverSize = stack
-                ? Math.Clamp(innerWidth, 72, coverWide)
-                : coverWide;
-            if (stack)
-            {
-                // 窄布局：封面高度受面板限制，避免信息卡底部波形被 NowPlayingPaneContent.Clip 裁剪
-                double panelHeight = NowPlayingPaneContent?.ActualHeight ?? 320;
-                coverSize = Math.Max(72, Math.Min(coverSize, panelHeight - 150));
-                WaveformCanvas.Height = 28;
-            }
-            else
-            {
-                WaveformCanvas.Height = 44;
-            }
-
+            // 大封面：按面板高度 50% 居中，上限 340、下限 240
+            double coverSize = Math.Clamp(paneHeight * 0.5, 240, 340);
             NowPlayingCoverBorder.Width = coverSize;
             NowPlayingCoverBorder.Height = coverSize;
-
-            if (stack)
+            WaveformCanvas.Width = coverSize;
+            if (NowPlayingLeftColumn != null)
             {
-                Grid.SetRow(NowPlayingCoverBorder, 0);
-                Grid.SetColumn(NowPlayingCoverBorder, 0);
-                Grid.SetColumnSpan(NowPlayingCoverBorder, 2);
-                NowPlayingCoverBorder.HorizontalAlignment = HorizontalAlignment.Center;
-
-                Grid.SetRow(NowPlayingSidePanel, 1);
-                Grid.SetColumn(NowPlayingSidePanel, 0);
-                Grid.SetColumnSpan(NowPlayingSidePanel, 2);
-                NowPlayingSidePanel.VerticalAlignment = VerticalAlignment.Top;
-                Grid.SetRow(WaveformCanvas, 2);
-
-                NowPlayingTitleText.MaxLines = 4;
-                NowPlayingTitleText.TextTrimming = TextTrimming.None;
-                NowPlayingArtistAlbumText.TextWrapping = TextWrapping.WrapWholeWords;
-                NowPlayingArtistAlbumText.TextTrimming = TextTrimming.None;
-            }
-            else
-            {
-                Grid.SetRow(NowPlayingCoverBorder, 0);
-                Grid.SetColumn(NowPlayingCoverBorder, 0);
-                Grid.SetColumnSpan(NowPlayingCoverBorder, 1);
-                NowPlayingCoverBorder.HorizontalAlignment = HorizontalAlignment.Left;
-
-                // 文字紧贴封面；波形固定在卡片底部
-                Grid.SetRow(NowPlayingSidePanel, 0);
-                Grid.SetColumn(NowPlayingSidePanel, 1);
-                Grid.SetColumnSpan(NowPlayingSidePanel, 1);
-                NowPlayingSidePanel.VerticalAlignment = VerticalAlignment.Center;
-                Grid.SetRow(WaveformCanvas, 1);
-
-                NowPlayingTitleText.MaxLines = 2;
-                NowPlayingTitleText.TextTrimming = TextTrimming.CharacterEllipsis;
-                NowPlayingArtistAlbumText.TextWrapping = TextWrapping.NoWrap;
-                NowPlayingArtistAlbumText.TextTrimming = TextTrimming.CharacterEllipsis;
+                NowPlayingLeftColumn.MinWidth = coverSize;
             }
         }
 
@@ -1473,25 +1408,6 @@ namespace CelesteMusicPlayer
                 NowPlayingPane.Padding = new Thickness(12);
             }
 
-            if (NowPlayingCard != null)
-            {
-                FrostedGlass.StyleElevatedPanel(NowPlayingCard, new CornerRadius(12));
-                try
-                {
-                    if (NowPlayingCardShadow != null && NowPlayingShadowReceiver != null)
-                    {
-                        NowPlayingCard.Shadow = NowPlayingCardShadow;
-                        if (!NowPlayingCardShadow.Receivers.Contains(NowPlayingShadowReceiver))
-                        {
-                            NowPlayingCardShadow.Receivers.Add(NowPlayingShadowReceiver);
-                        }
-                    }
-                }
-                catch
-                {
-                }
-            }
-
             ApplyArtistSongsFrostChrome();
         }
 
@@ -1503,19 +1419,19 @@ namespace CelesteMusicPlayer
 
         /// <summary>
         /// 深色 Tint 的 Acrylic：提高霜化/模糊感，色调跟整体 UI，避免发白。
+        /// 应用于播放信息页内容面板（底层），后续由封面动态背景覆盖。
         /// </summary>
         private void ApplyNowPlayingCardAcrylic()
         {
-            if (NowPlayingCard != null)
+            if (NowPlayingPaneContent != null)
             {
-                NowPlayingCard.Background = CreateNowPlayingStyleAcrylicBrush();
+                NowPlayingPaneContent.Background = CreateNowPlayingStyleAcrylicBrush();
             }
         }
 
-        /// <summary>外围阴影（ThemeShadow + Z，失败则仅靠描边）</summary>
+        /// <summary>外围阴影（由动态背景/遮罩统一处理，无独立阴影层）。</summary>
         private void ApplyNowPlayingCardShadow()
         {
-            // 由 StyleElevatedPanel / ApplyNowPlayingCardChrome 统一处理
         }
 
         private Color ResolveUiBaseTintColor()
@@ -1528,7 +1444,7 @@ namespace CelesteMusicPlayer
                 return Color.FromArgb(255, paneColor.R, paneColor.G, paneColor.B);
             }
 
-            FrameworkElement? anchor = Content as FrameworkElement ?? NowPlayingCard;
+            FrameworkElement? anchor = Content as FrameworkElement ?? NowPlayingPaneContent;
             string[] keys =
             {
                 "CardBackgroundFillColorDefault",
@@ -12891,7 +12807,6 @@ namespace CelesteMusicPlayer
                         new GradientStop { Color = Color.FromArgb(235, 8, 8, 14), Offset = 1 }
                     }
                 };
-                NowPlayingCard.Background = null;
             }
             catch
             {
@@ -12912,7 +12827,10 @@ namespace CelesteMusicPlayer
                     NowPlayingCardScrim.Background = null;
                 }
 
-                NowPlayingCard.Background = CreateNowPlayingStyleAcrylicBrush();
+                if (NowPlayingPaneContent != null)
+                {
+                    NowPlayingPaneContent.Background = CreateNowPlayingStyleAcrylicBrush();
+                }
             }
             catch
             {

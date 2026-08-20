@@ -2757,194 +2757,158 @@
                     Visibility="Collapsed">
                 <Grid
                     x:Name="NowPlayingPaneContent"
-                    Background="Transparent"
-                    RowSpacing="14">
+                    Background="Transparent">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!-- ThemeShadow 接收面必须是投射元素的兄弟，不能是祖先 -->
+                    <!-- 整页动态背景：模糊封面 + 深色渐变遮罩（浮于最底层） -->
                     <Border
-                        x:Name="NowPlayingShadowReceiver"
+                        x:Name="NowPlayingCardBackdrop"
                         Grid.Row="0"
                         Grid.RowSpan="2"
-                        Background="Transparent"
+                        CornerRadius="16"
+                        IsHitTestVisible="False" />
+                    <Border
+                        x:Name="NowPlayingCardScrim"
+                        Grid.Row="0"
+                        Grid.RowSpan="2"
+                        CornerRadius="16"
                         IsHitTestVisible="False" />
 
-                    <!-- 信息卡：宽时封面+文字横排；窄时文字移到封面下方按行显示 -->
-                    <Border
-                        x:Name="NowPlayingCard"
+                    <!-- 左上角：倒三角箭头收起按钮 -->
+                    <Button
+                        x:Name="NowPlayingCollapseButton"
                         Grid.Row="0"
-                        MinHeight="0"
-                        Margin="4,4,4,10"
-                        HorizontalAlignment="Stretch"
-                        CornerRadius="16"
-                        BorderThickness="0"
+                        Width="34"
+                        Height="34"
+                        Margin="0"
                         Padding="0"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Top"
                         Background="Transparent"
-                        SizeChanged="NowPlayingCard_SizeChanged">
-                        <Border.Shadow>
-                            <ThemeShadow x:Name="NowPlayingCardShadow" />
-                        </Border.Shadow>
+                        BorderThickness="0"
+                        Click="NowPlayingCollapseButton_Click"
+                        ToolTipService.ToolTip="收起播放信息">
+                        <FontIcon Glyph="&#xE70D;" FontSize="14" />
+                    </Button>
 
-                        <Grid>
-                            <!-- 动态背景：模糊封面 + 深色渐变遮罩，文字浮于其上 -->
+                    <!-- 主体：左侧封面区 + 右侧滚动歌词 -->
+                    <Grid
+                        Grid.Row="1"
+                        ColumnSpacing="40">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <!-- 左栏：大封面 + 波形 + 歌曲信息（以封面中轴居中，文字超长换行） -->
+                        <StackPanel
+                            x:Name="NowPlayingLeftColumn"
+                            Grid.Column="0"
+                            MinWidth="320"
+                            Spacing="10"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
                             <Border
-                                x:Name="NowPlayingCardBackdrop"
-                                CornerRadius="16"
-                                IsHitTestVisible="False" />
-                            <Border
-                                x:Name="NowPlayingCardScrim"
-                                CornerRadius="16"
-                                IsHitTestVisible="False" />
-                            <Border
-                                Padding="14"
-                                CornerRadius="16"
-                                BorderThickness="0"
-                                Background="Transparent">
-                                <Grid
-                                    x:Name="NowPlayingCardLayout"
-                                    ColumnSpacing="16"
-                                    RowSpacing="12">
-                                    <Grid.RowDefinitions>
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                        <RowDefinition Height="Auto" />
-                                    </Grid.RowDefinitions>
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" MinWidth="0" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <Border
-                                        x:Name="NowPlayingCoverBorder"
-                                        Grid.Row="0"
-                                        Grid.Column="0"
-                                        Width="132"
-                                        Height="132"
-                                        VerticalAlignment="Top"
-                                        HorizontalAlignment="Left"
-                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                        CornerRadius="8"
-                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        BorderThickness="1"
-                                        PointerPressed="NowPlayingCover_PointerPressed">
-                                        <Grid>
-                                            <FontIcon
-                                                Glyph="&#xE93C;"
-                                                FontSize="42"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                Opacity="0.55" />
-                                            <Image
-                                                x:Name="NowPlayingCoverImage"
-                                                Stretch="UniformToFill" />
-                                        </Grid>
-                                    </Border>
-
-                                    <!-- 横排：文字紧贴封面，波形固定在卡片底部横跨两列 -->
-                                    <StackPanel
-                                        x:Name="NowPlayingSidePanel"
-                                        Grid.Row="0"
-                                        Grid.Column="1"
-                                        Spacing="8"
-                                        VerticalAlignment="Center">
-                                        <StackPanel x:Name="NowPlayingMetaPanel" Spacing="8">
-                                            <TextBlock
-                                                x:Name="NowPlayingTitleText"
-                                                FontSize="23"
-                                                FontWeight="SemiBold"
-                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                                TextWrapping="WrapWholeWords"
-                                                MaxLines="2"
-                                                TextTrimming="CharacterEllipsis"
-                                                Text="未在播放" />
-                                            <TextBlock
-                                                x:Name="NowPlayingArtistAlbumText"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                FontSize="14"
-                                                TextWrapping="NoWrap"
-                                                TextTrimming="CharacterEllipsis"
-                                                Text="艺术家 · 专辑" />
-                                            <TextBlock
-                                                x:Name="NowPlayingAudioInfoText"
-                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                FontSize="11"
-                                                Opacity="0.85"
-                                                TextWrapping="WrapWholeWords"
-                                                MaxLines="2"
-                                                TextTrimming="CharacterEllipsis"
-                                                Text="" />
-                                            <TextBlock
-                                                x:Name="SignalChainInfoText"
-                                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                                FontSize="10"
-                                                Opacity="0.7"
-                                                TextWrapping="WrapWholeWords"
-                                                MaxLines="4"
-                                                TextTrimming="CharacterEllipsis"
-                                                Text="信号链：未初始化" />
-
-                                            <!-- 信息卡内收藏按钮：状态与底部控制条同步 -->
-                                            <Button
-                                                x:Name="NowPlayingFavoriteButton"
-                                                Padding="8,4"
-                                                Background="Transparent"
-                                                BorderThickness="0"
-                                                HorizontalAlignment="Left"
-                                                VerticalAlignment="Center"
-                                                Click="NowPlayingFavoriteButton_Click">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <FontIcon
-                                                        x:Name="NowPlayingFavoriteButtonIcon"
-                                                        Glyph="&#xEB51;"
-                                                        FontSize="16"
-                                                        VerticalAlignment="Center" />
-                                                    <TextBlock
-                                                        x:Name="NowPlayingFavoriteButtonText"
-                                                        Text="我喜欢的音乐"
-                                                        FontSize="12"
-                                                        VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </Button>
-                                        </StackPanel>
-                                    </StackPanel>
-
-                                    <Canvas
-                                        x:Name="WaveformCanvas"
-                                        Grid.Row="1"
-                                        Grid.Column="0"
-                                        Grid.ColumnSpan="2"
-                                        Height="44"
-                                        HorizontalAlignment="Stretch"
-                                        IsHitTestVisible="False"
-                                        SizeChanged="WaveformCanvas_SizeChanged" />
+                                x:Name="NowPlayingCoverBorder"
+                                Width="320"
+                                Height="320"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                CornerRadius="10"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                                <Grid>
+                                    <FontIcon
+                                        Glyph="&#xE93C;"
+                                        FontSize="96"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        Opacity="0.55" />
+                                    <Image
+                                        x:Name="NowPlayingCoverImage"
+                                        Stretch="UniformToFill" />
                                 </Grid>
                             </Border>
+
+                            <Canvas
+                                x:Name="WaveformCanvas"
+                                Width="320"
+                                Height="40"
+                                HorizontalAlignment="Center"
+                                IsHitTestVisible="False"
+                                SizeChanged="WaveformCanvas_SizeChanged" />
+
+                            <StackPanel
+                                x:Name="NowPlayingMetaPanel"
+                                Spacing="8"
+                                HorizontalAlignment="Center">
+                                <TextBlock
+                                    x:Name="NowPlayingTitleText"
+                                    FontSize="26"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                    TextAlignment="Center"
+                                    TextWrapping="WrapWholeWords"
+                                    MaxLines="3"
+                                    TextTrimming="CharacterEllipsis"
+                                    Text="未在播放" />
+                                <TextBlock
+                                    x:Name="NowPlayingArtistAlbumText"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    FontSize="15"
+                                    TextAlignment="Center"
+                                    TextWrapping="WrapWholeWords"
+                                    MaxLines="2"
+                                    TextTrimming="CharacterEllipsis"
+                                    Text="艺术家 · 专辑" />
+                                <TextBlock
+                                    x:Name="NowPlayingAudioInfoText"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    FontSize="11"
+                                    Opacity="0.85"
+                                    TextAlignment="Center"
+                                    TextWrapping="WrapWholeWords"
+                                    MaxLines="2"
+                                    TextTrimming="CharacterEllipsis"
+                                    Text="" />
+                                <TextBlock
+                                    x:Name="SignalChainInfoText"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    FontSize="10"
+                                    Opacity="0.7"
+                                    TextAlignment="Center"
+                                    TextWrapping="WrapWholeWords"
+                                    MaxLines="3"
+                                    TextTrimming="CharacterEllipsis"
+                                    Text="信号链：未初始化" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <!-- 右栏：滚动歌词 -->
+                        <Grid Grid.Column="1" x:Name="LyricsSection">
+                            <ScrollViewer
+                                x:Name="LyricsScrollViewer"
+                                VerticalScrollBarVisibility="Hidden"
+                                HorizontalScrollBarVisibility="Disabled"
+                                VerticalScrollMode="Disabled"
+                                HorizontalScrollMode="Disabled">
+                                <StackPanel x:Name="LyricsPanel" Spacing="10" />
+                            </ScrollViewer>
+
+                            <TextBlock
+                                x:Name="LyricsEmptyHint"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                Opacity="0.7"
+                                Text="暂无歌词"
+                                Visibility="Collapsed" />
                         </Grid>
-                    </Border>
-
-                    <!-- 歌词滚动区：当前句居中 -->
-                    <Grid Grid.Row="1" x:Name="LyricsSection">
-                        <ScrollViewer
-                            x:Name="LyricsScrollViewer"
-                            VerticalScrollBarVisibility="Hidden"
-                            HorizontalScrollBarVisibility="Disabled"
-                            VerticalScrollMode="Disabled"
-                            HorizontalScrollMode="Disabled">
-                            <StackPanel x:Name="LyricsPanel" Spacing="10" />
-                        </ScrollViewer>
-
-                        <TextBlock
-                            x:Name="LyricsEmptyHint"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                            Opacity="0.7"
-                            Text="暂无歌词"
-                            Visibility="Collapsed" />
                     </Grid>
                 </Grid>
             </Border>
@@ -2973,7 +2937,10 @@
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
                 CornerRadius="6"
-                PointerPressed="TransportCover_PointerPressed">
+                PointerPressed="TransportCover_PointerPressed"
+                PointerEntered="TransportCover_PointerEntered"
+                PointerExited="TransportCover_PointerExited"
+                PointerCaptureLost="TransportCover_PointerExited">
                 <Grid>
                     <FontIcon
                         Glyph="&#xE93C;"

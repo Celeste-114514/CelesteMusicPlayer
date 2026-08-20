@@ -944,25 +944,12 @@ namespace CelesteMusicPlayer
                 FavoriteButtonIcon.Glyph = fav ? "\uEB52" : "\uEB51";
                 ToolTipService.SetToolTip(FavoriteButton, fav ? "取消喜欢" : "我喜欢的音乐");
             }
-
-            // 信息卡内的收藏按钮与底部控制条保持同步
-            if (NowPlayingFavoriteButtonIcon != null)
-            {
-                NowPlayingFavoriteButtonIcon.Glyph = fav ? "\uEB52" : "\uEB51";
-                NowPlayingFavoriteButtonText.Text = fav ? "已收藏" : "我喜欢的音乐";
-                var accent = ResolveAccentBrush();
-                NowPlayingFavoriteButtonIcon.Foreground = fav ? accent : null;
-            }
         }
-
-        private void NowPlayingFavoriteButton_Click(object sender, RoutedEventArgs e)
-            => ToggleFavoriteForCurrent();
-
 
         private void FavoriteButton_Click(object sender, RoutedEventArgs e)
             => ToggleFavoriteForCurrent();
 
-        // ---- 播放歌曲信息页（状态条封面进入，信息卡封面返回） ----
+        // ---- 播放歌曲信息页（状态条封面进入；左上角倒三角箭头返回） ----
         private void TransportCover_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
             // 点击状态条封面：在主程序（状态条上方）展开播放歌曲信息页
@@ -979,9 +966,47 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void NowPlayingCover_PointerPressed(object sender, PointerRoutedEventArgs e)
+        /// <summary>状态条封面 hover：高亮描边 + 强调背景，提示可点击展开播放信息页。</summary>
+        private void TransportCover_PointerEntered(object sender, PointerRoutedEventArgs e)
         {
-            // 信息卡内封面再次点击：收起播放歌曲信息页，返回原音乐库/播放列表视图
+            if (sender is not Border b)
+            {
+                return;
+            }
+
+            try
+            {
+                var hoverBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(ResolveAccentColor());
+                b.BorderBrush = hoverBrush;
+                b.BorderThickness = new Thickness(2);
+                b.Background = ResolveAccentBrush();
+            }
+            catch
+            {
+            }
+        }
+
+        private void TransportCover_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is not Border b)
+            {
+                return;
+            }
+
+            try
+            {
+                b.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"];
+                b.BorderThickness = new Thickness(1);
+                b.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"];
+            }
+            catch
+            {
+            }
+        }
+
+        private void NowPlayingCollapseButton_Click(object sender, RoutedEventArgs e)
+        {
+            // 左上角倒三角箭头：收起播放歌曲信息页，返回原音乐库/播放列表视图
             if (NowPlayingPane != null)
             {
                 NowPlayingPane.Visibility = Visibility.Collapsed;
