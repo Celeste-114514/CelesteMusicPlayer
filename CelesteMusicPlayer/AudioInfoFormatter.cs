@@ -182,6 +182,122 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 编码器 + 位深/采样率质量行，如 "MPEG-4 ALAC · 16bit/44kHz"、"FLAC · 24bit/96kHz"、"DSD128 · 2.82MHz"。
+        /// 编码器按容器/扩展名推断（M4A→MPEG-4 ALAC、DSD→DSD64/128/256等）；读取失败返回空串。
+        /// </summary>
+        public static string FormatQualityLine(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out _))
+                {
+                    return string.Empty;
+                }
+
+                string encoder = ResolveEncoderName(path, rate);
+                string bitsPart = bits > 0 ? bits + "bit" : string.Empty;
+                string ratePart = rate > 0 ? FormatSampleRate(rate) : string.Empty;
+                string depth = string.Empty;
+                if (bitsPart.Length > 0 && ratePart.Length > 0)
+                {
+                    depth = bitsPart + "/" + ratePart;
+                }
+                else if (bitsPart.Length > 0)
+                {
+                    depth = bitsPart;
+                }
+                else if (ratePart.Length > 0)
+                {
+                    depth = ratePart;
+                }
+
+                var parts = new System.Collections.Generic.List<string>();
+                if (encoder.Length > 0)
+                {
+                    parts.Add(encoder);
+                }
+
+                if (depth.Length > 0)
+                {
+                    parts.Add(depth);
+                }
+
+                return string.Join(" · ", parts);
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        /// <summary>根据容器/扩展名 + 采样率推断编码器显示名。</summary>
+        private static string ResolveEncoderName(string path, int rate)
+        {
+            string ext = (Path.GetExtension(path)?.TrimStart('.').Trim() ?? "").ToLowerInvariant();
+            switch (ext)
+            {
+                case "m4a":
+                case "mp4":
+                    return "MPEG-4 ALAC";
+                case "alac":
+                    return "ALAC";
+                case "flac":
+                    return "FLAC";
+                case "mp3":
+                    return "MP3";
+                case "wav":
+                    return "WAV/PCM";
+                case "aac":
+                    return "AAC";
+                case "ape":
+                    return "APE";
+                case "ogg":
+                case "opus":
+                    return "Ogg/Opus";
+                case "dsf":
+                case "dff":
+                    return ResolveDsdName(rate);
+                default:
+                    return string.IsNullOrEmpty(ext) ? string.Empty : ext.ToUpperInvariant();
+            }
+        }
+
+        private static string ResolveDsdName(int rate)
+        {
+            // DSD 位深率常为 44100/48000 的 64/128/256 倍；部分工具报 PCM 采样率(352800/705600/1411200)
+            double ratio441 = rate > 0 ? rate / 44100.0 : 0;
+            double ratio48 = rate > 0 ? rate / 48000.0 : 0;
+            double ratio = Math.Abs(ratio441 - Math.Round(ratio441)) < 0.02 ? ratio441 : ratio48;
+            long n = (long)Math.Round(ratio);
+            if (n >= 512)
+            {
+                return "DSD512";
+            }
+
+            if (n >= 256)
+            {
+                return "DSD256";
+            }
+
+            if (n >= 128)
+            {
+                return "DSD128";
+            }
+
+            if (n >= 64)
+            {
+                return "DSD64";
+            }
+
+            return "DSD";
+        }
+
         /// <summary>带缓存的读取：每个路径只解析一次（含 ffmpeg 兜底），随后命中缓存。</summary>
         private static bool TryGetPartsCached(string path, out int rate, out int bits, out int kbps, out int channels)
         {

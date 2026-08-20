@@ -1402,8 +1402,8 @@
                                 VerticalScrollBarVisibility="Auto"
                                 HorizontalScrollBarVisibility="Disabled">
                                 <StackPanel Spacing="16" Padding="0,8,20,16">
-                                    <!-- 封面 + 专辑信息（靠左） -->
-                                    <Grid ColumnSpacing="24" HorizontalAlignment="Left" Margin="0,8,0,0">
+                                    <!-- 封面 + 专辑信息（居中） -->
+                                    <Grid ColumnSpacing="24" HorizontalAlignment="Center" Margin="0,8,0,0">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
@@ -1534,8 +1534,8 @@
                                         </Button>
                                     </StackPanel>
 
-                                    <!-- 专辑曲目表头 + 列表（居中、加宽） -->
-                                    <StackPanel Spacing="4" MaxWidth="920" HorizontalAlignment="Center">
+                                    <!-- 专辑曲目表头 + 列表（居中、左右加宽） -->
+                                    <StackPanel Spacing="4" MaxWidth="1100" HorizontalAlignment="Center">
                                         <Grid Padding="12,8" ColumnSpacing="12">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="56" />

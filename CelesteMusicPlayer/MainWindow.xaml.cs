@@ -6822,12 +6822,13 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>汇总专辑内歌曲质量行：格式 + 位深/采样率（取出现最多的组合），如 "FLAC 16bit/44kHz"。</summary>
+        /// <summary>汇总专辑内歌曲质量行（编码器+位深/采样率，取出现最多的组合），如 "FLAC · 16bit/44kHz"。</summary>
         private static string BuildAlbumQualityLine(IEnumerable<PlaylistItem> tracks)
         {
             string? quality = tracks
-                .Select(t => t.FormatChips)
-                .Where(c => c.Count >= 1)
-                .GroupBy(c => c.Count >= 2 ? c[0] + " " + c[1] : c[0], StringComparer.OrdinalIgnoreCase)
+                .Select(t => AudioInfoFormatter.FormatQualityLine(t.FilePath))
+                .Where(s => !string.IsNullOrWhiteSpace(s))
+                .GroupBy(s => s, StringComparer.OrdinalIgnoreCase)
                 .OrderByDescending(g => g.Count())
                 .Select(g => g.Key)
                 .FirstOrDefault();
