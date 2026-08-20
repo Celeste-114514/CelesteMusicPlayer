@@ -6811,13 +6811,42 @@ namespace CelesteMusicPlayer
                 _albumTracks.Add(track);
             }
 
+            // 音频格式与歌曲质量行：取专辑内（多数）音轨的 格式 + 位深/采样率，如 "ALAC 16bit/44kHz"
+            if (AlbumDetailQualityText != null)
+            {
+                AlbumDetailQualityText.Text = BuildAlbumQualityLine(_albumTracks);
+            }
+
             // Apple Music 风格：按碟片分组显示（每组以 CD{n} 标题行开头）
             AlbumTrackListView.ItemsSource = BuildAlbumGroupedView(_albumTracks);
         }
 
-        // ---- 专辑艺术家超链接：悬停显示下划线，点击进入对应专辑艺术家详情页 ----
-        private void AlbumDetailArtistLink_PointerEntered(object sender, PointerRoutedEventArgs e)
+        /// <summary>汇总专辑内歌曲质量行：格式 + 位深/采样率（取出现最多的组合），如 "FLAC 16bit/44kHz"。</summary>
+        private static string BuildAlbumQualityLine(IEnumerable<PlaylistItem> tracks)
         {
+            string? quality = tracks
+                .Select(t => t.FormatChips)
+                .Where(c => c.Count >= 1)
+                .GroupBy(c => c.Count >= 2 ? c[0] + " " + c[1] : c[0], StringComparer.OrdinalIgnoreCase)
+                .OrderByDescending(g => g.Count())
+                .Select(g => g.Key)
+                .FirstOrDefault();
+            return string.IsNullOrWhiteSpace(quality) ? string.Empty : quality;
+        }
+
+        /// <summary>把专辑内歌曲按播放顺序（碟号→音轨）添加到某个播放列表。</summary>
+        private void AlbumDetailAddToNamedListButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_albumTracks.Count == 0)
+            {
+                return;
+            }
+
+            _ = ShowNamedPlaylistPickerAsync(_albumTracks.ToList());
+        }
+
+        // ---- 专辑艺术家超链接：悬停显示下划线，点击进入对应专辑艺术家详情页 ----
+        private void AlbumDetailArtistLink_PointerEntered(object sender, PointerRoutedEventArgs e)        {
             if (AlbumDetailArtistText != null)
             {
                 AlbumDetailArtistText.TextDecorations = Windows.UI.Text.TextDecorations.Underline;
