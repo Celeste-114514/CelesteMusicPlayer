@@ -372,8 +372,8 @@ namespace CelesteMusicPlayer
         private IntPtr _mainWindowHwnd;
 
         // 最小窗口尺寸（DIP）
-        private const int MinWindowWidthDip = 1200;
-        private const int MinWindowHeightDip = 760;
+        private const int MinWindowWidthDip = 1350;
+        private const int MinWindowHeightDip = 770;
 
         // ---- WM_GETMINMAXINFO 子类化：真正锁定最小窗口 ----
         private const int WM_GETMINMAXINFO = 0x0024;
@@ -4053,7 +4053,7 @@ namespace CelesteMusicPlayer
             {
                 case "Songs":
                     LibraryPaneTitle.Text = "歌曲";
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Visible;
                     SetSongSortUiForCategory(isUserPlaylist: false);
@@ -4075,7 +4075,7 @@ namespace CelesteMusicPlayer
 
                 case "UserPlaylist":
                     LibraryPaneTitle.Text = "播放列表";
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Visible;
                     SetSongSortUiForCategory(isUserPlaylist: true);
@@ -4093,7 +4093,7 @@ namespace CelesteMusicPlayer
 
                 case "Albums":
                     LibraryPaneTitle.Text = "专辑";
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
                     AlbumSortPanel.Visibility = Visibility.Visible;
@@ -4110,7 +4110,7 @@ namespace CelesteMusicPlayer
                 case "Artists":
                 case "AlbumArtists":
                     LibraryPaneTitle.Text = _currentCategory == "AlbumArtists" ? "专辑艺术家" : "艺术家";
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
                     AlbumSortPanel.Visibility = Visibility.Collapsed;
@@ -4125,7 +4125,7 @@ namespace CelesteMusicPlayer
 
                 case "Folders":
                     LibraryPaneTitle.Text = "文件夹";
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
                     AlbumSortPanel.Visibility = Visibility.Collapsed;
@@ -4140,7 +4140,7 @@ namespace CelesteMusicPlayer
 
                 case "PlaylistWall":
                     LibraryPaneTitle.Text = "播放列表";
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
                     AlbumSortPanel.Visibility = Visibility.Collapsed;
@@ -4175,7 +4175,7 @@ namespace CelesteMusicPlayer
 
                 case "TagSort":
                     LibraryPaneTitle.Text = "标签排序";
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
                     AlbumSortPanel.Visibility = Visibility.Collapsed;
@@ -4191,7 +4191,7 @@ namespace CelesteMusicPlayer
                 case "Genres":
                 case "Years":
                     LibraryPaneTitle.Text = _currentCategory == "Genres" ? "流派" : "年份";
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
                     AlbumSortPanel.Visibility = Visibility.Collapsed;
@@ -4209,7 +4209,7 @@ namespace CelesteMusicPlayer
                 case "GenreSongs":
                 case "YearSongs":
                     LibraryPaneTitle.Text = (_currentCategory == "GenreSongs" ? "流派：" : "年份：") + (_genreYearFilter ?? "");
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Visible;
                     SetSongSortUiForCategory(isUserPlaylist: false);
@@ -4236,7 +4236,7 @@ namespace CelesteMusicPlayer
                 case "AudioFX":
                     // 音效处理入口占位：后续阶段在此接入 ECHO 音效处理页面
                     LibraryPaneTitle.Text = "音效处理";
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
                     AlbumSortPanel.Visibility = Visibility.Collapsed;
@@ -8286,7 +8286,7 @@ namespace CelesteMusicPlayer
                         || _currentCategory == "AlbumArtists"
                         || _currentCategory == "Albums"))
                 {
-                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
                 }
 
                 return;
@@ -8300,7 +8300,7 @@ namespace CelesteMusicPlayer
             ApplyCapsuleSortButtonStyle(accent: true);
             MultiSelectActionBar.Visibility = Visibility.Collapsed;
             MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-            LibraryPaneTitle.Visibility = Visibility.Visible;
+            LibraryPaneTitle.Visibility = Visibility.Collapsed;
             if (_currentCategory == "Songs" || _currentCategory == "UserPlaylist")
             {
                 SongSortPanel.Visibility = Visibility.Visible;

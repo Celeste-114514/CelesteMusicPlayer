@@ -181,7 +181,7 @@ namespace CelesteMusicPlayer
                 {
                     int bits = wf.BitsPerSample;
                     // 24bit 可能实际是 IeeeFloat/32；对 DoP/独占显示核心格式
-                    ActualOutputFormat = wf.SampleRate + " Hz / " + bits + " bit / " + wf.Channels + " 声道";
+                    ActualOutputFormat = wf.SampleRate + "hz / " + bits + "bit / " + wf.Channels + " 声道";
                 }
             }
             catch
@@ -432,7 +432,7 @@ namespace CelesteMusicPlayer
                     Duration = _sourceDuration;
                 }
                 var srcWf = _waveFile.WaveFormat;
-                SourceFormatDescription = srcWf.SampleRate + " Hz / " + srcWf.BitsPerSample + " bit / " + srcWf.Channels + "声道";
+                SourceFormatDescription = srcWf.SampleRate + "hz / " + srcWf.BitsPerSample + "bit / " + srcWf.Channels + "声道";
                 Position = TimeSpan.Zero;
                 _pausedPosition = seekTo ?? TimeSpan.Zero;
 

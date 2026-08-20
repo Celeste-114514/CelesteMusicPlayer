@@ -22,7 +22,7 @@ namespace CelesteMusicPlayer
 
         private static readonly int InfoCacheMax = 8192;
 
-        /// <summary>返回 "格式 · 采样率 · 位深 · 码率 · 声道"；读取失败返回 null。</summary>
+        /// <summary>返回 "编码器 · 位深/采样率 · 码率 · 声道"；读取失败返回 null。</summary>
         public static string? Format(string path)
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
@@ -38,15 +38,26 @@ namespace CelesteMusicPlayer
                 }
 
                 string encoder = ResolveEncoderName(path, rate);
-                var parts = new System.Collections.Generic.List<string> { encoder };
-                if (rate > 0)
+                string bitsPart = bits > 0 ? bits + "bit" : string.Empty;
+                string ratePart = rate > 0 ? FormatSampleRate(rate) : string.Empty;
+                string bitDepth = string.Empty;
+                if (bitsPart.Length > 0 && ratePart.Length > 0)
                 {
-                    parts.Add(FormatSampleRate(rate));
+                    bitDepth = bitsPart + "/" + ratePart;
+                }
+                else if (bitsPart.Length > 0)
+                {
+                    bitDepth = bitsPart;
+                }
+                else if (ratePart.Length > 0)
+                {
+                    bitDepth = ratePart;
                 }
 
-                if (bits > 0)
+                var parts = new System.Collections.Generic.List<string> { encoder };
+                if (bitDepth.Length > 0)
                 {
-                    parts.Add(bits + " bit");
+                    parts.Add(bitDepth);
                 }
 
                 if (kbps > 0)
@@ -370,15 +381,7 @@ namespace CelesteMusicPlayer
         }
 
         private static string FormatSampleRate(int rate)
-        {
-            if (rate >= 1000)
-            {
-                double khz = rate / 1000.0;
-                return khz.ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + " kHz";
-            }
-
-            return rate + " Hz";
-        }
+            => rate + "hz";
 
         private static string FormatChannels(int channels)
         {
