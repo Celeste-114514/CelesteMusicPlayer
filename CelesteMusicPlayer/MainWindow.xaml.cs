@@ -188,6 +188,9 @@ namespace CelesteMusicPlayer
         /// <summary>专辑墙小字行右侧文本（专辑歌曲数）。</summary>
         public string TrackCountText => TrackCount + " 首歌";
 
+        /// <summary>添加顺序号（专辑首次在库中出现的位置，用于“按添加时间”排序）。</summary>
+        public int SortIndex { get; set; }
+
         public TimeSpan TotalDuration { get; set; }
 
         public string TotalDurationText { get; set; } = "00:00";
@@ -249,14 +252,20 @@ namespace CelesteMusicPlayer
     /// <summary>专辑墙排序方式</summary>
     public enum AlbumSortMode
     {
-        TitleAsc,
-        TitleDesc,
-        YearAsc,
-        YearDesc,
-        /// <summary>先按专辑主艺术家升序，同艺术家再按专辑标题升序</summary>
-        ArtistTitleAsc,
-        /// <summary>先按专辑主艺术家升序，同艺术家再按发行年份升序</summary>
-        ArtistYearAsc
+        /// <summary>按专辑名称</summary>
+        Title,
+        /// <summary>按艺术家</summary>
+        Artist,
+        /// <summary>按发行年份</summary>
+        Year,
+        /// <summary>按添加时间</summary>
+        Added,
+        /// <summary>随机</summary>
+        Random,
+        /// <summary>按专辑曲目数</summary>
+        TrackCount,
+        /// <summary>按专辑总时长</summary>
+        TotalDuration
     }
 
     /// <summary>艺术家详情内歌曲列表排序</summary>
@@ -441,7 +450,10 @@ namespace CelesteMusicPlayer
         // ---------- 排序状态 ----------
         private SortField _sortField = SortField.Title;
         private bool _sortAscending = true;
-        private AlbumSortMode _albumSortMode = AlbumSortMode.TitleAsc;
+        private AlbumSortMode _albumSortMode = AlbumSortMode.Title;
+
+        /// <summary>专辑墙排序方向（升序/降序；Random 时忽略）。</summary>
+        private bool _albumSortAscending = true;
         private ArtistSongSortMode _artistSongSortMode = ArtistSongSortMode.Title;
         private ArtistAlbumSortMode _artistAlbumSortMode = ArtistAlbumSortMode.Title;
         private bool _artistAlbumSortAscending = true;
@@ -3952,7 +3964,7 @@ namespace CelesteMusicPlayer
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Visible;
                     SetSongSortUiForCategory(isUserPlaylist: false);
-                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Visible;
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Collapsed;
@@ -3974,7 +3986,7 @@ namespace CelesteMusicPlayer
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Visible;
                     SetSongSortUiForCategory(isUserPlaylist: true);
-                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Visible;
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Collapsed;
@@ -3991,7 +4003,8 @@ namespace CelesteMusicPlayer
                     LibraryPaneTitle.Visibility = Visibility.Visible;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortButton.Visibility = Visibility.Visible;
+                    AlbumSortPanel.Visibility = Visibility.Visible;
+                    UpdateAlbumSortButtonsUi();
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
                     AlbumListBorder.Visibility = Visibility.Visible;
                     ArtistListBorder.Visibility = Visibility.Collapsed;
@@ -4007,7 +4020,7 @@ namespace CelesteMusicPlayer
                     LibraryPaneTitle.Visibility = Visibility.Visible;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Visible;
@@ -4022,7 +4035,7 @@ namespace CelesteMusicPlayer
                     LibraryPaneTitle.Visibility = Visibility.Visible;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Collapsed;
@@ -4037,7 +4050,7 @@ namespace CelesteMusicPlayer
                     LibraryPaneTitle.Visibility = Visibility.Visible;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Collapsed;
@@ -4072,7 +4085,7 @@ namespace CelesteMusicPlayer
                     LibraryPaneTitle.Visibility = Visibility.Visible;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Collapsed;
@@ -4088,7 +4101,7 @@ namespace CelesteMusicPlayer
                     LibraryPaneTitle.Visibility = Visibility.Visible;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Collapsed;
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Visible;
@@ -4107,7 +4120,7 @@ namespace CelesteMusicPlayer
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Visible;
                     SetSongSortUiForCategory(isUserPlaylist: false);
-                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Visible;
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Collapsed;
@@ -4133,7 +4146,7 @@ namespace CelesteMusicPlayer
                     LibraryPaneTitle.Visibility = Visibility.Visible;
                     MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
                     SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
                     PlaylistListBorder.Visibility = Visibility.Visible;
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Collapsed;
@@ -5152,7 +5165,7 @@ namespace CelesteMusicPlayer
 
             LibraryPaneTitle.Visibility = Visibility.Collapsed;
             SongSortPanel.Visibility = Visibility.Collapsed;
-            AlbumSortButton.Visibility = Visibility.Collapsed;
+            AlbumSortPanel.Visibility = Visibility.Collapsed;
             MultiSelectTitlePanel.Visibility = Visibility.Visible;
             MultiSelectTitleText.Text = "选择项目";
             MultiSelectActionBar.Visibility = Visibility.Visible;
@@ -6280,6 +6293,7 @@ namespace CelesteMusicPlayer
                 .ToList();
 
             var entries = new List<AlbumEntry>();
+            int sortIndex = 0;
             foreach (var group in groups)
             {
                 PlaylistItem coverTrack =
@@ -6306,7 +6320,8 @@ namespace CelesteMusicPlayer
                     TrackCount = group.Count(),
                     TotalDuration = total,
                     TotalDurationText = FormatTime(total),
-                    CoverSourcePath = coverTrack.FilePath
+                    CoverSourcePath = coverTrack.FilePath,
+                    SortIndex = sortIndex++
                 });
             }
 
@@ -6430,26 +6445,46 @@ namespace CelesteMusicPlayer
 
             _albumSortMode = tag switch
             {
-                "TitleDesc" => AlbumSortMode.TitleDesc,
-                "YearAsc" => AlbumSortMode.YearAsc,
-                "YearDesc" => AlbumSortMode.YearDesc,
-                "ArtistTitleAsc" => AlbumSortMode.ArtistTitleAsc,
-                "ArtistYearAsc" => AlbumSortMode.ArtistYearAsc,
-                _ => AlbumSortMode.TitleAsc
+                "Artist" => AlbumSortMode.Artist,
+                "Year" => AlbumSortMode.Year,
+                "Added" => AlbumSortMode.Added,
+                "Random" => AlbumSortMode.Random,
+                "TrackCount" => AlbumSortMode.TrackCount,
+                "TotalDuration" => AlbumSortMode.TotalDuration,
+                _ => AlbumSortMode.Title
             };
 
-            AlbumSortButton.Content = "排序：" + GetAlbumSortDisplayName(_albumSortMode);
+            UpdateAlbumSortButtonsUi();
             ResortAlbumsInPlace();
         }
 
-        private static string GetAlbumSortDisplayName(AlbumSortMode mode) => mode switch
+        /// <summary>升序/降序切换。</summary>
+        private void AlbumSortOrderButton_Click(object sender, RoutedEventArgs e)
         {
-            AlbumSortMode.TitleDesc => "按标题（降序）",
-            AlbumSortMode.YearAsc => "按发行时间（从早到晚）",
-            AlbumSortMode.YearDesc => "按发行时间（从晚到早）",
-            AlbumSortMode.ArtistTitleAsc => "按艺术家排列（按标题）",
-            AlbumSortMode.ArtistYearAsc => "按艺术家排列（按时间）",
-            _ => "按标题（升序）"
+            // Random 排序无方向概念，切换无意义；仍允许翻转但不影响结果
+            _albumSortAscending = !_albumSortAscending;
+            UpdateAlbumSortButtonsUi();
+            ResortAlbumsInPlace();
+        }
+
+        private void UpdateAlbumSortButtonsUi()
+        {
+            AlbumSortButton.Content = GetAlbumSortFieldName(_albumSortMode);
+            if (AlbumSortOrderButton != null)
+            {
+                AlbumSortOrderButton.Content = _albumSortAscending ? "升序" : "降序";
+            }
+        }
+
+        private static string GetAlbumSortFieldName(AlbumSortMode mode) => mode switch
+        {
+            AlbumSortMode.Artist => "按艺术家",
+            AlbumSortMode.Year => "按发行年份",
+            AlbumSortMode.Added => "按添加时间",
+            AlbumSortMode.Random => "随机",
+            AlbumSortMode.TrackCount => "按专辑曲目数",
+            AlbumSortMode.TotalDuration => "按专辑总时长",
+            _ => "按专辑名称"
         };
 
         private void ResortAlbumsInPlace()
@@ -6472,27 +6507,29 @@ namespace CelesteMusicPlayer
 
         private List<AlbumEntry> ApplyAlbumSortToList(List<AlbumEntry> source)
         {
+            bool asc = _albumSortAscending;
             IOrderedEnumerable<AlbumEntry> ordered = _albumSortMode switch
             {
-                AlbumSortMode.TitleDesc =>
-                    source.OrderByDescending(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
-                AlbumSortMode.YearAsc =>
-                    source.OrderBy(a => a.Year == 0 ? uint.MaxValue : a.Year)
-                        .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
-                AlbumSortMode.YearDesc =>
-                    source.OrderByDescending(a => a.Year)
-                        .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
-                // 主艺术家升序 → 同艺术家按专辑标题升序
-                AlbumSortMode.ArtistTitleAsc =>
-                    source.OrderBy(a => a.Artist, StringComparer.CurrentCultureIgnoreCase)
-                        .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
-                // 主艺术家升序 → 同艺术家按年份升序（未知年份靠后）→ 再按标题
-                AlbumSortMode.ArtistYearAsc =>
-                    source.OrderBy(a => a.Artist, StringComparer.CurrentCultureIgnoreCase)
-                        .ThenBy(a => a.Year == 0 ? uint.MaxValue : a.Year)
-                        .ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
+                AlbumSortMode.Artist =>
+                    asc ? source.OrderBy(a => a.Artist, StringComparer.CurrentCultureIgnoreCase)
+                          : source.OrderByDescending(a => a.Artist, StringComparer.CurrentCultureIgnoreCase),
+                AlbumSortMode.Year =>
+                    asc ? source.OrderBy(a => a.Year == 0 ? uint.MaxValue : a.Year)
+                          : source.OrderByDescending(a => a.Year),
+                AlbumSortMode.Added =>
+                    asc ? source.OrderBy(a => a.SortIndex)
+                          : source.OrderByDescending(a => a.SortIndex),
+                AlbumSortMode.Random =>
+                    source.OrderBy(_ => System.Guid.NewGuid()),
+                AlbumSortMode.TrackCount =>
+                    asc ? source.OrderBy(a => a.TrackCount).ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+                          : source.OrderByDescending(a => a.TrackCount).ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
+                AlbumSortMode.TotalDuration =>
+                    asc ? source.OrderBy(a => a.TotalDuration.Ticks).ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+                          : source.OrderByDescending(a => a.TotalDuration.Ticks).ThenBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase),
                 _ =>
-                    source.OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+                    asc ? source.OrderBy(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+                          : source.OrderByDescending(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
             };
 
             return ordered.ToList();
@@ -6747,7 +6784,7 @@ namespace CelesteMusicPlayer
 
             AlbumGridView.Visibility = Visibility.Collapsed;
             AlbumDetailPanel.Visibility = Visibility.Visible;
-            AlbumSortButton.Visibility = Visibility.Collapsed;
+            AlbumSortPanel.Visibility = Visibility.Collapsed;
             LibraryPaneTitle.Text = album.Name;
             UpdateLibrarySearchUi();
 
@@ -6755,7 +6792,11 @@ namespace CelesteMusicPlayer
             AlbumDetailNameText.Text = album.Name;
             AlbumDetailArtistText.Text = album.Artist;
             AlbumDetailYearText.Text = "发行时间：" + album.YearText;
-            AlbumDetailMetaText.Text = $"{album.TrackCount} 首 · 总时长 {album.TotalDurationText}";
+            AlbumDetailMetaText.Text = $"{album.TrackCount} 首";
+            if (AlbumDetailTotalDurationText != null)
+            {
+                AlbumDetailTotalDurationText.Text = album.TotalDurationText;
+            }
 
             _albumTracks.Clear();
             List<PlaylistItem> tracks = _playlist
@@ -6880,7 +6921,7 @@ namespace CelesteMusicPlayer
                 if (_currentCategory == "Albums")
                 {
                     LibraryPaneTitle.Text = "专辑";
-                    AlbumSortButton.Visibility = Visibility.Visible;
+                    AlbumSortPanel.Visibility = Visibility.Visible;
                 }
 
                 UpdateLibrarySearchUi();
@@ -7773,7 +7814,7 @@ namespace CelesteMusicPlayer
 
             LibraryPaneTitle.Visibility = Visibility.Collapsed;
             SongSortPanel.Visibility = Visibility.Collapsed;
-            AlbumSortButton.Visibility = Visibility.Collapsed;
+            AlbumSortPanel.Visibility = Visibility.Collapsed;
             MultiSelectTitlePanel.Visibility = Visibility.Visible;
             MultiSelectTitleText.Text = "选择专辑";
             MultiSelectActionBar.Visibility = Visibility.Visible;
@@ -8133,12 +8174,12 @@ namespace CelesteMusicPlayer
             }
             else if (_currentCategory == "Albums")
             {
-                AlbumSortButton.Visibility = Visibility.Visible;
+                AlbumSortPanel.Visibility = Visibility.Visible;
             }
             else
             {
                 SongSortPanel.Visibility = Visibility.Collapsed;
-                AlbumSortButton.Visibility = Visibility.Collapsed;
+                AlbumSortPanel.Visibility = Visibility.Collapsed;
             }
 
             UpdateUserPlaylistActionBarVisibility();
