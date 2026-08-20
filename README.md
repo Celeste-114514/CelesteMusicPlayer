@@ -5,7 +5,7 @@
 ## ✨ 功能特性
 
 - 🎵 本地音乐库：扫描文件夹 / 多选导入，自动读取标签（标题、艺术家、专辑、年份、封面）
-- 🎧 广泛格式支持：MP3 / FLAC / WAV / M4A / APE / WavPack / TTA / DSD 等
+- 🎧 广泛格式支持：MP3 / FLAC / WAV / M4A / APE / WavPack / TTA / DSD（DSD由解码器转为高质量pcm后播放，Windows Shared模式下不支持dsd） 等
   - 内置 [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) 
 - 📋 输出模式：AUDIO 输出设备可选择，WASAPI 共享 / WASAPI 独占（HiFi，绕开系统混音器；ASIO 后续更新）
 - 🎯 HiFi 独占输出：基于 NAudio / 原生 WASAPI 从 PCM WAV 流式输出，兼顾音质；独占设备音量可调、切歌音量不再重置
