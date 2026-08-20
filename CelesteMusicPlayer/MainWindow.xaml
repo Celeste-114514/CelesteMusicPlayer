@@ -2738,10 +2738,10 @@
                 </Grid>
             </Grid>
 
-            <!-- 右侧信息面板已停用（代码保留）；下方为合并到同一 Row1 的播放歌曲信息页(默认收起)。
-                 内容展示统一走 NowPlayingPane，Grid.Column=1 全宽。 -->
+            <!-- 播放歌曲信息页(默认收起)，横向覆盖整行(Column0+1)，使左侧分类暂时消失 -->
             <Grid
-                Grid.Column="1">
+                Grid.Column="0"
+                Grid.ColumnSpan="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -2753,8 +2753,57 @@
                     Grid.RowSpan="2"
                     Background="Transparent"
                     BorderThickness="0"
-                    Padding="12"
-                    Visibility="Collapsed">
+                    CornerRadius="0"
+                    RenderTransformOrigin="0.5,0.5"
+                    Visibility="Collapsed"
+                    IsTabStop="False">
+                    <Border.RenderTransform>
+                        <CompositeTransform x:Name="PaneTransform" ScaleX="0.985" ScaleY="0.985" />
+                    </Border.RenderTransform>
+                    <Border.Resources>
+                        <!-- 展开动画：淡入 + 轻微放大到原尺寸 -->
+                        <Storyboard x:Name="NowPlayingOpenStoryboard">
+                            <DoubleAnimation Storyboard.TargetName="NowPlayingPane" Storyboard.TargetProperty="Opacity"
+                                             From="0" To="1" Duration="0:0:0.22">
+                                <DoubleAnimation.EasingFunction>
+                                    <CubicEase EasingMode="EaseOut" />
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetName="PaneTransform" Storyboard.TargetProperty="ScaleX"
+                                             From="0.985" To="1" Duration="0:0:0.22">
+                                <DoubleAnimation.EasingFunction>
+                                    <CubicEase EasingMode="EaseOut" />
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetName="PaneTransform" Storyboard.TargetProperty="ScaleY"
+                                             From="0.985" To="1" Duration="0:0:0.22">
+                                <DoubleAnimation.EasingFunction>
+                                    <CubicEase EasingMode="EaseOut" />
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                        <!-- 收起动画：淡出 + 轻微缩小 -->
+                        <Storyboard x:Name="NowPlayingCloseStoryboard">
+                            <DoubleAnimation Storyboard.TargetName="NowPlayingPane" Storyboard.TargetProperty="Opacity"
+                                             From="1" To="0" Duration="0:0:0.18">
+                                <DoubleAnimation.EasingFunction>
+                                    <CubicEase EasingMode="EaseIn" />
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetName="PaneTransform" Storyboard.TargetProperty="ScaleX"
+                                             From="1" To="0.985" Duration="0:0:0.18">
+                                <DoubleAnimation.EasingFunction>
+                                    <CubicEase EasingMode="EaseIn" />
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetName="PaneTransform" Storyboard.TargetProperty="ScaleY"
+                                             From="1" To="0.985" Duration="0:0:0.18">
+                                <DoubleAnimation.EasingFunction>
+                                    <CubicEase EasingMode="EaseIn" />
+                                </DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                    </Border.Resources>
                 <Grid
                     x:Name="NowPlayingPaneContent"
                     Background="Transparent">
@@ -2764,17 +2813,12 @@
                     </Grid.RowDefinitions>
 
                     <!-- 整页动态背景：模糊封面 + 深色渐变遮罩（浮于最底层） -->
-                    <Border
-                        x:Name="NowPlayingCardBackdrop"
-                        Grid.Row="0"
-                        Grid.RowSpan="2"
-                        CornerRadius="16"
-                        IsHitTestVisible="False" />
+                    <!-- 统一加深遮罩：与主程序背景同色系但更深，整页无框、盖住下层内容 -->
                     <Border
                         x:Name="NowPlayingCardScrim"
                         Grid.Row="0"
                         Grid.RowSpan="2"
-                        CornerRadius="16"
+                        Background="#B0101820"
                         IsHitTestVisible="False" />
 
                     <!-- 左上角：倒三角箭头收起按钮 -->

@@ -958,12 +958,89 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            _nowPlayingPaneOpen = !_nowPlayingPaneOpen;
-            NowPlayingPane.Visibility = _nowPlayingPaneOpen ? Visibility.Visible : Visibility.Collapsed;
             if (_nowPlayingPaneOpen)
             {
-                DispatcherQueue.TryEnqueue(() => UpdateNowPlayingCardLayout());
+                CloseNowPlayingPane();
             }
+            else
+            {
+                OpenNowPlayingPane();
+            }
+        }
+
+        /// <summary>播放信息页展开/收起动画（XAML 资源内定义的 Storyboard）。</summary>
+        private Microsoft.UI.Xaml.Media.Animation.Storyboard? NowPlayingOpenAnimation
+            => NowPlayingPane?.Resources["NowPlayingOpenStoryboard"] as Microsoft.UI.Xaml.Media.Animation.Storyboard;
+        private Microsoft.UI.Xaml.Media.Animation.Storyboard? NowPlayingCloseAnimation
+            => NowPlayingPane?.Resources["NowPlayingCloseStoryboard"] as Microsoft.UI.Xaml.Media.Animation.Storyboard;
+
+        /// <summary>展开播放信息页：淡入 + 轻微放大。</summary>
+        private void OpenNowPlayingPane()
+        {
+            if (NowPlayingPane == null)
+            {
+                return;
+            }
+
+            try
+            {
+                NowPlayingCloseAnimation?.Stop();
+            }
+            catch
+            {
+            }
+
+            NowPlayingPane.Opacity = 0;
+            NowPlayingPane.Visibility = Visibility.Visible;
+            _nowPlayingPaneOpen = true;
+            DispatcherQueue.TryEnqueue(() => UpdateNowPlayingCardLayout());
+            try
+            {
+                NowPlayingOpenAnimation?.Begin();
+            }
+            catch
+            {
+                NowPlayingPane.Opacity = 1;
+            }
+        }
+
+        /// <summary>收起播放信息页：淡出 + 轻微缩小，动画结束后折叠。</summary>
+        private void CloseNowPlayingPane()
+        {
+            if (NowPlayingPane == null || !_nowPlayingPaneOpen)
+            {
+                return;
+            }
+
+            _nowPlayingPaneOpen = false;
+            try
+            {
+                NowPlayingCloseAnimation?.Stop();
+                NowPlayingCloseAnimation.Completed -= NowPlayingCloseAnimation_Completed;
+                NowPlayingCloseAnimation.Completed += NowPlayingCloseAnimation_Completed;
+                NowPlayingOpenAnimation?.Stop();
+                NowPlayingCloseAnimation?.Begin();
+            }
+            catch
+            {
+                NowPlayingPane.Visibility = Visibility.Collapsed;
+                NowPlayingPane.Opacity = 1;
+            }
+        }
+
+        private void NowPlayingCloseAnimation_Completed(object? sender, object e)
+        {
+            if (NowPlayingPane != null)
+            {
+                NowPlayingPane.Visibility = Visibility.Collapsed;
+                NowPlayingPane.Opacity = 1;
+            }
+        }
+
+        private void NowPlayingCollapseButton_Click(object sender, RoutedEventArgs e)
+        {
+            // 左上角倒三角箭头：收起播放歌曲信息页，返回原音乐库/播放列表视图
+            CloseNowPlayingPane();
         }
 
         /// <summary>状态条封面 hover：高亮描边 + 强调背景，提示可点击展开播放信息页。</summary>
@@ -1001,16 +1078,6 @@ namespace CelesteMusicPlayer
             }
             catch
             {
-            }
-        }
-
-        private void NowPlayingCollapseButton_Click(object sender, RoutedEventArgs e)
-        {
-            // 左上角倒三角箭头：收起播放歌曲信息页，返回原音乐库/播放列表视图
-            if (NowPlayingPane != null)
-            {
-                NowPlayingPane.Visibility = Visibility.Collapsed;
-                _nowPlayingPaneOpen = false;
             }
         }
 

@@ -12587,7 +12587,7 @@ namespace CelesteMusicPlayer
             NowPlayingTitleText.Text = "未在播放";
             NowPlayingArtistAlbumText.Text = "艺术家 · 专辑";
             NowPlayingCoverImage.Source = null;
-            ClearNowPlayingCardBackdrop();
+            ApplyNowPlayingPaneBackdrop();
             UpdateTransportNowPlaying(null, null);
             ClearLyricsUi("开始播放后显示歌词");
             // 未播放时也填充静态频谱，保证信息卡波形始终可见
@@ -12740,7 +12740,7 @@ namespace CelesteMusicPlayer
             NowPlayingCoverImage.Source = coverImage;
             UpdateTransportNowPlaying(item, coverImage);
             _ = ApplyAlbumArtBackgroundAsync(coverBytes, item.FilePath);
-            _ = UpdateNowPlayingCardBackdropAsync(coverBytes, item.FilePath);
+            ApplyNowPlayingPaneBackdrop();
 
             List<LyricLine> lyrics = await Task.Run(() => LyricsLoader.LoadForAudio(item.FilePath));
             if (_nowPlayingPath != item.FilePath)
@@ -12763,74 +12763,16 @@ namespace CelesteMusicPlayer
             NowPlayingArtistAlbumText.Text = string.Join(" · ", new[] { artist, album }.Where(s => s.Length > 0));
         }
 
-        /// <summary>信息卡动态背景：封面高斯模糊图 + 深色渐变遮罩（方案 A + C）。</summary>
-        private async Task UpdateNowPlayingCardBackdropAsync(byte[]? coverBytes, string forPath)
+        /// <summary>播放信息页背景统一为主程序风格：内容面板丙烯酸 + 顶层更深遮罩（加深模糊观感）。</summary>
+        private void ApplyNowPlayingPaneBackdrop()
         {
             try
             {
-                if (NowPlayingCardBackdrop == null || NowPlayingCardScrim == null)
-                {
-                    return;
-                }
-
-                if (coverBytes == null || coverBytes.Length == 0)
-                {
-                    ClearNowPlayingCardBackdrop();
-                    return;
-                }
-
-                byte[]? blurred = await Task.Run(() =>
-                    AlbumArtBackground.CreateHeavilyBlurredPng(coverBytes, workSize: 128, blurRadius: 3));
-                if (_nowPlayingPath != forPath || blurred == null || blurred.Length == 0)
-                {
-                    return;
-                }
-
-                BitmapImage? image = await CreateBitmapFromBytesAsync(blurred);
-                if (_nowPlayingPath != forPath || image == null)
-                {
-                    return;
-                }
-
-                NowPlayingCardBackdrop.Background = new ImageBrush
-                {
-                    ImageSource = image,
-                    Stretch = Stretch.UniformToFill
-                };
-                NowPlayingCardScrim.Background = new LinearGradientBrush
-                {
-                    StartPoint = new Windows.Foundation.Point(0, 0),
-                    EndPoint = new Windows.Foundation.Point(0, 1),
-                    GradientStops =
-                    {
-                        new GradientStop { Color = Color.FromArgb(120, 14, 12, 24), Offset = 0 },
-                        new GradientStop { Color = Color.FromArgb(235, 8, 8, 14), Offset = 1 }
-                    }
-                };
-            }
-            catch
-            {
-            }
-        }
-
-        private void ClearNowPlayingCardBackdrop()
-        {
-            try
-            {
-                if (NowPlayingCardBackdrop != null)
-                {
-                    NowPlayingCardBackdrop.Background = null;
-                }
-
-                if (NowPlayingCardScrim != null)
-                {
-                    NowPlayingCardScrim.Background = null;
-                }
-
                 if (NowPlayingPaneContent != null)
                 {
                     NowPlayingPaneContent.Background = CreateNowPlayingStyleAcrylicBrush();
                 }
+                // NowPlayingCardScrim 的深色遮罩固定在 XAML，不再动态置空
             }
             catch
             {
