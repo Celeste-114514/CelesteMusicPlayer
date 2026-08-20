@@ -25,7 +25,8 @@
 
 ## 🖥️ 截图
 
-<img width="2255" height="1368" alt="QQ20260808-172857" src="https://github.com/user-attachments/assets/49b4e965-5f6e-4563-b9a4-8e2b547e885d" />
+![Uploading QQ20260820-125428.png…]()
+
 
 ## 🛠️ 技术栈
 
