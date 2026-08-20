@@ -1011,7 +1011,7 @@
                                                         </ItemsControl.ItemTemplate>
                                                     </ItemsControl>
                                                 </StackPanel>
-                                                <TextBlock Grid.Column="3" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Opacity="0.8" Text="{x:Bind DurationText}" />
+                                                <TextBlock Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="12" FontWeight="SemiBold" Opacity="0.8" Margin="0,0,16,0" Text="{x:Bind DurationText}" />
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -1297,13 +1297,15 @@
                                             </ItemsControl>
                                         </StackPanel>
 
-                                        <!-- 时长 -->
+                                        <!-- 时长（贴右边界但避开滚动条） -->
                                         <TextBlock
                                             Grid.Column="3"
                                             VerticalAlignment="Center"
+                                            HorizontalAlignment="Right"
                                             FontSize="14"
                                             FontWeight="SemiBold"
                                             Opacity="0.8"
+                                            Margin="0,0,16,0"
                                             Text="{x:Bind DurationText}" />
                                     </Grid>
                                 </Border>
