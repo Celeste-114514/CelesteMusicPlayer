@@ -5242,6 +5242,11 @@ namespace CelesteMusicPlayer
                 {
                     MediaOptionsButton.Visibility = Visibility.Visible;
                 }
+
+                if (MediaExitMultiSelectButton != null)
+                {
+                    MediaExitMultiSelectButton.Visibility = Visibility.Visible;
+                }
             };
             flyout.Items.Add(multi);
 
@@ -5437,7 +5442,16 @@ namespace CelesteMusicPlayer
             {
                 MediaOptionsButton.Visibility = Visibility.Collapsed;
             }
+
+            if (MediaExitMultiSelectButton != null)
+            {
+                MediaExitMultiSelectButton.Visibility = Visibility.Collapsed;
+            }
         }
+
+        /// <summary>显式退出多选按钮。</summary>
+        private void MediaExitMultiSelectButton_Click(object sender, RoutedEventArgs e)
+            => ExitMediaMultiSelect();
 
         /// <summary>更新右侧详情列表：中途加载完成/重载时退出多选。</summary>
         private void ResetMediaSelectionUi()
@@ -8138,7 +8152,7 @@ namespace CelesteMusicPlayer
         // =====================================================================
 
         /// <summary>主内容区空白点击（非歌曲项）取消当前选中，从主题色背景恢复常态。</summary>
-        private void MainContentGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
+        private void MainContentGrid_Tapped(object sender, TappedRoutedEventArgs e)
         {
             Microsoft.UI.Xaml.DependencyObject? origin = e.OriginalSource as Microsoft.UI.Xaml.DependencyObject;
             while (origin != null)

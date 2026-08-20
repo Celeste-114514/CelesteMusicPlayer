@@ -119,7 +119,7 @@
         </Grid>
 
         <!-- 中部：分类 | 播放列表（右侧信息面板已停用，播放列表区扩张到底） -->
-        <Grid x:Name="MainContentGrid" Grid.Row="1" Margin="16,8,16,0" PointerPressed="MainContentGrid_PointerPressed">
+        <Grid x:Name="MainContentGrid" Grid.Row="1" Margin="16,8,16,0" Tapped="MainContentGrid_Tapped">
             <Grid.ColumnDefinitions>
                 <!-- 音乐库 -->
                 <ColumnDefinition x:Name="CategoryColumn" Width="156" MinWidth="148" MaxWidth="220" />
@@ -1200,6 +1200,7 @@
                                     MinHeight="64"
                                     CornerRadius="8"
                                     Padding="10,8"
+                                    MinWidth="{Binding ElementName=PlaylistView, Path=ActualWidth}"
                                     VerticalAlignment="Stretch"
                                     Background="Transparent" PointerEntered="SongRow_PointerEntered" PointerExited="SongRow_PointerExited">
                                     <Grid ColumnSpacing="12" VerticalAlignment="Center">
@@ -2348,6 +2349,21 @@
                                         <StackPanel Orientation="Horizontal" Spacing="5">
                                             <FontIcon Glyph="&#xE712;" FontSize="13" />
                                             <TextBlock Text="选项" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <Button
+                                        x:Name="MediaExitMultiSelectButton"
+                                        Grid.Column="2"
+                                        Height="30"
+                                        Padding="12,0"
+                                        CornerRadius="15"
+                                        BorderThickness="0"
+                                        Visibility="Collapsed"
+                                        Click="MediaExitMultiSelectButton_Click"
+                                        ToolTipService.ToolTip="退出多选">
+                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                            <FontIcon Glyph="&#xE711;" FontSize="13" />
+                                            <TextBlock Text="退出多选" VerticalAlignment="Center" />
                                         </StackPanel>
                                     </Button>
                                 </Grid>
