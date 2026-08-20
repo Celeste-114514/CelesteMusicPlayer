@@ -375,51 +375,48 @@
                             <TextBlock Text="音效处理" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
-                    <!-- 标签排序（三竖图标）+ 播放列表：并列一行 -->
-                    <StackPanel Orientation="Horizontal" Spacing="6">
-                        <Button
-                            x:Name="NavTagSortButton"
-                            Tag="TagSort"
-                            Padding="8,10"
-                            FontSize="14"
-                            Height="40"
-                            MinWidth="120"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            Background="Transparent"
-                            BorderThickness="1"
-                            CornerRadius="20"
-                            Click="NavTagSortButton_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                                <FontIcon
-                                    x:Name="NavTagSortIcon"
-                                    Glyph="&#xE700;"
-                                    FontSize="14"
-                                    VerticalAlignment="Center"
-                                    RenderTransformOrigin="0.5,0.5">
-                                    <FontIcon.RenderTransform>
-                                        <RotateTransform Angle="90" />
-                                    </FontIcon.RenderTransform>
-                                </FontIcon>
-                                <TextBlock Text="标签排序" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button
-                            x:Name="UserPlaylistNavButton"
-                            Tag="PlaylistWall"
-                            Padding="8,10"
-                            FontSize="14"
-                            Height="40"
-                            MinWidth="96"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Center"
-                            Background="Transparent"
-                            BorderThickness="1"
-                            CornerRadius="20"
-                            Click="UserPlaylistNavButton_Click">
-                            <TextBlock Text="播放列表" VerticalAlignment="Center" />
-                        </Button>
-                    </StackPanel>
+                    <!-- 标签排序（三竖图标），与音效处理同级竖排 -->
+                    <Button
+                        x:Name="NavTagSortButton"
+                        Tag="TagSort"
+                        Padding="8,10"
+                        FontSize="14"
+                        Height="40"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Background="Transparent"
+                        BorderThickness="1"
+                        CornerRadius="20"
+                        Click="NavTagSortButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                            <FontIcon
+                                x:Name="NavTagSortIcon"
+                                Glyph="&#xE700;"
+                                FontSize="14"
+                                VerticalAlignment="Center"
+                                RenderTransformOrigin="0.5,0.5">
+                                <FontIcon.RenderTransform>
+                                    <RotateTransform Angle="90" />
+                                </FontIcon.RenderTransform>
+                            </FontIcon>
+                            <TextBlock Text="标签排序" VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
+                    <!-- 播放列表，与上面两按钮同级竖排 -->
+                    <Button
+                        x:Name="UserPlaylistNavButton"
+                        Tag="PlaylistWall"
+                        Padding="8,10"
+                        FontSize="14"
+                        Height="40"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Background="Transparent"
+                        BorderThickness="1"
+                        CornerRadius="20"
+                        Click="UserPlaylistNavButton_Click">
+                        <TextBlock Text="播放列表" VerticalAlignment="Center" />
+                    </Button>
                 </StackPanel>
             </Grid>
 
@@ -734,6 +731,28 @@
                             </DataTemplate>
                         </GridView.ItemTemplate>
                     </GridView>
+                    <!-- 播放列表墙：无任何命中单时的空状态提示 -->
+                    <StackPanel
+                        x:Name="PlaylistWallEmptyHint"
+                        Grid.Row="1"
+                        VerticalAlignment="Center"
+                        HorizontalAlignment="Center"
+                        Spacing="10"
+                        Visibility="Collapsed"
+                        IsHitTestVisible="False">
+                        <FontIcon
+                            Glyph="&#xE8B7;"
+                            FontSize="44"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            HorizontalAlignment="Center"
+                            Opacity="0.7" />
+                        <TextBlock
+                            Text="当前没有已创建的列表"
+                            FontSize="14"
+                            Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                            Opacity="0.85"
+                            HorizontalAlignment="Center" />
+                    </StackPanel>
                     <Border
                         x:Name="PlaylistWallMultiBar"
                         Grid.Row="2"

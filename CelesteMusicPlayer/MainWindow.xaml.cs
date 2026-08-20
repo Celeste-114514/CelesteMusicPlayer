@@ -3029,6 +3029,20 @@ namespace CelesteMusicPlayer
                 _ = LoadPlaylistWallCoverAsync(vm);
                 _playlistWall.Add(vm);
             }
+
+            // 无任何命中单时显示空状态提示
+            UpdatePlaylistWallEmptyHint();
+        }
+
+        private void UpdatePlaylistWallEmptyHint()
+        {
+            if (PlaylistWallEmptyHint == null)
+            {
+                return;
+            }
+
+            PlaylistWallEmptyHint.Visibility =
+                _playlistWall.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private async System.Threading.Tasks.Task LoadPlaylistWallCoverAsync(PlaylistCardViewModel vm)
