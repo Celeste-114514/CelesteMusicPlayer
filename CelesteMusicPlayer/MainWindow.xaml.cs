@@ -3499,6 +3499,10 @@ namespace CelesteMusicPlayer
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {
                 ApplySongListItemSelectionChrome(PlaylistDetailListView, container, song);
+                if (!args.InRecycleQueue && args.Phase == 0)
+                {
+                    LoadRowCoverAsync(PlaylistDetailListView, container, song);
+                }
             }
         }
 

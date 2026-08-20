@@ -717,10 +717,10 @@
                         </GridView.ItemsPanel>
                         <GridView.ItemTemplate>
                             <DataTemplate x:DataType="local:PlaylistCardViewModel">
-                                <StackPanel Width="132" Spacing="8">
+                                <StackPanel Width="160" Spacing="8">
                                     <Border
-                                        Width="132"
-                                        Height="132"
+                                        Width="160"
+                                        Height="160"
                                         CornerRadius="8"
                                         Background="{ThemeResource SystemControlHighlightListAccentLowBrush}"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -728,7 +728,7 @@
                                         <Grid>
                                             <FontIcon
                                                 Glyph="&#xE8B7;"
-                                                FontSize="44"
+                                                FontSize="52"
                                                 Foreground="White"
                                                 HorizontalAlignment="Center"
                                                 VerticalAlignment="Center"
@@ -969,16 +969,48 @@
                                 </ListView.ItemContainerStyle>
                                 <ListView.ItemTemplate>
                                     <DataTemplate x:DataType="local:PlaylistItem">
-                                        <Border Tag="SongRowChrome" MinHeight="40" CornerRadius="8" Padding="12,0" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" MinWidth="{Binding ElementName=PlaylistDetailListView, Path=ActualWidth}" Background="Transparent" PointerEntered="PlaylistDetailRow_PointerEntered" PointerExited="PlaylistDetailRow_PointerExited">
-                                            <Grid ColumnSpacing="12">
+                                        <Border Tag="SongRowChrome" MinHeight="64" CornerRadius="8" Padding="10,8" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" MinWidth="{Binding ElementName=PlaylistDetailListView, Path=ActualWidth}" Background="Transparent" PointerEntered="PlaylistDetailRow_PointerEntered" PointerExited="PlaylistDetailRow_PointerExited">
+                                            <Grid ColumnSpacing="12" VerticalAlignment="Center">
                                                 <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="56" />
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="72" />
+                                                    <ColumnDefinition Width="40" />
+                                                    <ColumnDefinition Width="52" />
+                                                    <ColumnDefinition Width="*" MinWidth="0" />
+                                                    <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.7" Text="{x:Bind Index}" />
-                                                <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Title}" />
-                                                <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.7" Text="{x:Bind DurationText}" />
+                                                <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Opacity="0.7" Text="{x:Bind Index}" />
+                                                <Border
+                                                    Grid.Column="1"
+                                                    Width="52"
+                                                    Height="52"
+                                                    CornerRadius="6"
+                                                    VerticalAlignment="Center"
+                                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1">
+                                                    <Grid>
+                                                        <FontIcon Glyph="&#xE93C;" FontSize="24" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.5" />
+                                                        <Image x:Name="RowCoverImage" Stretch="UniformToFill" />
+                                                    </Grid>
+                                                </Border>
+                                                <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="3">
+                                                    <TextBlock FontSize="14" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{x:Bind DisplayTitle}" />
+                                                    <TextBlock FontSize="11" FontWeight="Normal" Opacity="0.75" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{x:Bind ArtistAlbumText}" />
+                                                    <ItemsControl ItemsSource="{x:Bind FormatChips}">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <StackPanel Orientation="Horizontal" Spacing="5" />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Border Padding="9,2" CornerRadius="9" Background="#33FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
+                                                                    <TextBlock FontSize="10" Opacity="0.85" Text="{Binding}" />
+                                                                </Border>
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="3" VerticalAlignment="Center" FontSize="12" FontWeight="SemiBold" Opacity="0.8" Text="{x:Bind DurationText}" />
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
