@@ -1142,6 +1142,10 @@
                             DoubleTapped="PlaylistView_DoubleTapped"
                             RightTapped="PlaylistView_RightTapped"
                             SelectionMode="Single"
+                            CanDragItems="True"
+                            AllowDrop="True"
+                            CanReorderItems="True"
+                            DragItemsCompleted="PlaylistView_DragItemsCompleted"
                             HorizontalContentAlignment="Stretch">
                         <ListView.ItemContainerStyle>
                             <Style TargetType="ListViewItem">

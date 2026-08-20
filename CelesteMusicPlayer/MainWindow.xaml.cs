@@ -4252,6 +4252,10 @@ namespace CelesteMusicPlayer
                     break;
             }
 
+            // 仅「播放队列」分类支持拖拽重排（其它列表保持排序语义不变）
+            PlaylistView.CanReorderItems = ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist);
+            PlaylistView.CanDragItems = PlaylistView.CanReorderItems;
+
             UpdateUserPlaylistActionBarVisibility();
             UpdateLibrarySearchUi();
         }
@@ -7525,6 +7529,29 @@ namespace CelesteMusicPlayer
         // =====================================================================
         // 播放列表交互 / 右键菜单 / 多选
         // =====================================================================
+
+        /// <summary>拖拽重排后更新歌曲序号（针对当前显示的集合）。</summary>
+        private void PlaylistView_DragItemsCompleted(ListViewBase sender, DragItemsCompletedEventArgs args)
+        {
+            try
+            {
+                if (ReferenceEquals(sender.ItemsSource, _userPlaylist))
+                {
+                    RenumberCollection(_userPlaylist);
+                }
+                else if (ReferenceEquals(sender.ItemsSource, _playlist))
+                {
+                    RenumberCollection(_playlist);
+                }
+                else if (sender.ItemsSource is System.Collections.ObjectModel.ObservableCollection<PlaylistItem> col)
+                {
+                    RenumberCollection(col);
+                }
+            }
+            catch
+            {
+            }
+        }
 
         private void PlaylistView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
         {
