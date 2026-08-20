@@ -24,32 +24,13 @@ namespace CelesteMusicPlayer
 
             try
             {
+                if (!TryReadParts(path, out int rate, out int bits, out int kbps, out int channels))
+                {
+                    return null;
+                }
+
                 string ext = (Path.GetExtension(path)?.TrimStart('.').Trim() ?? "未知").ToUpperInvariant();
-                int rate = 0, bits = 0, kbps = 0, channels = 0;
-
-                try
-                {
-                    using TagLib.File file = TagLib.File.Create(path);
-                    var pr = file.Properties;
-                    if (pr != null)
-                    {
-                        rate = pr.AudioSampleRate;
-                        bits = pr.BitsPerSample;
-                        kbps = pr.AudioBitrate;
-                    }
-                }
-                catch
-                {
-                }
-
-                // TagLib 读不全时用 ffmpeg 兜底（位深/码率/声道）
-                if (bits <= 0 || kbps <= 0)
-                {
-                    ProbeWithFfmpeg(path, ref rate, ref bits, ref kbps, ref channels);
-                }
-
-                var parts = new System.Collections.Generic.List<string>();
-                parts.Add(ext);
+                var parts = new System.Collections.Generic.List<string> { ext };
                 if (rate > 0)
                 {
                     parts.Add(FormatSampleRate(rate));
@@ -75,6 +56,99 @@ namespace CelesteMusicPlayer
             catch
             {
                 return null;
+            }
+        }
+
+        /// <summary>
+        /// 状态条第三行短格式信息："ALAC · 16bit/44kHz · 1411kbps"。
+        /// 读取失败返回空串（调用侧据此隐藏该行）。
+        /// </summary>
+        public static string FormatShortLine(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                return string.Empty;
+            }
+
+            try
+            {
+                if (!TryReadParts(path, out int rate, out int bits, out int kbps, out _))
+                {
+                    return string.Empty;
+                }
+
+                string ext = (Path.GetExtension(path)?.TrimStart('.').Trim() ?? "未知").ToUpperInvariant();
+                string bitsPart = bits > 0 ? bits + "bit" : string.Empty;
+                string ratePart = rate > 0 ? FormatSampleRate(rate) : string.Empty;
+                string bitDepth = string.Empty;
+                if (bitsPart.Length > 0 && ratePart.Length > 0)
+                {
+                    bitDepth = bitsPart + "/" + ratePart;
+                }
+                else if (bitsPart.Length > 0)
+                {
+                    bitDepth = bitsPart;
+                }
+                else if (ratePart.Length > 0)
+                {
+                    bitDepth = ratePart;
+                }
+
+                string kbpsPart = kbps > 0 ? kbps + "kbps" : string.Empty;
+
+                var parts = new System.Collections.Generic.List<string> { ext };
+                if (bitDepth.Length > 0)
+                {
+                    parts.Add(bitDepth);
+                }
+
+                if (kbpsPart.Length > 0)
+                {
+                    parts.Add(kbpsPart);
+                }
+
+                return string.Join(" · ", parts);
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        /// <summary>读取采样率/位深/码率/声道；TagLib 读不全时用 ffmpeg 兜底。</summary>
+        private static bool TryReadParts(string path, out int rate, out int bits, out int kbps, out int channels)
+        {
+            rate = 0;
+            bits = 0;
+            kbps = 0;
+            channels = 0;
+            try
+            {
+                try
+                {
+                    using TagLib.File file = TagLib.File.Create(path);
+                    var pr = file.Properties;
+                    if (pr != null)
+                    {
+                        rate = pr.AudioSampleRate;
+                        bits = pr.BitsPerSample;
+                        kbps = pr.AudioBitrate;
+                    }
+                }
+                catch
+                {
+                }
+
+                if (bits <= 0 || kbps <= 0)
+                {
+                    ProbeWithFfmpeg(path, ref rate, ref bits, ref kbps, ref channels);
+                }
+
+                return true;
+            }
+            catch
+            {
+                return false;
             }
         }
 

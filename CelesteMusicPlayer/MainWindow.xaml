@@ -118,15 +118,13 @@
             </StackPanel>
         </Grid>
 
-        <!-- 中部：分类 | 播放列表 | 右侧（左缘可拖调整，无中间竖线） -->
+        <!-- 中部：分类 | 播放列表（右侧信息面板已停用，播放列表区扩张到底） -->
         <Grid x:Name="MainContentGrid" Grid.Row="1" Margin="16,8,16,0">
             <Grid.ColumnDefinitions>
                 <!-- 音乐库 -->
                 <ColumnDefinition x:Name="CategoryColumn" Width="156" MinWidth="148" MaxWidth="220" />
-                <!-- 播放列表占剩余；右侧正在播放默认约 800px -->
+                <!-- 播放列表占剩余全部 -->
                 <ColumnDefinition x:Name="PlaylistColumn" Width="*" MinWidth="320" />
-                <!-- 默认约 2/3 比例下的右侧宽度；分割线可自由拖动 -->
-                <ColumnDefinition x:Name="RightPaneColumn" Width="560" MinWidth="200" />
             </Grid.ColumnDefinitions>
 
             <!-- 左：音乐库 + 播放列表入口（统一 Button 选中样式） -->
@@ -353,10 +351,16 @@
                             <TextBlock Text="播放最多" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
+                </StackPanel>
+
+                <StackPanel
+                    Grid.Row="2"
+                    Spacing="6"
+                    Margin="4,8,4,4">
+                    <!-- 音效处理：入口占位（后续阶段接入 ECHO 音效页面） -->
                     <Button
-                        x:Name="NavTagSortButton"
-                        Tag="TagSort"
-                        Margin="4,8,4,2"
+                        x:Name="NavAudioFxButton"
+                        Tag="AudioFX"
                         Padding="8,10"
                         FontSize="14"
                         Height="40"
@@ -365,29 +369,58 @@
                         Background="Transparent"
                         BorderThickness="1"
                         CornerRadius="20"
-                        Click="NavTagSortButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE833;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="标签排序" VerticalAlignment="Center" />
+                        Click="NavAudioFxButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                            <FontIcon Glyph="&#xE91F;" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="音效处理" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
+                    <!-- 标签排序（三竖图标）+ 播放列表：并列一行 -->
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <Button
+                            x:Name="NavTagSortButton"
+                            Tag="TagSort"
+                            Padding="8,10"
+                            FontSize="14"
+                            Height="40"
+                            MinWidth="120"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="1"
+                            CornerRadius="20"
+                            Click="NavTagSortButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                <FontIcon
+                                    x:Name="NavTagSortIcon"
+                                    Glyph="&#xE700;"
+                                    FontSize="14"
+                                    VerticalAlignment="Center"
+                                    RenderTransformOrigin="0.5,0.5">
+                                    <FontIcon.RenderTransform>
+                                        <RotateTransform Angle="90" />
+                                    </FontIcon.RenderTransform>
+                                </FontIcon>
+                                <TextBlock Text="标签排序" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Button
+                            x:Name="UserPlaylistNavButton"
+                            Tag="PlaylistWall"
+                            Padding="8,10"
+                            FontSize="14"
+                            Height="40"
+                            MinWidth="96"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Background="Transparent"
+                            BorderThickness="1"
+                            CornerRadius="20"
+                            Click="UserPlaylistNavButton_Click">
+                            <TextBlock Text="播放列表" VerticalAlignment="Center" />
+                        </Button>
+                    </StackPanel>
                 </StackPanel>
-
-                <Button
-                    x:Name="UserPlaylistNavButton"
-                    Grid.Row="2"
-                    Tag="PlaylistWall"
-                    Margin="4,8,4,4"
-                    Padding="8,10"
-                    FontSize="14"
-                    Height="40"
-                    Content="播放列表"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Center"
-                    Background="Transparent"
-                    BorderThickness="1"
-                    CornerRadius="20"
-                    Click="UserPlaylistNavButton_Click" />
             </Grid>
 
         <!-- 中：歌曲列表 / 专辑浏览（侧键前进/后退） -->
@@ -462,7 +495,7 @@
                         VerticalAlignment="Center"
                         Visibility="Collapsed">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*" MaxWidth="200" />
+                            <ColumnDefinition Width="*" MaxWidth="320" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <local:StableIBeamTextBox
@@ -2315,28 +2348,23 @@
                 </Grid>
             </Grid>
 
-            <!-- 整个右侧区域左缘：全高可拖调整（无竖线、无光标切换） -->
-            <local:HorizontalResizeSplitter
-                x:Name="MainSplitter"
-                Grid.Column="2"
-                Width="10"
-                Margin="0"
-                HorizontalAlignment="Left"
-                VerticalAlignment="Stretch"
-                Canvas.ZIndex="300"
-                ShowVisualLine="False"
-                PointerPressed="MainSplitter_PointerPressed"
-                PointerMoved="MainSplitter_PointerMoved"
-                PointerReleased="MainSplitter_PointerReleased"
-                PointerCaptureLost="MainSplitter_PointerCaptureLost" />
+            <!-- 右侧信息面板已停用（代码保留）；下方为合并到同一 Row1 的播放歌曲信息页(默认收起)。
+                 内容展示统一走 NowPlayingPane，Grid.Column=1 全宽。 -->
+            <Grid
+                Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
 
-            <!-- 右：正在播放信息 + 歌词（无面板外框） -->
-            <Border
-                x:Name="NowPlayingPane"
-                Grid.Column="2"
-                Background="Transparent"
-                BorderThickness="0"
-                Padding="12">
+                <Border
+                    x:Name="NowPlayingPane"
+                    Grid.Row="0"
+                    Grid.RowSpan="2"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="12"
+                    Visibility="Collapsed">
                 <Grid
                     x:Name="NowPlayingPaneContent"
                     Background="Transparent"
@@ -2410,7 +2438,8 @@
                                         Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                         CornerRadius="8"
                                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                        BorderThickness="1">
+                                        BorderThickness="1"
+                                        PointerPressed="NowPlayingCover_PointerPressed">
                                         <Grid>
                                             <FontIcon
                                                 Glyph="&#xE93C;"
@@ -2506,6 +2535,7 @@
                     </Grid>
                 </Grid>
             </Border>
+            </Grid>
         </Grid>
 
         <!-- 底部播放控制 -->
@@ -2529,7 +2559,8 @@
                 Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                 BorderThickness="1"
-                CornerRadius="6">
+                CornerRadius="6"
+                PointerPressed="TransportCover_PointerPressed">
                 <Grid>
                     <FontIcon
                         Glyph="&#xE93C;"
@@ -2562,6 +2593,14 @@
                     x:Name="TransportArtistText"
                     FontSize="12"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    TextWrapping="NoWrap"
+                    TextTrimming="CharacterEllipsis"
+                    Visibility="Collapsed" />
+                <TextBlock
+                    x:Name="TransportFormatText"
+                    FontSize="10"
+                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                    Opacity="0.85"
                     TextWrapping="NoWrap"
                     TextTrimming="CharacterEllipsis"
                     Visibility="Collapsed" />

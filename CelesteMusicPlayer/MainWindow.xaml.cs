@@ -93,6 +93,12 @@ namespace CelesteMusicPlayer
         public string DisplayName => Title;
 
         /// <summary>
+        /// 播放歌曲状态条第三行显示的短格式信息："ALAC · 24bit/44kHz · 1411kbps"（由路径实时读取，读失败为空）。
+        /// </summary>
+        public string FormatInfoLine =>
+            string.IsNullOrWhiteSpace(FilePath) ? string.Empty : AudioInfoFormatter.FormatShortLine(FilePath);
+
+        /// <summary>
         /// 歌曲面板显示的标题：一律使用音频内嵌标题标签（Tag.Title），
         /// 缺失时回退文件名。不再受"播放列表显示格式"设置影响。
         /// </summary>
@@ -438,12 +444,6 @@ namespace CelesteMusicPlayer
         private LibraryNavState? _navCurrent;
         private bool _suppressNavHistory;
 
-        // ---------- 主区域分割线拖动 ----------
-        private bool _isDraggingMainSplitter;
-        private double _mainSplitStartX;
-        private double _playlistColStartWidth;
-        private double _rightColStartWidth;
-
         // ---------- 列表列分割线拖动 ----------
         private bool _isDraggingColumnSplitter;
         private string? _columnSplitPair;
@@ -468,6 +468,7 @@ namespace CelesteMusicPlayer
         private int _currentLyricIndex = -1;
         private readonly List<TextBlock> _lyricTextBlocks = new();
         private string? _nowPlayingPath;
+        private bool _nowPlayingPaneOpen;
 
         // 歌词平滑滚动
         private DispatcherQueueTimer? _lyricScrollTimer;
@@ -494,8 +495,8 @@ namespace CelesteMusicPlayer
                 _mainWindowHwnd = IntPtr.Zero;
             }
 
-            // 默认 1400×750；Resize 按 DPI 换算为物理像素
-            ResizeWindowToDips(1400, 750);
+            // 默认 1600×900；Resize 按 DPI 换算为物理像素
+            ResizeWindowToDips(1600, 900);
             // 标题栏扩展放到 Activated 之后，避免资源管理器直接启动时黑窗闪退（0xC000027B）
             Activated += MainWindow_FirstActivated;
             Closed += MainWindow_Closed;
@@ -1001,10 +1002,10 @@ namespace CelesteMusicPlayer
             double innerWidth = Math.Max(
                 0,
                 maxCardWidth - 28); // 内层 Padding 14 × 2
-            // 封面 176 + 间距 16 + 文字至少约 120 → 不足则纵向排列
-            bool stack = innerWidth < 320;
+            // 全宽信息面板：恒用横排（封面左 + 文字右），不再根据宽度纵排
+            bool stack = false;
 
-            const double coverWide = 176;
+            const double coverWide = 216;
             double coverSize = stack
                 ? Math.Clamp(innerWidth, 72, coverWide)
                 : coverWide;
@@ -2385,6 +2386,19 @@ namespace CelesteMusicPlayer
                 _currentCategory = "TagSort";
                 ApplyCategoryView();
             });
+        }
+
+        // 音效处理按钮：占位入口（后续阶段接入 ECHO 音效处理页面）
+        private void NavAudioFxButton_Click(object sender, RoutedEventArgs e)
+        {
+            ExitMultiSelectMode();
+            CommitLibraryNavigation(() =>
+            {
+                _currentCategory = "AudioFX";
+                ApplyCategoryView();
+            });
+            // 占位提示：音效处理页面后续接通
+            NowPlayingText.Text = "音效处理功能即将上线（暂未接入）";
         }
 
         // ---------------- 标签排序板块（按曲目元数据字段逐级分组钻取） ----------------
@@ -4059,6 +4073,24 @@ namespace CelesteMusicPlayer
                     var groupedCollection = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>(groupedSongs);
                     RenumberCollection(groupedCollection);
                     PlaylistView.ItemsSource = groupedCollection;
+                    break;
+
+                case "AudioFX":
+                    // 音效处理入口占位：后续阶段在此接入 ECHO 音效处理页面
+                    LibraryPaneTitle.Text = "音效处理";
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Collapsed;
+                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Visible;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    var fxEmpty = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>();
+                    RenumberCollection(fxEmpty);
+                    PlaylistView.ItemsSource = fxEmpty;
                     break;
             }
 
@@ -9098,6 +9130,28 @@ namespace CelesteMusicPlayer
                 NavTagSortButton.BorderBrush = capsuleBorder;
                 NavTagSortButton.ClearValue(Control.ForegroundProperty);
             }
+
+            // 音效处理胶囊按钮（占位，后续接入 ECHO 音效页面）
+            if (NavAudioFxButton != null)
+            {
+                NavAudioFxButton.CornerRadius = new CornerRadius(playlistCapsuleHeight / 2.0);
+                NavAudioFxButton.HorizontalContentAlignment = HorizontalAlignment.Center;
+                bool fxActive = string.Equals(_currentCategory, "AudioFX", StringComparison.Ordinal);
+                if (fxActive)
+                {
+                    NavAudioFxButton.Background = accent;
+                    NavAudioFxButton.Foreground = fg;
+                    NavAudioFxButton.BorderThickness = new Thickness(0);
+                    NavAudioFxButton.ClearValue(Control.BorderBrushProperty);
+                }
+                else
+                {
+                    NavAudioFxButton.Background = capsuleIdle;
+                    NavAudioFxButton.BorderThickness = new Thickness(1);
+                    NavAudioFxButton.BorderBrush = capsuleBorder;
+                    NavAudioFxButton.ClearValue(Control.ForegroundProperty);
+                }
+            }
         }
 
         private Brush ResolveNavCapsuleBorderBrush()
@@ -11572,6 +11626,8 @@ namespace CelesteMusicPlayer
                 TransportTitleText.Text = "目前未播放音乐";
                 TransportArtistText.Text = string.Empty;
                 TransportArtistText.Visibility = Visibility.Collapsed;
+                TransportFormatText.Text = string.Empty;
+                TransportFormatText.Visibility = Visibility.Collapsed;
                 TransportCoverImage.Source = null;
                 _miniPlayerWindow?.RefreshFromOwner();
                 return;
@@ -11580,6 +11636,11 @@ namespace CelesteMusicPlayer
             TransportTitleText.Text = item.Title;
             TransportArtistText.Text = item.Artist;
             TransportArtistText.Visibility = Visibility.Visible;
+            TransportFormatText.Text = item.FormatInfoLine;
+            TransportFormatText.Visibility =
+                string.IsNullOrWhiteSpace(item.FormatInfoLine)
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
             TransportCoverImage.Source = cover;
             _miniPlayerWindow?.RefreshFromOwner();
         }
@@ -13224,58 +13285,6 @@ namespace CelesteMusicPlayer
         // =====================================================================
         // 主区域：播放列表 / 右侧 可拖分割线
         // =====================================================================
-
-        private void MainSplitter_PointerPressed(object sender, PointerRoutedEventArgs e)
-        {
-            _isDraggingMainSplitter = true;
-            _mainSplitStartX = e.GetCurrentPoint(MainContentGrid).Position.X;
-            _playlistColStartWidth = PlaylistColumn.ActualWidth;
-            // 右侧用 * 吃剩余，按下时记下当时实际宽度便于计算
-            _rightColStartWidth = RightPaneColumn.ActualWidth;
-            MainSplitter.CapturePointer(e.Pointer);
-            e.Handled = true;
-        }
-
-        private void MainSplitter_PointerMoved(object sender, PointerRoutedEventArgs e)
-        {
-            if (!_isDraggingMainSplitter)
-            {
-                return;
-            }
-
-            double delta = e.GetCurrentPoint(MainContentGrid).Position.X - _mainSplitStartX;
-            double total = _playlistColStartWidth + _rightColStartWidth;
-            double newRight = Math.Clamp(
-                _rightColStartWidth - delta,
-                RightPaneColumn.MinWidth,
-                Math.Max(RightPaneColumn.MinWidth, total - PlaylistColumn.MinWidth));
-
-            // 右侧固定像素宽（默认约 800）；播放列表用 * 占满剩余
-            RightPaneColumn.Width = new GridLength(newRight);
-            PlaylistColumn.Width = new GridLength(1, GridUnitType.Star);
-            e.Handled = true;
-        }
-
-        private void MainSplitter_PointerReleased(object sender, PointerRoutedEventArgs e)
-        {
-            _isDraggingMainSplitter = false;
-            try
-            {
-                MainSplitter.ReleasePointerCapture(e.Pointer);
-            }
-            catch
-            {
-            }
-
-            FitColumnsToAvailableWidth();
-            e.Handled = true;
-        }
-
-        private void MainSplitter_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
-        {
-            _isDraggingMainSplitter = false;
-            FitColumnsToAvailableWidth();
-        }
 
         /// <summary>播放列表区域尺寸变化：保证各列完整可见且不过度拉宽。</summary>
         private void PlaylistListBorder_SizeChanged(object sender, SizeChangedEventArgs e)

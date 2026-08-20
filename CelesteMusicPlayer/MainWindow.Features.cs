@@ -950,6 +950,33 @@ namespace CelesteMusicPlayer
         private void FavoriteButton_Click(object sender, RoutedEventArgs e)
             => ToggleFavoriteForCurrent();
 
+        // ---- 播放歌曲信息页（状态条封面进入，信息卡封面返回） ----
+        private void TransportCover_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            // 点击状态条封面：在主程序（状态条上方）展开播放歌曲信息页
+            if (NowPlayingPane == null || string.IsNullOrWhiteSpace(_nowPlayingPath))
+            {
+                return;
+            }
+
+            _nowPlayingPaneOpen = !_nowPlayingPaneOpen;
+            NowPlayingPane.Visibility = _nowPlayingPaneOpen ? Visibility.Visible : Visibility.Collapsed;
+            if (_nowPlayingPaneOpen)
+            {
+                DispatcherQueue.TryEnqueue(() => UpdateNowPlayingCardLayout());
+            }
+        }
+
+        private void NowPlayingCover_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            // 信息卡内封面再次点击：收起播放歌曲信息页，返回原音乐库/播放列表视图
+            if (NowPlayingPane != null)
+            {
+                NowPlayingPane.Visibility = Visibility.Collapsed;
+                _nowPlayingPaneOpen = false;
+            }
+        }
+
         private void SeekBackButton_Click(object sender, RoutedEventArgs e)
             => SeekBySeconds(-5);
 
