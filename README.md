@@ -9,7 +9,6 @@
   - 内置 [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) 
 - 📋 输出模式：AUDIO 输出设备可选择，WASAPI 共享 / WASAPI 独占（HiFi，绕开系统混音器；ASIO 后续更新）
 - 🎯 HiFi 独占输出：基于 NAudio / 原生 WASAPI 从 PCM WAV 流式输出，兼顾音质；独占设备音量可调、切歌音量不再重置
-- ⏭️ 无缝衔接（gapless）：共享 / ASIO 下同格式曲目自动预加载、无缝续接，告别切歌空白
 - 🎚️ 均衡器（AudioGraph 预览）、音量条自绘、任务栏进度
 - 📝 歌词：自动下载（网易云 / QQ / 酷狗）、在线搜索、桌面歌词窗口、卡拉 OK 高亮
 - 🖼️ 封面：自动下载并嵌入标签、专辑 / 艺术家视图、封面文件夹
