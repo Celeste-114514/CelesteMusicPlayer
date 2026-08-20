@@ -2719,7 +2719,7 @@
         <!-- 底部播放控制 -->
         <Grid
             Grid.Row="2"
-            MinHeight="82"
+            MinHeight="72"
             Margin="16,6,16,12"
             ColumnSpacing="14">
             <Grid.ColumnDefinitions>
