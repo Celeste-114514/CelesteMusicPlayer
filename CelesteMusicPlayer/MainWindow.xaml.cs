@@ -5122,6 +5122,79 @@ namespace CelesteMusicPlayer
                 songs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
+        /// <summary>多选切换：开启后列表可多选。</summary>
+        private void MediaMultiSelectButton_Click(object sender, RoutedEventArgs e)
+        {
+            bool on = MediaMultiSelectButton?.IsChecked == true;
+            if (MediaDetailsList != null)
+            {
+                MediaDetailsList.SelectionMode = on
+                    ? ListViewSelectionMode.Multiple
+                    : ListViewSelectionMode.None;
+                if (!on)
+                {
+                    MediaDetailsList.SelectedItems.Clear();
+                }
+            }
+
+            if (MediaMultiSelectButton != null)
+            {
+                MediaMultiSelectButton.Content = on ? "退出多选" : "多选";
+            }
+        }
+
+        /// <summary>把右侧详情区选中的歌曲加入播放队列。</summary>
+        private void MediaAddQueueButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (MediaDetailsList?.SelectedItems == null)
+            {
+                return;
+            }
+
+            List<PlaylistItem> sel = MediaDetailsList.SelectedItems.OfType<PlaylistItem>().ToList();
+            if (sel.Count == 0)
+            {
+                // 未多选时：默认加入当前详情列表全部
+                sel = MediaDetailsList.ItemsSource is System.Collections.ObjectModel.ObservableCollection<PlaylistItem> oc
+                    ? oc.ToList()
+                    : (MediaDetailsList.ItemsSource as System.Collections.Generic.IEnumerable<PlaylistItem>)?.ToList() ?? new List<PlaylistItem>();
+            }
+
+            if (sel.Count > 0)
+            {
+                AddRangeToPlayQueue(sel);
+            }
+        }
+
+        /// <summary>右侧详情区歌曲双击/末选时，把歌曲加入播放队列。</summary>
+        private void AddRangeToPlayQueue(IReadOnlyList<PlaylistItem> songs)
+        {
+            foreach (PlaylistItem s in songs)
+            {
+                _ = AddToUserPlaylistBack(s);
+            }
+        }
+
+        /// <summary>把单曲加入播放队列末尾。</summary>
+        private System.Threading.Tasks.Task AddToUserPlaylistBack(PlaylistItem song)
+        {
+            try
+            {
+                _userPlaylist.Add(song);
+                RenumberCollection(_userPlaylist);
+                if (_currentCategory == "UserPlaylist")
+                {
+                    PlaylistView.ItemsSource = null;
+                    PlaylistView.ItemsSource = _userPlaylist;
+                }
+            }
+            catch
+            {
+            }
+
+            return System.Threading.Tasks.Task.CompletedTask;
+        }
+
         private void FolderBrowserView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
         {
             if (args.Item is FolderBrowserItem item && args.ItemContainer is ListViewItem container)
@@ -5200,6 +5273,23 @@ namespace CelesteMusicPlayer
             flyout.Items.Add(playItem);
             flyout.Items.Add(multiItem);
             flyout.Items.Add(addItem);
+
+            // 从媒体库删除（仅对配置的媒体库根文件夹可用）
+            AppSettingsState settings = AppSettingsStore.Load();
+            bool isMediaRoot = settings.LibraryWatchFolders?.Contains(folderRef.FullPath, StringComparer.OrdinalIgnoreCase) == true;
+            if (isMediaRoot)
+            {
+                var removeItem = new MenuFlyoutItem { Text = "从媒体库中删除" };
+                removeItem.Icon = new FontIcon { Glyph = "\uE74D" };
+                removeItem.Click += (_, _) =>
+                {
+                    settings.LibraryWatchFolders?.RemoveAll(p =>
+                        string.Equals(p, folderRef.FullPath, StringComparison.OrdinalIgnoreCase));
+                    AppSettingsStore.Save(settings);
+                    RefreshFolderBrowserRoots();
+                };
+                flyout.Items.Add(removeItem);
+            }
 
             if (e.OriginalSource is FrameworkElement fe)
             {

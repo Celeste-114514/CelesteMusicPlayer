@@ -2299,13 +2299,46 @@
                                 Margin="0,0,0,8"
                                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                                 BorderThickness="0,0,0,1">
-                                <TextBlock
-                                    x:Name="MediaDetailsHeader"
-                                    FontSize="14"
-                                    FontWeight="SemiBold"
-                                    TextWrapping="NoWrap"
-                                    TextTrimming="CharacterEllipsis"
-                                    Text="选择文件夹查看歌曲" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        x:Name="MediaDetailsHeader"
+                                        Grid.Column="0"
+                                        VerticalAlignment="Center"
+                                        FontSize="14"
+                                        FontWeight="SemiBold"
+                                        TextWrapping="NoWrap"
+                                        TextTrimming="CharacterEllipsis"
+                                        Text="选择文件夹查看歌曲" />
+                                    <Button
+                                        x:Name="MediaAddQueueButton"
+                                        Grid.Column="1"
+                                        Height="30"
+                                        Padding="10,0"
+                                        CornerRadius="15"
+                                        BorderThickness="0"
+                                        Click="MediaAddQueueButton_Click"
+                                        ToolTipService.ToolTip="把选中歌曲加入播放队列">
+                                        <StackPanel Orientation="Horizontal" Spacing="5">
+                                            <FontIcon Glyph="&#xE710;" FontSize="13" />
+                                            <TextBlock Text="加入播放队列" VerticalAlignment="Center" />
+                                        </StackPanel>
+                                    </Button>
+                                    <ToggleButton
+                                        x:Name="MediaMultiSelectButton"
+                                        Grid.Column="2"
+                                        Height="30"
+                                        Padding="10,0"
+                                        CornerRadius="15"
+                                        BorderThickness="1"
+                                        Content="多选"
+                                        Click="MediaMultiSelectButton_Click"
+                                        ToolTipService.ToolTip="进入/退出多选" />
+                                </Grid>
                             </Border>
                             <ListView
                                 x:Name="MediaDetailsList"
