@@ -1159,20 +1159,16 @@ namespace CelesteMusicPlayer
             if (NowPlayingArtistLinkButton != null) NowPlayingArtistLinkButton.MaxWidth = linkMax;
             if (NowPlayingAlbumLinkButton != null) NowPlayingAlbumLinkButton.MaxWidth = linkMax;
 
-            // 封面整体右移：使封面中轴位于主UI中轴线右侧约 150px（歌词同步右移保持间距）
+            // 封面中轴位于主UI中轴线左侧约 150px（右侧歌词保持原位）
             double paneLeftPad = 12;
             double coverCenterBefore = paneLeftPad + coverSize / 2.0;
-            double targetCenter = paneWidth / 2.0 + 150.0;
-            double dx = Math.Max(0, targetCenter - coverCenterBefore);
+            double targetCenter = paneWidth / 2.0 - 150.0;
+            double dx = targetCenter - coverCenterBefore;
             if (NowPlayingLeftShift != null)
             {
                 NowPlayingLeftShift.TranslateX = dx;
             }
-            if (LyricsSection != null)
-            {
-                Thickness m = LyricsSection.Margin;
-                LyricsSection.Margin = new Thickness(dx, m.Top, m.Right, m.Bottom);
-            }
+            // 歌词(右栏)不同步位移，保持原样
         }
 
         private bool _windowChromeConfigured;
