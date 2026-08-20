@@ -3020,7 +3020,10 @@
                         </StackPanel>
 
                         <!-- 右栏：滚动歌词 -->
-                        <Grid Grid.Column="1" x:Name="LyricsSection">
+                        <Grid Grid.Column="1" x:Name="LyricsSection" RenderTransformOrigin="0.5,0.5">
+                            <Grid.RenderTransform>
+                                <CompositeTransform x:Name="LyricsShift" ScaleX="1" ScaleY="1" />
+                            </Grid.RenderTransform>
                             <ScrollViewer
                                 x:Name="LyricsScrollViewer"
                                 VerticalScrollBarVisibility="Hidden"
