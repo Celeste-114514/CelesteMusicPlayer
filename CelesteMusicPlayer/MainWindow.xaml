@@ -1404,7 +1404,7 @@
                                 <Grid ColumnSpacing="24" Padding="0,8,20,16">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" MinWidth="360" />
+                                        <ColumnDefinition Width="500" />
                                     </Grid.ColumnDefinitions>
                                     <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" MaxHeight="720">
                                     <StackPanel Spacing="16" Width="420">
@@ -1496,15 +1496,15 @@
                                         </StackPanel>
                                     </Grid>
 
-                                    <!-- 专辑操作：胶囊按钮 -->
-                                    <!-- 专辑操作：三按钮居中 -->
-                                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center">
+                                    <!-- 专辑操作：三个按钮逐行排列 -->
+                                    <StackPanel Orientation="Vertical" Spacing="10" HorizontalAlignment="Left">
                                         <Button
                                             x:Name="AlbumDetailPlayButton"
                                             Height="36"
                                             Padding="18,0"
                                             CornerRadius="18"
                                             BorderThickness="0"
+                                            HorizontalAlignment="Left"
                                             Click="AlbumDetailPlayButton_Click"
                                             ToolTipService.ToolTip="从音轨 1 开始播放，并替换播放列表">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -1518,6 +1518,7 @@
                                             Padding="18,0"
                                             CornerRadius="18"
                                             BorderThickness="0"
+                                            HorizontalAlignment="Left"
                                             Click="AlbumDetailAddToPlaylistButton_Click"
                                             ToolTipService.ToolTip="将本专辑歌曲添加到播放队列">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -1531,6 +1532,7 @@
                                             Padding="18,0"
                                             CornerRadius="18"
                                             BorderThickness="0"
+                                            HorizontalAlignment="Left"
                                             Click="AlbumDetailAddToNamedListButton_Click"
                                             ToolTipService.ToolTip="把专辑内歌曲按播放顺序添加到某个播放列表">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -1742,13 +1744,13 @@
                                     <ColumnDefinition Width="*" MinWidth="280" />
                                 </Grid.ColumnDefinitions>
 
-                                <!-- 左右分隔竖线（作为中间独立列，明确分隔两栏，不穿内容） -->
+                                <!-- 左右分隔竖线（作为中间独立列，留空隙分隔两栏，不穿内容） -->
                                 <Border
                                     Grid.Row="0"
                                     Grid.RowSpan="3"
                                     Grid.Column="1"
                                     Width="1"
-                                    Margin="0,0,16,0"
+                                    Margin="20,0,16,0"
                                     HorizontalAlignment="Left"
                                     Background="{ThemeResource DividerStrokeColorDefaultBrush}"
                                     IsHitTestVisible="False" />
@@ -1829,7 +1831,7 @@
                                     Grid.Row="1"
                                     Grid.Column="0"
                                     Width="400"
-                                    Height="450"
+                                    Height="300"
                                     Margin="0,0,16,0"
                                     MaxWidth="400"
                                     MinHeight="0"
@@ -2010,8 +2012,8 @@
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
 
-                                        <!-- 标题 + 排序（同行对齐，下移至与左栏播放/添加按钮对齐） -->
-                                        <Grid ColumnSpacing="12" Padding="0,0,0,4" Margin="0,96,0,0">
+                                        <!-- 标题 + 排序（同行对齐，顶部对齐横线附近） -->
+                                        <Grid ColumnSpacing="12" Padding="0,0,0,4" Margin="0,0,0,0">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="*" />
                                                 <ColumnDefinition Width="Auto" />
