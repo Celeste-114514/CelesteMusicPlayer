@@ -961,39 +961,103 @@ namespace CelesteMusicPlayer
             SetNowPlayingPaneVisible(!_nowPlayingPaneOpen);
         }
 
-        /// <summary>整合式视图切换：展开播放信息页时隐藏主内容区(LibraryPaneRoot)，露出主程序背景；收起则恢复。</summary>
+        /// <summary>景深切换：切出播放信息页时面板前推、主内容区(含左侧分类)退后变暗；收起则反向恢复。</summary>
         private void SetNowPlayingPaneVisible(bool visible)
         {
             _nowPlayingPaneOpen = visible;
-            if (NowPlayingPane != null)
+            if (NowPlayingPane == null)
             {
-                NowPlayingPane.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+                return;
             }
-            if (LibraryPaneRoot != null)
-            {
-                // 专辑详情页式视图切换：面板展开时主内容区暂时隐藏，避免透明背景透出底层列表
-                LibraryPaneRoot.Visibility = visible ? Visibility.Collapsed : Visibility.Visible;
-            }
+
+            var mcBack = MainContentGrid?.Resources["MainContentDepthBackStoryboard"]
+                as Microsoft.UI.Xaml.Media.Animation.Storyboard;
+            var mcRestore = MainContentGrid?.Resources["MainContentDepthRestoreStoryboard"]
+                as Microsoft.UI.Xaml.Media.Animation.Storyboard;
+            var depthIn = NowPlayingPane.Resources["NowPlayingDepthInStoryboard"]
+                as Microsoft.UI.Xaml.Media.Animation.Storyboard;
+            var depthOut = NowPlayingPane.Resources["NowPlayingDepthOutStoryboard"]
+                as Microsoft.UI.Xaml.Media.Animation.Storyboard;
+
             if (visible)
             {
+                try
+                {
+                    mcRestore?.Stop();
+                    depthOut?.Stop();
+                    nowPlayingDepthOutSubscribed = false;
+                }
+                catch
+                {
+                }
+
+                NowPlayingPane.Opacity = 0;
+                NowPlayingPane.Visibility = Visibility.Visible;
                 DispatcherQueue.TryEnqueue(() => UpdateNowPlayingCardLayout());
+                try
+                {
+                    mcBack?.Begin();
+                    depthIn?.Begin();
+                }
+                catch
+                {
+                    NowPlayingPane.Opacity = 1;
+                }
+            }
+            else
+            {
+                try
+                {
+                    mcBack?.Stop();
+                    depthIn?.Stop();
+                    if (!nowPlayingDepthOutSubscribed && depthOut != null)
+                    {
+                        depthOut.Completed += NowPlayingDepthOut_Completed;
+                        nowPlayingDepthOutSubscribed = true;
+                    }
+                    mcRestore?.Begin();
+                    depthOut?.Begin();
+                }
+                catch
+                {
+                    NowPlayingPane.Visibility = Visibility.Collapsed;
+                    NowPlayingPane.Opacity = 1;
+                }
             }
         }
 
-        /// <summary>状态条封面 hover：高亮描边 + 强调背景，提示可点击展开播放信息页。</summary>
+        private bool nowPlayingDepthOutSubscribed;
+
+        /// <summary>收起动画完成后折叠面板。</summary>
+        private void NowPlayingDepthOut_Completed(object? sender, object e)
+        {
+            nowPlayingDepthOutSubscribed = false;
+            if (NowPlayingPane != null)
+            {
+                NowPlayingPane.Visibility = Visibility.Collapsed;
+                NowPlayingPane.Opacity = 1;
+            }
+        }
+
+        /// <summary>状态条封面 hover：封面变暗 + 朝上三角箭头淡入动画，提示可展开。</summary>
         private void TransportCover_PointerEntered(object sender, PointerRoutedEventArgs e)
         {
-            if (sender is not Border b)
+            if (TransportCoverBorder == null)
             {
                 return;
             }
 
             try
             {
-                var hoverBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(ResolveAccentColor());
-                b.BorderBrush = hoverBrush;
-                b.BorderThickness = new Thickness(2);
-                b.Background = ResolveAccentBrush();
+                var arrowIn = TransportCoverBorder.Resources["TransportArrowInStoryboard"]
+                    as Microsoft.UI.Xaml.Media.Animation.Storyboard;
+                var arrowOut = TransportCoverBorder.Resources["TransportArrowOutStoryboard"]
+                    as Microsoft.UI.Xaml.Media.Animation.Storyboard;
+                arrowOut?.Stop();
+                // 描边轻微高亮，提示可点击
+                TransportCoverBorder.BorderBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(ResolveAccentColor());
+                TransportCoverBorder.BorderThickness = new Thickness(2);
+                arrowIn?.Begin();
             }
             catch
             {
@@ -1002,16 +1066,21 @@ namespace CelesteMusicPlayer
 
         private void TransportCover_PointerExited(object sender, PointerRoutedEventArgs e)
         {
-            if (sender is not Border b)
+            if (TransportCoverBorder == null)
             {
                 return;
             }
 
             try
             {
-                b.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"];
-                b.BorderThickness = new Thickness(1);
-                b.Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["SubtleFillColorSecondaryBrush"];
+                var arrowIn = TransportCoverBorder.Resources["TransportArrowInStoryboard"]
+                    as Microsoft.UI.Xaml.Media.Animation.Storyboard;
+                var arrowOut = TransportCoverBorder.Resources["TransportArrowOutStoryboard"]
+                    as Microsoft.UI.Xaml.Media.Animation.Storyboard;
+                arrowIn?.Stop();
+                TransportCoverBorder.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"];
+                TransportCoverBorder.BorderThickness = new Thickness(1);
+                arrowOut?.Begin();
             }
             catch
             {

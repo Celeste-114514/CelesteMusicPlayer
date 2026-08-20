@@ -8444,7 +8444,7 @@ namespace CelesteMusicPlayer
                 }
 
                 NowPlayingTitleText.Text = "未在播放";
-                NowPlayingArtistAlbumText.Text = "艺术家 · 专辑";
+                ResetNowPlayingArtistAlbumLinks();
             }
             catch (Exception ex)
             {
@@ -12585,7 +12585,7 @@ namespace CelesteMusicPlayer
             RedrawProgressStyle();
             _nowPlayingPath = null;
             NowPlayingTitleText.Text = "未在播放";
-            NowPlayingArtistAlbumText.Text = "艺术家 · 专辑";
+            ResetNowPlayingArtistAlbumLinks();
             NowPlayingCoverImage.Source = null;
             ApplyNowPlayingPaneTransparent();
             UpdateTransportNowPlaying(null, null);
@@ -12752,15 +12752,85 @@ namespace CelesteMusicPlayer
             _ = MaybeAutoDownloadExtrasAsync(item, lyrics, coverBytes);
         }
 
+        /// <summary>重置艺术家/专辑超链接为空占位（未播放时禁用）。</summary>
+        private void ResetNowPlayingArtistAlbumLinks()
+        {
+            try
+            {
+                if (NowPlayingArtistText != null) NowPlayingArtistText.Text = "未知艺术家";
+                if (NowPlayingArtistLinkButton != null) NowPlayingArtistLinkButton.IsEnabled = false;
+                if (NowPlayingAlbumText != null) NowPlayingAlbumText.Text = "未知专辑";
+                if (NowPlayingAlbumLinkButton != null) NowPlayingAlbumLinkButton.IsEnabled = false;
+                if (NowPlayingArtistAlbumSeparator != null) NowPlayingArtistAlbumSeparator.Visibility = Visibility.Collapsed;
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>点击艺术家超链接：收起播放面板并跳转到对应艺术家详情页。</summary>
+        private void NowPlayingArtistLinkButton_Click(object sender, RoutedEventArgs e)
+        {
+            string artistName = NowPlayingArtistText?.Text?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(artistName))
+            {
+                return;
+            }
+
+            ArtistEntry? entry = _artists.FirstOrDefault(
+                a => string.Equals(a.Name, artistName, StringComparison.OrdinalIgnoreCase));
+            if (entry == null)
+            {
+                entry = new ArtistEntry { Name = artistName };
+            }
+
+            SetNowPlayingPaneVisible(false);
+            DispatcherQueue.TryEnqueue(() => OpenArtistDetail(entry!));
+        }
+
+        /// <summary>点击专辑超链接：收起播放面板并跳转到对应专辑详情页。</summary>
+        private void NowPlayingAlbumLinkButton_Click(object sender, RoutedEventArgs e)
+        {
+            string albumName = NowPlayingAlbumText?.Text?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(albumName))
+            {
+                return;
+            }
+
+            string artistName = NowPlayingArtistText?.Text?.Trim() ?? "";
+            AlbumEntry? entry = _albums.FirstOrDefault(
+                a => string.Equals(a.Name, albumName, StringComparison.OrdinalIgnoreCase));
+            if (entry == null)
+            {
+                entry = BuildAlbumEntriesFromTracks(_playlist).FirstOrDefault(
+                    a => string.Equals(a.Name, albumName, StringComparison.OrdinalIgnoreCase));
+            }
+            if (entry == null)
+            {
+                entry = new AlbumEntry { Name = albumName, Artist = artistName };
+            }
+
+            SetNowPlayingPaneVisible(false);
+            DispatcherQueue.TryEnqueue(() => OpenAlbumDetail(entry!, fromArtist: false));
+        }
+
         private void UpdateNowPlayingArtistAlbumText(PlaylistItem item)
         {
-            string artist = string.IsNullOrWhiteSpace(item.Artist) || item.Artist == "未知艺术家"
-                ? string.Empty
-                : item.Artist.Trim();
-            string album = string.IsNullOrWhiteSpace(item.Album) || item.Album == "未知专辑"
-                ? string.Empty
-                : item.Album.Trim();
-            NowPlayingArtistAlbumText.Text = string.Join(" · ", new[] { artist, album }.Where(s => s.Length > 0));
+            bool hasArtist = !string.IsNullOrWhiteSpace(item.Artist) && item.Artist != "未知艺术家";
+            bool hasAlbum = !string.IsNullOrWhiteSpace(item.Album) && item.Album != "未知专辑";
+
+            NowPlayingArtistText.Text = hasArtist ? item.Artist.Trim() : "未知艺术家";
+            NowPlayingArtistLinkButton.IsEnabled = hasArtist;
+
+            NowPlayingAlbumText.Text = hasAlbum ? item.Album.Trim() : "未知专辑";
+            NowPlayingAlbumLinkButton.IsEnabled = hasAlbum;
+
+            // 分隔符仅在艺术家与专辑都存在时显示
+            if (NowPlayingArtistAlbumSeparator != null)
+            {
+                NowPlayingArtistAlbumSeparator.Visibility = (hasArtist && hasAlbum)
+                    ? Visibility.Visible : Visibility.Collapsed;
+            }
         }
 
         /// <summary>播放面板背景保持透明，与专辑详情页一致（露出主程序背景，非浮层）。</summary>
@@ -12843,7 +12913,7 @@ namespace CelesteMusicPlayer
                 if (lyricSettings.ShowSongInfoIfNoLyric)
                 {
                     string title = NowPlayingTitleText?.Text ?? "未知曲目";
-                    string artistAlbum = NowPlayingArtistAlbumText?.Text ?? "";
+                    string artistAlbum = string.Join(" · ", new[] { NowPlayingArtistText?.Text, NowPlayingAlbumText?.Text }.Where(s => !string.IsNullOrWhiteSpace(s)));
                     hint = title + "\n" + artistAlbum;
                 }
 

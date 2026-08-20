@@ -120,6 +120,62 @@
 
         <!-- 中部：分类 | 播放列表（右侧信息面板已停用，播放列表区扩张到底） -->
         <Grid x:Name="MainContentGrid" Grid.Row="1" Margin="16,8,16,0" Tapped="MainContentGrid_Tapped">
+            <Grid.Resources>
+                <!-- 主内容区景深退后：切出播放信息面板时缩小变暗 -->
+                <Storyboard x:Name="MainContentDepthBackStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="LeftCategoryGrid" Storyboard.TargetProperty="Opacity"
+                                     To="0.05" Duration="0:0:0.28">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="LeftCategoryTransform" Storyboard.TargetProperty="ScaleX"
+                                     To="0.9" Duration="0:0:0.28">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="LeftCategoryTransform" Storyboard.TargetProperty="ScaleY"
+                                     To="0.9" Duration="0:0:0.28">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="LibraryPaneRoot" Storyboard.TargetProperty="Opacity"
+                                     To="0.05" Duration="0:0:0.28">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="LibraryPaneTransform" Storyboard.TargetProperty="ScaleX"
+                                     To="0.9" Duration="0:0:0.28">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="LibraryPaneTransform" Storyboard.TargetProperty="ScaleY"
+                                     To="0.9" Duration="0:0:0.28">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+                <!-- 主内容区景深恢复 -->
+                <Storyboard x:Name="MainContentDepthRestoreStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="LeftCategoryGrid" Storyboard.TargetProperty="Opacity"
+                                     To="1" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="LeftCategoryTransform" Storyboard.TargetProperty="ScaleX"
+                                     To="1" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="LeftCategoryTransform" Storyboard.TargetProperty="ScaleY"
+                                     To="1" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="LibraryPaneRoot" Storyboard.TargetProperty="Opacity"
+                                     To="1" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="LibraryPaneTransform" Storyboard.TargetProperty="ScaleX"
+                                     To="1" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                    <DoubleAnimation Storyboard.TargetName="LibraryPaneTransform" Storyboard.TargetProperty="ScaleY"
+                                     To="1" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+            </Grid.Resources>
             <Grid.ColumnDefinitions>
                 <!-- 音乐库 -->
                 <ColumnDefinition x:Name="CategoryColumn" Width="156" MinWidth="148" MaxWidth="220" />
@@ -129,10 +185,15 @@
 
             <!-- 左：音乐库 + 播放列表入口（统一 Button 选中样式） -->
             <Grid
+                x:Name="LeftCategoryGrid"
                 Grid.Column="0"
                 Margin="0,0,8,0"
                 Padding="4"
-                RowSpacing="4">
+                RowSpacing="4"
+                RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <CompositeTransform x:Name="LeftCategoryTransform" ScaleX="1" ScaleY="1" />
+                </Grid.RenderTransform>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -427,7 +488,11 @@
             <Grid
                 x:Name="LibraryPaneRoot"
                 Grid.Column="1"
-                RowSpacing="8">
+                RowSpacing="8"
+                RenderTransformOrigin="0.5,0.5">
+                <Grid.RenderTransform>
+                    <CompositeTransform x:Name="LibraryPaneTransform" ScaleX="1" ScaleY="1" />
+                </Grid.RenderTransform>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -2738,10 +2803,8 @@
                 </Grid>
             </Grid>
 
-            <!-- 右侧信息面板已停用（代码保留）；下方为合并到同一 Row1 的播放歌曲信息页(默认收起)。
-                 内容展示统一走 NowPlayingPane，Grid.Column=1 全宽。 -->
-            <Grid
-                Grid.Column="1">
+            <!-- 播放歌曲信息页(切出时占满整个主内容区，含左侧音乐库分类栏) -->
+            <Grid Grid.Column="0" Grid.ColumnSpan="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -2754,7 +2817,51 @@
                     Background="Transparent"
                     BorderThickness="0"
                     Padding="12"
+                    RenderTransformOrigin="0.5,0.5"
                     Visibility="Collapsed">
+                    <Border.RenderTransform>
+                        <CompositeTransform x:Name="NowPlayingPaneTransform" ScaleX="0.92" ScaleY="0.92" TranslateY="16" />
+                    </Border.RenderTransform>
+                    <Border.Resources>
+                        <!-- 景深推进：面板向前放大并上浮切入 -->
+                        <Storyboard x:Name="NowPlayingDepthInStoryboard">
+                            <DoubleAnimation Storyboard.TargetName="NowPlayingPane" Storyboard.TargetProperty="Opacity"
+                                             From="0" To="1" Duration="0:0:0.28">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetName="NowPlayingPaneTransform" Storyboard.TargetProperty="ScaleX"
+                                             From="0.92" To="1" Duration="0:0:0.28">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetName="NowPlayingPaneTransform" Storyboard.TargetProperty="ScaleY"
+                                             From="0.92" To="1" Duration="0:0:0.28">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetName="NowPlayingPaneTransform" Storyboard.TargetProperty="TranslateY"
+                                             From="16" To="0" Duration="0:0:0.28">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                        <!-- 景深退回：面板缩小并下沉淡出 -->
+                        <Storyboard x:Name="NowPlayingDepthOutStoryboard">
+                            <DoubleAnimation Storyboard.TargetName="NowPlayingPane" Storyboard.TargetProperty="Opacity"
+                                             From="1" To="0" Duration="0:0:0.22">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseIn" /></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetName="NowPlayingPaneTransform" Storyboard.TargetProperty="ScaleX"
+                                             From="1" To="0.92" Duration="0:0:0.22">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseIn" /></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetName="NowPlayingPaneTransform" Storyboard.TargetProperty="ScaleY"
+                                             From="1" To="0.92" Duration="0:0:0.22">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseIn" /></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                            <DoubleAnimation Storyboard.TargetName="NowPlayingPaneTransform" Storyboard.TargetProperty="TranslateY"
+                                             From="0" To="16" Duration="0:0:0.22">
+                                <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseIn" /></DoubleAnimation.EasingFunction>
+                            </DoubleAnimation>
+                        </Storyboard>
+                    </Border.Resources>
                 <Grid
                     x:Name="NowPlayingPaneContent"
                     Background="Transparent">
@@ -2772,16 +2879,15 @@
                         BorderThickness="0,0,0,1">
                         <Button
                             x:Name="NowPlayingCollapseButton"
-                            Padding="10,5"
+                            Width="36"
+                            Height="32"
+                            Padding="0"
                             HorizontalAlignment="Left"
                             Background="Transparent"
                             BorderThickness="0"
                             Click="NowPlayingCollapseButton_Click"
                             ToolTipService.ToolTip="返回音乐库">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE72B;" FontSize="13" />
-                                <TextBlock Text="返回" FontSize="13" VerticalAlignment="Center" />
-                            </StackPanel>
+                            <FontIcon Glyph="&#xE70D;" FontSize="13" />
                         </Button>
                     </Border>
 
@@ -2848,15 +2954,45 @@
                                     MaxLines="3"
                                     TextTrimming="CharacterEllipsis"
                                     Text="未在播放" />
-                                <TextBlock
-                                    x:Name="NowPlayingArtistAlbumText"
-                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                    FontSize="15"
-                                    TextAlignment="Center"
-                                    TextWrapping="WrapWholeWords"
-                                    MaxLines="2"
-                                    TextTrimming="CharacterEllipsis"
-                                    Text="艺术家 · 专辑" />
+                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                    <Button
+                                        x:Name="NowPlayingArtistLinkButton"
+                                        Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        CornerRadius="4"
+                                        Click="NowPlayingArtistLinkButton_Click">
+                                        <TextBlock
+                                            x:Name="NowPlayingArtistText"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                            FontSize="15"
+                                            FontWeight="SemiBold"
+                                            TextDecorations="Underline"
+                                            TextWrapping="WrapWholeWords"
+                                            MaxLines="2"
+                                            TextTrimming="CharacterEllipsis"
+                                            Text="未知艺术家" />
+                                    </Button>
+                                    <TextBlock x:Name="NowPlayingArtistAlbumSeparator" Text="·" FontSize="15"
+                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
+                                    <Button
+                                        x:Name="NowPlayingAlbumLinkButton"
+                                        Padding="0"
+                                        Background="Transparent"
+                                        BorderThickness="0"
+                                        CornerRadius="4"
+                                        Click="NowPlayingAlbumLinkButton_Click">
+                                        <TextBlock
+                                            x:Name="NowPlayingAlbumText"
+                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                            FontSize="15"
+                                            TextDecorations="Underline"
+                                            TextWrapping="WrapWholeWords"
+                                            MaxLines="2"
+                                            TextTrimming="CharacterEllipsis"
+                                            Text="未知专辑" />
+                                    </Button>
+                                </StackPanel>
                                 <TextBlock
                                     x:Name="NowPlayingAudioInfoText"
                                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"
@@ -2932,6 +3068,37 @@
                 PointerEntered="TransportCover_PointerEntered"
                 PointerExited="TransportCover_PointerExited"
                 PointerCaptureLost="TransportCover_PointerExited">
+                <Border.Resources>
+                    <!-- hover 时状态条封面上浮三角箭头淡入 -->
+                    <Storyboard x:Name="TransportArrowInStoryboard">
+                        <DoubleAnimation Storyboard.TargetName="TransportCoverExpandHint" Storyboard.TargetProperty="Opacity"
+                                         From="0" To="1" Duration="0:0:0.18">
+                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                        <DoubleAnimation Storyboard.TargetName="TransportCoverExpandHintTransform" Storyboard.TargetProperty="ScaleX"
+                                         From="0.7" To="1" Duration="0:0:0.18">
+                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                        <DoubleAnimation Storyboard.TargetName="TransportCoverExpandHintTransform" Storyboard.TargetProperty="ScaleY"
+                                         From="0.7" To="1" Duration="0:0:0.18">
+                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                        <DoubleAnimation Storyboard.TargetName="TransportCoverDimLayer" Storyboard.TargetProperty="Opacity"
+                                         From="0" To="0.55" Duration="0:0:0.18">
+                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                    </Storyboard>
+                    <Storyboard x:Name="TransportArrowOutStoryboard">
+                        <DoubleAnimation Storyboard.TargetName="TransportCoverExpandHint" Storyboard.TargetProperty="Opacity"
+                                         From="1" To="0" Duration="0:0:0.12">
+                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                        <DoubleAnimation Storyboard.TargetName="TransportCoverDimLayer" Storyboard.TargetProperty="Opacity"
+                                         From="0.55" To="0" Duration="0:0:0.12">
+                            <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                        </DoubleAnimation>
+                    </Storyboard>
+                </Border.Resources>
                 <Grid>
                     <FontIcon
                         Glyph="&#xE93C;"
@@ -2943,6 +3110,27 @@
                     <Image
                         x:Name="TransportCoverImage"
                         Stretch="UniformToFill" />
+                    <!-- hover 变暗层 -->
+                    <Border
+                        x:Name="TransportCoverDimLayer"
+                        Background="#B0000000"
+                        CornerRadius="6"
+                        Opacity="0"
+                        IsHitTestVisible="False" />
+                    <!-- hover 提示：朝上三角箭头，表示可展开 -->
+                    <FontIcon
+                        x:Name="TransportCoverExpandHint"
+                        Glyph="&#xE70E;"
+                        FontSize="16"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="0,3,3,0"
+                        Opacity="0"
+                        RenderTransformOrigin="0.5,0.5">
+                        <FontIcon.RenderTransform>
+                            <CompositeTransform x:Name="TransportCoverExpandHintTransform" ScaleX="0.7" ScaleY="0.7" />
+                        </FontIcon.RenderTransform>
+                    </FontIcon>
                 </Grid>
             </Border>
 
