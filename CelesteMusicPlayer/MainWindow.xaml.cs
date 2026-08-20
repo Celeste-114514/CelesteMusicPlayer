@@ -83,6 +83,12 @@ namespace CelesteMusicPlayer
 
         public string DurationText { get; set; } = "00:00";
 
+        /// <summary>歌曲面板第三行的格式胶囊：格式 / 位深·采样率 / 比特率（如 ["FLAC","16bit/44kHz","1411kbps"]）。</summary>
+        public IReadOnlyList<string> FormatChips { get; set; } = System.Array.Empty<string>();
+
+        /// <summary>歌曲小封面（延迟异步加载，空则显示占位图标）。</summary>
+        public Microsoft.UI.Xaml.Media.ImageSource? CoverImage { get; set; }
+
         public TimeSpan Duration { get; set; }
 
         public string FilePath { get; set; } = string.Empty;
@@ -469,6 +475,9 @@ namespace CelesteMusicPlayer
         private readonly List<TextBlock> _lyricTextBlocks = new();
         private string? _nowPlayingPath;
         private bool _nowPlayingPaneOpen;
+
+        // 歌曲面板小封面异步加载：防止同一路径并发重复读取
+        private readonly System.Collections.Generic.HashSet<string> _rowCoverLoading = new(System.StringComparer.OrdinalIgnoreCase);
 
         // 歌词平滑滚动
         private DispatcherQueueTimer? _lyricScrollTimer;
@@ -2337,7 +2346,8 @@ namespace CelesteMusicPlayer
                 Genre = genre,
                 Duration = duration,
                 DurationText = FormatTime(duration),
-                FilePath = path
+                FilePath = path,
+                FormatChips = AudioInfoFormatter.FormatChips(path)
             };
         }
 
@@ -9420,6 +9430,67 @@ namespace CelesteMusicPlayer
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {
                 ApplySongListItemSelectionChrome(PlaylistView, container, song);
+                if (args.InRecycleQueue)
+                {
+                    return;
+                }
+
+                // 行模板尚未实现时（Phase 0）触发小封面异步加载
+                if (args.Phase == 0)
+                {
+                    LoadRowCoverAsync(PlaylistView, container, song);
+                }
+            }
+        }
+
+        /// <summary>异步读取歌曲小封面并填到行模板内的 RowCoverImage；去重 + 行已回收则跳过。</summary>
+        private async void LoadRowCoverAsync(ListView owner, ListViewItem container, PlaylistItem song)
+        {
+            if (string.IsNullOrWhiteSpace(song.FilePath))
+            {
+                return;
+            }
+
+            if (!_rowCoverLoading.Add(song.FilePath))
+            {
+                return;
+            }
+
+            try
+            {
+                byte[]? bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(song.FilePath));
+                if (bytes is not { Length: > 0 })
+                {
+                    return;
+                }
+
+                var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+                using (var ms = new System.IO.MemoryStream(bytes))
+                {
+                    ms.Position = 0;
+                    await bmp.SetSourceAsync(ms.AsRandomAccessStream());
+                }
+
+                // 仅在行仍被实现（未回收）时更新，避免写错容器
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (owner.ContainerFromItem(song) == container)
+                    {
+                        var img = container.ContentTemplateRoot as FrameworkElement;
+                        var coverImg = img?.FindName("RowCoverImage") as Microsoft.UI.Xaml.Controls.Image;
+                        if (coverImg != null)
+                        {
+                            coverImg.Source = bmp;
+                        }
+                    }
+                });
+            }
+            catch
+            {
+            }
+            finally
+            {
+                _rowCoverLoading.Remove(song.FilePath);
             }
         }
 

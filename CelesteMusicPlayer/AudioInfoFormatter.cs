@@ -115,6 +115,65 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 歌曲面板第三行的格式胶囊内容（每段一个胶囊）：格式 / 位深·采样率 / 比特率。
+        /// 如 ["FLAC","16bit/44kHz","1411kbps"]；读取失败返回空列表。
+        /// </summary>
+        public static System.Collections.Generic.IReadOnlyList<string> FormatChips(string path)
+        {
+            var result = new System.Collections.Generic.List<string>();
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                return result;
+            }
+
+            try
+            {
+                if (!TryReadParts(path, out int rate, out int bits, out int kbps, out _))
+                {
+                    return result;
+                }
+
+                string ext = (Path.GetExtension(path)?.TrimStart('.').Trim() ?? "").ToUpperInvariant();
+                if (ext.Length > 0)
+                {
+                    result.Add(ext);
+                }
+
+                string bitsPart = bits > 0 ? bits + "bit" : string.Empty;
+                string ratePart = rate > 0 ? FormatSampleRate(rate) : string.Empty;
+                string bitDepth = string.Empty;
+                if (bitsPart.Length > 0 && ratePart.Length > 0)
+                {
+                    bitDepth = bitsPart + "/" + ratePart;
+                }
+                else if (bitsPart.Length > 0)
+                {
+                    bitDepth = bitsPart;
+                }
+                else if (ratePart.Length > 0)
+                {
+                    bitDepth = ratePart;
+                }
+
+                if (bitDepth.Length > 0)
+                {
+                    result.Add(bitDepth);
+                }
+
+                if (kbps > 0)
+                {
+                    result.Add(kbps + "kbps");
+                }
+
+                return result;
+            }
+            catch
+            {
+                return result;
+            }
+        }
+
         /// <summary>读取采样率/位深/码率/声道；TagLib 读不全时用 ffmpeg 兜底。</summary>
         private static bool TryReadParts(string path, out int rate, out int bits, out int kbps, out int channels)
         {

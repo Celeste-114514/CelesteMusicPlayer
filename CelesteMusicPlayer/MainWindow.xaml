@@ -986,7 +986,8 @@
                             Grid.Row="0"
                             Height="40"
                             Margin="4,4,4,4"
-                            ColumnSpacing="0">
+                            ColumnSpacing="0"
+                            Visibility="Collapsed">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition x:Name="HeaderTitleCol" Width="168" MinWidth="48" />
                                 <ColumnDefinition Width="10" />
@@ -1125,100 +1126,124 @@
                                 <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                                 <Setter Property="VerticalContentAlignment" Value="Stretch" />
                                 <Setter Property="Padding" Value="0" />
-                                <Setter Property="MinHeight" Value="40" />
+                                <Setter Property="MinHeight" Value="66" />
                                 <Setter Property="CornerRadius" Value="8" />
-                                <Setter Property="Margin" Value="0,2" />
+                                <Setter Property="Margin" Value="0,3" />
                                 <Setter Property="BorderThickness" Value="0" />
                             </Style>
                         </ListView.ItemContainerStyle>
 
                         <ListView.ItemTemplate>
                             <DataTemplate x:DataType="local:PlaylistItem">
-                                <!-- SongRowChrome：铺满词条高度，与悬停浅灰框一致 -->
+                                <!-- 歌曲面板行：序号 | 小封面 | 三行信息 | 时长 -->
                                 <Border
                                     Tag="SongRowChrome"
-                                    MinHeight="24"
+                                    MinHeight="64"
                                     CornerRadius="8"
-                                    Padding="12,0"
+                                    Padding="10,8"
                                     VerticalAlignment="Stretch"
                                     Background="Transparent" PointerEntered="SongRow_PointerEntered" PointerExited="SongRow_PointerExited">
-                                    <Grid VerticalAlignment="Center">
+                                    <Grid ColumnSpacing="12" VerticalAlignment="Center">
                                         <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="36" />
+                                            <ColumnDefinition Width="52" />
+                                            <ColumnDefinition Width="*" MinWidth="0" />
                                             <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="10" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="10" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="10" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="10" />
-                                            <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="10" />
-                                            <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
 
+                                        <!-- 序号 -->
                                         <TextBlock
                                             Grid.Column="0"
-                                            Width="{Binding Title, Source={StaticResource PlaylistColumns}}"
-                                            HorizontalAlignment="Left"
                                             VerticalAlignment="Center"
-                                            TextAlignment="Left"
-                                            TextTrimming="CharacterEllipsis"
-                                            Text="{x:Bind DisplayTitle}"
-                                            Tag="Title"
-                                            PointerEntered="PlaylistCell_PointerEntered"
-                                            PointerExited="PlaylistCell_PointerExited"
-                                            PointerMoved="PlaylistCell_PointerMoved" />
-                                        <TextBlock
+                                            FontSize="12"
+                                            Opacity="0.65"
+                                            Text="{x:Bind Index}" />
+
+                                        <!-- 小封面 -->
+                                        <Border
+                                            Grid.Column="1"
+                                            Width="52"
+                                            Height="52"
+                                            VerticalAlignment="Center"
+                                            CornerRadius="6"
+                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1">
+                                            <Grid>
+                                                <FontIcon
+                                                    Glyph="&#xE93C;"
+                                                    FontSize="24"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                    HorizontalAlignment="Center"
+                                                    VerticalAlignment="Center"
+                                                    Opacity="0.5" />
+                                                <Image
+                                                    x:Name="RowCoverImage"
+                                                    Stretch="UniformToFill" />
+                                            </Grid>
+                                        </Border>
+
+                                        <!-- 三行信息 -->
+                                        <StackPanel
                                             Grid.Column="2"
-                                            Width="{Binding Artist, Source={StaticResource PlaylistColumns}}"
-                                            HorizontalAlignment="Left"
                                             VerticalAlignment="Center"
-                                            TextAlignment="Left"
-                                            Opacity="0.85"
-                                            TextTrimming="CharacterEllipsis"
-                                            Text="{x:Bind Artist}"
-                                            Tag="Artist"
-                                            PointerEntered="PlaylistCell_PointerEntered"
-                                            PointerExited="PlaylistCell_PointerExited"
-                                            PointerMoved="PlaylistCell_PointerMoved" />
+                                            Spacing="3">
+                                            <!-- 第一行：标题（内嵌标签，稍大加粗） -->
+                                            <TextBlock
+                                                FontSize="14"
+                                                FontWeight="SemiBold"
+                                                TextWrapping="NoWrap"
+                                                TextTrimming="CharacterEllipsis"
+                                                Tag="Title"
+                                                PointerEntered="PlaylistCell_PointerEntered"
+                                                PointerExited="PlaylistCell_PointerExited"
+                                                PointerMoved="PlaylistCell_PointerMoved"
+                                                Text="{x:Bind DisplayTitle}" />
+                                            <!-- 第二行：专辑（比标题小一点、细一点） -->
+                                            <TextBlock
+                                                FontSize="12"
+                                                FontWeight="Normal"
+                                                Opacity="0.75"
+                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                                TextWrapping="NoWrap"
+                                                TextTrimming="CharacterEllipsis"
+                                                Tag="Album"
+                                                PointerEntered="PlaylistCell_PointerEntered"
+                                                PointerExited="PlaylistCell_PointerExited"
+                                                PointerMoved="PlaylistCell_PointerMoved"
+                                                Text="{x:Bind Album}" />
+                                            <!-- 第三行：格式胶囊（格式 / 位深·采样率 / 比特率） -->
+                                            <ItemsControl ItemsSource="{x:Bind FormatChips}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" Spacing="5" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <Border
+                                                            Padding="9,2"
+                                                            CornerRadius="9"
+                                                            Background="#33FFFFFF"
+                                                            BorderBrush="#22FFFFFF"
+                                                            BorderThickness="1">
+                                                            <TextBlock
+                                                                FontSize="10"
+                                                                Opacity="0.85"
+                                                                Text="{Binding}" />
+                                                        </Border>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
+                                        </StackPanel>
+
+                                        <!-- 时长 -->
                                         <TextBlock
-                                            Grid.Column="4"
-                                            Width="{Binding Album, Source={StaticResource PlaylistColumns}}"
-                                            HorizontalAlignment="Left"
+                                            Grid.Column="3"
                                             VerticalAlignment="Center"
-                                            TextAlignment="Left"
-                                            Opacity="0.85"
-                                            TextTrimming="CharacterEllipsis"
-                                            Text="{x:Bind Album}"
-                                            Tag="Album"
-                                            PointerEntered="PlaylistCell_PointerEntered"
-                                            PointerExited="PlaylistCell_PointerExited"
-                                            PointerMoved="PlaylistCell_PointerMoved" />
-                                        <TextBlock
-                                            Grid.Column="6"
-                                            Width="{Binding Year, Source={StaticResource PlaylistColumns}}"
-                                            HorizontalAlignment="Left"
-                                            VerticalAlignment="Center"
-                                            TextAlignment="Left"
+                                            FontSize="12"
                                             Opacity="0.7"
-                                            Text="{x:Bind YearText}"
-                                            Tag="Year"
-                                            PointerEntered="PlaylistCell_PointerEntered"
-                                            PointerExited="PlaylistCell_PointerExited"
-                                            PointerMoved="PlaylistCell_PointerMoved" />
-                                        <TextBlock
-                                            Grid.Column="8"
-                                            Width="{Binding Duration, Source={StaticResource PlaylistColumns}}"
-                                            HorizontalAlignment="Left"
-                                            VerticalAlignment="Center"
-                                            TextAlignment="Left"
-                                            Opacity="0.7"
-                                            Text="{x:Bind DurationText}"
-                                            Tag="Duration"
-                                            PointerEntered="PlaylistCell_PointerEntered"
-                                            PointerExited="PlaylistCell_PointerExited"
-                                            PointerMoved="PlaylistCell_PointerMoved" />
+                                            Text="{x:Bind DurationText}" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
