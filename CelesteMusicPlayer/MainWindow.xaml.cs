@@ -185,6 +185,9 @@ namespace CelesteMusicPlayer
 
         public int TrackCount { get; set; }
 
+        /// <summary>专辑墙小字行右侧文本（专辑歌曲数）。</summary>
+        public string TrackCountText => TrackCount + " 首歌";
+
         public TimeSpan TotalDuration { get; set; }
 
         public string TotalDurationText { get; set; } = "00:00";
@@ -6230,14 +6233,21 @@ namespace CelesteMusicPlayer
             e.Handled = true;
         }
 
-        private void ArtistAlbumGridView_ItemClick(object sender, ItemClickEventArgs e)
+        private void ArtistAlbumGridView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
         {
             if (_isMultiSelectMode && ReferenceEquals(_multiSelectAlbumGrid, ArtistAlbumGridView))
             {
                 return;
             }
 
-            if (e.ClickedItem is AlbumEntry album)
+            // 向上找到 GridView 项容器，取出 AlbumEntry
+            DependencyObject? node = e.OriginalSource as DependencyObject;
+            while (node != null && node is not GridViewItem)
+            {
+                node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node);
+            }
+
+            if ((node as FrameworkElement)?.DataContext is AlbumEntry album)
             {
                 OpenAlbumDetail(album, fromArtist: true);
             }
@@ -6743,7 +6753,7 @@ namespace CelesteMusicPlayer
 
             AlbumDetailCoverImage.Source = album.CoverImage;
             AlbumDetailNameText.Text = album.Name;
-            AlbumDetailArtistText.Text = "艺术家：" + album.Artist;
+            AlbumDetailArtistText.Text = album.Artist;
             AlbumDetailYearText.Text = "发行时间：" + album.YearText;
             AlbumDetailMetaText.Text = $"{album.TrackCount} 首 · 总时长 {album.TotalDurationText}";
 
@@ -6762,6 +6772,48 @@ namespace CelesteMusicPlayer
 
             // Apple Music 风格：按碟片分组显示（每组以 CD{n} 标题行开头）
             AlbumTrackListView.ItemsSource = BuildAlbumGroupedView(_albumTracks);
+        }
+
+        // ---- 专辑艺术家超链接：悬停显示下划线，点击进入对应专辑艺术家详情页 ----
+        private void AlbumDetailArtistLink_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            if (AlbumDetailArtistText != null)
+            {
+                AlbumDetailArtistText.TextDecorations = Windows.UI.Text.TextDecorations.Underline;
+            }
+        }
+
+        private void AlbumDetailArtistLink_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            if (AlbumDetailArtistText != null)
+            {
+                AlbumDetailArtistText.TextDecorations = Windows.UI.Text.TextDecorations.None;
+            }
+        }
+
+        private void AlbumDetailArtistLink_Click(object sender, RoutedEventArgs e)
+        {
+            string? artistName = string.IsNullOrWhiteSpace(_openedAlbum?.Artist) ? null : _openedAlbum.Artist;
+            if (string.IsNullOrWhiteSpace(artistName))
+            {
+                return;
+            }
+
+            // 进入“专辑艺术家”详情页：先切分类，再打开对应艺术家的详情
+            CommitLibraryNavigation(() =>
+            {
+                _currentCategory = "AlbumArtists";
+                ArtistEntry? artist = _artists.FirstOrDefault(a =>
+                    string.Equals(a.Name, artistName, StringComparison.CurrentCultureIgnoreCase));
+                if (artist == null)
+                {
+                    artist = new ArtistEntry { Name = artistName };
+                    _artists.Add(artist);
+                }
+
+                OpenArtistDetailCore(artist);
+                UpdateLibraryNavHighlight();
+            });
         }
 
         /// <summary>构建按碟片分组的视图（Apple Music 风格 CD 标题行）。</summary>

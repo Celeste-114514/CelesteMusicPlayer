@@ -1292,18 +1292,19 @@
                                         CornerRadius="8"
                                         Padding="6"
                                         Background="Transparent">
-                                        <StackPanel Width="132" Spacing="8">
+                                        <StackPanel Width="156" Spacing="6">
                                             <Border
-                                                Width="132"
-                                                Height="132"
+                                                Width="146"
+                                                Height="146"
+                                                HorizontalAlignment="Center"
                                                 Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                                CornerRadius="8"
+                                                CornerRadius="10"
                                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                                 BorderThickness="1">
                                                 <Grid>
                                                     <FontIcon
                                                         Glyph="&#xE93C;"
-                                                        FontSize="36"
+                                                        FontSize="40"
                                                         HorizontalAlignment="Center"
                                                         VerticalAlignment="Center"
                                                         Opacity="0.35" />
@@ -1314,12 +1315,34 @@
                                             </Border>
                                             <TextBlock
                                                 Text="{x:Bind Name}"
-                                                TextWrapping="WrapWholeWords"
-                                                TextAlignment="Center"
-                                                MaxLines="2"
-                                                Height="38"
+                                                FontWeight="SemiBold"
+                                                TextWrapping="NoWrap"
+                                                TextAlignment="Left"
+                                                MaxLines="1"
+                                                Height="20"
                                                 TextTrimming="CharacterEllipsis"
                                                 ToolTipService.ToolTip="{x:Bind Name}" />
+                                            <!-- 小字行：左=专辑艺术家（省略号收尾），右=歌曲数 -->
+                                            <Grid ColumnSpacing="6" Height="16">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    Grid.Column="0"
+                                                    FontSize="10"
+                                                    Opacity="0.7"
+                                                    TextWrapping="NoWrap"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    VerticalAlignment="Center"
+                                                    Text="{x:Bind Artist}" />
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    FontSize="10"
+                                                    Opacity="0.7"
+                                                    VerticalAlignment="Center"
+                                                    Text="{x:Bind TrackCountText}" />
+                                            </Grid>
                                         </StackPanel>
                                     </Border>
                                 </DataTemplate>
@@ -1353,25 +1376,25 @@
                                 VerticalScrollBarVisibility="Auto"
                                 HorizontalScrollBarVisibility="Disabled">
                                 <StackPanel Spacing="16" Padding="0,8,20,16">
-                                    <!-- 封面 + 专辑信息 -->
-                                    <Grid ColumnSpacing="16">
+                                    <!-- 封面 + 专辑信息（整体居中） -->
+                                    <Grid ColumnSpacing="20" HorizontalAlignment="Center">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
-                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
 
                                         <Border
                                             Grid.Column="0"
-                                            Width="132"
-                                            Height="132"
+                                            Width="200"
+                                            Height="200"
                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                            CornerRadius="8"
+                                            CornerRadius="12"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                             BorderThickness="1">
                                             <Grid>
                                                 <FontIcon
                                                     Glyph="&#xE93C;"
-                                                    FontSize="40"
+                                                    FontSize="60"
                                                     HorizontalAlignment="Center"
                                                     VerticalAlignment="Center"
                                                     Opacity="0.35" />
@@ -1387,7 +1410,26 @@
                                                 FontSize="22"
                                                 FontWeight="SemiBold"
                                                 TextWrapping="WrapWholeWords" />
-                                            <TextBlock x:Name="AlbumDetailArtistText" Opacity="0.85" />
+                                            <!-- 专辑艺术家：超链接（悬停显示下划线，点击进入专辑艺术家详情页） -->
+                                            <Button
+                                                x:Name="AlbumDetailArtistLink"
+                                                HorizontalAlignment="Left"
+                                                Padding="0"
+                                                VerticalAlignment="Center"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                CornerRadius="4"
+                                                PointerEntered="AlbumDetailArtistLink_PointerEntered"
+                                                PointerExited="AlbumDetailArtistLink_PointerExited"
+                                                Click="AlbumDetailArtistLink_Click">
+                                                <StackPanel Orientation="Horizontal" Spacing="5">
+                                                    <FontIcon Glyph="&#xE716;" FontSize="13" Opacity="0.7" />
+                                                    <TextBlock
+                                                        x:Name="AlbumDetailArtistText"
+                                                        VerticalAlignment="Center"
+                                                        TextDecorations="None" />
+                                                </StackPanel>
+                                            </Button>
                                             <TextBlock x:Name="AlbumDetailYearText" Opacity="0.7" />
                                             <TextBlock x:Name="AlbumDetailMetaText" Opacity="0.7" />
                                         </StackPanel>
@@ -1423,8 +1465,8 @@
                                         </Button>
                                     </StackPanel>
 
-                                    <!-- 专辑曲目表头 + 列表（随页面滚动） -->
-                                    <StackPanel Spacing="4">
+                                    <!-- 专辑曲目表头 + 列表（居中、横向长度保持） -->
+                                    <StackPanel Spacing="4" MaxWidth="720" HorizontalAlignment="Center">
                                         <Grid Padding="12,8" ColumnSpacing="12">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="56" />
@@ -1616,12 +1658,16 @@
                             <Grid RowSpacing="16" Padding="0,8,20,12">
                                 <Grid.RowDefinitions>
                                     <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" MinWidth="0" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
 
                                 <!-- 圆形头像 + 名字 + 播放艺术家 -->
-                                <Grid Grid.Row="0" ColumnSpacing="16">
+                                <Grid Grid.Row="0" Grid.ColumnSpan="2" ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -1694,8 +1740,10 @@
                                 <Border
                                     x:Name="ArtistSongsFrostPanel"
                                     Grid.Row="1"
+                                    Grid.Column="0"
+                                    Margin="0,0,16,0"
+                                    MaxWidth="720"
                                     MinHeight="0"
-                                    Margin="0,0,0,0"
                                     Padding="12"
                                     CornerRadius="12"
                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -1860,8 +1908,8 @@
                                     </Grid>
                                 </Border>
 
-                                <!-- 该艺术家的专辑（缩小封面） -->
-                                <Grid Grid.Row="2" RowSpacing="8">
+                                <!-- 该艺术家的专辑（右栏） -->
+                                <Grid Grid.Row="1" Grid.Column="1" Width="372" RowSpacing="8">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
@@ -1933,7 +1981,7 @@
                                         Margin="0,8,0,0"
                                         SelectionMode="Single"
                                         IsItemClickEnabled="True"
-                                        ItemClick="ArtistAlbumGridView_ItemClick"
+                                        DoubleTapped="ArtistAlbumGridView_DoubleTapped"
                                         RightTapped="ArtistAlbumGridView_RightTapped"
                                         SelectionChanged="ArtistAlbumGridView_SelectionChromeChanged">
                                         <GridView.ItemContainerStyle>
