@@ -1145,8 +1145,8 @@
                                     Background="Transparent" PointerEntered="SongRow_PointerEntered" PointerExited="SongRow_PointerExited">
                                     <Grid ColumnSpacing="12" VerticalAlignment="Center">
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="36" />
-                                            <ColumnDefinition Width="52" />
+                                            <ColumnDefinition Width="40" />
+                                            <ColumnDefinition Width="60" />
                                             <ColumnDefinition Width="*" MinWidth="0" />
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
@@ -1155,24 +1155,25 @@
                                         <TextBlock
                                             Grid.Column="0"
                                             VerticalAlignment="Center"
-                                            FontSize="12"
-                                            Opacity="0.65"
+                                            FontSize="14"
+                                            FontWeight="SemiBold"
+                                            Opacity="0.7"
                                             Text="{x:Bind Index}" />
 
                                         <!-- 小封面 -->
                                         <Border
                                             Grid.Column="1"
-                                            Width="52"
-                                            Height="52"
+                                            Width="60"
+                                            Height="60"
                                             VerticalAlignment="Center"
-                                            CornerRadius="6"
+                                            CornerRadius="8"
                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                             BorderThickness="1">
                                             <Grid>
                                                 <FontIcon
                                                     Glyph="&#xE93C;"
-                                                    FontSize="24"
+                                                    FontSize="26"
                                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                     HorizontalAlignment="Center"
                                                     VerticalAlignment="Center"
@@ -1188,9 +1189,9 @@
                                             Grid.Column="2"
                                             VerticalAlignment="Center"
                                             Spacing="3">
-                                            <!-- 第一行：标题（内嵌标签，稍大加粗） -->
+                                            <!-- 第一行：标题（内嵌标签，较大加粗） -->
                                             <TextBlock
-                                                FontSize="14"
+                                                FontSize="16"
                                                 FontWeight="SemiBold"
                                                 TextWrapping="NoWrap"
                                                 TextTrimming="CharacterEllipsis"
@@ -1199,9 +1200,9 @@
                                                 PointerExited="PlaylistCell_PointerExited"
                                                 PointerMoved="PlaylistCell_PointerMoved"
                                                 Text="{x:Bind DisplayTitle}" />
-                                            <!-- 第二行：专辑（比标题小一点、细一点） -->
+                                            <!-- 第二行：艺术家 - 专辑（比标题更小、更细） -->
                                             <TextBlock
-                                                FontSize="12"
+                                                FontSize="11"
                                                 FontWeight="Normal"
                                                 Opacity="0.75"
                                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
@@ -1211,7 +1212,7 @@
                                                 PointerEntered="PlaylistCell_PointerEntered"
                                                 PointerExited="PlaylistCell_PointerExited"
                                                 PointerMoved="PlaylistCell_PointerMoved"
-                                                Text="{x:Bind Album}" />
+                                                Text="{x:Bind ArtistAlbumText}" />
                                             <!-- 第三行：格式胶囊（格式 / 位深·采样率 / 比特率） -->
                                             <ItemsControl ItemsSource="{x:Bind FormatChips}">
                                                 <ItemsControl.ItemsPanel>
@@ -1241,8 +1242,9 @@
                                         <TextBlock
                                             Grid.Column="3"
                                             VerticalAlignment="Center"
-                                            FontSize="12"
-                                            Opacity="0.7"
+                                            FontSize="14"
+                                            FontWeight="SemiBold"
+                                            Opacity="0.8"
                                             Text="{x:Bind DurationText}" />
                                     </Grid>
                                 </Border>

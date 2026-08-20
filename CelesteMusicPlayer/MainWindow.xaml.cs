@@ -124,6 +124,21 @@ namespace CelesteMusicPlayer
                 ? Path.GetFileNameWithoutExtension(FilePath)
                 : Title.Trim();
 
+        /// <summary>歌曲面板第二行："艺术家 - 专辑"（用曲目/演出艺术家，而非专辑艺术家）。</summary>
+        public string ArtistAlbumText
+        {
+            get
+            {
+                string artist = string.IsNullOrWhiteSpace(Artist) || string.Equals(Artist, "未知艺术家", StringComparison.Ordinal)
+                    ? "未知艺术家"
+                    : Artist;
+                string album = string.IsNullOrWhiteSpace(Album) || string.Equals(Album, "未知专辑", StringComparison.Ordinal)
+                    ? "未知专辑"
+                    : Album;
+                return artist + " - " + album;
+            }
+        }
+
         /// <summary>专辑详情列表显示的音轨号（纯音轨号；碟片号由独立标题行表达）</summary>
         public string TrackText => Track > 0 ? Track.ToString() : "-";
     }
