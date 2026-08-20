@@ -605,14 +605,6 @@ namespace CelesteMusicPlayer
             {
             }
 
-            try
-            {
-                RefreshPlaylistDisplayFormatBindings();
-            }
-            catch
-            {
-            }
-
             if (!string.IsNullOrWhiteSpace(_nowPlayingPath)
                 && settings.EnableBackground
                 && settings.AlbumCoverAsBackground)
@@ -645,17 +637,6 @@ namespace CelesteMusicPlayer
             }
             catch
             {
-            }
-        }
-
-        /// <summary>x:Bind 为 OneTime：重建 ItemsSource 以应用新的 PlaylistDisplayFormat。</summary>
-        private void RefreshPlaylistDisplayFormatBindings()
-        {
-            if (PlaylistView?.ItemsSource != null)
-            {
-                object source = PlaylistView.ItemsSource;
-                PlaylistView.ItemsSource = null;
-                PlaylistView.ItemsSource = source;
             }
         }
 

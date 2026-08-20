@@ -92,25 +92,14 @@ namespace CelesteMusicPlayer
 
         public string DisplayName => Title;
 
-        /// <summary>按设置 PlaylistDisplayFormat 生成的列表显示名。</summary>
-        public string DisplayTitle
-        {
-            get
-            {
-                string fmt = AppSettingsStore.Load().PlaylistDisplayFormat;
-                string title = string.IsNullOrWhiteSpace(Title) ? Path.GetFileNameWithoutExtension(FilePath) : Title;
-                bool hasArtist = !string.IsNullOrWhiteSpace(Artist) && !string.Equals(Artist, "未知艺术家", StringComparison.Ordinal);
-                return fmt switch
-                {
-                    "FileName" => string.IsNullOrWhiteSpace(Path.GetFileNameWithoutExtension(FilePath))
-                        ? title
-                        : Path.GetFileNameWithoutExtension(FilePath),
-                    "Title" => title,
-                    "TitleArtist" => hasArtist ? title + " - " + Artist : title,
-                    _ => hasArtist ? Artist + " - " + title : title
-                };
-            }
-        }
+        /// <summary>
+        /// 歌曲面板显示的标题：一律使用音频内嵌标题标签（Tag.Title），
+        /// 缺失时回退文件名。不再受"播放列表显示格式"设置影响。
+        /// </summary>
+        public string DisplayTitle =>
+            string.IsNullOrWhiteSpace(Title)
+                ? Path.GetFileNameWithoutExtension(FilePath)
+                : Title.Trim();
 
         /// <summary>专辑详情列表显示的音轨号（纯音轨号；碟片号由独立标题行表达）</summary>
         public string TrackText => Track > 0 ? Track.ToString() : "-";

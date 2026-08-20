@@ -982,16 +982,6 @@
                                 <ColumnDefinition Width="Auto" MinWidth="200" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="播放列表显示格式" />
-                            </StackPanel>
-                            <ComboBox x:Name="PlaylistDisplayFormatCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" MinWidth="200" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="最近播放范围" />
                             </StackPanel>
                             <ComboBox x:Name="RecentPlayedRangeDaysCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />

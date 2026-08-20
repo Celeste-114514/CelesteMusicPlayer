@@ -167,9 +167,6 @@ namespace CelesteMusicPlayer
 
         public bool InsertPlaylistAtBegin { get; set; } = true;
 
-        /// <summary>FileName / Title / ArtistTitle / TitleArtist</summary>
-        public string PlaylistDisplayFormat { get; set; } = "ArtistTitle";
-
         /// <summary>0=全部，其它为天数</summary>
         public int RecentPlayedRangeDays { get; set; }
 
@@ -380,11 +377,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 s.LyricAlign = "Center";
             }
 
-            if (string.IsNullOrWhiteSpace(s.PlaylistDisplayFormat))
-            {
-                s.PlaylistDisplayFormat = "ArtistTitle";
-            }
-
             if (string.IsNullOrWhiteSpace(s.DesktopLyricPlayedColor))
             {
                 s.DesktopLyricPlayedColor = "#40B4FF";
@@ -488,7 +480,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             IgnoreTooShortOnUpdate = s.IgnoreTooShortOnUpdate,
             FileTooShortSec = s.FileTooShortSec,
             InsertPlaylistAtBegin = s.InsertPlaylistAtBegin,
-            PlaylistDisplayFormat = s.PlaylistDisplayFormat,
             RecentPlayedRangeDays = s.RecentPlayedRangeDays,
             WriteId3v23 = s.WriteId3v23,
             EnableLastFm = s.EnableLastFm,

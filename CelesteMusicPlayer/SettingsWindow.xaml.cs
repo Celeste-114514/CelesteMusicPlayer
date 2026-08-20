@@ -83,14 +83,6 @@ namespace CelesteMusicPlayer
             ("Right", "仅右声道")
         };
 
-        private static readonly (string Id, string Label)[] PlaylistFormatOptions =
-        {
-            ("FileName", "文件名"),
-            ("Title", "标题"),
-            ("ArtistTitle", "艺术家-标题"),
-            ("TitleArtist", "标题-艺术家")
-        };
-
         private static readonly (int Days, string Label)[] RecentRangeOptions =
         {
             (0, "全部"),
@@ -254,7 +246,6 @@ namespace CelesteMusicPlayer
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 共享（系统混音）", Tag = "Shared" });
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 独占（HiFi）", Tag = "WasapiExclusive" });
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "ASIO（专有声卡驱动）", Tag = "Asio" });
-            FillCombo(PlaylistDisplayFormatCombo, PlaylistFormatOptions);
 
             WriteId3v23Combo.Items.Clear();
             WriteId3v23Combo.Items.Add(new ComboBoxItem { Content = "ID3v2.3", Tag = true });
@@ -397,7 +388,6 @@ namespace CelesteMusicPlayer
                 }
 
                 SetToggle(InsertPlaylistAtBeginSwitch, s.InsertPlaylistAtBegin);
-                SelectComboByTag(PlaylistDisplayFormatCombo, s.PlaylistDisplayFormat);
                 SelectComboByTagInt(RecentPlayedRangeDaysCombo, s.RecentPlayedRangeDays);
                 SelectWriteId3Version(s.WriteId3v23);
                 SetToggle(ShowNavFavoritesSwitch, s.ShowNavFavorites);
@@ -933,7 +923,6 @@ namespace CelesteMusicPlayer
             }
 
             s.InsertPlaylistAtBegin = InsertPlaylistAtBeginSwitch?.IsOn ?? s.InsertPlaylistAtBegin;
-            s.PlaylistDisplayFormat = GetComboTagString(PlaylistDisplayFormatCombo, "ArtistTitle");
             s.RecentPlayedRangeDays = GetComboTagInt(RecentPlayedRangeDaysCombo, 0);
             s.WriteId3v23 = WriteId3v23Combo?.SelectedItem is ComboBoxItem id3Item && id3Item.Tag is bool v23 && v23;
             s.ShowNavFavorites = ShowNavFavoritesSwitch?.IsOn ?? s.ShowNavFavorites;
