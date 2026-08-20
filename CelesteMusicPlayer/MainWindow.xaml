@@ -2174,89 +2174,178 @@
                     BorderThickness="0"
                     Padding="8"
                     Visibility="Collapsed">
-                    <Grid>
-                        <ListView
-                            x:Name="FolderBrowserView"
-                            SelectionMode="Single"
-                            DoubleTapped="FolderBrowserView_DoubleTapped"
-                            RightTapped="FolderBrowserView_RightTapped"
-                            SelectionChanged="FolderBrowserView_SelectionChromeChanged">
-                            <ListView.ItemContainerStyle>
-                                <Style TargetType="ListViewItem">
-                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                    <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                                    <Setter Property="Padding" Value="0" />
-                                    <Setter Property="MinHeight" Value="36" />
-                                    <Setter Property="CornerRadius" Value="8" />
-                                    <Setter Property="Margin" Value="0,2" />
-                                    <Setter Property="Background" Value="Transparent" />
-                                    <Setter Property="BorderThickness" Value="0" />
-                                </Style>
-                            </ListView.ItemContainerStyle>
-                            <ListView.ItemTemplate>
-                                <DataTemplate x:DataType="local:FolderBrowserItem">
-                                    <Border
-                                        Tag="FolderRowChrome"
-                                        MinHeight="36"
-                                        CornerRadius="10"
-                                        Padding="4,0"
-                                        VerticalAlignment="Stretch"
-                                        Background="{x:Bind CapsuleBackground, Mode=OneWay}">
-                                        <Grid
-                                            Padding="{x:Bind Indent}"
-                                            ColumnSpacing="4"
-                                            Background="Transparent"
-                                            Tapped="FolderBrowserItem_Tapped">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="20" />
-                                                <ColumnDefinition Width="20" />
-                                                <ColumnDefinition Width="*" />
-                                            </Grid.ColumnDefinitions>
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" MinWidth="300" />
+                        </Grid.ColumnDefinitions>
 
-                                            <Border
-                                                Grid.Column="0"
-                                                Width="22"
-                                                Height="36"
+                        <!-- 左：媒体库树 -->
+                        <StackPanel Grid.Column="0" Width="430" Spacing="6">
+                            <Button
+                                x:Name="AddMediaFolderButton"
+                                Height="32"
+                                Padding="10,0"
+                                HorizontalAlignment="Left"
+                                CornerRadius="16"
+                                BorderThickness="1"
+                                Click="AddMediaFolderButton_Click"
+                                ToolTipService.ToolTip="把文件夹加入媒体库">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <FontIcon Glyph="&#xE710;" FontSize="14" />
+                                    <TextBlock Text="添加文件夹" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <ListView
+                                x:Name="FolderBrowserView"
+                                SelectionMode="Single"
+                                DoubleTapped="FolderBrowserView_DoubleTapped"
+                                RightTapped="FolderBrowserView_RightTapped"
+                                SelectionChanged="FolderBrowserView_SelectionChromeChanged">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                        <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                        <Setter Property="Padding" Value="0" />
+                                        <Setter Property="MinHeight" Value="36" />
+                                        <Setter Property="CornerRadius" Value="8" />
+                                        <Setter Property="Margin" Value="0,2" />
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="BorderThickness" Value="0" />
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="local:FolderBrowserItem">
+                                        <Border
+                                            Tag="FolderRowChrome"
+                                            MinHeight="36"
+                                            CornerRadius="10"
+                                            Padding="4,0"
+                                            VerticalAlignment="Stretch"
+                                            Background="{x:Bind CapsuleBackground, Mode=OneWay}">
+                                            <Grid
+                                                Padding="{x:Bind Indent}"
+                                                ColumnSpacing="4"
                                                 Background="Transparent"
-                                                Visibility="{x:Bind ChevronVisibility, Mode=OneWay}"
-                                                Tapped="FolderBrowserChevron_Tapped">
-                                                <FontIcon
-                                                    FontSize="12"
+                                                Tapped="FolderBrowserItem_Tapped">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="20" />
+                                                    <ColumnDefinition Width="20" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+
+                                                <Border
+                                                    Grid.Column="0"
+                                                    Width="22"
+                                                    Height="36"
+                                                    Background="Transparent"
+                                                    Visibility="{x:Bind ChevronVisibility, Mode=OneWay}"
+                                                    Tapped="FolderBrowserChevron_Tapped">
+                                                    <FontIcon
+                                                        FontSize="12"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        Glyph="{x:Bind ChevronGlyph, Mode=OneWay}"
+                                                        IsHitTestVisible="False" />
+                                                </Border>
+
+                                                <Border
+                                                    Grid.Column="1"
+                                                    Width="18"
+                                                    Height="18"
                                                     HorizontalAlignment="Center"
                                                     VerticalAlignment="Center"
-                                                    Glyph="{x:Bind ChevronGlyph, Mode=OneWay}"
-                                                    IsHitTestVisible="False" />
-                                            </Border>
+                                                    Background="Transparent"
+                                                    Tag="IconSlot" />
 
-                                            <Border
-                                                Grid.Column="1"
-                                                Width="18"
-                                                Height="18"
-                                                HorizontalAlignment="Center"
-                                                VerticalAlignment="Center"
-                                                Background="Transparent"
-                                                Tag="IconSlot" />
+                                                <TextBlock
+                                                    Grid.Column="2"
+                                                    VerticalAlignment="Center"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    Text="{x:Bind DisplayName}"
+                                                    ToolTipService.ToolTip="{x:Bind FullPath}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
 
-                                            <TextBlock
-                                                Grid.Column="2"
-                                                VerticalAlignment="Center"
-                                                TextTrimming="CharacterEllipsis"
-                                                Text="{x:Bind DisplayName}"
-                                                ToolTipService.ToolTip="{x:Bind FullPath}" />
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ListView.ItemTemplate>
-                        </ListView>
+                            <TextBlock
+                                x:Name="FolderBrowserEmptyHint"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Opacity="0.55"
+                                FontSize="16"
+                                Text="请选择文件夹"
+                                Visibility="Collapsed" />
+                        </StackPanel>
 
-                        <TextBlock
-                            x:Name="FolderBrowserEmptyHint"
-                            HorizontalAlignment="Center"
-                            VerticalAlignment="Center"
-                            Opacity="0.55"
-                            FontSize="16"
-                            Text="请选择文件夹"
-                            Visibility="Collapsed" />
+                        <!-- 右：被选中项详情区 -->
+                        <Grid Grid.Column="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Border
+                                Grid.Row="0"
+                                Padding="8,6"
+                                Margin="0,0,0,8"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                                BorderThickness="0,0,0,1">
+                                <TextBlock
+                                    x:Name="MediaDetailsHeader"
+                                    FontSize="14"
+                                    FontWeight="SemiBold"
+                                    TextWrapping="NoWrap"
+                                    TextTrimming="CharacterEllipsis"
+                                    Text="选择文件夹查看歌曲" />
+                            </Border>
+                            <ListView
+                                x:Name="MediaDetailsList"
+                                Grid.Row="1"
+                                Background="Transparent"
+                                SelectionMode="None"
+                                HorizontalContentAlignment="Stretch">
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem">
+                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                        <Setter Property="Padding" Value="0" />
+                                        <Setter Property="MinHeight" Value="40" />
+                                        <Setter Property="CornerRadius" Value="8" />
+                                        <Setter Property="Margin" Value="0,2" />
+                                        <Setter Property="Background" Value="Transparent" />
+                                        <Setter Property="BorderThickness" Value="0" />
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.ItemTemplate>
+                                    <DataTemplate x:DataType="local:PlaylistItem">
+                                        <Border Tag="SongRowChrome" MinHeight="40" CornerRadius="8" Padding="10,0" VerticalAlignment="Stretch" HorizontalAlignment="Stretch" Background="Transparent">
+                                            <Grid ColumnSpacing="10" VerticalAlignment="Center">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="34" />
+                                                    <ColumnDefinition Width="*" MinWidth="0" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="12" Opacity="0.6" Text="{x:Bind Index}" />
+                                                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                                                    <TextBlock FontSize="13" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{x:Bind FileName}" />
+                                                    <TextBlock FontSize="11" Opacity="0.7" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{x:Bind ArtistAlbumText}" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="2" VerticalAlignment="Center" FontSize="11" Opacity="0.7" Text="{x:Bind DurationText}" />
+                                            </Grid>
+                                        </Border>
+                                    </DataTemplate>
+                                </ListView.ItemTemplate>
+                            </ListView>
+                            <TextBlock
+                                x:Name="MediaDetailsEmptyHint"
+                                Grid.Row="1"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Opacity="0.55"
+                                Text="无歌曲"
+                                Visibility="Collapsed" />
+                        </Grid>
                     </Grid>
                 </Border>
 

@@ -104,6 +104,9 @@ namespace CelesteMusicPlayer
 
         public string FilePath { get; set; } = string.Empty;
 
+        /// <summary>仅文件名（媒体库/文件夹详情列表显示用）。</summary>
+        public string FileName => System.IO.Path.GetFileName(FilePath);
+
         /// <summary>CUE 分轨起始秒；0 表示整曲。</summary>
         public double StartTimeSeconds { get; set; }
 
@@ -4771,6 +4774,51 @@ namespace CelesteMusicPlayer
 
             return false;
         }
+        /// <summary>「添加文件夹」：选择文件夹加入媒体库(LibraryWatchFolders)并刷新根列表。</summary>
+        private async void AddMediaFolderButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new FolderPicker();
+                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
+                picker.FileTypeFilter.Add("*");
+
+                StorageFolder? folder = await picker.PickSingleFolderAsync();
+                if (folder == null || string.IsNullOrWhiteSpace(folder.Path))
+                {
+                    return;
+                }
+
+                AppSettingsState settings = AppSettingsStore.Load();
+                if (settings.LibraryWatchFolders == null)
+                {
+                    settings.LibraryWatchFolders = new List<string>();
+                }
+
+                string fp = folder.Path;
+                if (!settings.LibraryWatchFolders.Contains(fp, StringComparer.OrdinalIgnoreCase))
+                {
+                    settings.LibraryWatchFolders.Add(fp);
+                }
+
+                AppSettingsStore.Save(settings);
+
+                // 把该文件夹的音频加入主库
+                string[] paths = await System.Threading.Tasks.Task.Run(() => EnumerateAudioFiles(fp).ToArray());
+                LoadAndAddFiles(paths, persist: false);
+
+                if (_currentCategory == "Folders")
+                {
+                    RefreshFolderBrowserRoots();
+                }
+            }
+            catch
+            {
+            }
+        }
+
         /// <summary>显示媒体库根（设置里的文件夹列表）或其直接子项；未配置则回退旧单根。</summary>
         private void RefreshFolderBrowserRoots()
         {
@@ -4994,6 +5042,62 @@ namespace CelesteMusicPlayer
 
             RefreshFolderBrowserSelectionChrome();
             UpdateSelectAllMultiSelectButtonState();
+            UpdateMediaDetails(FolderBrowserView.SelectedItem as FolderBrowserItem);
+        }
+
+        /// <summary>根据选中的文件夹/单曲填充右侧详情区。
+        /// 文件夹 → 台头=路径 + 列表其内歌曲(文件名)；单曲 → 台头=文件路径 + 该文件。</summary>
+        private void UpdateMediaDetails(FolderBrowserItem? item)
+        {
+            if (MediaDetailsHeader == null || MediaDetailsList == null)
+            {
+                return;
+            }
+
+            if (item == null)
+            {
+                MediaDetailsHeader.Text = "选择文件夹查看歌曲";
+                MediaDetailsList.ItemsSource = null;
+                MediaDetailsEmptyHint.Visibility = MediaDetailsList.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            MediaDetailsEmptyHint.Visibility = Visibility.Collapsed;
+            MediaDetailsList.Visibility = Visibility.Visible;
+
+            List<PlaylistItem> songs = new();
+            if (item.IsFolder)
+            {
+                MediaDetailsHeader.Text = item.FullPath;
+                foreach (string path in EnumerateAudioFiles(item.FullPath))
+                {
+                    if (System.IO.File.Exists(path))
+                    {
+                        PlaylistItem p = CreatePlaylistItemFromPath(path);
+                        p.DurationText = FormatTime(p.Duration);
+                        songs.Add(p);
+                    }
+                }
+            }
+            else
+            {
+                MediaDetailsHeader.Text = item.FullPath;
+                if (System.IO.File.Exists(item.FullPath))
+                {
+                    PlaylistItem p = CreatePlaylistItemFromPath(item.FullPath);
+                    p.DurationText = FormatTime(p.Duration);
+                    songs.Add(p);
+                }
+            }
+
+            for (int i = 0; i < songs.Count; i++)
+            {
+                songs[i].Index = i + 1;
+            }
+
+            MediaDetailsList.ItemsSource = songs;
+            MediaDetailsEmptyHint.Visibility =
+                songs.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void FolderBrowserView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
