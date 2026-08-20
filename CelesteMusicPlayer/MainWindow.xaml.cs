@@ -545,8 +545,8 @@ namespace CelesteMusicPlayer
                 _mainWindowHwnd = IntPtr.Zero;
             }
 
-            // 默认 1600×900；Resize 按 DPI 换算为物理像素
-            ResizeWindowToDips(1600, 900);
+            // 默认 1350×900；Resize 按 DPI 换算为物理像素
+            ResizeWindowToDips(1350, 900);
             // 标题栏扩展放到 Activated 之后，避免资源管理器直接启动时黑窗闪退（0xC000027B）
             Activated += MainWindow_FirstActivated;
             Closed += MainWindow_Closed;
@@ -6246,21 +6246,14 @@ namespace CelesteMusicPlayer
             e.Handled = true;
         }
 
-        private void ArtistAlbumGridView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        private void ArtistAlbumGridView_ItemClick(object sender, ItemClickEventArgs e)
         {
             if (_isMultiSelectMode && ReferenceEquals(_multiSelectAlbumGrid, ArtistAlbumGridView))
             {
                 return;
             }
 
-            // 向上找到 GridView 项容器，取出 AlbumEntry
-            DependencyObject? node = e.OriginalSource as DependencyObject;
-            while (node != null && node is not GridViewItem)
-            {
-                node = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(node);
-            }
-
-            if ((node as FrameworkElement)?.DataContext is AlbumEntry album)
+            if (e.ClickedItem is AlbumEntry album)
             {
                 OpenAlbumDetail(album, fromArtist: true);
             }

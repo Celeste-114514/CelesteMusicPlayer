@@ -1731,12 +1731,12 @@
                                     <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" MinWidth="0" />
                                     <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" MinWidth="280" />
                                 </Grid.ColumnDefinitions>
 
-                                <!-- 圆形头像 + 名字 + 播放艺术家 -->
-                                <Grid Grid.Row="0" Grid.ColumnSpan="2" ColumnSpacing="16">
+                                <!-- 圆形头像 + 名字 + 播放艺术家（左列） -->
+                                <Grid Grid.Row="0" Grid.Column="0" ColumnSpacing="16">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto" />
                                         <ColumnDefinition Width="*" />
@@ -1810,8 +1810,10 @@
                                     x:Name="ArtistSongsFrostPanel"
                                     Grid.Row="1"
                                     Grid.Column="0"
+                                    Width="400"
+                                    Height="450"
                                     Margin="0,0,16,0"
-                                    MaxWidth="720"
+                                    MaxWidth="400"
                                     MinHeight="0"
                                     Padding="12"
                                     CornerRadius="12"
@@ -1977,8 +1979,8 @@
                                     </Grid>
                                 </Border>
 
-                                <!-- 该艺术家的专辑（右栏） -->
-                                <Grid Grid.Row="1" Grid.Column="1" Width="372" RowSpacing="8">
+                                <!-- 该艺术家的专辑（右栏，顶对齐、随窗口自适应） -->
+                                <Grid Grid.Row="0" Grid.Column="1" Grid.RowSpan="2" VerticalAlignment="Top" RowSpacing="8">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
@@ -1990,12 +1992,48 @@
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
 
-                                        <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                                        <!-- 标题 + 排序（同行对齐） -->
+                                        <Grid ColumnSpacing="12" Padding="0,0,0,4">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="*" />
+                                                <ColumnDefinition Width="Auto" />
+                                            </Grid.ColumnDefinitions>
                                             <TextBlock
+                                                Grid.Column="0"
                                                 VerticalAlignment="Center"
                                                 FontWeight="SemiBold"
                                                 FontSize="16"
                                                 Text="该艺术家的专辑" />
+                                            <StackPanel
+                                                Grid.Column="1"
+                                                Orientation="Horizontal"
+                                                Spacing="8"
+                                                VerticalAlignment="Center">
+                                                <Button
+                                                    x:Name="ArtistAlbumSortFieldButton"
+                                                    Height="32"
+                                                    MinWidth="110"
+                                                    Padding="14,0"
+                                                    CornerRadius="16"
+                                                    BorderThickness="0"
+                                                    Content="按标题排序"
+                                                    Click="ArtistAlbumSortFieldButton_Click"
+                                                    ToolTipService.ToolTip="点击切换：按标题排序 / 按年份排序" />
+                                                <Button
+                                                    x:Name="ArtistAlbumSortOrderButton"
+                                                    Height="32"
+                                                    MinWidth="72"
+                                                    Padding="14,0"
+                                                    CornerRadius="16"
+                                                    BorderThickness="0"
+                                                    Content="升序"
+                                                    Click="ArtistAlbumSortOrderButton_Click"
+                                                    ToolTipService.ToolTip="切换升序 / 降序" />
+                                            </StackPanel>
+                                        </Grid>
+
+                                        <!-- 播放所有专辑 / 添加到播放列表（标题下方） -->
+                                        <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
                                             <Button
                                                 x:Name="PlayAllArtistAlbumsButton"
                                                 Height="32"
@@ -2015,33 +2053,6 @@
                                                 Click="AddAllArtistAlbumsToPlaylistButton_Click"
                                                 ToolTipService.ToolTip="按当前专辑顺序、音轨号加入播放队列最前" />
                                         </StackPanel>
-
-                                        <StackPanel
-                                            Grid.Row="1"
-                                            Orientation="Horizontal"
-                                            Spacing="8"
-                                            HorizontalAlignment="Right">
-                                            <Button
-                                                x:Name="ArtistAlbumSortFieldButton"
-                                                Height="32"
-                                                MinWidth="110"
-                                                Padding="14,0"
-                                                CornerRadius="16"
-                                                BorderThickness="0"
-                                                Content="按标题排序"
-                                                Click="ArtistAlbumSortFieldButton_Click"
-                                                ToolTipService.ToolTip="点击切换：按标题排序 / 按年份排序" />
-                                            <Button
-                                                x:Name="ArtistAlbumSortOrderButton"
-                                                Height="32"
-                                                MinWidth="72"
-                                                Padding="14,0"
-                                                CornerRadius="16"
-                                                BorderThickness="0"
-                                                Content="升序"
-                                                Click="ArtistAlbumSortOrderButton_Click"
-                                                ToolTipService.ToolTip="切换升序 / 降序" />
-                                        </StackPanel>
                                     </Grid>
 
                                         <GridView
@@ -2050,7 +2061,7 @@
                                         Margin="0,8,0,0"
                                         SelectionMode="Single"
                                         IsItemClickEnabled="True"
-                                        DoubleTapped="ArtistAlbumGridView_DoubleTapped"
+                                        ItemClick="ArtistAlbumGridView_ItemClick"
                                         RightTapped="ArtistAlbumGridView_RightTapped"
                                         SelectionChanged="ArtistAlbumGridView_SelectionChromeChanged">
                                         <GridView.ItemContainerStyle>
