@@ -12587,7 +12587,7 @@ namespace CelesteMusicPlayer
             NowPlayingTitleText.Text = "未在播放";
             NowPlayingArtistAlbumText.Text = "艺术家 · 专辑";
             NowPlayingCoverImage.Source = null;
-            ApplyNowPlayingPaneBackdrop();
+            ApplyNowPlayingPaneTransparent();
             UpdateTransportNowPlaying(null, null);
             ClearLyricsUi("开始播放后显示歌词");
             // 未播放时也填充静态频谱，保证信息卡波形始终可见
@@ -12740,7 +12740,7 @@ namespace CelesteMusicPlayer
             NowPlayingCoverImage.Source = coverImage;
             UpdateTransportNowPlaying(item, coverImage);
             _ = ApplyAlbumArtBackgroundAsync(coverBytes, item.FilePath);
-            ApplyNowPlayingPaneBackdrop();
+            ApplyNowPlayingPaneTransparent();
 
             List<LyricLine> lyrics = await Task.Run(() => LyricsLoader.LoadForAudio(item.FilePath));
             if (_nowPlayingPath != item.FilePath)
@@ -12763,16 +12763,15 @@ namespace CelesteMusicPlayer
             NowPlayingArtistAlbumText.Text = string.Join(" · ", new[] { artist, album }.Where(s => s.Length > 0));
         }
 
-        /// <summary>播放信息页背景统一为主程序风格：内容面板丙烯酸 + 顶层更深遮罩（加深模糊观感）。</summary>
-        private void ApplyNowPlayingPaneBackdrop()
+        /// <summary>播放面板背景保持透明，与专辑详情页一致（露出主程序背景，非浮层）。</summary>
+        private void ApplyNowPlayingPaneTransparent()
         {
             try
             {
                 if (NowPlayingPaneContent != null)
                 {
-                    NowPlayingPaneContent.Background = CreateNowPlayingStyleAcrylicBrush();
+                    NowPlayingPaneContent.Background = null;
                 }
-                // NowPlayingCardScrim 的深色遮罩固定在 XAML，不再动态置空
             }
             catch
             {

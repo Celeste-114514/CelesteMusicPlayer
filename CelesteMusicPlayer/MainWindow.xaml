@@ -2738,10 +2738,10 @@
                 </Grid>
             </Grid>
 
-            <!-- 播放歌曲信息页(默认收起)，横向覆盖整行(Column0+1)，使左侧分类暂时消失 -->
+            <!-- 右侧信息面板已停用（代码保留）；下方为合并到同一 Row1 的播放歌曲信息页(默认收起)。
+                 内容展示统一走 NowPlayingPane，Grid.Column=1 全宽。 -->
             <Grid
-                Grid.Column="0"
-                Grid.ColumnSpan="2">
+                Grid.Column="1">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -2753,57 +2753,8 @@
                     Grid.RowSpan="2"
                     Background="Transparent"
                     BorderThickness="0"
-                    CornerRadius="0"
-                    RenderTransformOrigin="0.5,0.5"
-                    Visibility="Collapsed"
-                    IsTabStop="False">
-                    <Border.RenderTransform>
-                        <CompositeTransform x:Name="PaneTransform" ScaleX="0.985" ScaleY="0.985" />
-                    </Border.RenderTransform>
-                    <Border.Resources>
-                        <!-- 展开动画：淡入 + 轻微放大到原尺寸 -->
-                        <Storyboard x:Name="NowPlayingOpenStoryboard">
-                            <DoubleAnimation Storyboard.TargetName="NowPlayingPane" Storyboard.TargetProperty="Opacity"
-                                             From="0" To="1" Duration="0:0:0.22">
-                                <DoubleAnimation.EasingFunction>
-                                    <CubicEase EasingMode="EaseOut" />
-                                </DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                            <DoubleAnimation Storyboard.TargetName="PaneTransform" Storyboard.TargetProperty="ScaleX"
-                                             From="0.985" To="1" Duration="0:0:0.22">
-                                <DoubleAnimation.EasingFunction>
-                                    <CubicEase EasingMode="EaseOut" />
-                                </DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                            <DoubleAnimation Storyboard.TargetName="PaneTransform" Storyboard.TargetProperty="ScaleY"
-                                             From="0.985" To="1" Duration="0:0:0.22">
-                                <DoubleAnimation.EasingFunction>
-                                    <CubicEase EasingMode="EaseOut" />
-                                </DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                        </Storyboard>
-                        <!-- 收起动画：淡出 + 轻微缩小 -->
-                        <Storyboard x:Name="NowPlayingCloseStoryboard">
-                            <DoubleAnimation Storyboard.TargetName="NowPlayingPane" Storyboard.TargetProperty="Opacity"
-                                             From="1" To="0" Duration="0:0:0.18">
-                                <DoubleAnimation.EasingFunction>
-                                    <CubicEase EasingMode="EaseIn" />
-                                </DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                            <DoubleAnimation Storyboard.TargetName="PaneTransform" Storyboard.TargetProperty="ScaleX"
-                                             From="1" To="0.985" Duration="0:0:0.18">
-                                <DoubleAnimation.EasingFunction>
-                                    <CubicEase EasingMode="EaseIn" />
-                                </DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                            <DoubleAnimation Storyboard.TargetName="PaneTransform" Storyboard.TargetProperty="ScaleY"
-                                             From="1" To="0.985" Duration="0:0:0.18">
-                                <DoubleAnimation.EasingFunction>
-                                    <CubicEase EasingMode="EaseIn" />
-                                </DoubleAnimation.EasingFunction>
-                            </DoubleAnimation>
-                        </Storyboard>
-                    </Border.Resources>
+                    Padding="12"
+                    Visibility="Collapsed">
                 <Grid
                     x:Name="NowPlayingPaneContent"
                     Background="Transparent">
@@ -2812,31 +2763,27 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
-                    <!-- 整页动态背景：模糊封面 + 深色渐变遮罩（浮于最底层） -->
-                    <!-- 统一加深遮罩：与主程序背景同色系但更深，整页无框、盖住下层内容 -->
+                    <!-- 左上角：返回按钮（整合式，仿专辑详情页返回栏） -->
                     <Border
-                        x:Name="NowPlayingCardScrim"
                         Grid.Row="0"
-                        Grid.RowSpan="2"
-                        Background="#B0101820"
-                        IsHitTestVisible="False" />
-
-                    <!-- 左上角：倒三角箭头收起按钮 -->
-                    <Button
-                        x:Name="NowPlayingCollapseButton"
-                        Grid.Row="0"
-                        Width="34"
-                        Height="34"
-                        Margin="0"
-                        Padding="0"
-                        HorizontalAlignment="Left"
-                        VerticalAlignment="Top"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Click="NowPlayingCollapseButton_Click"
-                        ToolTipService.ToolTip="收起播放信息">
-                        <FontIcon Glyph="&#xE70D;" FontSize="14" />
-                    </Button>
+                        Padding="0,2,0,10"
+                        Margin="0,0,0,4"
+                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                        BorderThickness="0,0,0,1">
+                        <Button
+                            x:Name="NowPlayingCollapseButton"
+                            Padding="10,5"
+                            HorizontalAlignment="Left"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="NowPlayingCollapseButton_Click"
+                            ToolTipService.ToolTip="返回音乐库">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE72B;" FontSize="13" />
+                                <TextBlock Text="返回" FontSize="13" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                    </Border>
 
                     <!-- 主体：左侧封面区 + 右侧滚动歌词 -->
                     <Grid
