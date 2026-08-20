@@ -14,6 +14,14 @@ namespace CelesteMusicPlayer
             Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe")
         };
 
+        // 每个文件只解析一次并缓存（含 ffmpeg 兜底开销昂贵的那些格式），避免列表/启动反复读盘与反复起进程。
+        private readonly record struct AudioInfoData(int Rate, int Bits, int Kbps, int Channels);
+
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, AudioInfoData> InfoCache =
+            new(System.StringComparer.OrdinalIgnoreCase);
+
+        private static readonly int InfoCacheMax = 8192;
+
         /// <summary>返回 "格式 · 采样率 · 位深 · 码率 · 声道"；读取失败返回 null。</summary>
         public static string? Format(string path)
         {
@@ -24,7 +32,7 @@ namespace CelesteMusicPlayer
 
             try
             {
-                if (!TryReadParts(path, out int rate, out int bits, out int kbps, out int channels))
+                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out int channels))
                 {
                     return null;
                 }
@@ -72,7 +80,7 @@ namespace CelesteMusicPlayer
 
             try
             {
-                if (!TryReadParts(path, out int rate, out int bits, out int kbps, out _))
+                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out _))
                 {
                     return string.Empty;
                 }
@@ -129,7 +137,7 @@ namespace CelesteMusicPlayer
 
             try
             {
-                if (!TryReadParts(path, out int rate, out int bits, out int kbps, out _))
+                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out _))
                 {
                     return result;
                 }
@@ -174,8 +182,42 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>带缓存的读取：每个路径只解析一次（含 ffmpeg 兜底），随后命中缓存。</summary>
+        private static bool TryGetPartsCached(string path, out int rate, out int bits, out int kbps, out int channels)
+        {
+            rate = 0;
+            bits = 0;
+            kbps = 0;
+            channels = 0;
+            if (InfoCache.TryGetValue(path, out AudioInfoData hit))
+            {
+                rate = hit.Rate;
+                bits = hit.Bits;
+                kbps = hit.Kbps;
+                channels = hit.Channels;
+                return true;
+            }
+
+            if (!ProbePartsUncached(path, out int r, out int b, out int k, out int c))
+            {
+                return false;
+            }
+
+            if (InfoCache.Count >= InfoCacheMax)
+            {
+                InfoCache.Clear();
+            }
+
+            InfoCache[path] = new AudioInfoData(r, b, k, c);
+            rate = r;
+            bits = b;
+            kbps = k;
+            channels = c;
+            return true;
+        }
+
         /// <summary>读取采样率/位深/码率/声道；TagLib 读不全时用 ffmpeg 兜底。</summary>
-        private static bool TryReadParts(string path, out int rate, out int bits, out int kbps, out int channels)
+        private static bool ProbePartsUncached(string path, out int rate, out int bits, out int kbps, out int channels)
         {
             rate = 0;
             bits = 0;

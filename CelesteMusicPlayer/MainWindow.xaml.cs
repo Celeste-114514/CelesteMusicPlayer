@@ -83,8 +83,19 @@ namespace CelesteMusicPlayer
 
         public string DurationText { get; set; } = "00:00";
 
-        /// <summary>歌曲面板第三行的格式胶囊：格式 / 位深·采样率 / 比特率（如 ["FLAC","16bit/44kHz","1411kbps"]）。</summary>
-        public IReadOnlyList<string> FormatChips { get; set; } = System.Array.Empty<string>();
+        /// <summary>歌曲面板第三行的格式胶囊：格式 / 位深·采样率 / 比特率（如 ["FLAC","16bit/44kHz","1411kbps"]）。
+        /// 懒计算 + AudioInfoFormatter 按路径缓存，避免启动/建条目时同步解析。</summary>
+        private IReadOnlyList<string>? _formatChips;
+        public IReadOnlyList<string> FormatChips
+        {
+            get
+            {
+                _formatChips ??= string.IsNullOrWhiteSpace(FilePath)
+                    ? System.Array.Empty<string>()
+                    : AudioInfoFormatter.FormatChips(FilePath);
+                return _formatChips;
+            }
+        }
 
         /// <summary>歌曲小封面（延迟异步加载，空则显示占位图标）。</summary>
         public Microsoft.UI.Xaml.Media.ImageSource? CoverImage { get; set; }
@@ -2346,8 +2357,7 @@ namespace CelesteMusicPlayer
                 Genre = genre,
                 Duration = duration,
                 DurationText = FormatTime(duration),
-                FilePath = path,
-                FormatChips = AudioInfoFormatter.FormatChips(path)
+                FilePath = path
             };
         }
 
