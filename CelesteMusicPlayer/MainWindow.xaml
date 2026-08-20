@@ -2338,6 +2338,8 @@
                                 Grid.Row="1"
                                 Background="Transparent"
                                 SelectionMode="None"
+                                ContainerContentChanging="MediaDetailsList_ContainerContentChanging"
+                                SelectionChanged="MediaDetailsList_SelectionChanged"
                                 RightTapped="MediaDetailsList_RightTapped"
                                 HorizontalContentAlignment="Stretch">
                                 <ListView.ItemContainerStyle>
@@ -2349,6 +2351,22 @@
                                         <Setter Property="Margin" Value="0,2" />
                                         <Setter Property="Background" Value="Transparent" />
                                         <Setter Property="BorderThickness" Value="0" />
+                                        <Setter Property="Template">
+                                            <Setter.Value>
+                                                <ControlTemplate TargetType="ListViewItem">
+                                                    <Grid HorizontalAlignment="Stretch" VerticalAlignment="Stretch">
+                                                        <ContentPresenter
+                                                            Content="{TemplateBinding Content}"
+                                                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                                                            ContentTransitions="{TemplateBinding ContentTransitions}"
+                                                            HorizontalAlignment="Stretch"
+                                                            VerticalAlignment="Stretch"
+                                                            HorizontalContentAlignment="Stretch"
+                                                            VerticalContentAlignment="Stretch" />
+                                                    </Grid>
+                                                </ControlTemplate>
+                                            </Setter.Value>
+                                        </Setter>
                                     </Style>
                                 </ListView.ItemContainerStyle>
                                 <ListView.ItemTemplate>

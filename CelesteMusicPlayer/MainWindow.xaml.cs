@@ -5169,21 +5169,68 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // 右键即进入多选状态：选中该项、列表可多选、显示「选项」按钮
-            if (MediaDetailsList != null)
+            if (MediaDetailsList?.SelectionMode == ListViewSelectionMode.Multiple)
             {
-                MediaDetailsList.SelectionMode = ListViewSelectionMode.Multiple;
+                // 已进入多选：右键加入选中
                 if (!MediaDetailsList.SelectedItems.Contains(song))
                 {
                     MediaDetailsList.SelectedItems.Add(song);
                 }
+
+                return;
             }
 
-            if (MediaOptionsButton != null)
+            // 右键：弹出该歌曲的选项菜单（多选作为其中一项，点多选才进入多选态）
+            var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
+            PlaylistItem songRef = song;
+
+            var play = new MenuFlyoutItem { Text = "播放" };
+            play.Icon = new FontIcon { Glyph = "\uE768" };
+            play.Click += (_, _) =>
             {
-                MediaOptionsButton.Visibility = Visibility.Visible;
-            }
+                PlaylistItem? track = EnsureTrackInLibrary(songRef.FilePath);
+                if (track != null)
+                {
+                    PlayPlaylistItem(track);
+                }
+            };
+            flyout.Items.Add(play);
 
+            var add = new MenuFlyoutItem { Text = "加入播放队列" };
+            add.Icon = new FontIcon { Glyph = "\uE710" };
+            add.Click += (_, _) => AddToUserPlaylistBack(songRef);
+            flyout.Items.Add(add);
+
+            var edit = new MenuFlyoutItem { Text = "编辑标签" };
+            edit.Icon = new FontIcon { Glyph = "\uE8D2" };
+            edit.Click += (_, _) => TagEditorWindow.ShowBatch(new[] { songRef.FilePath });
+            flyout.Items.Add(edit);
+
+            var del = new MenuFlyoutItem { Text = "从媒体库中删除" };
+            del.Icon = new FontIcon { Glyph = "\uE74D" };
+            del.Click += (_, _) => _ = DeleteMediaSongWithConfirmAsync(songRef);
+            flyout.Items.Add(del);
+
+            var multi = new MenuFlyoutItem { Text = "多选" };
+            multi.Icon = new FontIcon { Glyph = "\uE700" };
+            multi.Click += (_, _) =>
+            {
+                if (MediaDetailsList != null)
+                {
+                    MediaDetailsList.SelectionMode = ListViewSelectionMode.Multiple;
+                    MediaDetailsList.SelectedItems.Clear();
+                    MediaDetailsList.SelectedItems.Add(songRef);
+                    RefreshMediaSongSelectionChrome();
+                }
+
+                if (MediaOptionsButton != null)
+                {
+                    MediaOptionsButton.Visibility = Visibility.Visible;
+                }
+            };
+            flyout.Items.Add(multi);
+
+            flyout.ShowAt(MediaDetailsList ?? (FrameworkElement)sender, e.GetPosition(MediaDetailsList ?? (FrameworkElement)sender));
             e.Handled = true;
         }
 
@@ -5214,6 +5261,116 @@ namespace CelesteMusicPlayer
             }
             catch
             {
+            }
+        }
+
+        /// <summary>详情区歌曲行选中 chrome：主题色圆角背景（去掉多选框）。</summary>
+        private void MediaDetailsList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        {
+            if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
+            {
+                ApplyMediaSongSelectionChrome(sender as ListView, container, song);
+            }
+        }
+
+        private void MediaDetailsList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            RefreshMediaSongSelectionChrome();
+        }
+
+        private void RefreshMediaSongSelectionChrome()
+        {
+            if (MediaDetailsList == null)
+            {
+                return;
+            }
+
+            var realized = FindRealizedListViewContainers(MediaDetailsList);
+            foreach ((ListViewItem c, PlaylistItem s) in realized)
+            {
+                ApplyMediaSongSelectionChrome(MediaDetailsList, c, s);
+            }
+        }
+
+        private static List<(ListViewItem, PlaylistItem)> FindRealizedListViewContainers(ListView list)
+        {
+            var result = new List<(ListViewItem, PlaylistItem)>();
+            try
+            {
+                var presenter = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(list, 0);
+                void Walk(Microsoft.UI.Xaml.DependencyObject node, int depth)
+                {
+                    if (depth > 12)
+                    {
+                        return;
+                    }
+
+                    int n = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);
+                    for (int i = 0; i < n; i++)
+                    {
+                        var child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i);
+                        if (child is ListViewItem lvi)
+                        {
+                            if (lvi.Content is PlaylistItem p)
+                            {
+                                result.Add((lvi, p));
+                            }
+                        }
+                        else
+                        {
+                            Walk(child, depth + 1);
+                        }
+                    }
+                }
+
+                Walk(presenter, 0);
+            }
+            catch
+            {
+            }
+
+            return result;
+        }
+
+        private void ApplyMediaSongSelectionChrome(ListView? list, ListViewItem container, PlaylistItem song)
+        {
+            if (list == null)
+            {
+                return;
+            }
+
+            Brush accent = ResolveAccentBrush();
+            Brush selectedFg = ResolveContrastingForeground(accent);
+            bool selected = list.SelectionMode == ListViewSelectionMode.Multiple
+                ? list.SelectedItems.Contains(song)
+                : ReferenceEquals(list.SelectedItem, song);
+
+            container.Background = new SolidColorBrush(Colors.Transparent);
+            container.CornerRadius = new CornerRadius(8);
+            container.BorderThickness = new Thickness(0);
+            DisableContainerSelectionCheckMark(container);
+
+            Border? chrome = FindTaggedBorder(container, "SongRowChrome");
+            if (chrome != null)
+            {
+                chrome.MinHeight = 40;
+                chrome.CornerRadius = new CornerRadius(8);
+                chrome.VerticalAlignment = VerticalAlignment.Stretch;
+                if (list.ActualWidth > 0)
+                {
+                    chrome.Width = list.ActualWidth;
+                }
+
+                if (selected)
+                {
+                    chrome.Background = accent;
+                    ApplyForegroundToDescendants(chrome, selectedFg);
+                }
+                else
+                {
+                    chrome.Background = new SolidColorBrush(Colors.Transparent);
+                    ClearForegroundOnDescendants(chrome);
+                }
             }
         }
 
