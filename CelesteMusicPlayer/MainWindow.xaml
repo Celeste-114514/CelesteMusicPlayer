@@ -3000,7 +3000,8 @@
                                     TextAlignment="Center"
                                     TextWrapping="WrapWholeWords"
                                     Text="未在播放" />
-                                <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
+                                <!-- 歌手 / 专辑：各自一行，宽=半区-留边，超长换行 -->
+                                <StackPanel Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
                                     <Button
                                         x:Name="NowPlayingArtistLinkButton"
                                         Padding="0"
@@ -3019,8 +3020,6 @@
                                             TextWrapping="WrapWholeWords"
                                             Text="未知艺术家" />
                                     </Button>
-                                    <TextBlock x:Name="NowPlayingArtistAlbumSeparator" Text="·" FontSize="15"
-                                               Foreground="{ThemeResource TextFillColorSecondaryBrush}" VerticalAlignment="Center" />
                                     <Button
                                         x:Name="NowPlayingAlbumLinkButton"
                                         Padding="0"

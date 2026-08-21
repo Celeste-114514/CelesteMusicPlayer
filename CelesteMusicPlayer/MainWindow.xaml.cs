@@ -1201,9 +1201,23 @@ namespace CelesteMusicPlayer
             {
                 NowPlayingLeftShift.TranslateX = -paneWidth / 4.0;
             }
-            // 信息区：左右各留30(半区宽)，定宽使内部真正换行
-            if (NowPlayingArtistLinkButton != null) NowPlayingArtistLinkButton.MaxWidth = sideContentMax - 16;
-            if (NowPlayingAlbumLinkButton != null) NowPlayingAlbumLinkButton.MaxWidth = sideContentMax - 16;
+            // 信息区：左右各留30(半区宽)，StackPanel 垂直布局会给子无穷宽，故必须给每个 TextBlock/Button 自身设 MaxWidth 才换行
+            double infoTextMax = Math.Max(0, sideContentMax - 16);
+            NowPlayingTitleText.MaxWidth = infoTextMax;
+            NowPlayingAudioInfoText.MaxWidth = infoTextMax;
+            SignalChainInfoText.MaxWidth = infoTextMax;
+            NowPlayingArtistText.MaxWidth = infoTextMax;
+            NowPlayingAlbumText.MaxWidth = infoTextMax;
+            if (NowPlayingArtistLinkButton != null)
+            {
+                NowPlayingArtistLinkButton.MaxWidth = infoTextMax;
+                NowPlayingArtistLinkButton.Width = infoTextMax;
+            }
+            if (NowPlayingAlbumLinkButton != null)
+            {
+                NowPlayingAlbumLinkButton.MaxWidth = infoTextMax;
+                NowPlayingAlbumLinkButton.Width = infoTextMax;
+            }
             if (NowPlayingMetaPanel != null)
             {
                 NowPlayingMetaPanel.MaxWidth = sideContentMax;
@@ -12928,7 +12942,6 @@ namespace CelesteMusicPlayer
                 if (NowPlayingArtistLinkButton != null) NowPlayingArtistLinkButton.IsEnabled = false;
                 if (NowPlayingAlbumText != null) NowPlayingAlbumText.Text = "未知专辑";
                 if (NowPlayingAlbumLinkButton != null) NowPlayingAlbumLinkButton.IsEnabled = false;
-                if (NowPlayingArtistAlbumSeparator != null) NowPlayingArtistAlbumSeparator.Visibility = Visibility.Collapsed;
             }
             catch
             {
@@ -12997,13 +13010,6 @@ namespace CelesteMusicPlayer
 
             NowPlayingAlbumText.Text = hasAlbum ? item.Album.Trim() : "未知专辑";
             NowPlayingAlbumLinkButton.IsEnabled = hasAlbum;
-
-            // 分隔符仅在艺术家与专辑都存在时显示
-            if (NowPlayingArtistAlbumSeparator != null)
-            {
-                NowPlayingArtistAlbumSeparator.Visibility = (hasArtist && hasAlbum)
-                    ? Visibility.Visible : Visibility.Collapsed;
-            }
         }
 
         /// <summary>播放面板背景保持透明，与专辑详情页一致（露出主程序背景，非浮层）。</summary>
