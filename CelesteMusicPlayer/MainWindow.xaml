@@ -1438,6 +1438,20 @@
                                                     <Image
                                                         Stretch="UniformToFill"
                                                         Source="{x:Bind CoverImage, Mode=OneWay}" />
+                                                    <!-- DSD 专辑角标：左上角小三角 + 容器文字 -->
+                                                    <Border
+                                                        HorizontalAlignment="Left"
+                                                        VerticalAlignment="Top"
+                                                        Padding="7,2"
+                                                        Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                        CornerRadius="0,0,8,0"
+                                                        Visibility="{x:Bind DsdTagVisibility, Mode=OneWay}">
+                                                        <TextBlock
+                                                            Text="{x:Bind DsdTagText}"
+                                                            FontSize="10"
+                                                            FontWeight="SemiBold"
+                                                            Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                                    </Border>
                                                 </Grid>
                                             </Border>
                                             <TextBlock
@@ -1633,6 +1647,16 @@
                                         TextAlignment="Center"
                                         TextWrapping="NoWrap"
                                         TextTrimming="CharacterEllipsis" />
+                                    <!-- DSD 专辑提示：全 DSD 专辑时显示 -->
+                                    <TextBlock
+                                        x:Name="AlbumDetailDsdHint"
+                                        FontSize="11"
+                                        Opacity="0.85"
+                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                        TextWrapping="WrapWholeWords"
+                                        TextAlignment="Center"
+                                        Text="☢ 该专辑为 DSD 专辑，请使用 WASAPI 独占输出模式，并在播放前调节输出音量大小。"
+                                        Visibility="Collapsed" />
                                     </StackPanel>
                                     </ScrollViewer>
                                     <!-- 右栏：歌曲列表（铺满右侧，独立滚动） -->
@@ -2213,6 +2237,21 @@
                                                                 <Image
                                                                     Stretch="UniformToFill"
                                                                     Source="{x:Bind CoverImage, Mode=OneWay}" />
+                                                                <!-- DSD 专辑角标：左上角小三角 + 容器文字 -->
+                                                                <Border
+                                                                    HorizontalAlignment="Left"
+                                                                    VerticalAlignment="Top"
+                                                                    Padding="6,2"
+                                                                    Margin="0"
+                                                                    Background="{ThemeResource AccentFillColorDefaultBrush}"
+                                                                    CornerRadius="0,0,6,0"
+                                                                    Visibility="{x:Bind DsdTagVisibility, Mode=OneWay}">
+                                                                    <TextBlock
+                                                                        Text="{x:Bind DsdTagText}"
+                                                                        FontSize="9"
+                                                                        FontWeight="SemiBold"
+                                                                        Foreground="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
+                                                                </Border>
                                                             </Grid>
                                                         </Border>
                                                         <TextBlock

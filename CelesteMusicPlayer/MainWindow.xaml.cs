@@ -198,6 +198,20 @@ namespace CelesteMusicPlayer
 
         public string TotalDurationText { get; set; } = "00:00";
 
+        /// <summary>是否为 DSD 专辑（专辑内全部曲目都是 DSF/DFF）。</summary>
+        public bool IsDsd { get; set; }
+
+        /// <summary>DSD 角标文字（"DSF" 或 "DFF"）；非全 DSD 时为 null。</summary>
+        public string? DsdTagText => IsDsd ? DsdContainerExt : null;
+
+        /// <summary>DSD 角标可见性（供 x:Bind 绑定）。</summary>
+        public Microsoft.UI.Xaml.Visibility DsdTagVisibility
+            => IsDsd ? Microsoft.UI.Xaml.Visibility.Visible : Microsoft.UI.Xaml.Visibility.Collapsed;
+
+        private string? _dsdContainerExt;
+        internal void SetDsdContainer(string? ext) => _dsdContainerExt = ext;
+        private string? DsdContainerExt => _dsdContainerExt;
+
         /// <summary>用来提取封面的音频路径（优先音轨 1）</summary>
         public string CoverSourcePath { get; set; } = string.Empty;
 
@@ -888,6 +902,13 @@ namespace CelesteMusicPlayer
         {
             string ext = Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
             return ext is ".dsf" or ".dff";
+        }
+
+        /// <summary>返回 DSD 容器扩展名大写（"DSF"/"DFF"），非 DSD 返回 null。</summary>
+        private static string? DsdExtOf(string path)
+        {
+            string ext = Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
+            return ext switch { ".dsf" => "DSF", ".dff" => "DFF", _ => null };
         }
 
         private static bool IsHiFiModeSelected()
@@ -6995,6 +7016,9 @@ namespace CelesteMusicPlayer
                     .Select(g => g.First().Artist)
                     .FirstOrDefault() ?? "未知艺术家";
 
+                bool allDsd = group.All(t => IsDsdFile(t.FilePath));
+                string? dsdExt = allDsd ? DsdExtOf(group.First().FilePath) : null;
+
                 entries.Add(new AlbumEntry
                 {
                     Name = group.First().Album,
@@ -7004,8 +7028,13 @@ namespace CelesteMusicPlayer
                     TotalDuration = total,
                     TotalDurationText = FormatTime(total),
                     CoverSourcePath = coverTrack.FilePath,
-                    SortIndex = sortIndex++
+                    SortIndex = sortIndex++,
+                    IsDsd = allDsd
                 });
+                if (allDsd && entries.Count > 0)
+                {
+                    entries[^1].SetDsdContainer(dsdExt);
+                }
             }
 
             return entries;
@@ -7492,6 +7521,13 @@ namespace CelesteMusicPlayer
             foreach (PlaylistItem track in tracks)
             {
                 _albumTracks.Add(track);
+            }
+
+            // DSD 专辑提示：专辑内全部曲目为 DSF/DFF 时显示
+            if (AlbumDetailDsdHint != null)
+            {
+                bool allDsd = tracks.Count > 0 && tracks.All(t => IsDsdFile(t.FilePath));
+                AlbumDetailDsdHint.Visibility = allDsd ? Visibility.Visible : Visibility.Collapsed;
             }
 
             // 行3：编码器 | 位深/采样率 | 总时长（在后台线程算质量行，避免 CD 大专辑打开卡顿）
