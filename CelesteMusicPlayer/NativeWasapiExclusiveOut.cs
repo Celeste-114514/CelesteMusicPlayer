@@ -27,6 +27,7 @@ namespace CelesteMusicPlayer
         private IWaveSourceProvider? _provider;
         private long _framesWritten;
         private long _lastUnderrunLogMs; // 限频记录 underrun 诊断
+        private long _lastReadSlowMs;    // 限频记录"读源耗时尖峰"诊断（卡顿定位）
         private readonly object _seekLock = new();
         private TimeSpan? _pendingSeek; // 线程安全 seek 请求（由 render 线程消费）
 
@@ -397,7 +398,20 @@ namespace CelesteMusicPlayer
                     // ECHO 式：每次取整缓冲，写满后整体提交；无需 GetCurrentPadding/frames 换算 → 无越界
                     if (rc.GetBuffer((uint)maxFrames, out IntPtr dst) != NativeWasapi.S_OK) break;
 
-                    int got = ReadFully(src, srcBuf, maxFrames * _srcBlock);
+                    int got;
+                    long readStart = Environment.TickCount64;
+                    got = ReadFully(src, srcBuf, maxFrames * _srcBlock);
+                    long readMs = Environment.TickCount64 - readStart;
+                    // 诊断：单次读源耗时尖峰（>12ms）→ 读文件/源慢（磁盘/云盘定点区段）会成为卡顿点。
+                    // 若读取总快但播放仍卡在固定位置，则指向设备/驱动/定时器层（与此处无关）。
+                    if (readMs > 12 && _lastReadSlowMs < Environment.TickCount64)
+                    {
+                        _lastReadSlowMs = Environment.TickCount64 + 1000; // 限频 1s 一次
+                        var ps = src.ProbeCurrentState;
+                        long pos = ps?.Pos ?? 0, len = ps?.Len ?? 0;
+                        StartupLog.Write($"[源诊断] 读源耗时尖峰={readMs}ms（需{maxFrames * _srcBlock}B）srcPos={pos}/{len} nextMount={src.NextMounted}");
+                    }
+
                     if (got < srcBuf.Length)
                     {
                         Array.Clear(srcBuf, got, srcBuf.Length - got); // 不足部分静音，避免旧/越界数据
