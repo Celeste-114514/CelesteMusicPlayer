@@ -1191,12 +1191,16 @@ namespace CelesteMusicPlayer
                 NowPlayingLeftColumn.MinWidth = coverSize;
                 NowPlayingLeftColumn.MaxWidth = coverSize;
             }
-            // 艺术家/专辑超链接也限制在左栏宽度内，超长时换行
-            double linkMax = Math.Max(0, coverSize - 8);
-            if (NowPlayingArtistLinkButton != null) NowPlayingArtistLinkButton.MaxWidth = linkMax;
-            if (NowPlayingAlbumLinkButton != null) NowPlayingAlbumLinkButton.MaxWidth = linkMax;
-            // 左栏信息区域限定在封面宽度内换行，避免长艺术家/专辑名超出封面左右边界
-            if (NowPlayingMetaPanel != null) NowPlayingMetaPanel.MaxWidth = coverSize;
+            // 艺术家/专辑超链接限制在 500px 内换行
+            const double infoMax = 500;
+            if (NowPlayingArtistLinkButton != null) NowPlayingArtistLinkButton.MaxWidth = infoMax - 8;
+            if (NowPlayingAlbumLinkButton != null) NowPlayingAlbumLinkButton.MaxWidth = infoMax - 8;
+            // 封面下方信息区：向右移 150px，左右长度超过 500px 时换行(标题/艺术家/专辑/链路线都按此)
+            if (NowPlayingMetaPanel != null)
+            {
+                NowPlayingMetaPanel.MaxWidth = infoMax;
+                NowPlayingMetaPanel.Margin = new Thickness(150, 0, 0, 0);
+            }
             }
             finally
             {
@@ -7606,6 +7610,7 @@ namespace CelesteMusicPlayer
             CommitLibraryNavigation(() =>
             {
                 _currentCategory = "AlbumArtists";
+                ApplyCategoryView(); // 真正显示专辑艺术家分类的视图根，否则右侧面板不切换(仅左侧高亮)
                 ArtistEntry? artist = _artists.FirstOrDefault(a =>
                     string.Equals(a.Name, artistName, StringComparison.CurrentCultureIgnoreCase));
                 if (artist == null)
@@ -12892,6 +12897,9 @@ namespace CelesteMusicPlayer
             }
 
             SetNowPlayingPaneVisible(false);
+            // 从播放面板跳转：先切到「艺术家」分类并真正显示其视图根，再打开详情，保证左侧分类与右侧面板同步
+            _currentCategory = "Artists";
+            ApplyCategoryView();
             DispatcherQueue.TryEnqueue(() => OpenArtistDetail(entry!));
         }
 
@@ -12918,6 +12926,9 @@ namespace CelesteMusicPlayer
             }
 
             SetNowPlayingPaneVisible(false);
+            // 从播放面板跳转：先切到「专辑」分类并真正显示视图根，再打开详情，左侧分类与右侧面板同步
+            _currentCategory = "Albums";
+            ApplyCategoryView();
             DispatcherQueue.TryEnqueue(() => OpenAlbumDetail(entry!, fromArtist: false));
         }
 
