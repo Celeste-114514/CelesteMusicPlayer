@@ -128,11 +128,11 @@ namespace CelesteMusicPlayer
         /// <summary>用内置 FFmpeg 把文件转成临时 WAV 后播放（支持 APE/WavPack/TTA 等系统不支持的格式）。</summary>
         public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null)
         {
-            // DSD（DSF/DFF）：走原生 WASAPI 独占 + DoP 直出（bit-perfect），不再 ffmpeg 转 PCM。
-            // 先一次性完整解析 DSD 并封装为 DoP 容器 WAV（预加载），再交给现有独占通道原生直通播放，
-            // 避免"边播边解 DSD"造成的电流音/卡顿。
+            // DSD（DSF/DFF）：独占模式默认走原生 WASAPI 独占 + DoP 直出（bit-perfect）。
+            // 诊断开关 DsdUsePcmFallback=true 时改走下方通用 ffmpeg→PCM 通路（成熟路径），用于判断电流/黄灯是 DoP 链路还是高采样时钟问题。
             if (_outputMode == HiFiOutputBackend.OutputMode.WasapiExclusive
-                && IsDsdFile(path))
+                && IsDsdFile(path)
+                && !AppSettingsStore.Load().DsdUsePcmFallback)
             {
                 bool ok = await TryPlayDsdPreloadAsync(path, status);
                 StartupLog.Write("DSD 走原生直出 path=" + path + " ok=" + ok + " err=" + (LastError ?? ""));
@@ -433,13 +433,6 @@ namespace CelesteMusicPlayer
                     return false;
                 }
 
-                // 诊断开关：PCM Fallback——用 ffmpeg 把 DSF/DFF 转成高采样 PCM，走成熟 PCM 独占通路播放，
-                // 判断"电流/黄灯"是 DoP 直出链路的问题，还是 KA13 对高采样率 USB 时钟/驱动本身的问题。
-                if (AppSettingsStore.Load().DsdUsePcmFallback)
-                {
-                    return await PlayDsdAsPcmAsync(dsdPath, status);
-                }
-
                 status?.Invoke("DSD 缓冲直出：解析容器…");
                 // 同步在调用线程初始化 WASAPI 独占 + DoP 内存源（与 PCM 路径一致，避免 MTA 线程跨线程用 COM 报错）；
                 // 真正费时的 DSD 读取/封装由 DoPWaveSource 后台预读线程承担，不阻塞 UI。
@@ -451,51 +444,6 @@ namespace CelesteMusicPlayer
                 }
                 StartupLog.Write("DSD 内存预读→独占直通: " + dsdPath + " ok=" + played
                     + (played ? "" : " err=" + (LastError ?? "")));
-                return played;
-            }
-            catch (Exception ex)
-            {
-                LastError = ex.Message;
-                RaiseFailed(ex);
-                return false;
-            }
-        }
-
-        /// <summary>诊断路径：DSD 转成高采样 PCM 后走成熟 PCM 独占通道播放（ffmpeg 解码，非 bit-perfect DoP）。
-        /// 用于切割"DoP 直出链路问题" vs "KA13 高采样 USB 时钟/驱动问题"。</summary>
-        private async Task<bool> PlayDsdAsPcmAsync(string dsdPath, Action<string>? status)
-        {
-            try
-            {
-                string? ffmpeg = FindFfmpeg();
-                if (string.IsNullOrWhiteSpace(ffmpeg))
-                {
-                    RaiseFailed(new Exception("未找到内置 ffmpeg.exe（PCM fallback 需要）。"));
-                    return false;
-                }
-
-                string cacheDir = GetCacheDir();
-                Directory.CreateDirectory(cacheDir);
-                string key = "dsdpcm_" + Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(
-                    System.Text.Encoding.UTF8.GetBytes(dsdPath.ToLowerInvariant())));
-                string dstWav = Path.Combine(cacheDir, key + ".wav");
-
-                if (!File.Exists(dstWav) || new FileInfo(dstWav).Length <= 44)
-                {
-                    status?.Invoke("DSD→PCM 诊断转码…");
-                    string args = string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -sample_fmt s32 -ac 2 \"{1}\"", dsdPath, dstWav);
-                    if (!await RunFfmpegAsync(args, status))
-                    {
-                        return false;
-                    }
-                }
-
-                bool played = PlayWavHiFi(dstWav, requireExact: false);
-                if (played)
-                {
-                    status?.Invoke("");
-                }
-                StartupLog.Write("DSD→PCM 诊断播放（非 bit-perfect DoP）：" + dsdPath + " ok=" + played);
                 return played;
             }
             catch (Exception ex)
