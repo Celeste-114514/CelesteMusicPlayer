@@ -1906,12 +1906,14 @@
                                         </Ellipse>
                                     </Grid>
 
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="12">
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="12" MaxWidth="240">
                                         <TextBlock
                                             x:Name="ArtistDetailNameText"
                                             FontSize="28"
                                             FontWeight="SemiBold"
-                                            TextWrapping="WrapWholeWords" />
+                                            TextWrapping="WrapWholeWords"
+                                            MaxLines="4"
+                                            TextTrimming="CharacterEllipsis" />
                                         <StackPanel Orientation="Vertical" Spacing="10">
                                             <Button
                                                 x:Name="PlayArtistWorksButton"
