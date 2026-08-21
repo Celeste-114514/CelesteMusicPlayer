@@ -12,6 +12,25 @@ namespace CelesteMusicPlayer
     /// </summary>
     internal static class DsdToDoPWav
     {
+        // 8-bit 位反转表（DSF MSB-first → DoP LSB-first）
+        private static readonly byte[] Rev8 = BuildRevTable();
+        private static byte[] BuildRevTable()
+        {
+            var t = new byte[256];
+            for (int i = 0; i < 256; i++)
+            {
+                byte b = (byte)i, r = 0;
+                for (int k = 0; k < 8; k++)
+                {
+                    r = (byte)((r << 1) | (b & 1));
+                    b >>= 1;
+                }
+
+                t[i] = r;
+            }
+
+            return t;
+        }
         /// <summary>把 dsf/dfF 一次性解析并写出 DoP PCM 容器 WAV。返回 (成功, 采样率, 说明)。</summary>
         public static (bool Ok, int Rate, string Msg) Convert(string dsdPath, string wavPath, Action<int>? progress = null)
         {
@@ -76,9 +95,11 @@ namespace CelesteMusicPlayer
                         break; // 源尽/残缺
                     }
 
+                    // 位序：DSF MSB-first → DoP 容器需 LSB-first → 逐字节位反转(与 DoPWaveSource 一致)
+                    byte l0 = Rev8[src[0]], r0 = Rev8[src[1]], l1 = Rev8[src[2]], r1 = Rev8[src[3]];
                     byte marker = (frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
-                    frame[0] = src[0]; frame[1] = src[2]; frame[2] = marker; // L: 低16=DSD, 高8=标记
-                    frame[3] = src[1]; frame[4] = src[3]; frame[5] = marker; // R
+                    frame[0] = l0; frame[1] = l1; frame[2] = marker; // L: 低16=DSD, 高8=标记
+                    frame[3] = r0; frame[4] = r1; frame[5] = marker; // R
                     bw.Write(frame);
                     frameIndex++;
                     written += 6;

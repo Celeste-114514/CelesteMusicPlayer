@@ -168,11 +168,11 @@ namespace CelesteMusicPlayer
             int frames = 0;
             while (frames * 6 < want && (_curPos + 4) <= _curCount)
             {
-                // DSF/DFF 的 DSD 字节内位序与 DoP 容器一致时直接放入；位序分歧时通过 ReverseDsdBytes 开关切换验证。
-                byte l0 = _cur[_curPos];
-                byte r0 = _cur[_curPos + 1];
-                byte l1 = _cur[_curPos + 2];
-                byte r1 = _cur[_curPos + 3];
+                // DSF/DFF 的 DSD 字节内 bit7 为最早样本(MSB-first)，DoP 规范要求最早样本在容器 bit0(LSB-first) → 逐字节位反转。
+                byte l0 = Rev8[_cur[_curPos]];
+                byte r0 = Rev8[_cur[_curPos + 1]];
+                byte l1 = Rev8[_cur[_curPos + 2]];
+                byte r1 = Rev8[_cur[_curPos + 3]];
                 _curPos += 4;
 
                 byte marker = (_frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
@@ -206,6 +206,26 @@ namespace CelesteMusicPlayer
             }
 
             return frames * 6;
+        }
+
+        // 8-bit 位反转查表（DSF MSB-first → DoP LSB-first；据真机"反转可听、不反转雪花"定稿）
+        private static readonly byte[] Rev8 = BuildRevTable();
+        private static byte[] BuildRevTable()
+        {
+            var t = new byte[256];
+            for (int i = 0; i < 256; i++)
+            {
+                byte b = (byte)i, r = 0;
+                for (int k = 0; k < 8; k++)
+                {
+                    r = (byte)((r << 1) | (b & 1));
+                    b >>= 1;
+                }
+
+                t[i] = r;
+            }
+
+            return t;
         }
 
         public void Seek(TimeSpan position)
