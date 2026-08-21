@@ -24,7 +24,6 @@ namespace CelesteMusicPlayer
     internal sealed class BuiltInDsdStream : IDsDStream
     {
         private readonly FileStream _fs;
-        private readonly long _dataStart;       // 数据块内 DSD 字节流起点（文件偏移）
         private readonly long _dataBytes;       // DSD 数据总字节
         private readonly DsdRate _rate;
         private readonly int _channels;
@@ -32,20 +31,41 @@ namespace CelesteMusicPlayer
         private readonly bool _dff;             // true=DFF(L/R 逐字节交织), false=DSF(块交错)
         private long _samplesRead;
 
+        // 整段 DSD 数据预载入内存：云盘同步盘等慢盘上若靠 FileStream 懒读，预读线程读不过播放速率
+        // → DoP ring 持续欠载补静音，听感为"滋滋电流/断音/后半段无声"。改为开播前一次性读入内存，
+        // 后续 Read/Seek 全部走内存数组，预读线程极速取数，ring 永不欠载（对齐 PCM 整曲内存策略）。
+        private readonly byte[] _data;
+        private long _dataPos;                  // 当前 DSD 数据偏移（相对 _data[0]）
+
         private byte[]? _block;                 // DSF 重交织缓冲
         private int _blockPos;
-        private readonly object _ioLock = new(); // 串行化 _fs/_block 读写，防预读线程与 seek 线程并发导致 NRE/数据错乱
+        private readonly object _ioLock = new(); // 串行化读位置/块/seek，防预读线程与 seek 线程并发
 
         private BuiltInDsdStream(FileStream fs, long dataStart, long dataBytes,
             DsdRate rate, int channels, int blockSize, bool dff)
         {
             _fs = fs;
-            _dataStart = dataStart;
             _dataBytes = dataBytes;
             _rate = rate;
             _channels = channels;
             _blockSize = blockSize;
             _dff = dff;
+            _data = new byte[dataBytes];
+            fs.Position = dataStart;
+            int got = 0;
+            while (got < _data.Length)
+            {
+                int n = fs.Read(_data, got, _data.Length - got);
+                if (n <= 0)
+                {
+                    break;
+                }
+
+                got += n;
+            }
+
+            // 已全部读入内存，可关闭底层文件句柄（样本读取不再触碰磁盘）
+            try { fs.Dispose(); } catch { }
         }
 
         public DsdRate Rate => _rate;
@@ -255,22 +275,21 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>DFF：数据本身就是 L/R 逐字节交织，直接流水读。</summary>
+        /// <summary>DFF：数据本身就是 L/R 逐字节交织，直接流水读（全从内存 _data）。</summary>
         private int ReadDffDirect(byte[] buffer, int offset, int count)
         {
-            long cur = _fs.Position;
-            if (cur >= _dataStart + _dataBytes)
+            int n = (int)Math.Min(count, _dataBytes - _dataPos);
+            if (n <= 0)
             {
                 return 0;
             }
 
-            _fs.Position = cur;
-            long remaining = Math.Min(count, _dataStart + _dataBytes - cur);
-            int n = _fs.Read(buffer, offset, (int)remaining);
+            Buffer.BlockCopy(_data, (int)_dataPos, buffer, offset, n);
+            _dataPos += n;
             return n;
         }
 
-        /// <summary>DSF：数据按 blockSize/声道 块交错(L块,R块…)，读时重交织成 L,R 逐字节。</summary>
+        /// <summary>DSF：数据按 blockSize/声道 块交错(L块,R块…)，读时重交织成 L,R 逐字节（全从内存 _data）。</summary>
         private int ReadDsfInterleaved(byte[] buffer, int offset, int count)
         {
             if (_block == null)
@@ -304,45 +323,25 @@ namespace CelesteMusicPlayer
 
         private bool LoadNextDsfBlock()
         {
-            long curByte = _fs.Position;
-            int alloc = Math.Max(1, _blockSize * 2); // L+R
-            byte[] block = new byte[alloc];
-            int got = 0;
-            while (got < alloc && curByte + got < _dataStart + _dataBytes && (curByte + got) < _fs.Length)
+            if (_dataPos >= _dataBytes)
             {
-                _fs.Position = curByte + got;
-                int n = _fs.Read(block, got, Math.Min(alloc - got, (int)Math.Min(_dataStart + _dataBytes - (curByte + got), int.MaxValue)));
-                if (n <= 0)
-                {
-                    break;
-                }
-
-                got += n;
+                return false;
             }
 
-            if (got < _blockSize * 2)
+            int alloc = _blockSize * 2; // L+R（当前按立体声 pair-block；与原有读法一致）
+            var block = new byte[alloc];
+            int got = (int)Math.Min(alloc, _dataBytes - _dataPos);
+            Buffer.BlockCopy(_data, (int)_dataPos, block, 0, got);
+            if (got < alloc)
             {
-                // 数据不足一块：若完全不足则视为结束；否则把已有置入 block，剩余补零
-                if (got == 0)
-                {
-                    _fs.Position = curByte + got;
-                    return false;
-                }
-
-                Array.Clear(block, got, alloc - got);
-                _block = block;
-                _blockSizeUsed = _blockSize; // 保持块大小语义
-                _fs.Position = curByte + got;
-                return true;
+                Array.Clear(block, got, alloc - got); // 尾部不足补零
             }
 
             _block = block;
             _blockPos = 0;
-            _fs.Position = curByte + alloc;
-            return true;
+            _dataPos += alloc; // 前进到下一个 pair-block 起点（不足时超出 _dataBytes，下次返回 false）
+            return got > 0;
         }
-
-        private int _blockSizeUsed;
 
         public void SeekSample(long sampleIndex)
         {
@@ -350,13 +349,13 @@ namespace CelesteMusicPlayer
             {
                 // DSF data 布局是「每声道分块交错」：data = [L块(blockSize)][R块(blockSize)][L块][R块]...
                 // sampleIndex = 每声道 1-bit 样本数。每声道字节偏移 = sampleIndex/8。
-                // 旧实现用线性偏移 dataStart + sampleIndex/8/channels，对块交错布局定位到错误声道/相位
-                // → 选进度/seek 后声道错位，产生"膜状鼓动"噪音。这里改为按 DSF pair-block 精确定位。
+                // 旧实现用线性偏移定位到错误声道/相位 → seek 后声道错位（膜状鼓动噪音）。
+                // 改按 DSF pair-block 精确换算，并从内存 _data 载入对应块。
                 if (_channels <= 0 || _blockSize <= 0 || _dff)
                 {
                     // DFF 是线性 L,R 逐字节交织，旧线性偏移正确；DSF 用块交错公式
                     long byteOff = _channels > 0 ? sampleIndex / 8 / _channels : 0;
-                    _fs.Position = Math.Min(_dataStart + byteOff, _dataStart + _dataBytes);
+                    _dataPos = Math.Min(byteOff, _dataBytes);
                     _block = null;
                     _samplesRead = sampleIndex;
                     return;
@@ -365,30 +364,15 @@ namespace CelesteMusicPlayer
                 long chByte = sampleIndex / 8;                 // 每声道字节偏移（含全部 pair-block 累计）
                 long pair = chByte / _blockSize;               // 目标所在 L/R pair-block 序号
                 int off = (int)(chByte % _blockSize);          // 块内字节位置（0..blockSize-1）
-                long blockStart = _dataStart + pair * (long)_blockSize * _channels;
+                long blockDataPos = pair * (long)_blockSize * _channels; // 该 pair-block 在 _data 中的偏移
 
                 // 载入含 off 的这一个 pair-block（L 在前 R 在后，各 blockSize 字节）
                 int alloc = _blockSize * _channels;
                 var block = new byte[alloc];
-                int got = 0;
-                _fs.Position = Math.Min(blockStart, _dataStart + _dataBytes);
-                while (got < alloc && _fs.Position < _dataStart + _dataBytes && _fs.Position < _fs.Length)
+                int got = (int)Math.Min(alloc, _dataBytes - blockDataPos);
+                if (got > 0)
                 {
-                    int n = _fs.Read(block, got, Math.Min(alloc - got, (int)Math.Min(_dataStart + _dataBytes - _fs.Position, int.MaxValue)));
-                    if (n <= 0)
-                    {
-                        break;
-                    }
-
-                    got += n;
-                }
-
-                if (got == 0)
-                {
-                    _block = null;
-                    _blockPos = 0;
-                    _samplesRead = sampleIndex;
-                    return; // 源尽
+                    Buffer.BlockCopy(_data, (int)blockDataPos, block, 0, got);
                 }
 
                 if (got < alloc)
@@ -398,7 +382,7 @@ namespace CelesteMusicPlayer
 
                 _block = block;
                 _blockPos = Math.Min(off, _blockSize);   // 从块内 off 处续读 L,R 交错
-                _fs.Position = Math.Min(blockStart + alloc, _dataStart + _dataBytes); // 指向下一个 pair-block 起点
+                _dataPos = blockDataPos + alloc;         // 指向下一个 pair-block 起点（_data 内偏移）
                 _samplesRead = sampleIndex;
             }
         }

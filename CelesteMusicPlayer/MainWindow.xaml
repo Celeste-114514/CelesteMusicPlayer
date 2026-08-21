@@ -651,7 +651,8 @@
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock
                                     Text="排序：标题"
-                                    VerticalAlignment="Center" />
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,0,2" />
                             </StackPanel>
                             <DropDownButton.Flyout>
                                 <MenuFlyout Placement="Bottom">
@@ -674,7 +675,8 @@
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock
                                     Text="升序"
-                                    VerticalAlignment="Center" />
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,0,2" />
                             </StackPanel>
                         </Button>
                         <Button
@@ -688,7 +690,8 @@
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock
                                     Text="更改排序"
-                                    VerticalAlignment="Center" />
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,0,2" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -712,7 +715,8 @@
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock
                                     Text="按专辑名称"
-                                    VerticalAlignment="Center" />
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,0,2" />
                             </StackPanel>
                             <DropDownButton.Flyout>
                                 <MenuFlyout Placement="Bottom">
@@ -737,7 +741,8 @@
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <TextBlock
                                     Text="升序"
-                                    VerticalAlignment="Center" />
+                                    VerticalAlignment="Center"
+                                    Margin="0,0,0,2" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
