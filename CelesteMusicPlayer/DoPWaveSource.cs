@@ -161,7 +161,7 @@ namespace CelesteMusicPlayer
 
                 if (_curCount < 4)
                 {
-                    return 0;
+                    _eof = true; // 源尽：转补合规 DoP 静音帧（0x69），避免 render 用 0 填充造成爆音
                 }
             }
 
@@ -185,6 +185,24 @@ namespace CelesteMusicPlayer
                 buffer[o + 5] = marker;
                 _frameIndex++;
                 frames++;
+            }
+
+            // 源尽后补合规 DoP 静音帧（0x69 数据 + 0x05/0xFA 交替），避免尾/切换时用 0 填充造成爆音/杂音
+            if (_eof)
+            {
+                while (frames * 6 < want)
+                {
+                    byte marker = (_frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
+                    int o = offset + frames * 6;
+                    buffer[o] = 0x69;
+                    buffer[o + 1] = 0x69;
+                    buffer[o + 2] = marker;
+                    buffer[o + 3] = 0x69;
+                    buffer[o + 4] = 0x69;
+                    buffer[o + 5] = marker;
+                    _frameIndex++;
+                    frames++;
+                }
             }
 
             return frames * 6;
