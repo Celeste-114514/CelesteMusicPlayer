@@ -714,13 +714,12 @@ namespace CelesteMusicPlayer
         private void OnEqualizerApplied()
         {
             EqualizerState state = EqualizerStore.Load();
-            // 把增益实际应用到引擎：共享模式（AudioGraph）与 HiFi(ASIO/共享 NAudio) 均生效；
-            // WASAPI 独占为保持 bit-perfect 不使用 EQ。启用 EQ 后输出非 bit-perfect。
+            // 把增益实际应用到引擎：共享 / ASIO / 原生 WASAPI 独占 均可走统一 DSP 链；启用 EQ 后输出非 bit-perfect。
             _audioEngine?.SetEqualizer(state.BandGains);
-            string onlyWEx = _audioEngine != null && _audioEngine.IsHiFiMode
-                ? "（WASAPI 独占保持 bit-perfect，不使用 EQ）"
-                : "";
-            NowPlayingText.Text = "均衡器已应用" + onlyWEx;
+            bool any = state.BandGains != null && state.BandGains.Any(g => Math.Abs(g) > 0.01);
+            NowPlayingText.Text = any
+                ? "均衡器已应用（输出非 bit-perfect）"
+                : "均衡器已应用（bit-perfect 直通）";
         }
 
         private void OnTagsSaved(string path)
@@ -1102,10 +1101,6 @@ namespace CelesteMusicPlayer
         private void FeaturesMoreButton_Click(object sender, RoutedEventArgs e)
         {
             var flyout = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Top };
-
-            var eq = new MenuFlyoutItem { Text = "均衡器…" };
-            eq.Click += (_, _) => EqualizerWindow.ShowOrActivate();
-            flyout.Items.Add(eq);
 
             var find = new MenuFlyoutItem { Text = "查找歌曲…" };
             find.Click += (_, _) => OpenFindSongWindow();
@@ -2005,11 +2000,6 @@ namespace CelesteMusicPlayer
             find.Icon = new FontIcon { Glyph = "\uE721" };
             find.Click += (_, _) => OpenFindSongWindow();
             flyout.Items.Add(find);
-
-            var eq = new MenuFlyoutItem { Text = "均衡器…" };
-            eq.Icon = new FontIcon { Glyph = "\uE9E9" };
-            eq.Click += (_, _) => EqualizerWindow.ShowOrActivate();
-            flyout.Items.Add(eq);
 
             var tools = new MenuFlyoutSubItem { Text = "工具" };
             var importM3u = new MenuFlyoutItem { Text = "导入 M3U…" };

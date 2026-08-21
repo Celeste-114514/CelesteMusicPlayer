@@ -1,0 +1,481 @@
+using System;
+using System.Collections.Generic;
+using NAudio.Dsp;
+using NAudio.Wave;
+
+namespace CelesteMusicPlayer
+{
+    /// <summary>
+    /// 统一直管 DSP 源：包装 <see cref="SeamlessWaveProvider"/>，在 Read 时对源 PCM 依次做
+    /// 「10段EQ → 声道平衡 → 安全限幅(headroom + soft-clip)」。同时实现 <see cref="IWaveSourceProvider"/>
+    /// 与 <see cref="IWaveProvider"/>，因此既可用于 NAudio（ASIO/共享）输出，也可传给原生 WASAPI 独占
+    /// 渲染线程 —— 让 DSP 在独占输出下同样生效。
+    ///
+    /// 任一 DSP 激活即非 bit-perfect（与 ECHO 的界定一致）；全部直通时数值直通。
+    /// DSD/DoP 直出（requireExact）路径不使用本 provider，保持 1-bit 直通。
+    /// </summary>
+    internal sealed class ManagedDspSourceProvider : IWaveProvider, IWaveSourceProvider
+    {
+        private readonly IWaveSourceProvider _source;
+        private readonly WaveFormat _format;
+        private readonly int _channels;
+        private readonly bool _isFloat;
+
+        // EQ：动态 band 滤波链（按 band 列表/类型重建，render 线程整数组原子读，UI 线程原子替换）
+        private volatile BiQuadFilter[] _eqFilters = Array.Empty<BiQuadFilter>();
+        private double _preampGain = 1.0; // preamp（double 不能 volatile；仅在 EQ 状态更新时变化，读侧极端误差可忽略）
+        private bool _eqEnabled;
+
+        // 声道平衡参数
+        private bool _chEnabled;
+        private bool _chSwap, _chInvL, _chInvR, _chMono, _chMonoLeft, _chMonoRight;
+        private double _gainL, _gainR;
+
+        // 安全限幅
+        private double _headroomDb;       // 负值预衰减余量
+        private double _headroomGain;     // 当前平滑中的增益
+        private double _headroomStep;     // 每样本步进
+        private int _headroomSmoothLeft;  // 剩余平滑样本
+        private int _headroomSmoothTotal = 22050; // ~0.5s@44.1k，默认
+        private const int SmoothingMs = 50; // 快速但无爆音
+        private bool _limiterEnabled;
+        private volatile bool _active; // 任意 DSP 生效（EQ/声道/headroom/limiter）→ 决定 Read 是否走 ProcessBlock
+
+        public ManagedDspSourceProvider(IWaveSourceProvider source)
+        {
+            _source = source ?? throw new ArgumentNullException(nameof(source));
+            _format = source.WaveFormat;
+            _channels = _format.Channels;
+            _isFloat = _format.Encoding == WaveFormatEncoding.IeeeFloat;
+
+            if (_format.SampleRate > 0)
+            {
+                _headroomSmoothTotal = Math.Max(1, (int)(_format.SampleRate * SmoothingMs / 1000.0));
+            }
+
+            _headroomGain = 1.0;
+        }
+
+        #region 状态更新（播放中调用，下一次 Read 生效）
+
+        /// <summary>兼容旧 10 段 EQ（独立 EQ 窗口用）：组装为动态曲线状态再走统一引擎。</summary>
+        public void UpdateEq(double[]? gainsDb)
+        {
+            var curve = new EqCurveState { Enabled = true, PreampDb = 0, PresetId = "custom", PresetName = "自定义" };
+            double[] stdFreq = { 31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 };
+            if (gainsDb != null)
+            {
+                for (int i = 0; i < stdFreq.Length; i++)
+                {
+                    double g = i < gainsDb.Length ? gainsDb[i] : 0.0;
+                    if (Math.Abs(g) <= 0.01) continue;
+                    curve.Bands.Add(new EqBand { Enabled = true, FrequencyHz = stdFreq[i], GainDb = g, Q = 1.0, FilterType = EqFilterType.Peaking });
+                }
+            }
+
+            if (curve.Bands.Count == 0) { _eqEnabled = false; _eqFilters = Array.Empty<BiQuadFilter>(); RefreshActive(); return; }
+            UpdateEqCurve(curve);
+        }
+
+        /// <summary>应用动态 EQ 曲线状态（band 列表 + preamp）。null / 无效果 → 关闭 EQ。
+        /// 播放中调用：整数组原子替换滤波链（volatile），render 线程下一次 Read 生效，无锁、可丝滑实时调节。</summary>
+        public void UpdateEqCurve(EqCurveState? curve)
+        {
+            bool on = curve != null && curve.HasEffect();
+            if (!on)
+            {
+                _eqEnabled = false;
+                _preampGain = 1.0;
+                _eqFilters = Array.Empty<BiQuadFilter>();
+                RefreshActive();
+                return;
+            }
+
+            var filters = new List<BiQuadFilter>();
+            // 自动峰值余量补偿：估算所有启用 band 在频域的最大叠加增益 peakDb，
+            // 当用户未手动设 preamp 时，自动施加负余量把输出压回 0dB，避免极端增益（如 +10dB 低频增强）
+            // 触发 biQuad 过冲后只能靠削波产生爆音（对齐 ECHO 自动增益/余量思路）。
+            double peakDb = EstimateEqPeakDb(curve);
+            double autoCompDb = -Math.Max(0, peakDb);
+            autoCompDb = Math.Clamp(autoCompDb, -12, 0);
+            double userPre = Math.Abs(curve!.PreampDb) > 0.01 ? Math.Pow(10.0, Math.Clamp(curve.PreampDb, -24, 24) / 20.0) : 1.0;
+            if (Math.Abs(curve.PreampDb) > 0.01)
+            {
+                // 用户手动 set 了 preamp：尊重用户设定，但叠加的自动余量也纳入（仍防削波）
+                _preampGain = userPre * Math.Pow(10.0, autoCompDb / 20.0);
+            }
+            else
+            {
+                _preampGain = Math.Pow(10.0, autoCompDb / 20.0);
+            }
+
+            foreach (var band in curve.Bands)
+            {
+                if (band is not { Enabled: true }) continue;
+                var f = BuildBandFilter(band);
+                if (f != null) filters.Add(f);
+            }
+
+            _eqFilters = filters.ToArray();
+            _eqEnabled = true;
+            RefreshActive();
+        }
+
+        /// <summary>估算一组 EQ band 在频域的最大叠加增益（dB）。保守起见对 peak 用带宽高斯近似、架/滤子做简化求和。</summary>
+        private static double EstimateEqPeakDb(EqCurveState curve)
+        {
+            double peak = 0;
+            if (curve.Bands.Count == 0) return 0;
+            double fMin = 20, fMax = 20000;
+            double dAdd = Math.Pow(fMax / fMin, 1.0 / 200.0);
+            double f = fMin;
+            for (int i = 0; i <= 200; i++)
+            {
+                double g = 0;
+                foreach (var b in curve.Bands)
+                {
+                    if (b is not { Enabled: true }) continue;
+                    g += ApproxBandGain(f, b);
+                }
+
+                if (g > peak) peak = g;
+                f *= dAdd;
+            }
+
+            return peak;
+        }
+
+        /// <summary>单段在给定频率处的近似幅度增益（dB）——用于峰值估算，与曲线绘制用同一近似。</summary>
+        private static double ApproxBandGain(double freq, EqBand b)
+        {
+            if (Math.Abs(b.GainDb) < 0.01 && b.FilterType is not (EqFilterType.LowPass or EqFilterType.HighPass or EqFilterType.Notch))
+            {
+                if (b.FilterType is EqFilterType.Peaking or EqFilterType.LowShelf or EqFilterType.HighShelf) return 0;
+            }
+
+            switch (b.FilterType)
+            {
+                case EqFilterType.LowPass:
+                {
+                    double cutoff = Math.Max(20, b.FrequencyHz);
+                    if (freq >= cutoff) { double x = freq / cutoff; return -6.0 * Math.Log10(1 + x * x); }
+                    return 0;
+                }
+                case EqFilterType.HighPass:
+                {
+                    double hc = Math.Max(20, b.FrequencyHz);
+                    if (freq <= hc) { double x = hc / freq; return -6.0 * Math.Log10(1 + x * x); }
+                    return 0;
+                }
+                case EqFilterType.Notch:
+                {
+                    double d = Math.Abs(System.Math.Log(freq / b.FrequencyHz));
+                    double n = b.Q <= 0 ? 1 : b.Q;
+                    if (d <= 0.5 / n) return -6 * Math.Min(1, (0.5 / n - d) * n * 2);
+                    return 0;
+                }
+                case EqFilterType.LowShelf:
+                case EqFilterType.HighShelf:
+                {
+                    double gain = Math.Clamp(b.GainDb, -24, 24);
+                    double extent = Math.Abs(System.Math.Log(freq / Math.Max(20, b.FrequencyHz)));
+                    return gain * Math.Clamp(1.0 / (1.0 + 0.5 * extent), 0.2, 1.0);
+                }
+                default: // Peaking
+                {
+                    if (Math.Abs(b.GainDb) < 0.01) return 0;
+                    double w = Math.Max(20, b.FrequencyHz);
+                    double x = System.Math.Log10(freq / w) * 6; // octave 尺度
+                    double q = Math.Max(0.1, b.Q);
+                    double sigma = q > 0 ? 0.7 * (1.0 / q) : 0.6; // octaves
+                    return b.GainDb * System.Math.Exp(-(x * x) / (2 * sigma * sigma));
+                }
+            }
+        }
+
+        /// <summary>把单条 band 构造成 BiQuad 滤波器（按类型）。</summary>
+        private BiQuadFilter? BuildBandFilter(EqBand band)
+        {
+            float sr = _format.SampleRate;
+            float freq = (float)Math.Clamp(band.FrequencyHz, 20, sr * 0.45f);
+            float q = (float)Math.Clamp(band.Q, 0.1, 24);
+            float gain = (float)Math.Clamp(band.GainDb, -24, 24);
+            switch (band.FilterType)
+            {
+                case EqFilterType.Peaking: return BiQuadFilter.PeakingEQ(sr, freq, q, gain);
+                case EqFilterType.LowShelf: return BiQuadFilter.LowShelf(sr, freq, q, gain);
+                case EqFilterType.HighShelf: return BiQuadFilter.HighShelf(sr, freq, q, gain);
+                case EqFilterType.LowPass: return BiQuadFilter.LowPassFilter(sr, freq, q);
+                case EqFilterType.HighPass: return BiQuadFilter.HighPassFilter(sr, freq, q);
+                case EqFilterType.Notch: return BiQuadFilter.NotchFilter(sr, freq, q);
+                default: return BiQuadFilter.PeakingEQ(sr, freq, q, gain);
+            }
+        }
+
+        public void UpdateChannel(ChannelBalanceState? state)
+        {
+            if (state == null || !state.Enabled)
+            {
+                _chEnabled = false;
+                return;
+            }
+
+            _chEnabled = true;
+            _chSwap = state.SwapChannels;
+            _chInvL = state.InvertLeft;
+            _chInvR = state.InvertRight;
+            _chMono = !string.Equals(state.MonoMode, "off", StringComparison.Ordinal);
+            _chMonoLeft = string.Equals(state.MonoMode, "left", StringComparison.Ordinal);
+            _chMonoRight = string.Equals(state.MonoMode, "right", StringComparison.Ordinal);
+
+            double balance = Math.Clamp(state.Balance, -1.0, 1.0);
+            double panL = balance <= 0 ? 1.0 : Math.Cos(balance * Math.PI / 2.0);
+            double panR = balance >= 0 ? 1.0 : Math.Cos(balance * Math.PI / 2.0);
+            double lg = Math.Pow(10.0, Math.Clamp(state.LeftGainDb, -12.0, 12.0) / 20.0);
+            double rg = Math.Pow(10.0, Math.Clamp(state.RightGainDb, -12.0, 12.0) / 20.0);
+            _gainL = lg * panL;
+            _gainR = rg * panR;
+            RefreshActive();
+        }
+
+        public void UpdateSafety(DspSafetyState? state)
+        {
+            double hd = state?.HeadroomDb ?? 0.0;
+            hd = Math.Clamp(hd, -12.0, 0.0);
+            double targetGain = Math.Pow(10.0, hd / 20.0);
+            _headroomDb = hd;
+            _limiterEnabled = state?.EnableLimiter ?? true;
+            _headroomSmoothTotal = _format.SampleRate > 0 ? Math.Max(1, (int)(_format.SampleRate * SmoothingMs / 1000.0)) : 1;
+            if (Math.Abs(_headroomGain - targetGain) > 1e-5)
+            {
+                _headroomSmoothLeft = _headroomSmoothTotal;
+                _headroomStep = (targetGain - _headroomGain) / _headroomSmoothTotal;
+            }
+
+            RefreshActive();
+        }
+
+        /// <summary>任意 DSP 是否激活（UI 据此提示"非 bit-perfect"）。</summary>
+        public bool IsActive => _active;
+
+        /// <summary>重算 DSP 是否生效；当无任一 DSP 生效时后续 Read 直接直通（bit-perfect，零逐样本开销）。</summary>
+        private void RefreshActive()
+        {
+            _active = _eqEnabled || _chEnabled || _limiterEnabled || Math.Abs(_headroomDb) > 0.001;
+        }
+
+        #endregion
+
+        #region IWaveSourceProvider
+
+        public WaveFormat WaveFormat => _format;
+
+        public TimeSpan TotalTime => _source.TotalTime;
+
+        public (long Pos, long Len, bool SameAsOuter)? ProbeCurrentState => _source.ProbeCurrentState;
+
+        public bool NextMounted => _source.NextMounted;
+
+        public void Seek(TimeSpan position) => _source.Seek(position);
+
+        #endregion
+
+        public int Read(byte[] buffer, int offset, int count)
+        {
+            int read = _source.Read(buffer, offset, count);
+            if (read <= 0 || !_active)
+            {
+                return read; // 全部直通：bit-perfect
+            }
+
+            ProcessBlock(buffer, offset, read);
+            return read;
+        }
+
+        private void ProcessBlock(byte[] b, int offset, int count)
+        {
+            int block = _format.BlockAlign;
+            int bytesPerChannel = _format.BitsPerSample / 8;
+            if (block <= 0 || bytesPerChannel <= 0)
+            {
+                return;
+            }
+
+            // 循环前把状态快照到局部（避免每样本访问字段/属性），显著降低托管吞吐开销
+            bool doEq = _eqEnabled;
+            bool doCh = _chEnabled;
+            bool doHeadroom = Math.Abs(_headroomDb) > 0.001;
+            bool doLimiter = _limiterEnabled;
+            bool chSwap = _chSwap, chInvL = _chInvL, chInvR = _chInvR, chMono = _chMono, monoL = _chMonoLeft, monoR = _chMonoRight;
+            bool isFloat = _isFloat;
+            int bits = _format.BitsPerSample;
+            double gainL = _gainL, gainR = _gainR;
+            BiQuadFilter[] eq = _eqFilters;
+            int eqCount = eq.Length;
+            bool stereo = _channels >= 2;
+            bool wantsClip = doHeadroom || doLimiter || doEq || doCh; // 只要有任何 DSP 即需 Clamp 保护
+            float preampGain = (float)_preampGain;
+
+            int frames = count / block;
+            int ch = _channels;
+            int n = frames * ch;
+
+            // 批量浮点处理显著降低整数字节编解码 + 分支开销（独占 352800Hz 高采样下是关键优化）
+            if (n <= 0)
+            {
+                return;
+            }
+
+            float[] buf = GetTempFloatBuffer(n);
+            // 解码：byte → float
+            if (isFloat)
+            {
+                int bi = offset;
+                for (int i = 0; i < n; i++, bi += 4) buf[i] = BitConverter.ToSingle(b, bi);
+            }
+            else if (bits == 32)
+            {
+                int bi = offset;
+                for (int i = 0; i < n; i++, bi += 4) buf[i] = (b[bi] | (b[bi + 1] << 8) | (b[bi + 2] << 16) | (b[bi + 3] << 24)) / 2147483648f;
+            }
+            else if (bits == 24)
+            {
+                int bi = offset;
+                for (int i = 0; i < n; i++, bi += 3)
+                {
+                    int v = b[bi] | (b[bi + 1] << 8) | (b[bi + 2] << 16);
+                    if ((b[bi + 2] & 0x80) != 0) v |= unchecked((int)0xFF000000);
+                    buf[i] = v / 8388608f;
+                }
+            }
+            else // 16
+            {
+                int bi = offset;
+                for (int i = 0; i < n; i++, bi += 2) buf[i] = (short)(b[bi] | (b[bi + 1] << 8)) / 32768f;
+            }
+
+            // 逐帧 DSP
+            for (int f = 0; f < frames; f++)
+            {
+                int li = f * ch, ri = li + 1;
+                float l = buf[li];
+                float r = stereo ? buf[ri] : l;
+
+                if (doEq)
+                {
+                    for (int k = 0; k < eqCount; k++) l = eq[k].Transform(l);
+                    if (stereo) for (int k = 0; k < eqCount; k++) r = eq[k].Transform(r);
+                    if (preampGain != 1f)
+                    {
+                        l *= preampGain;
+                        if (stereo) r *= preampGain;
+                    }
+                }
+
+                if (doCh)
+                {
+                    if (chSwap && stereo) (l, r) = (r, l);
+                    if (chMono)
+                    {
+                        float m = monoL ? l : monoR ? r : (l + r) * 0.5f;
+                        l = m; r = m;
+                    }
+
+                    l = (float)(l * gainL);
+                    r = (float)(r * gainR);
+                    if (chInvL) l = -l;
+                    if (chInvR && stereo) r = -r;
+                }
+
+                if (doHeadroom)
+                {
+                    if (_headroomSmoothLeft > 0)
+                    {
+                        _headroomGain += _headroomStep;
+                        _headroomSmoothLeft--;
+                    }
+
+                    float hg = (float)_headroomGain;
+                    l *= hg;
+                    if (stereo) r *= hg;
+                }
+
+                if (doLimiter)
+                {
+                    l = SoftLimit(l);
+                    if (stereo) r = SoftLimit(r);
+                    wantsClip = false;
+                }
+
+                if (wantsClip)
+                {
+                    // wantsClip 为 true 仅在 doLimiter=false 时成立（doLimiter 分支已置 false 并 SoftLimit）。
+                    // 用软削波而非硬 Clamp，避免 EQ/声道增益过头时硬削爆音。
+                    l = SoftLimit(l);
+                    if (stereo) r = SoftLimit(r);
+                }
+
+                buf[li] = l;
+                if (stereo) buf[ri] = r;
+            }
+
+            // 编码：float → byte
+            if (isFloat)
+            {
+                int bo = offset;
+                for (int i = 0; i < n; i++, bo += 4) BitConverter.GetBytes(buf[i]).CopyTo(b, bo);
+            }
+            else if (bits == 32)
+            {
+                int bo = offset;
+                for (int i = 0; i < n; i++, bo += 4)
+                {
+                    int v = (int)(buf[i] * 2147483647f);
+                    b[bo] = (byte)(v & 0xFF); b[bo + 1] = (byte)((v >> 8) & 0xFF);
+                    b[bo + 2] = (byte)((v >> 16) & 0xFF); b[bo + 3] = (byte)((v >> 24) & 0xFF);
+                }
+            }
+            else if (bits == 24)
+            {
+                int bo = offset;
+                for (int i = 0; i < n; i++, bo += 3)
+                {
+                    int v = (int)(buf[i] * 8388607f);
+                    b[bo] = (byte)(v & 0xFF); b[bo + 1] = (byte)((v >> 8) & 0xFF); b[bo + 2] = (byte)((v >> 16) & 0xFF);
+                }
+            }
+            else
+            {
+                int bo = offset;
+                for (int i = 0; i < n; i++, bo += 2)
+                {
+                    short s = (short)(buf[i] * 32767f);
+                    b[bo] = (byte)(s & 0xFF); b[bo + 1] = (byte)((s >> 8) & 0xFF);
+                }
+            }
+        }
+
+        // 复用临时 float 缓冲，避免独占 render 高频分配 GC
+        private float[] _tempFloatBuf = Array.Empty<float>();
+
+        private float[] GetTempFloatBuffer(int n)
+        {
+            if (_tempFloatBuf.Length < n) _tempFloatBuf = new float[n * 2];
+            return _tempFloatBuf;
+        }
+
+        /// <summary>软削波（soft-knee limiter）：对接近 ±1 的样本渐近饱和而非瞬时削平，
+        /// 避免参数增益过大时硬削产生的谐波爆音/电流杂音（对齐 ECHO 安全限幅思路）。
+        /// |x|≤0.9 完全线性（无失真），0.9~∞ 平滑压缩到 ±1。</summary>
+        private static float SoftLimit(float s)
+        {
+            if (!float.IsFinite(s)) s = 0f;
+            float m = Math.Abs(s);
+            if (m <= 0.9f) return s;
+            float k = (m - 0.9f) / 0.1f;
+            // k≥0；用 1/(1+k) 而非 tanh，避免 fast-math/性能开销且曲线足够柔
+            float compressed = 0.9f + 0.1f * (1f - 1f / (1f + k));
+            return s > 0 ? compressed : -compressed;
+        }
+    }
+}

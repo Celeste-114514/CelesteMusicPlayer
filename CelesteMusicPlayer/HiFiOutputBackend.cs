@@ -30,8 +30,11 @@ namespace CelesteMusicPlayer
         private WaveFileReader? _waveFile;
         private IWavePlayer? _output; // WasapiOut 或 AsioOut
         private SeamlessWaveProvider? _seamless; // NAudio 输出（共享/ASIO）的无缝续接源（当前+下一首）
-        private double[]? _eqGains; // HiFi(ASIO/共享 NAudio) 10 段 EQ 增益(dB)，启用则包 EQ provider
-        private Eq10WaveProvider? _eqProvider; // 当前输出使用的 EQ provider（NAudio 路径），用于播放中实时更新增益
+        private double[]? _eqGains; // (旧) 10 段 EQ 增益(dB)，独立 EQ 窗口用
+        private EqCurveState? _eqCurve; // 动态 EQ 曲线状态（DSP 面板用）
+        private ChannelBalanceState? _channelBalance; // 声道平衡状态
+        private DspSafetyState? _safety; // 安全限幅/余量状态
+        private ManagedDspSourceProvider? _dspProvider; // 统一 DSP 链（EQ→声道平衡→限幅），NAudio 与独占共用
         private NativeWasapiExclusiveOut? _native; // 原生 WASAPI 独占输出器（WasapiExclusive 模式替代 NAudio WasapiOut）
         private bool _useNative; // 当前播放是否走原生独占输出
         private bool _isDsd;     // 当前是否 DSD/DoP 直出（独占 + 禁降级）
@@ -87,16 +90,34 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>设置 HiFi（ASIO/共享 NAudio 输出）的 10 段 EQ 增益（dB，-12..12）。null / 全 0 表示直通（bit-perfect）。</summary>
+        /// <summary>设置 10 段 EQ 增益（dB，-12..12）。null / 全 0 表示直通（bit-perfect）。播放中实时生效。</summary>
         public void SetEqualizer(double[]? gainsDb)
         {
             _eqGains = gainsDb == null ? null : (double[])gainsDb.Clone();
-            // 仅在播放中且为 NAudio(ASIO/共享) 输出且已在用 EQ provider 时实时更新增益；
-            // 否则仅记录，由下次 PlayWavAsync 按新增益决定是否启用 EQ provider。
-            if (_output != null && !_useNative && _isPlaying && _eqProvider != null && _eqGains != null && HasNonZeroGain(_eqGains))
-            {
-                _eqProvider.UpdateGains(_eqGains);
-            }
+            _eqCurve = null; // 旧窗口与 DSP 面板互斥占用 EQ
+            _dspProvider?.UpdateEq(_eqGains);
+        }
+
+        /// <summary>设置动态 EQ 曲线状态（DSP 面板用，band 列表 + preamp）。null / 无效果表示直通。播放中实时生效（整数组原子替换）。</summary>
+        public void SetEqCurve(EqCurveState? curve)
+        {
+            _eqCurve = curve?.Clone();
+            _eqGains = null; // DSP 面板与旧窗口互斥占用 EQ
+            _dspProvider?.UpdateEqCurve(_eqCurve);
+        }
+
+        /// <summary>设置声道平衡状态。null / 未启用表示直通。播放中实时生效。</summary>
+        public void SetChannelBalance(ChannelBalanceState? state)
+        {
+            _channelBalance = state?.Clone();
+            _dspProvider?.UpdateChannel(_channelBalance);
+        }
+
+        /// <summary>设置安全限幅/余量状态。播放中实时生效。</summary>
+        public void SetSafety(DspSafetyState? state)
+        {
+            _safety = state?.Clone();
+            _dspProvider?.UpdateSafety(_safety);
         }
 
         private static bool HasNonZeroGain(double[] gains)
@@ -266,7 +287,7 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>读取 WASAPI 设备的 MixFormat（系统默认格式，设备必定支持）。返回 (采样率, 声道数, 位深)；失败返回 null。</summary>
-        public static (int Rate, int Channels, int Bits)? GetDeviceMixFormat(string? deviceId)
+        public static (int Rate, int Channels, int Bits, bool IsFloat)? GetDeviceMixFormat(string? deviceId)
         {
             try
             {
@@ -279,7 +300,7 @@ namespace CelesteMusicPlayer
 
                 using var ac = dev.AudioClient;
                 WaveFormat mf = ac.MixFormat;
-                return (mf.SampleRate, mf.Channels, mf.BitsPerSample);
+                return (mf.SampleRate, mf.Channels, mf.BitsPerSample, mf.Encoding == WaveFormatEncoding.IeeeFloat);
             }
             catch
             {
@@ -383,6 +404,9 @@ namespace CelesteMusicPlayer
                 // 无缝源（当前+可预加载下一首）：共享/ASIO 走 NAudio wasapi/asio，独占走原生 WASAPI，
                 // 均用同一份 SeamlessWaveProvider 做同格式字节级续接 → 单输出会话 gapless。
                 _seamless = new SeamlessWaveProvider(_waveFile);
+                // 统一 DSP 链（EQ→声道平衡→限幅）：任一激活则包住无缝源使 DSP 在 NAudio(ASIO/共享) 与
+                // 原生 WASAPI 独占下都生效（非 bit-perfect）；全部关闭则 _dspProvider=null → 源 PCM 直通。
+                _dspProvider = BuildDspProvider();
                 switch (mode)
                 {
                     case OutputMode.WasapiShared:
@@ -405,7 +429,10 @@ namespace CelesteMusicPlayer
                         }
 
                         var nat = new NativeWasapiExclusiveOut();
-                        if (!nat.Init(natDev, _seamless, requireExactFormat: requireExact))
+                        // DSP 链在独占下同样生效：传 _dspProvider（包住无缝源，内部短路直通）。
+                        // requireExact（DSD/DoP 直出）强制用源原样，禁止 DSP 破坏 1-bit 容器。
+                        var natProvider = requireExact ? (IWaveSourceProvider)_seamless : (IWaveSourceProvider)_dspProvider;
+                        if (!nat.Init(natDev, natProvider, requireExactFormat: requireExact))
                         {
                             LastError = nat.LastError ?? "原生 WASAPI 初始化失败";
                             StartupLog.Write("WasapiExclusive 原生初始化失败: " + (nat.LastError ?? "未知") + " | 源格式=" + (_waveFile?.WaveFormat.SampleRate) + "/" + (_waveFile?.WaveFormat.BitsPerSample) + "bit/" + (_waveFile?.WaveFormat.Channels) + "ch");
@@ -479,24 +506,11 @@ namespace CelesteMusicPlayer
                 }
                 else
                 {
-                    // 共享/ASIO 用无缝源：同格式下一首可无缝续接（gapless）。
-                    // 若用户开启 EQ（非全 0 增益），包一层 10 段 PeakingEQ provider（数据经 DSP → 非 bit-perfect）；
-                    // 全 0 / 默认时保持源 PCM 直通。
-                    if (_eqGains != null && HasNonZeroGain(_eqGains))
-                    {
-                        _eqProvider = new Eq10WaveProvider(_seamless!, _eqGains);
-                        _output.Init(_eqProvider);
-                        CaptureActualOutputFormat();
-                        StartupLog.Write("[EQ诊断] HiFi输出已启用 EQ（gain 非全0） → 数据经 DSP，非 bit-perfect");
-                    }
-                    else
-                    {
-                        _eqProvider = null;
-                        _output.Init(_seamless); // IWaveProvider：源 PCM 原样直通（严格 bit-perfect）
-                        CaptureActualOutputFormat();
-                        StartupLog.Write("[EQ诊断] HiFi输出 EQ=false(gain 全0/未设) → bit-perfect直通");
-                    }
-
+                    // 共享/ASIO 走 NAudio：DSP 链 provider 恒存在（DSP 全关时其内部 _active 短路直通→bit-perfect），
+                    // 因此播放中开启/调节 DSP 能实时生效；同格式下一首经无缝源无缝续接（gapless）。
+                    _output.Init(_dspProvider);
+                    CaptureActualOutputFormat();
+                    StartupLog.Write("[DSP] HiFi输出（NAudio）挂载统一 DSP 链（内部短路直通按需启用）");
                     _output.PlaybackStopped += Output_PlaybackStopped;
                     _output.Play();
                 }
@@ -523,6 +537,26 @@ namespace CelesteMusicPlayer
                 Failed?.Invoke(ex);
                 return false;
             }
+        }
+
+        /// <summary>构建统一 DSP 链（包住无缝源）。始终构建（而非"任一激活才建"），使播放中开启/调节
+        /// EQ / 声道平衡 / 限幅时能实时生效（_dspProvider 恒存在，内部 _active 短路直通零开销）。
+        /// requireExact（DSD/DoP 直出）由调用处强制用无缝源，不经此链。</summary>
+        private ManagedDspSourceProvider BuildDspProvider()
+        {
+            var dsp = new ManagedDspSourceProvider(_seamless!);
+            if (_eqCurve != null)
+            {
+                dsp.UpdateEqCurve(_eqCurve);
+            }
+            else
+            {
+                dsp.UpdateEq(_eqGains);
+            }
+
+            dsp.UpdateChannel(_channelBalance);
+            dsp.UpdateSafety(_safety);
+            return dsp;
         }
 
         /// <summary>是否为 DSD 文件（DSF/DFF）。</summary>
@@ -762,6 +796,18 @@ namespace CelesteMusicPlayer
         public void SetVolume(float volume)
         {
             _resumeVolume = Math.Clamp(volume, 0f, 1f);
+            // 共享模式：用 NAudio WasapiOut 软件增益，只影响本播放器（保持应用内音量语义）。
+            // 独占/ASIO（bit-perfect）：控设备主音量——滑块 100%→满、其它非线性压缩（slider²）。
+            if (CurrentMode == OutputMode.WasapiShared)
+            {
+                if (_output != null)
+                {
+                    try { _output.Volume = _resumeVolume; } catch { }
+                }
+
+                return;
+            }
+
             if (_device?.AudioEndpointVolume != null)
             {
                 try
@@ -996,6 +1042,7 @@ namespace CelesteMusicPlayer
             _dsdSource?.Dispose();
             _dsdSource = null;
             _isDsd = false;
+            _dspProvider = null;
             _seamless?.Dispose();
             _seamless = null;
             _waveFile?.Dispose();

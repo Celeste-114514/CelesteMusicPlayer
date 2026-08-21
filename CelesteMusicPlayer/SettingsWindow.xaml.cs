@@ -1078,6 +1078,7 @@ namespace CelesteMusicPlayer
                 ApplyAutoRunRegistry(saved.AutoRun);
             }
 
+            MainWindow.Instance?.ApplySettingsLive(AppSettingsStore.Load());
             MainWindow.Instance?.ApplyOverlayPreferenceFromSettings(saved);
         }
 

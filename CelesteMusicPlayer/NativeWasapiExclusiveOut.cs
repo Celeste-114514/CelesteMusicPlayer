@@ -271,8 +271,9 @@ namespace CelesteMusicPlayer
             var c = NativeWasapi.ActivateAudioClient(device);
             if (c == null) return NativeWasapi.REGDB_E_CLASSNOTREG;
 
-            // 200ms（100ns 单位 = 2,000,000）。旧 FrameCountToHns(200000,...) 误算成 ~4.5s 巨大缓冲导致卡顿/迟滞
-            long hns = 2000000L;
+            // 100ms（100ns 单位 = 1,000,000）。缓冲越大 render 每次回调要整块处理（含 DSP）的单次耗时越长，
+            // 在 352800Hz 开 EQ 时易造成 render 实时峰值 → 整体变慢/卡顿；降到 100ms 折中稳定性与单次处理块大小。
+            long hns = 1000000L;
             int hr = c.Initialize(NativeWasapi.AUDCLNT_SHAREMODE_EXCLUSIVE, NativeWasapi.AUDCLNT_STREAMFLAGS_EVENTCALLBACK, hns, hns, ref wave, IntPtr.Zero);
 
             if (hr == NativeWasapi.AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED)

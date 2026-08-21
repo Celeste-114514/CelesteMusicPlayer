@@ -48,8 +48,9 @@ namespace CelesteMusicPlayer
         private NaudioDsdBackend? _dsdNaudioBackend; // A/B 诊断：NAudio WasapiOut 播 DoP 的后端（DsdUseNaudioOutput=true 时用）
         private HiFiOutputBackend.OutputMode _outputMode = HiFiOutputBackend.OutputMode.WasapiShared;
 
-        /// <summary>是否处于 HiFi 独占输出模式（WASAPI 独占 / ASIO）。</summary>
-        public bool IsHiFiMode => _outputMode != HiFiOutputBackend.OutputMode.WasapiShared;
+        /// <summary>是否为 HiFi 输出后端主导播放（三模式统一走 NAudio/HiFi DSP 链）。
+        /// 恒为 true：共享 / WASAPI 独占 / ASIO 都经 HiFiOutputBackend 输出，使曲线 EQ / 声道 / 限幅实时生效。</summary>
+        public bool IsHiFiMode => true;
 
         /// <summary>设置输出模式：独占模式（WASAPI Exclusive / ASIO）时全部曲目经 NAudio 输出。</summary>
         public void SetOutputMode(HiFiOutputBackend.OutputMode mode)
@@ -290,17 +291,17 @@ namespace CelesteMusicPlayer
                         if (!ok)
                         {
                             // 全部候选失败：退回设备 MixFormat 保底（可能为 16/32bit、常见采样率）
-                            int devRate = 0, devCh = 0, devBits = 32;
+                            int devRate = 0, devCh = 0, devBits = 32; bool devFloat0 = false;
                             var mf0 = HiFiOutputBackend.GetDeviceMixFormat(null);
-                            if (mf0 is (int r0, int c0, int b0) && r0 > 0 && (c0 == 1 || c0 == 2))
+                            if (mf0 is (int r0, int c0, int b0, bool f0) && r0 > 0 && (c0 == 1 || c0 == 2))
                             {
-                                devRate = r0; devCh = c0; devBits = b0 > 0 ? b0 : devBits;
+                                devRate = r0; devCh = c0; devBits = b0 > 0 ? b0 : devBits; devFloat0 = f0;
                             }
 
                             if (devRate > 0 && devCh > 0)
                             {
                                 string fallback = Path.Combine(Path.GetDirectoryName(targetWav) ?? cacheDir, key + ".fallback.wav");
-                                string enc2 = devBits <= 16 ? "pcm_s16le" : "pcm_s32le";
+                                string enc2 = devFloat0 ? "pcm_f32le" : (devBits <= 16 ? "pcm_s16le" : "pcm_s32le");
                                 string args2 = string.Format("-y -i \"{0}\" -vn -c:a {1} -ar {2} -ac {3} \"{4}\"", path, enc2, devRate, devCh, fallback);
                                 if (await RunFfmpegAsync(args2, status) && File.Exists(fallback))
                                 {
@@ -314,17 +315,17 @@ namespace CelesteMusicPlayer
                     else
                     {
                         // WASAPI 独占：按设备 MixFormat 重转一次（保证可播）
-                        int devRate = 0, devCh = 0, devBits = 0;
+                        int devRate = 0, devCh = 0, devBits = 0; bool devFloat = false;
                         var mf = HiFiOutputBackend.GetDeviceMixFormat(_devicePreference);
-                        if (mf is (int r, int c, int b) && r > 0 && c > 0)
+                        if (mf is (int r, int c, int b, bool fl) && r > 0 && c > 0)
                         {
-                            devRate = r; devCh = c; devBits = b;
+                            devRate = r; devCh = c; devBits = b; devFloat = fl;
                         }
 
                         if (devRate > 0 && devCh > 0)
                         {
                             string fallback = Path.Combine(Path.GetDirectoryName(targetWav) ?? cacheDir, key + ".fallback.wav");
-                            string enc2 = devBits <= 16 ? "pcm_s16le" : "pcm_s32le";
+                            string enc2 = devFloat ? "pcm_f32le" : (devBits <= 16 ? "pcm_s16le" : "pcm_s32le");
                             string args2 = string.Format("-y -i \"{0}\" -vn -c:a {1} -ar {2} -ac {3} \"{4}\"", path, enc2, devRate, devCh, fallback);
                             if (await RunFfmpegAsync(args2, status) && File.Exists(fallback))
                             {
@@ -688,20 +689,37 @@ namespace CelesteMusicPlayer
             if (ext is ".dsf" or ".dff")
             {
                 // 共享模式（系统混音/共享）：统一折叠为 16bit/44.1kHz PCM，保证设备/系统可播（非 bit-perfect，可听优先）。
-                // WASAPI 独占 / ASIO：高质量 PCM，先以 176400Hz（DSD64 的 DoP 容器率）输出——实测 352800Hz 该 DAC
-                // 时钟易失锁（固定位置卡顿+黄灯），先降到 176400 验证是否"高采样率时钟"问题；若 176400 也不卡则定案。
-                // pcm_s32le 锚定位深避免浮点漂移。
+                // WASAPI 独占 / ASIO：高质量 PCM，输出 DSD 原生容器率（DSD64→176400Hz、DSD128→352800Hz）。
+                // 之前曾临时降到 176400 验证"高采样率时钟"假设，但实测降与不降都在同一位置卡，已确认与采样率无关，
+                // 故恢复为按源 DSD 等级的高分辨率直出（352800Hz 等）。pcm_s32le 锚定位深避免浮点漂移。
                 if (_outputMode == HiFiOutputBackend.OutputMode.WasapiShared)
                 {
                     return string.Format("-y -i \"{0}\" -vn -c:a pcm_s16le -ar 44100 -ac 2 \"{1}\"", srcPath, dstPath);
                 }
 
-                return string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -ar 176400 -sample_fmt s32 \"{1}\"", srcPath, dstPath);
+                return string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -ar 352800 -sample_fmt s32 \"{1}\"", srcPath, dstPath);
             }
 
             var srcFmt = ProbeSourceFormat(srcPath);
             if (srcFmt is (int rate, int ch, int bits) && rate > 0 && ch > 0)
             {
+                // 共享模式：折叠到设备 MixFormat（采样率/声道），输出统一用 pcm_f32le（IEEE float）。
+                // 实测：ffmpeg 输出 pcm_f32le 写的是标准 float 格式块 → NAudio WaveFileReader 返回 IeeeFloat，
+                //   WasapiOut(Shared) 可正常 Init；而 pcm_s32le/pcm_s24le 会写成 WAVE_FORMAT_EXTENSIBLE →
+                //   WaveFileReader 返回 Extensible → WasapiOut(Shared) 抛 E_INVALIDARG「value does not fall within the expected range」。
+                //   因此共享一律用 float32，规避 16/44.1 ALAC、24/96k FLAC 等所有源无法播放的问题。
+                if (_outputMode == HiFiOutputBackend.OutputMode.WasapiShared)
+                {
+                    var mix = HiFiOutputBackend.GetDeviceMixFormat(_devicePreference);
+                    if (mix is (int mr, int mc, _, _) && mr > 0 && mc > 0)
+                    {
+                        return string.Format("-y -i \"{0}\" -vn -c:a pcm_f32le -ar {1} -ac {2} \"{3}\"", srcPath, mr, mc, dstPath);
+                    }
+
+                    // 设备 MixFormat 探测失败兜底：固定 48k/2ch float32（系统共享普遍支持）
+                    return string.Format("-y -i \"{0}\" -vn -c:a pcm_f32le -ar 48000 -ac 2 \"{1}\"", srcPath, dstPath);
+                }
+
                 // 严格按源位深输出（bit-perfect）：16→s16le、24→s24le、32→s32le。
                 // NAudio Extensible 报错仅在 NAudio 的 sample 层；独占用原生 WASAPI 直出，24bit 可全程直通。
                 string enc = bits switch { <= 16 => "pcm_s16le", <= 24 => "pcm_s24le", _ => "pcm_s32le" };
@@ -1319,8 +1337,26 @@ namespace CelesteMusicPlayer
         {
             _equalizerGains = gainsDb == null ? null : (double[])GainsDbClone(gainsDb);
             ApplyEqualizerToNode(_inputNode);
-            // HiFi（ASIO/共享 NAudio 输出）：把 EQ 增益转发给后端，由 Eq10WaveProvider 在数据直通前 DSP（非 bit-perfect）
+            // HiFi 输出（ASIO/共享 NAudio/原生 WASAPI 独占均可 DSP）：把 EQ 增益转发给后端，由统一 DSP 链处理（非 bit-perfect）。
             _hifiOut?.SetEqualizer(gainsDb);
+        }
+
+        /// <summary>应用动态 EQ 曲线状态（DSP 面板用，band 列表 + preamp）。null / 无效果表示直通。播放中实时生效。</summary>
+        public void SetEqCurve(EqCurveState? curve)
+        {
+            _hifiOut?.SetEqCurve(curve);
+        }
+
+        /// <summary>设置声道平衡（HiFi 输出的统一 DSP 链；独占/共享/ASIO 均生效，非 bit-perfect）。</summary>
+        public void SetChannelBalance(ChannelBalanceState? state)
+        {
+            _hifiOut?.SetChannelBalance(state);
+        }
+
+        /// <summary>设置安全限幅/余量（HiFi 输出的统一 DSP 链）。</summary>
+        public void SetSafety(DspSafetyState? state)
+        {
+            _hifiOut?.SetSafety(state);
         }
 
         /// <summary>对指定输入节点应用当前均衡器增益（新节点/无缝切换后调用）。</summary>
