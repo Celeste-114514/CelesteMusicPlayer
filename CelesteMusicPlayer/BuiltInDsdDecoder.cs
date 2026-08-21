@@ -112,6 +112,10 @@ namespace CelesteMusicPlayer
                 long start = fs.Position;
                 long avail = Math.Min(size, fs.Length - start);
                 DsdRate rate = RateFromFreq(freq);
+                // 诊断：打印每个 DSF 的结构参数，便于对比"正常专辑 vs 有滋滋噪音专辑"的差异（blockSize/声道数/采样率/数据字节）
+                StartupLog.Write(string.Format(
+                    "[DSF解析] 频道={0} blockSize={1} freq={2} sampleCount={3} dataBytes={4} size={5}",
+                    ch, blockSize, freq, sampleCount, avail, size));
                 return new BuiltInDsdStream(
                     fs as FileStream ?? throw new InvalidDataException("DSF 需文件流"),
                     start, Math.Max(0, avail), rate, (int)ch, (int)blockSize, dff: false);
@@ -199,6 +203,10 @@ namespace CelesteMusicPlayer
             {
                 throw new InvalidDataException("DFF 缺 DSD 数据块。");
             }
+
+            // 诊断：打印每个 DFF 的结构参数
+            StartupLog.Write(string.Format(
+                "[DFF解析] 频道={0} freq={1} dataBytes={2}", ch, fsFreq, dataBytes));
 
             // DST 压缩检测：CMPR 内容在数据里若为 NDST 正常；若为压缩则拒绝
             return new BuiltInDsdStream(
@@ -340,11 +348,57 @@ namespace CelesteMusicPlayer
         {
             lock (_ioLock)
             {
-                // sampleIndex = 1-bit 样本总数（跨声道）。字节位置 = sampleIndex/8/channels 交错偏移。
-                long byteOff = _channels > 0 ? sampleIndex / 8 / _channels : 0;
-                long pos = _dataStart + byteOff;
-                _fs.Position = Math.Min(pos, _dataStart + _dataBytes);
-                _block = null;
+                // DSF data 布局是「每声道分块交错」：data = [L块(blockSize)][R块(blockSize)][L块][R块]...
+                // sampleIndex = 每声道 1-bit 样本数。每声道字节偏移 = sampleIndex/8。
+                // 旧实现用线性偏移 dataStart + sampleIndex/8/channels，对块交错布局定位到错误声道/相位
+                // → 选进度/seek 后声道错位，产生"膜状鼓动"噪音。这里改为按 DSF pair-block 精确定位。
+                if (_channels <= 0 || _blockSize <= 0 || _dff)
+                {
+                    // DFF 是线性 L,R 逐字节交织，旧线性偏移正确；DSF 用块交错公式
+                    long byteOff = _channels > 0 ? sampleIndex / 8 / _channels : 0;
+                    _fs.Position = Math.Min(_dataStart + byteOff, _dataStart + _dataBytes);
+                    _block = null;
+                    _samplesRead = sampleIndex;
+                    return;
+                }
+
+                long chByte = sampleIndex / 8;                 // 每声道字节偏移（含全部 pair-block 累计）
+                long pair = chByte / _blockSize;               // 目标所在 L/R pair-block 序号
+                int off = (int)(chByte % _blockSize);          // 块内字节位置（0..blockSize-1）
+                long blockStart = _dataStart + pair * (long)_blockSize * _channels;
+
+                // 载入含 off 的这一个 pair-block（L 在前 R 在后，各 blockSize 字节）
+                int alloc = _blockSize * _channels;
+                var block = new byte[alloc];
+                int got = 0;
+                _fs.Position = Math.Min(blockStart, _dataStart + _dataBytes);
+                while (got < alloc && _fs.Position < _dataStart + _dataBytes && _fs.Position < _fs.Length)
+                {
+                    int n = _fs.Read(block, got, Math.Min(alloc - got, (int)Math.Min(_dataStart + _dataBytes - _fs.Position, int.MaxValue)));
+                    if (n <= 0)
+                    {
+                        break;
+                    }
+
+                    got += n;
+                }
+
+                if (got == 0)
+                {
+                    _block = null;
+                    _blockPos = 0;
+                    _samplesRead = sampleIndex;
+                    return; // 源尽
+                }
+
+                if (got < alloc)
+                {
+                    Array.Clear(block, got, alloc - got); // 不足补零（尾部残缺）
+                }
+
+                _block = block;
+                _blockPos = Math.Min(off, _blockSize);   // 从块内 off 处续读 L,R 交错
+                _fs.Position = Math.Min(blockStart + alloc, _dataStart + _dataBytes); // 指向下一个 pair-block 起点
                 _samplesRead = sampleIndex;
             }
         }

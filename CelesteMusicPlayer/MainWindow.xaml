@@ -340,9 +340,11 @@
                         CornerRadius="8"
                         Click="NavPlaylistWallButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Grid Width="16" Height="16">
-                                <FontIcon Glyph="&#xE700;" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                <FontIcon Glyph="&#xE710;" FontSize="8" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                            <Grid Width="18" Height="16">
+                                <!-- 三横（播放队列）主图标：居中偏左，保持三横完整可见 -->
+                                <FontIcon Glyph="&#xE700;" FontSize="12" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,0,2" />
+                                <!-- 右下角小加号：作为角标，缩得比三横小并贴右下角，不盖住三横主体 -->
+                                <FontIcon Glyph="&#xE710;" FontSize="7" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-1,0" Opacity="0.92" />
                             </Grid>
                             <TextBlock Text="播放队列" VerticalAlignment="Center" />
                         </StackPanel>
