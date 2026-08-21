@@ -47,6 +47,7 @@ namespace CelesteMusicPlayer
         private volatile bool _eof;                    // 源已读尽
         private bool _prebuffering;                    // 起播/seek 后仍在攒预缓冲
         private DateTime _prebufferDeadline;
+        private bool _headerLogged;                     // 一次性 DoP 头诊断已输出
         private volatile bool _disposed;
 
         private Thread? _prefetch;
@@ -185,6 +186,20 @@ namespace CelesteMusicPlayer
         /// <summary>把已封装的 DoP 帧写入环形缓冲。需在 lock(_lock) 内调用。</summary>
         private void WriteRingInLock(byte[] data, int len)
         {
+            // 一次性诊断：把实际封装的 DoP 前 6 帧(36 字节)hex 打到日志，用于在真机核对 marker 交替/位序/LR
+            //（对照"有没有滋滋"：欠载已被内存化排除，滋滋必来自数据字节或 render 时序）。
+            if (!_headerLogged)
+            {
+                _headerLogged = true;
+                int n = Math.Min(36, len);
+                var sb = new System.Text.StringBuilder(96);
+                for (int i = 0; i < n; i++)
+                {
+                    sb.Append(data[i].ToString("X2"));
+                }
+                StartupLog.Write("[DoP头6帧] " + sb.ToString());
+            }
+
             int first = Math.Min(len, RingBytes - _writePos);
             Buffer.BlockCopy(data, 0, _ring, _writePos, first);
             _writePos = (_writePos + first) % RingBytes;

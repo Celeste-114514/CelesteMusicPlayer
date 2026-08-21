@@ -40,6 +40,7 @@ namespace CelesteMusicPlayer
         private MMDevice? _device;     // 用于调设备/系统主音量（WASAPI）；ASIO 无统一接口为 null
         private bool _isPlaying;
         private TimeSpan _pausedPosition;
+        private TimeSpan? _pendingSeekTarget; // DSD/native 播放中 seek 的待消费目标：防止 updatePosition/Pause 用旧的 FramesWritten 把它覆盖掉（否则选进度后进度条不变/从头重播）
         private float _resumeVolume = 1f;
         private float _pausedDeviceVol = -1f; // 暂停瞬间记录的真实设备主音量（供恢复回到该值，避免误用 0.02 防爆音残留）
         private string? _activeWavPath;
@@ -449,6 +450,7 @@ namespace CelesteMusicPlayer
                 SourceFormatDescription = srcWf.SampleRate + "hz / " + srcWf.BitsPerSample + "bit / " + srcWf.Channels + "声道";
                 Position = TimeSpan.Zero;
                 _pausedPosition = seekTo ?? TimeSpan.Zero;
+                _pendingSeekTarget = null;
 
                 // 播放起始前定位到 seekTo（暂停恢复续播的关键：在输出缓冲填充前 seek，避免跳变爆音）
                 if (seekTo != null && seekTo.Value > TimeSpan.Zero)
@@ -597,6 +599,7 @@ namespace CelesteMusicPlayer
                 Position = TimeSpan.Zero;
                 SourceFormatDescription = dsd.Rate + " / " + dsd.Channels + "声道 1-bit DSD";
                 _pausedPosition = seekTo ?? TimeSpan.Zero;
+                _pendingSeekTarget = null;
                 if (seekTo != null && seekTo.Value > TimeSpan.Zero)
                 {
                     try { dop.Seek(seekTo.Value); Position = seekTo.Value; } catch { }
@@ -645,7 +648,8 @@ namespace CelesteMusicPlayer
             // 暂停点用当前显示的播放位置（Position）：seek 后 HiFiOutputBackend.Seek 已把 Position 设为用户 seek 目标，
             // 正常播放时是 UpdatePosition 维护的实时位置。不要依赖渲染线程异步消费后的 reader 游标，
             // 否则 seek→暂停的瞬间可能记录成错误位置（如读到文件尾）导致恢复后误判已播完而切歌。
-            _pausedPosition = Position;
+            _pausedPosition = _pendingSeekTarget ?? Position;
+            _pendingSeekTarget = null;
             // 记录暂停瞬间的真实设备主音量（此时设备音量仍是用户当前设定），供恢复时回到该值
             _pausedDeviceVol = GetDeviceVolume();
 
@@ -712,7 +716,9 @@ namespace CelesteMusicPlayer
 
             if (_useNative && _native != null)
             {
-                // 播放中 seek：交由 render 线程安全重定位（避免与正在读源的线程直接竞争）
+                // 播放中 seek：交由 render 线程安全重定位（避免与正在读源的线程直接竞争）。
+                // 记录待消费目标，避免随后 updatePosition/Pause 用尚未更新的 FramesWritten 把它覆盖（选进度后进度条不变/从头重播）。
+                _pendingSeekTarget = position;
                 _native.SeekTo(position);
                 return;
             }
@@ -803,7 +809,20 @@ namespace CelesteMusicPlayer
                 {
                     // DSD/DoP：无 WaveFileReader，用独占写帧数 / 容器帧率换算绝对进度
                     int rate = _native.SampleRateValue;
-                    Position = rate > 0 ? TimeSpan.FromSeconds((double)_native.FramesWritten / rate) : TimeSpan.Zero;
+                    if (_pendingSeekTarget is TimeSpan t)
+                    {
+                        // 播放中 seek 目标尚未被 render 消费（FramesWritten 未更新）：显示 seek 目标，
+                        // 待 FramesWritten 追上目标后清除，恢复正常进度，避免选进度后进度条不动/回头。
+                        Position = t;
+                        if (rate > 0 && _native.FramesWritten >= (long)(t.TotalSeconds * rate))
+                        {
+                            _pendingSeekTarget = null;
+                        }
+                    }
+                    else
+                    {
+                        Position = rate > 0 ? TimeSpan.FromSeconds((double)_native.FramesWritten / rate) : TimeSpan.Zero;
+                    }
 
                     // 诊断：DSD ring 预读欠载补静音统计（>0 说明预读跟不上/起播冷启动→短暂无声，是潜在卡顿点）。
                     // 限频记录，便于与"雪花/卡顿"音频现象对照定位根因。
