@@ -523,6 +523,10 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             ShowPlaylistYear = s.ShowPlaylistYear,
             ShowPlaylistDuration = s.ShowPlaylistDuration,
             AudioChannel = s.AudioChannel,
+            // 诊断开关必须随 Clone 拷贝，否则 Load() 返回的克隆里恒为默认 false（此前导致 DSD 诊断 A/B 开关从未生效、配置被重写）。
+            DsDoP32 = s.DsDoP32,
+            DsdUseNaudioOutput = s.DsdUseNaudioOutput,
+            DsdUsePcmFallback = s.DsdUsePcmFallback,
             OnlineSearchDefaultSource = s.OnlineSearchDefaultSource,
             CustomHotkeys = s.CustomHotkeys.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase)
         };
