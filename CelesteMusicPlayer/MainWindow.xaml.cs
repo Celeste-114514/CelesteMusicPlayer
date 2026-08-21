@@ -13122,6 +13122,7 @@ namespace CelesteMusicPlayer
                 {
                     TextAlignment = align,
                     TextWrapping = TextWrapping.WrapWholeWords,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
                     FontSize = 14,
                     Foreground = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154)),
                     Opacity = 0.55,

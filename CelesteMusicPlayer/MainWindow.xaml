@@ -3067,8 +3067,9 @@
                                 VerticalScrollBarVisibility="Hidden"
                                 HorizontalScrollBarVisibility="Disabled"
                                 VerticalScrollMode="Disabled"
-                                HorizontalScrollMode="Disabled">
-                                <StackPanel x:Name="LyricsPanel" Spacing="10" />
+                                HorizontalScrollMode="Disabled"
+                                HorizontalContentAlignment="Stretch">
+                                <StackPanel x:Name="LyricsPanel" Spacing="10" HorizontalAlignment="Stretch" />
                             </ScrollViewer>
 
                             <TextBlock
