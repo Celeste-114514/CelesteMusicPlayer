@@ -892,7 +892,9 @@ namespace CelesteMusicPlayer
                 sourceExhausted = _waveFile.Position >= _waveFile.Length - 8 && _waveFile.Position > 0;
             }
 
-            if (_waveFile != null && Duration > TimeSpan.Zero && sourceExhausted)
+            // 修复：外层判定原来要求 _waveFile!=null，导致 DSD(_waveFile 恒 null) 播完(sourceExhausted)永不触发
+            // Stop→自动切下一首，进度条延续不切歌。改为仅要求 Duration>0 且 sourceExhausted（DSD 走 _native.Stop，PCM 走 _waveFile/_output）。
+            if (Duration > TimeSpan.Zero && sourceExhausted)
             {
                 // 有可续接的下一首：交给无缝源，不主动 Stop（播完检测挪到切歌后）
                 if (_seamless != null && _seamless.HasReadyNext)
