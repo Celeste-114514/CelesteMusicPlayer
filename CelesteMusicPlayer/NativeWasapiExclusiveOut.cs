@@ -24,7 +24,7 @@ namespace CelesteMusicPlayer
 
         private NativeWasapi.IAudioClient? _audioClient;
         private NativeWasapi.IAudioRenderClient? _renderClient;
-        private SeamlessWaveProvider? _provider;
+        private IWaveSourceProvider? _provider;
         private long _framesWritten;
         private long _lastUnderrunLogMs; // 限频记录 underrun 诊断
         private readonly object _seekLock = new();
@@ -72,8 +72,8 @@ namespace CelesteMusicPlayer
         /// <summary>最近一次初始化是否触发了 AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED 对齐 dance（供日志排障）。</summary>
         public bool LastAlignDance { get; private set; }
 
-        /// <summary>用指定设备 + 无缝源（当前+可预加载下一首）初始化（格式协商 + Initialize + 取 render client + 绑定事件）。</summary>
-        public bool Init(NativeWasapi.IMMDevice device, SeamlessWaveProvider provider)
+        /// <summary>用指定设备 + 输出源（PCM 无缝源或 DSD/DoP 源）初始化（格式协商 + Initialize + 取 render client + 绑定事件）。</summary>
+        public bool Init(NativeWasapi.IMMDevice device, IWaveSourceProvider provider)
         {
             if (_audioClient != null)
             {
@@ -397,7 +397,9 @@ namespace CelesteMusicPlayer
                         if (nowMs - _lastUnderrunLogMs > 1000) // 限频，避免刷屏
                         {
                             _lastUnderrunLogMs = nowMs;
-                            StartupLog.Write($"[无缝诊断] render underrun: 需要{srcBuf.Length}B 读得{got}B srcExh当前pos={ (src.Current?.Position ?? 0)}/{ (src.Current?.Length ?? 0)} nextMount={src.NextMounted}");
+                            var ps = src.ProbeCurrentState;
+                            long pos = ps?.Pos ?? 0, len = ps?.Len ?? 0;
+                            StartupLog.Write($"[源诊断] render underrun: 需要{srcBuf.Length}B 读得{got}B srcPos={pos}/{len} nextMount={src.NextMounted}");
                         }
                     }
 
@@ -438,7 +440,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private static int ReadFully(SeamlessWaveProvider src, byte[] buf, int count)
+        private static int ReadFully(IWaveSourceProvider src, byte[] buf, int count)
         {
             int total = 0;
             while (total < count)

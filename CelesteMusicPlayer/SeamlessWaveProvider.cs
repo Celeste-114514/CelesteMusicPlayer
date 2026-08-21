@@ -15,7 +15,7 @@ namespace CelesteMusicPlayer
     ///    写入方在 _sync 内顺带取 _snap，UI 线程的位置/时长/切换查询只取 _snap（不含磁盘 IO）
     ///    → 进度条等 UI 读取不会因 render 持锁读盘而被冻结。
     /// </summary>
-    internal sealed class SeamlessWaveProvider : IWaveProvider
+    internal sealed class SeamlessWaveProvider : IWaveProvider, IWaveSourceProvider
     {
         private readonly object _sync = new();
         private readonly object _snap = new();
