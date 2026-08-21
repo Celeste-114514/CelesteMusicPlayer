@@ -128,10 +128,12 @@ namespace CelesteMusicPlayer
         public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null)
         {
             // DSD（DSF/DFF）：走原生 WASAPI 独占 + DoP 直出（bit-perfect），不再 ffmpeg 转 PCM。
+            // 先一次性完整解析 DSD 并封装为 DoP 容器 WAV（预加载），再交给现有独占通道原生直通播放，
+            // 避免"边播边解 DSD"造成的电流音/卡顿。
             if (_outputMode == HiFiOutputBackend.OutputMode.WasapiExclusive
                 && IsDsdFile(path))
             {
-                bool ok = TryPlayDsdDirect(path);
+                bool ok = await TryPlayDsdPreloadAsync(path, status);
                 StartupLog.Write("DSD 走原生直出 path=" + path + " ok=" + ok + " err=" + (LastError ?? ""));
                 return ok; // 失败不降级转 PCM（会破坏 bit-perfect）；错误由上层显示
             }
@@ -351,7 +353,7 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>用 HiFiOutputBackend 播放转码后的 PCM WAV（WASAPI 独占 / ASIO）。</summary>
-        private bool PlayWavHiFi(string wavPath)
+        private bool PlayWavHiFi(string wavPath, bool requireExact = false)
         {
             try
             {
@@ -364,7 +366,7 @@ namespace CelesteMusicPlayer
                 _hifiOut.PositionChanged -= Hifi_PositionChanged;
                 _hifiOut.PositionChanged += Hifi_PositionChanged;
 
-                bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference);
+                bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference, requireExact: requireExact);
                 StartupLog.Write("HiFi播放 mode=" + _outputMode + " 设备=" + (_hifiOut.OutputDeviceName ?? "?") + " (pref=" + (_devicePreference ?? "默认") + ") ok=" + ok + (ok ? "" : " err=" + (_hifiOut.LastError ?? "")));
                 if (!ok)
                 {
@@ -417,31 +419,39 @@ namespace CelesteMusicPlayer
             return ext is ".dsf" or ".dff";
         }
 
-        /// <summary>DSD/DoP 原生直出：经 HiFiOutputBackend 的 WASAPI 独占通道（requireExact，bit-perfect）。</summary>
-        private bool TryPlayDsdDirect(string dsdPath)
+        /// <summary>DSD/DoP 原生直出（预加载版）：先完整解析 DSD 封装为 DoP 容器 WAV，再走现有 WASAPI 独占通道原生直通。
+        /// 实时播放只是顺序读规整 WAV → 无明显卡顿/电流音；DoP 容器字节原样直通 DAC（bit-perfect）。</summary>
+        private async Task<bool> TryPlayDsdPreloadAsync(string dsdPath, Action<string>? status)
         {
             try
             {
-                StopCore();
-                _hifiOut ??= new HiFiOutputBackend();
-                _hifiOut.PlaybackStopped -= Hifi_PlaybackStopped;
-                _hifiOut.PlaybackStopped += Hifi_PlaybackStopped;
-                _hifiOut.SeamlessTrackChanged -= Hifi_SeamlessTrackChanged;
-                _hifiOut.SeamlessTrackChanged += Hifi_SeamlessTrackChanged;
-                _hifiOut.PositionChanged -= Hifi_PositionChanged;
-                _hifiOut.PositionChanged += Hifi_PositionChanged;
-
-                bool ok = _hifiOut.PlayDsdAsync(dsdPath, _devicePreference);
-                if (!ok)
+                if (!File.Exists(dsdPath))
                 {
-                    LastError = _hifiOut.LastError ?? "DSD/DoP 输出失败";
+                    RaiseFailed(new Exception("DSD 文件不存在：" + dsdPath));
                     return false;
                 }
 
-                Duration = _hifiOut.Duration;
-                Position = TimeSpan.Zero;
-                _isPlaying = true;
-                return true;
+                string cacheDir = GetCacheDir();
+                string key = "dsd_" + Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(dsdPath.ToLowerInvariant())));
+                string dopWav = Path.Combine(cacheDir, key + ".dop.wav");
+
+                if (!File.Exists(dopWav) || new FileInfo(dopWav).Length <= 44)
+                {
+                    status?.Invoke("DSD 预加载中：解析音频…");
+                    var (ok, rate, msg) = await Task.Run(() =>
+                        DsdToDoPWav.Convert(dsdPath, dopWav, pct => status?.Invoke($"DSD 预加载：{pct}%")));
+                    if (!ok)
+                    {
+                        LastError = "DSD 预加载失败：" + msg;
+                        RaiseFailed(new Exception(LastError));
+                        return false;
+                    }
+                }
+
+                bool played = PlayWavHiFi(dopWav, requireExact: true);
+                StartupLog.Write("DSD 预加载→独占直通: " + dsdPath + " → " + dopWav + " ok=" + played);
+                return played;
             }
             catch (Exception ex)
             {
@@ -606,15 +616,18 @@ namespace CelesteMusicPlayer
 
         /// <summary>构建 ffmpeg 转码参数：按源位深输出原生 PCM（16bit→s16le / 24bit→s24le / 32bit→s32le），
         /// 保留源采样率与声道，供 WaveFileReader 原样直通（严格 bit-perfect）。探测失败回退 16/44.1/2。</summary>
-        private static string BuildTranscodeArgs(string srcPath, string dstPath)
+        private string BuildTranscodeArgs(string srcPath, string dstPath)
         {
-            // DSD（DSF/DFF）：先用 ffmpeg 转码为高质量 PCM 再播放（KA13 亮黄灯）。
-            // ffmpeg 内置 dsd 解码器解码为高采样率 PCM（DSD64→352.8kHz，DSD128→705.6kHz，DSD256→1411.2kHz）。
-            // 不指定 -ar，保留 DSD 原生采样率（不降采样）；用 pcm_s32le + 显式 sample_fmt s32 锚定位深，
-            // 避免不同 ffmpeg 构建对 dsf 默认输出浮点/不同位深造成漂移。颜色码：飞傲某些 ASIO 驱动下 24bit 会回调 NRE（实测 16/32 稳）。
             string ext = Path.GetExtension(srcPath).ToLowerInvariant();
             if (ext is ".dsf" or ".dff")
             {
+                // 共享模式（系统混音/共享）：统一折叠为 16bit/44.1kHz PCM，保证设备/系统可播（非 bit-perfect，可听优先）。
+                // ASIO 模式：保留 DSD 原生采样率的高质量 PCM（高采样率，pcm_s32le 锚定位深，避免浮点漂移）。
+                if (_outputMode == HiFiOutputBackend.OutputMode.WasapiShared)
+                {
+                    return string.Format("-y -i \"{0}\" -vn -c:a pcm_s16le -ar 44100 -ac 2 \"{1}\"", srcPath, dstPath);
+                }
+
                 return string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -sample_fmt s32 \"{1}\"", srcPath, dstPath);
             }
 

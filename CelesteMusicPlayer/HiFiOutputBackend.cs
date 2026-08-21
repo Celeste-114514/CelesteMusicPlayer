@@ -350,8 +350,8 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>从 PCM WAV 文件以指定模式播放。</summary>
-        public bool PlayWavAsync(string wavPath, OutputMode mode, string? deviceIdentifier = null, TimeSpan? seekTo = null)
+        /// <summary>从 PCM WAV 文件以指定模式播放。<paramref name="requireExact"/> 为 true（DSD/DoP 容器 WAV）时独占只做源格式精确直通，禁止降级（保 bit-perfect）。</summary>
+        public bool PlayWavAsync(string wavPath, OutputMode mode, string? deviceIdentifier = null, TimeSpan? seekTo = null, bool requireExact = false)
         {
             try
             {
@@ -392,7 +392,7 @@ namespace CelesteMusicPlayer
                         }
 
                         var nat = new NativeWasapiExclusiveOut();
-                        if (!nat.Init(natDev, _seamless))
+                        if (!nat.Init(natDev, _seamless, requireExactFormat: requireExact))
                         {
                             LastError = nat.LastError ?? "原生 WASAPI 初始化失败";
                             StartupLog.Write("WasapiExclusive 原生初始化失败: " + (nat.LastError ?? "未知") + " | 源格式=" + (_waveFile?.WaveFormat.SampleRate) + "/" + (_waveFile?.WaveFormat.BitsPerSample) + "bit/" + (_waveFile?.WaveFormat.Channels) + "ch");
