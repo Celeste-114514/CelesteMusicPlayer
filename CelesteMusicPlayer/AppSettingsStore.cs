@@ -68,6 +68,9 @@ namespace CelesteMusicPlayer
         /// 用于判断电流/黄灯是否来自我们的原生 WASAPI 渲染层（默认 false=原生态）。</summary>
         public bool DsdUseNaudioOutput { get; set; }
 
+        /// <summary>DSD 直出用 32bit DoP 容器（部分 DAC/KA13 认同 DoP 32bit 而 24bit 不认）。默认 false=24bit。</summary>
+        public bool DsDoP32 { get; set; }
+
         public bool LyricFuzzyMatch { get; set; } = true;
 
         public bool ShowLyricTranslate { get; set; } = true;

@@ -558,7 +558,8 @@ namespace CelesteMusicPlayer
                 }
 
                 IDsDStream dsd = decoder.Open(dsdPath);
-                var dop = new DoPWaveSource(dsd);
+                int dopBits = AppSettingsStore.Load().DsDoP32 ? 32 : 24;
+                var dop = new DoPWaveSource(dsd, dopBits);
                 _dsdSource = dop;
                 _isDsd = true;
                 _activeWavPath = dsdPath;

@@ -508,7 +508,7 @@ namespace CelesteMusicPlayer
                     return false;
                 }
 
-                var dop = new DoPWaveSource(dec.Open(dsdPath));
+                var dop = new DoPWaveSource(dec.Open(dsdPath), AppSettingsStore.Load().DsDoP32 ? 32 : 24);
                 var backend = new NaudioDsdBackend(dop);
                 if (!backend.Start())
                 {
