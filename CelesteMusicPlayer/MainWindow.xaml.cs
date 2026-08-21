@@ -1185,25 +1185,52 @@ namespace CelesteMusicPlayer
             NowPlayingCoverBorder.Height = coverSize;
             WaveformCanvas.Width = coverSize;
 
-            // 左栏宽固定为封面宽（长信息在其中换行）
+            // 左半区：左栏(封面+信息)中轴在主UI左1/4处(paneWidth/4)，宽=左半区-左右各30
+            double half = paneWidth / 2.0;
+            double sideContentMax = Math.Max(0, half - 60);
             if (NowPlayingLeftColumn != null)
             {
-                NowPlayingLeftColumn.MinWidth = coverSize;
-                NowPlayingLeftColumn.MaxWidth = coverSize;
+                // 左栏宽固定为半区宽(左右留30)，封面/信息在其中以中轴=paneWidth/4 居中，信息区超宽换行
+                NowPlayingLeftColumn.ClearValue(FrameworkElement.MaxWidthProperty);
+                NowPlayingLeftColumn.ClearValue(FrameworkElement.MinWidthProperty);
+                NowPlayingLeftColumn.MaxWidth = sideContentMax;
+                NowPlayingLeftColumn.Width = sideContentMax;
             }
-            // 封面中轴：左列宽750内居中=375，平移+125 → 中轴距主UI左500
+            // 左栏默认居中于 paneWidth/2，位移到 paneWidth/4 → 封面中轴=主UI左1/4
             if (NowPlayingLeftShift != null)
             {
-                NowPlayingLeftShift.TranslateX = 125;
+                NowPlayingLeftShift.TranslateX = -paneWidth / 4.0;
             }
-            // 信息区：中轴同封面(500)，右侧边界730(宽上限460)，超长换行
-            const double infoMax = 460; // 500-中轴=左270, 右730 → 半宽230*2=460
-            if (NowPlayingArtistLinkButton != null) NowPlayingArtistLinkButton.MaxWidth = infoMax - 8;
-            if (NowPlayingAlbumLinkButton != null) NowPlayingAlbumLinkButton.MaxWidth = infoMax - 8;
+            // 信息区：左右各留30(半区宽)，定宽使内部真正换行
+            if (NowPlayingArtistLinkButton != null) NowPlayingArtistLinkButton.MaxWidth = sideContentMax - 16;
+            if (NowPlayingAlbumLinkButton != null) NowPlayingAlbumLinkButton.MaxWidth = sideContentMax - 16;
             if (NowPlayingMetaPanel != null)
             {
-                NowPlayingMetaPanel.MaxWidth = infoMax;
+                NowPlayingMetaPanel.MaxWidth = sideContentMax;
+                NowPlayingMetaPanel.Width = sideContentMax - 16;
                 NowPlayingMetaPanel.Margin = new Thickness(0);
+            }
+            // 右半区：歌词中轴在主UI右1/4处(3/4paneWidth)，宽=右半区-左右各30，居中换行
+            if (LyricsSection != null)
+            {
+                LyricsSection.MaxWidth = sideContentMax;
+                LyricsSection.Width = sideContentMax;
+            }
+            if (LyricsShift != null)
+            {
+                LyricsShift.TranslateX = paneWidth / 4.0;
+            }
+            // 让每条歌词在歌词区宽内真正换行(居中区宽 - 留边)
+            double lyricMax = Math.Max(0, sideContentMax - 16);
+            if (LyricsPanel != null)
+            {
+                foreach (var child in LyricsPanel.Children)
+                {
+                    if (child is Microsoft.UI.Xaml.Controls.TextBlock tb)
+                    {
+                        tb.MaxWidth = lyricMax;
+                    }
+                }
             }
             }
             finally
@@ -6408,14 +6435,39 @@ namespace CelesteMusicPlayer
             ArtistDetailAvatarPlaceholder.Visibility =
                 artist.AvatarImage == null ? Visibility.Visible : Visibility.Collapsed;
 
+            // 若头像未加载(如从超链接/播放面板进入用的是缓存或新建条目)，异步补齐后再应用，确保头像显示
+            if (artist.AvatarImage == null)
+            {
+                _ = LoadArtistDetailAvatarAsync(artist);
+            }
+
             RebuildArtistTracks();
             _ = RebuildArtistAlbumsAsync();
             ApplyArtistSongsFrostChrome();
             UpdateLibrarySearchUi();
         }
 
-        private void ApplyArtistSongsFrostChrome()
+        /// <summary>异步加载艺术家头像并应用到详情页（超链接/播放面板进入时头像未填充的情况）。</summary>
+        private async System.Threading.Tasks.Task LoadArtistDetailAvatarAsync(ArtistEntry artist)
         {
+            try
+            {
+                BitmapImage? image = await ResolveArtistAvatarAsync(artist.Name, _artistDetailUsesAlbumArtist);
+                if (image == null || !ReferenceEquals(_openedArtist, artist))
+                {
+                    return; // 已切到其它艺术家或加载失败
+                }
+
+                artist.AvatarImage = image;
+                ArtistDetailAvatarBrush.ImageSource = image;
+                ArtistDetailAvatarPlaceholder.Visibility = Visibility.Collapsed;
+            }
+            catch
+            {
+            }
+        }
+
+        private void ApplyArtistSongsFrostChrome()        {
             if (ArtistSongsFrostPanel == null)
             {
                 return;

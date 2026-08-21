@@ -2939,11 +2939,8 @@
 
                     <!-- 主体：左侧封面区 + 右侧滚动歌词 -->
                     <Grid
-                        Grid.Row="1"
-                        ColumnSpacing="0">
+                        Grid.Row="1">
                         <Grid.ColumnDefinitions>
-                            <!-- 左列宽=歌词左边界(750)：其内封面中轴距主UI左500、信息区右界730 -->
-                            <ColumnDefinition Width="750" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
@@ -3070,8 +3067,8 @@
                             </StackPanel>
                         </StackPanel>
 
-                        <!-- 右栏：滚动歌词 -->
-                        <Grid Grid.Column="1" x:Name="LyricsSection" Margin="0,0,18,0" RenderTransformOrigin="0.5,0.5">
+                        <!-- 右半区：滚动歌词（由 layout 位移到 3/4 中轴，宽=半区-60，居中换行） -->
+                        <Grid Grid.Column="0" x:Name="LyricsSection" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Center">
                             <Grid.RenderTransform>
                                 <CompositeTransform x:Name="LyricsShift" ScaleX="1" ScaleY="1" />
                             </Grid.RenderTransform>
