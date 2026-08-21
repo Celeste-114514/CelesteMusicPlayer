@@ -688,14 +688,15 @@ namespace CelesteMusicPlayer
             if (ext is ".dsf" or ".dff")
             {
                 // 共享模式（系统混音/共享）：统一折叠为 16bit/44.1kHz PCM，保证设备/系统可播（非 bit-perfect，可听优先）。
-                // WASAPI 独占 / ASIO：高质量 PCM，@ 352800Hz（=DSD64×4 的 DoP 容器率，设备已验证可协商，
-                // 避免按 DSD 原生 5.6MHz 出超高频 PCM/DoP 导致黑屏闪退）。pcm_s32le 锚定位深避免浮点漂移。
+                // WASAPI 独占 / ASIO：高质量 PCM，先以 176400Hz（DSD64 的 DoP 容器率）输出——实测 352800Hz 该 DAC
+                // 时钟易失锁（固定位置卡顿+黄灯），先降到 176400 验证是否"高采样率时钟"问题；若 176400 也不卡则定案。
+                // pcm_s32le 锚定位深避免浮点漂移。
                 if (_outputMode == HiFiOutputBackend.OutputMode.WasapiShared)
                 {
                     return string.Format("-y -i \"{0}\" -vn -c:a pcm_s16le -ar 44100 -ac 2 \"{1}\"", srcPath, dstPath);
                 }
 
-                return string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -ar 352800 -sample_fmt s32 \"{1}\"", srcPath, dstPath);
+                return string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -ar 176400 -sample_fmt s32 \"{1}\"", srcPath, dstPath);
             }
 
             var srcFmt = ProbeSourceFormat(srcPath);
