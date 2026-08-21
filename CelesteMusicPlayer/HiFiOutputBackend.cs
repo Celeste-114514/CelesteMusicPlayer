@@ -143,7 +143,7 @@ namespace CelesteMusicPlayer
                     return false;
                 }
 
-                var next = new WaveFileReader(nextWavPath);
+                var next = OpenWaveInMemory(nextWavPath);
                 _seamless.PrepareNext(next);
                 return true;
             }
@@ -151,6 +151,16 @@ namespace CelesteMusicPlayer
             {
                 return false;
             }
+        }
+
+        /// <summary>把 WAV 文件整体读入内存后返回其 WaveFileReader，使 render 实时线程只从内存读、磁盘 I/O 移到播放前/预载时。
+        /// 根治低质量 PCM 卡顿：之前 render 每填满一轮 WASAPI 缓冲都在实时线程内同步读盘（SeamlessWaveProvider.Read→WaveFileReader.Read）。
+        /// MemoryStream 不 dispose，随 reader 由 GC 回收；reader 的 Position/CurrentTime/Length 语义与文件版完全一致（不影响进度/无缝/播完判定）。</summary>
+        private static WaveFileReader OpenWaveInMemory(string path)
+        {
+            byte[] data = File.ReadAllBytes(path);
+            var ms = new MemoryStream(data, writable: false);
+            return new WaveFileReader(ms);
         }
 
         /// <summary>最近一次失败原因。</summary>
@@ -365,7 +375,7 @@ namespace CelesteMusicPlayer
                     return false;
                 }
 
-                _waveFile = new WaveFileReader(wavPath);
+                _waveFile = OpenWaveInMemory(wavPath);
                 _activeWavPath = wavPath;
                 _activeMode = mode;
                 _activeDeviceId = deviceIdentifier;
