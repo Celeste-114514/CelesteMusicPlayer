@@ -128,17 +128,11 @@ namespace CelesteMusicPlayer
         /// <summary>用内置 FFmpeg 把文件转成临时 WAV 后播放（支持 APE/WavPack/TTA 等系统不支持的格式）。</summary>
         public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null)
         {
-            // DSD（DSF/DFF）：独占模式走原生 WASAPI 独占 + DoP 直出（bit-perfect）。
-            // 注意：此前的"DSD→PCM fallback"诊断路径在真实执行时黑屏闪退（高采样 PCM 直出不稳定），
-            // 且诊断收益已被"DoP 24/32bit 容器、原生/NAudio 两通道均黄灯"覆盖 → 一律走稳定 DoP 直出，
-            // 忽略曾残留的 DsdUsePcmFallback=true 配置，避免用户 json 里那个键让程序启动即崩溃。
-            if (_outputMode == HiFiOutputBackend.OutputMode.WasapiExclusive
-                && IsDsdFile(path))
-            {
-                bool ok = await TryPlayDsdPreloadAsync(path, status);
-                StartupLog.Write("DSD 走原生直出 path=" + path + " ok=" + ok + " err=" + (LastError ?? ""));
-                return ok; // 失败不降级转 PCM（会破坏 bit-perfect）；错误由上层显示
-            }
+            // DSD（DSF/DFF）：统一走 ffmpeg 转 PCM 输出（不再 DoP 原生直出）。
+            //   - 共享模式：16bit/44100Hz（系统/设备可播，可听优先）；
+            //   - WASAPI 独占 / ASIO：高质量 pcm_s32le @ 352800Hz（设备已验证可协商的 DoP 采样率，
+            //     避免 5.6MHz 超高频 PCM 直出导致的黑屏闪退）。
+            // DoP 直出代码（TryPlayDsdPreloadAsync / DoPWaveSource）保留但默认不再使用，便于日后恢复。
 
             string? ffmpeg = FindFfmpeg();
             if (string.IsNullOrWhiteSpace(ffmpeg))
@@ -694,13 +688,14 @@ namespace CelesteMusicPlayer
             if (ext is ".dsf" or ".dff")
             {
                 // 共享模式（系统混音/共享）：统一折叠为 16bit/44.1kHz PCM，保证设备/系统可播（非 bit-perfect，可听优先）。
-                // ASIO 模式：保留 DSD 原生采样率的高质量 PCM（高采样率，pcm_s32le 锚定位深，避免浮点漂移）。
+                // WASAPI 独占 / ASIO：高质量 PCM，@ 352800Hz（=DSD64×4 的 DoP 容器率，设备已验证可协商，
+                // 避免按 DSD 原生 5.6MHz 出超高频 PCM/DoP 导致黑屏闪退）。pcm_s32le 锚定位深避免浮点漂移。
                 if (_outputMode == HiFiOutputBackend.OutputMode.WasapiShared)
                 {
                     return string.Format("-y -i \"{0}\" -vn -c:a pcm_s16le -ar 44100 -ac 2 \"{1}\"", srcPath, dstPath);
                 }
 
-                return string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -sample_fmt s32 \"{1}\"", srcPath, dstPath);
+                return string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -ar 352800 -sample_fmt s32 \"{1}\"", srcPath, dstPath);
             }
 
             var srcFmt = ProbeSourceFormat(srcPath);
