@@ -26,7 +26,8 @@
 
 ## 🖥️ 截图
 
-<img width="2082" height="1116" alt="屏幕截图" src="https://github.com/user-attachments/assets/184c1e38-286c-43e8-944b-697e6a034501" />
+<img width="2022" height="1153" alt="QQ20260822-022810" src="https://github.com/user-attachments/assets/5f09a6e1-64bb-4996-bc67-8e7c6648d8da" />
+
 
 
 ## 🛠️ 技术栈
