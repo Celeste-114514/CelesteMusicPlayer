@@ -10281,6 +10281,9 @@ namespace CelesteMusicPlayer
             control.Background = background;
             control.BorderThickness = new Thickness(0);
             control.Padding = new Thickness(14, 0, 14, 0);
+            // 胶囊文字内容水平垂直居中（否则在有额外宽/高时偏向一侧）
+            control.HorizontalContentAlignment = HorizontalAlignment.Center;
+            control.VerticalContentAlignment = VerticalAlignment.Center;
 
             if (foreground != null)
             {
@@ -11004,6 +11007,8 @@ namespace CelesteMusicPlayer
 
             if (_isEnginePaused && _audioEngine != null)
             {
+                // 恢复前先取暂停前的设备主音量（Pause 不改变设备音量），避免恢复时用滑块值覆盖导致音量骤增。
+                float pausedDevice = _audioEngine.GetDeviceVolume();
                 _audioEngine.Resume();
                 // 暂停-恢复本质是一次 seek 重建会话，无缝源 _next 已被清空；
                 // 重新预加载下一首，避免恢复后播到尾因无续接而误切歌。
@@ -11020,9 +11025,10 @@ namespace CelesteMusicPlayer
                     PlayPauseIcon.Glyph = "\uE769";
                 }
 
-                // 恢复后把设备主音量拉回用户当前设定（避免重建时残留默认 _resumeVolume=1.0 导致音量暴增），
-                // 并以极短淡入缓解独占会话重建瞬间的爆音（仅暂停恢复时生效，不影响 bit-perfect 直通）。
-                _ = FadeInEngineAfterResumeAsync(VolumeSlider.Value / 100.0);
+                // 恢复后把设备主音量拉回「暂停前的设备音量」（而非滑块值），避免独占重建时音量跳变/骤增；
+                // 并以极短淡入缓解独占会话重建瞬间的爆音。
+                double resumeTarget = pausedDevice >= 0 ? pausedDevice : VolumeSlider.Value / 100.0;
+                _ = FadeInEngineAfterResumeAsync(resumeTarget);
                 _miniPlayerWindow?.RefreshFromOwner();
                 return;
             }

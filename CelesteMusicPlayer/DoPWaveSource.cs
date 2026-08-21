@@ -168,10 +168,12 @@ namespace CelesteMusicPlayer
             int frames = 0;
             while (frames * 6 < want && (_curPos + 4) <= _curCount)
             {
-                byte l0 = _cur[_curPos];
-                byte r0 = _cur[_curPos + 1];
-                byte l1 = _cur[_curPos + 2];
-                byte r1 = _cur[_curPos + 3];
+                // DSD 源字节内位序为 MSB-first（bit7=最早样本），DoP 规范要求低16bit 中
+                // 最早样本在 bit0（LSB-first）→ 每个字节位反转后再放入容器，避免 DSD 数据位序错乱导致雪花噪声。
+                byte l0 = Rev8[_cur[_curPos]];
+                byte r0 = Rev8[_cur[_curPos + 1]];
+                byte l1 = Rev8[_cur[_curPos + 2]];
+                byte r1 = Rev8[_cur[_curPos + 3]];
                 _curPos += 4;
 
                 byte marker = (_frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
@@ -187,6 +189,26 @@ namespace CelesteMusicPlayer
             }
 
             return frames * 6;
+        }
+
+        // 8-bit 位反转查表（DSF/DFF 的 DSD 字节 MSB-first → DoP 容器 LSB-first）
+        private static readonly byte[] Rev8 = BuildRevTable();
+        private static byte[] BuildRevTable()
+        {
+            var t = new byte[256];
+            for (int i = 0; i < 256; i++)
+            {
+                byte b = (byte)i, r = 0;
+                for (int k = 0; k < 8; k++)
+                {
+                    r = (byte)((r << 1) | (b & 1));
+                    b >>= 1;
+                }
+
+                t[i] = r;
+            }
+
+            return t;
         }
 
         public void Seek(TimeSpan position)

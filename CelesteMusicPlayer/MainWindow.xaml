@@ -1647,15 +1647,15 @@
                                         TextAlignment="Center"
                                         TextWrapping="NoWrap"
                                         TextTrimming="CharacterEllipsis" />
-                                    <!-- DSD 专辑提示：全 DSD 专辑时显示 -->
+                                    <!-- DSD 专辑提示：全 DSD 专辑时显示，置于左侧整块信息区域底部 -->
                                     <TextBlock
                                         x:Name="AlbumDetailDsdHint"
                                         FontSize="11"
-                                        Opacity="0.85"
-                                        Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                        Opacity="0.9"
+                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                         TextWrapping="WrapWholeWords"
                                         TextAlignment="Center"
-                                        Text="☢ 该专辑为 DSD 专辑，请使用 WASAPI 独占输出模式，并在播放前调节输出音量大小。"
+                                        Text="该专辑为 DSD 专辑，推荐使用 WASAPI 独占输出，在播放前请检查音量大小"
                                         Visibility="Collapsed" />
                                     </StackPanel>
                                     </ScrollViewer>
