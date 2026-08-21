@@ -1191,15 +1191,19 @@ namespace CelesteMusicPlayer
                 NowPlayingLeftColumn.MinWidth = coverSize;
                 NowPlayingLeftColumn.MaxWidth = coverSize;
             }
-            // 艺术家/专辑超链接限制在 500px 内换行
-            const double infoMax = 500;
+            // 封面中轴：左列宽750内居中=375，平移+125 → 中轴距主UI左500
+            if (NowPlayingLeftShift != null)
+            {
+                NowPlayingLeftShift.TranslateX = 125;
+            }
+            // 信息区：中轴同封面(500)，右侧边界730(宽上限460)，超长换行
+            const double infoMax = 460; // 500-中轴=左270, 右730 → 半宽230*2=460
             if (NowPlayingArtistLinkButton != null) NowPlayingArtistLinkButton.MaxWidth = infoMax - 8;
             if (NowPlayingAlbumLinkButton != null) NowPlayingAlbumLinkButton.MaxWidth = infoMax - 8;
-            // 封面下方信息区：向右移 150px，左右长度超过 500px 时换行(标题/艺术家/专辑/链路线都按此)
             if (NowPlayingMetaPanel != null)
             {
                 NowPlayingMetaPanel.MaxWidth = infoMax;
-                NowPlayingMetaPanel.Margin = new Thickness(150, 0, 0, 0);
+                NowPlayingMetaPanel.Margin = new Thickness(0);
             }
             }
             finally
@@ -12759,18 +12763,17 @@ namespace CelesteMusicPlayer
 
                 string exclusivo = hifi ? "独占" : "共享";
 
-                // DSP 摘要：EQ 仅在 AudioGraph（非 HiFi 独占）下有效；
-                // 音量在 HiFi 独占下恒 100%。
+                // DSP 摘要：EQ 仅在 AudioGraph（非 HiFi 独占）下有效；不显示音量（用户不关心它在此链路里）。
                 string dsp;
                 if (hifi)
                 {
-                    dsp = "无（bit-perfect 直通；数字音量100%，设备音量=" + (int)Math.Round(VolumeSlider.Value) + "%）";
+                    dsp = "无（bit-perfect 直通）";
                 }
                 else
                 {
                     double[] eq = EqualizerStore.Load().BandGains;
                     bool eqFlat = eq == null || Array.TrueForAll(eq, g => Math.Abs(g) < 0.5);
-                    dsp = (eqFlat ? "EQ=off" : "EQ=on") + "，音量=" + (int)Math.Round(VolumeSlider.Value) + "%";
+                    dsp = eqFlat ? "EQ=off" : "EQ=on";
                 }
 
                 SignalChainInfoText.Text =

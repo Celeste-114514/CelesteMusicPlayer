@@ -2940,9 +2940,10 @@
                     <!-- 主体：左侧封面区 + 右侧滚动歌词 -->
                     <Grid
                         Grid.Row="1"
-                        ColumnSpacing="40">
+                        ColumnSpacing="0">
                         <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
+                            <!-- 左列宽=歌词左边界(750)：其内封面中轴距主UI左500、信息区右界730 -->
+                            <ColumnDefinition Width="750" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
@@ -3070,7 +3071,7 @@
                         </StackPanel>
 
                         <!-- 右栏：滚动歌词 -->
-                        <Grid Grid.Column="1" x:Name="LyricsSection" RenderTransformOrigin="0.5,0.5">
+                        <Grid Grid.Column="1" x:Name="LyricsSection" Margin="0,0,18,0" RenderTransformOrigin="0.5,0.5">
                             <Grid.RenderTransform>
                                 <CompositeTransform x:Name="LyricsShift" ScaleX="1" ScaleY="1" />
                             </Grid.RenderTransform>
