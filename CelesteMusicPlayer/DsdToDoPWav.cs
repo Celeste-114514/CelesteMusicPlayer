@@ -23,15 +23,21 @@ namespace CelesteMusicPlayer
                     return (false, 0, "没有可用的 DSD 解码器。");
                 }
 
-                using IDsDStream dsd = decoder.Open(dsdPath);
-                using var dop = new DoPWaveSource(dsd);
-                int rate = dop.WaveFormat.SampleRate;
-                int channels = dop.WaveFormat.Channels;
-                int bits = dop.WaveFormat.BitsPerSample;
+                IDsDStream dsd = decoder.Open(dsdPath);
+                using (dsd)
+                {
+                // DoP 容器采样率：DSD64→176.4k DSD128→352.8k DSD256→705.6k DSD512→1411.2k
+                int rate = dsd.Rate switch
+                {
+                    DsdRate.Dsd128 => 352800,
+                    DsdRate.Dsd256 => 705600,
+                    DsdRate.Dsd512 => 1411200,
+                    _ => 176400,
+                };
+                int channels = dsd.Channels;
+                int bits = 24;
                 int bytesPerFrame = (bits / 8) * channels; // 6
-                long totalFrames = dop.TotalTime.TotalSeconds > 0
-                    ? (long)(dop.TotalTime.TotalSeconds * rate)
-                    : 0;
+                long totalFrames = channels > 0 ? dsd.TotalSamples / channels / 16 : 0;
                 long totalBytes = totalFrames * bytesPerFrame;
 
                 string dir = Path.GetDirectoryName(wavPath);
@@ -43,19 +49,39 @@ namespace CelesteMusicPlayer
                 using var fs = new FileStream(wavPath, FileMode.Create, FileAccess.Write);
                 WriteWaveHeader(fs, rate, channels, bits, totalBytes);
 
-                byte[] buf = new byte[128 * 1024];
+                // 单线程顺序读 DSD(L,R,L,R 交织) 并封 DoP 容器帧(低16bit DSD + 高8bit 0x05/0xFA 交替)，避免预读线程与写并发。
+                byte[] src = new byte[4];   // L,R,L,R
+                byte[] frame = new byte[6];
+                long frameIndex = 0;
                 long written = 0;
                 int lastPct = -1;
+                using (var bw = new BinaryWriter(fs, System.Text.Encoding.UTF8, leaveOpen: true))
+                {
                 while (true)
                 {
-                    int n = dop.Read(buf, 0, buf.Length);
-                    if (n <= 0)
+                    int got = 0;
+                    while (got < 4)
                     {
-                        break;
+                        int k = dsd.Read(src, got, 4 - got);
+                        if (k <= 0)
+                        {
+                            break;
+                        }
+
+                        got += k;
                     }
 
-                    fs.Write(buf, 0, n);
-                    written += n;
+                    if (got < 4)
+                    {
+                        break; // 源尽/残缺
+                    }
+
+                    byte marker = (frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
+                    frame[0] = src[0]; frame[1] = src[2]; frame[2] = marker; // L: 低16=DSD, 高8=标记
+                    frame[3] = src[1]; frame[4] = src[3]; frame[5] = marker; // R
+                    bw.Write(frame);
+                    frameIndex++;
+                    written += 6;
                     if (totalBytes > 0)
                     {
                         int pct = (int)(written * 100 / totalBytes);
@@ -66,12 +92,16 @@ namespace CelesteMusicPlayer
                         }
                     }
                 }
+                }
 
+                // 用实际写入长度修正 RIFF/data 头
+                fs.Flush();
                 fs.Seek(4, SeekOrigin.Begin);
-                var bw = new BinaryWriter(fs);
-                bw.Write((int)(fs.Length - 8));
+                var w = new BinaryWriter(fs);
+                w.Write((int)(fs.Length - 8));
                 fs.Seek(0, SeekOrigin.End);
                 return (true, rate, rate + "Hz / " + bits + "bit / " + channels + "ch");
+                }
             }
             catch (Exception ex)
             {

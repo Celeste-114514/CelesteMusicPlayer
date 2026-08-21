@@ -983,10 +983,9 @@ namespace CelesteMusicPlayer
                     if (hifi)
                     {
                         // HiFi 独占（bit-perfect）：数字音量恒 100%，设备主音量（DAC 级）随滑块可调。
-                        // 回填滑块到设置音量，并应用一次到设备；切歌不重置（保持用户设定）。
-                        VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
-                        _volumeToSave = Math.Clamp(settings.Volume, 0, 100);
-                        _audioEngine?.SetVolume(VolumeSlider.Value / 100.0);
+                        // 独占：软件音量条固定 100%；实际音量由系统托盘(DAC 设备主音量)控制，bit-perfect 保真。
+                        VolumeSlider.Value = VolumeSlider.Maximum;
+                        _volumeToSave = VolumeSlider.Maximum;
                         MediaPlayer? hifiPlayer = GetPlayer();
                         if (hifiPlayer != null)
                         {
@@ -11171,10 +11170,15 @@ namespace CelesteMusicPlayer
                 player.Volume = e.NewValue / 100.0;
             }
 
-            // 设备主音量（DAC 驱动级）随滑块：共享与 HiFi 独占都联动。
-            // 说明：HiFi 独占下这是 DAC 硬件/驱动增益（非播放器对 PCM 的数字衰减），不破坏 bit-perfect，
-            //       让无实体音量键的小尾巴用户也能调轻音量；数字音量（播放器内部）仍恒 100%。
-            _audioEngine?.SetVolume(e.NewValue / 100.0);
+            // 设备/引擎音量：共享沿用原机制（数字增益随滑块）；独占下软件音量条固定 100%、由系统托盘控制设备音量（bit-perfect）。
+            if (IsHiFiModeSelected())
+            {
+                _audioEngine?.SetVolume(1.0); // 独占：软件音量恒满直通，音量交系统托盘
+            }
+            else
+            {
+                _audioEngine?.SetVolume(e.NewValue / 100.0);
+            }
 
             if (!_applyingSettingsVolume)
             {
@@ -12657,6 +12661,14 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // HiFi 独占：音量条固定 100% 不动，调音量请用系统托盘（DAC 设备主音量，bit-perfect 保真）。
+                if (IsHiFiModeSelected())
+                {
+                    VolumeSlider.Value = VolumeSlider.Maximum;
+                    NowPlayingText.Text = "请在系统托盘音量条内修改音量";
+                    return;
+                }
+
                 double px = e.GetCurrentPoint(VolumeStyleCanvas).Position.X;
                 double ratio = Math.Clamp(px / Math.Max(1, VolumeStyleCanvas.ActualWidth), 0, 1);
                 VolumeSlider.Value = ratio * VolumeSlider.Maximum; // 触发 ValueChanged -> 音量
