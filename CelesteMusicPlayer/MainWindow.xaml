@@ -477,7 +477,12 @@
                         CornerRadius="20"
                         Click="UserPlaylistNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE700;" FontSize="14" VerticalAlignment="Center" />
+                            <Grid Width="16" Height="16" VerticalAlignment="Center">
+                                <!-- 三横线（播放列表/队列） -->
+                                <FontIcon Glyph="&#xE700;" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                <!-- 右下角小加号（添加到播放队列） -->
+                                <FontIcon Glyph="&#xE710;" FontSize="8" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
+                            </Grid>
                             <TextBlock Text="播放列表" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
@@ -3004,13 +3009,15 @@
                                         Background="Transparent"
                                         BorderThickness="0"
                                         CornerRadius="4"
-                                        Click="NowPlayingArtistLinkButton_Click">
+                                        Click="NowPlayingArtistLinkButton_Click"
+                                        PointerEntered="NowPlayingArtistLink_PointerEntered"
+                                        PointerExited="NowPlayingArtistLink_PointerExited">
                                         <TextBlock
                                             x:Name="NowPlayingArtistText"
-                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             FontSize="15"
                                             FontWeight="SemiBold"
-                                            TextDecorations="Underline"
+                                            TextDecorations="None"
                                             TextWrapping="WrapWholeWords"
                                             MaxLines="2"
                                             TextTrimming="CharacterEllipsis"
@@ -3024,12 +3031,14 @@
                                         Background="Transparent"
                                         BorderThickness="0"
                                         CornerRadius="4"
-                                        Click="NowPlayingAlbumLinkButton_Click">
+                                        Click="NowPlayingAlbumLinkButton_Click"
+                                        PointerEntered="NowPlayingAlbumLink_PointerEntered"
+                                        PointerExited="NowPlayingAlbumLink_PointerExited">
                                         <TextBlock
                                             x:Name="NowPlayingAlbumText"
-                                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                             FontSize="15"
-                                            TextDecorations="Underline"
+                                            TextDecorations="None"
                                             TextWrapping="WrapWholeWords"
                                             MaxLines="2"
                                             TextTrimming="CharacterEllipsis"

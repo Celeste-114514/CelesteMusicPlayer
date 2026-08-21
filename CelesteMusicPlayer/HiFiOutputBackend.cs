@@ -655,17 +655,7 @@ namespace CelesteMusicPlayer
             }
 
             // 恢复前先把设备主音量压到很低，使重建起播就以低音量输出，避免恢复瞬间的全音量爆音；
-            // 之后由上层 FadeInEngineAfterResumeAsync 渐变回用户音量。
-            try
-            {
-                if (_device?.AudioEndpointVolume != null)
-                {
-                    _device.AudioEndpointVolume.MasterVolumeLevelScalar = 0.02f;
-                }
-            }
-            catch
-            {
-            }
+            // （独占下音量完全由 Windows 托盘/DAC 物理键控制，程序不写设备主音量，避免多次 select/暂停音量跳变到 0/100。）
 
             // 用缓存的激活参数完全重建输出，并在启动缓冲前定位到暂停点
             TimeSpan resumeAt = _pausedPosition;

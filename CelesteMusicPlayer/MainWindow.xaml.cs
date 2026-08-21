@@ -11008,8 +11008,6 @@ namespace CelesteMusicPlayer
 
             if (_isEnginePaused && _audioEngine != null)
             {
-                // 恢复目标用「暂停前记录的真实设备主音量」，避免误读 Resume 里 0.02 防爆残留导致恢复后无声。
-                float pausedDevice = _audioEngine.GetPausedDeviceVolume();
                 _audioEngine.Resume();
                 // 暂停-恢复本质是一次 seek 重建会话，无缝源 _next 已被清空；
                 // 重新预加载下一首，避免恢复后播到尾因无续接而误切歌。
@@ -11026,10 +11024,14 @@ namespace CelesteMusicPlayer
                     PlayPauseIcon.Glyph = "\uE769";
                 }
 
-                // 恢复后把设备主音量拉回「暂停前的设备音量」（而非滑块值），避免独占重建时音量跳变/骤增；
-                // 并以极短淡入缓解独占会话重建瞬间的爆音。
-                double resumeTarget = pausedDevice >= 0 ? pausedDevice : VolumeSlider.Value / 100.0;
-                _ = FadeInEngineAfterResumeAsync(resumeTarget);
+                // 独占下音量完全由 Windows 托盘/DAC 物理键控制，程序不写设备主音量(避免多次 select/暂停音量跳变到 0/100)；
+                // 仅共享模式在恢复时做软件增益淡入。
+                if (!IsHiFiModeSelected())
+                {
+                    double resumeTarget = VolumeSlider.Value / 100.0;
+                    _ = FadeInEngineAfterResumeAsync(resumeTarget);
+                }
+
                 _miniPlayerWindow?.RefreshFromOwner();
                 return;
             }
@@ -12854,6 +12856,27 @@ namespace CelesteMusicPlayer
 
             BuildLyricsUi(lyrics);
             _ = MaybeAutoDownloadExtrasAsync(item, lyrics, coverBytes);
+        }
+
+        /// <summary>悬停超链接：显示下划线（无主题色，正常文字色 + 悬停下划线标识可点击）。</summary>
+        private void NowPlayingArtistLink_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            if (NowPlayingArtistText != null) NowPlayingArtistText.TextDecorations = Windows.UI.Text.TextDecorations.Underline;
+        }
+
+        private void NowPlayingArtistLink_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            if (NowPlayingArtistText != null) NowPlayingArtistText.TextDecorations = Windows.UI.Text.TextDecorations.None;
+        }
+
+        private void NowPlayingAlbumLink_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            if (NowPlayingAlbumText != null) NowPlayingAlbumText.TextDecorations = Windows.UI.Text.TextDecorations.Underline;
+        }
+
+        private void NowPlayingAlbumLink_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            if (NowPlayingAlbumText != null) NowPlayingAlbumText.TextDecorations = Windows.UI.Text.TextDecorations.None;
         }
 
         /// <summary>重置艺术家/专辑超链接为空占位（未播放时禁用）。</summary>
