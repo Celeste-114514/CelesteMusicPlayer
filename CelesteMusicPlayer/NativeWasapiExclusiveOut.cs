@@ -394,36 +394,50 @@ namespace CelesteMusicPlayer
                         lock (_framesLock) { _framesWritten = (long)(seekReq.Value.TotalSeconds * _rate); }
                     }
 
-                    // ECHO 式：每次取整缓冲，写满后整体提交；无需 GetCurrentPadding/frames 换算 → 无越界
-                    if (rc.GetBuffer((uint)maxFrames, out IntPtr dst) != NativeWasapi.S_OK) break;
-
-                    int got = ReadFully(src, srcBuf, maxFrames * _srcBlock);
-                    if (got < srcBuf.Length)
+                    // 按「当前可写帧数」写（GetCurrentPadding 为标准单排法）：只补设备已消费掉的部分，
+                    // 永不覆盖未播数据、也不整块重写 → 消除"每次写满整个 bufferFrames"造成的 overshoot 覆盖/断音/电流声。
+                    if (rc.GetCurrentPadding(out uint pad) != NativeWasapi.S_OK)
                     {
-                        Array.Clear(srcBuf, got, srcBuf.Length - got); // 不足部分静音，避免旧/越界数据
-                        // 诊断：本次 WASAPI 缓冲未能从数据源读满（潜在 underrun → 播放卡顿）。
-                        // 正常无缝续接时 ReadFully 可跨曲填满；此处仅当磁盘读不足或源已尽时出现。
+                        break;
+                    }
+
+                    uint writable = _bufferFrames - pad;
+                    if (writable == 0 || pad >= _bufferFrames)
+                    {
+                        continue; // 缓冲仍满，无空间可写（下一次事件再补）
+                    }
+
+                    if (rc.GetBuffer(writable, out IntPtr dst) != NativeWasapi.S_OK)
+                    {
+                        break;
+                    }
+
+                    int want = (int)writable * _srcBlock;
+                    int got = ReadFully(src, srcBuf, want);
+                    if (got < want)
+                    {
+                        Array.Clear(srcBuf, got, want - got); // 源尽/不足：补静音（PCM=0；DoP 源内部已补 0x69）
                         long nowMs = Environment.TickCount64;
-                        if (nowMs - _lastUnderrunLogMs > 1000) // 限频，避免刷屏
+                        if (nowMs - _lastUnderrunLogMs > 1000)
                         {
                             _lastUnderrunLogMs = nowMs;
                             var ps = src.ProbeCurrentState;
                             long pos = ps?.Pos ?? 0, len = ps?.Len ?? 0;
-                            StartupLog.Write($"[源诊断] render underrun: 需要{srcBuf.Length}B 读得{got}B srcPos={pos}/{len} nextMount={src.NextMounted}");
+                            StartupLog.Write($"[源诊断] render underrun: 需要{want}B 读得{got}B srcPos={pos}/{len} nextMount={src.NextMounted}");
                         }
                     }
 
                     if (_direct)
                     {
-                        Marshal.Copy(srcBuf, 0, dst, maxFrames * _dstBlock);
+                        Marshal.Copy(srcBuf, 0, dst, want);
                     }
                     else
                     {
-                        ConvertToFloat(dst, srcBuf, maxFrames, srcWf);
+                        ConvertToFloat(dst, srcBuf, (int)writable, srcWf);
                     }
 
-                    rc.ReleaseBuffer((uint)maxFrames, 0);
-                    lock (_framesLock) { _framesWritten += maxFrames; }
+                    rc.ReleaseBuffer(writable, 0);
+                    lock (_framesLock) { _framesWritten += writable; }
                 }
 
                 bool completed = !_requestStop && !_disposed;
