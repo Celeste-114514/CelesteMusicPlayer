@@ -27,6 +27,7 @@ namespace CelesteMusicPlayer
         private IWaveSourceProvider? _provider;
         private long _framesWritten;
         private long _lastUnderrunLogMs; // 限频记录 underrun 诊断
+        private bool _usePadding = true; // 是否用 GetCurrentPadding 按可写帧补写；设备异常时回退写满（防崩溃）
         private readonly object _seekLock = new();
         private TimeSpan? _pendingSeek; // 线程安全 seek 请求（由 render 线程消费）
 
@@ -394,36 +395,66 @@ namespace CelesteMusicPlayer
                         lock (_framesLock) { _framesWritten = (long)(seekReq.Value.TotalSeconds * _rate); }
                     }
 
-                    // ECHO 式：每次取整缓冲，写满后整体提交；无需 GetCurrentPadding/frames 换算 → 无越界
-                    if (rc.GetBuffer((uint)maxFrames, out IntPtr dst) != NativeWasapi.S_OK) break;
-
-                    int got = ReadFully(src, srcBuf, maxFrames * _srcBlock);
-                    if (got < srcBuf.Length)
+                    // 写缓冲：优先按「可写帧 = bufferFrames - padding」补写（WASAPI 标准，避免整块重写覆盖未播数据导致偶发错帧/DAC 黄灯/电流）。
+                    // 关键：严格范围校验 + try/catch，任何异常都回退"写满 bufferFrames"（上一版 padding 因未防御导致真机崩溃，现加双保险）。
+                    uint framesToWrite = (uint)maxFrames;
+                    if (_usePadding)
                     {
-                        Array.Clear(srcBuf, got, srcBuf.Length - got); // 不足部分静音，避免旧/越界数据
-                        // 诊断：本次 WASAPI 缓冲未能从数据源读满（潜在 underrun → 播放卡顿）。
-                        // 正常无缝续接时 ReadFully 可跨曲填满；此处仅当磁盘读不足或源已尽时出现。
+                        try
+                        {
+                            if (rc.GetCurrentPadding(out uint pad) == NativeWasapi.S_OK
+                                && pad < _bufferFrames)
+                            {
+                                uint writable = _bufferFrames - pad;
+                                if (writable > 0 && writable <= _bufferFrames)
+                                {
+                                    framesToWrite = writable;
+                                }
+                            }
+                        }
+                        catch
+                        {
+                            _usePadding = false; // 设备/驱动不支持 → 回退写满，杜绝崩溃
+                            StartupLog.Write("[源诊断] GetCurrentPadding 异常，回退写满缓冲");
+                        }
+                    }
+
+                    if (framesToWrite == 0)
+                    {
+                        continue; // 缓冲仍满，本事件无可写帧
+                    }
+
+                    if (rc.GetBuffer(framesToWrite, out IntPtr dst) != NativeWasapi.S_OK)
+                    {
+                        break;
+                    }
+
+                    int want = (int)framesToWrite * _srcBlock;
+                    int got = ReadFully(src, srcBuf, want);
+                    if (got < want)
+                    {
+                        Array.Clear(srcBuf, got, want - got); // 源尽/不足：补静音（PCM=0；DoP 源内部已补 0x69）
                         long nowMs = Environment.TickCount64;
                         if (nowMs - _lastUnderrunLogMs > 1000) // 限频，避免刷屏
                         {
                             _lastUnderrunLogMs = nowMs;
                             var ps = src.ProbeCurrentState;
                             long pos = ps?.Pos ?? 0, len = ps?.Len ?? 0;
-                            StartupLog.Write($"[源诊断] render underrun: 需要{srcBuf.Length}B 读得{got}B srcPos={pos}/{len} nextMount={src.NextMounted}");
+                            StartupLog.Write($"[源诊断] render underrun: 需要{want}B 读得{got}B srcPos={pos}/{len} nextMount={src.NextMounted}");
                         }
                     }
 
                     if (_direct)
                     {
-                        Marshal.Copy(srcBuf, 0, dst, maxFrames * _dstBlock);
+                        Marshal.Copy(srcBuf, 0, dst, want);
                     }
                     else
                     {
-                        ConvertToFloat(dst, srcBuf, maxFrames, srcWf);
+                        ConvertToFloat(dst, srcBuf, (int)framesToWrite, srcWf);
                     }
 
-                    rc.ReleaseBuffer((uint)maxFrames, 0);
-                    lock (_framesLock) { _framesWritten += maxFrames; }
+                    rc.ReleaseBuffer(framesToWrite, 0);
+                    lock (_framesLock) { _framesWritten += framesToWrite; }
                 }
 
                 bool completed = !_requestStop && !_disposed;
