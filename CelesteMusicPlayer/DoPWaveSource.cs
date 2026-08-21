@@ -36,6 +36,7 @@ namespace CelesteMusicPlayer
         private long _frameIndex;                      // 全局 DoP 帧计数（决定 marker 奇偶）
         private long _framesRead;                      // render 已读出的 DoP 帧数（诊断/进度）
         private volatile bool _done;                   // 整曲封装完成
+        private int _diagMilestone;                      // 已输出的抽样里程碑序号(10/40/70/99%)
         private volatile bool _disposed;
         private Thread? _encode;
 
@@ -195,6 +196,20 @@ namespace CelesteMusicPlayer
                 else break;
             }
 
+            // 中途抽样诊断：在 10%/40%/70%/99% 各打印一小段实际交给 render 的 DoP 字节，
+            // 供判断"电流声是数据字节错位(marker/0x00/位序)还是 render 时序"。只在命中里程碑时打一次。
+            if (total > 0 && _totalFrames > 0 && _diagMilestone < 4 && _framesRead >= _totalFrames * MilestoneFracs[_diagMilestone])
+            {
+                int t = Math.Min(12, total); // dump 前 12 字节
+                var sb = new System.Text.StringBuilder(36);
+                for (int i = 0; i < t; i++) sb.Append(buffer[offset + i].ToString("X2"));
+                StartupLog.Write(string.Format(
+                    "[DoP抽样{0}%] 进度={1:F1}/{2:F1}s 字节={3}",
+                    (int)(MilestoneFracs[_diagMilestone] * 100),
+                    (double)_framesRead / _frameRate, (double)_totalFrames / _frameRate, sb.ToString()));
+                _diagMilestone++;
+            }
+
             // 整曲已到尾：补合法 DoP 静音帧填满，避免 render 用 0 兜底（0 是雪花）
             if (total < want)
             {
@@ -255,6 +270,7 @@ namespace CelesteMusicPlayer
 
         // 8-bit 位反转查表（DSF/DFF MSB-first → DoP LSB-first；据真机"反转可听、不反转雪花"定稿）
         private static readonly byte[] Rev8 = BuildRevTable();
+        private static readonly double[] MilestoneFracs = { 0.10, 0.40, 0.70, 0.99 };
         private static byte[] BuildRevTable()
         {
             var t = new byte[256];
