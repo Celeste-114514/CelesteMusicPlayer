@@ -86,7 +86,7 @@ namespace CelesteMusicPlayer
             }
 
             long hdrSize = ReadI64(fs);
-            fs.Position += 8; // 文件总大小
+            fs.Position += 16; // 跳过 fileTotalSize(8) + metadataPtr(8)
 
             // fmt 块
             if (ReadTag(fs, 4) != "fmt ")
@@ -102,6 +102,7 @@ namespace CelesteMusicPlayer
             ReadU32(fs);               // bits per sample(=1)
             ulong sampleCount = ReadU64(fs);
             uint blockSize = ReadU32(fs); // e.g. 4096
+            fs.Position += 4;          // reserved
 
             // data 块
             while (ReadTag(fs, 4) == "data")

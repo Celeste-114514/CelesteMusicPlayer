@@ -34,6 +34,8 @@ namespace CelesteMusicPlayer
         private Eq10WaveProvider? _eqProvider; // 当前输出使用的 EQ provider（NAudio 路径），用于播放中实时更新增益
         private NativeWasapiExclusiveOut? _native; // 原生 WASAPI 独占输出器（WasapiExclusive 模式替代 NAudio WasapiOut）
         private bool _useNative; // 当前播放是否走原生独占输出
+        private bool _isDsd;     // 当前是否 DSD/DoP 直出（独占 + 禁降级）
+        private DoPWaveSource? _dsdSource; // DSD/DoP 数据源（仅向独占通道喂 DoP 帧）
         private MMDevice? _device;     // 用于调设备/系统主音量（WASAPI）；ASIO 无统一接口为 null
         private bool _isPlaying;
         private TimeSpan _pausedPosition;
@@ -509,6 +511,107 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// DSD/DoP 原生直出：解析 DSF/DFF → DoPWaveSource → WASAPI 独占（requireExact，禁降级）。
+        /// 数据 1-bit 从容器直接抽出并封装为 DoP 容器帧，不经 PCM 解码，也不挂任何 DSP/音量（bit-perfect）。
+        /// </summary>
+        public bool PlayDsdAsync(string dsdPath, string? deviceIdentifier, TimeSpan? seekTo = null)
+        {
+            try
+            {
+                StopCore();
+
+                if (!File.Exists(dsdPath))
+                {
+                    LastError = "DSD 文件不存在：\n" + dsdPath;
+                    return false;
+                }
+
+                // 解析 DSD 容器 → 1-bit 流 → DoP 封装
+                IDsDDecoder? decoder = DsdDecoderRegistry.Resolve(dsdPath);
+                if (decoder == null)
+                {
+                    LastError = "没有可用的 DSD 解码器（内建解析器不可用）。";
+                    StartupLog.Write("DSD 直出失败：无解码器 path=" + dsdPath);
+                    return false;
+                }
+
+                IDsDStream dsd = decoder.Open(dsdPath);
+                var dop = new DoPWaveSource(dsd);
+                _dsdSource = dop;
+                _isDsd = true;
+                _activeWavPath = dsdPath;
+                _activeMode = OutputMode.WasapiExclusive;
+                _activeDeviceId = deviceIdentifier;
+
+                _device = ResolveDeviceForVolume(deviceIdentifier);
+                var natDev = NativeWasapi.GetRenderDeviceById(deviceIdentifier);
+                if (natDev == null)
+                {
+                    LastError = "无法解析输出设备。";
+                    Cleanup();
+                    return false;
+                }
+
+                var nat = new NativeWasapiExclusiveOut();
+                if (!nat.Init(natDev, dop, requireExactFormat: true))
+                {
+                    LastError = nat.LastError ?? "DSD/DoP 独占初始化失败";
+                    StartupLog.Write("DSD 独占初始化失败: " + LastError
+                        + " | DoP容器=" + dop.WaveFormat.SampleRate + "/" + dop.WaveFormat.BitsPerSample + "bit/" + dop.WaveFormat.Channels + "ch"
+                        + " | rate=" + dsd.Rate);
+                    try { Marshal.ReleaseComObject(natDev); } catch { }
+                    Cleanup();
+                    return false;
+                }
+
+                try { Marshal.ReleaseComObject(natDev); } catch { }
+
+                _native = nat;
+                _useNative = true;
+                _isDsd = true;
+                OutputDeviceName = nat.ActualFormatDescription != null
+                    ? "WASAPI 独占（DSD/DoP " + nat.ActualFormatDescription + "）"
+                    : "WASAPI 独占（DSD/DoP）";
+                Duration = dop.TotalTime;
+                _sourceDuration = dop.TotalTime;
+                Position = TimeSpan.Zero;
+                SourceFormatDescription = dsd.Rate + " / " + dsd.Channels + "声道 1-bit DSD";
+                _pausedPosition = seekTo ?? TimeSpan.Zero;
+                if (seekTo != null && seekTo.Value > TimeSpan.Zero)
+                {
+                    try { dop.Seek(seekTo.Value); Position = seekTo.Value; } catch { }
+                }
+
+                _native.Ended += Native_Ended;
+                if (!_native.Play(_pausedPosition))
+                {
+                    LastError = _native.LastError ?? "DSD/DoP 播放启动失败";
+                    Cleanup();
+                    return false;
+                }
+
+                ActualOutputFormat = _native.ActualFormatDescription;
+                _isPlaying = true;
+                CurrentMode = OutputMode.WasapiExclusive;
+                _nativePosBaselineFrames = 0;
+                _positionTimer.Start();
+                StartupLog.Write(string.Format(
+                    "DSD直出启动 源={0} {1}/{2}ch 1-bit → DoP容器={3}Hz/{4}bit/{5}ch → 设备=[{6}] | bit-perfect，CPU DSP/音量已绕过",
+                    Path.GetFileName(dsdPath), dsd.Rate, dsd.Channels,
+                    dop.WaveFormat.SampleRate, dop.WaveFormat.BitsPerSample, dop.WaveFormat.Channels,
+                    ActualOutputFormat ?? OutputDeviceName ?? "?"));
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+                Cleanup();
+                Failed?.Invoke(ex);
+                return false;
+            }
+        }
+
         /// <summary>暂停播放：释放输出，记录暂停位置。（Echo 风格：暂停释放独占，避免 Pause/Play 缓冲重建爆音。）</summary>
         public void Pause()
         {
@@ -669,8 +772,17 @@ namespace CelesteMusicPlayer
                 // 用数据源 reader 的实时游标作为位置（渲染线程读取同一 reader，反映真实播放进度）：
                 // 无缝续接后 _seamless.Current 变为下一首 reader（位置从 0），seek 后 CurrentTime 即被更新，
                 // 避免依赖跨曲累加的 _framesWritten 相对基准（seek/暂停恢复/续接时不一致）。
-                var curReader = _seamless?.Current ?? _waveFile;
-                Position = curReader != null ? curReader.CurrentTime : TimeSpan.Zero;
+                if (_isDsd)
+                {
+                    // DSD/DoP：无 WaveFileReader，用独占写帧数 / 容器帧率换算绝对进度
+                    int rate = _native.SampleRateValue;
+                    Position = rate > 0 ? TimeSpan.FromSeconds((double)_native.FramesWritten / rate) : TimeSpan.Zero;
+                }
+                else
+                {
+                    var curReader = _seamless?.Current ?? _waveFile;
+                    Position = curReader != null ? curReader.CurrentTime : TimeSpan.Zero;
+                }
             }
             else if (_waveFile != null)
             {
@@ -786,6 +898,9 @@ namespace CelesteMusicPlayer
                 _native = null;
             }
             _useNative = false;
+            _dsdSource?.Dispose();
+            _dsdSource = null;
+            _isDsd = false;
             _waveFile?.Dispose();
             _waveFile = null;
             _seamless?.Dispose(); // 释放已预加载的 next reader，避免切歌后文件句柄延迟释放
@@ -816,6 +931,9 @@ namespace CelesteMusicPlayer
                 _native = null;
             }
             _useNative = false;
+            _dsdSource?.Dispose();
+            _dsdSource = null;
+            _isDsd = false;
             _seamless?.Dispose();
             _seamless = null;
             _waveFile?.Dispose();

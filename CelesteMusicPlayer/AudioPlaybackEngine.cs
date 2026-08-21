@@ -127,6 +127,15 @@ namespace CelesteMusicPlayer
         /// <summary>用内置 FFmpeg 把文件转成临时 WAV 后播放（支持 APE/WavPack/TTA 等系统不支持的格式）。</summary>
         public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null)
         {
+            // DSD（DSF/DFF）：走原生 WASAPI 独占 + DoP 直出（bit-perfect），不再 ffmpeg 转 PCM。
+            if (_outputMode == HiFiOutputBackend.OutputMode.WasapiExclusive
+                && IsDsdFile(path))
+            {
+                bool ok = TryPlayDsdDirect(path);
+                StartupLog.Write("DSD 走原生直出 path=" + path + " ok=" + ok + " err=" + (LastError ?? ""));
+                return ok; // 失败不降级转 PCM（会破坏 bit-perfect）；错误由上层显示
+            }
+
             string? ffmpeg = FindFfmpeg();
             if (string.IsNullOrWhiteSpace(ffmpeg))
             {
@@ -399,6 +408,47 @@ namespace CelesteMusicPlayer
         {
             Position = pos;
             PositionChanged?.Invoke(pos);
+        }
+
+        /// <summary>是否为 DSD 文件（DSF/DFF）。</summary>
+        private static bool IsDsdFile(string path)
+        {
+            string ext = System.IO.Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
+            return ext is ".dsf" or ".dff";
+        }
+
+        /// <summary>DSD/DoP 原生直出：经 HiFiOutputBackend 的 WASAPI 独占通道（requireExact，bit-perfect）。</summary>
+        private bool TryPlayDsdDirect(string dsdPath)
+        {
+            try
+            {
+                StopCore();
+                _hifiOut ??= new HiFiOutputBackend();
+                _hifiOut.PlaybackStopped -= Hifi_PlaybackStopped;
+                _hifiOut.PlaybackStopped += Hifi_PlaybackStopped;
+                _hifiOut.SeamlessTrackChanged -= Hifi_SeamlessTrackChanged;
+                _hifiOut.SeamlessTrackChanged += Hifi_SeamlessTrackChanged;
+                _hifiOut.PositionChanged -= Hifi_PositionChanged;
+                _hifiOut.PositionChanged += Hifi_PositionChanged;
+
+                bool ok = _hifiOut.PlayDsdAsync(dsdPath, _devicePreference);
+                if (!ok)
+                {
+                    LastError = _hifiOut.LastError ?? "DSD/DoP 输出失败";
+                    return false;
+                }
+
+                Duration = _hifiOut.Duration;
+                Position = TimeSpan.Zero;
+                _isPlaying = true;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+                RaiseFailed(ex);
+                return false;
+            }
         }
 
         /// <summary>转码缓存目录（%LOCALAPPDATA%\CelesteMusicPlayer\TranscodeCache）。</summary>

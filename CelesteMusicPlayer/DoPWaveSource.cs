@@ -8,7 +8,7 @@ namespace CelesteMusicPlayer
     /// 封装成 176.4k/24bit/2ch（DSD64 基准 ×倍率）PCM 容器帧，供 WASAPI 独占原样直通。
     /// 每容器帧：L/R 各 24bit小端，低 16bit=DSD 数据，高 8bit=DoP 标记(0x05/0xFA 交替)。
     /// </summary>
-    internal sealed class DoPWaveSource : IWaveSourceProvider
+    internal sealed class DoPWaveSource : IWaveSourceProvider, IDisposable
     {
         private readonly IDsDStream _src;
         private readonly int _frameRate;
@@ -111,5 +111,7 @@ namespace CelesteMusicPlayer
         }
 
         private static readonly byte[][] Frames = { new byte[6] };
+
+        public void Dispose() => _src.Dispose();
     }
 }

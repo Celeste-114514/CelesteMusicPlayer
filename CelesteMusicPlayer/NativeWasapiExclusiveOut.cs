@@ -72,8 +72,10 @@ namespace CelesteMusicPlayer
         /// <summary>最近一次初始化是否触发了 AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED 对齐 dance（供日志排障）。</summary>
         public bool LastAlignDance { get; private set; }
 
-        /// <summary>用指定设备 + 输出源（PCM 无缝源或 DSD/DoP 源）初始化（格式协商 + Initialize + 取 render client + 绑定事件）。</summary>
-        public bool Init(NativeWasapi.IMMDevice device, IWaveSourceProvider provider)
+        /// <summary>用指定设备 + 输出源（PCM 无缝源或 DSD/DoP 源）初始化（格式协商 + Initialize + 取 render client + 绑定事件）。
+        /// <paramref name="requireExactFormat"/> 为 true（DSD/DoP 直出）时只尝试「源格式精确直通」，任何降级都视为失败，
+        /// 防止 Bit-perfect DSD 容器被设备降级改写。</summary>
+        public bool Init(NativeWasapi.IMMDevice device, IWaveSourceProvider provider, bool requireExactFormat = false)
         {
             if (_audioClient != null)
             {
@@ -86,7 +88,7 @@ namespace CelesteMusicPlayer
             var src = provider.WaveFormat;
             if (src == null)
             {
-                LastError = "无缝源无有效格式。";
+                LastError = "输出源无有效格式。";
                 return false;
             }
 
@@ -112,14 +114,22 @@ namespace CelesteMusicPlayer
                 _kind = ToKind(src);
                 _dstBlock = src.BlockAlign;
                 _direct = true;
-                ActualFormatDescription = src.SampleRate + " Hz / " + src.BitsPerSample + " bit(源直通) / " + src.Channels + " ch";
+                ActualFormatDescription = src.SampleRate + " Hz / " + src.BitsPerSample + " bit(源直通" + (requireExactFormat ? "/DoP" : "") + ") / " + src.Channels + " ch";
                 StartupLog.Write(initLog + "  → 源直通成功 " + ActualFormatDescription + (srcAlignDance ? "（含对齐dance）" : ""));
                 LastAlignDance = srcAlignDance;
                 FinishInit();
                 return true;
             }
 
-            // 2) 源格式设备不支持 → 按候选表逐次降级（FLOAT32 → PCM16 → PCM32 → PCM24IN32），
+            // 2) 仅 DSD/DoP 且要求精确格式：不再协商降级候选，直接失败（避免容器被设备改写破坏 bit-perfect）
+            if (requireExactFormat)
+            {
+                LastError = "设备不支持 DSD/DoP 所需容器格式（" + src.SampleRate + "Hz/" + src.BitsPerSample + "bit/" + src.Channels + "ch）";
+                StartupLog.Write(initLog + "  → 精确格式未支持，禁止降级，失败: " + LastError);
+                return false;
+            }
+
+            // 3) 源格式设备不支持 → 按候选表逐次降级（FLOAT32 → PCM16 → PCM32 → PCM24IN32），
             //    仅接受「与源同布局」的格式（保证 bit-perfect 直出，无需转换）；源采样率设备不认时交给引擎按 MixFormat 重采样。
             var cands = new[] { Kind.Float32, Kind.Pcm16, Kind.Pcm32, Kind.Pcm24In32 };
             int lastHr = NativeWasapi.AUDCLNT_E_UNSUPPORTED_FORMAT;
