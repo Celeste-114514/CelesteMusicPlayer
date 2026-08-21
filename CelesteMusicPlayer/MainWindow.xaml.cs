@@ -13476,16 +13476,9 @@ namespace CelesteMusicPlayer
             StartupLog.Write("波形加载开始: " + item.FilePath + " style=" + _progressBarStyle);
             LoadWaveformForCurrentAsync(item.FilePath);
 
-            // DSD(DSF/DFF) 需 WASAPI 独占 + DoP 原生直出；其它模式会导致 DSD 被解成 PCM(亮蓝/黄灯)。
-            // 非独占时拒绝播放并提示，切到独占模式后再播。
-            if (IsDsdFile(item.FilePath)
-                && !string.Equals(AppSettingsStore.Load().OutputMode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase))
-            {
-                NowPlayingText.Text = "播放失败：DSD 需 WASAPI 独占模式";
-                NowPlayingText.Visibility = Visibility.Visible;
-                StartupLog.Write("DSD 播放被拦截：输出模式非 WasapiExclusive，路径=" + item.FilePath);
-                return;
-            }
+            // DSD(DSF/DFF) 在非 WASAPI 独占模式下自动转码为 PCM 输出（保留可听性，非 bit-perfect），
+            // 独占模式下走 DoP 原生直出。提示在 PlayExtendedWithEngineAsync 成功后给出。
+            StartupLog.Write("StartPlayback: " + item.FilePath + " mode=" + (AppSettingsStore.Load().OutputMode));
 
             // HiFi 独占模式（WASAPI 独占 / ASIO）：所有曲目统一走 FFmpeg 引擎 + NAudio 输出。
             // 直接按设置判断（而非 _audioEngine.IsHiFiMode），避免 engine 尚未创建/未设 mode 时的首次播放漏走独占。
@@ -13623,6 +13616,15 @@ namespace CelesteMusicPlayer
                 _isEnginePaused = false;
                 _usingEnginePlayback = true;
                 NowPlayingText.Text = "正在播放（引擎）：" + item.Title + " - " + item.Artist;
+                // DSD 在非 WASAPI 独占模式：ffmpeg 转码为 PCM 输出（非 bit-perfect），左上角提示转码结果。
+                if (IsDsdFile(item.FilePath)
+                    && !string.Equals(AppSettingsStore.Load().OutputMode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase))
+                {
+                    string pcmDesc = string.IsNullOrWhiteSpace(_audioEngine?.SourceFormatDescription)
+                        ? (_audioEngine?.ActualOutputFormat ?? "PCM") : _audioEngine!.SourceFormatDescription!;
+                    NowPlayingText.Text = "已转码为 " + pcmDesc + " 输出";
+                    StartupLog.Write("DSD 已转码 PCM 输出: " + item.FilePath + " → " + (_audioEngine?.SourceFormatDescription ?? "?"));
+                }
                 // 设备主音量（DAC 驱动级）只由用户拖动音量条时设置，切歌不重置，保持用户设定的响度。
                 // （播放器数字音量恒 100% 直通，bit-perfect；无实体音量键的小尾巴可拖动音量条调轻）
                 _ = UpdateNowPlayingPanelAsync(item);
