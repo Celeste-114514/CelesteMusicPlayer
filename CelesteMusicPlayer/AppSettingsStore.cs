@@ -221,7 +221,21 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             {
                 if (_cache != null)
                 {
-                    StartupLog.Write("Load 命中缓存 _cache 已设, OutputMode=" + (_cache?.OutputMode ?? "null"));
+                    string caller = "";
+                    try
+                    {
+                        var frames = new System.Diagnostics.StackTrace();
+                        // 取最近2层调用者，定位启动期高频循环来源
+                        for (int i = 1; i < Math.Min(frames.FrameCount, 3); i++)
+                        {
+                            var mi = frames.GetFrame(i)?.GetMethod();
+                            caller += " <- " + (mi?.DeclaringType?.Name + "." + mi?.Name);
+                        }
+                    }
+                    catch
+                    {
+                    }
+                    StartupLog.Write("Load 命中缓存 OutputMode=" + (_cache?.OutputMode ?? "null") + caller);
                     return Clone(_cache);
                 }
 

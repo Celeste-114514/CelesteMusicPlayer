@@ -1125,11 +1125,21 @@ namespace CelesteMusicPlayer
             return CallWindowProcW(_prevWndProc, hWnd, msg, wParam, lParam);
         }
 
+        private bool _isUpdatingNowPlayingLayout;
+
         /// <summary>
         /// 播放信息页：大封面尺寸随面板高度自适应；波形与封面同宽并居中。
         /// </summary>
         private void UpdateNowPlayingCardLayout()
         {
+            if (_isUpdatingNowPlayingLayout)
+            {
+                return;
+            }
+
+            _isUpdatingNowPlayingLayout = true;
+            try
+            {
             double paneWidth = NowPlayingPane.ActualWidth;
             double paneHeight = NowPlayingPane.ActualHeight;
             if (paneWidth <= 0 || paneHeight <= 0)
@@ -1179,6 +1189,11 @@ namespace CelesteMusicPlayer
                 {
                     LyricsShift.TranslateX = lyricTarget - lyricCenterBefore;
                 }
+            }
+            }
+            finally
+            {
+                _isUpdatingNowPlayingLayout = false;
             }
         }
 
