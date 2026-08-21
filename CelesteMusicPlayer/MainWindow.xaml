@@ -20,119 +20,6 @@
                 <Setter Property="MinHeight" Value="48" />
                 <Setter Property="Padding" Value="0" />
             </Style>
-            <!-- 排序/升降序胶囊按钮模板：把文字与(可选)下拉箭头强制垂直居中。
-             默认 DropDownButton/Button 模板内部 ContentPresenter+Chevron 布局会让文字视觉偏下，
-             代码层的 VerticalContentAlignment=Center 无法纠正模板内部布局 → 需自定义 ControlTemplate。 -->
-            <Style x:Key="SortCapsuleDropDownStyle" TargetType="DropDownButton">
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="DropDownButton">
-                            <Grid>
-                                <VisualStateManager.VisualStateGroups>
-                                    <VisualStateGroup x:Name="CommonStates">
-                                        <VisualState x:Name="Normal" />
-                                        <VisualState x:Name="PointerOver">
-                                            <VisualState.Setters>
-                                                <Setter Target="Highlight.Opacity" Value="1" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Pressed">
-                                            <VisualState.Setters>
-                                                <Setter Target="Press.Opacity" Value="1" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Disabled">
-                                            <VisualState.Setters>
-                                                <Setter Target="ContentPresenter.Opacity" Value="0.5" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                    </VisualStateGroup>
-                                </VisualStateManager.VisualStateGroups>
-                                <Border
-                                    x:Name="LayoutRoot"
-                                    Background="{TemplateBinding Background}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    Padding="{TemplateBinding Padding}"
-                                    CornerRadius="16">
-                                    <Grid>
-                                        <Border x:Name="Highlight" Background="#22FFFFFF" CornerRadius="16" Opacity="0" />
-                                        <Border x:Name="Press" Background="#33000000" CornerRadius="16" Opacity="0" />
-                                        <Grid ColumnSpacing="4">
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="*" />
-                                                <ColumnDefinition Width="Auto" />
-                                            </Grid.ColumnDefinitions>
-                                            <ContentPresenter
-                                                x:Name="ContentPresenter"
-                                                Grid.Column="0"
-                                                Content="{TemplateBinding Content}"
-                                                ContentTemplate="{TemplateBinding ContentTemplate}"
-                                                HorizontalContentAlignment="Center"
-                                                VerticalContentAlignment="Center"
-                                                VerticalAlignment="Center" />
-                                            <FontIcon
-                                                x:Name="Chevron"
-                                                Grid.Column="1"
-                                                Glyph="&#xE70D;"
-                                                FontSize="10"
-                                                VerticalAlignment="Center"
-                                                HorizontalAlignment="Center"/>
-                                        </Grid>
-                                    </Grid>
-                                </Border>
-                            </Grid>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
-            <Style x:Key="SortCapsuleButtonStyle" TargetType="Button">
-                <Setter Property="Template">
-                    <Setter.Value>
-                        <ControlTemplate TargetType="Button">
-                            <Grid>
-                                <VisualStateManager.VisualStateGroups>
-                                    <VisualStateGroup x:Name="CommonStates">
-                                        <VisualState x:Name="Normal" />
-                                        <VisualState x:Name="PointerOver">
-                                            <VisualState.Setters>
-                                                <Setter Target="Highlight.Opacity" Value="1" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Pressed">
-                                            <VisualState.Setters>
-                                                <Setter Target="Press.Opacity" Value="1" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                        <VisualState x:Name="Disabled">
-                                            <VisualState.Setters>
-                                                <Setter Target="ContentPresenter.Opacity" Value="0.5" />
-                                            </VisualState.Setters>
-                                        </VisualState>
-                                    </VisualStateGroup>
-                                </VisualStateManager.VisualStateGroups>
-                                <Border
-                                    x:Name="LayoutRoot"
-                                    Background="{TemplateBinding Background}"
-                                    BorderThickness="{TemplateBinding BorderThickness}"
-                                    Padding="{TemplateBinding Padding}"
-                                    CornerRadius="16">
-                                    <Grid>
-                                        <Border x:Name="Highlight" Background="#22FFFFFF" CornerRadius="16" Opacity="0" />
-                                        <Border x:Name="Press" Background="#33000000" CornerRadius="16" Opacity="0" />
-                                        <ContentPresenter
-                                            x:Name="ContentPresenter"
-                                            Content="{TemplateBinding Content}"
-                                            ContentTemplate="{TemplateBinding ContentTemplate}"
-                                            HorizontalContentAlignment="Center"
-                                            VerticalContentAlignment="Center"
-                                            VerticalAlignment="Center" />
-                                    </Grid>
-                                </Border>
-                            </Grid>
-                        </ControlTemplate>
-                    </Setter.Value>
-                </Setter>
-            </Style>
         </Grid.Resources>
         <!-- 自定义背景图片(设置里选择,优先于封面背景) -->
         <Image
@@ -755,9 +642,12 @@
                             x:Name="SortFieldButton"
                             Height="32"
                             Padding="14,0"
-                            Style="{StaticResource SortCapsuleDropDownStyle}"
-                            BorderThickness="0"
-                            Content="排序：标题">
+                            BorderThickness="0">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock
+                                    Text="排序：标题"
+                                    VerticalAlignment="Center" />
+                            </StackPanel>
                             <DropDownButton.Flyout>
                                 <MenuFlyout Placement="Bottom">
                                     <MenuFlyoutItem Text="标题" Tag="Title" Click="SortFieldMenu_Click" />
@@ -773,21 +663,29 @@
                             Height="32"
                             MinWidth="72"
                             Padding="14,0"
-                            Style="{StaticResource SortCapsuleButtonStyle}"
                             BorderThickness="0"
-                            Content="升序"
                             Click="SortOrderButton_Click"
-                            ToolTipService.ToolTip="切换升序 / 降序" />
+                            ToolTipService.ToolTip="切换升序 / 降序">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock
+                                    Text="升序"
+                                    VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Button
                             x:Name="ChangeSortButton"
                             Height="32"
                             Padding="14,0"
-                            Style="{StaticResource SortCapsuleButtonStyle}"
                             BorderThickness="0"
-                            Content="更改排序"
                             Visibility="Collapsed"
                             Click="ChangeSortButton_Click"
-                            ToolTipService.ToolTip="按字段重新排序当前列表（会打乱原有顺序）" />
+                            ToolTipService.ToolTip="按字段重新排序当前列表（会打乱原有顺序）">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock
+                                    Text="更改排序"
+                                    VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
 
                     <!-- 专辑墙排序：类别下拉 + 升序/降序（两个胶囊并列） -->
@@ -803,11 +701,14 @@
                             x:Name="AlbumSortButton"
                             Height="32"
                             Padding="14,0"
-                            Style="{StaticResource SortCapsuleDropDownStyle}"
                             BorderThickness="0"
-                            Content="按专辑名称"
                             HorizontalAlignment="Right"
                             VerticalAlignment="Center">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock
+                                    Text="按专辑名称"
+                                    VerticalAlignment="Center" />
+                            </StackPanel>
                             <DropDownButton.Flyout>
                                 <MenuFlyout Placement="Bottom">
                                     <MenuFlyoutItem Text="按专辑名称" Tag="Title" Click="AlbumSortMenu_Click" />
@@ -825,11 +726,15 @@
                             Height="32"
                             MinWidth="64"
                             Padding="14,0"
-                            Style="{StaticResource SortCapsuleButtonStyle}"
                             BorderThickness="0"
-                            Content="升序"
                             Click="AlbumSortOrderButton_Click"
-                            ToolTipService.ToolTip="切换升序 / 降序" />
+                            ToolTipService.ToolTip="切换升序 / 降序">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock
+                                    Text="升序"
+                                    VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </Grid>
 
