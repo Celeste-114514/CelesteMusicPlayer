@@ -593,6 +593,9 @@ namespace CelesteMusicPlayer
                 }
 
                 _native.Ended += Native_Ended;
+                // 起播前等后台预读线程把 ring 填够预缓冲（对齐 ECHO 的 startupPrebuffer），
+                // 避免"边解边播受磁盘/解码速度影响"导致的起播欠载/卡顿（Ring 空时 render 会补 0x69 静音但那是无声间断）。
+                dop.WaitForPrefill(TimeSpan.FromMilliseconds(1200));
                 if (!_native.Play(_pausedPosition))
                 {
                     LastError = _native.LastError ?? "DSD/DoP 播放启动失败";

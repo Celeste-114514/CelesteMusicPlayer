@@ -436,6 +436,11 @@ namespace CelesteMusicPlayer
                 // 同步在调用线程初始化 WASAPI 独占 + DoP 内存源（与 PCM 路径一致，避免 MTA 线程跨线程用 COM 报错）；
                 // 真正费时的 DSD 读取/封装由 DoPWaveSource 后台预读线程承担，不阻塞 UI。
                 bool played = PlayDsdHiFi(dsdPath, _devicePreference);
+                // 播放已启动（含起播预缓冲就绪）→ 清除顶部"解析容器"占位提示，避免整曲残留误导"一直在边解边播"
+                if (played)
+                {
+                    status?.Invoke("");
+                }
                 StartupLog.Write("DSD 内存预读→独占直通: " + dsdPath + " ok=" + played
                     + (played ? "" : " err=" + (LastError ?? "")));
                 return Task.FromResult(played);

@@ -323,6 +323,21 @@ namespace CelesteMusicPlayer
             return filled;
         }
 
+        /// <summary>起播阻塞用：等待后台预读线程把 ring 填够预缓冲（或源尽/超时任一即返回）。
+        /// 在 WASAPI Start 前调用，可从根上避免"起播即欠载"——这正是"边解边播受磁盘/解码速度影响"的欠载窗口。
+        /// 返回后 render 若仍欠载，会走 Read 的 0x69 静音兜底（无声而非雪花），并写 [DSD诊断] 日志量化。</summary>
+        public void WaitForPrefill(TimeSpan timeout)
+        {
+            var deadline = DateTime.UtcNow + timeout;
+            lock (_lock)
+            {
+                while (!_disposed && !_eof && DateTime.UtcNow < deadline && _count < _prebufferBytes)
+                {
+                    Monitor.Wait(_lock, TimeSpan.FromMilliseconds(5)); // 预读线程 WriteRingInLock PulseAll 唤醒
+                }
+            }
+        }
+
         public void Seek(TimeSpan position)
         {
             long frame = (long)Math.Round(position.TotalSeconds * _frameRate); // Round 避免浮点亚帧截断（落到最近帧）
