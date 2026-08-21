@@ -36,6 +36,7 @@ namespace CelesteMusicPlayer
         private bool _useNative; // 当前播放是否走原生独占输出
         private bool _isDsd;     // 当前是否 DSD/DoP 直出（独占 + 禁降级）
         private DoPWaveSource? _dsdSource; // DSD/DoP 数据源（仅向独占通道喂 DoP 帧）
+        private double _lastDsdPrefillLogSec = double.NegativeInfinity; // 限频 DSD ring 欠载诊断日志
         private MMDevice? _device;     // 用于调设备/系统主音量（WASAPI）；ASIO 无统一接口为 null
         private bool _isPlaying;
         private TimeSpan _pausedPosition;
@@ -790,6 +791,14 @@ namespace CelesteMusicPlayer
                     // DSD/DoP：无 WaveFileReader，用独占写帧数 / 容器帧率换算绝对进度
                     int rate = _native.SampleRateValue;
                     Position = rate > 0 ? TimeSpan.FromSeconds((double)_native.FramesWritten / rate) : TimeSpan.Zero;
+
+                    // 诊断：DSD ring 预读欠载补静音统计（>0 说明预读跟不上/起播冷启动→短暂无声，是潜在卡顿点）。
+                    // 限频记录，便于与"雪花/卡顿"音频现象对照定位根因。
+                    if (_dsdSource != null && Position.TotalSeconds - _lastDsdPrefillLogSec > 2.0 && _dsdSource.PrefillFrames > 0)
+                    {
+                        _lastDsdPrefillLogSec = Position.TotalSeconds;
+                        StartupLog.Write($"[DSD诊断] ring预读欠载补静音帧累计={_dsdSource.PrefillFrames} (t={Position.TotalSeconds:F1}s)");
+                    }
                 }
                 else
                 {

@@ -41,6 +41,9 @@ namespace CelesteMusicPlayer
         private long _frameIndex;                      // 全局 DoP 帧计数（决定 marker 奇偶与进度；仅 lock 内改）
         private long _framesRead;                      // render 已读出的 DoP 帧数（诊断/进度）
         private long _gen;                             // seek generation：预读块读回的归属代次，seek 时递增
+
+        /// <summary>诊断：因 ring 空而补填的"合法静音"帧累计数（>0 说明预读跟不上/起播冷启动，是潜在的无声卡顿点）。</summary>
+        public long PrefillFrames { get; private set; }
         private volatile bool _eof;                    // 源已读尽
         private bool _prebuffering;                    // 起播/seek 后仍在攒预缓冲
         private DateTime _prebufferDeadline;
@@ -199,7 +202,8 @@ namespace CelesteMusicPlayer
         private int RingFree() => RingBytes - _count;
 
         /// <summary>读 DoP 容器帧字节（每 6 字节 = 1 帧 L3+R3）。仅从内存环形缓冲取，不做任何 I/O/封装。
-        /// 数据不足：源尽补 0x69 静音；预缓冲期 hold（返回部分）；短暂等待后台预读再填。</summary>
+        /// 数据不足时**补合法 DoP 静音帧（0x69 + 相位延续的 marker）填满**，绝不返回"部分帧让 render 层补 0"——
+        /// 因为全 0 容器帧（marker=0）在真机 DAC 上会被解成连续雪花电流噪音（对齐 ECHO DopRingSource：先 fillDoPSilence 再覆盖真实数据）。</summary>
         public int Read(byte[] buffer, int offset, int count)
         {
             int want = count - (count % 6);
@@ -209,8 +213,7 @@ namespace CelesteMusicPlayer
             }
 
             int total = 0;
-            DateTime pbDeadline = DateTime.UtcNow.AddMilliseconds(PrebufferTimeoutMs);
-            bool pbTimeout = false;
+            DateTime waitEnd = DateTime.UtcNow.AddMilliseconds(6); // 等待后台预读的小窗口（正常播放预读已就绪，几乎不触发）
 
             while (total < want)
             {
@@ -221,52 +224,49 @@ namespace CelesteMusicPlayer
                     {
                         _framesRead += got / 6;
                         total += got;
+                        waitEnd = DateTime.UtcNow.AddMilliseconds(6); // 拿到数据，重置等待窗口
                         continue; // 有数据，直接继续
                     }
                 }
 
-                // 无更多数据：判断应补静音、hold 预缓冲、还是等待后台预读
-                bool eof;
-                bool preb;
-                lock (_lock)
+                if (_disposed)
                 {
-                    eof = _eof;
-                    preb = _prebuffering;
+                    break;
                 }
 
-                if (eof)
+                // 无数据：先小窗口等后台预读填一点（不忙旋、不永久阻塞 render）
+                bool data = false;
+                if (DateTime.UtcNow < waitEnd)
                 {
                     lock (_lock)
                     {
-                        if (_count == 0)
+                        Monitor.Wait(_lock, YieldWait);
+                    }
+
+                    lock (_lock)
+                    {
+                        int g = PullFromRing(buffer, offset + total, want - total);
+                        if (g > 0)
                         {
-                            FillSilenceTo(buffer, offset + total, want - total);
-                            total = want;
-                            break;
+                            _framesRead += g / 6;
+                            total += g;
+                            data = true;
                         }
                     }
-
-                    continue; // ring 仍有残帧，下一轮取出
                 }
 
-                if (preb && !pbTimeout)
+                if (data)
                 {
-                    pbTimeout = DateTime.UtcNow >= pbDeadline;
-                    if (!pbTimeout)
-                    {
-                        break; // 预缓冲中：返回已得数据（render 会 hold 起播，静音直到攒够/超时）
-                    }
+                    continue;
                 }
 
-                // 等待后台预读填一点（短暂有界，避免 render 忙旋）
+                // 仍无数据（源尽量尽 / 起播冷启动 / seek 后 RING 未补满）：补合法 DoP 静音填满，
+                // 让 render 拿满一整块，避免它用 0 兜底（0 是雪花噪音之源）。
                 lock (_lock)
                 {
-                    if (_disposed)
-                    {
-                        break;
-                    }
-
-                    Monitor.Wait(_lock, YieldWait);
+                    int prefill = FillSilenceTo(buffer, offset + total, want - total);
+                    PrefillFrames += prefill;
+                    total = want;
                 }
             }
 
@@ -303,9 +303,10 @@ namespace CelesteMusicPlayer
             return take;
         }
 
-        /// <summary>把 count（6 倍数）字节写成合法 DoP 静音帧（0x69 数据 + marker 交替）。</summary>
-        private void FillSilenceTo(byte[] dst, int off, int count)
+        /// <summary>把 count（6 倍数）字节写成合法 DoP 静音帧（0x69 数据 + marker 交替）。返回补写的帧数（诊断用）。</summary>
+        private int FillSilenceTo(byte[] dst, int off, int count)
         {
+            int filled = 0;
             for (int i = 0; i + 5 < count; i += 6)
             {
                 byte m = (_frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
@@ -316,7 +317,10 @@ namespace CelesteMusicPlayer
                 dst[off + i + 4] = 0x69;
                 dst[off + i + 5] = m;
                 _frameIndex++;
+                filled++;
             }
+
+            return filled;
         }
 
         public void Seek(TimeSpan position)
