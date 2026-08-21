@@ -13140,6 +13140,12 @@ namespace CelesteMusicPlayer
                     tb.Text = line.Text;
                 }
 
+                // 歌词区宽约=面板宽/2-左右留边；给每条歌词设最大宽使其在右半区换行(不依赖 layout 时序)
+                double lyricMax = NowPlayingPane != null && NowPlayingPane.ActualWidth > 0
+                    ? Math.Max(200, NowPlayingPane.ActualWidth / 2.0 - 76)
+                    : 520;
+                tb.MaxWidth = lyricMax;
+
                 _lyricTextBlocks.Add(tb);
                 LyricsPanel.Children.Add(tb);
             }

@@ -2999,8 +2999,6 @@
                                     Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                     TextAlignment="Center"
                                     TextWrapping="WrapWholeWords"
-                                    MaxLines="3"
-                                    TextTrimming="CharacterEllipsis"
                                     Text="未在播放" />
                                 <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
                                     <Button
@@ -3019,8 +3017,6 @@
                                             FontWeight="SemiBold"
                                             TextDecorations="None"
                                             TextWrapping="WrapWholeWords"
-                                            MaxLines="2"
-                                            TextTrimming="CharacterEllipsis"
                                             Text="未知艺术家" />
                                     </Button>
                                     <TextBlock x:Name="NowPlayingArtistAlbumSeparator" Text="·" FontSize="15"
@@ -3040,8 +3036,6 @@
                                             FontSize="15"
                                             TextDecorations="None"
                                             TextWrapping="WrapWholeWords"
-                                            MaxLines="2"
-                                            TextTrimming="CharacterEllipsis"
                                             Text="未知专辑" />
                                     </Button>
                                 </StackPanel>
@@ -3052,8 +3046,6 @@
                                     Opacity="0.85"
                                     TextAlignment="Center"
                                     TextWrapping="WrapWholeWords"
-                                    MaxLines="2"
-                                    TextTrimming="CharacterEllipsis"
                                     Text="" />
                                 <TextBlock
                                     x:Name="SignalChainInfoText"
@@ -3062,7 +3054,6 @@
                                     Opacity="0.7"
                                     TextAlignment="Center"
                                     TextWrapping="WrapWholeWords"
-                                    TextTrimming="CharacterEllipsis"
                                     Text="信号链：未初始化" />
                             </StackPanel>
                         </StackPanel>
