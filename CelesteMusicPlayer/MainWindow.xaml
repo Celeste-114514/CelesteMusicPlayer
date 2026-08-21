@@ -239,7 +239,7 @@
                         Click="CategoryNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE8D6;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="歌曲" VerticalAlignment="Center" />
+                            <TextBlock Text="歌曲" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -256,7 +256,7 @@
                         Click="CategoryNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE93C;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="专辑" VerticalAlignment="Center" />
+                            <TextBlock Text="专辑" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -273,7 +273,7 @@
                         Click="CategoryNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE77B;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="艺术家" VerticalAlignment="Center" />
+                            <TextBlock Text="艺术家" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -290,7 +290,7 @@
                         Click="CategoryNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE716;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="专辑艺术家" VerticalAlignment="Center" />
+                            <TextBlock Text="专辑艺术家" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -307,7 +307,7 @@
                         Click="CategoryNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xEB51;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="我喜欢的音乐" VerticalAlignment="Center" />
+                            <TextBlock Text="我喜欢的音乐" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -324,7 +324,7 @@
                         Click="CategoryNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE81C;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="最近播放" VerticalAlignment="Center" />
+                            <TextBlock Text="最近播放" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -346,7 +346,7 @@
                                 <!-- 右下角小加号：作为角标，缩得比三横小并贴右下角，不盖住三横主体 -->
                                 <FontIcon Glyph="&#xE710;" FontSize="7" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-1,0" Opacity="0.92" />
                             </Grid>
-                            <TextBlock Text="播放队列" VerticalAlignment="Center" />
+                            <TextBlock Text="播放队列" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -363,7 +363,7 @@
                         Click="CategoryNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE8EC;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="流派" VerticalAlignment="Center" />
+                            <TextBlock Text="流派" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -380,7 +380,7 @@
                         Click="CategoryNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE787;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="年份" VerticalAlignment="Center" />
+                            <TextBlock Text="年份" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -397,7 +397,7 @@
                         Click="CategoryNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE768;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="播放最多" VerticalAlignment="Center" />
+                            <TextBlock Text="播放最多" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -414,7 +414,7 @@
                         Click="CategoryNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE8B7;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="文件夹" VerticalAlignment="Center" />
+                            <TextBlock Text="文件夹" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                 </StackPanel>
@@ -438,7 +438,7 @@
                         Click="NavAudioFxButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
                             <FontIcon Glyph="&#xE91F;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="音效处理" VerticalAlignment="Center" />
+                            <TextBlock Text="音效处理" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <!-- 标签排序（三竖图标），与音效处理同级竖排 -->
@@ -465,7 +465,7 @@
                                     <RotateTransform Angle="90" />
                                 </FontIcon.RenderTransform>
                             </FontIcon>
-                            <TextBlock Text="标签排序" VerticalAlignment="Center" />
+                            <TextBlock Text="标签排序" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <!-- 播放列表，与上面两按钮同级竖排 -->
@@ -488,7 +488,7 @@
                                 <!-- 右下角小加号（添加到播放队列） -->
                                 <FontIcon Glyph="&#xE710;" FontSize="8" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
                             </Grid>
-                            <TextBlock Text="播放列表" VerticalAlignment="Center" />
+                            <TextBlock Text="播放列表" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                 </StackPanel>
