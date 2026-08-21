@@ -477,7 +477,7 @@
                         CornerRadius="20"
                         Click="UserPlaylistNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon Glyph="&#xE8B7;" FontSize="14" VerticalAlignment="Center" />
+                            <FontIcon Glyph="&#xE700;" FontSize="14" VerticalAlignment="Center" />
                             <TextBlock Text="播放列表" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
