@@ -419,39 +419,60 @@ namespace CelesteMusicPlayer
             return ext is ".dsf" or ".dff";
         }
 
-        /// <summary>DSD/DoP 原生直出（预加载版）：先完整解析 DSD 封装为 DoP 容器 WAV，再走现有 WASAPI 独占通道原生直通。
-        /// 实时播放只是顺序读规整 WAV → 无明显卡顿/电流音；DoP 容器字节原样直通 DAC（bit-perfect）。</summary>
-        private async Task<bool> TryPlayDsdPreloadAsync(string dsdPath, Action<string>? status)
+        /// <summary>DSD/DoP 原生直出（内存预读版）：后台预读线程把 DSF/DFF 解析封装为 DoP 容器帧
+        /// 写入内存环形缓冲，独占 render 线程只从内存取帧原样直通 DAC（bit-perfect）。
+        /// 不落盘、不走磁盘 I/O 实时读，杜绝"边播边从磁盘读/解 DSD"造成的电流音/卡顿。</summary>
+        private Task<bool> TryPlayDsdPreloadAsync(string dsdPath, Action<string>? status)
         {
             try
             {
                 if (!File.Exists(dsdPath))
                 {
                     RaiseFailed(new Exception("DSD 文件不存在：" + dsdPath));
+                    return Task.FromResult(false);
+                }
+
+                status?.Invoke("DSD 缓冲直出：解析容器…");
+                // 同步在调用线程初始化 WASAPI 独占 + DoP 内存源（与 PCM 路径一致，避免 MTA 线程跨线程用 COM 报错）；
+                // 真正费时的 DSD 读取/封装由 DoPWaveSource 后台预读线程承担，不阻塞 UI。
+                bool played = PlayDsdHiFi(dsdPath, _devicePreference);
+                StartupLog.Write("DSD 内存预读→独占直通: " + dsdPath + " ok=" + played
+                    + (played ? "" : " err=" + (LastError ?? "")));
+                return Task.FromResult(played);
+            }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+                RaiseFailed(ex);
+                return Task.FromResult(false);
+            }
+        }
+
+        /// <summary>走 HiFiOutputBackend 的 DSD/DoP 内存预读直出（requireExact，禁降级）。</summary>
+        private bool PlayDsdHiFi(string dsdPath, string? deviceId)
+        {
+            try
+            {
+                StopCore();
+                _hifiOut ??= new HiFiOutputBackend();
+                _hifiOut.PlaybackStopped -= Hifi_PlaybackStopped;
+                _hifiOut.PlaybackStopped += Hifi_PlaybackStopped;
+                _hifiOut.SeamlessTrackChanged -= Hifi_SeamlessTrackChanged;
+                _hifiOut.SeamlessTrackChanged += Hifi_SeamlessTrackChanged;
+                _hifiOut.PositionChanged -= Hifi_PositionChanged;
+                _hifiOut.PositionChanged += Hifi_PositionChanged;
+
+                bool ok = _hifiOut.PlayDsdAsync(dsdPath, deviceId, seekTo: null);
+                if (!ok)
+                {
+                    LastError = _hifiOut.LastError ?? "DSD 内存直出失败";
                     return false;
                 }
 
-                string cacheDir = GetCacheDir();
-                string key = "dsd_" + Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(
-                    System.Text.Encoding.UTF8.GetBytes(dsdPath.ToLowerInvariant())));
-                string dopWav = Path.Combine(cacheDir, key + ".dop.wav");
-
-                if (!File.Exists(dopWav) || new FileInfo(dopWav).Length <= 44)
-                {
-                    status?.Invoke("DSD 预加载中：解析音频…");
-                    var (ok, rate, msg) = await Task.Run(() =>
-                        DsdToDoPWav.Convert(dsdPath, dopWav, pct => status?.Invoke($"DSD 预加载：{pct}%")));
-                    if (!ok)
-                    {
-                        LastError = "DSD 预加载失败：" + msg;
-                        RaiseFailed(new Exception(LastError));
-                        return false;
-                    }
-                }
-
-                bool played = PlayWavHiFi(dopWav, requireExact: true);
-                StartupLog.Write("DSD 预加载→独占直通: " + dsdPath + " → " + dopWav + " ok=" + played);
-                return played;
+                Duration = _hifiOut.Duration;
+                Position = TimeSpan.Zero;
+                _isPlaying = true;
+                return true;
             }
             catch (Exception ex)
             {

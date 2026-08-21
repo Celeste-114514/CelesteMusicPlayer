@@ -56,7 +56,7 @@ namespace CelesteMusicPlayer
                 int channels = dsd.Channels;
                 int bits = 24;
                 int bytesPerFrame = (bits / 8) * channels; // 6
-                long totalFrames = channels > 0 ? dsd.TotalSamples / channels / 16 : 0;
+                long totalFrames = channels > 0 ? dsd.TotalSamples / 16 : 0; // TotalSamples 已是"每声道 1-bit 样本数"
                 long totalBytes = totalFrames * bytesPerFrame;
 
                 string dir = Path.GetDirectoryName(wavPath);

@@ -7,29 +7,51 @@ namespace CelesteMusicPlayer
     /// <summary>
     /// DoP（DSD over PCM）封装源：把 <see cref="IDsDStream"/> 的 1-bit DSD 流
     /// 封装成 176.4k/24bit/2ch（DSD64 基准 ×倍率）PCM 容器帧，供 WASAPI 独占原样直通。
-    /// 每容器帧：L/R 各 24bit小端，低 16bit=DSD 数据，高 8bit=DoP 标记(0x05/0xFA 交替)。
-    /// 数据读取放在**后台预读线程**，render 线程只在内存缓冲取帧，杜绝磁盘/文件 IO 阻塞实时输出造成卡顿。
+    /// 每容器帧：L/R 各 24bit 小端，低 16bit=DSD 数据，高 8bit=DoP 标记(0x05/0xFA 交替)。
+    ///
+    /// 卡顿根治（对齐 ECHO NEXT 的 DopRingSource）：
+    ///   * 数据读取 + 位反转 + DoP 封装全部在【后台预读线程】完成，并写入【内存环形 FIFO】；
+    ///   * 独占 render 线程只从环形缓冲做逐块拷贝，绝不触碰 DSD 源、绝不做磁盘/解码 I/O，
+    ///     杜绝磁盘读或封装 CPU 阻塞实时输出导致 underrun/卡顿（根治 DSD 与独占卡顿）。
+    ///   * 起播预缓冲：开播前先攒够一段数据（或超时/源尽兜底），避免起播即欠载；
+    ///   * 源尽后补合规 DoP 静音帧（0x69 + marker 交替），替代二进制 0 填充，避免尾/切换爆音。
+    ///   * seek 用 generation 校验丢弃 seek 前预读的旧块，保证 seek 后 ring 里只有目标位置数据。
     /// </summary>
     internal sealed class DoPWaveSource : IWaveSourceProvider, IDisposable
     {
-        private const int ReadChunk = 512 * 1024; // 后台预读块（约 256ms DSD128）
+        private const int RawChunk = 1 << 17;          // 预读线程每块从源读取的原始交织字节（128KB，后台线程）
+        private const int RingBytes = 32 << 20;        // 环形缓冲容量 32MB（DSD512≈3.7s；DSD64≈30s）
+        private const double PrebufferSeconds = 0.30;  // 起播预缓冲时长（秒）
+        private const int PrebufferTimeoutMs = 800;    // 预缓冲最久等待，超时兜底开播（避免卡死）
+        private static readonly TimeSpan YieldWait = TimeSpan.FromMilliseconds(2);
 
         private readonly IDsDStream _src;
+        private readonly int _srcChannels;
         private readonly int _frameRate;
-        private readonly long _totalFrames;
-        private readonly object _qLock = new();
-        private byte[]? _ready;              // 后台线程已填好的下一块（L,R 交织）
-        private bool _eof;                   // 源已读尽
-        private byte[] _cur;
-        private int _curPos;
-        private int _curCount;
+        private readonly long _totalFrames;           // DoP 容器帧总数
+        private readonly object _lock = new();
+
+        // 环形 FIFO（字节级）
+        private readonly byte[] _ring = new byte[RingBytes];
+        private int _readPos;
+        private int _writePos;
+        private int _count;                           // 已在 ring 内、尚未被 render 消费的字节
+        private readonly int _prebufferBytes;
+
+        private long _frameIndex;                      // 全局 DoP 帧计数（决定 marker 奇偶与进度；仅 lock 内改）
+        private long _framesRead;                      // render 已读出的 DoP 帧数（诊断/进度）
+        private long _gen;                             // seek generation：预读块读回的归属代次，seek 时递增
+        private volatile bool _eof;                    // 源已读尽
+        private bool _prebuffering;                    // 起播/seek 后仍在攒预缓冲
+        private DateTime _prebufferDeadline;
         private volatile bool _disposed;
+
         private Thread? _prefetch;
-        private long _frameIndex;
 
         public DoPWaveSource(IDsDStream src)
         {
             _src = src ?? throw new ArgumentNullException(nameof(src));
+            _srcChannels = src.Channels;
             _frameRate = src.Rate switch
             {
                 DsdRate.Dsd128 => 352800,
@@ -37,12 +59,15 @@ namespace CelesteMusicPlayer
                 DsdRate.Dsd512 => 1411200,
                 _ => 176400, // DSD64
             };
-            _totalFrames = src.Channels > 0 ? src.TotalSamples / (long)src.Channels / 16 : 0;
-            _cur = new byte[ReadChunk];
+            _totalFrames = _srcChannels > 0 ? src.TotalSamples / 16 : 0; // TotalSamples 已是"每声道 1-bit 样本数"；每 DoP 帧=16 1-bit/声道
+            _prebufferBytes = (int)(PrebufferSeconds * _frameRate * 6.0);
+            _prebuffering = _prebufferBytes > 0;
+            _prebufferDeadline = DateTime.UtcNow.AddMilliseconds(PrebufferTimeoutMs);
+
             _prefetch = new Thread(PrefetchLoop)
             {
                 IsBackground = true,
-                Name = "DoPPrefetch",
+                Name = "DoPRingPrefetch",
                 Priority = ThreadPriority.BelowNormal
             };
             _prefetch.Start();
@@ -59,153 +84,261 @@ namespace CelesteMusicPlayer
         }
 
         public (long Pos, long Len, bool SameAsOuter)? ProbeCurrentState
-            => (_frameIndex * 6, _totalFrames * 6, false);
+            => (_framesRead * 6, _totalFrames * 6, false);
 
         public bool NextMounted => false;
 
-        /// <summary>后台预读线程：持续读大块 DSD 源到备用缓冲，render 可取。源尽则置 _eof。</summary>
+        /// <summary>后台预读线程：持续从 DSD 源读原始交织字节 → 位反转 → 封装 DoP 帧 → 写入环形缓冲。
+        /// ring 满时阻塞等 render 消费；seek（generation 变更）时丢弃 seek 前预读的旧块，绝不反向阻塞 render 实时输出。</summary>
         private void PrefetchLoop()
         {
+            var raw = new byte[RawChunk];
+            var dopp = new byte[(RawChunk / 4) * 6]; // 每 4B 原始 → 6B DoP；封装缓冲按原始块上限预分配
             try
             {
                 while (!_disposed)
                 {
-                    byte[] buf = new byte[ReadChunk];
-                    int n = _src.Read(buf, 0, buf.Length);
-                    if (n <= 0)
+                    // 等 ring 有足够空间再读一块（把磁盘 I/O 放到后台线程）
+                    lock (_lock)
                     {
-                        lock (_qLock)
+                        while (!_disposed && RingFree() < dopp.Length)
                         {
-                            _eof = true;
-                            Monitor.PulseAll(_qLock);
+                            Monitor.Wait(_lock, YieldWait);
                         }
+                    }
+
+                    if (_disposed)
+                    {
                         return;
                     }
 
-                    byte[] chunk = n == buf.Length ? buf : Shrink(buf, n);
-                    lock (_qLock)
+                    long genAtRead;
+                    lock (_lock) { genAtRead = _gen; }
+                    int got = _src.Read(raw, 0, raw.Length); // 磁盘 I/O + 源读满（后台线程，非 render）
+
+                    lock (_lock)
                     {
-                        // 已有待消费的 ready：等消费后继续
-                        while (_ready != null && !_disposed)
+                        if (_gen != genAtRead)
                         {
-                            Monitor.Wait(_qLock);
+                            continue; // seek 在本块读取期间/之后发生：丢弃旧数据，重新从新位置读
                         }
 
-                        if (_disposed)
+                        int whole = got - (got % 4); // 丢弃不成双声道的零星尾字节
+                        if (whole <= 0)
                         {
-                            return;
+                            _eof = true;
+                            Monitor.PulseAll(_lock);
+                            // 源已尽：进入休眠等待，直到被 Seek 重置（_eof=false）或 Dispose；
+                            // seek 后源文件已定位到新位置，本线程须继续循环补读（而不是 return 退出）。
+                            while (!_disposed && _eof)
+                            {
+                                Monitor.Wait(_lock);
+                            }
+
+                            continue;
                         }
 
-                        _ready = chunk;
-                        Monitor.PulseAll(_qLock);
+                        int n = EncodeBlock(raw, whole, dopp); // 封装在 lock 内，与 seek/_frameIndex 无竞态
+                        if (n > 0)
+                        {
+                            WriteRingInLock(dopp, n);
+                        }
                     }
                 }
             }
             catch
             {
+                // 后台线程异常：标记源尽，结束（render 会转到 0x69 静音兜底）
+                lock (_lock)
+                {
+                    _eof = true;
+                    Monitor.PulseAll(_lock);
+                }
             }
         }
 
-        private static byte[] Shrink(byte[] src, int n)
+        /// <summary>把 whole 个原始 L,R,L,R… 交织字节封装为 6 字节/帧的 DoP；返回产出字节数。需在 lock(_lock) 内调用。
+        /// 位序：DSF/DFF MSB-first → DoP 容器需 LSB-first → 逐字节位反转（据真机"反转可听/不反转雪花"定稿）。</summary>
+        private int EncodeBlock(byte[] raw, int whole, byte[] dopp)
         {
-            var r = new byte[n];
-            Buffer.BlockCopy(src, 0, r, 0, n);
-            return r;
+            int fp = 0;
+            int frames = whole / 4;
+            for (int f = 0; f < frames; f++)
+            {
+                int i = f * 4;
+                byte m = (_frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
+                dopp[fp++] = Rev8[raw[i]];      // L 低字节
+                dopp[fp++] = Rev8[raw[i + 2]];  // L 高字节
+                dopp[fp++] = m;
+                dopp[fp++] = Rev8[raw[i + 1]];  // R 低字节
+                dopp[fp++] = Rev8[raw[i + 3]];  // R 高字节
+                dopp[fp++] = m;
+                _frameIndex++;
+            }
+
+            return fp;
         }
 
-        /// <summary>读 DoP 容器帧字节（每 6 字节 = 1 帧 L3+R3）。仅从内存缓冲取，不做 IO。</summary>
+        /// <summary>把已封装的 DoP 帧写入环形缓冲。需在 lock(_lock) 内调用。</summary>
+        private void WriteRingInLock(byte[] data, int len)
+        {
+            int first = Math.Min(len, RingBytes - _writePos);
+            Buffer.BlockCopy(data, 0, _ring, _writePos, first);
+            _writePos = (_writePos + first) % RingBytes;
+            if (len > first)
+            {
+                Buffer.BlockCopy(data, first, _ring, _writePos, len - first);
+                _writePos = (_writePos + (len - first)) % RingBytes;
+            }
+
+            _count += len;
+            _prebuffering = !_eof && _count < _prebufferBytes;
+            Monitor.PulseAll(_lock);
+        }
+
+        private int RingFree() => RingBytes - _count;
+
+        /// <summary>读 DoP 容器帧字节（每 6 字节 = 1 帧 L3+R3）。仅从内存环形缓冲取，不做任何 I/O/封装。
+        /// 数据不足：源尽补 0x69 静音；预缓冲期 hold（返回部分）；短暂等待后台预读再填。</summary>
         public int Read(byte[] buffer, int offset, int count)
         {
-            int total = 0;
-            int remaining = count - (count % 6);
-            int pos = offset;
-            while (remaining > 0)
+            int want = count - (count % 6);
+            if (want <= 0)
             {
-                int produced = EmitFrames(buffer, pos, remaining);
-                if (produced <= 0)
+                return 0;
+            }
+
+            int total = 0;
+            DateTime pbDeadline = DateTime.UtcNow.AddMilliseconds(PrebufferTimeoutMs);
+            bool pbTimeout = false;
+
+            while (total < want)
+            {
+                lock (_lock)
                 {
-                    break; // 源尽
+                    int got = PullFromRing(buffer, offset + total, want - total);
+                    if (got > 0)
+                    {
+                        _framesRead += got / 6;
+                        total += got;
+                        continue; // 有数据，直接继续
+                    }
                 }
 
-                pos += produced;
-                total += produced;
-                remaining -= produced;
+                // 无更多数据：判断应补静音、hold 预缓冲、还是等待后台预读
+                bool eof;
+                bool preb;
+                lock (_lock)
+                {
+                    eof = _eof;
+                    preb = _prebuffering;
+                }
+
+                if (eof)
+                {
+                    lock (_lock)
+                    {
+                        if (_count == 0)
+                        {
+                            FillSilenceTo(buffer, offset + total, want - total);
+                            total = want;
+                            break;
+                        }
+                    }
+
+                    continue; // ring 仍有残帧，下一轮取出
+                }
+
+                if (preb && !pbTimeout)
+                {
+                    pbTimeout = DateTime.UtcNow >= pbDeadline;
+                    if (!pbTimeout)
+                    {
+                        break; // 预缓冲中：返回已得数据（render 会 hold 起播，静音直到攒够/超时）
+                    }
+                }
+
+                // 等待后台预读填一点（短暂有界，避免 render 忙旋）
+                lock (_lock)
+                {
+                    if (_disposed)
+                    {
+                        break;
+                    }
+
+                    Monitor.Wait(_lock, YieldWait);
+                }
             }
 
             return total;
         }
 
-        /// <summary>从当前缓冲取帧；当前块耗尽时换到后台已填好的下一块（无则同步兜底读），并唤醒预读线程。</summary>
-        private int EmitFrames(byte[] buffer, int offset, int want)
+        /// <summary>从环形缓冲取出至多 want 字节（6 对齐）。需在 lock(_lock) 内调用。</summary>
+        private int PullFromRing(byte[] dst, int off, int want)
         {
-            if (_curPos >= _curCount)
+            if (_count <= 0)
             {
-                lock (_qLock)
-                {
-                    byte[]? r = _ready;
-                    if (r != null)
-                    {
-                        _ready = null;
-                        Monitor.PulseAll(_qLock); // 唤醒预读继续填
-                        _cur = r;
-                        _curPos = 0;
-                        _curCount = r.Length;
-                    }
-                    else
-                    {
-                        // 预读尚未跟上：同步读（很少发生，预读通常 512KB 远超前）
-                        _curCount = _src.Read(_cur, 0, _cur.Length);
-                        _curPos = 0;
-                    }
-                }
-
-                if (_curCount < 4)
-                {
-                    _eof = true; // 源尽：转补合规 DoP 静音帧（0x69），避免 render 用 0 填充造成爆音
-                }
+                return 0;
             }
 
-            int frames = 0;
-            while (frames * 6 < want && (_curPos + 4) <= _curCount)
+            int avail = _count - (_count % 6);
+            int take = Math.Min(avail, want);
+            take -= take % 6;
+            if (take <= 0)
             {
-                // DSF/DFF 的 DSD 字节内 bit7 为最早样本(MSB-first)，DoP 规范要求最早样本在容器 bit0(LSB-first) → 逐字节位反转。
-                byte l0 = Rev8[_cur[_curPos]];
-                byte r0 = Rev8[_cur[_curPos + 1]];
-                byte l1 = Rev8[_cur[_curPos + 2]];
-                byte r1 = Rev8[_cur[_curPos + 3]];
-                _curPos += 4;
+                return 0;
+            }
 
-                byte marker = (_frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
-                int o = offset + frames * 6;
-                buffer[o] = l0;
-                buffer[o + 1] = l1;
-                buffer[o + 2] = marker;
-                buffer[o + 3] = r0;
-                buffer[o + 4] = r1;
-                buffer[o + 5] = marker;
+            int first = Math.Min(take, RingBytes - _readPos);
+            Buffer.BlockCopy(_ring, _readPos, dst, off, first);
+            _readPos = (_readPos + first) % RingBytes;
+            if (take > first)
+            {
+                Buffer.BlockCopy(_ring, _readPos, dst, off + first, take - first);
+                _readPos = (_readPos + (take - first)) % RingBytes;
+            }
+
+            _count -= take;
+            Monitor.PulseAll(_lock); // 唤醒预读线程继续填
+            return take;
+        }
+
+        /// <summary>把 count（6 倍数）字节写成合法 DoP 静音帧（0x69 数据 + marker 交替）。</summary>
+        private void FillSilenceTo(byte[] dst, int off, int count)
+        {
+            for (int i = 0; i + 5 < count; i += 6)
+            {
+                byte m = (_frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
+                dst[off + i] = 0x69;
+                dst[off + i + 1] = 0x69;
+                dst[off + i + 2] = m;
+                dst[off + i + 3] = 0x69;
+                dst[off + i + 4] = 0x69;
+                dst[off + i + 5] = m;
                 _frameIndex++;
-                frames++;
             }
+        }
 
-            // 源尽后补合规 DoP 静音帧（0x69 数据 + 0x05/0xFA 交替），避免尾/切换时用 0 填充造成爆音/杂音
-            if (_eof)
+        public void Seek(TimeSpan position)
+        {
+            long frame = (long)Math.Round(position.TotalSeconds * _frameRate); // Round 避免浮点亚帧截断（落到最近帧）
+            frame = Math.Clamp(frame, 0, _totalFrames);
+
+            _src.SeekSample(frame * 16 * _srcChannels); // 底层 _ioLock 串行化，防与预读线程 Read 竞争
+
+            lock (_lock)
             {
-                while (frames * 6 < want)
-                {
-                    byte marker = (_frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
-                    int o = offset + frames * 6;
-                    buffer[o] = 0x69;
-                    buffer[o + 1] = 0x69;
-                    buffer[o + 2] = marker;
-                    buffer[o + 3] = 0x69;
-                    buffer[o + 4] = 0x69;
-                    buffer[o + 5] = marker;
-                    _frameIndex++;
-                    frames++;
-                }
+                _readPos = 0;
+                _writePos = 0;
+                _count = 0;
+                _eof = false;
+                _frameIndex = frame;
+                _framesRead = frame;
+                _gen++;                       // 使预读线程丢弃 seek 前读取的旧块
+                _prebuffering = _prebufferBytes > 0;
+                _prebufferDeadline = DateTime.UtcNow.AddMilliseconds(PrebufferTimeoutMs);
+                Monitor.PulseAll(_lock);      // 唤醒预读线程从新位置重新填
             }
-
-            return frames * 6;
         }
 
         // 8-bit 位反转查表（DSF MSB-first → DoP LSB-first；据真机"反转可听、不反转雪花"定稿）
@@ -228,23 +361,6 @@ namespace CelesteMusicPlayer
             return t;
         }
 
-        public void Seek(TimeSpan position)
-        {
-            long frame = (long)(position.TotalSeconds * _frameRate);
-            frame = Math.Clamp(frame, 0, _totalFrames);
-            _frameIndex = frame;
-
-            lock (_qLock)
-            {
-                _src.SeekSample(frame * 16 * _src.Channels);
-                _ready = null;
-                _curCount = 0;
-                _curPos = 0;
-                _eof = false;
-                Monitor.PulseAll(_qLock);
-            }
-        }
-
         public void Dispose()
         {
             if (_disposed)
@@ -252,10 +368,10 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            _disposed = true;
-            lock (_qLock)
+            lock (_lock)
             {
-                Monitor.PulseAll(_qLock);
+                _disposed = true;
+                Monitor.PulseAll(_lock);
             }
 
             try { _prefetch?.Join(500); } catch { }
