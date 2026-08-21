@@ -71,6 +71,11 @@ namespace CelesteMusicPlayer
         /// <summary>DSD 直出用 32bit DoP 容器（部分 DAC/KA13 认同 DoP 32bit 而 24bit 不认）。默认 false=24bit。</summary>
         public bool DsDoP32 { get; set; }
 
+        /// <summary>诊断开关：true 时 DSD 不再走 DoP 直出，而是用 ffmpeg 把 DSF/DFF 转成高采样 PCM、
+        /// 走成熟的 PCM 独占通路播放。用于判断"电流/黄灯"是来自 DoP 直出链路，还是 KA13 对高采样率 USB 时钟/驱动本身的问题。
+        /// 默认 false=走 DoP 直出。</summary>
+        public bool DsdUsePcmFallback { get; set; }
+
         public bool LyricFuzzyMatch { get; set; } = true;
 
         public bool ShowLyricTranslate { get; set; } = true;

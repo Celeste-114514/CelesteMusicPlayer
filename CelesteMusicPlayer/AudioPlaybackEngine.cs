@@ -423,14 +423,21 @@ namespace CelesteMusicPlayer
         /// <summary>DSD/DoP 原生直出（内存预读版）：后台预读线程把 DSF/DFF 解析封装为 DoP 容器帧
         /// 写入内存环形缓冲，独占 render 线程只从内存取帧原样直通 DAC（bit-perfect）。
         /// 不落盘、不走磁盘 I/O 实时读，杜绝"边播边从磁盘读/解 DSD"造成的电流音/卡顿。</summary>
-        private Task<bool> TryPlayDsdPreloadAsync(string dsdPath, Action<string>? status)
+        private async Task<bool> TryPlayDsdPreloadAsync(string dsdPath, Action<string>? status)
         {
             try
             {
                 if (!File.Exists(dsdPath))
                 {
                     RaiseFailed(new Exception("DSD 文件不存在：" + dsdPath));
-                    return Task.FromResult(false);
+                    return false;
+                }
+
+                // 诊断开关：PCM Fallback——用 ffmpeg 把 DSF/DFF 转成高采样 PCM，走成熟 PCM 独占通路播放，
+                // 判断"电流/黄灯"是 DoP 直出链路的问题，还是 KA13 对高采样率 USB 时钟/驱动本身的问题。
+                if (AppSettingsStore.Load().DsdUsePcmFallback)
+                {
+                    return await PlayDsdAsPcmAsync(dsdPath, status);
                 }
 
                 status?.Invoke("DSD 缓冲直出：解析容器…");
@@ -444,13 +451,58 @@ namespace CelesteMusicPlayer
                 }
                 StartupLog.Write("DSD 内存预读→独占直通: " + dsdPath + " ok=" + played
                     + (played ? "" : " err=" + (LastError ?? "")));
-                return Task.FromResult(played);
+                return played;
             }
             catch (Exception ex)
             {
                 LastError = ex.Message;
                 RaiseFailed(ex);
-                return Task.FromResult(false);
+                return false;
+            }
+        }
+
+        /// <summary>诊断路径：DSD 转成高采样 PCM 后走成熟 PCM 独占通道播放（ffmpeg 解码，非 bit-perfect DoP）。
+        /// 用于切割"DoP 直出链路问题" vs "KA13 高采样 USB 时钟/驱动问题"。</summary>
+        private async Task<bool> PlayDsdAsPcmAsync(string dsdPath, Action<string>? status)
+        {
+            try
+            {
+                string? ffmpeg = FindFfmpeg();
+                if (string.IsNullOrWhiteSpace(ffmpeg))
+                {
+                    RaiseFailed(new Exception("未找到内置 ffmpeg.exe（PCM fallback 需要）。"));
+                    return false;
+                }
+
+                string cacheDir = GetCacheDir();
+                Directory.CreateDirectory(cacheDir);
+                string key = "dsdpcm_" + Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(
+                    System.Text.Encoding.UTF8.GetBytes(dsdPath.ToLowerInvariant())));
+                string dstWav = Path.Combine(cacheDir, key + ".wav");
+
+                if (!File.Exists(dstWav) || new FileInfo(dstWav).Length <= 44)
+                {
+                    status?.Invoke("DSD→PCM 诊断转码…");
+                    string args = string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -sample_fmt s32 -ac 2 \"{1}\"", dsdPath, dstWav);
+                    if (!await RunFfmpegAsync(args, status))
+                    {
+                        return false;
+                    }
+                }
+
+                bool played = PlayWavHiFi(dstWav, requireExact: false);
+                if (played)
+                {
+                    status?.Invoke("");
+                }
+                StartupLog.Write("DSD→PCM 诊断播放（非 bit-perfect DoP）：" + dsdPath + " ok=" + played);
+                return played;
+            }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+                RaiseFailed(ex);
+                return false;
             }
         }
 
