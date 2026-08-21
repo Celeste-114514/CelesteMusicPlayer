@@ -64,6 +64,10 @@ namespace CelesteMusicPlayer
         // —— 歌词 ——
         public bool PreferInnerLyric { get; set; } = true;
 
+        /// <summary>A/B 诊断开关：true 时 DSD 直出走 NAudio WasapiOut(独占) 而非本机原生 render，
+        /// 用于判断电流/黄灯是否来自我们的原生 WASAPI 渲染层（默认 false=原生态）。</summary>
+        public bool DsdUseNaudioOutput { get; set; }
+
         public bool LyricFuzzyMatch { get; set; } = true;
 
         public bool ShowLyricTranslate { get; set; } = true;

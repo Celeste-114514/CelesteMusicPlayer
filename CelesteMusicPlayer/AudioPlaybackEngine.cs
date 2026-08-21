@@ -45,6 +45,7 @@ namespace CelesteMusicPlayer
 
         private string? _devicePreference;
         private HiFiOutputBackend? _hifiOut;
+        private NaudioDsdBackend? _dsdNaudioBackend; // A/B 诊断：NAudio WasapiOut 播 DoP 的后端（DsdUseNaudioOutput=true 时用）
         private HiFiOutputBackend.OutputMode _outputMode = HiFiOutputBackend.OutputMode.WasapiShared;
 
         /// <summary>是否处于 HiFi 独占输出模式（WASAPI 独占 / ASIO）。</summary>
@@ -467,6 +468,12 @@ namespace CelesteMusicPlayer
                 _hifiOut.PositionChanged -= Hifi_PositionChanged;
                 _hifiOut.PositionChanged += Hifi_PositionChanged;
 
+                // A/B 诊断路径：DsdUseNaudioOutput=true 时用 NAudio WasapiOut(独占) 播 DoP，不进原生 render。
+                if (AppSettingsStore.Load().DsdUseNaudioOutput)
+                {
+                    return PlayDsdNaudio(dsdPath, deviceId);
+                }
+
                 bool ok = _hifiOut.PlayDsdAsync(dsdPath, deviceId, seekTo: null);
                 if (!ok)
                 {
@@ -477,6 +484,44 @@ namespace CelesteMusicPlayer
                 Duration = _hifiOut.Duration;
                 Position = TimeSpan.Zero;
                 _isPlaying = true;
+                return true;
+            }
+            catch (Exception ex)
+            {
+                LastError = ex.Message;
+                RaiseFailed(ex);
+                return false;
+            }
+        }
+
+        /// <summary>A/B：用 NAudio WasapiOut(独占) 直接播 DoP 数据源，判断电流/黄灯是否来自原生 render。
+        /// 仅诊断用：Pause/SkipPosition 在本路径降级为停止（不影响原生态走 _hifiOut）。</summary>
+        private bool PlayDsdNaudio(string dsdPath, string? deviceId)
+        {
+            try
+            {
+                bool hasDev = !string.IsNullOrWhiteSpace(deviceId);
+                var dec = DsdDecoderRegistry.Resolve(dsdPath);
+                if (dec == null)
+                {
+                    LastError = "没有可用的 DSD 解码器。";
+                    return false;
+                }
+
+                var dop = new DoPWaveSource(dec.Open(dsdPath));
+                var backend = new NaudioDsdBackend(dop);
+                if (!backend.Start())
+                {
+                    LastError = "NAudio DSD 播放启动失败";
+                    backend.Dispose();
+                    return false;
+                }
+
+                _dsdNaudioBackend = backend;
+                Duration = backend.TotalTime;
+                Position = TimeSpan.Zero;
+                _isPlaying = true;
+                StartupLog.Write("[NAudioDSD] 已用 NAudio WasapiOut(独占) 播 DoP — A/B 电流判断");
                 return true;
             }
             catch (Exception ex)
@@ -1334,6 +1379,9 @@ namespace CelesteMusicPlayer
             }
 
             _isPlaying = false;
+            // A/B 诊断后端：停止并释放 NAudio DSD
+            try { _dsdNaudioBackend?.Dispose(); } catch { }
+            _dsdNaudioBackend = null;
             _positionTimer?.Stop();
             Position = TimeSpan.Zero;
             Duration = TimeSpan.Zero;
