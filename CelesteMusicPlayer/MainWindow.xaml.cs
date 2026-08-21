@@ -13720,22 +13720,32 @@ namespace CelesteMusicPlayer
 
         private async Task FadeInEngineAfterResumeAsync(double target)
         {
+            // 防御：若读到的暂停音量异常(<=1%≈静音误判)，回退全音量，避免恢复后设备音量停在约 0 造成"系统托盘音量归0"。
+            if (target <= 0.01 || double.IsNaN(target))
+            {
+                target = 1.0;
+            }
+
+            target = Math.Clamp(target, 0.0, 1.0);
             try
             {
                 // 暂停恢复后独占会话重建，瞬时全音量可达造成爆音/音量暴增：
                 // 从较低音量极短渐变到目标，缓解瞬态。（仅暂停恢复路径调用，不影响常规切歌的 bit-perfect 直通。）
-                _audioEngine?.SetVolume(Math.Clamp(target * 0.18, 0.0, 1.0));
+                _audioEngine?.SetVolume(target * 0.18);
                 const int steps = 5;
                 for (int i = 1; i <= steps; i++)
                 {
-                    _audioEngine?.SetVolume(Math.Clamp(target * (0.18 + 0.82 * i / (double)steps), 0.0, 1.0));
+                    _audioEngine?.SetVolume(target * (0.18 + 0.82 * i / (double)steps));
                     await Task.Delay(30);
                 }
-
-                _audioEngine?.SetVolume(Math.Clamp(target, 0.0, 1.0));
             }
             catch
             {
+            }
+            finally
+            {
+                // 无论 Fade 是否中断/异常，最终都恢复目标设备音量，避免停在 0.02 静音值
+                try { _audioEngine?.SetVolume(target); } catch { }
             }
         }
 
