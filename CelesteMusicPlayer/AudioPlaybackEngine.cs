@@ -128,11 +128,12 @@ namespace CelesteMusicPlayer
         /// <summary>用内置 FFmpeg 把文件转成临时 WAV 后播放（支持 APE/WavPack/TTA 等系统不支持的格式）。</summary>
         public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null)
         {
-            // DSD（DSF/DFF）：独占模式默认走原生 WASAPI 独占 + DoP 直出（bit-perfect）。
-            // 诊断开关 DsdUsePcmFallback=true 时改走下方通用 ffmpeg→PCM 通路（成熟路径），用于判断电流/黄灯是 DoP 链路还是高采样时钟问题。
+            // DSD（DSF/DFF）：独占模式走原生 WASAPI 独占 + DoP 直出（bit-perfect）。
+            // 注意：此前的"DSD→PCM fallback"诊断路径在真实执行时黑屏闪退（高采样 PCM 直出不稳定），
+            // 且诊断收益已被"DoP 24/32bit 容器、原生/NAudio 两通道均黄灯"覆盖 → 一律走稳定 DoP 直出，
+            // 忽略曾残留的 DsdUsePcmFallback=true 配置，避免用户 json 里那个键让程序启动即崩溃。
             if (_outputMode == HiFiOutputBackend.OutputMode.WasapiExclusive
-                && IsDsdFile(path)
-                && !AppSettingsStore.Load().DsdUsePcmFallback)
+                && IsDsdFile(path))
             {
                 bool ok = await TryPlayDsdPreloadAsync(path, status);
                 StartupLog.Write("DSD 走原生直出 path=" + path + " ok=" + ok + " err=" + (LastError ?? ""));
