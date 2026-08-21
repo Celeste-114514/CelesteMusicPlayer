@@ -511,6 +511,13 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>是否为 DSD 文件（DSF/DFF）。</summary>
+        private static bool IsDsdFile(string path)
+        {
+            string ext = System.IO.Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
+            return ext is ".dsf" or ".dff";
+        }
+
         /// <summary>
         /// DSD/DoP 原生直出：解析 DSF/DFF → DoPWaveSource → WASAPI 独占（requireExact，禁降级）。
         /// 数据 1-bit 从容器直接抽出并封装为 DoP 容器帧，不经 PCM 解码，也不挂任何 DSP/音量（bit-perfect）。
@@ -659,7 +666,17 @@ namespace CelesteMusicPlayer
 
             // 用缓存的激活参数完全重建输出，并在启动缓冲前定位到暂停点
             TimeSpan resumeAt = _pausedPosition;
-            if (!PlayWavAsync(_activeWavPath, _activeMode, _activeDeviceId, resumeAt))
+            bool ok;
+            if (_isDsd || IsDsdFile(_activeWavPath ?? ""))
+            {
+                ok = PlayDsdAsync(_activeWavPath ?? "", _activeDeviceId, resumeAt);
+            }
+            else
+            {
+                ok = PlayWavAsync(_activeWavPath, _activeMode, _activeDeviceId, resumeAt);
+            }
+
+            if (!ok)
             {
                 return;
             }
@@ -824,7 +841,12 @@ namespace CelesteMusicPlayer
             }
 
             bool sourceExhausted = false;
-            if (_waveFile != null && _waveFile.Length > 16
+            if (_isDsd && _native != null)
+            {
+                // DSD：无 WaveFileReader，用播放位置≥源总时长判定播完（触发 Stop→下层切下一首）
+                sourceExhausted = Duration > TimeSpan.Zero && Position >= Duration;
+            }
+            else if (_waveFile != null && _waveFile.Length > 16
                 && (!_useNative || (_native?.IsStarted == true))) // native 模式下仅在渲染线程真正启动时判定，避免重建窗口期的旧 reader 误判为已读尽
             {
                 // 数据源已真实读到末尾（最可靠，避免依赖被源时长改短的 Duration；DSD 转码 WAV 读尽即播完）。

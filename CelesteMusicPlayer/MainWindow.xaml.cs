@@ -384,8 +384,8 @@ namespace CelesteMusicPlayer
         private IntPtr _mainWindowHwnd;
 
         // 最小窗口尺寸（DIP）
-        private const int MinWindowWidthDip = 1350;
-        private const int MinWindowHeightDip = 770;
+        private const int MinWindowWidthDip = 1360;
+        private const int MinWindowHeightDip = 775;
 
         // ---- WM_GETMINMAXINFO 子类化：真正锁定最小窗口 ----
         private const int WM_GETMINMAXINFO = 0x0024;
@@ -592,9 +592,9 @@ namespace CelesteMusicPlayer
                 _mainWindowHwnd = IntPtr.Zero;
             }
 
-            // 默认 1350×770；Resize 按 DPI 换算为物理像素
-            ResizeWindowToDips(1350, 770);
-            // 真正锁定最小窗口 1200×760（WM_GETMINMAXINFO 子类化，无闪烁）
+            // 默认 1360×775；Resize 按 DPI 换算为物理像素
+            ResizeWindowToDips(1360, 775);
+            // 真正锁定最小窗口 1360×775（WM_GETMINMAXINFO 子类化，无闪烁）
             SetupMinSizeHooks();
             // 标题栏扩展放到 Activated 之后，避免资源管理器直接启动时黑窗闪退（0xC000027B）
             Activated += MainWindow_FirstActivated;

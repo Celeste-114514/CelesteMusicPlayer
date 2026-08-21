@@ -13,8 +13,9 @@ namespace CelesteMusicPlayer
         private readonly IDsDStream _src;
         private readonly int _frameRate;
         private readonly long _totalFrames;
-        private readonly byte[] _srcBuf = new byte[4];   // L,R,L,R（每声道8样本）
-        private int _srcCount;
+        private readonly byte[] _chunk = new byte[64 * 1024]; // 批量 DSD 源缓冲(L,R 交织)；命中 render 批量读，避免每帧小 IO
+        private int _chunkCount;
+        private int _chunkPos;
         private long _frameIndex;
 
         public DoPWaveSource(IDsDStream src)
@@ -46,7 +47,8 @@ namespace CelesteMusicPlayer
 
         public bool NextMounted => false;
 
-        /// <summary>读 DoP 容器帧字节（每 6 字节 = 1 帧 L3+R3）。</summary>
+        /// <summary>读 DoP 容器帧字节（每 6 字节 = 1 帧 L3+R3）。
+        /// 分批从 DSD 源批量读大块，缓存后逐帧封装——避免每帧一次小 IO 拖垮 render 线程导致固定频率卡顿。</summary>
         public int Read(byte[] buffer, int offset, int count)
         {
             int total = 0;
@@ -54,18 +56,55 @@ namespace CelesteMusicPlayer
             int pos = offset;
             while (remaining > 0)
             {
-                if (!NextFrame(out byte[] frame))
+                int produced = EmitFrames(buffer, pos, remaining);
+                if (produced <= 0)
                 {
                     break; // 源尽
                 }
 
-                Buffer.BlockCopy(frame, 0, buffer, pos, 6);
-                pos += 6;
-                total += 6;
-                remaining -= 6;
+                pos += produced;
+                total += produced;
+                remaining -= produced;
             }
 
             return total;
+        }
+
+        /// <summary>从批量缓冲取 L,R,L,R 连产 DoP 帧，直到产出 want 字节或缓存耗尽。</summary>
+        private int EmitFrames(byte[] buffer, int offset, int want)
+        {
+            if (_chunkPos >= _chunkCount)
+            {
+                _chunkCount = _src.Read(_chunk, 0, _chunk.Length);
+                _chunkPos = 0;
+                if (_chunkCount < 4)
+                {
+                    return 0; // 源尽或残余不足一帧
+                }
+            }
+
+            int frames = 0;
+            while (frames * 6 < want && (_chunkPos + 4) <= _chunkCount)
+            {
+                byte l0 = _chunk[_chunkPos];
+                byte r0 = _chunk[_chunkPos + 1];
+                byte l1 = _chunk[_chunkPos + 2];
+                byte r1 = _chunk[_chunkPos + 3];
+                _chunkPos += 4;
+
+                byte marker = (_frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
+                int o = offset + frames * 6;
+                buffer[o] = l0;
+                buffer[o + 1] = l1;
+                buffer[o + 2] = marker;
+                buffer[o + 3] = r0;
+                buffer[o + 4] = r1;
+                buffer[o + 5] = marker;
+                _frameIndex++;
+                frames++;
+            }
+
+            return frames * 6;
         }
 
         public void Seek(TimeSpan position)
@@ -74,43 +113,9 @@ namespace CelesteMusicPlayer
             frame = Math.Clamp(frame, 0, _totalFrames);
             _frameIndex = frame;
             _src.SeekSample(frame * 16 * _src.Channels);
-            _srcCount = 0;
+            _chunkCount = 0;
+            _chunkPos = 0;
         }
-
-        private bool NextFrame(out byte[] frame)
-        {
-            frame = Frames[0];
-            // 多线程下用本地缓冲避免共享数组竞态：仅 render 线程单线程回调，此处常量即可
-            byte marker = (_frameIndex & 1) == 0 ? (byte)0x05 : (byte)0xFA;
-
-            if (_srcCount < 4)
-            {
-                // 填 4 字节 L,R,L,R：每个声道 16 个 1-bit 样本
-                _srcCount = _src.Read(_srcBuf, 0, 4);
-                if (_srcCount < 4)
-                {
-                    // 不够一帧：末尾可能残缺，丢弃（DoP 必须整帧完整）
-                    return false;
-                }
-            }
-
-            byte l0 = _srcBuf[0], l1 = _srcBuf[2];
-            byte r0 = _srcBuf[1], r1 = _srcBuf[3];
-            _srcCount = 0;
-
-            // LE 24bit：低16bit=DSD数据，byte2=标记
-            frame[0] = l0;
-            frame[1] = l1;
-            frame[2] = marker;
-            frame[3] = r0;
-            frame[4] = r1;
-            frame[5] = marker;
-
-            _frameIndex++;
-            return true;
-        }
-
-        private static readonly byte[][] Frames = { new byte[6] };
 
         public void Dispose() => _src.Dispose();
     }
