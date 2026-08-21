@@ -17,6 +17,9 @@ namespace CelesteMusicPlayer
 
         /// <summary>逐字开始时间（可选）。长度与 Text 的 UTF-16 长度一致；null 表示无逐字数据。</summary>
         public IReadOnlyList<TimeSpan>? CharTimes { get; init; }
+
+        /// <summary>是否翻译行（对照歌词里紧随原文的译文）。翻译行不高亮主题色，仅作辅助展示。</summary>
+        public bool IsTranslation { get; init; }
     }
 
     /// <summary>解析同名 .lrc / 内嵌纯文本歌词（尊重设置：优先内嵌、歌词文件夹、模糊匹配、隐藏空行）。</summary>
@@ -288,9 +291,50 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            return result
+            var ordered = result
                 .OrderBy(l => l.Time)
                 .ToList();
+            return MarkTranslations(ordered);
+        }
+
+        /// <summary>标记对照歌词的翻译行：相邻两行时间差很小（≤0.35s）且都非空时，把后一行视为译文（IsTranslation），
+        /// 使滚动歌词高亮停在原文行、翻译行仅作辅助展示。</summary>
+        private static List<LyricLine> MarkTranslations(List<LyricLine> lines)
+        {
+            if (lines.Count < 2)
+            {
+                return lines;
+            }
+
+            var res = new List<LyricLine>(lines.Count);
+            bool prevIsTranslation = false;
+            for (int i = 0; i < lines.Count; i++)
+            {
+                LyricLine cur = lines[i];
+                bool isTranslation = false;
+                if (i > 0 && !string.IsNullOrWhiteSpace(cur.Text))
+                {
+                    LyricLine prev = lines[i - 1];
+                    double gapMs = (cur.Time - prev.Time).TotalMilliseconds;
+                    if (!string.IsNullOrWhiteSpace(prev.Text)
+                        && gapMs >= -5 && gapMs <= 350
+                        && !prevIsTranslation)
+                    {
+                        isTranslation = true; // 后一行紧随前一行 → 视为译文
+                    }
+                }
+
+                res.Add(new LyricLine
+                {
+                    Time = cur.Time,
+                    Text = cur.Text,
+                    CharTimes = cur.CharTimes,
+                    IsTranslation = isTranslation
+                });
+                prevIsTranslation = isTranslation;
+            }
+
+            return res;
         }
 
         /// <summary>解析逐字内联时间戳："歌&lt;00:12.40&gt;词&lt;00:12.50&gt;文"。

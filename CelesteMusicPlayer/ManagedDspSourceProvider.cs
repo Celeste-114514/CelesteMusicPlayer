@@ -41,6 +41,13 @@ namespace CelesteMusicPlayer
         private bool _limiterEnabled;
         private volatile bool _active; // 任意 DSP 生效（EQ/声道/headroom/limiter）→ 决定 Read 是否走 ProcessBlock
 
+        // ReplayGain 响度归一化（对齐 ECHO ReplayGainProcessor：目标增益 + 10ms 平滑渐变）
+        private double _rgTargetDb;
+        private double _rgCurrentDb;
+        private int _rgRampLeft;
+        private int _rgRampTotal = 441; // ~10ms @44.1k，构造时按采样率重算
+        private bool _rgActive;
+
         public ManagedDspSourceProvider(IWaveSourceProvider source)
         {
             _source = source ?? throw new ArgumentNullException(nameof(source));
@@ -51,6 +58,7 @@ namespace CelesteMusicPlayer
             if (_format.SampleRate > 0)
             {
                 _headroomSmoothTotal = Math.Max(1, (int)(_format.SampleRate * SmoothingMs / 1000.0));
+                _rgRampTotal = Math.Max(1, (int)(_format.SampleRate * 0.01)); // ~10ms
             }
 
             _headroomGain = 1.0;
@@ -255,13 +263,63 @@ namespace CelesteMusicPlayer
             RefreshActive();
         }
 
+        /// <summary>设置 ReplayGain（对齐 ECHO ReplayGainProcessor.setConfig）。
+        /// 传每曲的 track/album 增益（dB）与 peak（线性）。按 state.Mode 选增益、叠加 preamp，
+        /// preventClipping 时若 peak×gain&gt;1 则截断到不削波的最大增益。mode=Off 目标 0dB 旁路。
+        /// 播放中可实时切换（10ms 平滑渐变，无爆音）。</summary>
+        public void SetReplayGain(ReplayGainState? state, double trackGainDb, double albumGainDb, double peak)
+        {
+            double gainDb = 0;
+            bool active = false;
+            bool preventClipping = state?.PreventClipping ?? true;
+            double preampDb = state?.PreampDb ?? 0.0;
+
+            if (state != null && state.Mode == ReplayGainMode.Track)
+            {
+                active = true;
+                gainDb = trackGainDb;
+            }
+            else if (state != null && state.Mode == ReplayGainMode.Album)
+            {
+                active = true;
+                gainDb = albumGainDb;
+            }
+
+            gainDb += preampDb;
+
+            // 防削波：若 peak × 线性增益 > 1，把增益压到最大不削波值（对齐 ECHO）
+            if (active && preventClipping && peak > 0.0)
+            {
+                double appliedLinear = Math.Pow(10.0, gainDb / 20.0);
+                if (peak * appliedLinear > 1.0)
+                {
+                    double maxGain = 1.0 / peak;
+                    double maxGainDb = 20.0 * Math.Log10(maxGain);
+                    if (gainDb > maxGainDb) gainDb = maxGainDb;
+                }
+            }
+
+            _rgActive = active;
+            _rgTargetDb = gainDb;
+            if (_rgRampLeft <= 0)
+            {
+                _rgCurrentDb = gainDb; // 从未生效时直接到目标，避免开播瞬间渐变
+            }
+            else
+            {
+                _rgRampLeft = _rgRampTotal; // 平滑渐进
+            }
+
+            RefreshActive();
+        }
+
         /// <summary>任意 DSP 是否激活（UI 据此提示"非 bit-perfect"）。</summary>
         public bool IsActive => _active;
 
         /// <summary>重算 DSP 是否生效；当无任一 DSP 生效时后续 Read 直接直通（bit-perfect，零逐样本开销）。</summary>
         private void RefreshActive()
         {
-            _active = _eqEnabled || _chEnabled || _limiterEnabled || Math.Abs(_headroomDb) > 0.001;
+            _active = _eqEnabled || _chEnabled || _limiterEnabled || _rgActive || Math.Abs(_headroomDb) > 0.001;
         }
 
         #endregion
@@ -313,8 +371,14 @@ namespace CelesteMusicPlayer
             BiQuadFilter[] eq = _eqFilters;
             int eqCount = eq.Length;
             bool stereo = _channels >= 2;
-            bool wantsClip = doHeadroom || doLimiter || doEq || doCh; // 只要有任何 DSP 即需 Clamp 保护
+            bool wantsClip = doHeadroom || doLimiter || doEq || doCh || _rgActive; // 只要有任何 DSP 即需 Clamp 保护
             float preampGain = (float)_preampGain;
+            bool rgActive = _rgActive;
+            double rgTargetDb = _rgTargetDb;
+            int rgRampLeft = _rgRampLeft;
+            int rgRampTotal = _rgRampTotal;
+            double rgCurrentDb = _rgCurrentDb;
+            int rgt = rgRampTotal > 0 ? rgRampTotal : 1;
 
             int frames = count / block;
             int ch = _channels;
@@ -387,6 +451,24 @@ namespace CelesteMusicPlayer
                     if (chInvR && stereo) r = -r;
                 }
 
+                // ReplayGain：目标增益 10ms 平滑渐变（对齐 ECHO ReplayGainProcessor.processBlock）
+                if (rgActive)
+                {
+                    if (rgRampLeft > 0)
+                    {
+                        rgRampLeft--;
+                        rgCurrentDb += (rgTargetDb - rgCurrentDb) / rgt;
+                    }
+                    else
+                    {
+                        rgCurrentDb = rgTargetDb;
+                    }
+
+                    float rgg = (float)Math.Pow(10.0, rgCurrentDb / 20.0);
+                    l *= rgg;
+                    if (stereo) r *= rgg;
+                }
+
                 if (doHeadroom)
                 {
                     if (_headroomSmoothLeft > 0)
@@ -418,6 +500,10 @@ namespace CelesteMusicPlayer
                 buf[li] = l;
                 if (stereo) buf[ri] = r;
             }
+
+            // 回写 RG 渐变进度（供下一次 block 继续）
+            _rgCurrentDb = rgCurrentDb;
+            _rgRampLeft = Math.Max(0, rgRampLeft);
 
             // 编码：float → byte
             if (isFloat)

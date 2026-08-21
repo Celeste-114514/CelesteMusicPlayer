@@ -573,10 +573,14 @@ namespace CelesteMusicPlayer
         private readonly Random _waveRandom = new();
         private int _waveformIdleSettleTicks;
         private List<LyricLine> _lyricLines = new();
-        private int _currentLyricIndex = -1;
-        private readonly List<TextBlock> _lyricTextBlocks = new();
+        private int _currentLyricIndex = -1;        private readonly List<TextBlock> _lyricTextBlocks = new();
+        // 歌词手动滚动协调
+        private bool _userScrollingLyrics;
+        private DispatcherQueueTimer? _lyricScrollResumeTimer;
         private string? _nowPlayingPath;
         private bool _nowPlayingPaneOpen;
+        // 当前播放曲目的 ReplayGain 元数据（SetReplayGain 时缓存，供 UI 显示/面板重应用）
+        private (double TrackGainDb, double AlbumGainDb, double Peak)? _currentRgData;
 
         // 歌曲面板小封面异步加载：防止同一路径并发重复读取
         private readonly System.Collections.Generic.HashSet<string> _rowCoverLoading = new(System.StringComparer.OrdinalIgnoreCase);
@@ -2646,6 +2650,14 @@ namespace CelesteMusicPlayer
 
             AudioFxEqBandFreqSlider.Minimum = Math.Log10(20) / Math.Log10(2); // ~4.32 (log2)
             AudioFxEqBandFreqSlider.Maximum = Math.Log10(20000) / Math.Log10(2); // ~14.29
+
+            if (AudioFxRgModeCombo != null)
+            {
+                AudioFxRgModeCombo.Items.Clear();
+                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "关闭", Tag = ReplayGainMode.Off });
+                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "单曲 (Track)", Tag = ReplayGainMode.Track });
+                AudioFxRgModeCombo.Items.Add(new ComboBoxItem { Content = "专辑 (Album)", Tag = ReplayGainMode.Album });
+            }
         }
 
         private void AddMonoComboItem(string mode, string label)
@@ -2684,6 +2696,14 @@ namespace CelesteMusicPlayer
                 AudioFxSafetyHeadroomSlider.Value = safety.HeadroomDb;
                 AudioFxSafetyHeadroomLabel.Text = "余量 (dB)：" + FormatAudioFxDb(safety.HeadroomDb);
                 AudioFxSafetyLimiterToggle.IsOn = safety.EnableLimiter;
+
+                // ReplayGain
+                ReplayGainState rg = ReplayGainStore.Load();
+                SelectAudioFxRgMode(rg.Mode);
+                AudioFxRgPreampSlider.Value = rg.PreampDb;
+                AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatAudioFxDb(rg.PreampDb);
+                AudioFxRgPreventClippingToggle.IsOn = rg.PreventClipping;
+                RefreshAudioFxRgInfo();
             }
             finally
             {
@@ -3538,6 +3558,77 @@ namespace CelesteMusicPlayer
         private void AudioFxSafetyLimiter_Toggled(object sender, RoutedEventArgs e)
         {
             if (!_audioFxLoading) ApplyDspToEngine();
+        }
+
+        // ---------------- 响度归一化（ReplayGain） ----------------
+
+        private void SelectAudioFxRgMode(ReplayGainMode mode)
+        {
+            for (int i = 0; i < AudioFxRgModeCombo.Items.Count; i++)
+            {
+                if (AudioFxRgModeCombo.Items[i] is ComboBoxItem { Tag: ReplayGainMode m } && m == mode)
+                {
+                    AudioFxRgModeCombo.SelectedIndex = i;
+                    return;
+                }
+            }
+
+            AudioFxRgModeCombo.SelectedIndex = 0;
+        }
+
+        private void AudioFxRgMode_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_audioFxLoading) return;
+            ApplyReplayGainToEngine();
+        }
+
+        private void AudioFxRgPreamp_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (_audioFxLoading) return;
+            AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatAudioFxDb(e.NewValue);
+            ApplyReplayGainToEngine();
+        }
+
+        private void AudioFxRgPreventClipping_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (!_audioFxLoading) ApplyReplayGainToEngine();
+        }
+
+        private ReplayGainMode CurrentAudioFxRgMode()
+        {
+            return AudioFxRgModeCombo.SelectedItem is ComboBoxItem { Tag: ReplayGainMode m } ? m : ReplayGainMode.Off;
+        }
+
+        /// <summary>收集 ReplayGain 面板状态 → 持久化 + 应用到引擎（带上当前曲目的增益/peak）。</summary>
+        private void ApplyReplayGainToEngine()
+        {
+            var rg = new ReplayGainState
+            {
+                Mode = CurrentAudioFxRgMode(),
+                PreampDb = AudioFxRgPreampSlider.Value,
+                PreventClipping = AudioFxRgPreventClippingToggle.IsOn
+            };
+            ReplayGainStore.Save(rg);
+
+            double tg = _currentRgData?.TrackGainDb ?? 0;
+            double ag = _currentRgData?.AlbumGainDb ?? 0;
+            double peak = _currentRgData?.Peak ?? 1.0;
+            _audioEngine?.SetReplayGain(rg, tg, ag, peak);
+            RefreshAudioFxRgInfo();
+        }
+
+        /// <summary>刷新当前曲目 ReplayGain 标签信息文本。</summary>
+        private void RefreshAudioFxRgInfo()
+        {
+            if (AudioFxRgInfoText == null) return;
+            if (_currentRgData == null)
+            {
+                AudioFxRgInfoText.Text = "当前曲目：无 ReplayGain 标签";
+                return;
+            }
+
+            var d = _currentRgData.Value;
+            AudioFxRgInfoText.Text = $"当前曲目：Track {FormatAudioFxDb(d.TrackGainDb)} dB / Album {FormatAudioFxDb(d.AlbumGainDb)} dB / peak {d.Peak:0.###}";
         }
 
         /// <summary>收集面板当前状态 → 持久化 + 应用到播放引擎。</summary>
@@ -14152,6 +14243,16 @@ namespace CelesteMusicPlayer
                     Opacity = 0.55,
                     Tag = line
                 };
+                if (line.IsTranslation)
+                {
+                    // 翻译行：小号、更淡，且不作为主题色高亮的目标
+                    tb.FontSize = 12;
+                    tb.Opacity = 0.40;
+                }
+                else
+                {
+                    tb.Foreground = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
+                }
                 if (line.CharTimes != null && line.CharTimes.Count == line.Text.Length)
                 {
                     // 逐字歌词：每字一个 Run，便于按字高亮
@@ -14176,6 +14277,13 @@ namespace CelesteMusicPlayer
                     ? Math.Max(200, NowPlayingPane.ActualWidth / 2.0 - 76)
                     : 520;
                 tb.MaxWidth = lyricMax;
+
+                if (!line.IsTranslation)
+                {
+                    // 单击歌词行 → 把播放跳到该行时间（对齐"点进度条→seek+暂停"）
+                    TimeSpan target = line.Time;
+                    tb.Tapped += (_, _) => SeekToLyricLine(target);
+                }
 
                 _lyricTextBlocks.Add(tb);
                 LyricsPanel.Children.Add(tb);
@@ -14211,7 +14319,11 @@ namespace CelesteMusicPlayer
             {
                 if (_lyricLines[i].Time <= position)
                 {
-                    index = i;
+                    // 跳过翻译行：高亮停在原文行（翻译行紧跟原文、同一时刻，若不清跳会让主题色落到译文上）
+                    if (!_lyricLines[i].IsTranslation)
+                    {
+                        index = i;
+                    }
                 }
                 else
                 {
@@ -14283,7 +14395,11 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            ScrollLyricToCenter(_lyricTextBlocks[index]);
+            // 用户手动滚动中：仅更新颜色高亮，不强制视口吸附（避免抢走用户正在看的滚动位置）
+            if (!_userScrollingLyrics)
+            {
+                ScrollLyricToCenter(_lyricTextBlocks[index]);
+            }
         }
 
         /// <summary>当前行的逐字高亮刷新（无逐字数据时无操作）。</summary>
@@ -14344,6 +14460,110 @@ namespace CelesteMusicPlayer
                 if (inline is Microsoft.UI.Xaml.Documents.Run run)
                 {
                     run.Foreground = brush;
+                }
+            }
+        }
+
+        // ---- 歌词手动滚动 + 单击跳进度 ----
+
+        /// <summary>视口滚动/拖动：进入"用户手动滚动"状态，暂停自动吸附，若干秒无操作后恢复。</summary>
+        private void LyricsScrollViewer_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+        {
+            // ViewChanged 也会被程序控制触发；仅在用户滚轮/拖动后短暂标记，靠 resume 计时器兜底。
+            MarkUserScrollingLyrics();
+        }
+
+        private void LyricsScrollViewer_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+        {
+            MarkUserScrollingLyrics();
+        }
+
+        private void LyricsScrollViewer_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            MarkUserScrollingLyrics();
+        }
+
+        /// <summary>标记用户正在手动滚动，并在停止 3 秒后恢复自动吸附 + 隐藏滚动条。</summary>
+        private void MarkUserScrollingLyrics()
+        {
+            if (LyricsPanel.Children.Count == 0)
+            {
+                return;
+            }
+
+            _userScrollingLyrics = true;
+            // 用户滚动时临时显示滚动条，3s 无操作后隐藏
+            LyricsScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            if (_lyricScrollResumeTimer == null)
+            {
+                _lyricScrollResumeTimer = DispatcherQueue.CreateTimer();
+                _lyricScrollResumeTimer.Interval = TimeSpan.FromMilliseconds(3000);
+                _lyricScrollResumeTimer.Tick += (_, _) =>
+                {
+                    _lyricScrollResumeTimer!.Stop();
+                    _userScrollingLyrics = false;
+                    // 恢复吸附：把当前高亮行滚回中间（即"回到原进度"）
+                    if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
+                    {
+                        ScrollLyricToCenter(_lyricTextBlocks[_currentLyricIndex]);
+                    }
+
+                    // 恢复隐藏滚动条
+                    LyricsScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
+                };
+            }
+
+            _lyricScrollResumeTimer.Stop();
+            _lyricScrollResumeTimer.Start();
+        }
+
+        /// <summary>单击歌词行：把播放跳到该行时间（对齐"点进度条→seek+暂停"）。</summary>
+        private void SeekToLyricLine(TimeSpan target)
+        {
+            // 跳到目标时间（引擎 seek；若 MediaPlayer 播放也用其 seek）
+            bool handled = false;
+            if (_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
+            {
+                _audioEngine.Seek(target);
+                handled = true;
+            }
+
+            MediaPlayer? player = GetPlayer();
+            if (player != null && player.Source != null && !handled)
+            {
+                try { player.PlaybackSession.Position = target; handled = true; }
+                catch { }
+            }
+
+            if (_audioEngine != null && handled)
+            {
+                // 与点进度条一致：seek 后暂停，方便定位（用户再按播放继续）；同步刷新高亮/进度
+                if (_audioEngine.IsPlaying)
+                {
+                    _audioEngine.Pause();
+                    _isEnginePaused = true;
+                    UpdateWaveformTimerForPlaybackState(false);
+                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
+                    if (PlayPauseIcon != null)
+                    {
+                        PlayPauseIcon.Glyph = "\uE768";
+                    }
+
+                    _miniPlayerWindow?.RefreshFromOwner();
+                }
+
+                // 重挂下一首（seek 丢弃无缝源里的 next）
+                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                {
+                    _ = PreloadSeamlessNextAsync(_userPlaylist[_userPlaylistIndex]);
+                }
+
+                // 立即把高亮切到目标行
+                SyncLyricsToPosition(target, force: true);
+                // 单击选中：无视用户滚动状态，把该行滚到中间
+                if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
+                {
+                    ScrollLyricToCenter(_lyricTextBlocks[_currentLyricIndex]);
                 }
             }
         }
@@ -14773,6 +14993,27 @@ namespace CelesteMusicPlayer
                 DspExtraState _dspExtra = DspExtraStore.Load();
                 _audioEngine.SetChannelBalance(_dspExtra.ChannelBalance);
                 _audioEngine.SetSafety(_dspExtra.Safety);
+            }
+            catch
+            {
+            }
+
+            // 应用 ReplayGain 响度归一化：从源文件读 track/album 增益与 peak，按持久化 mode 由 DSP 链处理。
+            try
+            {
+                ReplayGainState rg = ReplayGainStore.Load();
+                var rgData = await Task.Run(() => ReplayGainReader.ReadForAudio(item.FilePath));
+                _currentRgData = rgData;
+                if (rgData.HasValue)
+                {
+                    _audioEngine.SetReplayGain(rg, rgData.Value.TrackGainDb, rgData.Value.AlbumGainDb, rgData.Value.Peak);
+                }
+                else
+                {
+                    _audioEngine.SetReplayGain(rg, 0, 0, 1.0);
+                }
+
+                DispatcherQueue.TryEnqueue(RefreshAudioFxRgInfo);
             }
             catch
             {

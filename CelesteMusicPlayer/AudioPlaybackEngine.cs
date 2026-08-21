@@ -1359,6 +1359,12 @@ namespace CelesteMusicPlayer
             _hifiOut?.SetSafety(state);
         }
 
+        /// <summary>设置 ReplayGain（响度归一化）。播放中实时生效（10ms 平滑渐变）。</summary>
+        public void SetReplayGain(ReplayGainState? state, double trackGainDb, double albumGainDb, double peak)
+        {
+            _hifiOut?.SetReplayGain(state, trackGainDb, albumGainDb, peak);
+        }
+
         /// <summary>对指定输入节点应用当前均衡器增益（新节点/无缝切换后调用）。</summary>
         private void ApplyEqualizerToNode(AudioFileInputNode? node)
         {

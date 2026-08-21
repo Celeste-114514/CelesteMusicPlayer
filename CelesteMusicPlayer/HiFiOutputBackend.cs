@@ -35,6 +35,9 @@ namespace CelesteMusicPlayer
         private ChannelBalanceState? _channelBalance; // 声道平衡状态
         private DspSafetyState? _safety; // 安全限幅/余量状态
         private ManagedDspSourceProvider? _dspProvider; // 统一 DSP 链（EQ→声道平衡→限幅），NAudio 与独占共用
+        // ReplayGain 响度归一化（缓存到新建链，保证换歌/重播也生效）
+        private ReplayGainState? _rgState;
+        private double _rgTrackDb, _rgAlbumDb, _rgPeak = 1.0;
         private NativeWasapiExclusiveOut? _native; // 原生 WASAPI 独占输出器（WasapiExclusive 模式替代 NAudio WasapiOut）
         private bool _useNative; // 当前播放是否走原生独占输出
         private bool _isDsd;     // 当前是否 DSD/DoP 直出（独占 + 禁降级）
@@ -118,6 +121,16 @@ namespace CelesteMusicPlayer
         {
             _safety = state?.Clone();
             _dspProvider?.UpdateSafety(_safety);
+        }
+
+        /// <summary>设置 ReplayGain（响度归一化）。播放中实时生效（10ms 平滑）。</summary>
+        public void SetReplayGain(ReplayGainState? state, double trackGainDb, double albumGainDb, double peak)
+        {
+            _rgState = state?.Clone();
+            _rgTrackDb = trackGainDb;
+            _rgAlbumDb = albumGainDb;
+            _rgPeak = peak;
+            _dspProvider?.SetReplayGain(state, trackGainDb, albumGainDb, peak);
         }
 
         private static bool HasNonZeroGain(double[] gains)
@@ -556,6 +569,7 @@ namespace CelesteMusicPlayer
 
             dsp.UpdateChannel(_channelBalance);
             dsp.UpdateSafety(_safety);
+            dsp.SetReplayGain(_rgState, _rgTrackDb, _rgAlbumDb, _rgPeak);
             return dsp;
         }
 
