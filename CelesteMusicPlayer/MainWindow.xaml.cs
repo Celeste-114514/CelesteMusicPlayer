@@ -13087,16 +13087,8 @@ namespace CelesteMusicPlayer
 
             if (lyrics.Count == 0)
             {
-                AppSettingsState lyricSettings = AppSettingsStore.Load();
-                string hint = "暂无歌词";
-                if (lyricSettings.ShowSongInfoIfNoLyric)
-                {
-                    string title = NowPlayingTitleText?.Text ?? "未知曲目";
-                    string artistAlbum = string.Join(" · ", new[] { NowPlayingArtistText?.Text, NowPlayingAlbumText?.Text }.Where(s => !string.IsNullOrWhiteSpace(s)));
-                    hint = title + "\n" + artistAlbum;
-                }
-
-                ClearLyricsUi(hint);
+                // 无歌词：右侧歌词区固定显示简短说明（避免拼接长歌曲信息导致显示不全）
+                ClearLyricsUi("该音频没有歌词");
                 return;
             }
 
