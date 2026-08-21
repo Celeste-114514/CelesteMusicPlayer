@@ -11007,8 +11007,8 @@ namespace CelesteMusicPlayer
 
             if (_isEnginePaused && _audioEngine != null)
             {
-                // 恢复前先取暂停前的设备主音量（Pause 不改变设备音量），避免恢复时用滑块值覆盖导致音量骤增。
-                float pausedDevice = _audioEngine.GetDeviceVolume();
+                // 恢复目标用「暂停前记录的真实设备主音量」，避免误读 Resume 里 0.02 防爆残留导致恢复后无声。
+                float pausedDevice = _audioEngine.GetPausedDeviceVolume();
                 _audioEngine.Resume();
                 // 暂停-恢复本质是一次 seek 重建会话，无缝源 _next 已被清空；
                 // 重新预加载下一首，避免恢复后播到尾因无续接而误切歌。

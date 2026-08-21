@@ -40,6 +40,7 @@ namespace CelesteMusicPlayer
         private bool _isPlaying;
         private TimeSpan _pausedPosition;
         private float _resumeVolume = 1f;
+        private float _pausedDeviceVol = -1f; // 暂停瞬间记录的真实设备主音量（供恢复回到该值，避免误用 0.02 防爆音残留）
         private string? _activeWavPath;
         private long _nativePosBaselineFrames; // 原生独占下当前曲目起始帧基准（用于按曲目换算相对进度，避免跨曲累加）
         private OutputMode _activeMode;
@@ -631,6 +632,8 @@ namespace CelesteMusicPlayer
             // 正常播放时是 UpdatePosition 维护的实时位置。不要依赖渲染线程异步消费后的 reader 游标，
             // 否则 seek→暂停的瞬间可能记录成错误位置（如读到文件尾）导致恢复后误判已播完而切歌。
             _pausedPosition = Position;
+            // 记录暂停瞬间的真实设备主音量（此时设备音量仍是用户当前设定），供恢复时回到该值
+            _pausedDeviceVol = GetDeviceVolume();
 
             // 完全释放输出（Stop + Dispose），记录激活参数以便恢复时重建
             OutputMode savedMode = _activeMode;
@@ -724,6 +727,9 @@ namespace CelesteMusicPlayer
             {
             }
         }
+
+        /// <summary>暂停前记录的真实设备主音量（供恢复使用）；未暂停或无设备返回 -1。</summary>
+        public float GetPausedDeviceVolume() => _pausedDeviceVol;
 
         /// <summary>当前设备主音量标量 0..1；无设备/ASIO 返回 -1（未知）。</summary>
         public float GetDeviceVolume()

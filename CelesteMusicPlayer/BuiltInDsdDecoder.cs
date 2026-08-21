@@ -34,6 +34,7 @@ namespace CelesteMusicPlayer
 
         private byte[]? _block;                 // DSF 重交织缓冲
         private int _blockPos;
+        private readonly object _ioLock = new(); // 串行化 _fs/_block 读写，防预读线程与 seek 线程并发导致 NRE/数据错乱
 
         private BuiltInDsdStream(FileStream fs, long dataStart, long dataBytes,
             DsdRate rate, int channels, int blockSize, bool dff)
@@ -216,31 +217,34 @@ namespace CelesteMusicPlayer
         // ---------- 读取（统一 L/R 交织字节） ----------
         public int Read(byte[] buffer, int offset, int count)
         {
-            int total = 0;
-            int pos = offset;
-            while (total < count)
+            lock (_ioLock)
             {
-                int n;
-                if (_dff)
+                int total = 0;
+                int pos = offset;
+                while (total < count)
                 {
-                    n = ReadDffDirect(buffer, pos, count - total);
-                }
-                else
-                {
-                    n = ReadDsfInterleaved(buffer, pos, count - total);
+                    int n;
+                    if (_dff)
+                    {
+                        n = ReadDffDirect(buffer, pos, count - total);
+                    }
+                    else
+                    {
+                        n = ReadDsfInterleaved(buffer, pos, count - total);
+                    }
+
+                    if (n <= 0)
+                    {
+                        break;
+                    }
+
+                    total += n;
+                    pos += n;
                 }
 
-                if (n <= 0)
-                {
-                    break;
-                }
-
-                total += n;
-                pos += n;
+                _samplesRead += (long)total * 8;
+                return total;
             }
-
-            _samplesRead += (long)total * 8;
-            return total;
         }
 
         /// <summary>DFF：数据本身就是 L/R 逐字节交织，直接流水读。</summary>
@@ -334,12 +338,15 @@ namespace CelesteMusicPlayer
 
         public void SeekSample(long sampleIndex)
         {
-            // sampleIndex = 1-bit 样本总数（跨声道）。字节位置 = sampleIndex/8/channels 交错偏移。
-            long byteOff = _channels > 0 ? sampleIndex / 8 / _channels : 0;
-            long pos = _dataStart + byteOff;
-            _fs.Position = Math.Min(pos, _dataStart + _dataBytes);
-            _block = null;
-            _samplesRead = sampleIndex;
+            lock (_ioLock)
+            {
+                // sampleIndex = 1-bit 样本总数（跨声道）。字节位置 = sampleIndex/8/channels 交错偏移。
+                long byteOff = _channels > 0 ? sampleIndex / 8 / _channels : 0;
+                long pos = _dataStart + byteOff;
+                _fs.Position = Math.Min(pos, _dataStart + _dataBytes);
+                _block = null;
+                _samplesRead = sampleIndex;
+            }
         }
 
         // ---------- 字节工具 ----------

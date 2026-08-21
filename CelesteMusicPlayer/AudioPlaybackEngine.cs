@@ -1223,6 +1223,12 @@ namespace CelesteMusicPlayer
             return IsHiFiMode ? (_hifiOut?.GetDeviceVolume() ?? -1f) : -1f;
         }
 
+        /// <summary>暂停前记录的真实设备主音量（供恢复时回到该值）。</summary>
+        public float GetPausedDeviceVolume()
+        {
+            return IsHiFiMode ? (_hifiOut?.GetPausedDeviceVolume() ?? -1f) : -1f;
+        }
+
         private void ApplyOutputGain()
         {
             if (_graph == null || _inputNode == null || _deviceNode == null)
