@@ -1163,6 +1163,13 @@ namespace CelesteMusicPlayer
             var plats = await StreamingServiceClient.GetPlatformsAsync();
             if (plats is { Ok: true } && plats.Platforms.Length > 0)
             {
+                var set = new System.Collections.Generic.HashSet<string>(plats.Platforms, System.StringComparer.OrdinalIgnoreCase);
+                if (AmStatusText != null)
+                    AmStatusText.Text = set.Contains("applemusic") ? "已对接（服务端登录态）" : "服务未启用";
+                if (NetEaseStatusText != null)
+                    NetEaseStatusText.Text = set.Contains("netease") ? "已对接（服务端 cookie）" : "服务未启用";
+                if (QQStatusText != null)
+                    QQStatusText.Text = set.Contains("qqmusic") ? "已对接（服务端 cookie）" : "服务未启用";
                 StreamingStatusText.Text = "连接成功，可用平台：" + string.Join("、", plats.Platforms);
             }
             else

@@ -1225,31 +1225,69 @@
                             <Button x:Name="TestConnectionButton" Grid.Column="1" Content="检测连接" Click="TestConnectionButton_Click" MinWidth="96" />
                         </Grid>
                         <TextBlock x:Name="StreamingStatusText" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords" Text="未检测" />
-                        <Border
-                            CornerRadius="8"
-                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                            BorderThickness="1"
-                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                            Padding="14,10">
-                            <Grid ColumnSpacing="12">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="Apple Music" FontWeight="SemiBold" />
-                                    <TextBlock x:Name="AmLoginStatusText" Text="未登录" FontSize="12" Opacity="0.7" />
-                                </StackPanel>
-                                <Button
-                                    x:Name="AmLoginButton"
-                                    Grid.Column="1"
-                                    Content="登录 Apple Music"
-                                    Click="AmLoginButton_Click"
-                                    VerticalAlignment="Center"
-                                    MinWidth="140" />
-                            </Grid>
-                        </Border>
-                        <TextBlock Text="更多平台（网易云 / QQ / 酷狗 等）将在账号体系完善后逐步加入。" FontSize="11" Opacity="0.5" TextWrapping="WrapWholeWords" />
+                        <StackPanel x:Name="PlatformListPanel" Spacing="8">
+                            <Border
+                                CornerRadius="8"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                Padding="14,10">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="Apple Music" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="AmStatusText" Text="未检测" FontSize="12" Opacity="0.7" />
+                                    </StackPanel>
+                                    <Button
+                                        x:Name="AmLoginButton"
+                                        Grid.Column="1"
+                                        Content="登录 Apple Music"
+                                        Click="AmLoginButton_Click"
+                                        VerticalAlignment="Center"
+                                        MinWidth="140" />
+                                </Grid>
+                            </Border>
+                            <Border
+                                CornerRadius="8"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                Padding="14,10">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="网易云音乐" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="NetEaseStatusText" Text="未检测" FontSize="12" Opacity="0.7" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="服务端 cookie" FontSize="11" Opacity="0.55" VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
+                            <Border
+                                CornerRadius="8"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                Padding="14,10">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="QQ 音乐" FontWeight="SemiBold" />
+                                        <TextBlock x:Name="QQStatusText" Text="未检测" FontSize="12" Opacity="0.7" />
+                                    </StackPanel>
+                                    <TextBlock Grid.Column="1" Text="服务端 cookie" FontSize="11" Opacity="0.55" VerticalAlignment="Center" />
+                                </Grid>
+                            </Border>
+                        </StackPanel>
+                        <TextBlock Text="平台对接状态以流媒体插件服务端 config.ini 启用的平台为准；检测连接后自动刷新。" FontSize="11" Opacity="0.5" TextWrapping="WrapWholeWords" />
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
