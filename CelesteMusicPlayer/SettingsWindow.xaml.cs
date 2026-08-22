@@ -298,6 +298,10 @@ namespace CelesteMusicPlayer
                 {
                     StreamingUrlBox.Text = s.StreamingServiceUrl;
                 }
+                // 平台 Cookie
+                if (AmCookieBox != null) AmCookieBox.Text = s.AppleMusicCookie;
+                if (NeCookieBox != null) NeCookieBox.Text = s.NetEaseCookie;
+                if (QqCookieBox != null) QqCookieBox.Text = s.QqCookie;
 
                 // 歌词
                 SetToggle(PreferInnerLyricSwitch, s.PreferInnerLyric);
@@ -1176,6 +1180,24 @@ namespace CelesteMusicPlayer
             {
                 StreamingStatusText.Text = "连接成功（未返回平台）：" + (plats?.Error ?? "");
             }
+        }
+
+        private void SaveAmCookieButton_Click(object sender, RoutedEventArgs e)
+        {
+            AppSettingsStore.Update(x => x.AppleMusicCookie = AmCookieBox?.Text?.Trim() ?? "");
+            StreamingStatusText.Text = "Apple Music Cookie 已保存（本地）；已在设置中被记住，失效时会提醒你更新。";
+        }
+
+        private void SaveNeCookieButton_Click(object sender, RoutedEventArgs e)
+        {
+            AppSettingsStore.Update(x => x.NetEaseCookie = NeCookieBox?.Text?.Trim() ?? "");
+            StreamingStatusText.Text = "网易云 Cookie 已保存（本地）。";
+        }
+
+        private void SaveQqCookieButton_Click(object sender, RoutedEventArgs e)
+        {
+            AppSettingsStore.Update(x => x.QqCookie = QqCookieBox?.Text?.Trim() ?? "");
+            StreamingStatusText.Text = "QQ Cookie 已保存（本地）。";
         }
 
         private async void AmLoginButton_Click(object sender, RoutedEventArgs e)

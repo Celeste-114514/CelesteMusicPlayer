@@ -216,6 +216,10 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
 
         /// <summary>流媒体插件服务地址（WSL，如 http://172.20.55.125:21010）；空=未配置。</summary>
         public string StreamingServiceUrl { get; set; } = string.Empty;
+        /// <summary>各平台登录 Cookie（播放器内输入，本地明文存储）。空=未登录。</summary>
+        public string NetEaseCookie { get; set; } = string.Empty;
+        public string QqCookie { get; set; } = string.Empty;
+        public string AppleMusicCookie { get; set; } = string.Empty;
 
         /// <summary>声道：Stereo / Left / Right。</summary>
         public string AudioChannel { get; set; } = "Stereo";
@@ -535,6 +539,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DsdUsePcmFallback = s.DsdUsePcmFallback,
             OnlineSearchDefaultSource = s.OnlineSearchDefaultSource,
             StreamingServiceUrl = s.StreamingServiceUrl,
+            NetEaseCookie = s.NetEaseCookie,
+            QqCookie = s.QqCookie,
+            AppleMusicCookie = s.AppleMusicCookie,
             CustomHotkeys = s.CustomHotkeys.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase)
         };
 

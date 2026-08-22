@@ -1289,6 +1289,42 @@
                                 </Grid>
                             </Border>
                         </StackPanel>
+
+                        <TextBlock Text="登录（播放器内 Cookie）" FontSize="14" FontWeight="SemiBold" Margin="0,8,0,0" />
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="用浏览器登录对应平台官网 → 按 F12 打开开发者工具 →「Application / 应用」→「Cookies」→ 复制登录后的 Cookie 值（如 NetEase 的 cookie、QQ 的 qqmusic_key、Apple 的 itunes 登录 token），粘贴到下方并在本页保存即可。Cookie 仅保存在本机，失效时播放器会提醒你更新。" FontSize="12" Opacity="0.7" TextWrapping="WrapWholeWords" />
+                            <TextBlock Text="提示：Cookie 含你的登录凭证，请勿将它发给他人。" FontSize="11" Opacity="0.5" TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Apple Music" FontSize="12" VerticalAlignment="Center" />
+                            <TextBox x:Name="AmCookieBox" Grid.Column="1" PlaceholderText="粘贴 Apple Music 登录 Cookie / MusicKit token" AcceptsReturn="False" />
+                            <Button x:Name="SaveAmCookieButton" Grid.Column="2" Content="保存" Click="SaveAmCookieButton_Click" MinWidth="56" />
+                        </Grid>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="网易云" FontSize="12" VerticalAlignment="Center" />
+                            <TextBox x:Name="NeCookieBox" Grid.Column="1" PlaceholderText="粘贴 网易云音乐 Cookie" />
+                            <Button x:Name="SaveNeCookieButton" Grid.Column="2" Content="保存" Click="SaveNeCookieButton_Click" MinWidth="56" />
+                        </Grid>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="96" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="QQ 音乐" FontSize="12" VerticalAlignment="Center" />
+                            <TextBox x:Name="QqCookieBox" Grid.Column="1" PlaceholderText="粘贴 QQ 音乐 Cookie" />
+                            <Button x:Name="SaveQqCookieButton" Grid.Column="2" Content="保存" Click="SaveQqCookieButton_Click" MinWidth="56" />
+                        </Grid>
                         <TextBlock Text="平台对接状态以流媒体插件服务端 config.ini 启用的平台为准；检测连接后自动刷新。" FontSize="11" Opacity="0.5" TextWrapping="WrapWholeWords" />
                     </StackPanel>
                 </ScrollViewer>

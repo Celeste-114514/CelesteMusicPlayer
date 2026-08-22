@@ -350,7 +350,7 @@ namespace CelesteMusicPlayer
                 var dl = await StreamingServiceClient.GetDownloadAsync(_selected.Source, _selected.SongId, "standard");
                 if (dl == null || !dl.Ok || string.IsNullOrWhiteSpace(dl.Url))
                 {
-                    StatusText.Text = "获取下载链接失败：" + (dl?.Error ?? "服务未返回");
+                    StatusText.Text = "获取下载链接失败：" + (dl?.Error ?? "服务未返回") + StreamingServiceClient.CookieReminderHint(_selected.Source);
                     return;
                 }
 
@@ -465,7 +465,7 @@ namespace CelesteMusicPlayer
             }
             catch
             {
-                StatusText.Text = "下载歌词失败";
+                StatusText.Text = "下载歌词失败。" + StreamingServiceClient.CookieReminderHint(_selected?.Source ?? "");
             }
             finally
             {

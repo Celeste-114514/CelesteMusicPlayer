@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Text.Json;
@@ -24,6 +24,22 @@ namespace CelesteMusicPlayer
                 return null;
             }
             return u.Trim().TrimEnd('/');
+        }
+
+        /// <summary>当某平台的请求失败（可能未登录/凭证失效）时，追加给用户的提醒文案。</summary>
+        public static string CookieReminderHint(string platform)
+        {
+            var st = AppSettingsStore.Load();
+            bool has = platform switch
+            {
+                "NetEase" or "netease" => !string.IsNullOrWhiteSpace(st.NetEaseCookie),
+                "QQ" or "qqmusic" => !string.IsNullOrWhiteSpace(st.QqCookie),
+                "iTunes" or "applemusic" => !string.IsNullOrWhiteSpace(st.AppleMusicCookie),
+                _ => false
+            };
+            return has
+                ? "（若仍提示未授权，Cookie 可能已失效，请到 设置→流媒体 更新）"
+                : "（该平台需登录，请到 设置→流媒体 粘贴浏览器登录后的 Cookie）";
         }
 
         public sealed record PingResult(bool Ok, long? Time);
