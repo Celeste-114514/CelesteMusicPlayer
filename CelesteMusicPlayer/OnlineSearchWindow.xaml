@@ -62,7 +62,7 @@
                 <ColumnDefinition Width="6*" />
             </Grid.ColumnDefinitions>
 
-            <ListView x:Name="ResultList" SelectionChanged="ResultList_SelectionChanged" SelectionMode="Single">
+            <ListView x:Name="ResultList" SelectionChanged="ResultList_SelectionChanged" SelectionMode="Multiple">
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="local:OnlineSearchItem">
                         <Grid ColumnSpacing="10" Padding="2,8">
