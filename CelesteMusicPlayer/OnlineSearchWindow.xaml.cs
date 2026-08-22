@@ -43,6 +43,7 @@ namespace CelesteMusicPlayer
             {
                 "QQ" => "QQ音乐",
                 "Kugou" => "酷狗",
+                "iTunes" => "Apple Music",
                 _ => "网易云"
             };
         }
@@ -76,10 +77,12 @@ namespace CelesteMusicPlayer
             SourceCombo.Items.Add("网易云音乐");
             SourceCombo.Items.Add("QQ音乐");
             SourceCombo.Items.Add("酷狗音乐");
+            SourceCombo.Items.Add("Apple Music");
             SourceCombo.SelectedIndex = AppSettingsStore.Load().OnlineSearchDefaultSource switch
             {
                 "QQ" => 1,
                 "Kugou" => 2,
+                "iTunes" => 3,
                 _ => 0
             };
 
@@ -171,6 +174,7 @@ namespace CelesteMusicPlayer
             {
                 1 => "QQ",
                 2 => "Kugou",
+                3 => "iTunes",
                 _ => "NetEase"
             };
 
@@ -276,6 +280,13 @@ namespace CelesteMusicPlayer
             }
 
             // 歌词预览
+            if (string.Equals(song.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
+            {
+                // iTunes Search API 不返回歌词字段
+                LyricPreview.Text = "Apple Music 歌词需登录个人账号加载；未登录可用播放器「歌曲信息→下载歌词」从其他平台获取。";
+                return;
+            }
+
             try
             {
                 var settings = AppSettingsStore.Load();

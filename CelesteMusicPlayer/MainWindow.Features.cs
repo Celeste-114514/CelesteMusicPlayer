@@ -1691,6 +1691,11 @@ namespace CelesteMusicPlayer
             NowPlayingText.Text = "歌词已下载：" + Path.GetFileName(path);
         }
 
+        private async void DownloadLyricButton_Click(object sender, RoutedEventArgs e)
+        {
+            await DownloadLyricForCurrentAsync();
+        }
+
         private async Task DownloadCoverForCurrentAsync()
         {
             if (string.IsNullOrWhiteSpace(_nowPlayingPath))
@@ -1937,25 +1942,42 @@ namespace CelesteMusicPlayer
         // ---------------- 评分分类（未评分 + 1..5 星） ----------------
 
         /// <summary>右上角刷新当前页面：按当前分类重载对应数据。</summary>
-        private bool _fullscreen;
         private bool _windowMaximized;
-        private Windows.Graphics.RectInt32 _fullscreenRestoreRect;
 
-        /// <summary>无边框窗口（常驻）：去掉 WS_CAPTION/WS_THICKFRAME/WS_BORDER，消除任务栏图标的方框描边。</summary>
-        private void MakeWindowBorderless()
+        /// <summary>设置窗口四角风格（无边框自绘按钮窗口用；ROUND=圆角、DONOTROUND=全屏填满直角）。</summary>
+        private void ApplyWindowCorners(bool rounded)
         {
             try
             {
                 if (_mainWindowHwnd == IntPtr.Zero) return;
-                long s = GetWindowLongPtr64(_mainWindowHwnd, (int)GWL_STYLE);
-                SetWindowLongPtr642(_mainWindowHwnd, (int)GWL_STYLE, s & ~(WS_CAPTION | WS_THICKFRAME | WS_BORDER));
+                int corner = rounded ? DWMWCP_ROUND : DWMWCP_DONOTROUND;
+                DwmSetWindowAttributeInt(_mainWindowHwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
+            }
+            catch { }
+        }
+
+        /// <summary>无边框 + 自绘按钮的窗口 chrome：保留系统 resize 边框（四边/四角可调大小、四角圆角、最大化到工作区留任务栏），隐藏系统标题栏按钮（caption）。</summary>
+        private void MakeWindowBorderless()
+        {
+            try
+            {
+                if (AppWindow.Presenter is OverlappedPresenter p)
+                {
+                    // hasBorder 保留 resize 边框（原生四边调大小 + DWM 圆角 + 最大化到工作区）；
+                    // hasTitleBar=false 去掉系统标题栏/最小化/最大化/关闭按钮，由自绘按钮接管。
+                    p.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: false);
+                }
             }
             catch { }
         }
 
         private void WindowMinButton_Click(object sender, RoutedEventArgs e)
         {
-            try { if (AppWindow.Presenter is OverlappedPresenter p) p.Minimize(); } catch { }
+            try
+            {
+                if (AppWindow.Presenter is OverlappedPresenter p) p.Minimize();
+            }
+            catch { }
         }
 
         private void WindowMaxRestoreButton_Click(object sender, RoutedEventArgs e)
@@ -1964,10 +1986,10 @@ namespace CelesteMusicPlayer
             {
                 if (AppWindow.Presenter is OverlappedPresenter p)
                 {
+                    // 最大化状态与图标由 WM_SIZE（OnWindowMaximizeStateChanged）统一同步，
+                    // 这样从最大化拖拽还原后按钮也能正确变回“最大化”。
                     if (_windowMaximized) p.Restore();
                     else p.Maximize();
-                    _windowMaximized = !_windowMaximized;
-                    UpdateMaxRestoreIcon();
                 }
             }
             catch { }
@@ -1990,41 +2012,266 @@ namespace CelesteMusicPlayer
             catch { }
         }
 
-        private void FullscreenButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>由 WndProc(W M_SIZE) 同步最大化/还原状态：自绘最大化按钮图标始终反映真实窗口状态（含拖拽还原）。</summary>
+        internal void OnWindowMaximizeStateChanged(bool maximized)
+        {
+            _windowMaximized = maximized;
+            UpdateMaxRestoreIcon();
+        }
+
+        // ---------------- 音频设置右侧面板（输出模式 / 链路状态 / 专业播放状态） ----------------
+        private bool _audioCombosLoading;
+
+        private async void AudioSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            // 半透明亚克力 + 高斯模糊背景（AcrylicBrush），覆盖 XAML 的纯色底
+            AudioSettingsPanel.Background = FrostedGlass.CreatePanelBrush();
+            AudioSettingsOverlayHost.Visibility = Visibility.Visible;
+            AudioSettingsOverlayHost.IsHitTestVisible = true;
+            AudioSettingsPanelTransform.TranslateX = 360;
+            AudioSettingsOpenStoryboard?.Begin();
+            await FillAudioSettingsCombosAsync();
+            RefreshAudioSettingsPanel();
+        }
+
+        private void AudioSettingsCloseButton_Click(object sender, RoutedEventArgs e) => HideAudioSettingsPanel();
+
+        private void AudioSettingsScrim_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e) => HideAudioSettingsPanel();
+
+        private void HideAudioSettingsPanel()
+        {
+            if (AudioSettingsCloseStoryboard != null && AudioSettingsOverlayHost.Visibility == Visibility.Visible)
+            {
+                AudioSettingsCloseStoryboard.Completed += (_, _) =>
+                {
+                    AudioSettingsOverlayHost.Visibility = Visibility.Collapsed;
+                    AudioSettingsOverlayHost.IsHitTestVisible = false;
+                };
+                AudioSettingsCloseStoryboard.Begin();
+            }
+            else
+            {
+                AudioSettingsOverlayHost.Visibility = Visibility.Collapsed;
+                AudioSettingsOverlayHost.IsHitTestVisible = false;
+            }
+        }
+
+        private async System.Threading.Tasks.Task FillAudioSettingsCombosAsync()
+        {
+            // 全量填充（模式 + 设备），期间置位防止 SelectionChanged 回写中间态
+            _audioCombosLoading = true;
+            try
+            {
+                var s = AppSettingsStore.Load();
+                string mode = string.IsNullOrWhiteSpace(s.OutputMode) ? "Shared" : s.OutputMode;
+
+                UpdateModeCardHighlight(mode);
+
+                await FillAudioSettingsDevicesAsync();
+            }
+            finally
+            {
+                _audioCombosLoading = false;
+            }
+        }
+
+        private async System.Threading.Tasks.Task FillAudioSettingsDevicesAsync()
         {
             try
             {
-                if (AppWindow.Presenter is not OverlappedPresenter p)
+                if (AudioOutputDeviceCombo == null)
                 {
                     return;
                 }
 
-                if (_fullscreen)
+                var s = AppSettingsStore.Load();
+                string mode = string.IsNullOrWhiteSpace(s.OutputMode) ? "Shared" : s.OutputMode;
+                string selectedId = s.OutputDeviceId ?? string.Empty;
+                AudioOutputDeviceCombo.Items.Clear();
+
+                if (string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase))
                 {
-                    // 还原：取消置顶 → 恢复原位置尺寸
-                    SetWindowPos(_mainWindowHwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
-                    AppWindow.MoveAndResize(_fullscreenRestoreRect);
-                    _fullscreen = false;
-                    FullscreenIcon.Glyph = "\uE740"; // 进入全屏
+                    var drivers = HiFiOutputBackend.EnumerateAsioDrivers();
+                    if (drivers.Count == 0)
+                    {
+                        AudioOutputDeviceCombo.Items.Add(new ComboBoxItem { Content = "（未检测到 ASIO 驱动）", Tag = "" });
+                    }
+                    else
+                    {
+                        foreach (string d in drivers)
+                        {
+                            AudioOutputDeviceCombo.Items.Add(new ComboBoxItem { Content = d, Tag = d });
+                        }
+                    }
                 }
                 else
                 {
-                    _fullscreenRestoreRect = new Windows.Graphics.RectInt32(AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Size.Width, AppWindow.Size.Height);
-                    // 沉浸全屏：取所在监视器精确 rcMonitor（含任务栏区）并置顶隐藏任务栏
-                    int l = 0, t = 0, r = GetSystemMetrics(SM_CXSCREEN), b = GetSystemMetrics(SM_CYSCREEN);
-                    nint hm = MonitorFromWindow(_mainWindowHwnd, MONITOR_DEFAULTTOPRIMARY);
-                    var mi = new MONITORINFO();
-                    mi.cbSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO));
-                    if (hm != nint.Zero && GetMonitorInfo(hm, ref mi))
+                    var devices = HiFiOutputBackend.EnumerateWasapiDevices();
+                    string defaultId = HiFiOutputBackend.GetDefaultWasapiDeviceId();
+                    AudioOutputDeviceCombo.Items.Add(new ComboBoxItem { Content = "系统默认", Tag = "" });
+                    foreach ((string id, string name) in devices)
                     {
-                        l = mi.rcMonitor_L; t = mi.rcMonitor_T; r = mi.rcMonitor_R; b = mi.rcMonitor_B;
+                        string label = string.Equals(id, defaultId, System.StringComparison.OrdinalIgnoreCase) ? name + " (默认)" : name;
+                        AudioOutputDeviceCombo.Items.Add(new ComboBoxItem { Content = label, Tag = id });
                     }
-
-                    AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(l, t, r - l, b - t));
-                    SetWindowPos(_mainWindowHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
-                    _fullscreen = true;
-                    FullscreenIcon.Glyph = "\uE73F"; // 退出全屏
                 }
+
+                // 选中已保存设备
+                foreach (var o in AudioOutputDeviceCombo.Items)
+                {
+                    if (o is ComboBoxItem it && it.Tag is string t && string.Equals(t, selectedId ?? "", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        AudioOutputDeviceCombo.SelectedItem = it;
+                        break;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        private async void AudioModeCard_Click(object sender, RoutedEventArgs e)
+        {
+            if (_audioCombosLoading)
+            {
+                return;
+            }
+
+            if (sender is not Button b || b.Tag is not string mode)
+            {
+                return;
+            }
+
+            AppSettingsStore.Update(s => s.OutputMode = mode);
+            ApplyEngineOutputMode(AppSettingsStore.Load());
+            UpdateModeCardHighlight(mode);
+            _audioCombosLoading = true;
+            try
+            {
+                await FillAudioSettingsDevicesAsync();
+            }
+            finally
+            {
+                _audioCombosLoading = false;
+            }
+
+            RefreshAudioSettingsPanel();
+        }
+
+        /// <summary>输出模式三张可视化卡片：当前选中的卡片用主题色高亮，其余还原为常态。</summary>
+        private void UpdateModeCardHighlight(string mode)
+        {
+            Windows.UI.Color accent = ResolveAccentColor();
+            var activeBorder = new Microsoft.UI.Xaml.Media.SolidColorBrush(accent);
+            var activeBg = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(46, accent.R, accent.G, accent.B));
+            var normalBorder = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(60, 120, 120, 120));
+
+            SetModeCard(ModeSharedCard, string.Equals(mode, "Shared", StringComparison.OrdinalIgnoreCase), activeBorder, activeBg, normalBorder);
+            SetModeCard(ModeExclusiveCard, string.Equals(mode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase), activeBorder, activeBg, normalBorder);
+            SetModeCard(ModeAsioCard, string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase), activeBorder, activeBg, normalBorder);
+        }
+
+        private static void SetModeCard(Button? card, bool active, Microsoft.UI.Xaml.Media.Brush activeBorder, Microsoft.UI.Xaml.Media.Brush activeBg, Microsoft.UI.Xaml.Media.Brush normalBorder)
+        {
+            if (card == null)
+            {
+                return;
+            }
+
+            card.BorderBrush = active ? activeBorder : normalBorder;
+            card.BorderThickness = new Microsoft.UI.Xaml.Thickness(active ? 2 : 1);
+            card.Background = active ? activeBg : null;
+        }
+
+        private async void AudioOutputDeviceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_audioCombosLoading)
+            {
+                return;
+            }
+
+            if (AudioOutputDeviceCombo.SelectedItem is ComboBoxItem it && it.Tag is string did)
+            {
+                AppSettingsStore.Update(s => s.OutputDeviceId = did);
+                await ApplyOutputDeviceAsync(did);
+            }
+
+            RefreshAudioSettingsPanel();
+        }
+
+        private void RefreshAudioSettingsPanel()
+        {
+            try
+            {
+                if (AudioLinkSourceFmt == null)
+                {
+                    return;
+                }
+
+                bool hifi = IsHiFiModeSelected();
+                string? src = _audioEngine?.SourceFormatDescription;
+                string? outp = _audioEngine?.ActualOutputFormat;
+
+                AudioLinkSourceFmt.Text = string.IsNullOrWhiteSpace(src)
+                    ? (hifi ? "（解析中…）" : "MediaPlayer（系统解码）")
+                    : src;
+                AudioLinkOutputFmt.Text = string.IsNullOrWhiteSpace(outp)
+                    ? (hifi ? "（解析中…）" : "系统混音器（Shared）")
+                    : outp;
+                AudioLinkMode.Text = hifi ? "独占（WASAPI 独占 / ASIO）" : "共享（系统混音）";
+
+                // DSP 摘要
+                bool eqOn = EqCurveStore.Load().HasEffect();
+                var extra = DspExtraStore.Load();
+                bool chOn = extra.ChannelBalance?.IsActive == true;
+                bool limiterOn = extra.Safety?.EnableLimiter != false;
+                bool rgOn = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
+                var active = new System.Collections.Generic.List<string>();
+                if (eqOn) active.Add("EQ");
+                if (chOn) active.Add("声道");
+                if (limiterOn) active.Add("限幅");
+                if (rgOn) active.Add("ReplayGain");
+                string dsp = active.Count == 0 ? "全部旁路" : string.Join(" / ", active) + "（开）";
+                AudioLinkDsp.Text = dsp + (hifi ? " [HiFi 直通链路]" : " [共享链路]");
+                AudioLinkBitPerfect.Text = active.Count == 0
+                    ? "bit-perfect 直通（需结合输出格式确认，无重采样/音量干预）"
+                    : "非 bit-perfect（参与处理方：" + string.Join("、", active) + "）";
+
+                // 专业播放状态
+                AudioProPosition.Text =
+                    (EnginePositionValue >= TimeSpan.Zero ? EnginePositionValue.ToString(@"mm\:ss") : "--")
+                    + " / " + (EngineDurationValue > TimeSpan.Zero ? EngineDurationValue.ToString(@"h\:mm\:ss") : "--");
+                AudioProBuffer.Text = string.IsNullOrWhiteSpace(_audioEngine?.OutputDeviceId)
+                    ? "系统默认"
+                    : _audioEngine.OutputDeviceId;
+                AudioProDspChain.Text = "EQ" + (eqOn ? "✓" : "—") + " · 声道" + (chOn ? "✓" : "—") + " · 限幅" + (limiterOn ? "✓" : "—") + " · ReplayGain" + (rgOn ? "✓" : "—");
+                // 链路可视化着色 + bit-perfect 徽章
+                ApplyLinkVisual(pure: active.Count == 0, activeText: string.Join("、", active));
+            }
+            catch { }
+        }
+
+        private void ApplyLinkVisual(bool pure, string activeText)
+        {
+            try
+            {
+                if (LinkDspCapsule == null)
+                {
+                    return;
+                }
+
+                var green = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 46, 160, 67));
+                var amber = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 214, 148, 45));
+                var greenBg = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(40, 46, 160, 67));
+                var amberBg = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(40, 214, 148, 45));
+
+                LinkDspCapsule.BorderBrush = pure ? green : amber;
+                LinkDspCapsule.BorderThickness = new Microsoft.UI.Xaml.Thickness(2);
+
+                BitPerfectBadge.Background = pure
+                    ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 32, 122, 52))
+                    : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 178, 116, 28));
+                AudioLinkBitPerfectBadgeText.Text = pure ? "✓ bit-perfect · 直通" : "DSP 处理中";
+                AudioLinkBitPerfectBadgeText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
             }
             catch { }
         }

@@ -69,6 +69,17 @@ namespace CelesteMusicPlayer
 
         public bool IsVisible => _hwnd != IntPtr.Zero && IsWindowVisible(_hwnd);
 
+        /// <summary>当前窗口位置（物理像素），用于位置记忆。</summary>
+        public (int X, int Y) CurrentPosition => (_x, _y);
+
+        /// <summary>恢复记忆的窗口位置（在 EnsureWindow 创建窗口之前调用）。</summary>
+        public void SetSavedPosition(int x, int y)
+        {
+            _x = x;
+            _y = y;
+            _placedOnce = true;
+        }
+
         public void Show()
         {
             EnsureWindow();

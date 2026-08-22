@@ -70,7 +70,7 @@
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="*" />
-                <ColumnDefinition Width="138" />
+                <ColumnDefinition Width="Auto" />
             </Grid.ColumnDefinitions>
 
             <StackPanel
@@ -104,16 +104,25 @@
                     Opacity="0.7"
                     Text="尚未选择音频" />
             </StackPanel>
-            <!-- 选项 + 刷新：位于主UI中轴线向右 300px -->
+
+            <!-- 标题栏右上角：功能按钮（选择/刷新/全屏）+ 自绘系统按钮（靠紧）-->
             <StackPanel
-                Grid.Column="1"
+                Grid.Column="2"
                 Orientation="Horizontal"
                 Spacing="4"
-                HorizontalAlignment="Center"
-                VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
-                <StackPanel.RenderTransform>
-                    <TranslateTransform X="300" />
-                </StackPanel.RenderTransform>
+                VerticalAlignment="Center"
+                Margin="0,0,8,0">
+                <Button
+                    x:Name="AudioSettingsButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="AudioSettingsButton_Click"
+                    ToolTipService.ToolTip="音频设置">
+                    <FontIcon Glyph="&#xE95B;" FontSize="15" />
+                </Button>
                 <Button
                     x:Name="SelectLocalAudioButton"
                     Width="34"
@@ -136,36 +145,48 @@
                     ToolTipService.ToolTip="刷新当前页面">
                     <FontIcon Glyph="&#xE72C;" FontSize="15" />
                 </Button>
+                <Border
+                    Width="1"
+                    Height="20"
+                    Margin="2,0"
+                    VerticalAlignment="Center"
+                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <!-- 自绘系统按钮（无边框窗口） -->
                 <Button
-                    x:Name="FullscreenButton"
+                    x:Name="WindowMinButton"
                     Width="34"
                     Height="32"
                     Padding="0"
                     Background="Transparent"
                     BorderThickness="0"
-                    Click="FullscreenButton_Click"
-                    ToolTipService.ToolTip="全屏（隐藏任务栏）">
-                    <FontIcon x:Name="FullscreenIcon" Glyph="&#xE740;" FontSize="15" />
-                </Button>
-            </StackPanel>
-            <!-- 自绘系统按钮（无边框窗口） -->
-            <StackPanel
-                Grid.Column="2"
-                Orientation="Horizontal"
-                Spacing="2"
-                VerticalAlignment="Center"
-                HorizontalAlignment="Right"
-                Margin="0,0,4,0">
-                <Button x:Name="WindowMinButton" Width="34" Height="32" Padding="0" Background="Transparent" BorderThickness="0" Click="WindowMinButton_Click" ToolTipService.ToolTip="最小化">
+                    Click="WindowMinButton_Click"
+                    ToolTipService.ToolTip="最小化">
                     <FontIcon Glyph="&#xE921;" FontSize="15" />
                 </Button>
-                <Button x:Name="WindowMaxRestoreButton" Width="34" Height="32" Padding="0" Background="Transparent" BorderThickness="0" Click="WindowMaxRestoreButton_Click" ToolTipService.ToolTip="最大化 / 还原">
+                <Button
+                    x:Name="WindowMaxRestoreButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="WindowMaxRestoreButton_Click"
+                    ToolTipService.ToolTip="最大化 / 还原">
                     <FontIcon x:Name="WindowMaxRestoreIcon" Glyph="&#xE922;" FontSize="13" />
                 </Button>
-                <Button x:Name="WindowCloseButton" Width="34" Height="32" Padding="0" Background="Transparent" BorderThickness="0" Click="WindowCloseButton_Click" ToolTipService.ToolTip="关闭">
+                <Button
+                    x:Name="WindowCloseButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="WindowCloseButton_Click"
+                    ToolTipService.ToolTip="关闭">
                     <FontIcon Glyph="&#xE8BB;" FontSize="14" />
                 </Button>
             </StackPanel>
+
         </Grid>
 
         <!-- 中部：分类 | 播放列表（右侧信息面板已停用，播放列表区扩张到底） -->
@@ -2113,25 +2134,15 @@
                                             </StackPanel>
                                             <Button
                                                 x:Name="ArtistSongSortButton"
-                                                Content="排序"
+                                                Content="排序：标题"
                                                 HorizontalAlignment="Right"
-                                                MinWidth="88">
-                                                <Button.Flyout>
-                                                    <MenuFlyout>
-                                                        <MenuFlyoutItem
-                                                            Text="按标题排列"
-                                                            Tag="Title"
-                                                            Click="ArtistSongSortMenu_Click" />
-                                                        <MenuFlyoutItem
-                                                            Text="按专辑排列（标题）"
-                                                            Tag="AlbumTitle"
-                                                            Click="ArtistSongSortMenu_Click" />
-                                                        <MenuFlyoutItem
-                                                            Text="按专辑排列（时间）"
-                                                            Tag="AlbumYear"
-                                                            Click="ArtistSongSortMenu_Click" />
-                                                    </MenuFlyout>
-                                                </Button.Flyout>
+                                                Width="150"
+                                                RenderTransformOrigin="0.5,0.5"
+                                                Click="ArtistSongSortButton_Click"
+                                                ToolTipService.ToolTip="点击切换排序方式">
+                                                <Button.RenderTransform>
+                                                    <TranslateTransform X="30" />
+                                                </Button.RenderTransform>
                                             </Button>
                                         </Grid>
 
@@ -2152,7 +2163,7 @@
                                                 </ItemsPanelTemplate>
                                             </ListView.ItemsPanel>
                                             <ListView.Header>
-                                                <Grid Padding="12,8" ColumnSpacing="12" Background="Transparent">
+                                                <Grid Padding="12,8,24,8" ColumnSpacing="12" Background="Transparent">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="1.2*" />
@@ -2271,7 +2282,7 @@
                                                 <Button
                                                     x:Name="ArtistAlbumSortFieldButton"
                                                     Height="32"
-                                                    MinWidth="110"
+                                                    Width="150"
                                                     Padding="14,0"
                                                     CornerRadius="16"
                                                     BorderThickness="0"
@@ -2284,7 +2295,7 @@
                                                 <Button
                                                     x:Name="ArtistAlbumSortOrderButton"
                                                     Height="32"
-                                                    MinWidth="72"
+                                                    Width="80"
                                                     Padding="14,0"
                                                     CornerRadius="16"
                                                     BorderThickness="0"
@@ -3593,6 +3604,15 @@
                                     TextAlignment="Center"
                                     TextWrapping="WrapWholeWords"
                                     Text="信号链：未初始化" />
+                                <Button
+                                    x:Name="DownloadLyricButton"
+                                    Content="下载歌词"
+                                    Click="DownloadLyricButton_Click"
+                                    CornerRadius="16"
+                                    MinWidth="128"
+                                    Padding="16,4"
+                                    HorizontalAlignment="Center"
+                                    ToolTipService.ToolTip="为当前歌曲从在线平台下载歌词（Apple Music 不提供歌词：将按歌名/艺人从其他平台获取）" />
                             </StackPanel>
                         </StackPanel>
 
@@ -4022,5 +4042,234 @@
             </Grid>
         </Grid>
         </Grid>
+        <!-- 音频设置右侧滑出面板（从右边界向左延伸，仿 ECHO） -->
+        <Grid
+            x:Name="AudioSettingsOverlayHost"
+            Grid.RowSpan="3"
+            Visibility="Collapsed"
+            IsHitTestVisible="False">
+            <Grid.Resources>
+                <Storyboard x:Name="AudioSettingsOpenStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="AudioSettingsPanelTransform" Storyboard.TargetProperty="TranslateX"
+                                     From="360" To="0" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+                <Storyboard x:Name="AudioSettingsCloseStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="AudioSettingsPanelTransform" Storyboard.TargetProperty="TranslateX"
+                                     From="0" To="360" Duration="0:0:0.18">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseIn" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+            </Grid.Resources>
+            <Grid x:Name="AudioSettingsScrim" Background="#66000000" Tapped="AudioSettingsScrim_Tapped" />
+            <Border
+                x:Name="AudioSettingsPanel"
+                Width="360"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Stretch"
+                Background="{ThemeResource LayerFillColorDefaultBrush}"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                BorderThickness="1,0,0,0">
+                <Border.RenderTransform>
+                    <CompositeTransform x:Name="AudioSettingsPanelTransform" TranslateX="360" />
+                </Border.RenderTransform>
+                <Grid Padding="16,12,16,12">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 顶部标题 + 关闭 -->
+                    <Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <FontIcon Glyph="&#xE95B;" FontSize="15" />
+                            <TextBlock Text="音频设置" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
+                        </StackPanel>
+                        <Button
+                            HorizontalAlignment="Right"
+                            Width="30"
+                            Height="30"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="AudioSettingsCloseButton_Click"
+                            ToolTipService.ToolTip="关闭">
+                            <FontIcon Glyph="&#xE8BB;" FontSize="14" />
+                        </Button>
+                    </Grid>
+
+                    <!-- 输出模式 -->
+                    <StackPanel Grid.Row="1" Spacing="8" Margin="0,12,0,0">
+                        <TextBlock Text="输出模式" FontSize="14" FontWeight="SemiBold" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button
+                                x:Name="ModeSharedCard"
+                                Grid.Column="0"
+                                Height="52"
+                                Padding="0"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                Click="AudioModeCard_Click"
+                                Tag="Shared"
+                                HorizontalAlignment="Stretch"
+                                ToolTipService.ToolTip="WASAPI 共享（系统混音）">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="共享" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="系统混音" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="ModeExclusiveCard"
+                                Grid.Column="1"
+                                Height="52"
+                                Padding="0"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                Click="AudioModeCard_Click"
+                                Tag="WasapiExclusive"
+                                HorizontalAlignment="Stretch"
+                                ToolTipService.ToolTip="WASAPI 独占（HiFi，bit-perfect）">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="独占" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="HiFi" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="ModeAsioCard"
+                                Grid.Column="2"
+                                Height="52"
+                                Padding="0"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                Click="AudioModeCard_Click"
+                                Tag="Asio"
+                                HorizontalAlignment="Stretch"
+                                ToolTipService.ToolTip="ASIO（专有声卡驱动）">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="ASIO" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="专有声卡" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <ComboBox x:Name="AudioOutputDeviceCombo" HorizontalAlignment="Stretch" SelectionChanged="AudioOutputDeviceCombo_SelectionChanged" PlaceholderText="输出设备" />
+                    </StackPanel>
+
+                    <!-- 链路状态（可视化：源 → DSP → 输出） -->
+                    <StackPanel Grid.Row="2" Spacing="8" Margin="0,16,0,0">
+                        <TextBlock Text="链路状态" FontSize="14" FontWeight="SemiBold" />
+                        <!-- 改为纵向堆叠、每块左右扩张，保证源/输出/DSP 文字完整显示 -->
+                        <StackPanel Spacing="6">
+                            <Border
+                                x:Name="LinkSrcCapsule"
+                                CornerRadius="8"
+                                Padding="10,8"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                HorizontalAlignment="Stretch">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="源" FontSize="10" Opacity="0.7" />
+                                    <TextBlock x:Name="AudioLinkSourceFmt" Text="—" FontFamily="Consolas" FontSize="12" TextWrapping="WrapWholeWords" TextTrimming="None" HorizontalAlignment="Stretch" />
+                                </StackPanel>
+                            </Border>
+                            <Border
+                                x:Name="LinkDspCapsule"
+                                CornerRadius="8"
+                                Padding="10,8"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                HorizontalAlignment="Stretch">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="DSP" FontSize="10" Opacity="0.7" />
+                                    <TextBlock x:Name="AudioLinkDsp" Text="—" FontFamily="Consolas" FontSize="12" TextWrapping="WrapWholeWords" TextTrimming="None" HorizontalAlignment="Stretch" />
+                                </StackPanel>
+                            </Border>
+                            <Border
+                                x:Name="LinkOutCapsule"
+                                CornerRadius="8"
+                                Padding="10,8"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                HorizontalAlignment="Stretch">
+                                <StackPanel Spacing="3">
+                                    <TextBlock Text="输出" FontSize="10" Opacity="0.7" />
+                                    <TextBlock x:Name="AudioLinkOutputFmt" Text="—" FontFamily="Consolas" FontSize="12" TextWrapping="WrapWholeWords" TextTrimming="None" HorizontalAlignment="Stretch" />
+                                </StackPanel>
+                            </Border>
+                        </StackPanel>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="92" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="模式" Opacity="0.7" VerticalAlignment="Center" />
+                            <TextBlock x:Name="AudioLinkMode" Grid.Column="1" Text="—" TextWrapping="WrapWholeWords" FontSize="12" />
+                            <Border
+                                x:Name="BitPerfectBadge"
+                                Grid.Column="2"
+                                CornerRadius="10"
+                                Padding="8,3"
+                                VerticalAlignment="Center"
+                                Background="#222">
+                                <TextBlock x:Name="AudioLinkBitPerfectBadgeText" Text="bit-perfect" FontSize="11" FontWeight="SemiBold" />
+                            </Border>
+                        </Grid>
+                        <TextBlock x:Name="AudioLinkBitPerfect" FontSize="12" Opacity="0.8" TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+
+                    <!-- 专业播放状态 -->
+                    <StackPanel Grid.Row="3" Spacing="6" Margin="0,16,0,0">
+                        <TextBlock Text="专业播放状态" FontSize="14" FontWeight="SemiBold" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="92" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="会话缓冲" Opacity="0.7" VerticalAlignment="Center" />
+                            <TextBlock x:Name="AudioProBuffer" Grid.Column="1" Text="—" FontFamily="Consolas" FontSize="12" />
+                        </Grid>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="92" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="DSP 链" Opacity="0.7" VerticalAlignment="Center" />
+                            <TextBlock x:Name="AudioProDspChain" Grid.Column="1" Text="—" TextWrapping="WrapWholeWords" FontFamily="Consolas" FontSize="12" />
+                        </Grid>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="92" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="播放位置" Opacity="0.7" VerticalAlignment="Center" />
+                            <TextBlock x:Name="AudioProPosition" Grid.Column="1" Text="—" FontFamily="Consolas" FontSize="12" />
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- 底部说明 -->
+                    <TextBlock
+                        Grid.Row="5"
+                        FontSize="12"
+                        Opacity="0.55"
+                        TextWrapping="WrapWholeWords"
+                        Margin="0,10,0,0"
+                        Text="DSP（EQ／声道／限幅／ReplayGain）参与处理时不再 bit-perfect；全部旁路且输出格式未变才可直通。" />
+                </Grid>
+            </Border>
+        </Grid>
+
     </Grid>
 </Window>

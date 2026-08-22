@@ -810,9 +810,10 @@ namespace CelesteMusicPlayer
         public void SetVolume(float volume)
         {
             _resumeVolume = Math.Clamp(volume, 0f, 1f);
-            // 共享模式：用 NAudio WasapiOut 软件增益，只影响本播放器（保持应用内音量语义）。
-            // 独占/ASIO（bit-perfect）：控设备主音量——滑块 100%→满、其它非线性压缩（slider²）。
-            if (CurrentMode == OutputMode.WasapiShared)
+            // 共享模式 / 当前模式尚未初始化（CurrentMode=null，如引擎刚创建时）：一律用 NAudio 软件增益，
+            // 只影响本播放器、绝不动系统（设备/主）音量——否则共享模式一启动就把系统音量抬到滑块值。
+            bool hifiDevice = CurrentMode == OutputMode.WasapiExclusive || CurrentMode == OutputMode.Asio;
+            if (!hifiDevice)
             {
                 if (_output != null)
                 {
@@ -822,6 +823,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 独占/ASIO（bit-perfect）：控设备主音量——滑块 100%→满、其它非线性压缩（slider²）。
             if (_device?.AudioEndpointVolume != null)
             {
                 try

@@ -76,6 +76,15 @@ namespace CelesteMusicPlayer
             ("Kugou", "酷狗音乐"),
         };
 
+        /// <summary>在线搜索默认平台（含 iTunes；歌词源不含 iTunes，因 iTunes 不提供歌词）。</summary>
+        private static readonly (string Id, string Label)[] OnlineSearchSourceOptions =
+        {
+            ("NetEase", "网易云音乐"),
+            ("QQ", "QQ音乐"),
+            ("Kugou", "酷狗音乐"),
+            ("iTunes", "Apple Music"),
+        };
+
         private static readonly (string Id, string Label)[] AudioChannelOptions =
         {
             ("Stereo", "立体声"),
@@ -240,7 +249,7 @@ namespace CelesteMusicPlayer
             FillCombo(LyricSavePolicyCombo, LyricSavePolicyOptions);
             FillCombo(LyricAlignCombo, LyricAlignOptions);
             FillCombo(LyricDownloadServiceCombo, LyricServiceOptions);
-            FillCombo(OnlineSearchSourceCombo, LyricServiceOptions);
+            FillCombo(OnlineSearchSourceCombo, OnlineSearchSourceOptions);
             FillCombo(AudioChannelCombo, AudioChannelOptions);
             OutputModeCombo.Items.Clear();
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 共享（系统混音）", Tag = "Shared" });
@@ -1123,6 +1132,13 @@ namespace CelesteMusicPlayer
             PanelPlayback.Visibility = tag == "Playback" ? Visibility.Visible : Visibility.Collapsed;
             PanelMediaLib.Visibility = tag == "MediaLib" ? Visibility.Visible : Visibility.Collapsed;
             PanelHotkeys.Visibility = tag == "Hotkeys" ? Visibility.Visible : Visibility.Collapsed;
+            PanelLibraryHealth.Visibility = tag == "LibraryHealth" ? Visibility.Visible : Visibility.Collapsed;
+            PanelStreaming.Visibility = tag == "Streaming" ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private async void AmLoginButton_Click(object sender, RoutedEventArgs e)
+        {
+            await ShowInfoDialogAsync("Apple Music 登录", "登录功能待接入（需 Apple Music 订阅账号）。接入后会在此显示登录状态，并用于加载歌词与在线下载。");
         }
 
         private void SettingCheck_Changed(object sender, RoutedEventArgs e)
@@ -1525,6 +1541,68 @@ namespace CelesteMusicPlayer
             }
         }
 
+        private async void ExportSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new Windows.Storage.Pickers.FileSavePicker();
+                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                picker.FileTypeChoices.Add("设置备份", new List<string> { ".json" });
+                picker.SuggestedFileName = "celeste-settings-backup";
+                Windows.Storage.StorageFile? file = await picker.PickSaveFileAsync();
+                if (file == null)
+                {
+                    return;
+                }
+
+                bool ok = AppSettingsStore.ExportTo(file.Path);
+                if (ok)
+                {
+                    await ShowInfoDialogAsync("导出成功", "设置已导出到：\n" + file.Path);
+                }
+                else
+                {
+                    await ShowInfoDialogAsync("导出失败", "没有可导出的设置文件。");
+                }
+            }
+            catch (Exception ex)
+            {
+                await ShowInfoDialogAsync("导出失败", ex.Message);
+            }
+        }
+
+        private async void ImportSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new Windows.Storage.Pickers.FileOpenPicker();
+                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                picker.FileTypeFilter.Add(".json");
+                picker.FileTypeFilter.Add(".txt"); // 兼容旧的手动备份
+                Windows.Storage.StorageFile? file = await picker.PickSingleFileAsync();
+                if (file == null)
+                {
+                    return;
+                }
+
+                bool ok = AppSettingsStore.ImportFrom(file.Path);
+                if (ok)
+                {
+                    await ShowInfoDialogAsync("导入成功", "设置已恢复。部分设置在重启后完全生效。\n（导入前已自动备份当前设置到配置目录）");
+                }
+                else
+                {
+                    await ShowInfoDialogAsync("导入失败", "无法从该文件恢复设置（文件不存在或格式不符）。");
+                }
+            }
+            catch (Exception ex)
+            {
+                await ShowInfoDialogAsync("导入失败", ex.Message);
+            }
+        }
+
         private async void ClearRecentPlayedButton_Click(object sender, RoutedEventArgs e)
         {
             TrackStatsStore.ClearRecentlyPlayed();
@@ -1872,6 +1950,103 @@ namespace CelesteMusicPlayer
             public HotkeyAction Action { get; }
             public string Shortcut { get; }
             public string Description { get; }
+        }
+
+        // ---- 曲库健康 ----
+        private void HealthScanButton_Click(object sender, RoutedEventArgs e)
+        {
+            var snapshot = MainWindow.Instance?.GetCurrentPlaylistSnapshot();
+            var rows = new List<HealthIssueRow>();
+            int total = 0, missing = 0;
+            if (snapshot != null)
+            {
+                total = snapshot.Count;
+                foreach (var item in snapshot)
+                {
+                    var issues = new List<string>();
+                    string path = item.FilePath ?? string.Empty;
+                    bool fileMissing = string.IsNullOrWhiteSpace(path) || !File.Exists(path);
+                    if (fileMissing)
+                    {
+                        missing++;
+                        issues.Add("文件缺失");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(item.Title)) issues.Add("无标题");
+                    if (string.IsNullOrWhiteSpace(item.Artist) || item.Artist == "未知艺术家") issues.Add("无艺术家");
+                    if (string.IsNullOrWhiteSpace(item.Album) || item.Album == "未知专辑") issues.Add("无专辑");
+                    if (!fileMissing && item.Duration <= TimeSpan.Zero) issues.Add("时长异常");
+                    if (issues.Count > 0)
+                    {
+                        rows.Add(new HealthIssueRow { Path = string.IsNullOrWhiteSpace(path) ? "（空路径）" : path, Issues = string.Join("、", issues) });
+                    }
+                }
+            }
+
+            HealthResultsList.ItemsSource = rows;
+            HealthSummaryText.Text = $"共 {total} 首，存在 {total - missing} 首，失效 {missing} 首；发现 {rows.Count} 个问题项。";
+        }
+
+        private async void HealthRemoveMissingButton_Click(object sender, RoutedEventArgs e)
+        {
+            var snapshot = MainWindow.Instance?.GetCurrentPlaylistSnapshot();
+            if (snapshot == null)
+            {
+                return;
+            }
+
+            List<string> missing = snapshot
+                .Where(i => string.IsNullOrWhiteSpace(i.FilePath) || !System.IO.File.Exists(i.FilePath))
+                .Select(i => i.FilePath ?? string.Empty)
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .ToList();
+            if (missing.Count == 0)
+            {
+                await ShowInfoDialogAsync("无需移除", "当前曲库没有失效文件。");
+                return;
+            }
+
+            MainWindow.Instance?.RemoveFilesFromCurrentPlaylist(missing);
+            await ShowInfoDialogAsync("已移除", $"已从曲库索引移除 {missing.Count} 个失效条目（未删除磁盘文件）。");
+            HealthScanButton_Click(sender, e);
+        }
+
+        private async void HealthEditTagButton_Click(object sender, RoutedEventArgs e)
+        {
+            var rows = HealthResultsList.ItemsSource as List<HealthIssueRow>;
+            if (rows == null || rows.Count == 0)
+            {
+                await ShowInfoDialogAsync("无可编辑项", "请先点击“立即扫描”。");
+                return;
+            }
+
+            var selected = HealthResultsList.SelectedItem as HealthIssueRow;
+            List<string> paths;
+            if (selected != null && !string.IsNullOrWhiteSpace(selected.Path) && selected.Path != "（空路径）" && System.IO.File.Exists(selected.Path))
+            {
+                paths = new List<string> { selected.Path };
+            }
+            else
+            {
+                paths = rows
+                    .Select(r => r.Path ?? string.Empty)
+                    .Where(p => !string.IsNullOrWhiteSpace(p) && p != "（空路径）" && System.IO.File.Exists(p))
+                    .ToList();
+            }
+
+            if (paths.Count == 0)
+            {
+                await ShowInfoDialogAsync("无法编辑", "问题项中没有可编辑的本地文件。");
+                return;
+            }
+
+            TagEditorWindow.ShowBatch(paths);
+        }
+
+        private sealed class HealthIssueRow
+        {
+            public string Path { get; set; } = string.Empty;
+            public string Issues { get; set; } = string.Empty;
         }
     }
 }

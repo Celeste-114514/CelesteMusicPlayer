@@ -432,6 +432,23 @@ namespace CelesteMusicPlayer
         private const long WS_THICKFRAME = 0x00040000L;
         private const long WS_BORDER = 0x00800000L;
 
+        // ---- WM_NCHITTEST：彻底无边框下的边缘拖拽调大小 ----
+        private const int WM_NCHITTEST = 0x0084;
+        private const int WM_SIZE = 0x0005;
+        private const int SIZE_MAXIMIZED = 2;
+        private const int SIZE_RESTORED = 0;
+        private const int HTCAPTION = 2;
+        private const int HTCLIENT = 1;
+        private const int HTNOWHERE = 0;
+        private const int HTLEFT = 10;
+        private const int HTRIGHT = 11;
+        private const int HTTOP = 12;
+        private const int HTTOPLEFT = 13;
+        private const int HTTOPRIGHT = 14;
+        private const int HTBOTTOM = 15;
+        private const int HTBOTTOMLEFT = 16;
+        private const int HTBOTTOMRIGHT = 17;
+
         [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", CharSet = CharSet.Unicode)]
         private static extern long GetWindowLongPtr64(nint hWnd, int nIndex);
 
@@ -440,6 +457,13 @@ namespace CelesteMusicPlayer
 
         [DllImport("dwmapi.dll", PreserveSig = true)]
         private static extern int DwmSetWindowAttribute(nint hwnd, int attr, ref RECT_INT value, int sz);
+
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        private static extern int DwmSetWindowAttributeInt(nint hwnd, int attr, ref int value, int sz);
+        private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
+        private const int DWMWCP_ROUND = 2;
+        private const int DWMWCP_DONOTROUND = 1;
+
 
         [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", CharSet = CharSet.Unicode)]
         private static extern nint SetWindowLongPtr642(nint hWnd, int nIndex, long dwNewLong);
@@ -472,6 +496,9 @@ namespace CelesteMusicPlayer
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+
+        [DllImport("user32.dll")]
+        private static extern bool GetWindowRect(nint hWnd, out RECT_INT lpRect);
         private static readonly nint HWND_TOPMOST = new(-1);
         private static readonly nint HWND_NOTOPMOST = new(-2);
         private const uint SWP_NOACTIVATE = 0x0010;
@@ -1230,6 +1257,14 @@ namespace CelesteMusicPlayer
                 }
             }
 
+            // 系统 resize 边框（hasBorder）已提供四边/四角调大小；这里只需同步最大化/还原状态
+            // （自绘最大化按钮图标，含从最大化拖拽还原场景）。
+            if (msg == WM_SIZE && MainWindow.Instance is MainWindow mw)
+            {
+                int sizeType = (int)(wParam.ToInt64() & 0xFFFF);
+                mw.OnWindowMaximizeStateChanged(sizeType == SIZE_MAXIMIZED);
+            }
+
             return CallWindowProcW(_prevWndProc, hWnd, msg, wParam, lParam);
         }
 
@@ -1451,6 +1486,7 @@ namespace CelesteMusicPlayer
                 TryApplySystemBackdrop();
                 ConfigureWindowChrome();
                 MakeWindowBorderless(); // 显示后再强制一次无边框，避免 WinUI 重设 caption 样式
+                ApplyWindowCorners(true); // 无边框窗口四角圆角
                 if (_mainWindowHwnd != IntPtr.Zero)
                 {
                     SetWindowPos(_mainWindowHwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
@@ -1529,8 +1565,8 @@ namespace CelesteMusicPlayer
             try
             {
                 ExtendsContentIntoTitleBar = true;
-                SetTitleBar(AppTitleBar);
-                MakeWindowBorderless(); // 无边框：去掉任务栏图标的方框描边
+                SetTitleBar(AppTitleBar); // 自定义标题栏区域可拖动
+                MakeWindowBorderless(); // 无边框 + 自绘系统按钮；保留 WS_THICKFRAME 使窗口可自由调节大小
             }
             catch (Exception ex)
             {
@@ -5659,6 +5695,237 @@ namespace CelesteMusicPlayer
             }
         }
 
+        private static readonly (char Trad, char Simp)[] _tradSimpPairs = new[]
+        {
+            ('樂','乐'),
+            ('個','个'),
+            ('們','们'),
+            ('與','与'),
+            ('見','见'),
+            ('現','现'),
+            ('視','视'),
+            ('覺','觉'),
+            ('還','还'),
+            ('過','过'),
+            ('來','来'),
+            ('這','这'),
+            ('點','点'),
+            ('員','员'),
+            ('戶','户'),
+            ('體','体'),
+            ('動','动'),
+            ('網','网'),
+            ('電','电'),
+            ('話','话'),
+            ('讓','让'),
+            ('該','该'),
+            ('開','开'),
+            ('關','关'),
+            ('說','说'),
+            ('請','请'),
+            ('講','讲'),
+            ('認','认'),
+            ('識','识'),
+            ('訊','讯'),
+            ('華','华'),
+            ('結','结'),
+            ('構','构'),
+            ('組','组'),
+            ('約','约'),
+            ('紙','纸'),
+            ('細','细'),
+            ('終','终'),
+            ('紀','纪'),
+            ('紅','红'),
+            ('綠','绿'),
+            ('繼','继'),
+            ('續','续'),
+            ('級','级'),
+            ('縣','县'),
+            ('綜','综'),
+            ('維','维'),
+            ('績','绩'),
+            ('經','经'),
+            ('總','总'),
+            ('線','线'),
+            ('編','编'),
+            ('練','练'),
+            ('義','义'),
+            ('習','习'),
+            ('職','职'),
+            ('舊','旧'),
+            ('節','节'),
+            ('蘭','兰'),
+            ('藍','蓝'),
+            ('藝','艺'),
+            ('藥','药'),
+            ('應','应'),
+            ('戲','戏'),
+            ('趙','赵'),
+            ('遠','远'),
+            ('遲','迟'),
+            ('選','选'),
+            ('團','团'),
+            ('顧','顾'),
+            ('頭','头'),
+            ('題','题'),
+            ('額','额'),
+            ('類','类'),
+            ('風','风'),
+            ('飛','飞'),
+            ('飲','饮'),
+            ('飯','饭'),
+            ('馬','马'),
+            ('駕','驾'),
+            ('驚','惊'),
+            ('齊','齐'),
+            ('齒','齿'),
+            ('龍','龙'),
+            ('龐','庞'),
+            ('麗','丽'),
+            ('麥','麦'),
+            ('麵','面'),
+            ('車','车'),
+            ('軌','轨'),
+            ('轉','转'),
+            ('軟','软'),
+            ('輕','轻'),
+            ('載','载'),
+            ('輪','轮'),
+            ('詞','词'),
+            ('詩','诗'),
+            ('語','语'),
+            ('誤','误'),
+            ('誠','诚'),
+            ('敗','败'),
+            ('質','质'),
+            ('賬','账'),
+            ('貫','贯'),
+            ('貼','贴'),
+            ('贈','赠'),
+            ('則','则'),
+            ('側','侧'),
+            ('銀','银'),
+            ('鍵','键'),
+            ('鎖','锁'),
+            ('銅','铜'),
+            ('門','门'),
+            ('問','问'),
+            ('間','间'),
+            ('聞','闻'),
+            ('閣','阁'),
+            ('長','长'),
+            ('張','张'),
+            ('樣','样'),
+            ('楊','杨'),
+            ('樹','树'),
+            ('極','极'),
+            ('機','机'),
+            ('樓','楼'),
+            ('欄','栏'),
+            ('權','权'),
+            ('檢','检'),
+            ('檔','档'),
+            ('橋','桥'),
+            ('標','标'),
+            ('聲','声'),
+            ('聽','听'),
+            ('聯','联'),
+            ('葉','叶'),
+            ('蓋','盖'),
+            ('簡','简'),
+            ('筆','笔'),
+            ('範','范'),
+            ('簽','签'),
+            ('籃','篮'),
+            ('絕','绝'),
+            ('統','统'),
+            ('絲','丝'),
+            ('腦','脑'),
+            ('臉','脸'),
+            ('勝','胜'),
+            ('騰','腾'),
+            ('膽','胆'),
+            ('眾','众'),
+            ('書','书'),
+            ('會','会'),
+            ('陳','陈'),
+            ('陣','阵'),
+            ('隨','随'),
+            ('離','离'),
+            ('雖','虽'),
+            ('雞','鸡'),
+            ('靜','静'),
+            ('顯','显'),
+            ('飄','飘'),
+            ('韻','韵'),
+            ('項','项'),
+            ('順','顺'),
+            ('頑','顽'),
+            ('領','领'),
+            ('顆','颗'),
+            ('頻','频'),
+            ('預','预'),
+            ('髮','发'),
+            ('飼','饲'),
+            ('驗','验'),
+            ('髒','脏'),
+            ('貴','贵'),
+            ('買','买'),
+            ('賣','卖'),
+            ('讓','让'),
+            ('彈','弹'),
+            ('強','强'),
+            ('張','张'),
+            ('學','学'),
+            ('寶','宝'),
+            ('實','实'),
+            ('導','导'),
+            ('將','将'),
+            ('帥','帅'),
+            ('廣','广'),
+            ('廳','厅'),
+            ('後','后'),
+            ('復','复'),
+            ('從','从'),
+            ('應','应'),
+            ('當','当'),
+            ('寧','宁'),
+            ('帶','带'),
+            ('幫','帮'),
+            ('憶','忆'),
+            ('憂','忧'),
+            ('惡','恶'),
+            ('愛','爱'),
+            ('慶','庆'),
+            ('應','应'),
+            ('趕','赶'),
+            ('超','超'),
+            ('踴','踊'),
+            ('跩','跩'),
+            ('單','单'),
+            ('麼','么'),
+            ('廠','厂'),
+            ('廚','厨'),
+            ('廟','庙'),
+            ('廢','废'),
+            ('廣','广'),
+            ('廳','厅'),
+            ('彈','弹'),
+            ('強','强'),
+        };
+
+        private static readonly System.Collections.Generic.Dictionary<char, char> _tradToSimp = BuildTradToSimpMap();
+
+        private static System.Collections.Generic.Dictionary<char, char> BuildTradToSimpMap()
+        {
+            var d = new System.Collections.Generic.Dictionary<char, char>();
+            foreach (var p in _tradSimpPairs)
+            {
+                d[p.Trad] = p.Simp;
+            }
+            return d;
+        }
         private static bool ContainsIgnoreCase(string? source, string query)
         {
             if (string.IsNullOrEmpty(source) || string.IsNullOrEmpty(query))
@@ -5666,7 +5933,111 @@ namespace CelesteMusicPlayer
                 return false;
             }
 
-            return source.Contains(query, StringComparison.CurrentCultureIgnoreCase);
+            string s = SearchNormalize(source);
+            string q = SearchNormalize(query);
+            if (s.Contains(q, System.StringComparison.Ordinal))
+            {
+                return true;
+            }
+
+            // 拼音首字母：query 为纯字母、源含中文时，命中“周杰伦 ← zjl”
+            if (ContainsHan(source) && IsAsciiLetters(q))
+            {
+                string py = PinyinInitials(source);
+                if (!string.IsNullOrEmpty(py) && py.Contains(q, System.StringComparison.Ordinal))
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        private static bool IsAsciiLetters(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return false;
+            }
+
+            foreach (char c in text)
+            {
+                bool ok = (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9');
+                if (!ok)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
+        private static bool ContainsHan(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return false;
+            }
+
+            foreach (char c in text)
+            {
+                if (c >= 0x4E00 && c <= 0x9FFF)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
+        /// <summary>取汉字串的拼音首字母（如“周杰伦”→“zjl”），基于 ToolGood.Words 拼音库。</summary>
+        private static string PinyinInitials(string text)
+        {
+            try
+            {
+                string py = ToolGood.Words.Pinyin.WordsHelper.GetFirstPinyin(text ?? string.Empty);
+                return string.IsNullOrEmpty(py) ? string.Empty : py.ToLowerInvariant();
+            }
+            catch
+            {
+                return string.Empty;
+            }
+        }
+
+        /// <summary>中文搜索友好归一化：转小写 → 全角转半角 → 繁体转简体，实现容错匹配（搜繁体命中简体、搜全角命中半角等）。</summary>
+        private static string SearchNormalize(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return string.Empty;
+            }
+
+            var sb = new System.Text.StringBuilder(text.Length);
+            foreach (char c in text)
+            {
+                if (c == '\u3000')
+                {
+                    sb.Append(' ');
+                }
+                else if (c >= '\uFF01' && c <= '\uFF5E')
+                {
+                    sb.Append((char)(c - 0xFEE0)); // 全角 → 半角
+                }
+                else if (c < 0x20)
+                {
+                    continue;
+                }
+                else if (_tradToSimp.TryGetValue(c, out char simp))
+                {
+                    sb.Append(simp); // 繁体 → 简体
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+
+            return sb.ToString().ToLowerInvariant();
         }
 
         private void ApplySongsSearchFilter()
@@ -7666,10 +8037,12 @@ namespace CelesteMusicPlayer
             _artistSongSortMode = ArtistSongSortMode.Title;
             _artistAlbumSortMode = ArtistAlbumSortMode.Title;
             _artistAlbumSortAscending = true;
-            ArtistSongSortButton.Content = "排序";
-            ArtistAlbumSortFieldText.Text = "按标题排序";
+            ArtistSongSortButton.Content = "排序：标题";
+            ArtistAlbumSortFieldText.Text = "排序：专辑（标题）";
             ArtistAlbumSortOrderText.Text = "升序";
 
+            // 进入详情页即清除墙内选中项，返回后不再残留主题色选中框
+            ArtistGridView.SelectedItem = null;
             ArtistGridView.Visibility = Visibility.Collapsed;
             ArtistDetailPanel.Visibility = Visibility.Visible;
             LibraryPaneTitle.Text = artist.Name;
@@ -8037,24 +8410,20 @@ namespace CelesteMusicPlayer
             };
         }
 
-        private void ArtistSongSortMenu_Click(object sender, RoutedEventArgs e)
+        private void ArtistSongSortButton_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is not MenuFlyoutItem item || item.Tag is not string tag)
+            // 点击循环切换三种排序：标题 -> 专辑（标题）-> 专辑（时间）-> 标题
+            _artistSongSortMode = _artistSongSortMode switch
             {
-                return;
-            }
-
-            _artistSongSortMode = tag switch
-            {
-                "AlbumTitle" => ArtistSongSortMode.AlbumTitleThenTrack,
-                "AlbumYear" => ArtistSongSortMode.AlbumYearThenTrack,
+                ArtistSongSortMode.Title => ArtistSongSortMode.AlbumTitleThenTrack,
+                ArtistSongSortMode.AlbumTitleThenTrack => ArtistSongSortMode.AlbumYearThenTrack,
                 _ => ArtistSongSortMode.Title
             };
 
-            ArtistSongSortButton.Content = tag switch
+            ArtistSongSortButton.Content = _artistSongSortMode switch
             {
-                "AlbumTitle" => "排序：专辑（标题）",
-                "AlbumYear" => "排序：专辑（时间）",
+                ArtistSongSortMode.AlbumTitleThenTrack => "排序：专辑（标题）",
+                ArtistSongSortMode.AlbumYearThenTrack => "排序：专辑（时间）",
                 _ => "排序：标题"
             };
 
@@ -8139,8 +8508,8 @@ namespace CelesteMusicPlayer
                 ? ArtistAlbumSortMode.Year
                 : ArtistAlbumSortMode.Title;
             ArtistAlbumSortFieldText.Text = _artistAlbumSortMode == ArtistAlbumSortMode.Year
-                ? "按年份排序"
-                : "按标题排序";
+                ? "排序：专辑（时间）"
+                : "排序：专辑（标题）";
             RefreshArtistAlbumListOrder();
         }
 
@@ -9859,6 +10228,42 @@ namespace CelesteMusicPlayer
 
         internal static void OpenFileLocationInExplorerPublic(string? filePath)
             => OpenFileLocationInExplorer(filePath);
+
+        /// <summary>当前歌曲分类主列表的快照（供曲库健康等面板读取）。</summary>
+        internal System.Collections.Generic.IReadOnlyList<PlaylistItem> GetCurrentPlaylistSnapshot()
+            => _playlist.ToList();
+
+        /// <summary>从当前歌曲分类主列表移除指定路径的条目（仅去掉索引，不删除物理文件），并刷新界面。</summary>
+        internal void RemoveFilesFromCurrentPlaylist(System.Collections.Generic.IEnumerable<string> paths)
+        {
+            var dead = new System.Collections.Generic.HashSet<string>(
+                paths, System.StringComparer.OrdinalIgnoreCase);
+            for (int i = _playlist.Count - 1; i >= 0; i--)
+            {
+                if (dead.Contains(_playlist[i].FilePath))
+                {
+                    if (i < _currentIndex)
+                    {
+                        _currentIndex--;
+                    }
+                    _playlist.RemoveAt(i);
+                }
+            }
+
+            if (_currentIndex >= _playlist.Count)
+            {
+                if (_playlist.Count == 0)
+                {
+                    _currentIndex = -1;
+                    GetPlayer()?.Pause();
+                    ClearNowPlayingPanel();
+                }
+                else
+                {
+                    _currentIndex = _playlist.Count - 1;
+                }
+            }
+        }
 
         internal void PlayUserPlaylistFromStart()
         {
@@ -12724,6 +13129,8 @@ namespace CelesteMusicPlayer
             }
             else
             {
+                // 用户关闭显示开关前保存位置
+                PersistDesktopLyricPosition();
                 if (_desktopLyricsWindow != null)
                 {
                     DesktopLyricsOverlay closing = _desktopLyricsWindow;
@@ -12755,10 +13162,39 @@ namespace CelesteMusicPlayer
             };
             _desktopLyricsWindow.ClosedByUser += OnDesktopLyricsClosedByUser;
             _desktopLyricsWindow.ApplySettings(AppSettingsStore.Load());
+
+            // 记忆位置：上次拖到哪，下次仍放到那（否则 PlaceInitially 居中贴底）
+            AppSettingsState saved = AppSettingsStore.Load();
+            if (saved.DesktopLyricPosX != int.MinValue && saved.DesktopLyricPosY != int.MinValue)
+            {
+                _desktopLyricsWindow.SetSavedPosition(saved.DesktopLyricPosX, saved.DesktopLyricPosY);
+            }
+        }
+
+        private void PersistDesktopLyricPosition()
+        {
+            try
+            {
+                var w = _desktopLyricsWindow;
+                if (w == null || !w.IsVisible)
+                {
+                    return;
+                }
+
+                var (px, py) = w.CurrentPosition;
+                AppSettingsStore.Update(s =>
+                {
+                    s.DesktopLyricPosX = px;
+                    s.DesktopLyricPosY = py;
+                });
+            }
+            catch { }
         }
 
         private void OnDesktopLyricsClosedByUser()
         {
+            // 关闭前保存位置，下次打开记忆
+            PersistDesktopLyricPosition();
             // 可能从桌面歌词关闭按钮触发；确保主界面 badge 回到 off
             if (_desktopLyricsWindow != null)
             {
@@ -12789,6 +13225,7 @@ namespace CelesteMusicPlayer
 
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
+            PersistDesktopLyricPosition();
             _taskbarProgress?.Dispose();
             _taskbarProgress = null;
             try

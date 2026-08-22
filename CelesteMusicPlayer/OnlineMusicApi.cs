@@ -60,6 +60,7 @@ namespace CelesteMusicPlayer
             {
                 "QQ" => await SearchQqSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
                 "Kugou" => await SearchKugouSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
+                "iTunes" => await SearchItunesSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
                 _ => await SearchNetEaseSongsAsync(title, artist, cancellationToken).ConfigureAwait(false)
             };
         }
@@ -267,6 +268,71 @@ namespace CelesteMusicPlayer
                     if (!string.IsNullOrWhiteSpace(hash) && !string.IsNullOrWhiteSpace(name))
                     {
                         results.Add(new OnlineSongResult("Kugou", hash, name, singer, album, image));
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// iTunes Store Search API 搜索曲目（公开无鉴权）。用于标签编辑/在线搜索的元数据候选。
+        /// 端点：https://itunes.apple.com/search?term=...&media=music&entity=song
+        /// </summary>
+        private static async Task<IReadOnlyList<OnlineSongResult>> SearchItunesSongsAsync(
+            string title,
+            string artist,
+            CancellationToken cancellationToken)
+        {
+            var results = new List<OnlineSongResult>();
+            try
+            {
+                string url = "https://itunes.apple.com/search?media=music&entity=song&limit=25&term={0}";
+                url = string.Format(url, Uri.EscapeDataString(BuildQuery(title, artist)));
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
+                using HttpResponseMessage response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return results;
+                }
+
+                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("results", out JsonElement resultsEl))
+                {
+                    return results;
+                }
+
+                foreach (JsonElement s in resultsEl.EnumerateArray())
+                {
+                    string trackId = s.TryGetProperty("trackId", out JsonElement idEl)
+                        ? idEl.GetInt64().ToString()
+                        : string.Empty;
+                    string name = s.TryGetProperty("trackName", out JsonElement nEl)
+                        ? nEl.GetString() ?? string.Empty
+                        : string.Empty;
+                    string singer = s.TryGetProperty("artistName", out JsonElement aEl)
+                        ? aEl.GetString() ?? string.Empty
+                        : string.Empty;
+                    string album = s.TryGetProperty("collectionName", out JsonElement alEl)
+                        ? alEl.GetString() ?? string.Empty
+                        : string.Empty;
+                    string cover = s.TryGetProperty("artworkUrl100", out JsonElement cEl)
+                        ? cEl.GetString() ?? string.Empty
+                        : string.Empty;
+                    // 提高封面分辨率：100x100bb -> 600x600bb
+                    if (cover.Contains("100x100bb"))
+                    {
+                        cover = cover.Replace("100x100bb", "600x600bb");
+                    }
+
+                    if (!string.IsNullOrWhiteSpace(trackId) && !string.IsNullOrWhiteSpace(name))
+                    {
+                        results.Add(new OnlineSongResult("iTunes", trackId, name, singer, album, cover));
                     }
                 }
             }
@@ -885,6 +951,72 @@ namespace CelesteMusicPlayer
                 {
                     // 外置封面已保存即可
                 }
+
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>把指定封面 URL 下载并嵌入到音频标签（供标签编辑器使用选中结果封面，避免二次搜索）。</summary>
+        public static async Task<bool> EmbedCoverUrlAsync(
+            string audioPath,
+            string coverUrl,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(audioPath) || !File.Exists(audioPath) || string.IsNullOrWhiteSpace(coverUrl))
+            {
+                return false;
+            }
+
+            try
+            {
+                string? savePath = ResolveCoverSavePath(audioPath);
+                byte[]? bytes = null;
+                if (savePath != null)
+                {
+                    string? saved = await DownloadCoverAsync(coverUrl, savePath, cancellationToken).ConfigureAwait(false);
+                    if (saved != null && File.Exists(saved))
+                    {
+                        bytes = await File.ReadAllBytesAsync(saved, cancellationToken).ConfigureAwait(false);
+                    }
+                }
+
+                if (bytes == null || bytes.Length == 0)
+                {
+                    string temp = Path.Combine(Path.GetTempPath(), "celeste-cover-" + Guid.NewGuid().ToString("N") + ".jpg");
+                    string? tmpSaved = await DownloadCoverAsync(coverUrl, temp, cancellationToken).ConfigureAwait(false);
+                    if (tmpSaved == null || !File.Exists(tmpSaved))
+                    {
+                        return false;
+                    }
+
+                    bytes = await File.ReadAllBytesAsync(tmpSaved, cancellationToken).ConfigureAwait(false);
+                    try { File.Delete(tmpSaved); } catch { }
+                }
+
+                if (bytes == null || bytes.Length == 0)
+                {
+                    return false;
+                }
+
+                try
+                {
+                    using TagLib.File tagFile = TagLib.File.Create(audioPath);
+                    tagFile.Tag.Pictures = new TagLib.IPicture[]
+                    {
+                        new TagLib.Picture(new TagLib.ByteVector(bytes))
+                        {
+                            Type = TagLib.PictureType.FrontCover,
+                            MimeType = "image/jpeg",
+                            Description = "Cover"
+                        }
+                    };
+                    tagFile.Save();
+                }
+                catch { }
 
                 return true;
             }

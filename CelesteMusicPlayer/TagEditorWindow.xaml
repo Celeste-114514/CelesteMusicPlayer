@@ -3,8 +3,10 @@
     x:Class="CelesteMusicPlayer.TagEditorWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:CelesteMusicPlayer"
     Title="编辑标签">
 
+    <!-- 根背景用透明，让窗口亚克力(Acrylic)透出，与设置窗口一致的带透明效果 -->
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
@@ -13,7 +15,7 @@
 
         <Grid
             x:Name="AppTitleBar"
-            Height="48"
+            Height="44"
             Padding="16,0,0,0"
             Background="Transparent">
             <Grid.ColumnDefinitions>
@@ -21,58 +23,216 @@
                 <ColumnDefinition Width="138" />
             </Grid.ColumnDefinitions>
             <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                <FontIcon Glyph="&#xE8D2;" FontSize="16" />
+                <FontIcon Glyph="&#xE8D2;" FontSize="15" />
                 <TextBlock Text="编辑标签" FontSize="14" VerticalAlignment="Center" />
             </StackPanel>
         </Grid>
 
-        <ScrollViewer
-            Grid.Row="1"
-            Padding="24,8,24,24"
-            VerticalScrollBarVisibility="Auto">
-            <StackPanel Spacing="14" MaxWidth="640" HorizontalAlignment="Stretch">
-                <TextBlock
-                    x:Name="FilePathText"
-                    FontSize="12"
-                    Opacity="0.55"
-                    TextWrapping="WrapWholeWords" />
+        <!-- 主区：左栏(大封面+在线搜索) | 右栏(双选项卡标签) -->
+        <Grid Grid.Row="1" Padding="16,4,16,16" ColumnSpacing="16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="380" />
+                <ColumnDefinition Width="*" />
+            </Grid.ColumnDefinitions>
 
-                <TextBlock
-                    x:Name="BatchHintText"
-                    FontSize="12"
-                    Opacity="0.75"
-                    Text="批量模式：留空的字段将不修改，仅应用到所有选中歌曲"
+            <!--=========== 左栏 ===========-->
+            <ScrollViewer x:Name="LeftColumnScroll" VerticalScrollBarVisibility="Auto">
+                <StackPanel Spacing="12">
+                    <TextBlock Text="当前音频封面" FontSize="13" FontWeight="SemiBold" />
+                    <Border
+                        Width="236"
+                        Height="236"
+                        CornerRadius="10"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1"
+                        HorizontalAlignment="Left">
+                        <Grid>
+                            <Image x:Name="CurrentCoverImage" Stretch="UniformToFill" />
+                            <StackPanel
+                                x:Name="NoCoverPlaceholder"
+                                Spacing="4"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Visibility="Collapsed">
+                                <FontIcon Glyph="&#xE8B9;" FontSize="40" Opacity="0.35" HorizontalAlignment="Center" />
+                                <TextBlock Text="无封面" FontSize="12" Opacity="0.45" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Grid>
+                    </Border>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button x:Name="AddCoverButton" Content="添加/替换" Click="AddCoverButton_Click" MinWidth="76" />
+                        <Button x:Name="ClearCoverButton" Content="清除" Click="ClearCoverButton_Click" MinWidth="64" />
+                        <Button x:Name="ExtractCoverButton" Content="提取" Click="ExtractCoverButton_Click" MinWidth="64" />
+                    </StackPanel>
+                    <TextBlock x:Name="CoverStatusText" FontSize="11" Opacity="0.6" TextWrapping="WrapWholeWords" />
+
+                    <TextBlock Text="在线搜索" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" />
+                    <TextBox x:Name="OnlineQueryBox" PlaceholderText="歌名 / 艺人，如：周杰伦" />
+                    <Grid ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <ComboBox x:Name="OnlineSourceCombo" Grid.Column="0" MinWidth="120" SelectionChanged="OnlineSourceCombo_SelectionChanged" />
+                        <Button Grid.Column="1" Content="搜索" Click="OnlineSearchButton_Click" MinWidth="72" />
+                    </Grid>
+                    <ListView
+                        x:Name="OnlineResultList"
+                        MaxHeight="248"
+                        SelectionMode="Single"
+                        SelectionChanged="OnlineResultList_SelectionChanged">
+                        <ListView.ItemTemplate>
+                            <DataTemplate x:DataType="local:TagEditorSearchItem">
+                                <Grid ColumnSpacing="10" Padding="2,2">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="40" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border
+                                        Width="40"
+                                        Height="40"
+                                        CornerRadius="6"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1">
+                                        <Image Source="{x:Bind Cover}" Stretch="UniformToFill" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Spacing="1" VerticalAlignment="Center">
+                                        <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                        <TextBlock Text="{x:Bind Detail}" FontSize="11" Opacity="0.7" TextTrimming="CharacterEllipsis" />
+                                    </StackPanel>
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                    <TextBlock x:Name="OnlineStatusText" FontSize="11" Opacity="0.7" TextWrapping="WrapWholeWords" />
+                </StackPanel>
+            </ScrollViewer>
+
+            <!--=========== 右栏 ===========-->
+            <Grid Grid.Column="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <!-- 选项卡 -->
+                <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,0,0,8">
+                    <RadioButton x:Name="TabCurrentRadio" GroupName="TagTabs" Content="当前音频标签" Checked="TagTab_Checked" />
+                    <RadioButton x:Name="TabOnlineRadio" GroupName="TagTabs" Content="在线音频标签" IsEnabled="False" />
+                </StackPanel>
+
+                <!-- Tab1：当前音频标签 -->
+                <ScrollViewer
+                    x:Name="CurrentTabPanel"
+                    Grid.Row="2"
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="0,0,4,0">
+                    <StackPanel Spacing="8" MaxWidth="560">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Border
+                                Width="48"
+                                Height="48"
+                                CornerRadius="8"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                                <Image x:Name="CurrentSmallCover" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock x:Name="CurrentTitleText" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="FilePathText" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </StackPanel>
+
+                        <TextBlock
+                            x:Name="BatchHintText"
+                            FontSize="12"
+                            Opacity="0.75"
+                            Text="批量模式：留空的字段将不修改，仅应用到所有选中歌曲"
+                            Visibility="Collapsed"
+                            TextWrapping="WrapWholeWords" />
+
+                        <TextBox x:Name="TitleBox" Header="标题" />
+                        <TextBox x:Name="ArtistBox" Header="艺术家" />
+                        <TextBox x:Name="AlbumBox" Header="专辑" />
+                        <TextBox x:Name="AlbumArtistBox" Header="专辑艺术家" />
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="YearBox" Header="年份" Grid.Column="0" />
+                            <TextBox x:Name="TrackBox" Header="曲目号" Grid.Column="1" />
+                        </Grid>
+                        <TextBox x:Name="GenreBox" Header="流派" />
+                        <TextBox x:Name="CommentBox" Header="注释" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" />
+                        <TextBox x:Name="LyricsBox" Header="歌词" AcceptsReturn="True" TextWrapping="Wrap" Height="150" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Tab2：在线音频标签 -->
+                <ScrollViewer
+                    x:Name="OnlineTabPanel"
+                    Grid.Row="2"
                     Visibility="Collapsed"
-                    TextWrapping="WrapWholeWords" />
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="0,0,4,0">
+                    <StackPanel Spacing="8" MaxWidth="560">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Border
+                                Width="48"
+                                Height="48"
+                                CornerRadius="8"
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1">
+                                <Image x:Name="OnlineSmallCover" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel VerticalAlignment="Center">
+                                <TextBlock x:Name="OnlineTitleTitle" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                <TextBlock x:Name="OnlineDetailText" FontSize="11" Opacity="0.6" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </StackPanel>
 
-                <TextBox x:Name="TitleBox" Header="标题" />
-                <TextBox x:Name="ArtistBox" Header="艺术家" />
-                <TextBox x:Name="AlbumBox" Header="专辑" />
-                <TextBox x:Name="AlbumArtistBox" Header="专辑艺术家" />
+                        <TextBlock Text="在线元数据（保存前可微调）" FontSize="12" Opacity="0.75" />
+                        <TextBox x:Name="OnlineTitleBox" Header="歌名" />
+                        <TextBox x:Name="OnlineArtistBox" Header="艺人" />
+                        <TextBox x:Name="OnlineAlbumBox" Header="专辑" />
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="OnlineYearBox" Header="年份" Grid.Column="0" />
+                            <TextBox x:Name="OnlineGenreBox" Header="流派" Grid.Column="1" />
+                        </Grid>
+                        <Button
+                            x:Name="ApplyOnlineButton"
+                            Content="一键应用到当前歌曲"
+                            Click="ApplyOnlineButton_Click"
+                            HorizontalAlignment="Left"
+                            MinWidth="180"
+                            Margin="0,8,0,0" />
+                        <TextBlock x:Name="OnlineApplyStatus" FontSize="12" Opacity="0.8" TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </ScrollViewer>
 
-                <TextBox x:Name="YearBox" Header="年份" />
-                <TextBox x:Name="TrackBox" Header="曲目号" />
-
-                <TextBox x:Name="GenreBox" Header="流派" />
-                <TextBox x:Name="CommentBox" Header="注释" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="60" />
-
-                <TextBox
-                    x:Name="LyricsBox"
-                    Header="歌词"
-                    AcceptsReturn="True"
-                    TextWrapping="Wrap"
-                    MinHeight="120" />
-
+                <!-- 底部固定操作条（不随字段滚动、常驻显示） -->
                 <StackPanel
+                    Grid.Row="3"
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="12"
-                    Margin="0,8,0,0">
+                    Margin="0,10,0,0">
                     <Button x:Name="FillFromFileNameButton" Content="从文件名填充" Click="FillFromFileNameButton_Click" MinWidth="120" />
                     <Button x:Name="SaveButton" Content="保存" Click="SaveButton_Click" MinWidth="88" />
                     <Button x:Name="CancelButton" Content="取消" Click="CancelButton_Click" MinWidth="88" />
                 </StackPanel>
-            </StackPanel>
-        </ScrollViewer>
+            </Grid>
+        </Grid>
     </Grid>
 </Window>

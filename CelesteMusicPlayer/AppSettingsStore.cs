@@ -114,6 +114,10 @@ namespace CelesteMusicPlayer
 
         public string DesktopLyricUnplayedColor { get; set; } = "#F5F5F5";
 
+        /// <summary>桌面歌词窗口记住的位置（物理像素；int.MinValue=未定位）。</summary>
+        public int DesktopLyricPosX { get; set; } = int.MinValue;
+        public int DesktopLyricPosY { get; set; } = int.MinValue;
+
         // —— 外观 ——
         public bool ShowSpectrum { get; set; } = true;
 
@@ -383,7 +387,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             };
             s.OnlineSearchDefaultSource = s.OnlineSearchDefaultSource switch
             {
-                "QQ" or "Kugou" => s.OnlineSearchDefaultSource,
+                "QQ" or "Kugou" or "iTunes" => s.OnlineSearchDefaultSource,
                 _ => "NetEase"
             };
             s.AudioChannel = s.AudioChannel switch
@@ -467,6 +471,8 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DesktopLyricFontSize = s.DesktopLyricFontSize,
             DesktopLyricPlayedColor = s.DesktopLyricPlayedColor,
             DesktopLyricUnplayedColor = s.DesktopLyricUnplayedColor,
+            DesktopLyricPosX = s.DesktopLyricPosX,
+            DesktopLyricPosY = s.DesktopLyricPosY,
             ShowSpectrum = s.ShowSpectrum,
             ShowAlbumCover = s.ShowAlbumCover,
             EnableBackground = s.EnableBackground,
@@ -601,6 +607,62 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         {
             string path = GetFilePath();
             return Path.GetDirectoryName(path) ?? path;
+        }
+
+        /// <summary>设置主文件完整路径（app-settings.json）。</summary>
+        public static string GetSettingsFilePath() => GetFilePath();
+
+        /// <summary>把当前设置导出（备份）到目标路径。返回是否成功。</summary>
+        public static bool ExportTo(string destPath)
+        {
+            try
+            {
+                string path = GetFilePath();
+                if (!string.IsNullOrWhiteSpace(destPath) && File.Exists(path))
+                {
+                    Directory.CreateDirectory(Path.GetDirectoryName(destPath));
+                    File.Copy(path, destPath, overwrite: true);
+                    return true;
+                }
+            }
+            catch { }
+            return false;
+        }
+
+        /// <summary>从备份文件恢复设置到主设置文件，并重新加载缓存。返回是否成功。</summary>
+        public static bool ImportFrom(string srcPath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(srcPath) || !File.Exists(srcPath))
+                {
+                    return false;
+                }
+
+                string path = GetFilePath();
+                Directory.CreateDirectory(Path.GetDirectoryName(path));
+                // 导入前先备份当前设置，便于回滚
+                string rollback = path + ".pre-import-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                try
+                {
+                    if (File.Exists(path))
+                    {
+                        File.Copy(path, rollback, overwrite: true);
+                    }
+                }
+                catch { }
+
+                File.Copy(srcPath, path, overwrite: true);
+                // 清除缓存，下次 Load() 从磁盘重新读
+                lock (Gate)
+                {
+                    _cache = null;
+                }
+                try { Changed?.Invoke(); } catch { }
+                return true;
+            }
+            catch { }
+            return false;
         }
     }
 }

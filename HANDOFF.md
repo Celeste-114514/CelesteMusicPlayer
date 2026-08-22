@@ -41,3 +41,26 @@
 - 先 `git commit` 当前未提交改动存档，再继续。
 - 若要继续 DSP：独占性能/爆音、音频设置面板（ECHO 对齐）。
 - 若要继续 UI：黑框根因、排序扩展、专辑墙等。
+
+## 插件化服务（跨会话大工程，用户已确认方向，待实施）
+**目标**：把 `musicbot-go`（WSL 侧，见交接文档上半部用户提供的 bot 说明）的能力独立打包成"可直接运行的 WSL 服务包"，从播放器发布渠道（release）下载包 → 安装 → 播放器内即可使用对应服务（Apple Music/网易云/QQ 等的**在线歌词加载 + 最低限度下载**）。若用户缺运行环境（WSL/Go），安装时提示（安装提示在别的会话做）。
+
+**可行性（已核实）**：
+- WSL `musicbot-go` 的 `bot/platform/manager.go` 已提供 `Search(ctx, platform, query, limit)`、`GetLyrics(ctx, platform, trackID)`、`GetDownloadInfo`、`GetTrack` 等成体系接口（含 Apple Music `plugins/applemusic` → wrapper 10021/20021/30021 解密）。**缺的只是为它包一个 HTTP 服务做"桥接"**。
+- Apple Music 歌词来自 `https://api.music.apple.com/v1/catalog/{sf}/songs/{id}/lyrics`（MusicKit，需 Apple 订阅 cookie/身份）——播放器无法免登录拿，必须依赖 bot wrapper 登录态。
+- iTunes Search API（播放器现有 `OnlineMusicApi.SearchItunesSongsAsync`）**不返回歌词**（已实测），故歌词需登录/其他平台兜底。
+
+**实施蓝图**：
+1. **bot 侧（WSL/Go）**：新增一个独立 HTTP 服务（可复用 platform.Manager），暴露：
+   - `GET /api/ping`（健康检查）、`GET /api/platforms`（可用平台）
+   - `GET /api/search?platform=&q=&limit=`
+   - `GET /api/lyric?platform=&trackId=`（返回 LRC/明文；Apple Music 返回 TTML 需在 bot `bot/lyric` 转 LRC）
+   - `POST /api/download?platform=&trackId=&out=`（或返回下载流；Apple Music 走 wrapper 解密）
+   - 打包：tar + systemd/启动脚本，独立于 Telegram bot 可单独跑，端口约定（如 21010）。
+2. **播放器侧（本仓库）**：
+   - 设置→流媒体板块：显示各平台登录状态；配置 WSL 服务地址（IP:port）。
+   - 把"下载歌词/在线标签/Apple Music 无歌词提示"改为：优先调该服务拿 Apple Music 真歌词；服务未配置/未登录时保留当前"按歌名艺人从网易云等兜底"与"请登录个人账号以加载歌词"提示。
+   - 安装包下载：播放器 release 附 WSL 服务包；安装器做环境检测（wsl 是否可用），缺失则在安装时提示（提示 UI 在别的会话做）。
+3. **本会话已完成的铺垫**：设置已加"流媒体"板块骨架（PanelStreaming + AmLoginButton 占位→跳转安装/配置）、Apple Music 未登录时歌词提示改为"需登录个人账号加载"、登录按钮目前弹"待接入"对话框。
+
+**注意**：cmake/Go/网络/版权——下载功能仅作"最低限度"；Apple 歌词依赖订阅账号有效性/风控；wrapper 有已知 segfault（冷却自动拉起，见 bot 说明）。

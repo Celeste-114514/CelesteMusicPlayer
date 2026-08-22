@@ -58,6 +58,12 @@
                 <NavigationViewItem Content="全局快捷键" Tag="Hotkeys">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8FD;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="曲库健康" Tag="LibraryHealth">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE7B8;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="流媒体" Tag="Streaming">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8FE;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
 
             <Grid Padding="0,0,8,0">
@@ -722,6 +728,15 @@
 
                         <TextBlock Text="系统" FontSize="15" FontWeight="SemiBold" Margin="0,8,0,0" />
                         <Button x:Name="OpenConfigDirButton" Content="打开配置文件所在目录" Click="OpenConfigDirButton_Click" HorizontalAlignment="Left" />
+
+                        <TextBlock Text="设置备份" FontSize="15" FontWeight="SemiBold" Margin="0,8,0,0" />
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="导出当前全部设置，方便换机/重装后恢复" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <Button x:Name="ExportSettingsButton" Content="导出设置…" Click="ExportSettingsButton_Click" MinWidth="130" />
+                            <Button x:Name="ImportSettingsButton" Content="导入设置…" Click="ImportSettingsButton_Click" MinWidth="130" />
+                        </StackPanel>
                         <StackPanel Spacing="2">
                             <TextBlock Text="文件关联" />
                             <TextBlock Text="将常见音频格式设为使用 Celeste Music Player 打开" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
@@ -1147,6 +1162,80 @@
                             FontSize="12"
                             Opacity="0.55"
                             TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 曲库健康 -->
+                <ScrollViewer
+                    x:Name="PanelLibraryHealth"
+                    Visibility="Collapsed"
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="20,12,24,24">
+                    <StackPanel Spacing="10" MaxWidth="680">
+                        <TextBlock Text="曲库健康" FontSize="17" FontWeight="SemiBold" />
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="扫描当前曲库中失效的文件与缺失的标签信息，可对问题项编辑音频标签" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <Button x:Name="HealthScanButton" Content="立即扫描" Click="HealthScanButton_Click" MinWidth="110" />
+                            <Button x:Name="HealthRemoveMissingButton" Content="移除失效文件" Click="HealthRemoveMissingButton_Click" MinWidth="110" />
+                            <Button x:Name="HealthEditTagButton" Content="编辑音频标签…" Click="HealthEditTagButton_Click" MinWidth="130" />
+                        </StackPanel>
+                        <TextBlock x:Name="HealthSummaryText" Text="尚未扫描" Opacity="0.75" FontSize="12" />
+                        <ListView x:Name="HealthResultsList" MaxHeight="340" SelectionMode="Single">
+                            <ListView.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="{ThemeResource SubtleFillColorSecondaryBrush}" CornerRadius="6" Padding="10,6" Margin="0,2">
+                                        <StackPanel Spacing="2">
+                                            <TextBlock Text="{Binding Path}" TextTrimming="CharacterEllipsis" FontSize="13" FontWeight="SemiBold" />
+                                            <TextBlock Text="{Binding Issues}" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords" />
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <TextBlock
+                            Text="“移除失效文件”仅从曲库索引中剔除，不会删除磁盘上的文件。编辑标签需选择上方列表中的问题项。"
+                            FontSize="12"
+                            Opacity="0.55"
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 流媒体 -->
+                <ScrollViewer
+                    x:Name="PanelStreaming"
+                    Visibility="Collapsed"
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="20,12,24,24">
+                    <StackPanel Spacing="12" MaxWidth="680">
+                        <TextBlock Text="流媒体平台账号" FontSize="17" FontWeight="SemiBold" />
+                        <TextBlock Text="登录后可加载对应平台的在线歌词，并启用该平台的在线音频下载。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                        <Border
+                            CornerRadius="8"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            Padding="14,10">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="Apple Music" FontWeight="SemiBold" />
+                                    <TextBlock x:Name="AmLoginStatusText" Text="未登录" FontSize="12" Opacity="0.7" />
+                                </StackPanel>
+                                <Button
+                                    x:Name="AmLoginButton"
+                                    Grid.Column="1"
+                                    Content="登录 Apple Music"
+                                    Click="AmLoginButton_Click"
+                                    VerticalAlignment="Center"
+                                    MinWidth="140" />
+                            </Grid>
+                        </Border>
+                        <TextBlock Text="更多平台（网易云 / QQ / 酷狗 等）将在账号体系完善后逐步加入。" FontSize="11" Opacity="0.5" TextWrapping="WrapWholeWords" />
                     </StackPanel>
                 </ScrollViewer>
             </Grid>
