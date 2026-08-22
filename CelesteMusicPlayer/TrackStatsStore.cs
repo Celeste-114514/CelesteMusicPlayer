@@ -221,6 +221,16 @@ namespace CelesteMusicPlayer
             });
         }
 
+        /// <summary>按评分过滤媒体库路径。minRating 传 0 表示"未评分"（Rating==0）；1..5 表示精确评分。</summary>
+        public static IReadOnlyList<string> GetPathsByRating(int ratingValue)
+        {
+            return Load()
+                .Values
+                .Where(e => ratingValue == 0 ? e.Rating == 0 : e.Rating == ratingValue)
+                .Select(e => e.FilePath)
+                .ToList();
+        }
+
         public static void RecordPlayStart(string filePath)
         {
             if (string.IsNullOrWhiteSpace(filePath))

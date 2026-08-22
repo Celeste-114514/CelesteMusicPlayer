@@ -80,8 +80,6 @@ namespace CelesteMusicPlayer
 
         public bool ShowLyricTranslate { get; set; } = true;
 
-        public bool ShowSongInfoIfNoLyric { get; set; } = true;
-
         /// <summary>None / Auto / Ask</summary>
         public string LyricSavePolicy { get; set; } = "Ask";
 
@@ -454,7 +452,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             PreferInnerLyric = s.PreferInnerLyric,
             LyricFuzzyMatch = s.LyricFuzzyMatch,
             ShowLyricTranslate = s.ShowLyricTranslate,
-            ShowSongInfoIfNoLyric = s.ShowSongInfoIfNoLyric,
             LyricSavePolicy = s.LyricSavePolicy,
             LyricKaraokeStyle = s.LyricKaraokeStyle,
             HideBlankLyricLines = s.HideBlankLyricLines,

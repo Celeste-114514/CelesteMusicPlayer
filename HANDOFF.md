@@ -1,57 +1,43 @@
 # 交接文档：CelesteMusicPlayer（Celeste 音乐播放器）
 
-## 项目信息
-- 代码仓库（含 git）：`C:\Users\admin\source\repos\CelesteMusicPlayer`（真实项目；`global-workspace` 下的 `celeste-winui`/`CelesteDesktop` 是空壳模板，勿用）
+## 项目位置
+- 仓库：`C:\Users\admin\source\repos\CelesteMusicPlayer`（`global-workspace` 下 `celeste-winui`/`CelesteDesktop` 是空壳勿用）
 - 主工程：`CelesteMusicPlayer\CelesteMusicPlayer\CelesteMusicPlayer.csproj`；解决方案 `CelesteMusicPlayer.slnx`
-- 技术栈：.NET 8 + WinUI 3（WindowsAppSDK 1.8）+ NAudio 2.2.1 + ffmpeg；WinExe；Release 自包含、Debug 走 MSIX 打包（VS F5）
-- 输出 exe：`bin\x64\Release\net8.0-windows10.0.19041.0\win-x64\CelesteMusicPlayer.exe`（自包含可直接双击；需同目录 `ffmpeg.exe`）
-- 编译（自包含 Release）：`dotnet build CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -p:Platform=x64 -p:CelesteSelfContainedDistribute=true`
-- 编译（非打包 Debug，供调试/找错）：`dotnet build CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Debug -p:Platform=x64 -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:EnableMsixTooling=false`，产物在 `bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\`（记得 `Assets\ffmpeg\ffmpeg.exe` 已复制）。XamlCompiler 偶发崩溃 -1073741819，重试即过。
+- 技术栈：.NET 8 + WinUI 3（WindowsAppSDK 1.8）+ NAudio 2.2.1 + ffmpeg；WinExe
 
-## 当前状态（最近一轮迭代，尚未 git commit）
-工作树含大量未提交改动，集中在：
-- DSP 音效板块加分（曲线 EQ / 声道平衡 / 安全限幅）
-- 三模式统一走 HiFi 后端输出链
-- 共享格式兼容修复、音量切换修复、独占 DSP 优化
+## Git 状态
+- 最近提交：`e455167`（feat(DSP) 三模式统一 DSP 链 + 共享全格式播放）
+- **有大量未提交改动**（当前会话在 `0c233c2` 之后、`e455167` 基础上又改了很多，尚未再次 commit）。接续会话建议：`git status` 先看，必要时先 commit 一次再继续。
 
-## 播放/输出架构（重要变化）
-- **三模式统一走 HiFiOutputBackend 输出**：共享 = NAudio `WasapiOut(Shared)`，独占 = 原生 `NativeWasapiExclusiveOut`，ASIO = `AsioOut`。所有输出都包一个 `ManagedDspSourceProvider`（EQ→声道平衡→限幅），DSP 实时生效、暂停后继续保留。
-- `AudioPlaybackEngine.IsHiFiMode` 恒为 true（统一走引擎/DSP）；`AudioGraph` 路径（`PlayFileAsync`/`BuildGraphInputNode`）不再作为主播放入口（保留作试听等）。
-- 主播放入口 `MainWindow.StartPlayback` → 无条件走 `PlayExtendedWithEngineAsync`（ffmpeg 转 PCM 后交给引擎）。
+## 编译命令
+- Release 自包含（可双击，exe 需同目录 ffmpeg.exe）：
+  `dotnet build CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -p:Platform=x64 -p:CelesteSelfContainedDistribute=true`
+- Debug 非打包（调试用，需复制 ffmpeg.exe 到输出目录）：
+  `dotnet build CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Debug -p:Platform=x64 -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:EnableMsixTooling=false`
+  输出：`bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\`
+- 输出产物里手动 `cp Assets/ffmpeg/ffmpeg.exe` 到 win-x64。
+- ⚠️ XamlCompiler 偶发崩溃 `-1073741819`（重试即过）；**非打包 Debug 一次全量重建偶发 `ms-appx:///.../themeresources.xaml` 资源失败**——遇到先 `rm -rf obj/x64 bin/x64` 彻底清后干净重建即可恢复（与代码无关）。
 
-## 共享模式全格式播放（关键修复）
-- **根因**：ffmpeg 输出 `pcm_s32le/s24le` 会写 `WAVE_FORMAT_EXTENSIBLE` → NAudio `WaveFileReader` 返回 `Extensible` → `WasapiOut(Shared).Init` 抛 `E_INVALIDARG`（"value does not fall within the expected range"），导致 16/44.1 ALAC、24/96 FLAC 等都无法播放。
-- **修复**：共享模式统一折叠输出为 **`pcm_f32le`（IEEE float）**（采样率/声道按设备 MixFormat，设备探测失败兜底 48k/2ch），规避 Extensible 问题。缓存 key 含转码参数指纹，参数变更自动失效重转。
-- 效果：除 DSD 外的所有格式在共享都可播（非 bit-perfect，可听优先）。
+## 当前功能/架构
+- **三模式统一输出**：共享=NAudio WasapiOut、独占=原生 WASAPI、ASIO；全部经 `ManagedDspSourceProvider`（EQ→声道平衡→限幅→ReplayGain）统一 DSP 链。共享折叠 `pcm_f32le` 到设备 MixFormat（全格式可播，含 16/44.1 ALAC、24/96 FLAC）。
+- **DSP 面板**（左侧「音效处理」→右侧面板）：ECHO 式曲线 EQ（专业曲线+简单模式+自动增益+用户自定义预设保存/加载/删除）、声道平衡、安全限幅（soft-knee 软削波+自动峰值余量）、ReplayGain 响度归一化（track/album+preamp+防削波+10ms 平滑）。独占/共享/ASIO 都实时生效、暂停后保留。
+- **歌词**：滚动歌词（手动滚动+单击跳进度+翻译行不高亮主题色）、桌面歌词。
+- **无边框 + 自绘系统按钮**：窗口常驻无边框（`MakeWindowBorderless` 去 WS_CAPTION/THICKFRAME/BORDER），右上角自绘 最小化/最大化还原/关闭；右上角还有 全屏（`MoveAndResize` 所在监视器+置顶隐藏任务栏，无缝）、刷新、选项。窗口默认 1400×800、最小 1400×800。
+- **分类**：新增「评分」（未评分+★1-★5，胶囊在搜索框右侧、排序按钮左侧，仅评分分类显示）；评分用 `TrackStatsStore.Rating`（0-5）。
+- **排序**：歌曲面板排序字段扩到 8 个（标题/艺术家/专辑/年份/时长/流派/音轨号/文件路径）+ 升降序；用户列表/收藏/最近/流派/年份复用该排序。
+- **设置审计**：清理了死选项（删除「无歌词时显示歌曲信息」`ShowSongInfoIfNoLyric` 开关，无歌词一律显示"该音频没有歌词"）；`MusicRateCustom` 已确认无残留。
+- **封面优化**：封面解码缓存（ConcurrentDictionary）+ 并发限流（SemaphoreSlim(4)）+ 更严的行复用防护（`ContainerFromItem(song)==container` 才填图）。
+- **时长**：`PlaylistItem.DurationText` 改为由 `Duration` 只读推导（不再可写覆盖），恒有值，修复"时长空白串"。
 
-## DSP 板块（左侧「音效处理」按钮 → 右侧面板）
-- **EQ**：ECHO 式曲线均衡。专业模式（对数频率曲线 + 每段频率/增益/Q/滤波器类型 Peak/LowShelf/HighShelf/LowPass/HighPass/Notch + 增删段 + preamp + 自动增益 + 预设）+ 简单模式（低音/人声/空气/温暖滑杆）。**用户自定义预设**：保存/加载/删除（`EqUserPresetStore`，存 `eq-user-presets.json`）。
-- **声道平衡**：左右增益/平衡/反相/交换/单声道。
-- **安全限幅**：headroom 余量 + soft-knee 软削波（`SoftLimit`：|x|≤0.9 线性，0.9~∞ 渐近压缩到 ±1，消除硬削爆音）。另加 **自动峰值余量补偿**：估算所有 band 在频域最大叠加增益，超 0dB 自动施加负 preamp（≤-12dB）压回，防极端参数爆音。
-- DSP 状态持久化：`eq-curve.json`（曲线 EQ）、`dsp-extra.json`（声道/限幅）、`eq-user-presets.json`（用户预设）。
-- 使用任何 DSP → 输出非 bit-perfect，DSP 面板顶部 + 左上角 `NowPlayingText` 提示。
+## ⚠️ 待办 / 已知现象
+1. **任务栏图标外圈黑框**：已无边框但黑框仍在，未定位根因。可能方案：检查 WinUI 无边框窗口的非客户区/投影残留，或用 `SetIcon`/任务栏分组图标；也可能是旧产物未更新（先确认跑的是最新 Debug/Release exe）。待新会话继续排查。
+2. **歌曲长时**：改只读推导后应修复；若个别仍空白，给具体文件名/格式再查。
+3. 极端 EQ 参数仍有轻微爆音可能性（软削波已缓解）；独占高采样+EQ 受托管性能限制（较 ECHO native/SIMD 难完全丝滑）。
+4. 非打包 Debug 全量重建的 ms-appx 资源偶发问题（见编译命令）。
+5. **排序方案 A**：歌曲面板已扩字段；专辑墙/文件夹尚未接入多字段排序（如需继续）。
+6. 音频设置下拉（右上角耳机图标 → 对齐 ECHO 的 输出模式/音频链路/专业播放状态面板）**尚未开始**——用户曾点名的后续大工程。
 
-## 音量
-- 共享 = NAudio 软件增益（0..1）；独占/ASIO = 设备主音量（slider²）。
-- 修复"独占/ASIO 切共享后换歌音量巨大"：设置保存后同步 `MainWindow.ApplySettingsLive`；`FadeInEngineAsync` 共享用持久化真实音量，而非被锁 100% 的滑块值。
-
-## 独占 DSP 性能
-- `ManagedDspSourceProvider.ProcessBlock` 用**整块批量解码/编码 + 池化 float 缓冲**，降低 352800Hz 下 per-sample 字节编解码开销。
-- 独占 render 缓冲 200ms → **100ms**，降低 render 单次 DSP 块/实时峰值。
-- 关 DSP 时 `_active=false` → `Read` 纯直通零开销。
-- 说明：独占 352800Hz × EQ 段数 × 托管 float 有物理吞吐上限，较 ECHO（native C++/SIMD）仍可能不够丝滑；是否引入 native DSP 是待定的大决定。
-
-## DSD
-- 放弃 DoP 原生直出，统一 ffmpeg 转 PCM：共享 44.1k；独占/ASIO `pcm_s32le @ 352800Hz`（已恢复，不再 176.4k 降档——降不降都卡，且已确认与采样率无关）。
-- DoP 直出代码保留但不启用。
-- **KA13 硬件时钟/固件问题仍存在**（高采样 DoP 固定位置掉帧/黄灯），这是设备端问题，非软件可修；安卓 USB Audio Player Pro 能 bit-perfect 是平台（USB 独占底层）差异。
-
-## 已知待办/现象
-- 独占开 EQ 在极端参数下已加自动余量，听感待用户确认。
-- 用户自定义预设的删除入口已接（预设下拉「管理（删除）我的预设…」）。
-- 左上角三横菜单已移除「均衡器…」入口（并入 DSP 板块）。
-
-## 其它
-- 音频独占 render：`GetCurrentPadding` 在 KA13 上会非托管崩溃，别用（已回滚留注释）。
-- 认证/打包：Debug x64 需自签名 `CelesteMusicPlayer_TemporaryKey.pfx`（密码 `celeste123`）。
-- 若继续 DSD：优先确认是否为设备时钟问题，别回音频层盲试（已多轮证明非软件音频链路）。
+## 给接续会话的建议
+- 先 `git commit` 当前未提交改动存档，再继续。
+- 若要继续 DSP：独占性能/爆音、音频设置面板（ECHO 对齐）。
+- 若要继续 UI：黑框根因、排序扩展、专辑墙等。

@@ -94,7 +94,7 @@
                         BorderThickness="0"
                         Click="SettingsButton_Click"
                         ToolTipService.ToolTip="设置">
-                        <FontIcon Glyph="&#xE713;" FontSize="15" Foreground="White" />
+                        <FontIcon Glyph="&#xE7F8;" FontSize="15" Foreground="White" />
                     </Button>
                     <Button
                         x:Name="CloseMiniButton"

@@ -98,10 +98,25 @@
                 Spacing="10"
                 VerticalAlignment="Center"
                 Margin="4,0,12,0">
-                <!-- 无边框汉堡图标：打开本地音频菜单 -->
+                <TextBlock
+                    x:Name="NowPlayingText"
+                    VerticalAlignment="Center"
+                    Opacity="0.7"
+                    Text="尚未选择音频" />
+            </StackPanel>
+            <!-- 选项 + 刷新：位于主UI中轴线向右 300px -->
+            <StackPanel
+                Grid.Column="1"
+                Orientation="Horizontal"
+                Spacing="4"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center" RenderTransformOrigin="0.5,0.5">
+                <StackPanel.RenderTransform>
+                    <TranslateTransform X="300" />
+                </StackPanel.RenderTransform>
                 <Button
                     x:Name="SelectLocalAudioButton"
-                    Width="36"
+                    Width="34"
                     Height="32"
                     Padding="0"
                     Background="Transparent"
@@ -110,11 +125,46 @@
                     ToolTipService.ToolTip="选择本地音频">
                     <FontIcon Glyph="&#xE700;" FontSize="16" />
                 </Button>
-                <TextBlock
-                    x:Name="NowPlayingText"
-                    VerticalAlignment="Center"
-                    Opacity="0.7"
-                    Text="尚未选择音频" />
+                <Button
+                    x:Name="RefreshCurrentPageButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="RefreshCurrentPageButton_Click"
+                    ToolTipService.ToolTip="刷新当前页面">
+                    <FontIcon Glyph="&#xE72C;" FontSize="15" />
+                </Button>
+                <Button
+                    x:Name="FullscreenButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="FullscreenButton_Click"
+                    ToolTipService.ToolTip="全屏（隐藏任务栏）">
+                    <FontIcon x:Name="FullscreenIcon" Glyph="&#xE740;" FontSize="15" />
+                </Button>
+            </StackPanel>
+            <!-- 自绘系统按钮（无边框窗口） -->
+            <StackPanel
+                Grid.Column="2"
+                Orientation="Horizontal"
+                Spacing="2"
+                VerticalAlignment="Center"
+                HorizontalAlignment="Right"
+                Margin="0,0,4,0">
+                <Button x:Name="WindowMinButton" Width="34" Height="32" Padding="0" Background="Transparent" BorderThickness="0" Click="WindowMinButton_Click" ToolTipService.ToolTip="最小化">
+                    <FontIcon Glyph="&#xE921;" FontSize="15" />
+                </Button>
+                <Button x:Name="WindowMaxRestoreButton" Width="34" Height="32" Padding="0" Background="Transparent" BorderThickness="0" Click="WindowMaxRestoreButton_Click" ToolTipService.ToolTip="最大化 / 还原">
+                    <FontIcon x:Name="WindowMaxRestoreIcon" Glyph="&#xE922;" FontSize="13" />
+                </Button>
+                <Button x:Name="WindowCloseButton" Width="34" Height="32" Padding="0" Background="Transparent" BorderThickness="0" Click="WindowCloseButton_Click" ToolTipService.ToolTip="关闭">
+                    <FontIcon Glyph="&#xE8BB;" FontSize="14" />
+                </Button>
             </StackPanel>
         </Grid>
 
@@ -311,6 +361,23 @@
                         </StackPanel>
                     </Button>
                     <Button
+                        x:Name="NavRatingsButton"
+                        Tag="Ratings"
+                        Margin="4,2"
+                        Padding="8,10"
+                        FontSize="14"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CornerRadius="8"
+                        Click="CategoryNavButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE8BF;" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="评分" VerticalAlignment="Center" Margin="0,0,0,2" />
+                        </StackPanel>
+                    </Button>
+                    <Button
                         x:Name="NavRecentButton"
                         Tag="Recent"
                         Margin="4,2"
@@ -340,12 +407,7 @@
                         CornerRadius="8"
                         Click="NavPlaylistWallButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Grid Width="18" Height="16">
-                                <!-- 三横（播放队列）主图标：居中偏左，保持三横完整可见 -->
-                                <FontIcon Glyph="&#xE700;" FontSize="12" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="0,0,0,2" />
-                                <!-- 右下角小加号：作为角标，缩得比三横小并贴右下角，不盖住三横主体 -->
-                                <FontIcon Glyph="&#xE710;" FontSize="7" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="0,0,-1,0" Opacity="0.92" />
-                            </Grid>
+                            <FontIcon Glyph="&#xE700;" FontSize="14" VerticalAlignment="Center" />
                             <TextBlock Text="播放队列" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
@@ -455,16 +517,16 @@
                         CornerRadius="20"
                         Click="NavTagSortButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                            <FontIcon
+                            <Path
                                 x:Name="NavTagSortIcon"
-                                Glyph="&#xE700;"
-                                FontSize="14"
+                                Width="16"
+                                Height="16"
                                 VerticalAlignment="Center"
-                                RenderTransformOrigin="0.5,0.5">
-                                <FontIcon.RenderTransform>
-                                    <RotateTransform Angle="90" />
-                                </FontIcon.RenderTransform>
-                            </FontIcon>
+                                Stretch="Uniform"
+                                Fill="Transparent"
+                                Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                                StrokeThickness="1.4"
+                                Data="M6,2 L10,2 L10,6 L6,6 Z M2,10 L6,10 L6,14 L2,14 Z M10,10 L14,10 L14,14 L10,14 Z M8,6 L8,8 L4,8 L4,10 M8,8 L12,8 L12,10" />
                             <TextBlock Text="标签排序" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
@@ -482,12 +544,16 @@
                         CornerRadius="20"
                         Click="UserPlaylistNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Grid Width="16" Height="16" VerticalAlignment="Center">
-                                <!-- 三横线（播放列表/队列） -->
-                                <FontIcon Glyph="&#xE700;" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                <!-- 右下角小加号（添加到播放队列） -->
-                                <FontIcon Glyph="&#xE710;" FontSize="8" HorizontalAlignment="Right" VerticalAlignment="Bottom" />
-                            </Grid>
+                            <Path
+                                x:Name="UserPlaylistNavIcon"
+                                Width="16"
+                                Height="16"
+                                VerticalAlignment="Center"
+                                Stretch="Uniform"
+                                Fill="Transparent"
+                                Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                                StrokeThickness="1.4"
+                                Data="M2,2 L6,2 L6,6 L2,6 Z M10,2 L14,2 L14,6 L10,6 Z M2,10 L6,10 L6,14 L2,14 Z M10,10 L14,10 L14,14 L10,14 Z" />
                             <TextBlock Text="播放列表" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
@@ -513,6 +579,7 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" MinWidth="0" />
+                        <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
@@ -557,7 +624,7 @@
                                 ToolTipService.ToolTip="全选 / 取消全选">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon x:Name="SelectAllMultiSelectIcon" Glyph="&#xE739;" FontSize="14" />
-                                    <TextBlock Text="全选" VerticalAlignment="Center" />
+                                    <TextBlock Text="全选" VerticalAlignment="Center" Margin="0,0,0,2" />
                                 </StackPanel>
                             </Button>
                         </StackPanel>
@@ -625,7 +692,7 @@
                     <!-- 歌曲库：字段+升/降序；播放列表：更改排序 -->
                     <StackPanel
                         x:Name="SongSortPanel"
-                        Grid.Column="2"
+                        Grid.Column="3"
                         Orientation="Horizontal"
                         Spacing="8"
                         HorizontalAlignment="Right"
@@ -640,7 +707,7 @@
                             ToolTipService.ToolTip="把当前歌曲列表全部加入队列并按当前排序播放">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE768;" FontSize="14" VerticalAlignment="Center" />
-                                <TextBlock Text="播放所有歌曲" VerticalAlignment="Center" />
+                                <TextBlock Text="播放所有歌曲" VerticalAlignment="Center" Margin="0,0,0,2" />
                             </StackPanel>
                         </Button>
                         <DropDownButton
@@ -649,10 +716,7 @@
                             Padding="14,0"
                             BorderThickness="0">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock
-                                    Text="排序：标题"
-                                    VerticalAlignment="Center"
-                                    Margin="0,0,0,8" />
+                                <TextBlock x:Name="SortFieldText" Text="排序：标题" VerticalAlignment="Center" Margin="0,0,0,2" />
                             </StackPanel>
                             <DropDownButton.Flyout>
                                 <MenuFlyout Placement="Bottom">
@@ -661,6 +725,9 @@
                                     <MenuFlyoutItem Text="专辑" Tag="Album" Click="SortFieldMenu_Click" />
                                     <MenuFlyoutItem Text="年份" Tag="Year" Click="SortFieldMenu_Click" />
                                     <MenuFlyoutItem Text="时长" Tag="Duration" Click="SortFieldMenu_Click" />
+                                    <MenuFlyoutItem Text="流派" Tag="Genre" Click="SortFieldMenu_Click" />
+                                    <MenuFlyoutItem Text="音轨号" Tag="Track" Click="SortFieldMenu_Click" />
+                                    <MenuFlyoutItem Text="文件路径" Tag="FilePath" Click="SortFieldMenu_Click" />
                                 </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
@@ -673,10 +740,7 @@
                             Click="SortOrderButton_Click"
                             ToolTipService.ToolTip="切换升序 / 降序">
                             <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock
-                                    Text="升序"
-                                    VerticalAlignment="Center"
-                                    Margin="0,0,0,8" />
+                                <TextBlock x:Name="SortOrderText" Text="升序" VerticalAlignment="Center" Margin="0,0,0,2" />
                             </StackPanel>
                         </Button>
                         <Button
@@ -691,9 +755,26 @@
                                 <TextBlock
                                     Text="更改排序"
                                     VerticalAlignment="Center"
-                                    Margin="0,0,0,8" />
+                                    Margin="0,0,0,2" />
                             </StackPanel>
                         </Button>
+                    </StackPanel>
+
+                    <!-- 评分分类：6 类胶囊（未评分 + 1..5 星） -->
+                    <StackPanel
+                        x:Name="RatingFilterPanel"
+                        Grid.Column="2"
+                        Orientation="Horizontal"
+                        Spacing="6"
+                        HorizontalAlignment="Left"
+                        VerticalAlignment="Center"
+                        Visibility="Collapsed">
+                        <Button x:Name="RatingFilter0Button" Tag="0" Content="未评分" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="0" VerticalContentAlignment="Center" Click="RatingFilter_Click" />
+                        <Button x:Name="RatingFilter1Button" Tag="1" Content="★1" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="0" VerticalContentAlignment="Center" Click="RatingFilter_Click" />
+                        <Button x:Name="RatingFilter2Button" Tag="2" Content="★2" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="0" VerticalContentAlignment="Center" Click="RatingFilter_Click" />
+                        <Button x:Name="RatingFilter3Button" Tag="3" Content="★3" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="0" VerticalContentAlignment="Center" Click="RatingFilter_Click" />
+                        <Button x:Name="RatingFilter4Button" Tag="4" Content="★4" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="0" VerticalContentAlignment="Center" Click="RatingFilter_Click" />
+                        <Button x:Name="RatingFilter5Button" Tag="5" Content="★5" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="0" VerticalContentAlignment="Center" Click="RatingFilter_Click" />
                     </StackPanel>
 
                     <!-- 专辑墙排序：类别下拉 + 升序/降序（两个胶囊并列） -->
@@ -1405,12 +1486,21 @@
                                             FontWeight="SemiBold"
                                             Opacity="0.8"
                                             Margin="0,0,16,0"
-                                            Text="{x:Bind DurationText}" />
+                                            Text="{x:Bind DurationText, Mode=OneWay, FallbackValue='--:--'}" />
                                     </Grid>
                                 </Border>
                             </DataTemplate>
                         </ListView.ItemTemplate>
                     </ListView>
+                    <TextBlock
+                        x:Name="PlaylistEmptyHint"
+                        Grid.Row="1"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        FontSize="14"
+                        Opacity="0.6"
+                        Text="暂无内容"
+                        Visibility="Collapsed" />
                     </Grid>
                 </Border>
 
@@ -1557,11 +1647,11 @@
                                 Grid.Row="1"
                                 ColumnSpacing="24" Padding="0,8,20,16">
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="570" />
+                                    <ColumnDefinition Width="600" />
                                     <ColumnDefinition Width="*" MinWidth="400" />
                                 </Grid.ColumnDefinitions>
                                     <ScrollViewer Grid.Column="0" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch">
-                                    <StackPanel Spacing="14" Width="570" VerticalAlignment="Center">
+                                    <StackPanel Spacing="14" Width="600" VerticalAlignment="Center">
                                     <Grid ColumnSpacing="16" HorizontalAlignment="Center">
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -1600,7 +1690,7 @@
                                                 ToolTipService.ToolTip="从音轨 1 开始播放，并替换播放列表">
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <FontIcon Glyph="&#xE768;" FontSize="15" />
-                                                    <TextBlock Text="播放该专辑" VerticalAlignment="Center" />
+                                                    <TextBlock Text="播放该专辑" VerticalAlignment="Center" Margin="0,0,0,2" />
                                                 </StackPanel>
                                             </Button>
                                             <Button
@@ -1614,7 +1704,7 @@
                                                 ToolTipService.ToolTip="将本专辑歌曲添加到播放队列">
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <FontIcon Glyph="&#xE710;" FontSize="15" />
-                                                    <TextBlock Text="添加至播放队列" VerticalAlignment="Center" />
+                                                    <TextBlock Text="添加至播放队列" VerticalAlignment="Center" Margin="0,0,0,2" />
                                                 </StackPanel>
                                             </Button>
                                             <Button
@@ -1628,7 +1718,7 @@
                                                 ToolTipService.ToolTip="把专辑内歌曲按播放顺序添加到某个播放列表">
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <FontIcon Glyph="&#xE8B7;" FontSize="15" />
-                                                    <TextBlock Text="添加到播放列表" VerticalAlignment="Center" />
+                                                    <TextBlock Text="添加到播放列表" VerticalAlignment="Center" Margin="0,0,0,2" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -1898,7 +1988,7 @@
                                     Grid.RowSpan="3"
                                     Grid.Column="1"
                                     Width="1"
-                                    Margin="20,0,16,0"
+                                    Margin="50,0,16,0"
                                     HorizontalAlignment="Left"
                                     Background="{ThemeResource DividerStrokeColorDefaultBrush}"
                                     IsHitTestVisible="False" />
@@ -1934,7 +2024,7 @@
                                         </Ellipse>
                                     </Grid>
 
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="12" MaxWidth="240">
+                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="12" MaxWidth="270">
                                         <TextBlock
                                             x:Name="ArtistDetailNameText"
                                             FontSize="28"
@@ -1954,7 +2044,7 @@
                                                 ToolTipService.ToolTip="用该艺术家全部作品替换播放列表并开始播放">
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <FontIcon Glyph="&#xE768;" FontSize="14" />
-                                                    <TextBlock Text="播放该艺术家的作品" VerticalAlignment="Center" />
+                                                    <TextBlock Text="播放该艺术家的作品" VerticalAlignment="Center" Margin="0,0,0,2" />
                                                 </StackPanel>
                                             </Button>
                                             <Button
@@ -1968,7 +2058,7 @@
                                                 ToolTipService.ToolTip="将该艺术家全部作品添加到播放队列">
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <FontIcon Glyph="&#xE710;" FontSize="14" />
-                                                    <TextBlock Text="添加该艺术家的作品至播放队列" VerticalAlignment="Center" />
+                                                    <TextBlock Text="添加该艺术家的作品至播放队列" VerticalAlignment="Center" Margin="0,0,0,2" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -2185,9 +2275,12 @@
                                                     Padding="14,0"
                                                     CornerRadius="16"
                                                     BorderThickness="0"
-                                                    Content="按标题排序"
                                                     Click="ArtistAlbumSortFieldButton_Click"
-                                                    ToolTipService.ToolTip="点击切换：按标题排序 / 按年份排序" />
+                                                    ToolTipService.ToolTip="点击切换：按标题排序 / 按年份排序">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock x:Name="ArtistAlbumSortFieldText" Text="按标题排序" VerticalAlignment="Center" Margin="0,0,0,2" />
+                                                    </StackPanel>
+                                                </Button>
                                                 <Button
                                                     x:Name="ArtistAlbumSortOrderButton"
                                                     Height="32"
@@ -2195,9 +2288,12 @@
                                                     Padding="14,0"
                                                     CornerRadius="16"
                                                     BorderThickness="0"
-                                                    Content="升序"
                                                     Click="ArtistAlbumSortOrderButton_Click"
-                                                    ToolTipService.ToolTip="切换升序 / 降序" />
+                                                    ToolTipService.ToolTip="切换升序 / 降序">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock x:Name="ArtistAlbumSortOrderText" Text="升序" VerticalAlignment="Center" Margin="0,0,0,2" />
+                                                    </StackPanel>
+                                                </Button>
                                             </StackPanel>
                                         </Grid>
 
@@ -2361,7 +2457,7 @@
                                 ToolTipService.ToolTip="把文件夹加入媒体库">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
                                     <FontIcon Glyph="&#xE710;" FontSize="14" />
-                                    <TextBlock Text="添加文件夹" VerticalAlignment="Center" />
+                                    <TextBlock Text="添加文件夹" VerticalAlignment="Center" Margin="0,0,0,2" />
                                 </StackPanel>
                             </Button>
                             <ListView
@@ -2487,7 +2583,7 @@
                                         ToolTipService.ToolTip="多选操作">
                                         <StackPanel Orientation="Horizontal" Spacing="5">
                                             <FontIcon Glyph="&#xE712;" FontSize="13" />
-                                            <TextBlock Text="选项" VerticalAlignment="Center" />
+                                            <TextBlock Text="选项" VerticalAlignment="Center" Margin="0,0,0,2" />
                                         </StackPanel>
                                     </Button>
                                     <Button
@@ -2502,7 +2598,7 @@
                                         ToolTipService.ToolTip="退出多选">
                                         <StackPanel Orientation="Horizontal" Spacing="5">
                                             <FontIcon Glyph="&#xE711;" FontSize="13" />
-                                            <TextBlock Text="退出多选" VerticalAlignment="Center" />
+                                            <TextBlock Text="退出多选" VerticalAlignment="Center" Margin="0,0,0,2" />
                                         </StackPanel>
                                     </Button>
                                 </Grid>
@@ -2592,11 +2688,11 @@
                         <!-- 顶部：分类字段切换（分类墙维度） -->
                         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Padding="0,0,0,2">
                             <TextBlock Text="分类：" VerticalAlignment="Center" Opacity="0.7" FontSize="13" />
-                            <Button x:Name="TagSortFieldArtistButton" Tag="Artist" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="艺术家" Click="TagSortFieldBoundButton_Click" />
-                            <Button x:Name="TagSortFieldAlbumArtistButton" Tag="AlbumArtist" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="专辑艺术家" Click="TagSortFieldBoundButton_Click" />
-                            <Button x:Name="TagSortFieldAlbumButton" Tag="Album" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="专辑" Click="TagSortFieldBoundButton_Click" />
-                            <Button x:Name="TagSortFieldGenreButton" Tag="Genre" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="流派" Click="TagSortFieldBoundButton_Click" />
-                            <Button x:Name="TagSortFieldYearButton" Tag="Year" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="年份" Click="TagSortFieldBoundButton_Click" />
+                            <Button x:Name="TagSortFieldArtistButton" Tag="Artist" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" VerticalContentAlignment="Center" Content="艺术家" Click="TagSortFieldBoundButton_Click" />
+                            <Button x:Name="TagSortFieldAlbumArtistButton" Tag="AlbumArtist" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" VerticalContentAlignment="Center" Content="专辑艺术家" Click="TagSortFieldBoundButton_Click" />
+                            <Button x:Name="TagSortFieldAlbumButton" Tag="Album" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" VerticalContentAlignment="Center" Content="专辑" Click="TagSortFieldBoundButton_Click" />
+                            <Button x:Name="TagSortFieldGenreButton" Tag="Genre" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" VerticalContentAlignment="Center" Content="流派" Click="TagSortFieldBoundButton_Click" />
+                            <Button x:Name="TagSortFieldYearButton" Tag="Year" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" VerticalContentAlignment="Center" Content="年份" Click="TagSortFieldBoundButton_Click" />
                         </StackPanel>
 
                         <!-- 分类墙：一个分类一张封面卡片 -->
@@ -2641,9 +2737,9 @@
                             </Grid.RowDefinitions>
                             <!-- 顶栏：返回 + 标题 + 切换视角 -->
                             <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8">
-                                <Button x:Name="TagSortPanelBackButton" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="0" Content="← 返回" Click="TagSortPanelBackButton_Click" />
+                                <Button x:Name="TagSortPanelBackButton" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="0" VerticalContentAlignment="Center" Content="← 返回" Click="TagSortPanelBackButton_Click" />
                                 <TextBlock x:Name="TagSortPanelTitle" VerticalAlignment="Center" FontSize="16" FontWeight="SemiBold" Text="" />
-                                <Button x:Name="TagSortViewModeButton" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" Content="曲目">
+                                <Button x:Name="TagSortViewModeButton" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" VerticalContentAlignment="Center" Content="曲目">
                                     <Button.Flyout>
                                         <MenuFlyout>
                                             <MenuFlyoutItem Text="曲目" Tag="Songs" Click="TagSortViewModeItem_Click" />
@@ -2664,7 +2760,7 @@
                                     ToolTipService.ToolTip="按当前列表顺序替换播放队列并从第一首播放">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <FontIcon Glyph="&#xE768;" FontSize="14" VerticalAlignment="Center" />
-                                        <TextBlock Text="播放当前列表歌曲" VerticalAlignment="Center" />
+                                        <TextBlock Text="播放当前列表歌曲" VerticalAlignment="Center" Margin="0,0,0,2" />
                                     </StackPanel>
                                 </Button>
                             </StackPanel>
@@ -3220,7 +3316,7 @@
                             ToolTipService.ToolTip="按当前播放列表顺序开始播放">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE768;" FontSize="14" />
-                                <TextBlock Text="播放该队列" VerticalAlignment="Center" />
+                                <TextBlock Text="播放该队列" VerticalAlignment="Center" Margin="0,0,0,2" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
@@ -3260,7 +3356,7 @@
                             </Button.Flyout>
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE712;" FontSize="14" />
-                                <TextBlock Text="更多" VerticalAlignment="Center" />
+                                <TextBlock Text="更多" VerticalAlignment="Center" Margin="0,0,0,2" />
                             </StackPanel>
                         </Button>
                         <Button
@@ -3285,7 +3381,7 @@
                             ToolTipService.ToolTip="添加到播放列表（列表墙）">
                             <StackPanel Orientation="Horizontal" Spacing="8">
                                 <FontIcon Glyph="&#xE8B7;" FontSize="14" />
-                                <TextBlock Text="添加到播放列表" VerticalAlignment="Center" />
+                                <TextBlock Text="添加到播放列表" VerticalAlignment="Center" Margin="0,0,0,2" />
                             </StackPanel>
                         </Button>
                     </StackPanel>

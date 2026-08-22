@@ -290,7 +290,6 @@ namespace CelesteMusicPlayer
                 SetToggle(PreferInnerLyricSwitch, s.PreferInnerLyric);
                 SetToggle(LyricFuzzyMatchSwitch, s.LyricFuzzyMatch);
                 SetToggle(ShowLyricTranslateSwitch, s.ShowLyricTranslate);
-                SetToggle(ShowSongInfoIfNoLyricSwitch, s.ShowSongInfoIfNoLyric);
                 SetText(LyricFolderTextBox, s.LyricFolder);
                 SelectComboByTag(LyricSavePolicyCombo, s.LyricSavePolicy);
                 SetToggle(LyricKaraokeStyleSwitch, s.LyricKaraokeStyle);
@@ -797,7 +796,6 @@ namespace CelesteMusicPlayer
             s.PreferInnerLyric = PreferInnerLyricSwitch.IsOn;
             s.LyricFuzzyMatch = LyricFuzzyMatchSwitch?.IsOn ?? s.LyricFuzzyMatch;
             s.ShowLyricTranslate = ShowLyricTranslateSwitch?.IsOn ?? s.ShowLyricTranslate;
-            s.ShowSongInfoIfNoLyric = ShowSongInfoIfNoLyricSwitch?.IsOn ?? s.ShowSongInfoIfNoLyric;
             s.LyricFolder = LyricFolderTextBox?.Text?.Trim() ?? string.Empty;
             s.LyricSavePolicy = GetComboTagString(LyricSavePolicyCombo, "Ask");
             s.LyricKaraokeStyle = LyricKaraokeStyleSwitch?.IsOn ?? s.LyricKaraokeStyle;

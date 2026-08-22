@@ -46,7 +46,10 @@ namespace CelesteMusicPlayer
         Artist,
         Album,
         Year,
-        Duration
+        Duration,
+        Genre,
+        Track,
+        FilePath
     }
 
     /// <summary>
@@ -81,7 +84,15 @@ namespace CelesteMusicPlayer
         /// <summary>列表上显示的年份文字（由 Year 推导，避免复制条目时漏设）</summary>
         public string YearText => Year > 0 ? Year.ToString() : "-";
 
-        public string DurationText { get; set; } = "00:00";
+        /// <summary>时长文本（由 Duration 只读推导，保证恒有值、不空白）。</summary>
+        public string DurationText
+        {
+            get
+            {
+                var t = Duration < TimeSpan.Zero ? TimeSpan.Zero : Duration;
+                return t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"mm\:ss");
+            }
+        }
 
         /// <summary>歌曲面板第三行的格式胶囊：格式 / 位深·采样率 / 比特率（如 ["FLAC","16bit/44kHz","1411kbps"]）。
         /// 懒计算 + AudioInfoFormatter 按路径缓存，避免启动/建条目时同步解析。</summary>
@@ -103,6 +114,9 @@ namespace CelesteMusicPlayer
         public TimeSpan Duration { get; set; }
 
         public string FilePath { get; set; } = string.Empty;
+
+        /// <summary>用户评分 0..5（0 = 未评分）。</summary>
+        public int Rating { get; set; }
 
         /// <summary>仅文件名（媒体库/文件夹详情列表显示用）。</summary>
         public string FileName => System.IO.Path.GetFileName(FilePath);
@@ -398,8 +412,8 @@ namespace CelesteMusicPlayer
         private IntPtr _mainWindowHwnd;
 
         // 最小窗口尺寸（DIP）
-        private const int MinWindowWidthDip = 1360;
-        private const int MinWindowHeightDip = 775;
+        private const int MinWindowWidthDip = 1400;
+        private const int MinWindowHeightDip = 800;
 
         // ---- WM_GETMINMAXINFO 子类化：真正锁定最小窗口 ----
         private const int WM_GETMINMAXINFO = 0x0024;
@@ -408,6 +422,62 @@ namespace CelesteMusicPlayer
         private static WndProcDelegate? _minMaxWndProc;
         private static nint _prevWndProc;
         private static double _minTrackScale = 1.0;
+
+        // ---- 隐藏系统标题栏按钮（自绘最小化/最大化/关闭） ----
+        private const long GWL_STYLE = -16;
+        private const long WS_SYSMENU = 0x00080000L;
+        private const long WS_MINIMIZEBOX = 0x00020000L;
+        private const long WS_MAXIMIZEBOX = 0x00010000L;
+        private const long WS_CAPTION = 0x00C00000L;
+        private const long WS_THICKFRAME = 0x00040000L;
+        private const long WS_BORDER = 0x00800000L;
+
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW", CharSet = CharSet.Unicode)]
+        private static extern long GetWindowLongPtr64(nint hWnd, int nIndex);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct RECT_INT { public int L, T, R, B; }
+
+        [DllImport("dwmapi.dll", PreserveSig = true)]
+        private static extern int DwmSetWindowAttribute(nint hwnd, int attr, ref RECT_INT value, int sz);
+
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", CharSet = CharSet.Unicode)]
+        private static extern nint SetWindowLongPtr642(nint hWnd, int nIndex, long dwNewLong);
+
+        [DllImport("user32.dll")]
+        private static extern bool SystemParametersInfo(int uiAction, int uiParam, ref RECT_INT pvParam, int fWinIni);
+        private const int SPI_GETWORKAREA = 0x0030;
+
+        [DllImport("user32.dll")]
+        private static extern int GetSystemMetrics(int nIndex);
+        private const int SM_CXSCREEN = 0;
+        private const int SM_CYSCREEN = 1;
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct MONITORINFO
+        {
+            public int cbSize;
+            public int rcMonitor_L, rcMonitor_T, rcMonitor_R, rcMonitor_B;
+            public int rcWork_L, rcWork_T, rcWork_R, rcWork_B;
+            public int dwFlags;
+        }
+
+        [DllImport("user32.dll")]
+        private static extern nint MonitorFromWindow(nint hwnd, uint dwFlags);
+        private const uint MONITOR_DEFAULTTOPRIMARY = 0x00000001;
+
+        [DllImport("user32.dll")]
+        private static extern bool GetMonitorInfo(nint hMonitor, ref MONITORINFO lpmi);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
+        private static readonly nint HWND_TOPMOST = new(-1);
+        private static readonly nint HWND_NOTOPMOST = new(-2);
+        private const uint SWP_NOACTIVATE = 0x0010;
+        private const uint SWP_NOMOVE = 0x0002;
+        private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_ASYNCWINDOWPOS = 0x4000;
 
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
@@ -432,6 +502,9 @@ namespace CelesteMusicPlayer
         [DllImport("user32.dll")]
         private static extern nint CallWindowProcW(nint wndProc, nint hWnd, uint msg, nint wParam, nint lParam);
         private string? _genreYearFilter;
+
+        /// <summary>评分分类当前选中的评分数值（0..5；-1 = 未选择，显示全部有评分项）。</summary>
+        private int _ratingFilter = -1;
         private readonly ObservableCollection<AlbumEntry> _albums = new();
         private readonly ObservableCollection<PlaylistCardViewModel> _playlistWall = new();
         private readonly ObservableCollection<PlaylistItem> _playlistDetailItems = new();
@@ -584,6 +657,9 @@ namespace CelesteMusicPlayer
 
         // 歌曲面板小封面异步加载：防止同一路径并发重复读取
         private readonly System.Collections.Generic.HashSet<string> _rowCoverLoading = new(System.StringComparer.OrdinalIgnoreCase);
+        // 封面解码缓存（按路径复用已解码封面，避免滚动/重复时反复 IO+解码造成卡顿）；限流并发封面解码
+        private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> _coverImageCache = new(System.StringComparer.OrdinalIgnoreCase);
+        private readonly System.Threading.SemaphoreSlim _coverLoadGate = new(4);
 
         // 歌词平滑滚动
         private DispatcherQueueTimer? _lyricScrollTimer;
@@ -610,9 +686,9 @@ namespace CelesteMusicPlayer
                 _mainWindowHwnd = IntPtr.Zero;
             }
 
-            // 默认 1360×775；Resize 按 DPI 换算为物理像素
-            ResizeWindowToDips(1360, 775);
-            // 真正锁定最小窗口 1360×775（WM_GETMINMAXINFO 子类化，无闪烁）
+            // 默认 1400×800；Resize 按 DPI 换算为物理像素
+            ResizeWindowToDips(1400, 800);
+            // 真正锁定最小窗口 1400×800（WM_GETMINMAXINFO 子类化，无闪烁）
             SetupMinSizeHooks();
             // 标题栏扩展放到 Activated 之后，避免资源管理器直接启动时黑窗闪退（0xC000027B）
             Activated += MainWindow_FirstActivated;
@@ -1447,6 +1523,7 @@ namespace CelesteMusicPlayer
             {
                 ExtendsContentIntoTitleBar = true;
                 SetTitleBar(AppTitleBar);
+                MakeWindowBorderless(); // 无边框：去掉任务栏图标的方框描边
             }
             catch (Exception ex)
             {
@@ -1498,7 +1575,6 @@ namespace CelesteMusicPlayer
             {
             }
         }
-
         /// <summary>信息卡：更深毛玻璃 + 阴影立体感</summary>
         private void ApplyNowPlayingCardChrome()
         {
@@ -2511,8 +2587,8 @@ namespace CelesteMusicPlayer
                 Year = year,
                 Genre = genre,
                 Duration = duration,
-                DurationText = FormatTime(duration),
-                FilePath = path
+                FilePath = path,
+                Rating = TrackStatsStore.Get(path)?.Rating ?? 0
             };
         }
 
@@ -5202,6 +5278,7 @@ namespace CelesteMusicPlayer
             PlaylistDetailBorder.Visibility = Visibility.Collapsed;
             TagSortBorder.Visibility = Visibility.Collapsed;
             AudioFxBorder.Visibility = Visibility.Collapsed;
+            RatingFilterPanel.Visibility = Visibility.Collapsed;
 
             switch (_currentCategory)
             {
@@ -5222,8 +5299,8 @@ namespace CelesteMusicPlayer
 
                     _sortField = SortField.Title;
                     _sortAscending = true;
-                    SortFieldButton.Content = "排序：标题";
-                    SortOrderButton.Content = "升序";
+                    SortFieldText.Text = "排序：标题";
+                    SortOrderText.Text = "升序";
                     ApplySort(playingPath);
                     break;
 
@@ -5323,6 +5400,23 @@ namespace CelesteMusicPlayer
                     ApplyFavoritesOrRecentCategory();
                     break;
 
+                case "Ratings":
+                    LibraryPaneTitle.Text = "评分";
+                    LibraryPaneTitle.Visibility = Visibility.Visible;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Visible;
+                    SetSongSortUiForCategory(isUserPlaylist: false);
+                    AlbumSortButton.Visibility = Visibility.Collapsed;
+                    RatingFilterPanel.Visibility = Visibility.Visible;
+                    PlaylistListBorder.Visibility = Visibility.Visible;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    ApplyRatingCategory();
+                    break;
+
                 case "MostPlayed":
                     ApplyMostPlayedCategory();
                     break;
@@ -5412,6 +5506,12 @@ namespace CelesteMusicPlayer
             PlaylistView.CanReorderItems = ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist);
             PlaylistView.CanDragItems = PlaylistView.CanReorderItems;
 
+            // 空状态提示：仅 Favorites / Recent / Ratings 自己管理；其余分类隐藏
+            if (_currentCategory is not ("Favorites" or "Recent" or "Ratings"))
+            {
+                SetPlaylistEmptyHint(false, string.Empty);
+            }
+
             UpdateUserPlaylistActionBarVisibility();
             UpdateLibrarySearchUi();
         }
@@ -5470,7 +5570,7 @@ namespace CelesteMusicPlayer
             bool show = !_isMultiSelectMode
                 && _openedAlbum == null
                 && _openedArtist == null
-                && (_currentCategory is "Songs" or "Albums" or "Artists" or "AlbumArtists" or "Folders" or "UserPlaylist" or "Favorites" or "Recent");
+                && (_currentCategory is "Songs" or "Albums" or "Artists" or "AlbumArtists" or "Folders" or "UserPlaylist" or "Favorites" or "Recent" or "Ratings");
 
             LibrarySearchPanel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
             if (!show)
@@ -6269,7 +6369,6 @@ namespace CelesteMusicPlayer
                     try
                     {
                         PlaylistItem p = CreatePlaylistItemFromPath(path);
-                        p.DurationText = FormatTime(p.Duration);
                         songs.Add(p);
                     }
                     catch
@@ -7561,8 +7660,8 @@ namespace CelesteMusicPlayer
             _artistAlbumSortMode = ArtistAlbumSortMode.Title;
             _artistAlbumSortAscending = true;
             ArtistSongSortButton.Content = "排序";
-            ArtistAlbumSortFieldButton.Content = "按标题排序";
-            ArtistAlbumSortOrderButton.Content = "升序";
+            ArtistAlbumSortFieldText.Text = "按标题排序";
+            ArtistAlbumSortOrderText.Text = "升序";
 
             ArtistGridView.Visibility = Visibility.Collapsed;
             ArtistDetailPanel.Visibility = Visibility.Visible;
@@ -8032,7 +8131,7 @@ namespace CelesteMusicPlayer
             _artistAlbumSortMode = _artistAlbumSortMode == ArtistAlbumSortMode.Title
                 ? ArtistAlbumSortMode.Year
                 : ArtistAlbumSortMode.Title;
-            ArtistAlbumSortFieldButton.Content = _artistAlbumSortMode == ArtistAlbumSortMode.Year
+            ArtistAlbumSortFieldText.Text = _artistAlbumSortMode == ArtistAlbumSortMode.Year
                 ? "按年份排序"
                 : "按标题排序";
             RefreshArtistAlbumListOrder();
@@ -8041,7 +8140,7 @@ namespace CelesteMusicPlayer
         private void ArtistAlbumSortOrderButton_Click(object sender, RoutedEventArgs e)
         {
             _artistAlbumSortAscending = !_artistAlbumSortAscending;
-            ArtistAlbumSortOrderButton.Content = _artistAlbumSortAscending ? "升序" : "降序";
+            ArtistAlbumSortOrderText.Text = _artistAlbumSortAscending ? "升序" : "降序";
             RefreshArtistAlbumListOrder();
         }
 
@@ -9113,10 +9212,13 @@ namespace CelesteMusicPlayer
                 "Album" => SortField.Album,
                 "Year" => SortField.Year,
                 "Duration" => SortField.Duration,
+                "Genre" => SortField.Genre,
+                "Track" => SortField.Track,
+                "FilePath" => SortField.FilePath,
                 _ => SortField.Title
             };
 
-            SortFieldButton.Content = "排序：" + GetSortFieldDisplayName(_sortField);
+            SortFieldText.Text = "排序：" + GetSortFieldDisplayName(_sortField);
 
             string? playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
                 ? _playlist[_currentIndex].FilePath
@@ -9127,7 +9229,7 @@ namespace CelesteMusicPlayer
         private void SortOrderButton_Click(object sender, RoutedEventArgs e)
         {
             _sortAscending = !_sortAscending;
-            SortOrderButton.Content = _sortAscending ? "升序" : "降序";
+            SortOrderText.Text = _sortAscending ? "升序" : "降序";
 
             string? playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
                 ? _playlist[_currentIndex].FilePath
@@ -9223,6 +9325,9 @@ namespace CelesteMusicPlayer
             SortField.Album => "专辑",
             SortField.Year => "年份",
             SortField.Duration => "时长",
+            SortField.Genre => "流派",
+            SortField.Track => "音轨号",
+            SortField.FilePath => "文件路径",
             _ => "标题"
         };
 
@@ -9259,6 +9364,9 @@ namespace CelesteMusicPlayer
                 SortField.Album => target.OrderBy(i => i.Album, StringComparer.CurrentCultureIgnoreCase),
                 SortField.Year => target.OrderBy(i => i.Year),
                 SortField.Duration => target.OrderBy(i => i.Duration),
+                SortField.Genre => target.OrderBy(i => i.Genre, StringComparer.CurrentCultureIgnoreCase),
+                SortField.Track => target.OrderBy(i => i.Track),
+                SortField.FilePath => target.OrderBy(i => i.FilePath, StringComparer.CurrentCultureIgnoreCase),
                 _ => target.OrderBy(i => i.Title, StringComparer.CurrentCultureIgnoreCase)
             };
 
@@ -10867,7 +10975,6 @@ namespace CelesteMusicPlayer
                     Album = string.IsNullOrWhiteSpace(song.Album) ? "未知专辑" : song.Album,
                     Year = song.Year,
                     Duration = duration,
-                    DurationText = FormatTime(duration),
                     FilePath = song.FilePath
                 });
             }
@@ -11225,9 +11332,9 @@ namespace CelesteMusicPlayer
                 Year = song.Year,
                 Genre = song.Genre,
                 Duration = song.Duration,
-                DurationText = song.DurationText,
                 FilePath = song.FilePath,
-                StartTimeSeconds = song.StartTimeSeconds
+                StartTimeSeconds = song.StartTimeSeconds,
+                Rating = song.Rating
             };
 
         /// <summary>
@@ -11250,6 +11357,7 @@ namespace CelesteMusicPlayer
                 NavAlbumArtistsButton,
                 NavFoldersButton,
                 NavFavoritesButton,
+                NavRatingsButton,
                 NavRecentButton,
                 NavPlaylistWallButton,
                 NavGenreButton,
@@ -11609,7 +11717,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>异步读取歌曲小封面并填到行模板内的 RowCoverImage；去重 + 行已回收则跳过。</summary>
+        /// <summary>异步读取歌曲小封面并填到行模板内的 RowCoverImage；去重 + 封面解码缓存 + 并发限流 + 行已回收则跳过。</summary>
         private async void LoadRowCoverAsync(ListView owner, ListViewItem container, PlaylistItem song)
         {
             if (string.IsNullOrWhiteSpace(song.FilePath))
@@ -11624,7 +11732,24 @@ namespace CelesteMusicPlayer
 
             try
             {
-                byte[]? bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(song.FilePath));
+                // 命中已解码缓存：直接填行（不再 IO/解码，滚动丝滑）
+                if (_coverImageCache.TryGetValue(song.FilePath, out var cached))
+                {
+                    DispatcherQueue.TryEnqueue(() => AttachCover(owner, container, song, cached));
+                    return;
+                }
+
+                byte[]? bytes = null;
+                await _coverLoadGate.WaitAsync();
+                try
+                {
+                    bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(song.FilePath));
+                }
+                finally
+                {
+                    _coverLoadGate.Release();
+                }
+
                 if (bytes is not { Length: > 0 })
                 {
                     return;
@@ -11637,19 +11762,9 @@ namespace CelesteMusicPlayer
                     await bmp.SetSourceAsync(ms.AsRandomAccessStream());
                 }
 
-                // 仅在行仍被实现（未回收）时更新，避免写错容器
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    if (owner.ContainerFromItem(song) == container)
-                    {
-                        var img = container.ContentTemplateRoot as FrameworkElement;
-                        var coverImg = img?.FindName("RowCoverImage") as Microsoft.UI.Xaml.Controls.Image;
-                        if (coverImg != null)
-                        {
-                            coverImg.Source = bmp;
-                        }
-                    }
-                });
+                // 缓存解码结果供重复使用
+                _coverImageCache.TryAdd(song.FilePath, bmp);
+                DispatcherQueue.TryEnqueue(() => AttachCover(owner, container, song, bmp));
             }
             catch
             {
@@ -11657,6 +11772,28 @@ namespace CelesteMusicPlayer
             finally
             {
                 _rowCoverLoading.Remove(song.FilePath);
+            }
+        }
+
+        /// <summary>仅当该行仍由同一容器承载时，把封面填到其 RowCoverImage（避免行复用错位）。</summary>
+        private static void AttachCover(ListView owner, ListViewItem container, PlaylistItem song, Microsoft.UI.Xaml.Media.Imaging.BitmapImage bmp)
+        {
+            try
+            {
+                if (owner.ContainerFromItem(song) != container)
+                {
+                    return;
+                }
+
+                var img = container.ContentTemplateRoot as FrameworkElement;
+                var coverImg = img?.FindName("RowCoverImage") as Microsoft.UI.Xaml.Controls.Image;
+                if (coverImg != null)
+                {
+                    coverImg.Source = bmp;
+                }
+            }
+            catch
+            {
             }
         }
 
@@ -14210,7 +14347,7 @@ namespace CelesteMusicPlayer
 
             if (lyrics.Count == 0)
             {
-                // 无歌词：右侧歌词区固定显示简短说明（避免拼接长歌曲信息导致显示不全）
+                // 无歌词：右侧歌词区固定显示简短说明
                 ClearLyricsUi("该音频没有歌词");
                 return;
             }

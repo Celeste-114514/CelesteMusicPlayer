@@ -4,6 +4,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Text;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -778,7 +779,6 @@ namespace CelesteMusicPlayer
                 old.Track = fresh.Track;
                 old.Year = fresh.Year;
                 old.Duration = fresh.Duration;
-                old.DurationText = fresh.DurationText;
                 old.Genre = fresh.Genre;
             }
         }
@@ -1880,6 +1880,16 @@ namespace CelesteMusicPlayer
             LibraryPaneTitle.Text = string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal)
                 ? "我喜欢的音乐"
                 : "最近播放";
+            SetPlaylistEmptyHint(items.Count == 0,
+                string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal) ? "暂时没有添加我喜欢的音乐" : "最近没有播放记录");
+        }
+
+        /// <summary>歌曲列表空状态提示：空时显示 hint，否则收起。</summary>
+        private void SetPlaylistEmptyHint(bool empty, string hint)
+        {
+            if (PlaylistEmptyHint == null) return;
+            PlaylistEmptyHint.Visibility = empty ? Visibility.Visible : Visibility.Collapsed;
+            PlaylistEmptyHint.Text = hint;
         }
         /// <summary>播放最多：按播放次数降序显示媒体库歌曲。</summary>
         private void ApplyMostPlayedCategory()
@@ -1922,6 +1932,183 @@ namespace CelesteMusicPlayer
             RenumberCollection(result);
             PlaylistView.ItemsSource = result;
             LibraryPaneTitle.Text = "播放最多";
+        }
+
+        // ---------------- 评分分类（未评分 + 1..5 星） ----------------
+
+        /// <summary>右上角刷新当前页面：按当前分类重载对应数据。</summary>
+        private bool _fullscreen;
+        private bool _windowMaximized;
+        private Windows.Graphics.RectInt32 _fullscreenRestoreRect;
+
+        /// <summary>无边框窗口（常驻）：去掉 WS_CAPTION/WS_THICKFRAME/WS_BORDER，消除任务栏图标的方框描边。</summary>
+        private void MakeWindowBorderless()
+        {
+            try
+            {
+                if (_mainWindowHwnd == IntPtr.Zero) return;
+                long s = GetWindowLongPtr64(_mainWindowHwnd, (int)GWL_STYLE);
+                SetWindowLongPtr642(_mainWindowHwnd, (int)GWL_STYLE, s & ~(WS_CAPTION | WS_THICKFRAME | WS_BORDER));
+            }
+            catch { }
+        }
+
+        private void WindowMinButton_Click(object sender, RoutedEventArgs e)
+        {
+            try { if (AppWindow.Presenter is OverlappedPresenter p) p.Minimize(); } catch { }
+        }
+
+        private void WindowMaxRestoreButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (AppWindow.Presenter is OverlappedPresenter p)
+                {
+                    if (_windowMaximized) p.Restore();
+                    else p.Maximize();
+                    _windowMaximized = !_windowMaximized;
+                    UpdateMaxRestoreIcon();
+                }
+            }
+            catch { }
+        }
+
+        private void WindowCloseButton_Click(object sender, RoutedEventArgs e)
+        {
+            try { Close(); } catch { }
+        }
+
+        private void UpdateMaxRestoreIcon()
+        {
+            try
+            {
+                if (WindowMaxRestoreIcon != null)
+                {
+                    WindowMaxRestoreIcon.Glyph = _windowMaximized ? "\uE923" : "\uE922";
+                }
+            }
+            catch { }
+        }
+
+        private void FullscreenButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (AppWindow.Presenter is not OverlappedPresenter p)
+                {
+                    return;
+                }
+
+                if (_fullscreen)
+                {
+                    // 还原：取消置顶 → 恢复原位置尺寸
+                    SetWindowPos(_mainWindowHwnd, HWND_NOTOPMOST, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
+                    AppWindow.MoveAndResize(_fullscreenRestoreRect);
+                    _fullscreen = false;
+                    FullscreenIcon.Glyph = "\uE740"; // 进入全屏
+                }
+                else
+                {
+                    _fullscreenRestoreRect = new Windows.Graphics.RectInt32(AppWindow.Position.X, AppWindow.Position.Y, AppWindow.Size.Width, AppWindow.Size.Height);
+                    // 沉浸全屏：取所在监视器精确 rcMonitor（含任务栏区）并置顶隐藏任务栏
+                    int l = 0, t = 0, r = GetSystemMetrics(SM_CXSCREEN), b = GetSystemMetrics(SM_CYSCREEN);
+                    nint hm = MonitorFromWindow(_mainWindowHwnd, MONITOR_DEFAULTTOPRIMARY);
+                    var mi = new MONITORINFO();
+                    mi.cbSize = System.Runtime.InteropServices.Marshal.SizeOf(typeof(MONITORINFO));
+                    if (hm != nint.Zero && GetMonitorInfo(hm, ref mi))
+                    {
+                        l = mi.rcMonitor_L; t = mi.rcMonitor_T; r = mi.rcMonitor_R; b = mi.rcMonitor_B;
+                    }
+
+                    AppWindow.MoveAndResize(new Windows.Graphics.RectInt32(l, t, r - l, b - t));
+                    SetWindowPos(_mainWindowHwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_ASYNCWINDOWPOS);
+                    _fullscreen = true;
+                    FullscreenIcon.Glyph = "\uE73F"; // 退出全屏
+                }
+            }
+            catch { }
+        }
+
+        private void RefreshCurrentPageButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                switch (_currentCategory)
+                {
+                    case "Albums": _ = RefreshAlbumViewAsync(); break;
+                    case "Artists":
+                    case "AlbumArtists": _ = RefreshArtistViewAsync(); break;
+                    case "Folders": RefreshFolderBrowserRoots(); break;
+                    case "Favorites":
+                    case "Recent": ApplyFavoritesOrRecentCategory(); break;
+                    case "Ratings": ApplyRatingCategory(); break;
+                    case "MostPlayed": ApplyMostPlayedCategory(); break;
+                    case "Genres":
+                    case "Years": _ = RefreshGenreYearViewAsync(); break;
+                    case "PlaylistWall": ApplyPlaylistWallCategory(); break;
+                    default: ApplyCategoryView(); break;
+                }
+
+                NowPlayingText.Text = "已刷新当前页面";
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>刷新评分分类：按 _ratingFilter 过滤媒体库歌曲并填充列表。</summary>
+        private void ApplyRatingCategory()
+        {
+            UpdateRatingFilterHighlight();
+
+            var col = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>();
+            foreach (PlaylistItem track in _playlist)
+            {
+                if (_ratingFilter < 0)
+                {
+                    // 未点选：显示所有已评分歌曲
+                    if (track.Rating > 0) col.Add(ClonePlaylistItem(track));
+                }
+                else if (track.Rating == _ratingFilter)
+                {
+                    col.Add(ClonePlaylistItem(track));
+                }
+            }
+
+            RenumberCollection(col);
+            PlaylistView.ItemsSource = col;
+            LibraryPaneTitle.Text = "评分";
+            SetPlaylistEmptyHint(col.Count == 0, _ratingFilter >= 0
+                ? (_ratingFilter == 0 ? "没有未评分的歌曲" : "没有 " + _ratingFilter + " 星评分的歌曲")
+                : "还没有给任何歌曲评分");
+        }
+
+        private void RatingFilter_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button b && b.Tag is string s && int.TryParse(s, out int rating))
+            {
+                _ratingFilter = rating;
+                ApplyRatingCategory();
+            }
+        }
+
+        private void UpdateRatingFilterHighlight()
+        {
+            var accent = ResolveAccentBrush();
+            var fg = ResolveContrastingForeground(accent);
+            var idleBg = ResolveCapsuleFillBrush();
+            var border = ResolveNavCapsuleBorderBrush();
+            (Button Btn, int Val)[] maps =
+            {
+                (RatingFilter0Button, 0), (RatingFilter1Button, 1), (RatingFilter2Button, 2),
+                (RatingFilter3Button, 3), (RatingFilter4Button, 4), (RatingFilter5Button, 5)
+            };
+            foreach (var (btn, val) in maps)
+            {
+                bool active = val == _ratingFilter;
+                if (active) { btn.Background = accent; btn.Foreground = fg; btn.BorderThickness = new Thickness(0); }
+                else { btn.Background = idleBg; btn.ClearValue(Control.ForegroundProperty); btn.BorderThickness = new Thickness(1); btn.BorderBrush = border; }
+            }
         }
 
 

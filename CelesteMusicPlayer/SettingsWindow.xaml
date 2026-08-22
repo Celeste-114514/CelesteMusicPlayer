@@ -101,16 +101,6 @@
                                 </StackPanel>
                                 <ToggleSwitch x:Name="ShowLyricTranslateSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
                             </Grid>
-                            <Grid ColumnSpacing="16">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="无歌词时显示歌曲信息" />
-                                </StackPanel>
-                                <ToggleSwitch x:Name="ShowSongInfoIfNoLyricSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
-                            </Grid>
                             <Grid ColumnSpacing="12">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
