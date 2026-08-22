@@ -1180,6 +1180,8 @@
                             <Button x:Name="HealthScanButton" Content="立即扫描" Click="HealthScanButton_Click" MinWidth="110" />
                             <Button x:Name="HealthRemoveMissingButton" Content="移除失效文件" Click="HealthRemoveMissingButton_Click" MinWidth="110" />
                             <Button x:Name="HealthEditTagButton" Content="编辑音频标签…" Click="HealthEditTagButton_Click" MinWidth="130" />
+                            <Button x:Name="HealthDuplicateButton" Content="重复筛查" Click="HealthDuplicateButton_Click" MinWidth="120" />
+                            <Button x:Name="HealthRelocateButton" Content="重定位候选" Click="HealthRelocateButton_Click" MinWidth="120" />
                         </StackPanel>
                         <TextBlock x:Name="HealthSummaryText" Text="尚未扫描" Opacity="0.75" FontSize="12" />
                         <ListView x:Name="HealthResultsList" MaxHeight="340" SelectionMode="Single">

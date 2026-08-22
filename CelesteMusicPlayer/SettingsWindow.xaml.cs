@@ -2062,6 +2062,104 @@ namespace CelesteMusicPlayer
             HealthSummaryText.Text = $"共 {total} 首，存在 {total - missing} 首，失效 {missing} 首；发现 {rows.Count} 个问题项。";
         }
 
+        private void HealthDuplicateButton_Click(object sender, RoutedEventArgs e)
+        {
+            var snapshot = MainWindow.Instance?.GetCurrentPlaylistSnapshot();
+            var rows = new List<HealthIssueRow>();
+            int groupCount = 0, dupCount = 0;
+            if (snapshot != null)
+            {
+                // 只读：按（归一化文件名, 大小, 时长近似秒）分组，仅列出真正重复项（组内首条为保留）
+                var groups = snapshot
+                    .Where(i => !string.IsNullOrWhiteSpace(i.FilePath) && File.Exists(i.FilePath))
+                    .GroupBy(i => (
+                        NormalizeKey(Path.GetFileName(i.FilePath)),
+                        SafeLen(i.FilePath),
+                        (int)Math.Round(Math.Max(0.0, i.Duration.TotalSeconds))),
+                        System.Collections.Generic.EqualityComparer<(
+                        string, long, int)>.Default)
+                    .Where(g => g.Count() > 1).ToList();
+                foreach (var g in groups)
+                {
+                    var sorted = g.OrderBy(x => x.FilePath).ToList();
+                    groupCount++;
+                    for (int k = 1; k < sorted.Count; k++)
+                    {
+                        dupCount++;
+                        rows.Add(new HealthIssueRow
+                        {
+                            Path = sorted[k].FilePath,
+                            Issues = "重复项：" + (sorted.Count - 1) + " 个，保留：" + Path.GetFileName(sorted[0].FilePath)
+                        });
+                    }
+                }
+            }
+            HealthResultsList.ItemsSource = rows;
+            HealthSummaryText.Text = groupCount == 0
+                ? "未发现重复歌曲"
+                : $"发现 {groupCount} 组重复，共 {dupCount} 个可去除（去索引不删文件）。";
+        }
+
+        private void HealthRelocateButton_Click(object sender, RoutedEventArgs e)
+        {
+            // 只读：为失效文件查找“唯一同名现存候选”路径（供用户自行重定位，不做自动改写）
+            var snapshot = MainWindow.Instance?.GetCurrentPlaylistSnapshot()?.ToList();
+            var rows = new List<HealthIssueRow>();
+            int missingCount = 0, found = 0;
+            if (snapshot != null)
+            {
+                var existing = snapshot
+                    .Where(i => !string.IsNullOrWhiteSpace(i.FilePath) && File.Exists(i.FilePath))
+                    .ToList();
+                var existingByName = existing
+                    .GroupBy(i => NormalizeKey(Path.GetFileName(i.FilePath)))
+                    .ToDictionary(g => g.Key, g => g.ToList());
+                foreach (var lost in snapshot.Where(i => !string.IsNullOrWhiteSpace(i.FilePath) && !File.Exists(i.FilePath)))
+                {
+                    missingCount++;
+                    string name = Path.GetFileName(lost.FilePath);
+                    string key = NormalizeKey(name);
+                    if (existingByName.TryGetValue(key, out var cands) && cands.Count == 1)
+                    {
+                        found++;
+                        rows.Add(new HealthIssueRow
+                        {
+                            Path = lost.FilePath,
+                            Issues = "可重定位 → 候选：" + cands[0].FilePath
+                        });
+                    }
+                }
+            }
+            if (found == 0 && missingCount > 0)
+            {
+                rows.Add(new HealthIssueRow { Path = "（无唯一候选）", Issues = $"共 {missingCount} 个失效文件，未找到唯一同名候选，无法安全自动重定位。" });
+            }
+            HealthResultsList.ItemsSource = rows;
+            HealthSummaryText.Text = found > 0
+                ? "重定位候选 " + found + " 个（需你确认后手动更新路径，未自动改写）"
+                : (missingCount == 0 ? "无失效文件" : "未找到唯一重定位候选");
+        }
+
+        private static string NormalizeKey(string s)
+        {
+            if (string.IsNullOrWhiteSpace(s)) return string.Empty;
+            var sb = new System.Text.StringBuilder();
+            foreach (char c in s.Trim())
+            {
+                if (char.IsWhiteSpace(c) || c=='_' || c=='-' || c=='[' || c==']' || c=='(' || c==')')
+                {
+                    continue;
+                }
+                sb.Append(char.ToLowerInvariant(c));
+            }
+            return sb.ToString();
+        }
+
+        private static long SafeLen(string path)
+        {
+            try { return new FileInfo(path).Length; } catch { return -1; }
+        }
+
         private async void HealthRemoveMissingButton_Click(object sender, RoutedEventArgs e)
         {
             var snapshot = MainWindow.Instance?.GetCurrentPlaylistSnapshot();
