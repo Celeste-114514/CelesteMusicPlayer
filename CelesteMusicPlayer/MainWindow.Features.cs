@@ -1674,6 +1674,43 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 1) 若配置了流媒体插件服务（WSL），优先取 Apple Music 真歌词
+            if (!string.IsNullOrEmpty(StreamingServiceClient.ServiceBaseUrl))
+            {
+                try
+                {
+                    var sRes = await StreamingServiceClient.SearchAsync("applemusic", item.Title, 1);
+                    if (sRes is { Count: > 0 })
+                    {
+                        StreamingServiceClient.LyricResult? ly = await StreamingServiceClient.GetLyricAsync("applemusic", sRes[0].Id);
+                        if (ly is { Ok: true })
+                        {
+                            IReadOnlyList<LyricLine>? built = ly.Timestamped;
+                            if ((built == null || built.Count == 0) && !string.IsNullOrWhiteSpace(ly.Plain))
+                            {
+                                built = LyricsLoader.ParseLrc(ly.Plain);
+                            }
+
+                            if (built is { Count: > 0 })
+                            {
+                                string lrc = LyricsToLrc(built);
+                                string lrcPath = System.IO.Path.ChangeExtension(item.FilePath, ".lrc");
+                                try { System.IO.File.WriteAllText(lrcPath, lrc); } catch { }
+                                NowPlayingText.Text = "已从 Apple Music 获取歌词";
+                                if (string.Equals(_nowPlayingPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    BuildLyricsUi(built.ToList());
+                                }
+                                return;
+                            }
+                        }
+                    }
+                }
+                catch
+                {
+                }
+            }
+
             NowPlayingText.Text = "正在下载歌词…";
             string? path = await OnlineMusicApi.SearchAndDownloadLyricAsync(item.Title, item.Artist, item.FilePath);
             if (path == null)
@@ -1694,6 +1731,17 @@ namespace CelesteMusicPlayer
         private async void DownloadLyricButton_Click(object sender, RoutedEventArgs e)
         {
             await DownloadLyricForCurrentAsync();
+        }
+
+        private static string LyricsToLrc(IEnumerable<LyricLine> lines)
+        {
+            var sb = new System.Text.StringBuilder();
+            foreach (LyricLine l in lines)
+            {
+                TimeSpan t = l.Time < TimeSpan.Zero ? TimeSpan.Zero : l.Time;
+                sb.Append('[').Append(t.ToString(@"mm\:ss\.ff")).Append(']').AppendLine(l.Text);
+            }
+            return sb.ToString();
         }
 
         private async Task DownloadCoverForCurrentAsync()
