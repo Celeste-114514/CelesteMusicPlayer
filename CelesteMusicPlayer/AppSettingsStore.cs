@@ -214,6 +214,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         /// <summary>在线搜索窗口默认平台。</summary>
         public string OnlineSearchDefaultSource { get; set; } = "NetEase";
 
+        /// <summary>流媒体插件服务地址（WSL，如 http://172.20.55.125:21010）；空=未配置。</summary>
+        public string StreamingServiceUrl { get; set; } = string.Empty;
+
         /// <summary>声道：Stereo / Left / Right。</summary>
         public string AudioChannel { get; set; } = "Stereo";
 
@@ -531,6 +534,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DsdUseNaudioOutput = s.DsdUseNaudioOutput,
             DsdUsePcmFallback = s.DsdUsePcmFallback,
             OnlineSearchDefaultSource = s.OnlineSearchDefaultSource,
+            StreamingServiceUrl = s.StreamingServiceUrl,
             CustomHotkeys = s.CustomHotkeys.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase)
         };
 

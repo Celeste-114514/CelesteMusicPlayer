@@ -1210,7 +1210,21 @@
                     Padding="20,12,24,24">
                     <StackPanel Spacing="12" MaxWidth="680">
                         <TextBlock Text="流媒体平台账号" FontSize="17" FontWeight="SemiBold" />
-                        <TextBlock Text="登录后可加载对应平台的在线歌词，并启用该平台的在线音频下载。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                        <TextBlock Text="登录后可加载对应平台的在线歌词，并启用该平台的在线音频下载。Apple Music 歌词需登录个人账号加载。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+
+                        <TextBlock Text="插件服务地址（WSL）" FontSize="14" FontWeight="SemiBold" Margin="0,8,0,0" />
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="从播放器发布渠道下载并安装「流媒体插件包」到 WSL 后，在此填写其服务地址（默认 21010 端口）。保存后，播放器的「下载歌词 / 在线标签」即可调用 Apple Music 等平台的真实歌词与最低限度下载。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                        </StackPanel>
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="StreamingUrlBox" PlaceholderText="例如 http://172.20.55.125:21010" />
+                            <Button x:Name="TestConnectionButton" Grid.Column="1" Content="检测连接" Click="TestConnectionButton_Click" MinWidth="96" />
+                        </Grid>
+                        <TextBlock x:Name="StreamingStatusText" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords" Text="未检测" />
                         <Border
                             CornerRadius="8"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"

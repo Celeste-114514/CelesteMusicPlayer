@@ -295,6 +295,12 @@ namespace CelesteMusicPlayer
             {
                 AppSettingsState s = AppSettingsStore.Load();
 
+                // 流媒体服务地址
+                if (StreamingUrlBox != null)
+                {
+                    StreamingUrlBox.Text = s.StreamingServiceUrl;
+                }
+
                 // 歌词
                 SetToggle(PreferInnerLyricSwitch, s.PreferInnerLyric);
                 SetToggle(LyricFuzzyMatchSwitch, s.LyricFuzzyMatch);
@@ -873,6 +879,7 @@ namespace CelesteMusicPlayer
             s.AutoDownloadCover = AutoDownloadCoverSwitch?.IsOn ?? s.AutoDownloadCover;
             s.LyricDownloadService = GetComboTagString(LyricDownloadServiceCombo, "NetEase");
             s.OnlineSearchDefaultSource = GetComboTagString(OnlineSearchSourceCombo, "NetEase");
+            s.StreamingServiceUrl = StreamingUrlBox?.Text?.Trim() ?? "";
             s.AudioChannel = GetComboTagString(AudioChannelCombo, "Stereo");
             s.AlwaysOnTop = AlwaysOnTopSwitch?.IsOn ?? s.AlwaysOnTop;
             s.SaveLyricToSongFolder = SaveLyricToSongFolderSwitch?.IsOn ?? s.SaveLyricToSongFolder;
@@ -1134,6 +1141,36 @@ namespace CelesteMusicPlayer
             PanelHotkeys.Visibility = tag == "Hotkeys" ? Visibility.Visible : Visibility.Collapsed;
             PanelLibraryHealth.Visibility = tag == "LibraryHealth" ? Visibility.Visible : Visibility.Collapsed;
             PanelStreaming.Visibility = tag == "Streaming" ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private async void TestConnectionButton_Click(object sender, RoutedEventArgs e)
+        {
+            string url = StreamingUrlBox?.Text?.Trim() ?? "";
+            if (url.Length == 0)
+            {
+                StreamingStatusText.Text = "请先填写服务地址（http://<WSL-IP>:21010）";
+                return;
+            }
+
+            AppSettingsStore.Update(x => x.StreamingServiceUrl = url);
+            StreamingServiceClient.ServiceBaseUrl = url;
+            StreamingStatusText.Text = "检测中…";
+            var ping = await StreamingServiceClient.PingAsync();
+            if (ping == null || !ping.Ok)
+            {
+                StreamingStatusText.Text = "连接失败：请确认 WSL 插件服务已运行、地址正确（含端口 21010）。";
+                return;
+            }
+
+            var plats = await StreamingServiceClient.GetPlatformsAsync();
+            if (plats is { Ok: true } && plats.Platforms.Length > 0)
+            {
+                StreamingStatusText.Text = "连接成功，可用平台：" + string.Join("、", plats.Platforms);
+            }
+            else
+            {
+                StreamingStatusText.Text = "连接成功（未返回平台）：" + (plats?.Error ?? "");
+            }
         }
 
         private async void AmLoginButton_Click(object sender, RoutedEventArgs e)
