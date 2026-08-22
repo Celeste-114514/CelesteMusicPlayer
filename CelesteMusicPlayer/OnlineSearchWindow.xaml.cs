@@ -87,7 +87,7 @@ namespace CelesteMusicPlayer
             uint dpi = GetDpiForWindow(WindowNative.GetWindowHandle(this));
             if (dpi == 0) dpi = 96;
             double scale = dpi / 96.0;
-            AppWindow.Resize(new SizeInt32((int)Math.Round(920.0 * scale), (int)Math.Round(870.0 * scale)));
+            AppWindow.Resize(new SizeInt32((int)Math.Round(1100.0 * scale), (int)Math.Round(870.0 * scale)));
             if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter ov)
             {
                 ov.IsResizable = false;

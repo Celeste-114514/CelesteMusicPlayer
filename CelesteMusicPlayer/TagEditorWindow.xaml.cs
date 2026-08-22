@@ -55,8 +55,8 @@ namespace CelesteMusicPlayer
 
             double scale = dpi / 96.0;
             AppWindow.Resize(new SizeInt32(
-                (int)Math.Round(900.0 * scale),
-                (int)Math.Round(850.0 * scale)));
+                (int)Math.Round(920.0 * scale),
+                (int)Math.Round(900.0 * scale)));
             if (AppWindow.Presenter is OverlappedPresenter ov)
             {
                 ov.IsResizable = false; // 固定大小
