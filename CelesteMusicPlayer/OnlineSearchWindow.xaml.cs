@@ -303,7 +303,7 @@ namespace CelesteMusicPlayer
             if (string.Equals(song.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
             {
                 // iTunes Search API 不返回歌词字段
-                LyricPreview.Text = "Apple Music 歌词需登录个人账号加载；未登录可用播放器「歌曲信息→下载歌词」从其他平台获取。";
+                LyricPreview.Text = "Apple Music 不提供歌词；请用网易云 / QQ 搜索、下载歌词或 128k MP3。";
                 return;
             }
 
@@ -328,7 +328,7 @@ namespace CelesteMusicPlayer
 
             if (string.Equals(_selected.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
             {
-                StatusText.Text = "Apple Music 不提供音频下载，仅可下载歌词 / 封面。";
+                StatusText.Text = "Apple Music 不提供音频下载；下载 128k MP3 请切换到 网易云 / QQ 平台。";
                 return;
             }
 

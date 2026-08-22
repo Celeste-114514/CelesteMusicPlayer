@@ -368,7 +368,7 @@ namespace CelesteMusicPlayer
         {
             bool isItunes = OnlineSourceCombo.SelectedIndex == 3;
             OnlineStatusText.Text = isItunes
-                ? "Apple Music 歌词需登录个人账号加载；未登录可保存后用播放器「下载歌词」从其他平台获取。"
+                ? "Apple Music 不提供歌词，请用网易云 / QQ 搜索获取。"
                 : string.Empty;
         }
 
