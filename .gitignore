@@ -35,3 +35,6 @@ local.settings.json
 
 # Local dev packaging signing key (private key - never commit)
 *.pfx
+
+# ===== 流媒体插件预编译二进制与发布包（不入库，作 release 附件） =====
+streaming-plugin/streamingserver
