@@ -26,6 +26,19 @@ namespace CelesteMusicPlayer
             return u.Trim().TrimEnd('/');
         }
 
+        /// <summary>读取播放器内按平台保存的 Cookie（NetEase/QQ/Apple）。</summary>
+        private static string? GetLocalCookie(string platform)
+        {
+            var st = AppSettingsStore.Load();
+            return platform switch
+            {
+                "NetEase" or "netease" => st.NetEaseCookie,
+                "QQ" or "qqmusic" => st.QqCookie,
+                "iTunes" or "applemusic" => st.AppleMusicCookie,
+                _ => null
+            };
+        }
+
         /// <summary>当某平台的请求失败（可能未登录/凭证失效）时，追加给用户的提醒文案。</summary>
         public static string CookieReminderHint(string platform)
         {
@@ -209,6 +222,12 @@ namespace CelesteMusicPlayer
             {
                 string url = b + "/api/download?platform=" + Uri.EscapeDataString(platform)
                     + "&id=" + Uri.EscapeDataString(id) + "&quality=" + Uri.EscapeDataString(quality);
+                // 把播放器内保存的对应平台 Cookie 一并传给服务，供需要鉴权的直链使用
+                string? cookie = GetLocalCookie(platform);
+                if (!string.IsNullOrWhiteSpace(cookie))
+                {
+                    url += "&cookie=" + Uri.EscapeDataString(cookie);
+                }
                 using var resp = await Http.GetAsync(url, ct).ConfigureAwait(false);
                 if (!resp.IsSuccessStatusCode)
                 {
