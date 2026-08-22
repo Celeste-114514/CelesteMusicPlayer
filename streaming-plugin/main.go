@@ -148,6 +148,7 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	pl := r.URL.Query().Get("platform")
 	id := r.URL.Query().Get("id")
 	quality := r.URL.Query().Get("quality")
+	cookie := r.URL.Query().Get("cookie")
 	if pl == "" || id == "" {
 		writeJSON(w, 400, map[string]any{"ok": false, "error": "platform and id required"})
 		return
@@ -169,6 +170,13 @@ func handleDownload(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		writeJSON(w, 500, map[string]any{"ok": false, "error": err.Error()})
 		return
+	}
+	// 播放器传入的 Cookie：并入下载请求头（供需要鉴权的直链；服务端自身 config cookie 仍有效）
+	if cookie != "" {
+		if info.Headers == nil {
+			info.Headers = map[string]string{}
+		}
+		info.Headers["Cookie"] = cookie
 	}
 	writeJSON(w, 200, map[string]any{
 		"ok":     true,
