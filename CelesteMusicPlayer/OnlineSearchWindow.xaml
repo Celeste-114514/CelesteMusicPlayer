@@ -67,16 +67,22 @@
                     <DataTemplate x:DataType="local:OnlineSearchItem">
                         <Grid ColumnSpacing="10" Padding="2,8">
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="42" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2">
+                            <Border Width="42" Height="42" CornerRadius="6" VerticalAlignment="Center"
+                                    Background="{ThemeResource SubtleFillColorSecondary}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                <Image Source="{x:Bind Cover}" Stretch="UniformToFill" />
+                            </Border>
+                            <StackPanel Grid.Column="1" Spacing="2">
                                 <TextBlock Text="{x:Bind Display}" FontSize="14" FontWeight="SemiBold"
                                            TextTrimming="CharacterEllipsis" />
                                 <TextBlock Text="{x:Bind Subtitle}" FontSize="12" Opacity="0.6"
                                            TextTrimming="CharacterEllipsis" />
                             </StackPanel>
-                            <Border Grid.Column="1" Background="{ThemeResource SubtleFillColorSecondary}"
+                            <Border Grid.Column="2" Background="{ThemeResource SubtleFillColorSecondary}"
                                     CornerRadius="5" Padding="7,2" VerticalAlignment="Center">
                                 <TextBlock Text="{x:Bind Platform}" FontSize="11" Opacity="0.75" />
                             </Border>
@@ -113,6 +119,7 @@
                             <Button x:Name="WebPlayButton" Content="在网页播放" Click="WebPlayButton_Click" />
                             <Button x:Name="DownloadLyricButton" Content="下载歌词" Click="DownloadLyric_Click" />
                             <Button x:Name="DownloadCoverButton" Content="下载封面" Click="DownloadCover_Click" />
+                            <Button x:Name="DownloadAudioButton" Content="下载音频" Click="DownloadAudio_Click" ToolTipService.ToolTip="网易云 / QQ 下载 128kbps MP3；Apple Music 不提供音频下载" />
                         </StackPanel>
                     </StackPanel>
                 </Grid>

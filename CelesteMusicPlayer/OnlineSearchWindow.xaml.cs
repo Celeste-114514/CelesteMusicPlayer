@@ -32,6 +32,8 @@ namespace CelesteMusicPlayer
 
         public string Platform { get; }
 
+        public Microsoft.UI.Xaml.Media.Imaging.BitmapImage? Cover { get; }
+
         public OnlineSearchItem(OnlineSongResult song)
         {
             Song = song;
@@ -45,6 +47,16 @@ namespace CelesteMusicPlayer
                 "iTunes" => "Apple Music",
                 _ => "网易云"
             };
+            if (!string.IsNullOrWhiteSpace(song.CoverUrl))
+            {
+                try
+                {
+                    Cover = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(song.CoverUrl));
+                }
+                catch
+                {
+                }
+            }
         }
     }
 
@@ -62,13 +74,25 @@ namespace CelesteMusicPlayer
         private CancellationTokenSource? _cts;
         private static readonly SemaphoreSlim SearchGate = new(1, 1);
 
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(nint hWnd);
+
         public OnlineSearchWindow()
         {
             InitializeComponent();
             Title = "在线搜索";
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
-            AppWindow.Resize(new SizeInt32(1415, 999));
+            // 与标签编辑器一致：DIP → 物理像素换算（视觉 920×870）固定窗口
+            uint dpi = GetDpiForWindow(WindowNative.GetWindowHandle(this));
+            if (dpi == 0) dpi = 96;
+            double scale = dpi / 96.0;
+            AppWindow.Resize(new SizeInt32((int)Math.Round(920.0 * scale), (int)Math.Round(870.0 * scale)));
+            if (AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter ov)
+            {
+                ov.IsResizable = false;
+                ov.IsMaximizable = false;
+            }
 
             ConfigureTitleBarButtons();
             ApplyBackdropFromSettings();
@@ -292,6 +316,74 @@ namespace CelesteMusicPlayer
             catch
             {
                 LyricPreview.Text = "（获取歌词失败）";
+            }
+        }
+
+        private async void DownloadAudio_Click(object sender, RoutedEventArgs e)
+        {
+            if (_selected == null)
+            {
+                return;
+            }
+
+            if (string.Equals(_selected.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
+            {
+                StatusText.Text = "Apple Music 不提供音频下载，仅可下载歌词 / 封面。";
+                return;
+            }
+
+            if (StreamingServiceClient.ResolveBase() == null)
+            {
+                StatusText.Text = "未配置流媒体插件服务（设置 → 流媒体），无法下载音频。";
+                return;
+            }
+
+            DownloadAudioButton.IsEnabled = false;
+            try
+            {
+                string? savePath = await PickSaveFileAsync(".mp3", "MP3 音频", PickerLocationId.Downloads);
+                if (savePath == null)
+                {
+                    return;
+                }
+
+                var dl = await StreamingServiceClient.GetDownloadAsync(_selected.Source, _selected.SongId, "standard");
+                if (dl == null || !dl.Ok || string.IsNullOrWhiteSpace(dl.Url))
+                {
+                    StatusText.Text = "获取下载链接失败：" + (dl?.Error ?? "服务未返回");
+                    return;
+                }
+
+                StatusText.Text = "正在下载…";
+                using var hc = new System.Net.Http.HttpClient();
+                using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, dl.Url);
+                if (dl.Headers != null)
+                {
+                    foreach (var kv in dl.Headers)
+                    {
+                        if (!string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+                        {
+                            req.Headers.TryAddWithoutValidation(kv.Key, kv.Value);
+                        }
+                    }
+                }
+
+                using var resp = await hc.SendAsync(req);
+                resp.EnsureSuccessStatusCode();
+                await using (var fs = System.IO.File.Create(savePath))
+                {
+                    await resp.Content.CopyToAsync(fs);
+                }
+
+                StatusText.Text = "已下载：" + savePath;
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = "下载失败：" + ex.Message;
+            }
+            finally
+            {
+                DownloadAudioButton.IsEnabled = true;
             }
         }
 
