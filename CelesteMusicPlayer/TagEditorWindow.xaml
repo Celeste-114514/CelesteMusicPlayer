@@ -38,7 +38,7 @@
             <!--=========== 左栏 ===========-->
             <ScrollViewer x:Name="LeftColumnScroll" VerticalScrollBarVisibility="Auto">
                 <StackPanel Spacing="12">
-                    <TextBlock Text="当前音频封面" FontSize="13" FontWeight="SemiBold" />
+                    <TextBlock Text="当前音频封面" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
                     <Border
                         Width="236"
                         Height="236"
@@ -46,7 +46,7 @@
                         Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1"
-                        HorizontalAlignment="Left">
+                        HorizontalAlignment="Center">
                         <Grid>
                             <Image x:Name="CurrentCoverImage" Stretch="UniformToFill" />
                             <StackPanel
@@ -60,14 +60,29 @@
                             </StackPanel>
                         </Grid>
                     </Border>
-                    <StackPanel Orientation="Horizontal" Spacing="8">
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
                         <Button x:Name="AddCoverButton" Content="添加/替换" Click="AddCoverButton_Click" MinWidth="76" />
                         <Button x:Name="ClearCoverButton" Content="清除" Click="ClearCoverButton_Click" MinWidth="64" />
                         <Button x:Name="ExtractCoverButton" Content="提取" Click="ExtractCoverButton_Click" MinWidth="64" />
                     </StackPanel>
                     <TextBlock x:Name="CoverStatusText" FontSize="11" Opacity="0.6" TextWrapping="WrapWholeWords" />
 
-                    <TextBlock Text="在线搜索" FontSize="13" FontWeight="SemiBold" Margin="0,8,0,0" />
+                    <Grid Margin="0,8,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Text="在线搜索" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Center" />
+                        <Button
+                            x:Name="SearchThisSongButton"
+                            Grid.Column="1"
+                            Content="搜索该歌曲"
+                            Click="SearchThisSongButton_Click"
+                            Padding="10,2"
+                            FontSize="11"
+                            Height="26"
+                            ToolTipService.ToolTip="用当前歌曲标题/艺人自动搜索在线元数据" />
+                    </Grid>
                     <TextBox x:Name="OnlineQueryBox" PlaceholderText="歌名 / 艺人，如：周杰伦" />
                     <Grid ColumnSpacing="8">
                         <Grid.ColumnDefinitions>

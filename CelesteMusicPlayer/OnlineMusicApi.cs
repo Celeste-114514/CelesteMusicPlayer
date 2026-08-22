@@ -9,7 +9,7 @@ using System.Threading.Tasks;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>歌曲搜索结果：Source 为 NetEase / QQ / Kugou。</summary>
+    /// <summary>歌曲搜索结果：Source 为 NetEase / QQ / iTunes。</summary>
     public sealed record OnlineSongResult(
         string Source,
         string SongId,
@@ -43,7 +43,7 @@ namespace CelesteMusicPlayer
         private static string ResolveSource()
         {
             string s = AppSettingsStore.Load().LyricDownloadService;
-            return s is "QQ" or "Kugou" ? s : "NetEase";
+            return string.Equals(s, "QQ", StringComparison.Ordinal) ? s : "NetEase";
         }
 
         // =====================================================================
@@ -59,7 +59,6 @@ namespace CelesteMusicPlayer
             return source switch
             {
                 "QQ" => await SearchQqSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
-                "Kugou" => await SearchKugouSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
                 "iTunes" => await SearchItunesSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
                 _ => await SearchNetEaseSongsAsync(title, artist, cancellationToken).ConfigureAwait(false)
             };
@@ -356,7 +355,6 @@ namespace CelesteMusicPlayer
             return source switch
             {
                 "QQ" => await GetQqLyricAsync(song.SongId, cancellationToken).ConfigureAwait(false),
-                "Kugou" => await GetKugouLyricAsync(song.Name, song.SongId, cancellationToken).ConfigureAwait(false),
                 _ => await GetNetEaseLyricAsync(song.SongId, includeTranslation, cancellationToken).ConfigureAwait(false)
             };
         }

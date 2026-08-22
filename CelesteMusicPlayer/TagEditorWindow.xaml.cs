@@ -55,8 +55,8 @@ namespace CelesteMusicPlayer
 
             double scale = dpi / 96.0;
             AppWindow.Resize(new SizeInt32(
-                (int)Math.Round(1200.0 * scale),
-                (int)Math.Round(1000.0 * scale)));
+                (int)Math.Round(900.0 * scale),
+                (int)Math.Round(850.0 * scale)));
             if (AppWindow.Presenter is OverlappedPresenter ov)
             {
                 ov.IsResizable = false; // 固定大小
@@ -148,7 +148,6 @@ namespace CelesteMusicPlayer
             OnlineSourceCombo.Items.Clear();
             OnlineSourceCombo.Items.Add("网易云音乐");
             OnlineSourceCombo.Items.Add("QQ音乐");
-            OnlineSourceCombo.Items.Add("酷狗音乐");
             OnlineSourceCombo.Items.Add("Apple Music");
             OnlineSourceCombo.SelectedIndex = 0;
         }
@@ -385,8 +384,7 @@ namespace CelesteMusicPlayer
             string source = OnlineSourceCombo.SelectedIndex switch
             {
                 1 => "QQ",
-                2 => "Kugou",
-                3 => "iTunes",
+                2 => "iTunes",
                 _ => "NetEase"
             };
             OnlineStatusText.Text = "搜索中…";
@@ -401,6 +399,24 @@ namespace CelesteMusicPlayer
             {
                 OnlineStatusText.Text = "搜索失败";
             }
+        }
+
+        private void SearchThisSongButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_isBatch || string.IsNullOrWhiteSpace(_singlePath))
+            {
+                return;
+            }
+
+            TagEditModel m = TagEditorService.ReadTag(_singlePath);
+            if (string.IsNullOrWhiteSpace(m.Title))
+            {
+                OnlineStatusText.Text = "当前歌曲无标题，无法自动搜索";
+                return;
+            }
+
+            OnlineQueryBox.Text = m.Title;
+            OnlineSearchButton_Click(sender, e);
         }
 
         private async void OnlineResultList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -557,7 +573,6 @@ namespace CelesteMusicPlayer
         public string SourceLabel => (Raw?.Source) switch
         {
             "QQ" => "QQ音乐",
-            "Kugou" => "酷狗",
             "iTunes" => "Apple Music",
             _ => "网易云"
         };

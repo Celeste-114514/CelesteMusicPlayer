@@ -42,7 +42,6 @@ namespace CelesteMusicPlayer
             Platform = song.Source switch
             {
                 "QQ" => "QQ音乐",
-                "Kugou" => "酷狗",
                 "iTunes" => "Apple Music",
                 _ => "网易云"
             };
@@ -76,13 +75,11 @@ namespace CelesteMusicPlayer
 
             SourceCombo.Items.Add("网易云音乐");
             SourceCombo.Items.Add("QQ音乐");
-            SourceCombo.Items.Add("酷狗音乐");
             SourceCombo.Items.Add("Apple Music");
             SourceCombo.SelectedIndex = AppSettingsStore.Load().OnlineSearchDefaultSource switch
             {
                 "QQ" => 1,
-                "Kugou" => 2,
-                "iTunes" => 3,
+                "iTunes" => 2,
                 _ => 0
             };
 
@@ -173,8 +170,7 @@ namespace CelesteMusicPlayer
             _source = SourceCombo.SelectedIndex switch
             {
                 1 => "QQ",
-                2 => "Kugou",
-                3 => "iTunes",
+                2 => "iTunes",
                 _ => "NetEase"
             };
 
@@ -319,7 +315,6 @@ namespace CelesteMusicPlayer
             string url = _selected.Source switch
             {
                 "QQ" => $"https://y.qq.com/n/ryqq/songDetail/{_selected.SongId}",
-                "Kugou" => $"https://www.kugou.com/song/#hash={_selected.SongId}",
                 _ => $"https://music.163.com/#/song?id={_selected.SongId}"
             };
             try

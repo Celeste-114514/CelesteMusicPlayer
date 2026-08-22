@@ -73,7 +73,6 @@ namespace CelesteMusicPlayer
         {
             ("NetEase", "网易云音乐"),
             ("QQ", "QQ音乐"),
-            ("Kugou", "酷狗音乐"),
         };
 
         /// <summary>在线搜索默认平台（含 iTunes；歌词源不含 iTunes，因 iTunes 不提供歌词）。</summary>
@@ -81,7 +80,6 @@ namespace CelesteMusicPlayer
         {
             ("NetEase", "网易云音乐"),
             ("QQ", "QQ音乐"),
-            ("Kugou", "酷狗音乐"),
             ("iTunes", "Apple Music"),
         };
 

@@ -385,12 +385,12 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             s.CoverFolder ??= string.Empty;
             s.LyricDownloadService = s.LyricDownloadService switch
             {
-                "QQ" or "Kugou" => s.LyricDownloadService,
+                "QQ" => s.LyricDownloadService,
                 _ => "NetEase"
             };
             s.OnlineSearchDefaultSource = s.OnlineSearchDefaultSource switch
             {
-                "QQ" or "Kugou" or "iTunes" => s.OnlineSearchDefaultSource,
+                "QQ" or "iTunes" => s.OnlineSearchDefaultSource,
                 _ => "NetEase"
             };
             s.AudioChannel = s.AudioChannel switch
