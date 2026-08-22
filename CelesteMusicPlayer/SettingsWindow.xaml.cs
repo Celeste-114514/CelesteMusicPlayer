@@ -1180,7 +1180,40 @@ namespace CelesteMusicPlayer
 
         private async void AmLoginButton_Click(object sender, RoutedEventArgs e)
         {
-            await ShowInfoDialogAsync("Apple Music 登录", "登录功能待接入（需 Apple Music 订阅账号）。接入后会在此显示登录状态，并用于加载歌词与在线下载。");
+            if (StreamingServiceClient.ResolveBase() == null)
+            {
+                await ShowInfoDialogAsync("Apple Music 登录",
+                    "Apple Music 登录通过流媒体插件服务端完成。请先：1) 在 WSL 安装流媒体插件并配置 Apple 账号 cookie（musicbot 的 config.ini 已有 wrapper 登录态）；2) 在本页填写服务地址并点「检测连接」。");
+                return;
+            }
+
+            AmLoginButton.IsEnabled = false;
+            try
+            {
+                StreamingStatusText.Text = "正在验证 Apple Music 登录态…";
+                var hits = await StreamingServiceClient.SearchAsync("applemusic", "周杰伦", 1);
+                bool ok = hits is { Count: > 0 };
+                if (ok)
+                {
+                    AmStatusText.Text = "已对接（服务端登录态可用）";
+                }
+                else
+                {
+                    AmStatusText.Text = "需在服务端 config.ini 配置 Apple 账号";
+                }
+                await ShowInfoDialogAsync("Apple Music 登录",
+                    ok ? "登录态可用。已从 Apple Music 搜索到结果（示例）：" + hits![0].Title + "。现在可在播放器「下载歌词」获取 Apple 真歌词、在在线搜索用 Apple Music。"
+                       : "未检测到 Apple 登录态。请确认 WSL 流媒体服务已配置 Apple 账号 cookie（或用 musicbot 已有的 wrapper 登录态）后重启服务。");
+            }
+            catch (Exception ex)
+            {
+                StreamingStatusText.Text = "验证失败：" + ex.Message;
+            }
+            finally
+            {
+                AmLoginButton.IsEnabled = true;
+            }
+
         }
 
         private void SettingCheck_Changed(object sender, RoutedEventArgs e)
