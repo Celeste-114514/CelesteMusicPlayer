@@ -321,22 +321,17 @@ namespace CelesteMusicPlayer
 
         private async void DownloadAudio_Click(object sender, RoutedEventArgs e)
         {
-            // 批量下载：取多选结果（跳过 Apple Music）；否则下载当前选中单曲。
-            var batch = ResultList.SelectedItems
-                .OfType<OnlineSearchItem>()
-                .Where(it => !string.Equals(it.Song.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
-                .ToList();
-            if (batch.Count == 0 && _selected != null
-                && !string.Equals(_selected.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
+            if (_selected == null)
             {
-                batch.Add(new OnlineSearchItem(_selected));
+                return;
             }
 
-            if (batch.Count == 0)
+            if (string.Equals(_selected.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
             {
                 StatusText.Text = "Apple Music 不提供音频下载，仅可下载歌词 / 封面。";
                 return;
             }
+
             if (StreamingServiceClient.ResolveBase() == null)
             {
                 StatusText.Text = "未配置流媒体插件服务（设置 → 流媒体），无法下载音频。";
@@ -346,73 +341,41 @@ namespace CelesteMusicPlayer
             DownloadAudioButton.IsEnabled = false;
             try
             {
-                // 多选→选文件夹；单个→弹保存文件
-                string? folderPath = batch.Count > 1 ? await PickFolderAsync() : null;
-
-                int ok = 0, fail = 0;
-                for (int i = 0; i < batch.Count; i++)
+                string? savePath = await PickSaveFileAsync(".mp3", "MP3 音频", PickerLocationId.Downloads);
+                if (savePath == null)
                 {
-                    OnlineSearchItem item = batch[i];
-                    StatusText.Text = $"正在下载 {i + 1}/{batch.Count}：{item.Song.Name} …";
-
-                    string? savePath;
-                    using (var name = new System.IO.MemoryStream())
-                    { /* no-op */ }
-                    if (batch.Count > 1)
-                    {
-                        if (string.IsNullOrEmpty(folderPath))
-                        {
-                            return;
-                        }
-                        string fname = OnlineMusicApi.SanitizeFileName(item.Song.Name + " - " + item.Song.Artist) + ".mp3";
-                        savePath = System.IO.Path.Combine(folderPath, fname);
-                    }
-                    else
-                    {
-                        savePath = await PickSaveFileAsync(".mp3", "MP3 音频", PickerLocationId.Downloads);
-                        if (savePath == null)
-                        {
-                            return;
-                        }
-                    }
-
-                    var dl = await StreamingServiceClient.GetDownloadAsync(item.Song.Source, item.Song.SongId, "standard");
-                    if (dl == null || !dl.Ok || string.IsNullOrWhiteSpace(dl.Url))
-                    {
-                        fail++;
-                        continue;
-                    }
-
-                    using var hc = new System.Net.Http.HttpClient();
-                    using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, dl.Url);
-                    if (dl.Headers != null)
-                    {
-                        foreach (var kv in dl.Headers)
-                        {
-                            if (!string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
-                            {
-                                req.Headers.TryAddWithoutValidation(kv.Key, kv.Value);
-                            }
-                        }
-                    }
-
-                    using var resp = await hc.SendAsync(req);
-                    if (!resp.IsSuccessStatusCode)
-                    {
-                        fail++;
-                        continue;
-                    }
-
-                    await using (var fs = System.IO.File.Create(savePath))
-                    {
-                        await resp.Content.CopyToAsync(fs);
-                    }
-                    ok++;
+                    return;
                 }
 
-                StatusText.Text = batch.Count > 1
-                    ? $"批量下载完成：成功 {ok}，失败 {fail}"
-                    : (ok > 0 ? "已下载" : "下载失败");
+                var dl = await StreamingServiceClient.GetDownloadAsync(_selected.Source, _selected.SongId, "standard");
+                if (dl == null || !dl.Ok || string.IsNullOrWhiteSpace(dl.Url))
+                {
+                    StatusText.Text = "获取下载链接失败：" + (dl?.Error ?? "服务未返回");
+                    return;
+                }
+
+                StatusText.Text = "正在下载…";
+                using var hc = new System.Net.Http.HttpClient();
+                using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, dl.Url);
+                if (dl.Headers != null)
+                {
+                    foreach (var kv in dl.Headers)
+                    {
+                        if (!string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+                        {
+                            req.Headers.TryAddWithoutValidation(kv.Key, kv.Value);
+                        }
+                    }
+                }
+
+                using var resp = await hc.SendAsync(req);
+                resp.EnsureSuccessStatusCode();
+                await using (var fs = System.IO.File.Create(savePath))
+                {
+                    await resp.Content.CopyToAsync(fs);
+                }
+
+                StatusText.Text = "已下载：" + savePath;
             }
             catch (Exception ex)
             {
@@ -422,15 +385,6 @@ namespace CelesteMusicPlayer
             {
                 DownloadAudioButton.IsEnabled = true;
             }
-        }
-
-        private async Task<string?> PickFolderAsync()
-        {
-            var picker = new FolderPicker();
-            InitializeWithWindow.Initialize(picker, WindowNative.GetWindowHandle(this));
-            picker.SuggestedStartLocation = PickerLocationId.Downloads;
-            StorageFolder? folder = await picker.PickSingleFolderAsync();
-            return folder?.Path;
         }
 
         private void ClearDetail()
