@@ -477,6 +477,7 @@ namespace CelesteMusicPlayer
         private const uint SWP_NOACTIVATE = 0x0010;
         private const uint SWP_NOMOVE = 0x0002;
         private const uint SWP_NOSIZE = 0x0001;
+        private const uint SWP_FRAMECHANGED = 0x0020;
         private const uint SWP_ASYNCWINDOWPOS = 0x4000;
 
         [StructLayout(LayoutKind.Sequential)]
@@ -1449,6 +1450,12 @@ namespace CelesteMusicPlayer
             {
                 TryApplySystemBackdrop();
                 ConfigureWindowChrome();
+                MakeWindowBorderless(); // 显示后再强制一次无边框，避免 WinUI 重设 caption 样式
+                if (_mainWindowHwnd != IntPtr.Zero)
+                {
+                    SetWindowPos(_mainWindowHwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
+                }
+
                 StartupLog.Write("Window chrome configured");
             }
             catch (Exception ex)

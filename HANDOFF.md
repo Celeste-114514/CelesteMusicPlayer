@@ -30,7 +30,7 @@
 - **时长**：`PlaylistItem.DurationText` 改为由 `Duration` 只读推导（不再可写覆盖），恒有值，修复"时长空白串"。
 
 ## ⚠️ 待办 / 已知现象
-1. **任务栏图标外圈黑框**：已无边框但黑框仍在，未定位根因。可能方案：检查 WinUI 无边框窗口的非客户区/投影残留，或用 `SetIcon`/任务栏分组图标；也可能是旧产物未更新（先确认跑的是最新 Debug/Release exe）。待新会话继续排查。
+1. **任务栏图标外圈黑框**：已做常驻无边框（`MakeWindowBorderless` 去 WS_CAPTION/THICKFRAME/BORDER），并在**首次激活后强制再执行一次无边框 + `SetWindowPos(SWP_FRAMECHANGED)`** 让系统重新计算非客户区以清残留黑框。若仍存在，请在新会话用截图/观察确认（区分任务栏缩略图 vs 窗口角落），并按此排查：非客户区残留、`ExtendsContentIntoTitleBar`+`SetTitleBar` 是否保留 caption 阴影、`OverlappedPresenter` 投影。
 2. **歌曲长时**：改只读推导后应修复；若个别仍空白，给具体文件名/格式再查。
 3. 极端 EQ 参数仍有轻微爆音可能性（软削波已缓解）；独占高采样+EQ 受托管性能限制（较 ECHO native/SIMD 难完全丝滑）。
 4. 非打包 Debug 全量重建的 ms-appx 资源偶发问题（见编译命令）。
