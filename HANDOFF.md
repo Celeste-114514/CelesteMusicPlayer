@@ -64,3 +64,47 @@
 3. **本会话已完成的铺垫**：设置已加"流媒体"板块骨架（PanelStreaming + AmLoginButton 占位→跳转安装/配置）、Apple Music 未登录时歌词提示改为"需登录个人账号加载"、登录按钮目前弹"待接入"对话框。
 
 **注意**：cmake/Go/网络/版权——下载功能仅作"最低限度"；Apple 歌词依赖订阅账号有效性/风控；wrapper 有已知 segfault（冷却自动拉起，见 bot 说明）。
+
+## ECHO 网易云/QQ 下载机制研究报告（去 bot 依赖选型依据，2026-08）
+
+> 背景：用户目标=去掉对 WSL `streaming-plugin`(musicbot) 的音频下载依赖，把 ECHO 的网易云/QQ 下载套用进来。
+> ECHO 源码位置：`C:\Users\admin\Downloads\Download\ECHO-main`（Electron + TS，非 C#）。以下均是**已核实**的结论。
+
+### ECHO 的三条实现（分开看）
+1. **[下载侧] `src/main/downloads/DownloadService.ts` + `DownloadAuthorization.ts`**
+   - 用法：用户粘**分享 URL**（如 `music.163.com/#/song?id=xxx` / `y.qq.com/n/ryqq/songDetail/{songmid}`）→ `createUrlJob` → 调随包捆绑的 **yt-dlp**（`-f bestaudio/best --extract-audio`）提取并下载，再 `--extract-audio` 转码。
+   - 头注入：Referer/Origin（`music.163.com` / `y.qq.com`）+ 平台 Cookie；受保护 provider（网易云/QQ/酷狗）需 `DownloadAuthorizationToken`(HMAC-SHA256 签名) + `DownloadFeatureUnlockService`(付费授权 Gate)。
+   - 网易云下载产物是 `.ncm` 加密，再用随包捆绑的 **`NCMConverter.exe`** 解密。
+   - ⚠️ **结论：ECHO 下载侧是"外部二进制集合"（yt-dlp / ffmpeg / NCMConverter.exe 三者随包分发），不是自研接口。**
+
+2. **[网易云流媒体/直链侧] `NeteaseStreamingProvider.ts`**
+   - 捆绑 **`@neteasecloudmusicapienhanced/api`**(Node 库，网易云开源 API 分支) 调官方 `song_url_v1`(→接口 `/song/url/v1`，按 level) 与 `song_url`(→`/song/url`，按 br)，可选带 `MUSIC_U` cookie。
+   - 码率：`standard=128k` 到 `hires=flac/jymaster`；同一 URL 即可用于播放也可下载。
+   - ⚠️ 底层是网易云 **weapi 接口**（AES-CBC + RSA 加密参数）。C# 移植需自研 weapi 加密，或改用更老的免加密 `api.song.url`。
+
+3. **[QQ 流媒体/直链侧] `QQMusicStreamingProvider.ts`**
+   - **纯 HTTP POST** `https://u.y.qq.com/cgi-bin/musicu.fcg`，模块 `music.vkey.GetVkey: UrlGetVkey`；构造 `guid/songmid/media_mid/uin/gtk` + `filename=${qualityPrefix}${mediaMid}.${ext}`，读回 `midurlinfo[0].purl` 拼 `sip`。
+   - **128k(standard) 无 cookie 也可用**（UNLOGIN 时 qualities 限 `['standard']`）；高码率需 cookie(uin/guid/gtk)。
+   - ✅ **该实现是纯自研 HTTP，C# 可 1:1 移植，无需任何外部库。这是 ECHO 里最容易套用的部分。**
+
+### 播放器现状盘点（本仓库）
+- 网易云：搜索已返回 `id`(→songId)；直接够用。
+- QQ：搜索返回 `songmid`/`albummid`，但 **缺 `media_mid`**（取自 `song/url` 的 `file.media_mid`）——需补一个 QQ `song/detail` 接口或在搜索里多抓 `media_mid`（部分情况 songmid 即 media_mid，稳妥起见补齐）。
+- cookie 已保存：`AppSettingsStore.NetEaseCookie/QqCookie`（本地明文，设置页输入）。
+- 音频下载入口：`OnlineSearchWindow.DownloadAudio_Click` → `StreamingServiceClient.GetDownloadAsync`（即待绕过的 WSL 依赖）+ 返回 URL/Header 后本机 HttpClient 存盘。
+- 现有 `OnlineMusicApi.cs` 已实现网易云/QQ 搜索+歌词+封面（public API），无下载接口。
+
+### 三条备选路线对比（供用户拍板）
+| 路线 | 是否去 bot | 外部依赖 | 网易云 | QQ | 工作量 | 失效/风险 |
+|---|---|---|---|---|---|---|
+| **A. 纯 C# 自研接口**（weapi song/url + QQ vkey） | ✅ 彻底去 | 无（仅需可选 cookie） | 需自研 weapi 加密；无 cookie 常拿不到 | 纯 HTTP 移植，128k 免登录 | 中~大（QQ 小、网易云大） | 网易云 weapi 接口/风控易变，需维护 |
+| **B. 捆绑 yt-dlp+ffmpeg+NCMConverter**（复刻 ECHO 下载侧） | ✅ 去 | 3 个外部二进制随包 | yt-dlp 提取+ncm 解密 | yt-dlp 提取 | 小（接线即可） | 二进制体积大、更新维护、依赖外部工具 |
+| **C. 保留/完善 WSL bot 服务** | ❌ 仍依赖 WSL | 无（服务端在 WSL） | bot 已有 | bot 已有 | 小 | 未真正"去 bot"，用户明确不要 |
+
+**建议（推荐 A，分两期）**：
+- **第一期（推荐立刻做）**：QQ vkey 纯 HTTP 直链移植（128k 免 cookie，工作量小、稳定）→ 改 `DownloadAudio_Click`：QQ 平台直接本机调 `musicu.fcg` 拿直链下载，不再走 WSL。
+- **第二期**：网易云 weapi `song/url/v1`（先做免加密 `api.song.url` 兜底，再考虑 weapi+`MUSIC_U` 提码率）；QQ 补 `media_mid` 抓取与高码率(cookie)。
+- 保留现有 `StreamingServiceClient` 仅用于 Apple Music（其需要登录态 wrapper，属既定保留项）。
+
+**注意**：网易云/QQ 歌词、搜索接口已在线工作且非下载，不受下载改造影响；歌曲下载涉及平台授权，仅作个人/最低限度用途。
+
