@@ -129,11 +129,26 @@ namespace CelesteMusicPlayer
         /// <summary>用内置 FFmpeg 把文件转成临时 WAV 后播放（支持 APE/WavPack/TTA 等系统不支持的格式）。</summary>
         public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null)
         {
-            // DSD（DSF/DFF）：统一走 ffmpeg 转 PCM 输出（不再 DoP 原生直出）。
-            //   - 共享模式：16bit/44100Hz（系统/设备可播，可听优先）；
-            //   - WASAPI 独占 / ASIO：高质量 pcm_s32le @ 352800Hz（设备已验证可协商的 DoP 采样率，
-            //     避免 5.6MHz 超高频 PCM 直出导致的黑屏闪退）。
-            // DoP 直出代码（TryPlayDsdPreloadAsync / DoPWaveSource）保留但默认不再使用，便于日后恢复。
+            // DSD（DSF/DFF）输出策略：
+            //   - 设置「DSD 输出模式 = DoP 直出」且当前为 WASAPI 独占 / ASIO 时，走 DoP 原生直出
+            //     （DSD 1-bit 封进 176.4k..1411.2k DoP 容器直通 DAC，bit-perfect，不经 DSP/转码）；
+            //   - 其余情况（共享模式、或用户选了转 PCM）走 ffmpeg 转 PCM：
+            //     · 共享模式：16bit/44100Hz（系统可播，可听优先）；
+            //     · WASAPI 独占 / ASIO：高质量 pcm_s32le @ 352800Hz。
+
+            bool preferDop = string.Equals(AppSettingsStore.Load().DsdOutputMode, "Dop", StringComparison.OrdinalIgnoreCase);
+            if (preferDop && _outputMode != HiFiOutputBackend.OutputMode.WasapiShared && IsDsdFile(path))
+            {
+                bool dopOk = await TryPlayDsdPreloadAsync(path, status).ConfigureAwait(false);
+                if (dopOk)
+                {
+                    return true;
+                }
+
+                // DoP 直出失败（DAC 不支持 DoP/设备无法协商等）：降级转 PCM，保证可播。
+                StartupLog.Write("DSD DoP 直出失败，降级转 PCM: " + path + " err=" + (LastError ?? ""));
+                status?.Invoke("DoP 直出不可用，转 PCM…");
+            }
 
             string? ffmpeg = FindFfmpeg();
             if (string.IsNullOrWhiteSpace(ffmpeg))

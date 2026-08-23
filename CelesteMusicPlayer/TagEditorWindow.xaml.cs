@@ -176,6 +176,7 @@ namespace CelesteMusicPlayer
                     CurrentCoverImage.Source = null;
                     CurrentSmallCover.Source = null;
                     NoCoverPlaceholder.Visibility = Visibility.Visible;
+                    CurrentCoverSizeText.Text = "无封面";
                     return;
                 }
 
@@ -190,6 +191,7 @@ namespace CelesteMusicPlayer
                 CurrentCoverImage.Source = bmp;
                 CurrentSmallCover.Source = bmp;
                 _coverBytes = bytes;
+                CurrentCoverSizeText.Text = bmp.PixelWidth > 0 ? $"{bmp.PixelWidth} × {bmp.PixelHeight}px" : "封面尺寸";
             }
             catch
             {

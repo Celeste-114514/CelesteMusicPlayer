@@ -76,6 +76,10 @@ namespace CelesteMusicPlayer
         /// 默认 false=走 DoP 直出。</summary>
         public bool DsdUsePcmFallback { get; set; }
 
+        /// <summary>DSD 输出模式（用户可选择）："Pcm"=用 ffmpeg 转成高采样 PCM 输出（默认，保留现有独占/ASIO 的 PCM 方案）；
+        /// "Dop"=DoP 直出（独占/ASIO 下把 DSD 1-bit 封进 DoP 容器直通 DAC，bit-perfect）。</summary>
+        public string DsdOutputMode { get; set; } = "Pcm";
+
         public bool LyricFuzzyMatch { get; set; } = true;
 
         public bool ShowLyricTranslate { get; set; } = true;
@@ -537,6 +541,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DsDoP32 = s.DsDoP32,
             DsdUseNaudioOutput = s.DsdUseNaudioOutput,
             DsdUsePcmFallback = s.DsdUsePcmFallback,
+            DsdOutputMode = s.DsdOutputMode,
             OnlineSearchDefaultSource = s.OnlineSearchDefaultSource,
             StreamingServiceUrl = s.StreamingServiceUrl,
             NetEaseCookie = s.NetEaseCookie,

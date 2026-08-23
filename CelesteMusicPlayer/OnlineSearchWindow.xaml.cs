@@ -45,6 +45,8 @@ namespace CelesteMusicPlayer
             {
                 "QQ" => "QQ音乐",
                 "iTunes" => "Apple Music",
+                "Deezer" => "Deezer",
+                "MusicBrainz" => "MusicBrainz",
                 _ => "网易云"
             };
             if (!string.IsNullOrWhiteSpace(song.CoverUrl))
@@ -100,10 +102,14 @@ namespace CelesteMusicPlayer
             SourceCombo.Items.Add("网易云音乐");
             SourceCombo.Items.Add("QQ音乐");
             SourceCombo.Items.Add("Apple Music");
+            SourceCombo.Items.Add("Deezer");
+            SourceCombo.Items.Add("MusicBrainz");
             SourceCombo.SelectedIndex = AppSettingsStore.Load().OnlineSearchDefaultSource switch
             {
                 "QQ" => 1,
                 "iTunes" => 2,
+                "Deezer" => 3,
+                "MusicBrainz" => 4,
                 _ => 0
             };
 
@@ -195,6 +201,8 @@ namespace CelesteMusicPlayer
             {
                 1 => "QQ",
                 2 => "iTunes",
+                3 => "Deezer",
+                4 => "MusicBrainz",
                 _ => "NetEase"
             };
 
@@ -205,6 +213,16 @@ namespace CelesteMusicPlayer
                 _ = SearchAsync();
             }
         }
+
+        /// <summary>平台显示名（下拉/状态提示复用）。</summary>
+        private static string DisplayPlatform(string source) => source switch
+        {
+            "QQ" => "QQ音乐",
+            "iTunes" => "Apple Music",
+            "Deezer" => "Deezer",
+            "MusicBrainz" => "MusicBrainz",
+            _ => "网易云"
+        };
 
         private void SearchBox_KeyDown(object sender, KeyRoutedEventArgs e)
         {
@@ -292,7 +310,19 @@ namespace CelesteMusicPlayer
                         var bmp = new BitmapImage();
                         await bmp.SetSourceAsync(fs.AsRandomAccessStream());
                         CoverPreview.Source = bmp;
+                        if (bmp.PixelWidth > 0)
+                        {
+                            CoverSizeText.Text = $"{bmp.PixelWidth} × {bmp.PixelHeight}px";
+                        }
                     }
+                    else
+                    {
+                        CoverSizeText.Text = "无封面";
+                    }
+                }
+                else
+                {
+                    CoverSizeText.Text = "无封面";
                 }
             }
             catch
@@ -300,10 +330,12 @@ namespace CelesteMusicPlayer
             }
 
             // 歌词预览
-            if (string.Equals(song.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
+            if (string.Equals(song.Source, "iTunes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(song.Source, "Deezer", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(song.Source, "MusicBrainz", StringComparison.OrdinalIgnoreCase))
             {
-                // iTunes Search API 不返回歌词字段
-                LyricPreview.Text = "Apple Music 不提供歌词；请用网易云 / QQ 搜索、下载歌词。";
+                // iTunes/Deezer/MusicBrainz 不返回歌词字段
+                LyricPreview.Text = "该平台（" + DisplayPlatform(song.Source) + "）不提供歌词；请用网易云 / QQ 搜索、下载歌词。";
                 return;
             }
 
@@ -326,10 +358,12 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // Apple Music 不提供音频下载（iTunes Search API 仅用于搜索/封面/元数据）。
-            if (string.Equals(_selected.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
+            // 仅元数据平台不提供音频下载（iTunes/Deezer/MusicBrainz 仅用于搜索/封面/标签）。
+            if (string.Equals(_selected.Source, "iTunes", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(_selected.Source, "Deezer", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(_selected.Source, "MusicBrainz", StringComparison.OrdinalIgnoreCase))
             {
-                StatusText.Text = "Apple Music 不提供音频下载；请用网易云 / QQ 下载。";
+                StatusText.Text = "此平台（" + DisplayPlatform(_selected.Source) + "）仅提供元数据/封面，不提供音频下载；请用网易云 / QQ 下载。";
                 return;
             }
 
@@ -553,6 +587,7 @@ namespace CelesteMusicPlayer
             DetailAlbum.Text = string.Empty;
             LyricPreview.Text = string.Empty;
             CoverPreview.Source = null;
+            CoverSizeText.Text = "封面尺寸";
         }
 
         private void WebPlayButton_Click(object sender, RoutedEventArgs e)

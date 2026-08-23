@@ -103,11 +103,14 @@
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <Border Width="140" Height="140" CornerRadius="10"
-                            BorderBrush="{ThemeResource DividerStrokeColorDefault}" BorderThickness="1"
-                            Background="{ThemeResource SubtleFillColorSecondary}">
-                        <Image x:Name="CoverPreview" Stretch="UniformToFill" />
-                    </Border>
+                    <StackPanel Spacing="4">
+                        <Border Width="140" Height="140" CornerRadius="10"
+                                BorderBrush="{ThemeResource DividerStrokeColorDefault}" BorderThickness="1"
+                                Background="{ThemeResource SubtleFillColorSecondary}">
+                            <Image x:Name="CoverPreview" Stretch="UniformToFill" />
+                        </Border>
+                        <TextBlock x:Name="CoverSizeText" FontSize="10" Opacity="0.5" TextAlignment="Center" Text="封面尺寸" />
+                    </StackPanel>
                     <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="5">
                         <TextBlock x:Name="DetailTitle" FontSize="20" FontWeight="SemiBold"
                                    TextTrimming="CharacterEllipsis" />

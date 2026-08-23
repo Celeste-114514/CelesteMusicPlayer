@@ -15609,9 +15609,15 @@ namespace CelesteMusicPlayer
                 _isEnginePaused = false;
                 _usingEnginePlayback = true;
                 NowPlayingText.Text = "正在播放（引擎）：" + item.Title + " - " + item.Artist;
-                // DSD 在非 WASAPI 独占模式：ffmpeg 转码为 PCM 输出（非 bit-perfect），左上角提示转码结果。
-                if (IsDsdFile(item.FilePath)
-                    && !string.Equals(AppSettingsStore.Load().OutputMode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase))
+                // DSD：若走 DoP 直出（独占/ASIO + 设置=DoP）→ 提示直出；否则 ffmpeg 转 PCM → 提示转码。
+                bool dsdDop = IsDsdFile(item.FilePath)
+                    && IsHiFiModeSelected()
+                    && string.Equals(AppSettingsStore.Load().DsdOutputMode, "Dop", StringComparison.OrdinalIgnoreCase);
+                if (dsdDop)
+                {
+                    NowPlayingText.Text = "DSD DoP 直出（bit-perfect）· " + item.Title + " - " + item.Artist;
+                }
+                else if (IsDsdFile(item.FilePath))
                 {
                     string pcmDesc = string.IsNullOrWhiteSpace(_audioEngine?.SourceFormatDescription)
                         ? (_audioEngine?.ActualOutputFormat ?? "PCM") : _audioEngine!.SourceFormatDescription!;

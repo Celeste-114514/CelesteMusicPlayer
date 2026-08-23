@@ -61,6 +61,8 @@ namespace CelesteMusicPlayer
             {
                 "QQ" => await SearchQqSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
                 "iTunes" => await SearchItunesSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
+                "Deezer" => await SearchDeezerSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
+                "MusicBrainz" => await SearchMusicBrainzSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
                 _ => await SearchNetEaseSongsAsync(title, artist, cancellationToken).ConfigureAwait(false)
             };
         }
@@ -393,6 +395,138 @@ namespace CelesteMusicPlayer
             return results;
         }
 
+        /// <summary>
+        /// Deezer 公开搜索（免 key）：返回单曲+高清封面，仅作元数据/封面候选（不提供下载与歌词）。
+        /// 端点 api.deezer.com/search。注意：部分网络无法直连该域名。
+        /// </summary>
+        private static async Task<IReadOnlyList<OnlineSongResult>> SearchDeezerSongsAsync(
+            string title,
+            string artist,
+            CancellationToken cancellationToken)
+        {
+            var results = new List<OnlineSongResult>();
+            try
+            {
+                string url = "https://api.deezer.com/search?q={0}&limit=20";
+                url = string.Format(url, Uri.EscapeDataString(BuildQuery(title, artist)));
+                using HttpRequestMessage req = new(HttpMethod.Get, url);
+                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
+                using HttpResponseMessage response = await Http.SendAsync(req, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return results;
+                }
+
+                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("data", out JsonElement data) || data.ValueKind != JsonValueKind.Array)
+                {
+                    return results;
+                }
+
+                foreach (JsonElement s in data.EnumerateArray())
+                {
+                    string trackId = s.TryGetProperty("id", out JsonElement idEl) ? idEl.GetInt64().ToString() : string.Empty;
+                    string name = s.TryGetProperty("title", out JsonElement nEl) ? nEl.GetString() ?? string.Empty : string.Empty;
+                    string singer = s.TryGetProperty("artist", out JsonElement arEl)
+                        && arEl.TryGetProperty("name", out JsonElement arnEl)
+                        ? arnEl.GetString() ?? string.Empty : string.Empty;
+                    string album = s.TryGetProperty("album", out JsonElement alEl)
+                        && alEl.TryGetProperty("title", out JsonElement altEl)
+                        ? altEl.GetString() ?? string.Empty : string.Empty;
+                    string cover = s.TryGetProperty("album", out JsonElement alEl2)
+                        && alEl2.TryGetProperty("cover_xl", out JsonElement cvEl)
+                        ? cvEl.GetString() ?? string.Empty : string.Empty;
+
+                    if (!string.IsNullOrWhiteSpace(trackId) && !string.IsNullOrWhiteSpace(name))
+                    {
+                        results.Add(new OnlineSongResult("Deezer", trackId, name, singer, album, cover));
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return results;
+        }
+
+        /// <summary>
+        /// MusicBrainz 公开搜索（免 key）：返回专辑粒度，封面走 Cover Art Archive（coverartarchive.org）。
+        /// endpoint musicbrainz.org/ws/2/release。仅作元数据/封面候选（不提供下载与歌词）。
+        /// </summary>
+        private static async Task<IReadOnlyList<OnlineSongResult>> SearchMusicBrainzSongsAsync(
+            string title,
+            string artist,
+            CancellationToken cancellationToken)
+        {
+            var results = new List<OnlineSongResult>();
+            try
+            {
+                // 专辑粒度：封面直接来自 Cover Art Archive，最适合补封面/专辑标签。
+                string query = string.IsNullOrWhiteSpace(artist)
+                    ? Uri.EscapeDataString(title)
+                    : Uri.EscapeDataString($"artist:{artist} AND release:{title}");
+                string url = $"https://musicbrainz.org/ws/2/release/?query={query}&limit=20&fmt=json";
+                using HttpRequestMessage req = new(HttpMethod.Get, url);
+                req.Headers.TryAddWithoutValidation("User-Agent",
+                    "CelesteMusicPlayer/1.0 (https://github.com/Celeste-114514/CelesteMusicPlayer)");
+                using HttpResponseMessage response = await Http.SendAsync(req, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return results;
+                }
+
+                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("releases", out JsonElement releases) || releases.ValueKind != JsonValueKind.Array)
+                {
+                    return results;
+                }
+
+                foreach (JsonElement r in releases.EnumerateArray())
+                {
+                    string mbid = r.TryGetProperty("id", out JsonElement idEl) ? idEl.GetString() ?? string.Empty : string.Empty;
+                    string name = r.TryGetProperty("title", out JsonElement nEl) ? nEl.GetString() ?? string.Empty : string.Empty;
+                    string albumArtist = string.Empty;
+                    if (r.TryGetProperty("artist-credit", out JsonElement ac) && ac.ValueKind == JsonValueKind.Array)
+                    {
+                        var names = new List<string>();
+                        foreach (JsonElement c in ac.EnumerateArray())
+                        {
+                            if (c.ValueKind == JsonValueKind.Object && c.TryGetProperty("name", out JsonElement cn))
+                            {
+                                string? v = cn.GetString();
+                                if (!string.IsNullOrWhiteSpace(v))
+                                {
+                                    names.Add(v);
+                                }
+                            }
+                        }
+
+                        albumArtist = string.Join(" / ", names);
+                    }
+
+                    string groupId = r.TryGetProperty("release-group", out JsonElement rg)
+                        && rg.TryGetProperty("id", out JsonElement gidEl)
+                        ? gidEl.GetString() ?? string.Empty : string.Empty;
+                    string cover = string.IsNullOrWhiteSpace(groupId)
+                        ? string.Empty
+                        : $"https://coverartarchive.org/release-group/{groupId}/front";
+
+                    if (!string.IsNullOrWhiteSpace(mbid) && !string.IsNullOrWhiteSpace(name))
+                    {
+                        results.Add(new OnlineSongResult("MusicBrainz", mbid, name, albumArtist, name, cover));
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return results;
+        }
+
         // =====================================================================
         // 歌词
         // =====================================================================
@@ -406,6 +540,7 @@ namespace CelesteMusicPlayer
             return source switch
             {
                 "QQ" => await GetQqLyricAsync(song.SongId, cancellationToken).ConfigureAwait(false),
+                "Deezer" or "MusicBrainz" or "iTunes" => string.Empty,
                 _ => await GetNetEaseLyricAsync(song.SongId, includeTranslation, cancellationToken).ConfigureAwait(false)
             };
         }
@@ -780,6 +915,13 @@ namespace CelesteMusicPlayer
 
             try
             {
+                // 缓存：目标 .lrc 已存在 → 直接返回，不再联网搜索/下载。
+                string cachedPath = Path.Combine(folder, SanitizeFileName(title + " - " + artist) + ".lrc");
+                if (File.Exists(cachedPath))
+                {
+                    return cachedPath;
+                }
+
                 IReadOnlyList<OnlineSongResult> hits = await SearchSongsAsync(source, title, artist, cancellationToken).ConfigureAwait(false);
                 if (hits.Count == 0)
                 {
@@ -793,9 +935,8 @@ namespace CelesteMusicPlayer
                 }
 
                 Directory.CreateDirectory(folder);
-                string path = Path.Combine(folder, SanitizeFileName(title + " - " + artist) + ".lrc");
-                await File.WriteAllTextAsync(path, lyric, cancellationToken).ConfigureAwait(false);
-                return path;
+                await File.WriteAllTextAsync(cachedPath, lyric, cancellationToken).ConfigureAwait(false);
+                return cachedPath;
             }
             catch
             {
@@ -864,6 +1005,12 @@ namespace CelesteMusicPlayer
             if (string.IsNullOrWhiteSpace(coverUrl))
             {
                 return null;
+            }
+
+            // 缓存：目标文件已存在 → 直接返回，不再联网下载。
+            if (File.Exists(savePath))
+            {
+                return savePath;
             }
 
             try

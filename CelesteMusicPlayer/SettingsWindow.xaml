@@ -823,6 +823,17 @@
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" MinWidth="240" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="DSD 输出" />
+                                <TextBlock Text="DoP 直出=DSD 1-bit 封进 DoP 容器直通 DAC（独占/ASIO，bit-perfect）；转 PCM=用 FFmpeg 转高采样 PCM（可听优先）。共享模式下自动转 PCM。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ComboBox x:Name="DsdOutputModeCombo" Grid.Column="1" MinWidth="240" HorizontalAlignment="Stretch" SelectionChanged="DsdOutputModeCombo_SelectionChanged" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">

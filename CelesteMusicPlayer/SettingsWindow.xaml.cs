@@ -75,12 +75,14 @@ namespace CelesteMusicPlayer
             ("QQ", "QQ音乐"),
         };
 
-        /// <summary>在线搜索默认平台（含 iTunes；歌词源不含 iTunes，因 iTunes 不提供歌词）。</summary>
+        /// <summary>在线搜索默认平台（含 iTunes/Deezer/MusicBrainz；歌词源不含它们，因均不提供歌词/下载）。</summary>
         private static readonly (string Id, string Label)[] OnlineSearchSourceOptions =
         {
             ("NetEase", "网易云音乐"),
             ("QQ", "QQ音乐"),
             ("iTunes", "Apple Music"),
+            ("Deezer", "Deezer（封面）"),
+            ("MusicBrainz", "MusicBrainz（封面）"),
         };
 
         private static readonly (string Id, string Label)[] AudioChannelOptions =
@@ -254,6 +256,10 @@ namespace CelesteMusicPlayer
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 独占（HiFi）", Tag = "WasapiExclusive" });
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "ASIO（专有声卡驱动）", Tag = "Asio" });
 
+            DsdOutputModeCombo.Items.Clear();
+            DsdOutputModeCombo.Items.Add(new ComboBoxItem { Content = "DoP 直出（HiFi，独占/ASIO）", Tag = "Dop" });
+            DsdOutputModeCombo.Items.Add(new ComboBoxItem { Content = "转 PCM（兼容，先可听）", Tag = "Pcm" });
+
             WriteId3v23Combo.Items.Clear();
             WriteId3v23Combo.Items.Add(new ComboBoxItem { Content = "ID3v2.3", Tag = true });
             WriteId3v23Combo.Items.Add(new ComboBoxItem { Content = "ID3v2.4", Tag = false });
@@ -415,6 +421,7 @@ namespace CelesteMusicPlayer
 
                 // 音频输出模式 + 设备
                 SelectComboByTag(OutputModeCombo, s.OutputMode);
+                SelectComboByTag(DsdOutputModeCombo, string.IsNullOrWhiteSpace(s.DsdOutputMode) ? "Pcm" : s.DsdOutputMode);
                 UpdateVolumeSettingLockForMode(); // 模式决定设置页音量条是否锁定
                 StartupLog.Write("设置加载 输出模式=" + (s.OutputMode ?? "null") + " 下拉选中=" + (OutputModeCombo?.SelectedItem is ComboBoxItem _m && _m.Tag is string _mt ? _mt : "(null)") + " 设备=" + (s.OutputDeviceId ?? "null"));
                 _loadAsyncIgnore = true;
@@ -699,6 +706,18 @@ namespace CelesteMusicPlayer
             PersistAllFromUi();
         }
 
+        /// <summary>DSD 输出模式切换（DoP 直出 / 转 PCM）：仅持久化，播放时按文件即时生效。</summary>
+        private void DsdOutputModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingUi || !_uiReady)
+            {
+                return;
+            }
+
+            AppSettingsStore.Update(s => s.DsdOutputMode = DsdOutputModeCombo?.SelectedItem is ComboBoxItem item && item.Tag is string mode
+                ? mode : "Dop");
+        }
+
         /// <summary>选中设备下拉：空 = 系统默认；否则按去掉 \?\ 前缀的设备 ID 匹配，防回显成“系统默认”。
         /// 返回是否成功按 <paramref name="selectedId"/> 精确命中（空串视为命中，回落时返回 false）。</summary>
         private bool SelectRenderDeviceCombo(ComboBox? combo, string selectedId)
@@ -902,6 +921,8 @@ namespace CelesteMusicPlayer
             }
 
             s.OutputMode = GetSelectedOutputMode();
+            s.DsdOutputMode = DsdOutputModeCombo?.SelectedItem is ComboBoxItem dsi && dsi.Tag is string dst
+                ? dst : "Dop";
             StartupLog.Write("设置保存 输出模式=" + (s.OutputMode ?? "null") + " 设备=" + (s.OutputDeviceId ?? "null"));
             s.EnableFade = EnableFadeSwitch?.IsOn ?? s.EnableFade;
             if (FadeMsSlider != null)
