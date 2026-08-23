@@ -44,6 +44,7 @@ namespace CelesteMusicPlayer
             Platform = song.Source switch
             {
                 "QQ" => "QQ音乐",
+                "iTunes" => "Apple Music",
                 _ => "网易云"
             };
             if (!string.IsNullOrWhiteSpace(song.CoverUrl))
@@ -98,9 +99,11 @@ namespace CelesteMusicPlayer
 
             SourceCombo.Items.Add("网易云音乐");
             SourceCombo.Items.Add("QQ音乐");
+            SourceCombo.Items.Add("Apple Music");
             SourceCombo.SelectedIndex = AppSettingsStore.Load().OnlineSearchDefaultSource switch
             {
                 "QQ" => 1,
+                "iTunes" => 2,
                 _ => 0
             };
 
@@ -191,6 +194,7 @@ namespace CelesteMusicPlayer
             _source = SourceCombo.SelectedIndex switch
             {
                 1 => "QQ",
+                2 => "iTunes",
                 _ => "NetEase"
             };
 
@@ -296,6 +300,13 @@ namespace CelesteMusicPlayer
             }
 
             // 歌词预览
+            if (string.Equals(song.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
+            {
+                // iTunes Search API 不返回歌词字段
+                LyricPreview.Text = "Apple Music 不提供歌词；请用网易云 / QQ 搜索、下载歌词。";
+                return;
+            }
+
             try
             {
                 var settings = AppSettingsStore.Load();
@@ -312,6 +323,13 @@ namespace CelesteMusicPlayer
         {
             if (_selected == null)
             {
+                return;
+            }
+
+            // Apple Music 不提供音频下载（iTunes Search API 仅用于搜索/封面/元数据）。
+            if (string.Equals(_selected.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
+            {
+                StatusText.Text = "Apple Music 不提供音频下载；请用网易云 / QQ 下载。";
                 return;
             }
 
@@ -496,10 +514,16 @@ namespace CelesteMusicPlayer
                 using var resp = await hc.SendAsync(req);
                 if (!resp.IsSuccessStatusCode)
                 {
-                    StatusText.Text = "下载失败：" + (int)resp.StatusCode + " " + (resp.ReasonPhrase ?? "");
+                    if ((int)resp.StatusCode == 403)
+                    {
+                        StatusText.Text = "下载被网易云防盗链拒绝（403）。免费曲可下载；会员/高码率直链需在浏览器登录的网易云网页中下载。";
+                    }
+                    else
+                    {
+                        StatusText.Text = "下载失败：" + (int)resp.StatusCode + " " + (resp.ReasonPhrase ?? "");
+                    }
                     return;
                 }
-
                 await using (var fs = System.IO.File.Create(savePath))
                 {
                     await resp.Content.CopyToAsync(fs);
