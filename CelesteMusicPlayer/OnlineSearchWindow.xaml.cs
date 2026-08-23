@@ -44,7 +44,6 @@ namespace CelesteMusicPlayer
             Platform = song.Source switch
             {
                 "QQ" => "QQ音乐",
-                "iTunes" => "Apple Music",
                 _ => "网易云"
             };
             if (!string.IsNullOrWhiteSpace(song.CoverUrl))
@@ -99,11 +98,9 @@ namespace CelesteMusicPlayer
 
             SourceCombo.Items.Add("网易云音乐");
             SourceCombo.Items.Add("QQ音乐");
-            SourceCombo.Items.Add("Apple Music");
             SourceCombo.SelectedIndex = AppSettingsStore.Load().OnlineSearchDefaultSource switch
             {
                 "QQ" => 1,
-                "iTunes" => 2,
                 _ => 0
             };
 
@@ -194,7 +191,6 @@ namespace CelesteMusicPlayer
             _source = SourceCombo.SelectedIndex switch
             {
                 1 => "QQ",
-                2 => "iTunes",
                 _ => "NetEase"
             };
 
@@ -300,13 +296,6 @@ namespace CelesteMusicPlayer
             }
 
             // 歌词预览
-            if (string.Equals(song.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
-            {
-                // iTunes Search API 不返回歌词字段
-                LyricPreview.Text = "Apple Music 不提供歌词；请用网易云 / QQ 搜索、下载歌词或 128k MP3。";
-                return;
-            }
-
             try
             {
                 var settings = AppSettingsStore.Load();
@@ -326,12 +315,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            if (string.Equals(_selected.Source, "iTunes", StringComparison.OrdinalIgnoreCase))
-            {
-                StatusText.Text = "Apple Music 不提供音频下载；下载 128k MP3 请切换到 网易云 / QQ 平台。";
-                return;
-            }
-
             // QQ 音乐：本机直连 musicu.fcg 换 vkey 直链，不再依赖 WSL 流媒体服务去 bot。
             if (string.Equals(_selected.Source, "QQ", StringComparison.OrdinalIgnoreCase))
             {
@@ -339,7 +322,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // 网易云：本机 weapi 加密换直链，不再依赖 WSL 流媒体服务去 bot。
+            // 网易云：本机公开播放 URL 接口换直链，不再依赖 WSL 流媒体服务去 bot。
             if (string.Equals(_selected.Source, "NetEase", StringComparison.OrdinalIgnoreCase))
             {
                 await DownloadNetEaseAudioAsync();

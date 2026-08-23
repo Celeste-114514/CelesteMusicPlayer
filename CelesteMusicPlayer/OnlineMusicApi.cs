@@ -3,8 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
-using System.Numerics;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -132,6 +130,56 @@ namespace CelesteMusicPlayer
                     if (id > 0 && !string.IsNullOrWhiteSpace(name))
                     {
                         results.Add(new OnlineSongResult("NetEase", id.ToString(), name, songArtist, album, string.Empty));
+                    }
+                }
+
+                // 批量补齐封面：搜索接口的 album 不含 picUrl（仅 picId），
+                // 用歌曲详情接口一次拉取多首封面的 picUrl 回填结果。
+                if (results.Count > 0)
+                {
+                    try
+                    {
+                        string ids = string.Join(",", results.Select(r => r.SongId));
+                        using HttpResponseMessage detailResp = await Http.GetAsync(
+                            "https://music.163.com/api/song/detail/?ids=[" + ids + "]", cancellationToken).ConfigureAwait(false);
+                        if (detailResp.IsSuccessStatusCode)
+                        {
+                            string detailJson = await detailResp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                            using JsonDocument detailDoc = JsonDocument.Parse(detailJson);
+                            if (detailDoc.RootElement.TryGetProperty("songs", out JsonElement detailSongs)
+                                && detailSongs.ValueKind == JsonValueKind.Array)
+                            {
+                                var covers = new Dictionary<string, string>();
+                                foreach (JsonElement s in detailSongs.EnumerateArray())
+                                {
+                                    if (s.TryGetProperty("id", out JsonElement idEl)
+                                        && idEl.TryGetInt64(out long sid)
+                                        && s.TryGetProperty("album", out JsonElement alEl)
+                                        && alEl.TryGetProperty("picUrl", out JsonElement picEl))
+                                    {
+                                        string? pic = picEl.GetString();
+                                        if (!string.IsNullOrWhiteSpace(pic))
+                                        {
+                                            covers[sid.ToString()] = pic;
+                                        }
+                                    }
+                                }
+
+                                if (covers.Count > 0)
+                                {
+                                    for (int i = 0; i < results.Count; i++)
+                                    {
+                                        if (covers.TryGetValue(results[i].SongId, out string? pic))
+                                        {
+                                            results[i] = results[i] with { CoverUrl = pic };
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    catch
+                    {
                     }
                 }
             }
@@ -1123,7 +1171,10 @@ namespace CelesteMusicPlayer
                     }
                 }
 
-                return new OnlineDownloadLink(string.Empty, new(), "mp3", null, "QQ 音乐未返回播放直链（可能需登录会员或歌曲受限）。");
+                return new OnlineDownloadLink(string.Empty, new(), "mp3", null,
+                    cookie.Length > 0
+                        ? "QQ 音乐未返回播放直链（可能是会员/受限曲；若你是会员，请更新 QQ Cookie 后重试）。"
+                        : "QQ 音乐未返回播放直链（可能是会员/受限曲；请在设置里保存 QQ Cookie 后重试，或换一首免费曲）。");
             }
             catch (OperationCanceledException)
             {
@@ -1219,7 +1270,7 @@ namespace CelesteMusicPlayer
                     }
 
                     string json = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                    (string? purl, string? sip) = ExtractQqVkey(json);
+                    (string? purl, string? sip, int _) = ExtractQqVkey(json);
                     if (!string.IsNullOrWhiteSpace(purl))
                     {
                         return purl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
@@ -1278,7 +1329,7 @@ namespace CelesteMusicPlayer
             return string.Empty;
         }
 
-        private static (string? Purl, string? Sip) ExtractQqVkey(string json)
+        private static (string? Purl, string? Sip, int Result) ExtractQqVkey(string json)
         {
             try
             {
@@ -1286,7 +1337,7 @@ namespace CelesteMusicPlayer
                 if (!doc.RootElement.TryGetProperty("req_0", out JsonElement req0)
                     || !req0.TryGetProperty("data", out JsonElement data))
                 {
-                    return (null, null);
+                    return (null, null, 0);
                 }
 
                 string? sip = null;
@@ -1306,16 +1357,25 @@ namespace CelesteMusicPlayer
                     }
                 }
 
+                int resultCode = 0;
                 if (data.TryGetProperty("midurlinfo", out JsonElement mi) && mi.ValueKind == JsonValueKind.Array)
                 {
                     foreach (JsonElement item in mi.EnumerateArray())
                     {
+                        if (item.TryGetProperty("result", out JsonElement rEl) && rEl.TryGetInt32(out int rc))
+                        {
+                            if (rc != 0)
+                            {
+                                resultCode = rc;
+                            }
+                        }
+
                         if (item.TryGetProperty("purl", out JsonElement purlEl))
                         {
                             string? p = purlEl.GetString();
                             if (!string.IsNullOrWhiteSpace(p))
                             {
-                                return (p, sip);
+                                return (p, sip, resultCode);
                             }
                         }
                     }
@@ -1325,7 +1385,30 @@ namespace CelesteMusicPlayer
             {
             }
 
-            return (null, null);
+            return (null, null, 0);
+        }
+
+        /// <summary>据 QQ vkey result 码生成面向用户的诊断信息（对齐 ECHO QQMusicStreamingProvider）。</summary>
+        private static string QqVkeyMessage(int result, bool hasCookie)
+        {
+            if (result == 104003 && !hasCookie)
+            {
+                return "QQ 音乐不会 128k 播放地址（可能是会员/VIP 曲目）；请在设置里登录/保存有效 QQ Cookie 后重试。";
+            }
+            if (result == 104003)
+            {
+                return "QQ 音乐返回无播放权限（104003）；请确认是已开通会员的账号并更新 Cookie。";
+            }
+            if (result == 104013)
+            {
+                return "QQ 音乐限制当前设备播放（104013）；请稍后重试或更新 Cookie。";
+            }
+            if (result > 0)
+            {
+                return $"QQ 音乐未返回播放直链（错误码 {result}）";
+            }
+
+            return "QQ 音乐未返回播放直链。";
         }
 
         private static string QqUinFromCookie(string cookie)
@@ -1441,24 +1524,15 @@ namespace CelesteMusicPlayer
         }
 
         // =====================================================================
-        // 网易云 weapi 直链下载（去 bot：本机走 weapi 加密换取音频直链，MUSIC_U 可选）
+        // 网易云直链下载（去 bot：本机走公开播放 URL 接口换直链；免费曲 128k/320k 无需登录）
         // =====================================================================
-
-        private const string NetEasePresetKey = "0CoJUm6Qyw8W8jud";
-        private const string NetEaseIv = "0102030405060708";
-        private const string NetEaseBase62 = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-        private static readonly BigInteger NetEaseRsaE = new(0x10001);
-        private static readonly BigInteger NetEaseRsaN = BigInteger.Parse(
-            "00B509F6259DF8642DBC35662901477DF22677EC152B5FF68ACE615BB7B725152B3AB17A876AEA8A5AA76D2E417629EC4EE341F56135FCDF694A00413804C4BB2F6A4957C93E1C0452BDB2741713DFC30DA16DE91AFB89564C95D733842D093604F3F921D74FA0811EE5F77BD49D07551AE38A2771A4D6CFB38118B6C288AE39C",
-            System.Globalization.NumberStyles.HexNumber);
-
-        private static readonly Random NetEaseRandom = new();
+        // 注意：网易云 weapi/eapi 播放端点（/weapi/song/enhance/player/url）实测已失效（返回 200 空 body），
+        // 公开接口 /api/song/enhance/player/url?ids=[id]&br= 仍可用：
+        //   - 免费曲：128k/320k 直链直接返回（无需 Cookie）；
+        //   - 会员/VIP 曲：url=null（fee>0 或 code=-110），需有效 MUSIC_U Cookie 解锁。
 
         /// <summary>
-        /// 获取网易云音频直链（默认 128k；有已保存 NetEaseCookie/MUSIC_U 时同接口可提码率与解锁会员曲）。
-        /// 走网易云 web 用的 weapi：AES-CBC 双层加密 params + RSA 无填充 encSecKey。
-        /// 注意：当前网络出口若被网易云音频接口风控返回空 body，则必须带有效 MUSIC_U 才能下载。
+        /// 获取网易云音频直链（默认 128k；免费曲无 Cookie 即可，会员曲需设置里保存有效 NetEaseCookie/MUSIC_U）。
         /// </summary>
         public static async Task<OnlineDownloadLink?> GetNetEaseDownloadLinkAsync(
             string songId,
@@ -1472,25 +1546,22 @@ namespace CelesteMusicPlayer
 
             string cookie = AppSettingsStore.Load().NetEaseCookie?.Trim() ?? string.Empty;
 
-            // 降级链：preferLossless→999k；有 cookie→320k 再退 128k；无 cookie→仅 128k。
+            // 降级链：preferLossless→先 999k(flac)；否则 320k → 128k 兜底（免费曲无 cookie 也能拿 320k）。
             var bitrates = new List<int>();
             if (preferLossless)
             {
                 bitrates.Add(999000);
             }
-            if (cookie.Length > 0)
-            {
-                bitrates.Add(320000);
-            }
+            bitrates.Add(320000);
             bitrates.Add(128000);
 
-            string? lastError = "网易云音频接口未返回内容（当前网络可能被风控；请在设置里保存有效的网易云 Cookie 后再试）。";
+            string? lastError = "网易云未返回播放直链。";
             try
             {
                 foreach (int bitrate in bitrates)
                 {
-                    var (url, ext, br, err) = await TryResolveNetEaseUrlAsync(songId, bitrate, cookie, cancellationToken).ConfigureAwait(false);
-                    if (url != null)
+                    var (url, ext, returnedBr, err) = await TryResolveNetEaseUrlAsync(songId, bitrate, cookie, cancellationToken).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(url))
                     {
                         var headers = new Dictionary<string, string>
                         {
@@ -1502,7 +1573,7 @@ namespace CelesteMusicPlayer
                             headers["Cookie"] = cookie;
                         }
 
-                        return new OnlineDownloadLink(url, headers, ext, br, null);
+                        return new OnlineDownloadLink(url, headers, ext, returnedBr, null);
                     }
 
                     if (err != null)
@@ -1523,7 +1594,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>对单个码率发起 weapi 请求并解析直链。成功返回 (url,ext,bitrate,null)；失败返回 (null,null,null,错误)。</summary>
+        /// <summary>对单个码率请求公开播放 URL 接口并解析直链。成功返回 (url,ext,bitrate,null)；失败返回 (null,_,_,错误)。</summary>
         private static async Task<(string? Url, string Ext, int? Bitrate, string? Error)> TryResolveNetEaseUrlAsync(
             string songId,
             int bitrate,
@@ -1532,24 +1603,8 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                // 与网易云 web 播放一致：weapi 编码 body，form 提交 params + encSecKey。
-                var bodyObj = new Dictionary<string, object>
-                {
-                    ["ids"] = $"[{songId}]",
-                    ["br"] = bitrate,
-                    ["csrf_token"] = NetEaseCsrf(cookie),
-                };
-                (string paramsVal, string encSecKey) = NetEaseWeapi(bodyObj);
-
-                var form = new Dictionary<string, string>
-                {
-                    ["params"] = paramsVal,
-                    ["encSecKey"] = encSecKey,
-                };
-                using var formContent = new FormUrlEncodedContent(form);
-
-                using var request = new HttpRequestMessage(HttpMethod.Post, "https://music.163.com/weapi/song/enhance/player/url");
-                request.Content = formContent;
+                string url = $"https://music.163.com/api/song/enhance/player/url?ids=[{songId}]&br={bitrate}";
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
                 request.Headers.TryAddWithoutValidation("Referer", "https://music.163.com/");
                 request.Headers.TryAddWithoutValidation("Origin", "https://music.163.com");
                 request.Headers.TryAddWithoutValidation("User-Agent",
@@ -1568,7 +1623,7 @@ namespace CelesteMusicPlayer
                 string json = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(json))
                 {
-                    return (null, "mp3", null, "网易云音频接口未返回内容（当前网络可能被风控；请在设置里保存有效的网易云 Cookie 后再试）。");
+                    return (null, "mp3", null, "网易云音频接口未返回内容（可能被风控或暂时不可用，请稍后重试）。");
                 }
 
                 using JsonDocument doc = JsonDocument.Parse(json);
@@ -1580,113 +1635,27 @@ namespace CelesteMusicPlayer
                 }
 
                 JsonElement item = data[0];
-                string? url = item.TryGetProperty("url", out JsonElement urlEl) ? urlEl.GetString() : null;
-                if (string.IsNullOrWhiteSpace(url))
+                string? resolved = item.TryGetProperty("url", out JsonElement urlEl) ? urlEl.GetString() : null;
+                if (string.IsNullOrWhiteSpace(resolved))
                 {
-                    return (null, "mp3", null, "该曲需登录会员或当前 Cookie 无权（网易云未返回播放直链）。");
+                    bool isVip = item.TryGetProperty("fee", out JsonElement feeEl)
+                        && feeEl.TryGetInt32(out int feeV) && feeV > 0;
+                    return (null, "mp3", null, isVip
+                        ? "该曲为会员/VIP 曲目；请在设置里保存有效的网易云 Cookie 后重试。"
+                        : "网易云未返回播放直链（当前 Cookie 可能失效，请在设置里更新后重试）。");
                 }
 
+                string type = item.TryGetProperty("type", out JsonElement typeEl) ? (typeEl.GetString() ?? "mp3") : "mp3";
+                string level = item.TryGetProperty("level", out JsonElement levelEl) ? (levelEl.GetString() ?? "standard") : "standard";
+                string extension = level is "lossless" or "hires" || type == "flac" ? "flac" : "mp3";
                 int? returnedBr = item.TryGetProperty("br", out JsonElement brEl) ? brEl.GetInt32() : null;
-                string level = item.TryGetProperty("level", out JsonElement lv) ? (lv.GetString() ?? "standard") : "standard";
-                string extension = level is "lossless" or "hires" ? "flac" : "mp3";
 
-                return (url, extension, returnedBr, null);
+                return (resolved, extension, returnedBr, null);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 return (null, "mp3", null, ex.Message);
             }
-        }
-
-        private static string NetEaseCsrf(string cookie)
-        {
-            string? v = NetEaseCookieValue(cookie, "_csrf");
-            return v ?? string.Empty;
-        }
-
-        private static string? NetEaseCookieValue(string cookie, string name)
-        {
-            if (string.IsNullOrEmpty(cookie))
-            {
-                return null;
-            }
-
-            int i = cookie.IndexOf(name + "=", StringComparison.OrdinalIgnoreCase);
-            if (i < 0)
-            {
-                return null;
-            }
-
-            int start = i + name.Length + 1;
-            int end = cookie.IndexOf(';', start);
-            if (end < 0)
-            {
-                end = cookie.Length;
-            }
-
-            return cookie.Substring(start, end - start).Trim();
-        }
-
-        /// <summary>生成 weapi 的 params(双层 AES-CBC base64) 与 encSecKey(RSA 无填充 hex)。</summary>
-        private static (string Params, string EncSecKey) NetEaseWeapi(Dictionary<string, object> body)
-        {
-            string text = JsonSerializer.Serialize(body);
-            string secret = string.Empty;
-            lock (NetEaseRandom)
-            {
-                for (int i = 0; i < 16; i++)
-                {
-                    int idx = (int)Math.Round(NetEaseRandom.NextDouble() * 61);
-                    secret += NetEaseBase62[idx];
-                }
-            }
-
-            // 内层：AES-CBC(presetKey, iv, JSON) → base64；外层：AES-CBC(secretKey, iv, 内层base64) → base64
-            string inner = NetEaseAesCbc(NetEasePresetKey, text);
-            string prm = NetEaseAesCbc(secret, inner);
-            string encSecKey = NetEaseRsaNoPad(secret);
-
-            return (prm, encSecKey);
-        }
-
-        private static string NetEaseAesCbc(string key, string plain)
-        {
-            byte[] keyBytes = System.Text.Encoding.UTF8.GetBytes(key);
-            byte[] ivBytes = System.Text.Encoding.UTF8.GetBytes(NetEaseIv);
-            using var aes = Aes.Create();
-            aes.Key = keyBytes;
-            aes.IV = ivBytes;
-            aes.Mode = CipherMode.CBC;
-            aes.Padding = PaddingMode.PKCS7;
-
-            using var enc = aes.CreateEncryptor();
-            byte[] result = enc.TransformFinalBlock(System.Text.Encoding.UTF8.GetBytes(plain), 0, plain.Length);
-            return Convert.ToBase64String(result);
-        }
-
-        /// <summary>RSA 无填充 RSA 加密：m^e mod n，secret 反转后逐字节进制补 0，输出 128 字节 hex。</summary>
-        private static string NetEaseRsaNoPad(string secret)
-        {
-            string rev = NetEaseReverse(secret);
-            BigInteger m = new(System.Text.Encoding.UTF8.GetBytes(rev), isUnsigned: true, isBigEndian: true);
-            BigInteger c = BigInteger.ModPow(m, NetEaseRsaE, NetEaseRsaN);
-            byte[] cipher = c.ToByteArray(isUnsigned: true, isBigEndian: true);
-            // 补齐到 128 字节
-            if (cipher.Length != 128)
-            {
-                byte[] padded = new byte[128];
-                Array.Copy(cipher, 0, padded, 128 - cipher.Length, cipher.Length);
-                cipher = padded;
-            }
-
-            return Convert.ToHexString(cipher);
-        }
-
-        private static string NetEaseReverse(string s)
-        {
-            char[] arr = s.ToCharArray();
-            Array.Reverse(arr);
-            return new string(arr);
         }
     }
 }
