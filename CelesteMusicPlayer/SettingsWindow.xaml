@@ -1212,11 +1212,11 @@
                     Padding="20,12,24,24">
                     <StackPanel Spacing="12" MaxWidth="680">
                         <TextBlock Text="流媒体平台账号" FontSize="17" FontWeight="SemiBold" />
-                        <TextBlock Text="登录后可加载对应平台的在线歌词，并启用该平台的在线音频下载。Apple Music 歌词需登录个人账号加载。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                        <TextBlock Text="登录后可加载对应平台的在线歌词，并启用该平台的在线音频下载。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
 
                         <TextBlock Text="插件服务地址（WSL）" FontSize="14" FontWeight="SemiBold" Margin="0,8,0,0" />
                         <StackPanel Spacing="2">
-                            <TextBlock Text="从播放器发布渠道下载并安装「流媒体插件包」到 WSL 后，在此填写其服务地址（默认 21010 端口）。保存后，播放器的「下载歌词 / 在线标签」即可调用 Apple Music 等平台的真实歌词与最低限度下载。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            <TextBlock Text="从播放器发布渠道下载并安装「流媒体插件包」到 WSL 后，在此填写其服务地址（默认 21010 端口）。保存后，播放器的「下载歌词 / 在线标签」即可调用各平台的真实歌词与最低限度下载。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                         </StackPanel>
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
@@ -1228,30 +1228,6 @@
                         </Grid>
                         <TextBlock x:Name="StreamingStatusText" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords" Text="未检测" />
                         <StackPanel x:Name="PlatformListPanel" Spacing="8">
-                            <Border
-                                CornerRadius="8"
-                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                BorderThickness="1"
-                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                Padding="14,10">
-                                <Grid ColumnSpacing="12">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="*" />
-                                        <ColumnDefinition Width="Auto" />
-                                    </Grid.ColumnDefinitions>
-                                    <StackPanel Spacing="2" VerticalAlignment="Center">
-                                        <TextBlock Text="Apple Music" FontWeight="SemiBold" />
-                                        <TextBlock x:Name="AmStatusText" Text="未检测" FontSize="12" Opacity="0.7" />
-                                    </StackPanel>
-                                    <Button
-                                        x:Name="AmLoginButton"
-                                        Grid.Column="1"
-                                        Content="登录 Apple Music"
-                                        Click="AmLoginButton_Click"
-                                        VerticalAlignment="Center"
-                                        MinWidth="140" />
-                                </Grid>
-                            </Border>
                             <Border
                                 CornerRadius="8"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -1292,19 +1268,9 @@
 
                         <TextBlock Text="登录（播放器内 Cookie）" FontSize="14" FontWeight="SemiBold" Margin="0,8,0,0" />
                         <StackPanel Spacing="4">
-                            <TextBlock Text="用浏览器登录对应平台官网 → 按 F12 打开开发者工具 →「Application / 应用」→「Cookies」→ 复制登录后的 Cookie 值（如 NetEase 的 cookie、QQ 的 qqmusic_key、Apple 的 itunes 登录 token），粘贴到下方并在本页保存即可。Cookie 仅保存在本机，失效时播放器会提醒你更新。" FontSize="12" Opacity="0.7" TextWrapping="WrapWholeWords" />
+                            <TextBlock Text="用浏览器登录对应平台官网 → 按 F12 打开开发者工具 →「Application / 应用」→「Cookies」→ 复制登录后的 Cookie 值（如 NetEase 的 cookie、QQ 的 qqmusic_key），粘贴到下方并在本页保存即可。Cookie 仅保存在本机，失效时播放器会提醒你更新。" FontSize="12" Opacity="0.7" TextWrapping="WrapWholeWords" />
                             <TextBlock Text="提示：Cookie 含你的登录凭证，请勿将它发给他人。" FontSize="11" Opacity="0.5" TextWrapping="WrapWholeWords" />
                         </StackPanel>
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="96" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Apple Music" FontSize="12" VerticalAlignment="Center" />
-                            <TextBox x:Name="AmCookieBox" Grid.Column="1" PlaceholderText="粘贴 Apple Music 登录 Cookie / MusicKit token" AcceptsReturn="False" />
-                            <Button x:Name="SaveAmCookieButton" Grid.Column="2" Content="保存" Click="SaveAmCookieButton_Click" MinWidth="56" />
-                        </Grid>
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="96" />

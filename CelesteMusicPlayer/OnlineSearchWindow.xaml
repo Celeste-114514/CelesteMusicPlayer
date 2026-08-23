@@ -119,7 +119,7 @@
                             <Button x:Name="WebPlayButton" Content="在网页播放" Click="WebPlayButton_Click" />
                             <Button x:Name="DownloadLyricButton" Content="下载歌词" Click="DownloadLyric_Click" />
                             <Button x:Name="DownloadCoverButton" Content="下载封面" Click="DownloadCover_Click" />
-                            <Button x:Name="DownloadAudioButton" Content="下载音频" Click="DownloadAudio_Click" ToolTipService.ToolTip="网易云 / QQ 下载 128kbps MP3；Apple Music 不提供音频下载" />
+                            <Button x:Name="DownloadAudioButton" Content="下载音频" Click="DownloadAudio_Click" ToolTipService.ToolTip="网易云 / QQ 在线下载（128kbps MP3；会员曲需对应平台 Cookie）" />
                         </StackPanel>
                     </StackPanel>
                 </Grid>
