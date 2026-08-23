@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
@@ -1022,6 +1023,419 @@ namespace CelesteMusicPlayer
             {
                 return false;
             }
+        }
+
+        // =====================================================================
+        // QQ 音乐直链下载（去 bot：本机直连 u.y.qq.com musicu.fcg 换取 vkey 直链）
+        // =====================================================================
+
+        /// <summary>QQ 音乐直链结果：Url 可直接 GET（附 Headers），空 Error 表示成功。</summary>
+        public sealed record OnlineDownloadLink(
+            string Url,
+            Dictionary<string, string> Headers,
+            string Extension,
+            int? Bitrate,
+            string? Error);
+
+        private sealed record QqPlaybackTarget(string Module, string Method, bool Modern);
+
+        private static readonly QqPlaybackTarget[] QqVkeyEndpoints =
+        {
+            new("music.vkey.GetVkey", "UrlGetVkey", true),
+            new("vkey.GetVkeyServer", "CgiGetVkey", false),
+        };
+
+        private static readonly string[] QqLegacyPlatforms = { "20", "yqq" };
+
+        /// <summary>
+        /// 获取 QQ 音乐直链（默认 128k standard；有已保存 Cookie 时可尝试更高码率）。
+        /// 使用 ECHO(Electron) QQMusicStreamingProvider 同款机制：先 songmid 取 media_mid，
+        /// 再 POST u.y.qq.com/cgi-bin/musicu.fcg 的 music.vkey.GetVkey 换直链。
+        /// </summary>
+        public static async Task<OnlineDownloadLink?> GetQqDownloadLinkAsync(
+            string songMid,
+            CancellationToken cancellationToken = default,
+            bool preferLossless = false)
+        {
+            if (string.IsNullOrWhiteSpace(songMid))
+            {
+                return new OnlineDownloadLink(string.Empty, new(), "mp3", null, "无效的歌曲 ID");
+            }
+
+            try
+            {
+                // 0) 先读 cookie，detail 与 vkey 请求都会带上（会员码率需要）。
+                string cookie = AppSettingsStore.Load().QqCookie?.Trim() ?? string.Empty;
+
+                // 1) 先走歌曲详情接口抓取 media_mid（用于构造 filename）。
+                string mediaMid = string.Empty;
+                using (HttpRequestMessage detailReq = new(HttpMethod.Get,
+                           "https://c.y.qq.com/v8/fcg-bin/fcg_play_single_song.fcg?tpl=yqq_song_detail&format=json&songmid="
+                           + Uri.EscapeDataString(songMid)))
+                {
+                    SetQqHeaders(detailReq, cookie);
+                    using HttpResponseMessage detailResp = await Http.SendAsync(detailReq, cancellationToken).ConfigureAwait(false);
+                    if (detailResp.IsSuccessStatusCode)
+                    {
+                        string detailJson = await detailResp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                        mediaMid = ExtractQqMediaMid(detailJson);
+                    }
+                }
+
+                string primaryId = string.IsNullOrWhiteSpace(mediaMid) ? songMid : mediaMid;
+                string uin = QqUinFromCookie(cookie);
+                string guid = QqGuidFromCookie(cookie, uin);
+                long gtk = QqGtkFromCookie(cookie);
+
+                // 2) 按 ECHO 降级链逐个码率尝试换取直链。
+                //    无 cookie 只试 128k(standard)；有 cookie 试 lossless→high→standard 降级。
+                var qualities = new List<(string Prefix, string Extension, int Bitrate)>();
+                if (preferLossless || cookie.Length > 0)
+                {
+                    qualities.Add(("F000", "flac", 999000));
+                }
+                if (cookie.Length > 0)
+                {
+                    qualities.Add(("M800", "mp3", 320000));
+                }
+                qualities.Add(("M500", "mp3", 128000));
+
+                foreach (var (prefix, extension, bitrate) in qualities)
+                {
+                    string filename = $"{prefix}{primaryId}.{extension}";
+                    string? resolved = await TryResolveQqUrlAsync(
+                        songMid, filename, uin, guid, gtk, cookie, cancellationToken).ConfigureAwait(false);
+                    if (!string.IsNullOrWhiteSpace(resolved))
+                    {
+                        var headers = new Dictionary<string, string>
+                        {
+                            ["Referer"] = "https://y.qq.com/",
+                            ["Origin"] = "https://y.qq.com",
+                        };
+                        if (!string.IsNullOrWhiteSpace(cookie))
+                        {
+                            headers["Cookie"] = cookie;
+                        }
+
+                        return new OnlineDownloadLink(resolved, headers, extension, bitrate, null);
+                    }
+                }
+
+                return new OnlineDownloadLink(string.Empty, new(), "mp3", null, "QQ 音乐未返回播放直链（可能需登录会员或歌曲受限）。");
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return new OnlineDownloadLink(string.Empty, new(), "mp3", null, ex.Message);
+            }
+        }
+
+        /// <summary>对单个 filename 依次尝试各 vkey 端点/platform，返回直链或空。</summary>
+        private static async Task<string?> TryResolveQqUrlAsync(
+            string songMid,
+            string filename,
+            string uin,
+            string guid,
+            long gtk,
+            string cookie,
+            CancellationToken cancellationToken)
+        {
+            foreach (QqPlaybackTarget ep in QqVkeyEndpoints)
+            {
+                object?[] platforms = ep.Modern
+                    ? new object?[] { null }
+                    : QqLegacyPlatforms.Cast<object?>().ToArray();
+
+                foreach (object? platform in platforms)
+                {
+                    var param = new Dictionary<string, object?>
+                    {
+                        ["guid"] = guid,
+                        ["songmid"] = new[] { songMid },
+                        ["filename"] = new[] { filename },
+                        ["songtype"] = new[] { 0 },
+                        ["uin"] = uin,
+                    };
+                    if (ep.Modern)
+                    {
+                        param["ctx"] = 0;
+                    }
+                    else
+                    {
+                        param["loginflag"] = 1;
+                        if (platform != null)
+                        {
+                            param["platform"] = platform;
+                        }
+                    }
+
+                    var body = new Dictionary<string, object?>
+                    {
+                        ["req_0"] = new Dictionary<string, object?>
+                        {
+                            ["module"] = ep.Module,
+                            ["method"] = ep.Method,
+                            ["param"] = param,
+                        },
+                        ["comm"] = ep.Modern
+                            ? new Dictionary<string, object?>
+                            {
+                                ["uin"] = uin,
+                                ["format"] = "json",
+                                ["ct"] = 24,
+                                ["cv"] = 4747474,
+                                ["platform"] = "yqq.json",
+                                ["chid"] = "0",
+                                ["g_tk"] = gtk,
+                                ["g_tk_new_20200303"] = gtk,
+                                ["inCharset"] = "utf-8",
+                                ["outCharset"] = "utf-8",
+                                ["notice"] = 0,
+                                ["needNewCode"] = 1,
+                            }
+                            : new Dictionary<string, object?>
+                            {
+                                ["uin"] = uin,
+                                ["format"] = "json",
+                                ["ct"] = 24,
+                                ["cv"] = 0,
+                            },
+                    };
+
+                    string payloadJson = JsonSerializer.Serialize(body);
+                    using var request = new HttpRequestMessage(HttpMethod.Post, "https://u.y.qq.com/cgi-bin/musicu.fcg");
+                    request.Content = new StringContent(payloadJson, System.Text.Encoding.UTF8, "application/json");
+                    SetQqHeaders(request, cookie);
+
+                    using HttpResponseMessage resp = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                    if (!resp.IsSuccessStatusCode)
+                    {
+                        continue;
+                    }
+
+                    string json = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                    (string? purl, string? sip) = ExtractQqVkey(json);
+                    if (!string.IsNullOrWhiteSpace(purl))
+                    {
+                        return purl.StartsWith("http", StringComparison.OrdinalIgnoreCase)
+                            ? purl
+                            : (string.IsNullOrWhiteSpace(sip) ? "https://isure.stream.qqmusic.qq.com/" : sip) + purl;
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private static void SetQqHeaders(HttpRequestMessage request, string cookie = "")
+        {
+            request.Headers.TryAddWithoutValidation("Referer", "https://y.qq.com/");
+            request.Headers.TryAddWithoutValidation("Origin", "https://y.qq.com");
+            if (!string.IsNullOrWhiteSpace(cookie))
+            {
+                request.Headers.TryAddWithoutValidation("Cookie", cookie);
+            }
+        }
+
+        private static string ExtractQqMediaMid(string detailJson)
+        {
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(detailJson);
+                if (doc.RootElement.TryGetProperty("data", out JsonElement data)
+                    && data.ValueKind == JsonValueKind.Array
+                    && data.GetArrayLength() > 0
+                    && data[0].TryGetProperty("file", out JsonElement file))
+                {
+                    if (file.TryGetProperty("media_mid", out JsonElement mm) && mm.ValueKind == JsonValueKind.String)
+                    {
+                        string? v = mm.GetString();
+                        if (!string.IsNullOrWhiteSpace(v))
+                        {
+                            return v;
+                        }
+                    }
+
+                    if (file.TryGetProperty("strMediaMid", out JsonElement sm))
+                    {
+                        string? v = sm.GetString();
+                        if (!string.IsNullOrWhiteSpace(v))
+                        {
+                            return v;
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return string.Empty;
+        }
+
+        private static (string? Purl, string? Sip) ExtractQqVkey(string json)
+        {
+            try
+            {
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("req_0", out JsonElement req0)
+                    || !req0.TryGetProperty("data", out JsonElement data))
+                {
+                    return (null, null);
+                }
+
+                string? sip = null;
+                if (data.TryGetProperty("sip", out JsonElement sipEl) && sipEl.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement e in sipEl.EnumerateArray())
+                    {
+                        if (e.ValueKind == JsonValueKind.String)
+                        {
+                            string? s = e.GetString();
+                            if (!string.IsNullOrWhiteSpace(s))
+                            {
+                                sip = s;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (data.TryGetProperty("midurlinfo", out JsonElement mi) && mi.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement item in mi.EnumerateArray())
+                    {
+                        if (item.TryGetProperty("purl", out JsonElement purlEl))
+                        {
+                            string? p = purlEl.GetString();
+                            if (!string.IsNullOrWhiteSpace(p))
+                            {
+                                return (p, sip);
+                            }
+                        }
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return (null, null);
+        }
+
+        private static string QqUinFromCookie(string cookie)
+        {
+            string? value = CookieValue(cookie, "uin", "qqmusic_uin", "p_uin", "pt2gguin", "loginUin", "wxuin");
+            if (value != null)
+            {
+                string? m = Regex_MatchDigits(value);
+                if (!string.IsNullOrWhiteSpace(m))
+                {
+                    return m;
+                }
+            }
+
+            return "0";
+        }
+
+        private static string QqGuidFromCookie(string cookie, string uin)
+        {
+            string? raw = CookieValue(cookie, "pgv_pvid", "qqmusic_guid", "guid");
+            if (!string.IsNullOrWhiteSpace(raw))
+            {
+                string digits = new string(raw.Where(char.IsDigit).ToArray());
+                if (digits.Length > 0)
+                {
+                    return digits;
+                }
+            }
+
+            return StableNumericId(uin != "0" ? uin : (cookie ?? "qqmusic"));
+        }
+
+        private static long QqGtkFromCookie(string cookie)
+        {
+            // 复刻 ECHO qqGtkFromCookie 的 JS 语义：hash 为 number，每轮 `hash << 5`
+            // 先把 hash 转 int32 再左移 5（32 位回绕），结果与字符码相加回到 hash。
+            // 由于每轮 ToInt32 截掉高位，hash 始终在 int32×33 量级，number 全程精确。
+            string skey = CookieValue(cookie, "qqmusic_key", "qm_keyst", "music_key", "p_skey", "skey") ?? string.Empty;
+            double hash = 5381;
+            foreach (char c in skey)
+            {
+                int h32 = unchecked((int)hash); // JS ToInt32(hash)
+                double shifted = h32 << 5;      // int32 左移 5（回绕），转回 double
+                hash += shifted + c;
+            }
+
+            // JS: hash & 0x7fffffff → ToInt32(hash) & 0x7fffffff
+            return unchecked((int)hash) & 0x7fffffffL;
+        }
+
+        private static string? CookieValue(string cookie, params string[] names)
+        {
+            if (string.IsNullOrEmpty(cookie))
+            {
+                return null;
+            }
+
+            int start;
+            foreach (string name in names)
+            {
+                int i = cookie.IndexOf(name + "=", StringComparison.OrdinalIgnoreCase);
+                if (i < 0)
+                {
+                    continue;
+                }
+
+                start = i + name.Length + 1;
+                int end = cookie.IndexOf(';', start);
+                if (end < 0)
+                {
+                    end = cookie.Length;
+                }
+
+                string val = cookie.Substring(start, end - start).Trim();
+                return Uri.UnescapeDataString(val);
+            }
+
+            return null;
+        }
+
+        private static string Regex_MatchDigits(string value)
+        {
+            // 对应 JS match(/o?(\d+)/)：取首个连续数字块（允许前缀 o）。
+            var sb = new StringBuilder();
+            bool started = false;
+            foreach (char c in value)
+            {
+                if (char.IsDigit(c))
+                {
+                    started = true;
+                    sb.Append(c);
+                }
+                else if (started)
+                {
+                    break;
+                }
+            }
+
+            return sb.ToString();
+        }
+
+        private static string StableNumericId(string value)
+        {
+            int hash = -2128831035; // 2166136261 有符号
+            foreach (char c in value)
+            {
+                hash ^= c;
+                hash = unchecked(hash * 16777619);
+            }
+
+            uint u = (uint)hash;
+            return (100000000 + (u % 900000000)).ToString();
         }
     }
 }

@@ -332,6 +332,13 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // QQ 音乐：本机直连 musicu.fcg 换 vkey 直链，不再依赖 WSL 流媒体服务去 bot。
+            if (string.Equals(_selected.Source, "QQ", StringComparison.OrdinalIgnoreCase))
+            {
+                await DownloadQqAudioAsync();
+                return;
+            }
+
             if (StreamingServiceClient.ResolveBase() == null)
             {
                 StatusText.Text = "未配置流媒体插件服务（设置 → 流媒体），无法下载音频。";
@@ -376,6 +383,75 @@ namespace CelesteMusicPlayer
                 }
 
                 StatusText.Text = "已下载：" + savePath;
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = "下载失败：" + ex.Message;
+            }
+            finally
+            {
+                DownloadAudioButton.IsEnabled = true;
+            }
+        }
+
+        /// <summary>QQ 音乐本机直链下载（去 bot，2026-08）。</summary>
+        private async Task DownloadQqAudioAsync()
+        {
+            DownloadAudioButton.IsEnabled = false;
+            try
+            {
+                StatusText.Text = "正在获取 QQ 音乐直链…";
+                var link = await OnlineMusicApi.GetQqDownloadLinkAsync(_selected!.SongId);
+                if (link == null)
+                {
+                    StatusText.Text = "获取 QQ 音乐直链接口超时。";
+                    return;
+                }
+                if (!string.IsNullOrWhiteSpace(link.Error))
+                {
+                    StatusText.Text = "获取 QQ 音乐直链失败：" + link.Error;
+                    return;
+                }
+
+                string ext = string.Equals(link.Extension, "flac", StringComparison.OrdinalIgnoreCase) ? "flac" : "mp3";
+                string filter = ext == "flac" ? "FLAC 音频" : "MP3 音频";
+                string? savePath = await PickSaveFileAsync("." + ext, filter, PickerLocationId.Downloads);
+                if (savePath == null)
+                {
+                    return;
+                }
+
+                StatusText.Text = "正在下载…";
+                using var hc = new System.Net.Http.HttpClient();
+                using var req = new System.Net.Http.HttpRequestMessage(System.Net.Http.HttpMethod.Get, link.Url);
+                if (link.Headers != null)
+                {
+                    foreach (var kv in link.Headers)
+                    {
+                        if (!string.IsNullOrWhiteSpace(kv.Key) && !string.IsNullOrWhiteSpace(kv.Value))
+                        {
+                            req.Headers.TryAddWithoutValidation(kv.Key, kv.Value);
+                        }
+                    }
+                }
+
+                using var resp = await hc.SendAsync(req);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    StatusText.Text = "下载失败：" + (int)resp.StatusCode + " " + (resp.ReasonPhrase ?? "");
+                    return;
+                }
+
+                await using (var fs = System.IO.File.Create(savePath))
+                {
+                    await resp.Content.CopyToAsync(fs);
+                }
+
+                StatusText.Text = "已下载：" + savePath;
+            }
+            catch (OperationCanceledException)
+            {
+                StatusText.Text = "下载已取消。";
             }
             catch (Exception ex)
             {
