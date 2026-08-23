@@ -2832,6 +2832,47 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>应用 OPRA 耳机校正曲线到播放器 EQ（曲面板 + 持久化 + DSP 实时生效）。</summary>
+        internal void ApplyOpraCurve(EqCurveState curve)
+        {
+            if (curve == null)
+            {
+                return;
+            }
+
+            curve.Enabled = true;
+            _audioFxEq = curve;
+            EqCurveStore.Save(curve);
+
+            // 若音效面板已构建，同步其 EQ 显示（打开 OPRA 面板前通常已打开音效工作台）。
+            if (_audioFxEqBuilt)
+            {
+                try
+                {
+                    AudioFxEqEnableToggle.IsOn = true;
+                    AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatAudioFxDb(curve.PreampDb) + " dB";
+                    SelectAudioFxEqPreset(curve.PresetId);
+                    SelectAudioFxEqBand(_audioFxEqSelected);
+                    RedrawAudioFxEqCurve();
+                    RefreshAudioFxEqBandEditor();
+                }
+                catch
+                {
+                }
+            }
+
+            _audioEngine?.SetEqCurve(curve);
+            UpdateDspBitPerfectUi();
+            UpdateSignalChainDisplay();
+            StartupLog.Write("OPRA 耳机校正已应用: " + curve.PresetId + " bands=" + (curve.Bands?.Count ?? 0) + " preamp=" + curve.PreampDb);
+        }
+
+        /// <summary>打开耳机校正（OPRA）独立窗口。</summary>
+        private void OpenOpraButton_Click(object sender, RoutedEventArgs e)
+        {
+            HeadphoneCorrectionWindow.OpenOrActivate();
+        }
+
         private static string FormatAudioFxDb(double db)
         {
             double r = Math.Round(db, 1);
