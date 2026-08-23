@@ -109,29 +109,13 @@ namespace CelesteMusicPlayer
         {
             lock (Gate)
             {
-                if (_cache != null)
+                if (_cache == null)
                 {
-                    return Clone(_cache);
+                    _cache = JsonFile.Read(GetFilePath(), new DspExtraState());
+                    Normalize(_cache);
                 }
 
-                try
-                {
-                    string path = GetFilePath();
-                    if (File.Exists(path))
-                    {
-                        _cache = Normalize(JsonSerializer.Deserialize<DspExtraState>(File.ReadAllText(path)) ?? new DspExtraState());
-                    }
-                    else
-                    {
-                        _cache = new DspExtraState();
-                    }
-                }
-                catch
-                {
-                    _cache = new DspExtraState();
-                }
-
-                return Clone(_cache);
+                return JsonFile.DeepClone(_cache);
             }
         }
 
@@ -140,14 +124,7 @@ namespace CelesteMusicPlayer
             lock (Gate)
             {
                 _cache = Normalize(state ?? new DspExtraState());
-                try
-                {
-                    string json = JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true });
-                    File.WriteAllText(GetFilePath(), json);
-                }
-                catch
-                {
-                }
+                JsonFile.Write(GetFilePath(), _cache);
             }
         }
 
@@ -157,12 +134,6 @@ namespace CelesteMusicPlayer
             s.Safety?.Normalize();
             return s;
         }
-
-        private static DspExtraState Clone(DspExtraState s) => new()
-        {
-            ChannelBalance = s.ChannelBalance?.Clone() ?? ChannelBalanceState.Default(),
-            Safety = s.Safety?.Clone() ?? DspSafetyState.Default()
-        };
     }
 
     /// <summary>DSP 附加状态联合体。</summary>

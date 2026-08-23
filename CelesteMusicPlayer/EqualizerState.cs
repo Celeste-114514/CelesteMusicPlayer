@@ -79,30 +79,13 @@ namespace CelesteMusicPlayer
         {
             lock (Gate)
             {
-                if (_cache != null)
+                if (_cache == null)
                 {
-                    return Clone(_cache);
+                    _cache = JsonFile.Read(GetFilePath(), new EqualizerState());
+                    _cache.Normalize();
                 }
 
-                try
-                {
-                    string path = GetFilePath();
-                    if (File.Exists(path))
-                    {
-                        EqualizerState? loaded = JsonSerializer.Deserialize<EqualizerState>(File.ReadAllText(path));
-                        _cache = Normalize(loaded ?? new EqualizerState());
-                    }
-                    else
-                    {
-                        _cache = new EqualizerState();
-                    }
-                }
-                catch
-                {
-                    _cache = new EqualizerState();
-                }
-
-                return Clone(_cache);
+                return JsonFile.DeepClone(_cache);
             }
         }
 
@@ -110,33 +93,10 @@ namespace CelesteMusicPlayer
         {
             lock (Gate)
             {
-                _cache = Normalize(state ?? new EqualizerState());
-                SaveCore(_cache);
+                _cache = state ?? new EqualizerState();
+                _cache.Normalize();
+                JsonFile.Write(GetFilePath(), _cache);
             }
         }
-
-        private static void SaveCore(EqualizerState state)
-        {
-            try
-            {
-                string json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
-                File.WriteAllText(GetFilePath(), json);
-            }
-            catch
-            {
-            }
-        }
-
-        private static EqualizerState Normalize(EqualizerState s)
-        {
-            s.Normalize();
-            return s;
-        }
-
-        private static EqualizerState Clone(EqualizerState s) => new()
-        {
-            Preset = s.Preset,
-            BandGains = s.BandGains.ToArray()
-        };
     }
 }

@@ -191,28 +191,13 @@ namespace CelesteMusicPlayer
         {
             lock (Gate)
             {
-                if (_cache != null) return _cache.Clone();
-                try
+                if (_cache == null)
                 {
-                    string p = GetFilePath();
-                    if (File.Exists(p))
-                    {
-                        var s = JsonSerializer.Deserialize<EqCurveState>(File.ReadAllText(p));
-                        s ??= EqCurveState.Default();
-                        s.Normalize();
-                        _cache = s;
-                    }
-                    else
-                    {
-                        _cache = EqCurveState.Default();
-                    }
-                }
-                catch
-                {
-                    _cache = EqCurveState.Default();
+                    _cache = JsonFile.Read(GetFilePath(), EqCurveState.Default());
+                    _cache.Normalize();
                 }
 
-                return _cache.Clone();
+                return JsonFile.DeepClone(_cache);
             }
         }
 
@@ -220,16 +205,9 @@ namespace CelesteMusicPlayer
         {
             lock (Gate)
             {
-                var s = state?.Clone() ?? EqCurveState.Default();
-                s.Normalize();
-                _cache = s;
-                try
-                {
-                    File.WriteAllText(GetFilePath(), JsonSerializer.Serialize(s, new JsonSerializerOptions { WriteIndented = true }));
-                }
-                catch
-                {
-                }
+                _cache = state ?? EqCurveState.Default();
+                _cache.Normalize();
+                JsonFile.Write(GetFilePath(), _cache);
             }
         }
     }
@@ -254,27 +232,19 @@ namespace CelesteMusicPlayer
         {
             lock (Gate)
             {
-                if (_cache != null) return CloneList(_cache);
-                try
+                if (_cache == null)
                 {
-                    string p = GetFilePath();
-                    if (File.Exists(p))
+                    _cache = JsonFile.Read(GetFilePath(), new List<EqCurveState>());
+                    foreach (var s in _cache)
                     {
-                        var list = JsonSerializer.Deserialize<List<EqCurveState>>(File.ReadAllText(p)) ?? new List<EqCurveState>();
-                        foreach (var s in list) s?.Normalize();
-                        _cache = list;
+                        if (s != null)
+                        {
+                            s.Normalize();
+                        }
                     }
-                    else
-                    {
-                        _cache = new List<EqCurveState>();
-                    }
-                }
-                catch
-                {
-                    _cache = new List<EqCurveState>();
                 }
 
-                return CloneList(_cache);
+                return JsonFile.DeepClone(_cache);
             }
         }
 
@@ -282,14 +252,9 @@ namespace CelesteMusicPlayer
         {
             lock (Gate)
             {
-                _cache = presets?.Where(s => s != null).Select(s => { s.Normalize(); return s; }).ToList() ?? new List<EqCurveState>();
-                try
-                {
-                    File.WriteAllText(GetFilePath(), JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true }));
-                }
-                catch
-                {
-                }
+                _cache = presets?.Where(s => s != null).Select(s => { s.Normalize(); return s; }).ToList()
+                    ?? new List<EqCurveState>();
+                JsonFile.Write(GetFilePath(), _cache);
             }
         }
 
@@ -333,7 +298,5 @@ namespace CelesteMusicPlayer
                 return hit?.Clone();
             }
         }
-
-        private static List<EqCurveState> CloneList(List<EqCurveState> list) => list.Where(s => s != null).Select(s => s.Clone()).ToList();
     }
 }

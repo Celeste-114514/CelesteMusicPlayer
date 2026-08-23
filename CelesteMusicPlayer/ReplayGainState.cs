@@ -56,20 +56,13 @@ namespace CelesteMusicPlayer
         {
             lock (Gate)
             {
-                if (_cache != null) return _cache.Clone();
-                try
+                if (_cache == null)
                 {
-                    string p = GetFilePath();
-                    if (File.Exists(p))
-                    {
-                        var s = JsonSerializer.Deserialize<ReplayGainState>(File.ReadAllText(p)) ?? new ReplayGainState();
-                        s.Normalize();
-                        _cache = s;
-                    }
-                    else _cache = new ReplayGainState();
+                    _cache = JsonFile.Read(GetFilePath(), new ReplayGainState());
+                    _cache.Normalize();
                 }
-                catch { _cache = new ReplayGainState(); }
-                return _cache.Clone();
+
+                return JsonFile.DeepClone(_cache);
             }
         }
 
@@ -77,10 +70,9 @@ namespace CelesteMusicPlayer
         {
             lock (Gate)
             {
-                var s = state?.Clone() ?? new ReplayGainState();
-                s.Normalize();
-                _cache = s;
-                try { File.WriteAllText(GetFilePath(), JsonSerializer.Serialize(s, new JsonSerializerOptions { WriteIndented = true })); } catch { }
+                _cache = state ?? new ReplayGainState();
+                _cache.Normalize();
+                JsonFile.Write(GetFilePath(), _cache);
             }
         }
     }
