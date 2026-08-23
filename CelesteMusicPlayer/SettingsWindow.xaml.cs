@@ -75,13 +75,12 @@ namespace CelesteMusicPlayer
             ("QQ", "QQ音乐"),
         };
 
-        /// <summary>在线搜索默认平台（含 iTunes/Deezer/MusicBrainz；歌词源不含它们，因均不提供歌词/下载）。</summary>
+        /// <summary>在线搜索默认平台（含 iTunes/MusicBrainz；歌词源不含它们，因均不提供歌词/下载）。</summary>
         private static readonly (string Id, string Label)[] OnlineSearchSourceOptions =
         {
             ("NetEase", "网易云音乐"),
             ("QQ", "QQ音乐"),
             ("iTunes", "Apple Music"),
-            ("Deezer", "Deezer（封面）"),
             ("MusicBrainz", "MusicBrainz（封面）"),
         };
 

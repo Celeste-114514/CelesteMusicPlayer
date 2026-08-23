@@ -61,7 +61,6 @@ namespace CelesteMusicPlayer
             {
                 "QQ" => await SearchQqSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
                 "iTunes" => await SearchItunesSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
-                "Deezer" => await SearchDeezerSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
                 "MusicBrainz" => await SearchMusicBrainzSongsAsync(title, artist, cancellationToken).ConfigureAwait(false),
                 _ => await SearchNetEaseSongsAsync(title, artist, cancellationToken).ConfigureAwait(false)
             };
@@ -395,61 +394,6 @@ namespace CelesteMusicPlayer
             return results;
         }
 
-        /// <summary>
-        /// Deezer 公开搜索（免 key）：返回单曲+高清封面，仅作元数据/封面候选（不提供下载与歌词）。
-        /// 端点 api.deezer.com/search。注意：部分网络无法直连该域名。
-        /// </summary>
-        private static async Task<IReadOnlyList<OnlineSongResult>> SearchDeezerSongsAsync(
-            string title,
-            string artist,
-            CancellationToken cancellationToken)
-        {
-            var results = new List<OnlineSongResult>();
-            try
-            {
-                string url = "https://api.deezer.com/search?q={0}&limit=20";
-                url = string.Format(url, Uri.EscapeDataString(BuildQuery(title, artist)));
-                using HttpRequestMessage req = new(HttpMethod.Get, url);
-                req.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
-                using HttpResponseMessage response = await Http.SendAsync(req, cancellationToken).ConfigureAwait(false);
-                if (!response.IsSuccessStatusCode)
-                {
-                    return results;
-                }
-
-                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
-                using JsonDocument doc = JsonDocument.Parse(json);
-                if (!doc.RootElement.TryGetProperty("data", out JsonElement data) || data.ValueKind != JsonValueKind.Array)
-                {
-                    return results;
-                }
-
-                foreach (JsonElement s in data.EnumerateArray())
-                {
-                    string trackId = s.TryGetProperty("id", out JsonElement idEl) ? idEl.GetInt64().ToString() : string.Empty;
-                    string name = s.TryGetProperty("title", out JsonElement nEl) ? nEl.GetString() ?? string.Empty : string.Empty;
-                    string singer = s.TryGetProperty("artist", out JsonElement arEl)
-                        && arEl.TryGetProperty("name", out JsonElement arnEl)
-                        ? arnEl.GetString() ?? string.Empty : string.Empty;
-                    string album = s.TryGetProperty("album", out JsonElement alEl)
-                        && alEl.TryGetProperty("title", out JsonElement altEl)
-                        ? altEl.GetString() ?? string.Empty : string.Empty;
-                    string cover = s.TryGetProperty("album", out JsonElement alEl2)
-                        && alEl2.TryGetProperty("cover_xl", out JsonElement cvEl)
-                        ? cvEl.GetString() ?? string.Empty : string.Empty;
-
-                    if (!string.IsNullOrWhiteSpace(trackId) && !string.IsNullOrWhiteSpace(name))
-                    {
-                        results.Add(new OnlineSongResult("Deezer", trackId, name, singer, album, cover));
-                    }
-                }
-            }
-            catch
-            {
-            }
-
-            return results;
-        }
 
         /// <summary>
         /// MusicBrainz 公开搜索（免 key）：返回专辑粒度，封面走 Cover Art Archive（coverartarchive.org）。
@@ -540,7 +484,7 @@ namespace CelesteMusicPlayer
             return source switch
             {
                 "QQ" => await GetQqLyricAsync(song.SongId, cancellationToken).ConfigureAwait(false),
-                "Deezer" or "MusicBrainz" or "iTunes" => string.Empty,
+                "MusicBrainz" or "iTunes" => string.Empty,
                 _ => await GetNetEaseLyricAsync(song.SongId, includeTranslation, cancellationToken).ConfigureAwait(false)
             };
         }

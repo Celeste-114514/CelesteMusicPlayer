@@ -149,6 +149,7 @@ namespace CelesteMusicPlayer
             OnlineSourceCombo.Items.Add("网易云音乐");
             OnlineSourceCombo.Items.Add("QQ音乐");
             OnlineSourceCombo.Items.Add("Apple Music");
+            OnlineSourceCombo.Items.Add("MusicBrainz");
             OnlineSourceCombo.SelectedIndex = 0;
         }
 
@@ -368,10 +369,13 @@ namespace CelesteMusicPlayer
         // ============================= 在线搜索 =============================
         private void OnlineSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            bool isItunes = OnlineSourceCombo.SelectedIndex == 3;
-            OnlineStatusText.Text = isItunes
-                ? "Apple Music 不提供歌词，请用网易云 / QQ 搜索获取。"
-                : string.Empty;
+            int idx = OnlineSourceCombo.SelectedIndex;
+            OnlineStatusText.Text = idx switch
+            {
+                2 => "Apple Music 不提供歌词与音频，请用网易云 / QQ 搜索获取。",
+                3 => "MusicBrainz 仅提供元数据 / 封面，不提供歌词与音频。",
+                _ => string.Empty
+            };
         }
 
         private async void OnlineSearchButton_Click(object sender, RoutedEventArgs e)
@@ -387,6 +391,7 @@ namespace CelesteMusicPlayer
             {
                 1 => "QQ",
                 2 => "iTunes",
+                3 => "MusicBrainz",
                 _ => "NetEase"
             };
             OnlineStatusText.Text = "搜索中…";
