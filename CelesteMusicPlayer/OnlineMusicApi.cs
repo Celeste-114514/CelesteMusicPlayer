@@ -323,10 +323,10 @@ namespace CelesteMusicPlayer
                     string cover = s.TryGetProperty("artworkUrl100", out JsonElement cEl)
                         ? cEl.GetString() ?? string.Empty
                         : string.Empty;
-                    // 提高封面分辨率：100x100bb -> 600x600bb
+                    // 提高封面分辨率：100x100bb -> 1200x1200bb（Apple artworkUrl 尺寸上限 1200）
                     if (cover.Contains("100x100bb"))
                     {
-                        cover = cover.Replace("100x100bb", "600x600bb");
+                        cover = cover.Replace("100x100bb", "1200x1200bb");
                     }
 
                     if (!string.IsNullOrWhiteSpace(trackId) && !string.IsNullOrWhiteSpace(name))
