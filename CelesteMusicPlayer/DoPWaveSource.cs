@@ -171,15 +171,49 @@ namespace CelesteMusicPlayer
             }
 
             int total = 0;
+            // 等待封装追进度（若封装线程仍在后台整曲封装且尚未覆盖到当前读位）：
+            // 避免 read 读到 `_all` 中尚未被 EncodeAll 写入的未初始化区域（全 0 → 卡顿/静音段）。
+            var waitDeadline = Environment.TickCount64 + 1500;
             while (total < want)
             {
                 long avail;
                 lock (_lock)
                 {
-                    avail = _all.Length - _readPos;
+                    // 关键：只取"已封装"的字节数（_allPos），而非虚拟总长 _all.Length，
+                    // 否则 read 会超前读到 EncodeAll 还没写到的全 0 内存。整曲封装完成（_done）后两值相等。
+                    avail = _allPos - _readPos;
                 }
 
-                if (avail <= 0) break;
+                if (avail <= 0)
+                {
+                    if (_done)
+                    {
+                        // 整曲已封装且已读完 → 无更多数据，跳出补尾静音。
+                        break;
+                    }
+
+                    // 封装线程尚在填充：等待其 PulseAll（每次写入后会唤醒）追进度，超时兜底后补静音。
+                    if (Environment.TickCount64 > waitDeadline)
+                    {
+                        break;
+                    }
+
+                    lock (_lock)
+                    {
+                        if (!_disposed && !_done && _allPos - _readPos <= 0)
+                        {
+                            Monitor.Wait(_lock, 10);
+                        }
+                    }
+
+                    if (_disposed)
+                    {
+                        break;
+                    }
+
+                    continue;
+                }
+
                 long take = Math.Min(avail, (long)(want - total));
                 take -= take % _bpF;
                 if (take > 0)
