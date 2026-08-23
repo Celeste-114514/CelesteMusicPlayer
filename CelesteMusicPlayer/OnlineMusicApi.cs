@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
+using System.Numerics;
+using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using System.Threading;
@@ -1436,6 +1438,255 @@ namespace CelesteMusicPlayer
 
             uint u = (uint)hash;
             return (100000000 + (u % 900000000)).ToString();
+        }
+
+        // =====================================================================
+        // 网易云 weapi 直链下载（去 bot：本机走 weapi 加密换取音频直链，MUSIC_U 可选）
+        // =====================================================================
+
+        private const string NetEasePresetKey = "0CoJUm6Qyw8W8jud";
+        private const string NetEaseIv = "0102030405060708";
+        private const string NetEaseBase62 = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+
+        private static readonly BigInteger NetEaseRsaE = new(0x10001);
+        private static readonly BigInteger NetEaseRsaN = BigInteger.Parse(
+            "00B509F6259DF8642DBC35662901477DF22677EC152B5FF68ACE615BB7B725152B3AB17A876AEA8A5AA76D2E417629EC4EE341F56135FCDF694A00413804C4BB2F6A4957C93E1C0452BDB2741713DFC30DA16DE91AFB89564C95D733842D093604F3F921D74FA0811EE5F77BD49D07551AE38A2771A4D6CFB38118B6C288AE39C",
+            System.Globalization.NumberStyles.HexNumber);
+
+        private static readonly Random NetEaseRandom = new();
+
+        /// <summary>
+        /// 获取网易云音频直链（默认 128k；有已保存 NetEaseCookie/MUSIC_U 时同接口可提码率与解锁会员曲）。
+        /// 走网易云 web 用的 weapi：AES-CBC 双层加密 params + RSA 无填充 encSecKey。
+        /// 注意：当前网络出口若被网易云音频接口风控返回空 body，则必须带有效 MUSIC_U 才能下载。
+        /// </summary>
+        public static async Task<OnlineDownloadLink?> GetNetEaseDownloadLinkAsync(
+            string songId,
+            CancellationToken cancellationToken = default,
+            bool preferLossless = false)
+        {
+            if (!long.TryParse(songId, out long id) || id <= 0)
+            {
+                return new OnlineDownloadLink(string.Empty, new(), "mp3", null, "无效的网易云歌曲 ID");
+            }
+
+            string cookie = AppSettingsStore.Load().NetEaseCookie?.Trim() ?? string.Empty;
+
+            // 降级链：preferLossless→999k；有 cookie→320k 再退 128k；无 cookie→仅 128k。
+            var bitrates = new List<int>();
+            if (preferLossless)
+            {
+                bitrates.Add(999000);
+            }
+            if (cookie.Length > 0)
+            {
+                bitrates.Add(320000);
+            }
+            bitrates.Add(128000);
+
+            string? lastError = "网易云音频接口未返回内容（当前网络可能被风控；请在设置里保存有效的网易云 Cookie 后再试）。";
+            try
+            {
+                foreach (int bitrate in bitrates)
+                {
+                    var (url, ext, br, err) = await TryResolveNetEaseUrlAsync(songId, bitrate, cookie, cancellationToken).ConfigureAwait(false);
+                    if (url != null)
+                    {
+                        var headers = new Dictionary<string, string>
+                        {
+                            ["Referer"] = "https://music.163.com/",
+                            ["Origin"] = "https://music.163.com",
+                        };
+                        if (!string.IsNullOrWhiteSpace(cookie))
+                        {
+                            headers["Cookie"] = cookie;
+                        }
+
+                        return new OnlineDownloadLink(url, headers, ext, br, null);
+                    }
+
+                    if (err != null)
+                    {
+                        lastError = err;
+                    }
+                }
+
+                return new OnlineDownloadLink(string.Empty, new(), "mp3", null, lastError);
+            }
+            catch (OperationCanceledException)
+            {
+                return null;
+            }
+            catch (Exception ex)
+            {
+                return new OnlineDownloadLink(string.Empty, new(), "mp3", null, ex.Message);
+            }
+        }
+
+        /// <summary>对单个码率发起 weapi 请求并解析直链。成功返回 (url,ext,bitrate,null)；失败返回 (null,null,null,错误)。</summary>
+        private static async Task<(string? Url, string Ext, int? Bitrate, string? Error)> TryResolveNetEaseUrlAsync(
+            string songId,
+            int bitrate,
+            string cookie,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                // 与网易云 web 播放一致：weapi 编码 body，form 提交 params + encSecKey。
+                var bodyObj = new Dictionary<string, object>
+                {
+                    ["ids"] = $"[{songId}]",
+                    ["br"] = bitrate,
+                    ["csrf_token"] = NetEaseCsrf(cookie),
+                };
+                (string paramsVal, string encSecKey) = NetEaseWeapi(bodyObj);
+
+                var form = new Dictionary<string, string>
+                {
+                    ["params"] = paramsVal,
+                    ["encSecKey"] = encSecKey,
+                };
+                using var formContent = new FormUrlEncodedContent(form);
+
+                using var request = new HttpRequestMessage(HttpMethod.Post, "https://music.163.com/weapi/song/enhance/player/url");
+                request.Content = formContent;
+                request.Headers.TryAddWithoutValidation("Referer", "https://music.163.com/");
+                request.Headers.TryAddWithoutValidation("Origin", "https://music.163.com");
+                request.Headers.TryAddWithoutValidation("User-Agent",
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36");
+                if (!string.IsNullOrWhiteSpace(cookie))
+                {
+                    request.Headers.TryAddWithoutValidation("Cookie", cookie);
+                }
+
+                using HttpResponseMessage resp = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (!resp.IsSuccessStatusCode)
+                {
+                    return (null, "mp3", null, $"网易云请求失败 HTTP {(int)resp.StatusCode}");
+                }
+
+                string json = await resp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(json))
+                {
+                    return (null, "mp3", null, "网易云音频接口未返回内容（当前网络可能被风控；请在设置里保存有效的网易云 Cookie 后再试）。");
+                }
+
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("data", out JsonElement data)
+                    || data.ValueKind != JsonValueKind.Array
+                    || data.GetArrayLength() == 0)
+                {
+                    return (null, "mp3", null, "网易云未返回歌曲数据。");
+                }
+
+                JsonElement item = data[0];
+                string? url = item.TryGetProperty("url", out JsonElement urlEl) ? urlEl.GetString() : null;
+                if (string.IsNullOrWhiteSpace(url))
+                {
+                    return (null, "mp3", null, "该曲需登录会员或当前 Cookie 无权（网易云未返回播放直链）。");
+                }
+
+                int? returnedBr = item.TryGetProperty("br", out JsonElement brEl) ? brEl.GetInt32() : null;
+                string level = item.TryGetProperty("level", out JsonElement lv) ? (lv.GetString() ?? "standard") : "standard";
+                string extension = level is "lossless" or "hires" ? "flac" : "mp3";
+
+                return (url, extension, returnedBr, null);
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                return (null, "mp3", null, ex.Message);
+            }
+        }
+
+        private static string NetEaseCsrf(string cookie)
+        {
+            string? v = NetEaseCookieValue(cookie, "_csrf");
+            return v ?? string.Empty;
+        }
+
+        private static string? NetEaseCookieValue(string cookie, string name)
+        {
+            if (string.IsNullOrEmpty(cookie))
+            {
+                return null;
+            }
+
+            int i = cookie.IndexOf(name + "=", StringComparison.OrdinalIgnoreCase);
+            if (i < 0)
+            {
+                return null;
+            }
+
+            int start = i + name.Length + 1;
+            int end = cookie.IndexOf(';', start);
+            if (end < 0)
+            {
+                end = cookie.Length;
+            }
+
+            return cookie.Substring(start, end - start).Trim();
+        }
+
+        /// <summary>生成 weapi 的 params(双层 AES-CBC base64) 与 encSecKey(RSA 无填充 hex)。</summary>
+        private static (string Params, string EncSecKey) NetEaseWeapi(Dictionary<string, object> body)
+        {
+            string text = JsonSerializer.Serialize(body);
+            string secret = string.Empty;
+            lock (NetEaseRandom)
+            {
+                for (int i = 0; i < 16; i++)
+                {
+                    int idx = (int)Math.Round(NetEaseRandom.NextDouble() * 61);
+                    secret += NetEaseBase62[idx];
+                }
+            }
+
+            // 内层：AES-CBC(presetKey, iv, JSON) → base64；外层：AES-CBC(secretKey, iv, 内层base64) → base64
+            string inner = NetEaseAesCbc(NetEasePresetKey, text);
+            string prm = NetEaseAesCbc(secret, inner);
+            string encSecKey = NetEaseRsaNoPad(secret);
+
+            return (prm, encSecKey);
+        }
+
+        private static string NetEaseAesCbc(string key, string plain)
+        {
+            byte[] keyBytes = System.Text.Encoding.UTF8.GetBytes(key);
+            byte[] ivBytes = System.Text.Encoding.UTF8.GetBytes(NetEaseIv);
+            using var aes = Aes.Create();
+            aes.Key = keyBytes;
+            aes.IV = ivBytes;
+            aes.Mode = CipherMode.CBC;
+            aes.Padding = PaddingMode.PKCS7;
+
+            using var enc = aes.CreateEncryptor();
+            byte[] result = enc.TransformFinalBlock(System.Text.Encoding.UTF8.GetBytes(plain), 0, plain.Length);
+            return Convert.ToBase64String(result);
+        }
+
+        /// <summary>RSA 无填充 RSA 加密：m^e mod n，secret 反转后逐字节进制补 0，输出 128 字节 hex。</summary>
+        private static string NetEaseRsaNoPad(string secret)
+        {
+            string rev = NetEaseReverse(secret);
+            BigInteger m = new(System.Text.Encoding.UTF8.GetBytes(rev), isUnsigned: true, isBigEndian: true);
+            BigInteger c = BigInteger.ModPow(m, NetEaseRsaE, NetEaseRsaN);
+            byte[] cipher = c.ToByteArray(isUnsigned: true, isBigEndian: true);
+            // 补齐到 128 字节
+            if (cipher.Length != 128)
+            {
+                byte[] padded = new byte[128];
+                Array.Copy(cipher, 0, padded, 128 - cipher.Length, cipher.Length);
+                cipher = padded;
+            }
+
+            return Convert.ToHexString(cipher);
+        }
+
+        private static string NetEaseReverse(string s)
+        {
+            char[] arr = s.ToCharArray();
+            Array.Reverse(arr);
+            return new string(arr);
         }
     }
 }
