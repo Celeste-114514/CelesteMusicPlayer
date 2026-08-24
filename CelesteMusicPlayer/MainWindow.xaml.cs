@@ -15997,6 +15997,8 @@ namespace CelesteMusicPlayer
                 smtc.PlaybackStatus = playing ? MediaPlaybackStatus.Playing : MediaPlaybackStatus.Paused;
 
                 SystemMediaTransportControlsDisplayUpdater updater = smtc.DisplayUpdater;
+                // 切歌/重设前清空旧元数据，避免 deskbox 等系统小组件残留上一首状态（标题缺失/两状态叠加）。
+                updater.ClearAll();
                 updater.Type = MediaPlaybackType.Music;
                 updater.MusicProperties.Title = item.Title;
                 updater.MusicProperties.Artist = item.Artist;

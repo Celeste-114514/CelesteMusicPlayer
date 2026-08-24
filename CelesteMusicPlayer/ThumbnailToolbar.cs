@@ -38,10 +38,12 @@ namespace CelesteMusicPlayer
             {
                 _list = (ITaskbarList3)new TaskbarList();
                 _list.HrInit();
+                StartupLog.Write("[ThumbBar] ITaskbarList3 创建成功");
             }
-            catch
+            catch (Exception ex)
             {
                 _list = null;
+                StartupLog.Write("[ThumbBar] ITaskbarList3 创建失败: " + ex.Message);
             }
 
             _previousBmp = CreateSymbolBitmap("⏮");
