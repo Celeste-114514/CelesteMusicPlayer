@@ -41,6 +41,9 @@ namespace CelesteMusicPlayer
         private bool _limiterEnabled;
         private volatile bool _active; // 任意 DSP 生效（EQ/声道/headroom/limiter）→ 决定 Read 是否走 ProcessBlock
 
+        // 软件总音量（共享/ASIO 用，采样级增益；NAudio WasapiOut.Volume 不支持，故由 DSP 链实现）。
+        private volatile float _volumeGain = 1f;
+
         // ReplayGain 响度归一化（对齐 ECHO ReplayGainProcessor：目标增益 + 10ms 平滑渐变）
         private double _rgTargetDb;
         private double _rgCurrentDb;
@@ -319,7 +322,15 @@ namespace CelesteMusicPlayer
         /// <summary>重算 DSP 是否生效；当无任一 DSP 生效时后续 Read 直接直通（bit-perfect，零逐样本开销）。</summary>
         private void RefreshActive()
         {
-            _active = _eqEnabled || _chEnabled || _limiterEnabled || _rgActive || Math.Abs(_headroomDb) > 0.001;
+            _active = _eqEnabled || _chEnabled || _limiterEnabled || _rgActive || Math.Abs(_headroomDb) > 0.001
+                || Math.Abs(_volumeGain - 1f) > 0.0001f;
+        }
+
+        /// <summary>设置采样级总音量基因（共享/ASIO 软件音量），0..2。音量=1 时不进 Processing。</summary>
+        public void SetVolumeGain(float gain)
+        {
+            _volumeGain = Math.Clamp(gain, 0f, 2f);
+            RefreshActive();
         }
 
         #endregion
@@ -373,6 +384,7 @@ namespace CelesteMusicPlayer
             bool stereo = _channels >= 2;
             bool wantsClip = doHeadroom || doLimiter || doEq || doCh || _rgActive; // 只要有任何 DSP 即需 Clamp 保护
             float preampGain = (float)_preampGain;
+            float volumeGain = _volumeGain;
             bool rgActive = _rgActive;
             double rgTargetDb = _rgTargetDb;
             int rgRampLeft = _rgRampLeft;
@@ -424,6 +436,12 @@ namespace CelesteMusicPlayer
                 int li = f * ch, ri = li + 1;
                 float l = buf[li];
                 float r = stereo ? buf[ri] : l;
+                // 软件总音量（共享/ASIO）：采样级增益，恒在 EQ/声道/RG 之前（volatile 实时可调）。
+                if (volumeGain != 1f)
+                {
+                    l *= volumeGain;
+                    if (stereo) r *= volumeGain;
+                }
 
                 if (doEq)
                 {

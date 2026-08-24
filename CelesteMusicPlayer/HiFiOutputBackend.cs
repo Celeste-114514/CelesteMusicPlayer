@@ -570,6 +570,13 @@ namespace CelesteMusicPlayer
             dsp.UpdateChannel(_channelBalance);
             dsp.UpdateSafety(_safety);
             dsp.SetReplayGain(_rgState, _rgTrackDb, _rgAlbumDb, _rgPeak);
+            // 共享模式当前音量（播放会话重建后同步，避免音量丢失/跳回 100%）；
+            // 独占/ASIO 走设备主音量，DSP 链保持全音量（不双重衰减）。
+            if (_activeMode != OutputMode.WasapiExclusive && _activeMode != OutputMode.Asio)
+            {
+                dsp.SetVolumeGain(_resumeVolume);
+            }
+
             return dsp;
         }
 
@@ -810,34 +817,29 @@ namespace CelesteMusicPlayer
         public void SetVolume(float volume)
         {
             _resumeVolume = Math.Clamp(volume, 0f, 1f);
-            // 共享模式 / 当前模式尚未初始化（CurrentMode=null，如引擎刚创建时）：一律用 NAudio 软件增益，
-            // 只影响本播放器、绝不动系统（设备/主）音量——否则共享模式一启动就把系统音量抬到滑块值。
             bool hifiDevice = CurrentMode == OutputMode.WasapiExclusive || CurrentMode == OutputMode.Asio;
-            if (!hifiDevice)
+
+            // 独占/ASIO（及 DSD 直出）：bit-perfect，控设备主音量——滑块 100%→满、其它非线性压缩（slider²）。
+            if (hifiDevice || (_isDsd))
             {
-                if (_output != null)
+                if (_device?.AudioEndpointVolume != null)
                 {
-                    try { _output.Volume = _resumeVolume; } catch { }
+                    try
+                    {
+                        float dev = _resumeVolume * _resumeVolume;
+                        _device.AudioEndpointVolume.MasterVolumeLevelScalar = dev;
+                    }
+                    catch
+                    {
+                    }
                 }
 
                 return;
             }
 
-            // 独占/ASIO（bit-perfect）：控设备主音量——滑块 100%→满、其它非线性压缩（slider²）。
-            if (_device?.AudioEndpointVolume != null)
-            {
-                try
-                {
-                    // 滑块与设备主音量联动（独占直通时靠设备端控响）。为缓解“整体偏大”，
-                    // 对滑块标量做非线性压缩：dev = slider^2 —— 滑块 100%→100%、50%→25%、80%→64%，
-                    // 高段更平缓、整体更轻且调节更细。
-                    float dev = _resumeVolume * _resumeVolume;
-                    _device.AudioEndpointVolume.MasterVolumeLevelScalar = dev;
-                }
-                catch
-                {
-                }
-            }
+            // 共享模式：NAudio WasapiOut.Volume 抛 NotSupportedException（不支持软件音量），
+            // 必须经 DSP 链做采样级增益（只影响本播放器，绝不动系统音/设备主音量，避免"共享音量突然变大"）。
+            _dspProvider?.SetVolumeGain(_resumeVolume);
         }
 
         private void Output_PlaybackStopped(object? sender, StoppedEventArgs e)

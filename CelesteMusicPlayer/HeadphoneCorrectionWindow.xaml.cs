@@ -30,7 +30,7 @@ namespace CelesteMusicPlayer
             Title = "耳机校正 · OPRA";
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);
-            AppWindow.Resize(new SizeInt32(920, 640));
+            AppWindow.Resize(new SizeInt32(1360, 830));
 
             ConfigureTitleBarButtons();
             ApplyBackdropFromSettings();
