@@ -5,7 +5,7 @@
 ## ✨ 功能特性
 
 - 🎵 本地音乐库：扫描文件夹 / 多选导入，自动读取标签（标题、艺术家、专辑、年份、封面）
-- 🎧 广泛格式支持：MP3 / FLAC / WAV / M4A / APE / WavPack / TTA / DSD（DSD由解码器转为高质量pcm后播放，Windows Shared模式下不支持dsd） 等
+- 🎧 广泛格式支持：MP3 / FLAC / WAV / M4A / APE / WavPack / TTA / DSD等；DSD 支持「转 PCM」或「DoP 直出」可选（Shared 模式下自动转 PCM）
   - 内置 [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) 
 - 📋 输出模式：AUDIO 输出设备可选择，WASAPI 共享 / WASAPI 独占 / ASIO输出
 - 🎯 HiFi 独占输出：基于 NAudio / 原生 WASAPI 从 PCM WAV 流式输出，兼顾音质；独占设备音量可调（系统托盘/输出设备调整，软件内不可调整）、切歌音量不再重置
@@ -60,6 +60,10 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 发布产物为自包含目录：目标机器 **无需安装 .NET 运行时或 Windows App SDK**。
 
 ## 📝 更新日志
+
+### v26.8.24（2026-08-24）
+- 🎵 **DSD 支持 PCM / DoP 直出可选**：在「设置 → DSD 输出」可在「转 PCM」（FFmpeg 转高采样 PCM，可听优先）与「DoP 直出」（独占 / ASIO 下把 1-bit 封入 DoP 容器直通 DAC，bit-perfect）之间切换；共享模式自动转 PCM
+- 🔧 修复了一些 BUG，优化了一些细节，改善使用体验
 
 ### v26.8.23（2026-08-23）
 - 🔌 **流媒体插件服务（WSL 侧 `streaming-plugin/`）**：HTTP 服务暴露 Apple Music / 网易云 / QQ 的搜索、歌词、下载能力；监听 0.0.0.0:21010，播放器「设置 → 流媒体」直接调用；随版本附带预编译 `streamingserver` 二进制（release 附件）
