@@ -1402,6 +1402,9 @@ namespace CelesteMusicPlayer
             {
                 try
                 {
+                    // 窗口激活后确保任务栏缩略图工具栏已添加（需窗口可停靠后才生效）。
+                    _thumbToolbar?.EnsureButtons();
+
                     // 订阅主题色变化事件(统一刷新强调元素)
                     ThemeColorService.ThemeColorChanged -= OnThemeColorChanged;
                     ThemeColorService.ThemeColorChanged += OnThemeColorChanged;

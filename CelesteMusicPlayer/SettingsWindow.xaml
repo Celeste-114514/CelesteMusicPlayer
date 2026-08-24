@@ -805,7 +805,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="系统媒体传输控制 (SMTC)" />
-                                <TextBlock Text="锁屏与任务栏媒体控件" FontSize="12" Opacity="0.65" />
+                                <TextBlock Text="向系统媒体小组件/媒体键/锁屏暴露正在播放信息（如 deskbox）" FontSize="12" Opacity="0.65" />
                             </StackPanel>
                             <ToggleSwitch x:Name="EnableSmtcSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
                         </Grid>

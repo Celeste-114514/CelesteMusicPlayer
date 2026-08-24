@@ -53,24 +53,28 @@ namespace CelesteMusicPlayer
             for (int i = 0; i < 3; i++)
             {
                 _buttons[i].dwMask = THB_BITMAP | THB_TOOLTIP | THB_FLAGS;
-                _buttons[i].dwFlags = THBF_ENABLED;
+                _buttons[i].fsState = (byte)THBF_ENABLED; // THBF_ENABLED=0
+                _buttons[i].fsStyle = 0; // THBS_BUTTON
                 _buttons[i].iBitmap = 0;
             }
 
             _buttons[0].idCommand = CmdPrevious;
-            _buttons[0].pszTip = "上一首";
+            _buttons[0].szTip = "上一首";
             _buttons[0].hIcon = _previousBmp;
             _buttons[1].idCommand = CmdPlayPause;
-            _buttons[1].pszTip = "播放 / 暂停";
+            _buttons[1].szTip = "播放 / 暂停";
             _buttons[1].hIcon = _playBmp;
             _buttons[2].idCommand = CmdNext;
-            _buttons[2].pszTip = "下一首";
+            _buttons[2].szTip = "下一首";
             _buttons[2].hIcon = _nextBmp;
 
             TryAddButtons();
         }
 
         private bool _added;
+
+        /// <summary>供窗口激活/显示后再尝试添加（缩略图工具栏需在窗口可停靠后生效）。</summary>
+        public void EnsureButtons() => TryAddButtons();
 
         private void TryAddButtons()
         {
@@ -81,6 +85,7 @@ namespace CelesteMusicPlayer
 
             try
             {
+                // 仅在成功添加后置 _added；失败不置位以便窗口激活后重试。
                 _list.ThumbBarAddButtons(_hwnd, (uint)_buttons.Length, _buttons);
                 _added = true;
             }
@@ -106,7 +111,7 @@ namespace CelesteMusicPlayer
             try
             {
                 _buttons[1].hIcon = playing ? _pauseBmp : _playBmp;
-                _buttons[1].pszTip = playing ? "暂停" : "播放";
+                _buttons[1].szTip = playing ? "暂停" : "播放";
                 _list.ThumbBarUpdateButtons(_hwnd, 1, new[] { _buttons[1] });
                 TryAddButtons();
             }
@@ -178,10 +183,10 @@ namespace CelesteMusicPlayer
             public uint dwMask;
             public uint iBitmap;
             public uint idCommand;
-            public uint dwFlags;      // THBF_*（fsState）
-            public byte fsStyle;
+            public byte fsState;     // THBF_*（THBF_ENABLED=0 默认）
+            public byte fsStyle;     // THBS_BUTTON=0
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-            public string pszTip;
+            public string szTip;
             public IntPtr hIcon;
         }
 
