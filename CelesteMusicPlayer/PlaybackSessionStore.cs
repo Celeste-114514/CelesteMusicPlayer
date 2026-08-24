@@ -18,18 +18,9 @@ namespace CelesteMusicPlayer
 
         private static string GetFilePath()
         {
-            string root;
-            try
-            {
-                root = ApplicationData.Current.LocalFolder.Path;
-            }
-            catch
-            {
-                root = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer");
-            }
-
+            // 与主设置(AppSettingsStore)同源：固定 %LOCALAPPDATA%\CelesteMusicPlayer，
+            // 规避 packaged 下 ApplicationData.Current.LocalFolder 路径漂浮导致"保存到 A/读到 B"使续播失效。
+            string root = AppSettingsStore.GetConfigDirectory();
             Directory.CreateDirectory(root);
             return Path.Combine(root, FileName);
         }

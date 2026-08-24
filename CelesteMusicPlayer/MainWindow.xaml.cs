@@ -561,6 +561,7 @@ namespace CelesteMusicPlayer
         // 主题波形强调色（ResolveAccentColor 的缓存，避免频繁解析）
         private static Color _waveAccentColor = Color.FromArgb(255, 0, 120, 212);
         private SystemMediaTransportControls? _engineSmtc;
+        private long _lastSmtcTimelineMs; // SMTC timeline 限频（约 500ms 一次）
         private Style? _playlistItemDefaultStyle;
         private Style? _artistTrackItemDefaultStyle;
         private Style? _albumTrackItemDefaultStyle;
@@ -1514,6 +1515,7 @@ namespace CelesteMusicPlayer
                 ConfigureWindowChrome();
                 MakeWindowBorderless(); // 显示后再强制一次无边框，避免 WinUI 重设 caption 样式
                 ApplyWindowCorners(true); // 无边框窗口四角圆角
+                ApplyBorderColorFromUiTint(); // 任务栏缩略图/窗口描边与 UI 底色一致，去掉"主题色框"
                 if (_mainWindowHwnd != IntPtr.Zero)
                 {
                     SetWindowPos(_mainWindowHwnd, IntPtr.Zero, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE | SWP_FRAMECHANGED);
@@ -1716,6 +1718,36 @@ namespace CelesteMusicPlayer
 
             // 深色 Mica / 深灰 UI 回退（勿用浅灰，否则矩形发白）
             return Color.FromArgb(255, 42, 42, 42);
+        }
+
+        /// <summary>把无边框窗口的 DWM 边框/标题栏描边色设为当前 UI 底色，
+        /// 消除任务栏缩略图/窗口四周跟随系统强调色的"主题色框"。</summary>
+        private void ApplyBorderColorFromUiTint()
+        {
+            if (_mainWindowHwnd == IntPtr.Zero)
+            {
+                return;
+            }
+
+            try
+            {
+                // COLORREF = ABGR（DWMWA_BORDER_COLOR=34 / DWMWA_CAPTION_COLOR=35）
+                int color = MakeColorRef(ResolveUiBaseTintColor());
+                int hwndColor = unchecked((int)(uint)color);
+                DwmSetWindowAttributeInt(_mainWindowHwnd, 34, ref hwndColor, 4);
+                DwmSetWindowAttributeInt(_mainWindowHwnd, 35, ref hwndColor, 4);
+                StartupLog.Write("任务栏/窗口描边色已匹配 UI 底色 ABGR=" + color.ToString("X8"));
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("ApplyBorderColorFromUiTint", ex);
+            }
+        }
+
+        private static int MakeColorRef(Color c)
+        {
+            // Windows COLORREF = 0x00 BB GG RR
+            return unchecked((int)((uint)c.B | ((uint)c.G << 8) | ((uint)c.R << 16)));
         }
 
         private static bool IsNearWhite(Color color)
@@ -16042,6 +16074,37 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>引擎播放位置 → 进度条 / 时间 / 任务栏进度。</summary>
+        /// <summary>更新 SMTC timeline 属性（进度/时长），让系统媒体小组件(deskbox)显示当前曲目进度并可 seek。</summary>
+        private void UpdateSmtcTimeline(TimeSpan position)
+        {
+            if (_engineSmtc == null)
+            {
+                return;
+            }
+
+            try
+            {
+                TimeSpan duration = _audioEngine?.Duration ?? TimeSpan.Zero;
+                if (duration <= TimeSpan.Zero)
+                {
+                    return;
+                }
+
+                var props = new SystemMediaTransportControlsTimelineProperties
+                {
+                    StartTime = TimeSpan.Zero,
+                    EndTime = duration,
+                    MinSeekTime = TimeSpan.Zero,
+                    MaxSeekTime = duration,
+                    Position = position
+                };
+                _engineSmtc.UpdateTimelineProperties(props);
+            }
+            catch
+            {
+            }
+        }
+
         private void EnginePositionChanged(TimeSpan position)
         {
             try
@@ -16055,6 +16118,13 @@ namespace CelesteMusicPlayer
                 if (_isUserSeeking)
                 {
                     return;
+                }
+
+                // SMTC timeline（系统媒体小组件/deskbox 进度与可 seek）：约 500ms 一次
+                if (Environment.TickCount64 - _lastSmtcTimelineMs > 400)
+                {
+                    _lastSmtcTimelineMs = Environment.TickCount64;
+                    UpdateSmtcTimeline(position);
                 }
 
                 // 时长变化时同步进度条上限

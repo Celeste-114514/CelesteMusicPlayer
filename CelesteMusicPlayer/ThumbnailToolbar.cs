@@ -88,9 +88,11 @@ namespace CelesteMusicPlayer
                 // 仅在成功添加后置 _added；失败不置位以便窗口激活后重试。
                 _list.ThumbBarAddButtons(_hwnd, (uint)_buttons.Length, _buttons);
                 _added = true;
+                StartupLog.Write($"[ThumbBar] 缩略图工具栏已添加 3 个按钮 hwnd={_hwnd}");
             }
-            catch
+            catch (Exception ex)
             {
+                StartupLog.Write("[ThumbBar] ThumbBarAddButtons 失败: " + ex.Message);
             }
         }
 
