@@ -409,7 +409,6 @@ namespace CelesteMusicPlayer
         private readonly ObservableCollection<PlaylistItem> _playlist = new();
         private ObservableCollection<PlaylistItem> _userPlaylist = new();
         private TaskbarProgressHelper? _taskbarProgress;
-        private ThumbnailToolbar? _thumbToolbar;
         private IntPtr _mainWindowHwnd;
 
         // 最小窗口尺寸（DIP）
@@ -714,12 +713,6 @@ namespace CelesteMusicPlayer
             catch
             {
                 _mainWindowHwnd = IntPtr.Zero;
-            }
-
-            // 任务栏悬停缩略图切歌/播放暂停按钮（ThumbnailToolbar）。
-            if (_mainWindowHwnd != IntPtr.Zero)
-            {
-                try { _thumbToolbar = new ThumbnailToolbar(_mainWindowHwnd); } catch { }
             }
 
             // 默认 1400×800；Resize 按 DPI 换算为物理像素
@@ -1252,21 +1245,6 @@ namespace CelesteMusicPlayer
 
         private static nint MainMinMaxWndProc(nint hWnd, uint msg, nint wParam, nint lParam)
         {
-            // 任务栏缩略图工具栏按钮（ThumbnailToolbar）点击：WM_COMMAND，低 16 位 = idCommand。
-            if (msg == 0x0111)
-            {
-                int cmd = (int)(wParam.ToInt64() & 0xFFFF);
-                if (cmd == ThumbnailToolbar.CmdPrevious || cmd == ThumbnailToolbar.CmdPlayPause || cmd == ThumbnailToolbar.CmdNext)
-                {
-                    if (MainWindow.Instance is MainWindow tw)
-                    {
-                        tw.OnThumbBarCommand(cmd);
-                    }
-
-                    return IntPtr.Zero;
-                }
-            }
-
             if (msg == WM_GETMINMAXINFO && lParam != IntPtr.Zero)
             {
                 try
@@ -1403,9 +1381,6 @@ namespace CelesteMusicPlayer
             {
                 try
                 {
-                    // 窗口激活后确保任务栏缩略图工具栏已添加（需窗口可停靠后才生效）。
-                    _thumbToolbar?.EnsureButtons();
-
                     // 订阅主题色变化事件(统一刷新强调元素)
                     ThemeColorService.ThemeColorChanged -= OnThemeColorChanged;
                     ThemeColorService.ThemeColorChanged += OnThemeColorChanged;
@@ -13328,8 +13303,6 @@ namespace CelesteMusicPlayer
             PersistDesktopLyricPosition();
             _taskbarProgress?.Dispose();
             _taskbarProgress = null;
-            _thumbToolbar?.Dispose();
-            _thumbToolbar = null;
             try
             {
                 TrackStatsStore.Flush();
@@ -16034,23 +16007,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>任务栏缩略图工具栏点击（上一首/播放暂停/下一首）。</summary>
-        private void OnThumbBarCommand(int cmd)
-        {
-            switch (cmd)
-            {
-                case ThumbnailToolbar.CmdPrevious:
-                    PlayPrevious();
-                    break;
-                case ThumbnailToolbar.CmdNext:
-                    PlayNext();
-                    break;
-                case ThumbnailToolbar.CmdPlayPause:
-                    TogglePlayPausePublic();
-                    break;
-            }
-        }
-
         /// <summary>更新引擎 SMTC 播放状态（暂停/恢复/结束）。</summary>
         private void UpdateEngineSmtcStatus(MediaPlaybackStatus status)
         {
@@ -16067,8 +16023,6 @@ namespace CelesteMusicPlayer
                     _engineSmtc.IsEnabled = false;
                 }
 
-                // 同步任务栏缩略图按钮 ▶/⏸
-                _thumbToolbar?.SetPlaying(status == MediaPlaybackStatus.Playing);
             }
             catch
             {
