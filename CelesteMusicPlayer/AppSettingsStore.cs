@@ -213,7 +213,8 @@ namespace CelesteMusicPlayer
         /// <summary>自定义全局热键：HotkeyAction 枚举名 → "Ctrl+Alt+P" 形式；为空表示使用默认。</summary>
 public Dictionary<string, string> CustomHotkeys { get; set; } = new();
 
-        /// <summary>艺术家头像来源（右键头像 → 从网络获取时使用的平台）。</summary>
+        /// <summary>艺术家头像来源（右键头像 → 从网络获取时使用的平台）："NetEase"（默认，真实歌手头像）或 "iTunes"（精确区分艺人，用其专辑封面作头像）。</summary>
+        public string ArtistAvatarSource { get; set; } = "NetEase";
 
         /// <summary>在线搜索窗口默认平台。</summary>
         public string OnlineSearchDefaultSource { get; set; } = "NetEase";
@@ -543,6 +544,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DsdUsePcmFallback = s.DsdUsePcmFallback,
             DsdOutputMode = s.DsdOutputMode,
             OnlineSearchDefaultSource = s.OnlineSearchDefaultSource,
+            ArtistAvatarSource = s.ArtistAvatarSource,
             StreamingServiceUrl = s.StreamingServiceUrl,
             NetEaseCookie = s.NetEaseCookie,
             QqCookie = s.QqCookie,

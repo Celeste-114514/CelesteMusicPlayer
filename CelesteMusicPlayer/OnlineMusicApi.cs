@@ -801,6 +801,9 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>按歌手名搜索网络头像（当前使用网易云歌手搜索，返回头像 URL）。</summary>
+        /// <summary>按设置的面像来源平台搜索艺术家头像 URL（NetEase 默认 / iTunes 精确区分艺人）。
+        /// iTunes 的 musicArtist 实体本身不含 artworkUrl，故取其热门歌曲封面（专辑封面）作头像；
+        /// 优点是艺人 id 精确（如「東京事変」与「椎名林檎」不再混淆，各用各的专辑图）。</summary>
         public static async Task<string?> SearchArtistAvatarUrlAsync(string artistName, CancellationToken cancellationToken = default)
         {
             if (string.IsNullOrWhiteSpace(artistName))
@@ -808,11 +811,22 @@ namespace CelesteMusicPlayer
                 return null;
             }
 
+            string source = AppSettingsStore.Load().ArtistAvatarSource;
+            if (string.Equals(source, "iTunes", StringComparison.OrdinalIgnoreCase))
+            {
+                return await SearchItunesArtistAvatarUrlAsync(artistName, cancellationToken).ConfigureAwait(false);
+            }
+
+            return await SearchNetEaseArtistAvatarUrlAsync(artistName, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>网易云 type=100 真实歌手头像（picUrl）。对部分日系歌手（如東京市変/椎名林檎）可能返回同组艺人导致混淆。</summary>
+        private static async Task<string?> SearchNetEaseArtistAvatarUrlAsync(
+            string artistName,
+            CancellationToken cancellationToken)
+        {
             try
             {
-                // 头像搜索曾尝试切换 Apple Music（iTunes Search API）。实测其 musicArtist 实体
-                // 返回结果不含任何 artworkUrl 字段——Apple 不在公开 search API 暴露"艺术家头像"，
-                // 需授权/抓取页面，故不可行；维持网易云（music.163.com type=100 艺术家搜索取 picUrl）。
                 string url = "https://music.163.com/api/search/get?s={0}&type=100&limit=1";
                 url = string.Format(url, Uri.EscapeDataString(artistName.Trim()));
                 using HttpResponseMessage response = await Http.GetAsync(url, cancellationToken).ConfigureAwait(false);
@@ -835,6 +849,77 @@ namespace CelesteMusicPlayer
                     string? u = pic.GetString();
                     return string.IsNullOrWhiteSpace(u) ? null : u;
                 }
+            }
+            catch
+            {
+            }
+
+            return null;
+        }
+
+        /// <summary>iTunes 精确区分艺人：先按歌手名找 artistId/英文名，再查该艺术家热门歌曲取封面（artworkUrl100→600）。</summary>
+        private static async Task<string?> SearchItunesArtistAvatarUrlAsync(
+            string artistName,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                // 1) 定位艺术家：musicArtist 返回精确 artistId（不混淆同名/关联艺人）。
+                string locateUrl = "https://itunes.apple.com/search?term={0}&entity=musicArtist&limit=1";
+                locateUrl = string.Format(locateUrl, Uri.EscapeDataString(artistName.Trim()));
+                using HttpRequestMessage locateReq = new(HttpMethod.Get, locateUrl);
+                locateReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
+                using HttpResponseMessage locateResp = await Http.SendAsync(locateReq, cancellationToken).ConfigureAwait(false);
+                if (!locateResp.IsSuccessStatusCode)
+                {
+                    return null;
+                }
+
+                string locateJson = await locateResp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument locateDoc = JsonDocument.Parse(locateJson);
+                if (!locateDoc.RootElement.TryGetProperty("results", out JsonElement res)
+                    || res.ValueKind != JsonValueKind.Array
+                    || res.GetArrayLength() == 0)
+                {
+                    return null;
+                }
+
+                JsonElement artist = res[0];
+                string? exactName = artist.TryGetProperty("artistName", out JsonElement an) ? an.GetString() : null;
+                if (string.IsNullOrWhiteSpace(exactName))
+                {
+                    return null;
+                }
+
+                // 2) 用精确英文名查该艺术家热门歌曲，取其封面 artworkUrl100 → 600x600。
+                string trackUrl = "https://itunes.apple.com/search?term={0}&entity=musicTrack&attribute=artistTerm&limit=1";
+                trackUrl = string.Format(trackUrl, Uri.EscapeDataString(exactName.Trim()));
+                using HttpRequestMessage trackReq = new(HttpMethod.Get, trackUrl);
+                trackReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
+                using HttpResponseMessage trackResp = await Http.SendAsync(trackReq, cancellationToken).ConfigureAwait(false);
+                if (!trackResp.IsSuccessStatusCode)
+                {
+                    return null;
+                }
+
+                string trackJson = await trackResp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument trackDoc = JsonDocument.Parse(trackJson);
+                if (!trackDoc.RootElement.TryGetProperty("results", out JsonElement tres)
+                    || tres.ValueKind != JsonValueKind.Array
+                    || tres.GetArrayLength() == 0
+                    || !tres[0].TryGetProperty("artworkUrl100", out JsonElement art))
+                {
+                    return null;
+                }
+
+                string? cover = art.GetString();
+                if (string.IsNullOrWhiteSpace(cover))
+                {
+                    return null;
+                }
+
+                // 提高分辨率：100x100bb -> 600x600bb（Apple artworkUrl 上限 1200，600 够清晰）
+                return cover.Replace("100x100bb", "600x600bb");
             }
             catch
             {
