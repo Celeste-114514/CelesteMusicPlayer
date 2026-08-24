@@ -15832,24 +15832,40 @@ namespace CelesteMusicPlayer
         /// <summary>顺序播放时确定"当前曲目之后"的一首（播放队列优先，否则媒体库列表）。</summary>
         private PlaylistItem? ResolveSequentialNextItem(PlaylistItem current)
         {
+            // 无缝预加载预测"即将播放的下一首"：必须遵循当前播放顺序（含随机），
+            // 否则随机播放时自动切歌会错误地切到列表顺序的下一首而非随机下一首。
             if (_userPlaylist.Count > 0)
             {
-                int idx = FindUserPlaylistIndex(current.FilePath);
-                if (idx >= 0 && idx + 1 < _userPlaylist.Count)
+                int baseIdx = FindUserPlaylistIndex(current.FilePath);
+                if (baseIdx < 0)
                 {
-                    return _userPlaylist[idx + 1];
+                    baseIdx = _userPlaylistIndex >= 0 ? _userPlaylistIndex : 0;
                 }
+
+                int next = NextIndexByOrder(_userPlaylist.Count, baseIdx, autoAdvance: true);
+                if (next >= 0 && next < _userPlaylist.Count)
+                {
+                    return _userPlaylist[next];
+                }
+
                 return null;
             }
 
             if (_playlist.Count > 0)
             {
-                int idx = _playlist.ToList().FindIndex(p => string.Equals(p.FilePath, current.FilePath, StringComparison.OrdinalIgnoreCase));
-                if (idx >= 0 && idx + 1 < _playlist.Count)
+                int baseIdx = _playlist.ToList().FindIndex(p => string.Equals(p.FilePath, current.FilePath, StringComparison.OrdinalIgnoreCase));
+                if (baseIdx < 0)
                 {
-                    return _playlist[idx + 1];
+                    baseIdx = _currentIndex >= 0 ? _currentIndex : 0;
+                }
+
+                int next = NextIndexByOrder(_playlist.Count, baseIdx, autoAdvance: true);
+                if (next >= 0 && next < _playlist.Count)
+                {
+                    return _playlist[next];
                 }
             }
+
             return null;
         }
 
@@ -16220,6 +16236,49 @@ namespace CelesteMusicPlayer
                 }
 
                 default:
+                    return (baseIndex + 1) % count;
+            }
+        }
+
+        /// <summary>按当前播放顺序解析下一个播放项的索引（不修改任何状态）。用于无缝预加载预测，
+        /// 与 PlayNext 的切歌决策保持一致（修复随机播放时自动切歌仍按列表顺序的问题）。</summary>
+        private int NextIndexByOrder(int count, int baseIndex, bool autoAdvance)
+        {
+            if (count <= 0)
+            {
+                return -1;
+            }
+
+            switch (_playbackOrder)
+            {
+                case PlaybackOrder.TrackOnce:
+                    if (autoAdvance)
+                    {
+                        return -1; // 单曲只播一遍，不自动续播
+                    }
+                    return baseIndex + 1 < count ? baseIndex + 1 : -1;
+
+                case PlaybackOrder.TrackLoop:
+                    if (autoAdvance)
+                    {
+                        return baseIndex;
+                    }
+                    return baseIndex + 1 < count ? baseIndex + 1 : 0;
+
+                case PlaybackOrder.Sequential:
+                    return baseIndex + 1 < count ? baseIndex + 1 : -1;
+
+                case PlaybackOrder.Random:
+                    if (count == 1)
+                    {
+                        return baseIndex;
+                    }
+                    {
+                        int next = _playbackRandom.Next(count);
+                        return next == baseIndex ? (next + 1) % count : next;
+                    }
+
+                default: // ListLoop 等：循环到列表尾回到开头
                     return (baseIndex + 1) % count;
             }
         }
