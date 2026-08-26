@@ -2043,9 +2043,11 @@ namespace CelesteMusicPlayer
             catch { }
         }
 
-        private void WindowCloseButton_Click(object sender, RoutedEventArgs e)
+        private async void WindowCloseButton_Click(object sender, RoutedEventArgs e)
         {
-            try { Close(); } catch { }
+            // 自绘关闭按钮不能直接 Close()：WinUI 3 的 Window.Close() 不触发 AppWindow.Closing，
+            // 会绕过关闭策略（最小化到托盘/每次询问）导致直接退出。统一走 HandleCloseRequestAsync。
+            try { await HandleCloseRequestAsync(); } catch { }
         }
 
         private void UpdateMaxRestoreIcon()
