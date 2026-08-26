@@ -2741,6 +2741,10 @@ namespace CelesteMusicPlayer
         private bool _audioFxEqDragging;
         private bool _audioFxEqBuilt;
         private bool _audioFxLoading;
+        // 音效面板是否已完成读写盘的加载。启动阶段(未真正进入面板)控件以 XAML 默认值
+        // (限幅器 IsOn=True 等)加载会触发 Toggled/SelectionChanged，若此时允许 ApplyDspToEngine
+        // 会把默认的"打开"状态保存到盘，覆盖用户上次关闭的设置 —— 必须用该标志屏蔽。
+        private bool _audioFxPanelReady;
 
         /// <summary>首次进入音效面板时构建 EQ 滑杆与预设 / 单声道下拉。</summary>
         private void EnsureAudioFxUiBuilt()
@@ -2836,6 +2840,8 @@ namespace CelesteMusicPlayer
 
                 DspExtraState extra = DspExtraStore.Load();
                 var ch = extra.ChannelBalance;
+                ReplayGainState rglog = ReplayGainStore.Load();
+                StartupLog.Write($"[DSP] 加载读盘 eq.Enabled={_audioFxEq.Enabled} limiter={extra.Safety?.EnableLimiter} rg.Mode={rglog.Mode}");
                 AudioFxChannelToggle.IsOn = ch.Enabled;
                 AudioFxChannelBalanceSlider.Value = ch.Balance;
                 AudioFxChannelLeftGainSlider.Value = ch.LeftGainDb;
@@ -2862,6 +2868,9 @@ namespace CelesteMusicPlayer
             {
                 _audioFxLoading = false;
             }
+
+            // 面板已从盘加载完成，之后才允许 DSP handler 持久化/应用（启动阶段误触发需屏蔽）。
+            _audioFxPanelReady = true;
         }
 
         /// <summary>应用 OPRA 耳机校正曲线到播放器 EQ（曲面板 + 持久化 + DSP 实时生效）。</summary>
@@ -3816,6 +3825,12 @@ namespace CelesteMusicPlayer
         /// <summary>收集 ReplayGain 面板状态 → 持久化 + 应用到引擎（带上当前曲目的增益/peak）。</summary>
         private void ApplyReplayGainToEngine()
         {
+            // 与 ApplyDspToEngine 同理：面板未就绪时不保存/应用（避免启动阶段默认覆盖）。
+            if (!_audioFxPanelReady)
+            {
+                return;
+            }
+
             var rg = new ReplayGainState
             {
                 Mode = CurrentAudioFxRgMode(),
@@ -3848,8 +3863,40 @@ namespace CelesteMusicPlayer
         /// <summary>收集面板当前状态 → 持久化 + 应用到播放引擎。</summary>
         private void ApplyDspToEngine()
         {
+            // 面板未就绪（启动阶段控件以 XAML 默认值加载触发的 Toggled 等）不得持久化/应用，
+            // 否则会用默认的“打开”状态覆盖盘上用户上次关闭的设置，导致“关闭后重启又打开”。
+            if (!_audioFxPanelReady)
+            {
+                return;
+            }
+
             // DSP 面板 EQ：曲线状态持久化 + 应用到引擎（HiFi 输出，各输出模式均走统一 DSP 链）
             EqCurveStore.Save(_audioFxEq);
+
+            // 诊断：记录触发保存的调用来源，便于定位“关闭后又变回打开”是被谁触发的。
+            string trigger = "";
+            try
+            {
+                System.Diagnostics.StackTrace st = new System.Diagnostics.StackTrace(1, false);
+                for (int i = 0; i < st.GetFrames()?.Length; i++)
+                {
+                    System.Reflection.MethodBase? m = st.GetFrame(i)?.GetMethod();
+                    string? decl = m?.DeclaringType?.Name;
+                    if (decl != null && decl != "MainWindow" && decl != "AppWindow" && !decl.StartsWith("<>c"))
+                    {
+                        trigger = decl + "." + m.Name;
+                        break;
+                    }
+                }
+                if (string.IsNullOrEmpty(trigger) && st.GetFrames()?.Length > 0)
+                {
+                    System.Reflection.MethodBase? m0 = st.GetFrame(0)?.GetMethod();
+                    trigger = m0?.DeclaringType?.Name + "." + m0?.Name;
+                }
+            }
+            catch
+            {
+            }
 
             var ch = new ChannelBalanceState
             {
@@ -3870,7 +3917,7 @@ namespace CelesteMusicPlayer
             };
 
             DspExtraStore.Save(new DspExtraState { ChannelBalance = ch, Safety = safety });
-            StartupLog.Write($"[DSP] 已保存 eq(Enabled={_audioFxEq.Enabled},bands={_audioFxEq.Bands.Count}) ch(Enabled={ch.Enabled}) limiter={safety.EnableLimiter}");
+            StartupLog.Write($"[DSP] 已保存 eq(Enabled={_audioFxEq.Enabled},bands={_audioFxEq.Bands.Count}) ch(Enabled={ch.Enabled}) limiter={safety.EnableLimiter}  触发={trigger}");
 
             _audioEngine?.SetEqCurve(_audioFxEq);
             _audioEngine?.SetChannelBalance(ch);
