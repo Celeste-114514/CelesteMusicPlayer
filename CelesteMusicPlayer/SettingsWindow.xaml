@@ -793,6 +793,17 @@
                                 <ColumnDefinition Width="Auto" MinWidth="200" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="进度条点击行为" />
+                                <TextBlock Text="点击进度条定位后是否自动继续播放" FontSize="12" Opacity="0.65" />
+                            </StackPanel>
+                            <ComboBox x:Name="ProgressBarClickBehaviorCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" MinWidth="200" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="声道" />
                                 <TextBlock Text="仅左右声道切换，双声道合并暂不支持" FontSize="12" Opacity="0.65" />
                             </StackPanel>

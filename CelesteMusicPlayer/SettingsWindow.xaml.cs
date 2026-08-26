@@ -54,6 +54,13 @@ namespace CelesteMusicPlayer
             (PlaybackOrder.TrackOnce, "单曲播放")
         };
 
+        /// <summary>进度条点击后行为。</summary>
+        private static readonly (string Id, string Label)[] ProgressBarClickBehaviorOptions =
+        {
+            ("SeekAndPause", "跳转后暂停"),
+            ("SeekAndPlay", "跳转并继续播放")
+        };
+
         private static readonly (string Id, string Label)[] LyricSavePolicyOptions =
         {
             ("None", "不保存"),
@@ -258,6 +265,7 @@ namespace CelesteMusicPlayer
             FillCombo(OnlineSearchSourceCombo, OnlineSearchSourceOptions);
             FillCombo(ArtistAvatarSourceCombo, ArtistAvatarSourceOptions);
             FillCombo(AudioChannelCombo, AudioChannelOptions);
+            FillCombo(ProgressBarClickBehaviorCombo, ProgressBarClickBehaviorOptions);
             OutputModeCombo.Items.Clear();
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 共享（系统混音）", Tag = "Shared" });
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 独占（HiFi）", Tag = "WasapiExclusive" });
@@ -379,6 +387,7 @@ namespace CelesteMusicPlayer
                 SelectComboByTag(OnlineSearchSourceCombo, s.OnlineSearchDefaultSource);
                 SelectComboByTag(ArtistAvatarSourceCombo, string.IsNullOrWhiteSpace(s.ArtistAvatarSource) ? "NetEase" : s.ArtistAvatarSource);
                 SelectComboByTag(AudioChannelCombo, s.AudioChannel);
+                SelectComboByTag(ProgressBarClickBehaviorCombo, s.ProgressBarClickBehavior);
                 SetToggle(AlwaysOnTopSwitch, s.AlwaysOnTop);
                 SetToggle(SaveLyricToSongFolderSwitch, s.SaveLyricToSongFolder);
                 SetToggle(SaveCoverToSongFolderSwitch, s.SaveCoverToSongFolder);
@@ -904,6 +913,7 @@ namespace CelesteMusicPlayer
             s.OnlineSearchDefaultSource = GetComboTagString(OnlineSearchSourceCombo, "NetEase");
             s.ArtistAvatarSource = GetComboTagString(ArtistAvatarSourceCombo, "NetEase");
             s.AudioChannel = GetComboTagString(AudioChannelCombo, "Stereo");
+            s.ProgressBarClickBehavior = GetComboTagString(ProgressBarClickBehaviorCombo, "SeekAndPause");
             s.AlwaysOnTop = AlwaysOnTopSwitch?.IsOn ?? s.AlwaysOnTop;
             s.SaveLyricToSongFolder = SaveLyricToSongFolderSwitch?.IsOn ?? s.SaveLyricToSongFolder;
             s.SaveCoverToSongFolder = SaveCoverToSongFolderSwitch?.IsOn ?? s.SaveCoverToSongFolder;

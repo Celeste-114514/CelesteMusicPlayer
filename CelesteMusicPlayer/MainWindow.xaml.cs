@@ -2970,7 +2970,8 @@ namespace CelesteMusicPlayer
                         _audioFxEq.Enabled = AudioFxEqEnableToggle.IsOn;
                     }
                 }
-                else if (!string.Equals(presetId, "custom", StringComparison.Ordinal))
+                else if (!string.Equals(presetId, "custom", StringComparison.Ordinal)
+                         && !string.Equals(presetId, "simple", StringComparison.Ordinal))
                 {
                     _audioFxEq = EqCurveState.CreatePreset(presetId);
                     _audioFxEq.Enabled = AudioFxEqEnableToggle.IsOn;
@@ -2979,8 +2980,12 @@ namespace CelesteMusicPlayer
                 {
                     var cur = EqCurveStore.Load();
                     _audioFxEq = cur;
-                    _audioFxEq.PresetId = "custom";
-                    _audioFxEq.PresetName = "自定义";
+                    // 简单模式曲线保留盘上原值（勿改 id/名，避免后续按 custom fallback 误判）
+                    if (!string.Equals(presetId, "simple", StringComparison.Ordinal))
+                    {
+                        _audioFxEq.PresetId = "custom";
+                        _audioFxEq.PresetName = "自定义";
+                    }
                 }
 
                 SyncAudioFxEqSimpleFromState();
@@ -3453,6 +3458,7 @@ namespace CelesteMusicPlayer
         private void ApplySimpleTones()
         {
             var s = new EqCurveState { Enabled = AudioFxEqEnableToggle.IsOn, PreampDb = _audioFxEq.PreampDb, PresetId = "simple", PresetName = "简单模式" };
+            SimpleEqStore.Save(new SimpleEqState { Bass = _eqSimpleBass, Vocal = _eqSimpleVocal, Air = _eqSimpleAir, Warm = _eqSimpleWarm });
             if (_eqSimpleBass > 0.01) AppendSimple(s, "bass", _eqSimpleBass);
             if (_eqSimpleVocal > 0.01) AppendSimple(s, "vocal", _eqSimpleVocal);
             if (_eqSimpleAir > 0.01) AppendSimple(s, "air", _eqSimpleAir);
@@ -3504,17 +3510,31 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void SyncAudioFxEqSimpleFromState()
+        /// <param name="restoreFromStore">true=从持久化恢复上次滑块值；false=清空（用于重置按钮）。</param>
+        private void SyncAudioFxEqSimpleFromState(bool restoreFromStore = true)
         {
-            // 简单模式从默认各滑杆 0 起（避免覆盖用户专业曲线）
+            // 简单模式各滑块值：默认从持久化恢复（避免重启后回到 0），重置时清空。
             _audioFxLoading = true;
             try
             {
-                _eqSimpleBass = _eqSimpleVocal = _eqSimpleAir = _eqSimpleWarm = 0;
-                AudioFxEqSimpleBassSlider.Value = 0;
-                AudioFxEqSimpleVocalSlider.Value = 0;
-                AudioFxEqSimpleAirSlider.Value = 0;
-                AudioFxEqSimpleWarmSlider.Value = 0;
+                if (restoreFromStore)
+                {
+                    var t = SimpleEqStore.Load();
+                    _eqSimpleBass = t.Bass;
+                    _eqSimpleVocal = t.Vocal;
+                    _eqSimpleAir = t.Air;
+                    _eqSimpleWarm = t.Warm;
+                }
+                else
+                {
+                    _eqSimpleBass = _eqSimpleVocal = _eqSimpleAir = _eqSimpleWarm = 0;
+                    SimpleEqStore.Save(new SimpleEqState());
+                }
+
+                AudioFxEqSimpleBassSlider.Value = _eqSimpleBass;
+                AudioFxEqSimpleVocalSlider.Value = _eqSimpleVocal;
+                AudioFxEqSimpleAirSlider.Value = _eqSimpleAir;
+                AudioFxEqSimpleWarmSlider.Value = _eqSimpleWarm;
             }
             finally { _audioFxLoading = false; }
         }
@@ -3708,7 +3728,7 @@ namespace CelesteMusicPlayer
                 AudioFxEqPreampText.Text = "预增益 (preamp)：0.0 dB";
                 SelectAudioFxEqPreset("flat");
                 _audioFxEqSelected = _audioFxEq.Bands.Count > 0 ? 0 : -1;
-                SyncAudioFxEqSimpleFromState();
+                SyncAudioFxEqSimpleFromState(restoreFromStore: false);
             }
             finally
             {
@@ -3850,6 +3870,7 @@ namespace CelesteMusicPlayer
             };
 
             DspExtraStore.Save(new DspExtraState { ChannelBalance = ch, Safety = safety });
+            StartupLog.Write($"[DSP] 已保存 eq(Enabled={_audioFxEq.Enabled},bands={_audioFxEq.Bands.Count}) ch(Enabled={ch.Enabled}) limiter={safety.EnableLimiter}");
 
             _audioEngine?.SetEqCurve(_audioFxEq);
             _audioEngine?.SetChannelBalance(ch);
@@ -12933,8 +12954,9 @@ namespace CelesteMusicPlayer
                 {
                 }
 
-                // 用户点击进度条定位后保持暂停，方便精确定位/等待（与"点进度条→暂停"一致）。
-                if (_audioEngine.IsPlaying)
+                // 用户点击进度条定位后：按设置决定「跳转并继续播放」或「跳转并暂停」。
+                if (_audioEngine.IsPlaying
+                    && AppSettingsStore.Load().ProgressBarClickBehavior != "SeekAndPlay")
                 {
                     _audioEngine.Pause();
                     _isEnginePaused = true;
@@ -13161,6 +13183,31 @@ namespace CelesteMusicPlayer
 
         internal void TogglePlayPausePublic() => PlayPauseButton_Click(PlayPauseButton!, new RoutedEventArgs());
 
+        /// <summary>把当前播放曲目加入“我喜欢的音乐”（托盘/菜单复用）。</summary>
+        internal void FavoriteCurrentPublic()
+        {
+            if (string.IsNullOrWhiteSpace(_nowPlayingPath))
+            {
+                StartupLog.Write("[托盘] 收藏当前：无正在播放曲目");
+                return;
+            }
+
+            TrackStatsStore.SetFavorite(_nowPlayingPath, true);
+            NamedPlaylistStore.SyncFavoritesPlaylist();
+            UpdateFavoriteButtonUi();
+            if (string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal))
+            {
+                ApplyCategoryView();
+            }
+
+            if (NowPlayingText != null)
+            {
+                NowPlayingText.Text = "已收藏到“我喜欢的音乐”";
+            }
+
+            StartupLog.Write("[托盘] 已收藏 " + _nowPlayingPath);
+        }
+
         internal void SeekPublic(TimeSpan position)
         {
             MediaPlayer? player = GetPlayer();
@@ -13300,6 +13347,16 @@ namespace CelesteMusicPlayer
 
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
+            try
+            {
+                // 兜底保存 DSP 状态：确保关闭/退出前「最后的用户选择」落盘，重启后不回到旧状态。
+                EqCurveStore.Save(_audioFxEq);
+                StartupLog.Write("[DSP] 退出兜底保存 eq Enabled=" + _audioFxEq.Enabled);
+            }
+            catch
+            {
+            }
+
             PersistDesktopLyricPosition();
             _taskbarProgress?.Dispose();
             _taskbarProgress = null;

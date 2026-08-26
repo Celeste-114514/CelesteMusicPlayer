@@ -160,6 +160,9 @@ namespace CelesteMusicPlayer
 
         public int FadeMilliseconds { get; set; } = 500;
 
+        /// <summary>点击进度条定位后的行为：SeekAndPause（跳转并暂停，默认）/ SeekAndPlay（跳转并继续播放）。</summary>
+        public string ProgressBarClickBehavior { get; set; } = "SeekAndPause";
+
         public double PlaybackRate { get; set; } = 1.0;
 
         public bool StopWhenError { get; set; } = true;
@@ -509,6 +512,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             EnableGlobalHotkeys = s.EnableGlobalHotkeys,
             EnableFade = s.EnableFade,
             FadeMilliseconds = s.FadeMilliseconds,
+            ProgressBarClickBehavior = s.ProgressBarClickBehavior,
             PlaybackRate = s.PlaybackRate,
             StopWhenError = s.StopWhenError,
             AutoPlayWhenStart = s.AutoPlayWhenStart,

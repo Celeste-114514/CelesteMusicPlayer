@@ -142,4 +142,47 @@ namespace CelesteMusicPlayer
         public ChannelBalanceState ChannelBalance { get; set; } = ChannelBalanceState.Default();
         public DspSafetyState Safety { get; set; } = DspSafetyState.Default();
     }
+
+    /// <summary>简单模式 EQ 的滑杆值（低频/人声/通透/暖色）。独立持久化，避免叠加到曲线 band 无法反解。</summary>
+    public sealed class SimpleEqState
+    {
+        public double Bass { get; set; }
+        public double Vocal { get; set; }
+        public double Air { get; set; }
+        public double Warm { get; set; }
+    }
+
+    /// <summary>简单模式 EQ 滑杆值持久化。</summary>
+    public static class SimpleEqStore
+    {
+        private const string FileName = "simple-eq.json";
+        private static SimpleEqState? _cache;
+        private static readonly object Gate = new();
+
+        private static string GetFilePath()
+        {
+            string root = AppSettingsStore.GetConfigDirectory();
+            Directory.CreateDirectory(root);
+            return Path.Combine(root, FileName);
+        }
+
+        public static SimpleEqState Load()
+        {
+            lock (Gate)
+            {
+                _cache ??= JsonFile.Read(GetFilePath(), new SimpleEqState());
+                return JsonFile.DeepClone(_cache);
+            }
+        }
+
+        public static void Save(SimpleEqState state)
+        {
+            if (state == null) return;
+            lock (Gate)
+            {
+                _cache = state;
+                JsonFile.Write(GetFilePath(), _cache);
+            }
+        }
+    }
 }

@@ -105,9 +105,23 @@ namespace CelesteMusicPlayer
             // 因此这里必须给菜单项设置 Command，Click 订阅在 PopupMenu 模式下无效。
             var showItem = new MenuFlyoutItem { Text = "显示主界面" };
             showItem.Command = new TrayRelayCommand(() => { StartupLog.Write("托盘命令: 显示主界面"); _owner.RestoreFromTray(); });
+            // 播放控制 + 收藏（转发 MainWindow 现成 public 方法）
+            var playPauseItem = new MenuFlyoutItem { Text = "播放 / 暂停" };
+            playPauseItem.Command = new TrayRelayCommand(() => { _owner.TogglePlayPausePublic(); });
+            var prevItem = new MenuFlyoutItem { Text = "上一首" };
+            prevItem.Command = new TrayRelayCommand(() => { _owner.PreviousPublic(); });
+            var nextItem = new MenuFlyoutItem { Text = "下一首" };
+            nextItem.Command = new TrayRelayCommand(() => { _owner.NextPublic(); });
+            var favoriteItem = new MenuFlyoutItem { Text = "添加到我喜欢" };
+            favoriteItem.Command = new TrayRelayCommand(() => { _owner.FavoriteCurrentPublic(); });
             var exitItem = new MenuFlyoutItem { Text = "退出播放器" };
             exitItem.Command = new TrayRelayCommand(() => { StartupLog.Write("托盘命令: 退出播放器"); _owner.ExitFromTray(); });
             flyout.Items.Add(showItem);
+            flyout.Items.Add(new MenuFlyoutSeparator());
+            flyout.Items.Add(playPauseItem);
+            flyout.Items.Add(prevItem);
+            flyout.Items.Add(nextItem);
+            flyout.Items.Add(favoriteItem);
             flyout.Items.Add(new MenuFlyoutSeparator());
             flyout.Items.Add(exitItem);
             _icon.ContextFlyout = flyout;
