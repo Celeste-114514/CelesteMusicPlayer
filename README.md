@@ -60,6 +60,10 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 
 ## 📝 更新日志
 
+### v26.8.27（2026-08-27）
+- 🛠️ **安装程序升级**：改用标准图形向导（Modern UI 2），支持**组件选择**（桌面快捷方式 / 开始菜单快捷方式 / 开机自启 可勾选）、安装完成页「立即运行」、卸载时**可选是否删除用户数据**（设置 / 主题 / 播放列表 / 封面 / 转码缓存 / 日志），简体中文界面
+- 🔧 修复了一些 BUG，优化了一些细节，改善使用体验
+
 ### v26.8.24（2026-08-24）
 - 🎵 **DSD 支持 PCM / DoP 直出可选**：在「设置 → DSD 输出」可在「转 PCM」（FFmpeg 转高采样 PCM，可听优先）与「DoP 直出」（独占 / ASIO 下把 1-bit 封入 DoP 容器直通 DAC，bit-perfect）之间切换；共享模式自动转 PCM
 - 🔧 修复了一些 BUG，优化了一些细节，改善使用体验
