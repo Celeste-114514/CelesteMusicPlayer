@@ -849,22 +849,30 @@ namespace CelesteMusicPlayer
                     .OrderBy(f => f.LastWriteTimeUtc)
                     .ToList();
                 long total = files.Sum(f => SafeFileLength(f.FullName));
-                foreach (FileInfo f in files)
-                {
-                    if (total <= maxBytes)
-                    {
-                        break;
-                    }
 
+                // 健康清理策略：只有超过上限才触发；一次性删除「最早写入」的一半文件，
+                // 把缓存体量直接压到一半，而不是逐个删到刚好 ≤ 上限——
+                // 避免频繁的全量扫描/删除 I/O 抖动，也给后续写入留出更大缓冲。
+                if (total <= maxBytes)
+                {
+                    return;
+                }
+
+                int removeCount = Math.Max(1, files.Count / 2);
+                long removedBytes = 0;
+                for (int i = 0; i < removeCount && i < files.Count; i++)
+                {
                     try
                     {
-                        total -= f.Length;
-                        f.Delete();
+                        removedBytes += SafeFileLength(files[i].FullName);
+                        files[i].Delete();
                     }
                     catch
                     {
                     }
                 }
+
+                StartupLog.Write($"[TrimCache] 超上限(max={maxBytes/ (1024.0*1024.0):0.0}MB)，清理最早 {removeCount} 个文件，释放约 {removedBytes / (1024.0*1024.0):0.0}MB，删除前总计 {total / (1024.0*1024.0):0.0}MB");
             }
             catch
             {
