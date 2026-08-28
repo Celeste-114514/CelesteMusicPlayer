@@ -185,4 +185,58 @@ namespace CelesteMusicPlayer
             }
         }
     }
+
+    /// <summary>房间校正（卷积 FIR / 脉冲响应）状态。</summary>
+    public sealed class RoomCorrectionState
+    {
+        /// <summary>是否启用卷积处理。</summary>
+        public bool Enabled { get; set; }
+
+        /// <summary>脉冲响应 WAV 文件路径。</summary>
+        public string IrPath { get; set; } = string.Empty;
+
+        /// <summary>卷积输出增益（dB，默认 0）。</summary>
+        public double GainDb { get; set; }
+
+        public RoomCorrectionState Clone() => new()
+        {
+            Enabled = Enabled,
+            IrPath = IrPath,
+            GainDb = GainDb
+        };
+    }
+
+    /// <summary>房间校正（卷积 FIR）持久化：固定 %LOCALAPPDATA%\CelesteMusicPlayer\room-correction.json。</summary>
+    public static class RoomCorrectionStore
+    {
+        private const string FileName = "room-correction.json";
+        private static RoomCorrectionState? _cache;
+        private static readonly object Gate = new();
+
+        private static string GetFilePath()
+        {
+            string root = AppSettingsStore.GetConfigDirectory();
+            Directory.CreateDirectory(root);
+            return Path.Combine(root, FileName);
+        }
+
+        public static RoomCorrectionState Load()
+        {
+            lock (Gate)
+            {
+                _cache ??= JsonFile.Read(GetFilePath(), new RoomCorrectionState());
+                return JsonFile.DeepClone(_cache);
+            }
+        }
+
+        public static void Save(RoomCorrectionState state)
+        {
+            if (state == null) return;
+            lock (Gate)
+            {
+                _cache = state;
+                JsonFile.Write(GetFilePath(), _cache);
+            }
+        }
+    }
 }

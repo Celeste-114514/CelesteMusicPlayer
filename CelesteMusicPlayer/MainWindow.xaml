@@ -2922,6 +2922,36 @@
                                 </Grid>
                             </Border>
 
+                            <!-- 房间校正（卷积 FIR）：导入脉冲响应 WAV 做真卷积，区别于参数 EQ -->
+                            <Border
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="8"
+                                Padding="12,8">
+                                <Grid ColumnSpacing="12">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="🏠 房间校正（卷积 FIR）" FontWeight="SemiBold" />
+                                        <TextBlock
+                                            x:Name="RoomCorrectionStatusText"
+                                            FontSize="11"
+                                            Opacity="0.65"
+                                            TextWrapping="WrapWholeWords"
+                                            Text="导入测量得到的脉冲响应 WAV（IR）做真卷积处理，用于房间声学校正 / 音箱耳机补偿，与参数 EQ 不同：它能还原真实脉冲响应。启用后输出非 bit-perfect。" />
+                                    </StackPanel>
+                                    <Button
+                                        x:Name="OpenRoomCorrectionButton"
+                                        Grid.Column="1"
+                                        Content="打开房间校正"
+                                        VerticalAlignment="Center"
+                                        Click="OpenRoomCorrectionButton_Click" />
+                                </Grid>
+                            </Border>
+
                             <!-- 顶部提示：使用 DSP 时提示非 bit-perfect -->
                             <Border
                                 x:Name="AudioFxBitPerfectHint"

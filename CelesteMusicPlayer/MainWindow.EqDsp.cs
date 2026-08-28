@@ -207,6 +207,21 @@ namespace CelesteMusicPlayer
             StartupLog.Write("EQ 曲线已应用: " + curve.PresetId + " bands=" + (curve.Bands?.Count ?? 0) + " preamp=" + curve.PreampDb);
         }
 
+        /// <summary>应用房间校正（卷积 FIR）状态到引擎 + 刷新 bit-perfect 提示 + 链路显示。
+        /// 由 RoomCorrectionWindow 调用（播放中实时生效）。</summary>
+        internal void ApplyRoomCorrection(RoomCorrectionState state)
+        {
+            if (state == null)
+            {
+                return;
+            }
+
+            _audioEngine?.SetRoomCorrection(state);
+            UpdateDspBitPerfectUi();
+            UpdateSignalChainDisplay();
+            StartupLog.Write($"房间校正已应用: enabled={state.Enabled} ir={state.IrPath} gain={state.GainDb}dB");
+        }
+
 
         private void SelectAudioFxEqPreset(string presetId)
         {
@@ -1021,6 +1036,7 @@ namespace CelesteMusicPlayer
             _audioEngine?.SetEqCurve(_audioFxEq);
             _audioEngine?.SetChannelBalance(ch);
             _audioEngine?.SetSafety(safety);
+            _audioEngine?.SetRoomCorrection(RoomCorrectionStore.Load());
 
             UpdateDspBitPerfectUi();
         }
@@ -1038,7 +1054,8 @@ namespace CelesteMusicPlayer
             bool active = eqActive
                 || AudioFxChannelToggle.IsOn
                 || Math.Abs(AudioFxSafetyHeadroomSlider.Value) > 0.01
-                || AudioFxSafetyLimiterToggle.IsOn;
+                || AudioFxSafetyLimiterToggle.IsOn
+                || RoomCorrectionStore.Load().Enabled;
 
             AudioFxBitPerfectStatusText.Text = active ? "非 bit-perfect（已使用 DSP）" : "bit-perfect 直通";
             // 主界面信息条（左上角）提示：使用 DSP 时输出非 bit-perfect

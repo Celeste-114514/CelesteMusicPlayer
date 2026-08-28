@@ -40,6 +40,7 @@ namespace CelesteMusicPlayer
         // ReplayGain 响度归一化（缓存到新建链，保证换歌/重播也生效）
         private ReplayGainState? _rgState;
         private double _rgTrackDb, _rgAlbumDb, _rgPeak = 1.0;
+        private RoomCorrectionState? _roomCorrection; // 房间校正（卷积 FIR）状态
         private NativeWasapiExclusiveOut? _native; // 原生 WASAPI 独占输出器（WasapiExclusive 模式替代 NAudio WasapiOut）
         private bool _useNative; // 当前播放是否走原生独占输出
         private bool _isDsd;     // 当前是否 DSD/DoP 直出（独占 + 禁降级）
@@ -123,6 +124,13 @@ namespace CelesteMusicPlayer
         {
             _safety = state?.Clone();
             _dspProvider?.UpdateSafety(_safety);
+        }
+
+        /// <summary>设置房间校正（卷积 FIR）。播放中实时生效（加载 IR 可能短暂卡顿一次）。</summary>
+        public void SetRoomCorrection(RoomCorrectionState? state)
+        {
+            _roomCorrection = state?.Clone() ?? null;
+            _dspProvider?.SetRoomCorrection(_roomCorrection);
         }
 
         /// <summary>设置交叉淡化时长（毫秒）。0 = 关闭（无缝硬切）。
@@ -616,6 +624,7 @@ namespace CelesteMusicPlayer
             dsp.UpdateChannel(_channelBalance);
             dsp.UpdateSafety(_safety);
             dsp.SetReplayGain(_rgState, _rgTrackDb, _rgAlbumDb, _rgPeak);
+            dsp.SetRoomCorrection(_roomCorrection);
             // 共享模式当前音量（播放会话重建后同步，避免音量丢失/跳回 100%）；
             // 独占/ASIO 走设备主音量，DSP 链保持全音量（不双重衰减）。
             if (_activeMode != OutputMode.WasapiExclusive && _activeMode != OutputMode.Asio)

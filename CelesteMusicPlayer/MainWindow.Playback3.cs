@@ -1975,6 +1975,13 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
+            // 应用房间校正（卷积 FIR）：持久化状态 → 引擎 → DSP 链
+            try
+            {
+                _audioEngine.SetRoomCorrection(RoomCorrectionStore.Load());
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+
             // 应用 ReplayGain 响度归一化：从源文件读 track/album 增益与 peak，按持久化 mode 由 DSP 链处理。
             try
             {

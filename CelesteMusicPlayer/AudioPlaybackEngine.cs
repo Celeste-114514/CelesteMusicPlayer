@@ -1385,6 +1385,12 @@ namespace CelesteMusicPlayer
             _hifiOut?.SetSafety(state);
         }
 
+        /// <summary>设置房间校正（卷积 FIR）。播放中实时生效。</summary>
+        public void SetRoomCorrection(RoomCorrectionState? state)
+        {
+            _hifiOut?.SetRoomCorrection(state);
+        }
+
         /// <summary>设置 ReplayGain（响度归一化）。播放中实时生效（10ms 平滑渐变）。</summary>
         public void SetReplayGain(ReplayGainState? state, double trackGainDb, double albumGainDb, double peak)
         {

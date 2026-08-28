@@ -56,6 +56,11 @@ namespace CelesteMusicPlayer
         private int _rgRampTotal = 441; // ~10ms @44.1k，构造时按采样率重算
         private bool _rgActive;
 
+        // 房间校正（卷积 FIR）：链首处理（音量/EQ 之前）。_convolver 原子替换（volatile），播放线程读取。
+        private volatile StreamingPartitionedConvolver? _convolver;
+        private volatile bool _convEnabled;
+        private float _convGain = 1f; // 线性增益（由 GainDb 换算；状态更新时变化，读侧极端误差可忽略）
+
         public ManagedDspSourceProvider(IWaveSourceProvider source)
         {
             _source = source ?? throw new ArgumentNullException(nameof(source));
@@ -339,7 +344,7 @@ namespace CelesteMusicPlayer
         private void RefreshActive()
         {
             _active = _eqEnabled || _chEnabled || _limiterEnabled || _rgActive || Math.Abs(_headroomDb) > 0.001
-                || Math.Abs(_volumeGain - 1f) > 0.0001f;
+                || Math.Abs(_volumeGain - 1f) > 0.0001f || _convEnabled;
         }
 
         /// <summary>设置采样级总音量基因（共享/ASIO 软件音量），0..2。音量=1 时不进 Processing。</summary>
@@ -347,6 +352,46 @@ namespace CelesteMusicPlayer
         {
             _volumeGain = Math.Clamp(gain, 0f, 2f);
             RefreshActive();
+        }
+
+        /// <summary>
+        /// 设置房间校正（卷积 FIR）。state 为 null / 未启用 / 无 IR 路径 → 关闭卷积。
+        /// IR 从 <see cref="RoomCorrectionIrCache"/> 取（没有则加载并缓存），构造分区卷积器后原子替换。
+        /// 播放中调用：下一次 Read 生效；换 IR 会重置卷积流式状态（短暂衔接差异可接受）。
+        /// </summary>
+        public void SetRoomCorrection(RoomCorrectionState? state)
+        {
+            if (state == null || !state.Enabled || string.IsNullOrWhiteSpace(state.IrPath))
+            {
+                _convEnabled = false;
+                _convolver = null;
+                RefreshActive();
+                return;
+            }
+
+            try
+            {
+                float[][]? ir = RoomCorrectionIrCache.GetOrLoad(state.IrPath, _format.SampleRate);
+                if (ir == null)
+                {
+                    _convEnabled = false;
+                    _convolver = null;
+                    RefreshActive();
+                    return;
+                }
+
+                var conv = new StreamingPartitionedConvolver(ir, _channels);
+                _convGain = (float)Math.Pow(10.0, Math.Clamp(state.GainDb, -24.0, 24.0) / 20.0);
+                _convolver = conv;
+                _convEnabled = true;
+                RefreshActive();
+            }
+            catch
+            {
+                _convEnabled = false;
+                _convolver = null;
+                RefreshActive();
+            }
         }
 
         #endregion
@@ -403,6 +448,9 @@ namespace CelesteMusicPlayer
             bool doCh = _chEnabled;
             bool doHeadroom = Math.Abs(_headroomDb) > 0.001;
             bool doLimiter = _limiterEnabled;
+            bool doConv = _convEnabled;
+            StreamingPartitionedConvolver? convolver = _convolver;
+            float convGain = _convGain;
             bool chSwap = _chSwap, chInvL = _chInvL, chInvR = _chInvR, chMono = _chMono, monoL = _chMonoLeft, monoR = _chMonoRight;
             bool isFloat = _isFloat;
             int bits = _format.BitsPerSample;
@@ -431,6 +479,20 @@ namespace CelesteMusicPlayer
             float[] buf = GetTempFloatBuffer(n);
             // 解码：byte → float（抽成独立方法，电平表测量与 DSP 共用）
             DecodeToFloat(b, offset, n, buf);
+
+            // 房间校正（卷积 FIR）：链首块级处理（在音量/EQ 之前），流式分区卷积 in-place。
+            // 卷积引入 BlockSize(1024) 帧延迟，但输出逐帧连续，对实时播放正确。
+            if (doConv && convolver != null)
+            {
+                convolver.Process(buf, frames, ch);
+                if (convGain != 1f)
+                {
+                    for (int i = 0; i < n; i++)
+                    {
+                        buf[i] *= convGain;
+                    }
+                }
+            }
 
             // 逐帧 DSP。
             // 多声道：所有声道都经过「音量 → EQ → ReplayGain → Headroom → 限幅」这套全局 DSP；

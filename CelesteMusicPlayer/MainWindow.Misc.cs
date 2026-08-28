@@ -421,6 +421,12 @@ namespace CelesteMusicPlayer
             HeadphoneCorrectionWindow.OpenOrActivate();
         }
 
+        /// <summary>打开房间校正（卷积 FIR）独立窗口。</summary>
+        private void OpenRoomCorrectionButton_Click(object sender, RoutedEventArgs e)
+        {
+            RoomCorrectionWindow.OpenOrActivate();
+        }
+
 
         private static string FormatAudioFxDb(double db)
         {
