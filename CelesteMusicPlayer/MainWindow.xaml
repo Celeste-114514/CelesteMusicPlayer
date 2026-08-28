@@ -2999,6 +2999,8 @@
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
                                             <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <ComboBox
                                             x:Name="AudioFxEqPresetCombo"
@@ -3027,6 +3029,18 @@
                                             Content="保存预设"
                                             ToolTipService.ToolTip="把当前曲线保存为你命名的预设"
                                             Click="AudioFxEqSavePreset_Click" />
+                                        <Button
+                                            x:Name="AudioFxEqImportApoButton"
+                                            Grid.Column="5"
+                                            Content="导入 APO"
+                                            ToolTipService.ToolTip="读取 Equalizer APO 的 config.txt（Preamp / Filter 行），转成当前曲线"
+                                            Click="AudioFxEqImportApo_Click" />
+                                        <Button
+                                            x:Name="AudioFxEqExportApoButton"
+                                            Grid.Column="6"
+                                            Content="导出 APO"
+                                            ToolTipService.ToolTip="把当前曲线导出为 Equalizer APO 的 config.txt"
+                                            Click="AudioFxEqExportApo_Click" />
                                     </Grid>
                                     <!-- 曲线视图 -->
                                     <Border

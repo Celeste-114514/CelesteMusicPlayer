@@ -170,8 +170,12 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>应用 OPRA 耳机校正曲线到播放器 EQ（曲面板 + 持久化 + DSP 实时生效）。</summary>
-        internal void ApplyOpraCurve(EqCurveState curve)
+        /// <summary>应用 OPRA 耳机校正曲线到播放器 EQ。</summary>
+        internal void ApplyOpraCurve(EqCurveState curve) => ApplyEqCurveToPlayer(curve);
+
+        /// <summary>把一条曲线应用到播放器（曲线状态 + 持久化 + 面板同步 + DSP 实时生效 + 链路显示）。
+        /// OPRA 耳机校正、Equalizer APO 导入等「外部曲线入口」共用这一条路径。</summary>
+        internal void ApplyEqCurveToPlayer(EqCurveState curve)
         {
             if (curve == null)
             {
@@ -200,7 +204,7 @@ namespace CelesteMusicPlayer
             _audioEngine?.SetEqCurve(curve);
             UpdateDspBitPerfectUi();
             UpdateSignalChainDisplay();
-            StartupLog.Write("OPRA 耳机校正已应用: " + curve.PresetId + " bands=" + (curve.Bands?.Count ?? 0) + " preamp=" + curve.PreampDb);
+            StartupLog.Write("EQ 曲线已应用: " + curve.PresetId + " bands=" + (curve.Bands?.Count ?? 0) + " preamp=" + curve.PreampDb);
         }
 
 

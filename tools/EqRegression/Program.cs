@@ -429,4 +429,141 @@ namespace CelesteMusicPlayer.EqRegression
             Assert.Equal(LevelA, v[Frames - 1], 4);
         }
     }
+
+    /// <summary>Equalizer APO 配置（config.txt）导入 / 导出的回归测试。</summary>
+    public class ApoConverterTests
+    {
+        [Fact]
+        public void Apo_Import_ParsesPreampAndAllFilterTypes()
+        {
+            string text = string.Join("\n",
+                "# 注释行应当被忽略",
+                "Preamp: -6.5 dB",
+                "Filter: ON PK Fc 1000 Hz Gain 3 dB Q 1",
+                "Filter: ON LS Fc 100 Hz Gain -2.5 dB Q 0.7",
+                "Filter: OFF HS Fc 8000 Hz Gain 1.5 dB Q 0.707",
+                "Filter: ON LP Fc 20000 Hz Q 0.5",
+                "Filter: ON NO Fc 60 Hz Q 4");
+
+            Assert.True(EqualizerApoConverter.TryImport(text, out EqCurveState? c, out int imported, out int skipped, out string error), error);
+            Assert.NotNull(c);
+            Assert.Equal(5, imported);
+            Assert.Equal(0, skipped);
+            Assert.Equal(-6.5, c!.PreampDb, 3);
+
+            Assert.Equal(EqFilterType.Peaking, c.Bands[0].FilterType);
+            Assert.Equal(1000, c.Bands[0].FrequencyHz, 3);
+            Assert.Equal(3, c.Bands[0].GainDb, 3);
+            Assert.Equal(1, c.Bands[0].Q, 3);
+            Assert.True(c.Bands[0].Enabled);
+
+            Assert.Equal(EqFilterType.LowShelf, c.Bands[1].FilterType);
+            Assert.Equal(-2.5, c.Bands[1].GainDb, 3);
+
+            Assert.Equal(EqFilterType.HighShelf, c.Bands[2].FilterType);
+            Assert.False(c.Bands[2].Enabled); // OFF
+
+            Assert.Equal(EqFilterType.LowPass, c.Bands[3].FilterType);
+            Assert.Equal(0, c.Bands[3].GainDb, 3); // APO 的低通不带 Gain
+
+            Assert.Equal(EqFilterType.Notch, c.Bands[4].FilterType);
+            Assert.Equal(4, c.Bands[4].Q, 3);
+        }
+
+        [Fact]
+        public void Apo_RoundTrip_PreservesEveryBand()
+        {
+            var original = new EqCurveState
+            {
+                Enabled = true,
+                PreampDb = -3.0,
+                PresetId = "custom",
+                Bands =
+                {
+                    new EqBand { Enabled = true, FilterType = EqFilterType.Peaking, FrequencyHz = 1000, GainDb = 3, Q = 1 },
+                    new EqBand { Enabled = true, FilterType = EqFilterType.LowShelf, FrequencyHz = 100, GainDb = -2.5, Q = 0.7 },
+                    new EqBand { Enabled = true, FilterType = EqFilterType.HighShelf, FrequencyHz = 8000, GainDb = 1.5, Q = 0.707 },
+                    new EqBand { Enabled = true, FilterType = EqFilterType.LowPass, FrequencyHz = 20000, GainDb = 0, Q = 0.5 },
+                    new EqBand { Enabled = true, FilterType = EqFilterType.HighPass, FrequencyHz = 30, GainDb = 0, Q = 0.5 },
+                    new EqBand { Enabled = true, FilterType = EqFilterType.Notch, FrequencyHz = 60, GainDb = 0, Q = 4 },
+                }
+            };
+
+            string text = EqualizerApoConverter.Export(original);
+            Assert.True(EqualizerApoConverter.TryImport(text, out EqCurveState? back, out int imported, out int skipped, out string error), error);
+            Assert.NotNull(back);
+            Assert.Equal(0, skipped);
+            Assert.Equal(original.Bands.Count, imported);
+            Assert.Equal(original.PreampDb, back!.PreampDb, 3);
+
+            for (int i = 0; i < original.Bands.Count; i++)
+            {
+                Assert.Equal(original.Bands[i].FilterType, back.Bands[i].FilterType);
+                Assert.Equal(original.Bands[i].FrequencyHz, back.Bands[i].FrequencyHz, 1);
+                Assert.Equal(original.Bands[i].GainDb, back.Bands[i].GainDb, 2);
+                Assert.Equal(original.Bands[i].Q, back.Bands[i].Q, 3);
+                Assert.True(back.Bands[i].Enabled);
+            }
+        }
+
+        [Fact]
+        public void Apo_Import_SkipsUnsupportedFilterTypes()
+        {
+            // AP（全通）本程序没有对应实现，应被跳过而不是崩溃或误当成峰值
+            string text = string.Join("\n",
+                "Filter: ON PK Fc 500 Hz Gain 2 dB Q 1",
+                "Filter: ON AP Fc 1000 Hz Q 1");
+
+            Assert.True(EqualizerApoConverter.TryImport(text, out EqCurveState? c, out int imported, out int skipped, out string error), error);
+            Assert.Equal(1, imported);
+            Assert.Equal(1, skipped);
+            Assert.Single(c!.Bands);
+            Assert.Equal(EqFilterType.Peaking, c.Bands[0].FilterType);
+        }
+
+        [Fact]
+        public void Apo_Import_NoFilterLines_Fails()
+        {
+            Assert.False(EqualizerApoConverter.TryImport(string.Empty, out _, out _, out _, out string errEmpty));
+            Assert.False(string.IsNullOrWhiteSpace(errEmpty));
+
+            // 只有 Preamp、没有任何滤波段的配置也不算有效曲线
+            Assert.False(EqualizerApoConverter.TryImport("Preamp: -3 dB", out _, out _, out _, out string errNoFilter));
+            Assert.False(string.IsNullOrWhiteSpace(errNoFilter));
+        }
+
+        [Fact]
+        public void Apo_Export_OmitsGainForLowPassHighPassNotch()
+        {
+            var curve = new EqCurveState
+            {
+                Enabled = true,
+                PreampDb = -1.5,
+                Bands =
+                {
+                    // APO 的低通 / 高通 / 切除没有 Gain 参数，即使这里设了也不能写出去
+                    new EqBand { Enabled = true, FilterType = EqFilterType.LowPass, FrequencyHz = 20000, GainDb = 5, Q = 0.5 },
+                    new EqBand { Enabled = true, FilterType = EqFilterType.Peaking, FrequencyHz = 1000, GainDb = 3, Q = 1 },
+                }
+            };
+
+            string text = EqualizerApoConverter.Export(curve);
+            Assert.Contains("Preamp: -1.5 dB", text);
+
+            string lpLine = string.Empty;
+            string pkLine = string.Empty;
+            foreach (string raw in text.Split('\n'))
+            {
+                string l = raw.Trim();
+                if (l.StartsWith("Filter:", StringComparison.Ordinal) && l.Contains(" LP ", StringComparison.Ordinal)) lpLine = l;
+                if (l.StartsWith("Filter:", StringComparison.Ordinal) && l.Contains(" PK ", StringComparison.Ordinal)) pkLine = l;
+            }
+
+            Assert.False(string.IsNullOrEmpty(lpLine), "应导出低通行");
+            Assert.False(string.IsNullOrEmpty(pkLine), "应导出峰值行");
+            Assert.DoesNotContain("Gain", lpLine);
+            Assert.Contains("Q 0.5", lpLine);
+            Assert.Contains("Gain 3 dB", pkLine);
+        }
+    }
 }
