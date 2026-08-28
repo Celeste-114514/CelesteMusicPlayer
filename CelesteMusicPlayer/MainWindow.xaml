@@ -4172,11 +4172,7 @@
                 <Grid Padding="16,12,16,12">
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
 
                     <!-- 顶部标题 + 关闭 -->
@@ -4198,8 +4194,17 @@
                         </Button>
                     </Grid>
 
+                    <!-- 内容区（窗口变小时可滚动，避免被裁剪） -->
+                    <ScrollViewer
+                        Grid.Row="1"
+                        VerticalScrollBarVisibility="Visible"
+                        HorizontalScrollBarVisibility="Disabled"
+                        Padding="0,0,8,0"
+                        Margin="0,0,-8,0">
+                        <StackPanel>
+
                     <!-- 输出模式 -->
-                    <StackPanel Grid.Row="1" Spacing="8" Margin="0,12,0,0">
+                    <StackPanel Spacing="8" Margin="0,12,0,0">
                         <TextBlock Text="输出模式" FontSize="14" FontWeight="SemiBold" />
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
@@ -4260,7 +4265,7 @@
                     </StackPanel>
 
                     <!-- 链路状态（可视化：源 → DSP → 输出） -->
-                    <StackPanel Grid.Row="2" Spacing="8" Margin="0,16,0,0">
+                    <StackPanel Spacing="8" Margin="0,16,0,0">
                         <TextBlock Text="链路状态" FontSize="14" FontWeight="SemiBold" />
                         <!-- 改为纵向堆叠、每块左右扩张，保证源/输出/DSP 文字完整显示 -->
                         <StackPanel Spacing="6">
@@ -4326,7 +4331,7 @@
                     </StackPanel>
 
                     <!-- 专业播放状态 -->
-                    <StackPanel Grid.Row="3" Spacing="6" Margin="0,16,0,0">
+                    <StackPanel Spacing="6" Margin="0,16,0,0">
                         <TextBlock Text="专业播放状态" FontSize="14" FontWeight="SemiBold" />
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
@@ -4355,7 +4360,7 @@
                     </StackPanel>
 
                     <!-- 交叉淡化 -->
-                    <StackPanel Grid.Row="4" Spacing="8" Margin="0,16,0,0" VerticalAlignment="Top">
+                    <StackPanel Spacing="8" Margin="0,16,0,0" VerticalAlignment="Top">
                         <TextBlock Text="交叉淡化" FontSize="14" FontWeight="SemiBold" />
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
@@ -4421,12 +4426,13 @@
 
                     <!-- 底部说明 -->
                     <TextBlock
-                        Grid.Row="5"
                         FontSize="12"
                         Opacity="0.55"
                         TextWrapping="WrapWholeWords"
                         Margin="0,10,0,0"
                         Text="DSP（EQ／声道／限幅／ReplayGain）参与处理时不再 bit-perfect；全部旁路且输出格式未变才可直通。" />
+                        </StackPanel>
+                    </ScrollViewer>
                 </Grid>
             </Border>
         </Grid>
