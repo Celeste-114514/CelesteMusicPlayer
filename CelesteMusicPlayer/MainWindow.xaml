@@ -2888,7 +2888,7 @@
                     Padding="4,4"
                     Visibility="Collapsed">
                     <ScrollViewer
-                        VerticalScrollBarVisibility="Auto"
+                        VerticalScrollBarVisibility="Visible"
                         HorizontalScrollBarVisibility="Disabled"
                         Padding="0,0,12,0">
                         <StackPanel Spacing="16" MaxWidth="860" HorizontalAlignment="Stretch">
