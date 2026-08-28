@@ -107,9 +107,7 @@ namespace CelesteMusicPlayer
                 EqualizerWindow.Applied -= OnEqualizerApplied;
                 TagEditorWindow.TagsSaved -= OnTagsSaved;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
@@ -117,18 +115,14 @@ namespace CelesteMusicPlayer
                 _hotkeys?.Dispose();
                 _hotkeys = null;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 _libraryWatch.Stop();
                 _libraryWatch.Dispose();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             _fadeController?.Cancel();
         }
@@ -195,9 +189,7 @@ namespace CelesteMusicPlayer
             {
                 player.PlaybackSession.PlaybackRate = rate;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void RestartGlobalHotkeysFromSettings()
@@ -208,9 +200,7 @@ namespace CelesteMusicPlayer
                 _hotkeys?.Dispose();
                 _hotkeys = null;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             if (!AppSettingsStore.Load().EnableGlobalHotkeys)
             {
@@ -277,9 +267,7 @@ namespace CelesteMusicPlayer
                     });
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             if (folders.Count == 0)
             {
@@ -381,35 +369,27 @@ namespace CelesteMusicPlayer
             {
                 ApplyLyricPanelFromSettings(settings);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 _desktopLyricsWindow?.ApplySettings(settings);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             // 自定义背景图片：保存后即时应用
             try
             {
                 ApplyCustomBackground(settings.CustomBackgroundPath);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             // 播放列表列显隐/密度：保存后即时应用
             try
             {
                 ApplyPlaylistColumnSettings(settings);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             // 进度条样式：保存后即时切换
             try
@@ -432,9 +412,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             // 主题色：全局资源键在启动时应用(重启完全生效)；
             // 保存后即时刷新自绘强调元素（选中高亮/导航/正在播放卡/排序按钮）
@@ -443,9 +421,7 @@ namespace CelesteMusicPlayer
                 _waveAccentColor = ResolveAccentColor();
                 StartupLog.Write("主题色应用-波形: " + _waveAccentColor.ToString());
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
@@ -464,18 +440,14 @@ namespace CelesteMusicPlayer
                     : (GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero);
                 SyncLyricsToPosition(lyricPos, force: true);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             // 迷你播放器:刷新强调元素
             try
             {
                 _miniPlayerWindow?.RefreshAccentFromOwner();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             // 音量条(自绘)重绘 + 进度条主题色
             try
@@ -484,33 +456,25 @@ namespace CelesteMusicPlayer
                 DrawVolumeStyle();
                 ThemeColorService.ApplySliderAccent(ProgressSlider, accent2);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 ApplyCapsuleSortButtonStyle(accent: true);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 UpdateLibraryNavHighlight();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 ApplyNowPlayingCardChrome();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
@@ -521,90 +485,68 @@ namespace CelesteMusicPlayer
                 ApplyAccentSelectionResources(ArtistAlbumGridView);
                 ApplyAccentSelectionResources(FolderBrowserView);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 ConfigureSmtcFromSettings();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 ApplyPlaybackRateFromSettings();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 ApplyAudioChannelFromSettings();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 ApplyAlwaysOnTopFromSettings();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 UpdatePlaybackRateButtonText();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 _hotkeys?.ApplyBindings(settings.CustomHotkeys);
                 RestartGlobalHotkeysFromSettings();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 RestartLibraryWatchFromSettings();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 ApplyNavVisibilityFromSettings(settings);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 ApplySpectrumVisibilityFromSettings(settings);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             try
             {
                 ApplyCoverVisibilityFromSettings(settings);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             if (!string.IsNullOrWhiteSpace(_nowPlayingPath)
                 && settings.EnableBackground
@@ -616,9 +558,7 @@ namespace CelesteMusicPlayer
                     byte[]? bytes = ExtractCoverBytes(_nowPlayingPath);
                     _ = ApplyAlbumArtBackgroundAsync(bytes, _nowPlayingPath);
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
             }
             else if (!settings.EnableBackground || !settings.AlbumCoverAsBackground)
             {
@@ -626,9 +566,7 @@ namespace CelesteMusicPlayer
                 {
                     ClearAlbumArtBackground();
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
             }
 
             // 主题色变更：刷新列表，让选中高亮等立即使用新颜色
@@ -636,9 +574,7 @@ namespace CelesteMusicPlayer
             {
                 ApplyCategoryView();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void ApplyNavVisibilityFromSettings(AppSettingsState settings)
@@ -812,9 +748,7 @@ namespace CelesteMusicPlayer
 
                 player.PlaybackSession.Position = next;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void ToggleMainWindowVisibility()
@@ -986,9 +920,7 @@ namespace CelesteMusicPlayer
                     depthOut?.Stop();
                     nowPlayingDepthOutSubscribed = false;
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
                 NowPlayingPane.Opacity = 0;
                 NowPlayingPane.Visibility = Visibility.Visible;
@@ -1058,9 +990,7 @@ namespace CelesteMusicPlayer
                 TransportCoverBorder.BorderThickness = new Thickness(2);
                 arrowIn?.Begin();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void TransportCover_PointerExited(object sender, PointerRoutedEventArgs e)
@@ -1081,9 +1011,7 @@ namespace CelesteMusicPlayer
                 TransportCoverBorder.BorderThickness = new Thickness(1);
                 arrowOut?.Begin();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void NowPlayingCollapseButton_Click(object sender, RoutedEventArgs e)
@@ -1392,9 +1320,7 @@ namespace CelesteMusicPlayer
                 p?.Pause();
                 _audioEngine?.Pause();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             NowPlayingText.Text = message;
         }
@@ -1412,9 +1338,7 @@ namespace CelesteMusicPlayer
                     playing.Pause();
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             string? path = _nowPlayingPath;
             if (string.IsNullOrWhiteSpace(path) && _currentIndex >= 0 && _currentIndex < _playlist.Count)
@@ -1436,9 +1360,7 @@ namespace CelesteMusicPlayer
             {
                 _audioEngine.SetEqualizer(EqualizerStore.Load().BandGains);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             bool ok = await _audioEngine.PlayFileAsync(path);
             NowPlayingText.Text = ok
@@ -1695,7 +1617,7 @@ namespace CelesteMusicPlayer
                             {
                                 string lrc = LyricsToLrc(built);
                                 string lrcPath = System.IO.Path.ChangeExtension(item.FilePath, ".lrc");
-                                try { System.IO.File.WriteAllText(lrcPath, lrc); } catch { }
+                                try { System.IO.File.WriteAllText(lrcPath, lrc); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
                                 NowPlayingText.Text = "已从 Apple Music 获取歌词";
                                 if (string.Equals(_nowPlayingPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
                                 {
@@ -1706,9 +1628,7 @@ namespace CelesteMusicPlayer
                         }
                     }
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
             }
 
             NowPlayingText.Text = "正在下载歌词…";
@@ -1793,9 +1713,7 @@ namespace CelesteMusicPlayer
                 }, _lastPlayStartUtc);
                 _ = LastFmScrobbler.FlushQueueAsync();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
             finally
             {
                 _lastPlayedForScrobble = null;
@@ -1826,9 +1744,7 @@ namespace CelesteMusicPlayer
                     _ = LastFmScrobbler.FlushQueueAsync();
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void TickFeaturePlaybackExtras(TimeSpan position)
@@ -1922,9 +1838,7 @@ namespace CelesteMusicPlayer
                     {
                         items.Add(CreatePlaylistItemFromPath(path));
                     }
-                    catch
-                    {
-                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
                 }
             }
 
@@ -2001,7 +1915,7 @@ namespace CelesteMusicPlayer
                 int corner = rounded ? DWMWCP_ROUND : DWMWCP_DONOTROUND;
                 DwmSetWindowAttributeInt(_mainWindowHwnd, DWMWA_WINDOW_CORNER_PREFERENCE, ref corner, sizeof(int));
             }
-            catch { }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         /// <summary>无边框 + 自绘按钮的窗口 chrome：保留系统 resize 边框（四边/四角可调大小、四角圆角、最大化到工作区留任务栏），隐藏系统标题栏按钮（caption）。</summary>
@@ -2016,7 +1930,7 @@ namespace CelesteMusicPlayer
                     p.SetBorderAndTitleBar(hasBorder: true, hasTitleBar: false);
                 }
             }
-            catch { }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void WindowMinButton_Click(object sender, RoutedEventArgs e)
@@ -2025,7 +1939,7 @@ namespace CelesteMusicPlayer
             {
                 if (AppWindow.Presenter is OverlappedPresenter p) p.Minimize();
             }
-            catch { }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void WindowMaxRestoreButton_Click(object sender, RoutedEventArgs e)
@@ -2040,14 +1954,14 @@ namespace CelesteMusicPlayer
                     else p.Maximize();
                 }
             }
-            catch { }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private async void WindowCloseButton_Click(object sender, RoutedEventArgs e)
         {
             // 自绘关闭按钮不能直接 Close()：WinUI 3 的 Window.Close() 不触发 AppWindow.Closing，
             // 会绕过关闭策略（最小化到托盘/每次询问）导致直接退出。统一走 HandleCloseRequestAsync。
-            try { await HandleCloseRequestAsync(); } catch { }
+            try { await HandleCloseRequestAsync(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void UpdateMaxRestoreIcon()
@@ -2059,7 +1973,7 @@ namespace CelesteMusicPlayer
                     WindowMaxRestoreIcon.Glyph = _windowMaximized ? "\uE923" : "\uE922";
                 }
             }
-            catch { }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         /// <summary>由 WndProc(W M_SIZE) 同步最大化/还原状态：自绘最大化按钮图标始终反映真实窗口状态（含拖拽还原）。</summary>
@@ -2176,7 +2090,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch { }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private async void AudioModeCard_Click(object sender, RoutedEventArgs e)
@@ -2297,7 +2211,7 @@ namespace CelesteMusicPlayer
                 // 链路可视化着色 + bit-perfect 徽章
                 ApplyLinkVisual(pure: active.Count == 0, activeText: string.Join("、", active));
             }
-            catch { }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void ApplyLinkVisual(bool pure, string activeText)
@@ -2323,7 +2237,7 @@ namespace CelesteMusicPlayer
                 AudioLinkBitPerfectBadgeText.Text = pure ? "✓ bit-perfect · 直通" : "DSP 处理中";
                 AudioLinkBitPerfectBadgeText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
             }
-            catch { }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void RefreshCurrentPageButton_Click(object sender, RoutedEventArgs e)
@@ -2348,9 +2262,7 @@ namespace CelesteMusicPlayer
 
                 NowPlayingText.Text = "已刷新当前页面";
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         /// <summary>刷新评分分类：按 _ratingFilter 过滤媒体库歌曲并填充列表。</summary>
@@ -2519,9 +2431,7 @@ namespace CelesteMusicPlayer
                 {
                     _playlist.Add(CreatePlaylistItemFromPath(path));
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
             }
 
             if (_playlist.Count != before)

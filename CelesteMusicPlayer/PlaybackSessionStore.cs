@@ -42,9 +42,7 @@ namespace CelesteMusicPlayer
                 string json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(GetFilePath(), json);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("PlaybackSessionStore.cs", caught); }
         }
 
         public static PlaybackSessionState? TryLoad()

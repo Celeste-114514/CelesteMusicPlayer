@@ -110,7 +110,7 @@ namespace CelesteMusicPlayer
             }
             catch (Exception ex)
             {
-                try { StartupLog.Write("[DoP整曲封装异常] " + ex); } catch { }
+                try { StartupLog.Write("[DoP整曲封装异常] " + ex); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DoPWaveSource.cs", caught); }
             }
             finally
             {
@@ -289,8 +289,8 @@ namespace CelesteMusicPlayer
 
             _disposed = true;
             lock (_lock) { Monitor.PulseAll(_lock); }
-            try { _encode?.Join(2000); } catch { }
-            try { _src.Dispose(); } catch { }
+            try { _encode?.Join(2000); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DoPWaveSource.cs", caught); }
+            try { _src.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DoPWaveSource.cs", caught); }
         }
 
         private static readonly byte[] Rev8 = BuildRevTable();

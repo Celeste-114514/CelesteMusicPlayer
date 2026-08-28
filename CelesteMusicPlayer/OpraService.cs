@@ -122,7 +122,7 @@ namespace CelesteMusicPlayer
                     fetchedAt = DateTimeOffset.UtcNow;
                     Directory.CreateDirectory(_cacheDir);
                     File.WriteAllText(CachePath, raw);
-                    try { File.WriteAllText(MetaPath, JsonSerializer.Serialize(new { fetchedAt = fetchedAt.Value.ToString("O") })); } catch { }
+                    try { File.WriteAllText(MetaPath, JsonSerializer.Serialize(new { fetchedAt = fetchedAt.Value.ToString("O") })); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OpraService.cs", caught); }
                     source = "network";
                 }
                 catch (OperationCanceledException)
@@ -167,9 +167,7 @@ namespace CelesteMusicPlayer
                     return d;
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OpraService.cs", caught); }
 
             return null;
         }

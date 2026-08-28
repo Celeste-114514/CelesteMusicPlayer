@@ -113,9 +113,7 @@ namespace CelesteMusicPlayer
                     string json = JsonSerializer.Serialize(_cache, new JsonSerializerOptions { WriteIndented = true });
                     File.WriteAllText(GetFilePath(), json);
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("LastFmScrobbler.cs", caught); }
             }
         }
 
@@ -196,9 +194,7 @@ namespace CelesteMusicPlayer
                     using HttpResponseMessage response = await Http.PostAsync(GetApiRoot(), content, cancellationToken).ConfigureAwait(false);
                     _ = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("LastFmScrobbler.cs", caught); }
             }
         }
 

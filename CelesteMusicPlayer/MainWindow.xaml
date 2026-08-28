@@ -2432,8 +2432,16 @@
                         </Grid.ColumnDefinitions>
 
                         <!-- 左：媒体库树 -->
-                        <StackPanel Grid.Column="0" Width="430" Spacing="6">
-                            <Grid Margin="12,0,0,4">
+                        <!-- 注意：这里必须用 Grid 而不是 StackPanel。StackPanel 在堆叠方向给子项"无限高度"，
+                             会让 ListView 撑到内容全高、内建 ScrollViewer 认为无需滚动，导致文件夹树过长时内容被裁切且无法滚动。
+                             Grid 用 Auto/Auto/* 让 ListView 拿到有限高度，内建滚动即可正常工作。 -->
+                        <Grid Grid.Column="0" Width="430">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="12,0,0,4">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
@@ -2460,6 +2468,8 @@
                             </Grid>
                             <Button
                                 x:Name="AddMediaFolderButton"
+                                Grid.Row="1"
+                                Margin="0,6"
                                 Height="32"
                                 Padding="10,0"
                                 HorizontalAlignment="Left"
@@ -2474,6 +2484,7 @@
                             </Button>
                             <ListView
                                 x:Name="FolderBrowserView"
+                                Grid.Row="2"
                                 SelectionMode="Single"
                                 DoubleTapped="FolderBrowserView_DoubleTapped"
                                 RightTapped="FolderBrowserView_RightTapped"
@@ -2548,13 +2559,14 @@
 
                             <TextBlock
                                 x:Name="FolderBrowserEmptyHint"
+                                Grid.Row="2"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
                                 Opacity="0.55"
                                 FontSize="16"
                                 Text="请选择文件夹"
                                 Visibility="Collapsed" />
-                        </StackPanel>
+                        </Grid>
 
                         <!-- 右：被选中项详情区 -->
                         <Grid Grid.Column="1">

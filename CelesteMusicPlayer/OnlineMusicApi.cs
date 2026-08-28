@@ -179,14 +179,10 @@ namespace CelesteMusicPlayer
                             }
                         }
                     }
-                    catch
-                    {
-                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
             return results;
         }
@@ -261,9 +257,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
             return results;
         }
@@ -322,9 +316,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
             return results;
         }
@@ -387,9 +379,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
             return results;
         }
@@ -464,9 +454,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
             return results;
         }
@@ -587,9 +575,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
             return string.Empty;
         }
@@ -658,9 +644,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
             return string.Empty;
         }
@@ -850,9 +834,7 @@ namespace CelesteMusicPlayer
                     return string.IsNullOrWhiteSpace(u) ? null : u;
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
             return null;
         }
@@ -921,9 +903,7 @@ namespace CelesteMusicPlayer
                 // 提高分辨率：100x100bb -> 600x600bb（Apple artworkUrl 上限 1200，600 够清晰）
                 return cover.Replace("100x100bb", "600x600bb");
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
             return null;
         }
@@ -1148,9 +1128,7 @@ namespace CelesteMusicPlayer
                     {
                         File.Delete(tmpSaved);
                     }
-                    catch
-                    {
-                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
                 }
 
                 if (bytes == null || bytes.Length == 0)
@@ -1219,7 +1197,7 @@ namespace CelesteMusicPlayer
                     }
 
                     bytes = await File.ReadAllBytesAsync(tmpSaved, cancellationToken).ConfigureAwait(false);
-                    try { File.Delete(tmpSaved); } catch { }
+                    try { File.Delete(tmpSaved); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
                 }
 
                 if (bytes == null || bytes.Length == 0)
@@ -1241,7 +1219,7 @@ namespace CelesteMusicPlayer
                     };
                     tagFile.Save();
                 }
-                catch { }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
                 return true;
             }
@@ -1498,9 +1476,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
             return string.Empty;
         }
@@ -1557,9 +1533,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
             return (null, null, 0);
         }

@@ -292,9 +292,7 @@ namespace CelesteMusicPlayer
                     return Color.FromArgb(a, r, g, b);
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DesktopLyricsOverlay.cs", caught); }
 
             return fallback;
         }

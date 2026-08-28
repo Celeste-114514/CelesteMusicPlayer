@@ -261,9 +261,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                             caller += " <- " + (mi?.DeclaringType?.Name + "." + mi?.Name);
                         }
                     }
-                    catch
-                    {
-                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
                     StartupLog.Write("Load 命中缓存 OutputMode=" + (_cache?.OutputMode ?? "null") + caller);
                     return Clone(_cache);
                 }
@@ -278,6 +276,10 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                         AppSettingsState? loaded = JsonSerializer.Deserialize<AppSettingsState>(raw);
                         StartupLog.Write("Load 读文件 path=" + path + " 解析成功=" + (loaded != null) + " OutputMode=" + (loaded?.OutputMode ?? "(null)"));
                         _cache = Normalize(loaded ?? new AppSettingsState());
+                        // 解密磁盘上的 Cookie（DPAPI）；旧版明文无前缀则原样保留，下次保存自动加密迁移。
+                        _cache.NetEaseCookie = SecretProtector.Unprotect(_cache.NetEaseCookie);
+                        _cache.QqCookie = SecretProtector.Unprotect(_cache.QqCookie);
+                        _cache.AppleMusicCookie = SecretProtector.Unprotect(_cache.AppleMusicCookie);
                     }
                     else
                     {
@@ -300,9 +302,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                             StartupLog.Write("设置文件损坏，已备份到 " + backup + " 并使用默认设置");
                         }
                     }
-                    catch
-                    {
-                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
 
                     _cache = new AppSettingsState();
                 }
@@ -324,9 +324,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             {
                 Changed?.Invoke();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
         }
 
         public static void Update(Action<AppSettingsState> mutator)
@@ -340,12 +338,19 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         {
             try
             {
+                // 落盘前加密 Cookie（DPAPI 当前用户作用域）；内存对象保持明文不变。
+                string ne = state.NetEaseCookie, qq = state.QqCookie, ap = state.AppleMusicCookie;
+                state.NetEaseCookie = SecretProtector.Protect(ne);
+                state.QqCookie = SecretProtector.Protect(qq);
+                state.AppleMusicCookie = SecretProtector.Protect(ap);
                 string json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(GetFilePath(), json);
+                // 还原明文，保持内存态与缓存一致（下次读取仍是明文）。
+                state.NetEaseCookie = ne;
+                state.QqCookie = qq;
+                state.AppleMusicCookie = ap;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
         }
 
         private static AppSettingsState MigrateFromLegacyClosePrefs(AppSettingsState state)
@@ -363,9 +368,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                         : nameof(CloseWindowAction.MinimizeToTray);
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
 
             return state;
         }
@@ -583,9 +586,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 WasUncleanExitLastTime = File.Exists(marker);
                 File.WriteAllText(marker, DateTime.Now.ToString("o"));
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
         }
 
         /// <summary>正常退出时调用：清除运行标记。</summary>
@@ -596,9 +597,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 string marker = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CelesteMusicPlayer", ".running");
                 File.Delete(marker);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
         }
 
         /// <summary>本次进程加载时设置文件损坏并已用默认恢复（供 UI 提示一次）。</summary>
@@ -620,9 +619,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                     DateTimeOffset.Now.ToString("HH:mm:ss.fff") + " GetFilePath=" + path + Environment.NewLine);
                 System.IO.File.AppendAllText(path + ".pathlog", DateTimeOffset.Now.ToString("HH:mm:ss.fff") + " GetFilePath called" + Environment.NewLine);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
         }
 
         public static string GetConfigDirectory()
@@ -647,7 +644,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                     return true;
                 }
             }
-            catch { }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
             return false;
         }
 
@@ -672,7 +669,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                         File.Copy(path, rollback, overwrite: true);
                     }
                 }
-                catch { }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
 
                 File.Copy(srcPath, path, overwrite: true);
                 // 清除缓存，下次 Load() 从磁盘重新读
@@ -680,10 +677,10 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 {
                     _cache = null;
                 }
-                try { Changed?.Invoke(); } catch { }
+                try { Changed?.Invoke(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
                 return true;
             }
-            catch { }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
             return false;
         }
     }

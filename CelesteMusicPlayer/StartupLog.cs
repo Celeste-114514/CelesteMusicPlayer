@@ -25,9 +25,7 @@ namespace CelesteMusicPlayer
                 {
                     Directory.CreateDirectory(dir);
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("StartupLog.cs", caught); }
 
                 _path = Path.Combine(dir, "CelesteMusicPlayer.log");
                 return _path;
@@ -50,9 +48,7 @@ namespace CelesteMusicPlayer
                         DateTimeOffset.Now.ToString("HH:mm:ss.fff") + "  " + message + Environment.NewLine);
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("StartupLog.cs", caught); }
         }
 
         /// <summary>日志超阈值时把当前文件备份为 CelesteMusicPlayer.log.old（保留一份），避免无限增长。</summary>
@@ -87,9 +83,7 @@ namespace CelesteMusicPlayer
                         {
                             File.Delete(backup);
                         }
-                        catch
-                        {
-                        }
+                        catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("StartupLog.cs", caught); }
 
                         try
                         {
@@ -107,9 +101,7 @@ namespace CelesteMusicPlayer
                     _lastCheckedLength = len;
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("StartupLog.cs", caught); }
         }
 
         public static void WriteException(string where, Exception ex)

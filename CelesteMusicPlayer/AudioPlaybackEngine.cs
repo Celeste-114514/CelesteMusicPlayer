@@ -196,7 +196,7 @@ namespace CelesteMusicPlayer
                     using (Process proc = Process.Start(psi)!)
                     {
                         // 转码很耗 CPU；降为低优先级，避免抢占 WASAPI 独占（Pro Audio）渲染线程造成播放卡顿
-                        try { proc.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
+                        try { proc.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
                         proc.ErrorDataReceived += (_, e) =>
                         {
                             if (e.Data == null)
@@ -235,9 +235,7 @@ namespace CelesteMusicPlayer
                         {
                             File.Delete(partial);
                         }
-                        catch
-                        {
-                        }
+                        catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
 
                         return false;
                     }
@@ -252,9 +250,7 @@ namespace CelesteMusicPlayer
                         {
                             File.Delete(partial);
                         }
-                        catch
-                        {
-                        }
+                        catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
                     }
 
                     targetWav = cachedWav;
@@ -300,7 +296,7 @@ namespace CelesteMusicPlayer
                                 break;
                             }
 
-                            try { File.Delete(fallback); } catch { }
+                            try { File.Delete(fallback); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
                         }
 
                         if (!ok)
@@ -651,7 +647,7 @@ namespace CelesteMusicPlayer
                 using (Process proc = Process.Start(psi)!)
                 {
                     // 转码很耗 CPU；降为低优先级，避免抢占 WASAPI 独占（Pro Audio）渲染线程造成播放卡顿
-                    try { proc.PriorityClass = ProcessPriorityClass.BelowNormal; } catch { }
+                    try { proc.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
                     proc.ErrorDataReceived += (_, e) =>
                     {
                         if (e.Data == null)
@@ -794,9 +790,7 @@ namespace CelesteMusicPlayer
                     return h * 3600 + m * 60 + s;
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
 
             return 0;
         }
@@ -867,16 +861,12 @@ namespace CelesteMusicPlayer
                         removedBytes += SafeFileLength(files[i].FullName);
                         files[i].Delete();
                     }
-                    catch
-                    {
-                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
                 }
 
                 StartupLog.Write($"[TrimCache] 超上限(max={maxBytes/ (1024.0*1024.0):0.0}MB)，清理最早 {removeCount} 个文件，释放约 {removedBytes / (1024.0*1024.0):0.0}MB，删除前总计 {total / (1024.0*1024.0):0.0}MB");
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
         }
 
         private static long SafeFileLength(string path)
@@ -914,9 +904,7 @@ namespace CelesteMusicPlayer
                 {
                     File.Delete(_lastTempWav);
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
 
                 _lastTempWav = null;
             }
@@ -1077,7 +1065,7 @@ namespace CelesteMusicPlayer
                 // await 回来后若播放代次已变化（切歌/重播/停止）→ 预加载已失效，回收
                 if (gen != _playGeneration || _disposed || _graph == null || _deviceNode == null)
                 {
-                    try { node.Stop(); node.Dispose(); } catch { }
+                    try { node.Stop(); node.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
                     return false;
                 }
 
@@ -1136,9 +1124,7 @@ namespace CelesteMusicPlayer
                     _nextGraphNode.Stop();
                     _nextGraphNode.Dispose();
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
 
                 _nextGraphNode = null;
             }
@@ -1212,9 +1198,7 @@ namespace CelesteMusicPlayer
                 Position = position;
                 _pausedPosition = position;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
         }
 
         public void Stop()
@@ -1293,9 +1277,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
             return TimeSpan.Zero;
         }
 
@@ -1316,7 +1298,7 @@ namespace CelesteMusicPlayer
                 if (!await RunFfmpegAsync(transcodeArgs, status)) return null;
                 if (!File.Exists(partial)) return null;
                 try { File.Move(partial, cachedWav); }
-                catch { try { File.Delete(partial); } catch { } }
+                catch { try { File.Delete(partial); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); } }
                 TrimCache(cacheDir);
                 return cachedWav;
             }
@@ -1350,9 +1332,7 @@ namespace CelesteMusicPlayer
                 _inputNode.RemoveOutgoingConnection(_deviceNode);
                 _inputNode.AddOutgoingConnection(_deviceNode, _userVolume);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
         }
 
         /// <summary>应用 10 段均衡器增益（dB，-12..12）；null 表示旁路（移除 EQ 效果）。</summary>
@@ -1442,7 +1422,7 @@ namespace CelesteMusicPlayer
 
             _isPlaying = false;
             // A/B 诊断后端：停止并释放 NAudio DSD
-            try { _dsdNaudioBackend?.Dispose(); } catch { }
+            try { _dsdNaudioBackend?.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
             _dsdNaudioBackend = null;
             _positionTimer?.Stop();
             Position = TimeSpan.Zero;

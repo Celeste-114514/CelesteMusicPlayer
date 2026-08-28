@@ -22,7 +22,7 @@ namespace CelesteMusicPlayer
         private readonly bool _isFloat;
 
         // EQ：动态 band 滤波链（按 band 列表/类型重建，render 线程整数组原子读，UI 线程原子替换）
-        private volatile BiQuadFilter[] _eqFilters = Array.Empty<BiQuadFilter>();
+        private volatile BiQuadFilter[][] _eqFilters = Array.Empty<BiQuadFilter[]>();
         private double _preampGain = 1.0; // preamp（double 不能 volatile；仅在 EQ 状态更新时变化，读侧极端误差可忽略）
         private bool _eqEnabled;
 
@@ -84,7 +84,7 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            if (curve.Bands.Count == 0) { _eqEnabled = false; _eqFilters = Array.Empty<BiQuadFilter>(); RefreshActive(); return; }
+            if (curve.Bands.Count == 0) { _eqEnabled = false; _eqFilters = Array.Empty<BiQuadFilter[]>(); RefreshActive(); return; }
             UpdateEqCurve(curve);
         }
 
@@ -97,12 +97,11 @@ namespace CelesteMusicPlayer
             {
                 _eqEnabled = false;
                 _preampGain = 1.0;
-                _eqFilters = Array.Empty<BiQuadFilter>();
+                _eqFilters = Array.Empty<BiQuadFilter[]>();
                 RefreshActive();
                 return;
             }
 
-            var filters = new List<BiQuadFilter>();
             // 自动峰值余量补偿：估算所有启用 band 在频域的最大叠加增益 peakDb，
             // 当用户未手动设 preamp 时，自动施加负余量把输出压回 0dB，避免极端增益（如 +10dB 低频增强）
             // 触发 biQuad 过冲后只能靠削波产生爆音（对齐 ECHO 自动增益/余量思路）。
@@ -120,14 +119,26 @@ namespace CelesteMusicPlayer
                 _preampGain = Math.Pow(10.0, autoCompDb / 20.0);
             }
 
-            foreach (var band in curve.Bands)
+            // 按声道数建立独立滤波链：每个声道各持一组全新的 BiQuadFilter 实例。
+            // BiQuadFilter.Transform 是有状态的，共用实例会把交错多声道当成更高采样率单声道，
+            // 导致频响偏移（立体声下一个八度，多声道更多）。此前只建了 L/R 两条链，
+            // 使得 5.1 等多声道的第 3~6 声道完全不过 EQ。这里按 _channels 建链，所有声道都独立滤波。
+            int chCount = Math.Max(1, _channels);
+            var chains = new BiQuadFilter[chCount][];
+            for (int c = 0; c < chCount; c++)
             {
-                if (band is not { Enabled: true }) continue;
-                var f = BuildBandFilter(band);
-                if (f != null) filters.Add(f);
+                var list = new List<BiQuadFilter>();
+                foreach (var band in curve.Bands)
+                {
+                    if (band is not { Enabled: true }) continue;
+                    var f = BuildBandFilter(band);
+                    if (f != null) list.Add(f);
+                }
+
+                chains[c] = list.ToArray();
             }
 
-            _eqFilters = filters.ToArray();
+            _eqFilters = chains;
             _eqEnabled = true;
             RefreshActive();
         }
@@ -379,8 +390,6 @@ namespace CelesteMusicPlayer
             bool isFloat = _isFloat;
             int bits = _format.BitsPerSample;
             double gainL = _gainL, gainR = _gainR;
-            BiQuadFilter[] eq = _eqFilters;
-            int eqCount = eq.Length;
             bool stereo = _channels >= 2;
             bool wantsClip = doHeadroom || doLimiter || doEq || doCh || _rgActive; // 只要有任何 DSP 即需 Clamp 保护
             float preampGain = (float)_preampGain;
@@ -430,33 +439,73 @@ namespace CelesteMusicPlayer
                 for (int i = 0; i < n; i++, bi += 2) buf[i] = (short)(b[bi] | (b[bi + 1] << 8)) / 32768f;
             }
 
-            // 逐帧 DSP
+            // 逐帧 DSP。
+            // 多声道：所有声道都经过「音量 → EQ → ReplayGain → Headroom → 限幅」这套全局 DSP；
+            // 仅当立体声（前两个声道）时再做声道处理（交换 / mono / 反相 / 左右增益）。
+            // 旧实现只处理 L/R 两声道，5.1 等多声道的第 3~6 声道完全不过任何 DSP。
+            BiQuadFilter[][] eq = _eqFilters;
+            int eqChains = eq.Length;
+
+            // ReplayGain 与 Headroom 的渐变进度按「每帧」推进一次（不随声道数放大）。
+            // 旧实现把这套推进写在声道循环里、随声道数翻倍，多声道下渐变速度会与预期不符。
+            if (rgActive)
+            {
+                if (rgRampLeft > 0)
+                {
+                    rgRampLeft--;
+                    rgCurrentDb += (rgTargetDb - rgCurrentDb) / rgt;
+                }
+                else
+                {
+                    rgCurrentDb = rgTargetDb;
+                }
+            }
+
+            float rgg = rgActive ? (float)Math.Pow(10.0, rgCurrentDb / 20.0) : 1f;
+
+            if (doHeadroom)
+            {
+                if (_headroomSmoothLeft > 0)
+                {
+                    _headroomGain += _headroomStep;
+                    _headroomSmoothLeft--;
+                }
+            }
+
+            float hg = doHeadroom ? (float)_headroomGain : 1f;
+
             for (int f = 0; f < frames; f++)
             {
-                int li = f * ch, ri = li + 1;
-                float l = buf[li];
-                float r = stereo ? buf[ri] : l;
-                // 软件总音量（共享/ASIO）：采样级增益，恒在 EQ/声道/RG 之前（volatile 实时可调）。
-                if (volumeGain != 1f)
+                int baseIdx = f * ch;
+                for (int c = 0; c < ch; c++)
                 {
-                    l *= volumeGain;
-                    if (stereo) r *= volumeGain;
-                }
+                    int idx = baseIdx + c;
+                    float s = buf[idx];
 
-                if (doEq)
-                {
-                    for (int k = 0; k < eqCount; k++) l = eq[k].Transform(l);
-                    if (stereo) for (int k = 0; k < eqCount; k++) r = eq[k].Transform(r);
-                    if (preampGain != 1f)
+                    // 软件总音量（采样级增益，恒在 EQ/声道/RG 之前）
+                    if (volumeGain != 1f) s *= volumeGain;
+
+                    if (doEq)
                     {
-                        l *= preampGain;
-                        if (stereo) r *= preampGain;
+                        BiQuadFilter[] chain = eq[c < eqChains ? c : 0];
+                        for (int k = 0; k < chain.Length; k++) s = chain[k].Transform(s);
+                        if (preampGain != 1f) s *= preampGain;
                     }
+
+                    if (rgActive) s *= rgg;
+                    if (doHeadroom) s *= hg;
+                    if (doLimiter) s = SoftLimit(s);
+                    else if (wantsClip) s = SoftLimit(s);
+
+                    buf[idx] = s;
                 }
 
-                if (doCh)
+                // 声道处理：仅立体声前两声道有意义
+                if (doCh && stereo)
                 {
-                    if (chSwap && stereo) (l, r) = (r, l);
+                    int li = baseIdx, ri = baseIdx + 1;
+                    float l = buf[li], r = buf[ri];
+                    if (chSwap) (l, r) = (r, l);
                     if (chMono)
                     {
                         float m = monoL ? l : monoR ? r : (l + r) * 0.5f;
@@ -466,57 +515,10 @@ namespace CelesteMusicPlayer
                     l = (float)(l * gainL);
                     r = (float)(r * gainR);
                     if (chInvL) l = -l;
-                    if (chInvR && stereo) r = -r;
+                    if (chInvR) r = -r;
+                    buf[li] = l;
+                    buf[ri] = r;
                 }
-
-                // ReplayGain：目标增益 10ms 平滑渐变（对齐 ECHO ReplayGainProcessor.processBlock）
-                if (rgActive)
-                {
-                    if (rgRampLeft > 0)
-                    {
-                        rgRampLeft--;
-                        rgCurrentDb += (rgTargetDb - rgCurrentDb) / rgt;
-                    }
-                    else
-                    {
-                        rgCurrentDb = rgTargetDb;
-                    }
-
-                    float rgg = (float)Math.Pow(10.0, rgCurrentDb / 20.0);
-                    l *= rgg;
-                    if (stereo) r *= rgg;
-                }
-
-                if (doHeadroom)
-                {
-                    if (_headroomSmoothLeft > 0)
-                    {
-                        _headroomGain += _headroomStep;
-                        _headroomSmoothLeft--;
-                    }
-
-                    float hg = (float)_headroomGain;
-                    l *= hg;
-                    if (stereo) r *= hg;
-                }
-
-                if (doLimiter)
-                {
-                    l = SoftLimit(l);
-                    if (stereo) r = SoftLimit(r);
-                    wantsClip = false;
-                }
-
-                if (wantsClip)
-                {
-                    // wantsClip 为 true 仅在 doLimiter=false 时成立（doLimiter 分支已置 false 并 SoftLimit）。
-                    // 用软削波而非硬 Clamp，避免 EQ/声道增益过头时硬削爆音。
-                    l = SoftLimit(l);
-                    if (stereo) r = SoftLimit(r);
-                }
-
-                buf[li] = l;
-                if (stereo) buf[ri] = r;
             }
 
             // 回写 RG 渐变进度（供下一次 block 继续）

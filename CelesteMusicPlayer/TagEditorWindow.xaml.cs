@@ -194,9 +194,7 @@ namespace CelesteMusicPlayer
                 _coverBytes = bytes;
                 CurrentCoverSizeText.Text = bmp.PixelWidth > 0 ? $"{bmp.PixelWidth} × {bmp.PixelHeight}px" : "封面尺寸";
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorWindow.xaml.cs", caught); }
         }
 
         private TagEditModel BuildModelFromUi()
@@ -256,9 +254,7 @@ namespace CelesteMusicPlayer
             {
                 TagsSaved?.Invoke(_singlePath);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorWindow.xaml.cs", caught); }
 
             Close();
         }
@@ -283,11 +279,9 @@ namespace CelesteMusicPlayer
                     if (!string.IsNullOrWhiteSpace(model.Lyrics)) merged.Lyrics = model.Lyrics;
                     TagEditorService.SaveTag(path, merged);
                     ok++;
-                    try { TagsSaved?.Invoke(path); } catch { }
+                    try { TagsSaved?.Invoke(path); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorWindow.xaml.cs", caught); }
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorWindow.xaml.cs", caught); }
             }
 
             FilePathText.Text = ok == _filePaths.Count
@@ -461,9 +455,7 @@ namespace CelesteMusicPlayer
                         }
                     }
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorWindow.xaml.cs", caught); }
             }
             else
             {
@@ -528,7 +520,7 @@ namespace CelesteMusicPlayer
                 coverOk = await OnlineMusicApi.EmbedCoverUrlAsync(_singlePath, sel.CoverUrl);
             }
 
-            try { TagsSaved?.Invoke(_singlePath); } catch { }
+            try { TagsSaved?.Invoke(_singlePath); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorWindow.xaml.cs", caught); }
 
             // 同步左侧当前标签与封面
             TagEditModel fresh = TagEditorService.ReadTag(_singlePath);
@@ -564,9 +556,7 @@ namespace CelesteMusicPlayer
                 {
                     Cover = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(url));
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorWindow.xaml.cs", caught); }
             }
         }
 

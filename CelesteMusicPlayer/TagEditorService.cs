@@ -71,9 +71,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorService.cs", caught); }
 
             return model;
         }
@@ -115,9 +113,7 @@ namespace CelesteMusicPlayer
 
                 file.Save();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorService.cs", caught); }
         }
 
         public static void SaveEmbeddedLyrics(string path, string lyrics)
@@ -133,9 +129,7 @@ namespace CelesteMusicPlayer
                 file.Tag.Lyrics = lyrics ?? string.Empty;
                 file.Save();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorService.cs", caught); }
         }
 
         public static void ClearEmbeddedLyrics(string path)

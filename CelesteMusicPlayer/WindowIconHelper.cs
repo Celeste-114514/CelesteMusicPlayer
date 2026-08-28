@@ -17,9 +17,7 @@ namespace CelesteMusicPlayer
                     window.AppWindow.SetIcon(iconPath);
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("WindowIconHelper.cs", caught); }
         }
     }
 }

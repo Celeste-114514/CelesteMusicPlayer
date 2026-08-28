@@ -54,9 +54,7 @@ namespace CelesteMusicPlayer
                 {
                     Cover = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage(new Uri(song.CoverUrl));
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineSearchWindow.xaml.cs", caught); }
             }
         }
     }
@@ -320,9 +318,7 @@ namespace CelesteMusicPlayer
                     CoverSizeText.Text = "无封面";
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineSearchWindow.xaml.cs", caught); }
 
             // 歌词预览
             if (string.Equals(song.Source, "iTunes", StringComparison.OrdinalIgnoreCase)

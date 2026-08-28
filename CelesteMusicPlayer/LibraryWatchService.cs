@@ -123,9 +123,7 @@ namespace CelesteMusicPlayer
             {
                 Changed?.Invoke(paths);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("LibraryWatchService.cs", caught); }
         }
 
         public void Dispose()

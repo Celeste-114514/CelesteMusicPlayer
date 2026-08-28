@@ -161,9 +161,7 @@ namespace CelesteMusicPlayer
                     CreationCollisionOption.ReplaceExisting);
                 await FileIO.WriteBytesAsync(file, imageBytes);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("ArtistAvatarStore.cs", caught); }
         }
     }
 }

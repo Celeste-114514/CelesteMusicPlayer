@@ -50,9 +50,7 @@ namespace CelesteMusicPlayer
 
                 File.WriteAllText(path, JsonSerializer.Serialize(value, Indented));
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("JsonFile.cs", caught); }
         }
 
         /// <summary>基于 JSON 往返的深拷贝：返回 <paramref name="value"/> 的独立副本，防止外部修改污染缓存。</summary>

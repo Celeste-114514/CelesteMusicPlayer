@@ -58,9 +58,7 @@ namespace CelesteMusicPlayer
                             return _decoders[i];
                         }
                     }
-                    catch
-                    {
-                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DsdDecoderRegistry.cs", caught); }
                 }
             }
 

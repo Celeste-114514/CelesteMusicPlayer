@@ -200,9 +200,7 @@ namespace CelesteMusicPlayer
                 {
                     Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{item.FilePath}\"") { UseShellExecute = true });
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DuplicateFilesWindow.xaml.cs", caught); }
             };
             flyout.Items.Add(open);
 

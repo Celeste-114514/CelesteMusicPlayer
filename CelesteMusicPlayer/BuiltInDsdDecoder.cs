@@ -65,7 +65,7 @@ namespace CelesteMusicPlayer
             }
 
             // 已全部读入内存，可关闭底层文件句柄（样本读取不再触碰磁盘）
-            try { fs.Dispose(); } catch { }
+            try { fs.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("BuiltInDsdDecoder.cs", caught); }
         }
 
         public DsdRate Rate => _rate;

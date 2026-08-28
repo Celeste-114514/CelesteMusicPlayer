@@ -50,24 +50,24 @@ namespace CelesteMusicPlayer
             }
             catch (Exception ex)
             {
-                try { StartupLog.Write("[NAudioDSD] Start 失败: " + ex); } catch { }
+                try { StartupLog.Write("[NAudioDSD] Start 失败: " + ex); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NaudioDsdBackend.cs", caught); }
                 return false;
             }
         }
 
         public void Pause()
         {
-            try { _out?.Pause(); } catch { }
+            try { _out?.Pause(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NaudioDsdBackend.cs", caught); }
         }
 
         public void Resume()
         {
-            try { _out?.Play(); } catch { }
+            try { _out?.Play(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NaudioDsdBackend.cs", caught); }
         }
 
         public void Stop()
         {
-            try { _out?.Stop(); } catch { }
+            try { _out?.Stop(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NaudioDsdBackend.cs", caught); }
         }
 
         public void Dispose()
@@ -78,9 +78,9 @@ namespace CelesteMusicPlayer
             }
 
             _disposed = true;
-            try { _out?.Stop(); _out?.Dispose(); } catch { }
+            try { _out?.Stop(); _out?.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NaudioDsdBackend.cs", caught); }
             _out = null;
-            try { _wrapped.Dispose(); } catch { }
+            try { _wrapped.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NaudioDsdBackend.cs", caught); }
         }
 
         /// <summary>把 <see cref="IWaveSourceProvider"/> 适配为 NAudio <see cref="IWaveProvider"/>。</summary>

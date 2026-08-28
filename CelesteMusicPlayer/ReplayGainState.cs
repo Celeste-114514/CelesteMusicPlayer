@@ -103,7 +103,7 @@ namespace CelesteMusicPlayer
                         if (ParsePeak(pk, out double p)) peak = p;
                     }
                 }
-                catch { }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("ReplayGainState.cs", caught); }
 
                 // MP3/AAC(ID3v2)：TXXX:REPLAYGAIN_*
                 try
@@ -120,7 +120,7 @@ namespace CelesteMusicPlayer
                         }
                     }
                 }
-                catch { }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("ReplayGainState.cs", caught); }
 
                 return any ? (trackGain, albumGain, peak) : default((double, double, double)?);
             }

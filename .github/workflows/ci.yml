@@ -1,0 +1,32 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master, develop ]
+  pull_request:
+    branches: [ main, master, develop ]
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 9 SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+
+      - name: Restore main project
+        run: dotnet restore CelesteMusicPlayer/CelesteMusicPlayer.csproj
+
+      - name: Build main (Release x64 self-contained)
+        # 先编译主程序 Release，测试工程通过 HintPath 引用其产物（CelesteMusicPlayer.dll）。
+        # 本步骤也验证主程序本身能编译通过。
+        run: dotnet build CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -p:Platform=x64 -p:CelesteSelfContainedDistribute=true --no-restore
+
+      - name: Run DSP/EQ regression tests
+        # 自动验证：EQ 声道隔离（无八度偏移）、多声道各声道均生效、无 DSP 时数值直通。
+        # 任意不变量被破坏即判失败，红标提醒。
+        run: dotnet test tools/EqRegression/EqRegression.csproj -c Debug -p:Platform=x64

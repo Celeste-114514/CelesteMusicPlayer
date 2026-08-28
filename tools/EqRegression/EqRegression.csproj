@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <!-- 测试工程是普通库，由 dotnet test 驱动；消费主程序集的 internal DSP 类型，不引入 WinAppSDK 打包工具链。 -->
+    <OutputType>Library</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Platforms>x64</Platforms>
+    <!-- 就近大版本运行库：本机/CI 装了 .NET 9 就用 9；只有 .NET 10 时自动滚到 10。避免为跑测试强装特定运行库。 -->
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 主程序集已编译产物（Release/net9.0）。主 csproj 已 InternalsVisibleTo=EqRegression。 -->
+    <Reference Include="CelesteMusicPlayer">
+      <HintPath>..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\CelesteMusicPlayer.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <!-- 加载主程序集会触发 WinAppSDK 模块初始化，需要原生运行库（Microsoft.WindowsAppRuntime*）在测试输出目录旁。
+       从主程序 Release 自包含产物拷贝（不入库，仅本地/CI 测试用）。 -->
+  <Target Name="CopyWinAppSdkRuntime" AfterTargets="Build">
+    <ItemGroup>
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.WindowsAppRuntime.*" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.Windows.SDK.NET.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_Wasdk)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

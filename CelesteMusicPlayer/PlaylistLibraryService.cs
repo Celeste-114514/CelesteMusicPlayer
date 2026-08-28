@@ -40,9 +40,7 @@ namespace CelesteMusicPlayer
                 {
                     p.TrackFilePaths.AddRange(NamedPlaylistStore.LoadSongs(name));
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("PlaylistLibraryService.cs", caught); }
 
                 Items.Add(p);
             }
@@ -149,9 +147,7 @@ namespace CelesteMusicPlayer
                 string p = CoverFile(name);
                 if (System.IO.File.Exists(p)) System.IO.File.Delete(p);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("PlaylistLibraryService.cs", caught); }
         }
     }
 }

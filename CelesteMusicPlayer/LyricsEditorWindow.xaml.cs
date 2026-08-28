@@ -86,9 +86,7 @@ namespace CelesteMusicPlayer
                     LyricsTextBox.Text = File.ReadAllText(_lrcPath, Encoding.UTF8);
                     return;
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("LyricsEditorWindow.xaml.cs", caught); }
             }
 
             LyricsTextBox.Text = string.Empty;

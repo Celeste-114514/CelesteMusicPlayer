@@ -63,18 +63,14 @@ namespace CelesteMusicPlayer
                         classes.DeleteSubKeyTree(normalized, throwOnMissingSubKey: false);
                     }
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("FileAssociationHelper.cs", caught); }
             }
 
             try
             {
                 classes.DeleteSubKeyTree(ProgId, throwOnMissingSubKey: false);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("FileAssociationHelper.cs", caught); }
         }
 
         public static bool IsRegistered()

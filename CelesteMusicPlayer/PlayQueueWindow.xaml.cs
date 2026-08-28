@@ -56,9 +56,7 @@ namespace CelesteMusicPlayer
                 titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
                 titleBar.ExtendsContentIntoTitleBar = true;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("PlayQueueWindow.xaml.cs", caught); }
         }
 
         /// <summary>刷新：高亮当前播放项 + 更新"接下来 N 首"计数。</summary>
@@ -89,9 +87,7 @@ namespace CelesteMusicPlayer
                     QueueListView.SelectedItem = null;
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("PlayQueueWindow.xaml.cs", caught); }
         }
 
         private void QueueListView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)

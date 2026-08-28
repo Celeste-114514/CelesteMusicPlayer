@@ -251,9 +251,7 @@ namespace CelesteMusicPlayer
                     list.Add((dev.ID, dev.DeviceFriendlyName));
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
             return list;
         }
@@ -449,11 +447,11 @@ namespace CelesteMusicPlayer
                         {
                             LastError = nat.LastError ?? "原生 WASAPI 初始化失败";
                             StartupLog.Write("WasapiExclusive 原生初始化失败: " + (nat.LastError ?? "未知") + " | 源格式=" + (_waveFile?.WaveFormat.SampleRate) + "/" + (_waveFile?.WaveFormat.BitsPerSample) + "bit/" + (_waveFile?.WaveFormat.Channels) + "ch");
-                            try { Marshal.ReleaseComObject(natDev); } catch { }
+                            try { Marshal.ReleaseComObject(natDev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
                             Cleanup();
                             return false;
                         }
-                        try { Marshal.ReleaseComObject(natDev); } catch { }
+                        try { Marshal.ReleaseComObject(natDev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
                         _native = nat;
                         _useNative = true;
@@ -500,9 +498,7 @@ namespace CelesteMusicPlayer
                         _waveFile.CurrentTime = seekTo.Value;
                         Position = seekTo.Value;
                     }
-                    catch
-                    {
-                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
                 }
 
                 if (_useNative)
@@ -637,12 +633,12 @@ namespace CelesteMusicPlayer
                     StartupLog.Write("DSD 独占初始化失败: " + LastError
                         + " | DoP容器=" + dop.WaveFormat.SampleRate + "/" + dop.WaveFormat.BitsPerSample + "bit/" + dop.WaveFormat.Channels + "ch"
                         + " | rate=" + dsd.Rate);
-                    try { Marshal.ReleaseComObject(natDev); } catch { }
+                    try { Marshal.ReleaseComObject(natDev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
                     Cleanup();
                     return false;
                 }
 
-                try { Marshal.ReleaseComObject(natDev); } catch { }
+                try { Marshal.ReleaseComObject(natDev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
                 _native = nat;
                 _useNative = true;
@@ -658,7 +654,7 @@ namespace CelesteMusicPlayer
                 _pendingSeekTarget = null;
                 if (seekTo != null && seekTo.Value > TimeSpan.Zero)
                 {
-                    try { dop.Seek(seekTo.Value); Position = seekTo.Value; } catch { }
+                    try { dop.Seek(seekTo.Value); Position = seekTo.Value; } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
                 }
 
                 _native.Ended += Native_Ended;
@@ -789,9 +785,7 @@ namespace CelesteMusicPlayer
             {
                 _waveFile.CurrentTime = position;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
         }
 
         /// <summary>暂停前记录的真实设备主音量（供恢复使用）；未暂停或无设备返回 -1。</summary>
@@ -806,9 +800,7 @@ namespace CelesteMusicPlayer
                 {
                     return _device.AudioEndpointVolume.MasterVolumeLevelScalar;
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
             }
 
             return -1f;
@@ -829,9 +821,7 @@ namespace CelesteMusicPlayer
                         float dev = _resumeVolume * _resumeVolume;
                         _device.AudioEndpointVolume.MasterVolumeLevelScalar = dev;
                     }
-                    catch
-                    {
-                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
                 }
 
                 return;
@@ -984,9 +974,7 @@ namespace CelesteMusicPlayer
                             _output?.Stop(); // 触发 Output_PlaybackStopped（内含 PlaybackStopped）
                         }
                     }
-                    catch
-                    {
-                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
                 }
             }
 
@@ -1003,24 +991,20 @@ namespace CelesteMusicPlayer
                 {
                     _output.Stop();
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
                 try
                 {
                     _output.Dispose();
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
             }
 
             _output = null;
             if (_native != null)
             {
-                try { _native.Ended -= Native_Ended; _native.Stop(); } catch { }
-                try { _native.Dispose(); } catch { }
+                try { _native.Ended -= Native_Ended; _native.Stop(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+                try { _native.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
                 _native = null;
             }
             _useNative = false;
@@ -1043,17 +1027,15 @@ namespace CelesteMusicPlayer
                 {
                     _output.Dispose();
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
                 _output = null;
             }
 
             if (_native != null)
             {
-                try { _native.Ended -= Native_Ended; _native.Stop(); } catch { }
-                try { _native.Dispose(); } catch { }
+                try { _native.Ended -= Native_Ended; _native.Stop(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+                try { _native.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
                 _native = null;
             }
             _useNative = false;

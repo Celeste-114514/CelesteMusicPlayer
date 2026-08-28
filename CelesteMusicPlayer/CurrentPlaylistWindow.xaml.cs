@@ -198,9 +198,7 @@ namespace CelesteMusicPlayer
             {
                 PlaylistView.CanReorderItems = string.IsNullOrEmpty(q);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("CurrentPlaylistWindow.xaml.cs", caught); }
 
             _suppressSelectionUi = true;
             try
@@ -216,9 +214,7 @@ namespace CelesteMusicPlayer
                             {
                                 PlaylistView.SelectedItems.Add(song);
                             }
-                            catch
-                            {
-                            }
+                            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("CurrentPlaylistWindow.xaml.cs", caught); }
                         }
                     }
                 }

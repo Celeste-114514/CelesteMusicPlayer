@@ -22,9 +22,7 @@ namespace CelesteMusicPlayer
                 window.SystemBackdrop = new DesktopAcrylicBackdrop();
                 return;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("FrostedGlass.cs", caught); }
 
             try
             {

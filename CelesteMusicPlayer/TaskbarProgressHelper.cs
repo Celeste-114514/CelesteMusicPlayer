@@ -45,9 +45,7 @@ namespace CelesteMusicPlayer
                 _list.SetProgressState(_hwnd, paused ? TbpPaused : TbpNormal);
                 _list.SetProgressValue(_hwnd, (ulong)Math.Max(0, completed), (ulong)Math.Max(1, total));
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TaskbarProgressHelper.cs", caught); }
         }
 
         public void Clear()
@@ -61,9 +59,7 @@ namespace CelesteMusicPlayer
             {
                 _list.SetProgressState(_hwnd, TbpNoProgress);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TaskbarProgressHelper.cs", caught); }
         }
 
         public void Dispose() => Clear();

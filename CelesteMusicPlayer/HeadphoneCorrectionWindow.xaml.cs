@@ -148,9 +148,7 @@ namespace CelesteMusicPlayer
                 SearchStatusText.Text = results.Count == 0 ? "未找到匹配的耳机（换个品牌/型号试试）" : $"找到 {results.Count} 款（点击选曲线）";
                 ClearDetail();
             }
-            catch (OperationCanceledException)
-            {
-            }
+            catch (OperationCanceledException caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HeadphoneCorrectionWindow.xaml.cs", caught); }
             catch (Exception ex)
             {
                 SearchStatusText.Text = "搜索失败：" + ex.Message;

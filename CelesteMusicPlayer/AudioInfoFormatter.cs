@@ -363,9 +363,7 @@ namespace CelesteMusicPlayer
                         kbps = pr.AudioBitrate;
                     }
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioInfoFormatter.cs", caught); }
 
                 if (bits <= 0 || kbps <= 0)
                 {
@@ -476,9 +474,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioInfoFormatter.cs", caught); }
         }
 
         private static string? FindFfmpeg()

@@ -293,9 +293,7 @@ namespace CelesteMusicPlayer
             {
                 Applied?.Invoke();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("EqualizerWindow.xaml.cs", caught); }
         }
 
         private void ResetButton_Click(object sender, RoutedEventArgs e)

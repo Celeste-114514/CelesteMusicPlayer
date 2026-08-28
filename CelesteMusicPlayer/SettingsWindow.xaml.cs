@@ -207,9 +207,7 @@ namespace CelesteMusicPlayer
             {
                 w.DispatcherQueue.TryEnqueue(w.OpenMediaLibrary);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
         }
 
         /// <summary>选中并显示设置窗口的「媒体库」导航板块。</summary>
@@ -228,9 +226,7 @@ namespace CelesteMusicPlayer
 
                 ShowPanel("MediaLib");
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
         }
 
         public static void CloseIfOpen()
@@ -531,9 +527,7 @@ namespace CelesteMusicPlayer
                 };
                 _ = dialog.ShowAsync();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
         }
 
 
@@ -1086,9 +1080,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
         }
 
         /// <summary>遍历可视树收集指定类型后代。</summary>
@@ -1153,9 +1145,7 @@ namespace CelesteMusicPlayer
                     key.DeleteValue(AutoRunValueName, throwOnMissingValue: false);
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
         }
 
         private void SettingsNav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -1235,9 +1225,7 @@ namespace CelesteMusicPlayer
                     MainWindow.Instance?.RestartApp();
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
         }
 
         private void SettingCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1263,9 +1251,7 @@ namespace CelesteMusicPlayer
                     PersistAllFromUi();
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
         }
 
         private void ClearBackgroundButton_Click(object sender, RoutedEventArgs e)
@@ -1512,9 +1498,7 @@ namespace CelesteMusicPlayer
             PersistAllFromUi();
         
             }
-            catch
-            {
-            }}
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }}
 
         private async void BrowseCoverFolderButton_Click(object sender, RoutedEventArgs e)
         {
@@ -1531,9 +1515,7 @@ namespace CelesteMusicPlayer
             PersistAllFromUi();
         
             }
-            catch
-            {
-            }}
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }}
 
         private async void AddWatchFolderButton_Click(object sender, RoutedEventArgs e)
         {
@@ -1585,9 +1567,7 @@ namespace CelesteMusicPlayer
                     UseShellExecute = true
                 });
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
         }
 
         private async void ExportSettingsButton_Click(object sender, RoutedEventArgs e)
@@ -1747,9 +1727,7 @@ namespace CelesteMusicPlayer
             ReloadHotkeyList();
         
             }
-            catch
-            {
-            }}
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }}
 
         private async Task<string?> CaptureHotkeyAsync(string actionName)
         {

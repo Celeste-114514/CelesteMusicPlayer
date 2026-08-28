@@ -1,7 +1,11 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 本地签名密码从 csproj 外置到 CelesteMusicPlayer.signing.props（已被 .gitignore 忽略，不入库）。
+       仓库克隆后若需本地 Debug MSIX 自签名，请自行创建该文件填入密码；缺失则 Debug 打包不签名（不影响 Release 自包含）。 -->
+  <Import Project="CelesteMusicPlayer.signing.props" Condition="Exists('CelesteMusicPlayer.signing.props')" />
+
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>CelesteMusicPlayer</RootNamespace>
     <Version>26.8.27</Version>
@@ -56,6 +60,11 @@
     <Manifest Include="$(ApplicationManifest)" />
   </ItemGroup>
 
+  <!-- 允许 EQ 声道隔离回归测试工程访问 internal 类型 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="EqRegression" />
+  </ItemGroup>
+
   <!--
     Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
     Tools extension to be activated for this project even if the Windows App SDK Nuget
@@ -70,6 +79,7 @@
     <!-- 2.2+ 存在 TextBox/自定义标题栏光标闪烁回归；1.8 已修复 ExtendsContentIntoTitleBar 指针问题 -->
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251106002" />
     <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageReference Include="ToolGood.Words.Pinyin" Version="3.1.0" />
     <PackageReference Include="System.Drawing.Common" Version="9.0.1" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
@@ -83,7 +93,7 @@
   <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(Platform)' == 'x64' and '$(EnableMsixTooling)' == 'true'">
     <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
     <PackageCertificateKeyFile>CelesteMusicPlayer_TemporaryKey.pfx</PackageCertificateKeyFile>
-    <PackageCertificatePassword>celeste123</PackageCertificatePassword>
+    <PackageCertificatePassword>$(PackageCertificatePassword)</PackageCertificatePassword>
   </PropertyGroup>
 
   <!--

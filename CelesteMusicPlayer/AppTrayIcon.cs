@@ -49,18 +49,14 @@ namespace CelesteMusicPlayer
             {
                 _icon?.Dispose();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppTrayIcon.cs", caught); }
 
             _icon = null;
             try
             {
                 _drawingIcon?.Dispose();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppTrayIcon.cs", caught); }
 
             _drawingIcon = null;
             GC.SuppressFinalize(this);

@@ -28,9 +28,7 @@ namespace CelesteMusicPlayer
                 {
                     StartupLog.WriteException("AppDomain.UnhandledException", exArgs.ExceptionObject as Exception);
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("App.xaml.cs", caught); }
             };
 
             UnhandledException += (sender, e) =>
@@ -55,9 +53,7 @@ namespace CelesteMusicPlayer
                         _ = dialog.ShowAsync();
                     }
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("App.xaml.cs", caught); }
             };
         }
 
@@ -72,9 +68,7 @@ namespace CelesteMusicPlayer
             {
                 ThemeColorService.ApplyThemeResources(AppSettingsStore.Load());
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("App.xaml.cs", caught); }
 
             try
             {

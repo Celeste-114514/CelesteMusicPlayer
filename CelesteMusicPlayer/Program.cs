@@ -27,9 +27,7 @@ namespace CelesteMusicPlayer
             {
                 Directory.SetCurrentDirectory(baseDir);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("Program.cs", caught); }
 
             Environment.SetEnvironmentVariable("MICROSOFT_WINDOWSAPPRUNTIME_BASE_DIRECTORY", baseDir);
             StartupLog.Write("Main begin, BaseDirectory=" + baseDir);
@@ -59,9 +57,7 @@ namespace CelesteMusicPlayer
                         "CelesteMusicPlayer",
                         MbIconError);
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("Program.cs", caught); }
             }
         }
     }

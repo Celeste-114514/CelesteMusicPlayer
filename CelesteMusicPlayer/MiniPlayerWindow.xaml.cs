@@ -101,41 +101,31 @@ namespace CelesteMusicPlayer
                 {
                     ThemeColorService.ThemeColorChanged -= OnThemeColorChangedMini;
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
 
                 try
                 {
                     EndDrag();
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
 
                 try
                 {
                     RemoveWindowSubclassIfNeeded();
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
 
                 try
                 {
                     _marqueeTimer?.Stop();
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
 
                 try
                 {
                     ClosedByUser?.Invoke();
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
             };
         }
 
@@ -161,9 +151,7 @@ namespace CelesteMusicPlayer
                     SystemBackdrop = null;
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
         }
 
         /// <summary>主题色变化后刷新迷你播放器的强调元素(进度条等)。</summary>
@@ -178,9 +166,7 @@ namespace CelesteMusicPlayer
                 StartupLog.Write("迷你播放器主题色: " + accent.ToString() + " ProgressSlider=" + (ProgressSlider != null));
                 ThemeColorService.ApplySliderAccent(ProgressSlider, accent);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
         }
 
         public void RefreshFromOwner()
@@ -417,9 +403,7 @@ namespace CelesteMusicPlayer
                 ResizeToDips(440, heightDip);
                 PositionNearBottomCenter();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
         }
 
         private void PositionNearBottomCenter()
@@ -434,9 +418,7 @@ namespace CelesteMusicPlayer
                 int y = work.Y + work.Height - h - 72;
                 AppWindow.Move(new PointInt32(x, Math.Max(work.Y, y)));
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
         }
 
         private void TryCollapseTitleBar()
@@ -459,9 +441,7 @@ namespace CelesteMusicPlayer
                 bar.ButtonForegroundColor = transparent;
                 bar.ButtonInactiveForegroundColor = transparent;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
         }
 
         private void ApplyWindowChromeNative()
@@ -511,9 +491,7 @@ namespace CelesteMusicPlayer
                 EdgeMaskBorder.CornerRadius = new CornerRadius(CornerRadiusDip);
                 ApplyRoundedWindowRegion();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
         }
 
         private void InstallWindowSubclassIfNeeded()
@@ -606,9 +584,7 @@ namespace CelesteMusicPlayer
                 _lastRegionW = w;
                 _lastRegionH = h;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
         }
 
         private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
@@ -716,9 +692,7 @@ namespace CelesteMusicPlayer
             {
                 RootGrid.ReleasePointerCapture(e.Pointer);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
 
             e.Handled = true;
         }
@@ -769,9 +743,7 @@ namespace CelesteMusicPlayer
             {
                 ThemeColorService.ThemeColorChanged -= OnThemeColorChangedMini;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
 
             try
             {
@@ -789,9 +761,7 @@ namespace CelesteMusicPlayer
             {
                 RefreshAccentFromOwner();
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
         }
 
         private void SettingsButton_Click(object sender, RoutedEventArgs e)

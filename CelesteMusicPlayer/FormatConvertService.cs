@@ -48,9 +48,7 @@ namespace CelesteMusicPlayer
                         return candidate;
                     }
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("FormatConvertService.cs", caught); }
             }
 
             return null;

@@ -98,9 +98,7 @@ namespace CelesteMusicPlayer
                 });
                 File.WriteAllText(GetFilePath(), json);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TrackStatsStore.cs", caught); }
         }
 
         private static Dictionary<string, TrackStatsEntry> BuildDictionary(IEnumerable<TrackStatsEntry> entries)
@@ -299,9 +297,7 @@ namespace CelesteMusicPlayer
                 _cache = dict;
                 SaveCore(dict);
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TrackStatsStore.cs", caught); }
         }
 
         public static IReadOnlyList<string> GetAllFavorites()

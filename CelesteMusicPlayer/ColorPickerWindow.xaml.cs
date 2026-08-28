@@ -77,9 +77,7 @@ namespace CelesteMusicPlayer
                 {
                     _instance.Close();
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("ColorPickerWindow.xaml.cs", caught); }
 
                 _instance = null;
             }
@@ -126,9 +124,7 @@ namespace CelesteMusicPlayer
                     FrostedGlass.ApplyWindowBackdrop(this);
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("ColorPickerWindow.xaml.cs", caught); }
         }
 
         private void ApplyHexToUi(string hex)

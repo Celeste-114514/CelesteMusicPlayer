@@ -55,9 +55,7 @@ namespace CelesteMusicPlayer
                         return PostProcess(lines, settings);
                     }
                 }
-                catch
-                {
-                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("LyricsLoader.cs", caught); }
             }
 
             if (!settings.PreferInnerLyric)
@@ -117,9 +115,7 @@ namespace CelesteMusicPlayer
                     });
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("LyricsLoader.cs", caught); }
 
             return lines;
         }
@@ -183,9 +179,7 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("LyricsLoader.cs", caught); }
 
             return null;
         }
@@ -416,9 +410,7 @@ namespace CelesteMusicPlayer
                     return new UTF8Encoding(true);
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("LyricsLoader.cs", caught); }
 
             return new UTF8Encoding(encoderShouldEmitUTF8Identifier: false, throwOnInvalidBytes: false);
         }

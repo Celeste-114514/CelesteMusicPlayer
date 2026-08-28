@@ -180,7 +180,7 @@ namespace CelesteMusicPlayer
             {
                 if (_current != null)
                 {
-                    try { _current.CurrentTime = position; } catch { }
+                    try { _current.CurrentTime = position; } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SeamlessWaveProvider.cs", caught); }
                 }
 
                 DisposeNextUnsafe();
@@ -265,7 +265,7 @@ namespace CelesteMusicPlayer
             lock (_snap) { n = _next; _next = null; }
             if (n != null)
             {
-                try { n.Dispose(); } catch { }
+                try { n.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SeamlessWaveProvider.cs", caught); }
             }
         }
     }

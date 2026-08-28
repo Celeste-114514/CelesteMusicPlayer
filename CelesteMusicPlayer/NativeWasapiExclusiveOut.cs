@@ -150,8 +150,8 @@ namespace CelesteMusicPlayer
 
                 if (!SameLayout(src, kind))
                 {
-                    try { Marshal.ReleaseComObject(rc!); } catch { }
-                    try { Marshal.ReleaseComObject(ac!); } catch { }
+                    try { Marshal.ReleaseComObject(rc!); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NativeWasapiExclusiveOut.cs", caught); }
+                    try { Marshal.ReleaseComObject(ac!); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NativeWasapiExclusiveOut.cs", caught); }
                     continue; // 布局不符，无意义，释放后继续下一个
                 }
 
@@ -236,7 +236,7 @@ namespace CelesteMusicPlayer
         {
             _requestStop = true;
             _stopSignal.Set();
-            try { _renderThread?.Join(3000); } catch { }
+            try { _renderThread?.Join(3000); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NativeWasapiExclusiveOut.cs", caught); }
             // 不在此主动 Stop/Reset：由 render 线程退出时自 Stop/Reset，避免主线程与 render 线程竞争同一 COM 对象（防 AccessViolation）
             lock (_framesLock) { _framesWritten = 0; }
             IsStarted = false;
@@ -246,9 +246,9 @@ namespace CelesteMusicPlayer
         {
             if (_disposed) return;
             _disposed = true;
-            try { Stop(); } catch { }
-            try { Marshal.ReleaseComObject(_renderClient!); } catch { }
-            try { Marshal.ReleaseComObject(_audioClient!); } catch { }
+            try { Stop(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NativeWasapiExclusiveOut.cs", caught); }
+            try { Marshal.ReleaseComObject(_renderClient!); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NativeWasapiExclusiveOut.cs", caught); }
+            try { Marshal.ReleaseComObject(_audioClient!); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NativeWasapiExclusiveOut.cs", caught); }
             _stopSignal.Dispose();
             _renderSignal.Dispose();
             // 注意：_provider（SeamlessWaveProvider）归 HiFiOutputBackend 所有，不在此释放。
@@ -443,7 +443,7 @@ namespace CelesteMusicPlayer
 
                 bool completed = !_requestStop && !_disposed;
                 IsStarted = false;
-                try { _audioClient!.Stop(); _audioClient.Reset(); } catch { }
+                try { _audioClient!.Stop(); _audioClient.Reset(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NativeWasapiExclusiveOut.cs", caught); }
                 if (completed)
                 {
                     Ended?.Invoke();
@@ -453,14 +453,14 @@ namespace CelesteMusicPlayer
             {
                 _requestStop = true;
                 IsStarted = false;
-                try { _audioClient?.Stop(); } catch { }
+                try { _audioClient?.Stop(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NativeWasapiExclusiveOut.cs", caught); }
                 Failed?.Invoke(ex);
             }
             finally
             {
                 if (avrtTask != IntPtr.Zero)
                 {
-                    try { NativeWasapi.AvRevertMmThreadCharacteristics(avrtTask); } catch { }
+                    try { NativeWasapi.AvRevertMmThreadCharacteristics(avrtTask); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NativeWasapiExclusiveOut.cs", caught); }
                 }
             }
         }

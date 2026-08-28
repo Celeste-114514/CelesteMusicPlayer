@@ -67,9 +67,7 @@ namespace CelesteMusicPlayer
                 slider.SetValue(Microsoft.UI.Xaml.Controls.Control.TemplateProperty, null);
                 slider.Template = tpl;
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("ThemeColorService.cs", caught); }
         }
 
         private static Color Darken(Color c, double t)
@@ -91,9 +89,7 @@ namespace CelesteMusicPlayer
                     return scb.Color;
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("ThemeColorService.cs", caught); }
 
             return Color.FromArgb(255, 0, 120, 212);
         }
@@ -114,9 +110,7 @@ namespace CelesteMusicPlayer
                     RestoreSystemAccentResources();
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("ThemeColorService.cs", caught); }
         }
 
         /// <summary>解析 "#RRGGBB" 十六进制颜色。</summary>

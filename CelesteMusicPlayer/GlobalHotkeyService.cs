@@ -354,9 +354,7 @@ namespace CelesteMusicPlayer
                         break;
                 }
             }
-            catch
-            {
-            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("GlobalHotkeyService.cs", caught); }
         }
 
         public void Dispose()

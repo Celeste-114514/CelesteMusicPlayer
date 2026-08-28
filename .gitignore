@@ -35,6 +35,11 @@ local.settings.json
 
 # Local dev packaging signing key (private key - never commit)
 *.pfx
+# 本地签名密码（从 csproj 外置，避免密码随代码入库）
+CelesteMusicPlayer/CelesteMusicPlayer.signing.props
 
 # ===== 流媒体插件预编译二进制与发布包（不入库，作 release 附件） =====
 streaming-plugin/streamingserver
+
+# 2026-08-28: git 对象库损坏后保留的备份目录（确认无需恢复后可手动删除）
+.git.damaged-*/
