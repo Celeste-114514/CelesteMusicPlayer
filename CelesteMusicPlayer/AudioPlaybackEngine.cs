@@ -43,6 +43,13 @@ namespace CelesteMusicPlayer
         /// <summary>当前播放源的原始格式描述（WAV 直通源）。</summary>
         public string? SourceFormatDescription => _hifiOut?.SourceFormatDescription;
 
+        /// <summary>读取实时电平快照（post-DSP 信号）到调用方数组。返回是否取到
+        /// （未播放或 DSD 直出时为 false）。UI 线程调用。</summary>
+        public bool TryGetLevels(float[] peakOut, float[] rmsOut) => _hifiOut?.TryGetLevels(peakOut, rmsOut) ?? false;
+
+        /// <summary>电平表声道数（0 = 当前无可测电平）。</summary>
+        public int LevelMeterChannels => _hifiOut?.LevelMeterChannels ?? 0;
+
         private string? _devicePreference;
         private HiFiOutputBackend? _hifiOut;
         private NaudioDsdBackend? _dsdNaudioBackend; // A/B 诊断：NAudio WasapiOut 播 DoP 的后端（DsdUseNaudioOutput=true 时用）

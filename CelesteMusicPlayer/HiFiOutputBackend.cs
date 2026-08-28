@@ -133,6 +133,23 @@ namespace CelesteMusicPlayer
             _dspProvider?.SetReplayGain(state, trackGainDb, albumGainDb, peak);
         }
 
+        /// <summary>读取实时电平快照（post-DSP 信号）到调用方数组。返回是否取到
+        /// （未播放、或 DSD/DoP 直出不挂 DSP 链时为 false）。UI 线程调用。</summary>
+        public bool TryGetLevels(float[] peakOut, float[] rmsOut)
+        {
+            LevelMeter? m = _dspProvider?.LevelMeter;
+            if (m == null)
+            {
+                return false;
+            }
+
+            m.CopyTo(peakOut, rmsOut);
+            return true;
+        }
+
+        /// <summary>电平表声道数（0 = 当前无可测电平，如未播放或 DSD 直出）。</summary>
+        public int LevelMeterChannels => _dspProvider?.LevelMeter.Channels ?? 0;
+
         private static bool HasNonZeroGain(double[] gains)
         {
             for (int i = 0; i < gains.Length; i++)
@@ -418,6 +435,9 @@ namespace CelesteMusicPlayer
                 // 统一 DSP 链（EQ→声道平衡→限幅）：任一激活则包住无缝源使 DSP 在 NAudio(ASIO/共享) 与
                 // 原生 WASAPI 独占下都生效（非 bit-perfect）；全部关闭则 _dspProvider=null → 源 PCM 直通。
                 _dspProvider = BuildDspProvider();
+                // 开启实时电平测量（测量 post-DSP 信号；无 DSP 时只解码测量不改写输出，仍 bit-perfect）。
+                // requireExact（DSD/DoP 直出）时独占通道直接读无缝源、不经 DSP 链，测不到也无需测 → 关闭。
+                _dspProvider.SetMetering(!requireExact);
                 switch (mode)
                 {
                     case OutputMode.WasapiShared:

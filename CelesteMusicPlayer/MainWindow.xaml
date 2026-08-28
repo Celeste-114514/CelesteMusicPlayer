@@ -4058,6 +4058,14 @@
                                 </Border>
                             </Grid>
                         </Button>
+                        <!-- 实时电平表：每声道一根竖条（左→右 = 各声道），条子由代码动态生成 -->
+                        <StackPanel
+                            x:Name="LevelMeterPanel"
+                            Orientation="Horizontal"
+                            Spacing="2"
+                            VerticalAlignment="Center"
+                            Visibility="Collapsed"
+                            ToolTipService.ToolTip="实时电平（post-DSP）：细线=峰值，粗条=RMS；绿色正常，橙黄接近 0dBFS，红色满刻度" />
                         <FontIcon
                             x:Name="VolumeIcon"
                             Glyph="&#xE767;"

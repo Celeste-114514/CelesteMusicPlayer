@@ -168,4 +168,129 @@ namespace CelesteMusicPlayer.EqRegression
             return Math.Sqrt(sum / frames);
         }
     }
+
+    /// <summary>实时电平表回归测试：验证测量出的峰值/RMS 与实际信号一致、
+    /// 测量的是 DSP 之后的信号，且开启测量不会破坏 bit-perfect 直通。</summary>
+    public class LevelMeterTests
+    {
+        private const int Fs = 44100;
+        private const double Amp = 0.5; // 已知幅度：峰值 0.5、RMS = 0.5/√2 ≈ 0.3536
+
+        private static float[] BuildSine(WaveFormat fmt, double freq)
+        {
+            int frames = Fs;
+            float[] s = new float[frames * fmt.Channels];
+            for (int i = 0; i < frames; i++)
+            {
+                double v = Amp * Math.Sin(2.0 * Math.PI * freq * i / Fs);
+                for (int c = 0; c < fmt.Channels; c++)
+                {
+                    s[i * fmt.Channels + c] = (float)v;
+                }
+            }
+
+            return s;
+        }
+
+        private static (float Peak, float Rms) ReadMeter(WaveFormat fmt, bool metering)
+        {
+            var src = new SineSource(fmt, BuildSine(fmt, 1000));
+            var dsp = new ManagedDspSourceProvider(src);
+            dsp.SetMetering(metering);
+            byte[] buf = new byte[fmt.BlockAlign * 4410];
+            for (int i = 0; i < 4; i++) dsp.Read(buf, 0, buf.Length);
+
+            float[] peak = new float[fmt.Channels];
+            float[] rms = new float[fmt.Channels];
+            dsp.LevelMeter.CopyTo(peak, rms);
+            return (peak[0], rms[0]);
+        }
+
+        [Fact]
+        public void LevelMeter_MeasuresKnownSinePeakAndRms()
+        {
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(Fs, 2);
+            var (peak, rms) = ReadMeter(fmt, true);
+
+            // 幅度 0.5 的正弦 → 峰值 0.5，RMS 0.3536
+            Assert.Equal(0.50, peak, 2);
+            Assert.Equal(0.3536, rms, 3);
+        }
+
+        [Fact]
+        public void LevelMeter_HasOneBarPerChannel()
+        {
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(Fs, 6); // 5.1
+            var src = new SineSource(fmt, BuildSine(fmt, 1000));
+            var dsp = new ManagedDspSourceProvider(src);
+            dsp.SetMetering(true);
+            byte[] buf = new byte[fmt.BlockAlign * 4410];
+            dsp.Read(buf, 0, buf.Length);
+
+            // 每个声道都要有独立读数（声道数 = 电平条数量）
+            Assert.Equal(6, dsp.LevelMeter.Channels);
+            float[] peak = new float[6];
+            float[] rms = new float[6];
+            dsp.LevelMeter.CopyTo(peak, rms);
+            for (int c = 0; c < 6; c++)
+            {
+                Assert.Equal(0.50, peak[c], 2);
+            }
+        }
+
+        [Fact]
+        public void LevelMeter_WhenDisabled_ReportsNothing()
+        {
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(Fs, 2);
+            var src = new SineSource(fmt, BuildSine(fmt, 1000));
+            var dsp = new ManagedDspSourceProvider(src);
+            dsp.SetMetering(false);
+            byte[] buf = new byte[fmt.BlockAlign * 4410];
+            dsp.Read(buf, 0, buf.Length);
+
+            Assert.Equal(0, dsp.LevelMeter.Channels); // 未开启 → 无声道、零开销
+        }
+
+        [Fact]
+        public void LevelMeter_MeasuresAfterDsp_VolumeGainApplied()
+        {
+            // 电平表应显示「送去输出」的信号：加 0.5 倍音量后，读数应同步减半。
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(Fs, 2);
+            var src = new SineSource(fmt, BuildSine(fmt, 1000));
+            var dsp = new ManagedDspSourceProvider(src);
+            dsp.SetMetering(true);
+            dsp.SetVolumeGain(0.5f);
+            byte[] buf = new byte[fmt.BlockAlign * 4410];
+            for (int i = 0; i < 4; i++) dsp.Read(buf, 0, buf.Length);
+
+            float[] peak = new float[2];
+            float[] rms = new float[2];
+            dsp.LevelMeter.CopyTo(peak, rms);
+
+            Assert.Equal(0.25, peak[0], 2);  // 0.5 × 0.5
+            Assert.Equal(0.1768, rms[0], 3); // 0.3536 × 0.5
+        }
+
+        [Fact]
+        public void LevelMeter_DoesNotAlterBitPerfectOutput()
+        {
+            // 无 DSP（bit-perfect 直通）时开启电平测量，输出字节必须与不开测量时逐字节一致。
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(Fs, 2);
+            byte[] withMeter = ReadRaw(fmt, true);
+            byte[] withoutMeter = ReadRaw(fmt, false);
+
+            Assert.Equal(withoutMeter, withMeter);
+            Assert.True(Array.Exists(withMeter, b => b != 0), "测试数据不应为全静音，否则断言无意义");
+        }
+
+        private static byte[] ReadRaw(WaveFormat fmt, bool metering)
+        {
+            var src = new SineSource(fmt, BuildSine(fmt, 1000));
+            var dsp = new ManagedDspSourceProvider(src);
+            dsp.SetMetering(metering);
+            byte[] buf = new byte[fmt.BlockAlign * 4410];
+            dsp.Read(buf, 0, buf.Length);
+            return buf;
+        }
+    }
 }

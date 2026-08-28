@@ -41,6 +41,11 @@ namespace CelesteMusicPlayer
         private bool _limiterEnabled;
         private volatile bool _active; // 任意 DSP 生效（EQ/声道/headroom/limiter）→ 决定 Read 是否走 ProcessBlock
 
+        // 实时电平表：测量 post-DSP 信号（实际送往输出的信号）的每声道峰值/RMS。
+        // 默认关闭（零开销、保持 bit-perfect）；播放开始时被开启。
+        private readonly LevelMeter _levelMeter = new();
+        private bool _meterEnabled;
+
         // 软件总音量（共享/ASIO 用，采样级增益；NAudio WasapiOut.Volume 不支持，故由 DSP 链实现）。
         private volatile float _volumeGain = 1f;
 
@@ -363,12 +368,24 @@ namespace CelesteMusicPlayer
         public int Read(byte[] buffer, int offset, int count)
         {
             int read = _source.Read(buffer, offset, count);
-            if (read <= 0 || !_active)
+            if (read <= 0)
             {
-                return read; // 全部直通：bit-perfect
+                return read;
             }
 
-            ProcessBlock(buffer, offset, read);
+            if (_active)
+            {
+                ProcessBlock(buffer, offset, read);
+                return read;
+            }
+
+            // 无 DSP 生效 → 全部直通（bit-perfect）；若电平表开启则额外测量，
+            // 但只解码到临时 float 缓冲测量，绝不改写输出缓冲 → 仍严格 bit-perfect。
+            if (_meterEnabled)
+            {
+                MeasurePassthrough(buffer, offset, read);
+            }
+
             return read;
         }
 
@@ -412,32 +429,8 @@ namespace CelesteMusicPlayer
             }
 
             float[] buf = GetTempFloatBuffer(n);
-            // 解码：byte → float
-            if (isFloat)
-            {
-                int bi = offset;
-                for (int i = 0; i < n; i++, bi += 4) buf[i] = BitConverter.ToSingle(b, bi);
-            }
-            else if (bits == 32)
-            {
-                int bi = offset;
-                for (int i = 0; i < n; i++, bi += 4) buf[i] = (b[bi] | (b[bi + 1] << 8) | (b[bi + 2] << 16) | (b[bi + 3] << 24)) / 2147483648f;
-            }
-            else if (bits == 24)
-            {
-                int bi = offset;
-                for (int i = 0; i < n; i++, bi += 3)
-                {
-                    int v = b[bi] | (b[bi + 1] << 8) | (b[bi + 2] << 16);
-                    if ((b[bi + 2] & 0x80) != 0) v |= unchecked((int)0xFF000000);
-                    buf[i] = v / 8388608f;
-                }
-            }
-            else // 16
-            {
-                int bi = offset;
-                for (int i = 0; i < n; i++, bi += 2) buf[i] = (short)(b[bi] | (b[bi + 1] << 8)) / 32768f;
-            }
+            // 解码：byte → float（抽成独立方法，电平表测量与 DSP 共用）
+            DecodeToFloat(b, offset, n, buf);
 
             // 逐帧 DSP。
             // 多声道：所有声道都经过「音量 → EQ → ReplayGain → Headroom → 限幅」这套全局 DSP；
@@ -521,6 +514,9 @@ namespace CelesteMusicPlayer
                 }
             }
 
+            // 实时电平：测量 post-DSP 信号（即实际送往输出的样本），供 UI 电平条显示
+            if (_meterEnabled) _levelMeter.Update(buf, n, ch);
+
             // 回写 RG 渐变进度（供下一次 block 继续）
             _rgCurrentDb = rgCurrentDb;
             _rgRampLeft = Math.Max(0, rgRampLeft);
@@ -569,6 +565,77 @@ namespace CelesteMusicPlayer
             if (_tempFloatBuf.Length < n) _tempFloatBuf = new float[n * 2];
             return _tempFloatBuf;
         }
+
+        #region 实时电平表（测量 post-DSP 信号）
+
+        /// <summary>开启/关闭电平测量。开启时按声道数重置内部缓冲（播放会话开始时调用）。
+        /// 关闭时 Read 完全不做解码，恢复零开销 bit-perfect 直通。</summary>
+        public void SetMetering(bool enabled)
+        {
+            _meterEnabled = enabled;
+            if (enabled) _levelMeter.Reset(_channels);
+        }
+
+        /// <summary>电平表实例（渲染线程写、UI 线程读，内部有锁）。</summary>
+        public LevelMeter LevelMeter => _levelMeter;
+
+        /// <summary>byte → float 解码（支持 float / 32bit / 24bit / 16bit），供 DSP 与电平测量共用。</summary>
+        private void DecodeToFloat(byte[] b, int offset, int n, float[] buf)
+        {
+            bool isFloat = _isFloat;
+            int bits = _format.BitsPerSample;
+            if (isFloat)
+            {
+                int bi = offset;
+                for (int i = 0; i < n; i++, bi += 4) buf[i] = BitConverter.ToSingle(b, bi);
+            }
+            else if (bits == 32)
+            {
+                int bi = offset;
+                for (int i = 0; i < n; i++, bi += 4) buf[i] = (b[bi] | (b[bi + 1] << 8) | (b[bi + 2] << 16) | (b[bi + 3] << 24)) / 2147483648f;
+            }
+            else if (bits == 24)
+            {
+                int bi = offset;
+                for (int i = 0; i < n; i++, bi += 3)
+                {
+                    int v = b[bi] | (b[bi + 1] << 8) | (b[bi + 2] << 16);
+                    if ((b[bi + 2] & 0x80) != 0) v |= unchecked((int)0xFF000000);
+                    buf[i] = v / 8388608f;
+                }
+            }
+            else // 16
+            {
+                int bi = offset;
+                for (int i = 0; i < n; i++, bi += 2) buf[i] = (short)(b[bi] | (b[bi + 1] << 8)) / 32768f;
+            }
+        }
+
+        /// <summary>bit-perfect 直通路径下的电平测量：解码到临时 float 缓冲后更新电平表，
+        /// 不改写输出缓冲，保证输出严格 bit-perfect。</summary>
+        private void MeasurePassthrough(byte[] b, int offset, int count)
+        {
+            int block = _format.BlockAlign;
+            int bpc = _format.BitsPerSample / 8;
+            if (block <= 0 || bpc <= 0)
+            {
+                return;
+            }
+
+            int frames = count / block;
+            int ch = _channels;
+            int n = frames * ch;
+            if (n <= 0)
+            {
+                return;
+            }
+
+            float[] buf = GetTempFloatBuffer(n);
+            DecodeToFloat(b, offset, n, buf);
+            _levelMeter.Update(buf, n, ch);
+        }
+
+        #endregion
 
         /// <summary>软削波（soft-knee limiter）：对接近 ±1 的样本渐近饱和而非瞬时削平，
         /// 避免参数增益过大时硬削产生的谐波爆音/电流杂音（对齐 ECHO 安全限幅思路）。

@@ -628,6 +628,7 @@ namespace CelesteMusicPlayer
             Instance = this;
             InitializeComponent();
             StartupLog.Write("MainWindow InitializeComponent done");
+            InitializeLevelMeter();
             try
             {
                 _mainWindowHwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
