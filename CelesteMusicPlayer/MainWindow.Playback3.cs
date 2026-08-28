@@ -1950,6 +1950,13 @@ namespace CelesteMusicPlayer
         /// <summary>用 FFmpeg 引擎播放扩展格式（APE/WavPack 等）。</summary>
         private async Task PlayExtendedWithEngineAsync(PlaylistItem item)
         {
+            // 播放历史：切到新歌前，把上一首（若有）记入历史（未播完）
+            if (!string.IsNullOrWhiteSpace(_nowPlayingPath)
+                && !string.Equals(_nowPlayingPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                RecordCurrentTrackHistory(completed: false);
+            }
+
             NowPlayingText.Text = "正在转码：" + item.Title;
             _audioEngine ??= new AudioPlaybackEngine();
             AppSettingsState hifiSettings = AppSettingsStore.Load();
@@ -2098,6 +2105,8 @@ namespace CelesteMusicPlayer
         {
             _ = DispatcherQueue.TryEnqueue(() =>
             {
+                // 播放历史：自然播完 → 记为已完成
+                RecordCurrentTrackHistory(completed: true);
                 _isEnginePaused = false;
                 _usingEnginePlayback = false;
                 UpdateWaveformTimerForPlaybackState(false);

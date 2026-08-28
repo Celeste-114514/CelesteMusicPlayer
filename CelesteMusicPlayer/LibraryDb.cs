@@ -18,9 +18,26 @@ namespace CelesteMusicPlayer
         private static readonly object Gate = new();
         private static bool _migrated;
 
+        /// <summary>测试隔离：非空时数据库文件改用该路径（回归测试用临时库，避免污染真实数据）。</summary>
+        internal static string? TestDbOverride { get; set; }
+
+        /// <summary>测试隔离：强制重新走一次 EnsureMigrated（配合 TestDbOverride 换库后重建 schema）。</summary>
+        internal static void ResetMigratedForTest()
+        {
+            lock (Gate)
+            {
+                _migrated = false;
+            }
+        }
+
         /// <summary>数据库文件完整路径（%LOCALAPPDATA%\CelesteMusicPlayer\library.db）。</summary>
         public static string GetDbFilePath()
         {
+            if (!string.IsNullOrEmpty(TestDbOverride))
+            {
+                return TestDbOverride;
+            }
+
             string root;
             try
             {
@@ -107,6 +124,16 @@ namespace CelesteMusicPlayer
                     folder   TEXT,
                     file_path TEXT NOT NULL
                 );
+                CREATE TABLE IF NOT EXISTS playback_history (
+                    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+                    file_path     TEXT NOT NULL,
+                    title         TEXT NOT NULL,
+                    played_at_utc TEXT NOT NULL,
+                    played_seconds REAL NOT NULL DEFAULT 0,
+                    completed     INTEGER NOT NULL DEFAULT 0
+                );
+                CREATE INDEX IF NOT EXISTS idx_playback_history_time
+                    ON playback_history (played_at_utc DESC);
             ";
             cmd.ExecuteNonQuery();
         }
@@ -570,6 +597,106 @@ namespace CelesteMusicPlayer
             cmd.Parameters.AddWithValue("$folder", (object?)folderPath ?? DBNull.Value);
             cmd.Parameters.AddWithValue("$fp", joined);
             cmd.ExecuteNonQuery();
+        }
+
+        // ---------------------------------------------------------------- 播放历史
+
+        /// <summary>播放历史条目（最近播放，时间倒序）。</summary>
+        public sealed class PlaybackHistoryEntry
+        {
+            public string FilePath { get; set; } = string.Empty;
+            public string Title { get; set; } = string.Empty;
+            public DateTime PlayedAtUtc { get; set; }
+            public double PlayedSeconds { get; set; }
+            public bool Completed { get; set; }
+        }
+
+        /// <summary>记录一次播放（切歌/播完/停止时调用）。失败静默（不影响播放）。</summary>
+        public static void RecordPlayback(string path, string title, double playedSeconds, bool completed)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            EnsureMigrated();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = @"
+                        INSERT INTO playback_history(file_path, title, played_at_utc, played_seconds, completed)
+                        VALUES($fp, $title, $at, $sec, $done)";
+                    cmd.Parameters.AddWithValue("$fp", path);
+                    cmd.Parameters.AddWithValue("$title", string.IsNullOrWhiteSpace(title) ? Path.GetFileNameWithoutExtension(path) : title);
+                    cmd.Parameters.AddWithValue("$at", DateTime.UtcNow.ToString("o"));
+                    cmd.Parameters.AddWithValue("$sec", Math.Max(0, playedSeconds));
+                    cmd.Parameters.AddWithValue("$done", completed ? 1 : 0);
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>加载最近播放历史（时间倒序）。失败返回空列表。</summary>
+        public static List<PlaybackHistoryEntry> LoadPlaybackHistory(int limit = 100)
+        {
+            EnsureMigrated();
+            var result = new List<PlaybackHistoryEntry>();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = @"
+                        SELECT file_path, title, played_at_utc, played_seconds, completed
+                        FROM playback_history
+                        ORDER BY played_at_utc DESC
+                        LIMIT $limit";
+                    cmd.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 1000));
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read())
+                    {
+                        result.Add(new PlaybackHistoryEntry
+                        {
+                            FilePath = r.GetString(0),
+                            Title = r.GetString(1),
+                            PlayedAtUtc = DateTime.TryParse(r.GetString(2), out var t) ? t : DateTime.MinValue,
+                            PlayedSeconds = r.GetDouble(3),
+                            Completed = r.GetInt64(4) != 0
+                        });
+                    }
+                }
+            }
+            catch
+            {
+            }
+
+            return result;
+        }
+
+        /// <summary>清空播放历史。失败静默。</summary>
+        public static void ClearPlaybackHistory()
+        {
+            EnsureMigrated();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "DELETE FROM playback_history";
+                    cmd.ExecuteNonQuery();
+                }
+            }
+            catch
+            {
+            }
         }
     }
 }

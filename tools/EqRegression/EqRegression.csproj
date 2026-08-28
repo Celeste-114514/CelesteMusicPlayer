@@ -25,11 +25,14 @@
   </ItemGroup>
 
   <!-- 加载主程序集会触发 WinAppSDK 模块初始化，需要原生运行库（Microsoft.WindowsAppRuntime*）在测试输出目录旁。
-       从主程序 Release 自包含产物拷贝（不入库，仅本地/CI 测试用）。 -->
+       从主程序 Release 自包含产物拷贝（不入库，仅本地/CI 测试用）。
+       e_sqlite3.dll 是 SQLitePCLRaw 的原生库（LibraryDb 用 Microsoft.Data.Sqlite），主程序集
+       不传递依赖到测试输出，需一并拷贝。 -->
   <Target Name="CopyWinAppSdkRuntime" AfterTargets="Build">
     <ItemGroup>
       <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.WindowsAppRuntime.*" />
       <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.Windows.SDK.NET.dll" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\e_sqlite3.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(_Wasdk)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>

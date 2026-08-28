@@ -433,6 +433,22 @@
                         </StackPanel>
                     </Button>
                     <Button
+                        x:Name="NavPlaybackHistoryButton"
+                        Margin="4,2"
+                        Padding="8,10"
+                        FontSize="14"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CornerRadius="8"
+                        Click="NavPlaybackHistoryButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <FontIcon Glyph="&#xE81C;" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="播放历史" VerticalAlignment="Center" Margin="0,0,0,2" />
+                        </StackPanel>
+                    </Button>
+                    <Button
                         x:Name="NavGenreButton"
                         Tag="Genres"
                         Margin="4,2"

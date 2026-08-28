@@ -859,4 +859,75 @@ namespace CelesteMusicPlayer.EqRegression
         }
     }
 
+    public class PlaybackHistoryDbTests
+    {
+        private static string _tmpDb = "";
+
+        private static void UseTempDb()
+        {
+            // 每个测试独立临时库（不同文件名），避免 _migrated 缓存与 WAL 文件残留互相干扰
+            _tmpDb = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "celeste-eqreg-" + Guid.NewGuid().ToString("N").Substring(0, 12) + ".db");
+            LibraryDb.TestDbOverride = _tmpDb;
+            LibraryDb.ResetMigratedForTest();
+        }
+
+        private static void Cleanup()
+        {
+            LibraryDb.TestDbOverride = null;
+            try { System.IO.File.Delete(_tmpDb); } catch { }
+            try { System.IO.File.Delete(_tmpDb + "-wal"); } catch { }
+            try { System.IO.File.Delete(_tmpDb + "-shm"); } catch { }
+        }
+
+        [Fact]
+        public void PlaybackHistory_RecordLoadClear_RoundTrip()
+        {
+            UseTempDb();
+            try
+            {
+                // 先建库（EnsureMigrated）
+                LibraryDb.EnsureMigrated();
+                Assert.True(System.IO.File.Exists(_tmpDb));
+
+                LibraryDb.RecordPlayback(@"C:\music\song1.flac", "Song One", 120.5, false);
+                LibraryDb.RecordPlayback(@"C:\music\song2.flac", "Song Two", 240.0, true);
+
+                var rows = LibraryDb.LoadPlaybackHistory(10);
+                Assert.Equal(2, rows.Count);
+                // 时间倒序：后记录的在前
+                Assert.Equal("Song Two", rows[0].Title);
+                Assert.Equal("Song One", rows[1].Title);
+                Assert.Equal(120.5, rows[1].PlayedSeconds, 1);
+                Assert.False(rows[1].Completed);
+                Assert.True(rows[0].Completed);
+
+                LibraryDb.ClearPlaybackHistory();
+                Assert.Empty(LibraryDb.LoadPlaybackHistory(10));
+            }
+            finally
+            {
+                Cleanup();
+            }
+        }
+
+        [Fact]
+        public void PlaybackHistory_EmptyPath_Ignored()
+        {
+            UseTempDb();
+            try
+            {
+                LibraryDb.EnsureMigrated();
+                LibraryDb.RecordPlayback("", "x", 1, false);
+                LibraryDb.RecordPlayback("   ", "y", 1, false);
+                Assert.Empty(LibraryDb.LoadPlaybackHistory(10));
+            }
+            finally
+            {
+                Cleanup();
+            }
+        }
+    }
+
 }
