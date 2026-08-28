@@ -4356,6 +4356,37 @@
                             Opacity="0.6"
                             TextWrapping="WrapWholeWords"
                             Text="仅在自动连续播放时生效（手动切歌不淡化）。需下一首已预加载且格式相同，否则自动退回无缝硬切。" />
+
+                        <!-- 采样率升频（SRC） -->
+                        <StackPanel Spacing="8" Margin="0,16,0,0">
+                            <TextBlock Text="采样率升频（SRC）" FontSize="14" FontWeight="SemiBold" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="92" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="目标采样率" Opacity="0.7" VerticalAlignment="Center" />
+                                <ComboBox
+                                    x:Name="SrcRateCombo"
+                                    Grid.Column="1"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Center"
+                                    SelectionChanged="SrcRateCombo_SelectionChanged" />
+                                <TextBlock
+                                    x:Name="SrcStateText"
+                                    Grid.Column="2"
+                                    Text="—"
+                                    FontSize="12"
+                                    VerticalAlignment="Center"
+                                    MinWidth="58" />
+                            </Grid>
+                            <TextBlock
+                                FontSize="12"
+                                Opacity="0.6"
+                                TextWrapping="WrapWholeWords"
+                                Text="仅 WASAPI 独占模式生效（共享/ASIO 不升频）。用 WDL 高质量重采样（与 Reaper 同源）。设备不支持目标采样率时自动退回不升频。改动在下次播放时生效。" />
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- 底部说明 -->

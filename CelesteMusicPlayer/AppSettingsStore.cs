@@ -39,6 +39,10 @@ namespace CelesteMusicPlayer
         /// 仅对自动连续播放的自然换曲生效，手动切歌不淡化。</summary>
         public int CrossfadeMs { get; set; }
 
+        /// <summary>采样率升频目标（Hz）。0 = 关闭（源采样率原样输出）。
+        /// 仅 WASAPI 独占模式生效；设备不支持目标采样率时自动退回不升频。</summary>
+        public int SrcTargetHz { get; set; }
+
         public bool MiniPlayerAlwaysOnTop { get; set; } = true;
 
         public bool OpenDesktopLyricsOnStartup { get; set; }

@@ -35,6 +35,7 @@ namespace CelesteMusicPlayer
         private ChannelBalanceState? _channelBalance; // 声道平衡状态
         private DspSafetyState? _safety; // 安全限幅/余量状态
         private int _crossfadeMs; // 交叉淡化时长（毫秒），0 = 关闭（保持无缝硬切）
+        private int _resampleTargetHz; // 采样率升频目标（Hz），0 = 关闭
         private ManagedDspSourceProvider? _dspProvider; // 统一 DSP 链（EQ→声道平衡→限幅），NAudio 与独占共用
         // ReplayGain 响度归一化（缓存到新建链，保证换歌/重播也生效）
         private ReplayGainState? _rgState;
@@ -134,6 +135,18 @@ namespace CelesteMusicPlayer
 
         /// <summary>当前交叉淡化时长（毫秒，0=关闭）。</summary>
         public int CrossfadeMs => _crossfadeMs;
+
+        /// <summary>设置采样率升频目标（Hz）。0 = 关闭。
+        /// 仅对独占模式生效（共享模式系统混音器会再重采样、ASIO 设备采样率固定无法查询）；
+        /// 设备在独占下不支持目标采样率时自动退回不升频。播放中调用只保存，下次开播生效
+        /// （SRC 改变输出格式，必须重建播放会话，无法实时切换）。</summary>
+        public void SetResampleTargetRate(int hz)
+        {
+            _resampleTargetHz = hz > 0 ? hz : 0;
+        }
+
+        /// <summary>当前升频目标采样率（Hz，0=关闭）。</summary>
+        public int ResampleTargetHz => _resampleTargetHz;
 
         /// <summary>设置 ReplayGain（响度归一化）。播放中实时生效（10ms 平滑）。</summary>
         public void SetReplayGain(ReplayGainState? state, double trackGainDb, double albumGainDb, double peak)
@@ -446,9 +459,12 @@ namespace CelesteMusicPlayer
                 _seamless = new SeamlessWaveProvider(_waveFile);
                 // 交叉淡化：0 = 关闭，行为与加此功能前一致（同格式字节级无缝续接）
                 _seamless.SetCrossfade(_crossfadeMs);
-                // 统一 DSP 链（EQ→声道平衡→限幅）：任一激活则包住无缝源使 DSP 在 NAudio(ASIO/共享) 与
-                // 原生 WASAPI 独占下都生效（非 bit-perfect）；全部关闭则 _dspProvider=null → 源 PCM 直通。
-                _dspProvider = BuildDspProvider();
+                // 采样率升频（SRC）：仅在独占模式下有意义（共享模式系统混音器会再重采样一次，
+                // ASIO 设备采样率固定且无法预先查询）。设备在独占下不支持目标格式则自动退回不升频。
+                IWaveSourceProvider chainInput = BuildSrcChain(_seamless, mode, deviceIdentifier, requireExact);
+                // 统一 DSP 链（EQ→声道平衡→限幅）：任一激活则包住上游源使 DSP 在 NAudio(ASIO/共享) 与
+                // 原生 WASAPI 独占下都生效（非 bit-perfect）；全部关闭则 _dspProvider 内部短路直通。
+                _dspProvider = BuildDspProvider(chainInput);
                 // 开启实时电平测量（测量 post-DSP 信号；无 DSP 时只解码测量不改写输出，仍 bit-perfect）。
                 // requireExact（DSD/DoP 直出）时独占通道直接读无缝源、不经 DSP 链，测不到也无需测 → 关闭。
                 _dspProvider.SetMetering(!requireExact);
@@ -585,9 +601,9 @@ namespace CelesteMusicPlayer
         /// <summary>构建统一 DSP 链（包住无缝源）。始终构建（而非"任一激活才建"），使播放中开启/调节
         /// EQ / 声道平衡 / 限幅时能实时生效（_dspProvider 恒存在，内部 _active 短路直通零开销）。
         /// requireExact（DSD/DoP 直出）由调用处强制用无缝源，不经此链。</summary>
-        private ManagedDspSourceProvider BuildDspProvider()
+        private ManagedDspSourceProvider BuildDspProvider(IWaveSourceProvider chainInput)
         {
-            var dsp = new ManagedDspSourceProvider(_seamless!);
+            var dsp = new ManagedDspSourceProvider(chainInput);
             if (_eqCurve != null)
             {
                 dsp.UpdateEqCurve(_eqCurve);
@@ -608,6 +624,98 @@ namespace CelesteMusicPlayer
             }
 
             return dsp;
+        }
+
+        /// <summary>
+        /// 构建采样率升频（SRC）层。位于「无缝续接源」与「DSP 链」之间：
+        ///   无缝源 → [SRC] → DSP 链 → 输出
+        /// 仅在 WASAPI 独占模式下启用（共享模式系统混音器会再重采样一次、ASIO 设备采样率固定
+        /// 且无法预先查询）。DSD/DoP 直出（requireExact）绝不允许重采样，直接原样通过。
+        /// 设备在独占下不支持目标采样率时自动退回不升频（保守，宁可不升也不播放失败）。
+        /// </summary>
+        private IWaveSourceProvider BuildSrcChain(SeamlessWaveProvider seamless, OutputMode mode, string? deviceIdentifier, bool requireExact)
+        {
+            // 只升频：目标必须高于源采样率，否则无意义
+            int srcHz = _waveFile?.WaveFormat.SampleRate ?? 0;
+            if (_resampleTargetHz <= 0 || requireExact || mode != OutputMode.WasapiExclusive || srcHz <= 0 || _resampleTargetHz <= srcHz)
+            {
+                return seamless;
+            }
+
+            // 设备预检：目标采样率（24bit PCM 或 Float32 任一支持即可，位深由输出器自动协商）不被
+            // 支持 → 退回不升频。预检失败（COM 异常等）同样保守退回。
+            try
+            {
+                if (!DeviceSupportsSampleRate(deviceIdentifier, _resampleTargetHz, seamless.WaveFormat.Channels))
+                {
+                    StartupLog.Write($"SRC 跳过：设备不支持 {_resampleTargetHz}Hz 独占（源 {srcHz}Hz）");
+                    return seamless;
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("HiFiOutputBackend.BuildSrcChain", caught);
+                return seamless;
+            }
+
+            try
+            {
+                var src = new ResamplingSourceProvider(seamless, _resampleTargetHz);
+                StartupLog.Write($"SRC 启用：{srcHz}Hz → {_resampleTargetHz}Hz（WDL 重采样，输出 24bit）");
+                return src;
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("HiFiOutputBackend.BuildSrcChain", caught);
+                return seamless;
+            }
+        }
+
+        /// <summary>预检 WASAPI 独占下设备是否支持目标采样率（24bit PCM 或 Float32 任一即可）。</summary>
+        private static bool DeviceSupportsSampleRate(string? deviceIdentifier, int sampleRate, int channels)
+        {
+            NativeWasapi.IMMDevice? dev = null;
+            NativeWasapi.IAudioClient? ac = null;
+            try
+            {
+                dev = NativeWasapi.GetRenderDeviceById(deviceIdentifier);
+                if (dev == null)
+                {
+                    return false;
+                }
+
+                ac = NativeWasapi.ActivateAudioClient(dev);
+                if (ac == null)
+                {
+                    return false;
+                }
+
+                const uint AUDCLNT_SHAREMODE_EXCLUSIVE = 1;
+                var wf24 = NativeWasapi.WAVEFORMATEXTENSIBLE.Make(sampleRate, channels, 24, NativeWasapi.SubTypePcm, 0);
+                if (ac.IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, ref wf24, out _) == NativeWasapi.S_OK)
+                {
+                    return true;
+                }
+
+                var wfF32 = NativeWasapi.WAVEFORMATEXTENSIBLE.Make(sampleRate, channels, 32, NativeWasapi.SubTypeIeeeFloat, 0);
+                return ac.IsFormatSupported(AUDCLNT_SHAREMODE_EXCLUSIVE, ref wfF32, out _) == NativeWasapi.S_OK;
+            }
+            catch
+            {
+                return false;
+            }
+            finally
+            {
+                if (ac != null)
+                {
+                    try { Marshal.ReleaseComObject(ac); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+                }
+
+                if (dev != null)
+                {
+                    try { Marshal.ReleaseComObject(dev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+                }
+            }
         }
 
         /// <summary>是否为 DSD 文件（DSF/DFF）。</summary>

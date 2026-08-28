@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using NAudio.Wave;
 using Xunit;
@@ -566,4 +567,128 @@ namespace CelesteMusicPlayer.EqRegression
             Assert.Contains("Gain 3 dB", pkLine);
         }
     }
+
+    /// <summary>有限长度正弦源（读尽返回 0），用于 SRC 时长/频率测试。
+    /// 同时实现 IWaveProvider（SRC 构造要求）与 IWaveSourceProvider（拖动/时长转发）。</summary>
+    internal sealed class FiniteSineSource : IWaveSourceProvider, IWaveProvider
+    {
+        private readonly WaveFormat _fmt;
+        private readonly float[] _samples;
+        private int _pos;
+
+        public FiniteSineSource(WaveFormat fmt, float[] samples)
+        {
+            _fmt = fmt;
+            _samples = samples;
+        }
+
+        public WaveFormat WaveFormat => _fmt;
+        public TimeSpan TotalTime => TimeSpan.FromSeconds((double)_samples.Length / (_fmt.SampleRate * _fmt.Channels));
+        public (long, long, bool)? ProbeCurrentState => null;
+        public bool NextMounted => false;
+
+        public void Seek(TimeSpan position)
+        {
+            int frame = Math.Clamp((int)(position.TotalSeconds * _fmt.SampleRate), 0, _samples.Length / _fmt.Channels);
+            _pos = frame * _fmt.Channels;
+        }
+
+        public int Read(byte[] buffer, int offset, int count)
+        {
+            int n = count / 4;
+            int i = 0;
+            for (; i < n && _pos < _samples.Length; i++, _pos++)
+            {
+                BitConverter.GetBytes(_samples[_pos]).CopyTo(buffer, offset + i * 4);
+            }
+
+            return i * 4;
+        }
+    }
+
+    public class SrcTests
+    {
+        private static float[] BuildTone(int sampleRate, double hz, int frames, double amp = 0.5)
+        {
+            var s = new float[frames];
+            for (int i = 0; i < frames; i++)
+            {
+                s[i] = (float)(amp * Math.Sin(2 * Math.PI * hz * i / sampleRate));
+            }
+
+            return s;
+        }
+
+        private static float From24(byte[] b, int offset)
+        {
+            int v = b[offset] | (b[offset + 1] << 8) | (b[offset + 2] << 16);
+            if ((b[offset + 2] & 0x80) != 0) v |= unchecked((int)0xFF000000);
+            return v / 8388608f;
+        }
+
+        [Fact]
+        public void Src_UpsamplesToTargetRate()
+        {
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(44100, 1);
+            var res = new ResamplingSourceProvider(new FiniteSineSource(fmt, BuildTone(44100, 1000, 44100)), 96000);
+            Assert.Equal(96000, res.WaveFormat.SampleRate);
+            Assert.Equal(24, res.WaveFormat.BitsPerSample);
+            Assert.Equal(1, res.WaveFormat.Channels);
+        }
+
+        [Fact]
+        public void Src_KeepsDuration()
+        {
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(44100, 1);
+            var src = new FiniteSineSource(fmt, BuildTone(44100, 1000, 44100)); // 1 秒 @44.1k
+            var res = new ResamplingSourceProvider(src, 96000);
+            // 期望 96000 帧（±500：WDL 滤波器起止 transient/tail）
+            long frames = 0;
+            var buf = new byte[96000 * 3];
+            int read;
+            while ((read = res.Read(buf, 0, buf.Length)) > 0)
+            {
+                frames += read / 3;
+            }
+
+            Assert.InRange(frames, 95000, 97000);
+        }
+
+        [Fact]
+        public void Src_KeepsFrequency()
+        {
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(44100, 1);
+            var src = new FiniteSineSource(fmt, BuildTone(44100, 1000, 44100 * 2)); // 2 秒 @44.1k
+            var res = new ResamplingSourceProvider(src, 96000);
+            // 跳过前 0.5 秒（滤波群延迟/瞬态），随后读 1 秒输出：
+            // 1kHz 正弦 → 每秒应约 2000 次过零（每周期 2 次）
+            int skip = (int)(0.5 * 96000);
+            int got = 0;
+            var buf = new byte[96000 * 3];
+            while (got < skip)
+            {
+                int read = res.Read(buf, 0, buf.Length);
+                if (read <= 0) break;
+                got += read / 3;
+            }
+
+            int zeros = 0;
+            float prev = float.NaN;
+            for (int i = 0; i < 96000 * 3; i += 3)
+            {
+                float v = From24(buf, i);
+                if (float.IsNaN(prev))
+                {
+                    prev = v;
+                    continue;
+                }
+
+                if (prev != 0 && v != 0 && (prev < 0) != (v < 0)) zeros++;
+                prev = v;
+            }
+
+            Assert.InRange(zeros, 1900, 2100);
+        }
+    }
+
 }

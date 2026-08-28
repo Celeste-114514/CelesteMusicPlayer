@@ -53,6 +53,12 @@ namespace CelesteMusicPlayer
         /// <summary>设置交叉淡化时长（毫秒），0 = 关闭（无缝硬切）。播放中调用立即生效。</summary>
         public void SetCrossfade(int milliseconds) => _hifiOut?.SetCrossfade(milliseconds);
 
+        /// <summary>设置采样率升频目标（Hz，0=关闭）。播放中调用只保存，下次开播生效。</summary>
+        public void SetResampleTargetRate(int hz) => _hifiOut?.SetResampleTargetRate(hz);
+
+        /// <summary>当前升频目标采样率（Hz，0=关闭）。</summary>
+        public int ResampleTargetHz => _hifiOut?.ResampleTargetHz ?? 0;
+
         /// <summary>当前交叉淡化时长（毫秒，0 = 关闭）。</summary>
         public int CrossfadeMs => _hifiOut?.CrossfadeMs ?? 0;
 
@@ -389,6 +395,8 @@ namespace CelesteMusicPlayer
 
                 // 交叉淡化时长取自设置（0 = 无缝硬切，即加此功能前的原行为）
                 _hifiOut.SetCrossfade(AppSettingsStore.Load().CrossfadeMs);
+                // 采样率升频目标取自设置（0 = 关闭；仅独占模式生效，设备不支持时自动退回）
+                _hifiOut.SetResampleTargetRate(AppSettingsStore.Load().SrcTargetHz);
                 bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference, requireExact: requireExact);
                 StartupLog.Write("HiFi播放 mode=" + _outputMode + " 设备=" + (_hifiOut.OutputDeviceName ?? "?") + " (pref=" + (_devicePreference ?? "默认") + ") ok=" + ok + (ok ? "" : " err=" + (_hifiOut.LastError ?? "")));
                 if (!ok)
