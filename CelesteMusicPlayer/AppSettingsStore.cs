@@ -35,6 +35,10 @@ namespace CelesteMusicPlayer
         /// <summary><see cref="PlaybackOrder"/> 名称</summary>
         public string PlaybackOrder { get; set; } = nameof(CelesteMusicPlayer.PlaybackOrder.ListLoop);
 
+        /// <summary>交叉淡化时长（毫秒）。0 = 关闭（同格式无缝硬切，即加此功能前的原行为）。
+        /// 仅对自动连续播放的自然换曲生效，手动切歌不淡化。</summary>
+        public int CrossfadeMs { get; set; }
+
         public bool MiniPlayerAlwaysOnTop { get; set; } = true;
 
         public bool OpenDesktopLyricsOnStartup { get; set; }

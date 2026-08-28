@@ -4310,6 +4310,40 @@
                         </Grid>
                     </StackPanel>
 
+                    <!-- 交叉淡化 -->
+                    <StackPanel Grid.Row="4" Spacing="8" Margin="0,16,0,0" VerticalAlignment="Top">
+                        <TextBlock Text="交叉淡化" FontSize="14" FontWeight="SemiBold" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="92" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="时长" Opacity="0.7" VerticalAlignment="Center" />
+                            <Slider
+                                x:Name="CrossfadeSlider"
+                                Grid.Column="1"
+                                Minimum="0"
+                                Maximum="12"
+                                StepFrequency="0.5"
+                                Value="0"
+                                VerticalAlignment="Center"
+                                ValueChanged="CrossfadeSlider_ValueChanged" />
+                            <TextBlock
+                                x:Name="CrossfadeValueText"
+                                Grid.Column="2"
+                                Text="关闭"
+                                FontSize="12"
+                                VerticalAlignment="Center"
+                                MinWidth="58" />
+                        </Grid>
+                        <TextBlock
+                            FontSize="12"
+                            Opacity="0.6"
+                            TextWrapping="WrapWholeWords"
+                            Text="仅在自动连续播放时生效（手动切歌不淡化）。需下一首已预加载且格式相同，否则自动退回无缝硬切。" />
+                    </StackPanel>
+
                     <!-- 底部说明 -->
                     <TextBlock
                         Grid.Row="5"

@@ -34,6 +34,7 @@ namespace CelesteMusicPlayer
         private EqCurveState? _eqCurve; // 动态 EQ 曲线状态（DSP 面板用）
         private ChannelBalanceState? _channelBalance; // 声道平衡状态
         private DspSafetyState? _safety; // 安全限幅/余量状态
+        private int _crossfadeMs; // 交叉淡化时长（毫秒），0 = 关闭（保持无缝硬切）
         private ManagedDspSourceProvider? _dspProvider; // 统一 DSP 链（EQ→声道平衡→限幅），NAudio 与独占共用
         // ReplayGain 响度归一化（缓存到新建链，保证换歌/重播也生效）
         private ReplayGainState? _rgState;
@@ -122,6 +123,17 @@ namespace CelesteMusicPlayer
             _safety = state?.Clone();
             _dspProvider?.UpdateSafety(_safety);
         }
+
+        /// <summary>设置交叉淡化时长（毫秒）。0 = 关闭（无缝硬切）。
+        /// 仅对自动连续播放的自然换曲生效（手动切歌会重建会话，不淡化）。播放中调用立即生效。</summary>
+        public void SetCrossfade(int milliseconds)
+        {
+            _crossfadeMs = milliseconds > 0 ? milliseconds : 0;
+            _seamless?.SetCrossfade(_crossfadeMs);
+        }
+
+        /// <summary>当前交叉淡化时长（毫秒，0=关闭）。</summary>
+        public int CrossfadeMs => _crossfadeMs;
 
         /// <summary>设置 ReplayGain（响度归一化）。播放中实时生效（10ms 平滑）。</summary>
         public void SetReplayGain(ReplayGainState? state, double trackGainDb, double albumGainDb, double peak)
@@ -432,6 +444,8 @@ namespace CelesteMusicPlayer
                 // 无缝源（当前+可预加载下一首）：共享/ASIO 走 NAudio wasapi/asio，独占走原生 WASAPI，
                 // 均用同一份 SeamlessWaveProvider 做同格式字节级续接 → 单输出会话 gapless。
                 _seamless = new SeamlessWaveProvider(_waveFile);
+                // 交叉淡化：0 = 关闭，行为与加此功能前一致（同格式字节级无缝续接）
+                _seamless.SetCrossfade(_crossfadeMs);
                 // 统一 DSP 链（EQ→声道平衡→限幅）：任一激活则包住无缝源使 DSP 在 NAudio(ASIO/共享) 与
                 // 原生 WASAPI 独占下都生效（非 bit-perfect）；全部关闭则 _dspProvider=null → 源 PCM 直通。
                 _dspProvider = BuildDspProvider();

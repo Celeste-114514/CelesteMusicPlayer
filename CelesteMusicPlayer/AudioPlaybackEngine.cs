@@ -50,6 +50,12 @@ namespace CelesteMusicPlayer
         /// <summary>电平表声道数（0 = 当前无可测电平）。</summary>
         public int LevelMeterChannels => _hifiOut?.LevelMeterChannels ?? 0;
 
+        /// <summary>设置交叉淡化时长（毫秒），0 = 关闭（无缝硬切）。播放中调用立即生效。</summary>
+        public void SetCrossfade(int milliseconds) => _hifiOut?.SetCrossfade(milliseconds);
+
+        /// <summary>当前交叉淡化时长（毫秒，0 = 关闭）。</summary>
+        public int CrossfadeMs => _hifiOut?.CrossfadeMs ?? 0;
+
         private string? _devicePreference;
         private HiFiOutputBackend? _hifiOut;
         private NaudioDsdBackend? _dsdNaudioBackend; // A/B 诊断：NAudio WasapiOut 播 DoP 的后端（DsdUseNaudioOutput=true 时用）
@@ -381,6 +387,8 @@ namespace CelesteMusicPlayer
                 _hifiOut.PositionChanged -= Hifi_PositionChanged;
                 _hifiOut.PositionChanged += Hifi_PositionChanged;
 
+                // 交叉淡化时长取自设置（0 = 无缝硬切，即加此功能前的原行为）
+                _hifiOut.SetCrossfade(AppSettingsStore.Load().CrossfadeMs);
                 bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference, requireExact: requireExact);
                 StartupLog.Write("HiFi播放 mode=" + _outputMode + " 设备=" + (_hifiOut.OutputDeviceName ?? "?") + " (pref=" + (_devicePreference ?? "默认") + ") ok=" + ok + (ok ? "" : " err=" + (_hifiOut.LastError ?? "")));
                 if (!ok)
