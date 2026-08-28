@@ -63,6 +63,13 @@ namespace CelesteMusicPlayer
             // 应用资源在启动回调里再注册，供播放列表列宽 Binding 使用
             Resources["PlaylistColumns"] = PlaylistColumnWidths.Instance;
 
+            // Phase E：曲库 SQLite 迁移/初始化（首次建库时自动备份旧 JSON，窗口和任何 store 前先就绪）
+            try
+            {
+                LibraryDb.EnsureMigrated();
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("App.OnLaunched.LibraryDb", caught); }
+
             // 主题色：必须在窗口创建前覆盖系统强调色资源键（渲染后修改会触发 WinUI 原生崩溃）
             try
             {

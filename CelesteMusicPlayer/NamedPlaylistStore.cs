@@ -1,9 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
-using System.Text.Json;
-using Windows.Storage;
 
 namespace CelesteMusicPlayer
 {
@@ -16,59 +13,12 @@ namespace CelesteMusicPlayer
         public List<string> Songs { get; set; } = new();
     }
 
+    /// <summary>命名单存储：底层复用 SQLite（LibraryDb），对外接口保持不变。</summary>
     public static class NamedPlaylistStore
     {
         public const string FavoritesPlaylistName = "我喜欢的音乐";
 
-        private static string GetPlaylistsFolder()
-        {
-            string root;
-            try
-            {
-                root = ApplicationData.Current.LocalFolder.Path;
-            }
-            catch
-            {
-                root = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer");
-            }
-
-            string folder = Path.Combine(root, "Playlists");
-            Directory.CreateDirectory(folder);
-            return folder;
-        }
-
-        private static string GetPlaylistPath(string name)
-        {
-            string safe = SanitizeFileName(name);
-            return Path.Combine(GetPlaylistsFolder(), safe + ".json");
-        }
-
-        public static IReadOnlyList<string> List()
-        {
-            string folder = GetPlaylistsFolder();
-            var names = new List<string>();
-            foreach (string file in Directory.EnumerateFiles(folder, "*.json"))
-            {
-                try
-                {
-                    NamedPlaylistDto? dto = JsonSerializer.Deserialize<NamedPlaylistDto>(File.ReadAllText(file));
-                    names.Add(dto?.Name ?? Path.GetFileNameWithoutExtension(file));
-                }
-                catch
-                {
-                    names.Add(Path.GetFileNameWithoutExtension(file));
-                }
-            }
-
-            if (!names.Contains(FavoritesPlaylistName, StringComparer.Ordinal))
-            {
-                names.Insert(0, FavoritesPlaylistName);
-            }
-
-            return names.Distinct(StringComparer.Ordinal).OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList();
-        }
+        public static IReadOnlyList<string> List() => LibraryDb.ListPlaylists();
 
         public static void Create(string name)
         {
@@ -77,8 +27,7 @@ namespace CelesteMusicPlayer
                 throw new ArgumentException("Playlist name is required.", nameof(name));
             }
 
-            string path = GetPlaylistPath(name);
-            if (File.Exists(path))
+            if (LibraryDb.PlaylistExists(name))
             {
                 return;
             }
@@ -98,21 +47,17 @@ namespace CelesteMusicPlayer
                 throw new ArgumentException("New name is required.", nameof(newName));
             }
 
-            string oldPath = GetPlaylistPath(oldName);
-            string newPath = GetPlaylistPath(newName);
-            if (!File.Exists(oldPath))
+            if (!LibraryDb.PlaylistExists(oldName))
             {
-                throw new FileNotFoundException("Playlist not found.", oldPath);
+                throw new System.IO.FileNotFoundException("Playlist not found.", oldName);
             }
 
-            if (File.Exists(newPath))
+            if (LibraryDb.PlaylistExists(newName))
             {
-                throw new IOException("A playlist with that name already exists.");
+                throw new System.IO.IOException("A playlist with that name already exists.");
             }
 
-            List<string> songs = LoadSongs(oldName);
-            File.Delete(oldPath);
-            SaveSongs(newName, songs);
+            LibraryDb.RenamePlaylist(oldName, newName);
         }
 
         public static void Delete(string name)
@@ -122,11 +67,7 @@ namespace CelesteMusicPlayer
                 throw new InvalidOperationException("Built-in favorites playlist cannot be deleted.");
             }
 
-            string path = GetPlaylistPath(name);
-            if (File.Exists(path))
-            {
-                File.Delete(path);
-            }
+            LibraryDb.DeletePlaylist(name);
         }
 
         public static List<string> LoadSongs(string name)
@@ -136,26 +77,7 @@ namespace CelesteMusicPlayer
                 return TrackStatsStore.GetAllFavorites().ToList();
             }
 
-            string path = GetPlaylistPath(name);
-            if (!File.Exists(path))
-            {
-                return new List<string>();
-            }
-
-            try
-            {
-                NamedPlaylistDto? dto = JsonSerializer.Deserialize<NamedPlaylistDto>(File.ReadAllText(path));
-                return dto?.Songs?
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .Select(Path.GetFullPath)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList()
-                    ?? new List<string>();
-            }
-            catch
-            {
-                return new List<string>();
-            }
+            return LibraryDb.LoadPlaylistSongs(name);
         }
 
         public static void SaveSongs(string name, IEnumerable<string> songs)
@@ -166,21 +88,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            var dto = new NamedPlaylistDto
-            {
-                Name = name,
-                UpdatedAt = DateTimeOffset.UtcNow,
-                Songs = songs?
-                    .Where(s => !string.IsNullOrWhiteSpace(s))
-                    .Select(Path.GetFullPath)
-                    .Distinct(StringComparer.OrdinalIgnoreCase)
-                    .ToList()
-                    ?? new List<string>()
-            };
-
-            string path = GetPlaylistPath(name);
-            string json = JsonSerializer.Serialize(dto, new JsonSerializerOptions { WriteIndented = true });
-            File.WriteAllText(path, json);
+            LibraryDb.SavePlaylist(name, songs);
         }
 
         public static void SyncFavoritesPlaylist()
@@ -188,11 +96,17 @@ namespace CelesteMusicPlayer
             SaveSongs(FavoritesPlaylistName, TrackStatsStore.GetAllFavorites());
         }
 
+        /// <summary>供 SQLite 迁移阶段调用：把迁移来的收藏歌单同步到收藏统计（内部）。</summary>
+        internal static void SyncFavoritesFromPathsForMigration(IEnumerable<string> songs)
+        {
+            SyncFavoritesFromPaths(songs);
+        }
+
         private static void SyncFavoritesFromPaths(IEnumerable<string> songs)
         {
-            HashSet<string> desired = songs
+            var desired = songs
                 .Where(s => !string.IsNullOrWhiteSpace(s))
-                .Select(Path.GetFullPath)
+                .Select(System.IO.Path.GetFullPath)
                 .ToHashSet(StringComparer.OrdinalIgnoreCase);
 
             Dictionary<string, TrackStatsEntry> stats = TrackStatsStore.Load();
@@ -209,21 +123,6 @@ namespace CelesteMusicPlayer
             {
                 TrackStatsStore.SetFavorite(path, true);
             }
-        }
-
-        private static string SanitizeFileName(string name)
-        {
-            if (string.IsNullOrWhiteSpace(name))
-            {
-                return "playlist";
-            }
-
-            foreach (char c in Path.GetInvalidFileNameChars())
-            {
-                name = name.Replace(c, '_');
-            }
-
-            return name.Trim();
         }
     }
 }

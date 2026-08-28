@@ -1,8 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Text.Json;
-using Windows.Storage;
 
 namespace CelesteMusicPlayer
 {
@@ -17,79 +14,53 @@ namespace CelesteMusicPlayer
         public List<string> FilePaths { get; set; } = new();
     }
 
-    /// <summary>把上次读取的音频/文件夹路径存到本地，下次启动恢复。</summary>
+    /// <summary>把上次读取的音频/文件夹路径存到本地，下次启动恢复（底层 SQLite）。</summary>
     public static class LibrarySessionStore
     {
-        private const string FileName = "last-library.json";
-
-        private static string GetFilePath()
-        {
-            string root;
-            try
-            {
-                root = ApplicationData.Current.LocalFolder.Path;
-            }
-            catch
-            {
-                root = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer");
-            }
-
-            Directory.CreateDirectory(root);
-            return Path.Combine(root, FileName);
-        }
-
         public static void Save(LibrarySessionState state)
         {
-            try
-            {
-                string json = JsonSerializer.Serialize(state, new JsonSerializerOptions
-                {
-                    WriteIndented = true
-                });
-                File.WriteAllText(GetFilePath(), json);
-            }
-            catch
-            {
-                // 持久化失败不影响播放
-            }
+            LibraryDb.SaveSession(state?.Mode ?? "files", state?.FolderPath, state?.FilePaths);
         }
 
         public static void SaveFolder(string folderPath, IEnumerable<string> filePaths)
         {
-            Save(new LibrarySessionState
-            {
-                Mode = "folder",
-                FolderPath = folderPath,
-                FilePaths = new List<string>(filePaths)
-            });
+            LibraryDb.SaveSession("folder", folderPath, filePaths);
         }
 
         public static void SaveFiles(IEnumerable<string> filePaths)
         {
             // 保留已选浏览文件夹，避免「选文件」后文件夹分类丢失根目录
             string? folderPath = TryLoad()?.FolderPath;
-            Save(new LibrarySessionState
-            {
-                Mode = "files",
-                FolderPath = folderPath,
-                FilePaths = new List<string>(filePaths)
-            });
+            LibraryDb.SaveSession("files", folderPath, filePaths);
         }
 
-        public static LibrarySessionState? TryLoad()
+        public static LibrarySessionState? TryLoad() => LibraryDb.LoadSession();
+
+        /// <summary>仅供 SQLite 迁移读取旧 JSON 会话文件（避免迁移时走新层读到空库）。</summary>
+        internal static LibrarySessionState? TryLoadFromJsonFile()
         {
             try
             {
-                string path = GetFilePath();
-                if (!File.Exists(path))
+                string root;
+                try
+                {
+                    root = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
+                }
+                catch
+                {
+                    root = System.IO.Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "CelesteMusicPlayer");
+                }
+
+                string path = System.IO.Path.Combine(root, "last-library.json");
+                if (!System.IO.File.Exists(path))
                 {
                     return null;
                 }
 
-                string json = File.ReadAllText(path);
-                return JsonSerializer.Deserialize<LibrarySessionState>(json);
+                string json = System.IO.File.ReadAllText(path);
+                return System.Text.Json.JsonSerializer.Deserialize<LibrarySessionState>(json);
             }
             catch
             {
