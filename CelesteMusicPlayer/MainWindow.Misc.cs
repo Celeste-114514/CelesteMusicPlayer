@@ -391,6 +391,8 @@ namespace CelesteMusicPlayer
                 AudioFxChannelSwapToggle.IsOn = ch.SwapChannels;
                 AudioFxChannelInvertLToggle.IsOn = ch.InvertLeft;
                 AudioFxChannelInvertRToggle.IsOn = ch.InvertRight;
+                AudioFxChannelLeftDelaySlider.Value = ch.LeftDelayMs;
+                AudioFxChannelRightDelaySlider.Value = ch.RightDelayMs;
 
                 var safety = extra.Safety;
                 AudioFxSafetyHeadroomSlider.Value = safety.HeadroomDb;

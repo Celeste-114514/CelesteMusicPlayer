@@ -689,6 +689,174 @@ namespace CelesteMusicPlayer.EqRegression
 
             Assert.InRange(zeros, 1900, 2100);
         }
+
+        [Fact]
+        public void Src_QualityModes_AllProduceCorrectOutput()
+        {
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(44100, 1);
+
+            foreach (var quality in new[] { ResamplingSourceProvider.QualityLowLatency, ResamplingSourceProvider.QualityBalanced, ResamplingSourceProvider.QualityTransparent })
+            {
+                var src = new FiniteSineSource(fmt, BuildTone(44100, 1000, 44100)); // 1 秒（每档独立源）
+                var res = new ResamplingSourceProvider(src, 96000, quality, ResamplingSourceProvider.DitherOff);
+                Assert.Equal(96000, res.WaveFormat.SampleRate);
+                Assert.Equal(24, res.WaveFormat.BitsPerSample);
+                long frames = 0;
+                var buf = new byte[96000 * 3];
+                int read;
+                while ((read = res.Read(buf, 0, buf.Length)) > 0)
+                {
+                    frames += read / 3;
+                }
+
+                Assert.InRange(frames, 95000, 97000);
+            }
+        }
+
+        [Fact]
+        public void Src_DitherModes_ProduceDifferentOutput()
+        {
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(44100, 1);
+            byte[] ReadAll(string dither)
+            {
+                var src = new FiniteSineSource(fmt, BuildTone(44100, 1000, 44100));
+                var res = new ResamplingSourceProvider(src, 96000, ResamplingSourceProvider.QualityBalanced, dither);
+                var buf = new byte[96000 * 3];
+                int got = 0;
+                while (got < buf.Length)
+                {
+                    int n = res.Read(buf, got, buf.Length - got);
+                    if (n <= 0) break;
+                    got += n;
+                }
+
+                return buf;
+            }
+
+            byte[] off = ReadAll(ResamplingSourceProvider.DitherOff);
+            byte[] tpdf = ReadAll(ResamplingSourceProvider.DitherTpdf);
+            byte[] ns5 = ReadAll(ResamplingSourceProvider.DitherNs5);
+            // 三种模式输出应互不相同（dither 确实注入了噪声/整形）
+            Assert.False(SequenceEqual(off, tpdf));
+            Assert.False(SequenceEqual(off, ns5));
+            Assert.False(SequenceEqual(tpdf, ns5));
+        }
+
+        private static bool SequenceEqual(byte[] a, byte[] b)
+        {
+            if (a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++)
+            {
+                if (a[i] != b[i]) return false;
+            }
+
+            return true;
+        }
+    }
+
+    public class DspBypassAndDelayTests
+    {
+        private const int Fs = 44100;
+
+        [Fact]
+        public void BypassAll_MakesOutputBitPerfect_EvenWithEqActive()
+        {
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(Fs, 1);
+            float[] tone = BuildTone(Fs, 1000, Fs);
+
+            // 参考：不经任何 DSP 的原始直通字节
+            var srcRef = new FiniteSineSource(fmt, tone);
+            byte[] passthrough = new byte[Fs * 4];
+            srcRef.Read(passthrough, 0, passthrough.Length);
+
+            // EQ 激活：输出应明显不同于原始
+            var curve = new EqCurveState { Enabled = true, PresetId = "t", PresetName = "t" };
+            curve.Bands.Add(new EqBand { Enabled = true, FrequencyHz = 1000, GainDb = 12.0, Q = 1.0, FilterType = EqFilterType.Peaking });
+            var dspEq = new ManagedDspSourceProvider(new FiniteSineSource(fmt, tone));
+            dspEq.SetMetering(false);
+            dspEq.UpdateEqCurve(curve);
+            byte[] eqBuf = new byte[Fs * 4];
+            dspEq.Read(eqBuf, 0, eqBuf.Length);
+            Assert.False(SequenceEqual(passthrough, eqBuf), "EQ 生效时输出应被改变");
+
+            // 总旁路：输出必须与原始逐字节一致（bit-perfect），且设置保留
+            var dspBypass = new ManagedDspSourceProvider(new FiniteSineSource(fmt, tone));
+            dspBypass.SetMetering(false);
+            dspBypass.UpdateEqCurve(curve);
+            dspBypass.SetBypassAll(true);
+            byte[] bypassBuf = new byte[Fs * 4];
+            dspBypass.Read(bypassBuf, 0, bypassBuf.Length);
+            Assert.True(SequenceEqual(passthrough, bypassBuf), "总旁路后输出必须 bit-perfect");
+            Assert.True(dspBypass.IsBypassAll);
+        }
+
+        [Fact]
+        public void ChannelDelay_DefersPulseByDelayMs()
+        {
+            var fmt = WaveFormat.CreateIeeeFloatWaveFormat(Fs, 2);
+            // 1 秒立体声：前 0.5 秒全 0（预热延迟渐变），0.5s 处左声道放一个 0.8 脉冲
+            float[] s = new float[Fs * 2];
+            int pulseFrame = Fs / 2; // 22050
+            s[pulseFrame * 2] = 0.8f;
+            var src = new FiniteSineSource(fmt, s);
+
+            var dsp = new ManagedDspSourceProvider(src);
+            dsp.SetMetering(false);
+            dsp.UpdateChannel(new ChannelBalanceState
+            {
+                Enabled = true,
+                LeftDelayMs = 5.0, // 5ms @44.1k = 220.5 样本
+                RightDelayMs = 0.0
+            });
+
+            byte[] buf = new byte[Fs * fmt.BlockAlign];
+            int got = 0;
+            while (got < buf.Length)
+            {
+                int n = dsp.Read(buf, got, buf.Length - got);
+                if (n <= 0) break;
+                got += n;
+            }
+
+            // 扫描左声道最大帧位置与幅度；右声道应全 0
+            int maxFrame = -1;
+            float maxVal = 0f;
+            float maxRight = 0f;
+            for (int f = 0; f < Fs; f++)
+            {
+                float l = BitConverter.ToSingle(buf, f * 8);
+                float r = BitConverter.ToSingle(buf, f * 8 + 4);
+                if (Math.Abs(l) > maxVal) { maxVal = Math.Abs(l); maxFrame = f; }
+                if (Math.Abs(r) > maxRight) maxRight = Math.Abs(r);
+            }
+
+            // 脉冲应被延迟约 220.5 帧（线性插值把 0.8 摊到相邻两帧，各约 0.4）
+            Assert.InRange(maxFrame, pulseFrame + 218, pulseFrame + 224);
+            Assert.InRange(maxVal, 0.30, 0.50);
+            Assert.True(maxRight < 1e-6, "右声道不应有信号");
+        }
+
+        private static float[] BuildTone(int sampleRate, double hz, int frames, double amp = 0.5)
+        {
+            var t = new float[frames];
+            for (int i = 0; i < frames; i++)
+            {
+                t[i] = (float)(amp * Math.Sin(2 * Math.PI * hz * i / sampleRate));
+            }
+
+            return t;
+        }
+
+        private static bool SequenceEqual(byte[] a, byte[] b)
+        {
+            if (a.Length != b.Length) return false;
+            for (int i = 0; i < a.Length; i++)
+            {
+                if (a[i] != b[i]) return false;
+            }
+
+            return true;
+        }
     }
 
 }

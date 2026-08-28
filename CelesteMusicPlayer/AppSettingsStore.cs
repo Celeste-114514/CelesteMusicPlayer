@@ -43,6 +43,12 @@ namespace CelesteMusicPlayer
         /// 仅 WASAPI 独占模式生效；设备不支持目标采样率时自动退回不升频。</summary>
         public int SrcTargetHz { get; set; }
 
+        /// <summary>SRC 质量档位：lowlatency / balanced / transparent（默认 balanced）。</summary>
+        public string SrcQuality { get; set; } = ResamplingSourceProvider.QualityBalanced;
+
+        /// <summary>SRC 量化前抖动：off / tpdf / highpass / ns5（默认 off）。</summary>
+        public string SrcDither { get; set; } = ResamplingSourceProvider.DitherOff;
+
         public bool MiniPlayerAlwaysOnTop { get; set; } = true;
 
         public bool OpenDesktopLyricsOnStartup { get; set; }

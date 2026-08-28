@@ -36,6 +36,9 @@ namespace CelesteMusicPlayer
         private DspSafetyState? _safety; // 安全限幅/余量状态
         private int _crossfadeMs; // 交叉淡化时长（毫秒），0 = 关闭（保持无缝硬切）
         private int _resampleTargetHz; // 采样率升频目标（Hz），0 = 关闭
+        private string _srcQuality = ResamplingSourceProvider.QualityBalanced; // SRC 质量档位
+        private string _srcDither = ResamplingSourceProvider.DitherOff; // SRC 量化前抖动
+        private string _srcStateDescription = ""; // 最近一次播放的 SRC 实际状态描述（源率→目标率/未升频原因）
         private ManagedDspSourceProvider? _dspProvider; // 统一 DSP 链（EQ→声道平衡→限幅），NAudio 与独占共用
         // ReplayGain 响度归一化（缓存到新建链，保证换歌/重播也生效）
         private ReplayGainState? _rgState;
@@ -156,6 +159,32 @@ namespace CelesteMusicPlayer
         /// <summary>当前升频目标采样率（Hz，0=关闭）。</summary>
         public int ResampleTargetHz => _resampleTargetHz;
 
+        /// <summary>设置 SRC 质量档位（lowlatency/balanced/transparent）。下次开播生效。</summary>
+        public void SetSrcQuality(string quality)
+        {
+            if (quality is ResamplingSourceProvider.QualityLowLatency
+                or ResamplingSourceProvider.QualityBalanced
+                or ResamplingSourceProvider.QualityTransparent)
+            {
+                _srcQuality = quality;
+            }
+        }
+
+        /// <summary>设置 SRC 量化前抖动（off/tpdf/highpass/ns5）。下次开播生效。</summary>
+        public void SetSrcDither(string dither)
+        {
+            if (dither is ResamplingSourceProvider.DitherOff
+                or ResamplingSourceProvider.DitherTpdf
+                or ResamplingSourceProvider.DitherHighpass
+                or ResamplingSourceProvider.DitherNs5)
+            {
+                _srcDither = dither;
+            }
+        }
+
+        /// <summary>最近一次播放的 SRC 实际状态描述（如 "44.1k→96k" / "未升频（目标低于源）" / "未升频（设备不支持 96k）" / "SRC 关闭"）。</summary>
+        public string SrcStateDescription => _srcStateDescription;
+
         /// <summary>设置 ReplayGain（响度归一化）。播放中实时生效（10ms 平滑）。</summary>
         public void SetReplayGain(ReplayGainState? state, double trackGainDb, double albumGainDb, double peak)
         {
@@ -165,6 +194,13 @@ namespace CelesteMusicPlayer
             _rgPeak = peak;
             _dspProvider?.SetReplayGain(state, trackGainDb, albumGainDb, peak);
         }
+
+        /// <summary>DSP 总旁路（A/B 对比）：开 = 跳过全部 DSP 使输出 bit-perfect，设置全部保留。
+        /// 播放中实时切换（下一次 Read 生效）。</summary>
+        public void SetBypassAll(bool bypass) => _dspProvider?.SetBypassAll(bypass);
+
+        /// <summary>当前是否处于 DSP 总旁路。</summary>
+        public bool IsBypassAll => _dspProvider?.IsBypassAll ?? false;
 
         /// <summary>读取实时电平快照（post-DSP 信号）到调用方数组。返回是否取到
         /// （未播放、或 DSD/DoP 直出不挂 DSP 链时为 false）。UI 线程调用。</summary>
@@ -648,6 +684,11 @@ namespace CelesteMusicPlayer
             int srcHz = _waveFile?.WaveFormat.SampleRate ?? 0;
             if (_resampleTargetHz <= 0 || requireExact || mode != OutputMode.WasapiExclusive || srcHz <= 0 || _resampleTargetHz <= srcHz)
             {
+                _srcStateDescription = _resampleTargetHz <= 0 ? "SRC 关闭"
+                    : requireExact ? "DSD/DoP 直出（不升频）"
+                    : mode != OutputMode.WasapiExclusive ? "非独占模式（不升频）"
+                    : _resampleTargetHz <= srcHz ? "目标(" + _resampleTargetHz + ") ≤ 源(" + srcHz + ")，不升频"
+                    : "SRC 关闭";
                 return seamless;
             }
 
@@ -657,24 +698,28 @@ namespace CelesteMusicPlayer
             {
                 if (!DeviceSupportsSampleRate(deviceIdentifier, _resampleTargetHz, seamless.WaveFormat.Channels))
                 {
+                    _srcStateDescription = "设备不支持 " + _resampleTargetHz + "Hz（源 " + srcHz + "Hz）→ 未升频";
                     StartupLog.Write($"SRC 跳过：设备不支持 {_resampleTargetHz}Hz 独占（源 {srcHz}Hz）");
                     return seamless;
                 }
             }
             catch (Exception caught)
             {
+                _srcStateDescription = "预检失败（" + caught.GetType().Name + "）→ 未升频";
                 StartupLog.WriteException("HiFiOutputBackend.BuildSrcChain", caught);
                 return seamless;
             }
 
             try
             {
-                var src = new ResamplingSourceProvider(seamless, _resampleTargetHz);
-                StartupLog.Write($"SRC 启用：{srcHz}Hz → {_resampleTargetHz}Hz（WDL 重采样，输出 24bit）");
+                var src = new ResamplingSourceProvider(seamless, _resampleTargetHz, _srcQuality, _srcDither);
+                _srcStateDescription = (srcHz / 1000.0).ToString("0.#") + "k→" + (_resampleTargetHz / 1000.0).ToString("0.#") + "k（" + _srcQuality + (_srcDither != ResamplingSourceProvider.DitherOff ? "+dither:" + _srcDither : "") + "）";
+                StartupLog.Write($"SRC 启用：{srcHz}Hz → {_resampleTargetHz}Hz（WDL 重采样，输出 24bit，质量={_srcQuality}，dither={_srcDither}）");
                 return src;
             }
             catch (Exception caught)
             {
+                _srcStateDescription = "SRC 初始化失败（" + caught.GetType().Name + "）→ 未升频";
                 StartupLog.WriteException("HiFiOutputBackend.BuildSrcChain", caught);
                 return seamless;
             }

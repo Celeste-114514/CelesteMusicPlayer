@@ -61,6 +61,18 @@ namespace CelesteMusicPlayer
         private volatile bool _convEnabled;
         private float _convGain = 1f; // 线性增益（由 GainDb 换算；状态更新时变化，读侧极端误差可忽略）
 
+        // DSP 总旁路（A/B 对比用）：开 = 全部 DSP 跳过、输出 bit-perfect，但设置保留（关掉即恢复）。
+        // 旁路时 Read 走直通路径；电平表仍走 MeasurePassthrough 测量（不改写输出）。
+        private volatile bool _bypassAll;
+
+        // 声道延迟差（左右各一环形缓冲 + 线性插值）。目标延迟按采样率换算，
+        // 当前延迟逐帧 ±1 样本渐变逼近（对齐 ECHO ChannelBalanceProcessor 的平滑思路，避免切值爆音）。
+        private float[] _delayRingL = new float[1];
+        private float[] _delayRingR = new float[1];
+        private int _delayPosL, _delayPosR;
+        private double _delayCurL, _delayCurR;       // 当前生效延迟（样本）
+        private double _delayTargetL, _delayTargetR; // 目标延迟（样本）
+
         public ManagedDspSourceProvider(IWaveSourceProvider source)
         {
             _source = source ?? throw new ArgumentNullException(nameof(source));
@@ -267,6 +279,20 @@ namespace CelesteMusicPlayer
             double rg = Math.Pow(10.0, Math.Clamp(state.RightGainDb, -12.0, 12.0) / 20.0);
             _gainL = lg * panL;
             _gainR = rg * panR;
+
+            // 声道延迟差：目标延迟样本数 = 毫秒 × 采样率 / 1000；延迟越大缓冲越长（上限 10ms + 2 保险）
+            double sr = _format.SampleRate > 0 ? _format.SampleRate : 44100.0;
+            _delayTargetL = Math.Clamp(state.LeftDelayMs, 0.0, 10.0) * sr / 1000.0;
+            _delayTargetR = Math.Clamp(state.RightDelayMs, 0.0, 10.0) * sr / 1000.0;
+            int ringLen = Math.Max(1, (int)(sr * 0.010) + 2);
+            if (_delayRingL.Length < ringLen)
+            {
+                _delayRingL = new float[ringLen];
+                _delayRingR = new float[ringLen];
+                _delayPosL = 0;
+                _delayPosR = 0;
+            }
+
             RefreshActive();
         }
 
@@ -340,11 +366,22 @@ namespace CelesteMusicPlayer
         /// <summary>任意 DSP 是否激活（UI 据此提示"非 bit-perfect"）。</summary>
         public bool IsActive => _active;
 
+        /// <summary>DSP 总旁路（A/B 对比用）：开 = 跳过全部 DSP 使输出 bit-perfect，设置全部保留。
+        /// 播放中可随时切换，下一次 Read 生效（旁路时走直通路径，电平表仍测量但不改写输出）。</summary>
+        public void SetBypassAll(bool bypass)
+        {
+            _bypassAll = bypass;
+            RefreshActive();
+        }
+
+        /// <summary>当前是否处于 DSP 总旁路。</summary>
+        public bool IsBypassAll => _bypassAll;
+
         /// <summary>重算 DSP 是否生效；当无任一 DSP 生效时后续 Read 直接直通（bit-perfect，零逐样本开销）。</summary>
         private void RefreshActive()
         {
-            _active = _eqEnabled || _chEnabled || _limiterEnabled || _rgActive || Math.Abs(_headroomDb) > 0.001
-                || Math.Abs(_volumeGain - 1f) > 0.0001f || _convEnabled;
+            _active = !_bypassAll && (_eqEnabled || _chEnabled || _limiterEnabled || _rgActive || Math.Abs(_headroomDb) > 0.001
+                || Math.Abs(_volumeGain - 1f) > 0.0001f || _convEnabled);
         }
 
         /// <summary>设置采样级总音量基因（共享/ASIO 软件音量），0..2。音量=1 时不进 Processing。</summary>
@@ -455,6 +492,9 @@ namespace CelesteMusicPlayer
             bool isFloat = _isFloat;
             int bits = _format.BitsPerSample;
             double gainL = _gainL, gainR = _gainR;
+            double delayTargetL = _delayTargetL, delayTargetR = _delayTargetR;
+            bool delayActiveL = delayTargetL > 0.5 || _delayCurL > 0.5;
+            bool delayActiveR = delayTargetR > 0.5 || _delayCurR > 0.5;
             bool stereo = _channels >= 2;
             bool wantsClip = doHeadroom || doLimiter || doEq || doCh || _rgActive; // 只要有任何 DSP 即需 Clamp 保护
             float preampGain = (float)_preampGain;
@@ -571,15 +611,18 @@ namespace CelesteMusicPlayer
                     r = (float)(r * gainR);
                     if (chInvL) l = -l;
                     if (chInvR) r = -r;
+
+                    // 声道延迟差：左右各一环形缓冲，目标延迟逐帧 ±1 样本渐变（无爆音）
+                    if (delayActiveL) l = ApplyDelay(l, _delayRingL, ref _delayPosL, ref _delayCurL, delayTargetL);
+                    if (delayActiveR) r = ApplyDelay(r, _delayRingR, ref _delayPosR, ref _delayCurR, delayTargetR);
+
                     buf[li] = l;
                     buf[ri] = r;
                 }
             }
 
             // 实时电平：测量 post-DSP 信号（即实际送往输出的样本），供 UI 电平条显示
-            if (_meterEnabled) _levelMeter.Update(buf, n, ch);
-
-            // 回写 RG 渐变进度（供下一次 block 继续）
+            if (_meterEnabled) _levelMeter.Update(buf, n, ch);            // 回写 RG 渐变进度（供下一次 block 继续）
             _rgCurrentDb = rgCurrentDb;
             _rgRampLeft = Math.Max(0, rgRampLeft);
 
@@ -711,6 +754,26 @@ namespace CelesteMusicPlayer
             // k≥0；用 1/(1+k) 而非 tanh，避免 fast-math/性能开销且曲线足够柔
             float compressed = 0.9f + 0.1f * (1f - 1f / (1f + k));
             return s > 0 ? compressed : -compressed;
+        }
+
+        /// <summary>声道延迟：环形缓冲延迟 + 线性插值（小数样本精度）。
+        /// 目标延迟逐帧 ±1 样本渐变逼近（对齐 ECHO ChannelBalanceProcessor 平滑思路，避免切值爆音）。
+        /// 环形缓冲初始全 0，延迟启动时的开头几毫秒输出 0（延迟的本意，正确行为）。</summary>
+        private static float ApplyDelay(float v, float[] ring, ref int pos, ref double cur, double target)
+        {
+            if (cur < target) cur = Math.Min(target, cur + 1.0);
+            else if (cur > target) cur = Math.Max(target, cur - 1.0);
+
+            int len = ring.Length;
+            ring[pos] = v;
+            double readPos = pos - cur;
+            if (readPos < 0) readPos += len;
+            int i0 = (int)readPos;
+            float frac = (float)(readPos - i0);
+            int i1 = i0 + 1 < len ? i0 + 1 : 0;
+            float s = ring[i0] * (1f - frac) + ring[i1] * frac;
+            pos = (pos + 1) % len;
+            return s;
         }
     }
 }

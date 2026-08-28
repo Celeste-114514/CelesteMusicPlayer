@@ -59,8 +59,24 @@ namespace CelesteMusicPlayer
         /// <summary>当前升频目标采样率（Hz，0=关闭）。</summary>
         public int ResampleTargetHz => _hifiOut?.ResampleTargetHz ?? 0;
 
+        /// <summary>设置 SRC 质量档位（lowlatency/balanced/transparent）。下次开播生效。</summary>
+        public void SetSrcQuality(string quality) => _hifiOut?.SetSrcQuality(quality);
+
+        /// <summary>设置 SRC 量化前抖动（off/tpdf/highpass/ns5）。下次开播生效。</summary>
+        public void SetSrcDither(string dither) => _hifiOut?.SetSrcDither(dither);
+
+        /// <summary>最近一次播放的 SRC 实际状态描述（如 "44.1k→96k" / "设备不支持 96k → 未升频"）。</summary>
+        public string SrcStateDescription => _hifiOut?.SrcStateDescription ?? "";
+
         /// <summary>当前交叉淡化时长（毫秒，0 = 关闭）。</summary>
         public int CrossfadeMs => _hifiOut?.CrossfadeMs ?? 0;
+
+        /// <summary>DSP 总旁路（A/B 对比）：开 = 跳过全部 DSP 使输出 bit-perfect，设置保留。
+        /// 播放中实时切换。</summary>
+        public void SetBypassAll(bool bypass) => _hifiOut?.SetBypassAll(bypass);
+
+        /// <summary>当前是否处于 DSP 总旁路。</summary>
+        public bool IsBypassAll => _hifiOut?.IsBypassAll ?? false;
 
         private string? _devicePreference;
         private HiFiOutputBackend? _hifiOut;
@@ -396,7 +412,10 @@ namespace CelesteMusicPlayer
                 // 交叉淡化时长取自设置（0 = 无缝硬切，即加此功能前的原行为）
                 _hifiOut.SetCrossfade(AppSettingsStore.Load().CrossfadeMs);
                 // 采样率升频目标取自设置（0 = 关闭；仅独占模式生效，设备不支持时自动退回）
-                _hifiOut.SetResampleTargetRate(AppSettingsStore.Load().SrcTargetHz);
+                AppSettingsState st = AppSettingsStore.Load();
+                _hifiOut.SetResampleTargetRate(st.SrcTargetHz);
+                _hifiOut.SetSrcQuality(st.SrcQuality);
+                _hifiOut.SetSrcDither(st.SrcDither);
                 bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference, requireExact: requireExact);
                 StartupLog.Write("HiFi播放 mode=" + _outputMode + " 设备=" + (_hifiOut.OutputDeviceName ?? "?") + " (pref=" + (_devicePreference ?? "默认") + ") ok=" + ok + (ok ? "" : " err=" + (_hifiOut.LastError ?? "")));
                 if (!ok)

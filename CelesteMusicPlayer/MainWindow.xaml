@@ -2892,6 +2892,38 @@
                         HorizontalScrollBarVisibility="Disabled"
                         Padding="0,0,12,0">
                         <StackPanel Spacing="16" MaxWidth="860" HorizontalAlignment="Stretch">
+                            <!-- DSP 总开关（旁路 / A-B 对比）：开 = 全部 DSP 立即旁路、输出恢复 bit-perfect，设置全部保留 -->
+                            <Border
+                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                BorderThickness="1"
+                                CornerRadius="10"
+                                Padding="16,10">
+                                <Grid ColumnSpacing="16">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="2" VerticalAlignment="Center">
+                                        <TextBlock Text="DSP 总开关（A/B 对比）" FontSize="15" FontWeight="SemiBold" />
+                                        <TextBlock
+                                            x:Name="DspBypassStatusText"
+                                            FontSize="12"
+                                            Opacity="0.65"
+                                            TextWrapping="WrapWholeWords"
+                                            Text="开启 = 所有 DSP（EQ／声道／限幅／ReplayGain／卷积）立即旁路，输出恢复 bit-perfect；所有设置保留，关闭开关即恢复。用于对比「处理前 / 处理后」听感。" />
+                                    </StackPanel>
+                                    <ToggleSwitch
+                                        x:Name="DspBypassToggle"
+                                        Grid.Column="1"
+                                        Header="旁路"
+                                        OnContent=""
+                                        OffContent=""
+                                        VerticalAlignment="Center"
+                                        Toggled="DspBypassToggle_Toggled" />
+                                </Grid>
+                            </Border>
+
                             <!-- 耳机校正（OPRA）：打开独立窗口搜索耳机型号并应用其 EQ 目标曲线 -->
                             <Border
                                 Background="{ThemeResource SubtleFillColorSecondaryBrush}"
@@ -3248,6 +3280,7 @@
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="*" />
@@ -3284,6 +3317,20 @@
                                             <ToggleSwitch x:Name="AudioFxChannelSwapToggle" Header="交换左右" OnContent="" OffContent="" Toggled="AudioFxChannelSwap_Toggled" />
                                             <ToggleSwitch x:Name="AudioFxChannelInvertLToggle" Header="左反相" OnContent="" OffContent="" Toggled="AudioFxChannelSwap_Toggled" />
                                             <ToggleSwitch x:Name="AudioFxChannelInvertRToggle" Header="右反相" OnContent="" OffContent="" Toggled="AudioFxChannelSwap_Toggled" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="3" Grid.Column="0" Spacing="4">
+                                            <TextBlock Text="左声道延迟 (ms)" FontSize="12" />
+                                            <Slider
+                                                x:Name="AudioFxChannelLeftDelaySlider"
+                                                Minimum="0" Maximum="10" StepFrequency="0.5" Value="0"
+                                                ValueChanged="AudioFxChannelSlider_ValueChanged" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="3" Grid.Column="1" Spacing="4">
+                                            <TextBlock Text="右声道延迟 (ms)" FontSize="12" />
+                                            <Slider
+                                                x:Name="AudioFxChannelRightDelaySlider"
+                                                Minimum="0" Maximum="10" StepFrequency="0.5" Value="0"
+                                                ValueChanged="AudioFxChannelSlider_ValueChanged" />
                                         </StackPanel>
                                     </Grid>
                                 </StackPanel>
@@ -4416,11 +4463,59 @@
                                     VerticalAlignment="Center"
                                     MinWidth="58" />
                             </Grid>
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="92" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="质量档位" Opacity="0.7" VerticalAlignment="Center" />
+                                <ComboBox
+                                    x:Name="SrcQualityCombo"
+                                    Grid.Column="1"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Center"
+                                    SelectionChanged="SrcQualityCombo_SelectionChanged" />
+                                <TextBlock
+                                    x:Name="SrcQualityHintText"
+                                    Grid.Column="2"
+                                    Text="均衡"
+                                    FontSize="12"
+                                    VerticalAlignment="Center"
+                                    MinWidth="58" />
+                            </Grid>
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="92" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="量化抖动" Opacity="0.7" VerticalAlignment="Center" />
+                                <ComboBox
+                                    x:Name="SrcDitherCombo"
+                                    Grid.Column="1"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Center"
+                                    SelectionChanged="SrcDitherCombo_SelectionChanged" />
+                                <TextBlock
+                                    x:Name="SrcDitherHintText"
+                                    Grid.Column="2"
+                                    Text="关闭"
+                                    FontSize="12"
+                                    VerticalAlignment="Center"
+                                    MinWidth="58" />
+                            </Grid>
+                            <TextBlock
+                                x:Name="SrcSessionStateText"
+                                FontSize="12"
+                                Opacity="0.8"
+                                TextWrapping="WrapWholeWords"
+                                Text="—" />
                             <TextBlock
                                 FontSize="12"
                                 Opacity="0.6"
                                 TextWrapping="WrapWholeWords"
-                                Text="仅 WASAPI 独占模式生效（共享/ASIO 不升频）。用 WDL 高质量重采样（与 Reaper 同源）。设备不支持目标采样率时自动退回不升频。改动在下次播放时生效。" />
+                                Text="仅 WASAPI 独占模式生效（共享/ASIO 不升频）。设备不支持目标采样率时自动退回不升频。质量/抖动改动在下次播放时生效。" />
                         </StackPanel>
                     </StackPanel>
 

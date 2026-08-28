@@ -32,6 +32,12 @@ namespace CelesteMusicPlayer
         /// <summary>单声道模式摘要合并：off=保持立体声 / left=只用左 / right=只用右 / sum=左右求和。</summary>
         public string MonoMode { get; set; } = "off";
 
+        /// <summary>左声道延迟（毫秒，0-10）。用于校正左右声道时序差（对齐 ECHO 声道工具）。</summary>
+        public double LeftDelayMs { get; set; }
+
+        /// <summary>右声道延迟（毫秒，0-10）。</summary>
+        public double RightDelayMs { get; set; }
+
         public ChannelBalanceState Clone() => new()
         {
             Enabled = Enabled,
@@ -41,7 +47,9 @@ namespace CelesteMusicPlayer
             InvertLeft = InvertLeft,
             InvertRight = InvertRight,
             SwapChannels = SwapChannels,
-            MonoMode = MonoMode
+            MonoMode = MonoMode,
+            LeftDelayMs = LeftDelayMs,
+            RightDelayMs = RightDelayMs
         };
 
         public static ChannelBalanceState Default() => new() { MonoMode = "off" };
@@ -51,6 +59,8 @@ namespace CelesteMusicPlayer
             Balance = Math.Clamp(Balance, -1.0, 1.0);
             LeftGainDb = Math.Clamp(LeftGainDb, -12.0, 12.0);
             RightGainDb = Math.Clamp(RightGainDb, -12.0, 12.0);
+            LeftDelayMs = Math.Clamp(LeftDelayMs, 0.0, 10.0);
+            RightDelayMs = Math.Clamp(RightDelayMs, 0.0, 10.0);
             if (MonoMode is not ("off" or "left" or "right" or "sum"))
             {
                 MonoMode = "off";

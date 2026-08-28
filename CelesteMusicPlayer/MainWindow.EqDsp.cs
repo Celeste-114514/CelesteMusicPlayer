@@ -1021,7 +1021,9 @@ namespace CelesteMusicPlayer
                 SwapChannels = AudioFxChannelSwapToggle.IsOn,
                 InvertLeft = AudioFxChannelInvertLToggle.IsOn,
                 InvertRight = AudioFxChannelInvertRToggle.IsOn,
-                MonoMode = CurrentAudioFxMonoMode()
+                MonoMode = CurrentAudioFxMonoMode(),
+                LeftDelayMs = AudioFxChannelLeftDelaySlider.Value,
+                RightDelayMs = AudioFxChannelRightDelaySlider.Value
             };
 
             var safety = new DspSafetyState
@@ -1050,6 +1052,29 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // DSP 总旁路（A/B 对比）优先显示：旁路时输出 bit-perfect，无论 DSP 设置如何
+            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            if (bypass)
+            {
+                AudioFxBitPerfectStatusText.Text = "bit-perfect 直通（DSP 已旁路）";
+                if (_currentCategory == "AudioFX")
+                {
+                    NowPlayingText.Text = "DSP 已旁路（A/B 对比中）→ 输出 bit-perfect";
+                }
+
+                if (DspBypassStatusText != null)
+                {
+                    DspBypassStatusText.Text = "已旁路：所有 DSP 暂时不参与处理，输出恢复 bit-perfect。设置全部保留，关闭开关即恢复。";
+                }
+
+                return;
+            }
+
+            if (DspBypassStatusText != null)
+            {
+                DspBypassStatusText.Text = "开启 = 所有 DSP（EQ／声道／限幅／ReplayGain／卷积）立即旁路，输出恢复 bit-perfect；所有设置保留，关闭开关即恢复。用于对比「处理前 / 处理后」听感。";
+            }
+
             bool eqActive = _audioFxEq != null && _audioFxEq.HasEffect();
             bool active = eqActive
                 || AudioFxChannelToggle.IsOn
@@ -1065,6 +1090,16 @@ namespace CelesteMusicPlayer
                     ? "⚠ 使用 DSP（EQ/声道平衡/限幅）→ 输出非 bit-perfect"
                     : "音效处理：全部关闭 → bit-perfect 直通";
             }
+        }
+
+        /// <summary>DSP 总旁路开关（A/B 对比）：开 = 全部 DSP 立即旁路（bit-perfect），设置保留。
+        /// 仅内存态（不持久化），播放中实时切换。</summary>
+        private void DspBypassToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            _audioEngine?.SetBypassAll(bypass);
+            UpdateDspBitPerfectUi();
+            StartupLog.Write("[DSP] 总旁路切换: " + (bypass ? "开（bit-perfect）" : "关（DSP 恢复）"));
         }
 
 

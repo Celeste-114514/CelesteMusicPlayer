@@ -2210,6 +2210,8 @@ namespace CelesteMusicPlayer
                 AudioProDspChain.Text = "EQ" + (eqOn ? "✓" : "—") + " · 声道" + (chOn ? "✓" : "—") + " · 限幅" + (limiterOn ? "✓" : "—") + " · ReplayGain" + (rgOn ? "✓" : "—");
                 // 链路可视化着色 + bit-perfect 徽章
                 ApplyLinkVisual(pure: active.Count == 0, activeText: string.Join("、", active));
+                // SRC 会话实际状态（源→目标 / 未升频原因）
+                RefreshSrcSessionState();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
