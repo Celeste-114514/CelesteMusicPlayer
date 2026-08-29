@@ -59,6 +59,14 @@ namespace CelesteMusicPlayer
 
         protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
         {
+            // 醒目 startup banner:让用户/排错者一眼看出当前跑的是哪个版本、日志在哪
+            string procVer = "unknown";
+            try { procVer = typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown"; } catch { }
+            StartupLog.Write("=======================================================");
+            StartupLog.Write("=== CelesteMusicPlayer v" + procVer + " 启动 ===");
+            StartupLog.Write("=== 日志: " + StartupLog.CurrentFilePath + " ===");
+            StartupLog.Write("=== PID=" + Environment.ProcessId + "  启动时间=" + DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss") + " ===");
+            StartupLog.Write("=======================================================");
             StartupLog.Write("OnLaunched");
             // 应用资源在启动回调里再注册，供播放列表列宽 Binding 使用
             Resources["PlaylistColumns"] = PlaylistColumnWidths.Instance;

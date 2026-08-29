@@ -803,6 +803,22 @@ namespace CelesteMusicPlayer
             }
 
             StartupLog.Write("MainWindow ctor end");
+
+            // 把版本号和日志路径写进窗口标题,排查时一眼能看出是不是在跑新版
+            try
+            {
+                string ver = typeof(MainWindow).Assembly.GetName().Version?.ToString() ?? "?";
+                string shortPath = StartupLog.CurrentFilePath;
+                if (shortPath.Length > 60)
+                {
+                    shortPath = "..." + shortPath[(shortPath.Length - 57)..];
+                }
+                Title = "CelesteMusicPlayer v" + ver + "   日志: " + shortPath;
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow set Title", caught);
+            }
         }
 
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]

@@ -3,11 +3,14 @@ using System.IO;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>启动轨迹日志（写在 exe 同目录，便于排查闪退）。</summary>
+    /// <summary>启动轨迹日志（写在 %LocalAppData%\CelesteMusicPlayer\CelesteMusicPlayer.log，便于排查闪退）。</summary>
     internal static class StartupLog
     {
         private static readonly object Gate = new();
         private static string? _path;
+
+        /// <summary>对外暴露：启动日志的完整文件路径（不让其他模块重新计算路径）。</summary>
+        public static string CurrentFilePath => LogPath;
 
         private static string LogPath
         {

@@ -61,8 +61,11 @@ namespace CelesteMusicPlayer
         /// <summary>注册 4 个按钮并开始拦截 WM_COMMAND。重复调用安全。</summary>
         public void Add()
         {
+            StartupLog.Write("[thumb] Add 被调用, hwnd=0x" + _hwnd.ToString("X") + " taskbar=" + (_taskbar != null) + " 已添加=" + _added + " 已释放=" + _disposed);
+
             if (_added || _disposed || _hwnd == IntPtr.Zero || _taskbar == null)
             {
+                StartupLog.Write("[thumb] Add 早返回: " + (_added ? "已添加" : _disposed ? "已释放" : _hwnd == IntPtr.Zero ? "hwnd=0" : "taskbar=null"));
                 return;
             }
 
@@ -70,10 +73,7 @@ namespace CelesteMusicPlayer
             {
                 _subclassDelegate = SubclassWndProc;
                 bool subclassed = SetWindowSubclass(_hwnd, _subclassDelegate, _subclassId, IntPtr.Zero);
-                if (!subclassed)
-                {
-                    StartupLog.Write("任务栏缩略图：SetWindowSubclass 失败，错误=" + Marshal.GetLastWin32Error());
-                }
+                StartupLog.Write("[thumb] SetWindowSubclass ok=" + subclassed + " err=" + Marshal.GetLastWin32Error());
 
                 _himl = BuildImageList();
                 if (_himl == IntPtr.Zero)
