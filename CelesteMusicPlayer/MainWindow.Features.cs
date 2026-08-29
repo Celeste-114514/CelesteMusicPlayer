@@ -1820,25 +1820,67 @@ namespace CelesteMusicPlayer
             CloseAlbumDetailUi();
             CloseArtistDetailUi();
 
-            IReadOnlyList<string> paths = string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal)
-                ? TrackStatsStore.GetAllFavorites()
-                : TrackStatsStore.GetRecentlyPlayed(100, AppSettingsStore.Load().RecentPlayedRangeDays);
-
             var items = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>();
-            foreach (string path in paths)
+            if (string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal))
             {
-                PlaylistItem? fromLib = FindLibraryItemByPath(path);
-                if (fromLib != null)
+                foreach (string path in TrackStatsStore.GetAllFavorites())
                 {
-                    items.Add(ClonePlaylistItem(fromLib));
-                }
-                else if (System.IO.File.Exists(path))
-                {
-                    try
+                    PlaylistItem? fromLib = FindLibraryItemByPath(path);
+                    if (fromLib != null)
                     {
-                        items.Add(CreatePlaylistItemFromPath(path));
+                        items.Add(ClonePlaylistItem(fromLib));
                     }
-                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+                    else if (System.IO.File.Exists(path))
+                    {
+                        try
+                        {
+                            items.Add(CreatePlaylistItemFromPath(path));
+                        }
+                        catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+                    }
+                }
+            }
+            else
+            {
+                // 最近播放 = 播放历史事件流水（每次播放一条记录，含播放时间/时长/是否播完）。
+                // 与 LibraryDb 记录点（切歌/播完）对应；双击等交互复用歌曲行通用逻辑。
+                foreach (LibraryDb.PlaybackHistoryEntry e in LibraryDb.LoadPlaybackHistory(200))
+                {
+                    PlaylistItem? item = null;
+                    if (System.IO.File.Exists(e.FilePath))
+                    {
+                        PlaylistItem? fromLib = FindLibraryItemByPath(e.FilePath);
+                        if (fromLib != null)
+                        {
+                            item = ClonePlaylistItem(fromLib);
+                        }
+                        else
+                        {
+                            try { item = CreatePlaylistItemFromPath(e.FilePath); }
+                            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+                        }
+                    }
+
+                    item ??= new PlaylistItem { FilePath = e.FilePath, Title = e.Title };
+                    if (!string.IsNullOrWhiteSpace(e.Title)
+                        && string.Equals(item.Title, System.IO.Path.GetFileNameWithoutExtension(e.FilePath), StringComparison.OrdinalIgnoreCase))
+                    {
+                        item.Title = e.Title; // 无内嵌标题时用历史记录的标题
+                    }
+
+                    // 第二行显示播放信息："播放于 MM-dd HH:mm - 播放 m:ss · 播完/未播完"
+                    DateTime local = e.PlayedAtUtc == DateTime.MinValue
+                        ? DateTime.MinValue
+                        : e.PlayedAtUtc.ToLocalTime();
+                    string timeText = local == DateTime.MinValue ? "—" : local.ToString("MM-dd HH:mm");
+                    string durText = e.PlayedSeconds < 1
+                        ? "—"
+                        : e.PlayedSeconds < 60
+                            ? (int)e.PlayedSeconds + " 秒"
+                            : TimeSpan.FromSeconds(e.PlayedSeconds).ToString(@"m\:ss");
+                    item.Artist = "播放于 " + timeText;
+                    item.Album = "播放 " + durText + " · " + (e.Completed ? "播完" : "未播完");
+                    items.Add(item);
                 }
             }
 
