@@ -1,7 +1,4 @@
 ﻿using System;
-using System.Drawing;
-using System.Drawing.Drawing2D;
-using System.Drawing.Imaging;
 using System.Runtime.InteropServices;
 
 namespace CelesteMusicPlayer
@@ -11,11 +8,25 @@ namespace CelesteMusicPlayer
     /// 在预览小窗口下方显示 上一首 / 播放暂停 / 下一首 / 添加到我喜欢 四个按钮。
     ///
     /// 本版实施要点：
-    /// - 图标走 ThbIcon（每个按钮独立 HICON），不用 ThbImageList。
-    ///   原因：comctl32 v6 ImageList 在某些 WinUI 3 + 系统环境下 ImageList_Create 返回 0
-    ///   （[日志] 任务栏缩略图：ImageList_Create 失败），整条 ImageList 路径就被卡死。
-    /// - HICON 路径：每个按钮一个 16x16 32bpp ARGB Bitmap + GetHicon()，
-    ///   thumbar 受影响的只有当前按钮那个 HICON，路由清晰。
+    /// - **5 个按钮图标全部走系统 FontIcon**：
+    ///   全部 HICON 由 MainWindow.RenderFontIconHicon(...) 渲染——
+    ///   WinUI FontIcon（默认 Segoe Fluent Icons 字体）→ RenderTargetBitmap → BGRA → GDI Bitmap.GetHicon。
+    ///   与主界面 PreviousButton / PlayPauseIcon / NextButton / FavoriteButtonIcon
+    ///   上的 FontIcon **完全同源**（同一字体、同一 DirectWrite 渲染管线），任务栏图标
+    ///   与主界面按钮图标视觉一致。
+    /// - 完全弃用 GDI+ 自绘路径（FillRectangle / FillPolygon）：
+    ///   之前 GDI+ 自绘有两个长期问题：
+    ///     1. 16x16 小尺寸下手绘"竖+三角"的三角方向容易算错（apex 写反 = |▶ 跟下一首反了），
+    ///        需要逐个坐标系调，调试成本高；
+    ///     2. 16x16 手绘心形抗锯齿糊成一片，效果差。
+    ///   FontIcon 用 Segoe Fluent Icons 字体专门为小尺寸设计，不会出现这两个问题。
+    /// - Glyph 码直接复用主界面 XAML 已用的码点（同源 = 视觉一致）：
+    ///     上一首: \uE892  FontSize=15  白色
+    ///     播放  : \uE768  FontSize=14  白色
+    ///     暂停  : \uE769  FontSize=14  白色
+    ///     下一首: \uE893  FontSize=15  白色
+    ///     我喜欢空心: \uEB51  FontSize=14  红色 #E81123
+    ///     我喜欢实心: \uEB52  FontSize=14  红色 #E81123
     /// - **结构体 marshal**：ThumbBarAddButtons / ThumbBarUpdateButtons 用
     ///   [MarshalAs(UnmanagedType.LPArray)] THUMBBUTTON[] 数组参数。
     ///   之前 [In] ref THUMBBUTTON pButton 在 64-bit COM interop 下只 marshal 单元素
@@ -25,14 +36,9 @@ namespace CelesteMusicPlayer
     ///   explorer 才能读到全部 4 个按钮的 iId/hIcon。
     /// - **dwMask 只设 ThbIcon | ThbTooltip | ThbFlags**：
     ///   之前双设 ThbBitmap | ThbIcon 会让 explorer 走 iBitmap=0 的 bitmap fallback，
-    ///   导致 4 个按钮位置全部显示默认/不正确的图标（prev 是唯一"有图标"的位置，
-    ///   但显示的是 explorer fallback 而非我们画的 HICON）。
-    /// - **心形用两个相切椭圆 + 三角**：之前的椭圆在 x=8 处重叠 4px，
-    ///   FillPath 默认 FillMode.Alternate 把重叠区（奇偶数判定为偶数）挖洞，
-    ///   导致显示出来是"U 形"不是完整心形。新版两个椭圆恰好在 x=8 相切（无重叠），
-    ///   再加三角填充心尖，干净饱满。
-    /// - **空心 / 实心心形两套 HICON**：未收藏（默认）= 空心轮廓心，
-    ///   已收藏 = 实心红心。ToggleFavorite 后调 UpdateFavorite 切换。
+    ///   导致 4 个按钮位置全部显示默认/不正确的图标。修掉。
+    /// - **空心 / 实心心形两套 HICON**：未收藏 = EB51 轮廓心，
+    ///   已收藏 = EB52 实心心。ToggleFavorite 后调 UpdateFavorite 切换。
     /// - 子类化：SetWindowSubclass(comctl32) 而不是 SetWindowLongPtr，
     ///   WinUI 框架会替换 WndProc，SetWindowLongPtr 几小时就失效；comctl32 子类化栈
     ///   在框架之前，过滤规则明确。
@@ -49,9 +55,6 @@ namespace CelesteMusicPlayer
         private const uint WmCommand = 0x0111;
         private const ushort ThbnClicked = 0x1800;
 
-        // Explorer 任务栏缩略图按钮的硬性尺寸（官方要求 16x16 @ 96 DPI）
-        private const int GlyphSize = 16;
-
         private readonly MainWindow _owner;
         private readonly IntPtr _hwnd;
         private readonly ITaskbarList3? _taskbar;
@@ -59,12 +62,11 @@ namespace CelesteMusicPlayer
         private SubclassProc? _subclassDelegate;
         private readonly IntPtr _subclassId = new(0xC3);
 
-        // 每个按钮自己的 HICON（ThbIcon 路径，不依赖 comctl32 ImageList）
+        // 6 个独立 HICON（prev/play/pause/next + 收藏空心/实心）
         private IntPtr _hPrev = IntPtr.Zero;
         private IntPtr _hPlay = IntPtr.Zero;
         private IntPtr _hPause = IntPtr.Zero;
         private IntPtr _hNext = IntPtr.Zero;
-        // 收藏按钮：两套独立 HICON，空心 = 未收藏，实心 = 已收藏。
         private IntPtr _hHeartEmpty = IntPtr.Zero;
         private IntPtr _hHeartFilled = IntPtr.Zero;
 
@@ -96,6 +98,19 @@ namespace CelesteMusicPlayer
         private DateTime _nextForceUpdateAt = DateTime.MinValue;
         private static readonly TimeSpan ForceUpdateInterval = TimeSpan.FromMilliseconds(1500);
 
+        // Glyph 码 + 默认字号（与主界面 XAML 用的码点完全一致，所以视觉一致）
+        private const string GlyphPrev = "\uE892";
+        private const string GlyphPlay = "\uE768";
+        private const string GlyphPause = "\uE769";
+        private const string GlyphNext = "\uE893";
+        private const string GlyphHeartEmpty = "\uEB51";
+        private const string GlyphHeartFilled = "\uEB52";
+        private const double BtnFontSize = 14.0;      // 通用按钮
+        private const double PrevNextFontSize = 15.0;  // prev/next 略大一点对齐
+        private static readonly Windows.UI.Color WhiteColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
+        // 与主界面 HeartFill 一致（= 用户原话"我喜欢按钮自绘"#E81123 红心）
+        private static readonly Windows.UI.Color RedHeartColor = Windows.UI.Color.FromArgb(255, 232, 17, 35);
+
         public TaskbarThumbnailButtons(MainWindow owner, IntPtr hwnd)
         {
             _owner = owner ?? throw new ArgumentNullException(nameof(owner));
@@ -104,15 +119,19 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 由外部驱动（polling 时钟/timer）调用的"推进器"。
+        /// 由外部驱动（polling 时钟/timer）调用的"推进器"（async 版本）。
         /// 第一次调用时只完成 SetWindowSubclass + 渲染 HICON + 第一次 AddButtons。
         /// 后续定时推进重试，直到 hr=0 之后再额外确认一次。
+        ///
+        /// **async Pump 而不是 sync Pump**：6 个 HICON 的 RTB 渲染如果 sync-阻塞在 UI thread
+        /// 上会死锁（dispatcher sync context 等 RenderAsync 完成、RenderAsync 等 dwm 完成、
+        /// dwm 完成又调度回 UI thread → 永久阻塞）。改 await 后 UI thread 自然让出。
         /// </summary>
-        public void Pump()
+        public async System.Threading.Tasks.Task PumpAsync()
         {
             if (_disposed || _taskbar == null || _hwnd == IntPtr.Zero) return;
 
-            // 阶段 1：准备 delegates/HICON
+            // 阶段 1：准备 delegates + 渲染全部 6 个 HICON（走系统 FontIcon）
             if (!_delegatesReady)
             {
                 try
@@ -121,13 +140,16 @@ namespace CelesteMusicPlayer
                     bool subclassed = SetWindowSubclass(_hwnd, _subclassDelegate, _subclassId, IntPtr.Zero);
                     StartupLog.Write("[thumb] SetWindowSubclass ok=" + subclassed + " err=" + Marshal.GetLastWin32Error());
 
-                    _hPrev = RenderGlyphHicon(PaintGlyphPrev);
-                    _hPlay = RenderGlyphHicon(PaintGlyphPlay);
-                    _hPause = RenderGlyphHicon(PaintGlyphPause);
-                    _hNext = RenderGlyphHicon(PaintGlyphNext);
-                    _hHeartFilled = RenderGlyphHicon(PaintGlyphHeartFilled);
-                    _hHeartEmpty = RenderGlyphHicon(PaintGlyphHeartOutline);
-                    StartupLog.Write("[thumb] HICON 渲染完成: prev=0x" + _hPrev.ToString("X")
+                    // 6 个 HICON 全部走 MainWindow.RenderFontIconHiconAsync（系统 FontIcon 渲染）
+                    // 与主界面 PreviousButton / PlayPauseIcon / NextButton / FavoriteButtonIcon 同源
+                    _hPrev = await _owner.RenderFontIconHiconAsync(GlyphPrev, PrevNextFontSize, WhiteColor);
+                    _hPlay = await _owner.RenderFontIconHiconAsync(GlyphPlay, BtnFontSize, WhiteColor);
+                    _hPause = await _owner.RenderFontIconHiconAsync(GlyphPause, BtnFontSize, WhiteColor);
+                    _hNext = await _owner.RenderFontIconHiconAsync(GlyphNext, PrevNextFontSize, WhiteColor);
+                    _hHeartEmpty = await _owner.RenderFontIconHiconAsync(GlyphHeartEmpty, BtnFontSize, RedHeartColor);
+                    _hHeartFilled = await _owner.RenderFontIconHiconAsync(GlyphHeartFilled, BtnFontSize, RedHeartColor);
+
+                    StartupLog.Write("[thumb] HICON 渲染完成 (FontIcon): prev=0x" + _hPrev.ToString("X")
                         + " play=0x" + _hPlay.ToString("X")
                         + " pause=0x" + _hPause.ToString("X")
                         + " next=0x" + _hNext.ToString("X")
@@ -144,7 +166,7 @@ namespace CelesteMusicPlayer
                 }
                 catch (Exception caught)
                 {
-                    StartupLog.WriteException("TaskbarThumbnailButtons.Pump.prepare", caught);
+                    StartupLog.WriteException("TaskbarThumbnailButtons.PumpAsync.prepare", caught);
                 }
             }
 
@@ -245,11 +267,19 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>兼容旧 API。无操作——Pump() 才能真正触发注册。</summary>
+        /// <summary>
+        /// 兼容旧 API。Pump 是 async 后无法直接 fire-and-forget 启动 Timer.PumpAsync，
+        /// 这里 fire-and-forget 启动一次 PumpAsync 让前置 prepare 立即跑起来；
+        /// Timer 后续每 tick 也会调 PumpAsync。
+        /// </summary>
         public void Add()
         {
-            StartupLog.Write("[thumb] Add() 被调用（已被 Pump 模式取代，立即 Pump 一次）");
-            Pump();
+            StartupLog.Write("[thumb] Add() 被调用（async Pump 启动一次，让前置 prepare 立即跑）");
+            _ = System.Threading.Tasks.Task.Run(async () =>
+            {
+                try { await PumpAsync(); }
+                catch (Exception caught) { StartupLog.WriteException("Taskbar.Add->PumpAsync", caught); }
+            });
         }
 
         /// <summary>更新播放/暂停按钮图标（playing=true 显示暂停图标）。未添加时忽略。</summary>
@@ -344,105 +374,6 @@ namespace CelesteMusicPlayer
             try { DestroyIcon(h); }
             catch (Exception caught) { StartupLog.WriteException("DestroyIcon", caught); }
             h = IntPtr.Zero;
-        }
-
-        // ---------------------------------------------------------------- HICON 渲染
-
-        /// <summary>在 GlyphSize x GlyphSize 32bpp ARGB Bitmap 上绘制 glyph，转成 HICON（caller 负责 DestroyIcon）。</summary>
-        private static IntPtr RenderGlyphHicon(Action<Graphics> paint)
-        {
-            using var bmp = new Bitmap(GlyphSize, GlyphSize, PixelFormat.Format32bppArgb);
-            using (var g = Graphics.FromImage(bmp))
-            {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.Clear(Color.Transparent);
-                paint(g);
-            }
-            IntPtr hIcon = bmp.GetHicon();
-            if (hIcon == IntPtr.Zero)
-            {
-                StartupLog.WriteException("TaskbarThumbnailButtons.RenderGlyphHicon", new Exception("GetHicon 返回 0"));
-            }
-            return hIcon;
-        }
-
-        // Glyph 颜色
-        private static readonly Brush White = new SolidBrush(Color.White);
-        private static readonly Brush Red = new SolidBrush(Color.FromArgb(232, 17, 35));
-
-        private static void PaintGlyphPrev(Graphics g)
-        {
-            g.FillRectangle(White, 4, 4, 2, 8);
-            g.FillPolygon(White, new[]
-            {
-                new Point(12, 8),
-                new Point(6, 4),
-                new Point(6, 12)
-            });
-        }
-
-        private static void PaintGlyphPlay(Graphics g)
-        {
-            g.FillPolygon(White, new[]
-            {
-                new Point(13, 8),
-                new Point(4, 3),
-                new Point(4, 13)
-            });
-        }
-
-        private static void PaintGlyphNext(Graphics g)
-        {
-            g.FillPolygon(White, new[]
-            {
-                new Point(13, 8),
-                new Point(4, 4),
-                new Point(4, 12)
-            });
-            g.FillRectangle(White, 10, 4, 2, 8);
-        }
-
-        private static void PaintGlyphPause(Graphics g)
-        {
-            g.FillRectangle(White, 4, 3, 3, 10);
-            g.FillRectangle(White, 9, 3, 3, 10);
-        }
-
-        private static void PaintGlyphHeartFilled(Graphics g)
-        {
-            using var path = HeartPath();
-            // FillPath 默认 FillMode.Alternate：两个相切椭圆（x=8 处相切、不重叠），
-            // 加上三角形（顶点在 x=8），整体是 3 个不相交的闭合区域，全部填实。
-            g.FillPath(Red, path);
-        }
-
-        private static void PaintGlyphHeartOutline(Graphics g)
-        {
-            using var path = HeartPath();
-            // 1.2px 描边：16x16 画布上 1.2 是抗锯齿后看起来像 ~1.5 像素，醒目但不糊。
-            // 用 SmoothingMode.AntiAlias 让圆角自然过渡到直线段。
-            using var pen = new Pen(Color.FromArgb(232, 17, 35), 1.2f);
-            pen.LineJoin = LineJoin.Round;
-            g.DrawPath(pen, path);
-        }
-
-        /// <summary>
-        /// 16x16 经典心形路径：左叶椭圆 (1,3,7,6) + 右叶椭圆 (8,3,7,6)，
-        /// 两个椭圆在 x=8 处**相切**（不重叠），加底部三角 (1,6)-(15,6)-(8,15) 拼心尖。
-        /// 整体占 [1,15]×[3,15]，留 1px padding。
-        /// </summary>
-        private static GraphicsPath HeartPath()
-        {
-            var path = new GraphicsPath();
-            path.AddEllipse(1, 3, 7, 6);   // 左叶：中心 (4.5, 6)
-            path.AddEllipse(8, 3, 7, 6);   // 右叶：中心 (11.5, 6)
-            path.AddPolygon(new[]          // 心尖：底边中点 (8, 15)
-            {
-                new Point(1, 6),
-                new Point(15, 6),
-                new Point(8, 15)
-            });
-            return path;
         }
 
         // ---------------------------------------------------------------- Subclass

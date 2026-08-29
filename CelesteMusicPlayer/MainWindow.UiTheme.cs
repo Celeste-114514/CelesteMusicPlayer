@@ -78,12 +78,15 @@ namespace CelesteMusicPlayer
             var timer = DispatcherQueue.CreateTimer();
             timer.Interval = TimeSpan.FromMilliseconds(250);
             int maxTicks = 40; // ~10 秒，足以覆盖 Explorer 任务栏重绘窗口
-            timer.Tick += (s, e) =>
+            timer.Tick += async (s, e) =>
             {
                 _thumbPumpTicks++;
                 try
                 {
-                    _taskbarButtons?.Pump();
+                    if (_taskbarButtons != null)
+                    {
+                        await _taskbarButtons.PumpAsync();
+                    }
                 }
                 catch (Exception ex)
                 {

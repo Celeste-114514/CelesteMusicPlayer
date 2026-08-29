@@ -514,6 +514,10 @@ namespace CelesteMusicPlayer
         private ArtistAvatarEditorWindow? _artistAvatarEditorWindow;
         private AppTrayIcon? _trayIcon;
         private TaskbarThumbnailButtons? _taskbarButtons;
+        // 任务栏缩略图按钮专用：宿主 WinUI FontIcon 的隐藏 Canvas（在视觉树中、Opacity=0、
+        // 位置偏移到 -10000,-10000，肉眼看不见但能正常 measure/arrange/render）。
+        // 用于把 FontIcon 渲染成 HICON，避免手绘心形在小尺寸下模糊。
+        private Canvas? _thumbIconHostCanvas;
         private bool _allowClose;
         private bool _closePromptOpen;
         private bool _applyingSettingsVolume;
@@ -653,6 +657,27 @@ namespace CelesteMusicPlayer
                 catch (Exception caught)
                 {
                     global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ctor.taskbar", caught);
+                }
+
+                // 任务栏缩略图按钮用的"隐藏 FontIcon 宿主 Canvas"
+                // - 必须在 RootShell 视觉树中（RenderTargetBitmap 要求元素有 XamlRoot）
+                // - 位置 -10000/-10000 + Opacity=0 + 永远不显示，确保肉眼看不到
+                try
+                {
+                    _thumbIconHostCanvas = new Canvas
+                    {
+                        Width = 32,
+                        Height = 32,
+                        Opacity = 0,
+                        IsHitTestVisible = false
+                    };
+                    Canvas.SetLeft(_thumbIconHostCanvas, -10000);
+                    Canvas.SetTop(_thumbIconHostCanvas, -10000);
+                    RootShell.Children.Add(_thumbIconHostCanvas);
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ctor.thumbIconHost", caught);
                 }
             }
 
@@ -818,6 +843,94 @@ namespace CelesteMusicPlayer
             catch (Exception caught)
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow set Title", caught);
+            }
+        }
+
+        /// <summary>
+        /// 把 WinUI FontIcon（默认 Segoe Fluent Icons 字体，glyph 码如 "&#xEB51;" 心形轮廓）
+        /// 渲染成 HICON，给任务栏缩略图按钮用。**与 MainWindow 内 FavoriteButton 上 FontIcon
+        /// 渲染完全一致**——同一字体、同一默认字号比例，所以任务栏上的心和主界面上的心看起来一样。
+        ///
+        /// 实现要点：
+        /// - 把 FontIcon 放进隐藏 Canvas（构造时已挂在 RootShell，Opacity=0 / Left=-10000 / Top=-10000）
+        ///   这样 FontIcon 在视觉树里、有 XamlRoot，能被 RenderTargetBitmap 渲染
+        /// - 调 Measure/Arrange 让 FontIcon 知道自己的尺寸（用固定 32x32，不读 DesiredSize）
+        /// - RenderTargetBitmap 把 UIElement 渲到 BGRA byte[]
+        /// - 写到 System.Drawing.Bitmap（Format32bppArgb 内存布局就是 BGRA）→ GetHicon()
+        /// - 调用方负责 DestroyIcon 释放 HICON
+        ///
+        /// **重要：async 而不是 .GetAwaiter().GetResult()**：
+        /// 上版用 sync 阻塞等 RenderAsync/GetPixelsAsync，在 UI thread 上多次连续调用
+        /// 容易死锁（dispatcher sync context 上等 RenderAsync 完成 → RTB 内部分发回调也等 UI thread → 永久死锁）。
+        /// 改成 async/await 之后，6 个 HICON 串行 await 在 UI thread 上自然让出，dwm 合成线程能正常推进。
+        ///
+        /// 为什么不用 GDI+ DrawString + Segoe Fluent Icons 字体？
+        /// GDI+ DrawString 在 PUA 区段可能用 GDI 路径，视觉与 DirectWrite 不同；
+        /// 用 WinUI FontIcon 走 DirectWrite 路径，**主界面和任务栏完全同源**。
+        /// </summary>
+        internal async System.Threading.Tasks.Task<IntPtr> RenderFontIconHiconAsync(string glyph, double fontSize, Windows.UI.Color color)
+        {
+            if (_thumbIconHostCanvas == null)
+            {
+                StartupLog.Write("[thumb] RenderFontIconHiconAsync 失败: _thumbIconHostCanvas 为 null（窗口未就绪）");
+                return IntPtr.Zero;
+            }
+
+            var fontIcon = new FontIcon
+            {
+                Glyph = glyph,
+                FontSize = fontSize,
+                Foreground = new SolidColorBrush(color)
+                // 不指定 FontFamily → 默认 Segoe Fluent Icons (Win11) / Segoe MDL2 Assets (Win10)
+                // 与主界面 FavoriteButton 上的 FontIcon 完全一致
+            };
+
+            _thumbIconHostCanvas.Children.Add(fontIcon);
+            try
+            {
+                // 显式固定 32x32 大小——之前用 DesiredSize.Width/Height 在 Opacity=0 父 Canvas
+                // 里有时为 0，导致 RTB 渲染 0x0 异步任务永不完成 → Pump 整条卡死。
+                const double RenderSize = 32.0;
+                fontIcon.Measure(new Windows.Foundation.Size(RenderSize, RenderSize));
+                fontIcon.Arrange(new Windows.Foundation.Rect(0, 0, RenderSize, RenderSize));
+
+                var rtb = new RenderTargetBitmap();
+                await rtb.RenderAsync(fontIcon);                  // 让出 UI thread 给 dwm 合成
+                var pixels = await rtb.GetPixelsAsync();          // 让出 UI thread 给拷贝管线
+                int w = rtb.PixelWidth;
+                int h = rtb.PixelHeight;
+
+                var bytes = new byte[pixels.Length];
+                var reader = Windows.Storage.Streams.DataReader.FromBuffer(pixels);
+                reader.ReadBytes(bytes);
+
+                using var bmp = new System.Drawing.Bitmap(w, h, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                var bd = bmp.LockBits(
+                    new System.Drawing.Rectangle(0, 0, w, h),
+                    System.Drawing.Imaging.ImageLockMode.WriteOnly,
+                    System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                try
+                {
+                    System.Runtime.InteropServices.Marshal.Copy(bytes, 0, bd.Scan0, bytes.Length);
+                }
+                finally
+                {
+                    bmp.UnlockBits(bd);
+                }
+
+                IntPtr hIcon = bmp.GetHicon();
+                StartupLog.Write("[thumb] FontIcon \"" + glyph + "\" fontSize=" + fontSize
+                    + " 渲染完成: " + w + "x" + h + " hIcon=0x" + hIcon.ToString("X"));
+                return hIcon;
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.RenderFontIconHiconAsync", caught);
+                return IntPtr.Zero;
+            }
+            finally
+            {
+                _thumbIconHostCanvas.Children.Remove(fontIcon);
             }
         }
 
