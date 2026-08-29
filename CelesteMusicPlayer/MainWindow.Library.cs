@@ -84,7 +84,7 @@ namespace CelesteMusicPlayer
                         return;
                     }
 
-                    LoadAndAddFiles(paths, persist: false);
+                    await LoadLibraryFilesAsync(paths);
                     LibrarySessionStore.SaveFolder(folderPath, paths);
                     await RestoreLastPlayingTrackAsync();
                     ApplyStartupOverlayWindows();
@@ -103,7 +103,7 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                LoadAndAddFiles(paths, persist: false);
+                await LoadLibraryFilesAsync(paths);
                 await RestoreLastPlayingTrackAsync();
                 ApplyStartupOverlayWindows();
             }
@@ -349,6 +349,112 @@ namespace CelesteMusicPlayer
             {
                 LibrarySessionStore.SaveFiles(_playlist.Select(i => i.FilePath));
             }
+        }
+
+
+        /// <summary>后台线程批量读取文件元数据，避免大曲库阻塞 UI 线程。</summary>
+        private System.Threading.Tasks.Task<System.Collections.Generic.List<PlaylistItem>> BuildPlaylistItemsAsync(
+            string[] filePaths,
+            System.Collections.Generic.ISet<string> knownPaths,
+            System.Action<int, int>? onProgress = null)
+        {
+            return System.Threading.Tasks.Task.Run(() =>
+            {
+                int total = filePaths.Length;
+                // 按索引回填，保证结果与输入顺序一致（顺序扫描的原有行为）
+                PlaylistItem?[] results = new PlaylistItem?[total];
+                int done = 0;
+
+                // 读标签以磁盘 I/O 为主（曲库常在网络盘/云同步盘上），适度并行可显著缩短总耗时；
+                // 上限 4 避免机械盘随机寻道劣化与云盘连接被打满。
+                var options = new System.Threading.Tasks.ParallelOptions
+                {
+                    MaxDegreeOfParallelism = System.Math.Max(1, System.Math.Min(4, System.Environment.ProcessorCount))
+                };
+
+                System.Threading.Tasks.Parallel.For(0, total, options, i =>
+                {
+                    string path = filePaths[i];
+                    if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+                    {
+                        return;
+                    }
+
+                    bool isNew;
+                    lock (knownPaths)
+                    {
+                        isNew = knownPaths.Add(path);
+                    }
+
+                    if (!isNew)
+                    {
+                        return;
+                    }
+
+                    try
+                    {
+                        results[i] = CreatePlaylistItemFromPath(path);
+                    }
+                    catch (System.Exception ex)
+                    {
+                        lock (knownPaths)
+                        {
+                            knownPaths.Remove(path);
+                        }
+
+                        System.Diagnostics.Debug.WriteLine($"扫描加载失败: {path} → {ex.Message}");
+                        return;
+                    }
+
+                    int d = System.Threading.Interlocked.Increment(ref done);
+                    if ((d & 31) == 0)
+                    {
+                        onProgress?.Invoke(d, total);
+                    }
+                });
+
+                var built = new System.Collections.Generic.List<PlaylistItem>(total);
+                for (int i = 0; i < total; i++)
+                {
+                    PlaylistItem? item = results[i];
+                    if (item != null)
+                    {
+                        built.Add(item);
+                    }
+                }
+
+                return built;
+            });
+        }
+
+        /// <summary>启动恢复曲库：后台读标签 + 批量写入列表（不逐条触发 UI 刷新），随后由调用方恢复上次播放。</summary>
+        private async System.Threading.Tasks.Task LoadLibraryFilesAsync(string[] paths)
+        {
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            var known = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
+            System.Collections.Generic.List<PlaylistItem> built = await BuildPlaylistItemsAsync(paths, known,
+                (d, t) => DispatcherQueue.TryEnqueue(() => NowPlayingText.Text = $"加载 {System.Math.Min(d, t)}/{t}"));
+
+            bool rebounded = ReferenceEquals(PlaylistView.ItemsSource, _playlist);
+            if (rebounded)
+            {
+                PlaylistView.ItemsSource = null;
+            }
+
+            _playlist.Clear();
+            foreach (PlaylistItem it in built)
+            {
+                _playlist.Add(it);
+            }
+
+            if (rebounded)
+            {
+                PlaylistView.ItemsSource = _playlist;
+            }
+
+            NowPlayingText.Text = $"已加载 {built.Count} 首，共 {_playlist.Count} 首";
+            StartupLog.Write($"[library] 后台加载完成：扫描 {paths.Length} 个路径，入库 {built.Count} 首，列表共 {_playlist.Count} 首，耗时 {sw.ElapsedMilliseconds} ms");
+            ApplyCategoryView();
         }
 
 
@@ -911,8 +1017,20 @@ namespace CelesteMusicPlayer
             }
 
             var list = sorted.ToList();
+            // 全量重排时临时解绑，避免逐条 Clear/Add 触发 UI 反复重建
+            bool rebounded = ReferenceEquals(PlaylistView.ItemsSource, _playlist);
+            if (rebounded)
+            {
+                PlaylistView.ItemsSource = null;
+            }
+
             _playlist.Clear();
             foreach (var p in list) _playlist.Add(p);
+            if (rebounded)
+            {
+                PlaylistView.ItemsSource = _playlist;
+            }
+
             RenumberCollection(_playlist);
             if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal))
             {

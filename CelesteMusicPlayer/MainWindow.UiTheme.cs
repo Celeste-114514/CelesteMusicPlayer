@@ -733,6 +733,15 @@ namespace CelesteMusicPlayer
             PersistDesktopLyricPosition();
             _taskbarProgress?.Dispose();
             _taskbarProgress = null;
+
+            // 先停电平表定时器：否则窗口销毁后它仍会 tick 并访问已分离的 XAML 元素，
+            // 在退出时抛 COMException (0x8000FFFF)。
+            try
+            {
+                _levelMeterTimer?.Stop();
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.LevelMeter.cs", caught); }
+
             try
             {
                 TrackStatsStore.Flush();

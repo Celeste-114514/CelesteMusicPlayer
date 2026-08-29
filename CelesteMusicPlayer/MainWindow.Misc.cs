@@ -249,6 +249,13 @@ namespace CelesteMusicPlayer
 
             int added = 0;
 
+            // 大批量导入时临时解绑列表视图，避免逐条 Add 触发 ListView 反复创建/测量容器造成卡顿
+            bool rebounded = ReferenceEquals(PlaylistView.ItemsSource, _playlist);
+            if (rebounded)
+            {
+                PlaylistView.ItemsSource = null;
+            }
+
             foreach (string path in filePaths)
             {
                 if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
@@ -272,6 +279,12 @@ namespace CelesteMusicPlayer
                     knownPaths.Remove(path);
                     System.Diagnostics.Debug.WriteLine($"加载失败: {path} → {ex.Message}");
                 }
+            }
+
+            // 循环结束恢复绑定；即使下方早返回(added==0)也能保持列表可见
+            if (rebounded)
+            {
+                PlaylistView.ItemsSource = _playlist;
             }
 
             if (added == 0)
