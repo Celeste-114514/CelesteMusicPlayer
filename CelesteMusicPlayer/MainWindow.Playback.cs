@@ -748,6 +748,32 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>
+        /// 由索引缓存的元数据直接构造条目（不打开音频文件，省掉整个 TagLib 解析）。
+        /// 字段语义必须与 CreatePlaylistItemFromPath 严格一致，否则同一首歌
+        /// 「走索引」和「真解析」会显示成两样。
+        /// </summary>
+        private static PlaylistItem CreatePlaylistItemFromMeta(LibraryDb.TrackMeta meta)
+        {
+            return new PlaylistItem
+            {
+                Title = string.IsNullOrWhiteSpace(meta.Title)
+                    ? Path.GetFileNameWithoutExtension(meta.FilePath)
+                    : meta.Title,
+                Artist = string.IsNullOrWhiteSpace(meta.Artist) ? "未知艺术家" : meta.Artist,
+                AlbumArtist = string.IsNullOrWhiteSpace(meta.AlbumArtist) ? "未知艺术家" : meta.AlbumArtist,
+                Album = string.IsNullOrWhiteSpace(meta.Album) ? "未知专辑" : meta.Album,
+                Track = meta.Track,
+                Disc = meta.Disc,
+                Year = meta.Year,
+                Genre = string.IsNullOrWhiteSpace(meta.Genre) ? "未知流派" : meta.Genre,
+                Duration = meta.DurationTicks > 0 ? TimeSpan.FromTicks(meta.DurationTicks) : TimeSpan.Zero,
+                FilePath = meta.FilePath,
+                Rating = TrackStatsStore.Get(meta.FilePath)?.Rating ?? 0
+            };
+        }
+
+
         private void UserPlaylistNavButton_Click(object sender, RoutedEventArgs e)
         {
             ExitMultiSelectMode();

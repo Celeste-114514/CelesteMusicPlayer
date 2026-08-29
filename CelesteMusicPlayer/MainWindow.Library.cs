@@ -352,8 +352,27 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>后台线程批量读取文件元数据，避免大曲库阻塞 UI 线程。</summary>
-        private System.Threading.Tasks.Task<System.Collections.Generic.List<PlaylistItem>> BuildPlaylistItemsAsync(
+        /// <summary>后台构建曲库的结果：条目本体 + 需要写回索引的新解析项 + 已失效路径。</summary>
+        private sealed class PlaylistBuildResult
+        {
+            public System.Collections.Generic.List<PlaylistItem> Items = new();
+
+            /// <summary>索引命中数量（未解析标签直接复用的条数），仅用于日志观测。</summary>
+            public int IndexHits;
+
+            /// <summary>本次真实解析过标签的条目（索引缺失或已失效），需要写回 tracks 表。</summary>
+            public System.Collections.Generic.List<LibraryDb.TrackMeta> Fresh = new();
+
+            /// <summary>路径已不存在（文件被移走/删除），需要从 tracks 表清理。</summary>
+            public System.Collections.Generic.List<string> Missing = new();
+        }
+
+
+        /// <summary>
+        /// 后台线程批量构建播放条目：优先命中 SQLite 标签索引，只对「索引里没有、或文件被改动过」的才真正解析标签。
+        /// 首次运行索引为空，行为与原来的全量解析一致；之后启动绝大多数文件可跳过 TagLib 解析。
+        /// </summary>
+        private System.Threading.Tasks.Task<PlaylistBuildResult> BuildPlaylistItemsAsync(
             string[] filePaths,
             System.Collections.Generic.ISet<string> knownPaths,
             System.Action<int, int>? onProgress = null)
@@ -361,9 +380,13 @@ namespace CelesteMusicPlayer
             return System.Threading.Tasks.Task.Run(() =>
             {
                 int total = filePaths.Length;
+                var result = new PlaylistBuildResult();
+
                 // 按索引回填，保证结果与输入顺序一致（顺序扫描的原有行为）
                 PlaylistItem?[] results = new PlaylistItem?[total];
-                int done = 0;
+                bool[] keep = new bool[total];
+                long[] mtimes = new long[total];
+                long[] sizes = new long[total];
 
                 // 读标签以磁盘 I/O 为主（曲库常在网络盘/云同步盘上），适度并行可显著缩短总耗时；
                 // 上限 4 避免机械盘随机寻道劣化与云盘连接被打满。
@@ -372,28 +395,112 @@ namespace CelesteMusicPlayer
                     MaxDegreeOfParallelism = System.Math.Max(1, System.Math.Min(4, System.Environment.ProcessorCount))
                 };
 
+                // 1) 先并行取文件指纹（修改时间 + 大小）。这只是元数据读取，比解析标签便宜得多，
+                //    用它判断索引是否仍然有效；mtime 与 size 同时比对，避免云盘只改其一导致误判。
                 System.Threading.Tasks.Parallel.For(0, total, options, i =>
                 {
                     string path = filePaths[i];
-                    if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
-                    {
-                        return;
-                    }
-
-                    bool isNew;
-                    lock (knownPaths)
-                    {
-                        isNew = knownPaths.Add(path);
-                    }
-
-                    if (!isNew)
+                    if (string.IsNullOrWhiteSpace(path))
                     {
                         return;
                     }
 
                     try
                     {
-                        results[i] = CreatePlaylistItemFromPath(path);
+                        var fi = new System.IO.FileInfo(path);
+                        if (!fi.Exists)
+                        {
+                            return;
+                        }
+
+                        mtimes[i] = fi.LastWriteTimeUtc.Ticks;
+                        sizes[i] = fi.Length;
+                        keep[i] = true;
+                    }
+                    catch
+                    {
+                        keep[i] = false;
+                    }
+                });
+
+                // 2) 去重 + 收集待查指纹
+                var stamps = new System.Collections.Generic.List<(string path, long mtimeUtc, long size)>(total);
+                for (int i = 0; i < total; i++)
+                {
+                    if (!keep[i])
+                    {
+                        if (!string.IsNullOrWhiteSpace(filePaths[i]))
+                        {
+                            result.Missing.Add(filePaths[i]);
+                        }
+
+                        continue;
+                    }
+
+                    bool isNew;
+                    lock (knownPaths)
+                    {
+                        isNew = knownPaths.Add(filePaths[i]);
+                    }
+
+                    if (!isNew)
+                    {
+                        keep[i] = false;
+                        continue;
+                    }
+
+                    stamps.Add((filePaths[i], mtimes[i], sizes[i]));
+                }
+
+                // 3) 批量查索引：只返回指纹仍匹配的条目
+                System.Collections.Generic.Dictionary<string, LibraryDb.TrackMeta> cached = LibraryDb.LoadTrackIndex(stamps);
+
+                var needScan = new System.Collections.Generic.List<int>();
+                for (int i = 0; i < total; i++)
+                {
+                    if (!keep[i])
+                    {
+                        continue;
+                    }
+
+                    if (cached.TryGetValue(filePaths[i], out LibraryDb.TrackMeta? meta) && meta != null)
+                    {
+                        results[i] = CreatePlaylistItemFromMeta(meta);
+                    }
+                    else
+                    {
+                        needScan.Add(i);
+                    }
+                }
+
+                result.IndexHits = results.Count(x => x != null);
+
+                // 4) 只有未命中的才真正解析标签
+                int done = result.IndexHits;
+                var fresh = new System.Collections.Concurrent.ConcurrentBag<LibraryDb.TrackMeta>();
+                System.Threading.Tasks.Parallel.For(0, needScan.Count, options, k =>
+                {
+                    int i = needScan[k];
+                    string path = filePaths[i];
+                    try
+                    {
+                        PlaylistItem item = CreatePlaylistItemFromPath(path);
+                        results[i] = item;
+                        fresh.Add(new LibraryDb.TrackMeta
+                        {
+                            FilePath = path,
+                            MtimeUtc = mtimes[i],
+                            Size = sizes[i],
+                            Title = item.Title,
+                            Artist = item.Artist,
+                            AlbumArtist = item.AlbumArtist,
+                            Album = item.Album,
+                            Track = item.Track,
+                            Disc = item.Disc,
+                            Year = item.Year,
+                            Genre = item.Genre,
+                            DurationTicks = item.Duration.Ticks
+                        });
                     }
                     catch (System.Exception ex)
                     {
@@ -413,17 +520,17 @@ namespace CelesteMusicPlayer
                     }
                 });
 
-                var built = new System.Collections.Generic.List<PlaylistItem>(total);
                 for (int i = 0; i < total; i++)
                 {
                     PlaylistItem? item = results[i];
                     if (item != null)
                     {
-                        built.Add(item);
+                        result.Items.Add(item);
                     }
                 }
 
-                return built;
+                result.Fresh.AddRange(fresh);
+                return result;
             });
         }
 
@@ -432,7 +539,7 @@ namespace CelesteMusicPlayer
         {
             var sw = System.Diagnostics.Stopwatch.StartNew();
             var known = new System.Collections.Generic.HashSet<string>(System.StringComparer.OrdinalIgnoreCase);
-            System.Collections.Generic.List<PlaylistItem> built = await BuildPlaylistItemsAsync(paths, known,
+            PlaylistBuildResult built = await BuildPlaylistItemsAsync(paths, known,
                 (d, t) => DispatcherQueue.TryEnqueue(() => NowPlayingText.Text = $"加载 {System.Math.Min(d, t)}/{t}"));
 
             bool rebounded = ReferenceEquals(PlaylistView.ItemsSource, _playlist);
@@ -442,7 +549,7 @@ namespace CelesteMusicPlayer
             }
 
             _playlist.Clear();
-            foreach (PlaylistItem it in built)
+            foreach (PlaylistItem it in built.Items)
             {
                 _playlist.Add(it);
             }
@@ -452,9 +559,50 @@ namespace CelesteMusicPlayer
                 PlaylistView.ItemsSource = _playlist;
             }
 
-            NowPlayingText.Text = $"已加载 {built.Count} 首，共 {_playlist.Count} 首";
-            StartupLog.Write($"[library] 后台加载完成：扫描 {paths.Length} 个路径，入库 {built.Count} 首，列表共 {_playlist.Count} 首，耗时 {sw.ElapsedMilliseconds} ms");
+            NowPlayingText.Text = $"已加载 {built.Items.Count} 首，共 {_playlist.Count} 首";
+            StartupLog.Write($"[library] 后台加载完成：扫描 {paths.Length} 个路径，入库 {built.Items.Count} 首"
+                + $"（索引命中 {built.IndexHits} 首，实际解析 {built.Fresh.Count} 首），"
+                + $"列表共 {_playlist.Count} 首，耗时 {sw.ElapsedMilliseconds} ms");
             ApplyCategoryView();
+
+            // 索引写回放到后台：不拖慢启动，失败也不影响播放
+            if (built.Fresh.Count > 0 || built.Missing.Count > 0)
+            {
+                PlaylistBuildResult snapshot = built;
+                _ = System.Threading.Tasks.Task.Run(() => PersistTrackIndex(snapshot));
+            }
+        }
+
+
+        /// <summary>把本次新解析的标签写回 SQLite 索引，并清理已失效路径。后台执行，失败静默。</summary>
+        private static void PersistTrackIndex(PlaylistBuildResult result)
+        {
+            try
+            {
+                if (result.Fresh.Count > 0)
+                {
+                    LibraryDb.UpsertTracks(result.Fresh);
+                }
+
+                // 整盘离线（移动硬盘拔出、云盘未同步）时路径会大面积「不存在」，
+                // 此时若照常清理会把整个索引删空，下次上线又得全量重扫。
+                // 只在缺失量很小时才清理：宁可留几条陈旧记录，也不误删整库。
+                if (result.Missing.Count > 0 && result.Missing.Count <= 2000
+                    && result.Missing.Count < System.Math.Max(100, result.Items.Count / 4))
+                {
+                    LibraryDb.DeleteTracks(result.Missing);
+                }
+                else if (result.Missing.Count > 0)
+                {
+                    StartupLog.Write($"[library] 跳过索引清理：缺失 {result.Missing.Count} 条（入库 {result.Items.Count} 首），疑似整盘离线");
+                }
+
+                StartupLog.Write($"[library] 索引写回完成：新增/更新 {result.Fresh.Count} 条，索引总数 {LibraryDb.CountTracks()}");
+            }
+            catch (System.Exception ex)
+            {
+                StartupLog.Write($"[library] 索引写回失败（不影响播放）：{ex.Message}");
+            }
         }
 
 
