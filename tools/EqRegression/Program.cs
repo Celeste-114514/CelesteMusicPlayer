@@ -859,6 +859,7 @@ namespace CelesteMusicPlayer.EqRegression
         }
     }
 
+    [Collection("LibraryDb")]
     public class PlaybackHistoryDbTests
     {
         private static string _tmpDb = "";
@@ -922,6 +923,222 @@ namespace CelesteMusicPlayer.EqRegression
                 LibraryDb.RecordPlayback("", "x", 1, false);
                 LibraryDb.RecordPlayback("   ", "y", 1, false);
                 Assert.Empty(LibraryDb.LoadPlaybackHistory(10));
+            }
+            finally
+            {
+                Cleanup();
+            }
+        }
+    }
+
+    public class ConvolutionTests
+    {
+        private const int Fs = 44100;
+        private const int Block = 1024; // StreamingPartitionedConvolver.LatencyFrames
+
+        private static float[] BuildTone(int frames, double hz = 1000, double amp = 0.5)
+        {
+            var s = new float[frames];
+            for (int i = 0; i < frames; i++)
+            {
+                s[i] = (float)(amp * Math.Sin(2 * Math.PI * hz * i / Fs));
+            }
+
+            return s;
+        }
+
+        private static float MaxAbs(float[] a, int start, int len)
+        {
+            float m = 0f;
+            int end = Math.Min(a.Length, start + len);
+            for (int i = start; i < end; i++)
+            {
+                m = Math.Max(m, Math.Abs(a[i]));
+            }
+
+            return m;
+        }
+
+        [Fact]
+        public void Convolution_UnitImpulse_PassesSignalAfterLatency()
+        {
+            int frames = Fs; // 1 秒
+            float[] input = BuildTone(frames);
+            var buf = (float[])input.Clone();
+
+            // 单位冲激 IR [1.0] → 输出 = 输入（分块流式，块级原位流水）
+            var conv = new StreamingPartitionedConvolver(new[] { new[] { 1f } }, 1);
+            conv.Process(buf, frames, 1);
+
+            // 逐帧等于输入（抽稀比较；跳过最后的块边界，尾块可能缺输出）
+            int cmp = frames - Block - 16;
+            for (int i = 0; i < cmp; i += 97)
+            {
+                Assert.Equal(input[i], buf[i], 3);
+            }
+        }
+
+        [Fact]
+        public void Convolution_HalfImpulse_ScalesOutput()
+        {
+            int frames = Fs;
+            float[] input = BuildTone(frames);
+            var buf = (float[])input.Clone();
+
+            var conv = new StreamingPartitionedConvolver(new[] { new[] { 0.5f } }, 1);
+            conv.Process(buf, frames, 1);
+
+            int cmp = frames - Block - 16;
+            for (int i = 0; i < cmp; i += 97)
+            {
+                Assert.Equal(0.5f * input[i], buf[i], 3);
+            }
+        }
+
+        [Fact]
+        public void Convolution_MonoIr_AppliesToBothStereoChannels()
+        {
+            int frames = Fs;
+            float[] l = BuildTone(frames);
+            var buf = new float[frames * 2];
+            for (int i = 0; i < frames; i++)
+            {
+                buf[i * 2] = l[i];
+                buf[i * 2 + 1] = -l[i]; // 右声道反相，验证各声道独立
+            }
+
+            var conv = new StreamingPartitionedConvolver(new[] { new[] { 1f } }, 2);
+            conv.Process(buf, frames, 2);
+
+            int cmp = frames - Block - 16;
+            for (int i = 0; i < cmp; i += 97)
+            {
+                Assert.Equal(l[i], buf[i * 2], 3);
+                Assert.Equal(-l[i], buf[i * 2 + 1], 3);
+            }
+        }
+
+        [Fact]
+        public void ConvolutionIr_Load_Wav16And24AndFloat()
+        {
+            string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ir-" + Guid.NewGuid().ToString("N").Substring(0, 8));
+            try
+            {
+                float[] taps = { 0.5f, -0.25f, 0.125f, 0.0625f, -0.03125f, 0.015625f };
+
+                // 16bit
+                string p16 = tmp + "-16.wav";
+                using (var w = new NAudio.Wave.WaveFileWriter(p16, new NAudio.Wave.WaveFormat(Fs, 16, 1)))
+                {
+                    var bytes = new byte[taps.Length * 2];
+                    for (int i = 0; i < taps.Length; i++)
+                    {
+                        short s = (short)(taps[i] * 32767);
+                        bytes[i * 2] = (byte)(s & 0xFF);
+                        bytes[i * 2 + 1] = (byte)((s >> 8) & 0xFF);
+                    }
+                    w.Write(bytes, 0, bytes.Length);
+                }
+
+                var ir16 = ConvolutionIr.Load(p16, Fs);
+                Assert.NotNull(ir16);
+                Assert.Equal(1, ir16!.Length);
+                Assert.Equal(taps.Length, ir16[0].Length);
+                for (int i = 0; i < taps.Length; i++)
+                {
+                    Assert.Equal(taps[i], ir16[0][i], 3);
+                }
+
+                // float32
+                string pf = tmp + "-f.wav";
+                using (var w = new NAudio.Wave.WaveFileWriter(pf, NAudio.Wave.WaveFormat.CreateIeeeFloatWaveFormat(Fs, 1)))
+                {
+                    var bytes = new byte[taps.Length * 4];
+                    for (int i = 0; i < taps.Length; i++)
+                    {
+                        BitConverter.GetBytes(taps[i]).CopyTo(bytes, i * 4);
+                    }
+                    w.Write(bytes, 0, bytes.Length);
+                }
+
+                var irf = ConvolutionIr.Load(pf, Fs);
+                Assert.NotNull(irf);
+                Assert.Equal(taps.Length, irf![0].Length);
+                for (int i = 0; i < taps.Length; i++)
+                {
+                    Assert.Equal(taps[i], irf[0][i], 3);
+                }
+
+                // 采样率不匹配 → 自动重采样（44.1k → 96k 后长度应变化且首尾合理）
+                var irR = ConvolutionIr.Load(p16, 96000);
+                Assert.NotNull(irR);
+                Assert.True(irR![0].Length > taps.Length, "升采样后 IR 更长");
+            }
+            finally
+            {
+                try { System.IO.File.Delete(tmp + "-16.wav"); } catch { }
+                try { System.IO.File.Delete(tmp + "-f.wav"); } catch { }
+            }
+        }
+    }
+
+    [Collection("LibraryDb")]
+    public class LibraryDbMigrationTests
+    {
+        private static string _tmpDb = "";
+
+        private static void UseTempDb()
+        {
+            _tmpDb = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "celeste-migr-" + Guid.NewGuid().ToString("N").Substring(0, 12) + ".db");
+            LibraryDb.TestDbOverride = _tmpDb;
+            LibraryDb.ResetMigratedForTest();
+        }
+
+        private static void Cleanup()
+        {
+            LibraryDb.TestDbOverride = null;
+            try { System.IO.File.Delete(_tmpDb); } catch { }
+            try { System.IO.File.Delete(_tmpDb + "-wal"); } catch { }
+            try { System.IO.File.Delete(_tmpDb + "-shm"); } catch { }
+        }
+
+        [Fact]
+        public void Migration_RunningTwice_IsIdempotent_KeepsData()
+        {
+            UseTempDb();
+            try
+            {
+                LibraryDb.EnsureMigrated();
+                Assert.True(System.IO.File.Exists(_tmpDb));
+
+                LibraryDb.RecordPlayback(@"C:\m\a.flac", "A", 30, false);
+
+                // 再次 EnsureMigrated（模拟重启）：表已存在，不应重建/清空数据
+                LibraryDb.EnsureMigrated();
+
+                var rows = LibraryDb.LoadPlaybackHistory(10);
+                Assert.Single(rows);
+                Assert.Equal("A", rows[0].Title);
+            }
+            finally
+            {
+                Cleanup();
+            }
+        }
+
+        [Fact]
+        public void Migration_ExistingDb_NoThrow_AndLoadWorks()
+        {
+            UseTempDb();
+            try
+            {
+                LibraryDb.EnsureMigrated();
+                LibraryDb.EnsureMigrated();
+                LibraryDb.EnsureMigrated(); // 连续多次也不应抛
+                Assert.NotNull(LibraryDb.LoadPlaybackHistory(10));
+                Assert.NotNull(LibraryDb.ListPlaylists());
             }
             finally
             {

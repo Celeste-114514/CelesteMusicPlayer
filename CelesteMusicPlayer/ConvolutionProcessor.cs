@@ -241,6 +241,7 @@ namespace CelesteMusicPlayer
                     WriteOutput(buffer, outStart, BlockSize, channels);
                     for (int c = 0; c < _irChannels; c++)
                     {
+                        ShiftTail(c); // 输出后再左移：保留残响给下一块，且不覆盖当前块干信号
                         _inPos[c] = 0;
                     }
                 }
@@ -271,6 +272,7 @@ namespace CelesteMusicPlayer
             WriteOutput(buffer, 0, n, channels);
             for (int c = 0; c < _irChannels; c++)
             {
+                ShiftTail(c); // 输出后再左移（与 Process 一致）
                 _inPos[c] = 0;
             }
         }
@@ -307,8 +309,13 @@ namespace CelesteMusicPlayer
             {
                 tail[i] += (float)(y[i].Re * scale);
             }
+        }
 
-            // 输出前 BlockSize 帧并左移
+        /// <summary>块输出后保留残响：tail[0..BlockSize) = 旧 tail[BlockSize..FftSize)（下一块叠加），
+        /// 后段清 0。必须在 WriteOutput 读取 tail[0..BlockSize) 之后再调用（否则当前块干信号被覆盖丢失）。</summary>
+        private void ShiftTail(int ch)
+        {
+            float[] tail = _outTail[ch];
             for (int i = 0; i < FftSize - BlockSize; i++)
             {
                 tail[i] = tail[i + BlockSize];
