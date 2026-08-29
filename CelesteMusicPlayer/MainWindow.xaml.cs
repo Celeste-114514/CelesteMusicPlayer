@@ -599,6 +599,7 @@ namespace CelesteMusicPlayer
         private const int WaveBarCount = 40;
         private readonly double[] _waveLevels = new double[WaveBarCount];
         private readonly double[] _wavePhases = new double[WaveBarCount];
+        private readonly float[] _spectrumBands = new float[WaveBarCount]; // 真 FFT 频谱（每柱一个 0..1 电平）
         private readonly Random _waveRandom = new();
         private int _waveformIdleSettleTicks;
         private List<LyricLine> _lyricLines = new();
@@ -638,6 +639,8 @@ namespace CelesteMusicPlayer
             InitializeLevelMeter();
             InitializeCrossfadeUi();
             InitializeSrcUi();
+            InitializeOutputBufferUi();
+            StartAudioDeviceWatcher();
             try
             {
                 _mainWindowHwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);

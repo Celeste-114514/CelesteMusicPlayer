@@ -1793,6 +1793,11 @@ namespace CelesteMusicPlayer
 
             double t = Environment.TickCount64 / 1000.0;
             double volume = enginePlaying ? VolumeSlider.Value / 100.0 : (player?.Volume ?? 0.8);
+
+            // 真频谱优先：拿得到实际播放信号的 FFT 结果就用真的（低频在左、高频在右，跟着音乐动）；
+            // 拿不到（DSD 直出、刚开始播放样本不足、非引擎播放）才回退到装饰性呼吸动画。
+            bool realSpectrum = playing && _audioEngine != null && _audioEngine.TryGetSpectrum(_spectrumBands);
+
             bool changed = false;
 
             for (int i = 0; i < WaveBarCount; i++)
@@ -1800,20 +1805,30 @@ namespace CelesteMusicPlayer
                 double target;
                 if (playing)
                 {
-                    // 对称呼吸式频谱：中间高两边低、每柱各自节奏，无横向滚动
-                    double rhythm = 0.5 + 0.5 * Math.Sin(t * 1.8 + _wavePhases[i]);
-                    double halfSpan = Math.Max(1.0, (WaveBarCount - 1) / 2.0);
-                    double pos = (i - (WaveBarCount - 1) / 2.0) / halfSpan;
-                    double symmetry = 0.5 + 0.5 * (1.0 - Math.Min(1.0, Math.Abs(pos)));
-                    double n = rhythm * symmetry;
-                    target = Math.Clamp(n * (0.55 + 0.45 * volume), 0.1, 1.0);
+                    if (realSpectrum)
+                    {
+                        // 真频谱：不再乘音量系数（信号本身已含软件音量；硬件音量下不该让画面塌下去）
+                        target = Math.Clamp(_spectrumBands[i], 0.06, 1.0);
+                    }
+                    else
+                    {
+                        // 对称呼吸式频谱：中间高两边低、每柱各自节奏，无横向滚动
+                        double rhythm = 0.5 + 0.5 * Math.Sin(t * 1.8 + _wavePhases[i]);
+                        double halfSpan = Math.Max(1.0, (WaveBarCount - 1) / 2.0);
+                        double pos = (i - (WaveBarCount - 1) / 2.0) / halfSpan;
+                        double symmetry = 0.5 + 0.5 * (1.0 - Math.Min(1.0, Math.Abs(pos)));
+                        double n = rhythm * symmetry;
+                        target = Math.Clamp(n * (0.55 + 0.45 * volume), 0.1, 1.0);
+                    }
                 }
                 else
                 {
                     target = IdleLevel(i);
                 }
 
-                double next = _waveLevels[i] + (target - _waveLevels[i]) * (playing ? 0.35 : 0.18);
+                // 真频谱已在分析器内做过"快起慢落"，这里只补一点插值避免逐帧跳变
+                double ease = realSpectrum ? 0.55 : (playing ? 0.35 : 0.18);
+                double next = _waveLevels[i] + (target - _waveLevels[i]) * ease;
                 if (Math.Abs(next - _waveLevels[i]) > 0.002)
                 {
                     changed = true;

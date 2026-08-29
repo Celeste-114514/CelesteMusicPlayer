@@ -94,6 +94,10 @@ namespace CelesteMusicPlayer
         /// "Dop"=DoP 直出（独占/ASIO 下把 DSD 1-bit 封进 DoP 容器直通 DAC，bit-perfect）。</summary>
         public string DsdOutputMode { get; set; } = "Pcm";
 
+        /// <summary>输出缓冲区大小（毫秒）。越小越跟手（低延迟），越大越抗卡顿/爆音。
+        /// 共享模式（系统混音）下改动后下次开播生效；默认 100ms。</summary>
+        public int OutputBufferMs { get; set; } = 100;
+
         public bool LyricFuzzyMatch { get; set; } = true;
 
         public bool ShowLyricTranslate { get; set; } = true;
@@ -554,6 +558,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DsdUseNaudioOutput = s.DsdUseNaudioOutput,
             DsdUsePcmFallback = s.DsdUsePcmFallback,
             DsdOutputMode = s.DsdOutputMode,
+            OutputBufferMs = s.OutputBufferMs,
             OnlineSearchDefaultSource = s.OnlineSearchDefaultSource,
             ArtistAvatarSource = s.ArtistAvatarSource,
             StreamingServiceUrl = s.StreamingServiceUrl,

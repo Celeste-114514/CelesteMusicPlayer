@@ -46,6 +46,12 @@ namespace CelesteMusicPlayer
         private readonly LevelMeter _levelMeter = new();
         private bool _meterEnabled;
 
+        // 实时频谱分析：与电平表共用同一批 post-DSP 样本。
+        // 渲染线程只做单声道降混 + 环形缓冲写入（不分配、不做 FFT），FFT 由 UI 线程执行，不影响音频实时性。
+        private const int SpectrumBandCount = 40; // 与 MainWindow.WaveBarCount 保持一致
+        private readonly SpectrumAnalyzer _spectrum = new(SpectrumBandCount);
+        private bool _spectrumEnabled;
+
         // 软件总音量（共享/ASIO 用，采样级增益；NAudio WasapiOut.Volume 不支持，故由 DSP 链实现）。
         private volatile float _volumeGain = 1f;
 
@@ -464,9 +470,9 @@ namespace CelesteMusicPlayer
                 return read;
             }
 
-            // 无 DSP 生效 → 全部直通（bit-perfect）；若电平表开启则额外测量，
+            // 无 DSP 生效 → 全部直通（bit-perfect）；若电平表/频谱开启则额外测量，
             // 但只解码到临时 float 缓冲测量，绝不改写输出缓冲 → 仍严格 bit-perfect。
-            if (_meterEnabled)
+            if (_meterEnabled || _spectrumEnabled)
             {
                 MeasurePassthrough(buffer, offset, read);
             }
@@ -624,8 +630,18 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            // 实时电平：测量 post-DSP 信号（即实际送往输出的样本），供 UI 电平条显示
-            if (_meterEnabled) _levelMeter.Update(buf, n, ch);            // 回写 RG 渐变进度（供下一次 block 继续）
+            // 实时电平/频谱：测量 post-DSP 信号（即实际送往输出的样本）
+            if (_meterEnabled)
+            {
+                _levelMeter.Update(buf, n, ch);
+            }
+
+            if (_spectrumEnabled)
+            {
+                _spectrum.Push(buf, n, ch);
+            }
+
+            // 回写 RG 渐变进度（供下一次 block 继续）
             _rgCurrentDb = rgCurrentDb;
             _rgRampLeft = Math.Max(0, rgRampLeft);
 
@@ -701,7 +717,7 @@ namespace CelesteMusicPlayer
             return r * lsb;
         }
 
-        #region 实时电平表（测量 post-DSP 信号）
+        #region 实时电平表 / 频谱（测量 post-DSP 信号）
 
         /// <summary>开启/关闭电平测量。开启时按声道数重置内部缓冲（播放会话开始时调用）。
         /// 关闭时 Read 完全不做解码，恢复零开销 bit-perfect 直通。</summary>
@@ -713,6 +729,24 @@ namespace CelesteMusicPlayer
 
         /// <summary>电平表实例（渲染线程写、UI 线程读，内部有锁）。</summary>
         public LevelMeter LevelMeter => _levelMeter;
+
+        /// <summary>开启/关闭频谱采样。开启时按声道数与源采样率重建分频表。
+        /// 关闭后渲染线程不再降混写入（零开销）。</summary>
+        public void SetSpectrum(bool enabled)
+        {
+            _spectrumEnabled = enabled;
+            if (enabled)
+            {
+                _spectrum.Reset(_channels, _format.SampleRate, SpectrumBandCount);
+            }
+            else
+            {
+                _spectrum.SetEnabled(false);
+            }
+        }
+
+        /// <summary>频谱分析器实例（渲染线程写样本、UI 线程算 FFT，内部有锁）。</summary>
+        public SpectrumAnalyzer Spectrum => _spectrum;
 
         /// <summary>byte → float 解码（支持 float / 32bit / 24bit / 16bit），供 DSP 与电平测量共用。</summary>
         private void DecodeToFloat(byte[] b, int offset, int n, float[] buf)
@@ -746,7 +780,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>bit-perfect 直通路径下的电平测量：解码到临时 float 缓冲后更新电平表，
+        /// <summary>bit-perfect 直通路径下的测量：解码到临时 float 缓冲后更新电平表并喂频谱，
         /// 不改写输出缓冲，保证输出严格 bit-perfect。</summary>
         private void MeasurePassthrough(byte[] b, int offset, int count)
         {
@@ -767,7 +801,15 @@ namespace CelesteMusicPlayer
 
             float[] buf = GetTempFloatBuffer(n);
             DecodeToFloat(b, offset, n, buf);
-            _levelMeter.Update(buf, n, ch);
+            if (_meterEnabled)
+            {
+                _levelMeter.Update(buf, n, ch);
+            }
+
+            if (_spectrumEnabled)
+            {
+                _spectrum.Push(buf, n, ch);
+            }
         }
 
         #endregion

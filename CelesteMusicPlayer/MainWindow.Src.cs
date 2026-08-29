@@ -226,5 +226,92 @@ namespace CelesteMusicPlayer
 
             return options[idx].Hint;
         }
+
+        #region 输出缓冲区（抗卡顿 / 低延迟）
+
+        private static readonly (string Label, int Ms, string Hint)[] OutputBufferOptions =
+        {
+            ("20 ms（极低延迟）", 20, "极低"),
+            ("50 ms（低延迟）", 50, "低"),
+            ("100 ms（推荐）", 100, "推荐"),
+            ("200 ms（抗卡顿）", 200, "抗卡顿"),
+            ("300 ms（强抗卡顿）", 300, "强抗"),
+            ("500 ms（最稳）", 500, "最稳"),
+        };
+
+        /// <summary>在构造函数里调用：回填已保存的输出缓冲设置并填充下拉选项。</summary>
+        private void InitializeOutputBufferUi()
+        {
+            try
+            {
+                if (OutputBufferCombo == null)
+                {
+                    return;
+                }
+
+                int saved = AppSettingsStore.Load().OutputBufferMs;
+                OutputBufferCombo.Items.Clear();
+                foreach (var opt in OutputBufferOptions)
+                {
+                    OutputBufferCombo.Items.Add(opt.Label);
+                }
+
+                int idx = 2; // 默认 100ms（推荐）
+                for (int i = 0; i < OutputBufferOptions.Length; i++)
+                {
+                    if (OutputBufferOptions[i].Ms == saved)
+                    {
+                        idx = i;
+                        break;
+                    }
+                }
+
+                OutputBufferCombo.SelectedIndex = idx;
+                if (OutputBufferHintText != null)
+                {
+                    OutputBufferHintText.Text = OutputBufferOptions[idx].Hint;
+                }
+
+                _audioEngine?.SetOutputBufferMs(OutputBufferOptions[idx].Ms);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Src.cs", caught);
+            }
+        }
+
+        private void OutputBufferCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            try
+            {
+                int idx = OutputBufferCombo?.SelectedIndex ?? -1;
+                if (idx < 0 || idx >= OutputBufferOptions.Length)
+                {
+                    return;
+                }
+
+                int ms = OutputBufferOptions[idx].Ms;
+                if (OutputBufferHintText != null)
+                {
+                    OutputBufferHintText.Text = OutputBufferOptions[idx].Hint;
+                }
+
+                AppSettingsState s = AppSettingsStore.Load();
+                if (s.OutputBufferMs != ms)
+                {
+                    s.OutputBufferMs = ms;
+                    AppSettingsStore.Save(s);
+                }
+
+                _audioEngine?.SetOutputBufferMs(ms);
+                StartupLog.Write("[输出缓冲] 设置为 " + ms + " ms（下一首生效）");
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Src.cs", caught);
+            }
+        }
+
+        #endregion
     }
 }
