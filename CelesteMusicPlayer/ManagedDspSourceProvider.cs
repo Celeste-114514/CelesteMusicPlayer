@@ -380,7 +380,10 @@ namespace CelesteMusicPlayer
         /// <summary>重算 DSP 是否生效；当无任一 DSP 生效时后续 Read 直接直通（bit-perfect，零逐样本开销）。</summary>
         private void RefreshActive()
         {
-            _active = !_bypassAll && (_eqEnabled || _chEnabled || _limiterEnabled || _rgActive || Math.Abs(_headroomDb) > 0.001
+            // 注意：单独的「软限幅 EnableLimiter」不应激活托管 DSP 链 —— 源 PCM 不会超 ±1，
+            // 软限幅本就不改变样本，故保持 bit-perfect 直通。仅当 EQ/声道/headroom/音量/RG/卷积
+            // 任一真正改变信号时才走 ProcessBlock；这样独占模式下「无任何 DSP」即为严格 bit-perfect。
+            _active = !_bypassAll && (_eqEnabled || _chEnabled || _rgActive || Math.Abs(_headroomDb) > 0.001
                 || Math.Abs(_volumeGain - 1f) > 0.0001f || _convEnabled);
         }
 
@@ -626,7 +629,15 @@ namespace CelesteMusicPlayer
             _rgCurrentDb = rgCurrentDb;
             _rgRampLeft = Math.Max(0, rgRampLeft);
 
-            // 编码：float → byte
+            // 编码：float → byte。整数回写时叠加 TPDF dither（幅度 = 目标位深 1 LSB）后舍入并钳制，
+            // 消除截断量化失真（与 ResamplingSourceProvider 的 24bit dither 一致）；
+            // 直通路径不经过此处，故不影响 bit-perfect。
+            float lsb = isFloat ? 0f : bits switch
+            {
+                32 => 1f / 2147483647f,
+                24 => 1f / 8388607f,
+                _ => 1f / 32767f
+            };
             if (isFloat)
             {
                 int bo = offset;
@@ -637,9 +648,12 @@ namespace CelesteMusicPlayer
                 int bo = offset;
                 for (int i = 0; i < n; i++, bo += 4)
                 {
-                    int v = (int)(buf[i] * 2147483647f);
-                    b[bo] = (byte)(v & 0xFF); b[bo + 1] = (byte)((v >> 8) & 0xFF);
-                    b[bo + 2] = (byte)((v >> 16) & 0xFF); b[bo + 3] = (byte)((v >> 24) & 0xFF);
+                    float s = buf[i] + TpdfDither(_ditherRng, lsb);
+                    long v = (long)Math.Round(s * 2147483647.0);
+                    if (v > 2147483647L) v = 2147483647L; else if (v < -2147483648L) v = -2147483648L;
+                    int iv = (int)v;
+                    b[bo] = (byte)(iv & 0xFF); b[bo + 1] = (byte)((iv >> 8) & 0xFF);
+                    b[bo + 2] = (byte)((iv >> 16) & 0xFF); b[bo + 3] = (byte)((iv >> 24) & 0xFF);
                 }
             }
             else if (bits == 24)
@@ -647,7 +661,9 @@ namespace CelesteMusicPlayer
                 int bo = offset;
                 for (int i = 0; i < n; i++, bo += 3)
                 {
-                    int v = (int)(buf[i] * 8388607f);
+                    float s = buf[i] + TpdfDither(_ditherRng, lsb);
+                    int v = (int)Math.Round(s * 8388607.0);
+                    if (v > 8388607) v = 8388607; else if (v < -8388608) v = -8388608;
                     b[bo] = (byte)(v & 0xFF); b[bo + 1] = (byte)((v >> 8) & 0xFF); b[bo + 2] = (byte)((v >> 16) & 0xFF);
                 }
             }
@@ -656,8 +672,11 @@ namespace CelesteMusicPlayer
                 int bo = offset;
                 for (int i = 0; i < n; i++, bo += 2)
                 {
-                    short s = (short)(buf[i] * 32767f);
-                    b[bo] = (byte)(s & 0xFF); b[bo + 1] = (byte)((s >> 8) & 0xFF);
+                    float s = buf[i] + TpdfDither(_ditherRng, lsb);
+                    int v = (int)Math.Round(s * 32767.0);
+                    if (v > 32767) v = 32767; else if (v < -32768) v = -32768;
+                    short sv = (short)v;
+                    b[bo] = (byte)(sv & 0xFF); b[bo + 1] = (byte)((sv >> 8) & 0xFF);
                 }
             }
         }
@@ -669,6 +688,17 @@ namespace CelesteMusicPlayer
         {
             if (_tempFloatBuf.Length < n) _tempFloatBuf = new float[n * 2];
             return _tempFloatBuf;
+        }
+
+        // 整数回写 dither：TPDF（三角分布）抖动，幅度按目标位深 1 LSB，消除截断量化失真。
+        // 仅在 ProcessBlock（DSP 已修改信号）内使用；直通路径不经过，故不影响 bit-perfect。
+        private readonly Random _ditherRng = new();
+
+        /// <summary>TPDF 抖动：两个均匀随机数相减，幅度 ±amp×LSB。用于整数回写量化前的抖动。</summary>
+        private static float TpdfDither(Random rng, float lsb)
+        {
+            float r = (float)(rng.NextDouble() - rng.NextDouble()); // [-1,1)
+            return r * lsb;
         }
 
         #region 实时电平表（测量 post-DSP 信号）

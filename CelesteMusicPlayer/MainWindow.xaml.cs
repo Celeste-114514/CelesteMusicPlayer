@@ -614,7 +614,9 @@ namespace CelesteMusicPlayer
         // 歌曲面板小封面异步加载：防止同一路径并发重复读取
         private readonly System.Collections.Generic.HashSet<string> _rowCoverLoading = new(System.StringComparer.OrdinalIgnoreCase);
         // 封面解码缓存（按路径复用已解码封面，避免滚动/重复时反复 IO+解码造成卡顿）；限流并发封面解码
+        // BitmapImage 持有解码后的像素，逐曲播放会无限累积 —— 这是“播放越多内存越大”的主因，故设上限。
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> _coverImageCache = new(System.StringComparer.OrdinalIgnoreCase);
+        private const int RowCoverCacheMax = 1024;
         private readonly System.Threading.SemaphoreSlim _coverLoadGate = new(4);
 
         // 歌词平滑滚动
