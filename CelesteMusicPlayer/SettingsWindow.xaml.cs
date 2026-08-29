@@ -227,6 +227,16 @@ namespace CelesteMusicPlayer
                 ShowPanel("MediaLib");
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
+
+            // 关于面板：显示当前版本号（静态读取，构造时一次即可）
+            try
+            {
+                if (AboutVersionText != null)
+                {
+                    AboutVersionText.Text = $"版本 {CurrentVersionText()}";
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
         }
 
         public static void CloseIfOpen()
@@ -1166,6 +1176,7 @@ namespace CelesteMusicPlayer
             PanelHotkeys.Visibility = tag == "Hotkeys" ? Visibility.Visible : Visibility.Collapsed;
             PanelLibraryHealth.Visibility = tag == "LibraryHealth" ? Visibility.Visible : Visibility.Collapsed;
             PanelStreaming.Visibility = tag == "Streaming" ? Visibility.Visible : Visibility.Collapsed;
+            PanelAbout.Visibility = tag == "About" ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void SaveNeCookieButton_Click(object sender, RoutedEventArgs e)

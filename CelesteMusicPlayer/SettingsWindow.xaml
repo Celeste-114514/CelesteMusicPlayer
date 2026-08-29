@@ -64,6 +64,9 @@
                 <NavigationViewItem Content="流媒体" Tag="Streaming">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8FE;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="关于" Tag="About">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE946;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
             </NavigationView.MenuItems>
 
             <Grid Padding="0,0,8,0">
@@ -1273,6 +1276,91 @@
                             <Button x:Name="SaveQqCookieButton" Grid.Column="2" Content="保存" Click="SaveQqCookieButton_Click" MinWidth="56" />
                         </Grid>
                         <TextBlock x:Name="StreamingStatusText" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords" Text="" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 关于：软件介绍 / 版本与更新 / 作者 -->
+                <ScrollViewer
+                    x:Name="PanelAbout"
+                    Visibility="Collapsed"
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="20,12,24,24">
+                    <StackPanel Spacing="16" MaxWidth="680">
+                        <TextBlock Text="关于 CelesteMusicPlayer" FontSize="17" FontWeight="SemiBold" />
+
+                        <Border
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="软件介绍" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock
+                                    FontSize="12"
+                                    Opacity="0.8"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="CelesteMusicPlayer：为本地音乐文件打造的 Windows HiFi 播放器。支持 FLAC / APE / WAV / DSD 等无损格式，内置参数 EQ、声道平衡、房间校正（卷积）、采样率升频（SRC）、ReplayGain 响度归一化等音频处理。所有数据保存在本地，无需登录。" />
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="软件更新" FontSize="14" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Spacing="4" VerticalAlignment="Center">
+                                        <TextBlock
+                                            x:Name="AboutVersionText"
+                                            FontSize="13"
+                                            FontWeight="SemiBold"
+                                            Text="版本 —" />
+                                        <TextBlock
+                                            x:Name="AboutUpdateStatusText"
+                                            FontSize="11"
+                                            Opacity="0.65"
+                                            TextWrapping="WrapWholeWords"
+                                            Text="点击「检查更新」获取最新版本（GitHub Releases）。" />
+                                    </StackPanel>
+                                    <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
+                                        <Button x:Name="AboutCheckUpdateButton" Content="检查更新" Click="AboutCheckUpdate_Click" />
+                                        <HyperlinkButton
+                                            x:Name="AboutReleasesLink"
+                                            Content="GitHub Releases ↗"
+                                            FontSize="11"
+                                            NavigateUri="https://github.com/Celeste-114514/CelesteMusicPlayer/releases" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <Border
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="关于作者" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock
+                                    FontSize="12"
+                                    Opacity="0.8"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="Celeste，一名苦逼大学生。不懂代码，用 AI 写下了这个播放器。要是用着不错，欢迎反馈或请我喝杯咖啡。" />
+                                <HyperlinkButton
+                                    Content="联系 / 反馈：t.me/celesteabsolomb"
+                                    FontSize="12"
+                                    NavigateUri="https://t.me/celesteabsolomb" />
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

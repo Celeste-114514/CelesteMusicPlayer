@@ -52,6 +52,9 @@ namespace CelesteMusicPlayer
             try
             {
                 InitializePlayerAndTimers();
+                // 任务栏缩略图按钮：必须在 Loaded 后注册，任务栏按钮就绪时才生效。
+                // Add() 自身有重入保护，重复调用安全。
+                _taskbarButtons?.Add();
             }
             catch (Exception ex)
             {

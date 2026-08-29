@@ -632,7 +632,6 @@ namespace CelesteMusicPlayer
             InitializeLevelMeter();
             InitializeCrossfadeUi();
             InitializeSrcUi();
-            InitializeAboutUi();
             try
             {
                 _mainWindowHwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
@@ -647,8 +646,9 @@ namespace CelesteMusicPlayer
             {
                 try
                 {
+                    // Add() 推迟到 Loaded 后调用——窗口任务栏按钮未就绪时
+                    // ThumbarAddButtons 会静默失败（按钮不会显示）。Loaded 后调用一次。
                     _taskbarButtons = new TaskbarThumbnailButtons(this, _mainWindowHwnd);
-                    _taskbarButtons.Add();
                 }
                 catch (Exception caught)
                 {

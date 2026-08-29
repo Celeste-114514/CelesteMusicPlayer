@@ -60,7 +60,9 @@ namespace CelesteMusicPlayer
                     MakeButton(BtnNext, IconFromStock(SiidMediaNext), "下一首"),
                     MakeButton(BtnFavorite, MakeHeartIcon(), "添加到我喜欢")
                 };
-                _taskbar.ThumbBarAddButtons(_hwnd, (uint)buttons.Length, buttons);
+                // 注意：ThumbarAddButtons 用 ref 传第一个元素（数组参数会触发
+                // 0x80131165 Typelib export 错误——CLR 需要类型库编组数组）
+                _taskbar.ThumbBarAddButtons(_hwnd, (uint)buttons.Length, ref buttons[0]);
                 _added = true;
                 StartupLog.Write("任务栏缩略图按钮已添加");
             }
@@ -80,10 +82,15 @@ namespace CelesteMusicPlayer
 
             try
             {
-                var btn = MakeButton(BtnPlayPause,
-                    playing ? IconFromStock(SiidMediaPause) : IconFromStock(SiidMediaPlay),
-                    playing ? "暂停" : "播放");
-                _taskbar.ThumbBarUpdateButtons(_hwnd, 1, new[] { btn });
+                Icon? old = _iconPlayPause;
+                _iconPlayPause = playing ? IconFromStock(SiidMediaPause) : IconFromStock(SiidMediaPlay);
+                var btn = MakeButton(BtnPlayPause, _iconPlayPause, playing ? "暂停" : "播放");
+                _taskbar.ThumbBarUpdateButtons(_hwnd, 1, ref btn);
+                // ThumbarUpdateButtons 已复制新图标，旧的释放掉避免 GDI 句柄泄漏
+                if (old != null && !ReferenceEquals(old, _iconPlayPause))
+                {
+                    DestroyIconSafe(old);
+                }
             }
             catch (Exception caught)
             {
@@ -104,7 +111,8 @@ namespace CelesteMusicPlayer
                 if (_taskbar != null && _hwnd != IntPtr.Zero)
                 {
                     // ITaskbarList3 无 ThumbBarRemoveButtons；按钮数置 0 即移除全部
-                    _taskbar.ThumbBarUpdateButtons(_hwnd, 0, null);
+                    // （cButtons=0 时 pButton 被忽略，传空按钮即可）
+                    _taskbar.ThumbBarUpdateButtons(_hwnd, 0, ref EmptyButton);
                 }
             }
             catch (Exception caught) { StartupLog.WriteException("TaskbarThumbnailButtons.Dispose.remove", caught); }
@@ -119,12 +127,23 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { StartupLog.WriteException("TaskbarThumbnailButtons.Dispose.wndproc", caught); }
 
-            _iconPrev?.Dispose();
-            _iconPlayPause?.Dispose();
-            _iconNext?.Dispose();
-            _iconFavorite?.Dispose();
-            _iconPrev = _iconPlayPause = _iconNext = _iconFavorite = null;
+            DestroyIconSafe(_iconPrev);
+            DestroyIconSafe(_iconPlayPause);
+            DestroyIconSafe(_iconNext);
+            DestroyIconSafe(_iconFavorite);
             GC.SuppressFinalize(this);
+        }
+
+        /// <summary>释放由 SHGetStockIconInfo / Bitmap.GetHicon 生成的 HICON 及其包装。</summary>
+        private static void DestroyIconSafe(Icon? icon)
+        {
+            if (icon == null)
+            {
+                return;
+            }
+
+            try { DestroyIcon(icon.Handle); } catch { }
+            try { icon.Dispose(); } catch { }
         }
 
         private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -249,6 +268,9 @@ namespace CelesteMusicPlayer
         [DllImport("user32.dll", SetLastError = true)]
         private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool DestroyIcon(IntPtr hIcon);
+
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
         private static extern int SHGetStockIconInfo(uint siid, uint uFlags, ref SHSTOCKICONINFO psii);
 
@@ -295,8 +317,8 @@ namespace CelesteMusicPlayer
             void UnregisterTab(IntPtr hwndTab);
             void SetTabOrder(IntPtr hwndTab, IntPtr hwndInsertBefore);
             void SetTabActive(IntPtr hwndTab, IntPtr hwndMDI);
-            void ThumbBarAddButtons(IntPtr hwnd, uint cButtons, [In] THUMBBUTTON[] pButton);
-            void ThumbBarUpdateButtons(IntPtr hwnd, uint cButtons, [In] THUMBBUTTON[] pButton);
+            void ThumbBarAddButtons(IntPtr hwnd, uint cButtons, [In] ref THUMBBUTTON pButton);
+            void ThumbBarUpdateButtons(IntPtr hwnd, uint cButtons, [In] ref THUMBBUTTON pButton);
             void ThumbBarSetImageList(IntPtr hwnd, IntPtr himl);
             void SetOverlayIcon(IntPtr hwnd, IntPtr hicon, [MarshalAs(UnmanagedType.LPWStr)] string pszDescription);
             void SetThumbnailTooltip(IntPtr hwnd, [MarshalAs(UnmanagedType.LPWStr)] string pszTip);
@@ -311,5 +333,8 @@ namespace CelesteMusicPlayer
             public int Right;
             public int Bottom;
         }
+
+        /// <summary>ThumbBarUpdateButtons(cButtons=0) 时传入的空按钮（[In] ref 必须指向有效内存）。</summary>
+        private static THUMBBUTTON EmptyButton = default;
     }
 }
