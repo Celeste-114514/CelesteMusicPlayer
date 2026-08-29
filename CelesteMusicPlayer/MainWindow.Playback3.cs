@@ -162,6 +162,9 @@ namespace CelesteMusicPlayer
                     PlayPauseIcon.Glyph = "\uE768";
                 }
 
+                // 任务栏缩略图按钮：暂停 → 显示"播放"图标（提示用户点播放）
+                _taskbarButtons?.UpdatePlayPause(false);
+
                 _miniPlayerWindow?.RefreshFromOwner();
                 return;
             }
@@ -183,6 +186,9 @@ namespace CelesteMusicPlayer
                 {
                     PlayPauseIcon.Glyph = "\uE769";
                 }
+
+                // 任务栏缩略图按钮：播放中 → 显示"暂停"图标（提示用户点暂停）
+                _taskbarButtons?.UpdatePlayPause(true);
 
                 // 独占下音量完全由 Windows 托盘/DAC 物理键控制，程序不写设备主音量(避免多次 select/暂停音量跳变到 0/100)；
                 // 仅共享模式在恢复时做软件增益淡入。
@@ -216,13 +222,16 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            if (player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
+            bool wasPlaying = player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing;
+            if (wasPlaying)
             {
                 player.Pause();
+                _taskbarButtons?.UpdatePlayPause(false);   // 暂停后 → 显示"播放"图标
             }
             else
             {
                 player.Play();
+                _taskbarButtons?.UpdatePlayPause(true);    // 播放后 → 显示"暂停"图标
             }
         }
 
@@ -519,16 +528,30 @@ namespace CelesteMusicPlayer
 
         internal void TogglePlayPausePublic() => PlayPauseButton_Click(PlayPauseButton!, new RoutedEventArgs());
 
-        /// <summary>把当前播放曲目加入“我喜欢的音乐”（托盘/菜单复用）。</summary>
+        /// <summary>把当前播放曲目加入/移出"我喜欢的音乐"（托盘/菜单/任务栏缩略图复用）。
+        /// 点击行为：未收藏 → 加入；已收藏 → 移除。托盘和任务栏共用同一份逻辑。</summary>
         internal void FavoriteCurrentPublic()
         {
-            if (string.IsNullOrWhiteSpace(_nowPlayingPath))
+            string? path = _nowPlayingPath;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                {
+                    path = _userPlaylist[_userPlaylistIndex].FilePath;
+                }
+                else if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
+                {
+                    path = _playlist[_currentIndex].FilePath;
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(path))
             {
                 StartupLog.Write("[托盘] 收藏当前：无正在播放曲目");
                 return;
             }
 
-            TrackStatsStore.SetFavorite(_nowPlayingPath, true);
+            bool fav = TrackStatsStore.ToggleFavorite(path);
             NamedPlaylistStore.SyncFavoritesPlaylist();
             UpdateFavoriteButtonUi();
             if (string.Equals(_currentCategory, "Favorites", StringComparison.Ordinal))
@@ -538,10 +561,13 @@ namespace CelesteMusicPlayer
 
             if (NowPlayingText != null)
             {
-                NowPlayingText.Text = "已收藏到“我喜欢的音乐”";
+                NowPlayingText.Text = fav ? "已添加到我喜欢的音乐" : "已取消喜欢";
             }
 
-            StartupLog.Write("[托盘] 已收藏 " + _nowPlayingPath);
+            // 任务栏缩略图按钮：fav=true 实心红心 / fav=false 空心轮廓心
+            _taskbarButtons?.UpdateFavorite(fav);
+
+            StartupLog.Write("[托盘] " + (fav ? "已收藏 " : "已取消收藏 ") + path);
         }
 
 

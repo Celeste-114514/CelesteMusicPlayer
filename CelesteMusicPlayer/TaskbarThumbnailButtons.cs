@@ -16,12 +16,23 @@ namespace CelesteMusicPlayer
     ///   （[日志] 任务栏缩略图：ImageList_Create 失败），整条 ImageList 路径就被卡死。
     /// - HICON 路径：每个按钮一个 16x16 32bpp ARGB Bitmap + GetHicon()，
     ///   thumbar 受影响的只有当前按钮那个 HICON，路由清晰。
-    /// - **结构体 marshal**：ThumbBarAddButtons 用显式 AllocHGlobal + StructureToPtr 写 buffer，
-    ///   不再用 [In] ref THUMBBUTTON[] 跨 COM 推测边界。Win11 任务栏在 comctl32 v6 + 64-bit
-    ///   ITaskbarList3 进程下，ref array 推测偶发丢字段（4 按钮只渲染 1 个或 0 个），
-    ///   改显式 unmanaged memory 4 个按钮都被正确读出。
-    /// - **dwMask 同时设 ThbBitmap | ThbIcon**：Explorer 在 Win11 24H2+ 的 thumbar 渲染管线只
-    ///   在两个 mask 都出现时落进"读 hIcon"分支；只设 ThbIcon 会走 bitmap fallback（空图标）。
+    /// - **结构体 marshal**：ThumbBarAddButtons / ThumbBarUpdateButtons 用
+    ///   [MarshalAs(UnmanagedType.LPArray)] THUMBBUTTON[] 数组参数。
+    ///   之前 [In] ref THUMBBUTTON pButton 在 64-bit COM interop 下只 marshal 单元素
+    ///   （= sizeof(THUMBBUTTON)），explorer 实际只看到 1 个按钮的 iId/hIcon，
+    ///   剩 3 个按钮位置 iId=0/hIcon=NULL → 不渲染、不响应点击。
+    ///   LPArray 让 marshaler 按 cButtons * sizeof(THUMBBUTTON) 把整个数组写到 unmanaged，
+    ///   explorer 才能读到全部 4 个按钮的 iId/hIcon。
+    /// - **dwMask 只设 ThbIcon | ThbTooltip | ThbFlags**：
+    ///   之前双设 ThbBitmap | ThbIcon 会让 explorer 走 iBitmap=0 的 bitmap fallback，
+    ///   导致 4 个按钮位置全部显示默认/不正确的图标（prev 是唯一"有图标"的位置，
+    ///   但显示的是 explorer fallback 而非我们画的 HICON）。
+    /// - **心形用两个相切椭圆 + 三角**：之前的椭圆在 x=8 处重叠 4px，
+    ///   FillPath 默认 FillMode.Alternate 把重叠区（奇偶数判定为偶数）挖洞，
+    ///   导致显示出来是"U 形"不是完整心形。新版两个椭圆恰好在 x=8 相切（无重叠），
+    ///   再加三角填充心尖，干净饱满。
+    /// - **空心 / 实心心形两套 HICON**：未收藏（默认）= 空心轮廓心，
+    ///   已收藏 = 实心红心。ToggleFavorite 后调 UpdateFavorite 切换。
     /// - 子类化：SetWindowSubclass(comctl32) 而不是 SetWindowLongPtr，
     ///   WinUI 框架会替换 WndProc，SetWindowLongPtr 几小时就失效；comctl32 子类化栈
     ///   在框架之前，过滤规则明确。
@@ -53,11 +64,14 @@ namespace CelesteMusicPlayer
         private IntPtr _hPlay = IntPtr.Zero;
         private IntPtr _hPause = IntPtr.Zero;
         private IntPtr _hNext = IntPtr.Zero;
-        private IntPtr _hHeart = IntPtr.Zero;
+        // 收藏按钮：两套独立 HICON，空心 = 未收藏，实心 = 已收藏。
+        private IntPtr _hHeartEmpty = IntPtr.Zero;
+        private IntPtr _hHeartFilled = IntPtr.Zero;
 
         private bool _added;
         private bool _disposed;
         private bool _isPlaying;
+        private bool _isFavorite;
 
         // 延迟注册：任务栏图标 Loaded 后还没完全 ready 时直接 AddButtons 会被 Explorer
         // 默默吞掉（hr=0 但按钮不显示）。分多轮重试解决：1500 / 3500 / 6500 / 11500ms。
@@ -111,15 +125,17 @@ namespace CelesteMusicPlayer
                     _hPlay = RenderGlyphHicon(PaintGlyphPlay);
                     _hPause = RenderGlyphHicon(PaintGlyphPause);
                     _hNext = RenderGlyphHicon(PaintGlyphNext);
-                    _hHeart = RenderGlyphHicon(PaintGlyphHeart);
+                    _hHeartFilled = RenderGlyphHicon(PaintGlyphHeartFilled);
+                    _hHeartEmpty = RenderGlyphHicon(PaintGlyphHeartOutline);
                     StartupLog.Write("[thumb] HICON 渲染完成: prev=0x" + _hPrev.ToString("X")
                         + " play=0x" + _hPlay.ToString("X")
                         + " pause=0x" + _hPause.ToString("X")
                         + " next=0x" + _hNext.ToString("X")
-                        + " heart=0x" + _hHeart.ToString("X"));
+                        + " heartFilled=0x" + _hHeartFilled.ToString("X")
+                        + " heartEmpty=0x" + _hHeartEmpty.ToString("X"));
 
                     if (_hPrev != IntPtr.Zero && _hPlay != IntPtr.Zero && _hPause != IntPtr.Zero
-                        && _hNext != IntPtr.Zero && _hHeart != IntPtr.Zero)
+                        && _hNext != IntPtr.Zero && _hHeartFilled != IntPtr.Zero && _hHeartEmpty != IntPtr.Zero)
                     {
                         _delegatesReady = true;
                         _retryAttempt = 0;
@@ -161,12 +177,14 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                IntPtr heart = _isFavorite ? _hHeartFilled : _hHeartEmpty;
+                string heartTip = _isFavorite ? "取消喜欢" : "添加到喜欢";
                 var arr = new[]
                 {
                     MakeIconButton(BtnPrev, _hPrev, "上一首"),
                     MakeIconButton(BtnPlayPause, _isPlaying ? _hPause : _hPlay, _isPlaying ? "暂停" : "播放"),
                     MakeIconButton(BtnNext, _hNext, "下一首"),
-                    MakeIconButton(BtnFavorite, _hHeart, "添加到喜欢")
+                    MakeIconButton(BtnFavorite, heart, heartTip)
                 };
                 int hr = _taskbar!.ThumbBarUpdateButtons(_hwnd, (uint)arr.Length, arr);
                 _forceUpdateRound++;
@@ -184,10 +202,12 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                IntPtr heart = _isFavorite ? _hHeartFilled : _hHeartEmpty;
+                string heartTip = _isFavorite ? "取消喜欢" : "添加到喜欢";
                 var prevBtn = MakeIconButton(BtnPrev, _hPrev, "上一首");
                 var playBtn = MakeIconButton(BtnPlayPause, _hPlay, "播放");
                 var nextBtn = MakeIconButton(BtnNext, _hNext, "下一首");
-                var favBtn = MakeIconButton(BtnFavorite, _hHeart, "添加到喜欢");
+                var favBtn = MakeIconButton(BtnFavorite, heart, heartTip);
                 var arr = new[] { prevBtn, playBtn, nextBtn, favBtn };
 
                 // **关键**：用 THUMBBUTTON[] + [MarshalAs(UnmanagedType.LPArray)] 传整个数组。
@@ -258,6 +278,34 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 切换收藏按钮图标：isFavorite=true → 实心红心（点击取消收藏），
+        /// isFavorite=false → 空心轮廓心（点击加入收藏）。未 AddButtons 时只缓存状态，
+        /// AddButtons 成功后会在 TryAddButtonsOnce 自动应用当前 _isFavorite。
+        /// </summary>
+        public void UpdateFavorite(bool isFavorite)
+        {
+            _isFavorite = isFavorite;
+            if (!_added || _disposed || _taskbar == null)
+            {
+                return;
+            }
+
+            try
+            {
+                IntPtr heart = isFavorite ? _hHeartFilled : _hHeartEmpty;
+                string tip = isFavorite ? "取消喜欢" : "添加到喜欢";
+                var btn = MakeIconButton(BtnFavorite, heart, tip);
+                var arr = new[] { btn };
+                int hr = _taskbar.ThumbBarUpdateButtons(_hwnd, 1, arr);
+                StartupLog.Write("[thumb] UpdateFavorite fav=" + isFavorite + " hr=0x" + hr.ToString("X8"));
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("TaskbarThumbnailButtons.UpdateFavorite", caught);
+            }
+        }
+
         public void Dispose()
         {
             if (_disposed)
@@ -286,7 +334,8 @@ namespace CelesteMusicPlayer
             DestroyIconSafely(ref _hPlay);
             DestroyIconSafely(ref _hPause);
             DestroyIconSafely(ref _hNext);
-            DestroyIconSafely(ref _hHeart);
+            DestroyIconSafely(ref _hHeartFilled);
+            DestroyIconSafely(ref _hHeartEmpty);
         }
 
         private static void DestroyIconSafely(ref IntPtr h)
@@ -359,18 +408,41 @@ namespace CelesteMusicPlayer
             g.FillRectangle(White, 9, 3, 3, 10);
         }
 
-        private static void PaintGlyphHeart(Graphics g)
+        private static void PaintGlyphHeartFilled(Graphics g)
         {
-            using var heart = new GraphicsPath();
-            heart.AddEllipse(2, 3, 8, 7);
-            heart.AddEllipse(6, 3, 8, 7);
-            heart.AddPolygon(new[]
+            using var path = HeartPath();
+            // FillPath 默认 FillMode.Alternate：两个相切椭圆（x=8 处相切、不重叠），
+            // 加上三角形（顶点在 x=8），整体是 3 个不相交的闭合区域，全部填实。
+            g.FillPath(Red, path);
+        }
+
+        private static void PaintGlyphHeartOutline(Graphics g)
+        {
+            using var path = HeartPath();
+            // 1.2px 描边：16x16 画布上 1.2 是抗锯齿后看起来像 ~1.5 像素，醒目但不糊。
+            // 用 SmoothingMode.AntiAlias 让圆角自然过渡到直线段。
+            using var pen = new Pen(Color.FromArgb(232, 17, 35), 1.2f);
+            pen.LineJoin = LineJoin.Round;
+            g.DrawPath(pen, path);
+        }
+
+        /// <summary>
+        /// 16x16 经典心形路径：左叶椭圆 (1,3,7,6) + 右叶椭圆 (8,3,7,6)，
+        /// 两个椭圆在 x=8 处**相切**（不重叠），加底部三角 (1,6)-(15,6)-(8,15) 拼心尖。
+        /// 整体占 [1,15]×[3,15]，留 1px padding。
+        /// </summary>
+        private static GraphicsPath HeartPath()
+        {
+            var path = new GraphicsPath();
+            path.AddEllipse(1, 3, 7, 6);   // 左叶：中心 (4.5, 6)
+            path.AddEllipse(8, 3, 7, 6);   // 右叶：中心 (11.5, 6)
+            path.AddPolygon(new[]          // 心尖：底边中点 (8, 15)
             {
-                new Point(2, 7),
-                new Point(14, 7),
-                new Point(8, 14)
+                new Point(1, 6),
+                new Point(15, 6),
+                new Point(8, 15)
             });
-            g.FillPath(Red, heart);
+            return path;
         }
 
         // ---------------------------------------------------------------- Subclass
@@ -419,12 +491,12 @@ namespace CelesteMusicPlayer
 
         private static THUMBBUTTON MakeIconButton(uint id, IntPtr hIcon, string tip)
         {
-            // **dwMask 同时设 ThbBitmap | ThbIcon**：Win11 24H2+ 任务栏 thumbar 渲染管线
-            // 只在两个 bit 都被设置时落进"读 hIcon"分支（哪怕只用 hIcon）；只设 ThbIcon 时
-            // explorer 走 bitmap fallback（空图标）。
+            // **dwMask 只设 ThbIcon**：之前双设 ThbBitmap | ThbIcon 时 explorer 优先走
+            // iBitmap 路径（iBitmap=0 → 显示 explorer fallback 图标），导致 4 个按钮
+            // 都显示默认/不正确的图标。修掉：只设 ThbIcon，explorer 必须读 hIcon。
             return new THUMBBUTTON
             {
-                dwMask = ThbBitmap | ThbIcon | ThbTooltip | ThbFlags,
+                dwMask = ThbIcon | ThbTooltip | ThbFlags,
                 iId = id,
                 iBitmap = 0,
                 hIcon = hIcon,

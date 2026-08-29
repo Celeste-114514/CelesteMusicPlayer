@@ -864,6 +864,9 @@ namespace CelesteMusicPlayer
                 ApplyCategoryView();
             }
 
+            // 任务栏缩略图按钮：fav=true 实心红心 / fav=false 空心轮廓心
+            _taskbarButtons?.UpdateFavorite(fav);
+
             NowPlayingText.Text = fav ? "已添加到我喜欢的音乐" : "已取消喜欢";
         }
 
@@ -877,6 +880,10 @@ namespace CelesteMusicPlayer
                 FavoriteButtonIcon.Glyph = fav ? "\uEB52" : "\uEB51";
                 ToolTipService.SetToolTip(FavoriteButton, fav ? "取消喜欢" : "我喜欢的音乐");
             }
+
+            // 任务栏缩略图按钮：把当前曲目的收藏状态同步到 thumbar
+            // （启动恢复上次播放时，thumbar 加载完成就会用对的图标）
+            _taskbarButtons?.UpdateFavorite(fav);
         }
 
         private void FavoriteButton_Click(object sender, RoutedEventArgs e)
