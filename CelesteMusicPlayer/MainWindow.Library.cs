@@ -752,7 +752,7 @@ namespace CelesteMusicPlayer
         private void ApplyTagSortFieldButtons()
         {
             var accent = ResolveAccentBrush();
-            var fg = ResolveContrastingForeground(accent);
+            var fg = ColorHelper.ResolveContrastingForeground(accent);
             var idleBg = ResolveCapsuleFillBrush();
             var border = ResolveNavCapsuleBorderBrush();
             void Update(Button b)
@@ -2004,7 +2004,7 @@ namespace CelesteMusicPlayer
                         DefaultButton = ContentDialogButton.Close,
                         XamlRoot = Content.XamlRoot
                     };
-                    ApplyDialogAccent(dialog);
+                    ColorHelper.ApplyDialogAccent(dialog);
 
                     ContentDialogResult r;
                     try
@@ -2210,7 +2210,7 @@ namespace CelesteMusicPlayer
             HashSet<object>? selectedSet = null)
         {
             Brush accent = ResolveAccentBrush();
-            Brush selectedFg = ResolveContrastingForeground(accent);
+            Brush selectedFg = ColorHelper.ResolveContrastingForeground(accent);
             bool multiOnThisList = _isMultiSelectMode && _multiSelectFolderList == FolderBrowserView;
             Brush unselectedBg = multiOnThisList
                 ? CreateMultiSelectFrostBrush()
@@ -2222,14 +2222,14 @@ namespace CelesteMusicPlayer
             DisableContainerSelectionCheckMark(container);
 
             bool selected = multiOnThisList
-                ? IsItemSelected(FolderBrowserView, item, selectedSet)
+                ? VisualTreeWalker.IsItemSelected(FolderBrowserView, item, selectedSet)
                 : ReferenceEquals(FolderBrowserView.SelectedItem, item);
 
             bool searchHit = !multiOnThisList
                 && !string.IsNullOrEmpty(_folderSearchHighlightPath)
                 && string.Equals(item.FullPath, _folderSearchHighlightPath, StringComparison.OrdinalIgnoreCase);
 
-            Border? chrome = FindTaggedBorder(container, "FolderRowChrome");
+            Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "FolderRowChrome");
             if (chrome != null)
             {
                 chrome.MinHeight = 36;
@@ -2434,7 +2434,7 @@ namespace CelesteMusicPlayer
         /// <summary>圆形头像上右键：选择本地头像 / 恢复默认</summary>
         private void ArtistAvatar_RightTapped(object sender, RightTappedRoutedEventArgs e)
         {
-            ArtistEntry? artist = FindArtistEntry(sender as DependencyObject);
+            ArtistEntry? artist = VisualTreeWalker.FindArtistEntry(sender as DependencyObject);
             if (artist == null)
             {
                 return;
@@ -2504,31 +2504,6 @@ namespace CelesteMusicPlayer
             }
 
             e.Handled = true;
-        }
-
-
-        private static ArtistEntry? FindArtistEntry(DependencyObject? start)
-        {
-            DependencyObject? current = start;
-            while (current != null)
-            {
-                if (current is FrameworkElement fe)
-                {
-                    if (fe.DataContext is ArtistEntry fromContext)
-                    {
-                        return fromContext;
-                    }
-
-                    if (fe is GridViewItem { Content: ArtistEntry fromContent })
-                    {
-                        return fromContent;
-                    }
-                }
-
-                current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
-            }
-
-            return null;
         }
 
 

@@ -45,7 +45,7 @@ namespace CelesteMusicPlayer
 
         private void RefreshRealizedSongListSelectionChrome(ListView list)
         {
-            HashSet<object>? selectedSet = BuildSelectedItemsLookup(list);
+            HashSet<object>? selectedSet = VisualTreeWalker.BuildSelectedItemsLookup(list);
             foreach (ListViewItem container in EnumerateRealizedListViewItems(list))
             {
                 if (list.ItemFromContainer(container) is PlaylistItem song)
@@ -63,7 +63,7 @@ namespace CelesteMusicPlayer
             HashSet<object>? selectedSet = null)
         {
             Brush accent = ResolveAccentBrush();
-            Brush selectedFg = ResolveContrastingForeground(accent);
+            Brush selectedFg = ColorHelper.ResolveContrastingForeground(accent);
             bool multiOnThisList = _isMultiSelectMode && ReferenceEquals(_multiSelectTargetList, list);
             Brush unselectedBg = multiOnThisList
                 ? CreateMultiSelectFrostBrush()
@@ -76,10 +76,10 @@ namespace CelesteMusicPlayer
             DisableContainerSelectionCheckMark(container);
 
             bool selected = multiOnThisList
-                ? IsItemSelected(list, song, selectedSet)
+                ? VisualTreeWalker.IsItemSelected(list, song, selectedSet)
                 : ReferenceEquals(list.SelectedItem, song);
 
-            Border? chrome = FindTaggedBorder(container, "SongRowChrome");
+            Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "SongRowChrome");
             if (chrome != null)
             {
                 chrome.MinHeight = 40;
@@ -120,30 +120,6 @@ namespace CelesteMusicPlayer
 
         private void ApplyPlaylistItemSelectionChrome(ListViewItem container, PlaylistItem song)
             => ApplySongListItemSelectionChrome(PlaylistView, container, song);
-
-        private static Border? FindTaggedBorder(DependencyObject root, string tag)
-        {
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                DependencyObject child = VisualTreeHelper.GetChild(root, i);
-                if (child is Border border
-                    && border.Tag is string t
-                    && string.Equals(t, tag, StringComparison.Ordinal))
-                {
-                    return border;
-                }
-
-                Border? nested = FindTaggedBorder(child, tag);
-                if (nested != null)
-                {
-                    return nested;
-                }
-            }
-
-            return null;
-        }
-
 
         // =====================================================================
         // 底部控制按钮

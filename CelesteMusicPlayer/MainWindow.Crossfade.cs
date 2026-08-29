@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Microsoft.UI.Xaml.Controls.Primitives;
 
 namespace CelesteMusicPlayer
@@ -19,7 +19,7 @@ namespace CelesteMusicPlayer
                 int ms = AppSettingsStore.Load().CrossfadeMs;
                 if (ms < 0) ms = 0;
                 CrossfadeSlider.Value = Math.Clamp(ms / 1000.0, 0, CrossfadeSliderMaxSeconds);
-                CrossfadeValueText.Text = FormatCrossfade(ms);
+                CrossfadeValueText.Text = FormatHelper.FormatCrossfade(ms);
             }
             catch (Exception caught)
             {
@@ -37,7 +37,7 @@ namespace CelesteMusicPlayer
                 // 滑块刚离开 0 时给一个最小可用值，避免 0.5 秒以下的无意义淡化
                 if (ms > 0 && ms < 100) ms = 100;
 
-                CrossfadeValueText.Text = FormatCrossfade(ms);
+                CrossfadeValueText.Text = FormatHelper.FormatCrossfade(ms);
 
                 AppSettingsState s = AppSettingsStore.Load();
                 if (s.CrossfadeMs != ms)
@@ -55,12 +55,5 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private static string FormatCrossfade(int ms)
-        {
-            if (ms <= 0) return "关闭";
-            if (ms < 1000) return ms + " 毫秒";
-            double sec = ms / 1000.0;
-            return (Math.Abs(sec % 1) < 0.05 ? sec.ToString("0") : sec.ToString("0.0")) + " 秒";
-        }
     }
 }

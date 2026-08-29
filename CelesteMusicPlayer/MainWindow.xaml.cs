@@ -596,7 +596,7 @@ namespace CelesteMusicPlayer
 
         // ---------- 右侧正在播放 / 波形 / 歌词 ----------
         private DispatcherQueueTimer? _waveformTimer;
-        private const int WaveBarCount = 40;
+        private const int WaveBarCount = FormatHelper.WaveBarCount; // 单一来源：见 FormatHelper.WaveBarCount
         private readonly double[] _waveLevels = new double[WaveBarCount];
         private readonly double[] _wavePhases = new double[WaveBarCount];
         private readonly float[] _spectrumBands = new float[WaveBarCount]; // 真 FFT 频谱（每柱一个 0..1 电平）

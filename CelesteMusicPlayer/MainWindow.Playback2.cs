@@ -262,10 +262,10 @@ namespace CelesteMusicPlayer
             PlaylistItem? song = null;
             if (e.OriginalSource is DependencyObject source)
             {
-                song = FindPlaylistItem(source);
+                song = VisualTreeWalker.FindPlaylistItem(source);
                 if (song == null)
                 {
-                    ListViewItem? container = FindAncestorListViewItem(source);
+                    ListViewItem? container = VisualTreeWalker.FindAncestorListViewItem(source);
                     if (container != null)
                     {
                         song = ArtistTrackListView.ItemFromContainer(container) as PlaylistItem;
@@ -596,10 +596,10 @@ namespace CelesteMusicPlayer
             PlaylistItem? song = null;
             if (e.OriginalSource is DependencyObject source)
             {
-                song = FindPlaylistItem(source);
+                song = VisualTreeWalker.FindPlaylistItem(source);
                 if (song == null)
                 {
-                    ListViewItem? container = FindAncestorListViewItem(source);
+                    ListViewItem? container = VisualTreeWalker.FindAncestorListViewItem(source);
                     if (container != null)
                     {
                         song = AlbumTrackListView.ItemFromContainer(container) as PlaylistItem;
@@ -701,7 +701,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
@@ -975,10 +975,10 @@ namespace CelesteMusicPlayer
             PlaylistItem? song = null;
             if (e.OriginalSource is DependencyObject source)
             {
-                song = FindPlaylistItem(source);
+                song = VisualTreeWalker.FindPlaylistItem(source);
                 if (song == null)
                 {
-                    ListViewItem? container = FindAncestorListViewItem(source);
+                    ListViewItem? container = VisualTreeWalker.FindAncestorListViewItem(source);
                     if (container != null)
                     {
                         song = PlaylistView.ItemFromContainer(container) as PlaylistItem;
@@ -1668,7 +1668,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
@@ -1706,7 +1706,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             ContentDialogResult result = await dialog.ShowAsync();
             return result == ContentDialogResult.Primary ? box.Text?.Trim() : null;
         }
@@ -1750,7 +1750,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             ContentDialogResult result = await dialog.ShowAsync();
             if (result != ContentDialogResult.Primary || list.SelectedIndex < 0)
             {
@@ -1866,7 +1866,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = this.Content?.XamlRoot,
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
 
             string? chosen = (panel.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag as string)?.Trim();
@@ -1985,7 +1985,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = Content.XamlRoot
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
@@ -2100,7 +2100,7 @@ namespace CelesteMusicPlayer
         {
             Brush transparent = new SolidColorBrush(Colors.Transparent);
             Brush accent = ResolveAccentBrush();
-            Brush fg = ResolveContrastingForeground(accent);
+            Brush fg = ColorHelper.ResolveContrastingForeground(accent);
 
             string[] backgroundKeys =
             {

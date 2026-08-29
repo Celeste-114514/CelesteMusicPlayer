@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -100,8 +100,8 @@ namespace CelesteMusicPlayer
 
                 for (int i = 0; i < bars; i++)
                 {
-                    float fillTarget = LinearToMeterFraction(_levelRmsBuf[i]);
-                    float peakTarget = LinearToMeterFraction(_levelPeakBuf[i]);
+                    float fillTarget = FormatHelper.LinearToMeterFraction(_levelRmsBuf[i]);
+                    float peakTarget = FormatHelper.LinearToMeterFraction(_levelPeakBuf[i]);
 
                     // 快起慢落（attack 立即跟随，release 缓慢回落），避免闪烁
                     _levelFillDisplay[i] = fillTarget > _levelFillDisplay[i]
@@ -209,18 +209,5 @@ namespace CelesteMusicPlayer
                 : new SolidColorBrush(Color.FromArgb(220, 255, 255, 255));
         }
 
-        /// <summary>线性幅度 → 电平表刻度（0..1）。按 dBFS 映射：-60dB 起、0dB 满刻度。</summary>
-        private static float LinearToMeterFraction(float linear)
-        {
-            if (!(linear > 1e-7f))
-            {
-                return 0f;
-            }
-
-            double db = 20.0 * Math.Log10(linear);
-            if (db <= -60.0) return 0f;
-            if (db >= 0.0) return 1f;
-            return (float)(1.0 + db / 60.0);
-        }
     }
 }

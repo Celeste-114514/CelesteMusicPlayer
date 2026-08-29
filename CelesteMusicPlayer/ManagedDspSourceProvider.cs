@@ -48,7 +48,7 @@ namespace CelesteMusicPlayer
 
         // 实时频谱分析：与电平表共用同一批 post-DSP 样本。
         // 渲染线程只做单声道降混 + 环形缓冲写入（不分配、不做 FFT），FFT 由 UI 线程执行，不影响音频实时性。
-        private const int SpectrumBandCount = 40; // 与 MainWindow.WaveBarCount 保持一致
+        private const int SpectrumBandCount = FormatHelper.WaveBarCount; // 单一来源，不再手工同步
         private readonly SpectrumAnalyzer _spectrum = new(SpectrumBandCount);
         private bool _spectrumEnabled;
 

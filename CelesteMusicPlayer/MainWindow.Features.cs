@@ -2357,7 +2357,7 @@ namespace CelesteMusicPlayer
         private void UpdateRatingFilterHighlight()
         {
             var accent = ResolveAccentBrush();
-            var fg = ResolveContrastingForeground(accent);
+            var fg = ColorHelper.ResolveContrastingForeground(accent);
             var idleBg = ResolveCapsuleFillBrush();
             var border = ResolveNavCapsuleBorderBrush();
             (Button Btn, int Val)[] maps =

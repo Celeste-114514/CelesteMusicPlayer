@@ -384,7 +384,7 @@ namespace CelesteMusicPlayer
             {
                 _audioFxEq = EqCurveStore.Load();
                 AudioFxEqEnableToggle.IsOn = _audioFxEq.Enabled;
-                AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
+                AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatHelper.FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
                 SelectAudioFxEqPreset(_audioFxEq.PresetId);
                 AudioFxEqModeRadio.SelectedIndex = 0; // 专业
                 SyncAudioFxEqSimpleFromState();
@@ -409,14 +409,14 @@ namespace CelesteMusicPlayer
 
                 var safety = extra.Safety;
                 AudioFxSafetyHeadroomSlider.Value = safety.HeadroomDb;
-                AudioFxSafetyHeadroomLabel.Text = "余量 (dB)：" + FormatAudioFxDb(safety.HeadroomDb);
+                AudioFxSafetyHeadroomLabel.Text = "余量 (dB)：" + FormatHelper.FormatAudioFxDb(safety.HeadroomDb);
                 AudioFxSafetyLimiterToggle.IsOn = safety.EnableLimiter;
 
                 // ReplayGain
                 ReplayGainState rg = ReplayGainStore.Load();
                 SelectAudioFxRgMode(rg.Mode);
                 AudioFxRgPreampSlider.Value = rg.PreampDb;
-                AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatAudioFxDb(rg.PreampDb);
+                AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatHelper.FormatAudioFxDb(rg.PreampDb);
                 AudioFxRgPreventClippingToggle.IsOn = rg.PreventClipping;
                 RefreshAudioFxRgInfo();
             }
@@ -440,13 +440,6 @@ namespace CelesteMusicPlayer
         private void OpenRoomCorrectionButton_Click(object sender, RoutedEventArgs e)
         {
             RoomCorrectionWindow.OpenOrActivate();
-        }
-
-
-        private static string FormatAudioFxDb(double db)
-        {
-            double r = Math.Round(db, 1);
-            return r > 0 ? "+" + r.ToString("0.#") : r.ToString("0.#");
         }
 
 
@@ -533,7 +526,7 @@ namespace CelesteMusicPlayer
             if (_audioFxLoading) return;
             if (AudioFxSafetyHeadroomLabel != null)
             {
-                AudioFxSafetyHeadroomLabel.Text = "余量 (dB)：" + FormatAudioFxDb(AudioFxSafetyHeadroomSlider.Value);
+                AudioFxSafetyHeadroomLabel.Text = "余量 (dB)：" + FormatHelper.FormatAudioFxDb(AudioFxSafetyHeadroomSlider.Value);
             }
 
             ApplyDspToEngine();
@@ -1913,38 +1906,9 @@ namespace CelesteMusicPlayer
         }
 
 
-        private static HashSet<object>? BuildSelectedItemsLookup(ListViewBase list)
-        {
-            int count = list.SelectedItems.Count;
-            if (count <= 64)
-            {
-                return null;
-            }
-
-            var set = new HashSet<object>();
-            foreach (object item in list.SelectedItems)
-            {
-                set.Add(item);
-            }
-
-            return set;
-        }
-
-
-        private static bool IsItemSelected(ListViewBase list, object item, HashSet<object>? selectedSet)
-        {
-            if (selectedSet != null)
-            {
-                return selectedSet.Contains(item);
-            }
-
-            return list.SelectedItems.Contains(item);
-        }
-
-
         private static IEnumerable<ListViewItem> EnumerateRealizedListViewItems(ListView list)
         {
-            Panel? panel = FindItemsPanel(list);
+            Panel? panel = VisualTreeWalker.FindItemsPanel(list);
             if (panel == null)
             {
                 yield break;
@@ -1962,7 +1926,7 @@ namespace CelesteMusicPlayer
 
         private static IEnumerable<GridViewItem> EnumerateRealizedGridViewItems(GridView grid)
         {
-            Panel? panel = FindItemsPanel(grid);
+            Panel? panel = VisualTreeWalker.FindItemsPanel(grid);
             if (panel == null)
             {
                 yield break;
@@ -2107,7 +2071,7 @@ namespace CelesteMusicPlayer
         private static double IdleLevel(int index)
         {
             double shape = 0.22 + 0.28 * (0.5 + 0.5 * Math.Sin(index * 1.7 + 1.3));
-            return Math.Max(0.18, shape * SpectrumEnvelope(index));
+            return Math.Max(0.18, shape * FormatHelper.SpectrumEnvelope(index));
         }
 
 

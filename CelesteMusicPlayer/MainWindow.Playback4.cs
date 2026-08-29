@@ -582,29 +582,5 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>从单元格向上找所属的 PlaylistItem（兼容 x:Bind 时 DataContext 为空的情况）</summary>
-        private static PlaylistItem? FindPlaylistItem(DependencyObject start)
-        {
-            DependencyObject? current = start;
-            while (current != null)
-            {
-                if (current is FrameworkElement fe)
-                {
-                    if (fe.DataContext is PlaylistItem fromContext)
-                    {
-                        return fromContext;
-                    }
-
-                    if (fe is ListViewItem { Content: PlaylistItem fromContent })
-                    {
-                        return fromContent;
-                    }
-                }
-
-                current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
-            }
-
-            return null;
-        }
     }
 }
