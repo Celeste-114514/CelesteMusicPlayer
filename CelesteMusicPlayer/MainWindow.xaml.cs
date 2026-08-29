@@ -513,6 +513,7 @@ namespace CelesteMusicPlayer
         private DateTime _lastPlaybackPersistUtc = DateTime.MinValue;
         private ArtistAvatarEditorWindow? _artistAvatarEditorWindow;
         private AppTrayIcon? _trayIcon;
+        private TaskbarThumbnailButtons? _taskbarButtons;
         private bool _allowClose;
         private bool _closePromptOpen;
         private bool _applyingSettingsVolume;
@@ -639,6 +640,31 @@ namespace CelesteMusicPlayer
             catch
             {
                 _mainWindowHwnd = IntPtr.Zero;
+            }
+
+            // 任务栏缩略图按钮（悬停任务栏图标时显示 上一首/播放暂停/下一首/收藏）
+            if (_mainWindowHwnd != IntPtr.Zero)
+            {
+                try
+                {
+                    _taskbarButtons = new TaskbarThumbnailButtons(this, _mainWindowHwnd);
+                    _taskbarButtons.Add();
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ctor.taskbar", caught);
+                }
+            }
+
+            // 系统托盘图标常驻：程序启动即显示（不随窗口隐藏/恢复变化，退出时清理）
+            try
+            {
+                _trayIcon ??= new AppTrayIcon(this);
+                _trayIcon.Show();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ctor.tray", caught);
             }
 
             // 默认 1400×800；Resize 按 DPI 换算为物理像素

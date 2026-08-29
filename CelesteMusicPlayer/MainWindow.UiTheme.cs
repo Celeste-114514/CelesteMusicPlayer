@@ -725,6 +725,13 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
+            try
+            {
+                _taskbarButtons?.Dispose();
+                _taskbarButtons = null;
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+
             CloseAllChildWindows();
             DisposeMusicPlayer2Features();
         }
@@ -842,7 +849,7 @@ namespace CelesteMusicPlayer
                     StartupLog.Write("托盘: RestoreFromTray 收到点击");
                     AppWindow.Show();
                     Activate();
-                    _trayIcon?.Hide();
+                    // 托盘图标常驻：不随窗口恢复隐藏（退出时才清理）
                 }
                 catch (Exception ex)
                 {

@@ -2029,6 +2029,13 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
+            try
+            {
+                _taskbarButtons?.Dispose();
+                _taskbarButtons = null;
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+
             Close();
             // 托盘/子窗口等引用可能阻止进程退出,必须显式结束进程
             Application.Current.Exit();
