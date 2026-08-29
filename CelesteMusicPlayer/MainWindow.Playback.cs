@@ -252,7 +252,7 @@ namespace CelesteMusicPlayer
 
             if (Enum.TryParse(settings.PlaybackOrder, ignoreCase: true, out PlaybackOrder order))
             {
-                _playbackOrder = order;
+                _orderResolver.Order = order;
             }
 
             _ = ApplyOutputDeviceAsync(settings.OutputDeviceId);

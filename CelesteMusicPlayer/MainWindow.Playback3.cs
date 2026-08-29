@@ -485,7 +485,7 @@ namespace CelesteMusicPlayer
         internal MediaPlayer? GetMediaPlayerPublic() => GetPlayer();
 
         internal string GetPlaybackOrderGlyphPublic()
-            => _playbackOrder switch
+            => _orderResolver.Order switch
             {
                 PlaybackOrder.Sequential => "\uE8FD",
                 PlaybackOrder.Random => "\uE8B1",
@@ -2200,7 +2200,7 @@ namespace CelesteMusicPlayer
                     baseIdx = _userPlaylistIndex >= 0 ? _userPlaylistIndex : 0;
                 }
 
-                int next = NextIndexByOrder(_userPlaylist.Count, baseIdx, autoAdvance: true);
+                int next = _orderResolver.NextIndexByOrder(_userPlaylist.Count, baseIdx, autoAdvance: true);
                 if (next >= 0 && next < _userPlaylist.Count)
                 {
                     return _userPlaylist[next];
@@ -2217,7 +2217,7 @@ namespace CelesteMusicPlayer
                     baseIdx = _currentIndex >= 0 ? _currentIndex : 0;
                 }
 
-                int next = NextIndexByOrder(_playlist.Count, baseIdx, autoAdvance: true);
+                int next = _orderResolver.NextIndexByOrder(_playlist.Count, baseIdx, autoAdvance: true);
                 if (next >= 0 && next < _playlist.Count)
                 {
                     return _playlist[next];

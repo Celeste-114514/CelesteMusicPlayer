@@ -2185,7 +2185,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            switch (_playbackOrder)
+            switch (_orderResolver.Order)
             {
                 case PlaybackOrder.TrackLoop:
                     // IsLooping 为 true 时通常不会触发；兜底再播当前曲

@@ -525,8 +525,9 @@ namespace CelesteMusicPlayer
         private double _volumeToSave;
         private DispatcherQueueTimer? _libraryWatchDebounce;
         private bool _libraryRescanInProgress;
-        private PlaybackOrder _playbackOrder = PlaybackOrder.ListLoop;
-        private readonly Random _playbackRandom = new();
+        // 播放顺序与随机源已移到 PlaybackOrderResolver（阶段7 解耦）。
+        // 读写播放顺序一律走 _orderResolver.Order，随机索引走 _orderResolver.NextRandomIndex。
+        private readonly PlaybackOrderResolver _orderResolver = new();
         private string _librarySearchText = string.Empty;
         private DispatcherQueueTimer? _librarySearchDebounceTimer;
         private readonly List<string> _folderSearchMatches = new();
