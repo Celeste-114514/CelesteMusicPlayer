@@ -8,8 +8,14 @@ namespace CelesteMusicPlayer
     /// <summary>
     /// 任务栏缩略图按钮（Thumbnail Toolbar Buttons）：鼠标悬停任务栏图标时，
     /// 在预览小窗口下方显示 上一首 / 播放暂停 / 下一首 / 添加到我喜欢 四个按钮。
-    /// 实现：ITaskbarList3.ThumbarAddButtons + 子类化主窗口 WndProc 接收 WM_COMMAND
-    /// （按钮 ID 位于 wParam 高 16 位）。图标用 System.Drawing 现画（无需素材文件）。
+    /// 实现：ITaskbarList3.ThumbarAddButtons + SetWindowSubclass 接收 WM_COMMAND。
+    ///
+    /// 关键点：
+    /// - 用 SetWindowSubclass（comctl32）而不是 SetWindowLongPtr。WinUI 框架会在
+    ///   窗口创建/激活后替换 WndProc，SetWindowLongPtr 会很快失效；SetWindowSubclass
+    ///   维护一个子类化栈，被覆盖的子帧按入栈顺序调用，框架的版本在栈底不会被替换。
+    /// - WM_COMMAND 中按钮 ID 在 LOWORD(wParam)；HIWORD 是通知码（THBN_CLICKED=0x1800）。
+    ///   若错把 HIWORD 当 ID，switch 永远匹配不上 1001-1004。
     /// </summary>
     internal sealed class TaskbarThumbnailButtons : IDisposable
     {
@@ -19,12 +25,13 @@ namespace CelesteMusicPlayer
         public const int BtnFavorite = 1004;
 
         private const uint WmCommand = 0x0111;
+        private const ushort ThbnClicked = 0x1800;
 
         private readonly MainWindow _owner;
         private readonly IntPtr _hwnd;
-        private readonly ITaskbarList3? _taskbar; // ITaskbarList3
-        private IntPtr _oldWndProc = IntPtr.Zero;
-        private WndProcDelegate? _wndProcDelegate;
+        private readonly ITaskbarList3? _taskbar;
+        private SubclassProc? _subclassDelegate;
+        private IntPtr _subclassId = new(0xC3); // 任意唯一标识
         private Icon? _iconPrev;
         private Icon? _iconPlayPause;
         private Icon? _iconNext;
@@ -49,22 +56,34 @@ namespace CelesteMusicPlayer
 
             try
             {
-                _wndProcDelegate = WndProc;
-                _oldWndProc = SetWindowLongPtr(_hwnd, GwlpWndproc,
-                    Marshal.GetFunctionPointerForDelegate(_wndProcDelegate));
+                _subclassDelegate = SubclassWndProc;
+                bool subclassed = SetWindowSubclass(_hwnd, _subclassDelegate, _subclassId, IntPtr.Zero);
+                if (!subclassed)
+                {
+                    StartupLog.Write("任务栏缩略图：SetWindowSubclass 失败，错误=" + Marshal.GetLastWin32Error());
+                }
+
+                var prevIcon = IconFromStock(SiidMediaPrevious);
+                var playIcon = IconFromStock(SiidMediaPlay);
+                var nextIcon = IconFromStock(SiidMediaNext);
+                var favIcon = MakeHeartIcon();
+
+                // 系统 stock 图标 32x32 + Bitmap 自画心形 32x32；显式缩放到 [16,32] 范围
+                _iconPrev = NormalizeIcon(prevIcon, 32);
+                _iconPlayPause = NormalizeIcon(playIcon, 32);
+                _iconNext = NormalizeIcon(nextIcon, 32);
+                _iconFavorite = NormalizeIcon(favIcon, 32);
 
                 var buttons = new[]
                 {
-                    MakeButton(BtnPrev, IconFromStock(SiidMediaPrevious), "上一首"),
-                    MakeButton(BtnPlayPause, IconFromStock(SiidMediaPlay), "播放 / 暂停"),
-                    MakeButton(BtnNext, IconFromStock(SiidMediaNext), "下一首"),
-                    MakeButton(BtnFavorite, MakeHeartIcon(), "添加到我喜欢")
+                    MakeButton(BtnPrev, _iconPrev, "上一首"),
+                    MakeButton(BtnPlayPause, _iconPlayPause, "播放 / 暂停"),
+                    MakeButton(BtnNext, _iconNext, "下一首"),
+                    MakeButton(BtnFavorite, _iconFavorite, "添加到我喜欢")
                 };
-                // 注意：ThumbarAddButtons 用 ref 传第一个元素（数组参数会触发
-                // 0x80131165 Typelib export 错误——CLR 需要类型库编组数组）
                 _taskbar.ThumbBarAddButtons(_hwnd, (uint)buttons.Length, ref buttons[0]);
                 _added = true;
-                StartupLog.Write("任务栏缩略图按钮已添加");
+                StartupLog.Write("任务栏缩略图按钮已添加（4 个）");
             }
             catch (Exception caught)
             {
@@ -83,10 +102,9 @@ namespace CelesteMusicPlayer
             try
             {
                 Icon? old = _iconPlayPause;
-                _iconPlayPause = playing ? IconFromStock(SiidMediaPause) : IconFromStock(SiidMediaPlay);
+                _iconPlayPause = NormalizeIcon(playing ? IconFromStock(SiidMediaPause) : IconFromStock(SiidMediaPlay), 32);
                 var btn = MakeButton(BtnPlayPause, _iconPlayPause, playing ? "暂停" : "播放");
                 _taskbar.ThumbBarUpdateButtons(_hwnd, 1, ref btn);
-                // ThumbarUpdateButtons 已复制新图标，旧的释放掉避免 GDI 句柄泄漏
                 if (old != null && !ReferenceEquals(old, _iconPlayPause))
                 {
                     DestroyIconSafe(old);
@@ -108,24 +126,21 @@ namespace CelesteMusicPlayer
             _disposed = true;
             try
             {
+                if (_subclassDelegate != null && _hwnd != IntPtr.Zero)
+                {
+                    RemoveWindowSubclass(_hwnd, _subclassDelegate, _subclassId);
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("TaskbarThumbnailButtons.Dispose.subclass", caught); }
+
+            try
+            {
                 if (_taskbar != null && _hwnd != IntPtr.Zero)
                 {
-                    // ITaskbarList3 无 ThumbBarRemoveButtons；按钮数置 0 即移除全部
-                    // （cButtons=0 时 pButton 被忽略，传空按钮即可）
                     _taskbar.ThumbBarUpdateButtons(_hwnd, 0, ref EmptyButton);
                 }
             }
             catch (Exception caught) { StartupLog.WriteException("TaskbarThumbnailButtons.Dispose.remove", caught); }
-
-            try
-            {
-                if (_oldWndProc != IntPtr.Zero && _hwnd != IntPtr.Zero)
-                {
-                    SetWindowLongPtr(_hwnd, GwlpWndproc, _oldWndProc);
-                    _oldWndProc = IntPtr.Zero;
-                }
-            }
-            catch (Exception caught) { StartupLog.WriteException("TaskbarThumbnailButtons.Dispose.wndproc", caught); }
 
             DestroyIconSafe(_iconPrev);
             DestroyIconSafe(_iconPlayPause);
@@ -146,29 +161,80 @@ namespace CelesteMusicPlayer
             try { icon.Dispose(); } catch { }
         }
 
-        private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
+        /// <summary>
+        /// 把任意 HICON 缩放到指定尺寸（默认 32x32）并返回独立 HICON。
+        /// 缩略图按钮要求 32x32 32-bit ARGB；缩放并复制像素保证格式兼容。
+        /// </summary>
+        private Icon NormalizeIcon(Icon? source, int size)
+        {
+            if (source == null || source.Handle == IntPtr.Zero)
+            {
+                return MakeFallbackIcon(size);
+            }
+
+            try
+            {
+                using var bmp = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+                using (var g = Graphics.FromImage(bmp))
+                {
+                    g.Clear(Color.Transparent);
+                    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+                    g.DrawImage(source.ToBitmap(), 0, 0, size, size);
+                }
+
+                IntPtr hicon = bmp.GetHicon();
+                return Icon.FromHandle(hicon);
+            }
+            catch
+            {
+                return MakeFallbackIcon(size);
+            }
+        }
+
+        /// <summary>兜底图标：实心方块 + 文字（仅当 SHGetStockIconInfo 全部失败时使用）。</summary>
+        private Icon MakeFallbackIcon(int size)
+        {
+            using var bmp = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using (var g = Graphics.FromImage(bmp))
+            {
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                using var brush = new SolidBrush(Color.FromArgb(180, Color.Gray));
+                g.FillRectangle(brush, 2, 2, size - 4, size - 4);
+            }
+
+            IntPtr hicon = bmp.GetHicon();
+            return Icon.FromHandle(hicon);
+        }
+
+        private IntPtr SubclassWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr uIdSubclass, IntPtr dwRefData)
         {
             if (msg == WmCommand)
             {
-                uint id = (uint)((long)wParam >> 16);
-                switch (id)
+                long wp = wParam.ToInt64();
+                int id = (int)(wp & 0xFFFF);          // LOWORD = 按钮 ID（关键修正）
+                int notifyCode = (int)((wp >> 16) & 0xFFFF); // HIWORD = 通知码
+
+                if (notifyCode == ThbnClicked)
                 {
-                    case BtnPrev:
-                        _owner.PreviousPublic();
-                        return IntPtr.Zero;
-                    case BtnPlayPause:
-                        _owner.TogglePlayPausePublic();
-                        return IntPtr.Zero;
-                    case BtnNext:
-                        _owner.NextPublic();
-                        return IntPtr.Zero;
-                    case BtnFavorite:
-                        _owner.FavoriteCurrentPublic();
-                        return IntPtr.Zero;
+                    switch (id)
+                    {
+                        case BtnPrev:
+                            _owner.PreviousPublic();
+                            return IntPtr.Zero;
+                        case BtnPlayPause:
+                            _owner.TogglePlayPausePublic();
+                            return IntPtr.Zero;
+                        case BtnNext:
+                            _owner.NextPublic();
+                            return IntPtr.Zero;
+                        case BtnFavorite:
+                            _owner.FavoriteCurrentPublic();
+                            return IntPtr.Zero;
+                    }
                 }
             }
 
-            return CallWindowProc(_oldWndProc, hWnd, msg, wParam, lParam);
+            return DefSubclassProc(hWnd, msg, wParam, lParam);
         }
 
         private static THUMBBUTTON MakeButton(uint id, Icon? icon, string tip)
@@ -204,12 +270,12 @@ namespace CelesteMusicPlayer
         /// <summary>现画 32x32 红色心形图标（收藏）。</summary>
         private Icon MakeHeartIcon()
         {
-            using var bmp = new Bitmap(32, 32);
+            using var bmp = new Bitmap(32, 32, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
             using (var g = Graphics.FromImage(bmp))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.Clear(Color.Transparent);
                 using var heart = new GraphicsPath();
-                // 心形：两个椭圆 + 底部三角，坐标按 32x32 缩放
                 heart.AddEllipse(6, 6, 14, 12);
                 heart.AddEllipse(14, 6, 14, 12);
                 heart.AddPolygon(new[]
@@ -223,15 +289,13 @@ namespace CelesteMusicPlayer
             }
 
             IntPtr hicon = bmp.GetHicon();
-            // GetHicon 生成的是独立 HICON，可安全包装为 Icon（不依赖 bmp 生命周期）
             return Icon.FromHandle(hicon);
         }
 
         // ---------------------------------------------------------------- P/Invoke
 
-        private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        private delegate IntPtr SubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr uIdSubclass, IntPtr dwRefData);
 
-        private const int GwlpWndproc = -4;
         private static readonly Guid ClsidTaskbarList = new("56fdf344-fd6d-11d0-958a-006097c9a090");
         private const uint SiidMediaPrevious = 0x001B;
         private const uint SiidMediaNext = 0x001C;
@@ -262,11 +326,14 @@ namespace CelesteMusicPlayer
             return null;
         }
 
-        [DllImport("user32.dll", SetLastError = true, CharSet = CharSet.Unicode)]
-        private static extern IntPtr SetWindowLongPtr(IntPtr hWnd, int nIndex, IntPtr dwNewLong);
+        [DllImport("comctl32.dll", SetLastError = true, EntryPoint = "#410")]
+        private static extern bool SetWindowSubclass(IntPtr hWnd, SubclassProc pfnSubclass, IntPtr uIdSubclass, IntPtr dwRefData);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern IntPtr CallWindowProc(IntPtr lpPrevWndFunc, IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+        [DllImport("comctl32.dll", SetLastError = true, EntryPoint = "#412")]
+        private static extern bool RemoveWindowSubclass(IntPtr hWnd, SubclassProc pfnSubclass, IntPtr uIdSubclass);
+
+        [DllImport("comctl32.dll", EntryPoint = "#413")]
+        private static extern IntPtr DefSubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
         [DllImport("user32.dll", SetLastError = true)]
         private static extern bool DestroyIcon(IntPtr hIcon);
@@ -334,7 +401,6 @@ namespace CelesteMusicPlayer
             public int Bottom;
         }
 
-        /// <summary>ThumbBarUpdateButtons(cButtons=0) 时传入的空按钮（[In] ref 必须指向有效内存）。</summary>
         private static THUMBBUTTON EmptyButton = default;
     }
 }
