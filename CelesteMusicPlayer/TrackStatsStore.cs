@@ -52,30 +52,38 @@ namespace CelesteMusicPlayer
         {
             lock (Gate)
             {
-                if (_cache != null)
-                {
-                    return CloneDictionary(_cache);
-                }
+                EnsureCacheLoaded();
+                return CloneDictionary(_cache!);
+            }
+        }
 
-                try
+        /// <summary>
+        /// 在持锁前提下确保 _cache 已从磁盘加载（仅首次）。
+        /// Get() 等热路径直接走它只读单条，避免每次 Load() 都克隆整张表（O(N²) 性能陷阱）。
+        /// </summary>
+        private static void EnsureCacheLoaded()
+        {
+            if (_cache != null)
+            {
+                return;
+            }
+
+            try
+            {
+                string path = GetFilePath();
+                if (File.Exists(path))
                 {
-                    string path = GetFilePath();
-                    if (File.Exists(path))
-                    {
-                        List<TrackStatsEntry>? list = JsonSerializer.Deserialize<List<TrackStatsEntry>>(File.ReadAllText(path));
-                        _cache = BuildDictionary(list ?? new List<TrackStatsEntry>());
-                    }
-                    else
-                    {
-                        _cache = new Dictionary<string, TrackStatsEntry>(PathComparer);
-                    }
+                    List<TrackStatsEntry>? list = JsonSerializer.Deserialize<List<TrackStatsEntry>>(File.ReadAllText(path));
+                    _cache = BuildDictionary(list ?? new List<TrackStatsEntry>());
                 }
-                catch
+                else
                 {
                     _cache = new Dictionary<string, TrackStatsEntry>(PathComparer);
                 }
-
-                return CloneDictionary(_cache);
+            }
+            catch
+            {
+                _cache = new Dictionary<string, TrackStatsEntry>(PathComparer);
             }
         }
 
@@ -169,8 +177,12 @@ namespace CelesteMusicPlayer
             }
 
             string key = Path.GetFullPath(filePath);
-            Dictionary<string, TrackStatsEntry> dict = Load();
-            return dict.TryGetValue(key, out TrackStatsEntry? entry) ? CloneEntry(entry) : null;
+            // 热路径：只锁定并查单条，避免 Load() 克隆整张表（歌曲库加载时每首歌调一次 → O(N²)）
+            lock (Gate)
+            {
+                EnsureCacheLoaded();
+                return _cache!.TryGetValue(key, out TrackStatsEntry? entry) ? CloneEntry(entry) : null;
+            }
         }
 
         public static void SetFavorite(string filePath, bool isFavorite)

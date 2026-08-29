@@ -264,19 +264,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             {
                 if (_cache != null)
                 {
-                    string caller = "";
-                    try
-                    {
-                        var frames = new System.Diagnostics.StackTrace();
-                        // 取最近2层调用者，定位启动期高频循环来源
-                        for (int i = 1; i < Math.Min(frames.FrameCount, 3); i++)
-                        {
-                            var mi = frames.GetFrame(i)?.GetMethod();
-                            caller += " <- " + (mi?.DeclaringType?.Name + "." + mi?.Name);
-                        }
-                    }
-                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
-                    StartupLog.Write("Load 命中缓存 OutputMode=" + (_cache?.OutputMode ?? "null") + caller);
+                    // 注意：之前这里 new StackTrace() 抓取调用栈用于调试，但它是启动期高频调用
+                    // （每首歌提取封面都会触发一次 Load），分配+栈遍历开销不小。已移除，只保留轻量日志。
+                    StartupLog.Write("Load 命中缓存 OutputMode=" + (_cache?.OutputMode ?? "null"));
                     return Clone(_cache);
                 }
 

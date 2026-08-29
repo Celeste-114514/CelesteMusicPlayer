@@ -773,31 +773,52 @@ namespace CelesteMusicPlayer
 
             IOrderedEnumerable<PlaylistItem> ordered = _sortField switch
             {
-                SortField.Artist => target.OrderBy(i => i.Artist, StringComparer.CurrentCultureIgnoreCase),
-                SortField.Album => target.OrderBy(i => i.Album, StringComparer.CurrentCultureIgnoreCase),
+                SortField.Artist => target.OrderBy(i => i.Artist, StringComparer.OrdinalIgnoreCase),
+                SortField.Album => target.OrderBy(i => i.Album, StringComparer.OrdinalIgnoreCase),
                 SortField.Year => target.OrderBy(i => i.Year),
                 SortField.Duration => target.OrderBy(i => i.Duration),
-                SortField.Genre => target.OrderBy(i => i.Genre, StringComparer.CurrentCultureIgnoreCase),
+                SortField.Genre => target.OrderBy(i => i.Genre, StringComparer.OrdinalIgnoreCase),
                 SortField.Track => target.OrderBy(i => i.Track),
-                SortField.FilePath => target.OrderBy(i => i.FilePath, StringComparer.CurrentCultureIgnoreCase),
-                _ => target.OrderBy(i => i.Title, StringComparer.CurrentCultureIgnoreCase)
+                SortField.FilePath => target.OrderBy(i => i.FilePath, StringComparer.OrdinalIgnoreCase),
+                _ => target.OrderBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
             };
 
-            // 次要关键字：标题，同字段时顺序更稳定
-            ordered = ordered.ThenBy(i => i.Title, StringComparer.CurrentCultureIgnoreCase);
+            // 次要关键字：标题，同字段时顺序更稳定（Ordinal 比 CurrentCulture 快且对文件名/路径排序更正确）
+            ordered = ordered.ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase);
 
             List<PlaylistItem> sorted = (_sortAscending
                 ? ordered.AsEnumerable()
                 : ordered.Reverse()).ToList();
 
-            target.Clear();
-            foreach (PlaylistItem item in sorted)
+            // 整表替换而非 Clear + N 次 Add：先解绑 ItemsSource，让下面的清空/填充不再逐条驱动 UI
+            // 虚拟化；原地重建内容后重新绑定，只触发一次整表渲染（复用项目已有模式 Playback2.cs:1897）。
+            // 注意 _playlist 是 readonly 字段不能重新赋值，故主列表走“解绑→原地清空/填充→重绑”路径；
+            // _userPlaylist 非 readonly，可直接换新集合。
+            bool isUser = ReferenceEquals(target, _userPlaylist);
+            bool rebind = ReferenceEquals(PlaylistView.ItemsSource, target);
+
+            if (rebind) PlaylistView.ItemsSource = null;
+
+            ObservableCollection<PlaylistItem> effective;
+            if (isUser)
             {
-                target.Add(item);
+                _userPlaylist = new ObservableCollection<PlaylistItem>(sorted);
+                effective = _userPlaylist;
+            }
+            else
+            {
+                target.Clear();
+                foreach (PlaylistItem item in sorted) target.Add(item);
+                effective = target;
             }
 
-            RenumberCollection(target);
-            SyncIndicesAfterSort(target, preservePlayingPath);
+            if (rebind || (isUser && _currentCategory == "UserPlaylist"))
+            {
+                PlaylistView.ItemsSource = effective;
+            }
+
+            RenumberCollection(effective);
+            SyncIndicesAfterSort(effective, preservePlayingPath);
         }
 
 

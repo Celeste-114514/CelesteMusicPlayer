@@ -529,6 +529,7 @@ namespace CelesteMusicPlayer
 
         // 标签排序分类封面：封面字节内存缓存 + 并发控制（缓存命中免重复读文件/解码，避免大量分类同时打满线程池与 UI 线程）
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte[]> TagSortCoverBytesCache = new();
+        private const int TagSortCoverBytesCacheMax = 1024; // 上限：超量则清空，避免几千个分类封面字节常驻内存（之前无上限 → 内存泄漏）
         private static readonly System.Threading.SemaphoreSlim TagSortCoverGate = new(4);
 
         private async System.Threading.Tasks.Task LoadTagSortCategoryCoverAsync(TagSortCategoryEntry entry)
@@ -551,6 +552,10 @@ namespace CelesteMusicPlayer
                         if (bytes is { Length: > 0 })
                         {
                             TagSortCoverBytesCache[key] = bytes;
+                            if (TagSortCoverBytesCache.Count >= TagSortCoverBytesCacheMax)
+                            {
+                                TagSortCoverBytesCache.Clear(); // 容量上限保护（与 Library2.cs 的 CoverBytesCache 策略一致）
+                            }
                         }
                     }
                 }
