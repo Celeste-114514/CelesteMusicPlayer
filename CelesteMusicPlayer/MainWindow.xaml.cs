@@ -631,6 +631,7 @@ namespace CelesteMusicPlayer
             InitializeLevelMeter();
             InitializeCrossfadeUi();
             InitializeSrcUi();
+            InitializeAboutUi();
             try
             {
                 _mainWindowHwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
