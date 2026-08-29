@@ -1,21 +1,26 @@
 using System;
-using System.Runtime.InteropServices;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.Drawing.Imaging;
+using System.Runtime.InteropServices;
 
 namespace CelesteMusicPlayer
 {
     /// <summary>
     /// 任务栏缩略图按钮（Thumbnail Toolbar Buttons）：鼠标悬停任务栏图标时，
     /// 在预览小窗口下方显示 上一首 / 播放暂停 / 下一首 / 添加到我喜欢 四个按钮。
-    /// 实现：ITaskbarList3.ThumbarAddButtons + SetWindowSubclass 接收 WM_COMMAND。
+    /// 实现：IImageList（ImageList_Create） + ITaskbarList3.ThumbarSetImageList +
+    ///       ThumbBarAddButtons + SetWindowSubclass 接收 WM_COMMAND。
     ///
     /// 关键点：
     /// - 用 SetWindowSubclass（comctl32）而不是 SetWindowLongPtr。WinUI 框架会在
     ///   窗口创建/激活后替换 WndProc，SetWindowLongPtr 会很快失效；SetWindowSubclass
     ///   维护一个子类化栈，被覆盖的子帧按入栈顺序调用，框架的版本在栈底不会被替换。
     /// - WM_COMMAND 中按钮 ID 在 LOWORD(wParam)；HIWORD 是通知码（THBN_CLICKED=0x1800）。
-    ///   若错把 HIWORD 当 ID，switch 永远匹配不上 1001-1004。
+    /// - 用 IImageList + dwMask=ThbBitmap 路径（不用 ThbIcon/HICON）—— 此路径对 marshal
+    ///   错位免疫，且 ImageList 内置对 Explorer 透明，无需跨进程生存期管理。
+    /// - 所有 ITaskbarList3 调用带 [PreserveSig] 返回 int，错误直接日志（之前 void
+    ///   返回失败被 catch 吞掉，看起来"按钮存在但不能点"）。
     /// </summary>
     internal sealed class TaskbarThumbnailButtons : IDisposable
     {
@@ -27,17 +32,19 @@ namespace CelesteMusicPlayer
         private const uint WmCommand = 0x0111;
         private const ushort ThbnClicked = 0x1800;
 
+        // IImageList flags
+        private const uint IlcColor32 = 0x00000020; // 32-bit color depth
+        private const uint IlcAlpha = 0x00000080;   // alpha channel (must pair with ILC_COLOR32)
+
         private readonly MainWindow _owner;
         private readonly IntPtr _hwnd;
         private readonly ITaskbarList3? _taskbar;
         private SubclassProc? _subclassDelegate;
-        private IntPtr _subclassId = new(0xC3); // 任意唯一标识
-        private Icon? _iconPrev;
-        private Icon? _iconPlayPause;
-        private Icon? _iconNext;
-        private Icon? _iconFavorite;
+        private readonly IntPtr _subclassId = new(0xC3);
+        private IntPtr _himl = IntPtr.Zero;        // HIMAGELIST handle (we own, destroy in Dispose)
         private bool _added;
         private bool _disposed;
+        private bool _isPlaying;
 
         public TaskbarThumbnailButtons(MainWindow owner, IntPtr hwnd)
         {
@@ -63,27 +70,39 @@ namespace CelesteMusicPlayer
                     StartupLog.Write("任务栏缩略图：SetWindowSubclass 失败，错误=" + Marshal.GetLastWin32Error());
                 }
 
-                var prevIcon = IconFromStock(SiidMediaPrevious);
-                var playIcon = IconFromStock(SiidMediaPlay);
-                var nextIcon = IconFromStock(SiidMediaNext);
-                var favIcon = MakeHeartIcon();
-
-                // 系统 stock 图标 32x32 + Bitmap 自画心形 32x32；显式缩放到 [16,32] 范围
-                _iconPrev = NormalizeIcon(prevIcon, 32);
-                _iconPlayPause = NormalizeIcon(playIcon, 32);
-                _iconNext = NormalizeIcon(nextIcon, 32);
-                _iconFavorite = NormalizeIcon(favIcon, 32);
-
-                var buttons = new[]
+                _himl = BuildImageList();
+                if (_himl == IntPtr.Zero)
                 {
-                    MakeButton(BtnPrev, _iconPrev, "上一首"),
-                    MakeButton(BtnPlayPause, _iconPlayPause, "播放 / 暂停"),
-                    MakeButton(BtnNext, _iconNext, "下一首"),
-                    MakeButton(BtnFavorite, _iconFavorite, "添加到我喜欢")
-                };
-                _taskbar.ThumbBarAddButtons(_hwnd, (uint)buttons.Length, ref buttons[0]);
-                _added = true;
-                StartupLog.Write("任务栏缩略图按钮已添加（4 个）");
+                    StartupLog.Write("任务栏缩略图：ImageList_Create 失败");
+                    return;
+                }
+
+                int hr = _taskbar.ThumbBarSetImageList(_hwnd, _himl);
+                if (hr != 0)
+                {
+                    StartupLog.Write("任务栏缩略图：ThumbBarSetImageList 失败 hr=0x" + hr.ToString("X8"));
+                    ImageList_Destroy(_himl);
+                    _himl = IntPtr.Zero;
+                    return;
+                }
+
+                // iBitmap 索引顺序：0=Prev / 1=Play / 2=Next / 3=Heart / 4=Pause
+                var prevBtn = MakeBitmapButton(BtnPrev, 0, "上一首");
+                var playBtn = MakeBitmapButton(BtnPlayPause, 1, "播放");
+                var nextBtn = MakeBitmapButton(BtnNext, 2, "下一首");
+                var favBtn = MakeBitmapButton(BtnFavorite, 3, "添加到我喜欢");
+                var arr = new[] { prevBtn, playBtn, nextBtn, favBtn };
+
+                hr = _taskbar.ThumbBarAddButtons(_hwnd, (uint)arr.Length, ref arr[0]);
+                StartupLog.Write("任务栏缩略图：ThumbBarAddButtons hr=0x" + hr.ToString("X8")
+                    + " size=" + Marshal.SizeOf<THUMBBUTTON>()
+                    + " thumbCount=" + arr.Length);
+
+                _added = hr == 0;
+                if (_added)
+                {
+                    StartupLog.Write("任务栏缩略图按钮已添加（4 个）");
+                }
             }
             catch (Exception caught)
             {
@@ -91,7 +110,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>更新播放/暂停按钮图标与提示（playing=true 显示暂停图标）。未添加时忽略。</summary>
+        /// <summary>更新播放/暂停按钮图标（playing=true 显示暂停图标）。未添加时忽略。</summary>
         public void UpdatePlayPause(bool playing)
         {
             if (!_added || _disposed || _taskbar == null)
@@ -99,15 +118,15 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            _isPlaying = playing;
             try
             {
-                Icon? old = _iconPlayPause;
-                _iconPlayPause = NormalizeIcon(playing ? IconFromStock(SiidMediaPause) : IconFromStock(SiidMediaPlay), 32);
-                var btn = MakeButton(BtnPlayPause, _iconPlayPause, playing ? "暂停" : "播放");
-                _taskbar.ThumbBarUpdateButtons(_hwnd, 1, ref btn);
-                if (old != null && !ReferenceEquals(old, _iconPlayPause))
+                // 按位置索引：第 2 个按钮（index 1）是播放/暂停
+                var btn = MakeBitmapButton(BtnPlayPause, (uint)(playing ? 4 : 1), playing ? "暂停" : "播放");
+                int hr = _taskbar.ThumbBarUpdateButtons(_hwnd, 1, ref btn);
+                if (hr != 0)
                 {
-                    DestroyIconSafe(old);
+                    StartupLog.Write("任务栏缩略图：UpdatePlayPause hr=0x" + hr.ToString("X8"));
                 }
             }
             catch (Exception caught)
@@ -137,159 +156,192 @@ namespace CelesteMusicPlayer
             {
                 if (_taskbar != null && _hwnd != IntPtr.Zero)
                 {
-                    _taskbar.ThumbBarUpdateButtons(_hwnd, 0, ref EmptyButton);
+                    // ThumbBarRemoveButtons 不存在；用空 ImageList 解绑并清理所有按钮
+                    IntPtr empty = ImageList_Create(1, 1, IlcColor32, 0, 0);
+                    if (empty != IntPtr.Zero)
+                    {
+                        _taskbar.ThumbBarSetImageList(_hwnd, empty);
+                        ImageList_Destroy(empty);
+                    }
                 }
             }
             catch (Exception caught) { StartupLog.WriteException("TaskbarThumbnailButtons.Dispose.remove", caught); }
 
-            DestroyIconSafe(_iconPrev);
-            DestroyIconSafe(_iconPlayPause);
-            DestroyIconSafe(_iconNext);
-            DestroyIconSafe(_iconFavorite);
+            if (_himl != IntPtr.Zero)
+            {
+                try { ImageList_Destroy(_himl); } catch (Exception caught) { StartupLog.WriteException("IL destroy", caught); }
+                _himl = IntPtr.Zero;
+            }
+
             GC.SuppressFinalize(this);
         }
 
-        /// <summary>释放由 SHGetStockIconInfo / Bitmap.GetHicon 生成的 HICON 及其包装。</summary>
-        private static void DestroyIconSafe(Icon? icon)
+        // ---------------------------------------------------------------- ImageList
+
+        /// <summary>创建 32x32 ARGB ImageList，按 0=Prev 1=Play 2=Next 3=Heart 4=Pause 装入 5 个自绘图标。</summary>
+        private IntPtr BuildImageList()
         {
-            if (icon == null)
+            IntPtr himl = ImageList_Create(32, 32, IlcColor32 | IlcAlpha, 5, 0);
+            if (himl == IntPtr.Zero)
             {
-                return;
+                return IntPtr.Zero;
             }
 
-            try { DestroyIcon(icon.Handle); } catch { }
-            try { icon.Dispose(); } catch { }
-        }
-
-        /// <summary>
-        /// 把任意 HICON 缩放到指定尺寸（默认 32x32）并返回独立 HICON。
-        /// 缩略图按钮要求 32x32 32-bit ARGB；缩放并复制像素保证格式兼容。
-        /// </summary>
-        private Icon NormalizeIcon(Icon? source, int size)
-        {
-            if (source == null || source.Handle == IntPtr.Zero)
-            {
-                return MakeFallbackIcon(size);
-            }
-
+            IntPtr[] bitmaps = new IntPtr[5];
             try
             {
-                using var bmp = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-                using (var g = Graphics.FromImage(bmp))
-                {
-                    g.Clear(Color.Transparent);
-                    g.InterpolationMode = InterpolationMode.HighQualityBicubic;
-                    g.DrawImage(source.ToBitmap(), 0, 0, size, size);
-                }
+                bitmaps[0] = RenderGlyph(PaintGlyphPrev);
+                bitmaps[1] = RenderGlyph(PaintGlyphPlay);
+                bitmaps[2] = RenderGlyph(PaintGlyphNext);
+                bitmaps[3] = RenderGlyph(PaintGlyphHeart);
+                bitmaps[4] = RenderGlyph(PaintGlyphPause);
 
-                IntPtr hicon = bmp.GetHicon();
-                return Icon.FromHandle(hicon);
+                for (int i = 0; i < bitmaps.Length; i++)
+                {
+                    if (bitmaps[i] == IntPtr.Zero)
+                    {
+                        StartupLog.Write("任务栏缩略图：glyph bitmap[" + i + "] 为空");
+                        return IntPtr.Zero;
+                    }
+
+                    int added = ImageList_Add(himl, bitmaps[i], IntPtr.Zero);
+                    if (added == -1)
+                    {
+                        StartupLog.Write("任务栏缩略图：ImageList_Add 失败 index=" + i);
+                    }
+                }
+                return himl;
             }
-            catch
+            finally
             {
-                return MakeFallbackIcon(size);
+                foreach (IntPtr hb in bitmaps)
+                {
+                    if (hb != IntPtr.Zero)
+                    {
+                        DeleteObject(hb);
+                    }
+                }
             }
         }
 
-        /// <summary>兜底图标：实心方块 + 文字（仅当 SHGetStockIconInfo 全部失败时使用）。</summary>
-        private Icon MakeFallbackIcon(int size)
+        /// <summary>在 32x32 ARGB Bitmap 上绘制一个 glyph，返回 HBITMAP 句柄（调用方负责 DeleteObject 释放）。</summary>
+        private static IntPtr RenderGlyph(Action<Graphics> paint)
         {
-            using var bmp = new Bitmap(size, size, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
+            using var bmp = new Bitmap(32, 32, PixelFormat.Format32bppArgb);
             using (var g = Graphics.FromImage(bmp))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
-                using var brush = new SolidBrush(Color.FromArgb(180, Color.Gray));
-                g.FillRectangle(brush, 2, 2, size - 4, size - 4);
+                g.Clear(Color.Transparent);
+                paint(g);
             }
-
-            IntPtr hicon = bmp.GetHicon();
-            return Icon.FromHandle(hicon);
+            return bmp.GetHbitmap();
         }
+
+        // Glyph 绘制：白色为主，红色心形为独立颜色
+        private static readonly Brush White = new SolidBrush(Color.White);
+        private static readonly Brush Red = new SolidBrush(Color.FromArgb(232, 17, 35));
+
+        private static void PaintGlyphPrev(Graphics g)
+        {
+            // 单竖线 + 实心三角（左指）
+            g.FillRectangle(White, 7, 8, 3, 16);
+            g.FillPolygon(White, new[]
+            {
+                new Point(11, 8),
+                new Point(25, 16),
+                new Point(11, 24)
+            });
+        }
+
+        private static void PaintGlyphPlay(Graphics g)
+        {
+            g.FillPolygon(White, new[]
+            {
+                new Point(9, 7),
+                new Point(25, 16),
+                new Point(9, 25)
+            });
+        }
+
+        private static void PaintGlyphPause(Graphics g)
+        {
+            // 两条竖线
+            g.FillRectangle(White, 9, 7, 5, 18);
+            g.FillRectangle(White, 18, 7, 5, 18);
+        }
+
+        private static void PaintGlyphNext(Graphics g)
+        {
+            // 实心三角（右指）+ 单竖线
+            g.FillPolygon(White, new[]
+            {
+                new Point(21, 8),
+                new Point(7, 16),
+                new Point(21, 24)
+            });
+            g.FillRectangle(White, 22, 8, 3, 16);
+        }
+
+        private static void PaintGlyphHeart(Graphics g)
+        {
+            using var heart = new GraphicsPath();
+            heart.AddEllipse(5, 7, 14, 12);
+            heart.AddEllipse(13, 7, 14, 12);
+            heart.AddPolygon(new[]
+            {
+                new Point(4, 14),
+                new Point(28, 14),
+                new Point(16, 27)
+            });
+            g.FillPath(Red, heart);
+        }
+
+        // ---------------------------------------------------------------- Subclass
 
         private IntPtr SubclassWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr uIdSubclass, IntPtr dwRefData)
         {
             if (msg == WmCommand)
             {
                 long wp = wParam.ToInt64();
-                int id = (int)(wp & 0xFFFF);          // LOWORD = 按钮 ID（关键修正）
+                int id = (int)(wp & 0xFFFF);              // LOWORD = 按钮 ID
                 int notifyCode = (int)((wp >> 16) & 0xFFFF); // HIWORD = 通知码
-
                 if (notifyCode == ThbnClicked)
                 {
                     switch (id)
                     {
                         case BtnPrev:
+                            StartupLog.Write("任务栏按钮被点击: 上一首");
                             _owner.PreviousPublic();
                             return IntPtr.Zero;
                         case BtnPlayPause:
+                            StartupLog.Write("任务栏按钮被点击: 播放/暂停");
                             _owner.TogglePlayPausePublic();
                             return IntPtr.Zero;
                         case BtnNext:
+                            StartupLog.Write("任务栏按钮被点击: 下一首");
                             _owner.NextPublic();
                             return IntPtr.Zero;
                         case BtnFavorite:
+                            StartupLog.Write("任务栏按钮被点击: 收藏");
                             _owner.FavoriteCurrentPublic();
                             return IntPtr.Zero;
                     }
                 }
             }
-
             return DefSubclassProc(hWnd, msg, wParam, lParam);
         }
 
-        private static THUMBBUTTON MakeButton(uint id, Icon? icon, string tip)
+        private static THUMBBUTTON MakeBitmapButton(uint id, uint bitmapIndex, string tip)
         {
             return new THUMBBUTTON
             {
-                dwMask = ThbIcon | ThbTooltip,
+                dwMask = ThbBitmap | ThbTooltip | ThbFlags,
                 iId = id,
-                hIcon = icon?.Handle ?? IntPtr.Zero,
+                iBitmap = bitmapIndex,
+                hIcon = IntPtr.Zero,
                 szTip = tip,
                 dwFlags = ThbfEnabled
             };
-        }
-
-        private Icon? IconFromStock(uint siid)
-        {
-            try
-            {
-                var info = new SHSTOCKICONINFO { cbSize = (uint)Marshal.SizeOf<SHSTOCKICONINFO>() };
-                int hr = SHGetStockIconInfo(siid, ShgsIcon | ShgsLargeIcon, ref info);
-                if (hr == 0 && info.hIcon != IntPtr.Zero)
-                {
-                    return Icon.FromHandle(info.hIcon);
-                }
-            }
-            catch
-            {
-            }
-
-            return null;
-        }
-
-        /// <summary>现画 32x32 红色心形图标（收藏）。</summary>
-        private Icon MakeHeartIcon()
-        {
-            using var bmp = new Bitmap(32, 32, System.Drawing.Imaging.PixelFormat.Format32bppArgb);
-            using (var g = Graphics.FromImage(bmp))
-            {
-                g.SmoothingMode = SmoothingMode.AntiAlias;
-                g.Clear(Color.Transparent);
-                using var heart = new GraphicsPath();
-                heart.AddEllipse(6, 6, 14, 12);
-                heart.AddEllipse(14, 6, 14, 12);
-                heart.AddPolygon(new[]
-                {
-                    new Point(3, 14),
-                    new Point(29, 14),
-                    new Point(16, 28)
-                });
-                using var brush = new SolidBrush(Color.FromArgb(232, 17, 35));
-                g.FillPath(brush, heart);
-            }
-
-            IntPtr hicon = bmp.GetHicon();
-            return Icon.FromHandle(hicon);
         }
 
         // ---------------------------------------------------------------- P/Invoke
@@ -297,14 +349,9 @@ namespace CelesteMusicPlayer
         private delegate IntPtr SubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr uIdSubclass, IntPtr dwRefData);
 
         private static readonly Guid ClsidTaskbarList = new("56fdf344-fd6d-11d0-958a-006097c9a090");
-        private const uint SiidMediaPrevious = 0x001B;
-        private const uint SiidMediaNext = 0x001C;
-        private const uint SiidMediaPlay = 0x001D;
-        private const uint SiidMediaPause = 0x001E;
-        private const uint ShgsIcon = 0x000000100;
-        private const uint ShgsLargeIcon = 0x000000000;
-        private const uint ThbIcon = 0x00000002;
+        private const uint ThbBitmap = 0x00000001;
         private const uint ThbTooltip = 0x00000004;
+        private const uint ThbFlags = 0x00000010;
         private const uint ThbfEnabled = 0x00000000;
 
         private static ITaskbarList3? CreateTaskbarList()
@@ -322,35 +369,31 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.WriteException("TaskbarThumbnailButtons.CreateTaskbarList", caught);
             }
-
             return null;
         }
 
-        [DllImport("comctl32.dll", SetLastError = true, EntryPoint = "#410")]
+        [DllImport("comctl32.dll", EntryPoint = "#410")]
         private static extern bool SetWindowSubclass(IntPtr hWnd, SubclassProc pfnSubclass, IntPtr uIdSubclass, IntPtr dwRefData);
 
-        [DllImport("comctl32.dll", SetLastError = true, EntryPoint = "#412")]
+        [DllImport("comctl32.dll", EntryPoint = "#412")]
         private static extern bool RemoveWindowSubclass(IntPtr hWnd, SubclassProc pfnSubclass, IntPtr uIdSubclass);
 
         [DllImport("comctl32.dll", EntryPoint = "#413")]
         private static extern IntPtr DefSubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
 
-        [DllImport("user32.dll", SetLastError = true)]
-        private static extern bool DestroyIcon(IntPtr hIcon);
+        [DllImport("comctl32.dll")]
+        private static extern IntPtr ImageList_Create(int cx, int cy, uint flags, int cInitial, int cGrow);
 
-        [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
-        private static extern int SHGetStockIconInfo(uint siid, uint uFlags, ref SHSTOCKICONINFO psii);
+        [DllImport("comctl32.dll")]
+        private static extern int ImageList_Add(IntPtr himl, IntPtr hbm, IntPtr hbmMask);
 
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private struct SHSTOCKICONINFO
-        {
-            public uint cbSize;
-            public IntPtr hIcon;
-            public int iSysImageIndex;
-            public int iIcon;
-            [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 260)]
-            public string szPath;
-        }
+        [DllImport("comctl32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool ImageList_Destroy(IntPtr himl);
+
+        [DllImport("gdi32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DeleteObject(IntPtr hObject);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         private struct THUMBBUTTON
@@ -384,9 +427,10 @@ namespace CelesteMusicPlayer
             void UnregisterTab(IntPtr hwndTab);
             void SetTabOrder(IntPtr hwndTab, IntPtr hwndInsertBefore);
             void SetTabActive(IntPtr hwndTab, IntPtr hwndMDI);
-            void ThumbBarAddButtons(IntPtr hwnd, uint cButtons, [In] ref THUMBBUTTON pButton);
-            void ThumbBarUpdateButtons(IntPtr hwnd, uint cButtons, [In] ref THUMBBUTTON pButton);
-            void ThumbBarSetImageList(IntPtr hwnd, IntPtr himl);
+            // 全部加 PreserveSig，错误不被吞；调用方 HrStart 决定写日志还是抛
+            [PreserveSig] int ThumbBarAddButtons(IntPtr hwnd, uint cButtons, [In] ref THUMBBUTTON pButton);
+            [PreserveSig] int ThumbBarUpdateButtons(IntPtr hwnd, uint cButtons, [In] ref THUMBBUTTON pButton);
+            [PreserveSig] int ThumbBarSetImageList(IntPtr hwnd, IntPtr himl);
             void SetOverlayIcon(IntPtr hwnd, IntPtr hicon, [MarshalAs(UnmanagedType.LPWStr)] string pszDescription);
             void SetThumbnailTooltip(IntPtr hwnd, [MarshalAs(UnmanagedType.LPWStr)] string pszTip);
             void SetThumbnailClip(IntPtr hwnd, ref RECT prcClip);
@@ -400,7 +444,5 @@ namespace CelesteMusicPlayer
             public int Right;
             public int Bottom;
         }
-
-        private static THUMBBUTTON EmptyButton = default;
     }
 }
