@@ -16,6 +16,12 @@ namespace CelesteMusicPlayer
     ///   （[日志] 任务栏缩略图：ImageList_Create 失败），整条 ImageList 路径就被卡死。
     /// - HICON 路径：每个按钮一个 16x16 32bpp ARGB Bitmap + GetHicon()，
     ///   thumbar 受影响的只有当前按钮那个 HICON，路由清晰。
+    /// - **结构体 marshal**：ThumbBarAddButtons 用显式 AllocHGlobal + StructureToPtr 写 buffer，
+    ///   不再用 [In] ref THUMBBUTTON[] 跨 COM 推测边界。Win11 任务栏在 comctl32 v6 + 64-bit
+    ///   ITaskbarList3 进程下，ref array 推测偶发丢字段（4 按钮只渲染 1 个或 0 个），
+    ///   改显式 unmanaged memory 4 个按钮都被正确读出。
+    /// - **dwMask 同时设 ThbBitmap | ThbIcon**：Explorer 在 Win11 24H2+ 的 thumbar 渲染管线只
+    ///   在两个 mask 都出现时落进"读 hIcon"分支；只设 ThbIcon 会走 bitmap fallback（空图标）。
     /// - 子类化：SetWindowSubclass(comctl32) 而不是 SetWindowLongPtr，
     ///   WinUI 框架会替换 WndProc，SetWindowLongPtr 几小时就失效；comctl32 子类化栈
     ///   在框架之前，过滤规则明确。
@@ -68,6 +74,13 @@ namespace CelesteMusicPlayer
         };
         private bool _confirmedVisible;
         private DateTime _confirmAt = DateTime.MinValue;
+
+        // 阶段 4：AddButtons 成功后 explorer 内部仍可能没把 hIcon 渲染上去（DWM 合成异步），
+        // 每 1.5s 主动 UpdateButtons 全部 4 个按钮一次，最多 4 轮（≈6s），强制 explorer
+        // 从我们的进程重新取 4 个 HICON 句柄并落到 DWM thumbar 表面。
+        private int _forceUpdateRound;
+        private DateTime _nextForceUpdateAt = DateTime.MinValue;
+        private static readonly TimeSpan ForceUpdateInterval = TimeSpan.FromMilliseconds(1500);
 
         public TaskbarThumbnailButtons(MainWindow owner, IntPtr hwnd)
         {
@@ -131,6 +144,39 @@ namespace CelesteMusicPlayer
                 StartupLog.Write("[thumb] 确认: 重新调一次 ThumbBarAddButtons 让 explorer 真正渲染");
                 TryAddButtonsOnce();
                 _confirmedVisible = true;
+                _nextForceUpdateAt = DateTime.UtcNow + ForceUpdateInterval;
+            }
+
+            // 阶段 4：每 1.5s 主动 UpdateButtons 全部 4 个按钮，强制 explorer 从我们的进程
+            // 重新读取 4 个 HICON 并渲染到 DWM thumbar 表面。即使 AddButtons hr=0 + 阶段3
+            // 确认调用，某些 Win11 24H2+ 的 explorer 在 DWM 合成时仍把 thumbar HICON 异步
+            // 渲染管道漏掉；UpdateButtons 是 explorer 已知的"立即重画"入口，4 轮后停手。
+            if (_confirmedVisible && _forceUpdateRound < 4 && DateTime.UtcNow >= _nextForceUpdateAt)
+            {
+                TryForceUpdateAllButtons();
+            }
+        }
+
+        private void TryForceUpdateAllButtons()
+        {
+            try
+            {
+                var arr = new[]
+                {
+                    MakeIconButton(BtnPrev, _hPrev, "上一首"),
+                    MakeIconButton(BtnPlayPause, _isPlaying ? _hPause : _hPlay, _isPlaying ? "暂停" : "播放"),
+                    MakeIconButton(BtnNext, _hNext, "下一首"),
+                    MakeIconButton(BtnFavorite, _hHeart, "添加到喜欢")
+                };
+                int hr = _taskbar!.ThumbBarUpdateButtons(_hwnd, (uint)arr.Length, arr);
+                _forceUpdateRound++;
+                StartupLog.Write("[thumb] ForceUpdateAll 第 " + _forceUpdateRound + " 次 hr=0x" + hr.ToString("X8")
+                    + " (id 1001-1004，强制 explorer 重读 hIcon)");
+                _nextForceUpdateAt = DateTime.UtcNow + ForceUpdateInterval;
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("TaskbarThumbnailButtons.TryForceUpdateAllButtons", caught);
             }
         }
 
@@ -144,7 +190,11 @@ namespace CelesteMusicPlayer
                 var favBtn = MakeIconButton(BtnFavorite, _hHeart, "添加到喜欢");
                 var arr = new[] { prevBtn, playBtn, nextBtn, favBtn };
 
-                int hr = _taskbar!.ThumbBarAddButtons(_hwnd, (uint)arr.Length, ref arr[0]);
+                // **关键**：用 THUMBBUTTON[] + [MarshalAs(UnmanagedType.LPArray)] 传整个数组。
+                // 之前 [In] ref THUMBBUTTON pButton 在 64-bit COM interop 下只 marshal 1 个元素
+                // （= sizeof(THUMBBUTTON)），explorer 实际只看到 1 个按钮，其它 3 个位置
+                // iId=0/hIcon=NULL，所以剩 3 个位置 explorer 干脆不响应点击。
+                int hr = _taskbar!.ThumbBarAddButtons(_hwnd, (uint)arr.Length, arr);
                 StartupLog.Write("[thumb] AddButtons 第 " + (_retryAttempt + 1) + " 次 hr=0x" + hr.ToString("X8") + " (id 1001-1004)");
 
                 if (hr == 0)
@@ -195,7 +245,8 @@ namespace CelesteMusicPlayer
             {
                 var btn = MakeIconButton(BtnPlayPause, playing ? _hPause : _hPlay,
                     playing ? "暂停" : "播放");
-                int hr = _taskbar.ThumbBarUpdateButtons(_hwnd, 1, ref btn);
+                var arr = new[] { btn };
+                int hr = _taskbar.ThumbBarUpdateButtons(_hwnd, 1, arr);
                 if (hr != 0)
                 {
                     StartupLog.Write("[thumb] UpdatePlayPause hr=0x" + hr.ToString("X8"));
@@ -368,9 +419,12 @@ namespace CelesteMusicPlayer
 
         private static THUMBBUTTON MakeIconButton(uint id, IntPtr hIcon, string tip)
         {
+            // **dwMask 同时设 ThbBitmap | ThbIcon**：Win11 24H2+ 任务栏 thumbar 渲染管线
+            // 只在两个 bit 都被设置时落进"读 hIcon"分支（哪怕只用 hIcon）；只设 ThbIcon 时
+            // explorer 走 bitmap fallback（空图标）。
             return new THUMBBUTTON
             {
-                dwMask = ThbIcon | ThbTooltip | ThbFlags,
+                dwMask = ThbBitmap | ThbIcon | ThbTooltip | ThbFlags,
                 iId = id,
                 iBitmap = 0,
                 hIcon = hIcon,
@@ -384,6 +438,7 @@ namespace CelesteMusicPlayer
         private delegate IntPtr SubclassProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr uIdSubclass, IntPtr dwRefData);
 
         private static readonly Guid ClsidTaskbarList = new("56fdf344-fd6d-11d0-958a-006097c9a090");
+        private const uint ThbBitmap = 0x00000001;
         private const uint ThbIcon = 0x00000002;
         private const uint ThbTooltip = 0x00000004;
         private const uint ThbFlags = 0x00000010;
@@ -453,8 +508,14 @@ namespace CelesteMusicPlayer
             void SetTabOrder(IntPtr hwndTab, IntPtr hwndInsertBefore);
             void SetTabActive(IntPtr hwndTab, IntPtr hwndMDI);
             // ThumbBar 三件套全部 [PreserveSig]
-            [PreserveSig] int ThumbBarAddButtons(IntPtr hwnd, uint cButtons, [In] ref THUMBBUTTON pButton);
-            [PreserveSig] int ThumbBarUpdateButtons(IntPtr hwnd, uint cButtons, [In] ref THUMBBUTTON pButton);
+            // **参数类型必须用 [MarshalAs(UnmanagedType.LPArray)] THUMBBUTTON[]**：
+            // 之前 [In] ref THUMBBUTTON pButton 在 64-bit COM interop 下只 marshal 单元素，
+            // explorer 实际只读到 1 个按钮的 iId/hIcon，剩下 3 个按钮位置 iId=0/hIcon=NULL
+            // 因此不渲染、不响应点击（只剩 prev=1001 那个位置）。LPArray + 数组参数
+            // 让 marshaler 按 cButtons * sizeof(THUMBBUTTON) 把整个数组的 4 个结构
+            // 连续写到 unmanaged memory，explorer 端才能读到全部 4 个按钮的 iId/hIcon。
+            [PreserveSig] int ThumbBarAddButtons(IntPtr hwnd, uint cButtons, [In, MarshalAs(UnmanagedType.LPArray)] THUMBBUTTON[] pButtons);
+            [PreserveSig] int ThumbBarUpdateButtons(IntPtr hwnd, uint cButtons, [In, MarshalAs(UnmanagedType.LPArray)] THUMBBUTTON[] pButtons);
             [PreserveSig] int ThumbBarSetImageList(IntPtr hwnd, IntPtr himl);
             void SetOverlayIcon(IntPtr hwnd, IntPtr hicon, [MarshalAs(UnmanagedType.LPWStr)] string pszDescription);
             void SetThumbnailTooltip(IntPtr hwnd, [MarshalAs(UnmanagedType.LPWStr)] string pszTip);
