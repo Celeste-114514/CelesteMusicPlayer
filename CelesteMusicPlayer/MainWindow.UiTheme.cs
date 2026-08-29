@@ -53,8 +53,11 @@ namespace CelesteMusicPlayer
             {
                 InitializePlayerAndTimers();
                 // 任务栏缩略图按钮：必须在 Loaded 后注册，任务栏按钮就绪时才生效。
-                // Add() 自身有重入保护，重复调用安全。
+                // 立即调一次 Add()（首次准备 + 第一次尝试 AddButtons），
+                // 然后启动一个短间隔 pump timer 让 ITaskbarThumbnailButtons.Pump() 推动延迟重试，
+                // 覆盖 Explorer 任务栏图标 loaded→redraw 的临界窗口（~3 秒）。
                 _taskbarButtons?.Add();
+                StartThumbnailButtonsPump();
             }
             catch (Exception ex)
             {
@@ -64,6 +67,38 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.Write("MainWindow_Loaded end");
             }
+        }
+
+        private DispatcherQueueTimer? _thumbPumpTimer;
+        private int _thumbPumpTicks;
+
+        private void StartThumbnailButtonsPump()
+        {
+            if (_thumbPumpTimer != null) return;
+            var timer = DispatcherQueue.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(250);
+            int maxTicks = 40; // ~10 秒，足以覆盖 Explorer 任务栏重绘窗口
+            timer.Tick += (s, e) =>
+            {
+                _thumbPumpTicks++;
+                try
+                {
+                    _taskbarButtons?.Pump();
+                }
+                catch (Exception ex)
+                {
+                    StartupLog.WriteException("thumbPump.Tick", ex);
+                }
+                if (_thumbPumpTicks >= maxTicks)
+                {
+                    timer.Stop();
+                    _thumbPumpTimer = null;
+                    StartupLog.Write("[thumb] Pump 已停止 ticks=" + _thumbPumpTicks);
+                }
+            };
+            timer.Start();
+            _thumbPumpTimer = timer;
+            StartupLog.Write("[thumb] Pump 已启动，每 250ms 一次，最多 40 次");
         }
 
 

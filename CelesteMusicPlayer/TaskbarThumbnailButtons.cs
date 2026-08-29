@@ -53,6 +53,22 @@ namespace CelesteMusicPlayer
         private bool _disposed;
         private bool _isPlaying;
 
+        // 延迟注册：任务栏图标 Loaded 后还没完全 ready 时直接 AddButtons 会被 Explorer
+        // 默默吞掉（hr=0 但按钮不显示）。分多轮重试解决：1500 / 3500 / 6500 / 11500ms。
+        // 首次 hr=0 后立刻强制再调用一次，让 Explorer 真的把按钮渲染上去。
+        private bool _delegatesReady;
+        private DateTime _nextRetryAt = DateTime.MinValue;
+        private int _retryAttempt;
+        private static readonly TimeSpan[] RetryDelays =
+        {
+            TimeSpan.FromMilliseconds(0),
+            TimeSpan.FromMilliseconds(3500),
+            TimeSpan.FromMilliseconds(7000),
+            TimeSpan.FromMilliseconds(11000),
+        };
+        private bool _confirmedVisible;
+        private DateTime _confirmAt = DateTime.MinValue;
+
         public TaskbarThumbnailButtons(MainWindow owner, IntPtr hwnd)
         {
             _owner = owner ?? throw new ArgumentNullException(nameof(owner));
@@ -60,67 +76,110 @@ namespace CelesteMusicPlayer
             _taskbar = CreateTaskbarList();
         }
 
-        /// <summary>注册 4 个按钮并开始拦截 WM_COMMAND。重复调用安全。</summary>
-        public void Add()
+        /// <summary>
+        /// 由外部驱动（polling 时钟/timer）调用的"推进器"。
+        /// 第一次调用时只完成 SetWindowSubclass + 渲染 HICON + 第一次 AddButtons。
+        /// 后续定时推进重试，直到 hr=0 之后再额外确认一次。
+        /// </summary>
+        public void Pump()
         {
-            StartupLog.Write("[thumb] Add 被调用, hwnd=0x" + _hwnd.ToString("X")
-                + " taskbar=" + (_taskbar != null)
-                + " 已添加=" + _added + " 已释放=" + _disposed);
+            if (_disposed || _taskbar == null || _hwnd == IntPtr.Zero) return;
 
-            if (_added || _disposed || _hwnd == IntPtr.Zero || _taskbar == null)
+            // 阶段 1：准备 delegates/HICON
+            if (!_delegatesReady)
             {
-                StartupLog.Write("[thumb] Add 早返回: " + (_added ? "已添加" : _disposed ? "已释放" : _hwnd == IntPtr.Zero ? "hwnd=0" : "taskbar=null"));
-                return;
+                try
+                {
+                    _subclassDelegate = SubclassWndProc;
+                    bool subclassed = SetWindowSubclass(_hwnd, _subclassDelegate, _subclassId, IntPtr.Zero);
+                    StartupLog.Write("[thumb] SetWindowSubclass ok=" + subclassed + " err=" + Marshal.GetLastWin32Error());
+
+                    _hPrev = RenderGlyphHicon(PaintGlyphPrev);
+                    _hPlay = RenderGlyphHicon(PaintGlyphPlay);
+                    _hPause = RenderGlyphHicon(PaintGlyphPause);
+                    _hNext = RenderGlyphHicon(PaintGlyphNext);
+                    _hHeart = RenderGlyphHicon(PaintGlyphHeart);
+                    StartupLog.Write("[thumb] HICON 渲染完成: prev=0x" + _hPrev.ToString("X")
+                        + " play=0x" + _hPlay.ToString("X")
+                        + " pause=0x" + _hPause.ToString("X")
+                        + " next=0x" + _hNext.ToString("X")
+                        + " heart=0x" + _hHeart.ToString("X"));
+
+                    if (_hPrev != IntPtr.Zero && _hPlay != IntPtr.Zero && _hPause != IntPtr.Zero
+                        && _hNext != IntPtr.Zero && _hHeart != IntPtr.Zero)
+                    {
+                        _delegatesReady = true;
+                        _retryAttempt = 0;
+                        _nextRetryAt = DateTime.UtcNow + RetryDelays[0];
+                    }
+                }
+                catch (Exception caught)
+                {
+                    StartupLog.WriteException("TaskbarThumbnailButtons.Pump.prepare", caught);
+                }
             }
 
+            // 阶段 2：在指定时间点尝试 AddButtons
+            if (_delegatesReady && !_added && DateTime.UtcNow >= _nextRetryAt)
+            {
+                TryAddButtonsOnce();
+            }
+
+            // 阶段 3：首次 hr=0 后再补一次"确认" Add，让 explorer 真正渲染
+            if (_added && !_confirmedVisible && DateTime.UtcNow >= _confirmAt)
+            {
+                StartupLog.Write("[thumb] 确认: 重新调一次 ThumbBarAddButtons 让 explorer 真正渲染");
+                TryAddButtonsOnce();
+                _confirmedVisible = true;
+            }
+        }
+
+        private void TryAddButtonsOnce()
+        {
             try
             {
-                // 子类化窗口接 WM_COMMAND
-                _subclassDelegate = SubclassWndProc;
-                bool subclassed = SetWindowSubclass(_hwnd, _subclassDelegate, _subclassId, IntPtr.Zero);
-                StartupLog.Write("[thumb] SetWindowSubclass ok=" + subclassed + " err=" + Marshal.GetLastWin32Error());
-
-                // 5 个独立 HICON（不为 ImageList 所用，仅为 HICON 路径准备）
-                _hPrev = RenderGlyphHicon(PaintGlyphPrev);
-                _hPlay = RenderGlyphHicon(PaintGlyphPlay);
-                _hPause = RenderGlyphHicon(PaintGlyphPause);
-                _hNext = RenderGlyphHicon(PaintGlyphNext);
-                _hHeart = RenderGlyphHicon(PaintGlyphHeart);
-                StartupLog.Write("[thumb] HICON 渲染完成: prev=0x" + _hPrev.ToString("X")
-                    + " play=0x" + _hPlay.ToString("X")
-                    + " pause=0x" + _hPause.ToString("X")
-                    + " next=0x" + _hNext.ToString("X")
-                    + " heart=0x" + _hHeart.ToString("X"));
-
-                if (_hPrev == IntPtr.Zero || _hPlay == IntPtr.Zero || _hPause == IntPtr.Zero
-                    || _hNext == IntPtr.Zero || _hHeart == IntPtr.Zero)
-                {
-                    StartupLog.Write("[thumb] HICON 渲染至少一个为零，放弃 ThbIcon 路径");
-                    FreeAllHicons();
-                    return;
-                }
-
-                // ThbIcon 路径：每个按钮用自己的 HICON
                 var prevBtn = MakeIconButton(BtnPrev, _hPrev, "上一首");
                 var playBtn = MakeIconButton(BtnPlayPause, _hPlay, "播放");
                 var nextBtn = MakeIconButton(BtnNext, _hNext, "下一首");
                 var favBtn = MakeIconButton(BtnFavorite, _hHeart, "添加到喜欢");
                 var arr = new[] { prevBtn, playBtn, nextBtn, favBtn };
 
-                int hrAdd = _taskbar.ThumbBarAddButtons(_hwnd, (uint)arr.Length, ref arr[0]);
-                StartupLog.Write("[thumb] ThumbBarAddButtons hr=0x" + hrAdd.ToString("X8")
-                    + " count=" + arr.Length + " (id 1001-1004, ThbIcon path)");
+                int hr = _taskbar!.ThumbBarAddButtons(_hwnd, (uint)arr.Length, ref arr[0]);
+                StartupLog.Write("[thumb] AddButtons 第 " + (_retryAttempt + 1) + " 次 hr=0x" + hr.ToString("X8") + " (id 1001-1004)");
 
-                _added = hrAdd == 0;
-                if (_added)
+                if (hr == 0)
                 {
-                    StartupLog.Write("任务栏缩略图按钮已添加（4 个，ThbIcon HICON path）");
+                    _added = true;
+                    if (_confirmAt == DateTime.MinValue)
+                    {
+                        _confirmAt = DateTime.UtcNow + TimeSpan.FromMilliseconds(800);
+                    }
+                }
+                else
+                {
+                    _retryAttempt++;
+                    if (_retryAttempt < RetryDelays.Length)
+                    {
+                        _nextRetryAt = DateTime.UtcNow + RetryDelays[_retryAttempt];
+                        StartupLog.Write("[thumb] 计划重试于 " + (RetryDelays[_retryAttempt].TotalMilliseconds) + "ms 后");
+                    }
+                    else
+                    {
+                        StartupLog.Write("[thumb] 重试已耗尽，最后 hr=0x" + hr.ToString("X8"));
+                    }
                 }
             }
             catch (Exception caught)
             {
-                StartupLog.WriteException("TaskbarThumbnailButtons.Add", caught);
+                StartupLog.WriteException("TaskbarThumbnailButtons.TryAddButtonsOnce", caught);
             }
+        }
+
+        /// <summary>兼容旧 API。无操作——Pump() 才能真正触发注册。</summary>
+        public void Add()
+        {
+            StartupLog.Write("[thumb] Add() 被调用（已被 Pump 模式取代，立即 Pump 一次）");
+            Pump();
         }
 
         /// <summary>更新播放/暂停按钮图标（playing=true 显示暂停图标）。未添加时忽略。</summary>
