@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Input;
 using System.IO;
@@ -7,9 +8,39 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>系统托盘图标：显示主界面 / 退出。</summary>
+    /// <summary>系统托盘图标：显示主界面 / 退出 / 查看日志。</summary>
     internal sealed class AppTrayIcon : IDisposable
     {
+        private static string LogPathHint => Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "CelesteMusicPlayer",
+            "CelesteMusicPlayer.log");
+
+        private static void OpenLogFile()
+        {
+            try
+            {
+                string path = LogPathHint;
+                if (!File.Exists(path))
+                {
+                    string dir = Path.GetDirectoryName(path) ?? ".";
+                    Directory.CreateDirectory(dir);
+                    Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
+                    return;
+                }
+                // 直接用 notepad 打开（避免关联编辑器卡住/路径含空格）
+                Process.Start(new ProcessStartInfo
+                {
+                    FileName = "notepad.exe",
+                    Arguments = "\"" + path + "\"",
+                    UseShellExecute = false
+                });
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("AppTrayIcon.OpenLogFile", caught);
+            }
+        }
         private readonly MainWindow _owner;
         private TaskbarIcon? _icon;
         private Icon? _drawingIcon;
@@ -110,6 +141,8 @@ namespace CelesteMusicPlayer
             nextItem.Command = new TrayRelayCommand(() => { _owner.NextPublic(); });
             var favoriteItem = new MenuFlyoutItem { Text = "添加到我喜欢" };
             favoriteItem.Command = new TrayRelayCommand(() => { _owner.FavoriteCurrentPublic(); });
+            var openLogItem = new MenuFlyoutItem { Text = "打开日志文件" };
+            openLogItem.Command = new TrayRelayCommand(OpenLogFile);
             var exitItem = new MenuFlyoutItem { Text = "退出播放器" };
             exitItem.Command = new TrayRelayCommand(() => { StartupLog.Write("托盘命令: 退出播放器"); _owner.ExitFromTray(); });
             flyout.Items.Add(showItem);
@@ -119,6 +152,7 @@ namespace CelesteMusicPlayer
             flyout.Items.Add(nextItem);
             flyout.Items.Add(favoriteItem);
             flyout.Items.Add(new MenuFlyoutSeparator());
+            flyout.Items.Add(openLogItem);
             flyout.Items.Add(exitItem);
             _icon.ContextFlyout = flyout;
 
