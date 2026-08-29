@@ -98,6 +98,12 @@ namespace CelesteMusicPlayer
         private DateTime _nextForceUpdateAt = DateTime.MinValue;
         private static readonly TimeSpan ForceUpdateInterval = TimeSpan.FromMilliseconds(1500);
 
+        // 串行闸门：所有 PumpAsync 调用（Add 立即触发 + timer 每 tick 触发）都在 UI thread，
+        // 但为避免 timer 与 Add 并发重入导致重复渲染/重复 AddButtons，用 SemaphoreSlim 串行化。
+        // 关键：PumpAsync 内的 RenderFontIconHiconAsync 必须在 UI thread 执行（RenderTargetBitmap
+        // 要求 visual tree 所在线程），本闸门 + 调用方均在 UI thread 保证这一点。
+        private readonly System.Threading.SemaphoreSlim _pumpGate = new System.Threading.SemaphoreSlim(1, 1);
+
         // Glyph 码 + 默认字号（与主界面 XAML 用的码点完全一致，所以视觉一致）
         private const string GlyphPrev = "\uE892";
         private const string GlyphPlay = "\uE768";
@@ -131,6 +137,12 @@ namespace CelesteMusicPlayer
         {
             if (_disposed || _taskbar == null || _hwnd == IntPtr.Zero) return;
 
+            // 串行闸门：await 后回到 UI thread（调用方在 UI thread），保证下文
+            // RenderFontIconHiconAsync 的 RenderAsync 在 UI thread 执行；同时避免 timer 与
+            // Add 并发重入导致重复渲染/重复 AddButtons。
+            await _pumpGate.WaitAsync();
+            try
+            {
             // 阶段 1：准备 delegates + 渲染全部 6 个 HICON（走系统 FontIcon）
             if (!_delegatesReady)
             {
@@ -192,6 +204,11 @@ namespace CelesteMusicPlayer
             if (_confirmedVisible && _forceUpdateRound < 4 && DateTime.UtcNow >= _nextForceUpdateAt)
             {
                 TryForceUpdateAllButtons();
+            }
+            }
+            finally
+            {
+                _pumpGate.Release();
             }
         }
 
@@ -274,12 +291,17 @@ namespace CelesteMusicPlayer
         /// </summary>
         public void Add()
         {
-            StartupLog.Write("[thumb] Add() 被调用（async Pump 启动一次，让前置 prepare 立即跑）");
-            _ = System.Threading.Tasks.Task.Run(async () =>
+            // 必须在 UI thread 调用（MainWindow_Loaded 里调），直接 fire-and-forget 启动 PumpAsync。
+            // 注意：之前用 Task.Run 把 prepare 丢到线程池，导致 RenderFontIconHiconAsync 内的
+            // _thumbIconHostCanvas.Children.Add / RenderAsync 在非 UI 线程执行 →
+            // RPC_E_WRONG_THREAD (0x8001010E) 且会污染 DWM/COM 状态导致进程 native 崩溃。
+            // 这里改为在 UI thread 上直接 _ = PumpAsync()，由 _pumpGate 保证串行。
+            StartupLog.Write("[thumb] Add() 被调用（UI thread 上启动一次 PumpAsync）");
+            _ = PumpAsync().ContinueWith(t =>
             {
-                try { await PumpAsync(); }
-                catch (Exception caught) { StartupLog.WriteException("Taskbar.Add->PumpAsync", caught); }
-            });
+                if (t.IsFaulted && t.Exception != null)
+                    StartupLog.WriteException("Taskbar.Add->PumpAsync", t.Exception);
+            }, System.Threading.Tasks.TaskScheduler.Default);
         }
 
         /// <summary>更新播放/暂停按钮图标（playing=true 显示暂停图标）。未添加时忽略。</summary>
