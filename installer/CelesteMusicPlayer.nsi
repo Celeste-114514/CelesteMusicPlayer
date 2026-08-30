@@ -3,7 +3,7 @@
 
 ; ---------- Metadata ----------
 !define APP_NAME "CelesteMusicPlayer"
-!define APP_VERSION "26.8.29"
+!define APP_VERSION "26.8.30"
 !define APP_EXE "CelesteMusicPlayer.exe"
 !define PUBLISH_DIR "C:\Users\admin\source\repos\CelesteMusicPlayer\CelesteMusicPlayer\bin\Release\net9.0-windows10.0.19041.0\win-x64\publish"
 !define APP_GUID "{F0C207C6-BD8C-4D7A-9127-F1B67F17E65B}"
