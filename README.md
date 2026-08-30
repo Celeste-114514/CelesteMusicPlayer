@@ -1,6 +1,6 @@
 ﻿# CelesteMusicPlayer
 
-一个基于 **WinUI 3 / .NET 8** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和[ECHO-NEXT](https://github.com/moekotori/ECHO)设计开发。代码全部由AI生成，主要模型为deepseek，由Cursor和Reasonix辅助开发。
+一个基于 **WinUI 3 / .NET 9** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和[ECHO-NEXT](https://github.com/moekotori/ECHO)设计开发。代码全部由AI生成，主要模型为deepseek，由Cursor和Reasonix辅助开发。
 
 ## ✨ 功能特性
 
@@ -11,6 +11,8 @@
 - 🎯 HiFi 独占输出：基于 NAudio / 原生 WASAPI 从 PCM WAV 流式输出，兼顾音质；独占设备音量可调（系统托盘/输出设备调整，软件内不可调整）、切歌音量不再重置
 - 🎚️ **DSP 三模式统一信号链**（共享 / WASAPI 独占 / ASIO）：曲线 EQ（专业 / 简单模式 / 预设保存加载）、10 段均衡器、声道平衡、安全限幅（soft-knee 软削波 + 自动峰值余量）防爆音
 - 🔊 **ReplayGain 响度归一化**：单曲 / 专辑统一响度、10ms 平滑渐变、peak 防削波、额外增益可调
+- ⏯️ **任务栏缩略图控制 + 系统托盘常驻**：悬停任务栏可上一首 / 播放暂停 / 下一首 / 红心收藏；播放历史整合进「最近播放」
+- 🎚️ **DSP 总旁路（A/B）**：一键对比 DSP 前后；声道延迟差、SRC 质量 / Dither、DSP 状态显示
 - 📝 歌词：自动下载（网易云 / QQ / 酷狗）、在线搜索、桌面歌词窗口、卡拉 OK 高亮
 - 🖼️ 封面：自动下载并嵌入标签、专辑 / 艺术家视图、封面文件夹
 - 🎨 主题：主题预设 / 自定义主题色、毛玻璃背景、波形进度条
@@ -39,14 +41,14 @@
 ## 🛠️ 技术栈
 
 - WinUI 3（Microsoft.WindowsAppSDK 1.8）
-- .NET 8 / C#
+- .NET 9 / C#
 - [TagLibSharp](https://github.com/mono/taglib-sharp) 标签读取
 - [H.NotifyIcon](https://github.com/HavenDV/H.NotifyIcon) 系统托盘
 - FFmpeg（内置）
 
 ## 🔨 构建与发布
 
-需要：.NET 8 SDK + Visual Studio 2022（含 WinUI 工作负载）
+需要：.NET 9 SDK + Visual Studio 2022（含 WinUI 工作负载）
 
 ```bash
 # 开发运行
@@ -59,6 +61,18 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 发布产物为自包含目录：目标机器 **无需安装 .NET 运行时或 Windows App SDK**。
 
 ## 📝 更新日志
+
+### v26.8.30（2026-08-30）
+- 🚀 **启动 / 内存 / 排序优化**：更快启动、降低内存占用、大列表排序优化
+- 🖥️ **系统托盘图标常驻** + 托盘菜单「打开日志」
+- ⏯️ **任务栏缩略图控制按钮**：悬停任务栏可 上一首 / 播放暂停 / 下一首 / 红心收藏，图标用系统 FontIcon（修复启动崩溃与按钮 ID 点击失效）
+- 📖 **播放历史**：记录播放历史并整合进「最近播放」面板
+- 🎛️ **DSP 总旁路（A/B）**：一键对比 DSP 前后效果；声道延迟差、SRC 质量 / Dither 选项、DSP 状态显示
+- ℹ️ **「关于」分区**：设置面板新增软件介绍 / 版本 / 检查更新 / 作者信息
+- 🎼 **HiFi bit-perfect 直通**：整数回写 TPDF dither、播放内存泄漏修复
+- 💾 **曲库标签索引持久化**：二次启动跳过 TagLib 解析（实测约 9.5x 提速）
+- 📊 **真 FFT 频谱** + DSD 按级选率 + 输出缓冲可调 + **设备热插拔**
+- 🧪 EQ 回归测试补全（Phase E/F）及卷积输出修复
 
 ### v26.8.29（2026-08-29）
 - 📊 **实时电平表**：播放时显示实时音频电平（Level Meter）
