@@ -440,7 +440,7 @@ namespace CelesteMusicPlayer
         [DllImport("dwmapi.dll", PreserveSig = true)]
         private static extern int DwmSetWindowAttribute(nint hwnd, int attr, ref RECT_INT value, int sz);
 
-        [DllImport("dwmapi.dll", PreserveSig = true)]
+        [DllImport("dwmapi.dll", PreserveSig = true, EntryPoint = "DwmSetWindowAttribute")]
         private static extern int DwmSetWindowAttributeInt(nint hwnd, int attr, ref int value, int sz);
         private const int DWMWA_WINDOW_CORNER_PREFERENCE = 33;
         private const int DWMWCP_ROUND = 2;
