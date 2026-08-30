@@ -1113,6 +1113,10 @@ namespace CelesteMusicPlayer
             convert.Click += ConvertCurrent_Click;
             flyout.Items.Add(convert);
 
+            var smartPlaylist = new MenuFlyoutItem { Text = "智能播放列表…" };
+            smartPlaylist.Click += (_, _) => OpenSmartPlaylist();
+            flyout.Items.Add(smartPlaylist);
+
             if (sender is FrameworkElement fe)
             {
                 flyout.ShowAt(fe);
@@ -1384,6 +1388,16 @@ namespace CelesteMusicPlayer
                     NowPlayingText.Text = "引擎预览播放结束";
                 }
             });
+        }
+
+        /// <summary>打开智能播放列表窗口：按规则（评分/流派/艺术家/年代/最常播放/最近加入）实时生成播放列表。</summary>
+        private void OpenSmartPlaylist()
+        {
+            var win = new SmartPlaylistWindow(
+                this,
+                paths => _ = LoadPathsToQueueAndPlayAsync(paths),
+                paths => AddPathsToQueue(paths));
+            win.Activate();
         }
 
         private void OpenFindSongWindow()

@@ -963,6 +963,155 @@ namespace CelesteMusicPlayer
         /// <summary>SQL 参数个数上限的保守分块大小。</summary>
         private const int SqlChunkSize = 400;
 
+        /// <summary>按流派取曲目路径（最多 limit 首）。</summary>
+        public static List<string> GetTrackPathsByGenre(string genre, int limit)
+        {
+            var list = new List<string>();
+            if (string.IsNullOrWhiteSpace(genre)) return list;
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT file_path FROM tracks WHERE genre = $g LIMIT $lim";
+                    cmd.Parameters.AddWithValue("$g", genre);
+                    cmd.Parameters.AddWithValue("$lim", Math.Max(1, limit));
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read()) list.Add(r.IsDBNull(0) ? string.Empty : r.GetString(0));
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("LibraryDb.GetTrackPathsByGenre", caught); }
+            return list;
+        }
+
+        /// <summary>按专辑艺术家取曲目路径（最多 limit 首）。</summary>
+        public static List<string> GetTrackPathsByArtist(string artist, int limit)
+        {
+            var list = new List<string>();
+            if (string.IsNullOrWhiteSpace(artist)) return list;
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT file_path FROM tracks WHERE album_artist = $a LIMIT $lim";
+                    cmd.Parameters.AddWithValue("$a", artist);
+                    cmd.Parameters.AddWithValue("$lim", Math.Max(1, limit));
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read()) list.Add(r.IsDBNull(0) ? string.Empty : r.GetString(0));
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("LibraryDb.GetTrackPathsByArtist", caught); }
+            return list;
+        }
+
+        /// <summary>按年代（如 1990 表示 1990-1999）取曲目路径（最多 limit 首）。</summary>
+        public static List<string> GetTrackPathsByDecade(int decade, int limit)
+        {
+            var list = new List<string>();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT file_path FROM tracks WHERE year >= $d AND year < $d + 10 LIMIT $lim";
+                    cmd.Parameters.AddWithValue("$d", decade);
+                    cmd.Parameters.AddWithValue("$lim", Math.Max(1, limit));
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read()) list.Add(r.IsDBNull(0) ? string.Empty : r.GetString(0));
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("LibraryDb.GetTrackPathsByDecade", caught); }
+            return list;
+        }
+
+        /// <summary>最近加入（按文件修改时间倒序，最多 limit 首）。曲库无「加入时间」字段，以文件 mtime 作代理。</summary>
+        public static List<string> GetRecentTrackPaths(int limit)
+        {
+            var list = new List<string>();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT file_path FROM tracks ORDER BY mtime_utc DESC LIMIT $lim";
+                    cmd.Parameters.AddWithValue("$lim", Math.Max(1, limit));
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read()) list.Add(r.IsDBNull(0) ? string.Empty : r.GetString(0));
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("LibraryDb.GetRecentTrackPaths", caught); }
+            return list;
+        }
+
+        /// <summary>全部曲库路径集合（用于智能播放列表候选去重/剔除已删文件）。</summary>
+        public static HashSet<string> GetAllTrackPaths()
+        {
+            var set = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT file_path FROM tracks";
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read()) if (!r.IsDBNull(0)) set.Add(r.GetString(0));
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("LibraryDb.GetAllTrackPaths", caught); }
+            return set;
+        }
+
+        /// <summary>去重流派列表（供智能播放列表参数选择）。</summary>
+        public static List<string> GetDistinctGenres() => GetDistinctStrings("genre");
+
+        /// <summary>去重专辑艺术家列表（供智能播放列表参数选择）。</summary>
+        public static List<string> GetDistinctArtists() => GetDistinctStrings("album_artist");
+
+        /// <summary>去重年份列表（升序，供智能播放列表年代参数）。</summary>
+        public static List<int> GetDistinctYears()
+        {
+            var years = new List<int>();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT DISTINCT year FROM tracks WHERE year > 0 ORDER BY year";
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read()) { if (!r.IsDBNull(0)) years.Add(r.GetInt32(0)); }
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("LibraryDb.GetDistinctYears", caught); }
+            return years;
+        }
+
+        private static List<string> GetDistinctStrings(string column)
+        {
+            // 白名单：仅允许已知列，杜绝 SQL 注入
+            if (column != "genre" && column != "album_artist") return new List<string>();
+            var list = new List<string>();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT DISTINCT " + column + " FROM tracks WHERE " + column + " <> ''";
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read()) { if (!r.IsDBNull(0)) list.Add(r.GetString(0)); }
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("LibraryDb.GetDistinctStrings", caught); }
+            return list;
+        }
+
         private static IEnumerable<List<T>> Chunk<T>(IEnumerable<T> source, int size)
         {
             List<T> bucket = new(size);
