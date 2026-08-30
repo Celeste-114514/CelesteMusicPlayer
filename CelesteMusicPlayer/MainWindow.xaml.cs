@@ -509,9 +509,6 @@ namespace CelesteMusicPlayer
         private bool _desktopLyricsEnabled;
         private MiniPlayerWindow? _miniPlayerWindow;
         private bool _miniPlayerEnabled;
-        private double? _pendingRestorePositionSeconds;
-        // 启动恢复目标路径：仅当实际开播的是这首歌时才消费续播位置，避免用户换歌播放时误 seek
-        private string? _pendingRestorePath;
         private DateTime _lastPlaybackPersistUtc = DateTime.MinValue;
         private ArtistAvatarEditorWindow? _artistAvatarEditorWindow;
         private AppTrayIcon? _trayIcon;

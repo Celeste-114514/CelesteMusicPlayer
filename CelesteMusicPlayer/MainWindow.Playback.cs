@@ -486,15 +486,7 @@ namespace CelesteMusicPlayer
 
                         int idx = (queue.CurrentIndex >= 0 && queue.CurrentIndex < _userPlaylist.Count)
                             ? queue.CurrentIndex : 0;
-                        double pos = queue.PositionSeconds;
-                        // 优先用逐曲续播书签（更精细/更新）
-                        if (idx >= 0 && idx < _userPlaylist.Count)
-                        {
-                            double bm = TrackPositionStore.Get(_userPlaylist[idx].FilePath);
-                            if (bm > 0.5) pos = bm;
-                        }
-
-                        await PrepareTrackPausedAsync(idx, pos);
+                        await PrepareTrackPausedAsync(idx);
                         return;
                     }
                 }
@@ -537,7 +529,7 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                await PrepareTrackPausedAsync(userIdx, session.PositionSeconds);
+                await PrepareTrackPausedAsync(userIdx);
             }
             catch (Exception ex)
             {
@@ -546,7 +538,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private async Task PrepareTrackPausedAsync(int userPlaylistIndex, double positionSeconds)
+        private async Task PrepareTrackPausedAsync(int userPlaylistIndex)
         {
             if (userPlaylistIndex < 0 || userPlaylistIndex >= _userPlaylist.Count)
             {
@@ -556,8 +548,6 @@ namespace CelesteMusicPlayer
             PlaylistItem item = _userPlaylist[userPlaylistIndex];
             _userPlaylistIndex = userPlaylistIndex;
             _currentIndex = FindLibraryIndex(item.FilePath);
-            _pendingRestorePositionSeconds = Math.Max(0, positionSeconds);
-            _pendingRestorePath = item.FilePath;
 
             NowPlayingText.Text = "已就绪：" + item.Title + " - " + item.Artist;
             await UpdateNowPlayingPanelAsync(item);
@@ -617,15 +607,12 @@ namespace CelesteMusicPlayer
                 }
 
                 PlaylistItem? item = GetCurrentPlayingItem();
-                double pos = GetLivePositionSeconds();
                 if (item != null)
                 {
-                    PlaybackSessionStore.Save(item.FilePath, pos);
-                    // 逐曲续播书签：记录当前曲进度（自然播完的那首会在 HandleMediaEnded 里清除）
-                    TrackPositionStore.Set(item.FilePath, pos);
+                    PlaybackSessionStore.Save(item.FilePath, GetLivePositionSeconds());
                 }
 
-                SavePlayQueue(pos);
+                SavePlayQueue();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
@@ -652,7 +639,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void SavePlayQueue(double currentPosSeconds)
+        private void SavePlayQueue()
         {
             try
             {
@@ -665,8 +652,7 @@ namespace CelesteMusicPlayer
                 var state = new PlayQueueState
                 {
                     Paths = new List<string>(_userPlaylist.Count),
-                    CurrentIndex = _userPlaylistIndex,
-                    PositionSeconds = currentPosSeconds
+                    CurrentIndex = _userPlaylistIndex
                 };
                 foreach (PlaylistItem p in _userPlaylist)
                 {

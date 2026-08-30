@@ -32,7 +32,8 @@
 - **设置审计**：清理了死选项（删除「无歌词时显示歌曲信息」`ShowSongInfoIfNoLyric` 开关，无歌词一律显示"该音频没有歌词"）；`MusicRateCustom` 已确认无残留。
 - **封面优化**：封面解码缓存（ConcurrentDictionary）+ 并发限流（SemaphoreSlim(4)）+ 更严的行复用防护（`ContainerFromItem(song)==container` 才填图）。
 - **时长**：`PlaylistItem.DurationText` 改为由 `Duration` 只读推导（不再可写覆盖），恒有值，修复"时长空白串"。
-- **SACD (.iso) 播放**：播放 .iso 时由 `SacdIsoExtractor` 懒调用外部 `sacd_extract.exe`（`Assets/sacd/`，不随包发布，需自备 x64 二进制）把镜像解成逐轨 DSD(DSF)，**就地展开进播放队列**后走既有 DSD 全链路（DoP 直出 / PCM 转码 / 波形 / 续播书签 / 队列持久化全部复用，bit-perfect 不变）。抽取结果按 ISO 内容指纹缓存到 `%LOCALAPPDATA%\CelesteMusicPlayer\SacdCache`，重复播放不重抽。缺工具时状态栏提示「无法读取 SACD：缺少 sacd_extract.exe 或镜像不支持」。接入点仅在 `PlayUserPlaylistAt`（播放时展开）与 `PrepareTrackPausedAsync`（.iso 不预载进 MediaPlayer），引擎层不感知 .iso。
+- **SACD (.iso) 播放**：播放 .iso 时由 `SacdIsoExtractor` 懒调用外部 `sacd_extract.exe`（`Assets/sacd/`，不随包发布，需自备 x64 二进制）把镜像解成逐轨 DSD(DSF)，**就地展开进播放队列**后走既有 DSD 全链路（DoP 直出 / PCM 转码 / 波形 / 队列恢复全部复用，bit-perfect 不变）。抽取结果按 ISO 内容指纹缓存到 `%LOCALAPPDATA%\CelesteMusicPlayer\SacdCache`，重复播放不重抽。缺工具时状态栏提示「无法读取 SACD：缺少 sacd_extract.exe 或镜像不支持」。接入点仅在 `PlayUserPlaylistAt`（播放时展开）与 `PrepareTrackPausedAsync`（.iso 不预载进 MediaPlayer），引擎层不感知 .iso。
+- **重启恢复**：关闭再开记住**上次播放队列 + 当前曲**（`PlayQueueStore`/play-queue.json，默认开），恢复后定位到该曲**从头播**（不续播到具体秒数）。已移除逐曲续播书签（`TrackPositionStore`/track-positions.json）；旧单曲记忆 `PlaybackSessionStore`/last-playback.json 保留作无队列时的兼容回退（同样从头播）。
 
 ## ⚠️ 待办 / 已知现象
 1. **任务栏图标外圈黑框**：已做常驻无边框（`MakeWindowBorderless` 去 WS_CAPTION/THICKFRAME/BORDER），并在**首次激活后强制再执行一次无边框 + `SetWindowPos(SWP_FRAMECHANGED)`** 让系统重新计算非客户区以清残留黑框。若仍存在，请在新会话用截图/观察确认（区分任务栏缩略图 vs 窗口角落），并按此排查：非客户区残留、`ExtendsContentIntoTitleBar`+`SetTitleBar` 是否保留 caption 阴影、`OverlappedPresenter` 投影。

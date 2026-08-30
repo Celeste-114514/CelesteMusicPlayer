@@ -2185,12 +2185,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // 自然播完：清除该曲续播书签，下次播它从开头开始
-            if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
-            {
-                TrackPositionStore.Remove(_userPlaylist[_userPlaylistIndex].FilePath);
-            }
-
             switch (_orderResolver.Order)
             {
                 case PlaybackOrder.TrackLoop:

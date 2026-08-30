@@ -5,12 +5,11 @@ using System.Text.Json;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>播放队列持久化状态：曲目路径列表 + 当前播放索引 + 当前曲进度（秒）。</summary>
+    /// <summary>播放队列持久化状态：曲目路径列表 + 当前播放索引（重启后恢复队列与当前曲，从头播）。</summary>
     public sealed class PlayQueueState
     {
         public List<string> Paths { get; set; } = new();
         public int CurrentIndex { get; set; } = -1;
-        public double PositionSeconds { get; set; }
     }
 
     /// <summary>记住整张播放队列，下次启动时恢复（关闭再开仍在）。</summary>
