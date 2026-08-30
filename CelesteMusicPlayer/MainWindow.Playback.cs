@@ -455,6 +455,51 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
+                // 优先恢复整张播放队列（关闭再开仍在）
+                PlayQueueState? queue = PlayQueueStore.TryLoad();
+                if (queue != null && queue.Paths.Count > 0)
+                {
+                    var rebuilt = new List<PlaylistItem>(queue.Paths.Count);
+                    foreach (string p in queue.Paths)
+                    {
+                        if (string.IsNullOrWhiteSpace(p) || !System.IO.File.Exists(p))
+                        {
+                            continue;
+                        }
+
+                        int libIdx = FindLibraryIndex(p);
+                        rebuilt.Add(libIdx >= 0 ? _playlist[libIdx] : CreatePlaylistItemFromPath(p));
+                    }
+
+                    if (rebuilt.Count > 0)
+                    {
+                        for (int i = 0; i < rebuilt.Count; i++)
+                        {
+                            rebuilt[i].Index = i + 1;
+                        }
+
+                        _userPlaylist = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>(rebuilt);
+                        if (ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist) == false)
+                        {
+                            PlaylistView.ItemsSource = _userPlaylist;
+                        }
+
+                        int idx = (queue.CurrentIndex >= 0 && queue.CurrentIndex < _userPlaylist.Count)
+                            ? queue.CurrentIndex : 0;
+                        double pos = queue.PositionSeconds;
+                        // 优先用逐曲续播书签（更精细/更新）
+                        if (idx >= 0 && idx < _userPlaylist.Count)
+                        {
+                            double bm = TrackPositionStore.Get(_userPlaylist[idx].FilePath);
+                            if (bm > 0.5) pos = bm;
+                        }
+
+                        await PrepareTrackPausedAsync(idx, pos);
+                        return;
+                    }
+                }
+
+                // 兼容旧版：仅记住了单曲
                 PlaybackSessionState? session = PlaybackSessionStore.TryLoad();
                 if (session == null
                     || string.IsNullOrWhiteSpace(session.FilePath)
@@ -571,15 +616,68 @@ namespace CelesteMusicPlayer
                 }
 
                 PlaylistItem? item = GetCurrentPlayingItem();
-                if (item == null)
+                double pos = GetLivePositionSeconds();
+                if (item != null)
                 {
+                    PlaybackSessionStore.Save(item.FilePath, pos);
+                    // 逐曲续播书签：记录当前曲进度（自然播完的那首会在 HandleMediaEnded 里清除）
+                    TrackPositionStore.Set(item.FilePath, pos);
+                }
+
+                SavePlayQueue(pos);
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+        }
+
+
+        /// <summary>取当前播放进度（秒）：优先引擎（FFmpeg/NAudio 路径），回退 MediaPlayer。</summary>
+        private double GetLivePositionSeconds()
+        {
+            try
+            {
+                if (_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
+                {
+                    return _audioEngine.Position.TotalSeconds;
+                }
+
+                MediaPlayer? mp = GetPlayer();
+                if (mp?.Source != null)
+                {
+                    return mp.PlaybackSession.Position.TotalSeconds;
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback.cs", caught); }
+            return 0;
+        }
+
+
+        private void SavePlayQueue(double currentPosSeconds)
+        {
+            try
+            {
+                if (_userPlaylist.Count == 0)
+                {
+                    PlayQueueStore.Clear();
                     return;
                 }
 
-                double pos = GetPlayer()?.PlaybackSession.Position.TotalSeconds ?? 0;
-                PlaybackSessionStore.Save(item.FilePath, pos);
+                var state = new PlayQueueState
+                {
+                    Paths = new List<string>(_userPlaylist.Count),
+                    CurrentIndex = _userPlaylistIndex,
+                    PositionSeconds = currentPosSeconds
+                };
+                foreach (PlaylistItem p in _userPlaylist)
+                {
+                    if (!string.IsNullOrWhiteSpace(p.FilePath))
+                    {
+                        state.Paths.Add(p.FilePath);
+                    }
+                }
+
+                PlayQueueStore.Save(state);
             }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback.cs", caught); }
         }
 
 

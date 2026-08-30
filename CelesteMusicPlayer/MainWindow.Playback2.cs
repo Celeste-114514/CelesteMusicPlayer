@@ -1677,6 +1677,7 @@ namespace CelesteMusicPlayer
             ExitMultiSelectMode();
             _userPlaylist.Clear();
             _userPlaylistIndex = -1;
+            PlayQueueStore.Clear();
             NotifyCurrentPlaylistWindow();
             if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
             {

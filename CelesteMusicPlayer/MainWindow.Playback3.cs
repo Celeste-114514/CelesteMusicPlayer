@@ -1877,6 +1877,15 @@ namespace CelesteMusicPlayer
             }
 
             PlaylistItem item = _userPlaylist[index];
+
+            // 逐曲续播书签：切歌前先记下当前曲进度（自然播完的那首会在 HandleMediaEnded 清除）
+            if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+            {
+                string oldPath = _userPlaylist[_userPlaylistIndex].FilePath;
+                double oldPos = GetLivePositionSeconds();
+                if (oldPos > 0.5) TrackPositionStore.Set(oldPath, oldPos);
+            }
+
             _userPlaylistIndex = index;
             _currentIndex = FindLibraryIndex(item.FilePath);
 
