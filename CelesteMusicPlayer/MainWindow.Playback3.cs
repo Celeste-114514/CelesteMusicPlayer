@@ -616,15 +616,28 @@ namespace CelesteMusicPlayer
                     }
 
                     double start = 0;
-                    if (_pendingRestorePositionSeconds is double pending && pending > 0.5)
+                    string? curPath = (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                        ? _userPlaylist[_userPlaylistIndex].FilePath
+                        : null;
+                    bool restoreMatches = _pendingRestorePath != null
+                        && curPath != null
+                        && string.Equals(_pendingRestorePath, curPath, StringComparison.OrdinalIgnoreCase);
+                    if (_pendingRestorePositionSeconds is double pending && pending > 0.5 && restoreMatches)
                     {
                         start = Math.Min(pending, Math.Max(0, totalSeconds - 0.5));
                         _pendingRestorePositionSeconds = null;
+                        _pendingRestorePath = null;
                         try
                         {
                             sender.PlaybackSession.Position = TimeSpan.FromSeconds(start);
                         }
                         catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+                    }
+                    else if (_pendingRestorePositionSeconds != null && !restoreMatches)
+                    {
+                        // 用户换歌播放：丢弃残留的恢复位置，避免误 seek 到旧位置
+                        _pendingRestorePositionSeconds = null;
+                        _pendingRestorePath = null;
                     }
 
                     ProgressSlider.Value = start;
@@ -2122,6 +2135,28 @@ namespace CelesteMusicPlayer
                 DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }));
             if (ok)
             {
+                // 续播书签（引擎路径）：MediaPlayer 路径在 Player_MediaOpened 消费，而 FFmpeg/DSD 走引擎、
+                // MediaOpened 不会触发，必须在此消费恢复位置；仅当开播的正是恢复目标曲时才 seek。
+                if (_pendingRestorePositionSeconds is double pendingSec
+                    && pendingSec > 0.5
+                    && _pendingRestorePath != null
+                    && string.Equals(_pendingRestorePath, item.FilePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    _pendingRestorePositionSeconds = null;
+                    _pendingRestorePath = null;
+                    try
+                    {
+                        _audioEngine.Seek(TimeSpan.FromSeconds(pendingSec));
+                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback3.cs", caught); }
+                }
+                else if (_pendingRestorePositionSeconds != null)
+                {
+                    // 用户换歌播放：丢弃残留的恢复位置，避免误 seek 到旧位置
+                    _pendingRestorePositionSeconds = null;
+                    _pendingRestorePath = null;
+                }
+
                 _isEnginePaused = false;
                 _usingEnginePlayback = true;
                 NowPlayingText.Text = "正在播放（引擎）：" + item.Title + " - " + item.Artist;

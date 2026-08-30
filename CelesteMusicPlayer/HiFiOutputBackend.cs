@@ -1029,14 +1029,16 @@ namespace CelesteMusicPlayer
         /// <summary>当前设备主音量标量 0..1；无设备/ASIO 返回 -1（未知）。</summary>
         public float GetDeviceVolume()
         {
-            if (_device?.AudioEndpointVolume != null)
+            try
             {
-                try
+                // 注意：AudioEndpointVolume 的 COM QueryInterface 在独占模式/部分设备上
+                // 会抛 InvalidCastException(E_NOINTERFACE)，必须整体包 try，不能只包取值。
+                if (_device?.AudioEndpointVolume != null)
                 {
                     return _device.AudioEndpointVolume.MasterVolumeLevelScalar;
                 }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
             }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
             return -1f;
         }
@@ -1049,15 +1051,17 @@ namespace CelesteMusicPlayer
             // 独占/ASIO（及 DSD 直出）：bit-perfect，控设备主音量——滑块 100%→满、其它非线性压缩（slider²）。
             if (hifiDevice || (_isDsd))
             {
-                if (_device?.AudioEndpointVolume != null)
+                try
                 {
-                    try
+                    // AudioEndpointVolume 的 COM QueryInterface 在独占模式/部分设备上会抛
+                    // InvalidCastException(E_NOINTERFACE)，必须整体包 try，不能只包赋值。
+                    if (_device?.AudioEndpointVolume != null)
                     {
                         float dev = _resumeVolume * _resumeVolume;
                         _device.AudioEndpointVolume.MasterVolumeLevelScalar = dev;
                     }
-                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
                 }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
                 return;
             }

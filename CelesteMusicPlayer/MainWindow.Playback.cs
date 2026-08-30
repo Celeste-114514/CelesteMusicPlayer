@@ -557,6 +557,7 @@ namespace CelesteMusicPlayer
             _userPlaylistIndex = userPlaylistIndex;
             _currentIndex = FindLibraryIndex(item.FilePath);
             _pendingRestorePositionSeconds = Math.Max(0, positionSeconds);
+            _pendingRestorePath = item.FilePath;
 
             NowPlayingText.Text = "已就绪：" + item.Title + " - " + item.Artist;
             await UpdateNowPlayingPanelAsync(item);
