@@ -963,6 +963,33 @@ namespace CelesteMusicPlayer
         /// <summary>SQL 参数个数上限的保守分块大小。</summary>
         private const int SqlChunkSize = 400;
 
+        /// <summary>取全部曲目（含专辑信息），供 ReplayGain 扫描按专辑分组。失败返回空列表。</summary>
+        public static List<RgScanInput> GetAllTracksForScan()
+        {
+            var list = new List<RgScanInput>();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT file_path, album, album_artist FROM tracks";
+                    using var r = cmd.ExecuteReader();
+                    while (r.Read())
+                    {
+                        list.Add(new RgScanInput
+                        {
+                            FilePath = r.IsDBNull(0) ? string.Empty : r.GetString(0),
+                            Album = r.IsDBNull(1) ? string.Empty : r.GetString(1),
+                            AlbumArtist = r.IsDBNull(2) ? string.Empty : r.GetString(2)
+                        });
+                    }
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("LibraryDb.GetAllTracksForScan", caught); }
+            return list;
+        }
+
         private static IEnumerable<List<T>> Chunk<T>(IEnumerable<T> source, int size)
         {
             List<T> bucket = new(size);

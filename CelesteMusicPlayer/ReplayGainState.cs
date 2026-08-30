@@ -122,6 +122,21 @@ namespace CelesteMusicPlayer
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("ReplayGainState.cs", caught); }
 
+                // APE（ape / wv / tak / mpc / tta）：这些格式存的是 APE 标签，必须单独读，否则 RG 对其无效。
+                try
+                {
+                    if (tagFile.GetTag(TagLib.TagTypes.Ape) is TagLib.Ape.Tag ape)
+                    {
+                        string g = ape.GetItem("REPLAYGAIN_TRACK_GAIN").ToString();
+                        if (ParseDb(g, out double tg)) { trackGain = tg; any = true; }
+                        string ag = ape.GetItem("REPLAYGAIN_ALBUM_GAIN").ToString();
+                        if (ParseDb(ag, out double al)) { albumGain = al; any = true; }
+                        string pk = ape.GetItem("REPLAYGAIN_TRACK_PEAK").ToString();
+                        if (ParsePeak(pk, out double p)) peak = p;
+                    }
+                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("ReplayGainState.cs", caught); }
+
                 return any ? (trackGain, albumGain, peak) : default((double, double, double)?);
             }
             catch

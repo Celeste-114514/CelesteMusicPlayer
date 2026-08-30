@@ -1059,6 +1059,10 @@ namespace CelesteMusicPlayer
             dupCheck.Click += (_, _) => DuplicateFilesWindow.ShowOrActivate(this);
             flyout.Items.Add(dupCheck);
 
+            var rgScan = new MenuFlyoutItem { Text = "ReplayGain 扫描…" };
+            rgScan.Click += (_, _) => OpenReplayGainScan();
+            flyout.Items.Add(rgScan);
+
             var downloadCover = new MenuFlyoutItem { Text = "下载当前封面" };
             downloadCover.Click += (_, _) => _ = DownloadCoverForCurrentAsync();
             flyout.Items.Add(downloadCover);
@@ -1330,6 +1334,31 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             NowPlayingText.Text = message;
+        }
+
+        /// <summary>打开 ReplayGain 扫描窗口：按范围（整库 / 当前播放列表 / 选中曲目）提供待扫描曲目。</summary>
+        private void OpenReplayGainScan()
+        {
+            var win = new ReplayGainScanWindow(this, scope =>
+            {
+                if (scope == ReplayGainScanScope.Library)
+                {
+                    return LibraryDb.GetAllTracksForScan();
+                }
+
+                if (scope == ReplayGainScanScope.Playlist)
+                {
+                    return _playlist
+                        .Select(p => new RgScanInput { FilePath = p.FilePath, Album = p.Album, AlbumArtist = p.AlbumArtist })
+                        .ToList();
+                }
+
+                // Selection：仅对列表里多选的曲目扫描
+                return GetSelectedMultiSelectSongs()
+                    .Select(p => new RgScanInput { FilePath = p.FilePath, Album = p.Album, AlbumArtist = p.AlbumArtist })
+                    .ToList();
+            });
+            win.Activate();
         }
 
 
