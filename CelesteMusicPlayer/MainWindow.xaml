@@ -121,7 +121,7 @@
                     BorderThickness="0"
                     Click="AudioSettingsButton_Click"
                     ToolTipService.ToolTip="音频设置">
-                    <FontIcon Glyph="&#xE95B;" FontSize="15" />
+                    <FontIcon Glyph="&#xE91F;" FontSize="15" />
                 </Button>
                 <Button
                     x:Name="SelectLocalAudioButton"
@@ -428,8 +428,8 @@
                         CornerRadius="8"
                         Click="NavPlaylistWallButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE700;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="播放队列" VerticalAlignment="Center" Margin="0,0,0,2" />
+                                <FontIcon Glyph="&#xE7B3;" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="播放队列" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
                     <Button
@@ -538,16 +538,11 @@
                         CornerRadius="20"
                         Click="NavTagSortButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                            <Path
+                            <FontIcon
                                 x:Name="NavTagSortIcon"
-                                Width="16"
-                                Height="16"
-                                VerticalAlignment="Center"
-                                Stretch="Uniform"
-                                Fill="Transparent"
-                                Stroke="{ThemeResource TextFillColorPrimaryBrush}"
-                                StrokeThickness="1.4"
-                                Data="M6,2 L10,2 L10,6 L6,6 Z M2,10 L6,10 L6,14 L2,14 Z M10,10 L14,10 L14,14 L10,14 Z M8,6 L8,8 L4,8 L4,10 M8,8 L12,8 L12,10" />
+                                Glyph="&#xE8CB;"
+                                FontSize="16"
+                                VerticalAlignment="Center" />
                             <TextBlock Text="标签排序" VerticalAlignment="Center" Margin="0,0,0,2" />
                         </StackPanel>
                     </Button>
@@ -4076,7 +4071,7 @@
                             BorderThickness="0"
                             Click="ShowCurrentPlaylistButton_Click"
                             ToolTipService.ToolTip="显示播放队列">
-                            <FontIcon Glyph="&#xE700;" FontSize="18" />
+                            <FontIcon Glyph="&#xE7B3;" FontSize="18" />
                         </Button>
                         <Button
                             x:Name="FeaturesMoreButton"
@@ -4234,7 +4229,7 @@
                     <!-- 顶部标题 + 关闭 -->
                     <Grid>
                         <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <FontIcon Glyph="&#xE95B;" FontSize="15" />
+                            <FontIcon Glyph="&#xE91F;" FontSize="15" />
                             <TextBlock Text="音频设置" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </StackPanel>
                         <Button

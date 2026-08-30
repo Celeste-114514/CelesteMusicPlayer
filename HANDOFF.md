@@ -3,11 +3,12 @@
 ## 项目位置
 - 仓库：`C:\Users\admin\source\repos\CelesteMusicPlayer`（`global-workspace` 下 `celeste-winui`/`CelesteDesktop` 是空壳勿用）
 - 主工程：`CelesteMusicPlayer\CelesteMusicPlayer\CelesteMusicPlayer.csproj`；解决方案 `CelesteMusicPlayer.slnx`
-- 技术栈：.NET 8 + WinUI 3（WindowsAppSDK 1.8）+ NAudio 2.2.1 + ffmpeg；WinExe
+- 技术栈：.NET 9 + WinUI 3（WindowsAppSDK 1.8）+ NAudio + ffmpeg；WinExe
 
 ## Git 状态
-- 最近提交：`e455167`（feat(DSP) 三模式统一 DSP 链 + 共享全格式播放）
-- **有大量未提交改动**（当前会话在 `0c233c2` 之后、`e455167` 基础上又改了很多，尚未再次 commit）。接续会话建议：`git status` 先看，必要时先 commit 一次再继续。
+- 最近提交：`8de65e0`（合并 origin/main `62d948d`：含 ②bit-perfect 指示灯 / ③ 设备DSP 配置档 / ReplayGain 响度扫描；并含本地改动：DWM 圆角 P/Invoke 修复 + 精简 ffmpeg 替换完整版 + ④ 智能播放列表已移除）
+- 工作树：干净（均已提交）。接续会话建议先 `git fetch` 看远端是否有新提交，有则 `git merge origin/main` 再继续。
+- **同步策略（铁律）**：不 rebase（沙箱 shallow 克隆 rebase 易被 SIGTERM 打断损坏仓库）；远端有新版时 `git merge origin/main` 合并后直接 `git push`（fast-forward）。`git push` 前先 `git fetch` 确认。
 
 ## 编译命令
 - Release 自包含（可双击，exe 需同目录 ffmpeg.exe）：
@@ -17,6 +18,9 @@
   输出：`bin\x64\Debug\net8.0-windows10.0.19041.0\win-x64\`
 - 输出产物里手动 `cp Assets/ffmpeg/ffmpeg.exe` 到 win-x64。
 - ⚠️ XamlCompiler 偶发崩溃 `-1073741819`（重试即过）；**非打包 Debug 一次全量重建偶发 `ms-appx:///.../themeresources.xaml` 资源失败**——遇到先 `rm -rf obj/x64 bin/x64` 彻底清后干净重建即可恢复（与代码无关）。
+- ⚠️ **运行/调试正确档位（高频坑）**：Debug 直接 F5 必须选 **`CelesteMusicPlayer (Package)`** 档（首次 VS 会自动生成 `CelesteMusicPlayer_TemporaryKey.pfx` 自签名证书）；想免安装则用 **Release + `(Unpackaged)`**。**禁止 `Debug + (Unpackaged)`**——该组合不自带运行时，引导阶段死等，表现为"一直加载"或"加载一会就退"。
+- ⚠️ **`0x80131124`「未找到索引」= WMC9999 构建错误**（来自 `Microsoft.UI.Xaml.Markup.Compiler`，**非运行时 COMException**）：表现为 Debug 一个 `.g.cs` 都生成不出、程序启不动（日志连 `Main begin` 都没有）。真因常是 XAML 里写了 `Window` 根不认的属性（如 `Width`/`Height`），编译器建崩索引级联成 WMC9999。修法：删 XAML 根的 Width/Height、改代码后置里 `AppWindow.Resize(new Windows.Graphics.SizeInt32(w,h))`；仍不行查 csproj `WindowsAppSDK` 版本与 `microsoft.windowsappsdk.winui` 是否对齐（1.8 实验版通病）。
+- **ffmpeg 依赖（体积优化）**：`Assets/ffmpeg/ffmpeg.exe` 现为**精简版**（仅音频编解码器/容器，静态链接无外部 dll，~36MB；原完整版 ~103MB），覆盖项目全部音频用途（APE/WavPack/TTA/MusePack/TAK/DSD/Opus/模块文件 + PCM 输出 + 波形解码 + 格式探测 + ReplayGain/ebur128）。`FindFfmpeg` 优先 `Assets/ffmpeg/ffmpeg.exe`，回退 `Assets/ffmpeg-slim/ffmpeg.exe`。发布目录约省 66MB。
 
 ## 当前功能/架构
 - **三模式统一输出**：共享=NAudio WasapiOut、独占=原生 WASAPI、ASIO；全部经 `ManagedDspSourceProvider`（EQ→声道平衡→限幅→ReplayGain）统一 DSP 链。共享折叠 `pcm_f32le` 到设备 MixFormat（全格式可播，含 16/44.1 ALAC、24/96 FLAC）。
@@ -35,7 +39,8 @@
 3. 极端 EQ 参数仍有轻微爆音可能性（软削波已缓解）；独占高采样+EQ 受托管性能限制（较 ECHO native/SIMD 难完全丝滑）。
 4. 非打包 Debug 全量重建的 ms-appx 资源偶发问题（见编译命令）。
 5. **排序方案 A**：歌曲面板已扩字段；专辑墙/文件夹尚未接入多字段排序（如需继续）。
-6. 音频设置下拉（右上角耳机图标 → 对齐 ECHO 的 输出模式/音频链路/专业播放状态面板）**尚未开始**——用户曾点名的后续大工程。
+7. ④ 智能播放列表（Auto-DJ 规则生成）曾实现后又**移除**（用户确认不需要），代码 `git revert 6250df5` 可恢复。
+6. 音频设置面板（AudioSettingsPanel）**已实现**（右上角音频图标 `E91F` 打开，滑出式面板含 输出模式/DSP 链/设备状态）。待做：对齐 ECHO 的 输出模式/音频链路/专业播放状态面板细节（用户曾点名的后续打磨）。
 
 ## 给接续会话的建议
 - 先 `git commit` 当前未提交改动存档，再继续。
