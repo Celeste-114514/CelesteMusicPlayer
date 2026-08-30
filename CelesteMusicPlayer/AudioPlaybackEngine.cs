@@ -153,13 +153,17 @@ namespace CelesteMusicPlayer
             _decoder.FailureHandler = ex => RaiseFailed(ex);
         }
 
-        /// <summary>内置 ffmpeg.exe 路径（Assets\ffmpeg\ffmpeg.exe 或 exe 同目录）。</summary>
+        /// <summary>内置 ffmpeg.exe 路径（路线二：轻量/HiFi 双口味）。
+        /// 优先完整版（Assets\ffmpeg\ffmpeg.exe，HiFi 口味，默认），完整版不存在时回退精简版
+        /// （Assets\ffmpeg-slim\ffmpeg.exe，轻量口味）。当前仅发布完整版，故默认行为与旧版一致；
+        /// 轻量发布包只需把精简 ffmpeg 放到 Assets\ffmpeg-slim\ 即可自动启用，无需改代码。</summary>
         public static string? FindFfmpeg()
         {
             string[] candidates =
             {
-                Path.Combine(AppContext.BaseDirectory, "Assets", "ffmpeg", "ffmpeg.exe"),
-                Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe")
+                Path.Combine(AppContext.BaseDirectory, "Assets", "ffmpeg", "ffmpeg.exe"),    // 完整版（HiFi 口味，默认）
+                Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe"),
+                Path.Combine(AppContext.BaseDirectory, "Assets", "ffmpeg-slim", "ffmpeg.exe") // 精简版（轻量口味，路线二）
             };
             foreach (string c in candidates)
             {
@@ -170,6 +174,13 @@ namespace CelesteMusicPlayer
             }
 
             return null;
+        }
+
+        /// <summary>精简版 ffmpeg 路径（Assets\ffmpeg-slim\ffmpeg.exe）。轻量发布口味使用；不存在返回 null。</summary>
+        public static string? FindSlimFfmpeg()
+        {
+            string p = Path.Combine(AppContext.BaseDirectory, "Assets", "ffmpeg-slim", "ffmpeg.exe");
+            return File.Exists(p) ? p : null;
         }
 
         /// <summary>系统 Media Foundation 不支持、需要 FFmpeg 转码的扩展名。</summary>
