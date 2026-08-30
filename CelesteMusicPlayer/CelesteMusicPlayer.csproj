@@ -30,10 +30,17 @@
     -->
   </PropertyGroup>
 
+  <!--
+    发布形态由 CelesteSelfContainedDistribute 决定（默认不设置 = 框架依赖，体积小）：
+      - 框架依赖（默认）：不打包 .NET 9 / Windows App SDK 运行时，产物约少 30–50MB，
+        目标机需先装 .NET 9 桌面运行时 + Windows App SDK 运行时（缺失时启动会弹窗提示，见 Program.cs）。
+      - 自包含：dotnet publish -c Release -r win-x64 -p:CelesteSelfContainedDistribute=true，
+        运行时随包走，可整夹发给没装运行时的机器（体积大）。
+  -->
   <PropertyGroup Condition="'$(Configuration)' == 'Release' or '$(CelesteSelfContainedDistribute)' == 'true'">
     <WindowsPackageType>None</WindowsPackageType>
-    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
-    <SelfContained>true</SelfContained>
+    <WindowsAppSDKSelfContained>$(CelesteSelfContainedDistribute)</WindowsAppSDKSelfContained>
+    <SelfContained>$(CelesteSelfContainedDistribute)</SelfContained>
     <!-- 非打包自包含下关闭 DeploymentManager 自动初始化，避免 0xC000027B 闪退 -->
     <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
   </PropertyGroup>
