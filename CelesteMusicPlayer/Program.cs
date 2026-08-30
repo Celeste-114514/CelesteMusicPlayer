@@ -5,6 +5,8 @@ using System.Threading;
 using Microsoft.Win32;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
+using Windows.ApplicationModel;
+using Windows.Management.Deployment;
 using WinRT;
 
 namespace CelesteMusicPlayer
@@ -90,15 +92,18 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>是否以打包(MSIX)方式运行。非打包(Unpackaged)下访问 Package.Current 会抛异常。</summary>
+        /// <summary>是否以打包(MSIX)方式运行。非打包(Unpackaged)下访问 Package.Current 会抛异常，属预期。</summary>
         private static bool IsPackaged()
         {
             try
             {
                 return Windows.ApplicationModel.Package.Current != null;
             }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("Program.cs", caught); }
-            return false;
+            catch
+            {
+                // 非打包模式必然抛异常（E_NOTIMPL），静默即可，不写日志。
+                return false;
+            }
         }
 
         /// <summary>检测框架依赖所需的运行时是否已安装；返回 false 时 missing 给出缺失项说明。</summary>
@@ -107,23 +112,48 @@ namespace CelesteMusicPlayer
             missing = string.Empty;
             try
             {
-                // Windows App SDK 运行时（非自包含）：注册表 HKLM\SOFTWARE\Microsoft\WindowsAppRuntime 下
-                // 存在带 BaseDirectory 的版本子键即视为已安装。
+                // Windows App SDK 运行时（非自包含）：自 1.8 起以 MSIX 框架包安装
+                // （包名 Microsoft.WindowsAppRuntime.1.8，或 CBS 变体），不写注册表键。
+                // 因此先枚举系统已注册 MSIX 包判断主版本 1.8 是否就位，注册表仅作回退。
                 bool winAppSdkOk = false;
-                using (RegistryKey? root = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\WindowsAppRuntime"))
+                try
                 {
-                    if (root != null)
+                    var pkgManager = new PackageManager();
+                    foreach (Package pkg in pkgManager.FindPackages())
                     {
-                        foreach (string ver in root.GetSubKeyNames())
+                        string name = pkg.Name ?? string.Empty;
+                        if (name.StartsWith("Microsoft.WindowsAppRuntime.1.8", StringComparison.OrdinalIgnoreCase)
+                            || name.StartsWith("Microsoft.WindowsAppRuntime.CBS.1.8", StringComparison.OrdinalIgnoreCase))
                         {
-                            using RegistryKey? verKey = root.OpenSubKey(ver);
-                            if (verKey != null && verKey.GetValue("BaseDirectory") is string baseDir && baseDir.Length > 0)
+                            winAppSdkOk = true;
+                            break;
+                        }
+                    }
+                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("Program.cs", caught); }
+
+                // 回退：老版本运行时/个别系统通过注册表 HKLM\SOFTWARE\Microsoft\WindowsAppRuntime 定位。
+                if (!winAppSdkOk)
+                {
+                    try
+                    {
+                        using (RegistryKey? root = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\WindowsAppRuntime"))
+                        {
+                            if (root != null)
                             {
-                                winAppSdkOk = true;
-                                break;
+                                foreach (string ver in root.GetSubKeyNames())
+                                {
+                                    using RegistryKey? verKey = root.OpenSubKey(ver);
+                                    if (verKey != null && verKey.GetValue("BaseDirectory") is string baseDir && baseDir.Length > 0)
+                                    {
+                                        winAppSdkOk = true;
+                                        break;
+                                    }
+                                }
                             }
                         }
                     }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("Program.cs", caught); }
                 }
 
                 if (!winAppSdkOk)
