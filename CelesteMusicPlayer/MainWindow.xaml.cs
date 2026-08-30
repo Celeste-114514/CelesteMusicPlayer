@@ -635,6 +635,9 @@ namespace CelesteMusicPlayer
         {
             StartupLog.Write("MainWindow ctor begin");
             Instance = this;
+            // 缓存 UI 线程 DispatcherQueue 给引擎层（HiFiOutputBackend）在后台线程构造时取用，
+            // 避免 DispatcherQueue.GetForCurrentThread() 返回 null 导致 NullReferenceException。
+            HiFiOutputBackend.UiDispatcherQueue = this.DispatcherQueue;
             InitializeComponent();
             StartupLog.Write("MainWindow InitializeComponent done");
             InitializeLevelMeter();

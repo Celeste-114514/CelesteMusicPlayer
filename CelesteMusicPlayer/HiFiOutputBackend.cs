@@ -73,9 +73,23 @@ namespace CelesteMusicPlayer
         /// <summary>失败（初始化/打开/输出）。</summary>
         public event Action<Exception>? Failed;
 
+        /// <summary>
+        /// UI 线程 DispatcherQueue 缓存。由 MainWindow 在 UI 线程构造时设置。
+        /// 本类可能在后台/异步线程（播放引擎续接链路）被懒构造，那时
+        /// DispatcherQueue.GetForCurrentThread() 返回 null，直接 .CreateTimer() 会 NullReferenceException。
+        /// 持有 UI 队列即可在任何线程安全创建计时器（Tick 仍在 UI 线程触发）。
+        /// </summary>
+        public static Microsoft.UI.Dispatching.DispatcherQueue? UiDispatcherQueue { get; set; }
+
         public HiFiOutputBackend()
         {
-            _positionTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+            var dispatcher = UiDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            if (dispatcher == null)
+            {
+                throw new InvalidOperationException(
+                    "HiFiOutputBackend 必须在 UI 线程构造，且 UiDispatcherQueue 尚未设置（请在 MainWindow 构造时赋值）。");
+            }
+            _positionTimer = dispatcher.CreateTimer();
             _positionTimer.Interval = TimeSpan.FromMilliseconds(200);
             _positionTimer.Tick += (_, _) => UpdatePosition();
         }
