@@ -3730,6 +3730,15 @@
                                     TextAlignment="Center"
                                     TextWrapping="WrapWholeWords"
                                     Text="" />
+                                <Border
+                                    x:Name="MainBitPerfectBadge"
+                                    CornerRadius="10"
+                                    Padding="8,3"
+                                    VerticalAlignment="Center"
+                                    Background="#222"
+                                    ToolTipService.ToolTip="当前播放链路是否 bit-perfect 直通（与音频设置面板口径一致）">
+                                    <TextBlock x:Name="MainBitPerfectText" Text="bit-perfect" FontSize="11" FontWeight="SemiBold" Foreground="White" />
+                                </Border>
                                 <TextBlock
                                     x:Name="SignalChainInfoText"
                                     Foreground="{ThemeResource TextFillColorTertiaryBrush}"

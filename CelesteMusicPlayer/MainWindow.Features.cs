@@ -2290,8 +2290,49 @@ namespace CelesteMusicPlayer
                 AudioProDspChain.Text = "EQ" + (eqOn ? "✓" : "—") + " · 声道" + (chOn ? "✓" : "—") + " · 限幅" + (limiterOn ? "✓" : "—") + " · ReplayGain" + (rgOn ? "✓" : "—");
                 // 链路可视化着色 + bit-perfect 徽章
                 ApplyLinkVisual(pure: active.Count == 0, activeText: string.Join("、", active));
+                // 同步主界面常驻 bit-perfect 徽章
+                RefreshMainBitPerfectBadge();
                 // SRC 会话实际状态（源→目标 / 未升频原因）
                 RefreshSrcSessionState();
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+        }
+
+        /// <summary>计算与音频设置面板徽章同一口径的链路纯净度：任一 DSP（EQ/声道平衡/限幅/ReplayGain）
+        /// 生效即非 bit-perfect；DSP 总旁路优先视为直通。</summary>
+        private bool IsBitPerfectPure(out string activeText)
+        {
+            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            if (bypass) { activeText = string.Empty; return true; }
+
+            bool eqOn = EqCurveStore.Load().HasEffect();
+            var extra = DspExtraStore.Load();
+            bool chOn = extra.ChannelBalance?.IsActive == true;
+            bool limiterOn = extra.Safety?.EnableLimiter != false;
+            bool rgOn = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
+            var active = new System.Collections.Generic.List<string>();
+            if (eqOn) active.Add("EQ");
+            if (chOn) active.Add("声道");
+            if (limiterOn) active.Add("限幅");
+            if (rgOn) active.Add("ReplayGain");
+            activeText = active.Count == 0 ? string.Empty : string.Join("、", active);
+            return active.Count == 0;
+        }
+
+        /// <summary>刷新主播放界面常驻的 bit-perfect 徽章（绿=直通 / 琥珀=DSP 处理中）。</summary>
+        private void RefreshMainBitPerfectBadge()
+        {
+            try
+            {
+                if (MainBitPerfectBadge == null || MainBitPerfectText == null) return;
+                bool pure = IsBitPerfectPure(out string activeText);
+                var green = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 46, 160, 67));
+                var amber = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 214, 148, 45));
+                MainBitPerfectBadge.Background = pure ? green : amber;
+                MainBitPerfectText.Text = pure
+                    ? "✓ bit-perfect · 直通"
+                    : "非 bit-perfect · " + activeText;
+                MainBitPerfectText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
