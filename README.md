@@ -6,12 +6,16 @@
 
 - 🎵 本地音乐库：扫描文件夹 / 多选导入，自动读取标签（标题、艺术家、专辑、年份、封面）
 - 🎧 广泛格式支持：MP3 / FLAC / WAV / M4A / APE / WavPack / TTA / DSD等；DSD 支持「转 PCM」或「DoP 直出」可选（Shared 模式下自动转 PCM）
+  - **SACD 镜像（.iso）直接播放**：打开 .iso 自动解出整张 SACD 逐轨 DSD（DSF）加入播放列表，支持 DoP 直出 / PCM 转码
   - 内置 [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) 
 - 📋 输出模式：AUDIO 输出设备可选择，WASAPI 共享 / WASAPI 独占 / ASIO输出
 - 🎯 HiFi 独占输出：基于 NAudio / 原生 WASAPI 从 PCM WAV 流式输出，兼顾音质；独占设备音量可调（系统托盘/输出设备调整，软件内不可调整）、切歌音量不再重置
 - 🎚️ **DSP 三模式统一信号链**（共享 / WASAPI 独占 / ASIO）：曲线 EQ（专业 / 简单模式 / 预设保存加载）、10 段均衡器、声道平衡、安全限幅（soft-knee 软削波 + 自动峰值余量）防爆音
-- 🔊 **ReplayGain 响度归一化**：单曲 / 专辑统一响度、10ms 平滑渐变、peak 防削波、额外增益可调
+- 🔊 **ReplayGain 响度归一化**：单曲 / 专辑统一响度、10ms 平滑渐变、peak 防削波、额外增益可调；支持整库 / 播放列表 / 选中范围一键扫描并写回标签
+- 💡 **bit-perfect 指示灯**：主界面实时显示当前是否为 bit-perfect 直出
+- 🎛️ **按设备记忆 DSP 配置**：插回某台音频设备自动套用其 EQ/音效配置档
 - ⏯️ **任务栏缩略图控制 + 系统托盘常驻**：悬停任务栏可上一首 / 播放暂停 / 下一首 / 红心收藏；播放历史整合进「最近播放」
+- 💾 **播放队列持久化**：重启后恢复上次播放队列与当前曲
 - 🎚️ **DSP 总旁路（A/B）**：一键对比 DSP 前后；声道延迟差、SRC 质量 / Dither、DSP 状态显示
 - 📝 歌词：自动下载（网易云 / QQ / 酷狗）、在线搜索、桌面歌词窗口、卡拉 OK 高亮
 - 🖼️ 封面：自动下载并嵌入标签、专辑 / 艺术家视图、封面文件夹
@@ -54,13 +58,36 @@
 # 开发运行
 dotnet build -c Debug
 
-# 发布自包含（免安装，含 Windows App SDK 运行时）
+# 发布框架依赖（默认，体积小；目标机器需安装 .NET 9 运行时与 Windows App SDK，未装时程序启动会弹窗引导下载）
 dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x64 -o publish
+
+# 发布自包含（免安装，含 .NET 9 运行时与 Windows App SDK，体积更大）
+dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x64 -p:CelesteSelfContainedDistribute=true -o publish
 ```
 
-发布产物为自包含目录：目标机器 **无需安装 .NET 运行时或 Windows App SDK**。
+默认发布产物为**框架依赖**（体积小）；目标机器缺运行环境时程序启动会**弹窗提示并提供官方下载链接**。如需免安装自包含包，用上面的 `CelesteSelfContainedDistribute=true` 命令。
 
 ## 📝 更新日志
+
+### v26.8.31（2026-08-31）
+**新增功能**
+- 🎼 **SACD 镜像（.iso）直接播放**：打开 .iso 自动解出整张 SACD 的逐轨 DSD（DSF）文件并加入播放列表，支持 DoP 直出 / PCM 转码，HiFi 音质、bit-perfect 不变；解码工具已内置，开箱即用
+- 📈 **ReplayGain 响度扫描**：可对整库、播放列表或选中范围一键扫描，自动把响度增益写回音频标签；播放时按设置的模式做响度归一化，不同专辑之间不再忽大忽小
+- 💡 **主界面 bit-perfect 指示灯**：当前是否为 bit-perfect 直出，一眼可见
+- 🎛️ **按设备记忆 DSP 配置**：换回某台音频设备时，自动套用为它保存的 EQ/音效配置档
+
+**体验优化**
+- 💾 **播放队列持久化**：关闭程序再打开，上次的播放队列和播放到哪首歌都还在（队列从当前曲开始）
+- 🎨 音频设置、标签排序、播放队列三处入口图标美化
+
+**问题修复**
+- 修复启动即崩溃的问题（后台线程创建音频输出时的空引用）
+- 修复独占输出模式下暂停/恢复音量可能崩溃的问题
+- 修复窗口圆角/边框在部分系统上不生效的问题
+
+**体积与分发**
+- 内置 ffmpeg 换成精简版，发布包体积从约 100MB 降到约 40MB
+- 发布方式改为**框架依赖**：包内不再自带 .NET 9 运行时；若电脑没装 .NET 9，启动时会自动弹窗提示并提供官方下载链接，不再静默失败
 
 ### v26.8.30（2026-08-30）
 - 🚀 **启动 / 内存 / 排序优化**：更快启动、降低内存占用、大列表排序优化
