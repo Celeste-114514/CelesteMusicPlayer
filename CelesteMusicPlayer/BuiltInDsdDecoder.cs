@@ -18,6 +18,9 @@ namespace CelesteMusicPlayer
         }
 
         public IDsDStream Open(string path) => BuiltInDsdStream.Open(path);
+
+        /// <summary>只读头部取 DSD 位时钟频率（Hz），失败返回 0。见 <see cref="BuiltInDsdStream.ProbeFreqHz"/>。</summary>
+        public static uint ProbeFreqHz(string path) => BuiltInDsdStream.ProbeFreqHz(path);
     }
 
     /// <summary>内建 DSD 1-bit 流（源码在数组或文件，统一输出 L/R 交织字节）。</summary>
@@ -241,6 +244,101 @@ namespace CelesteMusicPlayer
             >= 5644800 => DsdRate.Dsd128,
             _ => DsdRate.Dsd64,
         };
+
+        /// <summary>只读文件头部取 DSD 位时钟频率（Hz，如 2822400 / 5644800），失败返回 0。
+        /// 用于「按 DSD 级别选 PCM 回退采样率」：不解码、不载入数据，开销可忽略。</summary>
+        public static uint ProbeFreqHz(string path)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path) || !File.Exists(path))
+                {
+                    return 0;
+                }
+
+                string ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+                FileStream fs = File.OpenRead(path);
+                try
+                {
+                    if (ext == ".dsf")
+                    {
+                        if (ReadTag(fs, 4) != "DSD ")
+                        {
+                            return 0;
+                        }
+
+                        ReadI64(fs);          // header size
+                        fs.Position += 16;    // fileTotalSize(8) + metadataPtr(8)
+                        if (ReadTag(fs, 4) != "fmt ")
+                        {
+                            return 0;
+                        }
+
+                        ReadI64(fs);          // fmt chunk size
+                        fs.Position += 8;     // version(4) + format id(4)
+                        ReadU32(fs);          // channel type
+                        ReadU32(fs);          // channel count
+                        return ReadU32(fs);   // sampling frequency，如 2822400
+                    }
+
+                    if (ext == ".dff")
+                    {
+                        if (ReadTag(fs, 4) != "FRM8")
+                        {
+                            return 0;
+                        }
+
+                        ReadI64(fs);          // FRM8 size
+                        if (ReadTag(fs, 4) != "DSD ")
+                        {
+                            return 0;
+                        }
+
+                        while (fs.Position + 12 <= fs.Length)
+                        {
+                            string id = ReadTag(fs, 4);
+                            long size = ReadI64(fs);
+                            if (id == "PROP")
+                            {
+                                long propEnd = fs.Position + size;
+                                ReadTag(fs, 4); // "SND "
+                                while (fs.Position + 8 <= propEnd && fs.Position < fs.Length)
+                                {
+                                    string sid = ReadTag(fs, 4);
+                                    long ssize = ReadI64(fs);
+                                    if (sid == "FS  ")
+                                    {
+                                        return ReadU32(fs);
+                                    }
+
+                                    fs.Position = Math.Min(fs.Position + ssize, fs.Length);
+                                }
+
+                                return 0;
+                            }
+
+                            if (id == "DSD ")
+                            {
+                                // 数据块到了还没找到 FS，说明没有采样率信息
+                                return 0;
+                            }
+
+                            fs.Position = Math.Min(fs.Position + size, fs.Length);
+                        }
+                    }
+                }
+                finally
+                {
+                    fs.Dispose();
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("BuiltInDsdDecoder.cs", caught);
+            }
+
+            return 0;
+        }
 
         // ---------- 读取（统一 L/R 交织字节） ----------
         public int Read(byte[] buffer, int offset, int count)

@@ -50,8 +50,24 @@ namespace CelesteMusicPlayer
         /// <summary>电平表声道数（0 = 当前无可测电平）。</summary>
         public int LevelMeterChannels => _hifiOut?.LevelMeterChannels ?? 0;
 
+        /// <summary>读取实时频谱（真 FFT，对数分频）到调用方数组，返回是否取到。
+        /// false = 未播放 / DSD 直出 / 样本不足，UI 应回退到装饰性动画。UI 线程调用。</summary>
+        public bool TryGetSpectrum(float[] bandsOut) => _hifiOut?.TryGetSpectrum(bandsOut) ?? false;
+
         /// <summary>设置交叉淡化时长（毫秒），0 = 关闭（无缝硬切）。播放中调用立即生效。</summary>
         public void SetCrossfade(int milliseconds) => _hifiOut?.SetCrossfade(milliseconds);
+
+        /// <summary>设置输出缓冲区大小（毫秒，20~500）。越小越跟手，越大越抗卡顿。下次开播生效。</summary>
+        public void SetOutputBufferMs(int ms)
+        {
+            if (_hifiOut != null)
+            {
+                _hifiOut.OutputBufferMs = ms;
+            }
+        }
+
+        /// <summary>当前输出缓冲区大小（毫秒）。</summary>
+        public int OutputBufferMs => _hifiOut?.OutputBufferMs ?? 0;
 
         /// <summary>设置采样率升频目标（Hz，0=关闭）。播放中调用只保存，下次开播生效。</summary>
         public void SetResampleTargetRate(int hz) => _hifiOut?.SetResampleTargetRate(hz);
@@ -312,8 +328,10 @@ namespace CelesteMusicPlayer
                     // 改为按 44.1k 家族候选采样率从高到低尝试，尽量用最高受支持档位（如 352.8/176.4/88.2k）。
                     if (_outputMode == HiFiOutputBackend.OutputMode.Asio)
                     {
-                        // DSD/44.1k 家族受支持档候选（前向兼容把 44.1k 精确倍率优先）
-                        int[] cands = { 352800, 176400, 88200, 44100 };
+                        // 按源文件的实际采样家族与 DSD 级别生成候选（从高到低）：
+                        // 既适配 48k 家族的 DSD，也不再对 DSD64 白试一次 352.8k 的无谓上采样。
+                        int[] cands = BuildPcmFallbackRates(path);
+                        StartupLog.Write("[DSD回退] 候选采样率=" + string.Join(",", cands) + " 源=" + path);
                         foreach (int rate in cands)
                         {
                             string fallback = Path.Combine(Path.GetDirectoryName(targetWav) ?? cacheDir, $"{key}.{rate}f.wav");
@@ -467,6 +485,54 @@ namespace CelesteMusicPlayer
         {
             string ext = System.IO.Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
             return ext is ".dsf" or ".dff";
+        }
+
+        /// <summary>为「设备不认源格式」的重采样回退生成 PCM 采样率候选（从高到低）。
+        /// <para>先看源文件真实采样率属于 44.1k 还是 48k 家族，再按 DSD 倍率决定最高档：
+        /// DSD64 最高 176.4k、DSD128 最高 352.8k、DSD256 及以上最高 705.6k。
+        /// 这样既不会漏掉 48k 家族的 DSD，也不会对 DSD64 白跑一次 352.8k 的整轨转码。</para></summary>
+        private static int[] BuildPcmFallbackRates(string sourcePath)
+        {
+            int baseRate = 44100;
+            int maxMult = 8; // 默认按 DSD128 档（352.8k / 384k）
+
+            try
+            {
+                if (IsDsdFile(sourcePath))
+                {
+                    uint freq = BuiltInDsdDecoder.ProbeFreqHz(sourcePath);
+                    if (freq > 0)
+                    {
+                        // 判断所属家族：与 48k 精确倍率吻合、且与 44.1k 倍率不吻合才算 48k 家族
+                        double r48 = freq / 48000.0;
+                        double r441 = freq / 44100.0;
+                        bool is48 = Math.Abs(r48 - Math.Round(r48)) < 0.02
+                                    && Math.Abs(r441 - Math.Round(r441)) >= 0.02;
+                        double mult = is48 ? r48 : r441;
+                        baseRate = is48 ? 48000 : 44100;
+
+                        // DSD 倍率 → 合理的 PCM 最高倍率：64→4x、128→8x、256/512→16x
+                        maxMult = mult >= 256 ? 16 : (mult >= 128 ? 8 : 4);
+                    }
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("AudioPlaybackEngine.cs", caught);
+            }
+
+            System.Collections.Generic.List<int> list = new();
+            for (int r = baseRate * maxMult; r >= baseRate; r /= 2)
+            {
+                list.Add(r);
+            }
+
+            if (list.Count == 0 || list[list.Count - 1] != baseRate)
+            {
+                list.Add(baseRate);
+            }
+
+            return list.ToArray();
         }
 
         /// <summary>DSD/DoP 原生直出（内存预读版）：后台预读线程把 DSF/DFF 解析封装为 DoP 容器帧

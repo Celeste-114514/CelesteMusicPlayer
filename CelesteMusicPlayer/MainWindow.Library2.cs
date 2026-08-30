@@ -1143,7 +1143,7 @@ namespace CelesteMusicPlayer
                 DefaultButton = ContentDialogButton.Close,
                 XamlRoot = Content.XamlRoot
             };
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
@@ -1168,7 +1168,7 @@ namespace CelesteMusicPlayer
         private void UpdateLibraryNavHighlight()
         {
             Brush accent = ResolveAccentBrush();
-            Brush fg = ResolveContrastingForeground(accent);
+            Brush fg = ColorHelper.ResolveContrastingForeground(accent);
             var transparent = new SolidColorBrush(Colors.Transparent);
             Brush capsuleIdle = ResolveCapsuleFillBrush();
             Brush capsuleBorder = ResolveNavCapsuleBorderBrush();
@@ -1290,7 +1290,7 @@ namespace CelesteMusicPlayer
 
         private void RefreshFolderBrowserSelectionChrome()
         {
-            HashSet<object>? selectedSet = BuildSelectedItemsLookup(FolderBrowserView);
+            HashSet<object>? selectedSet = VisualTreeWalker.BuildSelectedItemsLookup(FolderBrowserView);
             foreach (ListViewItem container in EnumerateRealizedListViewItems(FolderBrowserView))
             {
                 if (FolderBrowserView.ItemFromContainer(container) is FolderBrowserItem item)
@@ -1306,7 +1306,7 @@ namespace CelesteMusicPlayer
 
         private void RefreshAlbumWallSelectionChrome(GridView grid, IEnumerable<AlbumEntry> albums)
         {
-            HashSet<object>? selectedSet = BuildSelectedItemsLookup(grid);
+            HashSet<object>? selectedSet = VisualTreeWalker.BuildSelectedItemsLookup(grid);
             bool anyRealized = false;
             foreach (GridViewItem container in EnumerateRealizedGridViewItems(grid))
             {
@@ -1338,7 +1338,7 @@ namespace CelesteMusicPlayer
             HashSet<object>? selectedSet = null)
         {
             Brush accent = ResolveAccentBrush();
-            Brush selectedFg = ResolveContrastingForeground(accent);
+            Brush selectedFg = ColorHelper.ResolveContrastingForeground(accent);
             bool multiOnThisGrid = _isMultiSelectMode && ReferenceEquals(_multiSelectAlbumGrid, grid);
             Brush unselectedBg = multiOnThisGrid
                 ? CreateMultiSelectFrostBrush()
@@ -1350,10 +1350,10 @@ namespace CelesteMusicPlayer
             DisableContainerSelectionCheckMark(container);
 
             bool selected = multiOnThisGrid
-                ? IsItemSelected(grid, album, selectedSet)
+                ? VisualTreeWalker.IsItemSelected(grid, album, selectedSet)
                 : ReferenceEquals(grid.SelectedItem, album);
 
-            Border? chrome = FindTaggedBorder(container, "AlbumRowChrome");
+            Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "AlbumRowChrome");
             if (chrome != null)
             {
                 chrome.CornerRadius = new CornerRadius(8);
@@ -1437,7 +1437,7 @@ namespace CelesteMusicPlayer
         /// <summary>根据 TextBlock.Tag 取出对应字段的完整文案</summary>
         private static string? ResolveCellDetailText(FrameworkElement element)
         {
-            PlaylistItem? item = FindPlaylistItem(element);
+            PlaylistItem? item = VisualTreeWalker.FindPlaylistItem(element);
             if (item == null || element.Tag is not string field)
             {
                 return null;

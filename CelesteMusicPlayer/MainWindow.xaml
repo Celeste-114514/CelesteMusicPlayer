@@ -4309,6 +4309,13 @@
                             </Button>
                         </Grid>
                         <ComboBox x:Name="AudioOutputDeviceCombo" HorizontalAlignment="Stretch" SelectionChanged="AudioOutputDeviceCombo_SelectionChanged" PlaceholderText="输出设备" />
+                        <!-- 热插拔提示：设备拔插时短暂显示，10 秒后自动收起 -->
+                        <TextBlock x:Name="AudioDeviceHotplugText"
+                                   FontSize="11"
+                                   Opacity="0.75"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="0,4,0,0" />
                     </StackPanel>
 
                     <!-- 链路状态（可视化：源 → DSP → 输出） -->
@@ -4516,6 +4523,37 @@
                                 Opacity="0.6"
                                 TextWrapping="WrapWholeWords"
                                 Text="仅 WASAPI 独占模式生效（共享/ASIO 不升频）。设备不支持目标采样率时自动退回不升频。质量/抖动改动在下次播放时生效。" />
+                        </StackPanel>
+
+                        <!-- 输出缓冲区 -->
+                        <StackPanel Spacing="8" Margin="0,16,0,0">
+                            <TextBlock Text="输出缓冲区" FontSize="14" FontWeight="SemiBold" />
+                            <Grid ColumnSpacing="8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="92" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Text="缓冲时长" Opacity="0.7" VerticalAlignment="Center" />
+                                <ComboBox
+                                    x:Name="OutputBufferCombo"
+                                    Grid.Column="1"
+                                    HorizontalAlignment="Stretch"
+                                    VerticalAlignment="Center"
+                                    SelectionChanged="OutputBufferCombo_SelectionChanged" />
+                                <TextBlock
+                                    x:Name="OutputBufferHintText"
+                                    Grid.Column="2"
+                                    Text="推荐"
+                                    FontSize="12"
+                                    VerticalAlignment="Center"
+                                    MinWidth="58" />
+                            </Grid>
+                            <TextBlock
+                                FontSize="12"
+                                Opacity="0.6"
+                                TextWrapping="WrapWholeWords"
+                                Text="缓冲越大越不容易卡顿、爆音；缓冲越小声音越跟手。播放中有爆音/断续就调大，觉得拖沓就调小。改动在下一首歌开始时生效。" />
                         </StackPanel>
                     </StackPanel>
 

@@ -124,6 +124,23 @@ namespace CelesteMusicPlayer
                     folder   TEXT,
                     file_path TEXT NOT NULL
                 );
+                -- 阶段4：曲库标签索引。避免每次启动都对全部音频重新解析标签（TagLib 解析是启动最重的部分）。
+                -- mtime_utc + size 作为「文件是否被改动过」的校验键，二者一致才认为缓存有效。
+                CREATE TABLE IF NOT EXISTS tracks (
+                    file_path      TEXT PRIMARY KEY,
+                    mtime_utc      INTEGER NOT NULL DEFAULT 0,
+                    size           INTEGER NOT NULL DEFAULT 0,
+                    title          TEXT NOT NULL DEFAULT '',
+                    artist         TEXT NOT NULL DEFAULT '',
+                    album_artist   TEXT NOT NULL DEFAULT '',
+                    album          TEXT NOT NULL DEFAULT '',
+                    track_no       INTEGER NOT NULL DEFAULT 0,
+                    disc_no        INTEGER NOT NULL DEFAULT 0,
+                    year           INTEGER NOT NULL DEFAULT 0,
+                    genre          TEXT NOT NULL DEFAULT '',
+                    duration_ticks INTEGER NOT NULL DEFAULT 0,
+                    updated_at     INTEGER NOT NULL DEFAULT 0
+                );
                 CREATE TABLE IF NOT EXISTS playback_history (
                     id            INTEGER PRIMARY KEY AUTOINCREMENT,
                     file_path     TEXT NOT NULL,
@@ -696,6 +713,272 @@ namespace CelesteMusicPlayer
             }
             catch
             {
+            }
+        }
+
+        // ---------------------------------------------------------------- tracks（曲库标签索引）
+
+        /// <summary>一条音频的标签快照，外加用于判定缓存是否仍然有效的文件指纹（修改时间 + 大小）。</summary>
+        public sealed class TrackMeta
+        {
+            public string FilePath { get; set; } = string.Empty;
+
+            /// <summary>文件最后修改时间（UTC 时间戳，秒或更细粒度由调用方决定）。</summary>
+            public long MtimeUtc { get; set; }
+
+            public long Size { get; set; }
+
+            public string Title { get; set; } = string.Empty;
+
+            public string Artist { get; set; } = string.Empty;
+
+            public string AlbumArtist { get; set; } = string.Empty;
+
+            public string Album { get; set; } = string.Empty;
+
+            public uint Track { get; set; }
+
+            public uint Disc { get; set; }
+
+            public uint Year { get; set; }
+
+            public string Genre { get; set; } = string.Empty;
+
+            public long DurationTicks { get; set; }
+        }
+
+        /// <summary>批量查询已缓存的标签，只返回指纹仍然匹配的条目（文件被改动过则视为失效）。</summary>
+        /// <param name="stamps">每个待加载文件的 (路径, 修改时间UtcTicks, 大小)。</param>
+        public static Dictionary<string, TrackMeta> LoadTrackIndex(IEnumerable<(string path, long mtimeUtc, long size)> stamps)
+        {
+            var result = new Dictionary<string, TrackMeta>(StringComparer.OrdinalIgnoreCase);
+            EnsureMigrated();
+
+            // 用指纹表在内存里比对，避免为校验把每个文件都拼进 SQL
+            var fingerprint = new Dictionary<string, (long mt, long sz)>(StringComparer.OrdinalIgnoreCase);
+            foreach ((string path, long mtimeUtc, long size) in stamps)
+            {
+                fingerprint[path] = (mtimeUtc, size);
+            }
+
+            if (fingerprint.Count == 0)
+            {
+                return result;
+            }
+
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    foreach (List<string> chunk in Chunk(fingerprint.Keys, SqlChunkSize))
+                    {
+                        using var cmd = conn.CreateCommand();
+                        string placeholders = string.Join(",", Enumerable.Range(0, chunk.Count).Select(i => "$p" + i));
+                        for (int i = 0; i < chunk.Count; i++)
+                        {
+                            cmd.Parameters.AddWithValue("$p" + i, chunk[i]);
+                        }
+
+                        cmd.CommandText =
+                            "SELECT file_path, mtime_utc, size, title, artist, album_artist, album, " +
+                            "track_no, disc_no, year, genre, duration_ticks " +
+                            "FROM tracks WHERE file_path IN (" + placeholders + ")";
+
+                        using var reader = cmd.ExecuteReader();
+                        while (reader.Read())
+                        {
+                            string path = reader.GetString(0);
+                            long mt = reader.GetInt64(1);
+                            long sz = reader.GetInt64(2);
+
+                            // 指纹不一致 = 文件被替换/重新打过标签，缓存作废
+                            if (!fingerprint.TryGetValue(path, out var fp) || fp.mt != mt || fp.sz != sz)
+                            {
+                                continue;
+                            }
+
+                            result[path] = new TrackMeta
+                            {
+                                FilePath = path,
+                                MtimeUtc = mt,
+                                Size = sz,
+                                Title = reader.GetString(3),
+                                Artist = reader.GetString(4),
+                                AlbumArtist = reader.GetString(5),
+                                Album = reader.GetString(6),
+                                Track = (uint)reader.GetInt64(7),
+                                Disc = (uint)reader.GetInt64(8),
+                                Year = (uint)reader.GetInt64(9),
+                                Genre = reader.GetString(10),
+                                DurationTicks = reader.GetInt64(11)
+                            };
+                        }
+                    }
+                }
+            }
+            catch
+            {
+                // 索引不可用不应影响启动：调用方会退回逐个解析标签
+            }
+
+            return result;
+        }
+
+        /// <summary>批量写入/更新标签索引。失败静默（索引只是加速手段，不是数据源）。</summary>
+        public static void UpsertTracks(IEnumerable<TrackMeta> metas)
+        {
+            EnsureMigrated();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    foreach (List<TrackMeta> chunk in Chunk(metas, SqlChunkSize))
+                    {
+                        if (chunk.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        using var tx = conn.BeginTransaction();
+                        using var cmd = conn.CreateCommand();
+                        cmd.Transaction = tx;
+                        cmd.CommandText = @"
+                            INSERT INTO tracks(file_path, mtime_utc, size, title, artist, album_artist, album,
+                                               track_no, disc_no, year, genre, duration_ticks, updated_at)
+                            VALUES($fp, $mt, $sz, $ti, $ar, $aa, $al, $tn, $dn, $yr, $ge, $du, $ua)
+                            ON CONFLICT(file_path) DO UPDATE SET
+                                mtime_utc = excluded.mtime_utc,
+                                size = excluded.size,
+                                title = excluded.title,
+                                artist = excluded.artist,
+                                album_artist = excluded.album_artist,
+                                album = excluded.album,
+                                track_no = excluded.track_no,
+                                disc_no = excluded.disc_no,
+                                year = excluded.year,
+                                genre = excluded.genre,
+                                duration_ticks = excluded.duration_ticks,
+                                updated_at = excluded.updated_at";
+
+                        var fp = cmd.Parameters.Add("$fp", SqliteType.Text);
+                        var mt = cmd.Parameters.Add("$mt", SqliteType.Integer);
+                        var sz = cmd.Parameters.Add("$sz", SqliteType.Integer);
+                        var ti = cmd.Parameters.Add("$ti", SqliteType.Text);
+                        var ar = cmd.Parameters.Add("$ar", SqliteType.Text);
+                        var aa = cmd.Parameters.Add("$aa", SqliteType.Text);
+                        var al = cmd.Parameters.Add("$al", SqliteType.Text);
+                        var tn = cmd.Parameters.Add("$tn", SqliteType.Integer);
+                        var dn = cmd.Parameters.Add("$dn", SqliteType.Integer);
+                        var yr = cmd.Parameters.Add("$yr", SqliteType.Integer);
+                        var ge = cmd.Parameters.Add("$ge", SqliteType.Text);
+                        var du = cmd.Parameters.Add("$du", SqliteType.Integer);
+                        var ua = cmd.Parameters.Add("$ua", SqliteType.Integer);
+
+                        long now = DateTime.UtcNow.Ticks;
+                        foreach (TrackMeta m in chunk)
+                        {
+                            fp.Value = m.FilePath;
+                            mt.Value = m.MtimeUtc;
+                            sz.Value = m.Size;
+                            ti.Value = m.Title ?? string.Empty;
+                            ar.Value = m.Artist ?? string.Empty;
+                            aa.Value = m.AlbumArtist ?? string.Empty;
+                            al.Value = m.Album ?? string.Empty;
+                            tn.Value = (long)m.Track;
+                            dn.Value = (long)m.Disc;
+                            yr.Value = (long)m.Year;
+                            ge.Value = m.Genre ?? string.Empty;
+                            du.Value = m.DurationTicks;
+                            ua.Value = now;
+                            cmd.ExecuteNonQuery();
+                        }
+
+                        tx.Commit();
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>删除指定路径的索引记录（文件已被移走/删除时使用）。失败静默。</summary>
+        public static void DeleteTracks(IEnumerable<string> paths)
+        {
+            EnsureMigrated();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    foreach (List<string> chunk in Chunk(paths, SqlChunkSize))
+                    {
+                        if (chunk.Count == 0)
+                        {
+                            continue;
+                        }
+
+                        using var tx = conn.BeginTransaction();
+                        using var cmd = conn.CreateCommand();
+                        cmd.Transaction = tx;
+                        string placeholders = string.Join(",", Enumerable.Range(0, chunk.Count).Select(i => "$p" + i));
+                        for (int i = 0; i < chunk.Count; i++)
+                        {
+                            cmd.Parameters.AddWithValue("$p" + i, chunk[i]);
+                        }
+
+                        cmd.CommandText = "DELETE FROM tracks WHERE file_path IN (" + placeholders + ")";
+                        cmd.ExecuteNonQuery();
+                        tx.Commit();
+                    }
+                }
+            }
+            catch
+            {
+            }
+        }
+
+        /// <summary>索引中的曲目总数（日志/诊断用）。失败返回 -1。</summary>
+        public static int CountTracks()
+        {
+            EnsureMigrated();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText = "SELECT COUNT(*) FROM tracks";
+                    return Convert.ToInt32(cmd.ExecuteScalar());
+                }
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
+        /// <summary>SQL 参数个数上限的保守分块大小。</summary>
+        private const int SqlChunkSize = 400;
+
+        private static IEnumerable<List<T>> Chunk<T>(IEnumerable<T> source, int size)
+        {
+            List<T> bucket = new(size);
+            foreach (T item in source)
+            {
+                bucket.Add(item);
+                if (bucket.Count >= size)
+                {
+                    yield return bucket;
+                    bucket = new List<T>(size);
+                }
+            }
+
+            if (bucket.Count > 0)
+            {
+                yield return bucket;
             }
         }
     }

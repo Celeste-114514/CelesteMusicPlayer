@@ -97,7 +97,7 @@ namespace CelesteMusicPlayer
                 }
 
                 if (Enum.TryParse(settings.PlaybackOrder, ignoreCase: true, out PlaybackOrder order)
-                    && order != _playbackOrder)
+                    && order != _orderResolver.Order)
                 {
                     SetPlaybackOrder(order, persist: false);
                 }

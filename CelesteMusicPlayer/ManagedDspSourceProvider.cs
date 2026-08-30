@@ -46,6 +46,12 @@ namespace CelesteMusicPlayer
         private readonly LevelMeter _levelMeter = new();
         private bool _meterEnabled;
 
+        // 实时频谱分析：与电平表共用同一批 post-DSP 样本。
+        // 渲染线程只做单声道降混 + 环形缓冲写入（不分配、不做 FFT），FFT 由 UI 线程执行，不影响音频实时性。
+        private const int SpectrumBandCount = FormatHelper.WaveBarCount; // 单一来源，不再手工同步
+        private readonly SpectrumAnalyzer _spectrum = new(SpectrumBandCount);
+        private bool _spectrumEnabled;
+
         // 软件总音量（共享/ASIO 用，采样级增益；NAudio WasapiOut.Volume 不支持，故由 DSP 链实现）。
         private volatile float _volumeGain = 1f;
 
@@ -380,7 +386,10 @@ namespace CelesteMusicPlayer
         /// <summary>重算 DSP 是否生效；当无任一 DSP 生效时后续 Read 直接直通（bit-perfect，零逐样本开销）。</summary>
         private void RefreshActive()
         {
-            _active = !_bypassAll && (_eqEnabled || _chEnabled || _limiterEnabled || _rgActive || Math.Abs(_headroomDb) > 0.001
+            // 注意：单独的「软限幅 EnableLimiter」不应激活托管 DSP 链 —— 源 PCM 不会超 ±1，
+            // 软限幅本就不改变样本，故保持 bit-perfect 直通。仅当 EQ/声道/headroom/音量/RG/卷积
+            // 任一真正改变信号时才走 ProcessBlock；这样独占模式下「无任何 DSP」即为严格 bit-perfect。
+            _active = !_bypassAll && (_eqEnabled || _chEnabled || _rgActive || Math.Abs(_headroomDb) > 0.001
                 || Math.Abs(_volumeGain - 1f) > 0.0001f || _convEnabled);
         }
 
@@ -461,9 +470,9 @@ namespace CelesteMusicPlayer
                 return read;
             }
 
-            // 无 DSP 生效 → 全部直通（bit-perfect）；若电平表开启则额外测量，
+            // 无 DSP 生效 → 全部直通（bit-perfect）；若电平表/频谱开启则额外测量，
             // 但只解码到临时 float 缓冲测量，绝不改写输出缓冲 → 仍严格 bit-perfect。
-            if (_meterEnabled)
+            if (_meterEnabled || _spectrumEnabled)
             {
                 MeasurePassthrough(buffer, offset, read);
             }
@@ -621,12 +630,30 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            // 实时电平：测量 post-DSP 信号（即实际送往输出的样本），供 UI 电平条显示
-            if (_meterEnabled) _levelMeter.Update(buf, n, ch);            // 回写 RG 渐变进度（供下一次 block 继续）
+            // 实时电平/频谱：测量 post-DSP 信号（即实际送往输出的样本）
+            if (_meterEnabled)
+            {
+                _levelMeter.Update(buf, n, ch);
+            }
+
+            if (_spectrumEnabled)
+            {
+                _spectrum.Push(buf, n, ch);
+            }
+
+            // 回写 RG 渐变进度（供下一次 block 继续）
             _rgCurrentDb = rgCurrentDb;
             _rgRampLeft = Math.Max(0, rgRampLeft);
 
-            // 编码：float → byte
+            // 编码：float → byte。整数回写时叠加 TPDF dither（幅度 = 目标位深 1 LSB）后舍入并钳制，
+            // 消除截断量化失真（与 ResamplingSourceProvider 的 24bit dither 一致）；
+            // 直通路径不经过此处，故不影响 bit-perfect。
+            float lsb = isFloat ? 0f : bits switch
+            {
+                32 => 1f / 2147483647f,
+                24 => 1f / 8388607f,
+                _ => 1f / 32767f
+            };
             if (isFloat)
             {
                 int bo = offset;
@@ -637,9 +664,12 @@ namespace CelesteMusicPlayer
                 int bo = offset;
                 for (int i = 0; i < n; i++, bo += 4)
                 {
-                    int v = (int)(buf[i] * 2147483647f);
-                    b[bo] = (byte)(v & 0xFF); b[bo + 1] = (byte)((v >> 8) & 0xFF);
-                    b[bo + 2] = (byte)((v >> 16) & 0xFF); b[bo + 3] = (byte)((v >> 24) & 0xFF);
+                    float s = buf[i] + TpdfDither(_ditherRng, lsb);
+                    long v = (long)Math.Round(s * 2147483647.0);
+                    if (v > 2147483647L) v = 2147483647L; else if (v < -2147483648L) v = -2147483648L;
+                    int iv = (int)v;
+                    b[bo] = (byte)(iv & 0xFF); b[bo + 1] = (byte)((iv >> 8) & 0xFF);
+                    b[bo + 2] = (byte)((iv >> 16) & 0xFF); b[bo + 3] = (byte)((iv >> 24) & 0xFF);
                 }
             }
             else if (bits == 24)
@@ -647,7 +677,9 @@ namespace CelesteMusicPlayer
                 int bo = offset;
                 for (int i = 0; i < n; i++, bo += 3)
                 {
-                    int v = (int)(buf[i] * 8388607f);
+                    float s = buf[i] + TpdfDither(_ditherRng, lsb);
+                    int v = (int)Math.Round(s * 8388607.0);
+                    if (v > 8388607) v = 8388607; else if (v < -8388608) v = -8388608;
                     b[bo] = (byte)(v & 0xFF); b[bo + 1] = (byte)((v >> 8) & 0xFF); b[bo + 2] = (byte)((v >> 16) & 0xFF);
                 }
             }
@@ -656,8 +688,11 @@ namespace CelesteMusicPlayer
                 int bo = offset;
                 for (int i = 0; i < n; i++, bo += 2)
                 {
-                    short s = (short)(buf[i] * 32767f);
-                    b[bo] = (byte)(s & 0xFF); b[bo + 1] = (byte)((s >> 8) & 0xFF);
+                    float s = buf[i] + TpdfDither(_ditherRng, lsb);
+                    int v = (int)Math.Round(s * 32767.0);
+                    if (v > 32767) v = 32767; else if (v < -32768) v = -32768;
+                    short sv = (short)v;
+                    b[bo] = (byte)(sv & 0xFF); b[bo + 1] = (byte)((sv >> 8) & 0xFF);
                 }
             }
         }
@@ -671,7 +706,18 @@ namespace CelesteMusicPlayer
             return _tempFloatBuf;
         }
 
-        #region 实时电平表（测量 post-DSP 信号）
+        // 整数回写 dither：TPDF（三角分布）抖动，幅度按目标位深 1 LSB，消除截断量化失真。
+        // 仅在 ProcessBlock（DSP 已修改信号）内使用；直通路径不经过，故不影响 bit-perfect。
+        private readonly Random _ditherRng = new();
+
+        /// <summary>TPDF 抖动：两个均匀随机数相减，幅度 ±amp×LSB。用于整数回写量化前的抖动。</summary>
+        private static float TpdfDither(Random rng, float lsb)
+        {
+            float r = (float)(rng.NextDouble() - rng.NextDouble()); // [-1,1)
+            return r * lsb;
+        }
+
+        #region 实时电平表 / 频谱（测量 post-DSP 信号）
 
         /// <summary>开启/关闭电平测量。开启时按声道数重置内部缓冲（播放会话开始时调用）。
         /// 关闭时 Read 完全不做解码，恢复零开销 bit-perfect 直通。</summary>
@@ -683,6 +729,24 @@ namespace CelesteMusicPlayer
 
         /// <summary>电平表实例（渲染线程写、UI 线程读，内部有锁）。</summary>
         public LevelMeter LevelMeter => _levelMeter;
+
+        /// <summary>开启/关闭频谱采样。开启时按声道数与源采样率重建分频表。
+        /// 关闭后渲染线程不再降混写入（零开销）。</summary>
+        public void SetSpectrum(bool enabled)
+        {
+            _spectrumEnabled = enabled;
+            if (enabled)
+            {
+                _spectrum.Reset(_channels, _format.SampleRate, SpectrumBandCount);
+            }
+            else
+            {
+                _spectrum.SetEnabled(false);
+            }
+        }
+
+        /// <summary>频谱分析器实例（渲染线程写样本、UI 线程算 FFT，内部有锁）。</summary>
+        public SpectrumAnalyzer Spectrum => _spectrum;
 
         /// <summary>byte → float 解码（支持 float / 32bit / 24bit / 16bit），供 DSP 与电平测量共用。</summary>
         private void DecodeToFloat(byte[] b, int offset, int n, float[] buf)
@@ -716,7 +780,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>bit-perfect 直通路径下的电平测量：解码到临时 float 缓冲后更新电平表，
+        /// <summary>bit-perfect 直通路径下的测量：解码到临时 float 缓冲后更新电平表并喂频谱，
         /// 不改写输出缓冲，保证输出严格 bit-perfect。</summary>
         private void MeasurePassthrough(byte[] b, int offset, int count)
         {
@@ -737,7 +801,15 @@ namespace CelesteMusicPlayer
 
             float[] buf = GetTempFloatBuffer(n);
             DecodeToFloat(b, offset, n, buf);
-            _levelMeter.Update(buf, n, ch);
+            if (_meterEnabled)
+            {
+                _levelMeter.Update(buf, n, ch);
+            }
+
+            if (_spectrumEnabled)
+            {
+                _spectrum.Push(buf, n, ch);
+            }
         }
 
         #endregion

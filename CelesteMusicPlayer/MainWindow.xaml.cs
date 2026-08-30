@@ -525,8 +525,9 @@ namespace CelesteMusicPlayer
         private double _volumeToSave;
         private DispatcherQueueTimer? _libraryWatchDebounce;
         private bool _libraryRescanInProgress;
-        private PlaybackOrder _playbackOrder = PlaybackOrder.ListLoop;
-        private readonly Random _playbackRandom = new();
+        // 播放顺序与随机源已移到 PlaybackOrderResolver（阶段7 解耦）。
+        // 读写播放顺序一律走 _orderResolver.Order，随机索引走 _orderResolver.NextRandomIndex。
+        private readonly PlaybackOrderResolver _orderResolver = new();
         private string _librarySearchText = string.Empty;
         private DispatcherQueueTimer? _librarySearchDebounceTimer;
         private readonly List<string> _folderSearchMatches = new();
@@ -596,9 +597,10 @@ namespace CelesteMusicPlayer
 
         // ---------- 右侧正在播放 / 波形 / 歌词 ----------
         private DispatcherQueueTimer? _waveformTimer;
-        private const int WaveBarCount = 40;
+        private const int WaveBarCount = FormatHelper.WaveBarCount; // 单一来源：见 FormatHelper.WaveBarCount
         private readonly double[] _waveLevels = new double[WaveBarCount];
         private readonly double[] _wavePhases = new double[WaveBarCount];
+        private readonly float[] _spectrumBands = new float[WaveBarCount]; // 真 FFT 频谱（每柱一个 0..1 电平）
         private readonly Random _waveRandom = new();
         private int _waveformIdleSettleTicks;
         private List<LyricLine> _lyricLines = new();
@@ -614,7 +616,9 @@ namespace CelesteMusicPlayer
         // 歌曲面板小封面异步加载：防止同一路径并发重复读取
         private readonly System.Collections.Generic.HashSet<string> _rowCoverLoading = new(System.StringComparer.OrdinalIgnoreCase);
         // 封面解码缓存（按路径复用已解码封面，避免滚动/重复时反复 IO+解码造成卡顿）；限流并发封面解码
+        // BitmapImage 持有解码后的像素，逐曲播放会无限累积 —— 这是“播放越多内存越大”的主因，故设上限。
         private readonly System.Collections.Concurrent.ConcurrentDictionary<string, Microsoft.UI.Xaml.Media.Imaging.BitmapImage> _coverImageCache = new(System.StringComparer.OrdinalIgnoreCase);
+        private const int RowCoverCacheMax = 1024;
         private readonly System.Threading.SemaphoreSlim _coverLoadGate = new(4);
 
         // 歌词平滑滚动
@@ -636,6 +640,8 @@ namespace CelesteMusicPlayer
             InitializeLevelMeter();
             InitializeCrossfadeUi();
             InitializeSrcUi();
+            InitializeOutputBufferUi();
+            StartAudioDeviceWatcher();
             try
             {
                 _mainWindowHwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);

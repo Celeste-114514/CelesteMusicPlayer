@@ -364,9 +364,9 @@ namespace CelesteMusicPlayer
         private Color ResolveUiBaseTintColor()
         {
             // 优先取右侧面板实际底色（用户看到的整体 UI 区域色）
-            if (TryGetBrushColor(NowPlayingPane?.Background, out Color paneColor)
+            if (ColorHelper.TryGetBrushColor(NowPlayingPane?.Background, out Color paneColor)
                 && paneColor.A > 0
-                && !IsNearWhite(paneColor))
+                && !ColorHelper.IsNearWhite(paneColor))
             {
                 return Color.FromArgb(255, paneColor.R, paneColor.G, paneColor.B);
             }
@@ -383,9 +383,9 @@ namespace CelesteMusicPlayer
 
             foreach (string key in keys)
             {
-                if (TryGetThemeColor(anchor, key, out Color themeColor)
+                if (ColorHelper.TryGetThemeColor(anchor, key, out Color themeColor)
                     && themeColor.A > 0
-                    && !IsNearWhite(themeColor))
+                    && !ColorHelper.IsNearWhite(themeColor))
                 {
                     return Color.FromArgb(255, themeColor.R, themeColor.G, themeColor.B);
                 }
@@ -408,7 +408,7 @@ namespace CelesteMusicPlayer
             try
             {
                 // COLORREF = ABGR（DWMWA_BORDER_COLOR=34 / DWMWA_CAPTION_COLOR=35）
-                int color = MakeColorRef(ResolveUiBaseTintColor());
+                int color = ColorHelper.MakeColorRef(ResolveUiBaseTintColor());
                 int hwndColor = unchecked((int)(uint)color);
                 DwmSetWindowAttributeInt(_mainWindowHwnd, 34, ref hwndColor, 4);
                 DwmSetWindowAttributeInt(_mainWindowHwnd, 35, ref hwndColor, 4);
@@ -418,90 +418,6 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.WriteException("ApplyBorderColorFromUiTint", ex);
             }
-        }
-
-
-        private static int MakeColorRef(Color c)
-        {
-            // Windows COLORREF = 0x00 BB GG RR
-            return unchecked((int)((uint)c.B | ((uint)c.G << 8) | ((uint)c.R << 16)));
-        }
-
-
-        private static bool IsNearWhite(Color color)
-        {
-            return color.R >= 220 && color.G >= 220 && color.B >= 220;
-        }
-
-
-        private static bool TryGetBrushColor(Brush? brush, out Color color)
-        {
-            if (brush is SolidColorBrush solid)
-            {
-                color = solid.Color;
-                return true;
-            }
-
-            if (brush is AcrylicBrush acrylic)
-            {
-                color = acrylic.TintColor;
-                return true;
-            }
-
-            color = default;
-            return false;
-        }
-
-
-        private static bool TryGetThemeColor(FrameworkElement? element, string key, out Color color)
-        {
-            color = default;
-            try
-            {
-                object? value = null;
-                if (element != null && element.Resources.TryGetValue(key, out object local))
-                {
-                    value = local;
-                }
-                else if (Application.Current.Resources.TryGetValue(key, out object app))
-                {
-                    value = app;
-                }
-
-                if (value is Color c)
-                {
-                    color = c;
-                    return true;
-                }
-
-                if (value is SolidColorBrush solid)
-                {
-                    color = solid.Color;
-                    return true;
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            return false;
-        }
-
-
-        /// <summary>给 ContentDialog 的按钮设置当前主题色（局部资源覆盖，不改全局、避免运行时覆盖 Application.Resources 崩溃）。</summary>
-        private static void ApplyDialogAccent(Microsoft.UI.Xaml.Controls.ContentDialog dlg)
-        {
-            try
-            {
-                Windows.UI.Color accent = ThemeColorService.CurrentAccent;
-                var accentBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(accent);
-                Windows.UI.Color pressed = Windows.UI.Color.FromArgb(255, (byte)(accent.R * 0.7), (byte)(accent.G * 0.7), (byte)(accent.B * 0.7));
-                Windows.UI.Color disabled = Windows.UI.Color.FromArgb(255, (byte)(accent.R * 0.3), (byte)(accent.G * 0.3), (byte)(accent.B * 0.3));
-                dlg.Resources["AccentButtonBackground"] = accentBrush;
-                dlg.Resources["AccentButtonBackgroundPointerOver"] = accentBrush;
-                dlg.Resources["AccentButtonBackgroundPressed"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(pressed);
-                dlg.Resources["AccentButtonBackgroundDisabled"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(disabled);
-                dlg.Resources["AccentButtonForeground"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
 
 
@@ -666,7 +582,7 @@ namespace CelesteMusicPlayer
             AppSettingsState settings = AppSettingsStore.Load();
             if (settings.AccentSource == "Custom")
             {
-                return new SolidColorBrush(ParseHexColor(settings.CustomAccentColor) ?? Color.FromArgb(255, 0, 120, 212));
+                return new SolidColorBrush(ColorHelper.ParseHexColor(settings.CustomAccentColor) ?? Color.FromArgb(255, 0, 120, 212));
             }
 
             if (Application.Current.Resources.TryGetValue("AccentFillColorDefaultBrush", out object? brushObj)
@@ -686,44 +602,7 @@ namespace CelesteMusicPlayer
 
 
         private Brush ResolveAccentForegroundBrush()
-            => ResolveContrastingForeground(ResolveAccentBrush());
-
-        /// <summary>解析 "#RRGGBB" 十六进制颜色。</summary>
-        private static Color? ParseHexColor(string? hex)
-        {
-            if (string.IsNullOrWhiteSpace(hex))
-            {
-                return null;
-            }
-
-            string h = hex.Trim().TrimStart('#');
-            if (h.Length != 6 || !int.TryParse(h, System.Globalization.NumberStyles.HexNumber, null, out int value))
-            {
-                return null;
-            }
-
-            return Color.FromArgb(255, (byte)(value >> 16), (byte)(value >> 8), (byte)value);
-        }
-
-
-        /// <summary>主题色偏深用白字，偏浅用黑字。</summary>
-        private static Brush ResolveContrastingForeground(Brush background)
-        {
-            Color color = Colors.DodgerBlue;
-            if (background is SolidColorBrush solid)
-            {
-                color = solid.Color;
-            }
-            else if (Application.Current.Resources.TryGetValue("SystemAccentColor", out object? colorObj)
-                && colorObj is Color accent)
-            {
-                color = accent;
-            }
-
-            double luminance = (0.299 * color.R) + (0.587 * color.G) + (0.114 * color.B);
-            return new SolidColorBrush(luminance < 140 ? Colors.White : Colors.Black);
-        }
-
+            => ColorHelper.ResolveContrastingForeground(ResolveAccentBrush());
 
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
@@ -733,6 +612,23 @@ namespace CelesteMusicPlayer
             PersistDesktopLyricPosition();
             _taskbarProgress?.Dispose();
             _taskbarProgress = null;
+
+            // 先停电平表定时器：否则窗口销毁后它仍会 tick 并访问已分离的 XAML 元素，
+            // 在退出时抛 COMException (0x8000FFFF)。
+            try
+            {
+                _levelMeterTimer?.Stop();
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.LevelMeter.cs", caught); }
+
+            // 同理停掉设备监听：窗口销毁后 DeviceWatcher 的 COM 回调还会继续来，
+            // 那时再去 TryEnqueue 访问已分离的 XAML 就会崩在退出阶段。
+            try
+            {
+                AudioDeviceWatcher.Stop();
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
+
             try
             {
                 TrackStatsStore.Flush();
@@ -837,7 +733,7 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             ContentDialogResult result = await dialog.ShowAsync();
             if (result == ContentDialogResult.None)
             {
@@ -1171,12 +1067,5 @@ namespace CelesteMusicPlayer
 
         private static Color WaveColorFor(int index) => _waveAccentColor;
 
-        /// <summary>频谱包络：中间高、两边低。</summary>
-        private static double SpectrumEnvelope(int index)
-        {
-            double center = (WaveBarCount - 1) / 2.0;
-            double envelope = 1.0 - 0.55 * Math.Abs(index - center) / Math.Max(1.0, center);
-            return Math.Max(0.2, envelope);
-        }
     }
 }

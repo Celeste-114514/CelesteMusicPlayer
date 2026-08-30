@@ -252,7 +252,7 @@ namespace CelesteMusicPlayer
 
             if (Enum.TryParse(settings.PlaybackOrder, ignoreCase: true, out PlaybackOrder order))
             {
-                _playbackOrder = order;
+                _orderResolver.Order = order;
             }
 
             _ = ApplyOutputDeviceAsync(settings.OutputDeviceId);
@@ -748,6 +748,32 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>
+        /// 由索引缓存的元数据直接构造条目（不打开音频文件，省掉整个 TagLib 解析）。
+        /// 字段语义必须与 CreatePlaylistItemFromPath 严格一致，否则同一首歌
+        /// 「走索引」和「真解析」会显示成两样。
+        /// </summary>
+        private static PlaylistItem CreatePlaylistItemFromMeta(LibraryDb.TrackMeta meta)
+        {
+            return new PlaylistItem
+            {
+                Title = string.IsNullOrWhiteSpace(meta.Title)
+                    ? Path.GetFileNameWithoutExtension(meta.FilePath)
+                    : meta.Title,
+                Artist = string.IsNullOrWhiteSpace(meta.Artist) ? "未知艺术家" : meta.Artist,
+                AlbumArtist = string.IsNullOrWhiteSpace(meta.AlbumArtist) ? "未知艺术家" : meta.AlbumArtist,
+                Album = string.IsNullOrWhiteSpace(meta.Album) ? "未知专辑" : meta.Album,
+                Track = meta.Track,
+                Disc = meta.Disc,
+                Year = meta.Year,
+                Genre = string.IsNullOrWhiteSpace(meta.Genre) ? "未知流派" : meta.Genre,
+                Duration = meta.DurationTicks > 0 ? TimeSpan.FromTicks(meta.DurationTicks) : TimeSpan.Zero,
+                FilePath = meta.FilePath,
+                Rating = TrackStatsStore.Get(meta.FilePath)?.Rating ?? 0
+            };
+        }
+
+
         private void UserPlaylistNavButton_Click(object sender, RoutedEventArgs e)
         {
             ExitMultiSelectMode();
@@ -824,7 +850,7 @@ namespace CelesteMusicPlayer
             }
 
             var d = _currentRgData.Value;
-            AudioFxRgInfoText.Text = $"当前曲目：Track {FormatAudioFxDb(d.TrackGainDb)} dB / Album {FormatAudioFxDb(d.AlbumGainDb)} dB / peak {d.Peak:0.###}";
+            AudioFxRgInfoText.Text = $"当前曲目：Track {FormatHelper.FormatAudioFxDb(d.TrackGainDb)} dB / Album {FormatHelper.FormatAudioFxDb(d.AlbumGainDb)} dB / peak {d.Peak:0.###}";
         }
 
 
@@ -1359,10 +1385,10 @@ namespace CelesteMusicPlayer
             PlaylistItem? song = null;
             if (e.OriginalSource is DependencyObject source)
             {
-                song = FindPlaylistItem(source);
+                song = VisualTreeWalker.FindPlaylistItem(source);
                 if (song == null)
                 {
-                    ListViewItem? container = FindAncestorListViewItem(source);
+                    ListViewItem? container = VisualTreeWalker.FindAncestorListViewItem(source);
                     if (container != null)
                     {
                         song = PlaylistDetailListView.ItemFromContainer(container) as PlaylistItem;
@@ -1504,7 +1530,7 @@ namespace CelesteMusicPlayer
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = this.Content?.XamlRoot,
             };
-            ApplyDialogAccent(dlg);
+            ColorHelper.ApplyDialogAccent(dlg);
             if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
             string newName = box.Text?.Trim() ?? string.Empty;
             if (newName.Length == 0 || string.Equals(newName, vm.Name, StringComparison.Ordinal)) return;
@@ -1633,7 +1659,7 @@ namespace CelesteMusicPlayer
                 DefaultButton = ContentDialogButton.Primary,
                 XamlRoot = this.Content?.XamlRoot,
             };
-            ApplyDialogAccent(dlg);
+            ColorHelper.ApplyDialogAccent(dlg);
             if (await dlg.ShowAsync() != ContentDialogResult.Primary) return;
             string name = box.Text?.Trim() ?? string.Empty;
             if (name.Length == 0) return;
@@ -1965,7 +1991,7 @@ namespace CelesteMusicPlayer
                     DefaultButton = ContentDialogButton.Close,
                     XamlRoot = Content.XamlRoot
                 };
-                ApplyDialogAccent(dialog);
+                ColorHelper.ApplyDialogAccent(dialog);
                 if (await dialog.ShowAsync() == ContentDialogResult.Primary)
                 {
                     await DeleteSongFromDiskAsync(song);
@@ -2042,7 +2068,7 @@ namespace CelesteMusicPlayer
             }
 
             Brush accent = ResolveAccentBrush();
-            Brush selectedFg = ResolveContrastingForeground(accent);
+            Brush selectedFg = ColorHelper.ResolveContrastingForeground(accent);
             bool selected = list.SelectionMode == ListViewSelectionMode.Multiple
                 ? list.SelectedItems.Contains(song)
                 : ReferenceEquals(list.SelectedItem, song);
@@ -2052,7 +2078,7 @@ namespace CelesteMusicPlayer
             container.BorderThickness = new Thickness(0);
             DisableContainerSelectionCheckMark(container);
 
-            Border? chrome = FindTaggedBorder(container, "SongRowChrome");
+            Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "SongRowChrome");
             if (chrome != null)
             {
                 chrome.MinHeight = 40;
@@ -2096,7 +2122,7 @@ namespace CelesteMusicPlayer
                     DefaultButton = ContentDialogButton.Close,
                     XamlRoot = Content.XamlRoot
                 };
-                ApplyDialogAccent(dialog);
+                ColorHelper.ApplyDialogAccent(dialog);
                 if (await dialog.ShowAsync() != ContentDialogResult.Primary)
                 {
                     return;

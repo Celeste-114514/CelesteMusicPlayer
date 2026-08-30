@@ -262,10 +262,10 @@ namespace CelesteMusicPlayer
             PlaylistItem? song = null;
             if (e.OriginalSource is DependencyObject source)
             {
-                song = FindPlaylistItem(source);
+                song = VisualTreeWalker.FindPlaylistItem(source);
                 if (song == null)
                 {
-                    ListViewItem? container = FindAncestorListViewItem(source);
+                    ListViewItem? container = VisualTreeWalker.FindAncestorListViewItem(source);
                     if (container != null)
                     {
                         song = ArtistTrackListView.ItemFromContainer(container) as PlaylistItem;
@@ -596,10 +596,10 @@ namespace CelesteMusicPlayer
             PlaylistItem? song = null;
             if (e.OriginalSource is DependencyObject source)
             {
-                song = FindPlaylistItem(source);
+                song = VisualTreeWalker.FindPlaylistItem(source);
                 if (song == null)
                 {
-                    ListViewItem? container = FindAncestorListViewItem(source);
+                    ListViewItem? container = VisualTreeWalker.FindAncestorListViewItem(source);
                     if (container != null)
                     {
                         song = AlbumTrackListView.ItemFromContainer(container) as PlaylistItem;
@@ -701,7 +701,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
@@ -771,24 +771,11 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            IOrderedEnumerable<PlaylistItem> ordered = _sortField switch
-            {
-                SortField.Artist => target.OrderBy(i => i.Artist, StringComparer.OrdinalIgnoreCase),
-                SortField.Album => target.OrderBy(i => i.Album, StringComparer.OrdinalIgnoreCase),
-                SortField.Year => target.OrderBy(i => i.Year),
-                SortField.Duration => target.OrderBy(i => i.Duration),
-                SortField.Genre => target.OrderBy(i => i.Genre, StringComparer.OrdinalIgnoreCase),
-                SortField.Track => target.OrderBy(i => i.Track),
-                SortField.FilePath => target.OrderBy(i => i.FilePath, StringComparer.OrdinalIgnoreCase),
-                _ => target.OrderBy(i => i.Title, StringComparer.OrdinalIgnoreCase)
-            };
-
-            // 次要关键字：标题，同字段时顺序更稳定（Ordinal 比 CurrentCulture 快且对文件名/路径排序更正确）
-            ordered = ordered.ThenBy(i => i.Title, StringComparer.OrdinalIgnoreCase);
-
-            List<PlaylistItem> sorted = (_sortAscending
-                ? ordered.AsEnumerable()
-                : ordered.Reverse()).ToList();
+            // 单趟排序：用 List.Sort + 专用比较器，一次比较即完成「主字段 → 标题」排序与升/降序，
+            // 避免 OrderBy/ThenBy/Reverse/ToList 的多趟中间分配与多次比较（大列表卡顿优化）。
+            List<PlaylistItem> sorted = new List<PlaylistItem>(target.Count);
+            sorted.AddRange(target);
+            sorted.Sort(new PlaylistItemSortComparer(_sortField, _sortAscending));
 
             // 整表替换而非 Clear + N 次 Add：先解绑 ItemsSource，让下面的清空/填充不再逐条驱动 UI
             // 虚拟化；原地重建内容后重新绑定，只触发一次整表渲染（复用项目已有模式 Playback2.cs:1897）。
@@ -844,6 +831,43 @@ namespace CelesteMusicPlayer
             }
         }
 
+
+        /// <summary>排序专用比较器：单趟完成「主字段 → 标题」比较与升/降序，
+        /// 替代 OrderBy/ThenBy/Reverse 的多趟分配（大列表卡顿优化）。</summary>
+        private sealed class PlaylistItemSortComparer : IComparer<PlaylistItem>
+        {
+            private static readonly StringComparer Ignore = StringComparer.OrdinalIgnoreCase;
+            private readonly SortField _field;
+            private readonly bool _ascending;
+
+            public PlaylistItemSortComparer(SortField field, bool ascending)
+            {
+                _field = field;
+                _ascending = ascending;
+            }
+
+            public int Compare(PlaylistItem? x, PlaylistItem? y)
+            {
+                if (ReferenceEquals(x, y)) return 0;
+                if (x is null) return -1;
+                if (y is null) return 1;
+
+                int c = _field switch
+                {
+                    SortField.Artist => Ignore.Compare(x.Artist, y.Artist),
+                    SortField.Album => Ignore.Compare(x.Album, y.Album),
+                    SortField.Year => x.Year.CompareTo(y.Year),
+                    SortField.Duration => x.Duration.CompareTo(y.Duration),
+                    SortField.Genre => Ignore.Compare(x.Genre, y.Genre),
+                    SortField.Track => x.Track.CompareTo(y.Track),
+                    SortField.FilePath => Ignore.Compare(x.FilePath, y.FilePath),
+                    _ => Ignore.Compare(x.Title, y.Title)
+                };
+                // 次要关键字：标题，同字段时顺序更稳定
+                if (c == 0) c = Ignore.Compare(x.Title, y.Title);
+                return _ascending ? c : -c;
+            }
+        }
 
         private void RenumberIndices() => RenumberCollection(_playlist);
 
@@ -951,10 +975,10 @@ namespace CelesteMusicPlayer
             PlaylistItem? song = null;
             if (e.OriginalSource is DependencyObject source)
             {
-                song = FindPlaylistItem(source);
+                song = VisualTreeWalker.FindPlaylistItem(source);
                 if (song == null)
                 {
-                    ListViewItem? container = FindAncestorListViewItem(source);
+                    ListViewItem? container = VisualTreeWalker.FindAncestorListViewItem(source);
                     if (container != null)
                     {
                         song = PlaylistView.ItemFromContainer(container) as PlaylistItem;
@@ -1644,7 +1668,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
@@ -1682,7 +1706,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             ContentDialogResult result = await dialog.ShowAsync();
             return result == ContentDialogResult.Primary ? box.Text?.Trim() : null;
         }
@@ -1726,7 +1750,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = xamlRoot
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             ContentDialogResult result = await dialog.ShowAsync();
             if (result != ContentDialogResult.Primary || list.SelectedIndex < 0)
             {
@@ -1842,7 +1866,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = this.Content?.XamlRoot,
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary) return;
 
             string? chosen = (panel.Children.OfType<RadioButton>().FirstOrDefault(r => r.IsChecked == true)?.Tag as string)?.Trim();
@@ -1961,7 +1985,7 @@ namespace CelesteMusicPlayer
                 XamlRoot = Content.XamlRoot
             };
 
-            ApplyDialogAccent(dialog);
+            ColorHelper.ApplyDialogAccent(dialog);
             if (await dialog.ShowAsync() != ContentDialogResult.Primary)
             {
                 return;
@@ -2076,7 +2100,7 @@ namespace CelesteMusicPlayer
         {
             Brush transparent = new SolidColorBrush(Colors.Transparent);
             Brush accent = ResolveAccentBrush();
-            Brush fg = ResolveContrastingForeground(accent);
+            Brush fg = ColorHelper.ResolveContrastingForeground(accent);
 
             string[] backgroundKeys =
             {
@@ -2253,8 +2277,10 @@ namespace CelesteMusicPlayer
                     await bmp.SetSourceAsync(ms.AsRandomAccessStream());
                 }
 
-                // 缓存解码结果供重复使用
+                // 缓存解码结果供重复使用；超过上限则清空整表以限制内存增长
+                // （BitmapImage 持有解码像素，逐曲播放会无限累积——这是“播放越多内存越大”的主因）
                 _coverImageCache.TryAdd(song.FilePath, bmp);
+                if (_coverImageCache.Count > RowCoverCacheMax) _coverImageCache.Clear();
                 DispatcherQueue.TryEnqueue(() => AttachCover(owner, container, song, bmp));
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }

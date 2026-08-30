@@ -192,7 +192,7 @@ namespace CelesteMusicPlayer
                 try
                 {
                     AudioFxEqEnableToggle.IsOn = true;
-                    AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatAudioFxDb(curve.PreampDb) + " dB";
+                    AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatHelper.FormatAudioFxDb(curve.PreampDb) + " dB";
                     SelectAudioFxEqPreset(curve.PresetId);
                     SelectAudioFxEqBand(_audioFxEqSelected);
                     RedrawAudioFxEqCurve();
@@ -597,8 +597,8 @@ namespace CelesteMusicPlayer
                 AudioFxEqBandGainSlider.Value = Math.Clamp(b.GainDb, -24, 24);
                 AudioFxEqBandQSlider.Value = Math.Clamp(b.Q, 0.1, 24);
                 AudioFxEqBandEnableToggle.IsOn = b.Enabled;
-                AudioFxEqBandFreqLabel.Text = FormatAudioFxFreq(b.FrequencyHz);
-                AudioFxEqBandGainLabel.Text = FormatAudioFxDb(b.GainDb) + " dB";
+                AudioFxEqBandFreqLabel.Text = FormatHelper.FormatAudioFxFreq(b.FrequencyHz);
+                AudioFxEqBandGainLabel.Text = FormatHelper.FormatAudioFxDb(b.GainDb) + " dB";
                 AudioFxEqBandQLabel.Text = b.Q.ToString("0.##");
             }
             finally
@@ -614,15 +614,8 @@ namespace CelesteMusicPlayer
             // 更新 preamp 显示
             if (AudioFxEqPreampText != null)
             {
-                AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
+                AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatHelper.FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
             }
-        }
-
-
-        private static string FormatAudioFxFreq(double f)
-        {
-            if (f >= 1000) return (f / 1000.0).ToString("0.##") + " kHz";
-            return f.ToString("0") + " Hz";
         }
 
 
@@ -659,7 +652,7 @@ namespace CelesteMusicPlayer
             if (_audioFxLoading || _audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count) return;
             var b = _audioFxEq.Bands[_audioFxEqSelected];
             b.FrequencyHz = Math.Clamp(Math.Pow(2, e.NewValue), 20, 20000);
-            AudioFxEqBandFreqLabel.Text = FormatAudioFxFreq(b.FrequencyHz);
+            AudioFxEqBandFreqLabel.Text = FormatHelper.FormatAudioFxFreq(b.FrequencyHz);
             MarkAudioFxEqCustom();
             RedrawAudioFxEqCurve();
             ApplyDspToEngine();
@@ -672,7 +665,7 @@ namespace CelesteMusicPlayer
             var b = _audioFxEq.Bands[_audioFxEqSelected];
             b.GainDb = e.NewValue;
             b.Enabled = Math.Abs(b.GainDb) > 0.01;
-            AudioFxEqBandGainLabel.Text = FormatAudioFxDb(b.GainDb) + " dB";
+            AudioFxEqBandGainLabel.Text = FormatHelper.FormatAudioFxDb(b.GainDb) + " dB";
             MarkAudioFxEqCustom();
             SyncBandEditorFromState();
             RedrawAudioFxEqCurve();
@@ -925,7 +918,7 @@ namespace CelesteMusicPlayer
             _audioFxEq.PreampDb = Math.Clamp(preampDb, -24, 24);
             RefreshAudioFxEqBandEditor();
             ApplyDspToEngine();
-            NowPlayingText.Text = "自动增益：preamp = " + FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
+            NowPlayingText.Text = "自动增益：preamp = " + FormatHelper.FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
         }
 
 
@@ -971,7 +964,7 @@ namespace CelesteMusicPlayer
         private void AudioFxRgPreamp_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
             if (_audioFxLoading) return;
-            AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatAudioFxDb(e.NewValue);
+            AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatHelper.FormatAudioFxDb(e.NewValue);
             ApplyReplayGainToEngine();
         }
 

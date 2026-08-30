@@ -164,7 +164,7 @@ namespace CelesteMusicPlayer
             // 则按媒体库当前列表 (_playlist) 顺序推进，保证播完能自动连续下一首。
             if (_userPlaylist.Count > 0)
             {
-                int? nextIndex = ResolveNextIndex(autoAdvance);
+                int? nextIndex = _orderResolver.ResolveNextIndex(_userPlaylist.Count, _userPlaylistIndex, autoAdvance);
                 if (nextIndex != null)
                 {
                     PlayUserPlaylistAt(nextIndex.Value);
@@ -185,7 +185,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            switch (_playbackOrder)
+            switch (_orderResolver.Order)
             {
                 case PlaybackOrder.TrackOnce:
                     return; // 单曲播放模式：不自动续播
@@ -205,7 +205,7 @@ namespace CelesteMusicPlayer
                 case PlaybackOrder.Random:
                     if (_playlist.Count > 1)
                     {
-                        int r = _playbackRandom.Next(_playlist.Count);
+                        int r = _orderResolver.NextRandomIndex(_playlist.Count);
                         if (r == _currentIndex)
                         {
                             r = (r + 1) % _playlist.Count;
@@ -234,7 +234,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            int? prevIndex = ResolvePreviousIndex();
+            int? prevIndex = _orderResolver.ResolvePreviousIndex(_userPlaylist.Count, _userPlaylistIndex);
             if (prevIndex == null)
             {
                 return;
@@ -244,129 +244,9 @@ namespace CelesteMusicPlayer
         }
 
 
-        private int? ResolveNextIndex(bool autoAdvance)
-        {
-            int count = _userPlaylist.Count;
-            if (count == 0)
-            {
-                return null;
-            }
-
-            int baseIndex = _userPlaylistIndex >= 0 ? _userPlaylistIndex : 0;
-
-            switch (_playbackOrder)
-            {
-                case PlaybackOrder.TrackOnce:
-                    if (autoAdvance)
-                    {
-                        return null;
-                    }
-                    return baseIndex + 1 < count ? baseIndex + 1 : null;
-
-                case PlaybackOrder.TrackLoop:
-                    if (autoAdvance)
-                    {
-                        return baseIndex;
-                    }
-                    return baseIndex + 1 < count ? baseIndex + 1 : 0;
-
-                case PlaybackOrder.Sequential:
-                {
-                    int next = baseIndex + 1;
-                    return next >= count ? null : next;
-                }
-
-                case PlaybackOrder.ListLoop:
-                    return (baseIndex + 1) % count;
-
-                case PlaybackOrder.Random:
-                {
-                    if (count == 1)
-                    {
-                        return 0;
-                    }
-
-                    int next = _playbackRandom.Next(count);
-                    if (next == baseIndex)
-                    {
-                        next = (next + 1) % count;
-                    }
-                    return next;
-                }
-
-                default:
-                    return (baseIndex + 1) % count;
-            }
-        }
-
-
-        /// <summary>按当前播放顺序解析下一个播放项的索引（不修改任何状态）。用于无缝预加载预测，
-        /// 与 PlayNext 的切歌决策保持一致（修复随机播放时自动切歌仍按列表顺序的问题）。</summary>
-        private int NextIndexByOrder(int count, int baseIndex, bool autoAdvance)
-        {
-            if (count <= 0)
-            {
-                return -1;
-            }
-
-            switch (_playbackOrder)
-            {
-                case PlaybackOrder.TrackOnce:
-                    if (autoAdvance)
-                    {
-                        return -1; // 单曲只播一遍，不自动续播
-                    }
-                    return baseIndex + 1 < count ? baseIndex + 1 : -1;
-
-                case PlaybackOrder.TrackLoop:
-                    if (autoAdvance)
-                    {
-                        return baseIndex;
-                    }
-                    return baseIndex + 1 < count ? baseIndex + 1 : 0;
-
-                case PlaybackOrder.Sequential:
-                    return baseIndex + 1 < count ? baseIndex + 1 : -1;
-
-                case PlaybackOrder.Random:
-                    if (count == 1)
-                    {
-                        return baseIndex;
-                    }
-                    {
-                        int next = _playbackRandom.Next(count);
-                        return next == baseIndex ? (next + 1) % count : next;
-                    }
-
-                default: // ListLoop 等：循环到列表尾回到开头
-                    return (baseIndex + 1) % count;
-            }
-        }
-
-
-        private int? ResolvePreviousIndex()
-        {
-            int count = _userPlaylist.Count;
-            if (count == 0)
-            {
-                return null;
-            }
-
-            int baseIndex = _userPlaylistIndex >= 0 ? _userPlaylistIndex : 0;
-
-            switch (_playbackOrder)
-            {
-                case PlaybackOrder.Sequential:
-                case PlaybackOrder.TrackOnce:
-                    return baseIndex > 0 ? baseIndex - 1 : null;
-
-                case PlaybackOrder.Random:
-                case PlaybackOrder.ListLoop:
-                case PlaybackOrder.TrackLoop:
-                default:
-                    return baseIndex <= 0 ? count - 1 : baseIndex - 1;
-            }
-        }
+        // 下一首 / 上一首的索引决策已抽到 PlaybackOrderResolver（阶段7 解耦）：
+        //   ResolveNextIndex / NextIndexByOrder / ResolvePreviousIndex
+        // 这三个方法原先在这里，现在由 _orderResolver 提供。
 
 
         // =====================================================================
@@ -384,7 +264,7 @@ namespace CelesteMusicPlayer
                 PlaybackOrder.TrackOnce
             };
 
-            int index = Array.IndexOf(order, _playbackOrder);
+            int index = Array.IndexOf(order, _orderResolver.Order);
             int next = index < 0 ? 0 : (index + 1) % order.Length;
             SetPlaybackOrder(order[next]);
         }
@@ -421,7 +301,7 @@ namespace CelesteMusicPlayer
             {
                 Text = label,
                 Icon = new FontIcon { Glyph = glyph, FontSize = 16 },
-                IsChecked = _playbackOrder == order,
+                IsChecked = _orderResolver.Order == order,
                 Tag = order
             };
             item.Click += PlaybackOrderMenuItem_Click;
@@ -440,7 +320,7 @@ namespace CelesteMusicPlayer
 
         private void SetPlaybackOrder(PlaybackOrder order, bool persist = true)
         {
-            _playbackOrder = order;
+            _orderResolver.Order = order;
             ApplyPlaybackOrderToPlayer();
             UpdatePlaybackOrderButtonUi();
             _miniPlayerWindow?.RefreshFromOwner();
@@ -459,17 +339,17 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            player.IsLoopingEnabled = _playbackOrder == PlaybackOrder.TrackLoop;
+            player.IsLoopingEnabled = _orderResolver.Order == PlaybackOrder.TrackLoop;
         }
 
 
         private void UpdatePlaybackOrderButtonUi()
         {
-            bool trackOnce = _playbackOrder == PlaybackOrder.TrackOnce;
+            bool trackOnce = _orderResolver.Order == PlaybackOrder.TrackOnce;
             PlaybackOrderIcon.Visibility = trackOnce ? Visibility.Collapsed : Visibility.Visible;
             PlaybackOrderTrackOnceGlyph.Visibility = trackOnce ? Visibility.Visible : Visibility.Collapsed;
 
-            (string glyph, string name) = _playbackOrder switch
+            (string glyph, string name) = _orderResolver.Order switch
             {
                 PlaybackOrder.Sequential => ("\uE8FD", "顺序播放"),
                 PlaybackOrder.Random => ("\uE8B1", "随机播放"),
@@ -582,29 +462,5 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>从单元格向上找所属的 PlaylistItem（兼容 x:Bind 时 DataContext 为空的情况）</summary>
-        private static PlaylistItem? FindPlaylistItem(DependencyObject start)
-        {
-            DependencyObject? current = start;
-            while (current != null)
-            {
-                if (current is FrameworkElement fe)
-                {
-                    if (fe.DataContext is PlaylistItem fromContext)
-                    {
-                        return fromContext;
-                    }
-
-                    if (fe is ListViewItem { Content: PlaylistItem fromContent })
-                    {
-                        return fromContent;
-                    }
-                }
-
-                current = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetParent(current);
-            }
-
-            return null;
-        }
     }
 }

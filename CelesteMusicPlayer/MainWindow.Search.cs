@@ -91,46 +91,5 @@ namespace CelesteMusicPlayer
         }
 
 
-        private static Panel? FindItemsPanel(DependencyObject root)
-        {
-            if (root is ItemsStackPanel stack)
-            {
-                return stack;
-            }
-
-            if (root is ItemsWrapGrid wrap)
-            {
-                return wrap;
-            }
-
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                Panel? found = FindItemsPanel(VisualTreeHelper.GetChild(root, i));
-                if (found != null)
-                {
-                    return found;
-                }
-            }
-
-            return null;
-        }
-
-
-        private static ListViewItem? FindAncestorListViewItem(DependencyObject start)
-        {
-            DependencyObject? current = start;
-            while (current != null)
-            {
-                if (current is ListViewItem item)
-                {
-                    return item;
-                }
-
-                current = VisualTreeHelper.GetParent(current);
-            }
-
-            return null;
-        }
     }
 }

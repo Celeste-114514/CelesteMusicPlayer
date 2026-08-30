@@ -2204,6 +2204,8 @@ namespace CelesteMusicPlayer
 
             if (AudioOutputDeviceCombo.SelectedItem is ComboBoxItem it && it.Tag is string did)
             {
+                // 用户手动改选 → 放弃「等设备插回自动切回」的暂存偏好
+                ClearPreferredOutputDevice();
                 AppSettingsStore.Update(s => s.OutputDeviceId = did);
                 await ApplyOutputDeviceAsync(did);
             }
@@ -2355,7 +2357,7 @@ namespace CelesteMusicPlayer
         private void UpdateRatingFilterHighlight()
         {
             var accent = ResolveAccentBrush();
-            var fg = ResolveContrastingForeground(accent);
+            var fg = ColorHelper.ResolveContrastingForeground(accent);
             var idleBg = ResolveCapsuleFillBrush();
             var border = ResolveNavCapsuleBorderBrush();
             (Button Btn, int Val)[] maps =
@@ -2491,5 +2493,139 @@ namespace CelesteMusicPlayer
                 LibrarySessionStore.SaveFiles(_playlist.Select(i => i.FilePath));
             }
         }
+
+        #region 输出设备热插拔（USB DAC / 蓝牙耳机插拔自动切换）
+
+        /// <summary>设备被拔掉时暂存的偏好 ID；插回后自动切回。用户手动改选时清空。</summary>
+        private string? _preferredOutputDeviceId;
+
+        private bool _deviceHotplugBusy;
+
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _hotplugNoticeTimer;
+
+        /// <summary>启动设备监听（窗口初始化时调用一次）。</summary>
+        private void StartAudioDeviceWatcher()
+        {
+            try
+            {
+                AudioDeviceWatcher.DevicesChanged += OnAudioDevicesChanged;
+                AudioDeviceWatcher.Start();
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+        }
+
+        /// <summary>设备变化回调。注意：这里跑在非 UI 线程，任何 XAML 访问都必须切回 UI 线程，
+        /// 否则会触发 RPC_E_WRONG_THREAD。</summary>
+        private void OnAudioDevicesChanged(object? sender, AudioDeviceChangeEventArgs e)
+        {
+            try
+            {
+                DispatcherQueue.TryEnqueue(() => _ = HandleAudioDevicesChangedAsync(e));
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+        }
+
+        private async System.Threading.Tasks.Task HandleAudioDevicesChangedAsync(AudioDeviceChangeEventArgs e)
+        {
+            if (_deviceHotplugBusy)
+            {
+                return;
+            }
+
+            _deviceHotplugBusy = true;
+            try
+            {
+                string savedId = AppSettingsStore.Load().OutputDeviceId ?? string.Empty;
+
+                // 当前选中的设备掉了 → 回退系统默认，并记住它，插回来时自动切回
+                bool vanished = savedId.Length > 0 && !e.CurrentIds.Contains(savedId);
+
+                // 之前拔掉的设备又回来了 → 自动切回
+                bool returned = !string.IsNullOrEmpty(_preferredOutputDeviceId)
+                    && e.Added.Any(id => string.Equals(id, _preferredOutputDeviceId, StringComparison.OrdinalIgnoreCase));
+
+                // 刷新下拉列表（无论哪种变化都要刷新，保证面板里看到的都是当前实际在线的设备）
+                _audioCombosLoading = true;
+                try
+                {
+                    await FillAudioSettingsDevicesAsync();
+                }
+                finally
+                {
+                    _audioCombosLoading = false;
+                }
+
+                if (vanished)
+                {
+                    _preferredOutputDeviceId = savedId;
+                    AppSettingsStore.Update(s => s.OutputDeviceId = string.Empty);
+                    await ApplyOutputDeviceAsync(string.Empty);
+                    string name = AudioDeviceService.GetDeviceName(savedId) ?? savedId;
+                    global::CelesteMusicPlayer.StartupLog.Write("[设备监听] 当前输出设备已移除，回退默认：" + name);
+                    ShowHotplugNotice("输出设备「" + name + "」已断开，已切回系统默认。重新插上后会自动切回。");
+                }
+                else if (returned)
+                {
+                    string back = _preferredOutputDeviceId!;
+                    _preferredOutputDeviceId = null;
+                    AppSettingsStore.Update(s => s.OutputDeviceId = back);
+                    await ApplyOutputDeviceAsync(back);
+                    string name = AudioDeviceService.GetDeviceName(back) ?? back;
+                    global::CelesteMusicPlayer.StartupLog.Write("[设备监听] 偏好设备已重新上线，自动切回：" + name);
+                    ShowHotplugNotice("检测到「" + name + "」，已自动切回该设备。");
+                }
+
+                RefreshAudioSettingsPanel();
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+            finally
+            {
+                _deviceHotplugBusy = false;
+            }
+        }
+
+        /// <summary>显示一条热插拔提示，10 秒后自动隐藏。</summary>
+        private void ShowHotplugNotice(string message)
+        {
+            try
+            {
+                if (AudioDeviceHotplugText == null)
+                {
+                    return;
+                }
+
+                AudioDeviceHotplugText.Text = message;
+                AudioDeviceHotplugText.Visibility = Visibility.Visible;
+
+                _hotplugNoticeTimer ??= DispatcherQueue.CreateTimer();
+                _hotplugNoticeTimer.Interval = TimeSpan.FromSeconds(10);
+                _hotplugNoticeTimer.Tick -= HotplugNoticeTimer_Tick;
+                _hotplugNoticeTimer.Tick += HotplugNoticeTimer_Tick;
+                _hotplugNoticeTimer.Stop();
+                _hotplugNoticeTimer.Start();
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+        }
+
+        private void HotplugNoticeTimer_Tick(object? sender, object e)
+        {
+            try
+            {
+                _hotplugNoticeTimer?.Stop();
+                if (AudioDeviceHotplugText != null)
+                {
+                    AudioDeviceHotplugText.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+        }
+
+        /// <summary>用户手动改选设备时，放弃「等设备插回自动切回」的暂存偏好。</summary>
+        private void ClearPreferredOutputDevice()
+        {
+            _preferredOutputDeviceId = null;
+        }
+
+        #endregion
     }
 }

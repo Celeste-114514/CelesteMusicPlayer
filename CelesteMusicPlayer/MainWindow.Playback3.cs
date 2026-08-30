@@ -45,7 +45,7 @@ namespace CelesteMusicPlayer
 
         private void RefreshRealizedSongListSelectionChrome(ListView list)
         {
-            HashSet<object>? selectedSet = BuildSelectedItemsLookup(list);
+            HashSet<object>? selectedSet = VisualTreeWalker.BuildSelectedItemsLookup(list);
             foreach (ListViewItem container in EnumerateRealizedListViewItems(list))
             {
                 if (list.ItemFromContainer(container) is PlaylistItem song)
@@ -63,7 +63,7 @@ namespace CelesteMusicPlayer
             HashSet<object>? selectedSet = null)
         {
             Brush accent = ResolveAccentBrush();
-            Brush selectedFg = ResolveContrastingForeground(accent);
+            Brush selectedFg = ColorHelper.ResolveContrastingForeground(accent);
             bool multiOnThisList = _isMultiSelectMode && ReferenceEquals(_multiSelectTargetList, list);
             Brush unselectedBg = multiOnThisList
                 ? CreateMultiSelectFrostBrush()
@@ -76,10 +76,10 @@ namespace CelesteMusicPlayer
             DisableContainerSelectionCheckMark(container);
 
             bool selected = multiOnThisList
-                ? IsItemSelected(list, song, selectedSet)
+                ? VisualTreeWalker.IsItemSelected(list, song, selectedSet)
                 : ReferenceEquals(list.SelectedItem, song);
 
-            Border? chrome = FindTaggedBorder(container, "SongRowChrome");
+            Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "SongRowChrome");
             if (chrome != null)
             {
                 chrome.MinHeight = 40;
@@ -120,30 +120,6 @@ namespace CelesteMusicPlayer
 
         private void ApplyPlaylistItemSelectionChrome(ListViewItem container, PlaylistItem song)
             => ApplySongListItemSelectionChrome(PlaylistView, container, song);
-
-        private static Border? FindTaggedBorder(DependencyObject root, string tag)
-        {
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                DependencyObject child = VisualTreeHelper.GetChild(root, i);
-                if (child is Border border
-                    && border.Tag is string t
-                    && string.Equals(t, tag, StringComparison.Ordinal))
-                {
-                    return border;
-                }
-
-                Border? nested = FindTaggedBorder(child, tag);
-                if (nested != null)
-                {
-                    return nested;
-                }
-            }
-
-            return null;
-        }
-
 
         // =====================================================================
         // 底部控制按钮
@@ -509,7 +485,7 @@ namespace CelesteMusicPlayer
         internal MediaPlayer? GetMediaPlayerPublic() => GetPlayer();
 
         internal string GetPlaybackOrderGlyphPublic()
-            => _playbackOrder switch
+            => _orderResolver.Order switch
             {
                 PlaybackOrder.Sequential => "\uE8FD",
                 PlaybackOrder.Random => "\uE8B1",
@@ -1793,6 +1769,11 @@ namespace CelesteMusicPlayer
 
             double t = Environment.TickCount64 / 1000.0;
             double volume = enginePlaying ? VolumeSlider.Value / 100.0 : (player?.Volume ?? 0.8);
+
+            // 真频谱优先：拿得到实际播放信号的 FFT 结果就用真的（低频在左、高频在右，跟着音乐动）；
+            // 拿不到（DSD 直出、刚开始播放样本不足、非引擎播放）才回退到装饰性呼吸动画。
+            bool realSpectrum = playing && _audioEngine != null && _audioEngine.TryGetSpectrum(_spectrumBands);
+
             bool changed = false;
 
             for (int i = 0; i < WaveBarCount; i++)
@@ -1800,20 +1781,30 @@ namespace CelesteMusicPlayer
                 double target;
                 if (playing)
                 {
-                    // 对称呼吸式频谱：中间高两边低、每柱各自节奏，无横向滚动
-                    double rhythm = 0.5 + 0.5 * Math.Sin(t * 1.8 + _wavePhases[i]);
-                    double halfSpan = Math.Max(1.0, (WaveBarCount - 1) / 2.0);
-                    double pos = (i - (WaveBarCount - 1) / 2.0) / halfSpan;
-                    double symmetry = 0.5 + 0.5 * (1.0 - Math.Min(1.0, Math.Abs(pos)));
-                    double n = rhythm * symmetry;
-                    target = Math.Clamp(n * (0.55 + 0.45 * volume), 0.1, 1.0);
+                    if (realSpectrum)
+                    {
+                        // 真频谱：不再乘音量系数（信号本身已含软件音量；硬件音量下不该让画面塌下去）
+                        target = Math.Clamp(_spectrumBands[i], 0.06, 1.0);
+                    }
+                    else
+                    {
+                        // 对称呼吸式频谱：中间高两边低、每柱各自节奏，无横向滚动
+                        double rhythm = 0.5 + 0.5 * Math.Sin(t * 1.8 + _wavePhases[i]);
+                        double halfSpan = Math.Max(1.0, (WaveBarCount - 1) / 2.0);
+                        double pos = (i - (WaveBarCount - 1) / 2.0) / halfSpan;
+                        double symmetry = 0.5 + 0.5 * (1.0 - Math.Min(1.0, Math.Abs(pos)));
+                        double n = rhythm * symmetry;
+                        target = Math.Clamp(n * (0.55 + 0.45 * volume), 0.1, 1.0);
+                    }
                 }
                 else
                 {
                     target = IdleLevel(i);
                 }
 
-                double next = _waveLevels[i] + (target - _waveLevels[i]) * (playing ? 0.35 : 0.18);
+                // 真频谱已在分析器内做过"快起慢落"，这里只补一点插值避免逐帧跳变
+                double ease = realSpectrum ? 0.55 : (playing ? 0.35 : 0.18);
+                double next = _waveLevels[i] + (target - _waveLevels[i]) * ease;
                 if (Math.Abs(next - _waveLevels[i]) > 0.002)
                 {
                     changed = true;
@@ -2209,7 +2200,7 @@ namespace CelesteMusicPlayer
                     baseIdx = _userPlaylistIndex >= 0 ? _userPlaylistIndex : 0;
                 }
 
-                int next = NextIndexByOrder(_userPlaylist.Count, baseIdx, autoAdvance: true);
+                int next = _orderResolver.NextIndexByOrder(_userPlaylist.Count, baseIdx, autoAdvance: true);
                 if (next >= 0 && next < _userPlaylist.Count)
                 {
                     return _userPlaylist[next];
@@ -2226,7 +2217,7 @@ namespace CelesteMusicPlayer
                     baseIdx = _currentIndex >= 0 ? _currentIndex : 0;
                 }
 
-                int next = NextIndexByOrder(_playlist.Count, baseIdx, autoAdvance: true);
+                int next = _orderResolver.NextIndexByOrder(_playlist.Count, baseIdx, autoAdvance: true);
                 if (next >= 0 && next < _playlist.Count)
                 {
                     return _playlist[next];

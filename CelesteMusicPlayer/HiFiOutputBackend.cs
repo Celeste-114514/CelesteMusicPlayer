@@ -39,6 +39,7 @@ namespace CelesteMusicPlayer
         private string _srcQuality = ResamplingSourceProvider.QualityBalanced; // SRC 质量档位
         private string _srcDither = ResamplingSourceProvider.DitherOff; // SRC 量化前抖动
         private string _srcStateDescription = ""; // 最近一次播放的 SRC 实际状态描述（源率→目标率/未升频原因）
+        private int _outputBufferMs = 100; // 输出缓冲区大小（毫秒）：越小越跟手，越大越抗卡顿
         private ManagedDspSourceProvider? _dspProvider; // 统一 DSP 链（EQ→声道平衡→限幅），NAudio 与独占共用
         // ReplayGain 响度归一化（缓存到新建链，保证换歌/重播也生效）
         private ReplayGainState? _rgState;
@@ -159,6 +160,14 @@ namespace CelesteMusicPlayer
         /// <summary>当前升频目标采样率（Hz，0=关闭）。</summary>
         public int ResampleTargetHz => _resampleTargetHz;
 
+        /// <summary>输出缓冲区大小（毫秒）。仅共享模式（NAudio WasapiOut）下生效，下次开播生效。
+        /// 越小越跟手（低延迟），越大越抗卡顿/爆音；合法范围 20~500ms，越界自动夹回。</summary>
+        public int OutputBufferMs
+        {
+            get => _outputBufferMs;
+            set => _outputBufferMs = value < 20 ? 20 : (value > 500 ? 500 : value);
+        }
+
         /// <summary>设置 SRC 质量档位（lowlatency/balanced/transparent）。下次开播生效。</summary>
         public void SetSrcQuality(string quality)
         {
@@ -218,6 +227,19 @@ namespace CelesteMusicPlayer
 
         /// <summary>电平表声道数（0 = 当前无可测电平，如未播放或 DSD 直出）。</summary>
         public int LevelMeterChannels => _dspProvider?.LevelMeter.Channels ?? 0;
+
+        /// <summary>读取实时频谱（post-DSP 信号的真 FFT 对数分频结果）到调用方数组，返回是否取到。
+        /// 返回 false 时 UI 应回退到装饰性动画（未播放 / DSD 直出 / 样本不足）。UI 线程调用。</summary>
+        public bool TryGetSpectrum(float[] bandsOut)
+        {
+            SpectrumAnalyzer? s = _dspProvider?.Spectrum;
+            if (s == null)
+            {
+                return false;
+            }
+
+            return s.TryCompute(bandsOut);
+        }
 
         private static bool HasNonZeroGain(double[] gains)
         {
@@ -512,11 +534,14 @@ namespace CelesteMusicPlayer
                 // 开启实时电平测量（测量 post-DSP 信号；无 DSP 时只解码测量不改写输出，仍 bit-perfect）。
                 // requireExact（DSD/DoP 直出）时独占通道直接读无缝源、不经 DSP 链，测不到也无需测 → 关闭。
                 _dspProvider.SetMetering(!requireExact);
+                // 开启实时频谱采样（与电平表共用同一批 post-DSP 样本；
+                // requireExact 即 DSD/DoP 直出时同样测不到 → 关闭）。
+                _dspProvider.SetSpectrum(!requireExact);
                 switch (mode)
                 {
                     case OutputMode.WasapiShared:
                         _device = ResolveDeviceForVolume(deviceIdentifier);
-                        _output = CreateWasapiOut(AudioClientShareMode.Shared, deviceIdentifier, 100);
+                        _output = CreateWasapiOut(AudioClientShareMode.Shared, deviceIdentifier, OutputBufferMs);
                         OutputDeviceName = "WASAPI 共享";
                         break;
 
