@@ -563,7 +563,7 @@ namespace CelesteMusicPlayer
 
             // 扩展格式（APE/WavPack 等）：系统 Media Foundation 无法解码，启动时不预加载，
             // 避免触发 MediaFailed 弹窗；点击播放时由 FFmpeg 引擎转码播放。
-            if (AudioPlaybackEngine.NeedsFfmpeg(item.FilePath))
+            if (AudioPlaybackEngine.NeedsFfmpeg(item.FilePath) || SacdIsoExtractor.IsSacdIso(item.FilePath))
             {
                 return;
             }

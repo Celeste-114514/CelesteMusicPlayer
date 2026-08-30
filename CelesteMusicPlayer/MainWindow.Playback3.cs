@@ -1886,6 +1886,14 @@ namespace CelesteMusicPlayer
                 if (oldPos > 0.5) TrackPositionStore.Set(oldPath, oldPos);
             }
 
+            // SACD 镜像(.iso)：播放时懒抽取为逐轨 DSF 并就地展开进队列，复用既有 DSD 全链路。
+            // 引擎层不感知 .iso，展开后的 DSF 走与本地 DSD 文件完全相同的播放路径（DoP/PCM/续播/持久化）。
+            if (SacdIsoExtractor.IsSacdIso(item.FilePath))
+            {
+                _ = ExpandAndPlaySacdAsync(index);
+                return;
+            }
+
             _userPlaylistIndex = index;
             _currentIndex = FindLibraryIndex(item.FilePath);
 
@@ -1908,6 +1916,82 @@ namespace CelesteMusicPlayer
             StartPlayback(item);
             PersistPlaybackSession();
             NotifyCurrentPlaylistWindow();
+        }
+
+
+        /// <summary>
+        /// 把队列里 index 处的 .iso 抽取为逐轨 DSF，并就地展开进队列（首轨留在原 index），
+        /// 随后像普通 DSD 文件一样开始播放；后续切歌由既有的 HandleMediaEnded 自然推进各轨。
+        /// </summary>
+        private async Task ExpandAndPlaySacdAsync(int isoIndex)
+        {
+            try
+            {
+                if (isoIndex < 0 || isoIndex >= _userPlaylist.Count)
+                {
+                    return;
+                }
+
+                string isoPath = _userPlaylist[isoIndex].FilePath;
+                NowPlayingText.Text = "正在读取 SACD 镜像…";
+
+                var tracks = await SacdIsoExtractor.ExtractTracksAsync(isoPath, s =>
+                    DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; })).ConfigureAwait(false);
+
+                if (tracks.Count == 0)
+                {
+                    NowPlayingText.Text = "无法读取 SACD：缺少 sacd_extract.exe 或镜像不支持";
+                    return;
+                }
+
+                // 用既有的标签读取构建 DSF 播放项（标题/艺术家/专辑/时长等）
+                var dsItems = new List<PlaylistItem>();
+                foreach (var t in tracks)
+                {
+                    try
+                    {
+                        dsItems.Add(CreatePlaylistItemFromPath(t));
+                    }
+                    catch (Exception caught)
+                    {
+                        global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught);
+                    }
+                }
+
+                if (dsItems.Count == 0)
+                {
+                    NowPlayingText.Text = "无法读取 SACD 曲目信息";
+                    return;
+                }
+
+                // 用逐轨 DSF 替换队列里的 .iso 那一项（就地展开），首轨仍在 isoIndex
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    try
+                    {
+                        _userPlaylist.RemoveAt(isoIndex);
+                        for (int k = 0; k < dsItems.Count; k++)
+                        {
+                            _userPlaylist.Insert(isoIndex + k, dsItems[k]);
+                        }
+
+                        _userPlaylistIndex = isoIndex;                       // 指向首轨
+                        _currentIndex = FindLibraryIndex(dsItems[0].FilePath);
+                        PlaylistView?.ScrollIntoView(dsItems[0]);
+                        StartPlayback(dsItems[0]);
+                        PersistPlaybackSession();
+                        NotifyCurrentPlaylistWindow();
+                    }
+                    catch (Exception caught)
+                    {
+                        global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught);
+                    }
+                });
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught);
+            }
         }
 
 
