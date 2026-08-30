@@ -4325,6 +4325,24 @@
                                    TextWrapping="Wrap"
                                    Visibility="Collapsed"
                                    Margin="0,4,0,0" />
+                        <!-- 按设备记忆 DSP 配置档 -->
+                        <StackPanel Spacing="6" Margin="0,10,0,0">
+                            <ToggleSwitch
+                                x:Name="DeviceDspMemoryToggle"
+                                Header="按设备记忆 DSP 配置"
+                                OffContent="关"
+                                OnContent="开"
+                                Toggled="DeviceDspMemoryToggle_Toggled" />
+                            <TextBlock
+                                x:Name="DeviceDspHint"
+                                FontSize="11"
+                                Opacity="0.75"
+                                TextWrapping="Wrap" />
+                            <Button
+                                x:Name="SaveDeviceDspButton"
+                                Content="保存当前配置为当前设备"
+                                Click="SaveDeviceDspButton_Click" />
+                        </StackPanel>
                     </StackPanel>
 
                     <!-- 链路状态（可视化：源 → DSP → 输出） -->
