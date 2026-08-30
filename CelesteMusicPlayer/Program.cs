@@ -2,11 +2,9 @@ using System;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
-using Microsoft.Win32;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Windows.ApplicationModel;
-using Windows.Management.Deployment;
 using WinRT;
 
 namespace CelesteMusicPlayer
@@ -48,14 +46,12 @@ namespace CelesteMusicPlayer
                 Environment.SetEnvironmentVariable("MICROSOFT_WINDOWSAPPRUNTIME_BASE_DIRECTORY", baseDir);
             }
 
-            // 框架依赖模式下，缺失 .NET 9 / Windows App SDK 运行时会导致托管代码都起不来，
-            // 因此在“能跑托管代码”的前提下提前检测并给出安装指引（纯缺 .NET 9 时由系统 apphost 提示）。
-            if (!runtimeBundled && !packaged && !CheckRuntimeDependencies(out string missing))
-            {
-                ShowRuntimePrompt(missing);
-                return;
-            }
-
+            // 框架依赖模式下运行时的可用性由系统引导层保证：
+            // - 缺 .NET 9 桌面运行时 → apphost 启动前弹系统错误框（含官方下载链接）；
+            // - 缺 Windows App SDK 运行时 → Bootstrap 自动初始化在 Main 之前失败并弹引导框。
+            // 能走到这里即代表运行时已就绪，无需（也无法）再自行枚举系统包——
+            // 非打包应用枚举 MSIX 包无权限（UnauthorizedAccessException），且 1.8 运行时不写注册表，
+            // 此前曾因此把“已安装”误判为“未安装”导致启动即弹窗退出。
             try
             {
                 ComWrappersSupport.InitializeComWrappers();
@@ -104,66 +100,6 @@ namespace CelesteMusicPlayer
                 // 非打包模式必然抛异常（E_NOTIMPL），静默即可，不写日志。
                 return false;
             }
-        }
-
-        /// <summary>检测框架依赖所需的运行时是否已安装；返回 false 时 missing 给出缺失项说明。</summary>
-        private static bool CheckRuntimeDependencies(out string missing)
-        {
-            missing = string.Empty;
-            try
-            {
-                // Windows App SDK 运行时（非自包含）：自 1.8 起以 MSIX 框架包安装
-                // （包名 Microsoft.WindowsAppRuntime.1.8，或 CBS 变体），不写注册表键。
-                // 因此先枚举系统已注册 MSIX 包判断主版本 1.8 是否就位，注册表仅作回退。
-                bool winAppSdkOk = false;
-                try
-                {
-                    var pkgManager = new PackageManager();
-                    foreach (Package pkg in pkgManager.FindPackages())
-                    {
-                        string name = pkg.Id.Name ?? string.Empty;
-                        if (name.StartsWith("Microsoft.WindowsAppRuntime.1.8", StringComparison.OrdinalIgnoreCase)
-                            || name.StartsWith("Microsoft.WindowsAppRuntime.CBS.1.8", StringComparison.OrdinalIgnoreCase))
-                        {
-                            winAppSdkOk = true;
-                            break;
-                        }
-                    }
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("Program.cs", caught); }
-
-                // 回退：老版本运行时/个别系统通过注册表 HKLM\SOFTWARE\Microsoft\WindowsAppRuntime 定位。
-                if (!winAppSdkOk)
-                {
-                    try
-                    {
-                        using (RegistryKey? root = Registry.LocalMachine.OpenSubKey(@"SOFTWARE\Microsoft\WindowsAppRuntime"))
-                        {
-                            if (root != null)
-                            {
-                                foreach (string ver in root.GetSubKeyNames())
-                                {
-                                    using RegistryKey? verKey = root.OpenSubKey(ver);
-                                    if (verKey != null && verKey.GetValue("BaseDirectory") is string baseDir && baseDir.Length > 0)
-                                    {
-                                        winAppSdkOk = true;
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("Program.cs", caught); }
-                }
-
-                if (!winAppSdkOk)
-                {
-                    missing = "Windows App SDK 运行时（1.8）未安装。";
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("Program.cs", caught); }
-
-            return string.IsNullOrEmpty(missing);
         }
 
         private static bool IsRuntimeMissingException(Exception ex)
