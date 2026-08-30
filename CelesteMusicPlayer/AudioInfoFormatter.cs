@@ -8,12 +8,6 @@ namespace CelesteMusicPlayer
     /// <summary>音频格式信息格式化（HiFi 显示：采样率 / 位深 / 码率 / 声道）。</summary>
     public static class AudioInfoFormatter
     {
-        private static readonly string[] FfmpegCandidates =
-        {
-            Path.Combine(AppContext.BaseDirectory, "Assets", "ffmpeg", "ffmpeg.exe"),
-            Path.Combine(AppContext.BaseDirectory, "ffmpeg.exe")
-        };
-
         // 每个文件只解析一次并缓存（含 ffmpeg 兜底开销昂贵的那些格式），避免列表/启动反复读盘与反复起进程。
         private readonly record struct AudioInfoData(int Rate, int Bits, int Kbps, int Channels);
 
@@ -394,7 +388,7 @@ namespace CelesteMusicPlayer
         /// <summary>用内置 ffmpeg -i 输出解析采样率/位深/码率/声道（robust 于 TagLib 读不到的格式）。</summary>
         private static void ProbeWithFfmpeg(string path, ref int rate, ref int bits, ref int kbps, ref int channels)
         {
-            string? ffmpeg = FindFfmpeg();
+            string? ffmpeg = AudioPlaybackEngine.FindFfmpeg();
             if (ffmpeg == null)
             {
                 return;
@@ -477,17 +471,5 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioInfoFormatter.cs", caught); }
         }
 
-        private static string? FindFfmpeg()
-        {
-            foreach (string c in FfmpegCandidates)
-            {
-                if (File.Exists(c))
-                {
-                    return c;
-                }
-            }
-
-            return null;
-        }
     }
 }

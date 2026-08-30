@@ -296,6 +296,9 @@ namespace CelesteMusicPlayer
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+
+            // 按设备记忆：应用设备后套用该设备的 DSP 配置档（无存档则跳过，不覆盖全局配置）
+            ApplyDeviceDspProfileIfEnabled(deviceId);
         }
 
 

@@ -1045,6 +1045,9 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 同步主界面常驻 bit-perfect 徽章（与音频设置面板口径一致）
+            RefreshMainBitPerfectBadge();
+
             // DSP 总旁路（A/B 对比）优先显示：旁路时输出 bit-perfect，无论 DSP 设置如何
             bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
             if (bypass)

@@ -1059,6 +1059,10 @@ namespace CelesteMusicPlayer
             dupCheck.Click += (_, _) => DuplicateFilesWindow.ShowOrActivate(this);
             flyout.Items.Add(dupCheck);
 
+            var rgScan = new MenuFlyoutItem { Text = "ReplayGain 扫描…" };
+            rgScan.Click += (_, _) => OpenReplayGainScan();
+            flyout.Items.Add(rgScan);
+
             var downloadCover = new MenuFlyoutItem { Text = "下载当前封面" };
             downloadCover.Click += (_, _) => _ = DownloadCoverForCurrentAsync();
             flyout.Items.Add(downloadCover);
@@ -1330,6 +1334,31 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
             NowPlayingText.Text = message;
+        }
+
+        /// <summary>打开 ReplayGain 扫描窗口：按范围（整库 / 当前播放列表 / 选中曲目）提供待扫描曲目。</summary>
+        private void OpenReplayGainScan()
+        {
+            var win = new ReplayGainScanWindow(this, scope =>
+            {
+                if (scope == ReplayGainScanScope.Library)
+                {
+                    return LibraryDb.GetAllTracksForScan();
+                }
+
+                if (scope == ReplayGainScanScope.Playlist)
+                {
+                    return _playlist
+                        .Select(p => new RgScanInput { FilePath = p.FilePath, Album = p.Album, AlbumArtist = p.AlbumArtist })
+                        .ToList();
+                }
+
+                // Selection：仅对列表里多选的曲目扫描
+                return GetSelectedMultiSelectSongs()
+                    .Select(p => new RgScanInput { FilePath = p.FilePath, Album = p.Album, AlbumArtist = p.AlbumArtist })
+                    .ToList();
+            });
+            win.Activate();
         }
 
 
@@ -2202,15 +2231,19 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            string? appliedDevice = null;
             if (AudioOutputDeviceCombo.SelectedItem is ComboBoxItem it && it.Tag is string did)
             {
                 // 用户手动改选 → 放弃「等设备插回自动切回」的暂存偏好
+                appliedDevice = did;
                 ClearPreferredOutputDevice();
                 AppSettingsStore.Update(s => s.OutputDeviceId = did);
                 await ApplyOutputDeviceAsync(did);
             }
 
             RefreshAudioSettingsPanel();
+            // 按设备记忆：切到具体设备时自动套用该设备的 DSP 配置档
+            ApplyDeviceDspProfileIfEnabled(appliedDevice);
         }
 
         private void RefreshAudioSettingsPanel()
@@ -2261,8 +2294,127 @@ namespace CelesteMusicPlayer
                 AudioProDspChain.Text = "EQ" + (eqOn ? "✓" : "—") + " · 声道" + (chOn ? "✓" : "—") + " · 限幅" + (limiterOn ? "✓" : "—") + " · ReplayGain" + (rgOn ? "✓" : "—");
                 // 链路可视化着色 + bit-perfect 徽章
                 ApplyLinkVisual(pure: active.Count == 0, activeText: string.Join("、", active));
+                // 同步主界面常驻 bit-perfect 徽章
+                RefreshMainBitPerfectBadge();
+                // 按设备记忆 DSP 配置档：开关与提示同步
+                if (DeviceDspMemoryToggle != null)
+                {
+                    DeviceDspMemoryToggle.IsOn = DeviceDspProfileStore.IsEnabled();
+                }
+
+                if (DeviceDspHint != null)
+                {
+                    string cur = _audioEngine?.OutputDeviceId;
+                    if (string.IsNullOrWhiteSpace(cur))
+                    {
+                        DeviceDspHint.Text = "当前：系统默认设备（不按设备记忆）。";
+                    }
+                    else
+                    {
+                        bool has = DeviceDspProfileStore.HasProfile(cur);
+                        DeviceDspHint.Text = (has ? "已为该设备保存配置档。" : "该设备暂无配置档；调好 DSP 后点「保存当前配置为当前设备」。")
+                            + " 设备：" + cur;
+                    }
+                }
+
                 // SRC 会话实际状态（源→目标 / 未升频原因）
                 RefreshSrcSessionState();
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+        }
+
+        /// <summary>计算与音频设置面板徽章同一口径的链路纯净度：任一 DSP（EQ/声道平衡/限幅/ReplayGain）
+        /// 生效即非 bit-perfect；DSP 总旁路优先视为直通。</summary>
+        private bool IsBitPerfectPure(out string activeText)
+        {
+            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            if (bypass) { activeText = string.Empty; return true; }
+
+            bool eqOn = EqCurveStore.Load().HasEffect();
+            var extra = DspExtraStore.Load();
+            bool chOn = extra.ChannelBalance?.IsActive == true;
+            bool limiterOn = extra.Safety?.EnableLimiter != false;
+            bool rgOn = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
+            var active = new System.Collections.Generic.List<string>();
+            if (eqOn) active.Add("EQ");
+            if (chOn) active.Add("声道");
+            if (limiterOn) active.Add("限幅");
+            if (rgOn) active.Add("ReplayGain");
+            activeText = active.Count == 0 ? string.Empty : string.Join("、", active);
+            return active.Count == 0;
+        }
+
+        /// <summary>按设备记忆：若开启且当前设备有已存配置档，则套用该设备的 DSP 配置（不碰音频字节流）。</summary>
+        private void ApplyDeviceDspProfileIfEnabled(string deviceId)
+        {
+            try
+            {
+                if (!DeviceDspProfileStore.IsEnabled()) return;
+                if (string.IsNullOrWhiteSpace(deviceId)) return;            // 系统默认设备不按设备记忆
+                if (!DeviceDspProfileStore.HasProfile(deviceId)) return;   // 无存档则用全局配置，避免被默认覆盖
+                var profile = DeviceDspProfileStore.GetProfile(deviceId);
+                DeviceDspProfileStore.ApplyToStores(profile);
+                // 重新填充音效面板控件 + 内存 EQ 曲线（与启动加载同口径）
+                LoadAudioFxUiFromStore();
+                // 推送到引擎（内部已按 _audioFxPanelReady 守卫；未就绪时仅写盘不应用）
+                ApplyDspToEngine();
+                // 独立的 10 段均衡器与房间校正由引擎直接读 store
+                _audioEngine?.SetEqualizer(EqualizerStore.Load().BandGains);
+                RefreshAudioSettingsPanel();
+                StartupLog.Write($"[DSP] 已套用设备配置档：{deviceId}");
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+        }
+
+        private void DeviceDspMemoryToggle_Toggled(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                bool on = DeviceDspMemoryToggle?.IsOn == true;
+                DeviceDspProfileStore.SetEnabled(on);
+                // 开启时，若当前设备尚无存档则把当前配置存为它的配置档，立即生效
+                string cur = _audioEngine?.OutputDeviceId ?? string.Empty;
+                if (on && !string.IsNullOrWhiteSpace(cur) && !DeviceDspProfileStore.HasProfile(cur))
+                {
+                    DeviceDspProfileStore.SaveProfile(cur, DeviceDspProfileStore.CaptureCurrent());
+                }
+
+                RefreshAudioSettingsPanel();
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+        }
+
+        private void SaveDeviceDspButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string cur = _audioEngine?.OutputDeviceId ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(cur))
+                {
+                    DeviceDspHint.Text = "当前为系统默认设备，无法按设备记忆；请先在「输出设备」里选具体设备。";
+                    return;
+                }
+
+                DeviceDspProfileStore.SaveProfile(cur, DeviceDspProfileStore.CaptureCurrent());
+                DeviceDspHint.Text = "已保存当前配置为设备：" + cur;
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+        }
+
+        /// <summary>刷新主播放界面常驻的 bit-perfect 徽章（绿=直通 / 琥珀=DSP 处理中）。</summary>
+        private void RefreshMainBitPerfectBadge()
+        {
+            try
+            {
+                if (MainBitPerfectBadge == null || MainBitPerfectText == null) return;
+                bool pure = IsBitPerfectPure(out string activeText);
+                var green = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 46, 160, 67));
+                var amber = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 214, 148, 45));
+                MainBitPerfectBadge.Background = pure ? green : amber;
+                MainBitPerfectText.Text = pure
+                    ? "✓ bit-perfect · 直通"
+                    : "非 bit-perfect · " + activeText;
+                MainBitPerfectText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
