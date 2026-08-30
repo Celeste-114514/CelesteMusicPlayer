@@ -121,7 +121,7 @@ namespace CelesteMusicPlayer
                     var pkgManager = new PackageManager();
                     foreach (Package pkg in pkgManager.FindPackages())
                     {
-                        string name = pkg.Name ?? string.Empty;
+                        string name = pkg.Id.Name ?? string.Empty;
                         if (name.StartsWith("Microsoft.WindowsAppRuntime.1.8", StringComparison.OrdinalIgnoreCase)
                             || name.StartsWith("Microsoft.WindowsAppRuntime.CBS.1.8", StringComparison.OrdinalIgnoreCase))
                         {

@@ -69,6 +69,10 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 
 ## 📝 更新日志
 
+### v26.8.31.1（2026-08-31）
+- 🛠️ **修复 Windows App SDK 运行时检测误判**：WinAppSDK 1.8 运行时以 MSIX 框架包安装，之前的检测只查注册表导致已安装也被误判缺失、启动退出；现改为先枚举系统已注册 MSIX 包（`Microsoft.WindowsAppRuntime.1.8` 变体），注册表仅作兼容回退
+- 🔧 修复框架依赖包启动预检正确性（bit-perfect 不变）
+
 ### v26.8.31（2026-08-31）
 **新增功能**
 - 🎼 **SACD 镜像（.iso）直接播放**：打开 .iso 自动解出整张 SACD 的逐轨 DSD（DSF）文件并加入播放列表，支持 DoP 直出 / PCM 转码，HiFi 音质、bit-perfect 不变；解码工具已内置，开箱即用
