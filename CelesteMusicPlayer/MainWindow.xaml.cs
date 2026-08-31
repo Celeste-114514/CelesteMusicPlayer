@@ -572,6 +572,12 @@ namespace CelesteMusicPlayer
         // 模块 B：分类字段配置
         private List<string> _tagSortCategoryFields = new();  // 加载自 AppSettings，空=默认5个
 
+        // 分类墙加载保护：全部分组缓存 + 当前可见数（高基数字段不会一次性渲染所有卡片）
+        private const int TagSortClassWallInitialMax = 200;   // 初始可见上限（再多就触发"加载更多"）
+        private const int TagSortClassWallLoadMoreStep = 200; // 每次"加载更多"再加 200
+        private List<TagSortCategoryEntry> _tagSortClassWallAll = new(); // 全部分组（已排序）
+        private int _tagSortClassWallShown = 0;                            // 当前已显示数量
+
         // ---------- 左侧分类（Songs / Albums / Artists / Folders / UserPlaylist）----------
         private string _currentCategory = "Songs";
 

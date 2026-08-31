@@ -38,20 +38,37 @@ namespace CelesteMusicPlayer
         {
             foreach (var def in TagSortFields.All)
             {
+                bool isHighCardinality = def.Cardinality == TagSortFields.Cardinality.High;
+                // 高基数字段：默认不勾选（避免误用爆内存）；用户可手动勾选。
+                bool initialChecked = !isHighCardinality && _visibleKeys.Contains(def.Key);
+
                 var check = new CheckBox
                 {
-                    Content = def.Label,
+                    Content = def.Label + (isHighCardinality ? "  ⚠" : string.Empty),
                     Tag = def.Key,
-                    IsChecked = _visibleKeys.Contains(def.Key),
+                    IsChecked = initialChecked,
                     MinWidth = 150,
                     Margin = new Thickness(0, 1, 0, 1),
                     FontSize = 13,
+                    Opacity = isHighCardinality ? 0.6 : 1.0,
                 };
                 check.Checked += (_, _) => { OnCheckedChanged(def.Key, true); };
                 check.Unchecked += (_, _) => { OnCheckedChanged(def.Key, false); };
                 _fieldChecks.Add(check);
                 (def.Tech ? TechChecks : MetaChecks).Children.Add(check);
             }
+
+            // 在底部追加一条高基数提示，避免用户疑惑为什么标题/文件名"勾不动"。
+            var hint = new TextBlock
+            {
+                Text = "⚠ 标记的字段基数过高（如每首歌的标题/文件名都不同），用于分类墙会产生海量卡片并耗尽内存。" +
+                       "此类字段请到「分组浏览」（列表内按字段分组、组头可折叠）使用。",
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.7,
+                FontSize = 12,
+                Margin = new Thickness(0, 6, 0, 0),
+            };
+            MetaChecks.Children.Add(hint);
         }
 
         private void OnCheckedChanged(string key, bool visible)

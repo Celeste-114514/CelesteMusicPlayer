@@ -2712,36 +2712,64 @@
 
                         <!-- 分类墙：一个分类一张封面卡片 -->
                         <ScrollViewer Grid.Row="1" x:Name="TagSortClassScroll" VerticalScrollBarVisibility="Auto">
-                            <GridView
-                                x:Name="TagSortClassGridView"
-                                SelectionMode="None"
-                                IsItemClickEnabled="True"
-                                ItemClick="TagSortClassGridView_ItemClick"
-                                RightTapped="TagSortClassGridView_RightTapped">
-                                <GridView.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="100" />
-                                    </ItemsPanelTemplate>
-                                </GridView.ItemsPanel>
-                                <GridView.ItemTemplate>
-                                    <DataTemplate x:DataType="local:TagSortCategoryEntry">
-                                        <StackPanel Width="132" Spacing="8">
-                                            <Border Width="132" Height="132" CornerRadius="8"
-                                                    Background="{ThemeResource SystemControlHighlightListAccentLowBrush}"
-                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                                                <Grid>
-                                                    <FontIcon Glyph="&#xE8B7;" FontSize="44" Foreground="White"
-                                                              HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.9" />
-                                                    <Image Stretch="UniformToFill" Source="{x:Bind Cover, Mode=OneWay}" />
-                                                </Grid>
-                                            </Border>
-                                            <TextBlock Text="{x:Bind Name}" TextWrapping="WrapWholeWords" TextAlignment="Center"
-                                                       MaxLines="2" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Name}" />
-                                            <TextBlock Text="{x:Bind CountText}" FontSize="11" Opacity="0.7" TextAlignment="Center" />
+                            <StackPanel>
+                                <GridView
+                                    x:Name="TagSortClassGridView"
+                                    SelectionMode="None"
+                                    IsItemClickEnabled="True"
+                                    ItemClick="TagSortClassGridView_ItemClick"
+                                    RightTapped="TagSortClassGridView_RightTapped">
+                                    <GridView.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="100" />
+                                        </ItemsPanelTemplate>
+                                    </GridView.ItemsPanel>
+                                    <GridView.ItemTemplate>
+                                        <DataTemplate x:DataType="local:TagSortCategoryEntry">
+                                            <StackPanel Width="132" Spacing="8">
+                                                <Border Width="132" Height="132" CornerRadius="8"
+                                                        Background="{ThemeResource SystemControlHighlightListAccentLowBrush}"
+                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                                    <Grid>
+                                                        <FontIcon Glyph="&#xE8B7;" FontSize="44" Foreground="White"
+                                                                  HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.9" />
+                                                        <Image Stretch="UniformToFill" Source="{x:Bind Cover, Mode=OneWay}" />
+                                                    </Grid>
+                                                </Border>
+                                                <TextBlock Text="{x:Bind Name}" TextWrapping="WrapWholeWords" TextAlignment="Center"
+                                                           MaxLines="2" TextTrimming="CharacterEllipsis" ToolTipService.ToolTip="{x:Bind Name}" />
+                                                <TextBlock Text="{x:Bind CountText}" FontSize="11" Opacity="0.7" TextAlignment="Center" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </GridView.ItemTemplate>
+                                </GridView>
+                                <!-- 分类墙底部：基数过多时显示"加载更多 / 去分组浏览"提示 -->
+                                <Border x:Name="TagSortClassWallOverflowBar"
+                                        Visibility="Collapsed"
+                                        Margin="0,12,0,24"
+                                        Padding="14,10"
+                                        CornerRadius="8"
+                                        Background="{ThemeResource SystemControlHighlightListLowBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1">
+                                    <StackPanel Spacing="8">
+                                        <TextBlock x:Name="TagSortClassWallOverflowText"
+                                                   TextWrapping="Wrap"
+                                                   Opacity="0.85"
+                                                   FontSize="13" />
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <Button x:Name="TagSortClassWallLoadMoreButton"
+                                                    Content="加载更多"
+                                                    Padding="12,4"
+                                                    Click="TagSortClassWallLoadMoreButton_Click" />
+                                            <Button x:Name="TagSortClassWallSwitchToGroupButton"
+                                                    Content="去分组浏览（按字段分组）"
+                                                    Padding="12,4"
+                                                    Click="TagSortClassWallSwitchToGroupButton_Click" />
                                         </StackPanel>
-                                    </DataTemplate>
-                                </GridView.ItemTemplate>
-                            </GridView>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
                         </ScrollViewer>
 
                         <!-- 分类面板：进入某个分类后显示 -->

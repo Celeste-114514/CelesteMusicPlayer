@@ -9,26 +9,31 @@ namespace CelesteMusicPlayer
     /// </summary>
     public static class TagSortFields
     {
-        public sealed record FieldDef(string Key, string Label, bool Numeric, bool Tech);
+        /// <summary>字段基数（用于分类字段配置时给提示）。High = 每首歌唯一或接近唯一，不适合分类墙。</summary>
+        public enum Cardinality { Low, High }
+
+        public sealed record FieldDef(string Key, string Label, bool Numeric, bool Tech, Cardinality Cardinality);
 
         /// <summary>全部可选字段。Tech=true 表示来自 AudioInfoFormatter 的技术信息（懒解析有缓存）。</summary>
         public static readonly FieldDef[] All =
         {
-            new("Artist", "艺术家", false, false),
-            new("AlbumArtist", "专辑艺术家", false, false),
-            new("Album", "专辑", false, false),
-            new("Genre", "流派", false, false),
-            new("Year", "年份", true, false),
-            new("Title", "标题", false, false),
-            new("Track", "音轨号", true, false),
-            new("Disc", "碟片号", true, false),
-            new("Rating", "评分", true, false),
-            new("TitleLetter", "标题首字母", false, false),
-            new("Duration", "时长", false, false),
-            new("Format", "格式", false, true),
-            new("DepthRate", "位深/采样率", false, true),
-            new("Bitrate", "码率", false, true),
-            new("FileName", "文件名", false, false),
+            new("Artist",       "艺术家",     false, false, Cardinality.Low),
+            new("AlbumArtist",  "专辑艺术家", false, false, Cardinality.Low),
+            new("Album",        "专辑",       false, false, Cardinality.Low),
+            new("Genre",        "流派",       false, false, Cardinality.Low),
+            new("Year",         "年份",       true,  false, Cardinality.Low),
+            new("TitleLetter",  "标题首字母", false, false, Cardinality.Low),
+            new("Format",       "格式",       false, true,  Cardinality.Low),
+            new("DepthRate",    "位深/采样率",false, true,  Cardinality.Low),
+            new("Bitrate",      "码率",       false, true,  Cardinality.Low),
+            // High：每首歌唯一/接近唯一，不适合做分类墙（卡片过多 + 重复读封面爆内存）。
+            // 在「分组浏览」（模块 C）里使用——列表内按字段分组，组头即歌名/文件名。
+            new("Title",        "标题",       false, false, Cardinality.High),
+            new("FileName",     "文件名",     false, false, Cardinality.High),
+            new("Track",        "音轨号",     true,  false, Cardinality.High),
+            new("Disc",         "碟片号",     true,  false, Cardinality.High),
+            new("Rating",       "评分",       true,  false, Cardinality.High),
+            new("Duration",     "时长",       false, false, Cardinality.High),
         };
 
         public static FieldDef? Find(string key) => Array.Find(All, f => f.Key == key);

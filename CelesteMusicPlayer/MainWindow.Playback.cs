@@ -13,6 +13,8 @@ using Shapes = Microsoft.UI.Xaml.Shapes;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.Linq;
+using System.Threading.Tasks;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -947,12 +949,14 @@ namespace CelesteMusicPlayer
             => TagSortFields.Value(p, field);
 
 
-        /// <summary>刷新分类墙：按 _tagSortClassField 分组 _playlist，每组分封面（首曲封面）。</summary>
+        /// <summary>刷新分类墙：按 _tagSortClassField 分组 _playlist，每组分封面（首曲封面）。高基数时只显示前 N 个，底部提示加载更多/去分组浏览。</summary>
         private void ShowTagSortClassWall()
         {
             TagSortPanel.Visibility = Visibility.Collapsed;
             TagSortClassScroll.Visibility = Visibility.Visible;
-            var entries = _playlist
+
+            // 1. 算全部分组（排序后存到 _tagSortClassWallAll）
+            _tagSortClassWallAll = _playlist
                 .GroupBy(p => TagSortFieldVal(p, _tagSortClassField), StringComparer.CurrentCultureIgnoreCase)
                 .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
                 .Select(g => new TagSortCategoryEntry
@@ -962,11 +966,84 @@ namespace CelesteMusicPlayer
                     FirstFilePath = g.First().FilePath
                 })
                 .ToList();
-            TagSortClassGridView.ItemsSource = entries;
-            foreach (var e in entries)
+
+            // 2. 先清空封面字节缓存里残留的旧条目，避免本次分组与上次分类字段不同时大量无效字节残留
+            TagSortCoverBytesCache.Clear();
+
+            // 3. 重置可见数 + 渲染
+            _tagSortClassWallShown = 0;
+            RenderTagSortClassWallSlice();
+        }
+
+
+        /// <summary>渲染分类墙前 N 张卡片（N = _tagSortClassWallShown）+ 刷新底部提示条 + 分批异步加载封面。</summary>
+        private void RenderTagSortClassWallSlice()
+        {
+            int total = _tagSortClassWallAll.Count;
+            int show = Math.Min(_tagSortClassWallShown > 0 ? _tagSortClassWallShown : TagSortClassWallInitialMax, total);
+            var slice = _tagSortClassWallAll.Take(show).ToList();
+            TagSortClassGridView.ItemsSource = slice;
+
+            // 4. 异步加载当前可见卡片的封面（分批限流：8/批、间隔 30ms，避免 UI 抖动）
+            _ = LoadClassWallCoversBatchedAsync(slice);
+
+            // 5. 更新底部"加载更多"提示条
+            UpdateClassWallOverflowBar(total, show);
+        }
+
+
+        private async System.Threading.Tasks.Task LoadClassWallCoversBatchedAsync(IReadOnlyList<TagSortCategoryEntry> slice)
+        {
+            const int batchSize = 8;
+            const int batchDelayMs = 30;
+            for (int i = 0; i < slice.Count; i += batchSize)
             {
-                _ = LoadTagSortCategoryCoverAsync(e);
+                int end = Math.Min(i + batchSize, slice.Count);
+                for (int j = i; j < end; j++)
+                {
+                    _ = LoadTagSortCategoryCoverAsync(slice[j]);
+                }
+                await System.Threading.Tasks.Task.Delay(batchDelayMs);
             }
+        }
+
+
+        private void UpdateClassWallOverflowBar(int total, int shown)
+        {
+            if (total <= shown)
+            {
+                TagSortClassWallOverflowBar.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            // 高基数字段时，给更明确的提示
+            bool highCardinality = TagSortFields.Find(_tagSortClassField)?.Cardinality == TagSortFields.Cardinality.High;
+            string advice = highCardinality
+                ? "当前分类字段基数过高（每首曲目几乎都不同）。建议改为低基数字段（如流派/年份/格式），或使用「分组浏览」按字段分组查看。"
+                : "分类数量较多，仅显示部分卡片以避免内存占用过高。";
+
+            TagSortClassWallOverflowText.Text = $"共 {total} 个分类，已显示前 {shown} 个。\n{advice}";
+            TagSortClassWallLoadMoreButton.Content = shown + TagSortClassWallLoadMoreStep <= total
+                ? $"再加载 {Math.Min(TagSortClassWallLoadMoreStep, total - shown)} 个"
+                : "加载全部剩余";
+            TagSortClassWallOverflowBar.Visibility = Visibility.Visible;
+        }
+
+
+        private void TagSortClassWallLoadMoreButton_Click(object sender, RoutedEventArgs e)
+        {
+            _tagSortClassWallShown = Math.Min(_tagSortClassWallShown + TagSortClassWallLoadMoreStep, _tagSortClassWallAll.Count);
+            RenderTagSortClassWallSlice();
+        }
+
+
+        /// <summary>「去分组浏览」按钮：模块 C 未完成时先引导用户到面板 Sort 视角；模块 C 完成后改为切换到真正的分组模式。</summary>
+        private void TagSortClassWallSwitchToGroupButton_Click(object sender, RoutedEventArgs e)
+        {
+            // 临时跳到面板的 Sort 视角（已有的自定义排序入口）；模块 C（分组浏览）完成后改为切到真正的"分组浏览"模式
+            _tagSortPanelMode = "Sort";
+            ApplyTagSortPanelMode();
+            try { WriteTagSortStatus(); } catch { /* 静默 */ }
         }
 
 
@@ -990,7 +1067,7 @@ namespace CelesteMusicPlayer
                     .ToList();
                 TagSortPanelGridView.Visibility = Visibility.Visible;
                 TagSortPanelGridView.ItemsSource = albums;
-                foreach (var e in albums) _ = LoadTagSortCategoryCoverAsync(e);
+                _ = LoadClassWallCoversBatchedAsync(albums); // 批处理：避免一次性并发加载所有封面
             }
             else if (_tagSortPanelMode == "Artists")
             {
@@ -1001,7 +1078,7 @@ namespace CelesteMusicPlayer
                     .ToList();
                 TagSortPanelGridView.Visibility = Visibility.Visible;
                 TagSortPanelGridView.ItemsSource = artists;
-                foreach (var e in artists) _ = LoadTagSortCategoryCoverAsync(e);
+                _ = LoadClassWallCoversBatchedAsync(artists); // 批处理：避免一次性并发加载所有封面
             }
             else if (_tagSortPanelMode == "Sort")
             {
