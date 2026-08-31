@@ -252,6 +252,13 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
 
         /// <summary>主窗口置顶。</summary>
         public bool AlwaysOnTop { get; set; }
+
+        // —— 标签排序面板（模块 A 列定制 + 模块 B 分类字段）——
+        /// <summary>曲目列表列配置；空 = 用默认列（标题/艺术家/专辑/时长）。</summary>
+        public List<ListColumnSpec> TagSortColumns { get; set; } = new();
+
+        /// <summary>分类字段 key 列表（按顺序显示在分类按钮组）；空 = 默认 5 个（艺术家/专辑艺术家/专辑/流派/年份）。</summary>
+        public List<string> TagSortCategoryFields { get; set; } = new();
     }
 
     public static class AppSettingsStore

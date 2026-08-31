@@ -1216,8 +1216,8 @@ namespace CelesteMusicPlayer
             // 标签排序板块：面板曲目视角（Songs）时多选针对该列表
             if (string.Equals(_currentCategory, "TagSort", StringComparison.Ordinal)
                 && _tagSortPanelMode == "Songs"
-                && TagSortPanelSongListView != null
-                && TagSortPanelSongListView.Visibility == Visibility.Visible)
+                && TagSortSongListRoot != null
+                && TagSortSongListRoot.Visibility == Visibility.Visible)
             {
                 return TagSortPanelSongListView;
             }

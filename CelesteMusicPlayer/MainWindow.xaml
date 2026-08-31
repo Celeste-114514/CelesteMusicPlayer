@@ -2704,14 +2704,10 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
 
-                        <!-- 顶部：分类字段切换（分类墙维度） -->
+                        <!-- 顶部：分类字段切换（分类墙维度，按钮动态生成，末尾"＋"配置入口） -->
                         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="6" Padding="0,0,0,2">
                             <TextBlock Text="分类：" VerticalAlignment="Center" Opacity="0.7" FontSize="13" />
-                            <Button x:Name="TagSortFieldArtistButton" Tag="Artist" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" VerticalContentAlignment="Center" Content="艺术家" Click="TagSortFieldBoundButton_Click" />
-                            <Button x:Name="TagSortFieldAlbumArtistButton" Tag="AlbumArtist" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" VerticalContentAlignment="Center" Content="专辑艺术家" Click="TagSortFieldBoundButton_Click" />
-                            <Button x:Name="TagSortFieldAlbumButton" Tag="Album" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" VerticalContentAlignment="Center" Content="专辑" Click="TagSortFieldBoundButton_Click" />
-                            <Button x:Name="TagSortFieldGenreButton" Tag="Genre" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" VerticalContentAlignment="Center" Content="流派" Click="TagSortFieldBoundButton_Click" />
-                            <Button x:Name="TagSortFieldYearButton" Tag="Year" Height="32" Padding="12,0" CornerRadius="16" BorderThickness="1" VerticalContentAlignment="Center" Content="年份" Click="TagSortFieldBoundButton_Click" />
+                            <StackPanel x:Name="TagSortFieldButtonsPanel" Orientation="Horizontal" Spacing="6" />
                         </StackPanel>
 
                         <!-- 分类墙：一个分类一张封面卡片 -->
@@ -2813,40 +2809,41 @@
                                     </GridView.ItemTemplate>
                                 </GridView>
 
-                                <!-- 曲目 视角：列表 -->
-                                <ListView x:Name="TagSortPanelSongListView" SelectionMode="Extended"
-                                          DoubleTapped="TagSortPanelSongListView_DoubleTapped"
-                                          RightTapped="TagSortPanelSongListView_RightTapped"
-                                          ContainerContentChanging="TagSortPanelSongList_ContainerContentChanging"
-                                          SelectionChanged="TagSortPanelSongList_SelectionChanged" Visibility="Collapsed">
-                                    <ListView.ItemContainerStyle>
-                                        <Style TargetType="ListViewItem">
-                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                                            <Setter Property="Padding" Value="0" />
-                                            <Setter Property="MinHeight" Value="40" />
-                                            <Setter Property="CornerRadius" Value="8" />
-                                            <Setter Property="Margin" Value="0,2" />
-                                            <Setter Property="Background" Value="Transparent" />
-                                        </Style>
-                                    </ListView.ItemContainerStyle>
-                                    <ListView.ItemTemplate>
-                                        <DataTemplate x:DataType="local:PlaylistItem">
-                                            <Border Tag="SongRowChrome" MinHeight="40" CornerRadius="8" Padding="12,0" Background="Transparent">
-                                                <Grid ColumnSpacing="12">
-                                                    <Grid.ColumnDefinitions>
-                                                        <ColumnDefinition Width="48" />
-                                                        <ColumnDefinition Width="*" />
-                                                        <ColumnDefinition Width="72" />
-                                                    </Grid.ColumnDefinitions>
-                                                    <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.7" Text="{x:Bind Index}" />
-                                                    <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Title}" />
-                                                    <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.7" Text="{x:Bind DurationText}" />
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ListView.ItemTemplate>
-                                </ListView>
+                                <!-- 曲目 视角：列表（列头条 + 动态列，列配置见代码 RebuildTagSortColumnHeaders） -->
+                                <Grid x:Name="TagSortSongListRoot" Visibility="Collapsed" RowSpacing="2">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="28" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <Grid x:Name="TagSortColumnHeaderGrid" Background="Transparent" />
+                                    <ListView
+                                        x:Name="TagSortPanelSongListView"
+                                        Grid.Row="1"
+                                        SelectionMode="Extended"
+                                        DoubleTapped="TagSortPanelSongListView_DoubleTapped"
+                                        RightTapped="TagSortPanelSongListView_RightTapped"
+                                        ContainerContentChanging="TagSortPanelSongList_ContainerContentChanging"
+                                        SelectionChanged="TagSortPanelSongList_SelectionChanged">
+                                        <ListView.ItemContainerStyle>
+                                            <Style TargetType="ListViewItem">
+                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                                <Setter Property="Padding" Value="0" />
+                                                <Setter Property="MinHeight" Value="40" />
+                                                <Setter Property="CornerRadius" Value="8" />
+                                                <Setter Property="Margin" Value="0,2" />
+                                                <Setter Property="Background" Value="Transparent" />
+                                            </Style>
+                                        </ListView.ItemContainerStyle>
+                                        <ListView.ItemTemplate>
+                                            <DataTemplate x:DataType="local:PlaylistItem">
+                                                <Border Tag="SongRowChrome" MinHeight="40" CornerRadius="8" Padding="0,0,12,0" Background="Transparent">
+                                                    <Grid x:Name="TagSortRowGrid" ColumnSpacing="12" />
+                                                </Border>
+                                            </DataTemplate>
+                                        </ListView.ItemTemplate>
+                                    </ListView>
+                                </Grid>
 
                                 <!-- 排序方式 视图：预设 + 自定义 + 升降序 -->
                                 <StackPanel x:Name="TagSortSortPanel" Spacing="8" Visibility="Collapsed">

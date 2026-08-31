@@ -563,6 +563,15 @@ namespace CelesteMusicPlayer
         private bool _tagSortAscending = true;
         private List<(string field, bool asc)> _tagSortCustom = new(); // 自定义排序（最多 5 级）
 
+        // 模块 A：曲目列表列配置（列定制）
+        private List<ListColumnSpec> _tagSortColumns = new(); // 加载自 AppSettings，空=默认
+        private int _tagSortColumnVersion = 1;                // 列配置变更时 ++，驱动行模板重建
+        private string _tagSortPanelSongSortField = string.Empty; // 面板列表列头排序字段（空=保持进入时的原顺序）
+        private bool _tagSortPanelSongSortAsc = true;         // 面板列表列头排序方向
+
+        // 模块 B：分类字段配置
+        private List<string> _tagSortCategoryFields = new();  // 加载自 AppSettings，空=默认5个
+
         // ---------- 左侧分类（Songs / Albums / Artists / Folders / UserPlaylist）----------
         private string _currentCategory = "Songs";
 

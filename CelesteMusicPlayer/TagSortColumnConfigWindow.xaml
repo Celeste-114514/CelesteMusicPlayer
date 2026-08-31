@@ -1,0 +1,58 @@
+<Window
+    x:Class="CelesteMusicPlayer.TagSortColumnConfigWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    Title="选择列">
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <Grid
+            Grid.Row="0"
+            Height="48"
+            Padding="16,0,0,0"
+            Background="Transparent">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="160" />
+            </Grid.ColumnDefinitions>
+            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                <FontIcon Glyph="&#xE8B1;" FontSize="16" />
+                <TextBlock Text="曲目列表列配置" FontSize="14" VerticalAlignment="Center" />
+            </StackPanel>
+        </Grid>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20,6,20,16">
+            <StackPanel Spacing="16" MaxWidth="680" HorizontalAlignment="Left">
+
+                <TextBlock Text="勾选要显示的列；右侧可调整列顺序与宽度。点击列表列头可排序，右键列头可快速隐藏/移动列。" TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13" />
+
+                <!-- 可用字段勾选（两分组：元数据标签 / 技术信息） -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="显示哪些列" FontSize="13" FontWeight="SemiBold" />
+                    <StackPanel x:Name="MetaChecks" Spacing="4" />
+                    <TextBlock Text="技术信息（来自文件解析，首次显示稍慢，之后有缓存）" FontSize="12" Opacity="0.6" />
+                    <StackPanel x:Name="TechChecks" Spacing="4" />
+                </StackPanel>
+
+                <!-- 已选列顺序与宽度 -->
+                <StackPanel Spacing="6">
+                    <TextBlock Text="列顺序与宽度" FontSize="13" FontWeight="SemiBold" />
+                    <TextBlock Text="上移/下移调整顺序；宽度分 窄 / 中 / 宽 三档（按比例分配，非固定像素）。" FontSize="12" Opacity="0.6" />
+                    <StackPanel x:Name="OrderPanel" Spacing="6" />
+                </StackPanel>
+
+                <!-- 底部操作 -->
+                <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
+                    <Button Content="恢复默认" Padding="14,6" Click="ResetButton_Click" />
+                    <Button x:Name="CancelButton" Content="取消" Padding="18,6" Click="CancelButton_Click" />
+                    <Button x:Name="ApplyButton" Content="应用" Padding="18,6" Click="ApplyButton_Click" />
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</Window>

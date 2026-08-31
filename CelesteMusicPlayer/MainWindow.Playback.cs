@@ -942,19 +942,9 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>按分类字段值取归一化键（Artist/AlbumArtist 等）。</summary>
+        /// <summary>按分类字段值取归一化键（Artist/AlbumArtist 等；统一走 TagSortFields.Value，支持技术字段）。</summary>
         private static string TagSortFieldVal(PlaylistItem p, string field)
-        {
-            return field switch
-            {
-                "Artist" => string.IsNullOrWhiteSpace(p.Artist) ? "未知" : p.Artist.Trim(),
-                "AlbumArtist" => string.IsNullOrWhiteSpace(p.AlbumArtist) ? "未知" : p.AlbumArtist.Trim(),
-                "Album" => string.IsNullOrWhiteSpace(p.Album) ? "未知" : p.Album.Trim(),
-                "Genre" => string.IsNullOrWhiteSpace(p.Genre) ? "未知" : p.Genre.Trim(),
-                "Year" => p.Year > 0 ? p.Year.ToString() : "未知",
-                _ => "未知"
-            };
-        }
+            => TagSortFields.Value(p, field);
 
 
         /// <summary>刷新分类墙：按 _tagSortClassField 分组 _playlist，每组分封面（首曲封面）。</summary>
@@ -984,7 +974,7 @@ namespace CelesteMusicPlayer
         private void ApplyTagSortPanelMode()
         {
             TagSortPanelGridView.Visibility = Visibility.Collapsed;
-            TagSortPanelSongListView.Visibility = Visibility.Collapsed;
+            TagSortSongListRoot.Visibility = Visibility.Collapsed;
             TagSortSortPanel.Visibility = Visibility.Collapsed;
             TagSortViewModeButton.Content = _tagSortPanelMode switch
             {
@@ -1020,14 +1010,16 @@ namespace CelesteMusicPlayer
             }
             else // Songs
             {
+                var ordered = SortTagSortPanelSongs(_tagSortClassSongs.ToList());
                 var songs = new ObservableCollection<PlaylistItem>();
-                for (int i = 0; i < _tagSortClassSongs.Count; i++)
+                for (int i = 0; i < ordered.Count; i++)
                 {
-                    _tagSortClassSongs[i].Index = i + 1;
-                    songs.Add(_tagSortClassSongs[i]);
+                    ordered[i].Index = i + 1;
+                    songs.Add(ordered[i]);
                 }
+                RebuildTagSortColumnHeaders();
                 TagSortPanelSongListView.ItemsSource = songs;
-                TagSortPanelSongListView.Visibility = Visibility.Visible;
+                TagSortSongListRoot.Visibility = Visibility.Visible;
             }
         }
 
@@ -1060,6 +1052,19 @@ namespace CelesteMusicPlayer
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {
                 ApplySongListItemSelectionChrome(TagSortPanelSongListView, container, song);
+                if (container.ContentTemplateRoot is Border rowBorder
+                    && rowBorder.FindName("TagSortRowGrid") is Grid rowGrid)
+                {
+                    if (!Equals(rowGrid.Tag, _tagSortColumnVersion))
+                    {
+                        rowGrid.Tag = _tagSortColumnVersion;
+                        BuildTagSortSongRow(rowGrid, song);
+                    }
+                    else
+                    {
+                        UpdateTagSortSongRow(rowGrid, song);
+                    }
+                }
             }
         }
 

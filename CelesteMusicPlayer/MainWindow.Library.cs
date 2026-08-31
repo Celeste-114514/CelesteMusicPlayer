@@ -742,30 +742,115 @@ namespace CelesteMusicPlayer
 
         private void BreakoutTagSortView()
         {
+            LoadTagSortConfig();
+            BuildTagSortFieldButtons();
+            RebuildTagSortColumnHeaders();
             TagSortBorder.Visibility = Visibility.Visible;
-            ApplyTagSortFieldButtons();
             ShowTagSortClassWall();
         }
 
 
-        /// <summary>高亮当前分类字段按钮（五个维度切换）。</summary>
+        /// <summary>从设置加载列配置与分类字段（空=默认），并校准当前分类字段仍在按钮组内。</summary>
+        private void LoadTagSortConfig()
+        {
+            var s = AppSettingsStore.Load();
+            _tagSortColumns = s.TagSortColumns is { Count: > 0 }
+                ? s.TagSortColumns.ToList()
+                : TagSortFields.DefaultColumns();
+            _tagSortCategoryFields = s.TagSortCategoryFields is { Count: > 0 }
+                ? s.TagSortCategoryFields.ToList()
+                : TagSortFields.DefaultCategoryFields.ToList();
+            if (_tagSortCategoryFields.Count == 0 || !_tagSortCategoryFields.Contains(_tagSortClassField))
+            {
+                _tagSortClassField = _tagSortCategoryFields.FirstOrDefault() ?? "Artist";
+            }
+        }
+
+
+        /// <summary>动态生成分类字段按钮组（末尾"＋"配置入口）。</summary>
+        private void BuildTagSortFieldButtons()
+        {
+            TagSortFieldButtonsPanel.Children.Clear();
+
+            foreach (var key in _tagSortCategoryFields)
+            {
+                var def = TagSortFields.Find(key);
+                if (def == null) continue;
+                var b = new Button
+                {
+                    Tag = key,
+                    Height = 32,
+                    Padding = new Thickness(12, 0, 12, 0),
+                    CornerRadius = new CornerRadius(16),
+                    BorderThickness = new Thickness(1),
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Content = def.Label,
+                };
+                b.Click += TagSortFieldBoundButton_Click;
+                TagSortFieldButtonsPanel.Children.Add(b);
+            }
+
+            var plus = new Button
+            {
+                Tag = "__config__",
+                Height = 32,
+                Width = 32,
+                Padding = new Thickness(0),
+                CornerRadius = new CornerRadius(16),
+                BorderThickness = new Thickness(1),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                Content = "＋",
+            };
+            Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(plus, "配置分类字段");
+            plus.Click += TagSortFieldConfigButton_Click;
+            TagSortFieldButtonsPanel.Children.Add(plus);
+
+            ApplyTagSortFieldButtons();
+        }
+
+
+        private void TagSortFieldConfigButton_Click(object sender, RoutedEventArgs e)
+        {
+            var win = new TagSortFieldConfigWindow(_tagSortCategoryFields);
+            win.FieldsConfirmed += fields =>
+            {
+                _tagSortCategoryFields = fields;
+                if (!fields.Contains(_tagSortClassField))
+                {
+                    _tagSortClassField = fields.FirstOrDefault() ?? "Artist";
+                }
+                AppSettingsStore.Update(s => s.TagSortCategoryFields = fields.ToList());
+                BuildTagSortFieldButtons();
+                ShowTagSortClassWall();
+            };
+            win.Activate();
+        }
+
+
+        /// <summary>高亮当前分类字段按钮（动态按钮组）。</summary>
         private void ApplyTagSortFieldButtons()
         {
             var accent = ResolveAccentBrush();
             var fg = ColorHelper.ResolveContrastingForeground(accent);
             var idleBg = ResolveCapsuleFillBrush();
             var border = ResolveNavCapsuleBorderBrush();
-            void Update(Button b)
+
+            foreach (var child in TagSortFieldButtonsPanel.Children)
             {
+                if (child is not Button b) continue;
+                if (Equals(b.Tag, "__config__"))
+                {
+                    b.Background = idleBg;
+                    b.ClearValue(Control.ForegroundProperty);
+                    b.BorderThickness = new Thickness(1);
+                    b.BorderBrush = border;
+                    continue;
+                }
+
                 bool active = string.Equals(b.Tag as string, _tagSortClassField, StringComparison.Ordinal);
                 if (active) { b.Background = accent; b.Foreground = fg; b.BorderThickness = new Thickness(0); }
                 else { b.Background = idleBg; b.ClearValue(Control.ForegroundProperty); b.BorderThickness = new Thickness(1); b.BorderBrush = border; }
             }
-            Update(TagSortFieldArtistButton);
-            Update(TagSortFieldAlbumArtistButton);
-            Update(TagSortFieldAlbumButton);
-            Update(TagSortFieldGenreButton);
-            Update(TagSortFieldYearButton);
         }
 
 
@@ -777,6 +862,308 @@ namespace CelesteMusicPlayer
                 _tagSortClassValue = string.Empty;
                 ApplyTagSortFieldButtons();
                 ShowTagSortClassWall();
+            }
+        }
+
+
+        // ---------------- 模块 A：曲目列表列定制（动态列头 + 动态行 + 列头排序/右键菜单） ----------------
+
+        /// <summary>按列配置重建列表列头（# 固定列 + 可见配置列），箭头标记当前排序列。</summary>
+        private void RebuildTagSortColumnHeaders()
+        {
+            TagSortColumnHeaderGrid.ColumnDefinitions.Clear();
+            TagSortColumnHeaderGrid.Children.Clear();
+
+            TagSortColumnHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(48) });
+            var idxText = new TextBlock
+            {
+                Text = "#",
+                FontSize = 12,
+                Opacity = 0.6,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, 0, 0),
+            };
+            Grid.SetColumn(idxText, 0);
+            TagSortColumnHeaderGrid.Children.Add(idxText);
+
+            var visible = _tagSortColumns.Where(c => c.Visible).ToList();
+            for (int i = 0; i < visible.Count; i++)
+            {
+                var spec = visible[i];
+                var def = TagSortFields.Find(spec.Key);
+                TagSortColumnHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(spec.Weight, GridUnitType.Star) });
+
+                string arrow = string.Equals(_tagSortPanelSongSortField, spec.Key, StringComparison.Ordinal)
+                    ? (_tagSortPanelSongSortAsc ? " ↑" : " ↓") : "";
+                var btn = new Button
+                {
+                    Tag = spec.Key,
+                    Content = (def?.Label ?? spec.Key) + arrow,
+                    FontSize = 12,
+                    Padding = new Thickness(0),
+                    HorizontalContentAlignment = HorizontalAlignment.Left,
+                    VerticalContentAlignment = VerticalAlignment.Center,
+                    Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent),
+                    BorderThickness = new Thickness(0),
+                };
+                btn.Click += TagSortColumnHeader_Click;
+                btn.RightTapped += TagSortColumnHeader_RightTapped;
+                Grid.SetColumn(btn, i + 1);
+                TagSortColumnHeaderGrid.Children.Add(btn);
+            }
+        }
+
+
+        /// <summary>列头点击：按该列排序（同列再点切换升降序）。</summary>
+        private void TagSortColumnHeader_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is Button b && b.Tag is string key)
+            {
+                if (string.Equals(_tagSortPanelSongSortField, key, StringComparison.Ordinal))
+                {
+                    _tagSortPanelSongSortAsc = !_tagSortPanelSongSortAsc;
+                }
+                else
+                {
+                    _tagSortPanelSongSortField = key;
+                    _tagSortPanelSongSortAsc = true;
+                }
+                ReapplyTagSortPanelSongs();
+                RebuildTagSortColumnHeaders();
+            }
+        }
+
+
+        /// <summary>列头右键菜单：排序 / 升降序 / 左移右移 / 隐藏 / 选择列…</summary>
+        private void TagSortColumnHeader_RightTapped(object sender, RightTappedRoutedEventArgs e)
+        {
+            if (sender is not Button b || b.Tag is not string key) return;
+            string field = key;
+
+            var menu = new MenuFlyout();
+
+            var sortItem = new MenuFlyoutItem { Text = "按此列排序", Tag = ("sort", field) };
+            sortItem.Click += TagSortColumnMenuAction;
+            var ascItem = new MenuFlyoutItem { Text = "升序", Tag = ("asc", field) };
+            ascItem.Click += TagSortColumnMenuAction;
+            var descItem = new MenuFlyoutItem { Text = "降序", Tag = ("desc", field) };
+            descItem.Click += TagSortColumnMenuAction;
+
+            var leftItem = new MenuFlyoutItem { Text = "左移", Tag = ("left", field) };
+            leftItem.Click += TagSortColumnMenuAction;
+            var rightItem = new MenuFlyoutItem { Text = "右移", Tag = ("right", field) };
+            rightItem.Click += TagSortColumnMenuAction;
+            var hideItem = new MenuFlyoutItem { Text = "隐藏此列", Tag = ("hide", field) };
+            hideItem.Click += TagSortColumnMenuAction;
+
+            var chooseItem = new MenuFlyoutItem { Text = "选择列…", Tag = ("choose", field) };
+            chooseItem.Click += TagSortColumnMenuAction;
+
+            menu.Items.Add(sortItem);
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(ascItem);
+            menu.Items.Add(descItem);
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(leftItem);
+            menu.Items.Add(rightItem);
+            menu.Items.Add(hideItem);
+            menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(chooseItem);
+
+            menu.ShowAt(b, e.GetPosition(b));
+        }
+
+
+        private void TagSortColumnMenuAction(object sender, RoutedEventArgs e)
+        {
+            if (sender is not MenuFlyoutItem item || item.Tag is not (string action, string field)) return;
+            switch (action)
+            {
+                case "sort":
+                    if (string.Equals(_tagSortPanelSongSortField, field, StringComparison.Ordinal))
+                        _tagSortPanelSongSortAsc = !_tagSortPanelSongSortAsc;
+                    else { _tagSortPanelSongSortField = field; _tagSortPanelSongSortAsc = true; }
+                    ReapplyTagSortPanelSongs();
+                    RebuildTagSortColumnHeaders();
+                    break;
+                case "asc":
+                    _tagSortPanelSongSortField = field;
+                    _tagSortPanelSongSortAsc = true;
+                    ReapplyTagSortPanelSongs();
+                    RebuildTagSortColumnHeaders();
+                    break;
+                case "desc":
+                    _tagSortPanelSongSortField = field;
+                    _tagSortPanelSongSortAsc = false;
+                    ReapplyTagSortPanelSongs();
+                    RebuildTagSortColumnHeaders();
+                    break;
+                case "left":
+                    MoveVisibleTagSortColumn(field, -1);
+                    break;
+                case "right":
+                    MoveVisibleTagSortColumn(field, +1);
+                    break;
+                case "hide":
+                    HideVisibleTagSortColumn(field);
+                    break;
+                case "choose":
+                    OpenTagSortColumnConfigWindow();
+                    break;
+            }
+        }
+
+
+        /// <summary>在可见列序列内左移/右移一列（隐藏列保持原相对位置追尾）。</summary>
+        private void MoveVisibleTagSortColumn(string key, int delta)
+        {
+            var visible = _tagSortColumns.Where(c => c.Visible).ToList();
+            int idx = visible.FindIndex(c => c.Key == key);
+            if (idx < 0) return;
+            int target = idx + delta;
+            if (target < 0 || target >= visible.Count) return;
+            (visible[idx], visible[target]) = (visible[target], visible[idx]);
+            var hidden = _tagSortColumns.Where(c => !c.Visible).ToList();
+            _tagSortColumns = visible.Concat(hidden).ToList();
+            _tagSortColumnVersion++;
+            SaveTagSortConfig();
+            RebuildTagSortColumnHeaders();
+            ReapplyTagSortPanelSongs();
+        }
+
+
+        /// <summary>隐藏一列（至少保留一列，避免空白）。</summary>
+        private void HideVisibleTagSortColumn(string key)
+        {
+            var visible = _tagSortColumns.Where(c => c.Visible).ToList();
+            if (visible.Count <= 1)
+            {
+                NowPlayingText.Text = "至少保留一列；如需调整请在「选择列…」里恢复";
+                return;
+            }
+            var spec = _tagSortColumns.FirstOrDefault(c => c.Key == key);
+            if (spec == null) return;
+            spec.Visible = false;
+            _tagSortColumnVersion++;
+            SaveTagSortConfig();
+            RebuildTagSortColumnHeaders();
+            ReapplyTagSortPanelSongs();
+        }
+
+
+        /// <summary>打开列配置窗口（选择列…）。</summary>
+        private void OpenTagSortColumnConfigWindow()
+        {
+            var win = new TagSortColumnConfigWindow(_tagSortColumns);
+            win.ColumnsConfirmed += cols =>
+            {
+                _tagSortColumns = cols;
+                _tagSortColumnVersion++;
+                SaveTagSortConfig();
+                RebuildTagSortColumnHeaders();
+                ReapplyTagSortPanelSongs();
+            };
+            win.Activate();
+        }
+
+
+        /// <summary>保存列配置与分类字段到设置。</summary>
+        private void SaveTagSortConfig()
+        {
+            AppSettingsStore.Update(s =>
+            {
+                s.TagSortColumns = _tagSortColumns
+                    .Select(c => new ListColumnSpec { Key = c.Key, Weight = c.Weight, Visible = c.Visible })
+                    .ToList();
+                s.TagSortCategoryFields = _tagSortCategoryFields.ToList();
+            });
+        }
+
+
+        /// <summary>按当前列头排序字段对列表排序（空字段=保持原顺序；数值字段按数值）。</summary>
+        private List<PlaylistItem> SortTagSortPanelSongs(List<PlaylistItem> source)
+        {
+            if (source.Count < 2 || string.IsNullOrEmpty(_tagSortPanelSongSortField)) return source;
+            bool numeric = TagSortFields.IsNumeric(_tagSortPanelSongSortField);
+            string field = _tagSortPanelSongSortField;
+            bool asc = _tagSortPanelSongSortAsc;
+
+            var list = source.ToList();
+            list.Sort((a, b) =>
+            {
+                int c = numeric
+                    ? TagSortFields.NumericValue(a, field).CompareTo(TagSortFields.NumericValue(b, field))
+                    : string.Compare(TagSortFields.Value(a, field), TagSortFields.Value(b, field), StringComparison.CurrentCultureIgnoreCase);
+                if (c == 0) c = string.Compare(a.Title, b.Title, StringComparison.CurrentCultureIgnoreCase);
+                return asc ? c : -c;
+            });
+            return list;
+        }
+
+
+        /// <summary>按当前列排序重建曲目列表（仅 Songs 视角）。</summary>
+        private void ReapplyTagSortPanelSongs()
+        {
+            if (!string.Equals(_tagSortPanelMode, "Songs", StringComparison.Ordinal)) return;
+            var ordered = SortTagSortPanelSongs(_tagSortClassSongs.ToList());
+            var songs = new ObservableCollection<PlaylistItem>();
+            for (int i = 0; i < ordered.Count; i++)
+            {
+                ordered[i].Index = i + 1;
+                songs.Add(ordered[i]);
+            }
+            TagSortPanelSongListView.ItemsSource = songs;
+        }
+
+
+        /// <summary>按列配置构建一行（# 固定列 + 可见配置列）。</summary>
+        private void BuildTagSortSongRow(Grid rowGrid, PlaylistItem song)
+        {
+            rowGrid.ColumnDefinitions.Clear();
+            rowGrid.Children.Clear();
+
+            rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(48) });
+            var idx = new TextBlock
+            {
+                Tag = "#",
+                Text = song.Index.ToString(),
+                FontSize = 12,
+                Opacity = 0.7,
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(12, 0, 0, 0),
+            };
+            Grid.SetColumn(idx, 0);
+            rowGrid.Children.Add(idx);
+
+            var visible = _tagSortColumns.Where(c => c.Visible).ToList();
+            for (int i = 0; i < visible.Count; i++)
+            {
+                var spec = visible[i];
+                rowGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(spec.Weight, GridUnitType.Star) });
+                var tb = new TextBlock
+                {
+                    Tag = spec.Key,
+                    Text = TagSortFields.ColumnText(song, spec.Key),
+                    FontSize = 13,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
+                    TextWrapping = TextWrapping.NoWrap,
+                };
+                Grid.SetColumn(tb, i + 1);
+                rowGrid.Children.Add(tb);
+            }
+        }
+
+
+        /// <summary>更新一行各列文本（列结构未变时只改 Text，避免反复重建控件）。</summary>
+        private void UpdateTagSortSongRow(Grid rowGrid, PlaylistItem song)
+        {
+            foreach (var child in rowGrid.Children)
+            {
+                if (child is TextBlock tb && tb.Tag is string key)
+                {
+                    tb.Text = key == "#" ? song.Index.ToString() : TagSortFields.ColumnText(song, key);
+                }
             }
         }
 
@@ -859,23 +1246,16 @@ namespace CelesteMusicPlayer
 
         private static string TagSortClassFieldLabel(string field)
         {
-            return field switch
-            {
-                "Artist" => "艺术家", "AlbumArtist" => "专辑艺术家", "Album" => "专辑",
-                "Genre" => "流派", "Year" => "年份", _ => field
-            };
+            var def = TagSortFields.Find(field);
+            return def?.Label ?? field;
         }
 
 
         /// <summary>排序字段的中文标签（给排序依据状态显示用）。</summary>
         private static string TagSortFieldLabel(string field)
         {
-            return field switch
-            {
-                "Artist" => "艺术家", "AlbumArtist" => "专辑艺术家", "Album" => "专辑",
-                "Genre" => "流派", "Year" => "年份", "Title" => "标题",
-                "Track" => "音轨号", "Disc" => "碟片号", _ => field
-            };
+            var def = TagSortFields.Find(field);
+            return def?.Label ?? field;
         }
 
 
