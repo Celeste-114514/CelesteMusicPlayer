@@ -1053,7 +1053,7 @@ namespace CelesteMusicPlayer
             {
                 ApplySongListItemSelectionChrome(TagSortPanelSongListView, container, song);
                 if (container.ContentTemplateRoot is Border rowBorder
-                    && rowBorder.FindName("TagSortRowGrid") is Grid rowGrid)
+                    && rowBorder.Child is Grid rowGrid)
                 {
                     if (!Equals(rowGrid.Tag, _tagSortColumnVersion))
                     {

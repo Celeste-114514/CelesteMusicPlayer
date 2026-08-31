@@ -2838,7 +2838,7 @@
                                         <ListView.ItemTemplate>
                                             <DataTemplate x:DataType="local:PlaylistItem">
                                                 <Border Tag="SongRowChrome" MinHeight="40" CornerRadius="8" Padding="0,0,12,0" Background="Transparent">
-                                                    <Grid x:Name="TagSortRowGrid" ColumnSpacing="12" />
+                                                    <Grid ColumnSpacing="12" />
                                                 </Border>
                                             </DataTemplate>
                                         </ListView.ItemTemplate>
