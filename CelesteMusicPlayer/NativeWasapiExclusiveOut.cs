@@ -70,6 +70,10 @@ namespace CelesteMusicPlayer
         public string? ActualFormatDescription { get; private set; }
         public bool IsStarted { get; private set; }
 
+        /// <summary>事件驱动缓冲大小（毫秒），须在 <see cref="Init"/> 之前设置。默认 100ms。
+        /// 事件驱动模式下缓冲越小延迟越低（越跟手），越小越依赖设备/驱动的调度精度，过低可能卡顿/爆音。</summary>
+        public int BufferMilliseconds { get; set; } = 100;
+
         /// <summary>最近一次初始化是否触发了 AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED 对齐 dance（供日志排障）。</summary>
         public bool LastAlignDance { get; private set; }
 
@@ -107,7 +111,7 @@ namespace CelesteMusicPlayer
             NativeWasapi.IAudioRenderClient? rc;
             uint frames;
             bool srcAlignDance = false;
-            if (TryInitialize(device, ref srcExt, out ac, out rc, out frames, out srcAlignDance) == NativeWasapi.S_OK)
+            if (TryInitialize(device, ref srcExt, out ac, out rc, out frames, out srcAlignDance, BufferMilliseconds) == NativeWasapi.S_OK)
             {
                 _audioClient = ac;
                 _renderClient = rc;
@@ -139,7 +143,7 @@ namespace CelesteMusicPlayer
             {
                 var cand = MakeFormat(kind, src.SampleRate, src.Channels);
                 bool alignDance = false;
-                int h = TryInitialize(device, ref cand, out ac, out rc, out frames, out alignDance);
+                int h = TryInitialize(device, ref cand, out ac, out rc, out frames, out alignDance, BufferMilliseconds);
                 LastAlignDance |= alignDance;
                 if (h != NativeWasapi.S_OK)
                 {
@@ -265,15 +269,16 @@ namespace CelesteMusicPlayer
 
         /// <summary>尝试以给定独占格式初始化并取 render client；成功返回 S_OK。</summary>
         private static int TryInitialize(NativeWasapi.IMMDevice device, ref NativeWasapi.WAVEFORMATEXTENSIBLE wave,
-            out NativeWasapi.IAudioClient? ac, out NativeWasapi.IAudioRenderClient? rc, out uint frames, out bool alignDance)
+            out NativeWasapi.IAudioClient? ac, out NativeWasapi.IAudioRenderClient? rc, out uint frames, out bool alignDance, int bufferMs)
         {
             ac = null; rc = null; frames = 0; alignDance = false;
             var c = NativeWasapi.ActivateAudioClient(device);
             if (c == null) return NativeWasapi.REGDB_E_CLASSNOTREG;
 
-            // 100ms（100ns 单位 = 1,000,000）。缓冲越大 render 每次回调要整块处理（含 DSP）的单次耗时越长，
-            // 在 352800Hz 开 EQ 时易造成 render 实时峰值 → 整体变慢/卡顿；降到 100ms 折中稳定性与单次处理块大小。
-            long hns = 1000000L;
+            // 缓冲毫秒 → 100ns 单位（1ms = 10,000）。事件驱动模式下每次回调整块处理缓冲（含 DSP），
+            // 缓冲越大单次回调耗时越长，在 352800Hz 开 EQ 时易造成 render 实时峰值 → 整体变慢/卡顿；
+            // 缓冲越小延迟越低但越依赖设备/驱动调度精度。默认 100ms 折中稳定性与单次处理块大小。
+            long hns = Math.Clamp(bufferMs, 10, 1000) * 10000L;
             int hr = c.Initialize(NativeWasapi.AUDCLNT_SHAREMODE_EXCLUSIVE, NativeWasapi.AUDCLNT_STREAMFLAGS_EVENTCALLBACK, hns, hns, ref wave, IntPtr.Zero);
 
             if (hr == NativeWasapi.AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED)

@@ -95,7 +95,7 @@ namespace CelesteMusicPlayer
         public string DsdOutputMode { get; set; } = "Pcm";
 
         /// <summary>输出缓冲区大小（毫秒）。越小越跟手（低延迟），越大越抗卡顿/爆音。
-        /// 共享模式（系统混音）下改动后下次开播生效；默认 100ms。</summary>
+        /// 共享（系统混音）与独占（原生 WASAPI 事件驱动）均生效，改动后下次开播生效；默认 100ms。</summary>
         public int OutputBufferMs { get; set; } = 100;
 
         public bool LyricFuzzyMatch { get; set; } = true;

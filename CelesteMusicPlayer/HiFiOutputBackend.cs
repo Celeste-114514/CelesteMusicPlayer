@@ -174,8 +174,8 @@ namespace CelesteMusicPlayer
         /// <summary>当前升频目标采样率（Hz，0=关闭）。</summary>
         public int ResampleTargetHz => _resampleTargetHz;
 
-        /// <summary>输出缓冲区大小（毫秒）。仅共享模式（NAudio WasapiOut）下生效，下次开播生效。
-        /// 越小越跟手（低延迟），越大越抗卡顿/爆音；合法范围 20~500ms，越界自动夹回。</summary>
+        /// <summary>输出缓冲区大小（毫秒）。共享模式（NAudio WasapiOut）与独占模式（原生 WASAPI 事件驱动）均生效，
+        /// 下次开播生效。越小越跟手（低延迟），越大越抗卡顿/爆音；合法范围 20~500ms，越界自动夹回。</summary>
         public int OutputBufferMs
         {
             get => _outputBufferMs;
@@ -573,6 +573,7 @@ namespace CelesteMusicPlayer
                         }
 
                         var nat = new NativeWasapiExclusiveOut();
+                        nat.BufferMilliseconds = OutputBufferMs; // 事件驱动缓冲跟随设置（默认 100ms，可调低延迟/抗卡顿）
                         // DSP 链在独占下同样生效：传 _dspProvider（包住无缝源，内部短路直通）。
                         // requireExact（DSD/DoP 直出）强制用源原样，禁止 DSP 破坏 1-bit 容器。
                         var natProvider = requireExact ? (IWaveSourceProvider)_seamless : (IWaveSourceProvider)_dspProvider;
@@ -862,6 +863,7 @@ namespace CelesteMusicPlayer
                 }
 
                 var nat = new NativeWasapiExclusiveOut();
+                nat.BufferMilliseconds = OutputBufferMs; // DSD/DoP 直出同样遵循事件驱动缓冲设置
                 if (!nat.Init(natDev, dop, requireExactFormat: true))
                 {
                     LastError = nat.LastError ?? "DSD/DoP 独占初始化失败";
