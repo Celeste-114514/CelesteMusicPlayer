@@ -3,7 +3,7 @@
 
 ; ---------- Metadata ----------
 !define APP_NAME "CelesteMusicPlayer"
-!define APP_VERSION "26.8.31.1"
+!define APP_VERSION "26.9.1"
 !define APP_EXE "CelesteMusicPlayer.exe"
 !define PUBLISH_DIR "C:\Users\admin\source\repos\CelesteMusicPlayer\CelesteMusicPlayer\bin\Release\net9.0-windows10.0.19041.0\win-x64\publish"
 !define APP_GUID "{F0C207C6-BD8C-4D7A-9127-F1B67F17E65B}"
@@ -17,7 +17,7 @@ Name "${APP_NAME}"
 OutFile "C:\Users\admin\Desktop\CelesteMusicPlayer-Setup-${APP_VERSION}.exe"
 InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
 InstallDirRegKey HKCU "Software\${APP_NAME}" "InstallLocation"
-SetCompressor /SOLID lzma
+SetCompressor lzma
 
 ; ---------- Modern UI 2 ----------
 !include "MUI2.nsh"
