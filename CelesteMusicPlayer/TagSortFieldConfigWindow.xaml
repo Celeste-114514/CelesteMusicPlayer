@@ -29,7 +29,7 @@
         <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" Padding="20,6,20,16">
             <StackPanel Spacing="16" MaxWidth="680" HorizontalAlignment="Left">
 
-                <TextBlock Text="勾选要出现在顶部"分类"按钮组的字段（按勾选顺序排列）。取消勾选即从按钮组移除，不影响曲库数据。" TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13" />
+                <TextBlock Text="勾选要出现在顶部「分类」按钮组的字段（按勾选顺序排列）。取消勾选即从按钮组移除，不影响曲库数据。" TextWrapping="WrapWholeWords" Opacity="0.7" FontSize="13" />
 
                 <!-- 元数据标签 -->
                 <StackPanel Spacing="6">

@@ -97,7 +97,7 @@ namespace CelesteMusicPlayer
                     Text = label,
                     VerticalAlignment = VerticalAlignment.Center,
                     FontSize = 13,
-                    TextTrimming = Windows.UI.Xaml.TextTrimming.CharacterEllipsis,
+                    TextTrimming = TextTrimming.CharacterEllipsis,
                 };
                 Grid.SetColumn(labelText, 0);
                 row.Children.Add(labelText);
