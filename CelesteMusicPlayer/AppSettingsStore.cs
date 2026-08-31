@@ -578,7 +578,13 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             NetEaseCookie = s.NetEaseCookie,
             QqCookie = s.QqCookie,
             AppleMusicCookie = s.AppleMusicCookie,
-            CustomHotkeys = s.CustomHotkeys.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase)
+            CustomHotkeys = s.CustomHotkeys.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase),
+            // 标签排序面板（模块 A/B/C）：Clone 必须原样拷贝，否则 Load() 返回克隆里这些字段恒为默认，
+            // 导致分类字段配置、列配置、自定义分组、上次激活项在重启后丢失（此前自定义分组记忆功能因此失效）。
+            TagSortColumns = s.TagSortColumns.Select(c => new ListColumnSpec { Key = c.Key, Weight = c.Weight, Visible = c.Visible }).ToList(),
+            TagSortCategoryFields = s.TagSortCategoryFields.ToList(),
+            TagSortGroupFields = s.TagSortGroupFields.ToList(),
+            TagSortGroupActivePreset = s.TagSortGroupActivePreset
         };
 
         internal static string GetFilePath()

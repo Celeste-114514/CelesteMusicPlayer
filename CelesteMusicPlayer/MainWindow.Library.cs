@@ -1250,7 +1250,10 @@ namespace CelesteMusicPlayer
             _tagSortClassSongs.Clear();
             foreach (var p in _playlist)
             {
-                if (string.Equals(TagSortFieldVal(p, _tagSortClassField), _tagSortClassValue, StringComparison.Ordinal))
+                // 注意：必须与分类墙分组（CurrentCultureIgnoreCase）使用同一比对规则，
+                // 否则当某分类值大小写不一致（如 "The Beatles" / "the beatles"）时，
+                // 墙已合并为一组但此处按 Ordinal 过滤会漏掉一批 → 详情整片空白（"某些分类加载不出来"）。
+                if (string.Equals(TagSortFieldVal(p, _tagSortClassField), _tagSortClassValue, StringComparison.CurrentCultureIgnoreCase))
                 {
                     _tagSortClassSongs.Add(p);
                 }
