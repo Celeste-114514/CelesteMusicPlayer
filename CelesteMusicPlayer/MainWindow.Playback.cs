@@ -1037,9 +1037,14 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>「去分组浏览」按钮：切到面板的分组浏览视图（模块 C）。</summary>
+        /// <summary>「去分组浏览」按钮（顶部常驻 / 溢出条）：从分类墙直接进入分组浏览视图（模块 C）。
+        /// 关键：必须显式隐藏分类墙、显示面板——否则只切内部子面板而父容器仍是 Collapsed，表现为"点了没反应"。</summary>
         private void TagSortClassWallSwitchToGroupButton_Click(object sender, RoutedEventArgs e)
         {
+            TagSortClassScroll.Visibility = Visibility.Collapsed;
+            TagSortPanel.Visibility = Visibility.Visible;
+            // 进入分组浏览时，让分组字段与当前分类墙保持一致（所见即所得）
+            _tagSortGroupFields = new List<string> { _tagSortClassField };
             _tagSortPanelMode = "GroupBy";
             ApplyTagSortPanelMode();
         }
@@ -1084,7 +1089,7 @@ namespace CelesteMusicPlayer
                 TagSortSortPanel.Visibility = Visibility.Visible;
                 WriteTagSortStatus();
             }
-            else // Songs
+            else if (_tagSortPanelMode == "Songs")
             {
                 var ordered = SortTagSortPanelSongs(_tagSortClassSongs.ToList());
                 var songs = new ObservableCollection<PlaylistItem>();
@@ -1108,30 +1113,38 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>把 TagSortGroupFieldCombo 当前选项同步到 _tagSortGroupField（避免 ComboBox 触发重建）。</summary>
+        /// <summary>把 TagSortGroupPresetCombo 当前选项同步到 _tagSortGroupFields（避免 ComboBox 触发重建）。</summary>
         private void SyncTagSortGroupFieldCombo()
         {
-            if (TagSortGroupFieldCombo == null) return;
-            foreach (var obj in TagSortGroupFieldCombo.Items)
+            if (TagSortGroupPresetCombo == null) return;
+            string current = string.Join(",", _tagSortGroupFields);
+            // 1) 命中某预设 → 高亮该预设
+            foreach (var obj in TagSortGroupPresetCombo.Items)
             {
-                if (obj is ComboBoxItem ci && ci.Tag is string tag && string.Equals(tag, _tagSortGroupField, StringComparison.Ordinal))
+                if (obj is ComboBoxItem ci && ci.Tag is string tag
+                    && string.Equals(tag, current, StringComparison.Ordinal))
                 {
-                    if (TagSortGroupFieldCombo.SelectedItem != ci)
+                    if (TagSortGroupPresetCombo.SelectedItem != ci)
                     {
-                        TagSortGroupFieldCombo.SelectedItem = ci;
+                        TagSortGroupPresetCombo.SelectedItem = ci;
                     }
                     return;
                 }
             }
-            // 没匹配到（罕见）：默认选 Artist
-            foreach (var obj in TagSortGroupFieldCombo.Items)
+            // 2) 未匹配预设（自定义字段序列）→ 高亮“自定义（已保存）”项
+            foreach (var obj in TagSortGroupPresetCombo.Items)
             {
-                if (obj is ComboBoxItem ci && ci.Tag is string tag && tag == "Artist")
+                if (obj is ComboBoxItem ci && string.Equals(ci.Tag as string, "__custom__", StringComparison.Ordinal))
                 {
-                    TagSortGroupFieldCombo.SelectedItem = ci;
-                    break;
+                    if (TagSortGroupPresetCombo.SelectedItem != ci)
+                    {
+                        TagSortGroupPresetCombo.SelectedItem = ci;
+                    }
+                    return;
                 }
             }
+            // 3) 兜底：无匹配也无“自定义”项时取消选中
+            TagSortGroupPresetCombo.SelectedItem = null;
         }
 
 
@@ -1139,185 +1152,231 @@ namespace CelesteMusicPlayer
         // 模块 C：分组浏览（列表内多级分组、组头折叠/展开）
         // ============================================================
 
-        /// <summary>构建/重建分组浏览：按 _tagSortGroupField 分组 _tagSortClassSongs，默认全部展开。</summary>
+        /// <summary>构建/重建分组浏览：按 _tagSortGroupFields 序列对整库 _playlist 多级分组，生成可折叠层级树。
+        /// 高基数字段（标题/文件名等）所在层级默认折叠，仅显示组头，避免一次性渲染海量行导致卡顿/爆内存。</summary>
         private void RebuildTagSortGroupRows()
         {
-            _tagSortGroupFlatRows.Clear();
-            _tagSortGroupHeaders.Clear();
-            _tagSortGroupSongs.Clear();
+            // 把扁平化结果绑定到列表（只设一次引用即可，后续 Clear/Add 会由 ObservableCollection 自动反映）
+            if (TagSortGroupListView != null && TagSortGroupListView.ItemsSource != _tagSortGroupFlatRows)
+            {
+                TagSortGroupListView.ItemsSource = _tagSortGroupFlatRows;
+            }
 
-            // 1. 按字段分组
-            var groups = _tagSortClassSongs
-                .GroupBy(p => TagSortFieldVal(p, _tagSortGroupField), StringComparer.OrdinalIgnoreCase)
+            _tagSortGroupTree.Clear();
+            _tagSortSongIndent.Clear();
+            _tagSortGroupFlatRows.Clear();
+
+            if (_tagSortGroupFields == null || _tagSortGroupFields.Count == 0)
+            {
+                return;
+            }
+
+            var roots = BuildGroupTree(_playlist.ToList(), 0, _tagSortGroupFields);
+            _tagSortGroupTree.AddRange(roots);
+            FlattenGroupTree(_tagSortGroupFlatRows);
+        }
+
+
+        private const int TagSortGroupIndentStep = 22;
+
+        /// <summary>递归按字段序列分组，返回当前层级的分组节点列表。末级分组直接挂 Songs。</summary>
+        private List<TagSortGroupHeader> BuildGroupTree(List<PlaylistItem> items, int level, List<string> fields)
+        {
+            string field = fields[level];
+            bool isLast = level == fields.Count - 1;
+            string fieldLabel = TagSortFields.Find(field)?.Label ?? field;
+            bool autoCollapse = TagSortFields.Find(field)?.Cardinality == TagSortFields.Cardinality.High;
+
+            var groups = items
+                .GroupBy(p => TagSortFields.Value(p, field), StringComparer.OrdinalIgnoreCase)
                 .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
 
-            string fieldLabel = TagSortFields.Find(_tagSortGroupField)?.Label ?? _tagSortGroupField;
-
-            // 2. 扁平化：组头 + 组内歌曲（每首歌的 Index 在该分类下连续编号）
-            int idx = 1;
+            var result = new List<TagSortGroupHeader>(groups.Count);
             foreach (var g in groups)
             {
-                var header = new TagSortGroupHeader
+                var node = new TagSortGroupHeader
                 {
-                    Field = _tagSortGroupField,
+                    Field = field,
                     FieldLabel = fieldLabel,
                     Value = g.Key,
+                    Depth = level,
+                    Indent = level * TagSortGroupIndentStep,
                     Count = g.Count(),
-                    IsExpanded = true,
+                    IsExpanded = !autoCollapse,
                 };
-                _tagSortGroupHeaders[g.Key] = header;
-                _tagSortGroupSongs[g.Key] = g.ToList();
-
-                _tagSortGroupFlatRows.Add(header);
-                foreach (var song in g)
+                if (isLast)
                 {
-                    song.Index = idx++;
-                    _tagSortGroupFlatRows.Add(song);
+                    node.Songs = g.ToList();
+                }
+                else
+                {
+                    node.Children = BuildGroupTree(g.ToList(), level + 1, fields);
+                }
+                result.Add(node);
+            }
+            return result;
+        }
+
+
+        /// <summary>从已建好的树按当前展开状态重新扁平化（不重新 GroupBy）。</summary>
+        private void FlattenGroupTree(ObservableCollection<object> rows)
+        {
+            rows.Clear();
+            foreach (var root in _tagSortGroupTree)
+            {
+                FlattenNode(root, rows);
+            }
+        }
+
+        private void FlattenNode(TagSortGroupHeader node, ObservableCollection<object> rows)
+        {
+            rows.Add(node);
+            if (!node.IsExpanded) return;
+            if (node.Children != null)
+            {
+                foreach (var child in node.Children)
+                {
+                    FlattenNode(child, rows);
                 }
             }
-
-            // 3. 同步到列表 + 列头
-            TagSortGroupListView.ItemsSource = _tagSortGroupFlatRows;
-            BuildTagSortGroupColumnHeader();
-        }
-
-
-        /// <summary>分组浏览的列头：与歌曲行的三列对齐（标题 / 艺术家 / 时长）。</summary>
-        private void BuildTagSortGroupColumnHeader()
-        {
-            TagSortGroupColumnHeaderGrid.Children.Clear();
-            TagSortGroupColumnHeaderGrid.ColumnDefinitions.Clear();
-            TagSortGroupColumnHeaderGrid.RowDefinitions.Clear();
-
-            var grid = TagSortGroupColumnHeaderGrid;
-            grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(28) });
-
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(64) });
-
-            AddHeaderCol(grid, 0, "标题");
-            AddHeaderCol(grid, 1, "艺术家", HorizontalAlignment.Left, opacity: 0.7);
-            AddHeaderCol(grid, 2, "时长", HorizontalAlignment.Right, opacity: 0.7);
-        }
-
-
-        private static void AddHeaderCol(Grid grid, int col, string text,
-            HorizontalAlignment halign = HorizontalAlignment.Left, double opacity = 1.0)
-        {
-            var tb = new TextBlock
+            else if (node.Songs != null)
             {
-                Text = text,
-                FontSize = 12,
-                Opacity = opacity,
-                VerticalAlignment = VerticalAlignment.Center,
-                HorizontalAlignment = halign,
-                Margin = new Thickness(col == 0 ? 34 : 0, 0, col == 2 ? 12 : 0, 0),
-            };
-            Grid.SetRow(tb, 0);
-            Grid.SetColumn(tb, col);
-            grid.Children.Add(tb);
-        }
-
-
-        /// <summary>切换某组的展开/折叠（从 FlatRows 移除/插回组内歌曲）。</summary>
-        private void ToggleTagSortGroup(string value)
-        {
-            if (!_tagSortGroupHeaders.TryGetValue(value, out var header)) return;
-            if (!_tagSortGroupSongs.TryGetValue(value, out var songs)) return;
-
-            header.IsExpanded = !header.IsExpanded;
-
-            int idx = _tagSortGroupFlatRows.IndexOf(header);
-            if (idx < 0) return;
-
-            if (!header.IsExpanded)
-            {
-                // 折叠：从 idx+1 起删除 songs.Count 个
-                for (int i = 0; i < songs.Count; i++)
+                int songIndent = (node.Depth + 1) * TagSortGroupIndentStep;
+                foreach (var s in node.Songs)
                 {
-                    _tagSortGroupFlatRows.RemoveAt(idx + 1);
-                }
-            }
-            else
-            {
-                // 展开：在 idx 之后插入 songs
-                for (int i = 0; i < songs.Count; i++)
-                {
-                    _tagSortGroupFlatRows.Insert(idx + 1 + i, songs[i]);
+                    _tagSortSongIndent[s] = songIndent;
+                    rows.Add(s);
                 }
             }
         }
 
 
-        /// <summary>整组替换播放队列并从该组第一首播放。</summary>
-        private void PlayTagSortGroup(string value)
+        /// <summary>切换某组的展开/折叠（用节点引用，避免同名组冲突）。</summary>
+        private void ToggleTagSortNode(TagSortGroupHeader node)
         {
-            if (!_tagSortGroupSongs.TryGetValue(value, out var songs) || songs.Count == 0) return;
+            node.IsExpanded = !node.IsExpanded;
+            FlattenGroupTree(_tagSortGroupFlatRows);
+        }
 
+        /// <summary>整组替换播放队列并从该组第一首播放（递归收集节点下全部歌曲）。</summary>
+        private void PlayTagSortGroup(TagSortGroupHeader node)
+        {
+            var songs = CollectNodeSongs(node);
+            if (songs.Count == 0) return;
             _userPlaylist.Clear();
-            AddSongsToUserPlaylist(songs.ToList());
+            AddSongsToUserPlaylist(songs);
             PlayUserPlaylistAt(0);
         }
 
-
-        private void TagSortGroupFieldCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private List<PlaylistItem> CollectNodeSongs(TagSortGroupHeader node)
         {
-            if (TagSortGroupFieldCombo?.SelectedItem is ComboBoxItem item
-                && item.Tag is string field
-                && !string.IsNullOrEmpty(field))
+            var list = new List<PlaylistItem>();
+            if (node.Songs != null) list.AddRange(node.Songs);
+            if (node.Children != null)
             {
-                if (string.Equals(field, _tagSortGroupField, StringComparison.Ordinal)) return;
-                _tagSortGroupField = field;
-                RebuildTagSortGroupRows();
+                foreach (var c in node.Children) list.AddRange(CollectNodeSongs(c));
             }
+            return list;
+        }
+
+
+        private void SetAllNodesExpanded(bool expanded)
+        {
+            foreach (var root in _tagSortGroupTree) SetNodeExpanded(root, expanded);
+        }
+
+        private void SetNodeExpanded(TagSortGroupHeader node, bool expanded)
+        {
+            node.IsExpanded = expanded;
+            if (node.Children != null)
+            {
+                foreach (var c in node.Children) SetNodeExpanded(c, expanded);
+            }
+        }
+
+
+
+        private void TagSortGroupPresetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (TagSortGroupPresetCombo?.SelectedItem is ComboBoxItem item
+                && item.Tag is string fields)
+            {
+                if (fields == "__custom__")
+                {
+                    // 返回已保存的自定义快照（切到预设时也不会被覆盖）
+                    _tagSortGroupFields = _tagSortGroupCustom.ToList();
+                    _tagSortGroupActivePreset = "__custom__";
+                }
+                else
+                {
+                    _tagSortGroupFields = fields.Split(',').ToList();
+                    _tagSortGroupActivePreset = fields;
+                }
+                RebuildTagSortGroupRows();
+                AppSettingsStore.Update(s =>
+                {
+                    s.TagSortGroupFields = _tagSortGroupCustom;
+                    s.TagSortGroupActivePreset = _tagSortGroupActivePreset;
+                });
+            }
+        }
+
+        private void TagSortGroupCustomButton_Click(object sender, RoutedEventArgs e)
+        {
+            // 打开自定义窗口时以“已保存的自定义快照”为初值，便于在原有自定义基础上继续编辑
+            var win = new TagSortGroupFieldsWindow(_tagSortGroupCustom);
+            win.FieldsConfirmed += fields =>
+            {
+                _tagSortGroupFields = fields;
+                _tagSortGroupCustom = fields.ToList();   // 更新自定义快照
+                _tagSortGroupActivePreset = "__custom__";
+                RebuildTagSortGroupRows();
+                SyncTagSortGroupFieldCombo();           // 让下拉高亮“自定义（已保存）”
+                AppSettingsStore.Update(s =>
+                {
+                    s.TagSortGroupFields = _tagSortGroupCustom;
+                    s.TagSortGroupActivePreset = _tagSortGroupActivePreset;
+                });
+            };
+            win.Activate();
         }
 
 
         private void TagSortGroupExpandAll_Click(object sender, RoutedEventArgs e)
         {
-            for (int i = _tagSortGroupFlatRows.Count - 1; i >= 0; i--)
-            {
-                if (_tagSortGroupFlatRows[i] is TagSortGroupHeader h && !h.IsExpanded)
-                {
-                    ToggleTagSortGroup(h.Value);
-                }
-            }
+            SetAllNodesExpanded(true);
+            FlattenGroupTree(_tagSortGroupFlatRows);
         }
 
 
         private void TagSortGroupCollapseAll_Click(object sender, RoutedEventArgs e)
         {
-            // 折叠所有组：一次性把每个组内的歌曲行从 FlatRows 中移除（比逐组 Toggle 快）
-            var headers = _tagSortGroupFlatRows.OfType<TagSortGroupHeader>().Where(h => h.IsExpanded).ToList();
-            foreach (var h in headers)
-            {
-                h.IsExpanded = false;
-            }
-            _tagSortGroupFlatRows.Clear();
-            foreach (var h in _tagSortGroupHeaders.Values)
-            {
-                _tagSortGroupFlatRows.Add(h);
-            }
+            SetAllNodesExpanded(false);
+            FlattenGroupTree(_tagSortGroupFlatRows);
         }
 
 
         private void TagSortGroupListView_DoubleTapped(object sender, Microsoft.UI.Xaml.Input.DoubleTappedRoutedEventArgs e)
         {
-            // 优先判断点的是不是组头；歌曲行走 TagSortPanelSongListView_DoubleTapped 同一逻辑（替换队列并从该首播放）
-            if (e.OriginalSource is FrameworkElement fe && fe.DataContext is TagSortGroupHeader header)
+            var fe = e.OriginalSource as FrameworkElement;
+            if (fe?.DataContext is TagSortGroupHeader header)
             {
-                // 双击组头 = 整组播放
-                PlayTagSortGroup(header.Value);
+                // 双击组头 = 整组播放（递归收集该节点下全部歌曲）
+                PlayTagSortGroup(header);
                 e.Handled = true;
                 return;
             }
 
-            if (fe.DataContext is PlaylistItem song)
+            if (fe?.DataContext is PlaylistItem song)
             {
-                // 双击歌曲 = 从该首开始播放该分类下的所有歌曲
-                var playlist = _tagSortClassSongs.ToList();
+                // 双击歌曲 = 从该首开始，播放其所属末级分组下的全部歌曲
+                if (_tagSortGroupFields == null || _tagSortGroupFields.Count == 0) return;
+                string lastField = _tagSortGroupFields[^1];
+                string groupVal = TagSortFields.Value(song, lastField);
+                var playlist = _playlist
+                    .Where(p => string.Equals(TagSortFields.Value(p, lastField), groupVal, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
                 int startIdx = playlist.FindIndex(p => string.Equals(p.FilePath, song.FilePath, StringComparison.OrdinalIgnoreCase));
                 if (startIdx < 0) startIdx = 0;
                 _userPlaylist.Clear();
@@ -1330,41 +1389,177 @@ namespace CelesteMusicPlayer
 
         private void TagSortGroupListView_RightTapped(object sender, Microsoft.UI.Xaml.Input.RightTappedRoutedEventArgs e)
         {
-            // 复用 TagSortPanelSongListView 的右键菜单逻辑（多选 + 入队 + 播放 + 属性...）
-            // 这里简化：直接显示一个含"整组播放/折叠/展开"的轻量菜单
-            if ((e.OriginalSource as FrameworkElement)?.DataContext is TagSortGroupHeader header)
-            {
-                var menu = new MenuFlyout();
-                menu.Items.Add(new MenuFlyoutItem { Text = "整组播放", CommandParameter = header.Value });
-                ((MenuFlyoutItem)menu.Items[0]).Click += (_, _) => PlayTagSortGroup(header.Value);
+            var fe = e.OriginalSource as FrameworkElement;
 
-                menu.Items.Add(new MenuFlyoutItem { Text = header.IsExpanded ? "折叠该组" : "展开该组", CommandParameter = header.Value });
-                ((MenuFlyoutItem)menu.Items[1]).Click += (_, _) => ToggleTagSortGroup(header.Value);
+            // 组头：与文件夹浏览器右键菜单一致（整组播放 / 多选 / 整组加入播放队列）
+            if (fe?.DataContext is TagSortGroupHeader header)
+            {
+                var menu = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
+
+                var play = new MenuFlyoutItem { Text = "整组播放" };
+                play.Icon = new FontIcon { Glyph = "\uE768" };
+                play.Click += (_, _) => PlayTagSortGroup(header);
+                menu.Items.Add(play);
+
+                var multi = new MenuFlyoutItem { Text = "多选" };
+                multi.Icon = new FontIcon { Glyph = "\uE700" };
+                multi.Click += (_, _) => EnterMultiSelectModeFrom(TagSortGroupListView);
+                menu.Items.Add(multi);
+
+                var groupSongs = CollectNodeSongs(header);
+                if (groupSongs.Count > 0)
+                {
+                    var queue = new MenuFlyoutItem { Text = "整组加入播放队列" };
+                    queue.Icon = new FontIcon { Glyph = "\uE710" };
+                    queue.Click += (_, _) => AddSongsToUserPlaylist(groupSongs.ToList());
+                    menu.Items.Add(queue);
+                }
 
                 menu.ShowAt(TagSortGroupListView, e.GetPosition(TagSortGroupListView));
                 e.Handled = true;
+                return;
+            }
+
+            // 歌曲：复用主库右键菜单（播放 / 入队 / 加入播放列表 / 属性...）
+            if (fe?.DataContext is PlaylistItem song)
+            {
+                _multiSelectTargetList = TagSortGroupListView;
+                var flyout = BuildPlaylistItemContextMenu(song, inUserPlaylist: false,
+                    multiSelectAction: () => EnterMultiSelectModeFrom(TagSortGroupListView));
+                flyout.ShowAt(TagSortGroupListView, e.GetPosition(TagSortGroupListView));
+                e.Handled = true;
+            }
+        }
+
+
+        /// <summary>组头点击：模仿 FolderBrowserItem_Tapped —— 选中该行并展开/折叠分组。</summary>
+        private void TagSortGroupHeader_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (sender is not FrameworkElement { DataContext: TagSortGroupHeader header }) return;
+            TagSortGroupListView.SelectedItem = header;
+            ToggleTagSortNode(header);
+            e.Handled = true;
+        }
+
+
+        /// <summary>组头左侧箭头点击：展开/折叠（阻止冒泡到行 Tapped，避免二次 toggle）。</summary>
+        private void TagSortGroupChevron_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            if (sender is FrameworkElement fe && fe.DataContext is TagSortGroupHeader header)
+            {
+                ToggleTagSortNode(header);
+            }
+            e.Handled = true;
+        }
+
+
+        private void TagSortGroupListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            RefreshTagSortGroupSelectionChrome();
+        }
+
+
+        /// <summary>分组浏览选中高亮：模仿文件夹浏览器 ApplyFolderBrowserItemSelectionChrome。
+        /// 选中行铺满强调色胶囊、文字反色；组头未选中显浅白胶囊，歌曲未选中透明。</summary>
+        private void ApplyTagSortGroupRowSelectionChrome(ListViewItem container, object item, HashSet<object>? selectedSet)
+        {
+            Brush accent = ResolveAccentBrush();
+            Brush selectedFg = ColorHelper.ResolveContrastingForeground(accent);
+
+            container.Background = new SolidColorBrush(Colors.Transparent);
+            container.CornerRadius = new CornerRadius(10);
+            container.BorderThickness = new Thickness(0);
+            DisableContainerSelectionCheckMark(container);
+
+            bool selected = VisualTreeWalker.IsItemSelected(TagSortGroupListView, item, selectedSet);
+
+            Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "TagSortGroupRowChrome");
+            if (chrome != null)
+            {
+                chrome.MinHeight = 36;
+                chrome.CornerRadius = new CornerRadius(10);
+                chrome.VerticalAlignment = VerticalAlignment.Stretch;
+                // 选中矩形铺满整行（与文件夹面板一致），但右侧给垂直滚动条留 16px，不顶到滚动条
+                if (TagSortGroupListView.ActualWidth > 0)
+                {
+                    chrome.Width = Math.Max(0, TagSortGroupListView.ActualWidth - 16);
+                }
+                if (selected)
+                {
+                    chrome.Background = accent;
+                    ApplyForegroundToDescendants(chrome, selectedFg);
+                }
+                else
+                {
+                    chrome.Background = item is TagSortGroupHeader
+                        ? new SolidColorBrush(Windows.UI.Color.FromArgb(0x22, 255, 255, 255))
+                        : new SolidColorBrush(Colors.Transparent);
+                    ClearForegroundOnDescendants(chrome);
+                }
+            }
+            else if (selected)
+            {
+                container.Background = accent;
+                container.Foreground = selectedFg;
+            }
+            else
+            {
+                container.Background = new SolidColorBrush(Colors.Transparent);
+                container.ClearValue(Control.ForegroundProperty);
+            }
+        }
+
+
+        private void RefreshTagSortGroupSelectionChrome()
+        {
+            if (TagSortGroupListView == null) return;
+            var selectedSet = VisualTreeWalker.BuildSelectedItemsLookup(TagSortGroupListView);
+            foreach (ListViewItem container in EnumerateRealizedListViewItems(TagSortGroupListView))
+            {
+                if (TagSortGroupListView.ItemFromContainer(container) is object item)
+                {
+                    ApplyTagSortGroupRowSelectionChrome(container, item, selectedSet);
+                }
             }
         }
 
 
         private void TagSortGroupList_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
         {
-            // 组头/歌曲两种 DataTemplate：保持轻量（不再为歌曲行额外建 chrome，避免与模块 A 冲突）
-            // 当前模板自身已经处理好外观；这里留个 hook，后续可扩展
+            if (TagSortGroupListView == null) return;
+            var selectedSet = VisualTreeWalker.BuildSelectedItemsLookup(TagSortGroupListView);
+            if (args.Item is object item && args.ItemContainer is ListViewItem container)
+            {
+                // 缩进：用 Padding.Left，使内容右移但选中背景仍铺满整行（与文件夹面板层级一致）
+                int indent = 0;
+                if (item is TagSortGroupHeader h) indent = h.Indent;
+                else if (item is PlaylistItem s && _tagSortSongIndent.TryGetValue(s, out int si)) indent = si;
+                var chrome = VisualTreeWalker.FindTaggedBorder(container, "TagSortGroupRowChrome");
+                if (chrome != null) chrome.Padding = new Thickness(indent, 0, 0, 0);
+                ApplyTagSortGroupRowSelectionChrome(container, item, selectedSet);
+            }
         }
 
 
         /// <summary>标签排序信息列表「播放当前列表歌曲」：按当前列表顺序替换播放队列并从第一首播放。</summary>
         private void TagSortPanelPlayAllButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_tagSortClassSongs.Count == 0)
+            if (_tagSortPanelMode == "GroupBy")
             {
-                return;
+                // 分组浏览：播放整库（即当前分组字段下的全部歌曲）
+                if (_playlist.Count == 0) return;
+                _userPlaylist.Clear();
+                AddSongsToUserPlaylist(_playlist.ToList());
+                PlayUserPlaylistAt(0);
             }
-
-            _userPlaylist.Clear();
-            AddSongsToUserPlaylist(_tagSortClassSongs.ToList());
-            PlayUserPlaylistAt(0);
+            else
+            {
+                // 进入某分类后的 Songs/Albums/Artists 视角：播放该分类下的歌曲
+                if (_tagSortClassSongs.Count == 0) return;
+                _userPlaylist.Clear();
+                AddSongsToUserPlaylist(_tagSortClassSongs.ToList());
+                PlayUserPlaylistAt(0);
+            }
         }
 
 

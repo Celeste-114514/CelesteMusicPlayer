@@ -814,8 +814,12 @@ namespace CelesteMusicPlayer
             if (ReferenceEquals(target, _playlist))
             {
                 UpdateCurrentIndexByPath(preservePlayingPath);
-                if (_currentIndex >= 0 && _currentIndex < _playlist.Count
-                    && string.Equals(_currentCategory, "Songs", StringComparison.Ordinal))
+                // 仅当 PlaylistView 当前确实显示完整的 _playlist（未开搜索过滤）时才按 _playlist 下标设选中，
+                // 否则下标对过滤子集越界会抛 ArgumentException；过滤场景由 ApplySongsSearchFilter 重建并刷新选中。
+                if (_currentIndex >= 0
+                    && string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
+                    && ReferenceEquals(PlaylistView.ItemsSource, _playlist)
+                    && _currentIndex < PlaylistView.Items.Count)
                 {
                     PlaylistView.SelectedIndex = _currentIndex;
                 }
@@ -823,8 +827,11 @@ namespace CelesteMusicPlayer
             else if (ReferenceEquals(target, _userPlaylist) && !string.IsNullOrEmpty(preservePlayingPath))
             {
                 _userPlaylistIndex = FindUserPlaylistIndex(preservePlayingPath);
+                // 同上：仅当 PlaylistView 当前显示完整的 _userPlaylist（未开过滤）时按该下标设选中，避免越界。
                 if (_userPlaylistIndex >= 0
-                    && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+                    && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
+                    && ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist)
+                    && _userPlaylistIndex < PlaylistView.Items.Count)
                 {
                     PlaylistView.SelectedIndex = _userPlaylistIndex;
                 }

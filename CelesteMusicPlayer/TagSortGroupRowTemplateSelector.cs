@@ -5,7 +5,8 @@ namespace CelesteMusicPlayer
 {
     /// <summary>
     /// 分组浏览（模块 C）行模板选择器：组头用组头模板、歌曲用歌曲模板。
-    /// 共享 TagSortSongListView，避免 XAML 里写两份 ListView 各自管数据。
+    /// WinUI3 的 DataTemplateSelector 是普通类（不从 DependencyObject 继承），
+    /// 所以这里用 CLR 自动属性；XAML 里通过属性元素语法 <local:Selector.GroupHeaderTemplate> 赋值。
     /// </summary>
     public sealed class TagSortGroupRowTemplateSelector : DataTemplateSelector
     {

@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using Microsoft.UI;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.UI;
 
 namespace CelesteMusicPlayer
 {
@@ -27,11 +29,46 @@ namespace CelesteMusicPlayer
 
             InitializeComponent();
             WindowIconHelper.Apply(this);
-            AppWindow.Resize(new Windows.Graphics.SizeInt32(640, 600));
             Title = "分类字段配置";
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(AppTitleBar);
+            AppWindow.Resize(new Windows.Graphics.SizeInt32(820, 660));
+            ConfigureTitleBarButtons();
+            ApplyBackdropFromSettings();
 
             BuildFieldChecks();
             RebuildOrderPanel();
+        }
+
+        private void ConfigureTitleBarButtons()
+        {
+            if (!AppWindowTitleBar.IsCustomizationSupported())
+            {
+                return;
+            }
+
+            AppWindowTitleBar titleBar = AppWindow.TitleBar;
+            titleBar.ButtonBackgroundColor = Colors.Transparent;
+            titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+            titleBar.ButtonHoverBackgroundColor = Color.FromArgb(36, 255, 255, 255);
+            titleBar.ButtonPressedBackgroundColor = Color.FromArgb(60, 255, 255, 255);
+            titleBar.ButtonForegroundColor = Color.FromArgb(255, 220, 220, 220);
+            titleBar.ButtonInactiveForegroundColor = Color.FromArgb(255, 140, 140, 140);
+            titleBar.ButtonHoverForegroundColor = Colors.White;
+            titleBar.ButtonPressedForegroundColor = Colors.White;
+        }
+
+        private void ApplyBackdropFromSettings()
+        {
+            AppSettingsState s = AppSettingsStore.Load();
+            if (s.EnableFrostedGlass)
+            {
+                FrostedGlass.ApplyWindowBackdrop(this);
+            }
+            else
+            {
+                SystemBackdrop = null;
+            }
         }
 
         private void BuildFieldChecks()

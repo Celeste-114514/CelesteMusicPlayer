@@ -760,10 +760,26 @@ namespace CelesteMusicPlayer
             _tagSortCategoryFields = s.TagSortCategoryFields is { Count: > 0 }
                 ? s.TagSortCategoryFields.ToList()
                 : TagSortFields.DefaultCategoryFields.ToList();
+            // 自定义分组快照（下拉“自定义”项返回此配置，独立于当前激活项）
+            _tagSortGroupCustom = s.TagSortGroupFields is { Count: > 0 }
+                ? s.TagSortGroupFields.ToList()
+                : new List<string> { "Artist", "Album" };
+            _tagSortGroupActivePreset = s.TagSortGroupActivePreset;
+            // 当前激活分组：激活项为某预设 → 用预设；否则（自定义或空）→ 用自定义快照
+            if (!string.IsNullOrEmpty(_tagSortGroupActivePreset) && _tagSortGroupActivePreset != "__custom__")
+            {
+                _tagSortGroupFields = _tagSortGroupActivePreset.Split(',').ToList();
+            }
+            else
+            {
+                _tagSortGroupFields = _tagSortGroupCustom.ToList();
+            }
             if (_tagSortCategoryFields.Count == 0 || !_tagSortCategoryFields.Contains(_tagSortClassField))
             {
                 _tagSortClassField = _tagSortCategoryFields.FirstOrDefault() ?? "Artist";
             }
+            // 同步预设下拉选中项（“自定义”项在未匹配预设时高亮）
+            SyncTagSortGroupFieldCombo();
         }
 
 

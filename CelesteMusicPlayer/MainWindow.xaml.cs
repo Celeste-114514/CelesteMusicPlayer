@@ -579,10 +579,12 @@ namespace CelesteMusicPlayer
         private int _tagSortClassWallShown = 0;                            // 当前已显示数量
 
         // 模块 C：分组浏览（列表内多级分组、组头折叠）
-        private string _tagSortGroupField = "Artist";                  // 当前分组字段 Key
-        private ObservableCollection<object> _tagSortGroupFlatRows = new(); // 扁平化：组头 + 歌曲行混排
-        private Dictionary<string, TagSortGroupHeader> _tagSortGroupHeaders = new(StringComparer.OrdinalIgnoreCase);
-        private Dictionary<string, List<PlaylistItem>> _tagSortGroupSongs = new(StringComparer.OrdinalIgnoreCase);
+        private List<string> _tagSortGroupFields = new() { "Artist", "Album" }; // 当前激活的分组字段序列（多级嵌套顺序）
+        private List<string> _tagSortGroupCustom = new() { "Artist", "Album" }; // 自定义分组快照（下拉“自定义”项返回此配置，独立于当前激活项）
+        private string? _tagSortGroupActivePreset;                             // 当前激活项标记：某预设的字段列表 Tag（如 "Artist,Album"）或 "__custom__"；空=默认
+        private ObservableCollection<object> _tagSortGroupFlatRows = new();    // 扁平化：组头(TagSortGroupHeader) + 歌曲(PlaylistItem) 混排
+        private List<TagSortGroupHeader> _tagSortGroupTree = new();            // 多级分组树（roots）
+        private Dictionary<PlaylistItem, int> _tagSortSongIndent = new();      // 歌曲行缩进像素（按所属末级节点深度计算）
 
         // ---------- 左侧分类（Songs / Albums / Artists / Folders / UserPlaylist）----------
         private string _currentCategory = "Songs";

@@ -259,6 +259,12 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
 
         /// <summary>分类字段 key 列表（按顺序显示在分类按钮组）；空 = 默认 5 个（艺术家/专辑艺术家/专辑/流派/年份）。</summary>
         public List<string> TagSortCategoryFields { get; set; } = new();
+
+        /// <summary>分组浏览（模块 C）的自定义多字段序列（自上而下嵌套）；空 = 默认 艺术家/专辑。作为“自定义”下拉项的快照独立保存，切到预设也不会被覆盖。</summary>
+        public List<string> TagSortGroupFields { get; set; } = new();
+
+        /// <summary>分组浏览当前激活的是哪一项：预设的字段列表 Tag（如 "Artist,Album"）或 "__custom__"（用 TagSortGroupFields 快照）；空 = 默认（自定义快照）。用于重启后恢复上次激活状态。</summary>
+        public string? TagSortGroupActivePreset { get; set; }
     }
 
     public static class AppSettingsStore
