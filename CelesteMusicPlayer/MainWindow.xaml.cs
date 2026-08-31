@@ -578,6 +578,12 @@ namespace CelesteMusicPlayer
         private List<TagSortCategoryEntry> _tagSortClassWallAll = new(); // 全部分组（已排序）
         private int _tagSortClassWallShown = 0;                            // 当前已显示数量
 
+        // 模块 C：分组浏览（列表内多级分组、组头折叠）
+        private string _tagSortGroupField = "Artist";                  // 当前分组字段 Key
+        private ObservableCollection<object> _tagSortGroupFlatRows = new(); // 扁平化：组头 + 歌曲行混排
+        private Dictionary<string, TagSortGroupHeader> _tagSortGroupHeaders = new(StringComparer.OrdinalIgnoreCase);
+        private Dictionary<string, List<PlaylistItem>> _tagSortGroupSongs = new(StringComparer.OrdinalIgnoreCase);
+
         // ---------- 左侧分类（Songs / Albums / Artists / Folders / UserPlaylist）----------
         private string _currentCategory = "Songs";
 

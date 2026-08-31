@@ -2790,6 +2790,8 @@
                                             <MenuFlyoutItem Text="艺术家" Tag="Artists" Click="TagSortViewModeItem_Click" />
                                             <MenuFlyoutSeparator />
                                             <MenuFlyoutItem Text="排序方式" Tag="Sort" Click="TagSortViewModeItem_Click" />
+                                            <MenuFlyoutSeparator />
+                                            <MenuFlyoutItem Text="分组浏览（按字段分组列表）" Tag="GroupBy" Click="TagSortViewModeItem_Click" />
                                         </MenuFlyout>
                                     </Button.Flyout>
                                 </Button>
@@ -2894,6 +2896,114 @@
                                     <Button Content="自定义排序…" Click="TagSortCustomSortButton_Click" />
                                     <TextBlock x:Name="TagSortSortStatusText" Opacity="0.7" Text="" TextWrapping="WrapWholeWords" />
                                 </StackPanel>
+
+                                <!-- 分组浏览（模块 C）：列表内多级分组，组头折叠/展开 -->
+                                <Grid x:Name="TagSortGroupPanel" Visibility="Collapsed" RowSpacing="6">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+                                    <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="分组字段：" VerticalAlignment="Center" Opacity="0.7" FontSize="13" />
+                                        <ComboBox x:Name="TagSortGroupFieldCombo" MinWidth="180"
+                                                  SelectionChanged="TagSortGroupFieldCombo_SelectionChanged">
+                                            <ComboBoxItem Content="艺术家" Tag="Artist" />
+                                            <ComboBoxItem Content="专辑艺术家" Tag="AlbumArtist" />
+                                            <ComboBoxItem Content="专辑" Tag="Album" />
+                                            <ComboBoxItem Content="流派" Tag="Genre" />
+                                            <ComboBoxItem Content="年份" Tag="Year" />
+                                            <ComboBoxItem Content="标题首字母" Tag="TitleLetter" />
+                                            <ComboBoxItem Content="标题" Tag="Title" />
+                                            <ComboBoxItem Content="文件名" Tag="FileName" />
+                                            <ComboBoxItem Content="格式" Tag="Format" />
+                                            <ComboBoxItem Content="评分" Tag="Rating" />
+                                        </ComboBox>
+                                        <Button Content="全部展开" Click="TagSortGroupExpandAll_Click" />
+                                        <Button Content="全部折叠" Click="TagSortGroupCollapseAll_Click" />
+                                    </StackPanel>
+                                    <Grid Grid.Row="1">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                        </Grid.RowDefinitions>
+                                        <!-- 占位列头（让歌曲列与组头视觉对齐） -->
+                                        <Grid x:Name="TagSortGroupColumnHeaderGrid" Grid.Row="0" Background="Transparent" />
+                                        <ListView
+                                            x:Name="TagSortGroupListView"
+                                            Grid.Row="1"
+                                            SelectionMode="Extended"
+                                            DoubleTapped="TagSortGroupListView_DoubleTapped"
+                                            RightTapped="TagSortGroupListView_RightTapped"
+                                            ContainerContentChanging="TagSortGroupList_ContainerContentChanging">
+                                            <ListView.ItemContainerStyle>
+                                                <Style TargetType="ListViewItem">
+                                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                                    <Setter Property="Padding" Value="0" />
+                                                    <Setter Property="MinHeight" Value="40" />
+                                                    <Setter Property="CornerRadius" Value="6" />
+                                                    <Setter Property="Margin" Value="0,2" />
+                                                    <Setter Property="Background" Value="Transparent" />
+                                                </Style>
+                                            </ListView.ItemContainerStyle>
+                                            <ListView.ItemTemplateSelector>
+                                                <local:TagSortGroupRowTemplateSelector>
+                                                    <local:TagSortGroupRowTemplateSelector.GroupHeaderTemplate>
+                                                        <DataTemplate x:DataType="local:TagSortGroupHeader">
+                                                            <Border Padding="10,6" CornerRadius="6"
+                                                                    Background="{ThemeResource SystemControlHighlightListLowBrush}"
+                                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                    BorderThickness="0,0,0,1">
+                                                                <Grid ColumnSpacing="10">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="24" />
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                        <ColumnDefinition Width="120" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <FontIcon Grid.Column="0" Glyph="{x:Bind Glyph, Mode=OneWay}"
+                                                                              FontSize="14" VerticalAlignment="Center" Opacity="0.8" />
+                                                                    <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                                                               FontSize="14" FontWeight="SemiBold"
+                                                                               Text="{x:Bind Value}" TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock Grid.Column="2" VerticalAlignment="Center"
+                                                                               Opacity="0.55" FontSize="12"
+                                                                               Text="{x:Bind FieldLabel}" />
+                                                                    <TextBlock Grid.Column="3" VerticalAlignment="Center"
+                                                                               HorizontalAlignment="Right" Opacity="0.7" FontSize="12"
+                                                                               Text="{x:Bind CountText}" />
+                                                                </Grid>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </local:TagSortGroupRowTemplateSelector.GroupHeaderTemplate>
+                                                    <local:TagSortGroupRowTemplateSelector.SongRowTemplate>
+                                                        <DataTemplate x:DataType="local:PlaylistItem">
+                                                            <Border Tag="SongRowChrome" MinHeight="36" CornerRadius="6"
+                                                                    Padding="34,0,12,0" Background="Transparent">
+                                                                <Grid ColumnSpacing="12">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="160" />
+                                                                        <ColumnDefinition Width="64" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <TextBlock Grid.Column="0" VerticalAlignment="Center"
+                                                                               TextTrimming="CharacterEllipsis"
+                                                                               Text="{x:Bind Title}" />
+                                                                    <TextBlock Grid.Column="1" VerticalAlignment="Center"
+                                                                               Opacity="0.7" TextTrimming="CharacterEllipsis"
+                                                                               Text="{x:Bind Artist}" />
+                                                                    <TextBlock Grid.Column="2" VerticalAlignment="Center"
+                                                                               HorizontalAlignment="Right" Opacity="0.7"
+                                                                               Text="{x:Bind DurationText}" />
+                                                                </Grid>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </local:TagSortGroupRowTemplateSelector.SongRowTemplate>
+                                                </local:TagSortGroupRowTemplateSelector>
+                                            </ListView.ItemTemplateSelector>
+                                        </ListView>
+                                    </Grid>
+                                </Grid>
                             </Grid>
                         </Grid>
                     </Grid>
