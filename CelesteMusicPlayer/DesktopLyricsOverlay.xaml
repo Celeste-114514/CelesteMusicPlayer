@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="CelesteMusicPlayer.DesktopLyricsOverlay"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    mc:Ignorable="d">
+
+    <Grid x:Name="RootGrid"
+          Background="Transparent"
+          PointerPressed="RootGrid_PointerPressed"
+          PointerMoved="RootGrid_PointerMoved"
+          PointerReleased="RootGrid_PointerReleased"
+          PointerCaptureLost="RootGrid_PointerCaptureLost"
+          DoubleTapped="RootGrid_DoubleTapped"
+          RightTapped="RootGrid_RightTapped">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- 上一行（双行模式显示） -->
+        <TextBlock x:Name="PrevLineText"
+                   Grid.Row="0"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Bottom"
+                   Text=""
+                   TextWrapping="WrapWholeWords"
+                   TextAlignment="Center"
+                   MaxWidth="900"
+                   FontSize="20"
+                   Opacity="0.55"
+                   Margin="0,0,0,6" />
+
+        <!-- 当前行：高亮 + 字号放大 -->
+        <TextBlock x:Name="CurrentLineText"
+                   Grid.Row="1"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Center"
+                   Text=""
+                   TextWrapping="WrapWholeWords"
+                   TextAlignment="Center"
+                   MaxWidth="900"
+                   FontWeight="SemiBold"
+                   Margin="0,4" />
+
+        <!-- 下一行（双行模式显示） -->
+        <TextBlock x:Name="NextLineText"
+                   Grid.Row="2"
+                   HorizontalAlignment="Center"
+                   VerticalAlignment="Top"
+                   Text=""
+                   TextWrapping="WrapWholeWords"
+                   TextAlignment="Center"
+                   MaxWidth="900"
+                   FontSize="20"
+                   Opacity="0.55"
+                   Margin="0,6,0,0" />
+
+        <!-- 工具栏：解锁态显式可见（右上角 锁定 + 关闭） -->
+        <StackPanel x:Name="TopBar"
+                    Grid.Row="0"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Top"
+                    Orientation="Horizontal"
+                    Spacing="2"
+                    Margin="0,2,6,0">
+            <Button x:Name="LockToggleButton"
+                    Click="LockToggleButton_Click"
+                    Width="30" Height="30"
+                    Padding="0"
+                    Background="#A0181818"
+                    BorderThickness="0"
+                    CornerRadius="6"
+                    ToolTipService.ToolTip="锁定 / 解锁">
+                <FontIcon x:Name="LockToggleIcon"
+                          FontFamily="Segoe Fluent Icons"
+                          Glyph="&#xE785;"
+                          FontSize="14" />
+            </Button>
+            <Button x:Name="CloseButton"
+                    Click="CloseButton_Click"
+                    Width="30" Height="30"
+                    Padding="0"
+                    Background="#A0181818"
+                    BorderThickness="0"
+                    CornerRadius="6"
+                    ToolTipService.ToolTip="关闭桌面歌词">
+                <FontIcon FontFamily="Segoe Fluent Icons"
+                          Glyph="&#xE711;"
+                          FontSize="14" />
+            </Button>
+        </StackPanel>
+
+        <!-- 锁定态专用：右上角一个小小的"开锁"按钮（不被 WS_EX_TRANSPARENT 罩住——它是 visible+enabled） -->
+        <Button x:Name="LockedUnlockButton"
+                Grid.Row="0"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Click="LockedUnlockButton_Click"
+                Visibility="Collapsed"
+                Width="30" Height="30"
+                Padding="0"
+                Margin="0,2,6,0"
+                Background="#A0181818"
+                BorderThickness="0"
+                CornerRadius="6"
+                ToolTipService.ToolTip="解锁">
+            <FontIcon FontFamily="Segoe Fluent Icons"
+                      Glyph="&#xE72E;"
+                      FontSize="14" />
+        </Button>
+    </Grid>
+</Window>
