@@ -86,8 +86,18 @@
     <PackageReference Include="H.NotifyIcon.WinUI" Version="2.3.0" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
-    <!-- 2.2+ 存在 TextBox/自定义标题栏光标闪烁回归；1.8 已修复 ExtendsContentIntoTitleBar 指针问题 -->
+    <!-- 2.2+ 存在 TextBox/自定义标题栏光标闪烁回归；1.8 已修复 ExtendsContentIntoTitleBar 指针问题。
+         主包 nuspec 期望的所有子包版本如下（精确版本号，feature bands 设计使主包和子包版本号不同步是正常的）；
+         必须把每个子包都显式锁版本，否则 nuget restore 会挑同大版本号 1.8 下的最新子包，
+         与主包 Runtime 期望对不上 → ComponentReference.targets 116 报错 → WMC9999 兜底。
+         没有第三方包传递依赖这些子包（只有 WinAppSDK 自己的新子包 nuspec 互相依赖），所以锁死安全。 -->
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251106002" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Base" Version="1.8.250831001" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="1.8.251104000" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="1.8.251104001" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.251105000" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.DWrite" Version="1.8.25090401" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="1.8.251106002" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageReference Include="ToolGood.Words.Pinyin" Version="3.1.0" />

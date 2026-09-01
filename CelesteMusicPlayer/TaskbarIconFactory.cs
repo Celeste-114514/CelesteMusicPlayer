@@ -195,7 +195,9 @@ namespace CelesteMusicPlayer
                 // 描边粗细是"元素坐标系"单位，不会被几何变换缩放，所以这里手动乘 scale
                 StrokeThickness = (outlineOnly ? HeartRingStroke : FillStroke) * scale,
                 StrokeLineJoin = PenLineJoin.Round,
-                StrokeLineCap = PenLineCap.Round,
+                // WinUI3 Shape 把单数 StrokeLineCap 拆成头/尾两个属性（与 WPF 不同）
+                StrokeStartLineCap = PenLineCap.Round,
+                StrokeEndLineCap = PenLineCap.Round,
                 IsHitTestVisible = false,
             };
             return path;
