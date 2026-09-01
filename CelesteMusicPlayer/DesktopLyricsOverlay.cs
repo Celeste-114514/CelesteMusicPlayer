@@ -18,7 +18,11 @@ namespace CelesteMusicPlayer
         private const int BtnSize = 44;
         private const int BtnGap = 8;
         private const int TimerId = 1;
-        private const uint TimerIntervalMs = 33; // ~30fps，歌词双色更跟手
+        private const uint TimerIntervalMs = 50; // 20fps；33ms 在 Win10/11 上 DWM compositor 时序不够，会闪烁
+        private const long MinRedrawIntervalMs = 50; // 节流：progress 触发的 Redraw 至少 50ms 一次（forceRedraw 不受限）
+
+        // 上次 Redraw 的物理时刻（Environment.TickCount64），用于跨 tick 节流
+        private long _lastRedrawMs;
 
         private static bool _classRegistered;
         private static readonly object ClassGate = new();
@@ -148,18 +152,37 @@ namespace CelesteMusicPlayer
             }
 
             double target = ComputeLineProgress(position, index);
-            // 向目标平滑靠拢，减少跳跃感
-            double lerp = indexChanged ? 1.0 : 0.42;
+            // 向目标平滑靠拢，减少跳跃感。lerp 提到 0.55：节流后单帧跳跃更明显，需要更快的追赶
+            double lerp = indexChanged ? 1.0 : 0.55;
             _displayProgress += (target - _displayProgress) * lerp;
             if (Math.Abs(target - _displayProgress) < 0.002)
             {
                 _displayProgress = target;
             }
 
-            if (forceRedraw || indexChanged || Math.Abs(target - _displayProgress) >= 0.0005 || target > 0.995)
+            // 节流：progress 触发的 Redraw 至少 MinRedrawIntervalMs 一次。
+            // forceRedraw（鼠标进出窗口、点击按钮）保持立即响应，不受节流限制。
+            bool progressChanged = indexChanged
+                || Math.Abs(target - _displayProgress) >= 0.008
+                || target > 0.995;
+            if (forceRedraw)
             {
                 Redraw();
             }
+            else if (progressChanged && CanRedrawNow())
+            {
+                Redraw();
+            }
+        }
+
+        private bool CanRedrawNow()
+        {
+            long now = Environment.TickCount64;
+            if (now - _lastRedrawMs >= MinRedrawIntervalMs)
+            {
+                return true;
+            }
+            return false;
         }
 
         private double ComputeLineProgress(TimeSpan position, int index)
@@ -459,6 +482,9 @@ namespace CelesteMusicPlayer
             {
                 return;
             }
+
+            // 实际重绘前打点，让后续 progress 触发的 Redraw 走节流
+            _lastRedrawMs = Environment.TickCount64;
 
             using var bmp = new Bitmap(_width, _height, PixelFormat.Format32bppArgb);
             using (Graphics g = Graphics.FromImage(bmp))
