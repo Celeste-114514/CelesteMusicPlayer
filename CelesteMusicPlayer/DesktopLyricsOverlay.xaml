@@ -5,9 +5,15 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
-    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     mc:Ignorable="d">
 
+    <!--
+        桌面歌词（WinUI3 窗口版）。
+        视觉参考 deskbox / Spotify floating widget / Apple Music 桌面歌词：
+        - 整窗铺 Desktop Acrylic backdrop（半透模糊），看上去是悬在桌面上
+        - 中央一个半透黑圆角"歌词卡"装文字 —— 跨深浅壁纸都看得清
+        - 工具栏也是歌词卡一部分，不用额外画
+    -->
     <Grid x:Name="RootGrid"
           Background="Transparent"
           PointerPressed="RootGrid_PointerPressed"
@@ -22,96 +28,127 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <!-- 上一行（双行模式显示） -->
-        <TextBlock x:Name="PrevLineText"
-                   Grid.Row="0"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Bottom"
-                   Text=""
-                   TextWrapping="WrapWholeWords"
-                   TextAlignment="Center"
-                   MaxWidth="900"
-                   FontSize="20"
-                   Opacity="0.55"
-                   Margin="0,0,0,6" />
+        <!-- 中央歌词卡：半透黑圆角矩形。文字+工具栏全装在这里 -->
+        <Border x:Name="LyricsCard"
+                Grid.Row="0" Grid.RowSpan="3"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                CornerRadius="20"
+                Background="#A6000000"
+                BorderThickness="1"
+                BorderBrush="#3FFFFFFF"
+                Padding="28,14,24,16">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />   <!-- 上一行 -->
+                    <RowDefinition Height="Auto" />   <!-- 当前行 -->
+                    <RowDefinition Height="Auto" />   <!-- 下一行 -->
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />  <!-- 工具栏 -->
+                </Grid.ColumnDefinitions>
 
-        <!-- 当前行：高亮 + 字号放大 -->
-        <TextBlock x:Name="CurrentLineText"
-                   Grid.Row="1"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Center"
-                   Text=""
-                   TextWrapping="WrapWholeWords"
-                   TextAlignment="Center"
-                   MaxWidth="900"
-                   FontWeight="SemiBold"
-                   Margin="0,4" />
+                <!-- 上一行（双行模式显示） -->
+                <TextBlock x:Name="PrevLineText"
+                           Grid.Row="0" Grid.Column="0"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Bottom"
+                           Text=""
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="#CCFFFFFF"
+                           FontSize="20"
+                           MaxWidth="780"
+                           Margin="0,0,0,4" />
 
-        <!-- 下一行（双行模式显示） -->
-        <TextBlock x:Name="NextLineText"
-                   Grid.Row="2"
-                   HorizontalAlignment="Center"
-                   VerticalAlignment="Top"
-                   Text=""
-                   TextWrapping="WrapWholeWords"
-                   TextAlignment="Center"
-                   MaxWidth="900"
-                   FontSize="20"
-                   Opacity="0.55"
-                   Margin="0,6,0,0" />
+                <!-- 当前行：高亮 + 字号放大 -->
+                <TextBlock x:Name="CurrentLineText"
+                           Grid.Row="1" Grid.Column="0"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           Text=""
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="#FFFFFFFF"
+                           FontSize="34"
+                           FontWeight="SemiBold"
+                           MaxWidth="880"
+                           Margin="0,2" />
 
-        <!-- 工具栏：解锁态显式可见（右上角 锁定 + 关闭） -->
-        <StackPanel x:Name="TopBar"
-                    Grid.Row="0"
-                    HorizontalAlignment="Right"
-                    VerticalAlignment="Top"
-                    Orientation="Horizontal"
-                    Spacing="2"
-                    Margin="0,2,6,0">
-            <Button x:Name="LockToggleButton"
-                    Click="LockToggleButton_Click"
-                    Width="30" Height="30"
-                    Padding="0"
-                    Background="#A0181818"
-                    BorderThickness="0"
-                    CornerRadius="6"
-                    ToolTipService.ToolTip="锁定 / 解锁">
-                <FontIcon x:Name="LockToggleIcon"
-                          FontFamily="Segoe Fluent Icons"
-                          Glyph="&#xE785;"
-                          FontSize="14" />
-            </Button>
-            <Button x:Name="CloseButton"
-                    Click="CloseButton_Click"
-                    Width="30" Height="30"
-                    Padding="0"
-                    Background="#A0181818"
-                    BorderThickness="0"
-                    CornerRadius="6"
-                    ToolTipService.ToolTip="关闭桌面歌词">
-                <FontIcon FontFamily="Segoe Fluent Icons"
-                          Glyph="&#xE711;"
-                          FontSize="14" />
-            </Button>
-        </StackPanel>
+                <!-- 下一行（双行模式显示） -->
+                <TextBlock x:Name="NextLineText"
+                           Grid.Row="2" Grid.Column="0"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Top"
+                           Text=""
+                           TextWrapping="NoWrap"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="#CCFFFFFF"
+                           FontSize="20"
+                           MaxWidth="780"
+                           Margin="0,4,0,0" />
 
-        <!-- 锁定态专用：右上角一个小小的"开锁"按钮（不被 WS_EX_TRANSPARENT 罩住——它是 visible+enabled） -->
-        <Button x:Name="LockedUnlockButton"
-                Grid.Row="0"
-                HorizontalAlignment="Right"
-                VerticalAlignment="Top"
-                Click="LockedUnlockButton_Click"
-                Visibility="Collapsed"
-                Width="30" Height="30"
-                Padding="0"
-                Margin="0,2,6,0"
-                Background="#A0181818"
-                BorderThickness="0"
-                CornerRadius="6"
-                ToolTipService.ToolTip="解锁">
-            <FontIcon FontFamily="Segoe Fluent Icons"
-                      Glyph="&#xE72E;"
-                      FontSize="14" />
-        </Button>
+                <!-- 工具栏：锁 / 关。垂直对齐到当前行；半透按钮 -->
+                <StackPanel x:Name="TopBar"
+                            Grid.Row="1" Grid.Column="1"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center"
+                            Orientation="Horizontal"
+                            Spacing="6"
+                            Margin="14,0,0,0">
+                    <Button x:Name="LockToggleButton"
+                            Click="LockToggleButton_Click"
+                            Width="34" Height="34"
+                            Padding="0"
+                            Background="#66000000"
+                            BorderBrush="#3FFFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="17"
+                            ToolTipService.ToolTip="锁定 / 解锁">
+                        <FontIcon x:Name="LockToggleIcon"
+                                  FontFamily="Segoe Fluent Icons"
+                                  Glyph="&#xE785;"
+                                  FontSize="16"
+                                  Foreground="White" />
+                    </Button>
+                    <Button x:Name="CloseButton"
+                            Click="CloseButton_Click"
+                            Width="34" Height="34"
+                            Padding="0"
+                            Background="#66000000"
+                            BorderBrush="#3FFFFFFF"
+                            BorderThickness="1"
+                            CornerRadius="17"
+                            ToolTipService.ToolTip="关闭桌面歌词">
+                        <FontIcon FontFamily="Segoe Fluent Icons"
+                                  Glyph="&#xE711;"
+                                  FontSize="14"
+                                  Foreground="White" />
+                    </Button>
+                </StackPanel>
+
+                <!-- 锁定态专用：右上角一个小小的"开锁"按钮（歌词卡还是可见） -->
+                <Button x:Name="LockedUnlockButton"
+                        Grid.Row="1" Grid.Column="1"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Center"
+                        Click="LockedUnlockButton_Click"
+                        Visibility="Collapsed"
+                        Width="34" Height="34"
+                        Padding="0"
+                        Margin="14,0,0,0"
+                        Background="#66000000"
+                        BorderBrush="#3FFFFFFF"
+                        BorderThickness="1"
+                        CornerRadius="17"
+                        ToolTipService.ToolTip="解锁">
+                    <FontIcon FontFamily="Segoe Fluent Icons"
+                              Glyph="&#xE72E;"
+                              FontSize="16"
+                              Foreground="White" />
+                </Button>
+            </Grid>
+        </Border>
     </Grid>
 </Window>

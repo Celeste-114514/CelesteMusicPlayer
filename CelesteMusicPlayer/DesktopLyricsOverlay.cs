@@ -59,7 +59,7 @@ namespace CelesteMusicPlayer
         private PointInt32 _dragStartWindowPos; // 物理像素位置
 
         // 设置缓存
-        private double _fontSize = 28;
+        private double _fontSize = 32;
         private int _opacityPercent = 100;
         private Color _playedColor = Color.FromArgb(255, 64, 180, 255);
         private Color _unplayedColor = Color.FromArgb(255, 245, 245, 245);
@@ -109,6 +109,13 @@ namespace CelesteMusicPlayer
             // Window.Closed 事件是"用户按 X / 程序 Close() / 进程结束"统一触发
             this.Closed += DesktopLyricsOverlay_Closed;
 
+            // 整窗铺 Desktop Acrylic：纯透明 WinUI3 Window 不支持，会显示一个纯黑窗体（导致用户看到的就是"一个黑框啥都没显示对"）。
+            // Acrylic backdrop 把桌面壁纸当模糊源，歌词卡叠上去，视觉是"漂浮"。
+            // 实现顺序要紧：SystemBackdrop 设置必须在 InitializeComponent() 之后、Show 之前；
+            // Mica 是 fallback —— 旧 Win10/主题不匹配就用 Mica，至少不再是黑底。
+            TryApplySystemBackdrop();
+            AttachCardShadow();
+
             // 让窗没有任务栏图标，不在 Alt+Tab 出现
             int exStyle = GetExStyle(_hwnd, GWL_EXSTYLE);
             _savedExStyle = exStyle;
@@ -128,10 +135,10 @@ namespace CelesteMusicPlayer
             }
             catch { }
 
-            // 起始大小留充足（双行 + 工具栏），主窗口可调
+            // 起始大小：给歌词卡 + 工具栏 + padding 留够空间（旧 900x200 太窄，工具栏会挤出当前行）
             try
             {
-                AppWindow.Resize(new Windows.Graphics.SizeInt32(900, 200));
+                AppWindow.Resize(new Windows.Graphics.SizeInt32(960, 220));
             }
             catch { }
 
@@ -301,7 +308,7 @@ namespace CelesteMusicPlayer
 
         private void UpdateLockedUi()
         {
-            // 锁定：主工具栏收起，只显一个"开锁"小按钮；歌词走"低调"模式（缩字号 + 半透）便于能透过歌词点空白，但点击歌词仍然能拖动整窗
+            // 锁定：主工具栏收起，只显一个"开锁"小按钮；歌词走"低调"模式（缩字号 + 半透）
             TopBar.Visibility = IsLocked ? Visibility.Collapsed : Visibility.Visible;
             LockedUnlockButton.Visibility = IsLocked ? Visibility.Visible : Visibility.Collapsed;
             LockToggleIcon.Glyph = IsLocked ? "\uE72E" : "\uE785"; // E72E=解锁 / E785=锁定
@@ -313,6 +320,51 @@ namespace CelesteMusicPlayer
             }
             if (PrevLineText != null) PrevLineText.Opacity = IsLocked ? 0.30 : 0.55;
             if (NextLineText != null) NextLineText.Opacity = IsLocked ? 0.30 : 0.55;
+        }
+
+        /// <summary>
+        /// 整窗铺 Desktop Acrylic backdrop。**WinUI3 Window 本身不支持"纯透明"**：
+        /// 不设 SystemBackdrop 时整窗就是纯黑底色，歌词文字即便设白色也难看清。
+        /// Acrylic backdrop 把桌面壁纸当模糊源（歌词"漂浮"在桌面上），Mica 作为 fallback。
+        /// </summary>
+        private void TryApplySystemBackdrop()
+        {
+            Safe(() =>
+            {
+                try
+                {
+                    SystemBackdrop = new DesktopAcrylicBackdrop();
+                    return;
+                }
+                catch (Exception caught1) { StartupLog.WriteException("DesktopLyricsOverlay.SystemBackdrop(Acrylic)", caught1); }
+
+                try
+                {
+                    SystemBackdrop = new MicaBackdrop();
+                }
+                catch (Exception caught2) { StartupLog.WriteException("DesktopLyricsOverlay.SystemBackdrop(Mica)", caught2); }
+            }, "DesktopLyricsOverlay.TryApplySystemBackdrop");
+        }
+
+        /// <summary>
+        /// 给 LyricsCard（歌词家那个半透圆角矩形）加 ThemeShadow，让其像浮在桌面亚克力上。
+        /// WinUI3 ThemeShadow 对顶级 Window 内的子节点会渲染阴影；构造时 Window 合成器已就绪。
+        /// </summary>
+        private void AttachCardShadow()
+        {
+            Safe(() =>
+            {
+                if (LyricsCard == null)
+                {
+                    return;
+                }
+                try
+                {
+                    LyricsCard.Shadow ??= new ThemeShadow();
+                    LyricsCard.Translation = new System.Numerics.Vector3(0, 6f, 32f);
+                }
+                catch (Exception caught) { StartupLog.WriteException("DesktopLyricsOverlay.AttachCardShadow", caught); }
+            }, "DesktopLyricsOverlay.AttachCardShadow");
         }
 
         private void UpdateLineUi()
