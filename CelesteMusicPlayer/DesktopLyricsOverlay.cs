@@ -15,24 +15,25 @@ using Color = Windows.UI.Color;
 namespace CelesteMusicPlayer
 {
     /// <summary>
-    /// 桌面歌词窗口（**已重写**）。
+    /// 桌面歌词窗口（**主流风格**：网易云 / QQ 音乐 / Spotify 桌面歌词观感）。
     ///
-    /// 旧版（删掉前 1324 行）是用裸 Win32 自定义窗口类 + `SetTimer` + GDI `DrawText` 自绘歌词 + 卡拉 OK 双色工具栏，
-    /// coriander 的代码路数：类型字号、不透明度、双色进度全部要 P/Invoke 拦下、再手动贴窗口。多个 P/Invoke 结构体散落在文件里，
-    /// DPI 适配不到位、字号/颜色改一次要改动七八处。播放器主题变更时还要重画 Surface，闪烁 + 卡顿。
-    /// 不重做没法解决"粗一点、好看点"以外的体验问题。
+    /// 视觉对标：
+    ///   - 屏幕顶部居中的半透圆角卡，整窗漂浮
+    ///   - 当前行：大字号 + 已唱主题色 + 未唱白半透；卡拉 OK 进度从左往右揭示
+    ///   - 下一行：小字号白半透（提示）
+    ///   - 工具栏：锁定 / 关闭两圆按钮，紧贴歌词右侧
+    ///   - 锁定后工具栏收起，露单按钮可解锁
     ///
-    /// 新版直接走 WinUI3 `Window`：
-    /// - 三行（上一行/当前行/下一行），关闭"双行"即单行；当前行高亮 + 字号放大，未播放行低对比
-    /// - 拖动 = 整窗 Pointer → `AppWindow.Move()`，DPI 由 `GetDpiForWindow` 自适应
-    /// - 锁定 = `WS_EX_TRANSPARENT` 整窗鼠标穿透，右上角小"🔓"按钮可戳解锁
-    /// - 双击 = 切换锁定 / 解锁；右键 = 强制解锁（保留旧 API 兼容）
-    /// - 字号、不透明度、已播放/未播放色 → 直接 `TextBlock.FontSize` / `RootGrid.Opacity` / `SolidColorBrush`
-    /// - 进度同步：主窗 `Sync(pos)` → 二分定位当前行，重设三行；本窗不主动轮询
-    /// - 位置记忆：拖动结束 + Dispose 时把 `(AppWindow.X, AppWindow.Y)` 落回 `AppSettingsStore.DesktopLyricPosX/Y`
+    /// 卡拉 OK 渐变实现：
+    ///   当前行用两个完全一样的 TextBlock 重叠 —— 底层白色半透（未唱），顶层主题色（已唱）。
+    ///   顶层加 RectangleGeometry Clip，width = progress × UnsignedText.ActualWidth，
+    ///   progress = (currentPos − currentLineStartTime) / lineDuration（最后一行默认 8s）。
+    ///   LineDuration 跟着"切到下一行"的 WidthChanged 自动重新计算。
     ///
-    /// **与主窗口的公开契约保持完全兼容**：事件 `ClosedByUser`、属性 `PositionProvider` / `IsLocked` / `IsVisible` / `CurrentPosition`、
-    /// 方法 `SetSavedPosition` / `Show` / `Close` / `SetLyrics` / `Sync` / `SetLocked` / `ApplySettings` / `SetPlaybackPaused` / `Dispose` 全部保留。
+    /// 公开契约完全保留（13 个成员签名不变）：
+    ///   event ClosedByUser / PositionProvider / IsLocked / IsVisible / CurrentPosition /
+    ///   SetSavedPosition / Show / Close / SetLyrics / Sync / SetLocked / ApplySettings /
+    ///   SetPlaybackPaused / Dispose —— 主窗口 0 改动。
     /// </summary>
     internal sealed partial class DesktopLyricsOverlay : IDisposable
     {
@@ -41,28 +42,36 @@ namespace CelesteMusicPlayer
         private const int WS_EX_TRANSPARENT = 0x00000020;
         private const int WS_EX_TOOLWINDOW  = 0x00000080;
 
+        // ===== 默认尺寸（DIP） =====
+        private const int DefaultWidthDip  = 720;
+        private const int DefaultHeightDip = 130;
+
         // ===== 状态 =====
         private IntPtr _hwnd;
         private int _savedExStyle;
         private bool _exStyleSaved;
         private bool _disposed;
-        private bool _isClosingFromSelf;   // 防 ClosedByUser 订阅方反向触发 Close 造成递归
+        private bool _isClosingFromSelf;   // 防 ClosedByUser 订阅方反向触发 Close 递归
 
         private readonly List<LyricLine> _lines = new();
         private int _currentIndex = -1;
         private TimeSpan _lastSyncPosition;
         private bool _hasSyncedOnce;
 
+        // 卡拉 OK
+        private RectangleGeometry? _progressClip;
+        private double _lastProgress01;
+
         // 拖动
         private bool _dragging;
-        private Point _dragStartDipPoint;       // 屏幕坐标（DIP）
-        private PointInt32 _dragStartWindowPos; // 物理像素位置
+        private Point _dragStartDipPoint;
+        private PointInt32 _dragStartWindowPos;
 
         // 设置缓存
-        private double _fontSize = 32;
+        private double _fontSize = 28;
         private int _opacityPercent = 100;
-        private Color _playedColor = Color.FromArgb(255, 64, 180, 255);
-        private Color _unplayedColor = Color.FromArgb(255, 245, 245, 245);
+        private Color _playedColor   = Color.FromArgb(255, 64, 180, 255);  // #40B4FF 默认主题色蓝紫
+        private Color _unplayedColor = Color.FromArgb(0xCC, 0xFF, 0xFF, 0xFF); // #CCFFFFFF 白色 80% 半透
         private bool _doubleLine = true;
         private bool _clickThroughSetting;
         private bool _hideWhenPaused;
@@ -71,19 +80,19 @@ namespace CelesteMusicPlayer
 
         // ============================== 公开契约 ==============================
 
-        /// <summary>窗被用户主动关闭（点了 X / 切主窗口开关触发 Dispose），通知主窗口做清理。</summary>
+        /// <summary>窗被用户主动关闭（按 X / 主窗口开关触发），通知主窗口做清理。</summary>
         public event Action? ClosedByUser;
 
-        /// <summary>可选：主窗口可提供一个当前位置 provider。备用，本版本未使用（主窗口直接 Sync）。</summary>
+        /// <summary>主窗口可注入的当前位置 provider（备用，本版本未使用，主窗口直接 Sync）。</summary>
         public Func<TimeSpan>? PositionProvider { get; set; }
 
-        /// <summary>当前是否被锁定。锁定时窗透明穿透，露出小"🔓"按钮。</summary>
+        /// <summary>当前是否被锁定。锁定 = 整窗鼠标穿透，露出单"开锁"按钮。</summary>
         public bool IsLocked { get; private set; }
 
         /// <summary>当前是否已 Show。WinUI3 Window 没显式可见属性，自己 track。</summary>
         public bool IsVisible { get; private set; }
 
-        /// <summary>当前窗位置（物理像素）。主窗口调用以做"关闭前保存位置"。</summary>
+        /// <summary>当前窗位置（物理像素）。主窗口用它做"关闭前保存位置"。</summary>
         public (int X, int Y) CurrentPosition
         {
             get
@@ -93,10 +102,7 @@ namespace CelesteMusicPlayer
                     EnsureHwnd();
                     return AppWindow != null ? (AppWindow.Position.X, AppWindow.Position.Y) : (0, 0);
                 }
-                catch
-                {
-                    return (0, 0);
-                }
+                catch { return (0, 0); }
             }
         }
 
@@ -106,64 +112,68 @@ namespace CelesteMusicPlayer
 
             EnsureHwnd();
 
-            // Window.Closed 事件是"用户按 X / 程序 Close() / 进程结束"统一触发
+            // Window.Closed 事件统一处理"用户按 X / 程序 Close() / 进程结束"
             this.Closed += DesktopLyricsOverlay_Closed;
 
-            // 整窗铺 Desktop Acrylic：纯透明 WinUI3 Window 不支持，会显示一个纯黑窗体（导致用户看到的就是"一个黑框啥都没显示对"）。
-            // Acrylic backdrop 把桌面壁纸当模糊源，歌词卡叠上去，视觉是"漂浮"。
-            // 实现顺序要紧：SystemBackdrop 设置必须在 InitializeComponent() 之后、Show 之前；
-            // Mica 是 fallback —— 旧 Win10/主题不匹配就用 Mica，至少不再是黑底。
+            // 整窗铺 Desktop Acrylic backdrop（替代纯透明窗 = 黑底的旧 bug），Mica fallback
             TryApplySystemBackdrop();
+
+            // 卡片 ThemeShadow
             AttachCardShadow();
 
-            // 让窗没有任务栏图标，不在 Alt+Tab 出现
+            // 没任务栏图标 + 不在 Alt+Tab
             int exStyle = GetExStyle(_hwnd, GWL_EXSTYLE);
             _savedExStyle = exStyle;
             exStyle |= WS_EX_TOOLWINDOW;
             SetExStyle(_hwnd, GWL_EXSTYLE, exStyle);
             _exStyleSaved = true;
 
-            // 标题栏砍掉：WinUI3 风格
+            // 砍掉系统标题栏（WinUI3 风格）
             ExtendsContentIntoTitleBar = true;
             try
             {
                 AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Standard;
                 AppWindow.TitleBar.ButtonBackgroundColor = Colors.Transparent;
                 AppWindow.TitleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
-                // 不显示系统按钮：自己画
                 AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
             }
             catch { }
 
-            // 起始大小：给歌词卡 + 工具栏 + padding 留够空间（旧 900x200 太窄，工具栏会挤出当前行）
-            try
-            {
-                AppWindow.Resize(new Windows.Graphics.SizeInt32(960, 220));
-            }
+            // 起始大小
+            try { AppWindow.Resize(new Windows.Graphics.SizeInt32(DefaultWidthDip, DefaultHeightDip)); }
             catch { }
+
+            // 没存位置 → 自动居中到主屏顶部 60 DIP 处
+            CenterOnPrimaryDisplay();
 
             UpdateLockedUi();
             UpdateLineUi();
             UpdateDimmedOpacity();
+
+            // Loaded 后再初始化卡拉 OK Clip —— 首次 Layout 时 ActualWidth 才有值
+            if (Content is FrameworkElement fe)
+            {
+                fe.Loaded += DesktopLyricsOverlay_Loaded;
+            }
         }
 
-        /// <summary>由主窗口调入：在 EnsureDesktopLyricsWindow 后注入上次保存的位置。</summary>
+        /// <summary>主窗口在 EnsureDesktopLyricsWindow 后注入上次保存的位置。</summary>
         public void SetSavedPosition(int x, int y)
         {
             Safe(() =>
             {
                 EnsureHwnd();
-                AppWindow.MoveAndResize(new RectInt32(x, y, AppWindow.Size.Width, AppWindow.Size.Height));
+                if (AppWindow != null)
+                {
+                    AppWindow.Move(new PointInt32(x, y));
+                }
             }, "DesktopLyricsOverlay.SetSavedPosition");
         }
 
         /// <summary>显示窗。仅切换可见性，不重置任何状态。</summary>
         public void Show()
         {
-            if (_disposed)
-            {
-                return;
-            }
+            if (_disposed) return;
             Safe(() =>
             {
                 EnsureHwnd();
@@ -173,43 +183,31 @@ namespace CelesteMusicPlayer
             }, "DesktopLyricsOverlay.Show");
         }
 
-        /// <summary>关闭窗。与 Window.Close() 区分（同名时不能 this.Close()），用显式类型调用基类。</summary>
+        /// <summary>关闭窗。用 ((Window)this).Close() 跟本类 Close 区分。</summary>
         public void Close()
         {
-            if (_disposed)
-            {
-                return;
-            }
-            // 标志位：本路径不期望触发 ClosedByUser（主窗口主动关闭）
+            if (_disposed) return;
             _isClosingFromSelf = true;
-            try
-            {
-                ((Window)this).Close();
-            }
+            try { ((Window)this).Close(); }
             catch (Exception caught) { StartupLog.WriteException("DesktopLyricsOverlay.Close", caught); }
             IsVisible = false;
         }
 
-        /// <summary>主窗口每帧/30fps 调：传入当前播放位置，本窗根据时间找到当前行并刷新。</summary>
+        /// <summary>主窗口每帧/30fps 调：定位当前行并刷卡拉 OK 进度。</summary>
         public void Sync(TimeSpan position)
         {
-            if (_disposed)
-            {
-                return;
-            }
+            if (_disposed) return;
             _lastSyncPosition = position;
             _hasSyncedOnce = true;
             UpdateCurrentLine();
+            UpdateKaraokeProgress();
         }
 
-        /// <summary>加载新歌词或切换歌曲时调：传入新行（空数组也行）。</summary>
+        /// <summary>加载新歌词或切换歌曲时调。空数组也行。</summary>
         public void SetLyrics(IReadOnlyList<LyricLine> lines)
         {
             _lines.Clear();
-            if (lines != null)
-            {
-                _lines.AddRange(lines);
-            }
+            if (lines != null) _lines.AddRange(lines);
             _currentIndex = -1;
             UpdateLineUi();
         }
@@ -217,10 +215,7 @@ namespace CelesteMusicPlayer
         /// <summary>锁定 / 解锁切换。锁定 = 整窗 WS_EX_TRANSPARENT。</summary>
         public void SetLocked(bool locked)
         {
-            if (IsLocked == locked)
-            {
-                return;
-            }
+            if (IsLocked == locked) return;
             IsLocked = locked;
             ApplyClickThrough();
             UpdateLockedUi();
@@ -229,34 +224,31 @@ namespace CelesteMusicPlayer
         /// <summary>主窗口切主题 / 改设置时调：刷新字号、不透明度、双行、颜色、穿透、暂停时是否隐藏。</summary>
         public void ApplySettings(AppSettingsState settings)
         {
-            _fontSize = Math.Clamp(settings.DesktopLyricFontSize, 14, 64);
-            _opacityPercent = Math.Clamp(settings.DesktopLyricOpacity, 20, 100);
-            _playedColor = ParseHexColor(settings.DesktopLyricPlayedColor, _playedColor);
-            _unplayedColor = ParseHexColor(settings.DesktopLyricUnplayedColor, _unplayedColor);
-            _doubleLine = settings.DesktopLyricDoubleLine;
+            _fontSize          = Math.Clamp(settings.DesktopLyricFontSize, 14, 64);
+            _opacityPercent    = Math.Clamp(settings.DesktopLyricOpacity, 20, 100);
+            _playedColor       = ParseHexColor(settings.DesktopLyricPlayedColor, _playedColor);
+            _unplayedColor     = ParseHexColor(settings.DesktopLyricUnplayedColor, _unplayedColor);
+            _doubleLine        = settings.DesktopLyricDoubleLine;
             _clickThroughSetting = settings.DesktopLyricClickThrough;
-            _hideWhenPaused = settings.DesktopLyricHideWhenPaused;
-            _hideWithoutLyric = settings.DesktopLyricHideWithoutLyric;
+            _hideWhenPaused    = settings.DesktopLyricHideWhenPaused;
+            _hideWithoutLyric  = settings.DesktopLyricHideWithoutLyric;
 
             ApplyClickThrough();
             UpdateLineUi();
             UpdateDimmedOpacity();
         }
 
-        /// <summary>主窗口调：暂停时使用 hide-when-paused 设置决定藏起来。</summary>
+        /// <summary>主窗口调：暂停时按 hide-when-paused 设置决定藏起来。</summary>
         public void SetPlaybackPaused(bool paused)
         {
             _paused = paused;
             ApplyPausedVisibility();
         }
 
-        /// <summary>主窗口调：释放窗与所有 hook。位置保存由 Window.Closed 兜底，这里只补一刀。</summary>
+        /// <summary>主窗口调：释放窗与所有 hook。位置保存由 Window.Closed 兜底，这里补一刀。</summary>
         public void Dispose()
         {
-            if (_disposed)
-            {
-                return;
-            }
+            if (_disposed) return;
             _disposed = true;
             Safe(() =>
             {
@@ -268,32 +260,43 @@ namespace CelesteMusicPlayer
 
         // ============================== 内部 ==============================
 
+        private void DesktopLyricsOverlay_Loaded(object sender, RoutedEventArgs e)
+        {
+            // 首次 Layout 完成 → 创建 Clip 对象 + 立刻算一次卡拉 OK 矩形
+            EnsureProgressClip();
+            // 切歌进来时 UpdateLineUi 已经触发过 ApplyLineContent + ApplyProgressRect(0)，
+            // 这里把 (XAML 初始化后) 是否第一次 Sync 补一下：
+            ApplyProgressRect(_lastProgress01);
+        }
+
         private void EnsureHwnd()
         {
-            if (_hwnd != IntPtr.Zero)
-            {
-                return;
-            }
-            try
-            {
-                _hwnd = WindowNative.GetWindowHandle(this);
-            }
+            if (_hwnd != IntPtr.Zero) return;
+            try { _hwnd = WindowNative.GetWindowHandle(this); }
             catch (Exception caught) { StartupLog.WriteException("DesktopLyricsOverlay.EnsureHwnd", caught); }
+        }
+
+        private void CenterOnPrimaryDisplay()
+        {
+            Safe(() =>
+            {
+                if (AppWindow == null) return;
+                var area = DisplayArea.Primary;
+                var work = area.WorkArea;
+                int x = work.X + Math.Max(0, (work.Width  - AppWindow.Size.Width)  / 2);
+                int y = work.Y + 40; // 顶部 40 DIP 处
+                AppWindow.Move(new PointInt32(x, y));
+            }, "DesktopLyricsOverlay.CenterOnPrimaryDisplay");
         }
 
         private void ApplyClickThrough()
         {
-            // 设计决定：WS_EX_TRANSPARENT 作用于整窗命中区，无法局部保留按钮。
-            // 锁定态为了能"点右上角 🔓 解锁"必须**不**穿透；锁定态靠"半透 + 字号缩小 + 隐藏工具栏"做视觉低调。
-            // 用户在设置里勾的"穿透"是另一个维度——全程生效（解锁后也不抢桌面焦点）。
-            if (_hwnd == IntPtr.Zero || !_exStyleSaved)
-            {
-                return;
-            }
+            // 整窗命中：用户设置勾上 → 整窗 WS_EX_TRANSPARENT；锁定态也穿透，以便工具栏收起后桌面干净
+            if (_hwnd == IntPtr.Zero || !_exStyleSaved) return;
             try
             {
                 int exStyle = GetExStyle(_hwnd, GWL_EXSTYLE);
-                if (_clickThroughSetting)
+                if (_clickThroughSetting || IsLocked)
                 {
                     exStyle |= WS_EX_TRANSPARENT;
                 }
@@ -308,56 +311,32 @@ namespace CelesteMusicPlayer
 
         private void UpdateLockedUi()
         {
-            // 锁定：主工具栏收起，只显一个"开锁"小按钮；歌词走"低调"模式（缩字号 + 半透）
-            TopBar.Visibility = IsLocked ? Visibility.Collapsed : Visibility.Visible;
+            // 锁定：工具栏收起 + 露单按钮
+            TopBar.Visibility          = IsLocked ? Visibility.Collapsed : Visibility.Visible;
             LockedUnlockButton.Visibility = IsLocked ? Visibility.Visible : Visibility.Collapsed;
-            LockToggleIcon.Glyph = IsLocked ? "\uE72E" : "\uE785"; // E72E=解锁 / E785=锁定
+            LockToggleIcon.Glyph       = IsLocked ? "\uE72E" : "\uE785"; // E72E=解锁 / E785=锁定
 
-            // 锁定视觉低调：仅作用于锁定态透出（不影响设置里的字号）
-            if (CurrentLineText != null)
-            {
-                CurrentLineText.Opacity = IsLocked ? 0.55 : 1.0;
-            }
-            if (PrevLineText != null) PrevLineText.Opacity = IsLocked ? 0.30 : 0.55;
-            if (NextLineText != null) NextLineText.Opacity = IsLocked ? 0.30 : 0.55;
+            UpdateDimmedOpacity();
         }
 
-        /// <summary>
-        /// 整窗铺 Desktop Acrylic backdrop。**WinUI3 Window 本身不支持"纯透明"**：
-        /// 不设 SystemBackdrop 时整窗就是纯黑底色，歌词文字即便设白色也难看清。
-        /// Acrylic backdrop 把桌面壁纸当模糊源（歌词"漂浮"在桌面上），Mica 作为 fallback。
-        /// </summary>
+        /// <summary>整窗铺 Desktop Acrylic backdrop（替代纯透明窗 = 黑底的旧 bug）。</summary>
         private void TryApplySystemBackdrop()
         {
             Safe(() =>
             {
-                try
-                {
-                    SystemBackdrop = new DesktopAcrylicBackdrop();
-                    return;
-                }
+                try { SystemBackdrop = new DesktopAcrylicBackdrop(); return; }
                 catch (Exception caught1) { StartupLog.WriteException("DesktopLyricsOverlay.SystemBackdrop(Acrylic)", caught1); }
-
-                try
-                {
-                    SystemBackdrop = new MicaBackdrop();
-                }
+                try { SystemBackdrop = new MicaBackdrop(); }
                 catch (Exception caught2) { StartupLog.WriteException("DesktopLyricsOverlay.SystemBackdrop(Mica)", caught2); }
             }, "DesktopLyricsOverlay.TryApplySystemBackdrop");
         }
 
-        /// <summary>
-        /// 给 LyricsCard（歌词家那个半透圆角矩形）加 ThemeShadow，让其像浮在桌面亚克力上。
-        /// WinUI3 ThemeShadow 对顶级 Window 内的子节点会渲染阴影；构造时 Window 合成器已就绪。
-        /// </summary>
+        /// <summary>给 LyricsCard 加 ThemeShadow，让卡片看着浮在桌面亚克力之上。</summary>
         private void AttachCardShadow()
         {
             Safe(() =>
             {
-                if (LyricsCard == null)
-                {
-                    return;
-                }
+                if (LyricsCard == null) return;
                 try
                 {
                     LyricsCard.Shadow ??= new ThemeShadow();
@@ -367,24 +346,56 @@ namespace CelesteMusicPlayer
             }, "DesktopLyricsOverlay.AttachCardShadow");
         }
 
+        /// <summary>设置切换 / Loaded 时调：刷字号、颜色、双行/单行、当前行内容、初始卡拉 OK 进度。</summary>
         private void UpdateLineUi()
         {
-            if (CurrentLineText == null)
+            if (CurrentLineUnsungText == null) return;
+
+            // 字号
+            CurrentLineUnsungText.FontSize = _fontSize;
+            CurrentLineSungText.FontSize   = _fontSize;
+            if (NextLineText != null) NextLineText.FontSize = Math.Max(13, _fontSize * 0.55);
+
+            // 颜色
+            CurrentLineSungText.Foreground   = new SolidColorBrush(_playedColor);
+            CurrentLineUnsungText.Foreground = new SolidColorBrush(_unplayedColor);
+            if (NextLineText != null)
             {
-                return;
+                NextLineText.Foreground = new SolidColorBrush(Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF));
+                NextLineText.Visibility = _doubleLine ? Visibility.Visible : Visibility.Collapsed;
             }
-            // 双行 vs 单行
-            PrevLineText.Visibility = _doubleLine ? Visibility.Visible : Visibility.Collapsed;
-            NextLineText.Visibility = _doubleLine ? Visibility.Visible : Visibility.Collapsed;
 
-            // 字号 + 颜色
-            CurrentLineText.FontSize = _fontSize;
-            PrevLineText.FontSize = _fontSize * 0.65;
-            NextLineText.FontSize = _fontSize * 0.65;
+            ApplyLineContent();
+        }
 
-            var playedBrush = new SolidColorBrush(_playedColor);
-            var unplayedBrush = new SolidColorBrush(_unplayedColor);
-            ApplyLinesToTextBlocks(playedBrush, unplayedBrush);
+        /// <summary>填当前行 + 下一行文本；内容变了重置 Clip。</summary>
+        private void ApplyLineContent()
+        {
+            if (CurrentLineUnsungText == null) return;
+
+            string curText;
+            if (_currentIndex >= 0 && _currentIndex < _lines.Count)
+            {
+                LyricLine cur = _lines[_currentIndex];
+                curText = string.IsNullOrWhiteSpace(cur.Text) ? "·" : cur.Text;
+            }
+            else
+            {
+                curText = _lines.Count == 0 ? "♪  暂无歌词" : "";
+            }
+            CurrentLineUnsungText.Text = curText;
+            CurrentLineSungText.Text   = curText;
+
+            if (NextLineText != null)
+            {
+                int nextIdx = FindNextDisplayLine(_currentIndex);
+                string nextText = (nextIdx >= 0 && nextIdx < _lines.Count) ? _lines[nextIdx].Text : "";
+                NextLineText.Text = nextText;
+            }
+
+            // 切歌/换句：先按 0 进度设 Clip；下一次 Sync 用真实 progress 修正
+            _lastProgress01 = 0.0;
+            ApplyProgressRect(0.0);
         }
 
         private void UpdateCurrentLine()
@@ -394,12 +405,12 @@ namespace CelesteMusicPlayer
                 if (_currentIndex != -1)
                 {
                     _currentIndex = -1;
-                    ApplyLinesToTextBlocks(new SolidColorBrush(_playedColor), new SolidColorBrush(_unplayedColor));
+                    ApplyLineContent();
                 }
                 return;
             }
 
-            // 二分定位最后一行 Time <= position
+            // 二分定位最后一行 Time ≤ position
             int idx = -1;
             int lo = 0, hi = _lines.Count - 1;
             while (lo <= hi)
@@ -416,86 +427,82 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            // 翻译行：跳回上一行原文（避免高亮停翻译行上）
-            if (idx >= 0 && _lines[idx].IsTranslation)
-            {
-                idx -= 1;
-            }
-            if (idx < -1 || idx >= _lines.Count)
-            {
-                idx = -1;
-            }
-            if (idx == _currentIndex)
-            {
-                return;
-            }
-            _currentIndex = idx;
-            ApplyLinesToTextBlocks(new SolidColorBrush(_playedColor), new SolidColorBrush(_unplayedColor));
-        }
+            // 翻译行：跳回上一行原文
+            if (idx >= 0 && _lines[idx].IsTranslation) idx -= 1;
+            if (idx < -1 || idx >= _lines.Count) idx = -1;
 
-        private void ApplyLinesToTextBlocks(Brush playedBrush, Brush unplayedBrush)
-        {
-            if (CurrentLineText == null)
+            if (idx != _currentIndex)
             {
-                return;
-            }
-
-            // 当前行文本/颜色（Opacity 由锁定状态统一管，不在本方法中设置）
-            if (_currentIndex >= 0 && _currentIndex < _lines.Count)
-            {
-                LyricLine cur = _lines[_currentIndex];
-                CurrentLineText.Text = string.IsNullOrWhiteSpace(cur.Text) ? "·" : cur.Text;
-                CurrentLineText.Foreground = playedBrush;
-            }
-            else
-            {
-                // 歌曲开头/未到第一行/无歌词
-                if (_lines.Count == 0)
-                {
-                    CurrentLineText.Text = "♪";
-                    CurrentLineText.Foreground = unplayedBrush;
-                }
-                else
-                {
-                    CurrentLineText.Text = "";
-                }
-            }
-
-            // 上一行 / 下一行
-            if (_doubleLine)
-            {
-                int prevIdx = FindDisplayLineBefore(_currentIndex);
-                int nextIdx = FindDisplayLineAfter(_currentIndex);
-                PrevLineText.Text = (prevIdx >= 0) ? _lines[prevIdx].Text : "";
-                NextLineText.Text = (nextIdx >= 0 && nextIdx < _lines.Count) ? _lines[nextIdx].Text : "";
-                PrevLineText.Foreground = unplayedBrush;
-                NextLineText.Foreground = unplayedBrush;
+                _currentIndex = idx;
+                ApplyLineContent();
             }
         }
 
-        /// <summary>在 anchor 之前找最近的"非翻译"行作为展示的上一行；找不到返回 -1。</summary>
-        private int FindDisplayLineBefore(int anchor)
-        {
-            for (int i = anchor - 1; i >= 0; i--)
-            {
-                if (!_lines[i].IsTranslation)
-                {
-                    return i;
-                }
-            }
-            return -1;
-        }
-
-        private int FindDisplayLineAfter(int anchor)
+        /// <summary>在 anchor 之后找最近的非翻译行作为下一行提示。</summary>
+        private int FindNextDisplayLine(int anchor)
         {
             for (int i = anchor + 1; i < _lines.Count; i++)
             {
-                if (!_lines[i].IsTranslation)
-                {
-                    return i;
-                }
+                if (!_lines[i].IsTranslation) return i;
             }
             return -1;
+        }
+
+        /// <summary>根据当前播放位置计算卡拉 OK 进度 0..1，并设 Clip Rect。</summary>
+        private void UpdateKaraokeProgress()
+        {
+            double p;
+            if (_lines.Count == 0 || _currentIndex < 0 || _currentIndex >= _lines.Count)
+            {
+                p = 0.0;
+            }
+            else
+            {
+                TimeSpan lineStart = _lines[_currentIndex].Time;
+                TimeSpan lineEnd;
+                if (_currentIndex + 1 < _lines.Count) lineEnd = _lines[_currentIndex + 1].Time;
+                else lineEnd = lineStart + TimeSpan.FromSeconds(8);
+
+                double lineDur = (lineEnd - lineStart).TotalSeconds;
+                double elapsed = (_lastSyncPosition - lineStart).TotalSeconds;
+                p = lineDur > 0.001 ? Math.Clamp(elapsed / lineDur, 0.0, 1.0) : 1.0;
+            }
+
+            _lastProgress01 = p;
+            ApplyProgressRect(p);
+        }
+
+        /// <summary>用 RectangleGeometry 设已唱层 Clip：Rect = (0, 0, progress * UnsignedWidth, Height)。</summary>
+        private void ApplyProgressRect(double progress01)
+        {
+            EnsureProgressClip();
+            if (_progressClip == null || CurrentLineUnsungText == null) return;
+
+            double w = Math.Max(0, CurrentLineUnsungText.ActualWidth);
+            double h = Math.Max(1, CurrentLineUnsungText.ActualHeight);
+            if (w <= 0)
+            {
+                // TextBlock 还没排好；Layout 完成后 SizeChanged 会再调
+                _progressClip.Rect = new Rect(0, 0, 0, h > 0 ? h : 40);
+                return;
+            }
+            double clipW = Math.Max(0, w * Math.Clamp(progress01, 0.0, 1.0));
+            _progressClip.Rect = new Rect(0, 0, clipW, h);
+        }
+
+        /// <summary>当前行 TextBlock 尺寸变了（切歌 / 换句 / 首字宽度变化）→ 用同一进度按新宽度重算 Clip。</summary>
+        private void CurrentLineHost_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            ApplyProgressRect(_lastProgress01);
+        }
+
+        /// <summary>确保 RectangleGeometry 已创建并绑到 CurrentLineHost.Clip。重复调用是空操作。</summary>
+        private void EnsureProgressClip()
+        {
+            if (_progressClip != null) return;
+            if (CurrentLineHost == null) return;
+            _progressClip = new RectangleGeometry { Rect = new Rect(0, 0, 0, 40) };
+            CurrentLineHost.Clip = _progressClip;
         }
 
         private void ApplyPausedVisibility()
@@ -513,16 +520,13 @@ namespace CelesteMusicPlayer
         {
             if (RootGrid != null)
             {
-                RootGrid.Opacity = Math.Clamp(_opacityPercent / 100.0, 0.2, 1.0);
+                RootGrid.Opacity = IsLocked ? 0.6 : Math.Clamp(_opacityPercent / 100.0, 0.2, 1.0);
             }
         }
 
         private void PersistPositionToSettings()
         {
-            if (_hwnd == IntPtr.Zero || AppWindow == null)
-            {
-                return;
-            }
+            if (_hwnd == IntPtr.Zero || AppWindow == null) return;
             try
             {
                 int x = AppWindow.Position.X;
@@ -538,10 +542,7 @@ namespace CelesteMusicPlayer
 
         private static Color ParseHexColor(string? hex, Color fallback)
         {
-            if (string.IsNullOrWhiteSpace(hex))
-            {
-                return fallback;
-            }
+            if (string.IsNullOrWhiteSpace(hex)) return fallback;
             try
             {
                 string s = hex.TrimStart('#');
@@ -567,36 +568,21 @@ namespace CelesteMusicPlayer
 
         // ============================== 事件 ==============================
 
-        /// <summary>Window 真的关闭后：位置保存 + 通知主窗口走 OnDesktopLyricsClosedByUser 路径。</summary>
         private void DesktopLyricsOverlay_Closed(object sender, WindowEventArgs args)
         {
-            if (_disposed)
-            {
-                return;
-            }
-            // 程序主动 Close 的路径已经在主窗口那清理过了，这里只对"用户按 X"做通知
-            if (_isClosingFromSelf)
-            {
-                return;
-            }
+            if (_disposed) return;
+            if (_isClosingFromSelf) return;
             try { PersistPositionToSettings(); } catch { }
             try { ClosedByUser?.Invoke(); } catch { }
         }
 
         private void RootGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
-            if (IsLocked)
-            {
-                return;
-            }
+            if (IsLocked) return;
             var p = e.GetCurrentPoint(RootGrid);
-            if (!p.Properties.IsLeftButtonPressed)
-            {
-                return;
-            }
+            if (!p.Properties.IsLeftButtonPressed) return;
             _dragging = true;
             try { RootGrid.CapturePointer(e.Pointer); } catch { }
-            // 起点用 DIP 计算窗口内偏移；窗口位置用物理像素
             uint dpi = GetDpiForWindow(_hwnd);
             double scale = dpi > 0 ? dpi / 96.0 : 1.0;
             _dragStartDipPoint = new Point(p.Position.X * scale, p.Position.Y * scale);
@@ -606,10 +592,7 @@ namespace CelesteMusicPlayer
 
         private void RootGrid_PointerMoved(object sender, PointerRoutedEventArgs e)
         {
-            if (!_dragging)
-            {
-                return;
-            }
+            if (!_dragging) return;
             try
             {
                 var p = e.GetCurrentPoint(RootGrid);
@@ -626,10 +609,7 @@ namespace CelesteMusicPlayer
 
         private void RootGrid_PointerReleased(object sender, PointerRoutedEventArgs e)
         {
-            if (!_dragging)
-            {
-                return;
-            }
+            if (!_dragging) return;
             _dragging = false;
             try { RootGrid.ReleasePointerCapture(e.Pointer); } catch { }
             PersistPositionToSettings();
@@ -666,10 +646,7 @@ namespace CelesteMusicPlayer
 
         private void LockedUnlockButton_Click(object sender, RoutedEventArgs e)
         {
-            if (IsLocked)
-            {
-                SetLocked(false);
-            }
+            if (IsLocked) SetLocked(false);
         }
 
         private void CloseButton_Click(object sender, RoutedEventArgs e)
@@ -677,7 +654,6 @@ namespace CelesteMusicPlayer
             Safe(() =>
             {
                 try { PersistPositionToSettings(); } catch { }
-                // 不走 Window.Closed → _isClosingFromSelf 不置位，让通知路径走主窗口预期
                 ClosedByUser?.Invoke();
                 IsVisible = false;
             }, "DesktopLyricsOverlay.CloseButton_Click");
@@ -685,7 +661,6 @@ namespace CelesteMusicPlayer
 
         // ============================== P/Invoke ==============================
 
-        /// <summary>取窗口样式。GWL_EXSTYLE=int 值，64 位进程用 SetWindowLongPtr 才稳（SetWindowLong 在 32 位索引内能用，但 SetWindowLongPtr 是显式 64 位 API）。</summary>
         [DllImport("user32.dll", SetLastError = true)]
         private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
 
@@ -697,7 +672,6 @@ namespace CelesteMusicPlayer
 
         private static void SetExStyle(IntPtr hWnd, int nIndex, int newExStyle)
         {
-            // 64 位优先，32 位 fallback
             IntPtr result = SetWindowLongPtr64(hWnd, nIndex, (IntPtr)newExStyle);
             if (result == IntPtr.Zero && Marshal.GetLastWin32Error() != 0)
             {

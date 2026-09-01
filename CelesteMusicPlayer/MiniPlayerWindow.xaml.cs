@@ -179,7 +179,7 @@ namespace CelesteMusicPlayer
                     ChromeBorder.Translation = new System.Numerics.Vector3(0, 8f, 32f);
                 }
                 catch (Exception caught) { StartupLog.WriteException("MiniPlayerWindow.AttachCardShadow", caught); }
-            }, "MiniPlayerWindow.AttachCardShadow");
+            });
         }
 
         /// <summary>主题色变化后刷新强调元素（进度条 + 播放按钮实心圆）。</summary>
