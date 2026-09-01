@@ -563,6 +563,57 @@ namespace CelesteMusicPlayer
         }
 
 
+        // =====================================================================
+        // 迷你播放器专用公开接口
+        // 迷你播放器是独立窗口（不同类），拿不到 MainWindow 的私有成员，
+        // 所以按项目既有的 "...Public" 约定在这里开几个最小包装。
+        // =====================================================================
+
+        /// <summary>当前音量（0–100）。迷你播放器音量条读它。</summary>
+        internal double GetVolumePublic() => VolumeSlider?.Value ?? 100;
+
+        /// <summary>
+        /// 设置音量（0–100）。刻意走主窗口同一个 VolumeSlider，而不是直接改 MediaPlayer.Volume，
+        /// 这样音量图标切换、写盘持久化、音频引擎侧同步全部复用主界面已有那套逻辑，不会分叉。
+        /// </summary>
+        internal void SetVolumePublic(double value0To100)
+        {
+            if (VolumeSlider == null)
+            {
+                return;
+            }
+
+            VolumeSlider.Value = Math.Clamp(value0To100, 0, VolumeSlider.Maximum);
+        }
+
+        /// <summary>当前播放队列快照。迷你播放器队列面板用。</summary>
+        internal IReadOnlyList<PlaylistItem> GetUserPlaylistPublic() => _userPlaylist;
+
+        /// <summary>队列中正在播放那首的下标（-1 = 没有）。用于给队列面板标出当前项。</summary>
+        internal int GetUserPlaylistIndexPublic() => _userPlaylistIndex;
+
+        /// <summary>当前曲目是否已收藏。迷你播放器心形按钮用它显示空心/实心。</summary>
+        internal bool IsCurrentFavoritePublic()
+        {
+            string? path = _nowPlayingPath;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                {
+                    path = _userPlaylist[_userPlaylistIndex].FilePath;
+                }
+                else if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
+                {
+                    path = _playlist[_currentIndex].FilePath;
+                }
+            }
+
+            // TrackStatsStore 没有 IsFavorite 查询方法，只有 Get() 取整条记录
+            return !string.IsNullOrWhiteSpace(path)
+                && (TrackStatsStore.Get(path)?.IsFavorite ?? false);
+        }
+
+
         private void PersistDesktopLyricPosition()
         {
             try

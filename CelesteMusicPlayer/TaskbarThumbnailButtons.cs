@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using Microsoft.UI.Xaml.Controls;
 
 namespace CelesteMusicPlayer
 {
@@ -8,25 +9,21 @@ namespace CelesteMusicPlayer
     /// 在预览小窗口下方显示 上一首 / 播放暂停 / 下一首 / 添加到我喜欢 四个按钮。
     ///
     /// 本版实施要点：
-    /// - **5 个按钮图标全部走系统 FontIcon**：
-    ///   全部 HICON 由 MainWindow.RenderFontIconHicon(...) 渲染——
-    ///   WinUI FontIcon（默认 Segoe Fluent Icons 字体）→ RenderTargetBitmap → BGRA → GDI Bitmap.GetHicon。
-    ///   与主界面 PreviousButton / PlayPauseIcon / NextButton / FavoriteButtonIcon
-    ///   上的 FontIcon **完全同源**（同一字体、同一 DirectWrite 渲染管线），任务栏图标
-    ///   与主界面按钮图标视觉一致。
-    /// - 完全弃用 GDI+ 自绘路径（FillRectangle / FillPolygon）：
-    ///   之前 GDI+ 自绘有两个长期问题：
-    ///     1. 16x16 小尺寸下手绘"竖+三角"的三角方向容易算错（apex 写反 = |▶ 跟下一首反了），
-    ///        需要逐个坐标系调，调试成本高；
-    ///     2. 16x16 手绘心形抗锯齿糊成一片，效果差。
-    ///   FontIcon 用 Segoe Fluent Icons 字体专门为小尺寸设计，不会出现这两个问题。
-    /// - Glyph 码直接复用主界面 XAML 已用的码点（同源 = 视觉一致）：
-    ///     上一首: \uE892  FontSize=15  白色
-    ///     播放  : \uE768  FontSize=14  白色
-    ///     暂停  : \uE769  FontSize=14  白色
-    ///     下一首: \uE893  FontSize=15  白色
-    ///     我喜欢空心: \uEB51  FontSize=14  红色 #E81123
-    ///     我喜欢实心: \uEB52  FontSize=14  红色 #E81123
+    /// - **6 个按钮图标全部走 TaskbarIconFactory 的矢量自绘路径**：
+    ///   图标不再是字体字形，而是自写 PathGeometry 描述在 24×24 设计网格上的
+    ///   上一首 / 播放 / 暂停 / 下一首 / 空心心 / 实心心，再经
+    ///   RenderTargetBitmap 超采样渲染 → 预乘 alpha 的 32bpp DIB → CreateIconIndirect 成 HICON。
+    ///   这么做的原因（旧版两大顽疾）：
+    ///     1. **描边字形粗细不可控**：旧版用 Segoe Fluent Icons 码点渲染，其中空心心 EB51
+    ///        是**描边字形**（细线），缩到 16px 后线宽失控，且和填充字形放一起视觉重量不一致。
+    ///        字形笔画粗细由字体设计者定死，**没法调粗**。
+    ///     2. **GDI+ Bitmap.GetHicon() 黑边**：GetHicon 产出的颜色位图是非预乘（straight alpha）
+    ///        BGRA，而 Windows 合成 32bpp 图标按**预乘 alpha** 处理；透明像素 RGB 仍是 (0,0,0)，
+    ///        抗锯齿边缘就被当成"半透明黑色"参与混合 → 空心心那圈细描边黑边特别明显。
+    ///   矢量自绘 + 手动构造 HICON 两个问题一起解决：笔画粗细由 StrokeThickness 精确控制
+    ///   （各图标统一），且透明像素被正确预乘成 0，合成不带黑色。
+    /// - 收藏状态：未收藏 = 描边粗环空心心，已收藏 = 实心红心。两者用**同一条心形几何**，
+    ///   切换收藏时心形轮廓不会"跳形"。
     /// - **结构体 marshal**：ThumbBarAddButtons / ThumbBarUpdateButtons 用
     ///   [MarshalAs(UnmanagedType.LPArray)] THUMBBUTTON[] 数组参数。
     ///   之前 [In] ref THUMBBUTTON pButton 在 64-bit COM interop 下只 marshal 单元素
@@ -104,17 +101,8 @@ namespace CelesteMusicPlayer
         // 要求 visual tree 所在线程），本闸门 + 调用方均在 UI thread 保证这一点。
         private readonly System.Threading.SemaphoreSlim _pumpGate = new System.Threading.SemaphoreSlim(1, 1);
 
-        // Glyph 码 + 默认字号（与主界面 XAML 用的码点完全一致，所以视觉一致）
-        private const string GlyphPrev = "\uE892";
-        private const string GlyphPlay = "\uE768";
-        private const string GlyphPause = "\uE769";
-        private const string GlyphNext = "\uE893";
-        private const string GlyphHeartEmpty = "\uEB51";
-        private const string GlyphHeartFilled = "\uEB52";
-        private const double BtnFontSize = 14.0;      // 通用按钮
-        private const double PrevNextFontSize = 15.0;  // prev/next 略大一点对齐
+        // 颜色：按钮用白色，心形用与主界面 HeartFill 一致的红（= 用户原话"我喜欢按钮自绘"#E81123 红心）
         private static readonly Windows.UI.Color WhiteColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
-        // 与主界面 HeartFill 一致（= 用户原话"我喜欢按钮自绘"#E81123 红心）
         private static readonly Windows.UI.Color RedHeartColor = Windows.UI.Color.FromArgb(255, 232, 17, 35);
 
         public TaskbarThumbnailButtons(MainWindow owner, IntPtr hwnd)
@@ -152,21 +140,36 @@ namespace CelesteMusicPlayer
                     bool subclassed = SetWindowSubclass(_hwnd, _subclassDelegate, _subclassId, IntPtr.Zero);
                     StartupLog.Write("[thumb] SetWindowSubclass ok=" + subclassed + " err=" + Marshal.GetLastWin32Error());
 
-                    // 6 个 HICON 全部走 MainWindow.RenderFontIconHiconAsync（系统 FontIcon 渲染）
-                    // 与主界面 PreviousButton / PlayPauseIcon / NextButton / FavoriteButtonIcon 同源
-                    _hPrev = await _owner.RenderFontIconHiconAsync(GlyphPrev, PrevNextFontSize, WhiteColor);
-                    _hPlay = await _owner.RenderFontIconHiconAsync(GlyphPlay, BtnFontSize, WhiteColor);
-                    _hPause = await _owner.RenderFontIconHiconAsync(GlyphPause, BtnFontSize, WhiteColor);
-                    _hNext = await _owner.RenderFontIconHiconAsync(GlyphNext, PrevNextFontSize, WhiteColor);
-                    _hHeartEmpty = await _owner.RenderFontIconHiconAsync(GlyphHeartEmpty, BtnFontSize, RedHeartColor);
-                    _hHeartFilled = await _owner.RenderFontIconHiconAsync(GlyphHeartFilled, BtnFontSize, RedHeartColor);
+                    // 6 个 HICON 全部走 TaskbarIconFactory：
+                    //   矢量 Path（自绘几何，笔画粗细可控且各图标统一）→ RenderTargetBitmap 超采样渲染
+                    //   → 预乘 alpha 的 32bpp DIB → CreateIconIndirect。
+                    // 不再用「Segoe 字形 + GDI+ Bitmap.GetHicon()」：
+                    //   - 字形 EB51 空心心本身是细描边字形，缩到 16px 后粗细失控、和填充字形不搭；
+                    //   - GetHicon() 产出非预乘 BGRA，Windows 按预乘合成 → 抗锯齿边缘发黑（明显黑边）。
+                    Canvas? host = _owner.ThumbIconHostCanvas;
+                    if (host == null)
+                    {
+                        StartupLog.Write("[thumb] 渲染失败：主窗口图标宿主 Canvas 尚未就绪，等待下轮重试");
+                    }
+                    else
+                    {
+                        TaskbarIconFactory.IconSet icons =
+                            await TaskbarIconFactory.CreateAsync(host, WhiteColor, RedHeartColor).ConfigureAwait(true);
 
-                    StartupLog.Write("[thumb] HICON 渲染完成 (FontIcon): prev=0x" + _hPrev.ToString("X")
-                        + " play=0x" + _hPlay.ToString("X")
-                        + " pause=0x" + _hPause.ToString("X")
-                        + " next=0x" + _hNext.ToString("X")
-                        + " heartFilled=0x" + _hHeartFilled.ToString("X")
-                        + " heartEmpty=0x" + _hHeartEmpty.ToString("X"));
+                        _hPrev = icons.Prev;
+                        _hPlay = icons.Play;
+                        _hPause = icons.Pause;
+                        _hNext = icons.Next;
+                        _hHeartEmpty = icons.HeartEmpty;
+                        _hHeartFilled = icons.HeartFilled;
+
+                        StartupLog.Write("[thumb] HICON 渲染完成 (矢量 Path): prev=0x" + _hPrev.ToString("X")
+                            + " play=0x" + _hPlay.ToString("X")
+                            + " pause=0x" + _hPause.ToString("X")
+                            + " next=0x" + _hNext.ToString("X")
+                            + " heartEmpty=0x" + _hHeartEmpty.ToString("X")
+                            + " heartFilled=0x" + _hHeartFilled.ToString("X"));
+                    }
 
                     if (_hPrev != IntPtr.Zero && _hPlay != IntPtr.Zero && _hPause != IntPtr.Zero
                         && _hNext != IntPtr.Zero && _hHeartFilled != IntPtr.Zero && _hHeartEmpty != IntPtr.Zero)

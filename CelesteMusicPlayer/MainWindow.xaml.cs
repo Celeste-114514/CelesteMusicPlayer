@@ -513,10 +513,16 @@ namespace CelesteMusicPlayer
         private ArtistAvatarEditorWindow? _artistAvatarEditorWindow;
         private AppTrayIcon? _trayIcon;
         private TaskbarThumbnailButtons? _taskbarButtons;
-        // 任务栏缩略图按钮专用：宿主 WinUI FontIcon 的隐藏 Canvas（在视觉树中、Opacity=0、
+        // 任务栏缩略图按钮专用：宿主 WinUI 矢量 / FontIcon 的隐藏 Canvas（在视觉树中、Opacity=0、
         // 位置偏移到 -10000,-10000，肉眼看不见但能正常 measure/arrange/render）。
-        // 用于把 FontIcon 渲染成 HICON，避免手绘心形在小尺寸下模糊。
+        // 用于把图标渲染成 HICON，避免手绘心形在小尺寸下模糊。
         private Canvas? _thumbIconHostCanvas;
+
+        /// <summary>
+        /// 任务栏图标渲染宿主。给 <see cref="TaskbarIconFactory"/> 用——
+        /// RenderTargetBitmap 要求被渲染的元素在视觉树里、有 XamlRoot，所以必须由主窗口提供这个容器。
+        /// </summary>
+        internal Canvas? ThumbIconHostCanvas => _thumbIconHostCanvas;
         private bool _allowClose;
         private bool _closePromptOpen;
         private bool _applyingSettingsVolume;

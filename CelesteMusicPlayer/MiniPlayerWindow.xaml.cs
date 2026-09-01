@@ -1,6 +1,6 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices;
-using System.Text.RegularExpressions;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -14,17 +14,30 @@ using WinRT.Interop;
 
 namespace CelesteMusicPlayer
 {
+    /// <summary>
+    /// 迷你播放器（重做版，布局参照 ECHO 的 mini-player）。
+    ///
+    /// 旧版的几个实际问题，这次一并解决：
+    /// 1. **音量按钮根本不调音量**：旧版 VolumeButton_Click 里只有 _owner.Activate()，
+    ///    点了是切回主窗口。现在改成 Flyout 弹音量条，走 MainWindow.SetVolumePublic()
+    ///    （内部还是改主窗口那个 VolumeSlider，所以音量图标、写盘、引擎同步全部复用主界面逻辑）。
+    /// 2. **高度会自我打架**：旧版 EnsureHeightFitsControls() 里 Measure → Resize →
+    ///    触发 AppWindow.Changed → 又调 EnsureHeightFitsControls()，反复递归。
+    ///    现在只有"收起 / 展开队列"两种固定高度，且只在目标高度与当前不同时才 Resize，必然收敛。
+    /// 3. **440×228 的大方块**：改成 420×74 的紧凑横条，进度行塞进封面右侧那 56px 里，不额外占高。
+    /// 4. **歌词跑马灯 33ms 常驻定时器**：常年在跑（费电、还容易把整条挤变形）。
+    ///    歌词显示交给独立的桌面歌词窗口，迷你条不再显示歌词。
+    /// 5. 文字全部改用主题画刷（旧版歌名写死白色，浅色主题/浅色壁纸上会看不清）。
+    /// </summary>
     public sealed partial class MiniPlayerWindow : Window
     {
         private readonly MainWindow _owner;
+
         private bool _updatingProgress;
         private bool _userSeeking;
-        private DispatcherTimer? _marqueeTimer;
-        private double _lyricOffset;
-        private string _lyricSource = string.Empty;
+        private bool _updatingVolume;
         private bool _alwaysOnTop = true;
-        private int _lastRegionW = -1;
-        private int _lastRegionH = -1;
+        private bool _queueOpen;
 
         private bool _isDragging;
         private uint _dragPointerId;
@@ -36,6 +49,13 @@ namespace CelesteMusicPlayer
         private IntPtr _hwnd;
         private SubclassProc? _subclassProc;
         private bool _subclassInstalled;
+        private int _lastRegionW = -1;
+        private int _lastRegionH = -1;
+
+        // 尺寸（DIP）。收起 74 = 上内边距 8 + 主体 58 + 下内边距 7，与 ECHO 的 68~74 一致。
+        private const int WidthDip = 420;
+        private const int HeightCollapsedDip = 74;
+        private const int HeightQueueDip = 320;
 
         private const double CornerRadiusDip = 16;
         private const int RegionInsetPx = 2;
@@ -53,6 +73,7 @@ namespace CelesteMusicPlayer
             AppSettingsState settings = AppSettingsStore.Load();
             _alwaysOnTop = settings.MiniPlayerAlwaysOnTop;
             ApplyBackdropPreference(settings.EnableFrostedGlass);
+
             ThemeColorService.ThemeColorChanged -= OnThemeColorChangedMini;
             ThemeColorService.ThemeColorChanged += OnThemeColorChangedMini;
             RefreshAccentFromOwner();
@@ -65,30 +86,27 @@ namespace CelesteMusicPlayer
             presenter.IsAlwaysOnTop = _alwaysOnTop;
             AppWindow.SetPresenter(presenter);
 
-            ResizeToDips(440, 228);
-            PositionNearBottomCenter();
-
-            // 不把整窗设成标题栏（双击会最大化）；拖动用手动 Move，避免系统拖动阈值
             ExtendsContentIntoTitleBar = false;
             TryCollapseTitleBar();
 
             RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
-            ChromeBorder.Background = FrostedGlass.CreateMiniPlayerDimOverlay();
-            ChromeBorder.CornerRadius = new CornerRadius(CornerRadiusDip);
-            EdgeMaskBorder.CornerRadius = new CornerRadius(CornerRadiusDip);
+            ApplyChromeBackground(settings.EnableFrostedGlass);
+
+            // 固定高度：不再像旧版那样 Measure 出来再回写（那套会自我递归）
+            ResizeToDips(WidthDip, HeightCollapsedDip);
+            PositionNearBottomCenter();
 
             if (Content is FrameworkElement root)
             {
                 root.Loaded += (_, _) =>
                 {
                     ApplyWindowChromeNative();
-                    EnsureHeightFitsControls();
-                    ApplyRoundedWindowRegion();
+                    ApplyWindowHeight();
                     RefreshFromOwner();
-                    StartMarquee();
+                    SyncVolumeFromOwner();
                 };
 
-                LyricCanvas.SizeChanged += (_, _) => UpdateLyricClip();
+                // 双击封面/空白 = 回到主窗口（ECHO 没有，但比旧版的"设置按钮"有用）
                 root.DoubleTapped += RootGrid_DoubleTapped;
             }
 
@@ -96,38 +114,16 @@ namespace CelesteMusicPlayer
 
             Closed += (_, _) =>
             {
-                // 窗口销毁前取消主题色事件订阅,防止已销毁窗口被回调
-                try
-                {
-                    ThemeColorService.ThemeColorChanged -= OnThemeColorChangedMini;
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
-
-                try
-                {
-                    EndDrag();
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
-
-                try
-                {
-                    RemoveWindowSubclassIfNeeded();
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
-
-                try
-                {
-                    _marqueeTimer?.Stop();
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
-
-                try
-                {
-                    ClosedByUser?.Invoke();
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
+                Safe(() => ThemeColorService.ThemeColorChanged -= OnThemeColorChangedMini);
+                Safe(EndDrag);
+                Safe(RemoveWindowSubclassIfNeeded);
+                Safe(() => ClosedByUser?.Invoke());
             };
         }
+
+        // =====================================================================
+        // 对外接口（主窗口依赖，签名保持不变）
+        // =====================================================================
 
         public void SetAlwaysOnTop(bool onTop)
         {
@@ -140,7 +136,7 @@ namespace CelesteMusicPlayer
 
         public void ApplyBackdropPreference(bool enabled)
         {
-            try
+            Safe(() =>
             {
                 if (enabled)
                 {
@@ -150,68 +146,87 @@ namespace CelesteMusicPlayer
                 {
                     SystemBackdrop = null;
                 }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
+
+                ApplyChromeBackground(enabled);
+            });
         }
 
-        /// <summary>主题色变化后刷新迷你播放器的强调元素(进度条等)。</summary>
+        /// <summary>
+        /// 横条自身底色。开毛玻璃时只做一层很淡的压暗，让 Desktop Acrylic 透出来；
+        /// 关掉毛玻璃时必须换成不透明底 —— 否则透明内容 + 无 SystemBackdrop 会直接露出白底。
+        /// </summary>
+        private void ApplyChromeBackground(bool frosted)
+        {
+            ChromeBorder.Background = frosted
+                ? FrostedGlass.CreateMiniPlayerDimOverlay()
+                : FrostedGlass.CreateMiniPlayerBrush();
+        }
+
+        /// <summary>主题色变化后刷新强调元素（进度条 + 播放按钮实心圆）。</summary>
         public void RefreshAccentFromOwner()
         {
-            try
+            Safe(() =>
             {
                 AppSettingsState s = AppSettingsStore.Load();
                 Windows.UI.Color accent = s.AccentSource == "Custom"
                     ? (ThemeColorService.ParseHexColor(s.CustomAccentColor) ?? Windows.UI.Color.FromArgb(255, 0, 120, 212))
                     : Windows.UI.Color.FromArgb(255, 0, 120, 212);
-                StartupLog.Write("迷你播放器主题色: " + accent.ToString() + " ProgressSlider=" + (ProgressSlider != null));
+
                 ThemeColorService.ApplySliderAccent(ProgressSlider, accent);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
+
+                // 播放按钮：强调色实心圆 + 自动选黑/白前景保证可读
+                PlayPauseButton.Background = new SolidColorBrush(accent);
+                PlayPauseButton.Foreground = new SolidColorBrush(ReadableForeground(accent));
+                if (PlayPauseIcon != null)
+                {
+                    PlayPauseIcon.Foreground = PlayPauseButton.Foreground;
+                }
+            });
         }
 
+        /// <summary>整条刷新（切歌、开迷你播放器时调用）。</summary>
         public void RefreshFromOwner()
         {
-            PlaylistItem? item = _owner.GetCurrentPlayingItem();
-            ImageSource? cover = _owner.GetCurrentCoverImage();
-            if (item == null)
+            Safe(() =>
             {
-                TitleText.Text = "未在播放";
-                ArtistText.Text = string.Empty;
-                CoverImage.Source = null;
-                StatusText.Text = "已暂停";
-                PlayPauseIcon.Glyph = "\uE768";
-                SetLyricText(string.Empty);
-            }
-            else
-            {
-                TitleText.Text = item.Title;
-                ArtistText.Text = item.Artist;
-                CoverImage.Source = cover;
-            }
+                PlaylistItem? item = _owner.GetCurrentPlayingItem();
+                if (item == null)
+                {
+                    TitleText.Text = "未在播放";
+                    ArtistText.Text = string.Empty;
+                    CoverImage.Source = null;
+                }
+                else
+                {
+                    TitleText.Text = item.Title;
+                    ArtistText.Text = item.Artist;
+                    CoverImage.Source = _owner.GetCurrentCoverImage();
+                }
 
-            MediaPlayer? player = _owner.GetMediaPlayerPublic();
-            if (player?.Source != null)
-            {
-                bool playing = player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing;
-                StatusText.Text = playing ? "正在播放" : "已暂停";
-                PlayPauseIcon.Glyph = playing ? "\uE769" : "\uE768";
-                UpdateProgressUi(player.PlaybackSession.Position, player.PlaybackSession.NaturalDuration);
-                double vol = player.Volume * 100;
-                VolumeIcon.Glyph = vol <= 0.5 ? "\uE74F" : vol < 34 ? "\uE992" : vol < 67 ? "\uE993" : "\uE767";
-            }
-            else if (_owner.IsEngineActiveNow)
-            {
-                bool playing = _owner.IsEnginePlayingNow;
-                StatusText.Text = playing ? "正在播放" : "已暂停";
-                PlayPauseIcon.Glyph = playing ? "\uE769" : "\uE768";
-                UpdateProgressUi(_owner.EnginePositionValue, _owner.EngineDurationValue);
-            }
+                CoverPlaceholder.Opacity = CoverImage.Source == null ? 0.45 : 0;
 
-            PlaybackOrderIcon.Glyph = _owner.GetPlaybackOrderGlyphPublic();
-            string lyric = PreferEnglishLyric(_owner.GetCurrentLyricTextPublic());
-            SetLyricText(lyric);
+                RefreshTransportState();
+
+                MediaPlayer? player = _owner.GetMediaPlayerPublic();
+                if (player?.Source != null)
+                {
+                    UpdateProgressUi(player.PlaybackSession.Position, player.PlaybackSession.NaturalDuration);
+                }
+                else if (_owner.IsEngineActiveNow)
+                {
+                    UpdateProgressUi(_owner.EnginePositionValue, _owner.EngineDurationValue);
+                }
+                else
+                {
+                    UpdateProgressUi(TimeSpan.Zero, TimeSpan.Zero);
+                }
+
+                SyncVolumeFromOwner();
+                RefreshQueueSelection();
+            });
         }
 
+        /// <summary>播放位置推进（主窗口每 tick 调用）。</summary>
         public void SyncPosition(TimeSpan position, TimeSpan duration)
         {
             if (_userSeeking)
@@ -220,137 +235,57 @@ namespace CelesteMusicPlayer
             }
 
             UpdateProgressUi(position, duration);
-            string lyric = PreferEnglishLyric(_owner.GetCurrentLyricTextPublic());
-            if (!string.Equals(lyric, _lyricSource, StringComparison.Ordinal))
-            {
-                SetLyricText(lyric);
-            }
 
-            MediaPlayer? player = _owner.GetMediaPlayerPublic();
-            bool playing = (player?.Source != null
-                    && player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
-                || _owner.IsEnginePlayingNow;
-            StatusText.Text = playing ? "正在播放" : "已暂停";
-            PlayPauseIcon.Glyph = playing ? "\uE769" : "\uE768";
+            // 播放/暂停图标跟着实际状态走（旧版在这里只改 StatusText，图标可能不同步）
+            RefreshTransportState();
         }
 
-        internal static string PreferEnglishLyric(string? raw)
+        // =====================================================================
+        // 内部实现
+        // =====================================================================
+
+        /// <summary>同步播放/暂停图标与音量图标。</summary>
+        private void RefreshTransportState()
         {
-            if (string.IsNullOrWhiteSpace(raw))
+            Safe(() =>
             {
-                return string.Empty;
-            }
+                MediaPlayer? player = _owner.GetMediaPlayerPublic();
+                bool playing = (player?.Source != null
+                        && player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
+                    || _owner.IsEnginePlayingNow;
 
-            string text = raw.Trim();
-            bool hasCjk = Regex.IsMatch(text, @"[\u3040-\u30ff\u3400-\u9fff]");
-            bool hasLatin = Regex.IsMatch(text, @"[A-Za-z]");
-            if (!(hasCjk && hasLatin))
-            {
-                return text;
-            }
-
-            string[] parts = Regex.Split(text, @"\s*[\/／|｜]\s*|\r\n|\n|\r");
-            foreach (string part in parts)
-            {
-                string p = part.Trim();
-                if (p.Length == 0)
-                {
-                    continue;
-                }
-
-                if (Regex.IsMatch(p, @"[A-Za-z]") && !Regex.IsMatch(p, @"[\u3040-\u30ff\u3400-\u9fff]"))
-                {
-                    return p;
-                }
-            }
-
-            string stripped = Regex.Replace(text, @"[\u3040-\u30ff\u3400-\u9fff]+", " ").Trim();
-            stripped = Regex.Replace(stripped, @"\s{2,}", " ").Trim(" -/|｜".ToCharArray());
-            return string.IsNullOrWhiteSpace(stripped) ? text : stripped;
-        }
-
-        private void SetLyricText(string text)
-        {
-            _lyricSource = text ?? string.Empty;
-            LyricText.Text = _lyricSource;
-            _lyricOffset = 0;
-            LyricText.ClearValue(Canvas.LeftProperty);
-            Canvas.SetLeft(LyricText, 0);
-            UpdateLyricClip();
-        }
-
-        private void UpdateLyricClip()
-        {
-            double w = LyricCanvas.ActualWidth;
-            if (w <= 0)
-            {
-                return;
-            }
-
-            LyricCanvas.Clip = new RectangleGeometry
-            {
-                Rect = new Rect(0, 0, w, LyricCanvas.ActualHeight)
-            };
-        }
-
-        private void StartMarquee()
-        {
-            _marqueeTimer ??= new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
-            _marqueeTimer.Tick -= MarqueeTimer_Tick;
-            _marqueeTimer.Tick += MarqueeTimer_Tick;
-            _marqueeTimer.Start();
-        }
-
-        private void MarqueeTimer_Tick(object? sender, object e)
-        {
-            if (string.IsNullOrEmpty(_lyricSource))
-            {
-                return;
-            }
-
-            LyricText.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-            double textW = LyricText.DesiredSize.Width;
-            double viewW = LyricCanvas.ActualWidth;
-            if (viewW <= 0 || textW <= viewW + 4)
-            {
-                Canvas.SetLeft(LyricText, 0);
-                return;
-            }
-
-            _lyricOffset -= 0.7;
-            if (_lyricOffset < -(textW + 28))
-            {
-                _lyricOffset = viewW;
-            }
-
-            Canvas.SetLeft(LyricText, _lyricOffset);
+                PlayPauseIcon.Glyph = playing ? "\uE769" : "\uE768";
+            });
         }
 
         private void UpdateProgressUi(TimeSpan position, TimeSpan duration)
         {
-            _updatingProgress = true;
-            try
+            Safe(() =>
             {
-                double total = duration.TotalSeconds;
-                if (total <= 0 || double.IsNaN(total))
+                _updatingProgress = true;
+                try
                 {
-                    ProgressSlider.Maximum = 100;
-                    ProgressSlider.Value = 0;
-                    TotalTimeText.Text = "--:--";
-                }
-                else
-                {
-                    ProgressSlider.Maximum = total;
-                    ProgressSlider.Value = Math.Clamp(position.TotalSeconds, 0, total);
-                    TotalTimeText.Text = FormatTime(duration);
-                }
+                    double total = duration.TotalSeconds;
+                    if (total <= 0 || double.IsNaN(total))
+                    {
+                        ProgressSlider.Maximum = 100;
+                        ProgressSlider.Value = 0;
+                        TotalTimeText.Text = "--:--";
+                    }
+                    else
+                    {
+                        ProgressSlider.Maximum = total;
+                        ProgressSlider.Value = Math.Clamp(position.TotalSeconds, 0, total);
+                        TotalTimeText.Text = FormatTime(duration);
+                    }
 
-                CurrentTimeText.Text = FormatTime(position);
-            }
-            finally
-            {
-                _updatingProgress = false;
-            }
+                    CurrentTimeText.Text = FormatTime(position);
+                }
+                finally
+                {
+                    _updatingProgress = false;
+                }
+            });
         }
 
         private static string FormatTime(TimeSpan t)
@@ -363,272 +298,144 @@ namespace CelesteMusicPlayer
             return t.ToString(@"mm\:ss");
         }
 
-        private void ResizeToDips(int widthDip, int heightDip)
+        /// <summary>按强调色亮度选黑/白前景，保证圆底上的图标始终看得清。</summary>
+        private static Windows.UI.Color ReadableForeground(Windows.UI.Color background)
         {
-            try
+            // 感知亮度（ITU-R BT.601 加权）
+            double luma = (0.299 * background.R + 0.587 * background.G + 0.114 * background.B) / 255.0;
+            return luma > 0.6
+                ? Windows.UI.Color.FromArgb(255, 0, 0, 0)
+                : Windows.UI.Color.FromArgb(255, 255, 255, 255);
+        }
+
+        // ---------------------------------------------------------------- 音量
+
+        /// <summary>从主窗口读回当前音量，同步到 Flyout 滑条与音量图标。</summary>
+        private void SyncVolumeFromOwner()
+        {
+            Safe(() =>
             {
-                IntPtr hwnd = WindowNative.GetWindowHandle(this);
-                uint dpi = GetDpiForWindow(hwnd);
-                if (dpi == 0)
+                _updatingVolume = true;
+                try
                 {
-                    dpi = 96;
+                    double vol = Math.Clamp(_owner.GetVolumePublic(), 0, 100);
+                    VolumeSlider.Value = vol;
+                    ApplyVolumeIcon(vol);
                 }
-
-                double scale = dpi / 96.0;
-                AppWindow.Resize(new SizeInt32(
-                    (int)Math.Round(widthDip * scale),
-                    (int)Math.Round(heightDip * scale)));
-            }
-            catch
-            {
-                AppWindow.Resize(new SizeInt32(widthDip, heightDip));
-            }
-        }
-
-        private void EnsureHeightFitsControls()
-        {
-            try
-            {
-                ChromeBorder.UpdateLayout();
-                double width = RootGrid.ActualWidth > 0 ? RootGrid.ActualWidth : 440;
-                ChromeBorder.Measure(new Size(width, double.PositiveInfinity));
-                double need = ChromeBorder.DesiredSize.Height;
-                if (ChromeBorder.ActualHeight > need)
+                finally
                 {
-                    need = ChromeBorder.ActualHeight;
+                    _updatingVolume = false;
                 }
-
-                int heightDip = (int)Math.Ceiling(need + 2);
-                heightDip = Math.Clamp(heightDip, 200, 260);
-                ResizeToDips(440, heightDip);
-                PositionNearBottomCenter();
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
+            });
         }
 
-        private void PositionNearBottomCenter()
+        private void ApplyVolumeIcon(double vol)
         {
-            try
-            {
-                DisplayArea display = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
-                RectInt32 work = display.WorkArea;
-                int w = AppWindow.Size.Width;
-                int h = AppWindow.Size.Height;
-                int x = work.X + (work.Width - w) / 2;
-                int y = work.Y + work.Height - h - 72;
-                AppWindow.Move(new PointInt32(x, Math.Max(work.Y, y)));
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
+            string glyph = vol <= 0.5 ? "\uE74F" : vol < 34 ? "\uE992" : vol < 67 ? "\uE993" : "\uE767";
+            VolumeIcon.Glyph = glyph;
+            VolumeFlyoutIcon.Glyph = glyph;
+            VolumeValueText.Text = (int)Math.Round(vol) + "%";
         }
 
-        private void TryCollapseTitleBar()
+        private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
-            try
-            {
-                AppWindowTitleBar bar = AppWindow.TitleBar;
-                bar.ExtendsContentIntoTitleBar = true;
-                bar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
-                bar.IconShowOptions = IconShowOptions.HideIconAndSystemMenu;
-                Windows.UI.Color transparent = Windows.UI.Color.FromArgb(0, 0, 0, 0);
-                bar.BackgroundColor = transparent;
-                bar.InactiveBackgroundColor = transparent;
-                bar.ButtonBackgroundColor = transparent;
-                bar.ButtonInactiveBackgroundColor = transparent;
-                bar.ButtonHoverBackgroundColor = transparent;
-                bar.ButtonPressedBackgroundColor = transparent;
-                bar.ForegroundColor = transparent;
-                bar.InactiveForegroundColor = transparent;
-                bar.ButtonForegroundColor = transparent;
-                bar.ButtonInactiveForegroundColor = transparent;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
-        }
-
-        private void ApplyWindowChromeNative()
-        {
-            try
-            {
-                _hwnd = WindowNative.GetWindowHandle(this);
-                InstallWindowSubclassIfNeeded();
-
-                int ex = GetWindowLong(_hwnd, GwlExStyle);
-                ex |= WsExToolWindow;
-                ex &= ~(WsExDlgModalFrame | WsExClientEdge | WsExStaticEdge | WsExWindowEdge | WsExLayered);
-                SetWindowLong(_hwnd, GwlExStyle, ex);
-
-                int style = GetWindowLong(_hwnd, GwlStyle);
-                style &= ~(WsThickFrame | WsCaption | WsMinimizeBox | WsMaximizeBox | WsSysMenu | WsBorder | WsDlgFrame);
-                SetWindowLong(_hwnd, GwlStyle, style);
-
-                if (AppWindow.Presenter is OverlappedPresenter presenter)
-                {
-                    presenter.IsResizable = false;
-                    presenter.IsMaximizable = false;
-                    presenter.SetBorderAndTitleBar(false, false);
-                }
-
-                TryCollapseTitleBar();
-
-                // 圆角由 SetWindowRgn 负责；DWM 设 DONOTROUND，避免再画一圈系统描边
-                uint corner = DwmWcpDoNotRound;
-                DwmSetWindowAttribute(_hwnd, DwmWaWindowCornerPreference, ref corner, sizeof(uint));
-
-                // 边框色贴近面板，即使残留 1px 也不发白
-                uint darkBorder = 0x001C151A;
-                DwmSetWindowAttribute(_hwnd, DwmWaBorderColor, ref darkBorder, sizeof(uint));
-                DwmSetWindowAttribute(_hwnd, DwmWaCaptionColor, ref darkBorder, sizeof(uint));
-
-                SetWindowPos(
-                    _hwnd,
-                    IntPtr.Zero,
-                    0,
-                    0,
-                    0,
-                    0,
-                    SwpNoMove | SwpNoSize | SwpNoZOrder | SwpFrameChanged);
-
-                ChromeBorder.CornerRadius = new CornerRadius(CornerRadiusDip);
-                EdgeMaskBorder.CornerRadius = new CornerRadius(CornerRadiusDip);
-                ApplyRoundedWindowRegion();
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
-        }
-
-        private void InstallWindowSubclassIfNeeded()
-        {
-            if (_subclassInstalled || _hwnd == IntPtr.Zero)
+            if (_updatingVolume)
             {
                 return;
             }
 
-            _subclassProc = SubclassWndProc;
-            if (SetWindowSubclass(_hwnd, _subclassProc, (IntPtr)SubclassId, IntPtr.Zero))
+            Safe(() =>
             {
-                _subclassInstalled = true;
-            }
+                double vol = Math.Clamp(e.NewValue, 0, 100);
+                // 走主窗口的 VolumeSlider，音量图标/持久化/引擎同步全部复用主界面那套
+                _owner.SetVolumePublic(vol);
+                ApplyVolumeIcon(vol);
+            });
         }
 
-        private void RemoveWindowSubclassIfNeeded()
-        {
-            if (!_subclassInstalled || _hwnd == IntPtr.Zero || _subclassProc == null)
-            {
-                return;
-            }
+        // ---------------------------------------------------------------- 队列
 
-            RemoveWindowSubclass(_hwnd, _subclassProc, (IntPtr)SubclassId);
-            _subclassInstalled = false;
+        private void QueueButton_Click(object sender, RoutedEventArgs e)
+        {
+            Safe(() =>
+            {
+                _queueOpen = !_queueOpen;
+                QueuePanel.Visibility = _queueOpen ? Visibility.Visible : Visibility.Collapsed;
+
+                ApplyWindowHeight();
+
+                if (_queueOpen)
+                {
+                    LoadQueue();
+                }
+            });
         }
 
-        private IntPtr SubclassWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr uIdSubclass, IntPtr dwRefData)
+        private void LoadQueue()
         {
-            // 去掉非客户区，消除顶部标题条/拖动手柄与外圈系统边
-            if (msg == WmNcCalcSize && wParam != IntPtr.Zero)
-            {
-                return IntPtr.Zero;
-            }
-
-            if (msg == WmNcPaint)
-            {
-                return IntPtr.Zero;
-            }
-
-            return DefSubclassProc(hWnd, msg, wParam, lParam);
+            EnsureQueueBound();
+            RefreshQueueSelection();
         }
 
         /// <summary>
-        /// 圆角裁剪 HWND；内缩 2px 剪掉丙烯酸最外圈细白线。
+        /// 队列数据源绑定。主窗口会把 _userPlaylist 整个 new 掉（排序、重建队列时），
+        /// 所以不能只在点按钮时绑一次 —— 每次刷新都比对引用，换了就重绑。
         /// </summary>
-        private void ApplyRoundedWindowRegion()
+        private void EnsureQueueBound()
         {
-            try
+            Safe(() =>
             {
-                IntPtr hwnd = _hwnd != IntPtr.Zero ? _hwnd : WindowNative.GetWindowHandle(this);
-                int w = AppWindow.Size.Width;
-                int h = AppWindow.Size.Height;
-                if (w <= 0 || h <= 0)
+                IReadOnlyList<PlaylistItem> queue = _owner.GetUserPlaylistPublic();
+                if (!ReferenceEquals(QueueList.ItemsSource, queue))
                 {
-                    return;
+                    QueueList.ItemsSource = queue;
                 }
-
-                if (w == _lastRegionW && h == _lastRegionH)
-                {
-                    return;
-                }
-
-                uint dpi = GetDpiForWindow(hwnd);
-                if (dpi == 0)
-                {
-                    dpi = 96;
-                }
-
-                int inset = RegionInsetPx;
-                int radiusPx = Math.Max(6, (int)Math.Round(CornerRadiusDip * dpi / 96.0) - inset);
-                IntPtr rgn = CreateRoundRectRgn(
-                    inset,
-                    inset,
-                    w - inset + 1,
-                    h - inset + 1,
-                    radiusPx * 2,
-                    radiusPx * 2);
-                if (rgn == IntPtr.Zero)
-                {
-                    return;
-                }
-
-                if (SetWindowRgn(hwnd, rgn, true) == 0)
-                {
-                    DeleteObject(rgn);
-                    return;
-                }
-
-                _lastRegionW = w;
-                _lastRegionH = h;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
+            });
         }
 
-        private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
+        /// <summary>把"正在播那首"标成选中项（收起队列时跳过，省开销）。</summary>
+        private void RefreshQueueSelection()
         {
-            if (args.DidSizeChange)
-            {
-                _lastRegionW = -1;
-                _lastRegionH = -1;
-                ApplyRoundedWindowRegion();
-            }
-
-            if (!args.DidPresenterChange && !args.DidSizeChange)
+            if (!_queueOpen || QueueList == null)
             {
                 return;
             }
 
-            if (AppWindow.Presenter is OverlappedPresenter presenter)
+            EnsureQueueBound();
+
+            Safe(() =>
             {
-                if (presenter.State == OverlappedPresenterState.Maximized)
+                int index = _owner.GetUserPlaylistIndexPublic();
+                if (index >= 0 && QueueList.SelectedIndex != index)
                 {
-                    presenter.Restore();
-                    presenter.IsMaximizable = false;
-                    EnsureHeightFitsControls();
-                    PositionNearBottomCenter();
-                    ApplyWindowChromeNative();
+                    QueueList.SelectedIndex = index;
                 }
-            }
-            else
-            {
-                OverlappedPresenter restored = OverlappedPresenter.Create();
-                restored.IsResizable = false;
-                restored.IsMinimizable = false;
-                restored.IsMaximizable = false;
-                restored.SetBorderAndTitleBar(false, false);
-                restored.IsAlwaysOnTop = _alwaysOnTop;
-                AppWindow.SetPresenter(restored);
-                EnsureHeightFitsControls();
-                PositionNearBottomCenter();
-                ApplyWindowChromeNative();
-            }
+            });
         }
 
+        private void QueueList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            // 只有用户点选才跳歌；代码里设 SelectedIndex 也会触发这里，
+            // 但那种情况 index 本来就等于当前曲目，再播一次等于重启当前曲，所以先用索引挡掉。
+            Safe(() =>
+            {
+                int index = QueueList.SelectedIndex;
+                if (index < 0 || index == _owner.GetUserPlaylistIndexPublic())
+                {
+                    return;
+                }
+
+                _owner.PlayUserPlaylistAtPublic(index);
+            });
+        }
+
+        // ---------------------------------------------------------------- 拖动
+
         private void RootGrid_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
-            => e.Handled = true;
+        {
+            e.Handled = true;
+            Safe(() => _owner.Activate());
+        }
 
         private void RootGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
@@ -638,10 +445,8 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            if (e.OriginalSource is DependencyObject src
-                && (IsDescendantOf(src, SettingsButton)
-                    || IsDescendantOf(src, ProgressSlider)
-                    || IsControlButton(src)))
+            // 命中任何按钮（含音量 Flyout 的按钮）都不起拖，否则点按钮会变成拖窗
+            if (e.OriginalSource is DependencyObject src && IsControlButton(src))
             {
                 return;
             }
@@ -674,9 +479,9 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            int x = _dragWindowStartX + (cursor.X - _dragCursorStartX);
-            int y = _dragWindowStartY + (cursor.Y - _dragCursorStartY);
-            AppWindow.Move(new PointInt32(x, y));
+            AppWindow.Move(new PointInt32(
+                _dragWindowStartX + (cursor.X - _dragCursorStartX),
+                _dragWindowStartY + (cursor.Y - _dragCursorStartY)));
             e.Handled = true;
         }
 
@@ -688,12 +493,7 @@ namespace CelesteMusicPlayer
             }
 
             EndDrag();
-            try
-            {
-                RootGrid.ReleasePointerCapture(e.Pointer);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
-
+            Safe(() => RootGrid.ReleasePointerCapture(e.Pointer));
             e.Handled = true;
         }
 
@@ -706,27 +506,13 @@ namespace CelesteMusicPlayer
             _dragPointerId = 0;
         }
 
-        private bool IsControlButton(DependencyObject src)
+        /// <summary>命中测试：来源是按钮（或按钮内部元素）就不拖动。</summary>
+        private static bool IsControlButton(DependencyObject src)
         {
-            DependencyObject? n = src;
-            while (n != null)
-            {
-                if (n is Button)
-                {
-                    return true;
-                }
-
-                n = VisualTreeHelper.GetParent(n);
-            }
-
-            return false;
-        }
-
-        private static bool IsDescendantOf(DependencyObject? node, DependencyObject ancestor)
-        {
+            DependencyObject? node = src;
             while (node != null)
             {
-                if (ReferenceEquals(node, ancestor))
+                if (node is Button || node is Slider)
                 {
                     return true;
                 }
@@ -737,50 +523,23 @@ namespace CelesteMusicPlayer
             return false;
         }
 
-        private void CloseMiniButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                ThemeColorService.ThemeColorChanged -= OnThemeColorChangedMini;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
-
-            try
-            {
-                Close();
-            }
-            catch (Exception closeEx)
-            {
-                StartupLog.WriteException("迷你播放器关闭异常", closeEx);
-            }
-        }
-
-        private void OnThemeColorChangedMini(Windows.UI.Color accent)
-        {
-            try
-            {
-                RefreshAccentFromOwner();
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.xaml.cs", caught); }
-        }
-
-        private void SettingsButton_Click(object sender, RoutedEventArgs e)
-            => SettingsWindow.ShowOrActivate();
-
-        private void PlaybackOrderButton_Click(object sender, RoutedEventArgs e)
-            => _owner.CyclePlaybackOrderPublic();
+        // ---------------------------------------------------------------- 按钮
 
         private void PreviousButton_Click(object sender, RoutedEventArgs e)
-            => _owner.PreviousPublic();
+            => Safe(_owner.PreviousPublic);
 
         private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
-            => _owner.TogglePlayPausePublic();
+            => Safe(() =>
+            {
+                _owner.TogglePlayPausePublic();
+                RefreshTransportState();
+            });
 
         private void NextButton_Click(object sender, RoutedEventArgs e)
-            => _owner.NextPublic();
+            => Safe(_owner.NextPublic);
 
-        private void VolumeButton_Click(object sender, RoutedEventArgs e)
-            => _owner.Activate();
+        private void CloseMiniButton_Click(object sender, RoutedEventArgs e)
+            => Safe(Close);
 
         private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
@@ -800,6 +559,248 @@ namespace CelesteMusicPlayer
                 _userSeeking = false;
             }
         }
+
+        private void OnThemeColorChangedMini(Windows.UI.Color accent)
+            => RefreshAccentFromOwner();
+
+        // ---------------------------------------------------------------- 窗口外观
+
+        private void ApplyWindowHeight()
+        {
+            Safe(() =>
+            {
+                int target = _queueOpen ? HeightQueueDip : HeightCollapsedDip;
+                // 只在与当前高度不同时才 Resize —— 避免 Resize → AppWindow.Changed → 再 Resize 的递归
+                if (AppWindow.Size.Height == target)
+                {
+                    return;
+                }
+
+                ResizeToDips(WidthDip, target);
+            });
+        }
+
+        private void ResizeToDips(int widthDip, int heightDip)
+        {
+            Safe(() =>
+            {
+                IntPtr hwnd = _hwnd != IntPtr.Zero ? _hwnd : WindowNative.GetWindowHandle(this);
+                uint dpi = GetDpiForWindow(hwnd);
+                if (dpi == 0)
+                {
+                    dpi = 96;
+                }
+
+                double scale = dpi / 96.0;
+                AppWindow.Resize(new SizeInt32(
+                    (int)Math.Round(widthDip * scale),
+                    (int)Math.Round(heightDip * scale)));
+            });
+        }
+
+        private void PositionNearBottomCenter()
+        {
+            Safe(() =>
+            {
+                DisplayArea display = DisplayArea.GetFromWindowId(AppWindow.Id, DisplayAreaFallback.Primary);
+                RectInt32 work = display.WorkArea;
+                int w = AppWindow.Size.Width;
+                int h = AppWindow.Size.Height;
+                int x = work.X + (work.Width - w) / 2;
+                int y = work.Y + work.Height - h - 72;
+                AppWindow.Move(new PointInt32(x, Math.Max(work.Y, y)));
+            });
+        }
+
+        private void TryCollapseTitleBar()
+        {
+            Safe(() =>
+            {
+                AppWindowTitleBar bar = AppWindow.TitleBar;
+                bar.ExtendsContentIntoTitleBar = true;
+                bar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+                bar.IconShowOptions = IconShowOptions.HideIconAndSystemMenu;
+
+                Windows.UI.Color transparent = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+                bar.BackgroundColor = transparent;
+                bar.InactiveBackgroundColor = transparent;
+                bar.ButtonBackgroundColor = transparent;
+                bar.ButtonInactiveBackgroundColor = transparent;
+                bar.ButtonHoverBackgroundColor = transparent;
+                bar.ButtonPressedBackgroundColor = transparent;
+                bar.ForegroundColor = transparent;
+                bar.InactiveForegroundColor = transparent;
+                bar.ButtonForegroundColor = transparent;
+                bar.ButtonInactiveForegroundColor = transparent;
+            });
+        }
+
+        private void ApplyWindowChromeNative()
+        {
+            Safe(() =>
+            {
+                _hwnd = WindowNative.GetWindowHandle(this);
+                InstallWindowSubclassIfNeeded();
+
+                int ex = GetWindowLong(_hwnd, GwlExStyle);
+                ex |= WsExToolWindow;
+                ex &= ~(WsExDlgModalFrame | WsExClientEdge | WsExStaticEdge | WsExWindowEdge | WsExLayered);
+                SetWindowLong(_hwnd, GwlExStyle, ex);
+
+                int style = GetWindowLong(_hwnd, GwlStyle);
+                style &= ~(WsThickFrame | WsCaption | WsMinimizeBox | WsMaximizeBox | WsSysMenu | WsBorder | WsDlgFrame);
+                SetWindowLong(_hwnd, GwlStyle, style);
+
+                if (AppWindow.Presenter is OverlappedPresenter presenter)
+                {
+                    presenter.IsResizable = false;
+                    presenter.IsMaximizable = false;
+                    presenter.SetBorderAndTitleBar(false, false);
+                }
+
+                TryCollapseTitleBar();
+
+                // 圆角交给 SetWindowRgn；同时让 DWM 不要再画一圈系统描边
+                uint corner = DwmWcpDoNotRound;
+                DwmSetWindowAttribute(_hwnd, DwmWaWindowCornerPreference, ref corner, sizeof(uint));
+
+                uint darkBorder = 0x001C151A;
+                DwmSetWindowAttribute(_hwnd, DwmWaBorderColor, ref darkBorder, sizeof(uint));
+                DwmSetWindowAttribute(_hwnd, DwmWaCaptionColor, ref darkBorder, sizeof(uint));
+
+                SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
+                    SwpNoMove | SwpNoSize | SwpNoZOrder | SwpFrameChanged);
+
+                ApplyRoundedWindowRegion();
+            });
+        }
+
+        private void InstallWindowSubclassIfNeeded()
+        {
+            if (_subclassInstalled || _hwnd == IntPtr.Zero)
+            {
+                return;
+            }
+
+            _subclassProc = SubclassWndProc;
+            if (SetWindowSubclass(_hwnd, _subclassProc, (IntPtr)SubclassId, IntPtr.Zero))
+            {
+                _subclassInstalled = true;
+            }
+        }
+
+        private void RemoveWindowSubclassIfNeeded()
+        {
+            if (!_subclassInstalled || _hwnd == IntPtr.Zero || _subclassProc == null)
+            {
+                return;
+            }
+
+            RemoveWindowSubclass(_hwnd, _subclassProc, (IntPtr)SubclassId);
+            _subclassInstalled = false;
+        }
+
+        private IntPtr SubclassWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr uIdSubclass, IntPtr dwRefData)
+        {
+            // 去掉非客户区，消除顶部标题条与外圈系统边
+            if (msg == WmNcCalcSize && wParam != IntPtr.Zero)
+            {
+                return IntPtr.Zero;
+            }
+
+            if (msg == WmNcPaint)
+            {
+                return IntPtr.Zero;
+            }
+
+            return DefSubclassProc(hWnd, msg, wParam, lParam);
+        }
+
+        /// <summary>圆角裁剪 HWND；内缩 2px 剪掉丙烯酸最外圈细白线。</summary>
+        private void ApplyRoundedWindowRegion()
+        {
+            Safe(() =>
+            {
+                IntPtr hwnd = _hwnd != IntPtr.Zero ? _hwnd : WindowNative.GetWindowHandle(this);
+                int w = AppWindow.Size.Width;
+                int h = AppWindow.Size.Height;
+                if (w <= 0 || h <= 0)
+                {
+                    return;
+                }
+
+                if (w == _lastRegionW && h == _lastRegionH)
+                {
+                    return;
+                }
+
+                uint dpi = GetDpiForWindow(hwnd);
+                if (dpi == 0)
+                {
+                    dpi = 96;
+                }
+
+                int inset = RegionInsetPx;
+                int radiusPx = Math.Max(6, (int)Math.Round(CornerRadiusDip * dpi / 96.0) - inset);
+                IntPtr rgn = CreateRoundRectRgn(inset, inset, w - inset + 1, h - inset + 1, radiusPx * 2, radiusPx * 2);
+                if (rgn == IntPtr.Zero)
+                {
+                    return;
+                }
+
+                if (SetWindowRgn(hwnd, rgn, true) == 0)
+                {
+                    DeleteObject(rgn);
+                    return;
+                }
+
+                _lastRegionW = w;
+                _lastRegionH = h;
+            });
+        }
+
+        private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
+        {
+            if (args.DidSizeChange)
+            {
+                _lastRegionW = -1;
+                _lastRegionH = -1;
+                ApplyRoundedWindowRegion();
+            }
+
+            // 被意外最大化（如 Win+Up）时恢复成迷你条尺寸
+            Safe(() =>
+            {
+                if (AppWindow.Presenter is OverlappedPresenter presenter
+                    && presenter.State == OverlappedPresenterState.Maximized)
+                {
+                    presenter.Restore();
+                    presenter.IsMaximizable = false;
+                    presenter.IsResizable = false;
+                    _lastRegionW = -1;
+                    _lastRegionH = -1;
+                    ApplyWindowHeight();
+                    ApplyWindowChromeNative();
+                }
+            });
+        }
+
+        // ---------------------------------------------------------------- 工具
+
+        /// <summary>统一兜底：迷你播放器里任何一处抛异常都不该把整个应用带崩。</summary>
+        private static void Safe(Action action)
+        {
+            try
+            {
+                action?.Invoke();
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MiniPlayerWindow", caught);
+            }
+        }
+
+        // ---------------------------------------------------------------- P/Invoke
 
         private const int GwlStyle = -16;
         private const int GwlExStyle = -20;
@@ -856,13 +857,7 @@ namespace CelesteMusicPlayer
 
         [DllImport("user32.dll")]
         private static extern bool SetWindowPos(
-            IntPtr hWnd,
-            IntPtr hWndInsertAfter,
-            int x,
-            int y,
-            int cx,
-            int cy,
-            uint uFlags);
+            IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
 
         [DllImport("gdi32.dll")]
         private static extern IntPtr CreateRoundRectRgn(int x1, int y1, int x2, int y2, int w, int h);
@@ -879,17 +874,12 @@ namespace CelesteMusicPlayer
         [DllImport("comctl32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool SetWindowSubclass(
-            IntPtr hWnd,
-            SubclassProc pfnSubclass,
-            IntPtr uIdSubclass,
-            IntPtr dwRefData);
+            IntPtr hWnd, SubclassProc pfnSubclass, IntPtr uIdSubclass, IntPtr dwRefData);
 
         [DllImport("comctl32.dll", SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool RemoveWindowSubclass(
-            IntPtr hWnd,
-            SubclassProc pfnSubclass,
-            IntPtr uIdSubclass);
+            IntPtr hWnd, SubclassProc pfnSubclass, IntPtr uIdSubclass);
 
         [DllImport("comctl32.dll", SetLastError = true)]
         private static extern IntPtr DefSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);

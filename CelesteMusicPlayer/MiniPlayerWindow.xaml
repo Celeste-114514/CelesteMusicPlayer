@@ -8,7 +8,23 @@
     mc:Ignorable="d"
     Title="迷你播放器">
 
-    <!-- 背景透明，让 Window.SystemBackdrop（Desktop Acrylic）透出壁纸毛玻璃 -->
+    <!--
+        设计参照 ECHO 的 mini-player：一条紧凑横条，而不是原来那个 440×228 的大方块面板。
+
+        高度怎么来的（和 ECHO 同一套算法）：
+          上内边距 8 + 主体 58 + 下内边距 7 ≈ 74 DIP
+        其中"主体 58"这一行里，封面 56 在左，右侧再分两行：
+          标题行 38（歌名 + 艺术家 + 传输按钮）
+          进度行 20（当前时间 / 进度条 / 总时长）
+        所以进度条**不额外占高度**，整条才能压到 74。
+
+        相比旧版的改动：
+        · 封面 56 / 圆角 13（ECHO 是 54 / 13）
+        · 播放按钮改成强调色实心圆 34px，整条里视觉最重，一眼能找到
+        · 音量按钮不再"点了只是切回主窗口"——改成 Flyout 弹音量条，真的能调音量
+        · 新增播放队列按钮，展开后点哪首播哪首
+        · 文字全部用主题画刷（旧版歌名写死白色，浅色主题/浅色壁纸上会看不清）
+    -->
     <Grid
         x:Name="RootGrid"
         Background="Transparent"
@@ -16,188 +32,269 @@
         PointerMoved="RootGrid_PointerMoved"
         PointerReleased="RootGrid_PointerReleased"
         PointerCaptureLost="RootGrid_PointerCaptureLost">
+
         <Border
             x:Name="ChromeBorder"
-            Margin="0"
             CornerRadius="16"
             BorderThickness="0"
-            Padding="14,10,14,8"
+            Padding="10,8,10,7"
             Background="Transparent">
-            <Grid RowSpacing="8">
+            <!-- RowSpacing 必须留 0：Grid 的行间距在"第二行高度=0"时照样占 6px，
+                 会把收起态从 74 撑到 80。队列和上方的间隔改用 QueuePanel 自己的上内边距。 -->
+            <Grid RowSpacing="0">
                 <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Grid ColumnSpacing="12">
+                <!-- ============ 主体行：封面 + （标题行 / 进度行） ============ -->
+                <Grid ColumnSpacing="11" Height="58">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
                         <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
+                    <!-- 封面 -->
                     <Border
-                        Width="72"
-                        Height="72"
-                        CornerRadius="6"
-                        Background="#28FFFFFF">
+                        x:Name="CoverBorder"
+                        Width="56"
+                        Height="56"
+                        CornerRadius="13"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                         <Grid>
                             <FontIcon
+                                x:Name="CoverPlaceholder"
                                 Glyph="&#xE93C;"
                                 FontSize="22"
                                 HorizontalAlignment="Center"
                                 VerticalAlignment="Center"
-                                Opacity="0.4" />
+                                Opacity="0.45" />
                             <Image x:Name="CoverImage" Stretch="UniformToFill" />
                         </Grid>
                     </Border>
 
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                        <TextBlock
-                            x:Name="TitleText"
-                            FontSize="17"
-                            FontWeight="SemiBold"
-                            Foreground="White"
-                            TextWrapping="NoWrap"
-                            TextTrimming="CharacterEllipsis"
-                            Text="未在播放" />
-                        <TextBlock
-                            x:Name="ArtistText"
-                            FontSize="12"
-                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                            TextWrapping="NoWrap"
-                            TextTrimming="CharacterEllipsis"
-                            Text="" />
-                        <Canvas x:Name="LyricCanvas" Height="18">
+                    <!-- 右侧两行 -->
+                    <Grid Grid.Column="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="38" />
+                            <RowDefinition Height="20" />
+                        </Grid.RowDefinitions>
+
+                        <!-- 标题行 -->
+                        <Grid ColumnSpacing="6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+
+                            <StackPanel VerticalAlignment="Center" Spacing="0">
+                                <TextBlock
+                                    x:Name="TitleText"
+                                    FontSize="13.5"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                    TextWrapping="NoWrap"
+                                    TextTrimming="CharacterEllipsis"
+                                    Text="未在播放" />
+                                <TextBlock
+                                    x:Name="ArtistText"
+                                    FontSize="11.5"
+                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                    TextWrapping="NoWrap"
+                                    TextTrimming="CharacterEllipsis"
+                                    Text="" />
+                            </StackPanel>
+
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="3"
+                                VerticalAlignment="Center">
+
+                                <Button
+                                    x:Name="PreviousButton"
+                                    Width="26"
+                                    Height="26"
+                                    Padding="0"
+                                    CornerRadius="13"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Click="PreviousButton_Click"
+                                    ToolTipService.ToolTip="上一首">
+                                    <FontIcon Glyph="&#xE892;" FontSize="13" />
+                                </Button>
+
+                                <!-- 播放/暂停：强调色实心圆，整条里视觉最重的元素 -->
+                                <Button
+                                    x:Name="PlayPauseButton"
+                                    Width="34"
+                                    Height="34"
+                                    Padding="0"
+                                    CornerRadius="17"
+                                    BorderThickness="0"
+                                    Click="PlayPauseButton_Click"
+                                    ToolTipService.ToolTip="播放 / 暂停">
+                                    <FontIcon x:Name="PlayPauseIcon" Glyph="&#xE768;" FontSize="15" />
+                                </Button>
+
+                                <Button
+                                    x:Name="NextButton"
+                                    Width="26"
+                                    Height="26"
+                                    Padding="0"
+                                    CornerRadius="13"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Click="NextButton_Click"
+                                    ToolTipService.ToolTip="下一首">
+                                    <FontIcon Glyph="&#xE893;" FontSize="13" />
+                                </Button>
+
+                                <!-- 音量：Flyout 里放滑条 -->
+                                <Button
+                                    x:Name="VolumeButton"
+                                    Width="24"
+                                    Height="24"
+                                    Padding="0"
+                                    CornerRadius="12"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    ToolTipService.ToolTip="音量">
+                                    <FontIcon x:Name="VolumeIcon" Glyph="&#xE767;" FontSize="13" />
+                                    <Button.Flyout>
+                                        <Flyout>
+                                            <StackPanel Width="190" Spacing="6">
+                                                <TextBlock
+                                                    Text="音量"
+                                                    FontSize="12"
+                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
+                                                <Grid ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <FontIcon
+                                                        x:Name="VolumeFlyoutIcon"
+                                                        Glyph="&#xE767;"
+                                                        FontSize="14"
+                                                        VerticalAlignment="Center" />
+                                                    <Slider
+                                                        x:Name="VolumeSlider"
+                                                        Grid.Column="1"
+                                                        Minimum="0"
+                                                        Maximum="100"
+                                                        StepFrequency="1"
+                                                        ValueChanged="VolumeSlider_ValueChanged" />
+                                                </Grid>
+                                                <TextBlock
+                                                    x:Name="VolumeValueText"
+                                                    Text="100%"
+                                                    FontSize="11"
+                                                    HorizontalAlignment="Right"
+                                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}" />
+                                            </StackPanel>
+                                        </Flyout>
+                                    </Button.Flyout>
+                                </Button>
+
+                                <!-- 播放队列 -->
+                                <Button
+                                    x:Name="QueueButton"
+                                    Width="24"
+                                    Height="24"
+                                    Padding="0"
+                                    CornerRadius="12"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Click="QueueButton_Click"
+                                    ToolTipService.ToolTip="播放队列">
+                                    <FontIcon Glyph="&#xE7B3;" FontSize="13" />
+                                </Button>
+
+                                <Button
+                                    x:Name="CloseMiniButton"
+                                    Width="24"
+                                    Height="24"
+                                    Padding="0"
+                                    CornerRadius="12"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Click="CloseMiniButton_Click"
+                                    ToolTipService.ToolTip="关闭迷你播放器">
+                                    <FontIcon Glyph="&#xE8BB;" FontSize="11" />
+                                </Button>
+                            </StackPanel>
+                        </Grid>
+
+                        <!-- 进度行 -->
+                        <Grid Grid.Row="1" ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="36" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="36" />
+                            </Grid.ColumnDefinitions>
                             <TextBlock
-                                x:Name="LyricText"
-                                FontSize="12"
-                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                Text="" />
-                        </Canvas>
-                        <TextBlock
-                            x:Name="StatusText"
-                            FontSize="11"
-                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Text="已暂停" />
-                    </StackPanel>
-
-                    <Button
-                        x:Name="SettingsButton"
-                        Grid.Column="2"
-                        Width="34"
-                        Height="34"
-                        Padding="0"
-                        VerticalAlignment="Top"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Click="SettingsButton_Click"
-                        ToolTipService.ToolTip="设置">
-                        <FontIcon Glyph="&#xE7F8;" FontSize="15" Foreground="White" />
-                    </Button>
-                    <Button
-                        x:Name="CloseMiniButton"
-                        Grid.Column="2"
-                        Width="34"
-                        Height="34"
-                        Margin="0,38,0,0"
-                        Padding="0"
-                        VerticalAlignment="Top"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Click="CloseMiniButton_Click"
-                        ToolTipService.ToolTip="关闭迷你播放器">
-                        <FontIcon Glyph="&#xE8BB;" FontSize="15" Foreground="White" />
-                    </Button>
+                                x:Name="CurrentTimeText"
+                                VerticalAlignment="Center"
+                                FontSize="10.5"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="00:00" />
+                            <Slider
+                                x:Name="ProgressSlider"
+                                Grid.Column="1"
+                                Minimum="0"
+                                Maximum="100"
+                                Value="0"
+                                VerticalAlignment="Center"
+                                ValueChanged="ProgressSlider_ValueChanged" />
+                            <TextBlock
+                                x:Name="TotalTimeText"
+                                Grid.Column="2"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Right"
+                                FontSize="10.5"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Text="00:00" />
+                        </Grid>
+                    </Grid>
                 </Grid>
 
-                <Grid Grid.Row="1" ColumnSpacing="8" MinHeight="28">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock
-                        x:Name="CurrentTimeText"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="00:00" />
-                    <Slider
-                        x:Name="ProgressSlider"
-                        Grid.Column="1"
-                        Minimum="0"
-                        Maximum="100"
-                        Value="0"
-                        VerticalAlignment="Center"
-                        ValueChanged="ProgressSlider_ValueChanged" />
-                    <TextBlock
-                        x:Name="TotalTimeText"
-                        Grid.Column="2"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                        Text="00:00" />
-                </Grid>
-
-                <StackPanel
-                    Grid.Row="2"
-                    Orientation="Horizontal"
-                    HorizontalAlignment="Center"
-                    Spacing="4">
-                    <Button
-                        x:Name="PlaybackOrderButton"
-                        Width="36"
-                        Height="36"
-                        Padding="0"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Click="PlaybackOrderButton_Click"
-                        ToolTipService.ToolTip="播放模式">
-                        <FontIcon x:Name="PlaybackOrderIcon" Glyph="&#xE8EE;" FontSize="15" Foreground="White" />
-                    </Button>
-                    <Button
-                        Width="36"
-                        Height="36"
-                        Padding="0"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Click="PreviousButton_Click"
-                        ToolTipService.ToolTip="上一首">
-                        <FontIcon Glyph="&#xE892;" FontSize="16" Foreground="White" />
-                    </Button>
-                    <Button
-                        Width="40"
-                        Height="40"
-                        Padding="0"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Click="PlayPauseButton_Click"
-                        ToolTipService.ToolTip="播放 / 暂停">
-                        <FontIcon x:Name="PlayPauseIcon" Glyph="&#xE768;" FontSize="18" Foreground="White" />
-                    </Button>
-                    <Button
-                        Width="36"
-                        Height="36"
-                        Padding="0"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Click="NextButton_Click"
-                        ToolTipService.ToolTip="下一首">
-                        <FontIcon Glyph="&#xE893;" FontSize="16" Foreground="White" />
-                    </Button>
-                    <Button
-                        Width="36"
-                        Height="36"
-                        Padding="0"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Click="VolumeButton_Click"
-                        ToolTipService.ToolTip="音量">
-                        <FontIcon x:Name="VolumeIcon" Glyph="&#xE767;" FontSize="15" Foreground="White" />
-                    </Button>
-                </StackPanel>
+                <!-- ============ 播放队列（点队列按钮展开，不额外占收起态高度） ============ -->
+                <Border
+                    x:Name="QueuePanel"
+                    Grid.Row="1"
+                    Visibility="Collapsed"
+                    Padding="0,6,0,0"
+                    BorderThickness="0,1,0,0"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                    <ListView
+                        x:Name="QueueList"
+                        SelectionMode="Single"
+                        SelectionChanged="QueueList_SelectionChanged">
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem">
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                <Setter Property="Padding" Value="6,0" />
+                                <Setter Property="MinHeight" Value="30" />
+                                <Setter Property="Margin" Value="0" />
+                            </Style>
+                        </ListView.ItemContainerStyle>
+                        <ListView.ItemTemplate>
+                            <!-- 当前曲目不用额外图标标记（DataTemplate 内的元素在后台代码里拿不到名字，
+                                 要靠 VisualTreeHelper 找，脆弱又啰嗦），直接靠 ListView 的
+                                 选中高亮 = 正在播那首，简单可靠。 -->
+                            <DataTemplate>
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    TextTrimming="CharacterEllipsis"
+                                    Text="{Binding Title}" />
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Border>
             </Grid>
         </Border>
 
@@ -206,7 +303,7 @@
             x:Name="EdgeMaskBorder"
             IsHitTestVisible="False"
             CornerRadius="16"
-            BorderThickness="1.5"
+            BorderThickness="1"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
             Background="Transparent" />
     </Grid>
