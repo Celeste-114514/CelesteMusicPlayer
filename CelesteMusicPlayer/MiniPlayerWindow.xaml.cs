@@ -52,13 +52,13 @@ namespace CelesteMusicPlayer
         private int _lastRegionW = -1;
         private int _lastRegionH = -1;
 
-        // 尺寸（DIP）。收起 74 = 上内边距 8 + 主体 58 + 下内边距 7，与 ECHO 的 68~74 一致。
-        private const int WidthDip = 420;
-        private const int HeightCollapsedDip = 74;
-        private const int HeightQueueDip = 320;
+        // 尺寸（DIP）：560×120 收起、380 展开队列。比例更 deskbox：圆角 20、阴影 8+64。
+        private const int WidthDip = 560;
+        private const int HeightCollapsedDip = 120;
+        private const int HeightQueueDip = 380;
 
-        private const double CornerRadiusDip = 16;
-        private const int RegionInsetPx = 2;
+        private const double CornerRadiusDip = 20;
+        private const int RegionInsetPx = 3;
         private const int SubclassId = 1;
 
         public event Action? ClosedByUser;
@@ -91,6 +91,7 @@ namespace CelesteMusicPlayer
 
             RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
             ApplyChromeBackground(settings.EnableFrostedGlass);
+            AttachCardShadow();
 
             // 固定高度：不再像旧版那样 Measure 出来再回写（那套会自我递归）
             ResizeToDips(WidthDip, HeightCollapsedDip);
@@ -160,6 +161,25 @@ namespace CelesteMusicPlayer
             ChromeBorder.Background = frosted
                 ? FrostedGlass.CreateMiniPlayerDimOverlay()
                 : FrostedGlass.CreateMiniPlayerBrush();
+        }
+
+        /// <summary>
+        /// 给 ChromeBorder 加 ThemeShadow，让迷你播放器看着像浮在桌面上。
+        /// WinUI3 ThemeShadow 对顶级 Window 内容能渲染出柔和阴影；构造时 Window 的合成器
+        /// 已就绪，可直接挂。Shadow 自身不会清掉背景，所以调一次就够。
+        /// </summary>
+        private void AttachCardShadow()
+        {
+            Safe(() =>
+            {
+                try
+                {
+                    ChromeBorder.Shadow ??= new ThemeShadow();
+                    // Y 向偏移让光从上方来，Z 提升阴影扩散半径
+                    ChromeBorder.Translation = new System.Numerics.Vector3(0, 8f, 32f);
+                }
+                catch (Exception caught) { StartupLog.WriteException("MiniPlayerWindow.AttachCardShadow", caught); }
+            }, "MiniPlayerWindow.AttachCardShadow");
         }
 
         /// <summary>主题色变化后刷新强调元素（进度条 + 播放按钮实心圆）。</summary>
