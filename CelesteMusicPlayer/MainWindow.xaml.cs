@@ -849,6 +849,19 @@ namespace CelesteMusicPlayer
             UpdateLibraryNavHighlight();
             _navCurrent = CaptureLibraryNavState();
 
+            // 右列播放队列：绑定到 _playlist（与 PlaylistListBorder 共享同一集合）
+            QueueListView.ItemsSource = _playlist;
+            _playlist.CollectionChanged += (_, _) =>
+            {
+                UpdateQueueEmptyHint();
+                SyncQueueSelection();
+            };
+            UpdateQueueEmptyHint();
+            if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
+            {
+                QueueListView.SelectedIndex = _currentIndex;
+            }
+
             LibraryPaneRoot.AddHandler(
                 UIElement.PointerPressedEvent,
                 new PointerEventHandler(LibraryPaneRoot_PointerPressed),
@@ -880,6 +893,47 @@ namespace CelesteMusicPlayer
             catch (Exception caught)
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow set Title", caught);
+            }
+        }
+
+        // ============================== 播放队列（右列固定） ==============================
+
+        /// <summary>右列播放队列的 SelectionChanged：点哪首就跳到哪首开始播。</summary>
+        private void QueueListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (QueueListView.SelectedItem is PlaylistItem item && item != null)
+            {
+                int idx = _playlist.IndexOf(item);
+                if (idx >= 0 && idx != _currentIndex)
+                {
+                    PlayAtIndex(idx);
+                }
+            }
+        }
+
+        /// <summary>队列为空时显示提示，否则隐藏。</summary>
+        private void UpdateQueueEmptyHint()
+        {
+            QueueCountText.Text = _playlist.Count + " 首";
+            QueueEmptyHint.Visibility = _playlist.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+            SyncQueueSelection();
+        }
+
+        /// <summary>把 QueueListView.SelectedIndex 同步到 _currentIndex（如果合法）。
+        /// 由 _playlist.CollectionChanged 触发（删/增/重排后保持高亮跟随）。
+        /// "_currentIndex 单独变化但 playlist 不变" 的情况由 1s 定时器兜底。</summary>
+        private void SyncQueueSelection()
+        {
+            if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
+            {
+                if (QueueListView.SelectedIndex != _currentIndex)
+                {
+                    QueueListView.SelectedIndex = _currentIndex;
+                }
+            }
+            else if (QueueListView.SelectedIndex != -1)
+            {
+                QueueListView.SelectedIndex = -1;
             }
         }
 

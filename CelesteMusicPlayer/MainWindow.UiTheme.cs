@@ -58,6 +58,9 @@ namespace CelesteMusicPlayer
                 // 覆盖 Explorer 任务栏图标 loaded→redraw 的临界窗口（~3 秒）。
                 _taskbarButtons?.Add();
                 StartThumbnailButtonsPump();
+                // 右列播放队列高亮跟随 _currentIndex：1s 兜底 timer，
+                // 覆盖"playlist 内容不变但 _currentIndex 变了"的情况（如下一首/上一首/点 queue 跳播）
+                StartQueueHighlightTimer();
             }
             catch (Exception ex)
             {
@@ -67,6 +70,24 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.Write("MainWindow_Loaded end");
             }
+        }
+
+        private DispatcherQueueTimer? _queueHighlightTimer;
+
+        /// <summary>右列播放队列高亮跟随 _currentIndex 的 1s 兜底 timer。
+        /// 由 _playlist.CollectionChanged 立即同步，timer 仅覆盖"切歌但 playlist 不变"的情况。</summary>
+        private void StartQueueHighlightTimer()
+        {
+            if (_queueHighlightTimer != null) return;
+            var timer = DispatcherQueue.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(1000);
+            timer.Tick += (_, _) =>
+            {
+                try { SyncQueueSelection(); }
+                catch (Exception ex) { StartupLog.WriteException("queueHighlight.Tick", ex); }
+            };
+            timer.Start();
+            _queueHighlightTimer = timer;
         }
 
         private DispatcherQueueTimer? _thumbPumpTimer;
