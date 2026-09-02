@@ -18,8 +18,14 @@ namespace CelesteMusicPlayer
         private const int BtnSize = 44;
         private const int BtnGap = 8;
         private const int TimerId = 1;
-        private const uint TimerIntervalMs = 50; // 20fps；33ms 在 Win10/11 上 DWM compositor 时序不够，会闪烁
-        private const long MinRedrawIntervalMs = 50; // 节流：progress 触发的 Redraw 至少 50ms 一次（forceRedraw 不受限）
+        // 20ms（约 50fps）。原先 50ms 是为了压住每帧 GetHbitmap 的开销，现在后台位图是持久 DIB，
+        // 每帧只重画不重建，可以把刷新率提上去 —— 卡拉 OK 填充的推进才不会一顿一顿。
+        private const uint TimerIntervalMs = 20;
+        private const long MinRedrawIntervalMs = 16; // 节流下限，略低于定时器间隔，避免定时器抖动导致整帧被丢
+
+        // 进度平滑的时间常数（毫秒）：越大越"黏"、越小越"紧跟"。
+        // 用时间常数而不是固定 lerp 系数，帧率变化（20ms/50ms/掉帧）时手感才一致。
+        private const double ProgressSmoothTauMs = 45.0;
 
         // 上次 Redraw 的物理时刻（Environment.TickCount64），用于跨 tick 节流
         private long _lastRedrawMs;
@@ -59,7 +65,15 @@ namespace CelesteMusicPlayer
         private Rectangle[] _btnRects = Array.Empty<Rectangle>();
         private int _pressedBtn = -1;
         private double _displayProgress; // 平滑后的卡拉 OK 进度 0..1
+        private long _lastProgressUpdateMs; // 上一次推进平滑的时刻，用于计算真实 dt
         private bool _karaokeStyle = true;
+
+        // 逐字歌词的字宽缓存：避免每帧为每个字重新走一遍 GraphicsPath 测量
+        private int _charWidthsIndex = -1;
+        private string? _charWidthsText;
+        private float _fontSizeAtMeasure;
+        private float[]? _charWidths;
+        private float _charWidthsTotal;
 
         private enum ToolbarBtn
         {
@@ -155,23 +169,30 @@ namespace CelesteMusicPlayer
             {
                 _currentIndex = index;
                 _displayProgress = 0;
+                _lastProgressUpdateMs = Environment.TickCount64;
                 ResizeForContent();
             }
 
             double target = ComputeLineProgress(position, index);
-            // 向目标平滑靠拢，减少跳跃感。lerp 提到 0.55：节流后单帧跳跃更明显，需要更快的追赶
-            double lerp = indexChanged ? 1.0 : 0.55;
-            _displayProgress += (target - _displayProgress) * lerp;
-            if (Math.Abs(target - _displayProgress) < 0.002)
+
+            // 按真实经过时间做指数平滑（帧率无关）：dt 越大追得越多，掉帧也不会甩尾。
+            // 换行时直接就位，避免上一行的残留进度带过来。
+            long nowMs = Environment.TickCount64;
+            double dtMs = Math.Clamp((double)(nowMs - _lastProgressUpdateMs), 1.0, 200.0);
+            _lastProgressUpdateMs = nowMs;
+            double alpha = indexChanged ? 1.0 : 1.0 - Math.Exp(-dtMs / ProgressSmoothTauMs);
+            _displayProgress += (target - _displayProgress) * alpha;
+            if (Math.Abs(target - _displayProgress) < 0.0015)
             {
                 _displayProgress = target;
             }
 
             // 节流：progress 触发的 Redraw 至少 MinRedrawIntervalMs 一次。
             // forceRedraw（鼠标进出窗口、点击按钮）保持立即响应，不受节流限制。
+            // 死区放到 0.0015：原来 0.008 会让慢歌的高亮边缘好几十毫秒才动一次，看着就是一顿一顿。
             bool progressChanged = indexChanged
-                || Math.Abs(target - _displayProgress) >= 0.008
-                || target > 0.995;
+                || Math.Abs(target - _displayProgress) >= 0.0015
+                || (target > 0.995 && _displayProgress < 0.995);
             if (forceRedraw)
             {
                 Redraw();
@@ -596,66 +617,147 @@ namespace CelesteMusicPlayer
         private void DrawKaraokeLine(Graphics g, LyricLine line, FontFamily family, float x, float y, SizeF size)
         {
             string text = line.Text;
-            double progress = Math.Clamp(_displayProgress, 0, 1);
 
             using var unplayed = new SolidBrush(_unplayedColor);
             using var played = new SolidBrush(_playedColor);
+            // 底色必须先画：这句时间还没唱到时（逐字歌词的第一个字之前）也要有字，
+            // 只画阴影会让整行"消失"。
             DrawTextPath(g, text, family, _fontSize, FontStyle.Bold, unplayed, x, y);
 
-            float highlightW;
-            if (line.CharTimes != null && line.CharTimes.Count == text.Length)
-            {
-                // 逐字歌词：按字时间戳计算已唱字数，高亮到对应字符宽度
-                int n = 0;
-                for (int i = 0; i < line.CharTimes.Count; i++)
-                {
-                    if (line.CharTimes[i] <= _position)
-                    {
-                        n = i + 1;
-                    }
-                    else
-                    {
-                        break;
-                    }
-                }
-
-                if (n == 0)
-                {
-                    return;
-                }
-
-                highlightW = MeasurePathSize(text.Substring(0, n), family, _fontSize, FontStyle.Bold).Width;
-            }
-            else
-            {
-                highlightW = (float)(size.Width * progress);
-            }
-
-            if (highlightW <= 0.5f)
+            float highlightW = ComputeHighlightWidth(line, text, family, size);
+            if (highlightW <= 0.3f)
             {
                 return;
             }
 
-            float soft = Math.Min(18f, Math.Max(8f, size.Width * 0.035f));
-            GraphicsState state = g.Save();
-            g.SetClip(new RectangleF(x, y - 2, Math.Max(0, highlightW - soft * 0.15f), size.Height + 4));
-            DrawTextPath(g, text, family, _fontSize, FontStyle.Bold, played, x, y);
-            g.Restore(state);
+            highlightW = Math.Min(highlightW, size.Width);
 
-            // 切线附近柔和过渡，减轻硬切
-            if (soft > 1 && highlightW > soft * 0.5f)
+            // 前沿羽化带：宽度随字号缩放；起步阶段让它退化成"整块都是渐变"，
+            // 这样第一个字刚开始时是淡入，而不是突然冒出一小块实心色块。
+            float soft = Math.Min(28f, Math.Max(12f, size.Width * 0.05f));
+            soft = Math.Min(soft, highlightW);
+            // 快唱完时羽化带随剩余距离收窄，整行唱满就是纯色，不会在行尾留一段发灰
+            float tail = Math.Max(0f, size.Width - highlightW);
+            if (tail < soft)
             {
-                float edgeX = x + highlightW - soft;
+                soft = tail;
+            }
+
+            float solidW = highlightW - soft;
+
+            // 实心段 0..solidW（已唱色，不透明）
+            if (solidW > 0.5f)
+            {
+                GraphicsState state = g.Save();
+                g.SetClip(new RectangleF(x, y - 2, solidW, size.Height + 4));
+                DrawTextPath(g, text, family, _fontSize, FontStyle.Bold, played, x, y);
+                g.Restore(state);
+            }
+
+            // 羽化段 solidW..solidW+soft，已唱色 255 → 0。
+            // 和实心段首尾相接、不重叠（旧实现两段重叠且起点只有 220 alpha，边界会出现一条色带）。
+            if (soft > 0.5f)
+            {
+                float edgeX = x + solidW;
                 using var edgeBrush = new LinearGradientBrush(
                     new PointF(edgeX, y),
                     new PointF(edgeX + soft, y),
-                    Color.FromArgb(220, _playedColor),
+                    Color.FromArgb(255, _playedColor),
                     Color.FromArgb(0, _playedColor));
                 GraphicsState edgeState = g.Save();
                 g.SetClip(new RectangleF(edgeX, y - 2, soft, size.Height + 4));
                 DrawTextPath(g, text, family, _fontSize, FontStyle.Bold, edgeBrush, x, y);
                 g.Restore(edgeState);
             }
+        }
+
+        /// <summary>
+        /// 已唱部分应该填充到多少像素宽。
+        /// 逐字歌词按"字内比例"连续推进（不再一个字一跳），普通歌词按整行进度。
+        /// </summary>
+        private float ComputeHighlightWidth(LyricLine line, string text, FontFamily family, SizeF size)
+        {
+            IReadOnlyList<TimeSpan>? charTimes = line.CharTimes;
+            if (charTimes == null || charTimes.Count != text.Length || text.Length == 0)
+            {
+                return (float)(size.Width * Math.Clamp(_displayProgress, 0, 1));
+            }
+
+            int n = 0;
+            for (int i = 0; i < charTimes.Count; i++)
+            {
+                if (charTimes[i] <= _position)
+                {
+                    n = i + 1;
+                }
+                else
+                {
+                    break;
+                }
+            }
+
+            if (n == 0)
+            {
+                return 0f;
+            }
+
+            float[] widths = GetCharWidths(text, family, out float total);
+            int done = n - 1; // 已经完整唱过去的字数
+            if (done >= widths.Length)
+            {
+                return size.Width;
+            }
+
+            float wDone = 0f;
+            for (int i = 0; i < done; i++)
+            {
+                wDone += widths[i];
+            }
+
+            // 正在唱的这个字：按它在相邻两个时间戳之间的比例连续推进，
+            // smoothstep 让每个字的起落更柔和（避免字与字之间出现台阶感）。
+            TimeSpan t0 = charTimes[done];
+            TimeSpan t1 = done + 1 < charTimes.Count
+                ? charTimes[done + 1]
+                : t0 + TimeSpan.FromMilliseconds(320);
+            double span = Math.Max(0.08, (t1 - t0).TotalSeconds);
+            double frac = Math.Clamp((_position - t0).TotalSeconds / span, 0, 1);
+            frac = frac * frac * (3 - 2 * frac);
+
+            // 逐字累加宽度和整行测量宽度不完全一致（字距、字形外扩），按比例归一
+            float scale = total > 0.5f ? size.Width / total : 1f;
+            return (wDone + widths[done] * (float)frac) * scale;
+        }
+
+        /// <summary>逐字宽度缓存：同一行同一字号只测量一次，不必每帧重算。</summary>
+        private float[] GetCharWidths(string text, FontFamily family, out float total)
+        {
+            if (_charWidths != null
+                && _charWidths.Length == text.Length
+                && _charWidthsIndex == _currentIndex
+                && string.Equals(_charWidthsText, text, StringComparison.Ordinal)
+                && Math.Abs(_fontSizeAtMeasure - _fontSize) < 0.01f)
+            {
+                total = _charWidthsTotal;
+                return _charWidths;
+            }
+
+            float[] widths = new float[text.Length];
+            float sum = 0f;
+            for (int i = 0; i < text.Length; i++)
+            {
+                float w = MeasurePathSize(text.Substring(i, 1), family, _fontSize, FontStyle.Bold).Width;
+                widths[i] = w;
+                sum += w;
+            }
+
+            _charWidths = widths;
+            _charWidthsTotal = sum;
+            _charWidthsIndex = _currentIndex;
+            _charWidthsText = text;
+            _fontSizeAtMeasure = _fontSize;
+            total = sum;
+            return widths;
         }
 
         private static FontFamily CreateFontFamily()
