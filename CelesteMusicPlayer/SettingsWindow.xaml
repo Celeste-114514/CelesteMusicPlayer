@@ -172,6 +172,17 @@
                                 </StackPanel>
                                 <ComboBox x:Name="LyricAlignCombo" Grid.Column="1" MinWidth="180" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
                             </Grid>
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="歌词偏移（校准）" />
+                                    <TextBlock x:Name="LyricOffsetValueText" Text="0.00s" FontSize="12" Opacity="0.65" />
+                                </StackPanel>
+                                <Slider x:Name="LyricOffsetSlider" Grid.Column="1" Minimum="-2000" Maximum="2000" StepFrequency="10" ValueChanged="SettingSlider_ValueChanged" />
+                            </Grid>
                         </StackPanel>
 
                         <StackPanel Spacing="10">

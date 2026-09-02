@@ -335,6 +335,8 @@ namespace CelesteMusicPlayer
                 SetSlider(LyricLineSpacingSlider, s.LyricLineSpacing);
                 SetTextBlock(LyricLineSpacingValueText, s.LyricLineSpacing.ToString());
                 SelectComboByTag(LyricAlignCombo, s.LyricAlign);
+                SetSlider(LyricOffsetSlider, s.LyricOffsetMs);
+                SetTextBlock(LyricOffsetValueText, FormatLyricOffset(s.LyricOffsetMs));
 
                 SetToggle(OpenDesktopLyricsSwitch, s.OpenDesktopLyricsOnStartup);
                 SetToggle(DesktopLyricHideWithoutLyricSwitch, s.DesktopLyricHideWithoutLyric);
@@ -872,6 +874,7 @@ namespace CelesteMusicPlayer
             }
 
             s.LyricAlign = GetComboTagString(LyricAlignCombo, "Center");
+            if (LyricOffsetSlider != null) s.LyricOffsetMs = (int)Math.Round(LyricOffsetSlider.Value);
 
             s.OpenDesktopLyricsOnStartup = OpenDesktopLyricsSwitch?.IsOn ?? s.OpenDesktopLyricsOnStartup;
             s.DesktopLyricHideWithoutLyric = DesktopLyricHideWithoutLyricSwitch?.IsOn ?? s.DesktopLyricHideWithoutLyric;
@@ -1152,6 +1155,9 @@ namespace CelesteMusicPlayer
             }
         }
 
+        private static string FormatLyricOffset(int ms)
+            => ms == 0 ? "0.00s" : (ms > 0 ? "+" : "") + (ms / 1000.0).ToString("0.00") + "s";
+
         private void PersistAllFromUi()
         {
             if (_loadingUi || !_uiReady || _loadAsyncIgnore)
@@ -1348,10 +1354,14 @@ namespace CelesteMusicPlayer
             {
                 PlaybackRateValueText.Text = $"{e.NewValue:0.00}×";
             }
-            else if (ReferenceEquals(sender, LyricLineSpacingSlider))
-            {
-                LyricLineSpacingValueText.Text = ((int)Math.Round(e.NewValue)).ToString();
-            }
+                else if (ReferenceEquals(sender, LyricLineSpacingSlider))
+                {
+                    LyricLineSpacingValueText.Text = ((int)Math.Round(e.NewValue)).ToString();
+                }
+                else if (ReferenceEquals(sender, LyricOffsetSlider))
+                {
+                    LyricOffsetValueText.Text = FormatLyricOffset((int)Math.Round(e.NewValue));
+                }
             else if (ReferenceEquals(sender, DesktopLyricOpacitySlider))
             {
                 DesktopLyricOpacityValueText.Text = ((int)Math.Round(e.NewValue)).ToString();

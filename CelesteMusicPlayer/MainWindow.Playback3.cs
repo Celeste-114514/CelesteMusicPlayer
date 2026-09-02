@@ -1686,7 +1686,7 @@ namespace CelesteMusicPlayer
         {
             if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
             {
-                UpdateCharHighlight(_lyricTextBlocks[_currentLyricIndex], position);
+                UpdateCharHighlight(_lyricTextBlocks[_currentLyricIndex], OffsetLyricPosition(position));
             }
         }
 

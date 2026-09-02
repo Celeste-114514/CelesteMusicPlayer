@@ -324,6 +324,7 @@ namespace CelesteMusicPlayer
             _backgroundColor = ParseHexColor(settings.DesktopLyricBackgroundColor, Color.FromArgb(0x66, 0, 0, 0));
             _clickThrough = settings.DesktopLyricClickThrough;
             _karaokeStyle = settings.LyricKaraokeStyle;
+            _lyricOffset = TimeSpan.FromMilliseconds(Math.Clamp(settings.LyricOffsetMs, -2000, 2000));
 
             if (settings.DesktopLyricLockOnStart && !_locked)
             {

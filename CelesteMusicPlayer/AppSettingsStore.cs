@@ -114,6 +114,9 @@ namespace CelesteMusicPlayer
         /// <summary>Left / Right / Center / Auto</summary>
         public string LyricAlign { get; set; } = "Center";
 
+        /// <summary>歌词偏移（毫秒，正=歌词延后显示，负=提前）。用于校准 LRC 与演唱不同步。</summary>
+        public int LyricOffsetMs { get; set; }
+
         // —— 桌面歌词 ——
         public bool DesktopLyricHideWithoutLyric { get; set; }
 
