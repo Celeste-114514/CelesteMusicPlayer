@@ -300,7 +300,7 @@ namespace CelesteMusicPlayer
                     return false;
                 }
 
-                var next = OpenWaveInMemory(nextWavPath);
+                var next = OpenWaveSource(nextWavPath);
                 _seamless.PrepareNext(next);
                 return true;
             }
@@ -310,14 +310,47 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>把 WAV 文件整体读入内存后返回其 WaveFileReader，使 render 实时线程只从内存读、磁盘 I/O 移到播放前/预载时。
-        /// 根治低质量 PCM 卡顿：之前 render 每填满一轮 WASAPI 缓冲都在实时线程内同步读盘（SeamlessWaveProvider.Read→WaveFileReader.Read）。
-        /// MemoryStream 不 dispose，随 reader 由 GC 回收；reader 的 Position/CurrentTime/Length 语义与文件版完全一致（不影响进度/无缝/播完判定）。</summary>
-        private static WaveFileReader OpenWaveInMemory(string path)
+        /// <summary>超过此大小的 WAV 不再整体读入内存，改走带缓冲的顺序流，避免长音频整段 PCM 常驻 RAM。
+        /// 64MB ≈ 16bit/44.1kHz 立体声约 6.3 分钟，覆盖绝大多数单曲 → 常规曲目行为与旧版完全一致。</summary>
+        private const long WaveWholeFileInMemoryMaxBytes = 64L * 1024 * 1024;
+
+        /// <summary>大文件流式读取的读缓冲（8MB）：顺序读 + 系统预读，使 render 实时线程几乎不会真正阻塞在磁盘上，
+        /// 同时把内存占用从「整首 PCM」压成常量。</summary>
+        private const int WaveStreamReadBufferBytes = 8 * 1024 * 1024;
+
+        /// <summary>打开 WAV 源。
+        /// 小文件（≤ WaveWholeFileInMemoryMaxBytes）：整体读入内存后返回其 WaveFileReader，
+        ///   使 render 实时线程只从内存读、磁盘 I/O 移到播放前/预载时 —— 用于根治低质量 PCM 卡顿
+        ///   （此前 render 每填满一轮 WASAPI 缓冲都在实时线程内同步读盘：SeamlessWaveProvider.Read→WaveFileReader.Read）。
+        /// 大文件：改用带 8MB 缓冲的 FileStream 顺序流，内存占用为常量。
+        ///   【内存暴涨修复】1 小时立体声 16bit/44.1kHz 的解码 WAV 约 635MB，24bit/高码率更大。
+        ///   旧实现无条件 File.ReadAllBytes 整段入内存；且无缝预载（PrepareNext）会再加载「下一首」一整份，
+        ///   两首同时常驻即 1.3GB 起，叠加这些大数组位于大对象堆、回收滞后，
+        ///   于是播放曲目越多内存越高（用户实测：单曲约 2GB，再放数曲约 3GB）。
+        /// 两条路径下 reader 的 Position / CurrentTime / Length 语义完全一致
+        ///   （进度显示、seek、无缝续接、播完判定均不受影响）。</summary>
+        private static WaveFileReader OpenWaveSource(string path)
         {
-            byte[] data = File.ReadAllBytes(path);
-            var ms = new MemoryStream(data, writable: false);
-            return new WaveFileReader(ms);
+            long size = 0;
+            try { size = new FileInfo(path).Length; }
+            catch { size = 0; }
+
+            if (size > 0 && size <= WaveWholeFileInMemoryMaxBytes)
+            {
+                byte[] data = File.ReadAllBytes(path);
+                var ms = new MemoryStream(data, writable: false);
+                return new WaveFileReader(ms);
+            }
+
+            // FileShare.Delete：允许缓存清理逻辑在流仍打开时删除该文件，避免删不掉导致磁盘缓存堆积。
+            var fs = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete,
+                WaveStreamReadBufferBytes,
+                FileOptions.SequentialScan);
+            return new WaveFileReader(fs);
         }
 
         /// <summary>最近一次失败原因。</summary>
@@ -530,7 +563,7 @@ namespace CelesteMusicPlayer
                     return false;
                 }
 
-                _waveFile = OpenWaveInMemory(wavPath);
+                _waveFile = OpenWaveSource(wavPath);
                 _activeWavPath = wavPath;
                 _activeMode = mode;
                 _activeDeviceId = deviceIdentifier;
