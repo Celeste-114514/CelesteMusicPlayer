@@ -140,7 +140,13 @@ namespace CelesteMusicPlayer
 
             _desktopLyricsWindow = new DesktopLyricsOverlay
             {
-                PositionProvider = () => GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero
+                // 引擎路径（HiFi 独占 / ASIO / DSD）下 MediaPlayer.PlaybackSession.Position 不是真实播放位置，
+                // 必须改读 _audioEngine.Position。否则歌词窗口内部 50ms 定时器拿到的是错误位置，
+                // 只能靠外部 200ms 的 Sync 强制推帧 → 实际只有 5fps，进度条一跳一跳地闪。
+                PositionProvider = () =>
+                    _usingEnginePlayback && _audioEngine != null
+                        ? _audioEngine.Position
+                        : (GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero)
             };
             _desktopLyricsWindow.ClosedByUser += OnDesktopLyricsClosedByUser;
             _desktopLyricsWindow.ApplySettings(AppSettingsStore.Load());

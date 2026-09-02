@@ -31,6 +31,13 @@ namespace CelesteMusicPlayer
         private IntPtr _hwnd;
         private IntPtr _wndProcPtr;
         private WndProcDelegate? _wndProcKeepAlive;
+
+        // 持久后台位图（真正的像素缓冲，非拷贝）：创建一次、尺寸变化时重建，每帧只重画不重建
+        private IntPtr _memDc;     // 后台 DC，已选入 _hBitmap
+        private IntPtr _hBitmap;   // CreateDIBSection 32 位 ARGB 位图
+        private IntPtr _oldBitmap; // _memDc 首次选入时保存的默认位图，Dispose 时还原
+        private int _backW;        // 当前后台位图尺寸（用于检测是否需要重建）
+        private int _backH;
         private int _width = 800;
         private int _height = 160;
         private int _x;
@@ -328,6 +335,7 @@ namespace CelesteMusicPlayer
             }
 
             _disposed = true;
+            CleanupBackbuffer();
             Close();
             GC.SuppressFinalize(this);
         }
@@ -423,6 +431,8 @@ namespace CelesteMusicPlayer
             if (_hwnd != IntPtr.Zero)
             {
                 SetWindowPos(_hwnd, HwndTopMost, _x, _y, _width, _height, SwpNoActivate);
+                // 后台位图尺寸随窗口同步，避免下一帧 Redraw 前出现尺寸错配而闪一下
+                EnsureBackbuffer();
             }
         }
 
@@ -486,8 +496,11 @@ namespace CelesteMusicPlayer
             // 实际重绘前打点，让后续 progress 触发的 Redraw 走节流
             _lastRedrawMs = Environment.TickCount64;
 
-            using var bmp = new Bitmap(_width, _height, PixelFormat.Format32bppArgb);
-            using (Graphics g = Graphics.FromImage(bmp))
+            EnsureBackbuffer();
+
+            // 直接画进持久后台位图（真正的 ARGB 像素缓冲），不再每帧 new Bitmap + GetHbitmap
+            // —— 那套做法在 Release 下会闪：GetHbitmap 每帧复制+转换像素，20fps 节奏偶尔超帧预算丢帧。
+            using (Graphics g = Graphics.FromHdc(_memDc))
             {
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
@@ -521,7 +534,7 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            UpdateLayeredFromBitmap(bmp);
+            Present();
         }
 
         private void DrawLyrics(Graphics g)
@@ -816,13 +829,67 @@ namespace CelesteMusicPlayer
             return path;
         }
 
-        private void UpdateLayeredFromBitmap(Bitmap bmp)
+        // 确保持久后台位图存在且与当前窗口尺寸一致（尺寸变化或尚未创建时重建）
+        private void EnsureBackbuffer()
         {
-            IntPtr screenDc = GetDC(IntPtr.Zero);
-            IntPtr memDc = CreateCompatibleDC(screenDc);
-            IntPtr hBitmap = bmp.GetHbitmap(Color.FromArgb(0));
-            IntPtr oldBitmap = SelectObject(memDc, hBitmap);
+            if (_memDc == IntPtr.Zero)
+            {
+                IntPtr screenDc = GetDC(IntPtr.Zero);
+                _memDc = CreateCompatibleDC(screenDc);
+                ReleaseDC(IntPtr.Zero, screenDc);
+            }
 
+            if (_memDc == IntPtr.Zero || (_hBitmap != IntPtr.Zero && _backW == _width && _backH == _height))
+            {
+                return;
+            }
+
+            // 旧位图先还原并释放，再按新尺寸建一块 32 位 ARGB DIB（真正的像素缓冲，不是拷贝）
+            if (_hBitmap != IntPtr.Zero)
+            {
+                SelectObject(_memDc, _oldBitmap);
+                DeleteObject(_hBitmap);
+                _hBitmap = IntPtr.Zero;
+                _oldBitmap = IntPtr.Zero;
+            }
+
+            IntPtr screenDc2 = GetDC(IntPtr.Zero);
+            var info = new BITMAPINFO
+            {
+                BiSize = Marshal.SizeOf<BITMAPINFO>(),
+                BiWidth = _width,
+                BiHeight = -_height, // 负值=自上而下，与 GDI+ 坐标一致，避免上下翻转
+                BiPlanes = 1,
+                BiBitCount = 32,
+                BiCompression = BI_RGB
+            };
+            _hBitmap = CreateDIBSection(screenDc2, ref info, DIB_RGB_COLORS, out _, IntPtr.Zero, 0);
+            ReleaseDC(IntPtr.Zero, screenDc2);
+
+            if (_hBitmap == IntPtr.Zero)
+            {
+                return;
+            }
+
+            _oldBitmap = SelectObject(_memDc, _hBitmap);
+            _backW = _width;
+            _backH = _height;
+        }
+
+        // 把持久后台位图原子地提交到分层窗口（UpdateLayeredWindow 本身不闪）
+        private void Present()
+        {
+            if (_memDc == IntPtr.Zero || _hBitmap == IntPtr.Zero)
+            {
+                EnsureBackbuffer();
+            }
+
+            if (_memDc == IntPtr.Zero || _hBitmap == IntPtr.Zero)
+            {
+                return;
+            }
+
+            IntPtr screenDc = GetDC(IntPtr.Zero);
             var size = new SIZE { Cx = _width, Cy = _height };
             var pointSource = new POINT { X = 0, Y = 0 };
             var topPos = new POINT { X = _x, Y = _y };
@@ -839,16 +906,37 @@ namespace CelesteMusicPlayer
                 screenDc,
                 ref topPos,
                 ref size,
-                memDc,
+                _memDc,
                 ref pointSource,
                 0,
                 ref blend,
                 UlwAlpha);
 
-            SelectObject(memDc, oldBitmap);
-            DeleteObject(hBitmap);
-            DeleteDC(memDc);
             ReleaseDC(IntPtr.Zero, screenDc);
+        }
+
+        // 释放持久后台位图与 DC（Dispose 时调用；先还原默认位图再删，避免 DeleteDC 行为未定义）
+        private void CleanupBackbuffer()
+        {
+            if (_memDc != IntPtr.Zero && _oldBitmap != IntPtr.Zero)
+            {
+                SelectObject(_memDc, _oldBitmap);
+                _oldBitmap = IntPtr.Zero;
+            }
+
+            if (_hBitmap != IntPtr.Zero)
+            {
+                DeleteObject(_hBitmap);
+                _hBitmap = IntPtr.Zero;
+            }
+
+            if (_memDc != IntPtr.Zero)
+            {
+                DeleteDC(_memDc);
+                _memDc = IntPtr.Zero;
+            }
+
+            _backW = _backH = 0;
         }
 
         private IntPtr WndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -1204,6 +1292,23 @@ namespace CelesteMusicPlayer
             public byte AlphaFormat;
         }
 
+        // 持久后台位图用的 DIB 头：32 位 ARGB（BI_RGB），负高度=自上而下，与 GDI+ 坐标一致。
+        [StructLayout(LayoutKind.Sequential)]
+        private struct BITMAPINFO
+        {
+            public int BiSize;
+            public int BiWidth;
+            public int BiHeight;
+            public short BiPlanes;
+            public short BiBitCount;
+            public int BiCompression;
+            public int BiSizeImage;
+            public int BiXPelsPerMeter;
+            public int BiYPelsPerMeter;
+            public int BiClrUsed;
+            public int BiClrImportant;
+        }
+
         [StructLayout(LayoutKind.Sequential)]
         private struct RECT
         {
@@ -1308,6 +1413,20 @@ namespace CelesteMusicPlayer
 
         [DllImport("gdi32.dll")]
         private static extern bool DeleteObject(IntPtr hObject);
+
+        // 创建一块真正的 32 位 ARGB 像素缓冲（并非拷贝），GDI+ 直接画进它的 DC，
+        // UpdateLayeredWindow 直接读它 —— 既不踩 GetHbitmap 的"拷贝不更新"坑，也避免了每帧复制/转换的开销。
+        [DllImport("gdi32.dll", SetLastError = true)]
+        private static extern IntPtr CreateDIBSection(
+            IntPtr hdc,
+            ref BITMAPINFO pbmi,
+            uint iUsage,
+            out IntPtr ppvBits,
+            IntPtr hSection,
+            uint dwOffset);
+
+        private const int BI_RGB = 0;
+        private const uint DIB_RGB_COLORS = 0;
 
         [DllImport("user32.dll")]
         private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
