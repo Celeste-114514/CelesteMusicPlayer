@@ -1,6 +1,6 @@
 ﻿# CelesteMusicPlayer
 
-一个基于 **WinUI 3 / .NET 9** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和[ECHO-NEXT](https://github.com/moekotori/ECHO)设计开发。代码全部由AI生成，主要模型为deepseek，由Cursor和Reasonix辅助开发。
+一个基于 **WinUI 3 / .NET 9** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和[ECHO-NEXT](https://github.com/moekotori/ECHO)设计开发。代码全部由AI生成，主要模型为deepseek。
 
 ## ✨ 功能特性
 
