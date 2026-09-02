@@ -24,6 +24,54 @@ namespace CelesteMusicPlayer
         [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
         private static extern int MessageBoxW(nint hWnd, string text, string caption, uint type);
 
+        // ---- 缺少运行环境时的可点击链接提示（TaskDialog）----
+        // MessageBoxW 无法渲染可点击链接，故改用 comctl32 的 TaskDialog：
+        // 内容里用 <A HREF="...">文字</A> 标记超链接，点击时在回调里用 ShellExecute 拉起浏览器。
+        private const uint TdfEnableHyperlinks = 0x0040;
+        private const uint TdfAllowDialogCancellation = 0x0008;
+        private const uint TdcbfOkButton = 0x0001;
+        private const uint TdnHyperlinkClicked = 0x04CC; // 1228
+        private static readonly nint TdWarningIcon = (nint)0xFFFF;
+
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+        private struct TaskDialogConfig
+        {
+            public uint cbSize;
+            public nint hwndParent;
+            public nint hInstance;
+            public uint dwFlags;
+            public uint dwCommonButtons;
+            public nint pszWindowTitle;
+            public nint pszMainIcon;       // union(HICON / PCWSTR)
+            public nint pszMainInstruction;
+            public nint pszContent;
+            public uint cButtons;
+            public nint pButtons;
+            public int nDefaultButton;
+            public uint cRadioButtons;
+            public nint pRadioButtons;
+            public nint pszVerificationText;
+            public nint pszExpandedInformation;
+            public nint pszExpandedControlText;
+            public nint pszCollapsedControlText;
+            public TaskDialogCallback pfnCallback;
+            public nint lpCallbackData;
+            public uint cxWidth;
+            public nint pszFooter;
+            public nint pszFooterIcon;     // union(HICON / PCWSTR)
+        }
+
+        private delegate int TaskDialogCallback(nint hwnd, uint msg, nint wParam, nint lParam, nint lpRefData);
+
+        [DllImport("comctl32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        private static extern int TaskDialogIndirect(ref TaskDialogConfig pTaskConfig, out int pnButton, out int pnRadioButton, out bool pfVerificationFlagChecked);
+
+        [DllImport("shell32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        private static extern nint ShellExecuteW(nint hwnd, string lpOperation, string lpFile, string lpParameters, string lpDirectory, int nShowCmd);
+
+        // 务必以静态字段持有回调委托，避免 TaskDialog  Pump 消息期间被 GC 回收。
+        private static readonly TaskDialogCallback s_taskDialogCallback = OnTaskDialogLinkClicked;
+
         [STAThread]
         private static void Main(string[] args)
         {
@@ -117,14 +165,89 @@ namespace CelesteMusicPlayer
 
         private static void ShowRuntimePrompt(string detail)
         {
-            string text = "CelesteMusicPlayer 需要以下运行环境才能启动：\n\n"
+            string content =
+                "CelesteMusicPlayer 需要以下运行环境才能启动：\n\n" +
+                "• .NET 9 桌面运行时：<A HREF=\"" + DotNetDownloadUrl + "\">点此下载</A>\n" +
+                "• Windows App SDK 运行时（1.8）：<A HREF=\"" + WinAppSdkDownloadUrl + "\">点此下载</A>\n\n" +
+                (string.IsNullOrWhiteSpace(detail) ? string.Empty : detail + "\n\n") +
+                "点击上面的链接即可在浏览器打开下载页，安装后重新启动本程序。";
+
+            if (TryShowRuntimePromptWithLinks("缺少运行环境", "请先安装所需的运行环境", content))
+            {
+                return;
+            }
+
+            // 兜底：环境中没有 comctl32 v6（TaskDialog 不可用）时，退回普通消息框（链接为纯文本）。
+            string plain = "CelesteMusicPlayer 需要以下运行环境才能启动：\n\n"
                 + "• .NET 9 桌面运行时\n  下载：" + DotNetDownloadUrl + "\n\n"
                 + "• Windows App SDK 运行时（1.8）\n  下载：" + WinAppSdkDownloadUrl + "\n\n"
                 + (string.IsNullOrWhiteSpace(detail) ? string.Empty : detail + "\n\n")
                 + "请安装以上运行环境后重新启动本程序。";
             try
             {
-                MessageBoxW(0, text, "缺少运行环境", MbIconWarning);
+                MessageBoxW(0, plain, "缺少运行环境", MbIconWarning);
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("Program.cs", caught); }
+        }
+
+        private static bool TryShowRuntimePromptWithLinks(string title, string instruction, string content)
+        {
+            nint titlePtr = nint.Zero;
+            nint instructionPtr = nint.Zero;
+            nint contentPtr = nint.Zero;
+            try
+            {
+                titlePtr = Marshal.StringToCoTaskMemUni(title);
+                instructionPtr = Marshal.StringToCoTaskMemUni(instruction);
+                contentPtr = Marshal.StringToCoTaskMemUni(content);
+
+                var cfg = new TaskDialogConfig
+                {
+                    cbSize = (uint)Marshal.SizeOf<TaskDialogConfig>(),
+                    dwFlags = TdfEnableHyperlinks | TdfAllowDialogCancellation,
+                    dwCommonButtons = TdcbfOkButton,
+                    pszWindowTitle = titlePtr,
+                    pszMainInstruction = instructionPtr,
+                    pszContent = contentPtr,
+                    pszMainIcon = TdWarningIcon,
+                    pfnCallback = s_taskDialogCallback,
+                };
+
+                int hr = TaskDialogIndirect(ref cfg, out _, out _, out _);
+                return hr >= 0; // S_OK = 0；负数（如 E_NOTIMPL）表示不支持，走兜底
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("Program.cs", caught);
+                return false;
+            }
+            finally
+            {
+                if (titlePtr != nint.Zero) Marshal.FreeCoTaskMem(titlePtr);
+                if (instructionPtr != nint.Zero) Marshal.FreeCoTaskMem(instructionPtr);
+                if (contentPtr != nint.Zero) Marshal.FreeCoTaskMem(contentPtr);
+            }
+        }
+
+        private static int OnTaskDialogLinkClicked(nint hwnd, uint msg, nint wParam, nint lParam, nint lpRefData)
+        {
+            if (msg == TdnHyperlinkClicked && lParam != nint.Zero)
+            {
+                string? url = Marshal.PtrToStringUni(lParam);
+                if (!string.IsNullOrWhiteSpace(url))
+                {
+                    OpenUrlInBrowser(url);
+                }
+            }
+
+            return 0;
+        }
+
+        private static void OpenUrlInBrowser(string url)
+        {
+            try
+            {
+                ShellExecuteW(0, "open", url, null, null, 1 /* SW_SHOWNORMAL */);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("Program.cs", caught); }
         }

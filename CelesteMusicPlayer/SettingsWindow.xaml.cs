@@ -341,7 +341,7 @@ namespace CelesteMusicPlayer
                 SetToggle(DesktopLyricHideWhenPausedSwitch, s.DesktopLyricHideWhenPaused);
                 SetToggle(DesktopLyricLockOnStartSwitch, s.DesktopLyricLockOnStart);
                 SetToggle(DesktopLyricShowUnlockWhenLockedSwitch, s.DesktopLyricShowUnlockWhenLocked);
-                SetToggle(DesktopLyricDoubleLineSwitch, s.DesktopLyricDoubleLine);
+                SelectComboByTag(DesktopLyricVisibleLinesCombo, s.DesktopLyricVisibleLines.ToString());
                 SetToggle(DesktopLyricClickThroughSwitch, s.DesktopLyricClickThrough);
                 SetSlider(DesktopLyricOpacitySlider, s.DesktopLyricOpacity);
                 SetTextBlock(DesktopLyricOpacityValueText, s.DesktopLyricOpacity.ToString());
@@ -349,6 +349,21 @@ namespace CelesteMusicPlayer
                 SetTextBlock(DesktopLyricFontSizeValueText, s.DesktopLyricFontSize.ToString("0"));
                 SetText(DesktopLyricPlayedColorTextBox, s.DesktopLyricPlayedColor);
                 SetText(DesktopLyricUnplayedColorTextBox, s.DesktopLyricUnplayedColor);
+
+                // —— 外观增强 ——
+                SelectComboByTag(DesktopLyricFontFamilyCombo, s.DesktopLyricFontFamily);
+                SelectComboByTag(DesktopLyricColorPresetCombo, s.DesktopLyricColorPreset);
+                SetToggle(DesktopLyricHideTranslationSwitch, s.DesktopLyricHideTranslation);
+                SelectComboByTag(DesktopLyricAlignCombo, s.DesktopLyricAlign);
+                SelectComboByTag(DesktopLyricShadowCombo, s.DesktopLyricShadowStrength.ToString());
+                SetSlider(DesktopLyricOutlineWidthSlider, s.DesktopLyricOutlineWidth);
+                SetTextBlock(DesktopLyricOutlineWidthValueText, s.DesktopLyricOutlineWidth.ToString("0.0"));
+                SetText(DesktopLyricOutlineColorTextBox, s.DesktopLyricOutlineColor);
+                SetSlider(DesktopLyricLineSpacingSlider, s.DesktopLyricLineSpacing);
+                SetTextBlock(DesktopLyricLineSpacingValueText, s.DesktopLyricLineSpacing.ToString("0"));
+                SetToggle(DesktopLyricShowBackgroundBarSwitch, s.DesktopLyricShowBackgroundBar);
+                SetText(DesktopLyricBackgroundColorTextBox, s.DesktopLyricBackgroundColor);
+
                 UpdateColorSwatches();
 
                 SetToggle(MiniAlwaysOnTopSwitch, s.MiniPlayerAlwaysOnTop);
@@ -863,7 +878,7 @@ namespace CelesteMusicPlayer
             s.DesktopLyricHideWhenPaused = DesktopLyricHideWhenPausedSwitch?.IsOn ?? s.DesktopLyricHideWhenPaused;
             s.DesktopLyricLockOnStart = DesktopLyricLockOnStartSwitch?.IsOn ?? s.DesktopLyricLockOnStart;
             s.DesktopLyricShowUnlockWhenLocked = DesktopLyricShowUnlockWhenLockedSwitch?.IsOn ?? s.DesktopLyricShowUnlockWhenLocked;
-            s.DesktopLyricDoubleLine = DesktopLyricDoubleLineSwitch?.IsOn ?? s.DesktopLyricDoubleLine;
+            s.DesktopLyricVisibleLines = int.Parse(GetComboTagString(DesktopLyricVisibleLinesCombo, "3"));
             s.DesktopLyricClickThrough = DesktopLyricClickThroughSwitch?.IsOn ?? s.DesktopLyricClickThrough;
             if (DesktopLyricOpacitySlider != null)
             {
@@ -877,6 +892,30 @@ namespace CelesteMusicPlayer
             s.DesktopLyricUnplayedColor = string.IsNullOrWhiteSpace(DesktopLyricUnplayedColorTextBox?.Text)
                 ? "#F5F5F5"
                 : DesktopLyricUnplayedColorTextBox.Text.Trim();
+
+            // —— 外观增强 ——
+            s.DesktopLyricFontFamily = GetComboTagString(DesktopLyricFontFamilyCombo, "Microsoft YaHei UI");
+            s.DesktopLyricColorPreset = GetComboTagString(DesktopLyricColorPresetCombo, "Custom");
+            s.DesktopLyricHideTranslation = DesktopLyricHideTranslationSwitch?.IsOn ?? s.DesktopLyricHideTranslation;
+            s.DesktopLyricAlign = GetComboTagString(DesktopLyricAlignCombo, "Center");
+            s.DesktopLyricShadowStrength = int.Parse(GetComboTagString(DesktopLyricShadowCombo, "2"));
+            if (DesktopLyricOutlineWidthSlider != null)
+            {
+                s.DesktopLyricOutlineWidth = DesktopLyricOutlineWidthSlider.Value;
+            }
+
+            s.DesktopLyricOutlineColor = string.IsNullOrWhiteSpace(DesktopLyricOutlineColorTextBox?.Text)
+                ? "#000000"
+                : DesktopLyricOutlineColorTextBox.Text.Trim();
+            if (DesktopLyricLineSpacingSlider != null)
+            {
+                s.DesktopLyricLineSpacing = DesktopLyricLineSpacingSlider.Value;
+            }
+
+            s.DesktopLyricShowBackgroundBar = DesktopLyricShowBackgroundBarSwitch?.IsOn ?? s.DesktopLyricShowBackgroundBar;
+            s.DesktopLyricBackgroundColor = string.IsNullOrWhiteSpace(DesktopLyricBackgroundColorTextBox?.Text)
+                ? "#66000000"
+                : DesktopLyricBackgroundColorTextBox.Text.Trim();
 
             s.MiniPlayerAlwaysOnTop = MiniAlwaysOnTopSwitch?.IsOn ?? s.MiniPlayerAlwaysOnTop;
             s.OpenMiniPlayerOnStartup = OpenMiniPlayerSwitch?.IsOn ?? s.OpenMiniPlayerOnStartup;
@@ -1321,6 +1360,14 @@ namespace CelesteMusicPlayer
             {
                 DesktopLyricFontSizeValueText.Text = ((int)Math.Round(e.NewValue)).ToString();
             }
+            else if (ReferenceEquals(sender, DesktopLyricOutlineWidthSlider))
+            {
+                DesktopLyricOutlineWidthValueText.Text = $"{e.NewValue:0.0}";
+            }
+            else if (ReferenceEquals(sender, DesktopLyricLineSpacingSlider))
+            {
+                DesktopLyricLineSpacingValueText.Text = ((int)Math.Round(e.NewValue)).ToString();
+            }
             else if (ReferenceEquals(sender, GaussBlurRadiusSlider))
             {
                 GaussBlurRadiusValueText.Text = ((int)Math.Round(e.NewValue)).ToString();
@@ -1462,10 +1509,92 @@ namespace CelesteMusicPlayer
             }
         }
 
+        private static readonly IReadOnlyDictionary<string, (string Played, string Unplayed)> DesktopLyricPresetColors = new Dictionary<string, (string Played, string Unplayed)>
+        {
+            ["IceBlue"] = ("#40B4FF", "#EAF6FF"),
+            ["WarmOrange"] = ("#FF9D3C", "#FFE9D0"),
+            ["NeonPurple"] = ("#C77DFF", "#ECD9FF"),
+            ["PureWhite"] = ("#FFFFFF", "#DCDCDC"),
+            ["Lime"] = ("#B6FF3C", "#E6FFCC"),
+        };
+
+        private void DesktopLyricColorPresetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            string preset = GetComboTagString(DesktopLyricColorPresetCombo, "Custom");
+            if (DesktopLyricPresetColors.TryGetValue(preset, out var colors))
+            {
+                if (DesktopLyricPlayedColorTextBox != null)
+                {
+                    DesktopLyricPlayedColorTextBox.Text = colors.Played;
+                }
+
+                if (DesktopLyricUnplayedColorTextBox != null)
+                {
+                    DesktopLyricUnplayedColorTextBox.Text = colors.Unplayed;
+                }
+
+                UpdateColorSwatches();
+            }
+
+            PersistAllFromUi();
+        }
+
+        private void PickOutlineColorButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string current = DesktopLyricOutlineColorTextBox?.Text ?? "#000000";
+                ColorPickerWindow.Show("描边颜色", current, hex =>
+                {
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (DesktopLyricOutlineColorTextBox != null)
+                        {
+                            DesktopLyricOutlineColorTextBox.Text = hex;
+                        }
+
+                        UpdateColorSwatches();
+                        PersistAllFromUi();
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                _ = ShowInfoDialogAsync("打开调色板失败", ex.Message);
+            }
+        }
+
+        private void PickBackgroundColorButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string current = DesktopLyricBackgroundColorTextBox?.Text ?? "#66000000";
+                ColorPickerWindow.Show("背景条颜色", current, hex =>
+                {
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (DesktopLyricBackgroundColorTextBox != null)
+                        {
+                            DesktopLyricBackgroundColorTextBox.Text = hex;
+                        }
+
+                        UpdateColorSwatches();
+                        PersistAllFromUi();
+                    });
+                });
+            }
+            catch (Exception ex)
+            {
+                _ = ShowInfoDialogAsync("打开调色板失败", ex.Message);
+            }
+        }
+
         private void UpdateColorSwatches()
         {
             SetSwatch(DesktopLyricPlayedColorSwatch, DesktopLyricPlayedColorTextBox?.Text, "#40B4FF");
             SetSwatch(DesktopLyricUnplayedColorSwatch, DesktopLyricUnplayedColorTextBox?.Text, "#F5F5F5");
+            SetSwatch(DesktopLyricOutlineColorSwatch, DesktopLyricOutlineColorTextBox?.Text, "#000000");
+            SetSwatch(DesktopLyricBackgroundColorSwatch, DesktopLyricBackgroundColorTextBox?.Text, "#66000000");
         }
 
         private static void SetSwatch(Border? swatch, string? hex, string fallback)

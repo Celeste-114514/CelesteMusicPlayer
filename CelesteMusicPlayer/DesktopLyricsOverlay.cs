@@ -34,6 +34,7 @@ namespace CelesteMusicPlayer
         private static readonly object ClassGate = new();
 
         private readonly List<LyricLine> _lines = new();
+        private readonly List<LyricLine> _sourceLines = new(); // 原始歌词（含译文），显示时按 _hideTranslation 过滤
         private IntPtr _hwnd;
         private IntPtr _wndProcPtr;
         private WndProcDelegate? _wndProcKeepAlive;
@@ -74,6 +75,19 @@ namespace CelesteMusicPlayer
         private float _fontSizeAtMeasure;
         private float[]? _charWidths;
         private float _charWidthsTotal;
+
+        // —— 外观设置（来自 AppSettings，ApplySettings 注入）——
+        private string _fontFamilyName = "Microsoft YaHei UI";
+        private float _outlineWidth;                 // 描边宽度，0 = 不描边
+        private Color _outlineColor = Color.FromArgb(255, 0, 0, 0);
+        private int _shadowStrength = 2;             // 0=关 1=弱 2=中 3=强
+        private string _colorPreset = "Custom";
+        private bool _hideTranslation;              // 隐藏译文行
+        private string _align = "Center";           // Left / Center / Right
+        private int _visibleLines = 3;              // 1 / 2 / 3
+        private float _lineSpacing;                 // 额外行距（像素）
+        private bool _showBackgroundBar;            // 歌词后加半透明底色条
+        private Color _backgroundColor = Color.FromArgb(0x66, 0, 0, 0);
 
         private enum ToolbarBtn
         {
@@ -126,13 +140,43 @@ namespace CelesteMusicPlayer
 
         public void SetLyrics(IReadOnlyList<LyricLine> lines)
         {
-            _lines.Clear();
-            _lines.AddRange(lines);
+            _sourceLines.Clear();
+            _sourceLines.AddRange(lines);
             _currentIndex = -1;
             _displayProgress = 0;
+            RebuildVisibleLines();
             ResizeForContent();
             UpdateVisibilityForState();
             Redraw();
+        }
+
+        /// <summary>按 _hideTranslation 过滤 _sourceLines（含译文）得到实际显示的 _lines。</summary>
+        private void RebuildVisibleLines()
+        {
+            _lines.Clear();
+            foreach (var l in _sourceLines)
+            {
+                if (_hideTranslation && l.IsTranslation)
+                {
+                    continue;
+                }
+
+                _lines.Add(l);
+            }
+
+            // 过滤后索引可能越界，下一帧 ApplyPosition 会重算；这里只保证不崩
+            if (_currentIndex >= _lines.Count)
+            {
+                _currentIndex = _lines.Count - 1;
+            }
+
+            if (_currentIndex < -1)
+            {
+                _currentIndex = -1;
+            }
+
+            // 行集合变了，逐字宽度缓存作废
+            _charWidths = null;
         }
 
         public void Sync(TimeSpan position)
@@ -259,13 +303,25 @@ namespace CelesteMusicPlayer
             }
 
             _fontSize = (float)Math.Clamp(settings.DesktopLyricFontSize, 14, 64);
+            _fontFamilyName = string.IsNullOrWhiteSpace(settings.DesktopLyricFontFamily)
+                ? "Microsoft YaHei UI"
+                : settings.DesktopLyricFontFamily;
             _playedColor = ParseHexColor(settings.DesktopLyricPlayedColor, Color.FromArgb(255, 64, 180, 255));
             _unplayedColor = ParseHexColor(settings.DesktopLyricUnplayedColor, Color.FromArgb(255, 245, 245, 245));
+            _outlineWidth = (float)Math.Clamp(settings.DesktopLyricOutlineWidth, 0, 4);
+            _outlineColor = ParseHexColor(settings.DesktopLyricOutlineColor, Color.FromArgb(255, 0, 0, 0));
+            _shadowStrength = Math.Clamp(settings.DesktopLyricShadowStrength, 0, 3);
+            _colorPreset = string.IsNullOrWhiteSpace(settings.DesktopLyricColorPreset) ? "Custom" : settings.DesktopLyricColorPreset;
             _opacityPercent = Math.Clamp(settings.DesktopLyricOpacity, 20, 100);
             _hideWithoutLyric = settings.DesktopLyricHideWithoutLyric;
             _hideWhenPaused = settings.DesktopLyricHideWhenPaused;
             _showUnlockWhenLocked = settings.DesktopLyricShowUnlockWhenLocked;
-            _doubleLine = settings.DesktopLyricDoubleLine;
+            _visibleLines = Math.Clamp(settings.DesktopLyricVisibleLines, 1, 3);
+            _hideTranslation = settings.DesktopLyricHideTranslation;
+            _align = settings.DesktopLyricAlign is "Left" or "Right" or "Center" ? settings.DesktopLyricAlign : "Center";
+            _lineSpacing = (float)Math.Clamp(settings.DesktopLyricLineSpacing, 0, 24);
+            _showBackgroundBar = settings.DesktopLyricShowBackgroundBar;
+            _backgroundColor = ParseHexColor(settings.DesktopLyricBackgroundColor, Color.FromArgb(0x66, 0, 0, 0));
             _clickThrough = settings.DesktopLyricClickThrough;
             _karaokeStyle = settings.LyricKaraokeStyle;
 
@@ -274,6 +330,7 @@ namespace CelesteMusicPlayer
                 SetLocked(true);
             }
 
+            RebuildVisibleLines();
             ApplyExStyle();
             UpdateVisibilityForState();
             Redraw();
@@ -282,7 +339,6 @@ namespace CelesteMusicPlayer
         private bool _hideWithoutLyric;
         private bool _hideWhenPaused;
         private bool _showUnlockWhenLocked = true;
-        private bool _doubleLine = true;
         private bool _clickThrough;
         private int _opacityPercent = 100;
         private bool _paused;
@@ -417,25 +473,46 @@ namespace CelesteMusicPlayer
         private int ComputeHeight()
         {
             float side = Math.Max(12f, _fontSize * 0.72f);
-            return (int)Math.Ceiling(ToolbarHeight + 16 + side * 1.4f + _fontSize * 1.45f + side * 1.4f + 16);
+            float lineH = _fontSize * 1.45f;
+            float gaps = _lineSpacing * (_visibleLines - 1);
+            float total;
+            if (_visibleLines <= 1)
+            {
+                total = lineH;
+            }
+            else if (_visibleLines == 2)
+            {
+                total = lineH + side * 1.4f + gaps;
+            }
+            else
+            {
+                total = side * 1.4f + lineH + side * 1.4f + gaps;
+            }
+
+            return (int)Math.Ceiling(ToolbarHeight + 16 + total + 16);
         }
 
         private void ResizeForContent()
         {
             string cur = GetLineText(_currentIndex >= 0 ? _currentIndex : 0);
-            string prev = GetLineText(_currentIndex > 0 ? _currentIndex - 1 : -1);
-            string next = GetLineText(_currentIndex >= 0 && _currentIndex + 1 < _lines.Count ? _currentIndex + 1 : -1);
+            string prev = _visibleLines >= 3 ? GetLineText(_currentIndex > 0 ? _currentIndex - 1 : -1) : string.Empty;
+            string next = _visibleLines >= 2 ? GetLineText(_currentIndex >= 0 && _currentIndex + 1 < _lines.Count ? _currentIndex + 1 : -1) : string.Empty;
 
-            using FontFamily family = CreateFontFamily();
+            using FontFamily family = CreateFontFamily(_fontFamilyName);
             using var tmp = new Bitmap(1, 1);
             using Graphics g = Graphics.FromImage(tmp);
             g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
 
-            float maxW = Math.Max(
-                MeasurePathSize(g, cur, family, _fontSize, FontStyle.Bold).Width,
-                Math.Max(
-                    MeasurePathSize(g, prev, family, Math.Max(12f, _fontSize * 0.72f), FontStyle.Regular).Width,
-                    MeasurePathSize(g, next, family, Math.Max(12f, _fontSize * 0.72f), FontStyle.Regular).Width));
+            float maxW = MeasurePathSize(g, cur, family, _fontSize, FontStyle.Bold).Width;
+            if (!string.IsNullOrEmpty(prev))
+            {
+                maxW = Math.Max(maxW, MeasurePathSize(g, prev, family, Math.Max(12f, _fontSize * 0.72f), FontStyle.Regular).Width);
+            }
+
+            if (!string.IsNullOrEmpty(next))
+            {
+                maxW = Math.Max(maxW, MeasurePathSize(g, next, family, Math.Max(12f, _fontSize * 0.72f), FontStyle.Regular).Width);
+            }
 
             GetWorkArea(out int left, out _, out int right, out _);
             int workW = right - left;
@@ -560,58 +637,111 @@ namespace CelesteMusicPlayer
 
         private void DrawLyrics(Graphics g)
         {
-            string prev = GetLineText(_currentIndex > 0 ? _currentIndex - 1 : -1);
+            string prev = _visibleLines >= 3 ? GetLineText(_currentIndex > 0 ? _currentIndex - 1 : -1) : string.Empty;
             LyricLine? curLine = GetLine(_currentIndex >= 0 ? _currentIndex : 0);
             string cur = curLine?.Text ?? string.Empty;
-            string next = GetLineText(_currentIndex >= 0 && _currentIndex + 1 < _lines.Count ? _currentIndex + 1 : -1);
+            string next = _visibleLines >= 2 ? GetLineText(_currentIndex >= 0 && _currentIndex + 1 < _lines.Count ? _currentIndex + 1 : -1) : string.Empty;
 
+            using FontFamily family = CreateFontFamily(_fontFamilyName);
             float sideSize = Math.Max(12f, _fontSize * 0.72f);
-            if (!_doubleLine)
+            float centerX = _width / 2f;
+
+            // 半透明底色条：提升在复杂/亮色壁纸上的可读性（默认关）
+            if (_showBackgroundBar)
             {
-                prev = string.Empty;
-                next = string.Empty;
+                using var bar = new SolidBrush(_backgroundColor);
+                g.FillRectangle(bar, 0, ToolbarHeight, _width, _height - ToolbarHeight);
             }
-            using FontFamily family = CreateFontFamily();
-            using var sideBrush = new SolidBrush(Color.FromArgb(160, _unplayedColor));
-            using var shadowBrush = new SolidBrush(Color.FromArgb(140, 0, 0, 0));
 
             float y = ToolbarHeight + 8;
-            float centerX = _width / 2f;
 
             if (!string.IsNullOrEmpty(prev))
             {
                 SizeF sz = MeasurePathSize(prev, family, sideSize, FontStyle.Regular);
-                float x = centerX - sz.Width / 2f;
-                DrawTextPath(g, prev, family, sideSize, FontStyle.Regular, shadowBrush, x + 1.5f, y + 1.5f);
-                DrawTextPath(g, prev, family, sideSize, FontStyle.Regular, sideBrush, x, y);
-                y += sz.Height + 6;
+                float x = XFor(sideSize, sz.Width, centerX);
+                DrawTextStyled(g, prev, family, sideSize, FontStyle.Regular, Color.FromArgb(160, _unplayedColor), x, y);
+                y += sz.Height + 6 + _lineSpacing;
             }
 
             if (!string.IsNullOrEmpty(cur))
             {
                 SizeF sz = MeasurePathSize(cur, family, _fontSize, FontStyle.Bold);
-                float x = centerX - sz.Width / 2f;
-                DrawTextPath(g, cur, family, _fontSize, FontStyle.Bold, shadowBrush, x + 1.5f, y + 1.5f);
+                float x = XFor(_fontSize, sz.Width, centerX);
+                DrawShadow(g, cur, family, _fontSize, x, y);
                 if (_karaokeStyle && curLine != null)
                 {
                     DrawKaraokeLine(g, curLine, family, x, y, sz);
                 }
                 else
                 {
-                    using var curBrush = new SolidBrush(_playedColor);
-                    DrawTextPath(g, cur, family, _fontSize, FontStyle.Bold, curBrush, x, y);
+                    DrawTextStyled(g, cur, family, _fontSize, FontStyle.Bold, _playedColor, x, y, shadow: false);
                 }
 
-                y += sz.Height + 6;
+                y += sz.Height + 6 + _lineSpacing;
             }
 
             if (!string.IsNullOrEmpty(next))
             {
                 SizeF sz = MeasurePathSize(next, family, sideSize, FontStyle.Regular);
-                float x = centerX - sz.Width / 2f;
-                DrawTextPath(g, next, family, sideSize, FontStyle.Regular, shadowBrush, x + 1.5f, y + 1.5f);
-                DrawTextPath(g, next, family, sideSize, FontStyle.Regular, sideBrush, x, y);
+                float x = XFor(sideSize, sz.Width, centerX);
+                DrawTextStyled(g, next, family, sideSize, FontStyle.Regular, Color.FromArgb(160, _unplayedColor), x, y);
             }
+        }
+
+        private float XFor(float size, float textWidth, float centerX)
+        {
+            return _align switch
+            {
+                "Left" => 24f,
+                "Right" => Math.Max(24f, _width - 24f - textWidth),
+                _ => centerX - textWidth / 2f
+            };
+        }
+
+        /// <summary>阴影：强度 0=关；1/2/3 控制不透明度与偏移。</summary>
+        private void DrawShadow(Graphics g, string text, FontFamily family, float size, float x, float y)
+        {
+            if (_shadowStrength <= 0)
+            {
+                return;
+            }
+
+            int a = _shadowStrength switch
+            {
+                1 => 90,
+                2 => 150,
+                3 => 210,
+                _ => 0
+            };
+            if (a <= 0)
+            {
+                return;
+            }
+
+            float off = _shadowStrength >= 3 ? 2.5f : 1.5f;
+            using var sb = new SolidBrush(Color.FromArgb((byte)a, 0, 0, 0));
+            DrawTextPath(g, text, family, size, FontStyle.Bold, sb, x + off, y + off);
+        }
+
+        /// <summary>画一行文字：可选阴影（底层）+ 可选描边（上层）+ 填充。</summary>
+        private void DrawTextStyled(Graphics g, string text, FontFamily family, float size, FontStyle style, Color fill, float x, float y, bool shadow = true)
+        {
+            if (shadow)
+            {
+                DrawShadow(g, text, family, size, x, y);
+            }
+
+            if (_outlineWidth > 0.05f)
+            {
+                using var pen = new Pen(_outlineColor, _outlineWidth);
+                pen.LineJoin = LineJoin.Round;
+                using var op = new GraphicsPath();
+                op.AddString(text, family, (int)style, size, new PointF(x, y), StringFormat.GenericTypographic);
+                g.DrawPath(pen, op);
+            }
+
+            using var fb = new SolidBrush(fill);
+            DrawTextPath(g, text, family, size, style, fb, x, y);
         }
 
         private void DrawKaraokeLine(Graphics g, LyricLine line, FontFamily family, float x, float y, SizeF size)
@@ -668,6 +798,17 @@ namespace CelesteMusicPlayer
                 g.SetClip(new RectangleF(edgeX, y - 2, soft, size.Height + 4));
                 DrawTextPath(g, text, family, _fontSize, FontStyle.Bold, edgeBrush, x, y);
                 g.Restore(edgeState);
+            }
+
+            // 描边放最上层：卡拉 OK 填充（不透明）会盖住下层的描边，
+            // 所以必须最后画，只露出字形外缘一圈，提升在亮色壁纸上的可读性。
+            if (_outlineWidth > 0.05f)
+            {
+                using var pen = new Pen(_outlineColor, _outlineWidth);
+                pen.LineJoin = LineJoin.Round;
+                using var op = new GraphicsPath();
+                op.AddString(text, family, (int)FontStyle.Bold, _fontSize, new PointF(x, y), StringFormat.GenericTypographic);
+                g.DrawPath(pen, op);
             }
         }
 
@@ -760,11 +901,11 @@ namespace CelesteMusicPlayer
             return widths;
         }
 
-        private static FontFamily CreateFontFamily()
+        private static FontFamily CreateFontFamily(string name)
         {
             try
             {
-                return new FontFamily("Microsoft YaHei UI");
+                return new FontFamily(name);
             }
             catch
             {
@@ -1254,11 +1395,13 @@ namespace CelesteMusicPlayer
             {
                 case ToolbarBtn.FontMinus:
                     _fontSize = Math.Max(14f, _fontSize - 2f);
+                    AppSettingsStore.Update(s => s.DesktopLyricFontSize = _fontSize);
                     ResizeForContent();
                     Redraw();
                     break;
                 case ToolbarBtn.FontPlus:
                     _fontSize = Math.Min(64f, _fontSize + 2f);
+                    AppSettingsStore.Update(s => s.DesktopLyricFontSize = _fontSize);
                     ResizeForContent();
                     Redraw();
                     break;

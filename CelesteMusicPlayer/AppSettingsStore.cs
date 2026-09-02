@@ -123,8 +123,6 @@ namespace CelesteMusicPlayer
 
         public bool DesktopLyricShowUnlockWhenLocked { get; set; } = true;
 
-        public bool DesktopLyricDoubleLine { get; set; } = true;
-
         public bool DesktopLyricClickThrough { get; set; }
 
         /// <summary>20–100</summary>
@@ -135,6 +133,40 @@ namespace CelesteMusicPlayer
         public string DesktopLyricPlayedColor { get; set; } = "#40B4FF";
 
         public string DesktopLyricUnplayedColor { get; set; } = "#F5F5F5";
+
+        // —— 桌面歌词：外观 ——
+
+        /// <summary>字体族名，例如 Microsoft YaHei UI / SimHei / KaiTi。</summary>
+        public string DesktopLyricFontFamily { get; set; } = "Microsoft YaHei UI";
+
+        /// <summary>描边宽度（像素），0 = 不描边，上限 4。</summary>
+        public double DesktopLyricOutlineWidth { get; set; }
+
+        public string DesktopLyricOutlineColor { get; set; } = "#000000";
+
+        /// <summary>阴影强度 0=关 1=弱 2=中 3=强。</summary>
+        public int DesktopLyricShadowStrength { get; set; } = 2;
+
+        /// <summary>配色预设名（IceBlue / WarmOrange / NeonPurple / PureWhite / Lime / Custom）。</summary>
+        public string DesktopLyricColorPreset { get; set; } = "Custom";
+
+        /// <summary>桌面歌词里是否显示译文行（对照歌词的翻译行）。关掉后只显示原文。</summary>
+        public bool DesktopLyricHideTranslation { get; set; }
+
+        /// <summary>Left / Center / Right</summary>
+        public string DesktopLyricAlign { get; set; } = "Center";
+
+        /// <summary>同时显示几行歌词：1=当前行 2=当前行+下一行 3=上一行+当前行+下一行。</summary>
+        public int DesktopLyricVisibleLines { get; set; } = 3;
+
+        /// <summary>行与行之间的额外间距（像素），0–24。</summary>
+        public double DesktopLyricLineSpacing { get; set; } = 6;
+
+        /// <summary>歌词后面加一条半透明底色条，提升在复杂壁纸上的可读性。</summary>
+        public bool DesktopLyricShowBackgroundBar { get; set; }
+
+        /// <summary>底色条颜色（8 位 ARGB 十六进制，前两位是透明度）。</summary>
+        public string DesktopLyricBackgroundColor { get; set; } = "#66000000";
 
         /// <summary>桌面歌词窗口记住的位置（物理像素；int.MinValue=未定位）。</summary>
         public int DesktopLyricPosX { get; set; } = int.MinValue;
@@ -454,6 +486,38 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 s.DesktopLyricUnplayedColor = "#F5F5F5";
             }
 
+            if (string.IsNullOrWhiteSpace(s.DesktopLyricFontFamily))
+            {
+                s.DesktopLyricFontFamily = "Microsoft YaHei UI";
+            }
+
+            s.DesktopLyricOutlineWidth = Math.Clamp(s.DesktopLyricOutlineWidth, 0, 4);
+            s.DesktopLyricShadowStrength = Math.Clamp(s.DesktopLyricShadowStrength, 0, 3);
+
+            if (string.IsNullOrWhiteSpace(s.DesktopLyricOutlineColor))
+            {
+                s.DesktopLyricOutlineColor = "#000000";
+            }
+
+            if (string.IsNullOrWhiteSpace(s.DesktopLyricColorPreset))
+            {
+                s.DesktopLyricColorPreset = "Custom";
+            }
+
+            s.DesktopLyricAlign = s.DesktopLyricAlign switch
+            {
+                "Left" or "Center" or "Right" => s.DesktopLyricAlign,
+                _ => "Center"
+            };
+
+            s.DesktopLyricVisibleLines = Math.Clamp(s.DesktopLyricVisibleLines, 1, 3);
+            s.DesktopLyricLineSpacing = Math.Clamp(s.DesktopLyricLineSpacing, 0, 24);
+
+            if (string.IsNullOrWhiteSpace(s.DesktopLyricBackgroundColor))
+            {
+                s.DesktopLyricBackgroundColor = "#66000000";
+            }
+
             s.LibraryWatchFolders = s.LibraryWatchFolders?
                 .Where(f => !string.IsNullOrWhiteSpace(f))
                 .Select(f => f.Trim())
@@ -504,12 +568,22 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DesktopLyricHideWhenPaused = s.DesktopLyricHideWhenPaused,
             DesktopLyricLockOnStart = s.DesktopLyricLockOnStart,
             DesktopLyricShowUnlockWhenLocked = s.DesktopLyricShowUnlockWhenLocked,
-            DesktopLyricDoubleLine = s.DesktopLyricDoubleLine,
             DesktopLyricClickThrough = s.DesktopLyricClickThrough,
             DesktopLyricOpacity = s.DesktopLyricOpacity,
             DesktopLyricFontSize = s.DesktopLyricFontSize,
             DesktopLyricPlayedColor = s.DesktopLyricPlayedColor,
             DesktopLyricUnplayedColor = s.DesktopLyricUnplayedColor,
+            DesktopLyricFontFamily = s.DesktopLyricFontFamily,
+            DesktopLyricOutlineWidth = s.DesktopLyricOutlineWidth,
+            DesktopLyricOutlineColor = s.DesktopLyricOutlineColor,
+            DesktopLyricShadowStrength = s.DesktopLyricShadowStrength,
+            DesktopLyricColorPreset = s.DesktopLyricColorPreset,
+            DesktopLyricHideTranslation = s.DesktopLyricHideTranslation,
+            DesktopLyricAlign = s.DesktopLyricAlign,
+            DesktopLyricVisibleLines = s.DesktopLyricVisibleLines,
+            DesktopLyricLineSpacing = s.DesktopLyricLineSpacing,
+            DesktopLyricShowBackgroundBar = s.DesktopLyricShowBackgroundBar,
+            DesktopLyricBackgroundColor = s.DesktopLyricBackgroundColor,
             DesktopLyricPosX = s.DesktopLyricPosX,
             DesktopLyricPosY = s.DesktopLyricPosY,
             ShowSpectrum = s.ShowSpectrum,

@@ -233,9 +233,14 @@
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="双行显示" />
+                                    <TextBlock Text="显示行数" />
+                                    <TextBlock Text="同时显示几行歌词" FontSize="12" Opacity="0.65" />
                                 </StackPanel>
-                                <ToggleSwitch x:Name="DesktopLyricDoubleLineSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                                <ComboBox x:Name="DesktopLyricVisibleLinesCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged">
+                                    <ComboBoxItem Content="仅当前行" Tag="1" />
+                                    <ComboBoxItem Content="当前行 + 下一行" Tag="2" />
+                                    <ComboBoxItem Content="上一行 + 当前行 + 下一行" Tag="3" />
+                                </ComboBox>
                             </Grid>
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
@@ -324,6 +329,160 @@
                                         Content="调色板"
                                         Click="PickUnplayedColorButton_Click"
                                         MinWidth="72" />
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="外观增强" FontSize="15" FontWeight="SemiBold" Margin="0,6,0,0" />
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="字体" />
+                                </StackPanel>
+                                <ComboBox x:Name="DesktopLyricFontFamilyCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged">
+                                    <ComboBoxItem Content="微软雅黑" Tag="Microsoft YaHei UI" />
+                                    <ComboBoxItem Content="黑体" Tag="SimHei" />
+                                    <ComboBoxItem Content="等线" Tag="DengXian" />
+                                    <ComboBoxItem Content="宋体" Tag="SimSun" />
+                                    <ComboBoxItem Content="楷体" Tag="KaiTi" />
+                                    <ComboBoxItem Content="微软雅黑（旧）" Tag="Microsoft YaHei" />
+                                </ComboBox>
+                            </Grid>
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="配色预设" />
+                                    <TextBlock Text="一键套用，也可在下方自定义颜色" FontSize="12" Opacity="0.65" />
+                                </StackPanel>
+                                <ComboBox x:Name="DesktopLyricColorPresetCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="DesktopLyricColorPresetCombo_SelectionChanged">
+                                    <ComboBoxItem Content="自定义" Tag="Custom" />
+                                    <ComboBoxItem Content="冰蓝" Tag="IceBlue" />
+                                    <ComboBoxItem Content="暖橙" Tag="WarmOrange" />
+                                    <ComboBoxItem Content="霓虹紫" Tag="NeonPurple" />
+                                    <ComboBoxItem Content="纯白" Tag="PureWhite" />
+                                    <ComboBoxItem Content="青柠" Tag="Lime" />
+                                </ComboBox>
+                            </Grid>
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="隐藏翻译歌词" />
+                                    <TextBlock Text="桌面歌词里不再显示译文行" FontSize="12" Opacity="0.65" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="DesktopLyricHideTranslationSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="对齐方式" />
+                                </StackPanel>
+                                <ComboBox x:Name="DesktopLyricAlignCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged">
+                                    <ComboBoxItem Content="左对齐" Tag="Left" />
+                                    <ComboBoxItem Content="居中" Tag="Center" />
+                                    <ComboBoxItem Content="右对齐" Tag="Right" />
+                                </ComboBox>
+                            </Grid>
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="阴影强度" />
+                                </StackPanel>
+                                <ComboBox x:Name="DesktopLyricShadowCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged">
+                                    <ComboBoxItem Content="关" Tag="0" />
+                                    <ComboBoxItem Content="弱" Tag="1" />
+                                    <ComboBoxItem Content="中" Tag="2" />
+                                    <ComboBoxItem Content="强" Tag="3" />
+                                </ComboBox>
+                            </Grid>
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="描边宽度" />
+                                    <TextBlock x:Name="DesktopLyricOutlineWidthValueText" Text="0" FontSize="12" Opacity="0.65" />
+                                </StackPanel>
+                                <Slider x:Name="DesktopLyricOutlineWidthSlider" Grid.Column="1" Minimum="0" Maximum="4" StepFrequency="0.5" ValueChanged="SettingSlider_ValueChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="描边颜色" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Border
+                                        x:Name="DesktopLyricOutlineColorSwatch"
+                                        Width="28" Height="28" CornerRadius="6"
+                                        BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" VerticalAlignment="Center" />
+                                    <TextBox x:Name="DesktopLyricOutlineColorTextBox" Width="100" LostFocus="SettingTextBox_LostFocus" />
+                                    <Button Content="调色板" Click="PickOutlineColorButton_Click" MinWidth="72" />
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="行距" />
+                                    <TextBlock x:Name="DesktopLyricLineSpacingValueText" Text="6" FontSize="12" Opacity="0.65" />
+                                </StackPanel>
+                                <Slider x:Name="DesktopLyricLineSpacingSlider" Grid.Column="1" Minimum="0" Maximum="24" StepFrequency="1" ValueChanged="SettingSlider_ValueChanged" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="背景条" />
+                                    <TextBlock Text="歌词后加一条半透明底色，提升可读性" FontSize="12" Opacity="0.65" />
+                                </StackPanel>
+                                <ToggleSwitch x:Name="DesktopLyricShowBackgroundBarSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                            </Grid>
+
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="背景条颜色" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Border
+                                        x:Name="DesktopLyricBackgroundColorSwatch"
+                                        Width="28" Height="28" CornerRadius="6"
+                                        BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" VerticalAlignment="Center" />
+                                    <TextBox x:Name="DesktopLyricBackgroundColorTextBox" Width="100" LostFocus="SettingTextBox_LostFocus" />
+                                    <Button Content="调色板" Click="PickBackgroundColorButton_Click" MinWidth="72" />
                                 </StackPanel>
                             </Grid>
                         </StackPanel>
@@ -1359,6 +1518,10 @@
                                     Content="联系 / 反馈：t.me/celesteabsolomb"
                                     FontSize="12"
                                     NavigateUri="https://t.me/celesteabsolomb" />
+                                <HyperlinkButton
+                                    Content="爱发电（请我喝杯咖啡）：afdian.com/a/celeste_114514"
+                                    FontSize="12"
+                                    NavigateUri="https://afdian.com/a/celeste_114514" />
                             </StackPanel>
                         </Border>
                     </StackPanel>
