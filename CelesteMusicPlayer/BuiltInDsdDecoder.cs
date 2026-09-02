@@ -7,7 +7,7 @@ namespace CelesteMusicPlayer
     /// <summary>
     /// 内建 DSF/DFF 解析器：从 DSD 容器直接提取 1-bit DSD 流（不转 PCM）。
     /// 数据统一规范为「L/R 逐字节交织」字节流，供 <see cref="DoPWaveSource"/> 封装。
-    /// 支持普通 DSD（DSF 全；DFF 未 DST 压缩）。DFF 的 DST 压缩解码暂不支持（返回不支持说明）。
+    /// 支持普通 DSD（DSF 全；DFF 未 DST 压缩）以及 DST 压缩的 DFF（进程内移植 ffmpeg dstdec.c 逐帧解回 1-bit DSD，bit-perfect 喂 DoP 直出）。
     /// </summary>
     internal sealed class BuiltInDsdDecoder : IDsDDecoder
     {
@@ -148,7 +148,7 @@ namespace CelesteMusicPlayer
         }
 
         // ---------- DFF ----------
-        private static BuiltInDsdStream OpenDff(Stream fs)
+        private static IDsDStream OpenDff(Stream fs)
         {
             if (ReadTag(fs, 4) != "FRM8")
             {
@@ -167,6 +167,8 @@ namespace CelesteMusicPlayer
             long dataStart = 0;
             long dataBytes = 0;
             bool sawData = false;
+            bool isDst = false;
+            long dstTableStart = 0, dstTableBytes = 0;
 
             while (fs.Position + 12 <= fs.Length)
             {
@@ -192,10 +194,16 @@ namespace CelesteMusicPlayer
                         else if (sid == "CMPR")
                         {
                             string comp = Encoding.ASCII.GetString(ReadN(fs, 4));
+                            if (comp.Contains("NDST", StringComparison.Ordinal))
+                            {
+                                // DST（Digital Stream Transfer）压缩：走进程内解码
+                                isDst = true;
+                            }
+
                             if (comp.Contains("NDSD", StringComparison.Ordinal)
                                 && fs.Position < propEnd)
                             {
-                                // 跳过 NDST 等字段
+                                // 跳过 NDSD 等字段
                                 fs.Position = propEnd;
                             }
                             else
@@ -216,6 +224,13 @@ namespace CelesteMusicPlayer
                     sawData = true;
                     fs.Position = Math.Min(fs.Position + size, fs.Length);
                 }
+                else if (id == "DST ")
+                {
+                    // DST 帧表块：NumFrames(4B) + FrameSize[NumFrames](4B 各)
+                    dstTableStart = fs.Position;
+                    dstTableBytes = size;
+                    fs.Position = Math.Min(fs.Position + size, fs.Length);
+                }
                 else
                 {
                     fs.Position = Math.Min(fs.Position + size, fs.Length);
@@ -229,12 +244,63 @@ namespace CelesteMusicPlayer
 
             // 诊断：打印每个 DFF 的结构参数
             StartupLog.Write(string.Format(
-                "[DFF解析] 频道={0} freq={1} dataBytes={2}", ch, fsFreq, dataBytes));
+                "[DFF解析] 频道={0} freq={1} dataBytes={2} isDst={3}", ch, fsFreq, dataBytes, isDst));
+
+            // DST 压缩 DFF：进程内逐帧解码为原始 1-bit DSD（bit-perfect），直接喂 DoP 原生直出。
+            // 内置 ffmpeg.exe 缺 dsdiff 解封装器，无法走转码路径，故在进程内移植 ffmpeg dstdec.c 解码。
+            if (isDst)
+            {
+                if (dstTableBytes <= 0 || dataBytes <= 0)
+                {
+                    throw new InvalidDataException("DST 压缩 DFF 结构不完整（缺少帧表或数据块）。");
+                }
+
+                ReadDstFrameTable(fs, dstTableStart, dstTableBytes, out int numFrames, out int[] frameSizes);
+                var compressed = new byte[dataBytes];
+                fs.Position = dataStart;
+                int got = 0;
+                while (got < compressed.Length)
+                {
+                    int n = fs.Read(compressed, got, compressed.Length - got);
+                    if (n <= 0)
+                    {
+                        break;
+                    }
+
+                    got += n;
+                }
+
+                long spp = 588L * (fsFreq * 8L / 44100L);
+                long bytesPerFrame = spp / 8 * ch;
+
+                try { fs.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("BuiltInDsdDecoder.cs", caught); }
+                StartupLog.Write(string.Format(
+                    "[DFF-DST] 频道={0} freq={1} 帧数={2} 压缩字节={3} 解码字节={4}",
+                    ch, fsFreq, numFrames, compressed.Length, (long)numFrames * bytesPerFrame));
+                return DstDsdStream.Create(compressed, frameSizes, fsFreq, (int)ch);
+            }
 
             // DST 压缩检测：CMPR 内容在数据里若为 NDST 正常；若为压缩则拒绝
             return new BuiltInDsdStream(
                 fs as FileStream ?? throw new InvalidDataException("DFF 需文件流"),
                 dataStart, dataBytes, RateFromFreq(fsFreq), (int)ch, 1, dff: true);
+        }
+
+        /// <summary>读取 DST 帧表块（NumFrames + 每帧压缩字节数），与现有 ReadU32 保持同字节序（小端，与文件其余字段一致）。</summary>
+        private static void ReadDstFrameTable(Stream fs, long tableStart, long tableBytes, out int numFrames, out int[] frameSizes)
+        {
+            fs.Position = tableStart;
+            numFrames = (int)ReadU32(fs);
+            if (numFrames <= 0 || numFrames > 1000000)
+            {
+                throw new InvalidDataException("DST 帧数异常：" + numFrames);
+            }
+
+            frameSizes = new int[numFrames];
+            for (int i = 0; i < numFrames; i++)
+            {
+                frameSizes[i] = (int)ReadU32(fs);
+            }
         }
 
         private static DsdRate RateFromFreq(uint freq) => freq switch
