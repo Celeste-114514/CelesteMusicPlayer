@@ -6,7 +6,7 @@
 
 这个播放器是因为目前网上的播放器没有能完全符合我需求的，几乎所有播放器都不支持我想要把专辑按照时间顺序排列（foobar和musicbee支持但是有点丑），musicplayer2在我高中时候就在用了，基本上就缺一个排序功能，外观也一般般，正好最近AI浪潮，就先借朋友的cursor账号试了一下改了一下musicplayer2，于是后续继续开发下去了，我自己对代码一无所知，只有最基础最基础的入门知识。这个播放器也算是我用AI花了蛮久开发的，希望各位能用的舒服用的开心，那我也不枉花钱买那么多token了（
 
-联系我 t.me/celesteabsolomb
+联系我 [t.me/celesteabsolomb](https://t.me/celesteabsolomb)
 
 支持我 https://afdian.com/a/celeste_114514
 
