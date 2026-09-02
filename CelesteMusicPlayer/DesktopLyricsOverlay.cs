@@ -24,14 +24,6 @@ namespace CelesteMusicPlayer
         // 上次 Redraw 的物理时刻（Environment.TickCount64），用于跨 tick 节流
         private long _lastRedrawMs;
 
-        // 持久 backing surface：复用同一 Bitmap/Graphics/HBITMAP，避免每帧 GDI 资源抖动
-        // （每帧 new Bitmap + new Graphics + GetHbitmap + Dispose 是 WS_EX_LAYERED 窗口闪烁的第二大根因）
-        private Bitmap? _backBitmap;
-        private Graphics? _backGraphics;
-        private IntPtr _backHBitmap;
-        private int _backWidth;
-        private int _backHeight;
-
         private static bool _classRegistered;
         private static readonly object ClassGate = new();
 
@@ -336,51 +328,8 @@ namespace CelesteMusicPlayer
             }
 
             _disposed = true;
-            DisposeBackingSurface();
             Close();
             GC.SuppressFinalize(this);
-        }
-
-        // ============================== Backing Surface ==============================
-
-        /// <summary>确保 _backBitmap/_backGraphics/_backHBitmap 与当前 _width/_height 匹配；
-        /// 尺寸变化时（切歌重排、字号调整、初始布局）重建一次。</summary>
-        private void EnsureBackingSurface()
-        {
-            if (_backBitmap != null
-                && _backWidth == _width
-                && _backHeight == _height
-                && _backHBitmap != IntPtr.Zero)
-            {
-                return;
-            }
-
-            DisposeBackingSurface();
-
-            _backBitmap = new Bitmap(_width, _height, PixelFormat.Format32bppArgb);
-            _backGraphics = Graphics.FromImage(_backBitmap);
-            _backGraphics.SmoothingMode = SmoothingMode.AntiAlias;
-            _backGraphics.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
-            _backHBitmap = _backBitmap.GetHbitmap(Color.FromArgb(0));
-            _backWidth = _width;
-            _backHeight = _height;
-        }
-
-        private void DisposeBackingSurface()
-        {
-            // 顺序：先 HBITMAP → Graphics → Bitmap
-            // DeleteObject(HBITMAP) 必须在 Graphics 释放前；否则 GDI+ 句柄泄漏
-            if (_backHBitmap != IntPtr.Zero)
-            {
-                DeleteObject(_backHBitmap);
-                _backHBitmap = IntPtr.Zero;
-            }
-            _backGraphics?.Dispose();
-            _backGraphics = null;
-            _backBitmap?.Dispose();
-            _backBitmap = null;
-            _backWidth = 0;
-            _backHeight = 0;
         }
 
         private void EnsureWindow()
@@ -537,41 +486,42 @@ namespace CelesteMusicPlayer
             // 实际重绘前打点，让后续 progress 触发的 Redraw 走节流
             _lastRedrawMs = Environment.TickCount64;
 
-            // 复用持久 backing surface：避免每帧 new Bitmap/Graphics/GetHbitmap/Dispose
-            // —— 这是 WS_EX_LAYERED 窗口闪烁的第二大根因（DWM 合成时序虽然节流，
-            // 但每帧重建 GDI 资源会让 GPU compositor 反复等待资源重建）
-            EnsureBackingSurface();
-            var g = _backGraphics!;
-            g.Clear(Color.Transparent);
-
-            // MusicPlayer2：未锁定时画极淡底，保证透明像素也能接到鼠标
-            if (!_locked)
+            using var bmp = new Bitmap(_width, _height, PixelFormat.Format32bppArgb);
+            using (Graphics g = Graphics.FromImage(bmp))
             {
-                byte a = (byte)(_hover ? 70 : 1);
-                using var bg = new SolidBrush(Color.FromArgb(a, 255, 255, 255));
-                g.FillRectangle(bg, 0, 0, _width, _height);
+                g.SmoothingMode = SmoothingMode.AntiAlias;
+                g.TextRenderingHint = TextRenderingHint.AntiAliasGridFit;
+                g.Clear(Color.Transparent);
+
+                // MusicPlayer2：未锁定时画极淡底，保证透明像素也能接到鼠标
+                if (!_locked)
+                {
+                    byte a = (byte)(_hover ? 70 : 1);
+                    using var bg = new SolidBrush(Color.FromArgb(a, 255, 255, 255));
+                    g.FillRectangle(bg, 0, 0, _width, _height);
+                }
+
+                DrawLyrics(g);
+
+                // 悬停显示完整工具条；锁定后鼠标进入窗口只显示解锁按钮（可按设置关闭）
+                bool showToolbar = (!_locked && _hover)
+                    || (_locked && _mouseInWindow && _showUnlockWhenLocked);
+                if (showToolbar)
+                {
+                    DrawToolbar(g);
+                }
+                else if (_locked && _showUnlockWhenLocked)
+                {
+                    // 仍布局解锁按钮矩形，供定时器命中测试
+                    LayoutLockOnlyButton(assignRects: true);
+                }
+                else
+                {
+                    _btnRects = Array.Empty<Rectangle>();
+                }
             }
 
-            DrawLyrics(g);
-
-            // 悬停显示完整工具条；锁定后鼠标进入窗口只显示解锁按钮（可按设置关闭）
-            bool showToolbar = (!_locked && _hover)
-                || (_locked && _mouseInWindow && _showUnlockWhenLocked);
-            if (showToolbar)
-            {
-                DrawToolbar(g);
-            }
-            else if (_locked && _showUnlockWhenLocked)
-            {
-                // 仍布局解锁按钮矩形，供定时器命中测试
-                LayoutLockOnlyButton(assignRects: true);
-            }
-            else
-            {
-                _btnRects = Array.Empty<Rectangle>();
-            }
-
-            UpdateLayeredFromBacking();
+            UpdateLayeredFromBitmap(bmp);
         }
 
         private void DrawLyrics(Graphics g)
@@ -866,17 +816,12 @@ namespace CelesteMusicPlayer
             return path;
         }
 
-        private void UpdateLayeredFromBacking()
+        private void UpdateLayeredFromBitmap(Bitmap bmp)
         {
-            // backing HBITMAP 由 EnsureBackingSurface 维护，跨帧复用
-            if (_backHBitmap == IntPtr.Zero)
-            {
-                return;
-            }
-
             IntPtr screenDc = GetDC(IntPtr.Zero);
             IntPtr memDc = CreateCompatibleDC(screenDc);
-            IntPtr oldBitmap = SelectObject(memDc, _backHBitmap);
+            IntPtr hBitmap = bmp.GetHbitmap(Color.FromArgb(0));
+            IntPtr oldBitmap = SelectObject(memDc, hBitmap);
 
             var size = new SIZE { Cx = _width, Cy = _height };
             var pointSource = new POINT { X = 0, Y = 0 };
@@ -901,6 +846,7 @@ namespace CelesteMusicPlayer
                 UlwAlpha);
 
             SelectObject(memDc, oldBitmap);
+            DeleteObject(hBitmap);
             DeleteDC(memDc);
             ReleaseDC(IntPtr.Zero, screenDc);
         }
