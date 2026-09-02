@@ -38,6 +38,13 @@ namespace CelesteMusicPlayer
         /// <summary>右声道延迟（毫秒，0-10）。</summary>
         public double RightDelayMs { get; set; }
 
+        /// <summary>耳机 Crossfeed（声场交叉馈送）：把对侧声道经低通后混入本侧，模拟扬声器串扰，
+        /// 缓解耳机「头中定位」、让声场更自然开阔。属于声道平衡模块的子能力，需模块启用才生效。</summary>
+        public bool CrossfeedEnabled { get; set; }
+
+        /// <summary>Crossfeed 强度 0-100（%）。0 等同于关闭；内部映射到最高 70% 混音系数。</summary>
+        public int CrossfeedLevel { get; set; }
+
         public ChannelBalanceState Clone() => new()
         {
             Enabled = Enabled,
@@ -49,7 +56,9 @@ namespace CelesteMusicPlayer
             SwapChannels = SwapChannels,
             MonoMode = MonoMode,
             LeftDelayMs = LeftDelayMs,
-            RightDelayMs = RightDelayMs
+            RightDelayMs = RightDelayMs,
+            CrossfeedEnabled = CrossfeedEnabled,
+            CrossfeedLevel = CrossfeedLevel
         };
 
         public static ChannelBalanceState Default() => new() { MonoMode = "off" };
@@ -61,6 +70,7 @@ namespace CelesteMusicPlayer
             RightGainDb = Math.Clamp(RightGainDb, -12.0, 12.0);
             LeftDelayMs = Math.Clamp(LeftDelayMs, 0.0, 10.0);
             RightDelayMs = Math.Clamp(RightDelayMs, 0.0, 10.0);
+            CrossfeedLevel = Math.Clamp(CrossfeedLevel, 0, 100);
             if (MonoMode is not ("off" or "left" or "right" or "sum"))
             {
                 MonoMode = "off";

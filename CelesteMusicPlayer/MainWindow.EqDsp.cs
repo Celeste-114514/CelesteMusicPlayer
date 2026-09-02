@@ -955,6 +955,18 @@ namespace CelesteMusicPlayer
         }
 
 
+        private void AudioFxChannelCrossfeed_Toggled(object sender, RoutedEventArgs e)
+        {
+            if (!_audioFxLoading) ApplyDspToEngine();
+        }
+
+
+        private void AudioFxChannelCrossfeedSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (!_audioFxLoading) ApplyDspToEngine();
+        }
+
+
         private void AudioFxSafetyLimiter_Toggled(object sender, RoutedEventArgs e)
         {
             if (!_audioFxLoading) ApplyDspToEngine();
@@ -1007,7 +1019,8 @@ namespace CelesteMusicPlayer
 
             var ch = new ChannelBalanceState
             {
-                Enabled = AudioFxChannelToggle.IsOn,
+                // Crossfeed 是声道平衡模块的子能力，必须模块启用才生效；勾选 Crossfeed 时自动点亮模块。
+                Enabled = AudioFxChannelToggle.IsOn || AudioFxChannelCrossfeedToggle.IsOn,
                 Balance = AudioFxChannelBalanceSlider.Value,
                 LeftGainDb = AudioFxChannelLeftGainSlider.Value,
                 RightGainDb = AudioFxChannelRightGainSlider.Value,
@@ -1016,7 +1029,9 @@ namespace CelesteMusicPlayer
                 InvertRight = AudioFxChannelInvertRToggle.IsOn,
                 MonoMode = CurrentAudioFxMonoMode(),
                 LeftDelayMs = AudioFxChannelLeftDelaySlider.Value,
-                RightDelayMs = AudioFxChannelRightDelaySlider.Value
+                RightDelayMs = AudioFxChannelRightDelaySlider.Value,
+                CrossfeedEnabled = AudioFxChannelCrossfeedToggle.IsOn,
+                CrossfeedLevel = (int)Math.Round(AudioFxChannelCrossfeedSlider.Value)
             };
 
             var safety = new DspSafetyState

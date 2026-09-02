@@ -3406,7 +3406,7 @@
                                         </Grid.ColumnDefinitions>
                                         <StackPanel Spacing="2" VerticalAlignment="Center">
                                             <TextBlock Text="声道平衡" FontSize="15" FontWeight="SemiBold" />
-                                            <TextBlock Text="左右增益 / 平衡 / 反相 / 交换 / 单声道" FontSize="12" Opacity="0.6" />
+                                            <TextBlock Text="左右增益 / 平衡 / 反相 / 交换 / 单声道 / Crossfeed" FontSize="12" Opacity="0.6" />
                                         </StackPanel>
                                         <ToggleSwitch
                                             x:Name="AudioFxChannelToggle"
@@ -3472,6 +3472,17 @@
                                                 x:Name="AudioFxChannelRightDelaySlider"
                                                 Minimum="0" Maximum="10" StepFrequency="0.5" Value="0"
                                                 ValueChanged="AudioFxChannelSlider_ValueChanged" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="4" Grid.Column="0" Spacing="6">
+                                            <ToggleSwitch x:Name="AudioFxChannelCrossfeedToggle" Header="耳机 Crossfeed" OnContent="" OffContent="" Toggled="AudioFxChannelCrossfeed_Toggled" />
+                                            <TextBlock Text="把对侧声道低频经低通混入本侧，缓解耳机「头中定位」、声场更自然开阔" FontSize="11" Opacity="0.55" TextWrapping="Wrap" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Row="4" Grid.Column="1" Spacing="4">
+                                            <TextBlock Text="强度 (%)" FontSize="12" />
+                                            <Slider
+                                                x:Name="AudioFxChannelCrossfeedSlider"
+                                                Minimum="0" Maximum="100" StepFrequency="5" Value="40"
+                                                ValueChanged="AudioFxChannelCrossfeedSlider_ValueChanged" />
                                         </StackPanel>
                                     </Grid>
                                 </StackPanel>

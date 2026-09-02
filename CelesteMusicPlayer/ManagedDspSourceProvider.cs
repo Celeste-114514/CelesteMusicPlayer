@@ -31,6 +31,13 @@ namespace CelesteMusicPlayer
         private bool _chSwap, _chInvL, _chInvR, _chMono, _chMonoLeft, _chMonoRight;
         private double _gainL, _gainR;
 
+        // 耳机 Crossfeed（声场交叉馈送）：把对侧声道经一阶低通后混入本侧，模拟扬声器串扰，
+        // 缓解耳机「头中定位」、声场更自然开阔。低频串扰为主（一阶 LP ~200Hz 截止）。
+        private bool _xfActive;
+        private double _xfMix;       // 混音系数（0..0.7，由强度%映射）
+        private float _xfLpCoef;     // 一阶低通系数（按采样率换算）
+        private float _xfLpL, _xfLpR; // 低通状态（本侧信号经低通后喂给对侧）
+
         // 安全限幅
         private double _headroomDb;       // 负值预衰减余量
         private double _headroomGain;     // 当前平滑中的增益
@@ -299,6 +306,22 @@ namespace CelesteMusicPlayer
                 _delayPosR = 0;
             }
 
+            // 耳机 Crossfeed：强度% 映射到 0..0.7 混音系数；一阶低通时间常数 ~0.8ms（≈200Hz 截止），只串扰低频
+            _xfActive = state.CrossfeedEnabled && state.CrossfeedLevel > 0;
+            if (_xfActive)
+            {
+                _xfMix = Math.Clamp(state.CrossfeedLevel, 0, 100) / 100.0 * 0.7;
+                double sr2 = _format.SampleRate > 0 ? _format.SampleRate : 44100.0;
+                double tau = 0.0008;
+                _xfLpCoef = (float)(1.0 - Math.Exp(-1.0 / (sr2 * tau)));
+            }
+            else
+            {
+                _xfMix = 0;
+                _xfLpL = 0f;
+                _xfLpR = 0f;
+            }
+
             RefreshActive();
         }
 
@@ -505,6 +528,7 @@ namespace CelesteMusicPlayer
             bool delayActiveL = delayTargetL > 0.5 || _delayCurL > 0.5;
             bool delayActiveR = delayTargetR > 0.5 || _delayCurR > 0.5;
             bool stereo = _channels >= 2;
+            bool doXf = _xfActive;
             bool wantsClip = doHeadroom || doLimiter || doEq || doCh || _rgActive; // 只要有任何 DSP 即需 Clamp 保护
             float preampGain = (float)_preampGain;
             float volumeGain = _volumeGain;
@@ -620,6 +644,15 @@ namespace CelesteMusicPlayer
                     r = (float)(r * gainR);
                     if (chInvL) l = -l;
                     if (chInvR) r = -r;
+
+                    // 耳机 Crossfeed（Meier 式）：对侧信号经一阶低通后混入本侧，只串扰低频（缓解头中定位）
+                    if (doXf)
+                    {
+                        _xfLpR = _xfLpR + _xfLpCoef * (r - _xfLpR); // 右侧低通状态
+                        _xfLpL = _xfLpL + _xfLpCoef * (l - _xfLpL); // 左侧低通状态
+                        l = (float)(l + _xfMix * _xfLpR); // 右侧低频串入左
+                        r = (float)(r + _xfMix * _xfLpL); // 左侧低频串入右
+                    }
 
                     // 声道延迟差：左右各一环形缓冲，目标延迟逐帧 ±1 样本渐变（无爆音）
                     if (delayActiveL) l = ApplyDelay(l, _delayRingL, ref _delayPosL, ref _delayCurL, delayTargetL);
