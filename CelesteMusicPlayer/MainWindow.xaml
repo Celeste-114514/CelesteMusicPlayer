@@ -248,12 +248,10 @@
                 </Storyboard>
             </Grid.Resources>
             <Grid.ColumnDefinitions>
-                <!-- 音乐库分类导航 -->
+                <!-- 音乐库 -->
                 <ColumnDefinition x:Name="CategoryColumn" Width="156" MinWidth="148" MaxWidth="220" />
-                <!-- 歌曲列表占弹性剩余 -->
-                <ColumnDefinition x:Name="LibraryColumn" Width="*" MinWidth="320" />
-                <!-- 播放队列（固定右列） -->
-                <ColumnDefinition x:Name="QueueColumn" Width="320" MinWidth="240" MaxWidth="420" />
+                <!-- 播放列表占剩余全部 -->
+                <ColumnDefinition x:Name="PlaylistColumn" Width="*" MinWidth="320" />
             </Grid.ColumnDefinitions>
 
             <!-- 左：音乐库 + 播放列表入口（统一 Button 选中样式） -->
@@ -3934,101 +3932,6 @@
             </Border>
             </Grid>
         </Grid>
-
-        <!-- 播放队列（固定右列，所有分类下都显示，跟分类切换无关） -->
-        <Border
-            x:Name="QueuePanel"
-            Grid.Column="2"
-            Margin="8,0,0,0"
-            Background="Transparent"
-            BorderThickness="1,0,0,0"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            IsHitTestVisible="True">
-            <Grid RowSpacing="4" Margin="8,4,8,0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <Grid Grid.Row="0" ColumnSpacing="8">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <TextBlock
-                        Grid.Column="0"
-                        VerticalAlignment="Center"
-                        FontWeight="SemiBold"
-                        FontSize="13"
-                        Opacity="0.85"
-                        Text="播放队列" />
-                    <TextBlock
-                        x:Name="QueueCountText"
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        FontSize="11"
-                        Opacity="0.6"
-                        Text="0 首" />
-                </Grid>
-
-                <ListView
-                    x:Name="QueueListView"
-                    Grid.Row="1"
-                    Background="Transparent"
-                    SelectionMode="Single"
-                    SelectionChanged="QueueListView_SelectionChanged">
-                    <ListView.ItemContainerStyle>
-                        <Style TargetType="ListViewItem">
-                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                            <Setter Property="Padding" Value="4,2" />
-                            <Setter Property="MinHeight" Value="34" />
-                            <Setter Property="Margin" Value="0,1" />
-                            <Setter Property="CornerRadius" Value="6" />
-                        </Style>
-                    </ListView.ItemContainerStyle>
-                    <ListView.ItemTemplate>
-                        <DataTemplate x:DataType="local:PlaylistItem">
-                            <Grid ColumnSpacing="8" VerticalAlignment="Center">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="20" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <FontIcon
-                                    Grid.Column="0"
-                                    Glyph="&#xE189;"
-                                    FontSize="11"
-                                    VerticalAlignment="Center"
-                                    Opacity="0.45" />
-                                <TextBlock
-                                    Grid.Column="1"
-                                    FontSize="13"
-                                    VerticalAlignment="Center"
-                                    TextTrimming="CharacterEllipsis"
-                                    Text="{x:Bind DisplayTitle}" />
-                                <TextBlock
-                                    Grid.Column="2"
-                                    FontSize="11"
-                                    VerticalAlignment="Center"
-                                    Opacity="0.5"
-                                    Text="{x:Bind DurationText}" />
-                            </Grid>
-                        </DataTemplate>
-                    </ListView.ItemTemplate>
-                </ListView>
-
-                <TextBlock
-                    x:Name="QueueEmptyHint"
-                    Grid.Row="1"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center"
-                    FontSize="12"
-                    Opacity="0.5"
-                    Text="队列为空"
-                    IsHitTestVisible="False"
-                    Visibility="Visible" />
-            </Grid>
-        </Border>
 
         <!-- 底部播放控制 -->
         <Grid

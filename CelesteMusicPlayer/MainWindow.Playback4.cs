@@ -398,7 +398,7 @@ namespace CelesteMusicPlayer
                 return PlaylistHeaderGrid.ActualWidth;
             }
 
-            return LibraryColumn.ActualWidth > 0 ? Math.Max(0, LibraryColumn.ActualWidth - 24) : 0;
+            return PlaylistColumn.ActualWidth > 0 ? Math.Max(0, PlaylistColumn.ActualWidth - 24) : 0;
         }
 
 
