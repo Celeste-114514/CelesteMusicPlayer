@@ -1585,17 +1585,19 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void SyncLyricsToPosition(TimeSpan position, bool force = false)
+        private void SyncLyricsToPosition(TimeSpan position, bool force = false, bool applyOffset = true)
         {
             if (_lyricLines.Count == 0 || _lyricTextBlocks.Count == 0)
             {
                 return;
             }
 
+            TimeSpan adj = applyOffset ? OffsetLyricPosition(position) : position;
+
             int index = 0;
             for (int i = 0; i < _lyricLines.Count; i++)
             {
-                if (_lyricLines[i].Time <= position)
+                if (_lyricLines[i].Time <= adj)
                 {
                     // 跳过翻译行：高亮停在原文行（翻译行紧跟原文、同一时刻，若不清跳会让主题色落到译文上）
                     if (!_lyricLines[i].IsTranslation)
@@ -1678,6 +1680,14 @@ namespace CelesteMusicPlayer
             {
                 ScrollLyricToCenter(_lyricTextBlocks[index]);
             }
+        }
+
+
+        /// <summary>把播放位置按用户手动偏移换算成歌词匹配位置（正偏移=歌词延后显示）。</summary>
+        private static TimeSpan OffsetLyricPosition(TimeSpan position)
+        {
+            double ms = AppSettingsStore.Load()?.LyricOffsetMs ?? 0.0;
+            return position - TimeSpan.FromMilliseconds(ms);
         }
 
 
@@ -1768,8 +1778,8 @@ namespace CelesteMusicPlayer
                     _ = PreloadSeamlessNextAsync(_userPlaylist[_userPlaylistIndex]);
                 }
 
-                // 立即把高亮切到目标行
-                SyncLyricsToPosition(target, force: true);
+                // 立即把高亮切到目标行（点击跳转按原位置，不套用偏移）
+                SyncLyricsToPosition(target, force: true, applyOffset: false);
                 // 单击选中：无视用户滚动状态，把该行滚到中间
                 if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
                 {

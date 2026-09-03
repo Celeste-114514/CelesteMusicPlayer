@@ -54,6 +54,7 @@ namespace CelesteMusicPlayer
         private Color _unplayedColor = Color.FromArgb(255, 245, 245, 245);
         private int _currentIndex = -1;
         private TimeSpan _position;
+        private TimeSpan _lyricOffset;       // 歌词手动偏移（正=歌词延后）
         private bool _hover;
         private bool _mouseInWindow;
         private bool _locked;
@@ -185,6 +186,7 @@ namespace CelesteMusicPlayer
         private void ApplyPosition(TimeSpan position, bool forceRedraw)
         {
             _position = position;
+            TimeSpan adj = position - _lyricOffset;
             if (_lines.Count == 0)
             {
                 if (forceRedraw)
@@ -198,7 +200,7 @@ namespace CelesteMusicPlayer
             int index = 0;
             for (int i = 0; i < _lines.Count; i++)
             {
-                if (_lines[i].Time <= position)
+                if (_lines[i].Time <= adj)
                 {
                     index = i;
                 }
@@ -217,7 +219,7 @@ namespace CelesteMusicPlayer
                 ResizeForContent();
             }
 
-            double target = ComputeLineProgress(position, index);
+            double target = ComputeLineProgress(adj, index);
 
             // 按真实经过时间做指数平滑（帧率无关）：dt 越大追得越多，掉帧也不会甩尾。
             // 换行时直接就位，避免上一行的残留进度带过来。
