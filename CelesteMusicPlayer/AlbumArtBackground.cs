@@ -57,7 +57,7 @@ namespace CelesteMusicPlayer
             Bitmap current = (Bitmap)src.Clone();
             for (int p = 0; p < passes; p++)
             {
-                Bitmap next = new Bitmap(current.Width, current.Height, PixelFormat.Format32bppArgb);
+                Bitmap next = new(current.Width, current.Height, PixelFormat.Format32bppArgb);
                 BlurHorizontal(current, next, radius);
                 current.Dispose();
                 current = next;

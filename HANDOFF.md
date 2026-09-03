@@ -6,9 +6,10 @@
 - 技术栈：.NET 9 + WinUI 3（WindowsAppSDK 1.8）+ NAudio + ffmpeg；WinExe
 
 ## Git 状态
-- 最近提交：`8de65e0`（合并 origin/main `62d948d`：含 ②bit-perfect 指示灯 / ③ 设备DSP 配置档 / ReplayGain 响度扫描；并含本地改动：DWM 圆角 P/Invoke 修复 + 精简 ffmpeg 替换完整版 + ④ 智能播放列表已移除）
+- 最近发布：**v26.9.2**（tag `f2cbbe7`）。待发布 HEAD = `a5ccb24`（合并 origin/main README 更新 + 9 个功能/修复提交：DSDIFF DST 解码、耳机 Crossfeed、歌词偏移校准、桌面歌词改进、内存暴涨修复）。
 - 工作树：干净（均已提交）。接续会话建议先 `git fetch` 看远端是否有新提交，有则 `git merge origin/main` 再继续。
 - **同步策略（铁律）**：不 rebase（沙箱 shallow 克隆 rebase 易被 SIGTERM 打断损坏仓库）；远端有新版时 `git merge origin/main` 合并后直接 `git push`（fast-forward）。`git push` 前先 `git fetch` 确认。
+- ⚠️ **构建环境坑（2026-09 实测，关键）**：本机沙箱 bash **缺大半 Windows 环境变量**（`APPDATA` / `ProgramData` / `ProgramFiles(x86)` / `LOCALAPPDATA` 等）。直接跑 `dotnet` 会 `Value cannot be null. (Parameter 'path1')`（NuGet 启动即崩），`gh` 报"未登录"（其实已登录，只是找不到 `%APPDATA%` 下的配置）。**必须在跑 dotnet / gh 前补齐这些变量**。WorkBuddy 会话 `2026-09-02-14-12-25/` 下有 `winenv.py`（补齐环境后转发命令）与 `build_retry.py`（已内含环境修复 + XamlCompiler 随机崩溃自动重试），可直接复用；或手动 `export APPDATA='C:\Users\admin\AppData\Roaming' LOCALAPPDATA=... ProgramData=... ProgramFiles=... ProgramFiles(x86)=... USERPROFILE=C:\Users\admin HOME=C:\Users\admin` 后再跑。
 
 ## 编译命令
 - Release 自包含（可双击，exe 需同目录 ffmpeg.exe）：
@@ -25,7 +26,9 @@
 ## 当前功能/架构
 - **三模式统一输出**：共享=NAudio WasapiOut、独占=原生 WASAPI、ASIO；全部经 `ManagedDspSourceProvider`（EQ→声道平衡→限幅→ReplayGain）统一 DSP 链。共享折叠 `pcm_f32le` 到设备 MixFormat（全格式可播，含 16/44.1 ALAC、24/96 FLAC）。
 - **DSP 面板**（左侧「音效处理」→右侧面板）：ECHO 式曲线 EQ（专业曲线+简单模式+自动增益+用户自定义预设保存/加载/删除）、声道平衡、安全限幅（soft-knee 软削波+自动峰值余量）、ReplayGain 响度归一化（track/album+preamp+防削波+10ms 平滑）。独占/共享/ASIO 都实时生效、暂停后保留。
+  - **耳机 Crossfeed（声场交叉馈送）**（v26.9.3）：声道平衡模块新增子能力，缓解头中效应；已修复控件与原控件重叠的布局问题。
 - **歌词**：滚动歌词（手动滚动+单击跳进度+翻译行不高亮主题色）、桌面歌词。
+  - **歌词偏移校准**（v26.9.3）：LRC 与演唱不同步时手动微调偏移量（`_lyricOffset` 字段 + `OffsetLyricPosition` 方法），已补全接线。
 - **无边框 + 自绘系统按钮**：窗口常驻无边框（`MakeWindowBorderless` 去 WS_CAPTION/THICKFRAME/BORDER），右上角自绘 最小化/最大化还原/关闭；右上角还有 全屏（`MoveAndResize` 所在监视器+置顶隐藏任务栏，无缝）、刷新、选项。窗口默认 1400×800、最小 1400×800。
 - **分类**：新增「评分」（未评分+★1-★5，胶囊在搜索框右侧、排序按钮左侧，仅评分分类显示）；评分用 `TrackStatsStore.Rating`（0-5）。
 - **排序**：歌曲面板排序字段扩到 8 个（标题/艺术家/专辑/年份/时长/流派/音轨号/文件路径）+ 升降序；用户列表/收藏/最近/流派/年份复用该排序。
@@ -43,6 +46,8 @@
 5. **排序方案 A**：歌曲面板已扩字段；专辑墙/文件夹尚未接入多字段排序（如需继续）。
 7. ④ 智能播放列表（Auto-DJ 规则生成）曾实现后又**移除**（用户确认不需要），代码 `git revert 6250df5` 可恢复。
 6. 音频设置面板（AudioSettingsPanel）**已实现**（右上角音频图标 `E91F` 打开，滑出式面板含 输出模式/DSP 链/设备状态）。待做：对齐 ECHO 的 输出模式/音频链路/专业播放状态面板细节（用户曾点名的后续打磨）。
+8. **启动偶发 `ArgumentException` 被吞**（已知旧问题，非本版引入）：设备枚举完成后 `ShowErrorAsync` 弹出的错误窗被静默吞掉，用户端看不到；v26.9.2 冒烟日志中该异常反复出现，根因待查。
+9. **启动加载日志刷屏**（已知旧问题，非本版引入）：`Load 命中缓存 OutputMode` 在启动加载库时反复打印（设置缓存命中日志过频），非崩溃，仅日志噪音，待降频/收敛。
 
 ## 给接续会话的建议
 - 先 `git commit` 当前未提交改动存档，再继续。
