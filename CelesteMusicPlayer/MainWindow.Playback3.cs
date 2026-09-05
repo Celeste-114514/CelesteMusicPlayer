@@ -329,7 +329,7 @@ namespace CelesteMusicPlayer
                 _audioEngine?.SetVolume(e.NewValue / 100.0);
             }
 
-            if (!_applyingSettingsVolume)
+            if (!_applyingSettingsVolume && !IsHiFiModeSelected())
             {
                 ScheduleVolumeSave(e.NewValue);
             }

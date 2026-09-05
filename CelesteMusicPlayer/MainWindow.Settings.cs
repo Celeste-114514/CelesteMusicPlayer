@@ -68,8 +68,10 @@ namespace CelesteMusicPlayer
                     {
                         // HiFi 独占（bit-perfect）：数字音量恒 100%，设备主音量（DAC 级）随滑块可调。
                         // 独占：软件音量条固定 100%；实际音量由系统托盘(DAC 设备主音量)控制，bit-perfect 保真。
+                        // 注意：这里只把 UI 滑块显示成 100%，绝不能改 _volumeToSave——
+                        // 否则切到 HiFi 后退出，会把用户在共享模式下的真实音量偏好覆盖成 100，
+                        // 下次重启共享模式音量就"重置"了。
                         VolumeSlider.Value = VolumeSlider.Maximum;
-                        _volumeToSave = VolumeSlider.Maximum;
                         MediaPlayer? hifiPlayer = GetPlayer();
                         if (hifiPlayer != null)
                         {
