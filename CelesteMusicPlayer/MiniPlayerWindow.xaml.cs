@@ -227,18 +227,24 @@ namespace CelesteMusicPlayer
 
                 RefreshTransportState();
 
-                MediaPlayer? player = _owner.GetMediaPlayerPublic();
-                if (player?.Source != null)
-                {
-                    UpdateProgressUi(player.PlaybackSession.Position, player.PlaybackSession.NaturalDuration);
-                }
-                else if (_owner.IsEngineActiveNow)
+                // 引擎在放（HiFi/转码）时优先用引擎位置：MediaPlayer 可能还挂着上一首的 Source，
+                // 读它会拿到一个早已结束的会话（Position == NaturalDuration），
+                // 表现同样是"暂停后进度变成 3:19/3:19"。
+                if (_owner.IsEngineActiveNow)
                 {
                     UpdateProgressUi(_owner.EnginePositionValue, _owner.EngineDurationValue);
                 }
                 else
                 {
-                    UpdateProgressUi(TimeSpan.Zero, TimeSpan.Zero);
+                    MediaPlayer? player = _owner.GetMediaPlayerPublic();
+                    if (player?.Source != null)
+                    {
+                        UpdateProgressUi(player.PlaybackSession.Position, player.PlaybackSession.NaturalDuration);
+                    }
+                    else
+                    {
+                        UpdateProgressUi(TimeSpan.Zero, TimeSpan.Zero);
+                    }
                 }
 
                 SyncVolumeFromOwner();
@@ -291,15 +297,18 @@ namespace CelesteMusicPlayer
                         ProgressSlider.Maximum = 100;
                         ProgressSlider.Value = 0;
                         TotalTimeText.Text = "--:--";
+                        CurrentTimeText.Text = "--:--";
                     }
                     else
                     {
+                        // 当前时间按总时长夹取：源偶尔会报出比时长略大的位置，
+                        // 不夹就会显示成"3:19/3:19"这种一眼假的进度。
+                        double pos = Math.Clamp(position.TotalSeconds, 0, total);
                         ProgressSlider.Maximum = total;
-                        ProgressSlider.Value = Math.Clamp(position.TotalSeconds, 0, total);
+                        ProgressSlider.Value = pos;
                         TotalTimeText.Text = FormatTime(duration);
+                        CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(pos));
                     }
-
-                    CurrentTimeText.Text = FormatTime(position);
                 }
                 finally
                 {
@@ -563,21 +572,51 @@ namespace CelesteMusicPlayer
 
         private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
+            // 只有用户真的在拖（指针按下过）才认；程序性赋值一律忽略。
+            // 旧写法是在 ValueChanged 里直接 SeekPublic，一旦有程序性变更漏过
+            // _updatingProgress 标志（例如 Maximum 变化时值被夹取），就会把播放位置顶到
+            // 末尾 —— 表现就是"暂停后进度条变成 3:19/3:19"。这里改成和主窗口同一套把关方式。
             if (_updatingProgress)
             {
                 return;
             }
 
-            _userSeeking = true;
-            try
+            if (_userSeeking)
             {
-                _owner.SeekPublic(TimeSpan.FromSeconds(e.NewValue));
                 CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(e.NewValue));
             }
-            finally
+        }
+
+        private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            _userSeeking = true;
+        }
+
+        private void ProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            CommitMiniSeek();
+        }
+
+        private void ProgressSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+        {
+            CommitMiniSeek();
+        }
+
+        /// <summary>用户拖完进度条后才真正跳转（指针抬起/捕获丢失都算拖完）。</summary>
+        private void CommitMiniSeek()
+        {
+            if (!_userSeeking)
             {
-                _userSeeking = false;
+                return;
             }
+
+            _userSeeking = false;
+            Safe(() =>
+            {
+                double seconds = ProgressSlider.Value;
+                _owner.SeekPublic(TimeSpan.FromSeconds(seconds));
+                CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(seconds));
+            });
         }
 
         private void OnThemeColorChangedMini(Windows.UI.Color accent)

@@ -242,6 +242,9 @@
                                 Maximum="100"
                                 Value="0"
                                 VerticalAlignment="Center"
+                                PointerPressed="ProgressSlider_PointerPressed"
+                                PointerReleased="ProgressSlider_PointerReleased"
+                                PointerCaptureLost="ProgressSlider_PointerCaptureLost"
                                 ValueChanged="ProgressSlider_ValueChanged" />
                             <TextBlock
                                 x:Name="TotalTimeText"
