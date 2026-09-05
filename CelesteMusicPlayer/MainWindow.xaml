@@ -3883,11 +3883,15 @@
                                     TextAlignment="Center"
                                     TextWrapping="WrapWholeWords"
                                     Text="" />
+                                <!-- bit-perfect 徽章：播放详情页不需要（非直通时会撑成一长条），默认隐藏。
+                                     想看链路状态去「音频设置 → 音频链路」面板。 -->
                                 <Border
                                     x:Name="MainBitPerfectBadge"
                                     CornerRadius="10"
                                     Padding="8,3"
                                     VerticalAlignment="Center"
+                                    HorizontalAlignment="Center"
+                                    Visibility="Collapsed"
                                     Background="#222"
                                     ToolTipService.ToolTip="当前播放链路是否 bit-perfect 直通（与音频设置面板口径一致）">
                                     <TextBlock x:Name="MainBitPerfectText" Text="bit-perfect" FontSize="11" FontWeight="SemiBold" Foreground="White" />

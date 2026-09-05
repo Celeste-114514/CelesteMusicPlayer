@@ -2407,6 +2407,8 @@ namespace CelesteMusicPlayer
             try
             {
                 if (MainBitPerfectBadge == null || MainBitPerfectText == null) return;
+                // 播放详情页不再显示这条徽章（非直通时会撑成长条），隐藏后就不必再刷。
+                if (MainBitPerfectBadge.Visibility != Microsoft.UI.Xaml.Visibility.Visible) return;
                 bool pure = IsBitPerfectPure(out string activeText);
                 var green = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 46, 160, 67));
                 var amber = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 214, 148, 45));
