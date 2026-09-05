@@ -2231,16 +2231,40 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // 早期启动（如 FirstActivated 阶段）Content.XamlRoot 可能尚未建立，
+                // 此时弹 ContentDialog 会抛 "This element does not have a XamlRoot" 并被静默吞掉。
+                // 改为等待 XamlRoot 就绪再弹，最多约 2s；仍拿不到则把错误写入日志而非丢失。
+                XamlRoot? root = await GetXamlRootWhenReadyAsync(xamlRoot);
+                if (root == null)
+                {
+                    global::CelesteMusicPlayer.StartupLog.Write("ShowErrorAsync: XamlRoot 不可用，错误未弹出 title=" + title + " msg=" + message);
+                    return;
+                }
                 ContentDialog dialog = new()
                 {
                     Title = title,
                     Content = message,
                     CloseButtonText = "确定",
-                    XamlRoot = xamlRoot ?? Content.XamlRoot
+                    XamlRoot = root
                 };
                 await dialog.ShowAsync();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+        }
+
+        private System.Threading.Tasks.Task<XamlRoot?> GetXamlRootWhenReadyAsync(XamlRoot? preferred)
+        {
+            var tcs = new System.Threading.Tasks.TaskCompletionSource<XamlRoot?>();
+            int tries = 0;
+            void Poll()
+            {
+                XamlRoot? r = preferred ?? Content?.XamlRoot;
+                if (r != null) { tcs.TrySetResult(r); return; }
+                if (++tries > 40) { tcs.TrySetResult(null); return; } // 约 2s 上限，避免无限等待
+                DispatcherQueue?.TryEnqueue(Poll);
+            }
+            DispatcherQueue?.TryEnqueue(Poll);
+            return tcs.Task;
         }
     }
 }

@@ -316,9 +316,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             {
                 if (_cache != null)
                 {
-                    // 注意：之前这里 new StackTrace() 抓取调用栈用于调试，但它是启动期高频调用
-                    // （每首歌提取封面都会触发一次 Load），分配+栈遍历开销不小。已移除，只保留轻量日志。
-                    StartupLog.Write("Load 命中缓存 OutputMode=" + (_cache?.OutputMode ?? "null"));
+                    // 命中缓存：高频路径（启动期每帧/每首歌都可能触发），不再逐次写日志，避免刷屏。
                     return Clone(_cache);
                 }
 
