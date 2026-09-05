@@ -156,6 +156,25 @@ namespace CelesteMusicPlayer
                         TaskbarIconFactory.IconSet icons =
                             await TaskbarIconFactory.CreateAsync(host, WhiteColor, RedHeartColor).ConfigureAwait(true);
 
+                        // 矢量路径失败时（例如 RenderTargetBitmap 在隐藏宿主上渲染出空位图），
+                        // 回退到系统字体字形 + GDI+ GetHicon()：掩码由 GDI 依 alpha 自动生成，
+                        // 保证任务栏按钮至少有正确图标，而不是 4 个黑方块。
+                        if (!icons.AllValid)
+                        {
+                            StartupLog.Write("[thumb] 矢量图标未全部渲染成功，回退到字体字形路径");
+                            TaskbarIconFactory.IconSet fallback =
+                                await CreateFontIconFallbackAsync().ConfigureAwait(true);
+                            if (fallback.AllValid)
+                            {
+                                icons = fallback;
+                                StartupLog.Write("[thumb] 字体字形回退成功");
+                            }
+                            else
+                            {
+                                StartupLog.Write("[thumb] 字体字形回退也失败，等待下轮重试");
+                            }
+                        }
+
                         _hPrev = icons.Prev;
                         _hPlay = icons.Play;
                         _hPause = icons.Pause;
@@ -212,6 +231,39 @@ namespace CelesteMusicPlayer
             finally
             {
                 _pumpGate.Release();
+            }
+        }
+
+        /// <summary>
+        /// 兜底图标：系统字体字形（Segoe Fluent Icons）经 MainWindow.RenderFontIconHiconAsync
+        /// 渲染。该路径用 GDI+ Bitmap.GetHicon()，掩码由 GDI 依 alpha 自动生成，不会有黑块；
+        /// 缺点是描边字形（如空心心 EB51）笔画粗细不可控、缩到 16px 偏细。
+        /// 因此只在矢量路径失败时启用，保证任务栏按钮始终有正确图标。
+        /// </summary>
+        private async System.Threading.Tasks.Task<TaskbarIconFactory.IconSet> CreateFontIconFallbackAsync()
+        {
+            const double fontSize = 20.0;
+            return new TaskbarIconFactory.IconSet
+            {
+                Prev = await RenderGlyphHiconAsync("\uE892", fontSize, WhiteColor),
+                Play = await RenderGlyphHiconAsync("\uE768", fontSize, WhiteColor),
+                Pause = await RenderGlyphHiconAsync("\uE769", fontSize, WhiteColor),
+                Next = await RenderGlyphHiconAsync("\uE893", fontSize, WhiteColor),
+                HeartEmpty = await RenderGlyphHiconAsync("\uEB51", fontSize, RedHeartColor),
+                HeartFilled = await RenderGlyphHiconAsync("\uEB52", fontSize, RedHeartColor),
+            };
+        }
+
+        private async System.Threading.Tasks.Task<IntPtr> RenderGlyphHiconAsync(string glyph, double fontSize, Windows.UI.Color color)
+        {
+            try
+            {
+                return await _owner.RenderFontIconHiconAsync(glyph, fontSize, color);
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("TaskbarThumbnailButtons.RenderGlyphHiconAsync", caught);
+                return IntPtr.Zero;
             }
         }
 

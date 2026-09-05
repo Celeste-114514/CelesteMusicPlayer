@@ -73,6 +73,13 @@ namespace CelesteMusicPlayer
         /// <summary>超采样倍率：先大后小，抗锯齿质量与直接小尺寸渲染不可同日而语。</summary>
         private const int Supersample = 6;
 
+        /// <summary>
+        /// 掩码判定阈值：alpha 低于此值视为"透明"，会在 1bpp 掩码里被置位屏蔽。
+        /// 掩码必须真实反映 alpha——全 0 掩码会让透明像素在部分渲染路径下
+        /// 被当成不透明黑色画出来（任务栏按钮显示成黑方块）。
+        /// </summary>
+        private const byte MaskOpaqueAlpha = 8;
+
         // ------------------------------------------------------------------ 对外入口
 
         /// <summary>
@@ -239,6 +246,23 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 判断位图是否"几乎全透明"（即没画出任何东西）。
+        /// RenderTargetBitmap 在宿主尚未完成布局 / 不可渲染时会给出全 0 像素，
+        /// 这种位图做成 HICON 就是纯黑方块，必须拦下来。
+        /// </summary>
+        private static bool IsBlank(byte[] px)
+        {
+            for (int i = 3; i < px.Length; i += 4)
+            {
+                if (px[i] > MaskOpaqueAlpha)
+                {
+                    return false;
+                }
+            }
+            return true;
+        }
+
         /// <summary>由若干闭合多边形构造 PathGeometry。</summary>
         private static PathGeometry Poly(params Point[][] rings)
         {
@@ -333,6 +357,16 @@ namespace CelesteMusicPlayer
                 // RenderTargetBitmap 的 alpha 语义（预乘/非预乘）随版本与渲染路径有差异，
                 // 这里用"是否存在通道值 > alpha"来判定：预乘格式下通道值不可能超过 alpha。
                 EnsurePremultiplied(bgra);
+
+                // 渲染兜底：整张位图几乎全透明 = RenderTargetBitmap 没真正画出图形
+                // （宿主 Canvas 尚未完成布局/不可渲染时会发生）。这时硬造 HICON 只会得到
+                // 一个纯黑方块，正是「任务栏按钮变成四个小黑框」的现象。这里直接判定失败，
+                // 交由上层回退到字体字形路径，避免把无效图标交给 explorer。
+                if (IsBlank(bgra))
+                {
+                    StartupLog.Write("[thumb] 渲染结果为全透明，判定渲染失败（不生成 HICON 以免显示黑块）");
+                    return IntPtr.Zero;
+                }
 
                 byte[] px = (srcW == outSize && srcH == outSize)
                     ? bgra
@@ -454,9 +488,30 @@ namespace CelesteMusicPlayer
                 Buffer.BlockCopy(premul, y * stride, colorBits, (size - 1 - y) * stride, stride);
             }
 
-            // 1bpp 掩码，每行按 4 字节对齐，全 0 = 不屏蔽任何像素
+            // 1bpp 掩码（bottom-up，每行按 4 字节对齐）：
+            // bit=1 = 屏蔽该像素（透明），bit=0 = 显示颜色位图。
+            //
+            // **绝不能全 0**：全 0 掩码等于告诉系统"每个像素都不透明地画出来"，
+            // 于是图标里 RGB=0 的透明区域被当成不透明黑像素绘制，任务栏 4 个按钮
+            // 就成了 4 个小黑框。旧版走 GDI+ Bitmap.GetHicon() 时掩码由 GDI 依 alpha
+            // 自动生成所以没问题，这里手动构造 DIB 就必须自己按 alpha 置位。
             int maskStride = ((size + 31) / 32) * 4;
             var maskBits = new byte[maskStride * size];
+            for (int y = 0; y < size; y++)
+            {
+                int srcRow = (size - 1 - y) * size;   // 源 px 是 top-down，掩码是 bottom-up
+                int dstRow = y * maskStride;
+                for (int x = 0; x < size; x++)
+                {
+                    byte a = premul[(srcRow + x) * 4 + 3];
+                    if (a >= MaskOpaqueAlpha)
+                    {
+                        continue;                      // 不透明 → 掩码位保持 0（正常绘制）
+                    }
+                    // 透明 → 掩码位置 1（屏蔽，该像素不被绘制）
+                    maskBits[dstRow + (x >> 3)] |= (byte)(0x80 >> (x & 7));
+                }
+            }
 
             GCHandle colorHandle = GCHandle.Alloc(colorBits, GCHandleType.Pinned);
             GCHandle maskHandle = GCHandle.Alloc(maskBits, GCHandleType.Pinned);
