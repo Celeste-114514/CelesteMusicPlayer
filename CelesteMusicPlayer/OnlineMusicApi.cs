@@ -472,6 +472,9 @@ namespace CelesteMusicPlayer
             return source switch
             {
                 "QQ" => await GetQqLyricAsync(song.SongId, includeTranslation, cancellationToken).ConfigureAwait(false),
+                // 酷狗有独立的歌词接口，必须走自己的实现：它的 SongId 是 hash，
+                // 若误落到下面的网易云分支会被 long.TryParse 判为非法而永远拿不到歌词。
+                "Kugou" => await GetKugouLyricAsync(song.Name, song.SongId, cancellationToken).ConfigureAwait(false),
                 "MusicBrainz" or "iTunes" => string.Empty,
                 _ => await GetNetEaseLyricAsync(song.SongId, includeTranslation, cancellationToken).ConfigureAwait(false)
             };
@@ -705,7 +708,9 @@ namespace CelesteMusicPlayer
                     return null;
                 }
 
-                OnlineSongResult best = hits[0];
+                // 不能直接取 hits[0]：搜索接口按热度/相关度排序，第一条常常是翻唱、
+                // 同名不同歌手的另一首歌。必须按标题/歌手打分挑最贴近本地标签的那个。
+                OnlineSongResult best = PickBestMatch(hits, title, artist);
                 string lyric = await GetLyricAsync(
                     source,
                     best,
@@ -736,6 +741,107 @@ namespace CelesteMusicPlayer
             {
                 return null;
             }
+        }
+
+        /// <summary>
+        /// 从搜索结果里挑最贴近本地曲目的那一条。
+        /// 搜索接口按热度/相关度排序，第一条常常是翻唱、现场版或同名不同歌手的另一首歌，
+        /// 直接取 hits[0] 就会下到别人的歌词。这里按标题、歌手加权打分挑最像的；
+        /// 全都对不上时靠位置分退回第一条，不会比原来的行为更差。
+        /// </summary>
+        private static OnlineSongResult PickBestMatch(
+            IReadOnlyList<OnlineSongResult> hits,
+            string title,
+            string artist)
+        {
+            if (hits == null || hits.Count == 0)
+            {
+                return null!;
+            }
+
+            if (hits.Count == 1)
+            {
+                return hits[0];
+            }
+
+            string wantTitle = NormalizeForMatch(title);
+            string wantArtist = NormalizeForMatch(artist);
+
+            int bestScore = int.MinValue;
+            OnlineSongResult best = hits[0];
+
+            for (int i = 0; i < hits.Count; i++)
+            {
+                OnlineSongResult h = hits[i];
+                string gotTitle = NormalizeForMatch(h.Name);
+                string gotArtist = NormalizeForMatch(h.Artist);
+
+                int score = 0;
+
+                // 标题：完全一致最高；其次互相包含，用来容纳「歌名」vs「歌名 (Live)」这类差异
+                if (wantTitle.Length > 0 && gotTitle.Length > 0)
+                {
+                    if (string.Equals(wantTitle, gotTitle, StringComparison.Ordinal))
+                    {
+                        score += 100;
+                    }
+                    else if (gotTitle.Contains(wantTitle, StringComparison.Ordinal)
+                             || wantTitle.Contains(gotTitle, StringComparison.Ordinal))
+                    {
+                        score += 55;
+                    }
+                }
+
+                // 歌手：只在本地有歌手标签时参与，避免缺标签时误伤
+                if (wantArtist.Length > 0 && gotArtist.Length > 0)
+                {
+                    if (string.Equals(wantArtist, gotArtist, StringComparison.Ordinal))
+                    {
+                        score += 60;
+                    }
+                    else if (gotArtist.Contains(wantArtist, StringComparison.Ordinal)
+                             || wantArtist.Contains(gotArtist, StringComparison.Ordinal))
+                    {
+                        score += 30;
+                    }
+                }
+
+                // 搜索结果本身已按相关度排序，给靠前的一点位置分用于打破平局
+                score += Math.Max(0, 10 - i);
+
+                if (score > bestScore)
+                {
+                    bestScore = score;
+                    best = h;
+                }
+            }
+
+            return best;
+        }
+
+        /// <summary>歌词/曲目比对用的归一化：去空白、全角转半角、统一小写。</summary>
+        private static string NormalizeForMatch(string? s)
+        {
+            if (string.IsNullOrWhiteSpace(s))
+            {
+                return string.Empty;
+            }
+
+            char[] buf = new char[s.Length];
+            int n = 0;
+            foreach (char c in s)
+            {
+                if (char.IsWhiteSpace(c))
+                {
+                    continue;
+                }
+
+                // 全角 ASCII 区间 → 半角
+                char v = (c >= '！' && c <= '～') ? (char)(c - 0xFEE0) : c;
+                buf[n++] = char.ToLowerInvariant(v);
+            }
+
+            return new string(buf, 0, n);
         }
 
         /// <summary>按设置决定歌词保存位置；返回 null 表示不保存（LyricSavePolicy=None 或未开启保存到歌曲目录）。</summary>

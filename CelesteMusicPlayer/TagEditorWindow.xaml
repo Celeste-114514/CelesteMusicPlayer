@@ -226,6 +226,14 @@
                             <TextBox x:Name="OnlineYearBox" Header="年份" Grid.Column="0" />
                             <TextBox x:Name="OnlineGenreBox" Header="流派" Grid.Column="1" />
                         </Grid>
+                        <TextBox
+                            x:Name="OnlineLyricsBox"
+                            Header="歌词（在线预览，只读）"
+                            AcceptsReturn="True"
+                            TextWrapping="Wrap"
+                            Height="180"
+                            IsReadOnly="True"
+                            FontSize="12" />
                         <Button
                             x:Name="ApplyOnlineButton"
                             Content="一键应用到当前歌曲"

@@ -25,6 +25,11 @@ namespace CelesteMusicPlayer
         private readonly string _singlePath;
         private byte[]? _coverBytes;
 
+        // 在线歌词预览：切歌时自增，用于丢弃已过期的旧请求结果，避免串歌。
+        private int _onlineLyricToken;
+        // 拉到的真实在线歌词（null 表示尚无有效歌词，占位/失败都算无效）。
+        private string? _onlineLyricText;
+
         public static event Action<string>? TagsSaved;
 
         [System.Runtime.InteropServices.DllImport("user32.dll")]
@@ -432,6 +437,7 @@ namespace CelesteMusicPlayer
             TabCurrentRadio.IsChecked = false;
             TabOnlineRadio.IsChecked = true;
             FillOnlineTab(it);
+            await LoadOnlineLyricAsync(it).ConfigureAwait(true);
 
             // 在线小封面
             if (!string.IsNullOrWhiteSpace(it.CoverUrl))
@@ -475,6 +481,56 @@ namespace CelesteMusicPlayer
             OnlineApplyStatus.Text = string.Empty;
         }
 
+        /// <summary>异步加载在线歌词预览。用自增 token 丢弃过期结果，避免快速换歌时串歌词。</summary>
+        private async Task LoadOnlineLyricAsync(TagEditorSearchItem it)
+        {
+            int token = ++_onlineLyricToken;
+            _onlineLyricText = null;
+
+            OnlineSongResult? raw = it?.Raw;
+            string source = raw?.Source ?? string.Empty;
+
+            // Apple Music / MusicBrainz 不提供歌词接口，直接给出说明
+            if (source is "iTunes" or "MusicBrainz")
+            {
+                OnlineLyricsBox.Text = "（该平台不提供歌词，请换用网易云 / QQ 搜索）";
+                return;
+            }
+
+            if (raw == null || string.IsNullOrWhiteSpace(raw.SongId))
+            {
+                OnlineLyricsBox.Text = "（该结果缺少歌曲 ID，无法获取歌词）";
+                return;
+            }
+
+            OnlineLyricsBox.Text = "歌词加载中…";
+            try
+            {
+                string lyric = await OnlineMusicApi
+                    .GetLyricAsync(source, raw, includeTranslation: true)
+                    .ConfigureAwait(true);
+
+                // 期间用户又切了别的歌，丢弃这次的结果
+                if (token != _onlineLyricToken)
+                {
+                    return;
+                }
+
+                _onlineLyricText = string.IsNullOrWhiteSpace(lyric) ? null : lyric.Trim();
+                OnlineLyricsBox.Text = _onlineLyricText ?? "（没有找到歌词）";
+            }
+            catch (Exception caught)
+            {
+                if (token != _onlineLyricToken)
+                {
+                    return;
+                }
+
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorWindow.xaml.cs", caught);
+                OnlineLyricsBox.Text = "（歌词加载失败）";
+            }
+        }
+
         private void TagTab_Checked(object sender, RoutedEventArgs e)
         {
             if (TabCurrentRadio == null || CurrentTabPanel == null || OnlineTabPanel == null)
@@ -508,7 +564,10 @@ namespace CelesteMusicPlayer
                 Album = OnlineAlbumBox.Text.Trim(),
                 AlbumArtist = OnlineArtistBox.Text.Trim(),
                 Comment = CommentBox.Text.Trim(),
-                Lyrics = LyricsBox.Text.Trim()
+                // 拉到在线歌词就写入（这是"一键应用在线结果"的本意）；没拉到则保留本地已有歌词，避免误清空
+                Lyrics = !string.IsNullOrWhiteSpace(_onlineLyricText)
+                    ? _onlineLyricText
+                    : LyricsBox.Text.Trim()
             };
             uint.TryParse(OnlineYearBox.Text.Trim(), out uint year);
             model.Year = year;
@@ -534,7 +593,11 @@ namespace CelesteMusicPlayer
                 ApplyCoverToImage(_coverBytes);
             }
 
-            OnlineApplyStatus.Text = "已应用：标签" + (coverOk ? " + 封面" : "（封面未嵌入）") + " 已更新到当前歌曲";
+            bool lyricOk = !string.IsNullOrWhiteSpace(_onlineLyricText);
+            OnlineApplyStatus.Text = "已应用：标签"
+                + (lyricOk ? " + 歌词" : "（无在线歌词，歌词未改动）")
+                + (coverOk ? " + 封面" : "（封面未嵌入）")
+                + " 已更新到当前歌曲";
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)
