@@ -138,7 +138,7 @@
                 <!-- 选项卡 -->
                 <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,0,0,8">
                     <RadioButton x:Name="TabCurrentRadio" GroupName="TagTabs" Content="当前音频标签" Checked="TagTab_Checked" />
-                    <RadioButton x:Name="TabOnlineRadio" GroupName="TagTabs" Content="在线音频标签" IsEnabled="False" />
+                    <RadioButton x:Name="TabOnlineRadio" GroupName="TagTabs" Content="在线音频标签" IsEnabled="False" Checked="TagTab_Checked" />
                 </StackPanel>
 
                 <!-- Tab1：当前音频标签 -->

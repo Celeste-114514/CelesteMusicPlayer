@@ -471,7 +471,7 @@ namespace CelesteMusicPlayer
         {
             return source switch
             {
-                "QQ" => await GetQqLyricAsync(song.SongId, cancellationToken).ConfigureAwait(false),
+                "QQ" => await GetQqLyricAsync(song.SongId, includeTranslation, cancellationToken).ConfigureAwait(false),
                 "MusicBrainz" or "iTunes" => string.Empty,
                 _ => await GetNetEaseLyricAsync(song.SongId, includeTranslation, cancellationToken).ConfigureAwait(false)
             };
@@ -531,7 +531,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private static async Task<string> GetQqLyricAsync(string songmid, CancellationToken cancellationToken)
+        private static async Task<string> GetQqLyricAsync(string songmid, bool includeTranslation, CancellationToken cancellationToken)
         {
             if (string.IsNullOrWhiteSpace(songmid))
             {
@@ -565,15 +565,46 @@ namespace CelesteMusicPlayer
                 }
 
                 using JsonDocument doc = JsonDocument.Parse(json);
+                string lrc = string.Empty;
+                string tlyric = string.Empty;
+
                 if (doc.RootElement.TryGetProperty("lyric", out JsonElement lyricEl))
                 {
                     string? b64 = lyricEl.GetString();
                     if (!string.IsNullOrWhiteSpace(b64))
                     {
                         byte[] bytes = Convert.FromBase64String(b64);
-                        return Encoding.UTF8.GetString(bytes);
+                        lrc = Encoding.UTF8.GetString(bytes);
                     }
                 }
+
+                // QQ 翻译歌词在 trans 字段（同样 base64）。之前漏抓，导致 QQ 源的双语歌词只有原文。
+                if (includeTranslation
+                    && doc.RootElement.TryGetProperty("trans", out JsonElement transEl))
+                {
+                    string? tb64 = transEl.GetString();
+                    if (!string.IsNullOrWhiteSpace(tb64))
+                    {
+                        try
+                        {
+                            byte[] tbytes = Convert.FromBase64String(tb64);
+                            tlyric = Encoding.UTF8.GetString(tbytes);
+                        }
+                        catch (Exception) { tlyric = string.Empty; }
+                    }
+                }
+
+                if (string.IsNullOrWhiteSpace(lrc))
+                {
+                    return string.IsNullOrWhiteSpace(tlyric) ? string.Empty : tlyric;
+                }
+
+                if (string.IsNullOrWhiteSpace(tlyric))
+                {
+                    return lrc;
+                }
+
+                return lrc.TrimEnd() + Environment.NewLine + tlyric.TrimStart();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
 
