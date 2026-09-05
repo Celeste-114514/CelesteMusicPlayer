@@ -635,6 +635,7 @@ namespace CelesteMusicPlayer
                     PlaylistView.ItemsSource = _userPlaylist;
                     // 播放列表默认不排序：保持添加顺序（后添加批次在前，批内相对顺序不变）
                     RenumberCollection(_userPlaylist);
+                    ScrollUserPlaylistToPlaying();
                     break;
 
                 case "Albums":
@@ -829,6 +830,37 @@ namespace CelesteMusicPlayer
 
             UpdateUserPlaylistActionBarVisibility();
             UpdateLibrarySearchUi();
+        }
+
+        /// <summary>
+        /// 切到「播放队列」页面时，把列表滚到正在播放的那首歌并高亮它。
+        /// ItemsSource 刚赋值时 ListView 还没完成布局，ScrollIntoView 会静默失效，
+        /// 所以用 DispatcherQueue 延迟到布局完成后执行；无正在播放的曲目则不滚动。
+        /// </summary>
+        private void ScrollUserPlaylistToPlaying()
+        {
+            if (PlaylistView == null || _userPlaylist == null || _userPlaylist.Count == 0)
+            {
+                return;
+            }
+
+            int index = _userPlaylistIndex;
+            if (index < 0 || index >= _userPlaylist.Count)
+            {
+                return;
+            }
+
+            PlaylistItem playing = _userPlaylist[index];
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                PlaylistView.SelectedIndex = index;
+                PlaylistView.ScrollIntoView(playing);
+            });
         }
 
 
