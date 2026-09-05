@@ -1087,6 +1087,10 @@ namespace CelesteMusicPlayer
             };
             flyout.Items.Add(editTag);
 
+            var openInExplorer = new MenuFlyoutItem { Text = "在资源管理器中打开该歌曲" };
+            openInExplorer.Click += (_, _) => OpenFileLocationInExplorer(_nowPlayingPath);
+            flyout.Items.Add(openInExplorer);
+
             flyout.Items.Add(new MenuFlyoutSeparator());
 
 
