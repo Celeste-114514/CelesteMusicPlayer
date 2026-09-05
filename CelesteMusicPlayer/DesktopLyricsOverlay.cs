@@ -660,49 +660,55 @@ namespace CelesteMusicPlayer
 
             if (!string.IsNullOrEmpty(prev))
             {
-                SizeF sz = MeasurePathSize(prev, family, sideSize, FontStyle.Regular);
-                float x = XFor(sideSize, sz.Width, centerX);
+                RectangleF b = MeasurePathBounds(prev, family, sideSize, FontStyle.Regular);
+                float x = XFor(b, centerX);
                 DrawTextStyled(g, prev, family, sideSize, FontStyle.Regular, Color.FromArgb(160, _unplayedColor), x, y);
-                y += sz.Height + 6 + _lineSpacing;
+                y += b.Y + b.Height + 6 + _lineSpacing;
             }
 
             if (!string.IsNullOrEmpty(cur))
             {
-                SizeF sz = MeasurePathSize(cur, family, _fontSize, FontStyle.Bold);
-                float x = XFor(_fontSize, sz.Width, centerX);
-                DrawShadow(g, cur, family, _fontSize, x, y);
+                RectangleF b = MeasurePathBounds(cur, family, _fontSize, FontStyle.Bold);
+                float x = XFor(b, centerX);
+                // 当前行文字是 Bold，阴影必须用同一 style，否则字形宽度不同会导致居中错位。
+                DrawShadow(g, cur, family, _fontSize, FontStyle.Bold, x, y);
                 if (_karaokeStyle && curLine != null)
                 {
-                    DrawKaraokeLine(g, curLine, family, x, y, sz);
+                    DrawKaraokeLine(g, curLine, family, x, y, b);
                 }
                 else
                 {
                     DrawTextStyled(g, cur, family, _fontSize, FontStyle.Bold, _playedColor, x, y, shadow: false);
                 }
 
-                y += sz.Height + 6 + _lineSpacing;
+                y += b.Y + b.Height + 6 + _lineSpacing;
             }
 
             if (!string.IsNullOrEmpty(next))
             {
-                SizeF sz = MeasurePathSize(next, family, sideSize, FontStyle.Regular);
-                float x = XFor(sideSize, sz.Width, centerX);
+                RectangleF b = MeasurePathBounds(next, family, sideSize, FontStyle.Regular);
+                float x = XFor(b, centerX);
                 DrawTextStyled(g, next, family, sideSize, FontStyle.Regular, Color.FromArgb(160, _unplayedColor), x, y);
             }
         }
 
-        private float XFor(float size, float textWidth, float centerX)
+        /// <summary>
+        /// 求 AddString 的原点 X。字形左边缘实际落在 x+bounds.X，
+        /// 所以先减掉 bounds.X，保证对齐的是字形本身而不是原点。
+        /// </summary>
+        private float XFor(RectangleF bounds, float centerX)
         {
+            float textWidth = bounds.Width;
             return _align switch
             {
-                "Left" => 24f,
-                "Right" => Math.Max(24f, _width - 24f - textWidth),
-                _ => centerX - textWidth / 2f
+                "Left" => 24f - bounds.X,
+                "Right" => Math.Max(24f, _width - 24f - textWidth) - bounds.X,
+                _ => centerX - textWidth / 2f - bounds.X
             };
         }
 
-        /// <summary>阴影：强度 0=关；1/2/3 控制不透明度与偏移。</summary>
-        private void DrawShadow(Graphics g, string text, FontFamily family, float size, float x, float y)
+        /// <summary>阴影：强度 0=关；1/2/3 控制不透明度与偏移。style 必须与文字一致，否则字形轮廓不同会造成错位。</summary>
+        private void DrawShadow(Graphics g, string text, FontFamily family, float size, FontStyle style, float x, float y)
         {
             if (_shadowStrength <= 0)
             {
@@ -723,7 +729,7 @@ namespace CelesteMusicPlayer
 
             float off = _shadowStrength >= 3 ? 2.5f : 1.5f;
             using var sb = new SolidBrush(Color.FromArgb((byte)a, 0, 0, 0));
-            DrawTextPath(g, text, family, size, FontStyle.Bold, sb, x + off, y + off);
+            DrawTextPath(g, text, family, size, style, sb, x + off, y + off);
         }
 
         /// <summary>画一行文字：可选阴影（底层）+ 可选描边（上层）+ 填充。</summary>
@@ -731,7 +737,7 @@ namespace CelesteMusicPlayer
         {
             if (shadow)
             {
-                DrawShadow(g, text, family, size, x, y);
+                DrawShadow(g, text, family, size, style, x, y);
             }
 
             if (_outlineWidth > 0.05f)
@@ -747,9 +753,15 @@ namespace CelesteMusicPlayer
             DrawTextPath(g, text, family, size, style, fb, x, y);
         }
 
-        private void DrawKaraokeLine(Graphics g, LyricLine line, FontFamily family, float x, float y, SizeF size)
+        private void DrawKaraokeLine(Graphics g, LyricLine line, FontFamily family, float x, float y, RectangleF bounds)
         {
             string text = line.Text;
+
+            // AddString 的 bounds 起点不是 (0,0)：字形实际落在 [x+bounds.X, y+bounds.Y]，
+            // 且这个偏移随字体/字号/首字符而变。高亮裁剪区必须按字形的真实边缘算，
+            // 否则裁剪框整体偏移 bounds.X/bounds.Y，表现为"高亮或底色和字不重合"。
+            float glyphX = x + bounds.X;
+            float glyphY = y + bounds.Y;
 
             using var unplayed = new SolidBrush(_unplayedColor);
             using var played = new SolidBrush(_playedColor);
@@ -757,20 +769,20 @@ namespace CelesteMusicPlayer
             // 只画阴影会让整行"消失"。
             DrawTextPath(g, text, family, _fontSize, FontStyle.Bold, unplayed, x, y);
 
-            float highlightW = ComputeHighlightWidth(line, text, family, size);
+            float highlightW = ComputeHighlightWidth(line, text, family, bounds.Size);
             if (highlightW <= 0.3f)
             {
                 return;
             }
 
-            highlightW = Math.Min(highlightW, size.Width);
+            highlightW = Math.Min(highlightW, bounds.Width);
 
             // 前沿羽化带：宽度随字号缩放；起步阶段让它退化成"整块都是渐变"，
             // 这样第一个字刚开始时是淡入，而不是突然冒出一小块实心色块。
-            float soft = Math.Min(28f, Math.Max(12f, size.Width * 0.05f));
+            float soft = Math.Min(28f, Math.Max(12f, bounds.Width * 0.05f));
             soft = Math.Min(soft, highlightW);
             // 快唱完时羽化带随剩余距离收窄，整行唱满就是纯色，不会在行尾留一段发灰
-            float tail = Math.Max(0f, size.Width - highlightW);
+            float tail = Math.Max(0f, bounds.Width - highlightW);
             if (tail < soft)
             {
                 soft = tail;
@@ -782,7 +794,7 @@ namespace CelesteMusicPlayer
             if (solidW > 0.5f)
             {
                 GraphicsState state = g.Save();
-                g.SetClip(new RectangleF(x, y - 2, solidW, size.Height + 4));
+                g.SetClip(new RectangleF(glyphX, glyphY - 2, solidW, bounds.Height + 4));
                 DrawTextPath(g, text, family, _fontSize, FontStyle.Bold, played, x, y);
                 g.Restore(state);
             }
@@ -791,14 +803,14 @@ namespace CelesteMusicPlayer
             // 和实心段首尾相接、不重叠（旧实现两段重叠且起点只有 220 alpha，边界会出现一条色带）。
             if (soft > 0.5f)
             {
-                float edgeX = x + solidW;
+                float edgeX = glyphX + solidW;
                 using var edgeBrush = new LinearGradientBrush(
-                    new PointF(edgeX, y),
-                    new PointF(edgeX + soft, y),
+                    new PointF(edgeX, glyphY),
+                    new PointF(edgeX + soft, glyphY),
                     Color.FromArgb(255, _playedColor),
                     Color.FromArgb(0, _playedColor));
                 GraphicsState edgeState = g.Save();
-                g.SetClip(new RectangleF(edgeX, y - 2, soft, size.Height + 4));
+                g.SetClip(new RectangleF(edgeX, glyphY - 2, soft, bounds.Height + 4));
                 DrawTextPath(g, text, family, _fontSize, FontStyle.Bold, edgeBrush, x, y);
                 g.Restore(edgeState);
             }
@@ -916,11 +928,17 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private static SizeF MeasurePathSize(string text, FontFamily family, float emSize, FontStyle style)
+        /// <summary>
+        /// 度量一行的真实字形边界（含相对 AddString 原点的偏移 X/Y）。
+        /// GDI+ 的 AddString 之后 GetBounds 的 X/Y 一般并不从 0 开始（字体 ascent 与字形装订线所致，
+        /// 斜体、大字号、混排英文时尤其明显）。居中、裁剪、行距都必须按这个偏移补偿，
+        /// 否则已唱高亮的裁剪区会与字形错开，表现为"阴影/底色和字不重合"。
+        /// </summary>
+        private static RectangleF MeasurePathBounds(string text, FontFamily family, float emSize, FontStyle style)
         {
             if (string.IsNullOrEmpty(text))
             {
-                return SizeF.Empty;
+                return RectangleF.Empty;
             }
 
             using var path = new GraphicsPath();
@@ -931,8 +949,39 @@ namespace CelesteMusicPlayer
                 emSize,
                 PointF.Empty,
                 StringFormat.GenericTypographic);
-            RectangleF bounds = path.GetBounds();
-            return new SizeF(Math.Max(1, bounds.Width), Math.Max(1, bounds.Height));
+            RectangleF b = path.GetBounds();
+            if (float.IsNaN(b.Width) || float.IsInfinity(b.Width) || b.Width <= 0)
+            {
+                b.Width = 1;
+            }
+
+            if (float.IsNaN(b.Height) || float.IsInfinity(b.Height) || b.Height <= 0)
+            {
+                b.Height = 1;
+            }
+
+            if (float.IsNaN(b.X) || float.IsInfinity(b.X))
+            {
+                b.X = 0;
+            }
+
+            if (float.IsNaN(b.Y) || float.IsInfinity(b.Y))
+            {
+                b.Y = 0;
+            }
+
+            return b;
+        }
+
+        private static SizeF MeasurePathSize(string text, FontFamily family, float emSize, FontStyle style)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return SizeF.Empty;
+            }
+
+            RectangleF b = MeasurePathBounds(text, family, emSize, style);
+            return new SizeF(Math.Max(1, b.Width), Math.Max(1, b.Height));
         }
 
         private static SizeF MeasurePathSize(Graphics g, string text, FontFamily family, float emSize, FontStyle style)
