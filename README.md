@@ -77,6 +77,10 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 
 ## 📝 更新日志
 
+### v26.9.8（2026-09-08）
+- 🛠️ 修复若干 Bug，提升播放稳定性（自动切歌失败、进度卡死、重启后音量回退、桌面歌词错位、迷你播放器进度卡死、任务栏缩略图黑框等）
+- ✨ 优化使用体验（播放队列自动滚动定位到正在播放歌曲、右键菜单支持在资源管理器中打开当前歌曲）
+
 ### v26.9.3（2026-09-03）
 **新增功能**
 - 🎵 **DSDIFF DST 压缩解码**：支持 DSDIFF 容器内 DST 压缩的 DSD 音轨，进程内逐帧解回 1-bit DSD 喂入 DoP 原生直出 / PCM 转码，bit-perfect 不变（此前仅支持未压缩 DSD / DSF）
