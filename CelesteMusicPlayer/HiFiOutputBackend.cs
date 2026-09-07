@@ -1189,12 +1189,11 @@ namespace CelesteMusicPlayer
                 {
                     _waveFile?.Dispose();
                     _waveFile = nextReader;
-                    // Duration：源时长优先，否则用新 reader 的 WAV 时长
-                    Duration = _sourceDuration > TimeSpan.Zero ? _sourceDuration : _waveFile.TotalTime;
-                    if (_sourceDuration > TimeSpan.Zero && _sourceDuration < Duration)
-                    {
-                        Duration = _sourceDuration;
-                    }
+                    // 无缝续接到下一首：_sourceDuration 是上一首歌的残留（无缝路径从不重新探测新歌时长），
+                    // 继续沿用会把新歌 Duration 错钳成上一首时长 → 进度条卡死、播完不切歌。这里清空，
+                    // 让 Duration 取新 reader 的真实 WAV 时长。
+                    _sourceDuration = TimeSpan.Zero;
+                    Duration = _waveFile.TotalTime;
                 }
                 // 无缝续接到下一首：位置基准重置为当前累计帧，使下一首从 0 起算（不跨曲累加）。
                 if (_native != null)
