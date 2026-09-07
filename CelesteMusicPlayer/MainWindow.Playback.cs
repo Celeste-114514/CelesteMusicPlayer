@@ -241,9 +241,9 @@ namespace CelesteMusicPlayer
             _applyingSettingsVolume = true;
             try
             {
-                if (IsHiFiModeSelected())
                 // 音量滑条在共享与 HiFi 独占下都可用：HiFi 下调 DAC 设备/驱动级主音量（不破坏 bit-perfect），
-                // 用保存音量回填，避免切模式/重启后音量跳回 100%。
+                // 用保存音量回填，避免切模式/重启后音量跳回默认值（此前误加 IsHiFiModeSelected 条件，
+                // 导致共享模式重启后音量不回填、停在 XAML 默认 80%）。
                 VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
                 _volumeToSave = Math.Clamp(settings.Volume, 0, 100); // 启动即同步，避免退出时以旧/0 值写盘
             }
