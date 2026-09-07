@@ -815,6 +815,7 @@ namespace CelesteMusicPlayer
             UpdateLibraryNavHighlight();
             PlaylistView.SelectionChanged += PlaylistView_SelectionChromeChanged;
             PlaylistView.ContainerContentChanging += PlaylistView_ContainerContentChanging;
+            PlaylistView.SizeChanged += SongListView_SizeChanged; // 行内容宽度跟随列表宽度
             PlaylistView.ItemsSource = _playlist;
             AlbumGridView.ItemsSource = _albums;
             PlaylistWallGridView.ItemsSource = _playlistWall;
