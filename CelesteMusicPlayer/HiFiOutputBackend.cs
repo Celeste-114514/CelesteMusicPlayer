@@ -550,6 +550,50 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>初始化 NAudio 输出（共享/ASIO）。共享模式下 WASAPI 在快速 Stop→重建（如自动切歌）时，
+        /// 旧的 IAudioClient 尚未被 COM 完全释放，紧接着的 AudioClient.Initialize 会偶发返回
+        /// E_INVALIDARG（"Value does not fall within the expected range"），表现为"自动切歌必失败、手动重试才成功"。
+        /// 这里对 Init 失败做带延迟的重试：等待旧会话释放后重建 WasapiOut 再 Init，最多重试 2 次。</summary>
+        private void InitNaudioOutput(OutputMode mode, string? deviceIdentifier)
+        {
+            const int maxAttempts = 3;
+            for (int attempt = 0; attempt < maxAttempts; attempt++)
+            {
+                try
+                {
+                    _output!.Init(_dspProvider!);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    // 记录每次失败的详细信息，便于排障
+                    StartupLog.Write($"NAudio Init 失败(第{attempt + 1}次): {ex.GetType().Name}: {ex.Message}");
+                    if (attempt >= maxAttempts - 1)
+                    {
+                        throw; // 重试耗尽，向上抛出（由 PlayWavAsync 的 catch 记录 LastError）
+                    }
+
+                    // 释放失败的输出实例，等待旧 WASAPI 会话释放后再重建
+                    try { _output!.Dispose(); } catch (Exception d) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", d); }
+                    _output = null;
+                    // 短暂等待让底层 AudioClient 完全释放（COM 释放 + WASAPI 内部清理）
+                    System.Threading.Thread.Sleep(80);
+                    // 重建输出实例
+                    _output = mode switch
+                    {
+                        OutputMode.WasapiShared => CreateWasapiOut(AudioClientShareMode.Shared, deviceIdentifier, OutputBufferMs),
+                        OutputMode.Asio => new AsioOut(deviceIdentifier ?? (AsioOut.GetDriverNames().Length > 0 ? AsioOut.GetDriverNames()[0] : string.Empty)),
+                        _ => CreateWasapiOut(AudioClientShareMode.Shared, deviceIdentifier, OutputBufferMs),
+                    };
+                    if (_output == null)
+                    {
+                        // 重建失败（如设备被移除），无法继续重试
+                        throw new InvalidOperationException("无法重建 NAudio 输出实例。");
+                    }
+                }
+            }
+        }
+
         /// <summary>从 PCM WAV 文件以指定模式播放。<paramref name="requireExact"/> 为 true（DSD/DoP 容器 WAV）时独占只做源格式精确直通，禁止降级（保 bit-perfect）。</summary>
         public bool PlayWavAsync(string wavPath, OutputMode mode, string? deviceIdentifier = null, TimeSpan? seekTo = null, bool requireExact = false)
         {
@@ -684,7 +728,7 @@ namespace CelesteMusicPlayer
                 {
                     // 共享/ASIO 走 NAudio：DSP 链 provider 恒存在（DSP 全关时其内部 _active 短路直通→bit-perfect），
                     // 因此播放中开启/调节 DSP 能实时生效；同格式下一首经无缝源无缝续接（gapless）。
-                    _output.Init(_dspProvider);
+                    InitNaudioOutput(mode, deviceIdentifier);
                     CaptureActualOutputFormat();
                     StartupLog.Write("[DSP] HiFi输出（NAudio）挂载统一 DSP 链（内部短路直通按需启用）");
                     _output.PlaybackStopped += Output_PlaybackStopped;
