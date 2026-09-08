@@ -619,6 +619,18 @@ namespace CelesteMusicPlayer
                 // 采样率升频（SRC）：仅在独占模式下有意义（共享模式系统混音器会再重采样一次，
                 // ASIO 设备采样率固定且无法预先查询）。设备在独占下不支持目标格式则自动退回不升频。
                 IWaveSourceProvider chainInput = BuildSrcChain(_seamless, mode, deviceIdentifier, requireExact);
+                // 多声道（5.1/7.1 转码产物，6ch/8ch）→ 立体声降混：
+                // 立体声设备的 WASAPI 共享模式下 IAudioClient::Initialize 会拒绝 6/8 声道格式，
+                // 返回 E_INVALIDARG，.NET 侧表现为 "Value does not fall within the expected range"，
+                // 整首歌直接播放失败（日志特征：仅多声道曲目失败，2ch 正常）。
+                // 降混放在 DSP 链之前，使 EQ / 声道平衡 / 限幅 / 电平表 / 频谱全程按 2 声道工作。
+                // requireExact（DSD / DoP 直出）容器本身是 2ch，不触发，保 bit-perfect。
+                if (!requireExact && chainInput.WaveFormat.Channels > 2)
+                {
+                    int srcCh = chainInput.WaveFormat.Channels;
+                    chainInput = new StereoDownmixSourceProvider(chainInput);
+                    StartupLog.Write($"多声道降混启用：{srcCh}ch → 2ch（设备为立体声，避免共享模式初始化被拒）");
+                }
                 // 统一 DSP 链（EQ→声道平衡→限幅）：任一激活则包住上游源使 DSP 在 NAudio(ASIO/共享) 与
                 // 原生 WASAPI 独占下都生效（非 bit-perfect）；全部关闭则 _dspProvider 内部短路直通。
                 _dspProvider = BuildDspProvider(chainInput);

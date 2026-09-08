@@ -359,13 +359,17 @@ namespace CelesteMusicPlayer
             var srcFmt = ProbeSourceFormat(srcPath);
             if (srcFmt is (int rate, int ch, int bits) && rate > 0 && ch > 0)
             {
-                // 共享模式：折叠到设备 MixFormat（采样率/声道），输出统一用 pcm_f32le（IEEE float）。
+                // 共享模式：采样率对齐设备 MixFormat，声道固定 2（立体声），输出统一用 pcm_f32le（IEEE float）。
+                // 声道不再跟随设备 MixFormat：部分设备（HDMI/DP 外接显示器）会报告 6/8 声道，
+                // 转出的多声道 WAV 在立体声设备的共享模式下会被 IAudioClient::Initialize 拒绝
+                // （E_INVALIDARG / "Value does not fall within the expected range"），整首歌播放失败；
+                // 且多声道缓存体积是立体声的数倍。音乐源本身是立体声，共享模式下由系统混音器处理即可。
                 if (outputMode == HiFiOutputBackend.OutputMode.WasapiShared)
                 {
                     var mix = HiFiOutputBackend.GetDeviceMixFormat(devicePreference);
-                    if (mix is (int mr, int mc, _, _) && mr > 0 && mc > 0)
+                    if (mix is (int mr, _, _, _) && mr > 0)
                     {
-                        return string.Format("-y -i \"{0}\" -vn -c:a pcm_f32le -ar {1} -ac {2} \"{3}\"", srcPath, mr, mc, dstPath);
+                        return string.Format("-y -i \"{0}\" -vn -c:a pcm_f32le -ar {1} -ac 2 \"{2}\"", srcPath, mr, dstPath);
                     }
 
                     // 设备 MixFormat 探测失败兜底：固定 48k/2ch float32（系统共享普遍支持）
