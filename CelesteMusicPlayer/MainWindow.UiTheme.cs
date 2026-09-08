@@ -635,12 +635,14 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
+            // 退出兜底：把音量滑条当前值（最新 UI 值）落盘，避免仅靠 300ms 去抖在异常退出/被强杀时漏写
             try
             {
                 _volumeSaveTimer?.Stop();
-                AppSettingsStore.Update(s => s.Volume = _volumeToSave);
+                double liveVolume = VolumeSlider != null ? Math.Clamp(VolumeSlider.Value, 0, 100) : _volumeToSave;
+                AppSettingsStore.Update(s => s.Volume = liveVolume);
             }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
 
             try
             {

@@ -2003,8 +2003,14 @@ namespace CelesteMusicPlayer
             try
             {
                 TrackStatsStore.Flush();
-                _volumeSaveTimer?.Stop();
-                AppSettingsStore.Update(s => s.Volume = _volumeToSave);
+                // 重启前先把音量滑条当前值落盘，避免仅靠 300ms 去抖在强杀时漏写
+                try
+                {
+                    _volumeSaveTimer?.Stop();
+                    double liveVolume = VolumeSlider != null ? Math.Clamp(VolumeSlider.Value, 0, 100) : _volumeToSave;
+                    AppSettingsStore.Update(s => s.Volume = liveVolume);
+                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Misc.cs", caught); }
                 PersistPlaybackSession();
 
                 string? exe = Environment.ProcessPath

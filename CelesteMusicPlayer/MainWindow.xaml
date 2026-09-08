@@ -3813,7 +3813,9 @@
                                         Opacity="0.55" />
                                     <Image
                                         x:Name="NowPlayingCoverImage"
-                                        Stretch="UniformToFill" />
+                                        Stretch="UniformToFill"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Center" />
                                 </Grid>
                             </Border>
 
@@ -4016,7 +4018,9 @@
                         Opacity="0.55" />
                     <Image
                         x:Name="TransportCoverImage"
-                        Stretch="UniformToFill" />
+                        Stretch="UniformToFill"
+                        HorizontalAlignment="Center"
+                        VerticalAlignment="Center" />
                     <!-- hover 变暗层 -->
                     <Border
                         x:Name="TransportCoverDimLayer"
