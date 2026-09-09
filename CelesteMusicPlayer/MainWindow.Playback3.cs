@@ -331,6 +331,8 @@ namespace CelesteMusicPlayer
 
             if (!_applyingSettingsVolume && !IsHiFiModeSelected())
             {
+                // 记录用户最后一次主动设定的音量（跨入口唯一真值源）
+                LastUserVolume = Math.Clamp(e.NewValue, 0, 100);
                 ScheduleVolumeSave(e.NewValue);
             }
 
@@ -355,7 +357,9 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                AppSettingsStore.Update(s => s.Volume = _volumeToSave);
+                double v = Math.Clamp(LastUserVolume >= 0 ? LastUserVolume : _volumeToSave, 0, 100);
+                AppSettingsStore.Update(s => s.Volume = v);
+                global::CelesteMusicPlayer.StartupLog.Write($"[音量] 去抖写盘 = {v:0.##}");
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }

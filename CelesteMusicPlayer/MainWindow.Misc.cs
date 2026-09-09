@@ -2003,12 +2003,14 @@ namespace CelesteMusicPlayer
             try
             {
                 TrackStatsStore.Flush();
-                // 重启前先把音量滑条当前值落盘，避免仅靠 300ms 去抖在强杀时漏写
+                // 重启前写盘：同样优先用"用户最后一次主动设定的音量"，避免被未同步的滑条值覆盖
                 try
                 {
                     _volumeSaveTimer?.Stop();
-                    double liveVolume = VolumeSlider != null ? Math.Clamp(VolumeSlider.Value, 0, 100) : _volumeToSave;
+                    double sliderVolume = VolumeSlider != null ? Math.Clamp(VolumeSlider.Value, 0, 100) : _volumeToSave;
+                    double liveVolume = Math.Clamp(LastUserVolume >= 0 ? LastUserVolume : sliderVolume, 0, 100);
                     AppSettingsStore.Update(s => s.Volume = liveVolume);
+                    global::CelesteMusicPlayer.StartupLog.Write($"[音量] 重启写盘 = {liveVolume:0.##}（滑条={sliderVolume:0.##}，用户设定={LastUserVolume:0.##}）");
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Misc.cs", caught); }
                 PersistPlaybackSession();

@@ -528,6 +528,11 @@ namespace CelesteMusicPlayer
         private bool _applyingSettingsVolume;
         private DispatcherQueueTimer? _volumeSaveTimer;
         private double _volumeToSave;
+        /// <summary>用户最后一次主动设定的音量（0-100），-1 表示本次运行没动过。
+        /// 音量有两个入口（主界面滑条 / 设置页滑条），各自单独保存会互相覆盖，
+        /// 导致"重启后音量回到 80%"。这里统一记录最后一次用户意图，退出写盘时优先用它。
+        /// 静态是为了让设置窗口（另一个类）也能写入。</summary>
+        internal static double LastUserVolume = -1;
         private DispatcherQueueTimer? _libraryWatchDebounce;
         private bool _libraryRescanInProgress;
         // 播放顺序与随机源已移到 PlaybackOrderResolver（阶段7 解耦）。

@@ -635,12 +635,15 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
-            // 退出兜底：把音量滑条当前值（最新 UI 值）落盘，避免仅靠 300ms 去抖在异常退出/被强杀时漏写
+            // 退出兜底写盘：优先用"用户最后一次主动设定的音量"（跨入口唯一真值源），
+            // 没动过音量才回退到滑条当前值。避免设置页调过、主界面滑条没同步时被覆盖回默认 80。
             try
             {
                 _volumeSaveTimer?.Stop();
-                double liveVolume = VolumeSlider != null ? Math.Clamp(VolumeSlider.Value, 0, 100) : _volumeToSave;
+                double sliderVolume = VolumeSlider != null ? Math.Clamp(VolumeSlider.Value, 0, 100) : _volumeToSave;
+                double liveVolume = Math.Clamp(LastUserVolume >= 0 ? LastUserVolume : sliderVolume, 0, 100);
                 AppSettingsStore.Update(s => s.Volume = liveVolume);
+                global::CelesteMusicPlayer.StartupLog.Write($"[音量] 退出写盘 = {liveVolume:0.##}（滑条={sliderVolume:0.##}，用户设定={LastUserVolume:0.##}）");
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
 

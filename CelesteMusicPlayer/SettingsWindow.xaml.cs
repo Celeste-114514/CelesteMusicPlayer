@@ -968,6 +968,10 @@ namespace CelesteMusicPlayer
             // 音量滑条在共享与 HiFi 独占下都可调：HiFi 下调节的是 DAC 设备/驱动级主音量（不破坏 bit-perfect），
             // 一并持久化，切换模式/重启后沿用用户设定。
             s.Volume = VolumeSettingSlider.Value;
+            // 同步到跨入口唯一真值源：设置页与主界面是两个独立滑条，
+            // 若主界面滑条因故未同步，退出时会用旧值把这里保存的音量覆盖回默认 80。
+            MainWindow.LastUserVolume = Math.Clamp(VolumeSettingSlider.Value, 0, 100);
+            global::CelesteMusicPlayer.StartupLog.Write($"[音量] 设置页保存 = {VolumeSettingSlider.Value:0.##}");
             if (PlaybackOrderCombo?.SelectedItem is ComboBoxItem playbackItem && playbackItem.Tag is PlaybackOrder order)
             {
                 s.PlaybackOrder = order.ToString();
@@ -1345,6 +1349,8 @@ namespace CelesteMusicPlayer
             if (ReferenceEquals(sender, VolumeSettingSlider))
             {
                 VolumeValueText.Text = $"{(int)Math.Round(e.NewValue)}%";
+                // 记录最后一次用户设定的音量，供主窗口退出写盘时优先采用（统一两个音量入口的真值源）
+                MainWindow.LastUserVolume = Math.Clamp(e.NewValue, 0, 100);
             }
             else if (ReferenceEquals(sender, FadeMsSlider))
             {
