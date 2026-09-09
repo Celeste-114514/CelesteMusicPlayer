@@ -368,6 +368,7 @@ namespace CelesteMusicPlayer
                         string.Equals(_openedAlbum.Name, entry.Name, StringComparison.CurrentCultureIgnoreCase))
                     {
                         AlbumDetailCoverImage.Source = image;
+                        ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
                     }
                 }
             }
@@ -527,6 +528,7 @@ namespace CelesteMusicPlayer
                         string.Equals(_openedAlbum.Name, entry.Name, StringComparison.CurrentCultureIgnoreCase))
                     {
                         AlbumDetailCoverImage.Source = image;
+                        ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
                     }
                 }
             }
@@ -838,6 +840,7 @@ namespace CelesteMusicPlayer
             UpdateLibrarySearchUi();
 
             AlbumDetailCoverImage.Source = album.CoverImage;
+            ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
             AlbumDetailNameText.Text = album.Name;
             AlbumDetailArtistText.Text = album.Artist;
             if (AlbumDetailSubInfoText != null)
@@ -972,6 +975,7 @@ namespace CelesteMusicPlayer
             AlbumDetailPanel.Visibility = Visibility.Collapsed;
             AlbumGridView.Visibility = Visibility.Visible;
             AlbumDetailCoverImage.Source = null;
+            ApplyCoverFrame(AlbumDetailCoverBorder, AlbumDetailCoverImage);
             AlbumDetailBackButton.Content = "← 返回专辑";
         }
 

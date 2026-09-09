@@ -2315,6 +2315,13 @@ namespace CelesteMusicPlayer
                 {
                     coverImg.Source = bmp;
                 }
+
+                // 有封面隐藏边框线/底色，无封面显示框 + 光盘占位（与专辑墙/详情页一致）
+                var coverFrame = img?.FindName("RowCoverBorder") as Border;
+                if (coverImg != null && coverFrame != null)
+                {
+                    ApplyCoverFrame(coverFrame, coverImg);
+                }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }

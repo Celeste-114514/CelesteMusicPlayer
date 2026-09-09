@@ -241,6 +241,39 @@ namespace CelesteMusicPlayer
 
                 _coverImage = value;
                 OnPropertyChanged();
+                OnPropertyChanged(nameof(HasCover));
+                OnPropertyChanged(nameof(CoverFrameThickness));
+                OnPropertyChanged(nameof(CoverFrameBackground));
+            }
+        }
+
+        /// <summary>是否有封面图（供 x:Bind 绑定：有封面时隐藏封面框的边框）。</summary>
+        public bool HasCover => _coverImage != null;
+
+        /// <summary>封面框边框粗细：有封面时 0（无框），无封面时 1（显示框）。</summary>
+        public Microsoft.UI.Xaml.Thickness CoverFrameThickness
+            => _coverImage != null
+                ? new Microsoft.UI.Xaml.Thickness(0)
+                : new Microsoft.UI.Xaml.Thickness(1);
+
+        /// <summary>封面框底色：有封面时透明（无框效果），无封面时主题底色（显示框）。</summary>
+        public Microsoft.UI.Xaml.Media.Brush CoverFrameBackground
+        {
+            get
+            {
+                if (_coverImage != null)
+                {
+                    return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
+                }
+
+                // 无封面：取主题浅灰底；取不到就回退透明（仍有边框线，不会崩）
+                if (Microsoft.UI.Xaml.Application.Current.Resources.TryGetValue("SubtleFillColorSecondaryBrush", out var brush)
+                    && brush is Microsoft.UI.Xaml.Media.Brush b)
+                {
+                    return b;
+                }
+
+                return new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Transparent);
             }
         }
 

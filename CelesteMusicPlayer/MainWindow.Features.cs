@@ -1014,8 +1014,8 @@ namespace CelesteMusicPlayer
                 var arrowOut = TransportCoverBorder.Resources["TransportArrowOutStoryboard"]
                     as Microsoft.UI.Xaml.Media.Animation.Storyboard;
                 arrowIn?.Stop();
-                TransportCoverBorder.BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"];
-                TransportCoverBorder.BorderThickness = new Thickness(1);
+                // 移出 hover 后，按"有无封面"恢复边框：有封面→无框，无封面→显示框
+                ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
                 arrowOut?.Begin();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }

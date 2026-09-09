@@ -1878,6 +1878,7 @@ namespace CelesteMusicPlayer
                     if (bmp != null)
                     {
                         PlaylistDetailCoverImage.Source = bmp;
+                        ApplyCoverFrame(PlaylistDetailCover, PlaylistDetailCoverImage);
                     }
                 }
             }

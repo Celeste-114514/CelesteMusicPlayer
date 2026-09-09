@@ -930,7 +930,7 @@
                                                 VerticalAlignment="Center"
                                                 Opacity="0.9" />
                                             <Image
-                                                Stretch="UniformToFill"
+                                                Stretch="Uniform"
                                                 Source="{x:Bind Cover, Mode=OneWay}" />
                                         </Grid>
                                     </Border>
@@ -1046,7 +1046,7 @@
                                             Opacity="0.5" />
                                         <Image
                                             x:Name="PlaylistDetailCoverImage"
-                                            Stretch="UniformToFill" />
+                                            Stretch="Uniform" />
                                     </Grid>
                                 </Border>
                                 <StackPanel VerticalAlignment="Center" Spacing="8">
@@ -1175,6 +1175,7 @@
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Opacity="0.7" Text="{x:Bind Index}" />
                                                 <Border
+                                                    x:Name="RowCoverBorder"
                                                     Grid.Column="1"
                                                     Width="52"
                                                     Height="52"
@@ -1184,8 +1185,8 @@
                                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                                     BorderThickness="1">
                                                     <Grid>
-                                                        <FontIcon Glyph="&#xE93C;" FontSize="24" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.5" />
-                                                        <Image x:Name="RowCoverImage" Stretch="UniformToFill" />
+                                                        <FontIcon Glyph="&#xE958;" FontSize="24" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.5" />
+                                                        <Image x:Name="RowCoverImage" Stretch="Uniform" />
                                                     </Grid>
                                                 </Border>
                                                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="3">
@@ -1417,6 +1418,7 @@
 
                                         <!-- 小封面 -->
                                         <Border
+                                            x:Name="RowCoverBorder"
                                             Grid.Column="1"
                                             Width="60"
                                             Height="60"
@@ -1427,7 +1429,7 @@
                                             BorderThickness="1">
                                             <Grid>
                                                 <FontIcon
-                                                    Glyph="&#xE93C;"
+                                                    Glyph="&#xE958;"
                                                     FontSize="26"
                                                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                     HorizontalAlignment="Center"
@@ -1435,7 +1437,7 @@
                                                     Opacity="0.5" />
                                                 <Image
                                                     x:Name="RowCoverImage"
-                                                    Stretch="UniformToFill" />
+                                                    Stretch="Uniform" />
                                             </Grid>
                                         </Border>
 
@@ -1563,19 +1565,19 @@
                                                 Width="146"
                                                 Height="146"
                                                 HorizontalAlignment="Center"
-                                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                Background="{x:Bind CoverFrameBackground, Mode=OneWay}"
                                                 CornerRadius="10"
                                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                                BorderThickness="1">
+                                                BorderThickness="{x:Bind CoverFrameThickness, Mode=OneWay}">
                                                 <Grid>
                                                     <FontIcon
-                                                        Glyph="&#xE93C;"
+                                                        Glyph="&#xE958;"
                                                         FontSize="40"
                                                         HorizontalAlignment="Center"
                                                         VerticalAlignment="Center"
                                                         Opacity="0.35" />
                                                     <Image
-                                                        Stretch="UniformToFill"
+                                                        Stretch="Uniform"
                                                         Source="{x:Bind CoverImage, Mode=OneWay}" />
                                                     <!-- DSD 专辑角标：左上角小三角 + 容器文字 -->
                                                     <Border
@@ -1674,6 +1676,7 @@
                                             <ColumnDefinition Width="Auto" />
                                         </Grid.ColumnDefinitions>
                                         <Border
+                                            x:Name="AlbumDetailCoverBorder"
                                             Grid.Column="0"
                                             Width="232"
                                             Height="232"
@@ -1684,14 +1687,14 @@
                                             BorderThickness="1">
                                             <Grid>
                                                 <FontIcon
-                                                    Glyph="&#xE93C;"
+                                                    Glyph="&#xE958;"
                                                     FontSize="60"
                                                     HorizontalAlignment="Center"
                                                     VerticalAlignment="Center"
                                                     Opacity="0.35" />
                                                 <Image
                                                     x:Name="AlbumDetailCoverImage"
-                                                    Stretch="UniformToFill" />
+                                                    Stretch="Uniform" />
                                             </Grid>
                                         </Border>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="10" HorizontalAlignment="Center">
@@ -2361,19 +2364,19 @@
                                                         <Border
                                                             Width="132"
                                                             Height="132"
-                                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                            Background="{x:Bind CoverFrameBackground, Mode=OneWay}"
                                                             CornerRadius="8"
                                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                                            BorderThickness="1">
+                                                            BorderThickness="{x:Bind CoverFrameThickness, Mode=OneWay}">
                                                             <Grid>
                                                                 <FontIcon
-                                                                    Glyph="&#xE93C;"
+                                                                    Glyph="&#xE958;"
                                                                     FontSize="24"
                                                                     HorizontalAlignment="Center"
                                                                     VerticalAlignment="Center"
                                                                     Opacity="0.35" />
                                                                 <Image
-                                                                    Stretch="UniformToFill"
+                                                                    Stretch="Uniform"
                                                                     Source="{x:Bind CoverImage, Mode=OneWay}" />
                                                                 <!-- DSD 专辑角标：左上角小三角 + 容器文字 -->
                                                                 <Border
@@ -3805,7 +3808,7 @@
                                 BorderThickness="1">
                                 <Grid>
                                     <FontIcon
-                                        Glyph="&#xE93C;"
+                                        Glyph="&#xE958;"
                                         FontSize="96"
                                         HorizontalAlignment="Center"
                                         VerticalAlignment="Center"
@@ -3813,7 +3816,7 @@
                                         Opacity="0.55" />
                                     <Image
                                         x:Name="NowPlayingCoverImage"
-                                        Stretch="UniformToFill"
+                                        Stretch="Uniform"
                                         HorizontalAlignment="Center"
                                         VerticalAlignment="Center" />
                                 </Grid>
@@ -4010,7 +4013,7 @@
                 </Border.Resources>
                 <Grid>
                     <FontIcon
-                        Glyph="&#xE93C;"
+                        Glyph="&#xE958;"
                         FontSize="28"
                         HorizontalAlignment="Center"
                         VerticalAlignment="Center"
@@ -4018,9 +4021,9 @@
                         Opacity="0.55" />
                     <Image
                         x:Name="TransportCoverImage"
-                        Stretch="UniformToFill"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center" />
+                        Stretch="Uniform"
+                        HorizontalAlignment="Stretch"
+                        VerticalAlignment="Stretch" />
                     <!-- hover 变暗层 -->
                     <Border
                         x:Name="TransportCoverDimLayer"

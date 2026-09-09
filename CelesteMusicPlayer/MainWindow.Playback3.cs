@@ -1313,6 +1313,30 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>
+        /// 封面框"无框"效果：有封面图时隐藏边框线和底色（视觉无框），无封面时显示框 + 光盘占位图标。
+        /// 与专辑墙 x:Bind 的 CoverFrameThickness / CoverFrameBackground 保持一致。
+        /// </summary>
+        private static void ApplyCoverFrame(Border frame, Image image)
+        {
+            if (frame == null)
+            {
+                return;
+            }
+
+            bool hasCover = image != null && image.Source != null;
+            frame.BorderThickness = hasCover ? new Thickness(0) : new Thickness(1);
+            if (hasCover)
+            {
+                frame.Background = new SolidColorBrush(Colors.Transparent);
+            }
+            else if (Application.Current.Resources.TryGetValue("SubtleFillColorSecondaryBrush", out var b) && b is Brush brush)
+            {
+                frame.Background = brush;
+            }
+        }
+
+
         private void ClearNowPlayingPanel()
         {
             // 保留旧波形:停止/切歌时进度条静态显示上次波形,不闪占位
@@ -1322,6 +1346,7 @@ namespace CelesteMusicPlayer
             NowPlayingTitleText.Text = "未在播放";
             ResetNowPlayingArtistAlbumLinks();
             NowPlayingCoverImage.Source = null;
+            ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
             ApplyNowPlayingPaneTransparent();
             UpdateTransportNowPlaying(null, null);
             ClearLyricsUi("开始播放后显示歌词");
@@ -1346,6 +1371,7 @@ namespace CelesteMusicPlayer
                 TransportFormatText.Text = string.Empty;
                 TransportFormatText.Visibility = Visibility.Collapsed;
                 TransportCoverImage.Source = null;
+                ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
                 _miniPlayerWindow?.RefreshFromOwner();
                 return;
             }
@@ -1359,6 +1385,7 @@ namespace CelesteMusicPlayer
                     ? Visibility.Collapsed
                     : Visibility.Visible;
             TransportCoverImage.Source = cover;
+            ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
             _miniPlayerWindow?.RefreshFromOwner();
         }
 
@@ -1454,6 +1481,7 @@ namespace CelesteMusicPlayer
             }
 
             NowPlayingCoverImage.Source = coverImage;
+            ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
             UpdateTransportNowPlaying(item, coverImage);
             _ = ApplyAlbumArtBackgroundAsync(coverBytes, item.FilePath);
             ApplyNowPlayingPaneTransparent();
