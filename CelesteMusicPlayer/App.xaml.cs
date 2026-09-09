@@ -15,6 +15,21 @@ namespace CelesteMusicPlayer
         public App()
         {
             StartupLog.Write("App ctor");
+
+            // 修复 WinUI3 已知 bug（microsoft-ui-xaml #10805/#11024）：
+            // MenuFlyoutItem 等右键菜单控件在非中文首选语言下，中文会走错误字形
+            // 渲染路径，显示成「瘦长/斜」的日文样式字形（如「添」「复」等）。
+            // 显式把首选语言设为简体中文，让菜单控件回退到正确的中文字形路径。
+            // 注意：必须在 InitializeComponent() 之前设置——XAML 模板/资源在
+            // InitializeComponent 阶段就按当前语言解析字形，之后再设不会生效。
+            // 标签必须是标准 BCP-47 的 "zh-CN"（简体中文·中国），而非无效的
+            // "zh-Hans-CN"（脚本标签与区域标签不能拼接）。
+            try
+            {
+                Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = "zh-CN";
+            }
+            catch (Exception ex) { StartupLog.WriteException("App.PrimaryLanguageOverride", ex); }
+
             InitializeComponent();
             StartupLog.Write("App InitializeComponent done");
 

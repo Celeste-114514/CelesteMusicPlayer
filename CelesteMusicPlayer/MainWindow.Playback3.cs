@@ -207,6 +207,15 @@ namespace CelesteMusicPlayer
             }
             else
             {
+                // 启动续播预加载的就绪态（MediaPlayer 有 Source 但未走引擎）：点播放时应转走
+                // 引擎路径，与双击播放一致 —— 否则走 player.Play() 是 MediaPlayer 路径，
+                // 没有 DSP 链 → 实时电平表不显示（LevelMeterChannels 恒 0），SMTC 进度也不对。
+                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                {
+                    PlayUserPlaylistAt(_userPlaylistIndex);
+                    return;
+                }
+
                 player.Play();
                 UpdateEngineSmtcStatus(MediaPlaybackStatus.Playing);
                 _taskbarButtons?.UpdatePlayPause(true);    // 播放后 → 显示"暂停"图标

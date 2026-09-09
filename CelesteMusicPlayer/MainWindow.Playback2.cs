@@ -403,11 +403,11 @@ namespace CelesteMusicPlayer
 
         private List<PlaylistItem> GetTracksForAlbum(AlbumEntry album)
         {
+            // 只按专辑名匹配（不按 artist 过滤）：群星合辑（多 artist、统一 album_artist）下，
+            // 若再按 artist 过滤会把其他艺术家的曲目漏掉，导致「播放该专辑」比右侧列表少歌、顺序错乱。
+            // 排序与专辑详情页右侧列表（OpenAlbumDetailCore）保持一致：碟号 → 音轨号 → 标题。
             return _playlist
-                .Where(t =>
-                    string.Equals(t.Album, album.Name, StringComparison.CurrentCultureIgnoreCase)
-                    && (string.IsNullOrWhiteSpace(album.Artist)
-                        || string.Equals(t.Artist, album.Artist, StringComparison.CurrentCultureIgnoreCase)))
+                .Where(t => string.Equals(t.Album, album.Name, StringComparison.CurrentCultureIgnoreCase))
                 .OrderBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
                 .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
                 .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
@@ -1182,7 +1182,16 @@ namespace CelesteMusicPlayer
 
 
         private void ShowCurrentPlaylistButton_Click(object sender, RoutedEventArgs e)
-            => ShowCurrentPlaylistWindow();
+        {
+            // 不再弹独立窗口，直接在主界面切换到「播放队列」面板（与侧边栏导航一致）
+            ExitMultiSelectMode();
+            CommitLibraryNavigation(() =>
+            {
+                _currentCategory = "UserPlaylist";
+                ApplyCategoryView();
+            });
+            ApplySwitchPlaylistPausePreference();
+        }
 
         internal void ShowCurrentPlaylistWindow()
         {
@@ -1480,8 +1489,9 @@ namespace CelesteMusicPlayer
             }
             else if (isDetailSongList)
             {
-                // 专辑/艺术家/专辑艺术家详情页多选 → 添加到播放列表（列表墙/命名单）
-                _ = ShowNamedPlaylistPickerAsync(selected);
+                // 专辑/艺术家/专辑艺术家详情页多选 → 主按钮「添加至播放队列」；
+                // 「添加到播放列表」由右下角副按钮（MultiSelectAddToPlaylistButton）负责。
+                AddSongsToUserPlaylist(selected);
             }
             else
             {

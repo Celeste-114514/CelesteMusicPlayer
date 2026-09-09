@@ -565,6 +565,18 @@ namespace CelesteMusicPlayer
             // 与双击播放后的显示保持一致；否则启动恢复上次播放时浮窗只剩程序图标。
             ConfigureEngineSmtc(item, playing: false);
 
+            // 「启动后自动播放」：走引擎路径（与双击播放一致），这样 DSP 链、实时电平表、
+            // SMTC 播放状态/进度才会全部正常。此前这里走 MediaPlayer 的 player.Play()，
+            // 而 MediaPlayer 路径没有 DSP 链 → LevelMeterChannels 恒 0 → 电平表不显示，
+            // 且 SMTC 状态也不会更新（与之前启动续播 SMTC 卡「暂停」同源）。
+            if (AppSettingsStore.Load().AutoPlayWhenStart)
+            {
+                StartPlayback(item);
+                NotifyCurrentPlaylistWindow();
+                _miniPlayerWindow?.RefreshFromOwner();
+                return;
+            }
+
             // 扩展格式（APE/WavPack 等）：系统 Media Foundation 无法解码，启动时不预加载，
             // 避免触发 MediaFailed 弹窗；点击播放时由 FFmpeg 引擎转码播放。
             if (AudioPlaybackEngine.NeedsFfmpeg(item.FilePath) || SacdIsoExtractor.IsSacdIso(item.FilePath))
@@ -591,14 +603,7 @@ namespace CelesteMusicPlayer
             {
                 MediaSource source = MediaSource.CreateFromUri(CreateFileMediaUri(item.FilePath));
                 player.Source = source;
-                if (AppSettingsStore.Load().AutoPlayWhenStart)
-                {
-                    player.Play();
-                }
-                else
-                {
-                    player.Pause();
-                }
+                player.Pause();
             }
             catch (Exception ex)
             {
@@ -2571,6 +2576,9 @@ namespace CelesteMusicPlayer
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
                 }
 
+                // 按专辑真实顺序（Disc → Track）排列，避免纯文件名字母序把第 1 首排到别处
+                songs = OrderAlbumTracks(songs);
+
                 for (int i = 0; i < songs.Count; i++)
                 {
                     songs[i].Index = i + 1;
@@ -2868,6 +2876,10 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 按专辑真实顺序播放：优先 Disc（碟号）→ Track（轨道号），
+            // 无轨道号的曲目回退到标题排序并排在末尾（避免纯文件名字母序把第 1 首排到别处）。
+            tracks = OrderAlbumTracks(tracks);
+
             if (replacePlaylist)
             {
                 _userPlaylist.Clear();
@@ -2878,6 +2890,30 @@ namespace CelesteMusicPlayer
             {
                 AddSongsToUserPlaylist(tracks);
             }
+        }
+
+
+        /// <summary>
+        /// 按专辑真实顺序排序：有轨道号的按 Disc → Track；无轨道号（Track==0）回退到
+        /// 标题排序并统一排在末尾。这样多 CD 合辑也能按碟序连续播放。
+        /// </summary>
+        private static List<PlaylistItem> OrderAlbumTracks(List<PlaylistItem> tracks)
+        {
+            bool anyTrack = tracks.Any(t => t.Track > 0);
+            if (!anyTrack)
+            {
+                // 整组都没有轨道号：退回标题排序（比纯文件名字母序更接近用户预期）
+                return tracks
+                    .OrderBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+            }
+
+            return tracks
+                .OrderBy(t => t.Track == 0 ? 1 : 0)          // 有轨道号的在前
+                .ThenBy(t => t.Disc)                         // 碟号
+                .ThenBy(t => t.Track)                        // 轨道号
+                .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
+                .ToList();
         }
 
 
@@ -2903,7 +2939,7 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            return GetOrImportTracksByPaths(paths);
+            return OrderAlbumTracks(GetOrImportTracksByPaths(paths));
         }
 
 

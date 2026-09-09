@@ -244,10 +244,11 @@ namespace CelesteMusicPlayer
             }
             else if (isDetailSongList)
             {
-                // 专辑/艺术家/专辑艺术家详情页多选歌曲 → 添加到播放列表（列表墙/命名单）
-                MultiSelectPrimaryActionIcon.Glyph = "\uE8B7";
-                MultiSelectPrimaryActionText.Text = "添加到播放列表";
-                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "把选中的歌曲添加到播放列表（列表墙）");
+                // 专辑/艺术家/专辑艺术家详情页多选歌曲 → 主按钮「添加至播放队列」，
+                // 右下角副按钮负责「添加到播放列表」（列表墙/命名单），两者不重复。
+                MultiSelectPrimaryActionIcon.Glyph = "\uE710";
+                MultiSelectPrimaryActionText.Text = "添加至播放队列";
+                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲按顺序加入播放队列");
             }
             else if (_multiSelectAlbumGrid != null)
             {

@@ -15,12 +15,33 @@
             <x:Boolean x:Key="ListViewItemSelectionCheckMarkVisualEnabled">False</x:Boolean>
             <x:Boolean x:Key="GridViewItemSelectionCheckMarkVisualEnabled">False</x:Boolean>
 
-            <!-- 全局字体回退：西文用 Segoe UI Variable，中文回退到微软雅黑 UI，
-                 修复 Segoe UI 缺中文字形时个别汉字（如「复」）走异常瘦长回退字形的问题。
-                 注意：字体名必须是系统真实注册名「Segoe UI Variable」（不带 " Text" 后缀），
-                 否则回退链找不到首字体导致中文落到异常字形。 -->
-            <FontFamily x:Key="ContentControlThemeFontFamily">Segoe UI Variable, Microsoft YaHei UI</FontFamily>
-            <FontFamily x:Key="TextControlThemeFontFamily">Segoe UI Variable, Microsoft YaHei UI</FontFamily>
+            <!-- 全局字体统一为微软雅黑 UI：它同时含完整中西文字形，中文不再走不可靠的
+                 字体回退（否则个别汉字如「复」、右键菜单项会落到异常瘦长字形）。
+                 不保留 Segoe UI Variable 前缀，是因为其缺中文字形、回退机制在
+                 WinUI3 部分控件（MenuFlyoutItem 等）上不可靠，反而造成字体不统一。 -->
+            <FontFamily x:Key="ContentControlThemeFontFamily">Microsoft YaHei UI</FontFamily>
+            <FontFamily x:Key="TextControlThemeFontFamily">Microsoft YaHei UI</FontFamily>
+            <FontFamily x:Key="MTCMediaFontFamily">Microsoft YaHei UI</FontFamily>
+            <FontFamily x:Key="PivotHeaderItemFontFamily">Microsoft YaHei UI</FontFamily>
+            <FontFamily x:Key="PivotTitleFontFamily">Microsoft YaHei UI</FontFamily>
+            <FontFamily x:Key="KeyTipFontFamily">Microsoft YaHei UI</FontFamily>
+
+            <!-- 修复右键菜单中文字形异常（WinUI3 bug #10805/#11024）：
+                 为所有菜单项控件加隐式 Style，强制微软雅黑 UI，避免中文走
+                 错误的日文样式字形渲染路径（「添」「复」等字瘦长/歪斜）。
+                 隐式 Style 同时作用于 XAML 静态菜单与代码里 new 的动态菜单。 -->
+            <Style TargetType="MenuFlyoutItem">
+                <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+            </Style>
+            <Style TargetType="MenuFlyoutSubItem">
+                <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+            </Style>
+            <Style TargetType="ToggleMenuFlyoutItem">
+                <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+            </Style>
+            <Style TargetType="RadioMenuFlyoutItem">
+                <Setter Property="FontFamily" Value="Microsoft YaHei UI" />
+            </Style>
         </ResourceDictionary>
     </Application.Resources>
 </Application>

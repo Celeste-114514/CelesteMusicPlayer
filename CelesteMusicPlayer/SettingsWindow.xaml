@@ -1499,9 +1499,21 @@
                                             Opacity="0.65"
                                             TextWrapping="WrapWholeWords"
                                             Text="点击「检查更新」获取最新版本（GitHub Releases）。" />
+                                        <ProgressBar
+                                            x:Name="AboutDownloadProgress"
+                                            Minimum="0"
+                                            Maximum="100"
+                                            Value="0"
+                                            IsIndeterminate="False"
+                                            Visibility="Collapsed" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
                                         <Button x:Name="AboutCheckUpdateButton" Content="检查更新" Click="AboutCheckUpdate_Click" />
+                                        <Button
+                                            x:Name="AboutDownloadUpdateButton"
+                                            Content="下载更新"
+                                            Click="AboutDownloadUpdate_Click"
+                                            Visibility="Collapsed" />
                                         <HyperlinkButton
                                             x:Name="AboutReleasesLink"
                                             Content="GitHub Releases ↗"
