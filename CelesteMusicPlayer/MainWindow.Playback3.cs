@@ -2453,8 +2453,15 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                _engineSmtc ??= SystemMediaTransportControls.GetForCurrentView();
+                // Unpackaged 应用不能用 GetForCurrentView()（打包/AppX 专用，非打包下返回 null/抛异常），
+                // 改用 MediaPlayer 自带的 SystemMediaTransportControls，与 ConfigureSmtcFromSettings 保持一致。
+                _engineSmtc ??= GetPlayer()?.SystemMediaTransportControls;
                 SystemMediaTransportControls smtc = _engineSmtc;
+                if (smtc == null)
+                {
+                    return;
+                }
+
                 smtc.IsEnabled = true;
                 smtc.IsPlayEnabled = true;
                 smtc.IsPauseEnabled = true;
