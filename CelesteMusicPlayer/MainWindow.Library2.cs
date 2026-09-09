@@ -156,12 +156,21 @@ namespace CelesteMusicPlayer
         {
             _openedArtist = artist;
             _artistDetailUsesAlbumArtist = string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal);
-            _artistSongSortMode = ArtistSongSortMode.Title;
-            _artistAlbumSortMode = ArtistAlbumSortMode.Title;
-            _artistAlbumSortAscending = true;
-            ArtistSongSortButton.Content = "排序：标题";
-            ArtistAlbumSortFieldText.Text = "排序：专辑（标题）";
-            ArtistAlbumSortOrderText.Text = "升序";
+
+            // 排序状态保留在字段里，不在此重置：否则切换页面再返回时，
+            // 用户之前选的排序方式会被硬编码回「标题/升序」。
+            // 首次进入时字段已是默认值（Title/升序），后续进入沿用上次选择。
+            // 同步 UI 文案到当前字段值，避免显示与实际排序不一致。
+            ArtistSongSortButton.Content = _artistSongSortMode switch
+            {
+                ArtistSongSortMode.AlbumTitleThenTrack => "排序：专辑（标题）",
+                ArtistSongSortMode.AlbumYearThenTrack => "排序：专辑（时间）",
+                _ => "排序：标题"
+            };
+            ArtistAlbumSortFieldText.Text = _artistAlbumSortMode == ArtistAlbumSortMode.Year
+                ? "排序：专辑（时间）"
+                : "排序：专辑（标题）";
+            ArtistAlbumSortOrderText.Text = _artistAlbumSortAscending ? "升序" : "降序";
 
             // 进入详情页即清除墙内选中项，返回后不再残留主题色选中框
             ArtistGridView.SelectedItem = null;
