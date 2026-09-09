@@ -329,7 +329,7 @@ namespace CelesteMusicPlayer
                 _audioEngine?.SetVolume(e.NewValue / 100.0);
             }
 
-            if (!_applyingSettingsVolume && !IsHiFiModeSelected())
+            if (!_applyingSettingsVolume && !IsHiFiModeSelected() && _volumeStartupApplied)
             {
                 // 记录用户最后一次主动设定的音量（跨入口唯一真值源）
                 LastUserVolume = Math.Clamp(e.NewValue, 0, 100);

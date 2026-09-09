@@ -246,6 +246,10 @@ namespace CelesteMusicPlayer
                 // 导致共享模式重启后音量不回填、停在 XAML 默认 80%）。
                 VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
                 _volumeToSave = Math.Clamp(settings.Volume, 0, 100); // 启动即同步，避免退出时以旧/0 值写盘
+                // 回填完成：此后（用户真实拖动等）音量变化才允许写盘。
+                // 关键：XAML 里 VolumeSlider 的 Value 默认值在 InitializeComponent 时触发 ValueChanged，
+                // 若不加此闸门，那个默认值（原 80）会在启动回填前抢先写盘，覆盖用户上次保存的音量。
+                _volumeStartupApplied = true;
             }
             finally
             {

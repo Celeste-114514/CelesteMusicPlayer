@@ -528,6 +528,10 @@ namespace CelesteMusicPlayer
         private bool _applyingSettingsVolume;
         private DispatcherQueueTimer? _volumeSaveTimer;
         private double _volumeToSave;
+        /// <summary>音量启动回填是否完成。为 false 期间（InitializeComponent 解析 XAML 默认值
+        /// 触发 ValueChanged 到真正回填保存音量之间），任何音量变化都不写盘，
+        /// 防止 XAML 里的默认值覆盖用户上次保存的音量。</summary>
+        private bool _volumeStartupApplied;
         /// <summary>用户最后一次主动设定的音量（0-100），-1 表示本次运行没动过。
         /// 音量有两个入口（主界面滑条 / 设置页滑条），各自单独保存会互相覆盖，
         /// 导致"重启后音量回到 80%"。这里统一记录最后一次用户意图，退出写盘时优先用它。
