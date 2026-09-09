@@ -99,6 +99,8 @@ namespace CelesteMusicPlayer
         private static Color _waveAccentColor = Color.FromArgb(255, 0, 120, 212);
         private SystemMediaTransportControls? _engineSmtc;
         private long _lastSmtcTimelineMs; // SMTC timeline 限频（约 500ms 一次）
+        /// <summary>SMTC 专用宿主 MediaPlayer：挂静音循环源激活播放会话，独立于主播放器，避免污染主播放的事件/UI。</summary>
+        private MediaPlayer? _smtcHost;
         private Style? _playlistItemDefaultStyle;
         private Style? _artistTrackItemDefaultStyle;
         private Style? _albumTrackItemDefaultStyle;

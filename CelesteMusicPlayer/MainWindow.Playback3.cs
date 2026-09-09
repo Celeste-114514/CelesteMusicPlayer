@@ -2443,6 +2443,96 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>
+        /// 拿到 SMTC 专用宿主 MediaPlayer（懒创建），并确保它挂着"静音循环占位源"真正开始一个音频播放会话。
+        /// 系统 SMTC 只有在应用开始音频播放会话后，才会在系统浮窗/音量条旁显示歌曲元数据；
+        /// 否则手动塞进 DisplayUpdater 的标题/歌手/封面会被系统忽略（只剩 exe 图标 + 路径）。
+        /// 本播放器真正出声走 NAudio/WASAPI 引擎，主 MediaPlayer 从不真正播放，故用独立宿主 + 占位源。
+        /// 独立宿主不 SetMediaPlayer、不注册主播放器事件，避免静音源触发 Player_MediaOpened 等污染主播放 UI。
+        /// Volume=0 保证绝不发声，不干扰引擎（含 WASAPI 独占 / bit-perfect 直通）。
+        /// </summary>
+        private MediaPlayer? EnsureSmtcSilentSource()
+        {
+            try
+            {
+                if (_smtcHost == null)
+                {
+                    _smtcHost = new MediaPlayer();
+                    _smtcHost.CommandManager.IsEnabled = false; // 手动控制，禁用内置命令自动关联
+                    _smtcHost.AudioCategory = MediaPlayerAudioCategory.Media;
+                    _smtcHost.Volume = 0.0;              // 绝对静音，绝不发声
+                    _smtcHost.IsLoopingEnabled = true;   // 循环，永不停止
+                }
+
+                // 已挂过占位源就跳过，避免重复重建播放会话导致 SMTC 闪断
+                if (_smtcHost.Source == null)
+                {
+                    byte[] wav = BuildSilentWav();
+                    using var ms = new MemoryStream(wav);
+                    var stream = ms.AsRandomAccessStream();
+                    _smtcHost.Source = MediaSource.CreateFromStream(stream, "audio/wav");
+                    _smtcHost.Play();
+                }
+
+                return _smtcHost;
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            return null;
+        }
+
+
+        /// <summary>在内存中构造 1 秒 44.1kHz / 16bit / 单声道纯静音 PCM WAV（44 字节头 + 全零采样）。</summary>
+        private static byte[] BuildSilentWav()
+        {
+            const int sampleRate = 44100;
+            const int channels = 1;
+            const int bitsPerSample = 16;
+            const int seconds = 1;
+
+            int bytesPerSample = bitsPerSample / 8;
+            int dataLength = sampleRate * channels * bytesPerSample * seconds; // 88200
+            byte[] wav = new byte[44 + dataLength];
+
+            // RIFF 头
+            wav[0] = (byte)'R'; wav[1] = (byte)'I'; wav[2] = (byte)'F'; wav[3] = (byte)'F';
+            int fileLength = 36 + dataLength;
+            wav[4] = (byte)(fileLength & 0xFF);
+            wav[5] = (byte)((fileLength >> 8) & 0xFF);
+            wav[6] = (byte)((fileLength >> 16) & 0xFF);
+            wav[7] = (byte)((fileLength >> 24) & 0xFF);
+            wav[8] = (byte)'W'; wav[9] = (byte)'A'; wav[10] = (byte)'V'; wav[11] = (byte)'E';
+
+            // fmt 子块
+            wav[12] = (byte)'f'; wav[13] = (byte)'m'; wav[14] = (byte)'t'; wav[15] = (byte)' ';
+            wav[16] = 16; wav[17] = 0; wav[18] = 0; wav[19] = 0; // fmt 长度 16
+            wav[20] = 1; wav[21] = 0; // PCM 编码
+            wav[22] = (byte)channels; wav[23] = 0;
+            wav[24] = (byte)(sampleRate & 0xFF);
+            wav[25] = (byte)((sampleRate >> 8) & 0xFF);
+            wav[26] = (byte)((sampleRate >> 16) & 0xFF);
+            wav[27] = (byte)((sampleRate >> 24) & 0xFF);
+            int byteRate = sampleRate * channels * bytesPerSample;
+            wav[28] = (byte)(byteRate & 0xFF);
+            wav[29] = (byte)((byteRate >> 8) & 0xFF);
+            wav[30] = (byte)((byteRate >> 16) & 0xFF);
+            wav[31] = (byte)((byteRate >> 24) & 0xFF);
+            int blockAlign = channels * bytesPerSample;
+            wav[32] = (byte)blockAlign; wav[33] = 0;
+            wav[34] = (byte)bitsPerSample; wav[35] = 0;
+
+            // data 子块
+            wav[36] = (byte)'d'; wav[37] = (byte)'a'; wav[38] = (byte)'t'; wav[39] = (byte)'a';
+            wav[40] = (byte)(dataLength & 0xFF);
+            wav[41] = (byte)((dataLength >> 8) & 0xFF);
+            wav[42] = (byte)((dataLength >> 16) & 0xFF);
+            wav[43] = (byte)((dataLength >> 24) & 0xFF);
+
+            // 采样数据全零（byte 数组默认就是 0，无需再填）
+
+            return wav;
+        }
+
+
         /// <summary>配置引擎播放的系统媒体控件（SMTC）。</summary>
         private void ConfigureEngineSmtc(PlaylistItem item, bool playing)
         {
@@ -2454,8 +2544,16 @@ namespace CelesteMusicPlayer
                 }
 
                 // Unpackaged 应用不能用 GetForCurrentView()（打包/AppX 专用，非打包下返回 null/抛异常），
-                // 改用 MediaPlayer 自带的 SystemMediaTransportControls，与 ConfigureSmtcFromSettings 保持一致。
-                _engineSmtc ??= GetPlayer()?.SystemMediaTransportControls;
+                // 改用 MediaPlayer 自带的 SystemMediaTransportControls。
+                // 但 MediaPlayer 没有真正播放时，其 SMTC 不会在系统浮窗显示数据（系统要求"开始音频播放会话"）。
+                // 因此用独立 SMTC 宿主 MediaPlayer 挂静音循环占位源，激活播放会话，让元数据被系统浮窗认账。
+                MediaPlayer? smtcHost = EnsureSmtcSilentSource();
+                if (smtcHost == null)
+                {
+                    return;
+                }
+
+                _engineSmtc ??= smtcHost.SystemMediaTransportControls;
                 SystemMediaTransportControls smtc = _engineSmtc;
                 if (smtc == null)
                 {

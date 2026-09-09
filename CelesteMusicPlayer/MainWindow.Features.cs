@@ -129,17 +129,18 @@ namespace CelesteMusicPlayer
 
         private void ConfigureSmtcFromSettings()
         {
-            MediaPlayer? player = GetPlayer();
-            if (player == null)
+            AppSettingsState settings = AppSettingsStore.Load();
+            bool enable = settings.EnableSmtc;
+
+            // SMTC 统一走独立宿主 MediaPlayer（挂静音循环源激活播放会话），
+            // 与 ConfigureEngineSmtc 使用同一个宿主，保证按钮开关和元数据指向同一 SMTC 实例。
+            MediaPlayer? host = EnsureSmtcSilentSource();
+            if (host == null)
             {
                 return;
             }
 
-            AppSettingsState settings = AppSettingsStore.Load();
-            bool enable = settings.EnableSmtc;
-            player.CommandManager.IsEnabled = enable;
-
-            SystemMediaTransportControls smtc = player.SystemMediaTransportControls;
+            SystemMediaTransportControls smtc = host.SystemMediaTransportControls;
             smtc.IsEnabled = enable;
             smtc.IsPlayEnabled = enable;
             smtc.IsPauseEnabled = enable;
