@@ -2462,6 +2462,7 @@ namespace CelesteMusicPlayer
                     _smtcHost.AudioCategory = MediaPlayerAudioCategory.Media;
                     _smtcHost.Volume = 0.0;              // 绝对静音，绝不发声
                     _smtcHost.IsLoopingEnabled = true;   // 循环，永不停止
+                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 创建独立宿主 MediaPlayer 完成");
                 }
 
                 // 已挂过占位源就跳过，避免重复重建播放会话导致 SMTC 闪断
@@ -2472,11 +2473,16 @@ namespace CelesteMusicPlayer
                     var stream = ms.AsRandomAccessStream();
                     _smtcHost.Source = MediaSource.CreateFromStream(stream, "audio/wav");
                     _smtcHost.Play();
+                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 静音占位源已挂载并 Play()，Source=" + (_smtcHost.Source != null ? "有" : "无"));
+                }
+                else
+                {
+                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 静音占位源已存在，跳过重建");
                 }
 
                 return _smtcHost;
             }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("[SMTC] EnsureSmtcSilentSource", caught); }
             return null;
         }
 
@@ -2579,11 +2585,12 @@ namespace CelesteMusicPlayer
                 updater.MusicProperties.AlbumTitle = item.Album;
                 updater.Thumbnail = null;
                 updater.Update();
+                global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 元数据已写入: Title=" + item.Title + " Artist=" + item.Artist + " Album=" + item.Album + " Status=" + smtc.PlaybackStatus);
 
                 // 异步补封面缩略图（deskbox/系统媒体浮层可显示专辑封面）
                 _ = LoadAndSetSmtcThumbnailAsync(updater, item);
             }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("[SMTC] ConfigureEngineSmtc", caught); }
         }
 
 
