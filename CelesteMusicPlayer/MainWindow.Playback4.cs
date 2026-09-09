@@ -49,6 +49,11 @@ namespace CelesteMusicPlayer
         {
             if (_engineSmtc == null)
             {
+                if (Environment.TickCount64 - _lastSmtcTimelineMs > 3000)
+                {
+                    _lastSmtcTimelineMs = Environment.TickCount64;
+                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] UpdateSmtcTimeline: _engineSmtc 为 null，跳过");
+                }
                 return;
             }
 
@@ -57,6 +62,11 @@ namespace CelesteMusicPlayer
                 TimeSpan duration = _audioEngine?.Duration ?? TimeSpan.Zero;
                 if (duration <= TimeSpan.Zero)
                 {
+                    if (Environment.TickCount64 - _lastSmtcTimelineMs > 3000)
+                    {
+                        _lastSmtcTimelineMs = Environment.TickCount64;
+                        global::CelesteMusicPlayer.StartupLog.Write("[SMTC] UpdateSmtcTimeline: duration=0，跳过 pos=" + position.TotalSeconds.ToString("F2"));
+                    }
                     return;
                 }
 
@@ -69,6 +79,13 @@ namespace CelesteMusicPlayer
                     Position = position
                 };
                 _engineSmtc.UpdateTimelineProperties(props);
+
+                // 诊断：首次成功写入 timeline 时打点，确认播放中进度同步链路是否真的在跑
+                if (Environment.TickCount64 - _lastSmtcTimelineLogMs > 3000)
+                {
+                    _lastSmtcTimelineLogMs = Environment.TickCount64;
+                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] timeline 已更新: pos=" + position.TotalSeconds.ToString("F2") + " dur=" + duration.TotalSeconds.ToString("F2"));
+                }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
@@ -78,6 +95,14 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // 诊断：每 3s 打点一次，确认引擎位置回调是否持续触发
+                if (Environment.TickCount64 - _lastSmtcTimelineLogMs > 3000)
+                {
+                    _lastSmtcTimelineLogMs = Environment.TickCount64;
+                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] EnginePositionChanged: pos=" + position.TotalSeconds.ToString("F2")
+                        + " usingEngine=" + _usingEnginePlayback + " enginePlaying=" + (_audioEngine?.IsPlaying ?? false));
+                }
+
                 if (!_usingEnginePlayback)
                 {
                     return;

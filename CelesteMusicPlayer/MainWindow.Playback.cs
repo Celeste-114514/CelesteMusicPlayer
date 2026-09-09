@@ -99,6 +99,7 @@ namespace CelesteMusicPlayer
         private static Color _waveAccentColor = Color.FromArgb(255, 0, 120, 212);
         private SystemMediaTransportControls? _engineSmtc;
         private long _lastSmtcTimelineMs; // SMTC timeline 限频（约 500ms 一次）
+        private long _lastSmtcTimelineLogMs; // SMTC timeline 诊断日志限频（约 3s 一次）
         /// <summary>SMTC 专用宿主 MediaPlayer：挂静音循环源激活播放会话，独立于主播放器，避免污染主播放的事件/UI。</summary>
         private MediaPlayer? _smtcHost;
         private Style? _playlistItemDefaultStyle;
@@ -559,6 +560,10 @@ namespace CelesteMusicPlayer
 
             NowPlayingText.Text = "已就绪：" + item.Title + " - " + item.Artist;
             await UpdateNowPlayingPanelAsync(item);
+
+            // 启动续播时同步写入 SMTC（状态=暂停/就绪），让系统媒体浮窗在启动后即显示歌名/歌手/封面，
+            // 与双击播放后的显示保持一致；否则启动恢复上次播放时浮窗只剩程序图标。
+            ConfigureEngineSmtc(item, playing: false);
 
             // 扩展格式（APE/WavPack 等）：系统 Media Foundation 无法解码，启动时不预加载，
             // 避免触发 MediaFailed 弹窗；点击播放时由 FFmpeg 引擎转码播放。

@@ -202,11 +202,13 @@ namespace CelesteMusicPlayer
             if (wasPlaying)
             {
                 player.Pause();
+                UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
                 _taskbarButtons?.UpdatePlayPause(false);   // 暂停后 → 显示"播放"图标
             }
             else
             {
                 player.Play();
+                UpdateEngineSmtcStatus(MediaPlaybackStatus.Playing);
                 _taskbarButtons?.UpdatePlayPause(true);    // 播放后 → 显示"暂停"图标
             }
         }
@@ -2601,15 +2603,31 @@ namespace CelesteMusicPlayer
             {
                 if (updater == null || item == null || string.IsNullOrWhiteSpace(item.FilePath)) return;
                 byte[]? bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(item.FilePath));
-                if (bytes is not { Length: > 0 }) return;
-                using var ms = new System.IO.MemoryStream(bytes);
-                ms.Position = 0;
-                var stream = ms.AsRandomAccessStream();
-                var reference = Windows.Storage.Streams.RandomAccessStreamReference.CreateFromStream(stream);
+                if (bytes is not { Length: > 0 })
+                {
+                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 封面：未取到封面字节，跳过");
+                    return;
+                }
+
+                // 关键：DataWriter 在 Dispose 时会 DetachStream 并释放其关联的底层流，
+                // 所以必须先用 DetachStream() 把 mem 的所有权拿回来，否则 mem.Seek(0) 抛 ObjectDisposedException。
+                // 而 mem 本身不能被 using 释放——RandomAccessStreamReference 只持引用，系统异步读缩略图时才真正读流。
+                var mem = new Windows.Storage.Streams.InMemoryRandomAccessStream();
+                using (var writer = new Windows.Storage.Streams.DataWriter(mem))
+                {
+                    writer.WriteBytes(bytes);
+                    await writer.StoreAsync();
+                    await writer.FlushAsync();
+                    writer.DetachStream();
+                }
+                mem.Seek(0);
+
+                var reference = Windows.Storage.Streams.RandomAccessStreamReference.CreateFromStream(mem);
                 updater.Thumbnail = reference;
                 updater.Update();
+                global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 封面已设置: " + bytes.Length + " 字节");
             }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("[SMTC] 封面设置", caught); }
         }
 
 

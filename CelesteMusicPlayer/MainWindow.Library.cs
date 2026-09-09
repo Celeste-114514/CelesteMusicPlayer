@@ -2884,9 +2884,9 @@ namespace CelesteMusicPlayer
 
             flyout.Items.Add(new MenuFlyoutSeparator());
 
-            var webAvatarItem = new MenuFlyoutItem { Text = "从网络获取头像…" };
+            var webAvatarItem = new MenuFlyoutItem { Text = "在线搜索网络头像…" };
             webAvatarItem.Icon = new FontIcon { Glyph = "\uE774" };
-            webAvatarItem.Click += async (_, _) => await DownloadArtistAvatarFromWebAsync(_avatarContextArtist);
+            webAvatarItem.Click += (_, _) => OpenArtistAvatarSearch(_avatarContextArtist);
             flyout.Items.Add(webAvatarItem);
 
             var selectItem = new MenuFlyoutItem { Text = "从本地选择艺术家头像" };
@@ -2906,56 +2906,24 @@ namespace CelesteMusicPlayer
         }
 
 
-        private async Task DownloadArtistAvatarFromWebAsync(ArtistEntry? artist)
+        private void OpenArtistAvatarSearch(ArtistEntry? artist)
         {
             if (artist == null)
             {
                 return;
             }
 
-            try
+            ArtistEntry captured = artist;
+            bool albumArtistMode = _artistDetailUsesAlbumArtist
+                || string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal);
+            string storeKey = ArtistAvatarStoreKey(captured.Name, albumArtistMode);
+
+            var window = ArtistAvatarSearchWindow.OpenForArtist(captured.Name, storeKey);
+            window.AvatarConfirmed += image =>
             {
-                NowPlayingText.Text = "正在从网络获取头像…";
-                string? imageUrl = await OnlineMusicApi.SearchArtistAvatarUrlAsync(artist.Name);
-                if (string.IsNullOrWhiteSpace(imageUrl))
-                {
-                    NowPlayingText.Text = "未找到该艺术家的头像";
-                    return;
-                }
-
-                string tmp = Path.Combine(Path.GetTempPath(), "celeste-avatar-" + Guid.NewGuid().ToString("N") + ".jpg");
-                using (var http = new HttpClient { Timeout = TimeSpan.FromSeconds(20) })
-                {
-                    http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
-                    byte[] bytes = await http.GetByteArrayAsync(imageUrl);
-                    await System.IO.File.WriteAllBytesAsync(tmp, bytes);
-                }
-
-                bool albumArtistMode = _artistDetailUsesAlbumArtist
-                    || string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal);
-                var editor = new ArtistAvatarEditorWindow(ArtistAvatarStoreKey(artist.Name, albumArtistMode), tmp);
-                _artistAvatarEditorWindow = editor;
-                editor.Closed += (_, _) =>
-                {
-                    if (ReferenceEquals(_artistAvatarEditorWindow, editor))
-                    {
-                        _artistAvatarEditorWindow = null;
-                    }
-
-                    NowPlayingText.Text = string.Empty;
-                };
-                editor.AvatarConfirmed += image =>
-                {
-                    artist.AvatarImage = image;
-                    ApplyArtistAvatarToDetailIfOpen(artist, image);
-                };
-                editor.Activate();
-            }
-            catch
-            {
-                NowPlayingText.Text = "获取头像失败";
-            }
+                captured.AvatarImage = image;
+                ApplyArtistAvatarToDetailIfOpen(captured, image);
+            };
         }
     }
 }

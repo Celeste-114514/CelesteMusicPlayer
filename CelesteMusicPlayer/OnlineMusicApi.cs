@@ -66,6 +66,308 @@ namespace CelesteMusicPlayer
             };
         }
 
+        /// <summary>
+        /// 按歌手名搜索「艺术家」候选（头像搜索窗口用）。返回结果里 Name=歌手名、CoverUrl=歌手头像。
+        /// 与 SearchSongsAsync（歌曲搜索）不同，这里走各平台的歌手/艺术家搜索接口，直接命中歌手本人头像，
+        /// 避免用歌曲名搜索接口搜歌手名时混入一堆无关歌曲封面。
+        /// 复用 OnlineSongResult：Source=平台、SongId=歌手id、Name=歌手名、CoverUrl=头像URL。
+        /// </summary>
+        public static async Task<IReadOnlyList<OnlineSongResult>> SearchArtistsAsync(
+            string source,
+            string query,
+            CancellationToken cancellationToken = default)
+        {
+            return source switch
+            {
+                "QQ" => await SearchQqArtistsAsync(query, cancellationToken).ConfigureAwait(false),
+                "iTunes" => await SearchItunesArtistsAsync(query, cancellationToken).ConfigureAwait(false),
+                "MusicBrainz" => await SearchMusicBrainzArtistsAsync(query, cancellationToken).ConfigureAwait(false),
+                _ => await SearchNetEaseArtistsAsync(query, cancellationToken).ConfigureAwait(false)
+            };
+        }
+
+        /// <summary>网易云 type=100 歌手搜索：返回多个歌手的真实头像 picUrl（含别名）。</summary>
+        private static async Task<IReadOnlyList<OnlineSongResult>> SearchNetEaseArtistsAsync(
+            string query,
+            CancellationToken cancellationToken)
+        {
+            var results = new List<OnlineSongResult>();
+            try
+            {
+                string url = "https://music.163.com/api/search/get?s={0}&type=100&limit=20";
+                url = string.Format(url, Uri.EscapeDataString(query.Trim()));
+                using HttpResponseMessage response = await Http.GetAsync(url, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return results;
+                }
+
+                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("result", out JsonElement result)
+                    || !result.TryGetProperty("artists", out JsonElement artists)
+                    || artists.ValueKind != JsonValueKind.Array)
+                {
+                    return results;
+                }
+
+                foreach (JsonElement a in artists.EnumerateArray())
+                {
+                    string id = a.TryGetProperty("id", out JsonElement idEl) && idEl.TryGetInt64(out long aid)
+                        ? aid.ToString() : string.Empty;
+                    string name = a.TryGetProperty("name", out JsonElement nEl) ? nEl.GetString() ?? string.Empty : string.Empty;
+                    string pic = a.TryGetProperty("picUrl", out JsonElement pEl) ? pEl.GetString() ?? string.Empty : string.Empty;
+
+                    // 部分结果 picUrl 可能为空，跳过；有别名时拼进显示名便于区分。
+                    if (string.IsNullOrWhiteSpace(name))
+                    {
+                        continue;
+                    }
+
+                    string displayName = name;
+                    if (a.TryGetProperty("alias", out JsonElement aliasEl) && aliasEl.ValueKind == JsonValueKind.Array
+                        && aliasEl.GetArrayLength() > 0)
+                    {
+                        string? first = aliasEl[0].GetString();
+                        if (!string.IsNullOrWhiteSpace(first))
+                        {
+                            displayName = name + "（" + first + "）";
+                        }
+                    }
+
+                    results.Add(new OnlineSongResult("NetEase", id, displayName, string.Empty, string.Empty, pic));
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
+
+            return results;
+        }
+
+        /// <summary>QQ 音乐歌手搜索：优先取 zhida_singer（精确命中歌手的头像），否则回退歌手列表头像。</summary>
+        private static async Task<IReadOnlyList<OnlineSongResult>> SearchQqArtistsAsync(
+            string query,
+            CancellationToken cancellationToken)
+        {
+            var results = new List<OnlineSongResult>();
+            try
+            {
+                string url = "https://c.y.qq.com/soso/fcgi-bin/client_search_cp?w={0}&format=json&p=1&n=20&cr=1"
+                    + "&g_tk=5381&loginUin=0&hostUin=0&inCharset=utf8&outCharset=utf-8&notice=0"
+                    + "&platform=yqq.json&needNewCode=0&catZhida=1&t=0";
+                url = string.Format(url, Uri.EscapeDataString(query.Trim()));
+                using HttpResponseMessage response = await Http.GetAsync(url, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return results;
+                }
+
+                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("data", out JsonElement data))
+                {
+                    return results;
+                }
+
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                // 1) 精确命中歌手：data.zhida.zhida_singer（含 singerName + singerPic）
+                if (data.TryGetProperty("zhida", out JsonElement zhida)
+                    && zhida.TryGetProperty("zhida_singer", out JsonElement zs)
+                    && zs.ValueKind == JsonValueKind.Object)
+                {
+                    string name = zs.TryGetProperty("singerName", out JsonElement nEl) ? nEl.GetString() ?? string.Empty : string.Empty;
+                    string mid = zs.TryGetProperty("singerMID", out JsonElement midEl) ? midEl.GetString() ?? string.Empty : string.Empty;
+                    string pic = zs.TryGetProperty("singerPic", out JsonElement pEl) ? pEl.GetString() ?? string.Empty : string.Empty;
+
+                    if (!string.IsNullOrWhiteSpace(name) && seen.Add("zhida:" + name))
+                    {
+                        results.Add(new OnlineSongResult("QQ", mid, name, string.Empty, string.Empty, pic));
+                    }
+                }
+
+                // 2) 兜底：歌曲列表里的歌手（singer 数组带 mid，头像用 singerPic 模板）
+                if (data.TryGetProperty("song", out JsonElement songObj)
+                    && songObj.TryGetProperty("list", out JsonElement list)
+                    && list.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement s in list.EnumerateArray())
+                    {
+                        if (!s.TryGetProperty("singer", out JsonElement singers) || singers.ValueKind != JsonValueKind.Array)
+                        {
+                            continue;
+                        }
+
+                        foreach (JsonElement a in singers.EnumerateArray())
+                        {
+                            string name = a.TryGetProperty("name", out JsonElement nmEl) ? nmEl.GetString() ?? string.Empty : string.Empty;
+                            string mid = a.TryGetProperty("mid", out JsonElement midEl) ? midEl.GetString() ?? string.Empty : string.Empty;
+                            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(mid))
+                            {
+                                continue;
+                            }
+
+                            string pic = $"https://y.gtimg.cn/music/photo_new/T001R300x300M000{mid}.jpg";
+                            if (seen.Add("song:" + name))
+                            {
+                                results.Add(new OnlineSongResult("QQ", mid, name, string.Empty, string.Empty, pic));
+                            }
+                        }
+
+                        if (results.Count >= 20)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
+
+            return results;
+        }
+
+        /// <summary>
+        /// iTunes 精确区分艺人：先 entity=musicArtist 定位候选歌手（避免同名混淆），
+        /// 再对每个歌手取热门歌曲封面 artworkUrl100→600 作头像。
+        /// </summary>
+        private static async Task<IReadOnlyList<OnlineSongResult>> SearchItunesArtistsAsync(
+            string query,
+            CancellationToken cancellationToken)
+        {
+            var results = new List<OnlineSongResult>();
+            try
+            {
+                string locateUrl = "https://itunes.apple.com/search?term={0}&entity=musicArtist&limit=10";
+                locateUrl = string.Format(locateUrl, Uri.EscapeDataString(query.Trim()));
+                using HttpRequestMessage locateReq = new(HttpMethod.Get, locateUrl);
+                locateReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
+                using HttpResponseMessage locateResp = await Http.SendAsync(locateReq, cancellationToken).ConfigureAwait(false);
+                if (!locateResp.IsSuccessStatusCode)
+                {
+                    return results;
+                }
+
+                string locateJson = await locateResp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument locateDoc = JsonDocument.Parse(locateJson);
+                if (!locateDoc.RootElement.TryGetProperty("results", out JsonElement res)
+                    || res.ValueKind != JsonValueKind.Array)
+                {
+                    return results;
+                }
+
+                var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (JsonElement artist in res.EnumerateArray())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+                    string? artistId = artist.TryGetProperty("artistId", out JsonElement idEl) ? idEl.GetInt64().ToString() : string.Empty;
+                    string? exactName = artist.TryGetProperty("artistName", out JsonElement an) ? an.GetString() : null;
+                    if (string.IsNullOrWhiteSpace(exactName) || !seenNames.Add(exactName))
+                    {
+                        continue;
+                    }
+
+                    // 取该歌手热门歌曲封面作头像
+                    string? cover = await GetItunesArtistCoverAsync(exactName, cancellationToken).ConfigureAwait(false);
+                    results.Add(new OnlineSongResult("iTunes", artistId ?? string.Empty, exactName, string.Empty, string.Empty, cover ?? string.Empty));
+
+                    if (results.Count >= 10)
+                    {
+                        break;
+                    }
+                }
+            }
+            catch (OperationCanceledException) { throw; }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
+
+            return results;
+        }
+
+        private static async Task<string?> GetItunesArtistCoverAsync(string artistName, CancellationToken cancellationToken)
+        {
+            try
+            {
+                string trackUrl = "https://itunes.apple.com/search?term={0}&entity=musicTrack&attribute=artistTerm&limit=1";
+                trackUrl = string.Format(trackUrl, Uri.EscapeDataString(artistName.Trim()));
+                using HttpRequestMessage trackReq = new(HttpMethod.Get, trackUrl);
+                trackReq.Headers.TryAddWithoutValidation("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
+                using HttpResponseMessage trackResp = await Http.SendAsync(trackReq, cancellationToken).ConfigureAwait(false);
+                if (!trackResp.IsSuccessStatusCode)
+                {
+                    return null;
+                }
+
+                string trackJson = await trackResp.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument trackDoc = JsonDocument.Parse(trackJson);
+                if (!trackDoc.RootElement.TryGetProperty("results", out JsonElement tres)
+                    || tres.ValueKind != JsonValueKind.Array
+                    || tres.GetArrayLength() == 0
+                    || !tres[0].TryGetProperty("artworkUrl100", out JsonElement art))
+                {
+                    return null;
+                }
+
+                string? cover = art.GetString();
+                return string.IsNullOrWhiteSpace(cover) ? null : cover.Replace("100x100bb", "600x600bb");
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// MusicBrainz 艺术家搜索：/ws/2/artist 返回艺术家实体，但头像不在 MusicBrainz 内
+        /// （头像通常在 fanart.tv/Wikipedia，需额外 key 或不稳定）。故本平台头像留空，
+        /// 由头像窗口在展示时对「无头像」结果降级/过滤。歌手搜索主力仍是网易云/QQ/iTunes。
+        /// </summary>
+        private static async Task<IReadOnlyList<OnlineSongResult>> SearchMusicBrainzArtistsAsync(
+            string query,
+            CancellationToken cancellationToken)
+        {
+            var results = new List<OnlineSongResult>();
+            try
+            {
+                string url = "https://musicbrainz.org/ws/2/artist/?query={0}&limit=20&fmt=json";
+                url = string.Format(url, Uri.EscapeDataString(query.Trim()));
+                using HttpRequestMessage req = new(HttpMethod.Get, url);
+                req.Headers.TryAddWithoutValidation("User-Agent",
+                    "CelesteMusicPlayer/1.0 (https://github.com/Celeste-114514/CelesteMusicPlayer)");
+                using HttpResponseMessage response = await Http.SendAsync(req, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return results;
+                }
+
+                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("artists", out JsonElement artists) || artists.ValueKind != JsonValueKind.Array)
+                {
+                    return results;
+                }
+
+                foreach (JsonElement a in artists.EnumerateArray())
+                {
+                    string mbid = a.TryGetProperty("id", out JsonElement idEl) ? idEl.GetString() ?? string.Empty : string.Empty;
+                    string name = a.TryGetProperty("name", out JsonElement nEl) ? nEl.GetString() ?? string.Empty : string.Empty;
+                    // 优先取「人物/乐队」类型，跳过纯「专辑/单曲」等非艺术家实体
+                    string type = a.TryGetProperty("type", out JsonElement tEl) ? tEl.GetString() ?? string.Empty : string.Empty;
+                    if (string.IsNullOrWhiteSpace(name))
+                    {
+                        continue;
+                    }
+
+                    if (type is not ("Person" or "Group"))
+                    {
+                        continue;
+                    }
+
+                    results.Add(new OnlineSongResult("MusicBrainz", mbid, name, string.Empty, string.Empty, string.Empty));
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
+
+            return results;
+        }
+
         private static string BuildQuery(string title, string artist)
         {
             string query = string.IsNullOrWhiteSpace(artist) ? title : $"{title} {artist}";
