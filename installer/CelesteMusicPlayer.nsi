@@ -3,7 +3,7 @@
 
 ; ---------- Metadata ----------
 !define APP_NAME "CelesteMusicPlayer"
-!define APP_VERSION "26.9.10.1"
+!define APP_VERSION "26.9.10.3"
 !define APP_EXE "CelesteMusicPlayer.exe"
 !define PUBLISH_DIR "C:\Users\admin\source\repos\CelesteMusicPlayer\CelesteMusicPlayer\bin\Release\net9.0-windows10.0.19041.0\win-x64\publish"
 !define APP_GUID "{F0C207C6-BD8C-4D7A-9127-F1B67F17E65B}"
@@ -47,6 +47,11 @@ SetCompressor lzma
 ; ---------- Install sections (components) ----------
 Section "播放器主程序（必需）" SEC_APP
   SectionIn RO
+
+  ; 更新场景：先关闭正在运行的旧版本，释放 CelesteMusicPlayer.exe 文件锁，否则覆盖更新会失败
+  ExecWait 'taskkill /F /IM CelesteMusicPlayer.exe'
+  Sleep 1000
+
   SetOutPath "$INSTDIR"
   SetOverwrite on
   File /r "${PUBLISH_DIR}\*.*"
@@ -88,6 +93,10 @@ SectionEnd
 
 ; ---------- Uninstall ----------
 Section "Uninstall"
+  ; 卸载前先关闭可能仍在运行的程序，避免文件占用导致残留
+  ExecWait 'taskkill /F /IM CelesteMusicPlayer.exe'
+  Sleep 500
+
   ; 询问是否删除用户数据（仅在 GUI 交互模式弹出；静默 /S 卸载自动保留数据）
   IfSilent +3
   MessageBox MB_YESNO|MB_ICONQUESTION|MB_DEFBUTTON2 "是否同时删除用户数据（设置、主题、播放列表、封面与转码缓存、日志）？$\r$\n推荐选择“否”以保留数据。$\r$\n注意：删除后无法恢复。" IDYES del_userdata IDNO keep_userdata

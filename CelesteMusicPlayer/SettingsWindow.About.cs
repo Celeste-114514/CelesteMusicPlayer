@@ -25,11 +25,22 @@ namespace CelesteMusicPlayer
         /// <summary>最新版本安装包（Setup-*.exe）的下载 URL，无匹配资产为 null。</summary>
         private string? _latestSetupUrl;
 
-        /// <summary>当前程序集版本号字符串（如 "26.8.29.0"）。</summary>
+        /// <summary>当前程序集版本号字符串（如 "26.9.10.2"）。</summary>
         private static string CurrentVersionText()
         {
             Version? v = Assembly.GetExecutingAssembly().GetName().Version;
-            return v != null ? $"{v.Major}.{v.Minor}.{v.Build}" : "未知";
+            if (v == null)
+            {
+                return "未知";
+            }
+
+            // 完整输出 4 段版本号（含修订号），否则 26.9.10.2 会被显示成 26.9.10，
+            // 与最初的 26.9.10 无法区分，用户会误以为「没更新」。
+            if (v.Revision > 0)
+            {
+                return $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
+            }
+            return $"{v.Major}.{v.Minor}.{v.Build}";
         }
 
         /// <summary>
@@ -62,10 +73,13 @@ namespace CelesteMusicPlayer
                 return new Version(0, 0, 0, 0);
             }
 
-            // Version 只支持 2-4 段，补齐
-            return parsed.Build < 0
-                ? new Version(parsed.Major, parsed.Minor, 0)
-                : parsed;
+            // 规范化到 4 段、缺失段补 0。Version 的 -1 会被 CompareTo 当成「更小」，
+            // 不补零会导致 26.9.10（Revision=-1）被误判成比 26.9.10.1「更旧」。
+            int major = parsed.Major < 0 ? 0 : parsed.Major;
+            int minor = parsed.Minor < 0 ? 0 : parsed.Minor;
+            int build = parsed.Build < 0 ? 0 : parsed.Build;
+            int revision = parsed.Revision < 0 ? 0 : parsed.Revision;
+            return new Version(major, minor, build, revision);
         }
 
         /// <summary>
@@ -277,7 +291,18 @@ namespace CelesteMusicPlayer
                         FileName = targetPath,
                         UseShellExecute = true,
                     };
-                    Process.Start(psi);
+                    Process? started = Process.Start(psi);
+                    if (started != null)
+                    {
+                        AboutUpdateStatusText.Text = "安装向导已启动，本程序即将退出以释放文件并完成更新…";
+                        // 稍等安装向导真正拉起后，主动退出本程序，释放被占用的 exe/dll 句柄，
+                        // 确保 NSIS 能顺利覆盖安装（安装包内部也会再 taskkill 一次作为兜底）。
+                        await System.Threading.Tasks.Task.Delay(800);
+                        Microsoft.UI.Xaml.Application.Current?.Exit();
+                        // 兜底：若上面的优雅退出未能真正终止进程，强制结束以释放文件锁，
+                        // 避免安装包因文件被占用而更新失败。
+                        Environment.Exit(0);
+                    }
                 }
                 catch (Exception caught)
                 {
