@@ -145,6 +145,17 @@
                     ToolTipService.ToolTip="刷新当前页面">
                     <FontIcon Glyph="&#xE72C;" FontSize="15" />
                 </Button>
+                <Button
+                    x:Name="FullScreenButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="FullScreenButton_Click"
+                    ToolTipService.ToolTip="全屏">
+                    <FontIcon x:Name="FullScreenIcon" Glyph="&#xE740;" FontSize="15" />
+                </Button>
                 <Border
                     Width="1"
                     Height="20"

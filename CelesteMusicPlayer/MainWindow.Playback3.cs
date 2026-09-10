@@ -2555,6 +2555,10 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // 任务栏缩略图按钮的播放/暂停图标同步：独立于 SMTC 开关，
+                // 在引擎播放/暂停/就绪时统一刷新，避免启动自动播放时按钮停在「播放」图标。
+                _taskbarButtons?.UpdatePlayPause(playing);
+
                 if (!AppSettingsStore.Load().EnableSmtc)
                 {
                     return;

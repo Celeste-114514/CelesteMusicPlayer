@@ -715,6 +715,8 @@ namespace CelesteMusicPlayer
             InitializeSrcUi();
             InitializeOutputBufferUi();
             StartAudioDeviceWatcher();
+            // 全屏控制器（标题栏右上角按钮 + Esc 退出）
+            InitializeFullScreen();
             try
             {
                 _mainWindowHwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);

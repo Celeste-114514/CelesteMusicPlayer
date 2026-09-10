@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Runtime.InteropServices;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml.Controls;
 
 namespace CelesteMusicPlayer
@@ -41,6 +42,11 @@ namespace CelesteMusicPlayer
     ///   在框架之前，过滤规则明确。
     /// - WM_COMMAND：按钮 ID 在 LOWORD(wParam)；HIWORD 是通知码 (THBN_CLICKED=0x1800)。
     /// - 所有 ITaskbarList3 调用一律 [PreserveSig] 返回 int，失败 hr 直接写日志。
+    /// - **播放/暂停图标状态同步**：TryAddButtonsOnce 在把按钮第一次加到任务栏时，
+    ///   必须读当前 _isPlaying / _isFavorite 决定初始图标，否则启动自动播放时按钮会
+    ///   永远停在「播放」图标（应为「暂停」）；UpdatePlayPause/UpdateFavorite 在 Win11 上
+    ///   对单次 ThumbBarUpdateButtons 偶发漏画，故经 DispatcherQueue 再排一次强制重画，
+    ///   且不依赖只在 ~10s 内运行的 Pump timer。
     /// </summary>
     internal sealed class TaskbarThumbnailButtons : IDisposable
     {
@@ -55,6 +61,7 @@ namespace CelesteMusicPlayer
         private readonly MainWindow _owner;
         private readonly IntPtr _hwnd;
         private readonly ITaskbarList3? _taskbar;
+        private readonly DispatcherQueue? _dispatcherQueue = DispatcherQueue.GetForCurrentThread();
 
         private SubclassProc? _subclassDelegate;
         private readonly IntPtr _subclassId = new(0xC3);
@@ -299,7 +306,7 @@ namespace CelesteMusicPlayer
                 IntPtr heart = _isFavorite ? _hHeartFilled : _hHeartEmpty;
                 string heartTip = _isFavorite ? "取消喜欢" : "添加到喜欢";
                 var prevBtn = MakeIconButton(BtnPrev, _hPrev, "上一首");
-                var playBtn = MakeIconButton(BtnPlayPause, _hPlay, "播放");
+                var playBtn = MakeIconButton(BtnPlayPause, _isPlaying ? _hPause : _hPlay, _isPlaying ? "暂停" : "播放");
                 var nextBtn = MakeIconButton(BtnNext, _hNext, "下一首");
                 var favBtn = MakeIconButton(BtnFavorite, heart, heartTip);
                 var arr = new[] { prevBtn, playBtn, nextBtn, favBtn };
@@ -359,21 +366,31 @@ namespace CelesteMusicPlayer
             }, System.Threading.Tasks.TaskScheduler.Default);
         }
 
-        /// <summary>更新播放/暂停按钮图标（playing=true 显示暂停图标）。未添加时忽略。</summary>
+        /// <summary>
+        /// 更新播放/暂停按钮图标（playing=true 显示暂停图标）。
+        /// 未添加时只缓存 _isPlaying，AddButtons 成功时 TryAddButtonsOnce 会自动应用当前状态，图标不会反。
+        /// 双重保险：explorer 在 Win11 上对单次 ThumbBarUpdateButtons 偶发漏画，
+        /// 经 DispatcherQueue 再排一次执行强制重画（独立于 10s 后停摆的 Pump timer）。
+        /// </summary>
         public void UpdatePlayPause(bool playing)
         {
+            _isPlaying = playing;
             if (!_added || _disposed || _taskbar == null)
             {
                 return;
             }
 
-            _isPlaying = playing;
+            SendPlayPause();
+            ScheduleResend(SendPlayPause);
+        }
+
+        private void SendPlayPause()
+        {
             try
             {
-                var btn = MakeIconButton(BtnPlayPause, playing ? _hPause : _hPlay,
-                    playing ? "暂停" : "播放");
-                var arr = new[] { btn };
-                int hr = _taskbar.ThumbBarUpdateButtons(_hwnd, 1, arr);
+                var btn = MakeIconButton(BtnPlayPause, _isPlaying ? _hPause : _hPlay,
+                    _isPlaying ? "暂停" : "播放");
+                int hr = _taskbar!.ThumbBarUpdateButtons(_hwnd, 1, new[] { btn });
                 if (hr != 0)
                 {
                     StartupLog.Write("[thumb] UpdatePlayPause hr=0x" + hr.ToString("X8"));
@@ -381,7 +398,7 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught)
             {
-                StartupLog.WriteException("TaskbarThumbnailButtons.UpdatePlayPause", caught);
+                StartupLog.WriteException("TaskbarThumbnailButtons.SendPlayPause", caught);
             }
         }
 
@@ -398,19 +415,46 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            SendFavorite();
+            ScheduleResend(SendFavorite);
+        }
+
+        private void SendFavorite()
+        {
             try
             {
-                IntPtr heart = isFavorite ? _hHeartFilled : _hHeartEmpty;
-                string tip = isFavorite ? "取消喜欢" : "添加到喜欢";
+                IntPtr heart = _isFavorite ? _hHeartFilled : _hHeartEmpty;
+                string tip = _isFavorite ? "取消喜欢" : "添加到喜欢";
                 var btn = MakeIconButton(BtnFavorite, heart, tip);
-                var arr = new[] { btn };
-                int hr = _taskbar.ThumbBarUpdateButtons(_hwnd, 1, arr);
-                StartupLog.Write("[thumb] UpdateFavorite fav=" + isFavorite + " hr=0x" + hr.ToString("X8"));
+                int hr = _taskbar!.ThumbBarUpdateButtons(_hwnd, 1, new[] { btn });
+                StartupLog.Write("[thumb] UpdateFavorite fav=" + _isFavorite + " hr=0x" + hr.ToString("X8"));
             }
             catch (Exception caught)
             {
-                StartupLog.WriteException("TaskbarThumbnailButtons.UpdateFavorite", caught);
+                StartupLog.WriteException("TaskbarThumbnailButtons.SendFavorite", caught);
             }
+        }
+
+        /// <summary>
+        /// 经 DispatcherQueue 再排一次执行（下一轮 UI 消息循环），强制 explorer 重画。
+        /// Win11 的 ThumbBarUpdateButtons 偶发异步漏画，单次发送不即时反应；
+        /// 用 dispatcher 异步重发而非 sleep，不阻塞 UI 线程，且 Pump timer 停摆后仍然有效
+        /// （Pump timer 仅运行 ~10s，其后播放/暂停切换若漏画只能靠这里补救）。
+        /// </summary>
+        private void ScheduleResend(Action resend)
+        {
+            if (_disposed || _dispatcherQueue == null)
+            {
+                return;
+            }
+
+            _dispatcherQueue.TryEnqueue(DispatcherQueuePriority.Low, () =>
+            {
+                if (!_disposed && _added && _taskbar != null)
+                {
+                    resend();
+                }
+            });
         }
 
         public void Dispose()
