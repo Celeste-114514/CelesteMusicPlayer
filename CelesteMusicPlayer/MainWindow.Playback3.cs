@@ -1469,6 +1469,22 @@ namespace CelesteMusicPlayer
         private async Task UpdateNowPlayingPanelAsync(PlaylistItem item)
         {
             _nowPlayingPath = item.FilePath;
+
+            // 切歌：临时播放标记失效。新歌若在音乐库里，「添加到音乐库」按钮自动收起；
+            // 不在（比如双击打开还没入库的散装文件）就继续显示。
+            if (!string.Equals(_externalPlayPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                _externalPlayPath = null;
+            }
+
+            // 「已加入音乐库」的确认态只对刚加的那首歌有效，切走了就复位
+            if (!string.Equals(_justAddedToLibraryPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                _justAddedToLibraryPath = null;
+            }
+
+            UpdateAddToLibraryButtonVisibility();
+
             NowPlayingTitleText.Text = item.Title;
             UpdateNowPlayingArtistAlbumText(item);
             UpdateTransportNowPlaying(item, null);
@@ -1494,6 +1510,7 @@ namespace CelesteMusicPlayer
             NowPlayingCoverImage.Source = coverImage;
             ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
             UpdateTransportNowPlaying(item, coverImage);
+            _lastCoverBytes = coverBytes;   // 供自定义背景移除后恢复封面背景
             _ = ApplyAlbumArtBackgroundAsync(coverBytes, item.FilePath);
             ApplyNowPlayingPaneTransparent();
 

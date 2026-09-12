@@ -600,6 +600,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="背景高斯模糊" />
+                                <TextBlock Text="对专辑封面背景和自定义背景图都生效" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                             <ToggleSwitch x:Name="BackgroundGaussBlurSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
                         </Grid>
@@ -922,12 +923,14 @@
                             <Button x:Name="ImportSettingsButton" Content="导入设置…" Click="ImportSettingsButton_Click" MinWidth="130" />
                         </StackPanel>
                         <StackPanel Spacing="2">
-                            <TextBlock Text="文件关联" />
-                            <TextBlock Text="将常见音频格式设为使用 Celeste Music Player 打开" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            <TextBlock Text="关联文件" />
+                            <TextBlock Text="选择让哪些音频格式用 Celeste Music Player 打开" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            <!-- 当前版本能否做关联 / 已关联到哪个程序：由 RefreshAssociationStatus() 填 -->
+                            <TextBlock x:Name="AssociationStatusText" FontSize="12" TextWrapping="WrapWholeWords" Margin="0,4,0,0" Visibility="Collapsed" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <Button x:Name="RegisterAssociationButton" Content="注册文件关联" Click="RegisterAssociationButton_Click" MinWidth="130" />
-                            <Button x:Name="UnregisterAssociationButton" Content="取消文件关联" Click="UnregisterAssociationButton_Click" MinWidth="130" />
+                            <Button x:Name="OpenAssociationWindowButton" Content="关联文件…" Click="OpenAssociationWindowButton_Click" MinWidth="130" />
+                            <Button x:Name="UnregisterAssociationButton" Content="取消全部关联" Click="UnregisterAssociationButton_Click" MinWidth="130" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>

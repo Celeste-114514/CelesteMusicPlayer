@@ -159,6 +159,7 @@ namespace CelesteMusicPlayer
             InitComboBoxes();
             ReloadHotkeyList();
             LoadFromStore();
+            RefreshAssociationStatus();
 
             if (SettingsNav.MenuItems.Count > 0)
             {
@@ -1169,14 +1170,13 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            bool prevAutoRun = AppSettingsStore.Load().AutoRun;
             PersistAndApply(PopulateStateFromUi);
 
             AppSettingsState saved = AppSettingsStore.Load();
-            if (saved.AutoRun != prevAutoRun)
-            {
-                ApplyAutoRunRegistry(saved.AutoRun);
-            }
+            // 无条件按当前设置校正注册表（不再只在「值变了」时才写）：
+            // 安装包（NSIS SEC_AUTORUN 组件）会在安装时直接写 Run 项，若只在值变化时同步，
+            // 该项会永久残留 → 「设置里关着但开机仍自启」。这里每次都同步，开关为关即清掉残留。
+            ApplyAutoRunRegistry(saved.AutoRun);
 
             MainWindow.Instance?.ApplySettingsLive(AppSettingsStore.Load());
             MainWindow.Instance?.ApplyOverlayPreferenceFromSettings(saved);
@@ -1184,27 +1184,8 @@ namespace CelesteMusicPlayer
 
         private static void ApplyAutoRunRegistry(bool enable)
         {
-            try
-            {
-                using RegistryKey key = Registry.CurrentUser.OpenSubKey(AutoRunRegistryKey, writable: true)
-                    ?? Registry.CurrentUser.CreateSubKey(AutoRunRegistryKey);
-                if (key == null)
-                {
-                    return;
-                }
-
-                if (enable)
-                {
-                    string exePath = Environment.ProcessPath
-                        ?? Path.Combine(AppContext.BaseDirectory, "CelesteMusicPlayer.exe");
-                    key.SetValue(AutoRunValueName, $"\"{exePath}\"");
-                }
-                else
-                {
-                    key.DeleteValue(AutoRunValueName, throwOnMissingValue: false);
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
+            // 统一走 AutoRunHelper（注册表逻辑集中一处，且被程序启动时的校正复用）
+            AutoRunHelper.Apply(enable);
         }
 
         private void SettingsNav_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -1794,18 +1775,76 @@ namespace CelesteMusicPlayer
             await ShowInfoDialogAsync("已清空", "最近播放记录已清除。");
         }
 
-        private async void RegisterAssociationButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// 刷新「文件关联」区域的状态提示。
+        ///
+        /// 为什么要有这块常驻提示：Debug（F5）跑的是 MSIX 打包版，Windows 不允许它
+        /// 作为文件的默认打开程序 —— 手动把它设成"打开方式"后双击音频会静默退出，
+        /// 表现就是"双击没反应"，而且没有任何报错，靠用户自己完全排查不出来。
+        /// 这里把结论直接写在设置界面上，并把「关联指到了一个用不了的程序」也点明。
+        /// </summary>
+        private void RefreshAssociationStatus()
         {
             try
             {
+                if (AssociationStatusText == null) return;
+
                 string exePath = Environment.ProcessPath
                     ?? Path.Combine(AppContext.BaseDirectory, "CelesteMusicPlayer.exe");
-                FileAssociationHelper.Register(exePath);
-                await ShowInfoDialogAsync("已注册", "常见音频格式已关联到 Celeste Music Player。");
+
+                bool selfPackaged = FileAssociationHelper.IsPackagedLayout(exePath);
+
+                string? registered = FileAssociationHelper.GetRegisteredExecutable();
+                bool registeredPackaged = registered != null
+                    && FileAssociationHelper.IsPackagedLayout(registered);
+
+                if (registeredPackaged)
+                {
+                    // 关联指到了一个不能用的程序：这正是「双击音频没反应」的根因
+                    AssociationStatusText.Text =
+                        "⚠ 当前关联指向的程序不能用来打开文件（调试/打包版）：\n" + registered
+                        + "\n请先点「取消文件关联」，再用免安装版或安装后的正式版本重新注册。";
+                    AssociationStatusText.Foreground = new SolidColorBrush(Colors.OrangeRed);
+                }
+                else if (selfPackaged)
+                {
+                    AssociationStatusText.Text =
+                        "⚠ 你现在运行的是调试（打包）版本，Windows 不允许它作为文件的默认打开程序，"
+                        + "双击音频不会有任何反应。\n要使用文件关联，请运行 Release（免安装）版或安装后的正式版本。";
+                    AssociationStatusText.Foreground = new SolidColorBrush(Colors.OrangeRed);
+                }
+                else if (!string.IsNullOrEmpty(registered))
+                {
+                    AssociationStatusText.Text = "✓ 当前版本可用于文件关联，已注册到：\n" + registered;
+                    AssociationStatusText.Foreground = new SolidColorBrush(Color.FromArgb(255, 76, 175, 80));
+                }
+                else
+                {
+                    AssociationStatusText.Text = "✓ 当前版本可用于文件关联（尚未注册）。";
+                    AssociationStatusText.Foreground = new SolidColorBrush(Color.FromArgb(255, 76, 175, 80));
+                }
+
+                AssociationStatusText.Visibility = Visibility.Visible;
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
+        }
+
+        /// <summary>
+        /// 打开「文件关联」窗口，让用户逐项勾选要关联哪些音频格式。
+        ///
+        /// 原来这里是一个"一键注册全部格式"的按钮，但一键全注册会把 .iso/.cue 这类
+        /// 本来属于别的软件的格式也抢过来，而且用户无法选择。改成开窗勾选后，
+        /// 注册 / 取消 / 挑选程序文件 都在那个窗口里完成，这里只负责把门打开。
+        /// </summary>
+        private void OpenAssociationWindowButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                FileAssociationWindow.ShowOrActivate();
             }
             catch (Exception ex)
             {
-                await ShowInfoDialogAsync("注册失败", ex.Message);
+                _ = ShowInfoDialogAsync("打开失败", ex.Message);
             }
         }
 
@@ -1814,6 +1853,7 @@ namespace CelesteMusicPlayer
             try
             {
                 FileAssociationHelper.Unregister();
+                RefreshAssociationStatus();
                 await ShowInfoDialogAsync("已取消", "已移除 Celeste Music Player 的文件关联。");
             }
             catch (Exception ex)

@@ -46,8 +46,11 @@ namespace CelesteMusicPlayer
                 large.Save(ms, ImageFormat.Png);
                 return ms.ToArray();
             }
-            catch
+            catch (Exception caught)
             {
+                // 以前这里是静默 return null，结果上层只看到「图没模糊」，完全不知道是解码失败。
+                // 典型触发：传入 WebP / AVIF / HEIC（GDI+ 不认这些格式）—— 记下来便于定位。
+                global::CelesteMusicPlayer.StartupLog.WriteException("AlbumArtBackground.cs", caught);
                 return null;
             }
         }

@@ -1408,6 +1408,14 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 设置里选了自定义背景图片：自定义优先，封面背景让位（清掉 + 压暗层归零）。
+            if (!string.IsNullOrWhiteSpace(settings.CustomBackgroundPath)
+                && System.IO.File.Exists(settings.CustomBackgroundPath))
+            {
+                ClearAlbumArtBackground();
+                return;
+            }
+
             if (coverBytes == null || coverBytes.Length == 0)
             {
                 ClearAlbumArtBackground();
@@ -1443,6 +1451,12 @@ namespace CelesteMusicPlayer
             if (AlbumArtBackgroundImage != null)
             {
                 AlbumArtBackgroundImage.Source = null;
+            }
+
+            // 压暗层跟着归零：只清封面图不清 Scrim 的话，53% 深色 Border 会残留继续压暗窗口
+            if (AlbumArtBackgroundScrim != null)
+            {
+                AlbumArtBackgroundScrim.Opacity = 0;
             }
         }
 

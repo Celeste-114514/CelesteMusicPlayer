@@ -43,8 +43,19 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
 
-        /// <summary>启动时恢复上次打开的文件夹或音频文件列表。</summary>
+        /// <summary>
+        /// 启动时恢复曲库：先恢复上次打开的文件夹 / 文件列表，
+        /// 再把手动加入音乐库的散装文件补进来（它们不在任何被扫描的文件夹里）。
+        /// </summary>
         private async Task RestoreLastLibraryAsync()
+        {
+            await RestoreLastLibraryCoreAsync();
+            await AppendManualLibraryFilesAsync();
+        }
+
+
+        /// <summary>恢复上次打开的文件夹或音频文件列表。</summary>
+        private async Task RestoreLastLibraryCoreAsync()
         {
             try
             {
@@ -249,6 +260,10 @@ namespace CelesteMusicPlayer
                 }
 
                 await ReplaceLibraryWithPaths(paths, persist: false);
+
+                // 重扫描会清空列表按文件夹重建，手动加入音乐库的散装文件不在文件夹里，得补回来
+                await AppendManualLibraryFilesAsync();
+
                 NowPlayingText.Text = $"已重新扫描，共 {_playlist.Count} 首";
             }
             catch (Exception ex)

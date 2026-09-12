@@ -90,17 +90,48 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>歌曲面板「播放所有歌曲」：把当前歌曲列表全部加入播放队列并按当前排序播放。</summary>
+        /// <summary>歌曲面板「播放所有歌曲」：只播放当前界面**实际显示**的歌曲
+        /// （音乐库当前排序／搜索结果／评分／流派／年份等视角各播各的），不再固定播放整个音乐库。
+        /// 播放队列视角下不重建队列，直接从第一首开始播放。</summary>
         private void PlayAllLibrarySongsButton_Click(object sender, RoutedEventArgs e)
         {
-            if (_playlist.Count == 0)
+            if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+            {
+                // 队列本身就是播放源：保持队列内容与顺序不变，从头播放
+                PlayUserPlaylistFromStart();
+                return;
+            }
+
+            List<PlaylistItem> songs = GetDisplayedSongList();
+            if (songs.Count == 0)
             {
                 return;
             }
 
             _userPlaylist.Clear();
-            AddSongsToUserPlaylist(_playlist.ToList());
+            AddSongsToUserPlaylist(songs);
             PlayUserPlaylistAt(0);
+        }
+
+
+        /// <summary>取中间列表当前实际显示的歌曲快照（按显示顺序）。ItemsSource 为空对象时退回当前分类集合。</summary>
+        private List<PlaylistItem> GetDisplayedSongList()
+        {
+            if (PlaylistView?.ItemsSource is System.Collections.IEnumerable source)
+            {
+                var displayed = new List<PlaylistItem>();
+                foreach (object? item in source)
+                {
+                    if (item is PlaylistItem song)
+                    {
+                        displayed.Add(song);
+                    }
+                }
+
+                return displayed;
+            }
+
+            return GetActiveSongCollection().ToList();
         }
 
 
@@ -644,6 +675,14 @@ namespace CelesteMusicPlayer
             SortFieldButton.Visibility = librarySort;
             SortOrderButton.Visibility = librarySort;
             ChangeSortButton.Visibility = playlistSort;
+
+            // 同一个「播放所有歌曲」按钮在播放队列视角语义不同：那里是「播放该队列」，且不重建队列
+            PlayAllLibrarySongsText.Text = isUserPlaylist ? "播放该队列" : "播放所有歌曲";
+            ToolTipService.SetToolTip(
+                PlayAllLibrarySongsButton,
+                isUserPlaylist
+                    ? "从当前播放队列第一首开始播放（不改动队列）"
+                    : "把当前界面显示的歌曲替换进播放队列并按显示顺序播放");
         }
 
 
@@ -1298,6 +1337,10 @@ namespace CelesteMusicPlayer
         {
             var dead = new System.Collections.Generic.HashSet<string>(
                 paths, System.StringComparer.OrdinalIgnoreCase);
+
+            // 同步清掉「手动加入音乐库」的记录，否则重启后这些被移除的歌又会被补回来
+            RemoveFromManualLibraryFiles(dead);
+
             for (int i = _playlist.Count - 1; i >= 0; i--)
             {
                 if (dead.Contains(_playlist[i].FilePath))
@@ -2048,6 +2091,9 @@ namespace CelesteMusicPlayer
         /// <summary>从当前曲库、用户播放列表与统计记录中移除该歌曲。</summary>
         private void RemoveSongFromAllCollections(PlaylistItem item)
         {
+            // 手动加入音乐库的歌被移除时一并清掉记录，避免重启后被补回来
+            RemoveFromManualLibraryFiles(new[] { item.FilePath });
+
             bool curWasDeleted = _currentIndex >= 0 && _currentIndex < _playlist.Count
                 && string.Equals(_playlist[_currentIndex].FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase);
             bool userWasDeleted = _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count

@@ -2285,9 +2285,14 @@ namespace CelesteMusicPlayer
                 if (rgOn) active.Add("ReplayGain");
                 string dsp = active.Count == 0 ? "全部旁路" : string.Join(" / ", active) + "（开）";
                 AudioLinkDsp.Text = dsp + (hifi ? " [HiFi 直通链路]" : " [共享链路]");
-                AudioLinkBitPerfect.Text = active.Count == 0
-                    ? "bit-perfect 直通（需结合输出格式确认，无重采样/音量干预）"
-                    : "非 bit-perfect（参与处理方：" + string.Join("、", active) + "）";
+                // bit-perfect：综合判定（DSP + 输出格式 + 是否共享模式），不再只看 DSP 开关
+                bool chainPure = EvaluateBitPerfectChain(out string chainReason, out bool chainConfirmed);
+                AudioLinkBitPerfect.Text = chainPure
+                    ? (chainConfirmed
+                        ? "bit-perfect 直通：输出格式与源一致，无重采样、无 DSP 干预"
+                        : "bit-perfect 直通（DSP 已旁路；开始播放后按输出格式复核）")
+                    : "非 bit-perfect：" + chainReason
+                      + (chainConfirmed ? string.Empty : "（待播放确认）");
 
                 // 专业播放状态
                 AudioProPosition.Text =
@@ -2297,8 +2302,8 @@ namespace CelesteMusicPlayer
                     ? "系统默认"
                     : _audioEngine.OutputDeviceId;
                 AudioProDspChain.Text = "EQ" + (eqOn ? "✓" : "—") + " · 声道" + (chOn ? "✓" : "—") + " · 限幅" + (limiterOn ? "✓" : "—") + " · ReplayGain" + (rgOn ? "✓" : "—");
-                // 链路可视化着色 + bit-perfect 徽章
-                ApplyLinkVisual(pure: active.Count == 0, activeText: string.Join("、", active));
+                // 链路可视化着色 + bit-perfect 徽章（用整链判定，而非仅 DSP 开关）
+                ApplyLinkVisual(pure: chainPure, activeText: chainReason);
                 // 同步主界面常驻 bit-perfect 徽章
                 RefreshMainBitPerfectBadge();
                 // 按设备记忆 DSP 配置档：开关与提示同步
@@ -2347,6 +2352,103 @@ namespace CelesteMusicPlayer
             if (rgOn) active.Add("ReplayGain");
             activeText = active.Count == 0 ? string.Empty : string.Join("、", active);
             return active.Count == 0;
+        }
+
+        /// <summary>
+        /// 综合判定整条链路是否 bit-perfect（2026-09-12 修）。
+        ///
+        /// 旧实现只看 DSP 开关，导致「共享模式 + 系统 48khz + 源 44.1khz」这种必然被系统混音器
+        /// 重采样的情形仍显示 bit-perfect —— 那行文案自己都写着「需结合输出格式确认」却没做。
+        ///
+        /// 现在的判定（任一命中即非 bit-perfect）：
+        ///   1) 任一 DSP 生效（EQ / 声道平衡 / 限幅 / ReplayGain）
+        ///   2) 输出采样率 ≠ 源采样率 → 发生重采样
+        ///   3) 输出位深 ≠ 源位深 → 发生位深转换
+        ///   4) 共享模式（系统混音器介入，即使格式一致也不保证逐字节直通）
+        /// DSD 源走 DoP/原生封装，输出格式是承载用的 PCM，不做 PCM 重采样比对。
+        /// 输出格式尚未捕获（未播放）时只按 DSP 判定，confirmed=false，UI 需标注「待播放确认」。
+        /// 只读状态用于显示，不改动任何音频字节流。
+        /// </summary>
+        private bool EvaluateBitPerfectChain(out string reason, out bool confirmed)
+        {
+            reason = string.Empty;
+            confirmed = false;
+
+            var causes = new System.Collections.Generic.List<string>();
+
+            // 1) DSP 是否参与处理
+            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            if (!bypass)
+            {
+                if (IsBitPerfectPure(out string dspText) && string.IsNullOrEmpty(dspText) == false)
+                {
+                    causes.Add("DSP：" + dspText);
+                }
+            }
+
+            // 2)3) 源格式与输出格式比对
+            string? src = _audioEngine?.SourceFormatDescription;
+            string? outp = _audioEngine?.ActualOutputFormat;
+            bool isDsd = !string.IsNullOrWhiteSpace(src)
+                && src.IndexOf("DSD", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (isDsd)
+            {
+                // DSD：DoP/原生直通，输出 PCM 只是封装载体，不做重采样判定
+                confirmed = true;
+            }
+            else if (TryParseFormatText(src, out int srcRate, out int srcBits)
+                  && TryParseFormatText(outp, out int outRate, out int outBits))
+            {
+                confirmed = true;
+                if (srcRate != outRate)
+                {
+                    causes.Add($"重采样 {srcRate}→{outRate}hz");
+                }
+                else if (srcBits != outBits)
+                {
+                    causes.Add($"位深转换 {srcBits}→{outBits}bit");
+                }
+
+                // 4) 共享模式：Windows 音频引擎介入，格式即使一致也不保证直通
+                if (!IsHiFiModeSelected())
+                {
+                    causes.Add("系统混音器（共享模式）");
+                }
+            }
+
+            reason = string.Join(" · ", causes);
+            return causes.Count == 0;
+        }
+
+        /// <summary>
+        /// 从格式描述串里解析采样率与位深，如 "44100hz / 16bit / 2声道" → (44100, 16)。
+        /// DSD 描述（"DSD64 / 2声道 1-bit DSD"）没有 hz，返回 false 交由调用方特殊处理。
+        /// </summary>
+        private static bool TryParseFormatText(string? text, out int sampleRate, out int bits)
+        {
+            sampleRate = 0;
+            bits = 0;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                return false;
+            }
+
+            var rateMatch = System.Text.RegularExpressions.Regex.Match(
+                text, @"(\d+)\s*hz", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (rateMatch.Success)
+            {
+                int.TryParse(rateMatch.Groups[1].Value, out sampleRate);
+            }
+
+            var bitMatch = System.Text.RegularExpressions.Regex.Match(
+                text, @"(\d+)\s*bit", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+            if (bitMatch.Success)
+            {
+                int.TryParse(bitMatch.Groups[1].Value, out bits);
+            }
+
+            return sampleRate > 0;
         }
 
         /// <summary>按设备记忆：若开启且当前设备有已存配置档，则套用该设备的 DSP 配置（不碰音频字节流）。</summary>
@@ -2414,13 +2516,13 @@ namespace CelesteMusicPlayer
                 if (MainBitPerfectBadge == null || MainBitPerfectText == null) return;
                 // 播放详情页不再显示这条徽章（非直通时会撑成长条），隐藏后就不必再刷。
                 if (MainBitPerfectBadge.Visibility != Microsoft.UI.Xaml.Visibility.Visible) return;
-                bool pure = IsBitPerfectPure(out string activeText);
+                bool pure = EvaluateBitPerfectChain(out string reason, out bool confirmed);
                 var green = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 46, 160, 67));
                 var amber = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 214, 148, 45));
                 MainBitPerfectBadge.Background = pure ? green : amber;
                 MainBitPerfectText.Text = pure
                     ? "✓ bit-perfect · 直通"
-                    : "非 bit-perfect · " + activeText;
+                    : (confirmed ? "非 bit-perfect · " + reason : "待播放确认 · " + reason);
                 MainBitPerfectText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
@@ -2446,7 +2548,9 @@ namespace CelesteMusicPlayer
                 BitPerfectBadge.Background = pure
                     ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 32, 122, 52))
                     : new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 178, 116, 28));
-                AudioLinkBitPerfectBadgeText.Text = pure ? "✓ bit-perfect · 直通" : "DSP 处理中";
+                AudioLinkBitPerfectBadgeText.Text = pure
+                    ? "✓ bit-perfect · 直通"
+                    : (string.IsNullOrWhiteSpace(activeText) ? "非 bit-perfect" : "非 bit-perfect · " + activeText);
                 AudioLinkBitPerfectBadgeText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }

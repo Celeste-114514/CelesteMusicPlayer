@@ -226,10 +226,16 @@ namespace CelesteMusicPlayer
 
         public bool ContinueWhenSwitchPlaylist { get; set; } = true;
 
-        // —— 媒体库 ——
+        // —— 音乐库 ——
         public bool AutoUpdateLibrary { get; set; }
 
         public List<string> LibraryWatchFolders { get; set; } = new();
+
+        /// <summary>
+        /// 手动加入音乐库的散装音频文件（双击打开的、或用「添加文件」选的，
+        /// 不在任何监视文件夹里）。单独记一笔，刷新音乐库或重启程序都不会丢。
+        /// </summary>
+        public List<string> ManualLibraryFiles { get; set; } = new();
 
         public bool DisableDeleteFromDisk { get; set; } = true;
 
@@ -287,6 +293,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
 
         /// <summary>主窗口置顶。</summary>
         public bool AlwaysOnTop { get; set; }
+
+        /// <summary>首次运行是否已经弹过「文件关联」选择窗口。只弹一次，用户关掉就记住，不再打扰。</summary>
+        public bool FileAssociationPromptShown { get; set; }
 
         // —— 标签排序面板（模块 A 列定制 + 模块 B 分类字段）——
         /// <summary>曲目列表列配置；空 = 用默认列（标题/艺术家/专辑/时长）。</summary>
@@ -619,6 +628,8 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             ContinueWhenSwitchPlaylist = s.ContinueWhenSwitchPlaylist,
             AutoUpdateLibrary = s.AutoUpdateLibrary,
             LibraryWatchFolders = s.LibraryWatchFolders.ToList(),
+            // 老版本的设置文件里没有这个字段，反序列化后可能是 null，必须兜住
+            ManualLibraryFiles = s.ManualLibraryFiles?.ToList() ?? new List<string>(),
             DisableDeleteFromDisk = s.DisableDeleteFromDisk,
             RemoveMissingOnUpdate = s.RemoveMissingOnUpdate,
             IgnoreTooShortOnUpdate = s.IgnoreTooShortOnUpdate,
@@ -659,7 +670,11 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             TagSortColumns = s.TagSortColumns.Select(c => new ListColumnSpec { Key = c.Key, Weight = c.Weight, Visible = c.Visible }).ToList(),
             TagSortCategoryFields = s.TagSortCategoryFields.ToList(),
             TagSortGroupFields = s.TagSortGroupFields.ToList(),
-            TagSortGroupActivePreset = s.TagSortGroupActivePreset
+            TagSortGroupActivePreset = s.TagSortGroupActivePreset,
+            // 主窗口置顶此前漏拷：保存写进了文件，但 Load() 返回的克隆里恒为 false，
+            // 表现是「勾了置顶、重启后自己取消」，与设置是否保存成功无关。
+            AlwaysOnTop = s.AlwaysOnTop,
+            FileAssociationPromptShown = s.FileAssociationPromptShown
         };
 
         internal static string GetFilePath()

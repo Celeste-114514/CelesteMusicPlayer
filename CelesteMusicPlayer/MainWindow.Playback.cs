@@ -231,7 +231,8 @@ namespace CelesteMusicPlayer
                 UpdateNowPlayingCardLayout();
             });
 
-            _ = RestoreLastLibraryAsync();
+            // 启动带进来的外部文件（双击打开）排在曲库恢复之后播，避免和启动续播抢链路
+            _ = RestoreLastLibraryThenPendingFileAsync();
         }
 
 

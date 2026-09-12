@@ -28,6 +28,7 @@ using System.Threading;
 // TagLibSharp：包名 TagLibSharp，命名空间 TagLib
 using TagLib;
 using Windows.ApplicationModel.DataTransfer;
+using Windows.Graphics.Imaging;
 using Windows.Media.Core;
 using Windows.Media;
 using Windows.Media.Playback;
@@ -984,29 +985,177 @@ namespace CelesteMusicPlayer
         }
 
 
-                /// <summary>应用自定义背景图片(设置里选择);无路径时恢复封面背景。</summary>
+                /// <summary>最近一次当前播放曲目的封面字节：清掉自定义背景后恢复封面背景用。</summary>
+        private byte[]? _lastCoverBytes;
+
+        /// <summary>自定义背景图的请求序号：连续换图时丢弃过期结果，避免旧图盖掉新图。</summary>
+        private int _customBackgroundRequest;
+
+        /// <summary>应用自定义背景图片(设置里选择)；与封面背景互斥——自定义优先。
+        /// 无路径时恢复封面背景（用最近缓存的当前曲目封面）。
+        /// 设置里开了「背景高斯模糊」时，自定义图片同样先做模糊再铺满窗口。</summary>
         private void ApplyCustomBackground(string? path)
+        {
+            int request = ++_customBackgroundRequest;
+            _ = ApplyCustomBackgroundAsync(path, request);
+        }
+
+        private async System.Threading.Tasks.Task ApplyCustomBackgroundAsync(string? path, int request)
         {
             try
             {
                 if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
                 {
+                    if (request != _customBackgroundRequest) return;
+
                     CustomBackgroundImage.Source = null;
                     CustomBackgroundImage.Visibility = Visibility.Collapsed;
+
+                    // 恢复封面背景：用最近一次的当前曲目封面重绘（没有就保持空）
+                    if (AlbumArtBackgroundImage != null)
+                    {
+                        _ = ApplyAlbumArtBackgroundAsync(_lastCoverBytes, _nowPlayingPath ?? string.Empty);
+                    }
                     return;
                 }
 
-                var bmp = new BitmapImage();
-                bmp.DecodePixelWidth = 1920;
-                using (System.IO.FileStream fs = System.IO.File.OpenRead(path))
+                AppSettingsState settings = AppSettingsStore.Load();
+                int blurRadius = settings.BackgroundGaussBlur ? settings.GaussBlurRadius : 0;
+
+                // 高斯模糊对自定义背景图同样生效（此前漏了这一步，开关只对封面背景起作用）。
+                // 顺带解决另一个隐患：4000px 的手机照片直接交给 XAML 会占掉几百 MB 显存，
+                // 走模糊通道后会被压到固定尺寸输出。
+                byte[]? pixels = await System.Threading.Tasks.Task.Run(() =>
                 {
-                    bmp.SetSource(fs.AsRandomAccessStream());
+                    try
+                    {
+                        byte[] raw = System.IO.File.ReadAllBytes(path);
+                        if (blurRadius <= 0)
+                        {
+                            return raw;
+                        }
+
+                        // workSize 取 192（封面背景是 96），半径同比放大，让滑块的模糊手感在两种背景上一致
+                        return AlbumArtBackground.CreateHeavilyBlurredPng(raw, workSize: 192, blurRadius: blurRadius * 2);
+                    }
+                    catch (Exception caught)
+                    {
+                        global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught);
+                        return null;
+                    }
+                });
+
+                // 走到这里还是 null，说明 GDI+ 根本解不了这张图 —— 典型是 WebP / AVIF / HEIC：
+                // WinUI 的图片控件走系统解码器（WIC），这些格式都能正常显示，
+                // 但 GDI+ 只认 BMP/GIF/JPEG/PNG/TIFF，碰上就抛异常、CreateHeavilyBlurredPng 只能返回 null。
+                // 旧代码这时会退回「原图直出」，于是背景照常显示、却完全不模糊
+                // —— 用户看到的现象就是「自己设的背景图，高斯模糊不生效」。
+                // 这里先让系统解码器把图转成 PNG，再走同一套模糊流程，把格式差异抹平。
+                if (pixels == null && blurRadius > 0)
+                {
+                    global::CelesteMusicPlayer.StartupLog.Write(
+                        "自定义背景：GDI+ 解不了码，改用系统解码器兜底 " + path);
+
+                    byte[]? normalized = await NormalizeImageToPngAsync(path);
+
+                    if (normalized != null)
+                    {
+                        pixels = await System.Threading.Tasks.Task.Run(
+                            () => AlbumArtBackground.CreateHeavilyBlurredPng(normalized, workSize: 192, blurRadius: blurRadius * 2));
+
+                        global::CelesteMusicPlayer.StartupLog.Write(
+                            "自定义背景：系统解码器兜底结果=" + (pixels != null ? "模糊成功" : "仍然失败"));
+                    }
                 }
 
-                CustomBackgroundImage.Source = bmp;
+                if (request != _customBackgroundRequest) return;
+
+                BitmapImage? image;
+                if (pixels != null && pixels.Length > 0)
+                {
+                    image = await CreateBitmapFromBytesAsync(pixels);
+                }
+                else
+                {
+                    // 模糊失败（图异常/格式怪）时退回直接解码原图，至少有背景可用
+                    BitmapImage fallback = new() { DecodePixelWidth = 1920 };
+                    using (System.IO.FileStream fs = System.IO.File.OpenRead(path))
+                    {
+                        fallback.SetSource(fs.AsRandomAccessStream());
+                    }
+
+                    image = fallback;
+                }
+
+                if (image == null || request != _customBackgroundRequest) return;
+
+                CustomBackgroundImage.Source = image;
                 CustomBackgroundImage.Visibility = Visibility.Visible;
+
+                // 互斥：自定义背景显示期间，封面背景（含压暗层）清掉
+                ClearAlbumArtBackground();
             }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
+        }
+
+
+        /// <summary>
+        /// 用系统解码器（WIC）把任意格式的图片转成 PNG 字节，好让 GDI+ 那套模糊代码能处理它。
+        ///
+        /// 为什么需要这一层：GDI+（System.Drawing）只认 BMP/GIF/JPEG/PNG/TIFF 这些老格式，
+        /// 碰上 WebP / AVIF / HEIC 会直接抛异常；而 WinUI 的图片控件走系统解码器，
+        /// 这些格式都能正常显示 —— 于是出现「背景图能显示、但模糊不生效」的怪现象。
+        /// 先解码再重编码成 PNG，把格式差异抹平，后面就能复用同一套模糊代码。
+        ///
+        /// 解码时按长边缩到 1024：模糊前的工作尺寸只有 192，没必要让 8000px 的巨图
+        /// 在内存里铺成几百 MB。顺带按 EXIF 摆正手机竖拍照片。
+        /// </summary>
+        private static async System.Threading.Tasks.Task<byte[]?> NormalizeImageToPngAsync(string path)
+        {
+            try
+            {
+                using System.IO.FileStream file = System.IO.File.OpenRead(path);
+                using var source = file.AsRandomAccessStream();
+
+                BitmapDecoder decoder = await BitmapDecoder.CreateAsync(source);
+                if (decoder.PixelWidth == 0 || decoder.PixelHeight == 0) return null;
+
+                double scale = 1024.0 / Math.Max(decoder.PixelWidth, decoder.PixelHeight);
+                if (scale > 1) scale = 1;
+
+                BitmapTransform transform = new()
+                {
+                    ScaledWidth = (uint)Math.Max(1, Math.Round(decoder.PixelWidth * scale)),
+                    ScaledHeight = (uint)Math.Max(1, Math.Round(decoder.PixelHeight * scale)),
+                    InterpolationMode = BitmapInterpolationMode.Fant
+                };
+
+                using SoftwareBitmap bitmap = await decoder.GetSoftwareBitmapAsync(
+                    BitmapPixelFormat.Bgra8,
+                    BitmapAlphaMode.Premultiplied,
+                    transform,
+                    ExifOrientationMode.RespectExifOrientation,
+                    ColorManagementMode.ColorManageToSRgb);
+
+                using InMemoryRandomAccessStream encoded = new();
+                BitmapEncoder encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.PngEncoderId, encoded);
+                encoder.SetSoftwareBitmap(bitmap);
+                await encoder.FlushAsync();
+
+                if (encoded.Size == 0) return null;
+
+                encoded.Seek(0);
+                Windows.Storage.Streams.Buffer buffer = new((uint)encoded.Size);
+                await encoded.ReadAsync(buffer, buffer.Capacity, InputStreamOptions.None);
+
+                byte[] bytes = buffer.ToArray();
+                return bytes.Length > 0 ? bytes : null;
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs.NormalizeImageToPngAsync", caught);
+                return null;
+            }
         }
 
 
