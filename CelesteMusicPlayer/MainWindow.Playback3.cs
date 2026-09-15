@@ -137,6 +137,10 @@ namespace CelesteMusicPlayer
                 {
                     PlayPauseIcon.Glyph = "\uE768";
                 }
+                if (FloatingPlayPauseIcon != null)
+                {
+                    FloatingPlayPauseIcon.Glyph = "\uE768";
+                }
 
                 // 任务栏缩略图按钮：暂停 → 显示"播放"图标（提示用户点播放）
                 _taskbarButtons?.UpdatePlayPause(false);
@@ -162,6 +166,10 @@ namespace CelesteMusicPlayer
                 {
                     PlayPauseIcon.Glyph = "\uE769";
                 }
+                if (FloatingPlayPauseIcon != null)
+                {
+                    FloatingPlayPauseIcon.Glyph = "\uE769";
+                }
 
                 // 任务栏缩略图按钮：播放中 → 显示"暂停"图标（提示用户点暂停）
                 _taskbarButtons?.UpdatePlayPause(true);
@@ -186,7 +194,14 @@ namespace CelesteMusicPlayer
 
             if (player.Source == null)
             {
-                if (_userPlaylist.Count > 0)
+                // 启动续播后就绪但未播（Source 为空）时，恢复的是 _userPlaylistIndex 指向的那首，
+                // 不是队列第 0 首 —— 以前靠"预加载进 MediaPlayer"兜出 wasPlaying 判断，
+                // 预加载已删（会弹 SourceNotSupported），这里必须显式按恢复索引起播。
+                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                {
+                    PlayUserPlaylistAt(_userPlaylistIndex);
+                }
+                else if (_userPlaylist.Count > 0)
                 {
                     PlayUserPlaylistAt(0);
                 }
@@ -236,20 +251,43 @@ namespace CelesteMusicPlayer
         private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
             _isUserSeeking = true;
+            _seekGestureConsumed = false;
         }
 
 
         private void ProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
         {
-            SeekToSliderValue();
-            _isUserSeeking = false;
+            EndSeekGesture();
         }
 
 
         private void ProgressSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
         {
-            SeekToSliderValue();
-            _isUserSeeking = false;
+            EndSeekGesture();
+        }
+
+
+        /// <summary>
+        /// 一次拖动只跳转一次：松手时 PointerReleased / PointerCaptureLost 会先后触发，
+        /// 两次都 seek 会卡顿并重复预加载下一首，这里用 _seekGestureConsumed 去重。
+        /// </summary>
+        private void EndSeekGesture()
+        {
+            if (!_isUserSeeking || _seekGestureConsumed)
+            {
+                _isUserSeeking = false;
+                return;
+            }
+
+            _seekGestureConsumed = true;
+            try
+            {
+                SeekToSliderValue();
+            }
+            finally
+            {
+                _isUserSeeking = false;
+            }
         }
 
 
@@ -311,6 +349,10 @@ namespace CelesteMusicPlayer
             MediaPlayer? player = GetPlayer();
             if (player?.Source == null)
             {
+                // 启动就绪态：还没有播放会话，直接 return 会让"拖进度条"完全没反应。
+                // 记下位置起播（起播后是否暂停按设置走），跟播放中拖进度条的手感一致。
+                bool pauseAfter = AppSettingsStore.Load().ProgressBarClickBehavior != "SeekAndPlay";
+                StartPlaybackFromPendingPosition(ProgressSlider.Value, pauseAfter);
                 return;
             }
 
@@ -700,6 +742,10 @@ namespace CelesteMusicPlayer
                 // E768=播放，E769=暂停
                 bool playing = sender.PlaybackState == MediaPlaybackState.Playing;
                 PlayPauseIcon.Glyph = playing ? "\uE769" : "\uE768";
+                if (FloatingPlayPauseIcon != null)
+                {
+                    FloatingPlayPauseIcon.Glyph = playing ? "\uE769" : "\uE768";
+                }
                 UpdateWaveformTimerForPlaybackState(playing);
                 _desktopLyricsWindow?.SetPlaybackPaused(!playing && sender.PlaybackState != MediaPlaybackState.Opening);
             });
@@ -739,7 +785,6 @@ namespace CelesteMusicPlayer
         {
             DispatcherQueue.TryEnqueue(async () =>
             {
-                NowPlayingText.Text = "播放失败";
                 if (AppSettingsStore.Load().StopWhenError)
                 {
                     try
@@ -749,7 +794,35 @@ namespace CelesteMusicPlayer
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
                 }
 
-                await ShowErrorAsync("无法播放", args.ErrorMessage);
+                // 本次运行里用户（或自动续播）从未真正开始过播放 → 这是"陈旧的源"留下的失败
+                // （典型场景：启动恢复上次曲目时，某个早就该丢弃的 MediaPlayer 源自己失败）。
+                // 这时候弹「无法播放」纯粹是误报：既没在播，也没人点播放。只记日志、不弹窗。
+                if (!_anyPlaybackStarted)
+                {
+                    global::CelesteMusicPlayer.StartupLog.Write(
+                        "Player_MediaFailed(未开播，忽略弹窗): 错误类型=" + args.Error + " 说明="
+                        + (string.IsNullOrWhiteSpace(args.ErrorMessage) ? "(空)" : args.ErrorMessage)
+                        + " 当前源=" + (_nowPlayingPath ?? "(无)"));
+                    global::CelesteMusicPlayer.StartupLog.Flush();
+                    return;
+                }
+
+                NowPlayingText.Text = "播放失败";
+
+                // args.ErrorMessage 在某些场景（如设备独占失败、续播恢复时源已释放）下为空，
+                // 仅靠它无法定位根因。补上 Error / HResult / ExtendedErrorCode / 当前源，
+                // 并同时写日志，方便用户把详细信息发回来定位。
+                string msg = args.ErrorMessage;
+                if (string.IsNullOrWhiteSpace(msg))
+                {
+                    msg = "(播放器未给出错误说明)";
+                }
+                string detail = $"错误类型：{args.Error}\r\n" +
+                                $"说明：{msg}\r\n" +
+                                $"当前源：{_nowPlayingPath ?? "(无)"}";
+                global::CelesteMusicPlayer.StartupLog.Write("Player_MediaFailed: " + detail);
+                global::CelesteMusicPlayer.StartupLog.Flush();
+                await ShowErrorAsync("无法播放", detail);
             });
         }
 
@@ -776,6 +849,11 @@ namespace CelesteMusicPlayer
 
         private void PositionTimer_Tick(DispatcherQueueTimer sender, object args)
         {
+            // 播放/暂停按钮的图标同步必须放在所有早退之前：
+            // 引擎播放、无源、用户拖动进度条这几种情况下定时器都会提前 return，
+            // 但按钮状态恰恰在这些时候最容易跟真实状态脱节（"歌在响、按钮还是 ▶"）。
+            SyncTransportPlayState();
+
             if (_usingEnginePlayback)
             {
                 return;
@@ -1357,6 +1435,8 @@ namespace CelesteMusicPlayer
             NowPlayingTitleText.Text = "未在播放";
             ResetNowPlayingArtistAlbumLinks();
             NowPlayingCoverImage.Source = null;
+            UpdateVinylArt(null);
+            SyncNowPlayingReflection(null);
             ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
             ApplyNowPlayingPaneTransparent();
             UpdateTransportNowPlaying(null, null);
@@ -1508,6 +1588,8 @@ namespace CelesteMusicPlayer
             }
 
             NowPlayingCoverImage.Source = coverImage;
+            UpdateVinylArt(coverImage);
+            SyncNowPlayingReflection(coverBytes);
             ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
             UpdateTransportNowPlaying(item, coverImage);
             _lastCoverBytes = coverBytes;   // 供自定义背景移除后恢复封面背景
@@ -1631,14 +1713,16 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>播放面板背景保持透明，与专辑详情页一致（露出主程序背景，非浮层）。</summary>
+        /// <summary>播放面板背景保持透明，与专辑详情页一致（露出主程序背景，非浮层）。
+        /// ⚠️ 必须用"透明画刷"而不是 null：WinUI 里 Background=null 的元素不参与命中测试，
+        /// 点击会漏到下面的音乐库界面。透明画刷视觉上一模一样，但能正常拦住鼠标。</summary>
         private void ApplyNowPlayingPaneTransparent()
         {
             try
             {
                 if (NowPlayingPaneContent != null)
                 {
-                    NowPlayingPaneContent.Background = null;
+                    NowPlayingPaneContent.Background = new SolidColorBrush(Colors.Transparent);
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
@@ -1733,6 +1817,15 @@ namespace CelesteMusicPlayer
                     row.Opacity = 0.55;
                     ResetRowRunColors(row, 154, 154, 154);
                 }
+
+                // 「水面」布局：非当前行按距离连续衰减，离当前句越远越淡（像没入水里）。
+                // 用逐行 Opacity 实现，不是遮罩 —— WinUI 3 的 UIElement 没有 OpacityMask，
+                // 而 ScrollViewer 又没有独立背景，盖一层渐变会露出色带。
+                // 设下限 0.10 保证远处的字仍可辨认（不为了好看牺牲可读性）。
+                if (_layoutIsWater && dist > 0)
+                {
+                    row.Opacity = Math.Max(0.10, 1.0 - dist * 0.16);
+                }
             }
 
             // 用户手动滚动中：仅更新颜色高亮，不强制视口吸附（避免抢走用户正在看的滚动位置）
@@ -1797,8 +1890,12 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>单击歌词行：把播放跳到该行时间（对齐"点进度条→seek+暂停"）。</summary>
-        private void SeekToLyricLine(TimeSpan target)
+        /// <summary>
+        /// 把播放跳到某一句歌词的时刻。
+        /// playAfter=false（点进度条的语义）：跳过去后暂停，方便反复定位；
+        /// playAfter=true（歌词行里的播放按钮）：跳过去后继续播，即"从这句开始听"。
+        /// </summary>
+        private void SeekToLyricLine(TimeSpan target, bool playAfter = false)
         {
             // 跳到目标时间（引擎 seek；若 MediaPlayer 播放也用其 seek）
             bool handled = false;
@@ -1815,11 +1912,42 @@ namespace CelesteMusicPlayer
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
             }
 
-            if (_audioEngine != null && handled)
+            if (!handled)
             {
-                // 与点进度条一致：seek 后暂停，方便定位（用户再按播放继续）；同步刷新高亮/进度
-                if (_audioEngine.IsPlaying)
+                // 启动就绪态：还没开播（引擎没建、MediaPlayer 没源），没有可 seek 的会话。
+                // 这时点歌词不能没反应 —— 记下目标位置直接起播，等于"从这句开始听"。
+                StartPlaybackFromPendingPosition(target.TotalSeconds, pauseAfter: false);
+                return;
+            }
+
+            if (_audioEngine != null)
+            {
+                if (playAfter)
                 {
+                    // 从这句开始听：暂停中的话先恢复，本来就播着的保持不动
+                    if (_isEnginePaused)
+                    {
+                        _audioEngine.Resume();
+                        _isEnginePaused = false;
+                    }
+
+                    UpdateWaveformTimerForPlaybackState(true);
+                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Playing);
+                    if (PlayPauseIcon != null)
+                    {
+                        PlayPauseIcon.Glyph = "\uE769";
+                    }
+
+                    if (FloatingPlayPauseIcon != null)
+                    {
+                        FloatingPlayPauseIcon.Glyph = "\uE769";
+                    }
+
+                    _taskbarButtons?.UpdatePlayPause(true);
+                }
+                else if (_audioEngine.IsPlaying)
+                {
+                    // 与点进度条一致：seek 后暂停，方便定位（用户再按播放继续）
                     _audioEngine.Pause();
                     _isEnginePaused = true;
                     UpdateWaveformTimerForPlaybackState(false);
@@ -1829,22 +1957,49 @@ namespace CelesteMusicPlayer
                         PlayPauseIcon.Glyph = "\uE768";
                     }
 
-                    _miniPlayerWindow?.RefreshFromOwner();
+                    if (FloatingPlayPauseIcon != null)
+                    {
+                        FloatingPlayPauseIcon.Glyph = "\uE768";
+                    }
+
+                    _taskbarButtons?.UpdatePlayPause(false);
                 }
 
-                // 重挂下一首（seek 丢弃无缝源里的 next）
-                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                _miniPlayerWindow?.RefreshFromOwner();
+            }
+            else if (player != null && player.Source != null)
+            {
+                // 非引擎（普通 MediaPlayer）路径
+                if (playAfter)
                 {
-                    _ = PreloadSeamlessNextAsync(_userPlaylist[_userPlaylistIndex]);
-                }
+                    if (player.PlaybackSession.PlaybackState != MediaPlaybackState.Playing)
+                    {
+                        player.Play();
+                    }
 
-                // 立即把高亮切到目标行（点击跳转按原位置，不套用偏移）
-                SyncLyricsToPosition(target, force: true, applyOffset: false);
-                // 单击选中：无视用户滚动状态，把该行滚到中间
-                if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
-                {
-                    ScrollLyricToCenter(_lyricTextBlocks[_currentLyricIndex]);
+                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Playing);
+                    _taskbarButtons?.UpdatePlayPause(true);
                 }
+                else if (player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
+                {
+                    player.Pause();
+                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
+                    _taskbarButtons?.UpdatePlayPause(false);
+                }
+            }
+
+            // 重挂下一首（seek 丢弃无缝源里的 next）
+            if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+            {
+                _ = PreloadSeamlessNextAsync(_userPlaylist[_userPlaylistIndex]);
+            }
+
+            // 立即把高亮切到目标行（点击跳转按原位置，不套用偏移）
+            SyncLyricsToPosition(target, force: true, applyOffset: false);
+            // 单击选中：无视用户滚动状态，把该行滚到中间
+            if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
+            {
+                ScrollLyricToCenter(_lyricTextBlocks[_currentLyricIndex]);
             }
         }
 
@@ -2099,6 +2254,10 @@ namespace CelesteMusicPlayer
 
         private void StartPlayback(PlaylistItem item)
         {
+            // 标记"用户主动开播过"：之后 MediaPlayer 报错才值得弹「无法播放」对话框。
+            _anyPlaybackStarted = true;
+            // 起播途中：引擎可能还播着上一首，这期间不写进度（避免记串曲目）
+            _startPlaybackInFlight = true;
             ScrobblePreviousIfAny();
 
             // 进度条样式(读设置缓存) + 异步加载波形(波形样式用)
@@ -2134,6 +2293,106 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+        }
+
+
+        /// <summary>
+        /// 就绪态（还没开播）下用户点了歌词或拖了进度条：记下目标位置，直接把当前这首起播。
+        /// 引擎起来后由 ApplyPendingStartPosition 定位过去。
+        /// </summary>
+        private void StartPlaybackFromPendingPosition(double seconds, bool pauseAfter)
+        {
+            if (_userPlaylistIndex < 0 || _userPlaylistIndex >= _userPlaylist.Count)
+            {
+                return;
+            }
+
+            PlaylistItem item = _userPlaylist[_userPlaylistIndex];
+            _pendingStartSeconds = Math.Max(0, seconds);
+            _pendingStartPauseAfter = pauseAfter;
+            _pendingStartPath = item.FilePath;
+            StartPlayback(item);
+        }
+
+
+        /// <summary>
+        /// 起播成功后，把"待应用的起始位置"真正落下去。
+        /// 三种来源共用一个通道：①启动续播（上次听到哪儿）②就绪态双击歌词 ③就绪态拖进度条。
+        /// 这三种情况下还没有播放会话，没法提前 seek，只能等引擎起来再定位。
+        /// </summary>
+        private void ApplyPendingStartPosition(string? playingFilePath)
+        {
+            double startAt = _pendingStartSeconds;
+            bool pauseAfter = _pendingStartPauseAfter;
+            string? ownerPath = _pendingStartPath;
+            _pendingStartSeconds = 0;
+            _pendingStartPauseAfter = false;
+            _pendingStartPath = null;
+
+            if (_audioEngine == null || startAt <= 0.5)
+            {
+                return;
+            }
+
+            // 位置是给"那一首"记的：如果期间用户点了别的歌，就不能拿过来用。
+            if (!string.IsNullOrEmpty(ownerPath)
+                && !string.IsNullOrEmpty(playingFilePath)
+                && !string.Equals(ownerPath, playingFilePath, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            try
+            {
+                double duration = _audioEngine.Duration.TotalSeconds;
+                if (duration > 1 && startAt > duration - 0.5)
+                {
+                    startAt = Math.Max(0, duration - 0.5);
+                }
+
+                var target = TimeSpan.FromSeconds(startAt);
+                _audioEngine.Seek(target);
+
+                ProgressSlider.Maximum = Math.Max(1, duration);
+                ProgressSlider.Value = startAt;
+                CurrentTimeText.Text = FormatTime(target);
+                UpdateSmtcTimeline(target);
+
+                // 歌词直接跳到该位置对应的那句（别从第一句慢慢滚过去）
+                SyncLyricsToPosition(target, force: true, applyOffset: false);
+                if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
+                {
+                    ScrollLyricToCenter(_lyricTextBlocks[_currentLyricIndex]);
+                }
+
+                StartupLog.Write("续播/定位: " + startAt.ToString("F2") + "s");
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+
+            if (pauseAfter)
+            {
+                try
+                {
+                    _audioEngine.Pause();
+                    _isEnginePaused = true;
+                    UpdateWaveformTimerForPlaybackState(false);
+                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
+                    if (PlayPauseIcon != null)
+                    {
+                        PlayPauseIcon.Glyph = "\uE768";
+                    }
+
+                    if (FloatingPlayPauseIcon != null)
+                    {
+                        FloatingPlayPauseIcon.Glyph = "\uE768";
+                    }
+
+                    _taskbarButtons?.UpdatePlayPause(false);
+                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            }
+
+            _miniPlayerWindow?.RefreshFromOwner();
         }
 
 
@@ -2260,13 +2519,24 @@ namespace CelesteMusicPlayer
                 _audioEngine.PositionChanged -= EnginePositionChanged;
                 _audioEngine.PositionChanged += EnginePositionChanged;
                 UpdateWaveformTimerForPlaybackState(true);
+
+                // 启动续播 / 就绪态点歌词 / 拖进度条：起播成功后立刻定位到目标位置
+                // （放在淡入之前，避免先出声再跳造成爆音）
+                ApplyPendingStartPosition(item.FilePath);
+
                 _ = FadeInEngineAsync();
                 _miniPlayerWindow?.RefreshFromOwner();
                 ConfigureEngineSmtc(item, playing: true);
                 _ = PreloadSeamlessNextAsync(item);
+                _startPlaybackInFlight = false;
             }
             else
             {
+                _startPlaybackInFlight = false;
+                _pendingStartSeconds = 0;
+                _pendingStartPauseAfter = false;
+                _pendingStartPath = null;
+
                 string? reason = _audioEngine?.LastError;
                 NowPlayingText.Text = string.IsNullOrWhiteSpace(reason)
                     ? "播放失败（FFmpeg 转码或打开出错）"

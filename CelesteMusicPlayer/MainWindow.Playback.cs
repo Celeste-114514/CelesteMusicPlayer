@@ -92,6 +92,35 @@ namespace CelesteMusicPlayer
         private bool _isEnginePaused;
         private bool _usingEnginePlayback;
 
+        /// <summary>上一次同步过的播放状态（null = 还没同步过，首次无条件套用）。
+        /// 用于 SyncTransportPlayState 去重，避免每 200ms 都写一遍控件。</summary>
+        private bool? _lastSyncedPlayingState;
+
+        /// <summary>本次运行是否真正开始过播放（StartPlayback 里置 true）。
+        /// 用来区分"用户点了播放后失败"（要弹窗）和"启动时某个陈旧源自己失败"（只记日志，不弹窗误报）。</summary>
+        private bool _anyPlaybackStarted;
+
+        /// <summary>
+        /// 待应用的起始播放位置（秒）。用于「启动续播 / 就绪态下点歌词、拖进度条」：
+        /// 此刻还没有播放会话（引擎未建、MediaPlayer 无源），没法直接 seek，
+        /// 只能先记下来，等 PlayExtendedWithEngineAsync 起播成功后立刻定位过去。
+        /// 应用后立即清零，避免影响下一首。
+        /// </summary>
+        private double _pendingStartSeconds;
+
+        /// <summary>配合 _pendingStartSeconds：起播定位后是否立即暂停（点进度条且设置=跳转并暂停时使用）。</summary>
+        private bool _pendingStartPauseAfter;
+        /// <summary>
+        /// _pendingStartSeconds 属于哪首歌。防止"就绪态记了位置、用户却点了别的歌"时把位置串到别的歌上。
+        /// </summary>
+        private string? _pendingStartPath;
+
+        /// <summary>
+        /// 是否正在起播（已调 StartPlayback、引擎还没真正起来）。
+        /// 这段时间里引擎播的还是上一首，位置与"当前曲目"对不上 → 暂停写进度，只写队列。
+        /// </summary>
+        private bool _startPlaybackInFlight;
+
         private float[]? _waveformData;
         private string? _waveformPath;
         private string _progressBarStyle = "Gradient";
@@ -171,10 +200,33 @@ namespace CelesteMusicPlayer
                 new PointerEventHandler(ProgressSlider_PointerCaptureLost),
                 handledEventsToo: true);
 
+            // 页内播放条上的进度条（NowPlayingProgressSlider）必须做同样的事：
+            // Slider 内部会把 PointerPressed/Released 标成 Handled，XAML 里挂（或在代码里用 +=）都收不到，
+            // 结果是 _isUserSeeking 永远是 false —— 拖动时播放位置镜像会把滑块每秒改回去
+            // （表现为"不跟手、松手后跳回原进度"），松手也不会真正 seek。
+            if (NowPlayingProgressSlider != null)
+            {
+                NowPlayingProgressSlider.AddHandler(
+                    UIElement.PointerPressedEvent,
+                    new PointerEventHandler(NowPlayingProgressSlider_PointerPressed),
+                    handledEventsToo: true);
+                NowPlayingProgressSlider.AddHandler(
+                    UIElement.PointerReleasedEvent,
+                    new PointerEventHandler(NowPlayingProgressSlider_PointerReleased),
+                    handledEventsToo: true);
+                NowPlayingProgressSlider.AddHandler(
+                    UIElement.PointerCaptureLostEvent,
+                    new PointerEventHandler(NowPlayingProgressSlider_PointerCaptureLost),
+                    handledEventsToo: true);
+            }
+
             _positionTimer = DispatcherQueue.CreateTimer();
             _positionTimer.Interval = TimeSpan.FromMilliseconds(200);
             _positionTimer.Tick += PositionTimer_Tick;
             _positionTimer.Start();
+
+            // 黑胶布局的唱片/唱臂状态轮询（内部有布局判断，非黑胶布局时等于空转一次布尔比较）
+            EnsureVinylMotionTimer();
 
             // 悬停提示定时器（满 1 秒才弹出）
             _hoverTipTimer = DispatcherQueue.CreateTimer();
@@ -315,7 +367,11 @@ namespace CelesteMusicPlayer
         private bool _isUpdatingNowPlayingLayout;
 
         /// <summary>
-        /// 播放信息页：大封面尺寸随面板高度自适应；波形与封面同宽并居中。
+        /// <summary>
+        /// 播放信息页：大封面尺寸随面板高度自适应；并按布局（经典 / 水面）把封面列 / 信息块 / 歌词块
+        /// 摆进 NowPlayingBody 的对应单元格，不重新挂接控件。
+        ///   经典：封面+信息叠在左侧居中、歌词在右半区（保持原有体验）；
+        ///   水面：封面在左下居中、信息在右上、歌词在右下。
         /// </summary>
         private void UpdateNowPlayingCardLayout()
         {
@@ -327,89 +383,623 @@ namespace CelesteMusicPlayer
             _isUpdatingNowPlayingLayout = true;
             try
             {
-            double paneWidth = NowPlayingPane.ActualWidth;
-            double paneHeight = NowPlayingPane.ActualHeight;
-            if (paneWidth <= 0 || paneHeight <= 0)
-            {
-                return;
-            }
-
-            NowPlayingPaneContent.Clip = new RectangleGeometry
-            {
-                Rect = new Windows.Foundation.Rect(0, 0, paneWidth, paneHeight)
-            };
-
-            // 大封面：按面板高度 50% 居中，上限 340、下限 240
-            double coverSize = Math.Clamp(paneHeight * 0.5, 240, 340);
-            NowPlayingCoverBorder.Width = coverSize;
-            NowPlayingCoverBorder.Height = coverSize;
-            WaveformCanvas.Width = coverSize;
-
-            // 左半区：左栏(封面+信息)中轴在主UI左1/4处(paneWidth/4)，宽=左半区-左右各30
-            double half = paneWidth / 2.0;
-            double sideContentMax = Math.Max(0, half - 60);
-            if (NowPlayingLeftColumn != null)
-            {
-                // 左栏宽固定为半区宽(左右留30)，封面/信息在其中以中轴=paneWidth/4 居中，信息区超宽换行
-                NowPlayingLeftColumn.ClearValue(FrameworkElement.MaxWidthProperty);
-                NowPlayingLeftColumn.ClearValue(FrameworkElement.MinWidthProperty);
-                NowPlayingLeftColumn.MaxWidth = sideContentMax;
-                NowPlayingLeftColumn.Width = sideContentMax;
-            }
-            // 左栏默认居中于 paneWidth/2，位移到 paneWidth/4 → 封面中轴=主UI左1/4
-            if (NowPlayingLeftShift != null)
-            {
-                NowPlayingLeftShift.TranslateX = -paneWidth / 4.0;
-            }
-            // 信息区：左右各留30(半区宽)，StackPanel 垂直布局会给子无穷宽，故必须给每个 TextBlock/Button 自身设 MaxWidth 才换行
-            double infoTextMax = Math.Max(0, sideContentMax - 16);
-            NowPlayingTitleText.MaxWidth = infoTextMax;
-            NowPlayingAudioInfoText.MaxWidth = infoTextMax;
-            SignalChainInfoText.MaxWidth = infoTextMax;
-            NowPlayingArtistText.MaxWidth = infoTextMax;
-            NowPlayingAlbumText.MaxWidth = infoTextMax;
-            if (NowPlayingArtistLinkButton != null)
-            {
-                NowPlayingArtistLinkButton.MaxWidth = infoTextMax;
-                NowPlayingArtistLinkButton.Width = infoTextMax;
-            }
-            if (NowPlayingAlbumLinkButton != null)
-            {
-                NowPlayingAlbumLinkButton.MaxWidth = infoTextMax;
-                NowPlayingAlbumLinkButton.Width = infoTextMax;
-            }
-            if (NowPlayingMetaPanel != null)
-            {
-                NowPlayingMetaPanel.MaxWidth = sideContentMax;
-                NowPlayingMetaPanel.Width = sideContentMax - 16;
-                NowPlayingMetaPanel.Margin = new Thickness(0);
-            }
-            // 右半区：歌词中轴在主UI右1/4处(3/4paneWidth)，宽=右半区-左右各30，居中换行
-            if (LyricsSection != null)
-            {
-                LyricsSection.MaxWidth = sideContentMax;
-                LyricsSection.Width = sideContentMax;
-            }
-            if (LyricsShift != null)
-            {
-                LyricsShift.TranslateX = paneWidth / 4.0;
-            }
-            // 让每条歌词在歌词区宽内真正换行(居中区宽 - 留边)
-            double lyricMax = Math.Max(0, sideContentMax - 16);
-            if (LyricsPanel != null)
-            {
-                foreach (var child in LyricsPanel.Children)
+                double paneWidth = NowPlayingPane.ActualWidth;
+                double paneHeight = NowPlayingPane.ActualHeight;
+                if (paneWidth <= 0 || paneHeight <= 0)
                 {
-                    if (child is Microsoft.UI.Xaml.Controls.TextBlock tb)
+                    return;
+                }
+
+                NowPlayingPaneContent.Clip = new RectangleGeometry
+                {
+                    Rect = new Windows.Foundation.Rect(0, 0, paneWidth, paneHeight)
+                };
+
+                // 波形高度：水面布局先算出来 —— 封面尺寸要按「水面线」反推（见下），经典固定 40。
+                // 上下加高（用户反馈"上下太短"）。
+                double waveformHeight = _layoutIsWater
+                    ? Math.Max(110, Math.Min(paneHeight * 0.22, 170))
+                    : 40;
+
+                // 大封面：经典按面板高度 50%，上限 340、下限 240；
+                // 水面布局用户要求更大封面；剧场居中要抢眼；歌词布局故意做小（当"小唱片"）。
+                double coverSize = _layoutIsWater
+                    ? Math.Clamp(paneHeight * 0.62, 300, 420)
+                    : _layoutIsLyrics
+                        // 歌词布局：封面只是左上角的一枚"小唱片"，别抢歌词的风头。
+                        // 用户反馈"还是太大"→ 再缩一档（原 0.19 / 92~156）。
+                        ? Math.Clamp(paneHeight * 0.13, 64, 104)
+                        : _layoutIsStage
+                            ? Math.Clamp(Math.Min(paneHeight * 0.58, paneWidth * 0.30), 200, 360)
+                            : _layoutIsCenter
+                                ? Math.Clamp(paneHeight * 0.42, 200, 320)
+                                : Math.Clamp(paneHeight * 0.5, 240, 340);
+                // 取整：避免非整数宽度导致封面/倒影在亚像素层面差 1px（封面倒影右侧错位）。
+                coverSize = Math.Round(coverSize);
+                if (_layoutIsWater)
+                {
+                    // 水面：封面底边被钉在「水面线」= 波形中线（见下方水面定位）。
+                    // 于是封面顶边 = bodyH/2 + 波形高/2 − 封面高，必须留出余量，
+                    // 否则封面会被面板顶部裁掉。bodyH 用「面板高 − 上下内边距」保守估计。
+                    double bodyEstimate = Math.Max(0, paneHeight - 32);
+                    double coverCap = bodyEstimate * 0.5 + waveformHeight * 0.5 - 8;
+                    coverSize = Math.Round(Math.Min(coverSize, Math.Max(200, coverCap)));
+                }
+
+                NowPlayingCoverBorder.Width = coverSize;
+                NowPlayingCoverBorder.Height = coverSize;
+                // 亚像素对齐 + 定位去歧义：
+                // 1) 封面列宽度固定 = 封面宽 → 列内水平定位不再依赖"居中"计算
+                //    （否则倒影的左外边距会把 StackPanel 撑宽，封面又被重新居中，来回漂移）；
+                // 2) 封面与倒影都左对齐到列，左边缘由同一个 x=0 决定 → 左右必定重合；
+                // 3) 两者都开布局取整，消除小数宽度的取整差。
+                if (NowPlayingCoverColumn != null)
+                {
+                    NowPlayingCoverColumn.Width = coverSize;
+                    NowPlayingCoverColumn.UseLayoutRounding = true;
+                }
+                if (NowPlayingCoverBorder != null)
+                {
+                    NowPlayingCoverBorder.HorizontalAlignment = HorizontalAlignment.Left;
+                }
+                if (NowPlayingCoverReflection != null) NowPlayingCoverReflection.UseLayoutRounding = true;
+
+                // 水面线（上移量）：封面列放进 Row1、顶对齐，并把整列往上推，
+                // 使「封面底边」正好落在 Row1 顶部 + 波形高/2 = 波形中线。
+                // 波形中线同时也是波形倒影的起点 → 封面倒影与波形倒影从此在同一条水平线上。
+                // 这是解析解（不依赖测量），窗口任意高度都严格成立。
+                double waterCoverLift = (waveformHeight * 0.5) - coverSize;
+
+                // 波形宽度：水面布局与右侧信息列同宽（左对齐），经典与封面同宽。
+                double rightColWidth = Math.Max(0, paneWidth * 0.46);
+                double waveformWidth = _layoutIsWater
+                    ? Math.Min(rightColWidth, 520)
+                    : coverSize;
+
+                // 播放条宽度：两种布局统一「横跨左右、内嵌在面板底部」——
+                // 吃满面板宽度（扣掉左右内边距），封顶 900，避免"进度条太短"。
+                double transportWidth = Math.Min(Math.Max(320, paneWidth - 48), 900);
+
+                if (_layoutIsWater)
+                {
+                    WaveformCanvas.Width = waveformWidth;
+                    WaveformCanvas.HorizontalAlignment = HorizontalAlignment.Left;
+                    WaveformCanvas.Height = waveformHeight;
+                    WaveformCanvas.Margin = new Thickness(0, 0, 0, 0);
+                    WaveformCanvas.VerticalAlignment = VerticalAlignment.Top;
+                }
+                else
+                {
+                    // 经典：波形在封面正下方居中
+                    WaveformCanvas.Width = waveformWidth;
+                    WaveformCanvas.HorizontalAlignment = HorizontalAlignment.Center;
+                    WaveformCanvas.Height = waveformHeight;
+                    WaveformCanvas.Margin = new Thickness(0);
+                    WaveformCanvas.VerticalAlignment = VerticalAlignment.Top;
+                }
+
+                // 播放条：两种布局都横跨面板、内嵌在底部、常显不淡出
+                if (NowPlayingFloatingBar != null)
+                {
+                    NowPlayingFloatingBar.Width = transportWidth;
+                    NowPlayingFloatingBar.MaxWidth = transportWidth;
+                    NowPlayingFloatingBar.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingFloatingBar.VerticalAlignment = VerticalAlignment.Bottom;
+                    NowPlayingFloatingBar.Margin = new Thickness(0, 0, 0, _layoutIsWater ? 4 : 8);
+                }
+                // 黑胶布局：唱盘尺寸随面板自适应（唱盘在左半区，信息与歌词在右半区）
+                UpdateVinylGeometry(paneWidth, paneHeight);
+
+                // 歌词区底部要留出的高度（内嵌播放条约 88px；水面没有歌词，留 0）。
+                double transportReserve = _layoutIsWater ? 0 : 88;
+                // 水面倒影的宽/高/裁剪跟随封面尺寸（窗口改变大小时必须同步，否则倒影会错位）
+                UpdateNowPlayingReflectionGeometry();
+                // 剧场是三栏（歌词 / 封面 / 信息），需要临时把网格切成 3 列；
+                // 歌词布局是「上头一行、下面整幅歌词」，需要临时把第一行改成按内容高度（Auto）。
+                UpdateNowPlayingBodyColumns(coverSize);
+                UpdateNowPlayingBodyRows();
+
+                // 文本换行最大宽度：
+                //   水面   —— 跟右侧整列宽（信息靠左贴着列边）；
+                //   歌词   —— 封面右侧那一整栏（小唱片在左上、信息紧挨其右）；
+                //   剧场   —— 约三分之一栏宽（信息在最右栏）；
+                //   居中   —— 面板宽度的 60%（整屏居中的标题，不想到处断行）；
+                //   经典 / 黑胶 / 镜像 —— 面板宽度的一部分（居中排版，太宽不好看）。
+                bool leftAlignInfo = _layoutIsWater || _layoutIsLyrics;
+                // 歌词布局：封面列被压成「封面宽 + 24」的固定窄列，剩下的全给信息栏。
+                double lyricsInfoWidth = Math.Max(180, paneWidth - coverSize - 88);
+                double textMax = _layoutIsLyrics
+                    ? lyricsInfoWidth
+                    : _layoutIsStage
+                        ? Math.Max(0, paneWidth * 0.28)
+                        : _layoutIsCenter
+                            ? Math.Max(0, paneWidth * 0.6)
+                            : leftAlignInfo
+                                ? Math.Max(0, rightColWidth)
+                                : Math.Max(0, Math.Min(paneWidth * 0.42, 460));
+                NowPlayingTitleText.MaxWidth = textMax;
+                NowPlayingAudioInfoText.MaxWidth = textMax;
+                SignalChainInfoText.MaxWidth = textMax;
+                NowPlayingArtistText.MaxWidth = textMax;
+                NowPlayingAlbumText.MaxWidth = textMax;
+                if (NowPlayingArtistLinkButton != null)
+                {
+                    NowPlayingArtistLinkButton.MaxWidth = textMax;
+                    NowPlayingArtistLinkButton.Width = textMax;
+                }
+                if (NowPlayingAlbumLinkButton != null)
+                {
+                    NowPlayingAlbumLinkButton.MaxWidth = textMax;
+                    NowPlayingAlbumLinkButton.Width = textMax;
+                }
+                if (NowPlayingMetaPanel != null)
+                {
+                    NowPlayingMetaPanel.MaxWidth = textMax + 16;
+                    NowPlayingMetaPanel.Width = double.NaN;
+                    // 水面：信息左对齐、靠下；其余布局居中
+                    TextAlignment infoAlign = leftAlignInfo ? TextAlignment.Left : TextAlignment.Center;
+                    NowPlayingMetaPanel.HorizontalAlignment = leftAlignInfo ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+                    // 只有水面需要"贴底"（信息压在波形上方）；歌词布局是顶部一行，由下面的分支改成 Top。
+                    NowPlayingMetaPanel.VerticalAlignment = _layoutIsWater ? VerticalAlignment.Bottom : VerticalAlignment.Center;
+                    NowPlayingTitleText.TextAlignment = infoAlign;
+                    NowPlayingArtistText.TextAlignment = infoAlign;
+                    NowPlayingAlbumText.TextAlignment = infoAlign;
+                    NowPlayingAudioInfoText.TextAlignment = infoAlign;
+                    SignalChainInfoText.TextAlignment = infoAlign;
+                    // 歌手/专辑是 Button 包裹的：文本在按钮内部的对齐由 HorizontalContentAlignment 控制（默认居中），
+                    // 只设 TextAlignment 不会让按钮内文本靠左，必须同时把按钮内容对齐也改成 Left。
+                    HorizontalAlignment btnAlign = leftAlignInfo ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+                    HorizontalAlignment btnContentAlign = leftAlignInfo ? HorizontalAlignment.Left : HorizontalAlignment.Center;
+                    NowPlayingArtistLinkButton.HorizontalAlignment = btnAlign;
+                    NowPlayingArtistLinkButton.HorizontalContentAlignment = btnContentAlign;
+                    NowPlayingAlbumLinkButton.HorizontalAlignment = btnAlign;
+                    NowPlayingAlbumLinkButton.HorizontalContentAlignment = btnContentAlign;
+                    if (NowPlayingArtistAlbumRow != null)
                     {
-                        tb.MaxWidth = lyricMax;
+                        NowPlayingArtistAlbumRow.HorizontalAlignment = btnAlign;
                     }
                 }
-            }
+
+                // 歌词在歌词区宽内真正换行。
+                // 歌词布局例外：歌词是主角、整幅居中显示，宽度按面板的 62% 给（封顶 720），
+                // 不再跟随信息栏宽度 —— 否则一句歌词会被拉到跟窗口一样宽，反而不好读。
+                double lyricMax = _layoutIsLyrics
+                    ? Math.Max(240, Math.Min(paneWidth * 0.62, 720))
+                    : Math.Max(0, textMax - 16);
+                if (LyricsPanel != null)
+                {
+                    // 每行是 Grid → Border（圆角框）→ 歌词 TextBlock，
+                    // 所以换行宽度要下钻两层；Border 左右各 14 的内边距也要扣掉，否则长句会顶到圆角边上。
+                    double rowTextMax = Math.Max(160, lyricMax - 28);
+                    foreach (var child in LyricsPanel.Children)
+                    {
+                        if (child is Microsoft.UI.Xaml.Controls.TextBlock tb)
+                        {
+                            tb.MaxWidth = lyricMax;
+                        }
+                        else if (child is Grid lyricRow)
+                        {
+                            foreach (var inner in lyricRow.Children)
+                            {
+                                if (inner is Border frame && frame.Child is Microsoft.UI.Xaml.Controls.TextBlock rowText)
+                                {
+                                    rowText.MaxWidth = rowTextMax;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 旧的「位移 1/4 中轴」变换不再使用：用 Grid 单元格定位，变换归零避免残留偏移。
+                if (LyricsShift != null)
+                {
+                    LyricsShift.TranslateX = 0;
+                }
+
+                // 按布局把各块摆进 NowPlayingBody 的单元格（默认 2 列 × 2 行，剧场临时 3 列）。
+                // 先把跨列/跨行归位：上一轮布局可能把某块设成跨两列（如「居中」的封面与信息），
+                // 不重置的话切到其它布局会残留跨列，位置全乱。
+                Grid.SetColumnSpan(NowPlayingCoverColumn, 1);
+                Grid.SetRowSpan(NowPlayingCoverColumn, 1);
+                Grid.SetColumnSpan(NowPlayingMetaPanel, 1);
+                Grid.SetRowSpan(NowPlayingMetaPanel, 1);
+                Grid.SetColumnSpan(LyricsSection, 1);
+                Grid.SetRowSpan(LyricsSection, 1);
+                Grid.SetColumnSpan(WaveformCanvas, 1);
+                Grid.SetRowSpan(WaveformCanvas, 1);
+
+                if (_layoutIsWater)
+                {
+                    // 封面列：放进 Row1、顶对齐，再用负 Margin 把整列上推 waterCoverLift，
+                    // 使封面底边正好落在波形中线上（= 水面线）→ 封面倒影与波形倒影同一条水平线。
+                    // 用负 Margin 而不是 Translation：让布局层就知道真实位置，避免与其他元素打架。
+                    Grid.SetColumn(NowPlayingCoverColumn, 0);
+                    Grid.SetRow(NowPlayingCoverColumn, 1);
+                    Grid.SetRowSpan(NowPlayingCoverColumn, 1);
+                    NowPlayingCoverColumn.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingCoverColumn.VerticalAlignment = VerticalAlignment.Top;
+                    NowPlayingCoverColumn.Margin = new Thickness(0, waterCoverLift, 0, 0);
+
+                    // 信息块：右上半，靠下、左对齐（波形在下方）
+                    Grid.SetColumn(NowPlayingMetaPanel, 1);
+                    Grid.SetRow(NowPlayingMetaPanel, 0);
+                    Grid.SetRowSpan(NowPlayingMetaPanel, 1);
+                    Grid.SetColumnSpan(NowPlayingMetaPanel, 1);
+                    NowPlayingMetaPanel.HorizontalAlignment = HorizontalAlignment.Left;
+                    NowPlayingMetaPanel.VerticalAlignment = VerticalAlignment.Bottom;
+                    NowPlayingMetaPanel.Margin = new Thickness(0);
+
+                    // 歌词块：水面布局内不显示
+                    LyricsSection.Visibility = Visibility.Collapsed;
+
+                    // 波形：右下，左端与上方信息块左端对齐（对齐/宽度已在上面统一设置，这里只定位单元格）
+                    Grid.SetColumn(WaveformCanvas, 1);
+                    Grid.SetRow(WaveformCanvas, 1);
+                    Grid.SetColumnSpan(WaveformCanvas, 1);
+
+                    // 播放条：与经典布局一致 —— 横跨左右两列、内嵌在面板底部
+                    Grid.SetColumn(NowPlayingFloatingBar, 0);
+                    Grid.SetRow(NowPlayingFloatingBar, 1);
+                    Grid.SetColumnSpan(NowPlayingFloatingBar, 2);
+                    NowPlayingFloatingBar.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingFloatingBar.VerticalAlignment = VerticalAlignment.Bottom;
+                }
+                else if (_layoutIsVinyl)
+                {
+                    // 黑胶：唱盘占左半区，歌曲信息在右上，歌词在右下，波形已隐藏。
+                    // 用户反馈「封面 / 信息 / 歌词都太靠下」→ 三块统一上移：
+                    // 唱盘居中后底部多留 96（等效上移 48），信息从「Row0 贴底」改成「Row0 居中」，
+                    // 歌词在播放条预留高度之上再多抬 32。
+                    if (VinylStage != null)
+                    {
+                        Grid.SetColumn(VinylStage, 0);
+                        Grid.SetRow(VinylStage, 0);
+                        Grid.SetRowSpan(VinylStage, 2);
+                        VinylStage.HorizontalAlignment = HorizontalAlignment.Center;
+                        VinylStage.VerticalAlignment = VerticalAlignment.Center;
+                        VinylStage.Margin = new Thickness(0, 0, 0, 96);
+                    }
+
+                    Grid.SetColumn(NowPlayingMetaPanel, 1);
+                    Grid.SetRow(NowPlayingMetaPanel, 0);
+                    Grid.SetRowSpan(NowPlayingMetaPanel, 1);
+                    NowPlayingMetaPanel.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingMetaPanel.VerticalAlignment = VerticalAlignment.Center;
+                    NowPlayingMetaPanel.Margin = new Thickness(0, 0, 0, 8);
+
+                    Grid.SetColumn(LyricsSection, 1);
+                    Grid.SetRow(LyricsSection, 1);
+                    Grid.SetRowSpan(LyricsSection, 1);
+                    LyricsSection.HorizontalAlignment = HorizontalAlignment.Center;
+                    LyricsSection.VerticalAlignment = VerticalAlignment.Center;
+                    // 底部留出播放条高度 + 额外 32 → 歌词既不会压进度条，整体也抬上来了
+                    LyricsSection.Margin = new Thickness(0, 0, 0, transportReserve + 32);
+                    LyricsSection.Visibility = Visibility.Visible;
+
+                    // 播放条：横跨左右两列、内嵌在面板底部
+                    Grid.SetColumn(NowPlayingFloatingBar, 0);
+                    Grid.SetRow(NowPlayingFloatingBar, 1);
+                    Grid.SetColumnSpan(NowPlayingFloatingBar, 2);
+                    NowPlayingFloatingBar.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingFloatingBar.VerticalAlignment = VerticalAlignment.Bottom;
+                }
+                else if (_layoutIsStage)
+                {
+                    // 剧场（三栏）：左歌词 / 中封面 + 频谱 / 右信息。
+                    // 封面成为视觉中心，左边是"音乐在唱什么"，右边是"这是哪张唱片"。
+                    Grid.SetColumn(LyricsSection, 0);
+                    Grid.SetRow(LyricsSection, 0);
+                    Grid.SetRowSpan(LyricsSection, 2);
+                    LyricsSection.HorizontalAlignment = HorizontalAlignment.Center;
+                    LyricsSection.VerticalAlignment = VerticalAlignment.Center;
+                    LyricsSection.Margin = new Thickness(0, 0, 0, transportReserve);
+                    LyricsSection.Visibility = Visibility.Visible;
+
+                    Grid.SetColumn(NowPlayingCoverColumn, 1);
+                    Grid.SetRow(NowPlayingCoverColumn, 0);
+                    Grid.SetRowSpan(NowPlayingCoverColumn, 1);
+                    NowPlayingCoverColumn.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingCoverColumn.VerticalAlignment = VerticalAlignment.Bottom;
+                    NowPlayingCoverColumn.Margin = new Thickness(0, 0, 0, 12);
+
+                    Grid.SetColumn(WaveformCanvas, 1);
+                    Grid.SetRow(WaveformCanvas, 1);
+                    Grid.SetColumnSpan(WaveformCanvas, 1);
+                    WaveformCanvas.HorizontalAlignment = HorizontalAlignment.Center;
+                    WaveformCanvas.VerticalAlignment = VerticalAlignment.Top;
+
+                    Grid.SetColumn(NowPlayingMetaPanel, 2);
+                    Grid.SetRow(NowPlayingMetaPanel, 0);
+                    Grid.SetRowSpan(NowPlayingMetaPanel, 2);
+                    NowPlayingMetaPanel.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingMetaPanel.VerticalAlignment = VerticalAlignment.Center;
+                    NowPlayingMetaPanel.Margin = new Thickness(0, 0, 0, transportReserve);
+
+                    PlayBarFullWidth(3);
+                }
+                else if (_layoutIsLyrics)
+                {
+                    // 歌词（2026-09-16 改版）：
+                    //   左上角 = 一枚小唱片；它右边同一行 = 歌曲信息（左对齐、跟封面顶部齐平）；
+                    //   下面整幅 = 歌词，水平垂直都居中 —— 歌词是这个布局唯一的主角。
+                    Grid.SetColumn(NowPlayingCoverColumn, 0);
+                    Grid.SetRow(NowPlayingCoverColumn, 0);
+                    Grid.SetRowSpan(NowPlayingCoverColumn, 1);
+                    NowPlayingCoverColumn.HorizontalAlignment = HorizontalAlignment.Left;
+                    NowPlayingCoverColumn.VerticalAlignment = VerticalAlignment.Top;
+                    NowPlayingCoverColumn.Margin = new Thickness(16, 14, 0, 0);
+
+                    // 信息：封面右侧，顶部与封面对齐（左列是「封面宽 + 24」的窄列，这里自然紧贴）
+                    Grid.SetColumn(NowPlayingMetaPanel, 1);
+                    Grid.SetRow(NowPlayingMetaPanel, 0);
+                    Grid.SetRowSpan(NowPlayingMetaPanel, 1);
+                    NowPlayingMetaPanel.HorizontalAlignment = HorizontalAlignment.Left;
+                    NowPlayingMetaPanel.VerticalAlignment = VerticalAlignment.Top;
+                    NowPlayingMetaPanel.Margin = new Thickness(20, 14, 0, 12);
+
+                    // 歌词：占满下方整幅，居中
+                    Grid.SetColumn(LyricsSection, 0);
+                    Grid.SetRow(LyricsSection, 1);
+                    Grid.SetColumnSpan(LyricsSection, 2);
+                    Grid.SetRowSpan(LyricsSection, 1);
+                    LyricsSection.HorizontalAlignment = HorizontalAlignment.Center;
+                    LyricsSection.VerticalAlignment = VerticalAlignment.Center;
+                    LyricsSection.Margin = new Thickness(0, 0, 0, transportReserve);
+                    LyricsSection.Visibility = Visibility.Visible;
+
+                    PlayBarFullWidth(2);
+                }
+                else if (_layoutIsMirror)
+                {
+                    // 镜像：把经典整体左右翻过来 —— 歌词在左，封面 + 频谱 + 信息在右。
+                    // 视觉重心从左边挪到右边，背景图主体偏左时特别耐看。
+                    Grid.SetColumn(LyricsSection, 0);
+                    Grid.SetRow(LyricsSection, 0);
+                    Grid.SetRowSpan(LyricsSection, 2);
+                    LyricsSection.HorizontalAlignment = HorizontalAlignment.Center;
+                    LyricsSection.VerticalAlignment = VerticalAlignment.Center;
+                    LyricsSection.Margin = new Thickness(0, 0, 0, transportReserve);
+                    LyricsSection.Visibility = Visibility.Visible;
+
+                    Grid.SetColumn(NowPlayingCoverColumn, 1);
+                    Grid.SetRow(NowPlayingCoverColumn, 0);
+                    Grid.SetRowSpan(NowPlayingCoverColumn, 1);
+                    NowPlayingCoverColumn.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingCoverColumn.VerticalAlignment = VerticalAlignment.Bottom;
+                    NowPlayingCoverColumn.Margin = new Thickness(0, 0, 0, 12);
+
+                    Grid.SetColumn(WaveformCanvas, 1);
+                    Grid.SetRow(WaveformCanvas, 1);
+                    Grid.SetColumnSpan(WaveformCanvas, 1);
+                    WaveformCanvas.HorizontalAlignment = HorizontalAlignment.Center;
+                    WaveformCanvas.VerticalAlignment = VerticalAlignment.Top;
+
+                    Grid.SetColumn(NowPlayingMetaPanel, 1);
+                    Grid.SetRow(NowPlayingMetaPanel, 1);
+                    Grid.SetRowSpan(NowPlayingMetaPanel, 1);
+                    NowPlayingMetaPanel.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingMetaPanel.VerticalAlignment = VerticalAlignment.Top;
+                    NowPlayingMetaPanel.Margin = new Thickness(0, waveformHeight + 12, 0, transportReserve);
+
+                    PlayBarFullWidth(2);
+                }
+                else if (_layoutIsCenter)
+                {
+                    // 居中（上下结构）：封面在上居中最显眼，信息、歌词依次居中往下。
+                    // 窗口缩放时最稳的一种，也不用担心左右两栏互相挤。
+                    Grid.SetColumn(NowPlayingCoverColumn, 0);
+                    Grid.SetRow(NowPlayingCoverColumn, 0);
+                    Grid.SetColumnSpan(NowPlayingCoverColumn, 2);
+                    Grid.SetRowSpan(NowPlayingCoverColumn, 1);
+                    NowPlayingCoverColumn.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingCoverColumn.VerticalAlignment = VerticalAlignment.Bottom;
+                    NowPlayingCoverColumn.Margin = new Thickness(0, 0, 0, 8);
+
+                    Grid.SetColumn(NowPlayingMetaPanel, 0);
+                    Grid.SetRow(NowPlayingMetaPanel, 1);
+                    Grid.SetColumnSpan(NowPlayingMetaPanel, 2);
+                    Grid.SetRowSpan(NowPlayingMetaPanel, 1);
+                    NowPlayingMetaPanel.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingMetaPanel.VerticalAlignment = VerticalAlignment.Top;
+                    NowPlayingMetaPanel.Margin = new Thickness(0, 4, 0, 0);
+
+                    // 歌词紧跟信息块下方：用信息块的实测高度推开，避免写死数字导致重叠
+                    // （首次布局时 ActualHeight 可能还是 0，给个 96 的兜底值）。
+                    double metaHeight = NowPlayingMetaPanel != null && NowPlayingMetaPanel.ActualHeight > 0
+                        ? NowPlayingMetaPanel.ActualHeight
+                        : 96;
+                    Grid.SetColumn(LyricsSection, 0);
+                    Grid.SetRow(LyricsSection, 1);
+                    Grid.SetColumnSpan(LyricsSection, 2);
+                    Grid.SetRowSpan(LyricsSection, 1);
+                    LyricsSection.HorizontalAlignment = HorizontalAlignment.Center;
+                    LyricsSection.VerticalAlignment = VerticalAlignment.Top;
+                    LyricsSection.Margin = new Thickness(0, metaHeight + 16, 0, transportReserve);
+                    LyricsSection.Visibility = Visibility.Visible;
+
+                    PlayBarFullWidth(2);
+                }
+                else
+                {
+                    // 经典：封面贴在左半区上半的底部，波形紧跟其下，信息块再紧跟波形下方
+                    // —— 三块贴成一组，修掉"信息离封面/波形太远、中间一大片空"的问题。
+                    Grid.SetColumn(NowPlayingCoverColumn, 0);
+                    Grid.SetRow(NowPlayingCoverColumn, 0);
+                    Grid.SetRowSpan(NowPlayingCoverColumn, 1);
+                    NowPlayingCoverColumn.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingCoverColumn.VerticalAlignment = VerticalAlignment.Bottom;
+                    // 底边留 12px：封面与下方波形之间有一点呼吸感（原来贴死，波形紧贴封面底边）
+                    NowPlayingCoverColumn.Margin = new Thickness(0, 0, 0, 12);
+
+                    Grid.SetColumn(NowPlayingMetaPanel, 0);
+                    Grid.SetRow(NowPlayingMetaPanel, 1);
+                    Grid.SetRowSpan(NowPlayingMetaPanel, 1);
+                    NowPlayingMetaPanel.HorizontalAlignment = HorizontalAlignment.Center;
+                    // 顶对齐 + 下移"波形高 + 12" → 紧贴波形下方（原来贴到 Row1 底部，中间空一大截）
+                    NowPlayingMetaPanel.VerticalAlignment = VerticalAlignment.Top;
+                    // 底部也留出播放条占位，防止信息过长时钻到内嵌播放条下面
+                    NowPlayingMetaPanel.Margin = new Thickness(0, waveformHeight + 12, 0, transportReserve);
+
+                    Grid.SetColumn(LyricsSection, 1);
+                    Grid.SetRow(LyricsSection, 0);
+                    Grid.SetRowSpan(LyricsSection, 2);
+                    LyricsSection.HorizontalAlignment = HorizontalAlignment.Center;
+                    LyricsSection.VerticalAlignment = VerticalAlignment.Center;
+                    // 歌词区底部留出播放条高度 → 歌词不会压在进度条上
+                    LyricsSection.Margin = new Thickness(0, 0, 0, transportReserve);
+                    LyricsSection.Visibility = Visibility.Visible;
+
+                    // 波形：左下，封面列下方
+                    Grid.SetColumn(WaveformCanvas, 0);
+                    Grid.SetRow(WaveformCanvas, 1);
+                    Grid.SetColumnSpan(WaveformCanvas, 1);
+                    WaveformCanvas.HorizontalAlignment = HorizontalAlignment.Center;
+                    WaveformCanvas.VerticalAlignment = VerticalAlignment.Top;
+
+                    // 播放条：内嵌在面板底部，横跨左右两列居中
+                    Grid.SetColumn(NowPlayingFloatingBar, 0);
+                    Grid.SetRow(NowPlayingFloatingBar, 1);
+                    Grid.SetColumnSpan(NowPlayingFloatingBar, 2);
+                    NowPlayingFloatingBar.HorizontalAlignment = HorizontalAlignment.Center;
+                    NowPlayingFloatingBar.VerticalAlignment = VerticalAlignment.Bottom;
+                }
             }
             finally
             {
                 _isUpdatingNowPlayingLayout = false;
+            }
+        }
+
+        /// <summary>
+        /// 播放页主体网格的列数：默认 2 列；「剧场」是三栏（歌词 / 封面 / 信息），临时切成 3 列。
+        /// 第三列在 XAML 里宽度为 0（平时完全不占位），只在剧场布局启用，切回其它布局自动收掉。
+        /// 「歌词」布局把第一列压成「封面宽 + 24」的窄列，剩下的全给第二列（封面在左、信息紧挨其右）。
+        /// </summary>
+        private void UpdateNowPlayingBodyColumns(double coverSize = 0)
+        {
+            if (NowPlayingBody?.ColumnDefinitions == null || NowPlayingBody.ColumnDefinitions.Count < 3)
+            {
+                return;
+            }
+
+            var cols = NowPlayingBody.ColumnDefinitions;
+            if (_layoutIsStage)
+            {
+                // 中间那栏（封面）稍宽一点，让封面真正成为视觉中心
+                cols[0].Width = new GridLength(1.05, GridUnitType.Star);
+                cols[1].Width = new GridLength(1.30, GridUnitType.Star);
+                cols[2].Width = new GridLength(1.05, GridUnitType.Star);
+            }
+            else if (_layoutIsLyrics)
+            {
+                // 左列只放那枚小唱片（封面宽 + 一点间距），右列吃满剩下的宽度放信息。
+                cols[0].Width = new GridLength(coverSize + 24);
+                cols[1].Width = new GridLength(1, GridUnitType.Star);
+                cols[2].Width = new GridLength(0);
+            }
+            else
+            {
+                cols[0].Width = new GridLength(1, GridUnitType.Star);
+                cols[1].Width = new GridLength(1, GridUnitType.Star);
+                cols[2].Width = new GridLength(0);
+            }
+        }
+
+        /// <summary>
+        /// 播放页主体网格的行：默认上下两行等分（Star/Star）。
+        /// 「歌词」布局改成「上行按内容高度（Auto，只放小唱片 + 信息）/ 下行吃满剩余（整幅歌词）」，
+        /// 否则上面那一行会白白占掉半屏，歌词被挤到很窄的一条里。
+        /// </summary>
+        private void UpdateNowPlayingBodyRows()
+        {
+            if (NowPlayingBody?.RowDefinitions == null || NowPlayingBody.RowDefinitions.Count < 2)
+            {
+                return;
+            }
+
+            var rows = NowPlayingBody.RowDefinitions;
+            if (_layoutIsLyrics)
+            {
+                rows[0].Height = GridLength.Auto;
+                rows[1].Height = new GridLength(1, GridUnitType.Star);
+            }
+            else
+            {
+                rows[0].Height = new GridLength(1, GridUnitType.Star);
+                rows[1].Height = new GridLength(1, GridUnitType.Star);
+            }
+        }
+
+        /// <summary>把内嵌播放条铺在面板底部，横跨指定的列数（剧场 3 列，其余 2 列）。</summary>
+        private void PlayBarFullWidth(int columnSpan)
+        {
+            if (NowPlayingFloatingBar == null)
+            {
+                return;
+            }
+
+            Grid.SetColumn(NowPlayingFloatingBar, 0);
+            Grid.SetRow(NowPlayingFloatingBar, 1);
+            Grid.SetColumnSpan(NowPlayingFloatingBar, columnSpan);
+            NowPlayingFloatingBar.HorizontalAlignment = HorizontalAlignment.Center;
+            NowPlayingFloatingBar.VerticalAlignment = VerticalAlignment.Bottom;
+        }
+
+        /// <summary>
+        /// 当前是否"真的在出声"。引擎优先、其次 MediaPlayer —— 两条播放路径都问一遍，
+        /// 避免只问一条导致状态判断反了。
+        /// </summary>
+        private bool IsPlaybackActuallyPlaying()
+        {
+            try
+            {
+                if (_audioEngine != null && (_usingEnginePlayback || _audioEngine.IsPlaying))
+                {
+                    return _audioEngine.IsPlaying && !_isEnginePaused;
+                }
+
+                var session = GetPlayer()?.PlaybackSession;
+                return session != null && session.PlaybackState == MediaPlaybackState.Playing;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 把「主播放按钮 / 页内播放按钮 / 任务栏按钮」的图标同步到真实播放状态。
+        /// 为什么需要它：引擎播放（HiFi / 独占 / ASIO）与 MediaPlayer 是两条路，
+        /// 播放状态变更事件覆盖不全 —— 自动切下一首、暂停后恢复、独占重建会话等都可能漏掉事件，
+        /// 于是偶尔会出现"歌在响、按钮却还是 ▶"的情况。
+        /// 这里由 200ms 的位置定时器兜一次底，只在状态真的变了才写控件，开销可忽略。
+        /// </summary>
+        private void SyncTransportPlayState()
+        {
+            bool playing = IsPlaybackActuallyPlaying();
+            if (_lastSyncedPlayingState == playing)
+            {
+                return;
+            }
+
+            _lastSyncedPlayingState = playing;
+            string glyph = playing ? "\uE769" : "\uE768";   // E769 = 暂停，E768 = 播放
+            if (PlayPauseIcon != null)
+            {
+                PlayPauseIcon.Glyph = glyph;
+            }
+            if (FloatingPlayPauseIcon != null)
+            {
+                FloatingPlayPauseIcon.Glyph = glyph;
+            }
+
+            try
+            {
+                _taskbarButtons?.UpdatePlayPause(playing);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.SyncTransportPlayState", caught);
             }
         }
 
@@ -418,8 +1008,11 @@ namespace CelesteMusicPlayer
         {
             if (NowPlayingPane != null)
             {
-                // 无外框：透明背景、无圆角（右侧面板不显示独立边框）
-                NowPlayingPane.Background = null;
+                // 无外框：透明背景、无圆角（右侧面板不显示独立边框）。
+                // ⚠️ 必须用"透明画刷"而不是 null：WinUI 里 Background=null 的元素不参与命中测试，
+                // 点击会直接漏到它下面的音乐库界面（表现为播放页盖在上面，却能点到下面的「排序」）。
+                // 透明画刷视觉上完全一样，但会正常拦住鼠标。
+                NowPlayingPane.Background = new SolidColorBrush(Colors.Transparent);
                 NowPlayingPane.BorderBrush = null;
                 NowPlayingPane.BorderThickness = new Thickness(0);
                 NowPlayingPane.CornerRadius = new CornerRadius(0);
@@ -559,12 +1152,29 @@ namespace CelesteMusicPlayer
             _userPlaylistIndex = userPlaylistIndex;
             _currentIndex = FindLibraryIndex(item.FilePath);
 
+            // ★ 记住上次听到哪儿：存档里存了退出时的进度，点播放时从这里接着播。
+            // 以前这里只恢复"是哪一首"，位置被丢掉 → 每次启动都从头开始。
+            _pendingStartSeconds = ReadSavedPositionSeconds(item.FilePath, item.Duration);
+            _pendingStartPauseAfter = false;
+            _pendingStartPath = _pendingStartSeconds > 0 ? item.FilePath : null;
+
             NowPlayingText.Text = "已就绪：" + item.Title + " - " + item.Artist;
+
+            // 就绪态也要把进度条/总时长/波形准备好：否则进度条停在默认的 0~100，
+            // 总时长显示 00:00，点播放前拖不了进度条，波形也是空的。
+            PreparePausedProgressUi(item);
+            HighlightUserPlaylistItem(userPlaylistIndex, item);
+            // 收藏（心形）状态：以前只在真正开播后才同步，启动恢复的那首会显示成未收藏
+            UpdateFavoriteButtonUi();
+
             await UpdateNowPlayingPanelAsync(item);
 
             // 启动续播时同步写入 SMTC（状态=暂停/就绪），让系统媒体浮窗在启动后即显示歌名/歌手/封面，
             // 与双击播放后的显示保持一致；否则启动恢复上次播放时浮窗只剩程序图标。
             ConfigureEngineSmtc(item, playing: false);
+            // 顺带把时长/进度写进系统时间轴，这样系统浮窗能显示总时长并可以拖定位
+            // （就绪态引擎还没建，时长从曲目标签来，所以显式传进去）。
+            UpdateSmtcTimeline(TimeSpan.FromSeconds(_pendingStartSeconds), item.Duration);
 
             // 「启动后自动播放」：走引擎路径（与双击播放一致），这样 DSP 链、实时电平表、
             // SMTC 播放状态/进度才会全部正常。此前这里走 MediaPlayer 的 player.Play()，
@@ -594,25 +1204,117 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            MediaPlayer? player = GetPlayer();
-            if (player == null)
-            {
-                return;
-            }
-
-            try
-            {
-                MediaSource source = MediaSource.CreateFromUri(CreateFileMediaUri(item.FilePath));
-                player.Source = source;
-                player.Pause();
-            }
-            catch (Exception ex)
-            {
-                System.Diagnostics.Debug.WriteLine("恢复加载媒体失败: " + ex.Message);
-            }
-
+            // 不再把歌曲预加载进 MediaPlayer：Media Foundation 认不出的格式（DSD、部分高规格
+            // WAV/FLAC 等）会立刻触发 MediaFailed → 弹「无法播放 SourceNotSupported」，
+            // 而双击播放走引擎路径一切正常 —— 这就是启动报错、双击却能播的原因。
+            // 就绪态的 SMTC 展示已由 ConfigureEngineSmtc 负责；点播放按钮由
+            // PlayPauseButton_Click 转走引擎路径（按 _userPlaylistIndex 恢复到这首）。
             NotifyCurrentPlaylistWindow();
             _miniPlayerWindow?.RefreshFromOwner();
+        }
+
+
+        /// <summary>
+        /// 读上次存档里这首歌听到哪儿了。文件不匹配 / 位置太小 / 已经听到底都当作从头开始。
+        /// </summary>
+        private static double ReadSavedPositionSeconds(string filePath, TimeSpan duration)
+        {
+            try
+            {
+                PlaybackSessionState? saved = PlaybackSessionStore.TryLoad();
+                if (saved == null
+                    || string.IsNullOrWhiteSpace(saved.FilePath)
+                    || !string.Equals(saved.FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    return 0;
+                }
+
+                double pos = saved.PositionSeconds;
+                if (pos <= 1)
+                {
+                    return 0;
+                }
+
+                // 上次已经听到底了（离结尾不到 2 秒）→ 从头开始，否则一点播放就立刻切下一首。
+                if (duration.TotalSeconds > 1 && pos > duration.TotalSeconds - 2)
+                {
+                    return 0;
+                }
+
+                return pos;
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback.cs", caught); }
+            return 0;
+        }
+
+
+        /// <summary>
+        /// 就绪态（还没开播）也要把进度条、总时长、波形准备好。
+        /// 以前这些只在真正开播时才做 → 启动后进度条是默认的 0~100、总时长 00:00、拖了也没用。
+        /// </summary>
+        private void PreparePausedProgressUi(PlaylistItem item)
+        {
+            try
+            {
+                _progressBarStyle = AppSettingsStore.Load().ProgressBarStyle;
+
+                double duration = item.Duration.TotalSeconds;
+                if (duration > 1)
+                {
+                    ProgressSlider.Maximum = duration;
+                    TotalTimeText.Text = FormatTime(item.Duration);
+                }
+
+                double start = Math.Clamp(_pendingStartSeconds, 0, duration > 1 ? duration : 0);
+                _isUpdatingProgressUi = true;
+                try
+                {
+                    ProgressSlider.Value = start;
+                }
+                finally
+                {
+                    _isUpdatingProgressUi = false;
+                }
+
+                CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(start));
+                RedrawProgressStyle();
+
+                // 波形：就绪态也解码一份，别等到点播放才出现
+                _waveformPath = null;
+                LoadWaveformForCurrentAsync(item.FilePath);
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback.cs", caught); }
+        }
+
+
+        /// <summary>就绪态下把播放列表里的当前项高亮并滚动到可见位置（与真正开播时保持一致）。</summary>
+        private void HighlightUserPlaylistItem(int userPlaylistIndex, PlaylistItem item)
+        {
+            try
+            {
+                if (_isMultiSelectMode)
+                {
+                    return;
+                }
+
+                if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
+                    && ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist)
+                    && userPlaylistIndex >= 0
+                    && userPlaylistIndex < _userPlaylist.Count)
+                {
+                    PlaylistView.SelectedIndex = userPlaylistIndex;
+                    PlaylistView.ScrollIntoView(item);
+                }
+                else if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
+                    && _currentIndex >= 0
+                    && _playlist.Count > _currentIndex
+                    && ReferenceEquals(PlaylistView.ItemsSource, _playlist))
+                {
+                    PlaylistView.SelectedIndex = _currentIndex;
+                    PlaylistView.ScrollIntoView(_playlist[_currentIndex]);
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback.cs", caught); }
         }
 
 
@@ -628,7 +1330,18 @@ namespace CelesteMusicPlayer
                 PlaylistItem? item = GetCurrentPlayingItem();
                 if (item != null)
                 {
-                    PlaybackSessionStore.Save(item.FilePath, GetLivePositionSeconds());
+                    // 只有真正播过（正在播 / 暂停着 / MediaPlayer 有源）才写进度。
+                    // 启动后一直没点播放就关掉程序时，GetLivePositionSeconds() 恒为 0，
+                    // 会把上次记住的进度覆盖成 0 —— 这是"续播失效"的元凶之一。
+                    // 起播途中（引擎还播着上一首）也不写，否则会把上一首的进度记到新歌头上。
+                    MediaPlayer? mp = GetPlayer();
+                    bool hasSession = !_startPlaybackInFlight
+                                      && ((_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
+                                          || (mp != null && mp.Source != null));
+                    if (hasSession)
+                    {
+                        PlaybackSessionStore.Save(item.FilePath, GetLivePositionSeconds());
+                    }
                 }
 
                 SavePlayQueue();

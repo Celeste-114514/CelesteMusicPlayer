@@ -30,6 +30,9 @@ namespace CelesteMusicPlayer
 
         private static SettingsWindow? _instance;
         private bool _loadingUi = true;
+
+        /// <summary>AppSettingsStore.Changed 的订阅句柄；窗口关闭时必须解绑（静态事件，不解绑会留住本窗口实例）。</summary>
+        private Action? _storeChangedHandler;
         private bool _uiReady;
         private bool _loadAsyncIgnore;
         private string? _loadedOutputDeviceId;
@@ -168,12 +171,33 @@ namespace CelesteMusicPlayer
 
             ThemeColorService.ThemeColorChanged -= OnThemeColorChangedSettings;
             ThemeColorService.ThemeColorChanged += OnThemeColorChangedSettings;
+
+            // 外部改设置（典型：播放页右上角「布局」按钮）时，把值同步回本窗口的下拉框。
+            // 不做这一步的话：设置窗口开着时用按钮切了布局，本窗口仍是旧值，
+            // 之后再随便改个别设置就会把布局"改回去"。
+            _storeChangedHandler = () =>
+            {
+                try
+                {
+                    DispatcherQueue.TryEnqueue(SyncNowPlayingLayoutComboFromStore);
+                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.storeChanged", caught); }
+            };
+            AppSettingsStore.Changed -= _storeChangedHandler;
+            AppSettingsStore.Changed += _storeChangedHandler;
+
             _uiReady = true;
             _loadingUi = false;
             _lastAppliedAccent = ThemeColorService.CurrentAccent;
 
             Closed += (_, _) =>
             {
+                if (_storeChangedHandler != null)
+                {
+                    AppSettingsStore.Changed -= _storeChangedHandler;
+                    _storeChangedHandler = null;
+                }
+
                 if (ReferenceEquals(_instance, this))
                 {
                     _instance = null;
@@ -207,6 +231,42 @@ namespace CelesteMusicPlayer
             try
             {
                 w.DispatcherQueue.TryEnqueue(w.OpenMediaLibrary);
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
+        }
+
+        /// <summary>打开设置窗口并定位到「关于」面板（自动检查到新版本时从托盘气泡点击进入）。</summary>
+        public static void ShowAbout()
+        {
+            ShowOrActivate();
+            SettingsWindow? w = _instance;
+            if (w == null)
+            {
+                return;
+            }
+
+            try
+            {
+                w.DispatcherQueue.TryEnqueue(w.OpenAboutPanel);
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
+        }
+
+        /// <summary>选中并显示设置窗口的「关于」导航板块，并刷新自动检查缓存的更新状态。</summary>
+        private void OpenAboutPanel()
+        {
+            try
+            {
+                foreach (object o in SettingsNav.MenuItems)
+                {
+                    if (o is NavigationViewItem item && item.Tag is string t && t == "About")
+                    {
+                        SettingsNav.SelectedItem = item;
+                        break;
+                    }
+                }
+
+                ShowPanel("About");
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
         }
@@ -388,6 +448,8 @@ namespace CelesteMusicPlayer
                         ? (s.FollowSystemAccent ? "System" : "Custom")
                         : s.AccentSource);
                 SelectComboByTag(ThemePresetCombo, s.ThemePreset);
+                SelectComboByTag(NowPlayingLayoutCombo,
+                    string.IsNullOrWhiteSpace(s.NowPlayingLayout) ? "Classic" : s.NowPlayingLayout);
                 ShowTitleColCheck.IsChecked = s.ShowPlaylistTitle;
                 ShowArtistColCheck.IsChecked = s.ShowPlaylistArtist;
                 ShowAlbumColCheck.IsChecked = s.ShowPlaylistAlbum;
@@ -942,6 +1004,7 @@ namespace CelesteMusicPlayer
             s.ProgressBarStyle = WaveformProgressSwitch.IsOn ? "Waveform" : "Gradient";
             s.CustomBackgroundPath = BackgroundPathTextBox?.Text?.Trim() ?? string.Empty;
             s.ThemePreset = GetComboTagString(ThemePresetCombo, "");
+            s.NowPlayingLayout = GetComboTagString(NowPlayingLayoutCombo, "Classic");
             s.ShowPlaylistTitle = ShowTitleColCheck.IsChecked ?? true;
             s.ShowPlaylistArtist = ShowArtistColCheck.IsChecked ?? true;
             s.ShowPlaylistAlbum = ShowAlbumColCheck.IsChecked ?? true;
@@ -1207,6 +1270,11 @@ namespace CelesteMusicPlayer
             PanelLibraryHealth.Visibility = tag == "LibraryHealth" ? Visibility.Visible : Visibility.Collapsed;
             PanelStreaming.Visibility = tag == "Streaming" ? Visibility.Visible : Visibility.Collapsed;
             PanelAbout.Visibility = tag == "About" ? Visibility.Visible : Visibility.Collapsed;
+            // 进入关于面板时，把启动自动检查到的新版本状态直接显示出来（不用等用户手动点「检查更新」）
+            if (tag == "About")
+            {
+                RefreshUpdateStatusFromCache();
+            }
         }
 
         private void SaveNeCookieButton_Click(object sender, RoutedEventArgs e)
@@ -1409,6 +1477,54 @@ namespace CelesteMusicPlayer
             SelectComboByTag(AccentSourceCombo, "Custom");
             UpdateAccentColorButton();
             PersistAllFromUi();
+        }
+
+        /// <summary>播放页布局切换：立即持久化；主窗口订阅 AppSettingsStore.Changed 后会实时套用。</summary>
+        private void NowPlayingLayoutCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            PersistAllFromUi();
+        }
+
+        /// <summary>
+        /// 把设置里的播放页布局同步回下拉框（用于「播放页角落布局按钮改完 → 本窗口跟着变」）。
+        /// 临时置 _loadingUi 拦掉自身 SelectionChanged，避免触发回写形成回环；
+        /// 用保存/恢复而非直接置 false，防止打断正在进行的异步填充。
+        /// </summary>
+        private void SyncNowPlayingLayoutComboFromStore()
+        {
+            if (_loadingUi || !_uiReady || NowPlayingLayoutCombo == null)
+            {
+                return;
+            }
+
+            try
+            {
+                string layout = AppSettingsStore.Load().NowPlayingLayout;
+                if (!MainWindow.IsKnownLayout(layout))
+                {
+                    layout = "Classic";
+                }
+
+                if (GetComboTagString(NowPlayingLayoutCombo, "") == layout)
+                {
+                    return; // 已经是这个值，不做无谓改动
+                }
+
+                bool previousLoading = _loadingUi;
+                _loadingUi = true;
+                try
+                {
+                    SelectComboByTag(NowPlayingLayoutCombo, layout);
+                }
+                finally
+                {
+                    _loadingUi = previousLoading;
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.SyncNowPlayingLayoutComboFromStore", caught);
+            }
         }
 
         private void UpdateAccentColorButton()

@@ -25,131 +25,60 @@ namespace CelesteMusicPlayer
         /// <summary>最新版本安装包（Setup-*.exe）的下载 URL，无匹配资产为 null。</summary>
         private string? _latestSetupUrl;
 
-        /// <summary>当前程序集版本号字符串（如 "26.9.10.2"）。</summary>
-        private static string CurrentVersionText()
-        {
-            Version? v = Assembly.GetExecutingAssembly().GetName().Version;
-            if (v == null)
-            {
-                return "未知";
-            }
-
-            // 完整输出 4 段版本号（含修订号），否则 26.9.10.2 会被显示成 26.9.10，
-            // 与最初的 26.9.10 无法区分，用户会误以为「没更新」。
-            if (v.Revision > 0)
-            {
-                return $"{v.Major}.{v.Minor}.{v.Build}.{v.Revision}";
-            }
-            return $"{v.Major}.{v.Minor}.{v.Build}";
-        }
+        /// <summary>当前程序集版本号字符串（如 "26.9.10.2"）。逻辑已抽到 UpdateChecker，这里只做转发。</summary>
+        private static string CurrentVersionText() => UpdateChecker.CurrentVersionText();
 
         /// <summary>
         /// 比较两个版本字符串（支持 v 前缀和 -beta/-rc 后缀）。
         /// 返回值：&lt;0 / 0 / &gt;0 表示 a 比 b 旧/相等/新。
         /// </summary>
-        private static int CompareVersionStrings(string a, string b)
-        {
-            Version va = ParseLoose(a);
-            Version vb = ParseLoose(b);
-            return va.CompareTo(vb);
-        }
-
-        private static Version ParseLoose(string raw)
-        {
-            if (string.IsNullOrWhiteSpace(raw))
-            {
-                return new Version(0, 0, 0, 0);
-            }
-
-            string trimmed = raw.Trim().TrimStart('v', 'V');
-            int dash = trimmed.IndexOf('-');
-            if (dash >= 0)
-            {
-                trimmed = trimmed.Substring(0, dash);
-            }
-
-            if (!Version.TryParse(trimmed, out Version? parsed) || parsed == null)
-            {
-                return new Version(0, 0, 0, 0);
-            }
-
-            // 规范化到 4 段、缺失段补 0。Version 的 -1 会被 CompareTo 当成「更小」，
-            // 不补零会导致 26.9.10（Revision=-1）被误判成比 26.9.10.1「更旧」。
-            int major = parsed.Major < 0 ? 0 : parsed.Major;
-            int minor = parsed.Minor < 0 ? 0 : parsed.Minor;
-            int build = parsed.Build < 0 ? 0 : parsed.Build;
-            int revision = parsed.Revision < 0 ? 0 : parsed.Revision;
-            return new Version(major, minor, build, revision);
-        }
+        private static int CompareVersionStrings(string a, string b) => UpdateChecker.CompareVersionStrings(a, b);
 
         /// <summary>
         /// 从 GitHub Releases latest 接口读取 tag_name 与安装包下载地址。
         /// 成功返回 tag（如 "v26.9.1"），并把 Setup-*.exe 的下载 URL 写入 _latestSetupUrl；
-        /// 失败返回 null。
+        /// 失败返回 null。实际网络请求走 UpdateChecker.FetchLatestAsync。
         /// </summary>
         private async System.Threading.Tasks.Task<string?> FetchLatestVersionAsync()
         {
-            _latestSetupUrl = null;
-            try
+            (string? tag, string? setupUrl) = await UpdateChecker.FetchLatestAsync();
+            _latestSetupUrl = setupUrl;
+            return tag;
+        }
+
+        /// <summary>
+        /// 关于面板打开时，若启动期自动检查已发现新版本，直接把状态显示出来（不用等用户手动点「检查更新」）。
+        /// 由 ShowPanel("About") 调用。
+        /// </summary>
+        private void RefreshUpdateStatusFromCache()
+        {
+            if (AboutUpdateStatusText == null)
             {
-                using var http = new HttpClient();
-                http.Timeout = TimeSpan.FromSeconds(15);
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("CelesteMusicPlayer/" + CurrentVersionText());
-                string json = await http.GetStringAsync(GithubReleasesApi);
-                using var doc = JsonDocument.Parse(json);
-
-                string? tag = null;
-                if (doc.RootElement.TryGetProperty("tag_name", out JsonElement tagEl) && tagEl.ValueKind == JsonValueKind.String)
-                {
-                    tag = tagEl.GetString();
-                }
-
-                // 在 assets 里找安装包：优先 CelesteMusicPlayer-Setup-*.exe，其次任何 *.exe 里的 Setup/Install
-                if (doc.RootElement.TryGetProperty("assets", out JsonElement assets) && assets.ValueKind == JsonValueKind.Array)
-                {
-                    foreach (JsonElement asset in assets.EnumerateArray())
-                    {
-                        string? name = asset.TryGetProperty("name", out JsonElement n) ? n.GetString() : null;
-                        string? url = asset.TryGetProperty("browser_download_url", out JsonElement u) ? u.GetString() : null;
-                        if (string.IsNullOrEmpty(name) || string.IsNullOrEmpty(url))
-                        {
-                            continue;
-                        }
-
-                        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                            (name.Contains("Setup", StringComparison.OrdinalIgnoreCase) ||
-                             name.Contains("Install", StringComparison.OrdinalIgnoreCase)))
-                        {
-                            _latestSetupUrl = url;
-                            break;
-                        }
-                    }
-
-                    // 兜底：没找到 Setup 命名，退而求其次取第一个 .exe（可能为绿色版/自解压包）
-                    if (_latestSetupUrl == null)
-                    {
-                        foreach (JsonElement asset in assets.EnumerateArray())
-                        {
-                            string? name = asset.TryGetProperty("name", out JsonElement n) ? n.GetString() : null;
-                            string? url = asset.TryGetProperty("browser_download_url", out JsonElement u) ? u.GetString() : null;
-                            if (!string.IsNullOrEmpty(name) && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                                !string.IsNullOrEmpty(url))
-                            {
-                                _latestSetupUrl = url;
-                                break;
-                            }
-                        }
-                    }
-                }
-
-                return tag;
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("SettingsWindow.About.FetchLatest", caught);
+                return;
             }
 
-            return null;
+            UpdateChecker.UpdateInfo? info = UpdateChecker.LatestAvailable;
+            if (info == null)
+            {
+                return;
+            }
+
+            string currentVer = UpdateChecker.CurrentVersionText();
+            if (UpdateChecker.CompareVersionStrings(info.Tag, currentVer) <= 0)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(info.SetupUrl))
+            {
+                AboutUpdateStatusText.Text = $"发现新版本 {info.Tag}（当前 {currentVer}）。点击「下载更新」下载安装包。";
+                AboutDownloadUpdateButton.Visibility = Visibility.Visible;
+            }
+            else
+            {
+                AboutUpdateStatusText.Text = $"发现新版本 {info.Tag}（当前 {currentVer}）。该版本未附带安装包，请到「GitHub Releases ↗」手动下载。";
+                AboutDownloadUpdateButton.Visibility = Visibility.Collapsed;
+            }
         }
 
         private void AboutCheckUpdate_Click(object sender, RoutedEventArgs e)

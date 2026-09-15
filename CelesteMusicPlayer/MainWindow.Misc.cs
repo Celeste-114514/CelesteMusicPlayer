@@ -2117,6 +2117,54 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>波形倒影的画刷缓存（按序号缓存渐变画刷，避免每帧重建 40 个画刷造成 GC 抖动）。
+        /// 颜色变化（换主题）时自动重建。</summary>
+        private readonly LinearGradientBrush?[] _waveReflBrushes = new LinearGradientBrush?[WaveBarCount];
+        private readonly Color[] _waveReflColors = new Color[WaveBarCount];
+
+        /// <summary>取（并缓存）某个柱子的倒影渐变画刷：顶部有颜色 → 底部完全透明，模拟水面渐隐。</summary>
+        private Brush ReflectionBrushFor(int index, Color accent)
+        {
+            if (_waveReflBrushes[index] is LinearGradientBrush cached && _waveReflColors[index] == accent)
+            {
+                return cached;
+            }
+
+            // 水面线处约 40% 不透明度，向下分三段平滑收到全透明 —— 比原来的"整块固定 92 alpha"
+            // 自然得多：既不会在倒影底部出现一条生硬的截止边，也不会紧贴水面线时显得"糊成一块"。
+            // （用户反馈：波形倒影太突兀 → 降起始不透明度 + 多加一档中间色标，让衰减更渐进。）
+            var brush = new LinearGradientBrush
+            {
+                StartPoint = new Windows.Foundation.Point(0, 0),
+                EndPoint = new Windows.Foundation.Point(0, 1)
+            };
+            brush.GradientStops.Add(new GradientStop
+            {
+                Color = Color.FromArgb(100, accent.R, accent.G, accent.B),
+                Offset = 0.0
+            });
+            brush.GradientStops.Add(new GradientStop
+            {
+                Color = Color.FromArgb(52, accent.R, accent.G, accent.B),
+                Offset = 0.32
+            });
+            brush.GradientStops.Add(new GradientStop
+            {
+                Color = Color.FromArgb(16, accent.R, accent.G, accent.B),
+                Offset = 0.68
+            });
+            brush.GradientStops.Add(new GradientStop
+            {
+                Color = Color.FromArgb(0, accent.R, accent.G, accent.B),
+                Offset = 1.0
+            });
+
+            _waveReflBrushes[index] = brush;
+            _waveReflColors[index] = accent;
+            return brush;
+        }
+
+
         private void DrawWaveformBars()
         {
             if (WaveformCanvas == null)
@@ -2151,44 +2199,71 @@ namespace CelesteMusicPlayer
             }
 
             double gap = 2;
-            double barWidth = Math.Max(2, (width - gap * (WaveBarCount - 1)) / WaveBarCount);
+            bool water = _layoutIsWater;
+            int mainCount = WaveBarCount;
+            int total = water ? mainCount * 2 : mainCount;
+            double barWidth = Math.Max(2, (width - gap * (mainCount - 1)) / mainCount);
 
-            while (WaveformCanvas.Children.Count < WaveBarCount)
+            // 扩容到 total（水面需 main + 倒影两组）
+            while (WaveformCanvas.Children.Count < total)
             {
-                int idx = WaveformCanvas.Children.Count;
                 WaveformCanvas.Children.Add(new Border
                 {
-                    Background = new SolidColorBrush(WaveColorFor(idx)),
                     CornerRadius = new CornerRadius(2.5),
                     IsHitTestVisible = false
                 });
             }
 
-            while (WaveformCanvas.Children.Count > WaveBarCount)
+            while (WaveformCanvas.Children.Count > total)
             {
                 WaveformCanvas.Children.RemoveAt(WaveformCanvas.Children.Count - 1);
             }
 
-            for (int i = 0; i < WaveBarCount; i++)
+            for (int i = 0; i < mainCount; i++)
             {
                 if (WaveformCanvas.Children[i] is not Border bar)
                 {
                     continue;
                 }
 
-                // 每次重绘都更新颜色(主题色变化后生效,不能只在新柱子创建时设置)
-                bar.Background = new SolidColorBrush(WaveColorFor(i));
+                Color accent = WaveColorFor(i);
+                bar.Background = new SolidColorBrush(accent);
 
                 double level = Math.Clamp(_waveLevels[i], 0.12, 1.0);
-                double barHeight = Math.Max(10, Math.Min(height, height * level * 1.15));
-                double left = i * (barWidth + gap);
-                double top = (height - barHeight) / 2;
+                if (water)
+                {
+                    // 水面：主柱从 midline 向上长（占上半部分），下半区是从 midline 向下长的镜像倒影（淡出）。
+                    // 这样主柱"在上半部分显示"，倒影"在下半部分"——水面倒影的标准样式。
+                    double half = height * 0.5;
+                    double barHeight = Math.Max(10, Math.Min(half, half * level * 1.15));
+                    double left = i * (barWidth + gap);
+                    bar.Width = barWidth;
+                    bar.Height = barHeight;
+                    Canvas.SetLeft(bar, left);
+                    Canvas.SetTop(bar, half - barHeight);  // 主柱底部贴 midline，向上延伸
 
-                // 直接赋值（Border 未设置时 Width/Height 为 NaN，比较判断恒 false 会导致柱子 0×0 不可见）
-                bar.Width = barWidth;
-                bar.Height = barHeight;
-                Canvas.SetLeft(bar, left);
-                Canvas.SetTop(bar, top);
+                    if (WaveformCanvas.Children[mainCount + i] is Border refl)
+                    {
+                        // 镜像在下半区：从 midline 向下延伸、高度一致，用渐变画刷自上而下淡出。
+                        // 原来用固定 alpha 的纯色块，底部会出现一条"戛然而止"的硬边（用户反馈过于突兀）。
+                        refl.Width = barWidth;
+                        refl.Height = barHeight;
+                        refl.Background = ReflectionBrushFor(i, accent);
+                        Canvas.SetLeft(refl, left);
+                        Canvas.SetTop(refl, half);  // 倒影顶部贴 midline，向下延伸
+                    }
+                }
+                else
+                {
+                    // 经典：整条居中对称
+                    double barHeight = Math.Max(10, Math.Min(height, height * level * 1.15));
+                    double left = i * (barWidth + gap);
+                    double top = (height - barHeight) / 2;
+                    bar.Width = barWidth;
+                    bar.Height = barHeight;
+                    Canvas.SetLeft(bar, left);
+                    Canvas.SetTop(bar, top);
+                }
             }
         }
 
@@ -2271,6 +2346,13 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // 无条件留痕 + 立即落盘：用户遇到"弹了个窗但什么信息都没有"时，
+                // 日志里至少能查到 弹窗标题/正文/时间。之前只有部分调用点写日志，
+                // 且日志是内存缓冲（被强杀会丢最后 300ms），排查时全是盲区。
+                global::CelesteMusicPlayer.StartupLog.Write(
+                    $"[对话框] {title} | {message?.Replace("\r\n", " / ").Replace("\n", " / ")}");
+                global::CelesteMusicPlayer.StartupLog.Flush();
+
                 // 早期启动（如 FirstActivated 阶段）Content.XamlRoot 可能尚未建立，
                 // 此时弹 ContentDialog 会抛 "This element does not have a XamlRoot" 并被静默吞掉。
                 // 改为等待 XamlRoot 就绪再弹，最多约 2s；仍拿不到则把错误写入日志而非丢失。

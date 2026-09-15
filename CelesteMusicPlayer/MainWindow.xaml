@@ -81,12 +81,56 @@
                 Spacing="10"
                 VerticalAlignment="Center"
                 Padding="4,0,8,0">
-                <Image
+                <!-- 左上角应用图标：简笔「圆圈 + 音符」。
+                     原来是蓝色的 AppIcon.png，和界面色调不搭；改成矢量线稿并跟随主题前景色，
+                     深色/浅色都会自动反色。只改主程序左上角这一处，不动任务栏/托盘图标。 -->
+                <Viewbox
                     x:Name="AppTitleBarIcon"
                     Width="20"
                     Height="20"
-                    Stretch="Uniform"
-                    Source="ms-appx:///Assets/AppIcon.png" />
+                    Stretch="Uniform">
+                    <Canvas Width="24" Height="24">
+                        <!-- 外圈 -->
+                        <Ellipse
+                            Canvas.Left="1"
+                            Canvas.Top="1"
+                            Width="22"
+                            Height="22"
+                            Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                            StrokeThickness="1.5" />
+                        <!-- 符头（微倾的实心椭圆） -->
+                        <Path Fill="{ThemeResource TextFillColorPrimaryBrush}">
+                            <Path.Data>
+                                <EllipseGeometry Center="9,16" RadiusX="3.2" RadiusY="2.4">
+                                    <EllipseGeometry.Transform>
+                                        <RotateTransform Angle="-20" CenterX="9" CenterY="16" />
+                                    </EllipseGeometry.Transform>
+                                </EllipseGeometry>
+                            </Path.Data>
+                        </Path>
+                        <!-- 符干 -->
+                        <Line
+                            X1="12.1"
+                            Y1="15.8"
+                            X2="12.1"
+                            Y2="6.6"
+                            Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                            StrokeThickness="1.5" />
+                        <!-- 符尾 -->
+                        <Path
+                            Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                            StrokeThickness="1.5"
+                            StrokeLineJoin="Round">
+                            <Path.Data>
+                                <PathGeometry>
+                                    <PathFigure StartPoint="12.1,6.6">
+                                        <BezierSegment Point1="14.8,7.2" Point2="16.1,8.9" Point3="15.2,11" />
+                                    </PathFigure>
+                                </PathGeometry>
+                            </Path.Data>
+                        </Path>
+                    </Canvas>
+                </Viewbox>
                 <TextBlock
                     VerticalAlignment="Center"
                     FontSize="13"
@@ -510,7 +554,7 @@
                         Click="CategoryNavButton_Click">
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <FontIcon Glyph="&#xE8B7;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="文件夹" VerticalAlignment="Center" />
+                            <TextBlock Text="媒体库" VerticalAlignment="Center" />
                         </StackPanel>
                     </Button>
                 </StackPanel>
@@ -3767,46 +3811,218 @@
                         <RowDefinition Height="*" />
                     </Grid.RowDefinitions>
 
+                    <!-- ⚠️ 这里曾经加过一层「播放页自己的背景图 + 压暗层」，用户反馈像
+                         「在主程序上加了一块板子」，已移除。背景统一走整窗的
+                         AlbumArtBackgroundImage（见 ApplyAlbumArtBackgroundAsync），别再加回来。 -->
+
                     <!-- 左上角：返回按钮（整合式，仿专辑详情页返回栏） -->
+                    <!-- 左上角：返回按钮（整合式，仿专辑详情页返回栏）
+                         ⚠️ 这里以前有一条 BorderThickness="0,0,0,1" 的分割线，横跨整个面板宽度，
+                         视觉上像一条压在专辑封面上的细线 —— 用户要求去掉，别再加回来。 -->
                     <Border
                         Grid.Row="0"
                         Padding="0,2,0,10"
                         Margin="0,0,0,4"
-                        BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
-                        BorderThickness="0,0,0,1">
-                        <Button
-                            x:Name="NowPlayingCollapseButton"
-                            Width="36"
-                            Height="32"
-                            Padding="0"
-                            HorizontalAlignment="Left"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Click="NowPlayingCollapseButton_Click"
-                            ToolTipService.ToolTip="返回音乐库">
-                            <FontIcon Glyph="&#xE70D;" FontSize="13" />
-                        </Button>
+                        BorderThickness="0">
+                        <Grid>
+                            <Button
+                                x:Name="NowPlayingCollapseButton"
+                                Width="36"
+                                Height="32"
+                                Padding="0"
+                                HorizontalAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Click="NowPlayingCollapseButton_Click"
+                                ToolTipService.ToolTip="返回音乐库">
+                                <FontIcon Glyph="&#xE70D;" FontSize="13" />
+                            </Button>
+                            <!-- 播放页布局切换（页内即时切换，不打断播放） -->
+                            <Button
+                                x:Name="NowPlayingLayoutButton"
+                                Height="32"
+                                Padding="10,0"
+                                HorizontalAlignment="Right"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                ToolTipService.ToolTip="切换播放页布局">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock x:Name="NowPlayingLayoutButtonText" Text="布局：经典" FontSize="12" VerticalAlignment="Center" />
+                                    <FontIcon Glyph="&#xE70D;" FontSize="10" VerticalAlignment="Center" />
+                                </StackPanel>
+                                <Button.Flyout>
+                                    <MenuFlyout Placement="BottomEdgeAlignedRight">
+                                        <MenuFlyoutItem Text="经典（原有版式）" Tag="Classic" Click="NowPlayingLayoutMenuItem_Click" />
+                                        <MenuFlyoutItem Text="水面倒影" Tag="Water" Click="NowPlayingLayoutMenuItem_Click" />
+                                        <MenuFlyoutItem Text="黑胶唱机" Tag="Vinyl" Click="NowPlayingLayoutMenuItem_Click" />
+                                        <MenuFlyoutItem Text="剧场（三栏：歌词/封面/信息）" Tag="Stage" Click="NowPlayingLayoutMenuItem_Click" />
+                                        <MenuFlyoutItem Text="歌词（小封面 + 大歌词）" Tag="Lyrics" Click="NowPlayingLayoutMenuItem_Click" />
+                                        <MenuFlyoutItem Text="镜像（封面在右）" Tag="Mirror" Click="NowPlayingLayoutMenuItem_Click" />
+                                        <MenuFlyoutItem Text="居中（上下结构）" Tag="Center" Click="NowPlayingLayoutMenuItem_Click" />
+                                    </MenuFlyout>
+                                </Button.Flyout>
+                            </Button>
+                        </Grid>
                     </Border>
 
-                    <!-- 主体：左侧封面区 + 右侧滚动歌词 -->
+                    <!-- 主体：三块（封面列 / 信息块 / 歌词块）都是 NowPlayingBody 的直接子元素，
+                         靠 Grid.Row/Column + 对齐在「经典」「水面」间切换，不重新挂接控件。
+                         经典：封面+信息叠在左侧居中、歌词在右半区；
+                         水面：封面在左下居中、信息在右上、歌词在右下。 -->
                     <Grid
+                        x:Name="NowPlayingBody"
                         Grid.Row="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <!-- 第三列：只有「剧场」三栏布局会用到（由 UpdateNowPlayingBodyColumns 在代码里给宽度）。
+                                 平时宽度 0，完全不占位，其它布局不受任何影响。 -->
+                            <ColumnDefinition Width="0" />
                         </Grid.ColumnDefinitions>
 
-                        <!-- 左栏：大封面 + 波形 + 歌曲信息（以封面中轴居中，文字超长换行） -->
-                        <StackPanel
-                            x:Name="NowPlayingLeftColumn"
+                        <!-- 黑胶布局：唱机（旋转唱片 + 唱臂）。仅「黑胶」布局显示，其它布局 Collapsed。
+                             盘面尺寸 / 标签尺寸 / 唱臂长度由 UpdateNowPlayingCardLayout 按面板大小设置。
+                             旋转用 Storyboard（放在资源里、按 x:Key 取），暂停用 Pause() 而不是 Stop()，
+                             这样唱片会停在当前角度，再播放时从原处继续转（跟真唱机一样）。 -->
+                        <Grid
+                            x:Name="VinylStage"
                             Grid.Column="0"
-                            MinWidth="320"
-                            Spacing="10"
+                            Grid.Row="0"
+                            Grid.RowSpan="2"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Center"
-                            RenderTransformOrigin="0.5,0.5">
-                            <StackPanel.RenderTransform>
-                                <CompositeTransform x:Name="NowPlayingLeftShift" ScaleX="1" ScaleY="1" />
-                            </StackPanel.RenderTransform>
+                            Visibility="Collapsed">
+                            <Grid.Resources>
+                                <Storyboard x:Key="VinylSpinStoryboard">
+                                    <DoubleAnimation
+                                        Storyboard.TargetName="VinylDiscRotate"
+                                        Storyboard.TargetProperty="Angle"
+                                        From="0"
+                                        To="360"
+                                        Duration="0:0:7"
+                                        RepeatBehavior="Forever" />
+                                </Storyboard>
+                                <Storyboard x:Key="VinylArmDownStoryboard">
+                                    <DoubleAnimation
+                                        Storyboard.TargetName="VinylArmRotate"
+                                        Storyboard.TargetProperty="Angle"
+                                        To="27"
+                                        Duration="0:0:0.5">
+                                        <DoubleAnimation.EasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                </Storyboard>
+                                <Storyboard x:Key="VinylArmUpStoryboard">
+                                    <DoubleAnimation
+                                        Storyboard.TargetName="VinylArmRotate"
+                                        Storyboard.TargetProperty="Angle"
+                                        To="0"
+                                        Duration="0:0:0.5">
+                                        <DoubleAnimation.EasingFunction>
+                                            <CubicEase EasingMode="EaseOut" />
+                                        </DoubleAnimation.EasingFunction>
+                                    </DoubleAnimation>
+                                </Storyboard>
+                            </Grid.Resources>
+
+                            <!-- 唱盘（整体旋转） -->
+                            <Grid
+                                x:Name="VinylDisc"
+                                Width="320"
+                                Height="320"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                RenderTransformOrigin="0.5,0.5">
+                                <Grid.RenderTransform>
+                                    <RotateTransform x:Name="VinylDiscRotate" Angle="0" />
+                                </Grid.RenderTransform>
+                                <Ellipse x:Name="VinylPlate">
+                                    <Ellipse.Fill>
+                                        <LinearGradientBrush StartPoint="0,0" EndPoint="1,1">
+                                            <GradientStop Color="#FF1C1C21" Offset="0" />
+                                            <GradientStop Color="#FF0B0B0D" Offset="0.5" />
+                                            <GradientStop Color="#FF25252B" Offset="1" />
+                                        </LinearGradientBrush>
+                                    </Ellipse.Fill>
+                                </Ellipse>
+                                <!-- 纹路：几圈极淡的同心圆，纯装饰 -->
+                                <Ellipse Margin="12" Stroke="#1FFFFFFF" StrokeThickness="1" />
+                                <Ellipse Margin="24" Stroke="#16FFFFFF" StrokeThickness="1" />
+                                <Ellipse Margin="37" Stroke="#12FFFFFF" StrokeThickness="1" />
+                                <Ellipse Margin="51" Stroke="#0FFFFFFF" StrokeThickness="1" />
+                                <Ellipse Margin="66" Stroke="#0CFFFFFF" StrokeThickness="1" />
+                                <!-- 中心标签 = 专辑封面（圆形，跟真唱片的标签一样） -->
+                                <Ellipse
+                                    x:Name="VinylArtEllipse"
+                                    Width="126"
+                                    Height="126"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Fill="{ThemeResource SubtleFillColorSecondaryBrush}" />
+                                <!-- 中心孔 -->
+                                <Ellipse
+                                    Width="10"
+                                    Height="10"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Fill="#FF08080A" />
+                            </Grid>
+
+                            <!-- 唱臂：支点在右端，播放时落下搭到盘上，暂停时抬起 -->
+                            <Grid
+                                x:Name="VinylTonearm"
+                                Width="170"
+                                Height="26"
+                                Margin="0,8,-8,0"
+                                HorizontalAlignment="Right"
+                                VerticalAlignment="Top"
+                                RenderTransformOrigin="1,0.5">
+                                <Grid.RenderTransform>
+                                    <RotateTransform x:Name="VinylArmRotate" Angle="0" />
+                                </Grid.RenderTransform>
+                                <!-- 支点座 -->
+                                <Ellipse
+                                    Width="26"
+                                    Height="26"
+                                    HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Fill="#FF5A5F66" />
+                                <!-- 臂杆 -->
+                                <Rectangle
+                                    Width="134"
+                                    Height="6"
+                                    RadiusX="3"
+                                    RadiusY="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Fill="#FFB9BEC6" />
+                                <!-- 唱头 -->
+                                <Rectangle
+                                    Width="30"
+                                    Height="15"
+                                    Margin="118,0,0,0"
+                                    RadiusX="3"
+                                    RadiusY="3"
+                                    HorizontalAlignment="Left"
+                                    VerticalAlignment="Center"
+                                    Fill="#FF7C828B" />
+                            </Grid>
+                        </Grid>
+
+                        <!-- 封面列：封面 + 水面倒影 + 波形（始终在左列） -->
+                        <StackPanel
+                            x:Name="NowPlayingCoverColumn"
+                            Grid.Column="0"
+                            Grid.Row="0"
+                            Grid.RowSpan="2"
+                            Spacing="10"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
                             <Border
                                 x:Name="NowPlayingCoverBorder"
                                 Width="320"
@@ -3833,107 +4049,131 @@
                                 </Grid>
                             </Border>
 
-                            <Canvas
-                                x:Name="WaveformCanvas"
-                                Width="320"
-                                Height="40"
+                            <!-- 水面倒影（仅「水面」布局显示；经典保持 Collapsed）。
+                                 镜像与渐隐已在 CPU 侧烤进贴图（见 NowPlayingReflection.cs）：
+                                 WinUI 3 的 UIElement 没有 OpacityMask，无法用遮罩做渐隐。
+                                 Margin 的 -10 用于抵消上方 StackPanel 的 Spacing=10，让倒影紧贴封面底边。
+                                 注意 Image 必须用 UniformToFill（不能 Uniform）：容器高度是"贴图高 × 比例"，
+                                 通常带小数（如 90.23），在 UseLayoutRounding 下会被取整成 90，
+                                 此时 Uniform 会按高度等比缩放，渲染宽度只有约 418.9（左右各露 0.5px 透明边，
+                                 高 DPI 下就是 1~2 个物理像素的"缺缝"）。UniformToFill 保证横向铺满，
+                                 0.2px 级的纵向裁切发生在渐隐尾部，完全不可见。 -->
+                            <Grid
+                                x:Name="NowPlayingCoverReflection"
                                 HorizontalAlignment="Center"
+                                Margin="0,-10,0,0"
                                 IsHitTestVisible="False"
-                                SizeChanged="WaveformCanvas_SizeChanged" />
-
-                            <StackPanel
-                                x:Name="NowPlayingMetaPanel"
-                                Spacing="8"
-                                HorizontalAlignment="Center">
-                                <TextBlock
-                                    x:Name="NowPlayingTitleText"
-                                    FontSize="26"
-                                    FontWeight="SemiBold"
-                                    Foreground="{ThemeResource TextFillColorPrimaryBrush}"
-                                    TextAlignment="Center"
-                                    TextWrapping="WrapWholeWords"
-                                    Text="未在播放" />
-                                <!-- 歌手 / 专辑：各自一行，宽=半区-留边，超长换行 -->
-                                <StackPanel Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
-                                    <Button
-                                        x:Name="NowPlayingArtistLinkButton"
-                                        Padding="0"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        CornerRadius="4"
-                                        Click="NowPlayingArtistLinkButton_Click"
-                                        PointerEntered="NowPlayingArtistLink_PointerEntered"
-                                        PointerExited="NowPlayingArtistLink_PointerExited">
-                                        <TextBlock
-                                            x:Name="NowPlayingArtistText"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            FontSize="15"
-                                            FontWeight="SemiBold"
-                                            TextDecorations="None"
-                                            TextWrapping="WrapWholeWords"
-                                            Text="未知艺术家" />
-                                    </Button>
-                                    <Button
-                                        x:Name="NowPlayingAlbumLinkButton"
-                                        Padding="0"
-                                        Background="Transparent"
-                                        BorderThickness="0"
-                                        CornerRadius="4"
-                                        Click="NowPlayingAlbumLinkButton_Click"
-                                        PointerEntered="NowPlayingAlbumLink_PointerEntered"
-                                        PointerExited="NowPlayingAlbumLink_PointerExited">
-                                        <TextBlock
-                                            x:Name="NowPlayingAlbumText"
-                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                            FontSize="15"
-                                            TextDecorations="None"
-                                            TextWrapping="WrapWholeWords"
-                                            Text="未知专辑" />
-                                    </Button>
-                                </StackPanel>
-                                <TextBlock
-                                    x:Name="NowPlayingAudioInfoText"
-                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                    FontSize="11"
-                                    Opacity="0.85"
-                                    TextAlignment="Center"
-                                    TextWrapping="WrapWholeWords"
-                                    Text="" />
-                                <!-- bit-perfect 徽章：播放详情页不需要（非直通时会撑成一长条），默认隐藏。
-                                     想看链路状态去「音频设置 → 音频链路」面板。 -->
-                                <Border
-                                    x:Name="MainBitPerfectBadge"
-                                    CornerRadius="10"
-                                    Padding="8,3"
-                                    VerticalAlignment="Center"
-                                    HorizontalAlignment="Center"
-                                    Visibility="Collapsed"
-                                    Background="#222"
-                                    ToolTipService.ToolTip="当前播放链路是否 bit-perfect 直通（与音频设置面板口径一致）">
-                                    <TextBlock x:Name="MainBitPerfectText" Text="bit-perfect" FontSize="11" FontWeight="SemiBold" Foreground="White" />
-                                </Border>
-                                <TextBlock
-                                    x:Name="SignalChainInfoText"
-                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                    FontSize="10"
-                                    Opacity="0.7"
-                                    TextAlignment="Center"
-                                    TextWrapping="WrapWholeWords"
-                                    Text="信号链：未初始化" />
-                                <Button
-                                    x:Name="DownloadLyricButton"
-                                    Content="下载歌词"
-                                    Click="DownloadLyricButton_Click"
-                                    CornerRadius="16"
-                                    MinWidth="128"
-                                    Padding="16,4"
-                                    HorizontalAlignment="Center"
-                                    ToolTipService.ToolTip="为当前歌曲从在线平台下载歌词（Apple Music 不提供歌词：将按歌名/艺人从其他平台获取）" />
-                            </StackPanel>
+                                Visibility="Collapsed">
+                                <Image
+                                    x:Name="NowPlayingCoverReflectionImage"
+                                    Stretch="UniformToFill"
+                                    VerticalAlignment="Top" />
+                            </Grid>
                         </StackPanel>
 
-                        <!-- 右半区：滚动歌词（由 layout 位移到 3/4 中轴，宽=半区-60，居中换行） -->
-                        <Grid Grid.Column="0" x:Name="LyricsSection" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Center">
+                        <!-- 波形：经典在左侧封面列下方；水面改到右侧歌曲信息下方（带倒影、拉长）。
+                             它是 NowPlayingBody 的直接子元素，由 UpdateNowPlayingCardLayout 按布局定位。 -->
+                        <Canvas
+                            x:Name="WaveformCanvas"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Top"
+                            Height="40"
+                            IsHitTestVisible="False"
+                            SizeChanged="WaveformCanvas_SizeChanged" />
+
+                        <!-- 信息块：标题 / 歌手 / 专辑 / 技术信息（经典在封面下方，水面在右上） -->
+                        <StackPanel
+                            x:Name="NowPlayingMetaPanel"
+                            Grid.Column="1"
+                            Grid.Row="0"
+                            Spacing="8"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center">
+                            <TextBlock
+                                x:Name="NowPlayingTitleText"
+                                FontSize="26"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                TextAlignment="Center"
+                                TextWrapping="WrapWholeWords"
+                                Text="未在播放" />
+                            <!-- 歌手 / 专辑：各自一行，宽=半区-留边，超长换行 -->
+                            <StackPanel x:Name="NowPlayingArtistAlbumRow" Orientation="Vertical" Spacing="4" HorizontalAlignment="Center">
+                                <Button
+                                    x:Name="NowPlayingArtistLinkButton"
+                                    Padding="0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    CornerRadius="4"
+                                    Click="NowPlayingArtistLinkButton_Click"
+                                    PointerEntered="NowPlayingArtistLink_PointerEntered"
+                                    PointerExited="NowPlayingArtistLink_PointerExited">
+                                    <TextBlock
+                                        x:Name="NowPlayingArtistText"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        FontSize="15"
+                                        FontWeight="SemiBold"
+                                        TextDecorations="None"
+                                        TextWrapping="WrapWholeWords"
+                                        Text="未知艺术家" />
+                                </Button>
+                                <Button
+                                    x:Name="NowPlayingAlbumLinkButton"
+                                    Padding="0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    CornerRadius="4"
+                                    Click="NowPlayingAlbumLinkButton_Click"
+                                    PointerEntered="NowPlayingAlbumLink_PointerEntered"
+                                    PointerExited="NowPlayingAlbumLink_PointerExited">
+                                    <TextBlock
+                                        x:Name="NowPlayingAlbumText"
+                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                        FontSize="15"
+                                        TextDecorations="None"
+                                        TextWrapping="WrapWholeWords"
+                                        Text="未知专辑" />
+                                </Button>
+                            </StackPanel>
+                            <TextBlock
+                                x:Name="NowPlayingAudioInfoText"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                FontSize="11"
+                                Opacity="0.85"
+                                TextAlignment="Center"
+                                TextWrapping="WrapWholeWords"
+                                Text="" />
+                            <!-- bit-perfect 徽章：播放详情页不需要（非直通时会撑成一长条），默认隐藏。
+                                 想看链路状态去「音频设置 → 音频链路」面板。 -->
+                            <Border
+                                x:Name="MainBitPerfectBadge"
+                                CornerRadius="10"
+                                Padding="8,3"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Center"
+                                Visibility="Collapsed"
+                                Background="#222"
+                                ToolTipService.ToolTip="当前播放链路是否 bit-perfect 直通（与音频设置面板口径一致）">
+                                <TextBlock x:Name="MainBitPerfectText" Text="bit-perfect" FontSize="11" FontWeight="SemiBold" Foreground="White" />
+                            </Border>
+                            <TextBlock
+                                x:Name="SignalChainInfoText"
+                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                FontSize="10"
+                                Opacity="0.7"
+                                TextAlignment="Center"
+                                TextWrapping="WrapWholeWords"
+                                Text="信号链：未初始化" />
+                        </StackPanel>
+
+                        <!-- 歌词块（经典在右半区，水面在右下） -->
+                        <Grid
+                            x:Name="LyricsSection"
+                            Grid.Column="1"
+                            Grid.Row="1"
+                            RenderTransformOrigin="0.5,0.5"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Stretch">
                             <Grid.RenderTransform>
                                 <CompositeTransform x:Name="LyricsShift" ScaleX="1" ScaleY="1" />
                             </Grid.RenderTransform>
@@ -3950,14 +4190,74 @@
                                 <StackPanel x:Name="LyricsPanel" Spacing="10" HorizontalAlignment="Stretch" />
                             </ScrollViewer>
 
-                            <TextBlock
-                                x:Name="LyricsEmptyHint"
-                                HorizontalAlignment="Center"
-                                VerticalAlignment="Center"
-                                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
-                                Opacity="0.7"
-                                Text="暂无歌词"
-                                Visibility="Collapsed" />
+                                <TextBlock
+                                    x:Name="LyricsEmptyHint"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                    Opacity="0.7"
+                                    Text="暂无歌词"
+                                    Visibility="Collapsed" />
+                        </Grid>
+
+                        <!-- 页内控制条：水面布局内嵌在波形下方（常显）；经典为亚克力悬浮条（闲置淡出）。
+                             一行布局：左侧三个按钮（上一首/播放暂停/下一首），右侧进度条 + 时间。
+                             宽度由 UpdateNowPlayingCardLayout 设置为与波形图一致。 -->
+                        <Grid
+                            x:Name="NowPlayingFloatingBar"
+                            Grid.Row="1"
+                            Grid.Column="0"
+                            Grid.ColumnSpan="2"
+                            VerticalAlignment="Bottom"
+                            Margin="0,0,0,20"
+                            HorizontalAlignment="Center"
+                            MaxWidth="680"
+                            Padding="16,10"
+                            Visibility="Collapsed"
+                            Background="{ThemeResource AcrylicInAppFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="16"
+                            PointerEntered="NowPlayingFloatingBar_PointerEntered">
+                            <Grid ColumnSpacing="12">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <!-- 左：三个按钮 -->
+                                <StackPanel Orientation="Horizontal" Spacing="8" Grid.Column="0" VerticalAlignment="Center">
+                                    <Button x:Name="FloatingPrevButton" Width="40" Height="40" Padding="0" Background="Transparent" BorderThickness="0" Click="PreviousButton_Click" ToolTipService.ToolTip="上一首">
+                                        <FontIcon Glyph="&#xE892;" FontSize="18" />
+                                    </Button>
+                                    <Button x:Name="FloatingPlayPauseButton" Width="44" Height="44" Padding="0" Background="Transparent" BorderThickness="0" Click="PlayPauseButton_Click" ToolTipService.ToolTip="播放 / 暂停">
+                                        <FontIcon x:Name="FloatingPlayPauseIcon" Glyph="&#xE768;" FontSize="22" />
+                                    </Button>
+                                    <Button x:Name="FloatingNextButton" Width="40" Height="40" Padding="0" Background="Transparent" BorderThickness="0" Click="NextButton_Click" ToolTipService.ToolTip="下一首">
+                                        <FontIcon Glyph="&#xE893;" FontSize="18" />
+                                    </Button>
+                                </StackPanel>
+                                <!-- 右：当前时间 + 进度条 + 总时间 -->
+                                <Grid Grid.Column="1" ColumnSpacing="8" VerticalAlignment="Center">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock x:Name="FloatingCurrentTime" Grid.Column="0" VerticalAlignment="Center" Text="00:00" FontSize="12" />
+                                    <!-- 指针事件不写在 XAML：Slider 内部会把 PointerPressed/Released 标成
+                                         Handled，XAML 挂的处理器默认收不到 → _isUserSeeking 永远为 false，
+                                         拖动不生效、松手后进度又跳回原位。改由代码 AddHandler(handledEventsToo:true) 挂接。 -->
+                                    <Slider
+                                        x:Name="NowPlayingProgressSlider"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        Minimum="0"
+                                        Maximum="100"
+                                        Value="0"
+                                        ValueChanged="NowPlayingProgressSlider_ValueChanged" />
+                                    <TextBlock x:Name="FloatingTotalTime" Grid.Column="2" VerticalAlignment="Center" Text="00:00" FontSize="12" />
+                                </Grid>
+                            </Grid>
                         </Grid>
                     </Grid>
                 </Grid>
@@ -3967,6 +4267,7 @@
 
         <!-- 底部播放控制 -->
         <Grid
+            x:Name="BottomTransportBar"
             Grid.Row="2"
             MinHeight="70"
             Margin="16,6,16,10"

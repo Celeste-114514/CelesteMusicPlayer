@@ -1422,7 +1422,16 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            int blurRadius = settings.BackgroundGaussBlur ? settings.GaussBlurRadius : 0;
+            // 这一层是「整个主窗口」的背景（XAML 里的 AlbumArtBackgroundImage），不是播放页内部的图。
+            // 除「经典」外的所有布局（水面 / 黑胶 / 剧场 / 歌词 / 镜像 / 居中）都固定带一层轻模糊
+            // —— 用户明确认可这个观感（"原来那套水面布局的模糊效果就挺好的"）；
+            // 「经典」严格跟随设置里的「背景高斯模糊」开关，你关掉它就是全程序都不糊。
+            // ⚠️ 曾经试过改成"播放页单独加一层背景图"，用户反馈像"在主程序上加了一块板子"，
+            //    已回退 —— 背景只有这一张整窗图，别再另起一层。
+            bool immersiveLayout = _nowPlayingLayoutName != LayoutClassic;
+            int blurRadius = immersiveLayout
+                ? 1
+                : (settings.BackgroundGaussBlur ? settings.GaussBlurRadius : 0);
             byte[]? blurred = await Task.Run(() =>
                 blurRadius > 0
                     ? AlbumArtBackground.CreateHeavilyBlurredPng(coverBytes, blurRadius: blurRadius)

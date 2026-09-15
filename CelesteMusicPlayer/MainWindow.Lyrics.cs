@@ -199,6 +199,9 @@ namespace CelesteMusicPlayer
             _lyricLines = lyrics;
             _currentLyricIndex = -1;
             _lyricTextBlocks.Clear();
+            _lyricRows.Clear();
+            _lyricRowFrames.Clear();
+            _selectedLyricRow = -1;
             LyricsPanel.Children.Clear();
 
             if (lyrics.Count == 0)
@@ -271,15 +274,44 @@ namespace CelesteMusicPlayer
                     : 520;
                 tb.MaxWidth = lyricMax;
 
+                // ---- 行容器 ----
+                // 外层 Grid：整行可点（Stretch 铺满，透明画刷保证参与命中测试）。
+                // 内层 Border：选中时的圆角白框，只裹住这句歌词本身（居中、紧贴文字宽度），
+                // 不会像"整行色条"那样在宽屏下拉成一条。它一直存在（平时透明），
+                // 所以选中/取消选中时行高完全不变 —— 歌词不会上下跳。
+                var row = new Grid
+                {
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    // 必须给透明画刷而不是 null：Background=null 的 Grid 不参与命中测试，
+                    // 点在这一行的空白处不会触发选中（点击会漏到下面的界面）。
+                    Background = new SolidColorBrush(Colors.Transparent)
+                };
+
+                var frame = new Border
+                {
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center,
+                    CornerRadius = new CornerRadius(8),
+                    Padding = new Thickness(14, 4, 14, 4),
+                    Background = new SolidColorBrush(Colors.Transparent),
+                    Child = tb
+                };
+                row.Children.Add(frame);
+
+                int rowIndex = _lyricRows.Count;
+                // 单击 = 选中（只是加个白框，不动播放），约 3 秒后自动取消、回到正在播的那句
+                row.Tapped += (_, _) => SelectLyricRow(rowIndex);
                 if (!line.IsTranslation)
                 {
-                    // 单击歌词行 → 把播放跳到该行时间（对齐"点进度条→seek+暂停"）
+                    // 双击 = 从这句开始播放（界面上不再摆按钮，双击是唯一入口）
                     TimeSpan target = line.Time;
-                    tb.Tapped += (_, _) => SeekToLyricLine(target);
+                    row.DoubleTapped += (_, _) => PlayFromLyricLine(target);
                 }
 
                 _lyricTextBlocks.Add(tb);
-                LyricsPanel.Children.Add(tb);
+                _lyricRows.Add(row);
+                _lyricRowFrames.Add(frame);
+                LyricsPanel.Children.Add(row);
             }
 
             SyncLyricsToPosition(GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero);
@@ -293,6 +325,9 @@ namespace CelesteMusicPlayer
             _lyricLines = new List<LyricLine>();
             _currentLyricIndex = -1;
             _lyricTextBlocks.Clear();
+            _lyricRows.Clear();
+            _lyricRowFrames.Clear();
+            _selectedLyricRow = -1;
             LyricsPanel.Children.Clear();
             LyricsPanel.Padding = new Thickness(0);
             LyricsScrollViewer.Visibility = Visibility.Collapsed;
@@ -321,7 +356,82 @@ namespace CelesteMusicPlayer
         private void LyricsScrollViewer_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
             MarkUserScrollingLyrics();
+            // 点在歌词行之外（上下留白、行间空隙）→ 取消选中。
+            // 点在某行上时不动它：否则按钮会在 Click 之前被收起来，跳转就点不到了。
+            if (e.OriginalSource is DependencyObject src && FindLyricRowIndex(src) < 0)
+            {
+                ClearLyricRowSelection();
+            }
         }
+
+
+        // ---- 歌词行选中（网易云式：选中 → 右侧时间 + 左侧播放按钮）----
+
+        /// <summary>选中某一行：给它套上圆角白框，并把上一行的白框撤掉。</summary>
+        private void SelectLyricRow(int index)
+        {
+            ClearLyricRowSelection();
+            if (index < 0 || index >= _lyricRows.Count)
+            {
+                return;
+            }
+
+            _selectedLyricRow = index;
+            if (index < _lyricRowFrames.Count)
+            {
+                // 一层很淡的白：深色/浅色背景上都看得出来，但不抢歌词本身
+                _lyricRowFrames[index].Background = new SolidColorBrush(Color.FromArgb(38, 255, 255, 255));
+            }
+
+            // 复用"用户手动滚动"那套计时：3 秒内暂停自动吸附（歌词不自己跑），
+            // 到点后 Tick 里会取消选中并把当前播放句重新滚回中间 —— 即"恢复成正在播放的状态"。
+            MarkUserScrollingLyrics();
+        }
+
+
+        /// <summary>撤掉当前选中行的白框。</summary>
+        private void ClearLyricRowSelection()
+        {
+            if (_selectedLyricRow >= 0 && _selectedLyricRow < _lyricRowFrames.Count)
+            {
+                // 透明画刷而不是 null：null 会让这一行不再参与命中测试，点不中。
+                _lyricRowFrames[_selectedLyricRow].Background = new SolidColorBrush(Colors.Transparent);
+            }
+
+            _selectedLyricRow = -1;
+        }
+
+
+        /// <summary>从命中元素往上找它属于第几行歌词；不在任何一行里返回 -1。</summary>
+        private int FindLyricRowIndex(DependencyObject element)
+        {
+            DependencyObject? cur = element;
+            while (cur != null)
+            {
+                if (cur is Grid g)
+                {
+                    int idx = _lyricRows.IndexOf(g);
+                    if (idx >= 0)
+                    {
+                        return idx;
+                    }
+                }
+
+                cur = VisualTreeHelper.GetParent(cur);
+            }
+
+            return -1;
+        }
+
+
+        /// <summary>点行内播放按钮：跳到这句并继续播放（与"点进度条/单击行"不同，后者是跳过去暂停）。</summary>
+        private void PlayFromLyricLine(TimeSpan target)
+        {
+            ClearLyricRowSelection();
+            SeekToLyricLine(target, playAfter: true);
+        }
+
+
 
 
         /// <summary>标记用户正在手动滚动，并在停止 3 秒后恢复自动吸附 + 隐藏滚动条。</summary>
@@ -333,8 +443,9 @@ namespace CelesteMusicPlayer
             }
 
             _userScrollingLyrics = true;
-            // 用户滚动时临时显示滚动条，3s 无操作后隐藏
-            LyricsScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Auto;
+            // 滚动条永远 Hidden：能滚，但一根都不显示（用户明确要求）。
+            // 必须是 Hidden 而不是 Disabled —— Disabled 会连滚动本身一起禁掉。
+            LyricsScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
             if (_lyricScrollResumeTimer == null)
             {
                 _lyricScrollResumeTimer = DispatcherQueue.CreateTimer();
@@ -343,14 +454,13 @@ namespace CelesteMusicPlayer
                 {
                     _lyricScrollResumeTimer!.Stop();
                     _userScrollingLyrics = false;
+                    // 恢复成"正在播放"的样子：白框撤掉、高亮回到当前句
+                    ClearLyricRowSelection();
                     // 恢复吸附：把当前高亮行滚回中间（即"回到原进度"）
                     if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
                     {
                         ScrollLyricToCenter(_lyricTextBlocks[_currentLyricIndex]);
                     }
-
-                    // 恢复隐藏滚动条
-                    LyricsScrollViewer.VerticalScrollBarVisibility = ScrollBarVisibility.Hidden;
                 };
             }
 

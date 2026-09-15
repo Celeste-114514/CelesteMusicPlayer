@@ -349,16 +349,8 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
-            try
-            {
-                // 非打包模式(WindowsPackageType=None)下 ms-appx:/// 不可用,标题栏图标改用文件加载
-                string pngPath = Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.png");
-                if (System.IO.File.Exists(pngPath) && AppTitleBarIcon != null)
-                {
-                    AppTitleBarIcon.Source = new BitmapImage(new Uri(pngPath));
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            // 注：以前这里会把 Assets\AppIcon.png 塞进标题栏图标（非打包模式下 ms-appx:/// 不可用）。
+            // 现在标题栏图标改成 XAML 里的矢量线稿（圆圈 + 音符），不再需要这张 png，故移除。
         }
 
 
@@ -648,6 +640,10 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
 
+            // ★ 必须先存进度，再销毁引擎：引擎一 Dispose，播放位置就读不出来了，
+            // 上次听到哪儿会被写成 0 —— 这是"续播不记进度"的元凶之一。
+            PersistPlaybackSession();
+
             try
             {
                 _audioEngine?.Dispose();
@@ -655,6 +651,7 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
+            // 队列等其它状态再存一次（此时引擎已销毁，位置部分会自动跳过，不会覆盖上面写进去的进度）
             PersistPlaybackSession();
             if (ReferenceEquals(Instance, this))
             {

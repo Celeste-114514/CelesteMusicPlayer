@@ -585,6 +585,14 @@ namespace CelesteMusicPlayer
         private bool _isUserSeeking;
         private bool _isUpdatingProgressUi;
 
+        /// <summary>
+        /// 一次拖动手势是否已经执行过跳转。
+        /// Slider 在松手时会连续触发 PointerReleased 和 PointerCaptureLost，两个处理器都调
+        /// SeekToSliderValue() → 同一次拖动 seek 两遍，还会触发两次「下一首无缝预加载」（转码 + 重整缓冲），
+        /// 表现就是「顿一下、响两声才恢复正常」。这里按手势去重，一次拖动只 seek 一次。
+        /// </summary>
+        private bool _seekGestureConsumed;
+
         // ---------- 排序状态 ----------
         private SortField _sortField = SortField.Title;
         private bool _sortAscending = true;
@@ -675,6 +683,13 @@ namespace CelesteMusicPlayer
         private int _waveformIdleSettleTicks;
         private List<LyricLine> _lyricLines = new();
         private int _currentLyricIndex = -1;        private readonly List<TextBlock> _lyricTextBlocks = new();
+        // 歌词行交互（单击选中 → 圆角白框，约 3 秒后自动恢复；双击 → 从这句开始播放）
+        // 每行是一个 Grid（整行可点）里套一个 Border（选中时的圆角白框），Border 里面才是歌词 TextBlock。
+        // _lyricTextBlocks 仍指向那个 TextBlock，索引与 _lyricLines 一一对应，
+        // 高亮、逐字染色、滚到中间等旧逻辑全部按索引复用。
+        private readonly List<Grid> _lyricRows = new();
+        private readonly List<Border> _lyricRowFrames = new();
+        private int _selectedLyricRow = -1;
         // 歌词手动滚动协调
         private bool _userScrollingLyrics;
         private DispatcherQueueTimer? _lyricScrollResumeTimer;
@@ -772,6 +787,14 @@ namespace CelesteMusicPlayer
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ctor.tray", caught);
             }
+
+            // 启动后自动检查更新（GitHub Releases latest）：发现新版本才弹系统托盘气泡通知，
+            // 不弹对话框、不阻塞启动。检查在后台 Low 优先级进行，主界面先渲染、曲库恢复先跑完。
+            ScheduleStartupUpdateCheck();
+
+            // 播放信息页布局（经典/水面…）：订阅设置变更让"改设置即时生效"，并先按当前设置套用一次
+            HookNowPlayingLayoutSettings();
+            ApplyNowPlayingLayout();
 
             // 默认 1400×800；Resize 按 DPI 换算为物理像素
             ResizeWindowToDips(1400, 800);
@@ -1018,6 +1041,55 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 启动后自动检查更新（GitHub Releases latest）。发现新版本才弹系统托盘气泡通知，
+        /// 不弹任何对话框、不阻塞启动。检查在 Low 优先级后台进行，让主界面先渲染、曲库恢复先跑完。
+        /// </summary>
+        private void ScheduleStartupUpdateCheck()
+        {
+            try
+            {
+                Microsoft.UI.Dispatching.DispatcherQueue? queue = DispatcherQueue;
+                if (queue == null)
+                {
+                    return;
+                }
+
+                // 压到 Low 优先级入队：避免刚启动就发起网络请求拖慢首屏；
+                // 真正的 await 在 StartupUpdateCheckAsync 里异步进行，不占用这个回调。
+                if (!queue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
+                {
+                    _ = StartupUpdateCheckAsync();
+                }))
+                {
+                    StartupLog.WriteException("MainWindow.ScheduleStartupUpdateCheck", new InvalidOperationException("TryEnqueue 返回 false，启动更新检查未调度"));
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.ScheduleStartupUpdateCheck", caught);
+            }
+        }
+
+        private async System.Threading.Tasks.Task StartupUpdateCheckAsync()
+        {
+            try
+            {
+                UpdateChecker.UpdateInfo? info = await UpdateChecker.CheckForUpdateAsync();
+                if (info == null)
+                {
+                    return; // 已是最新或检查失败
+                }
+
+                // 发现新版本：弹系统托盘气泡（点击气泡由 AppTrayIcon 打开设置→关于面板）
+                _trayIcon?.ShowUpdateNotification(info.Tag);
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.StartupUpdateCheck", caught);
+            }
+        }
+
         [DllImport("shell32.dll", CharSet = CharSet.Unicode)]
         private static extern int SHFileOperation(ref SHFILEOPSTRUCT lpFileOp);
 
@@ -1047,8 +1119,11 @@ namespace CelesteMusicPlayer
                     seconds = 0;
                 }
 
+                // 用"总分钟数"而不是 TimeSpan 的 mm 分量：超过 1 小时的曲子（如 75 分钟）
+                // 用 mm 会显示成 15:00（把小时吃掉），总分钟数才是 75:00。
                 var ts = TimeSpan.FromSeconds(seconds);
-                return ts.ToString(@"mm\:ss");
+                int totalMinutes = (int)ts.TotalMinutes;
+                return $"{totalMinutes:00}:{ts.Seconds:00}";
             }
             catch
             {

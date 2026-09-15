@@ -294,6 +294,13 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         /// <summary>主窗口置顶。</summary>
         public bool AlwaysOnTop { get; set; }
 
+        /// <summary>
+        /// 播放信息页（沉浸式播放页）的布局样式。
+        /// 取值：Classic（经典，默认，即原有版式）/ Water（水面倒影）。
+        /// 后续会扩展：BigCover（大背景）、Vinyl（黑胶唱片）、Minimal（极简）。
+        /// </summary>
+        public string NowPlayingLayout { get; set; } = "Classic";
+
         /// <summary>首次运行是否已经弹过「文件关联」选择窗口。只弹一次，用户关掉就记住，不再打扰。</summary>
         public bool FileAssociationPromptShown { get; set; }
 
@@ -674,6 +681,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             // 主窗口置顶此前漏拷：保存写进了文件，但 Load() 返回的克隆里恒为 false，
             // 表现是「勾了置顶、重启后自己取消」，与设置是否保存成功无关。
             AlwaysOnTop = s.AlwaysOnTop,
+            // 播放信息页布局：新字段必须随 Clone 拷贝，否则 Load() 返回的克隆里恒为默认，
+            // 表现为「选了水面布局、重启后自己变回经典」，与保存是否成功无关。
+            NowPlayingLayout = string.IsNullOrWhiteSpace(s.NowPlayingLayout) ? "Classic" : s.NowPlayingLayout,
             FileAssociationPromptShown = s.FileAssociationPromptShown
         };
 

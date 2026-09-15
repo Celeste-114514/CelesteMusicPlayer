@@ -45,7 +45,7 @@ namespace CelesteMusicPlayer
 
         /// <summary>引擎播放位置 → 进度条 / 时间 / 任务栏进度。</summary>
         /// <summary>更新 SMTC timeline 属性（进度/时长），让系统媒体小组件(deskbox)显示当前曲目进度并可 seek。</summary>
-        private void UpdateSmtcTimeline(TimeSpan position)
+        private void UpdateSmtcTimeline(TimeSpan position, TimeSpan? durationOverride = null)
         {
             if (_engineSmtc == null)
             {
@@ -59,7 +59,8 @@ namespace CelesteMusicPlayer
 
             try
             {
-                TimeSpan duration = _audioEngine?.Duration ?? TimeSpan.Zero;
+                // 就绪态（引擎还没建）时由调用方把时长传进来，否则系统浮窗没有时间轴。
+                TimeSpan duration = durationOverride ?? (_audioEngine?.Duration ?? TimeSpan.Zero);
                 if (duration <= TimeSpan.Zero)
                 {
                     if (Environment.TickCount64 - _lastSmtcTimelineMs > 3000)
@@ -159,6 +160,14 @@ namespace CelesteMusicPlayer
                 // 引擎（HiFi 独占/ASIO）路径也要推进当前歌词行与滚动，
                 // 否则歌词不随播放滚动（普通 MediaPlayer 路径由 PositionTimer_Tick 调用）。
                 SyncLyricsToPosition(position);
+
+                // ★ 定期把进度写盘：PositionTimer_Tick 在 _usingEnginePlayback 时会直接早退，
+                // 而所有播放都走引擎 → 进度从来没被保存过，下次启动只能从头开始。
+                if ((DateTime.UtcNow - _lastPlaybackPersistUtc).TotalSeconds >= 5)
+                {
+                    _lastPlaybackPersistUtc = DateTime.UtcNow;
+                    PersistPlaybackSession();
+                }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }

@@ -703,6 +703,31 @@
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="播放页布局" />
+                                <TextBlock Opacity="0.6" FontSize="11" Text="点底部状态栏封面进入的播放页版式；经典为原有版式" />
+                            </StackPanel>
+                            <ComboBox
+                                x:Name="NowPlayingLayoutCombo"
+                                Grid.Column="1"
+                                MinWidth="140"
+                                VerticalAlignment="Center"
+                                SelectionChanged="NowPlayingLayoutCombo_SelectionChanged">
+                                <ComboBoxItem Tag="Classic" Content="经典（默认）" />
+                                <ComboBoxItem Tag="Water" Content="水面倒影" />
+                                <ComboBoxItem Tag="Vinyl" Content="黑胶唱机" />
+                                <ComboBoxItem Tag="Stage" Content="剧场（三栏）" />
+                                <ComboBoxItem Tag="Lyrics" Content="歌词（大歌词）" />
+                                <ComboBoxItem Tag="Mirror" Content="镜像（封面在右）" />
+                                <ComboBoxItem Tag="Center" Content="居中（上下结构）" />
+                            </ComboBox>
+                        </Grid>
+
+                        <Grid ColumnSpacing="16" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">

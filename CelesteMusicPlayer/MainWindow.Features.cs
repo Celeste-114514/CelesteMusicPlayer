@@ -3,11 +3,13 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
+using Microsoft.UI;
 using Microsoft.UI.Text;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Microsoft.UI.Xaml.Media;
 using Windows.Media;
 using Windows.Media.Playback;
 using Windows.Storage.Pickers;
@@ -623,6 +625,17 @@ namespace CelesteMusicPlayer
                 {
                     tb.TextAlignment = align;
                 }
+                else if (child is Grid lyricRow)
+                {
+                    // 每行是 Grid → Border（圆角框）→ 歌词 TextBlock：对齐要下钻两层
+                    foreach (var inner in lyricRow.Children)
+                    {
+                        if (inner is Border frame && frame.Child is TextBlock rowText)
+                        {
+                            rowText.TextAlignment = align;
+                        }
+                    }
+                }
             }
         }
 
@@ -727,9 +740,32 @@ namespace CelesteMusicPlayer
 
         internal void SeekBySeconds(double seconds)
         {
+            // 引擎播放（FFmpeg / HiFi 独占路径）：以前这里只认 MediaPlayer，
+            // 而现在所有播放都走引擎 → 快进/快退（键盘、迷你播放器、托盘）其实是完全失效的。
+            if (_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
+            {
+                try
+                {
+                    double duration = _audioEngine.Duration.TotalSeconds;
+                    double next = _audioEngine.Position.TotalSeconds + seconds;
+                    next = Math.Clamp(next, 0, duration > 0 ? duration : next);
+                    _audioEngine.Seek(TimeSpan.FromSeconds(next));
+
+                    // seek 会丢弃无缝源里已预加载的下一首，重挂一次
+                    if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                    {
+                        _ = PreloadSeamlessNextAsync(_userPlaylist[_userPlaylistIndex]);
+                    }
+                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+                return;
+            }
+
             MediaPlayer? player = GetPlayer();
             if (player?.Source == null)
             {
+                // 启动就绪态：还没播，快进/快退就当作"从这个位置开始播"
+                StartPlaybackFromPendingPosition(ProgressSlider.Value + seconds, pauseAfter: false);
                 return;
             }
 
@@ -933,6 +969,11 @@ namespace CelesteMusicPlayer
                 NowPlayingPane.Opacity = 0;
                 NowPlayingPane.Visibility = Visibility.Visible;
                 DispatcherQueue.TryEnqueue(() => UpdateNowPlayingCardLayout());
+                // 进入播放页时按当前设置套用布局（经典/水面），并重算倒影尺寸
+                ApplyNowPlayingLayout();
+                UpdateNowPlayingReflectionGeometry();
+                // 沉浸式：隐藏底部常驻状态条，改由页内悬浮控制条承担播放控制
+                ShowFloatingTransport();
                 try
                 {
                     mcBack?.Begin();
@@ -956,6 +997,8 @@ namespace CelesteMusicPlayer
                     }
                     mcRestore?.Begin();
                     depthOut?.Begin();
+                    // 退出播放页：恢复底部常驻状态条，收起页内悬浮控制条
+                    HideFloatingTransport();
                 }
                 catch
                 {
@@ -976,6 +1019,357 @@ namespace CelesteMusicPlayer
                 NowPlayingPane.Visibility = Visibility.Collapsed;
                 NowPlayingPane.Opacity = 1;
             }
+        }
+
+        // ---- 页内悬浮控制条（进入播放页显示，鼠标静止自动淡出） ----
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _floatingIdleTimer;
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _floatingFadeTimer;
+        private double _floatingFadeFrom;
+        private double _floatingFadeTo;
+        private int _floatingFadeStep;
+        private bool _floatingShownTarget;
+        private bool _floatingMirrorSubscribed;
+        private bool _floatingPaneWired;
+        private bool _floatingMirror;
+        private Visibility _bottomBarVisibilityBefore = Visibility.Visible;
+
+        /// <summary>进入播放页：隐藏底部常驻状态条，显示页内悬浮控制条并同步一次当前播放状态，随后开始闲置淡出计时。</summary>
+        private void ShowFloatingTransport()
+        {
+            try
+            {
+                // 隐藏底部常驻状态条（记录原状态以便退出时恢复）
+                if (BottomTransportBar != null)
+                {
+                    _bottomBarVisibilityBefore = BottomTransportBar.Visibility;
+                    BottomTransportBar.Visibility = Visibility.Collapsed;
+                }
+
+                if (NowPlayingFloatingBar == null)
+                {
+                    return;
+                }
+
+                // 订阅真实进度条的变化，把位置/时间镜像到悬浮条（仅一次）
+                if (!_floatingMirrorSubscribed && ProgressSlider != null)
+                {
+                    ProgressSlider.ValueChanged += ProgressSliderMirror_ValueChanged;
+                    _floatingMirrorSubscribed = true;
+                }
+                // 鼠标在播放页内移动时唤醒悬浮条（仅挂一次）
+                if (!_floatingPaneWired && NowPlayingPaneContent != null)
+                {
+                    NowPlayingPaneContent.PointerMoved += NowPlayingPaneContent_PointerMoved;
+                    _floatingPaneWired = true;
+                }
+
+                SyncFloatingTransport();
+                ApplyFloatingBarStyle();
+                SetFloatingBarVisible(true, false);
+
+                // 进度条拖动/悬停时的浮动提示默认显示"原始秒数"（如 123.45），换成 分:秒。
+                // 用代码赋值而不是 XAML 资源：避免动 XAML 触发本项目偶发的 XamlCompiler 崩溃。
+                // ⚠️ 转换器类名是 SecondsToTimeSpanConverter（定义在 MainWindow.xaml.cs），别写错。
+                var timeTip = new SecondsToTimeSpanConverter();
+                if (NowPlayingProgressSlider != null && NowPlayingProgressSlider.ThumbToolTipValueConverter == null)
+                {
+                    NowPlayingProgressSlider.ThumbToolTipValueConverter = timeTip;
+                }
+                // 底部常驻进度条同样换成 分:秒（否则两处提示口径不一致）
+                if (ProgressSlider != null && ProgressSlider.ThumbToolTipValueConverter == null)
+                {
+                    ProgressSlider.ThumbToolTipValueConverter = timeTip;
+                }
+
+                // 两种布局都改成"内嵌常显"：不再启动闲置淡出计时（用户要求经典也内嵌）。
+                _floatingIdleTimer?.Stop();
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.ShowFloatingTransport", caught);
+            }
+        }
+
+        /// <summary>按布局调整播放条样式：水面=内嵌透明（贴在波形下方）；经典=亚克力药丸，内嵌在面板底部。
+        /// 两种布局都是"内嵌常显"，不再做鼠标闲置淡出（用户要求经典也内嵌）。</summary>
+        private void ApplyFloatingBarStyle()
+        {
+            if (NowPlayingFloatingBar == null)
+            {
+                return;
+            }
+
+            // 两种布局统一「内嵌」：不要亚克力卡片底、不要描边、不要圆角 ——
+            // 带背景+描边的药丸看起来就是「浮在页面上的悬浮条」，用户要的是融进播放页底部。
+            // 宽度/边距由 UpdateNowPlayingCardLayout 设置（横跨面板、随宽度变、不被 680 封顶）。
+            NowPlayingFloatingBar.Background = new SolidColorBrush(Colors.Transparent);
+            NowPlayingFloatingBar.BorderBrush = new SolidColorBrush(Colors.Transparent);
+            NowPlayingFloatingBar.BorderThickness = new Thickness(0);
+            NowPlayingFloatingBar.CornerRadius = new CornerRadius(0);
+            NowPlayingFloatingBar.Padding = new Thickness(0, 0, 0, 10);
+        }
+
+        /// <summary>退出播放页：恢复底部常驻状态条，收起悬浮控制条并停止闲置计时。</summary>
+        private void HideFloatingTransport()
+        {
+            try
+            {
+                _floatingIdleTimer?.Stop();
+                if (BottomTransportBar != null)
+                {
+                    BottomTransportBar.Visibility = _bottomBarVisibilityBefore;
+                }
+                if (NowPlayingFloatingBar != null)
+                {
+                    NowPlayingFloatingBar.Visibility = Visibility.Collapsed;
+                    NowPlayingFloatingBar.Opacity = 1;
+                    NowPlayingFloatingBar.IsHitTestVisible = false;
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.HideFloatingTransport", caught);
+            }
+        }
+
+        /// <summary>把真实进度条的位置 / 时间 / 播放暂停图标镜像到悬浮控制条。</summary>
+        private void SyncFloatingTransport()
+        {
+            if (NowPlayingProgressSlider == null)
+            {
+                return;
+            }
+            _floatingMirror = true;
+            try
+            {
+                NowPlayingProgressSlider.Maximum = ProgressSlider?.Maximum ?? 100;
+                NowPlayingProgressSlider.Value = ProgressSlider?.Value ?? 0;
+                if (FloatingCurrentTime != null) FloatingCurrentTime.Text = CurrentTimeText?.Text ?? "00:00";
+                if (FloatingTotalTime != null) FloatingTotalTime.Text = TotalTimeText?.Text ?? "00:00";
+                if (FloatingPlayPauseIcon != null) FloatingPlayPauseIcon.Glyph = PlayPauseIcon?.Glyph ?? "\uE768";
+            }
+            finally
+            {
+                _floatingMirror = false;
+            }
+        }
+
+        /// <summary>真实进度条变化时镜像到悬浮条（镜像期间忽略悬浮条自身的 ValueChanged，避免回环）。</summary>
+        private void ProgressSliderMirror_ValueChanged(object? sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            if (NowPlayingProgressSlider == null)
+            {
+                return;
+            }
+
+            // 用户正在拖页内进度条：此时不要用"播放位置"回写滑块，
+            // 否则拖到一半会被播放进度拽回去（不跟手 / 松手跳回原处）。
+            if (_isUserSeeking)
+            {
+                return;
+            }
+
+            _floatingMirror = true;
+            try
+            {
+                NowPlayingProgressSlider.Maximum = ProgressSlider?.Maximum ?? 100;
+                NowPlayingProgressSlider.Value = ProgressSlider?.Value ?? 0;
+                if (FloatingCurrentTime != null) FloatingCurrentTime.Text = CurrentTimeText?.Text ?? "00:00";
+                if (FloatingTotalTime != null) FloatingTotalTime.Text = TotalTimeText?.Text ?? "00:00";
+            }
+            finally
+            {
+                _floatingMirror = false;
+            }
+        }
+
+        // 悬浮进度条交互：复用真实进度条的拖拽 / 跳转逻辑
+        private void NowPlayingProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            _isUserSeeking = true;
+            _seekGestureConsumed = false;
+        }
+
+        private void NowPlayingProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
+            => EndNowPlayingSeekGesture();
+
+        private void NowPlayingProgressSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+            => EndNowPlayingSeekGesture();
+
+        /// <summary>
+        /// 页内进度条：一次拖动只跳转一次（PointerReleased + PointerCaptureLost 都会触发，
+        /// 重复 seek 会卡顿并重复触发下一首无缝预加载 —— 就是"顿一下响两声"的来源）。
+        /// </summary>
+        private void EndNowPlayingSeekGesture()
+        {
+            if (!_isUserSeeking || _seekGestureConsumed)
+            {
+                _isUserSeeking = false;
+                return;
+            }
+
+            _seekGestureConsumed = true;
+            try
+            {
+                if (NowPlayingProgressSlider != null && ProgressSlider != null)
+                {
+                    double target = NowPlayingProgressSlider.Value;
+                    if (Math.Abs(ProgressSlider.Value - target) >= 0.01)
+                    {
+                        ProgressSlider.Value = target;
+                    }
+                }
+
+                SeekToSliderValue();
+            }
+            finally
+            {
+                _isUserSeeking = false;
+            }
+        }
+
+        private void NowPlayingProgressSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            if (_floatingMirror)
+            {
+                return;
+            }
+
+            if (!_isUserSeeking)
+            {
+                return;
+            }
+
+            double seconds = Math.Clamp(e.NewValue, 0, NowPlayingProgressSlider?.Maximum ?? e.NewValue);
+
+            // 拖动中：时间文字跟着走（手感），同时把值同步回真实进度条，
+            // 让松手时的 SeekToSliderValue() 用的是用户拖到的位置。
+            if (FloatingCurrentTime != null)
+            {
+                FloatingCurrentTime.Text = FormatTime(TimeSpan.FromSeconds(seconds));
+            }
+
+            if (ProgressSlider != null && Math.Abs(ProgressSlider.Value - seconds) >= 0.01)
+            {
+                double keep = ProgressSlider.Value;
+                ProgressSlider.Value = seconds;
+                // 若真实进度条拒绝该值（Maximum 还没同步等极端情况），回退，避免两处长期不一致
+                if (Math.Abs(ProgressSlider.Value - seconds) >= 0.01)
+                {
+                    ProgressSlider.Value = keep;
+                }
+            }
+        }
+
+        private void NowPlayingPaneContent_PointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            if (_nowPlayingPaneOpen)
+            {
+                ResetFloatingIdle();
+            }
+        }
+
+        private void NowPlayingFloatingBar_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            if (_nowPlayingPaneOpen)
+            {
+                ResetFloatingIdle();
+            }
+        }
+
+        private void EnsureFloatingIdleTimer()
+        {
+            if (_floatingIdleTimer == null)
+            {
+                _floatingIdleTimer = DispatcherQueue.CreateTimer();
+                _floatingIdleTimer.Interval = TimeSpan.FromMilliseconds(2600);
+                _floatingIdleTimer.Tick += (_, _) => SetFloatingBarVisible(false, true);
+            }
+        }
+
+        private void ResetFloatingIdle()
+        {
+            if (NowPlayingFloatingBar == null)
+            {
+                return;
+            }
+            // 播放条已改成"内嵌常显"，两种布局都不再参与闲置淡出；
+            // 这里只需保证它处于可见状态（不做淡入动画、不重启计时）。
+            if (NowPlayingFloatingBar.Visibility != Visibility.Visible)
+            {
+                SetFloatingBarVisible(true, false);
+            }
+        }
+
+        private void SetFloatingBarVisible(bool visible, bool animate)
+        {
+            if (NowPlayingFloatingBar == null)
+            {
+                return;
+            }
+            _floatingShownTarget = visible;
+            if (visible)
+            {
+                if (NowPlayingFloatingBar.Visibility != Visibility.Visible)
+                {
+                    NowPlayingFloatingBar.Visibility = Visibility.Visible;
+                }
+                NowPlayingFloatingBar.IsHitTestVisible = true;
+            }
+            if (!animate)
+            {
+                _floatingFadeTimer?.Stop();
+                NowPlayingFloatingBar.Opacity = visible ? 1 : 0;
+                if (!visible)
+                {
+                    NowPlayingFloatingBar.IsHitTestVisible = false;
+                }
+                return;
+            }
+            double from = NowPlayingFloatingBar.Opacity;
+            double to = visible ? 1 : 0;
+            if (Math.Abs(from - to) < 0.01)
+            {
+                NowPlayingFloatingBar.Opacity = to;
+                if (!visible)
+                {
+                    NowPlayingFloatingBar.IsHitTestVisible = false;
+                }
+                return;
+            }
+            if (_floatingFadeTimer == null)
+            {
+                _floatingFadeTimer = DispatcherQueue.CreateTimer();
+                _floatingFadeTimer.Interval = TimeSpan.FromMilliseconds(16);
+                _floatingFadeTimer.Tick += FloatingFadeTick;
+            }
+            _floatingFadeTimer.Stop();
+            _floatingFadeFrom = from;
+            _floatingFadeTo = to;
+            _floatingFadeStep = 0;
+            _floatingFadeTimer.Start();
+        }
+
+        private void FloatingFadeTick(object? sender, object e)
+        {
+            if (NowPlayingFloatingBar == null || _floatingFadeTimer == null)
+            {
+                return;
+            }
+            _floatingFadeStep++;
+            const int total = 14;
+            if (_floatingFadeStep >= total)
+            {
+                NowPlayingFloatingBar.Opacity = _floatingFadeTo;
+                _floatingFadeTimer.Stop();
+                if (!_floatingShownTarget)
+                {
+                    NowPlayingFloatingBar.IsHitTestVisible = false;
+                }
+                return;
+            }
+            NowPlayingFloatingBar.Opacity = _floatingFadeFrom
+                + (_floatingFadeTo - _floatingFadeFrom) * (_floatingFadeStep / (double)total);
         }
 
         /// <summary>状态条封面 hover：封面变暗 + 朝上三角箭头淡入动画，提示可展开。</summary>
@@ -1687,11 +2081,6 @@ namespace CelesteMusicPlayer
             }
 
             NowPlayingText.Text = "歌词已下载：" + Path.GetFileName(path);
-        }
-
-        private async void DownloadLyricButton_Click(object sender, RoutedEventArgs e)
-        {
-            await DownloadLyricForCurrentAsync();
         }
 
         private static string LyricsToLrc(IEnumerable<LyricLine> lines)

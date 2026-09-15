@@ -75,6 +75,13 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 立即落盘（对外）。日志默认是"内存缓冲 + 每 300ms 定时落盘"，
+        /// 若进程被强杀（任务管理器结束进程、构建脚本 taskkill）会丢掉最后 300ms 的行。
+        /// 关键事件（弹窗、播放失败、异常）写完必须立刻调它，保证"弹过就一定有记录"。
+        /// </summary>
+        public static void Flush() => FlushNow();
+
         /// <summary>把内存缓冲一次性追加到磁盘。线程安全，可被定时器/退出事件/超量 Write 并发调用。</summary>
         private static void FlushNow()
         {
