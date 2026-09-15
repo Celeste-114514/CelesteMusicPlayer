@@ -80,7 +80,7 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 ### v26.9.16（2026-09-16）
 - ✨ 新增功能
   - 🔄 **程序内检查更新体系**：抽离独立 `UpdateChecker` 模块，关于面板可手动检查、启动自动检查；发现新版本时在系统托盘弹气泡通知，并支持一键「下载更新」自动拉取安装包并启动覆盖安装（沿用 26.9.10.3 的退出交还文件锁逻辑）
-  - 🖼️ **正在播放界面重构**：重写 Now Playing 布局与反射视觉（`MainWindow.NowPlayingLayout` / `NowPlayingReflection`）
+  - 🖼️ **正在播放界面重构**：重写 Now Playing 布局与反射视觉（`MainWindow.NowPlayingLayout` / `NowPlayingReflection`），新增各种布局（水面，剧场，黑胶等）
 - 🐛 修复 / 重构
   - 🔊 播放引擎链路重构（续播 / 定位 / 状态同步与异常处理梳理）；保持 bit-perfect 输出不变（仅整理逻辑与日志，未触碰音频输出字节流）
   - 🎵 歌词模块增强；系统托盘新增「发现新版本」气泡通知；设置窗口补充更新相关开关
