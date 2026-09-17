@@ -258,7 +258,7 @@ namespace CelesteMusicPlayer
             StartupLog.Write("MainWindow_FirstActivated");
             try
             {
-                TryApplySystemBackdrop();
+                ApplyUiStyleMode(AppSettingsStore.Load()); // 含经典界面分支；现有模式回落到 TryApplySystemBackdrop
                 ConfigureWindowChrome();
                 MakeWindowBorderless(); // 显示后再强制一次无边框，避免 WinUI 重设 caption 样式
                 ApplyWindowCorners(true); // 无边框窗口四角圆角
@@ -354,8 +354,509 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>当前是否处于经典不透明界面（ClassicSystem / ClassicLight / ClassicDark）。供各面板刷新处判断。</summary>
+        internal static bool IsClassicUiStyleActive()
+        {
+            string mode;
+            try
+            {
+                mode = AppSettingsStore.Load().UiStyleMode;
+            }
+            catch
+            {
+                return false;
+            }
+
+            return mode is "ClassicSystem" or "ClassicLight" or "ClassicDark";
+        }
+
+        /// <summary>
+        /// 应用界面风格（设置项「界面风格」）：
+        /// "" = 现有背景图式（一切照旧，唯一入口回落到毛玻璃开关）；
+        /// ClassicSystem / ClassicLight / ClassicDark = 经典不透明界面：
+        ///   明暗主题按选项/系统切换，背板关闭、背景图层（封面背景/自定义图片/视频）全部隐藏，
+        ///   面板由 FrostedGlass 总闸统一换成不透明纯色，侧栏分类图标变为彩色。
+        /// </summary>
+        private void ApplyUiStyleMode(AppSettingsState settings)
+        {
+            try
+            {
+                string mode = settings.UiStyleMode;
+                bool classic = mode is "ClassicSystem" or "ClassicLight" or "ClassicDark";
+
+                // 经典模式实际是深还是浅（"跟随系统"按系统当前主题解析）。
+                // 外壳底色、FrostedGlass 面板配色都以这一个判断为准，避免"跟随系统"落在深色系统上时出现外壳深、面板浅的错配。
+                bool darkClassic = mode == "ClassicDark"
+                    || (mode == "ClassicSystem" && Application.Current.RequestedTheme == ApplicationTheme.Dark);
+
+                if (Content is FrameworkElement root)
+                {
+                    root.RequestedTheme = !classic
+                        ? ElementTheme.Default
+                        : darkClassic ? ElementTheme.Dark : ElementTheme.Light;
+                }
+
+                if (classic)
+                {
+                    // 只存归一化后的 "Light" / "Dark"。
+                    // 早先这里存的是 "ClassicLight" / "ClassicDark"，和 FrostedGlass 内部判断的字符串对不上，
+                    // 结果经典浅色界面下面板被一律涂成深灰 —— 也就是"浅色模式里一片深色底"的根因。
+                    FrostedGlass.ClassicMode = darkClassic ? "Dark" : "Light";
+
+                    // 经典界面与壁纸/背板无关：关掉 Desktop Acrylic，窗口给纯色底
+                    SystemBackdrop = null;
+                    RootShell.Background = new SolidColorBrush(
+                        darkClassic
+                            ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
+                            : Windows.UI.Color.FromArgb(255, 243, 243, 243));
+
+                    // 多选行底色缓存的取色依赖界面基色，切风格必须失效重算
+                    _cachedMultiSelectFrostBrush = null;
+
+                    // 背景图层全部隐藏（含视频暂停）
+                    if (AlbumArtBackgroundImage != null)
+                    {
+                        AlbumArtBackgroundImage.Source = null;
+                        AlbumArtBackgroundImage.Visibility = Visibility.Collapsed;
+                    }
+
+                    if (AlbumArtBackgroundScrim != null)
+                    {
+                        AlbumArtBackgroundScrim.Opacity = 0;
+                    }
+
+                    if (CustomBackgroundImage != null)
+                    {
+                        CustomBackgroundImage.Source = null;
+                        CustomBackgroundImage.Visibility = Visibility.Collapsed;
+                    }
+
+                    StopCustomBackgroundVideo();
+
+                    // 侧栏分类图标：经典界面专属的彩色 emoji 图标 + 分组线
+                    ApplyClassicNavIconColors(classic: true);
+                    ApplyNavIconStyle(classic: true);
+
+                    // 面板底色/选中样式全部按新主题重刷（顺序：先信息卡底色，再依赖它取色的胶囊/表头）
+                    ApplyNowPlayingCardChrome();
+                    ApplyArtistSongsFrostChrome();
+                    ApplyCapsuleSortButtonStyle(accent: true);
+                    ApplyPlaylistHeaderChipStyle();
+                    UpdateLibraryNavHighlight();
+                    RefreshPlaylistSelectionChrome();
+                    RefreshArtistTrackSelectionChrome();
+                    ApplyBorderColorFromUiTint();
+
+                    // 主窗口系统按钮（最小化/最大化/关闭）跟着经典主题换色：浅色界面下配深色按钮，
+                    // 否则沿用背景图式的浅灰配色会在浅底上"隐身"
+                    FrostedGlass.ApplyWindowTheme(this);
+                    StartupLog.Write("界面风格：经典模式已应用 " + mode);
+                }
+                else
+                {
+                    FrostedGlass.ClassicMode = null;
+                    RootShell.ClearValue(Grid.BackgroundProperty);
+                    ApplyClassicNavIconColors(classic: false);
+                    ApplyNavIconStyle(classic: false);
+                    _cachedMultiSelectFrostBrush = null;
+
+                    // 现有界面：一切照旧（毛玻璃开关 + 背景图层恢复）
+                    ApplyFrostedGlassPreference(settings.EnableFrostedGlass);
+                    ApplyCustomBackground(settings.CustomBackgroundPath);
+                    ApplyNowPlayingCardChrome();
+                    ApplyArtistSongsFrostChrome();
+                    ApplyCapsuleSortButtonStyle(accent: true);
+                    ApplyPlaylistHeaderChipStyle();
+                    UpdateLibraryNavHighlight();
+                    RefreshPlaylistSelectionChrome();
+                    RefreshArtistTrackSelectionChrome();
+                    ApplyBorderColorFromUiTint();
+
+                    // 从经典切回来时，把系统按钮恢复成背景图式原本的浅灰配色
+                    //（经典浅色界面会把它们改成深色，不还原的话回到深色背景上会看不见）
+                    try
+                    {
+                        if (AppWindowTitleBar.IsCustomizationSupported())
+                        {
+                            AppWindowTitleBar titleBar = AppWindow.TitleBar;
+                            titleBar.ButtonBackgroundColor = Colors.Transparent;
+                            titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+                            titleBar.ButtonHoverBackgroundColor = Color.FromArgb(36, 255, 255, 255);
+                            titleBar.ButtonPressedBackgroundColor = Color.FromArgb(60, 255, 255, 255);
+                            titleBar.ButtonForegroundColor = Color.FromArgb(255, 220, 220, 220);
+                            titleBar.ButtonInactiveForegroundColor = Color.FromArgb(255, 140, 140, 140);
+                            titleBar.ButtonHoverForegroundColor = Colors.White;
+                            titleBar.ButtonPressedForegroundColor = Colors.White;
+                        }
+                    }
+                    catch (Exception caught) { StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
+
+                    StartupLog.Write("界面风格：背景图式已恢复");
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
+        }
+
+        /// <summary>经典界面专属：侧栏分类按钮图标按类别上彩色（媒体播放器风格）；classic=false 时还原主题前景色。</summary>
+        private void ApplyClassicNavIconColors(bool classic)
+        {
+            try
+            {
+                (Microsoft.UI.Xaml.Controls.Button button, Windows.UI.Color color)[] items =
+                {
+                    (NavSongsButton, Windows.UI.Color.FromArgb(255, 0, 120, 212)),      // 歌曲：蓝
+                    (NavAlbumsButton, Windows.UI.Color.FromArgb(255, 135, 100, 184)),   // 专辑：紫
+                    (NavArtistsButton, Windows.UI.Color.FromArgb(255, 227, 0, 140)),    // 歌手：品红
+                    (NavAlbumArtistsButton, Windows.UI.Color.FromArgb(255, 194, 57, 179)), // 专辑歌手
+                    (NavFavoritesButton, Windows.UI.Color.FromArgb(255, 247, 99, 12)),  // 收藏：橙
+                    (NavRatingsButton, Windows.UI.Color.FromArgb(255, 234, 163, 0)),    // 评分：金黄
+                    (NavRecentButton, Windows.UI.Color.FromArgb(255, 0, 183, 195)),     // 最近：青
+                    (NavPlaylistWallButton, Windows.UI.Color.FromArgb(255, 16, 124, 16)), // 歌单墙：绿
+                    (NavGenreButton, Windows.UI.Color.FromArgb(255, 3, 131, 135)),      // 流派
+                    (NavYearButton, Windows.UI.Color.FromArgb(255, 73, 130, 5)),        // 年代
+                    (NavMostPlayedButton, Windows.UI.Color.FromArgb(255, 202, 80, 16)), // 最常播放
+                    (NavFoldersButton, Windows.UI.Color.FromArgb(255, 116, 77, 169)),   // 文件夹
+                    (NavAudioFxButton, Windows.UI.Color.FromArgb(255, 0, 153, 188)),    // 音效
+                    (NavTagSortButton, Windows.UI.Color.FromArgb(255, 107, 105, 214)),  // 标签排序
+                    (UserPlaylistNavButton, Windows.UI.Color.FromArgb(255, 152, 111, 11)), // 自建歌单
+                };
+
+                foreach ((Microsoft.UI.Xaml.Controls.Button button, Windows.UI.Color color) in items)
+                {
+                    Microsoft.UI.Xaml.Controls.FontIcon? icon = NavTagSortButton != null && ReferenceEquals(button, NavTagSortButton) && NavTagSortIcon != null
+                        ? NavTagSortIcon
+                        : FindFirstFontIcon(button);
+                    if (icon == null)
+                    {
+                        continue;
+                    }
+
+                    if (classic)
+                    {
+                        icon.Foreground = new SolidColorBrush(color);
+                    }
+                    else
+                    {
+                        icon.ClearValue(Microsoft.UI.Xaml.Controls.FontIcon.ForegroundProperty);
+                    }
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
+        }
+
+        private static Microsoft.UI.Xaml.Controls.FontIcon? FindFirstFontIcon(DependencyObject? root)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is Microsoft.UI.Xaml.Controls.FontIcon icon)
+                {
+                    return icon;
+                }
+
+                Microsoft.UI.Xaml.Controls.FontIcon? nested = FindFirstFontIcon(child);
+                if (nested != null)
+                {
+                    return nested;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>经典界面的"选中"底色：半透明灰（深色主题用浅灰、浅色主题用灰），随明暗自动切。</summary>
+        internal static Brush ResolveClassicRowSelectionBrush(FrameworkElement? anchor)
+            => new SolidColorBrush(ResolveClassicRowSelectionColor(anchor));
+
+        /// <summary>同上，返回颜色本身（导航项的底色要做淡入动画，得拿到颜色现搓画笔）。</summary>
+        internal static Color ResolveClassicRowSelectionColor(FrameworkElement? anchor)
+        {
+            bool dark = anchor?.ActualTheme == ElementTheme.Dark;
+            return dark
+                ? Color.FromArgb(58, 255, 255, 255)
+                : Color.FromArgb(40, 128, 128, 128);
+        }
+
+        // =====================================================================
+        // 左侧导航条目：图标（经典 = 彩色 emoji / 背景图式 = 原单色字形）、
+        // 选中高亮（圆角灰底 + 左侧直竖条，切换带淡入动画）、收起时只留图标
+        // =====================================================================
+
+        /// <summary>
+        /// 一个左侧导航条目。指示条（Indicator）是按钮外面的独立 Border ——
+        /// 画在按钮的左边框上会被 CornerRadius 裁成一段弧，用户反馈过"竖条是弧形"。
+        /// </summary>
+        private sealed class NavItemRef
+        {
+            public Button Button = null!;
+            public Border? Indicator;
+            public FrameworkElement? Glyph;   // 背景图式用的单色图标（FontIcon / Path）
+            public FrameworkElement? Emoji;   // 经典模式用的彩色 emoji
+            public TextBlock? Label;
+            public bool IsTool;               // 音效处理 / 标签排序 / 播放列表
+        }
+
+        private List<NavItemRef>? _navItems;
+        private string? _lastAnimatedNavTag;
+
+        private List<NavItemRef> NavItems => _navItems ??= BuildNavItems();
+
+        private List<NavItemRef> BuildNavItems()
+        {
+            var items = new List<NavItemRef>();
+            AddNavItem(items, NavSongsButton, NavSongsIndicator, false);
+            AddNavItem(items, NavAlbumsButton, NavAlbumsIndicator, false);
+            AddNavItem(items, NavArtistsButton, NavArtistsIndicator, false);
+            AddNavItem(items, NavAlbumArtistsButton, NavAlbumArtistsIndicator, false);
+            AddNavItem(items, NavFavoritesButton, NavFavoritesIndicator, false);
+            AddNavItem(items, NavRatingsButton, NavRatingsIndicator, false);
+            AddNavItem(items, NavRecentButton, NavRecentIndicator, false);
+            AddNavItem(items, NavPlaylistWallButton, NavPlaylistWallIndicator, false);
+            AddNavItem(items, NavGenreButton, NavGenreIndicator, false);
+            AddNavItem(items, NavYearButton, NavYearIndicator, false);
+            AddNavItem(items, NavMostPlayedButton, NavMostPlayedIndicator, false);
+            AddNavItem(items, NavFoldersButton, NavFoldersIndicator, false);
+            AddNavItem(items, NavAudioFxButton, NavAudioFxIndicator, true);
+            AddNavItem(items, NavTagSortButton, NavTagSortIndicator, true);
+            AddNavItem(items, UserPlaylistNavButton, UserPlaylistNavIndicator, true);
+
+            // 自检：条目里的「字形 / emoji / 文字」是靠遍历按钮内容抓的，抓漏了会静默退化
+            // （经典界面下 emoji 不显示、图标还是老的单色字形）。这里留一行日志便于核对。
+            int glyph = items.Count(i => i.Glyph != null);
+            int emoji = items.Count(i => i.Emoji != null);
+            int label = items.Count(i => i.Label != null);
+            int bar = items.Count(i => i.Indicator != null);
+            StartupLog.Write($"[导航] 条目={items.Count} 字形={glyph} emoji={emoji} 文字={label} 竖条={bar}");
+            return items;
+        }
+
+        private static void AddNavItem(List<NavItemRef> items, Button? button, Border? indicator, bool isTool)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            var item = new NavItemRef { Button = button, Indicator = indicator, IsTool = isTool };
+
+            // 竖条以自身中心缩放（"长出来"的动画用）。XAML 里不写，省得 15 个条目抄 15 遍。
+            if (indicator != null)
+            {
+                indicator.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
+                indicator.RenderTransform = new ScaleTransform();
+            }
+
+            if (button.Content is DependencyObject content)
+            {
+                foreach (DependencyObject node in WalkNavContent(content))
+                {
+                    if (node is TextBlock block)
+                    {
+                        string? marker = block.Tag as string;
+                        if (marker == "NavEmoji")
+                        {
+                            item.Emoji ??= block;
+                        }
+                        else if (marker == "NavLabel")
+                        {
+                            item.Label ??= block;
+                        }
+                    }
+                    else if (item.Glyph == null && node is FontIcon or Shapes.Path)
+                    {
+                        item.Glyph = (FrameworkElement)node;
+                    }
+                }
+            }
+
+            items.Add(item);
+        }
+
+        /// <summary>
+        /// 遍历按钮内容里的元素。刻意先走 Panel.Children：这些 TextBlock/FontIcon 是 XAML 里直接写在
+        /// Button.Content 下的，页面还没布局时 VisualTreeHelper 取不到，Panel.Children 一定取得到。
+        /// </summary>
+        private static IEnumerable<DependencyObject> WalkNavContent(DependencyObject root)
+        {
+            var pending = new Stack<DependencyObject>();
+            pending.Push(root);
+            while (pending.Count > 0)
+            {
+                DependencyObject node = pending.Pop();
+                yield return node;
+
+                if (node is Panel panel)
+                {
+                    foreach (UIElement child in panel.Children)
+                    {
+                        pending.Push(child);
+                    }
+                }
+                else
+                {
+                    int count = VisualTreeHelper.GetChildrenCount(node);
+                    for (int i = 0; i < count; i++)
+                    {
+                        pending.Push(VisualTreeHelper.GetChild(node, i));
+                    }
+                }
+            }
+        }
+
+        /// <summary>
+        /// 经典界面用彩色 emoji 图标替换原来的单色字形（用户要求"像 emoji 那样的图标"，
+        /// 而不是"原有图标加个颜色"）；背景图式界面维持原样。
+        /// </summary>
+        private void ApplyNavIconStyle(bool classic)
+        {
+            try
+            {
+                foreach (NavItemRef item in NavItems)
+                {
+                    bool useEmoji = classic && item.Emoji != null;
+                    if (item.Glyph != null)
+                    {
+                        item.Glyph.Visibility = useEmoji ? Visibility.Collapsed : Visibility.Visible;
+                    }
+
+                    if (item.Emoji != null)
+                    {
+                        item.Emoji.Visibility = useEmoji ? Visibility.Visible : Visibility.Collapsed;
+                    }
+                }
+
+                if (LibraryNavInnerDivider != null)
+                {
+                    LibraryNavInnerDivider.Visibility = classic ? Visibility.Visible : Visibility.Collapsed;
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("MainWindow.UiTheme.cs.ApplyNavIconStyle", caught); }
+        }
+
+        /// <summary>
+        /// 选中条动画：圆角底淡入 + 左侧竖条淡入并"长"出来，观感对齐设置页的左侧导航。
+        /// 先把属性写成终态再让动画从 From 播过去 —— 万一动画起不来，界面也是对的。
+        /// </summary>
+        private void AnimateNavSelection(NavItemRef item, bool animate)
+        {
+            Border? indicator = item.Indicator;
+            if (indicator == null)
+            {
+                return;
+            }
+
+            // 先把终态写死：动画只是"从 From 播到终态"，动画起不来界面也是对的
+            indicator.Opacity = 1;
+            if (indicator.RenderTransform is ScaleTransform settled)
+            {
+                settled.ScaleY = 1;
+            }
+
+            if (!animate)
+            {
+                return;
+            }
+
+            try
+            {
+                BeginNavAnimation(indicator, 180, 1);
+
+                // 竖条"长出来"：动 ScaleY（不碰 Height，避免触发无谓的布局重算）
+                if (indicator.RenderTransform is ScaleTransform scale)
+                {
+                    BeginNavAnimation(scale, 200, 1, property: "ScaleY", from: 0.35);
+                }
+
+                // 圆角底淡入
+                if (item.Button.Background is SolidColorBrush { Opacity: < 1 } pill)
+                {
+                    BeginNavAnimation(pill, 170, 1);
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("MainWindow.UiTheme.cs.AnimateNavSelection", caught); }
+        }
+
+        /// <summary>单个双精度属性的淡入动画（代码构造的 Storyboard，目标用对象引用而不是名字）。</summary>
+        private static void BeginNavAnimation(
+            DependencyObject target,
+            int milliseconds,
+            double to,
+            string property = "Opacity",
+            double? from = 0)
+        {
+            var animation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+            {
+                To = to,
+                Duration = new Duration(TimeSpan.FromMilliseconds(milliseconds)),
+                EasingFunction = new Microsoft.UI.Xaml.Media.Animation.CubicEase
+                {
+                    EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut
+                }
+            };
+
+            if (from.HasValue)
+            {
+                animation.From = from.Value;
+            }
+
+            var storyboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(animation, target);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(animation, property);
+            storyboard.Children.Add(animation);
+            storyboard.Begin();
+        }
+
+        /// <summary>
+        /// 播放歌曲信息页展开 / 收起时，左侧音乐库面板要一起让位：
+        /// 播放页是盖在整个主内容区上的一层透明板，下面那层不退干净就会透出来（用户反馈过）。
+        /// </summary>
+        internal void SetLibraryNavHiddenForNowPlaying(bool hidden)
+        {
+            try
+            {
+                if (LeftCategoryGrid != null)
+                {
+                    LeftCategoryGrid.Visibility = hidden ? Visibility.Collapsed : Visibility.Visible;
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("MainWindow.UiTheme.cs.SetLibraryNavHiddenForNowPlaying", caught); }
+        }
+
+
+        /// <summary>行悬停底色：经典界面用半透明灰（原浅白在浅色主题下几乎看不见）。</summary>
+        internal static Brush ResolveRowHoverBrush(FrameworkElement? anchor)
+        {
+            if (!IsClassicUiStyleActive())
+            {
+                return new SolidColorBrush(Windows.UI.Color.FromArgb(20, 255, 255, 255));
+            }
+
+            bool dark = anchor?.ActualTheme == ElementTheme.Dark;
+            return new SolidColorBrush(dark
+                ? Windows.UI.Color.FromArgb(34, 255, 255, 255)
+                : Windows.UI.Color.FromArgb(24, 128, 128, 128));
+        }
+
+        // 左侧音乐库面板的收起/展开功能已按用户要求移除（面板固定展开）。
+
         private Color ResolveUiBaseTintColor()
         {
+            // 经典界面：直接给出经典底色（浅 = 浅灰、深 = 炭灰）。
+            // 不能走下面的候选色：浅色主题下那几个键取到的都是"接近白"被跳过，
+            // 最后落到深灰回退色，浅色界面里的描边/胶囊/多选底色就会发黑。
+            if (FrostedGlass.ClassicMode != null)
+            {
+                return FrostedGlass.ClassicMode == "Light"
+                    ? Color.FromArgb(255, 243, 243, 243)
+                    : Color.FromArgb(255, 32, 32, 32);
+            }
+
             // 优先取右侧面板实际底色（用户看到的整体 UI 区域色）
             if (ColorHelper.TryGetBrushColor(NowPlayingPane?.Background, out Color paneColor)
                 && paneColor.A > 0
@@ -605,6 +1106,14 @@ namespace CelesteMusicPlayer
             PersistDesktopLyricPosition();
             _taskbarProgress?.Dispose();
             _taskbarProgress = null;
+
+            // 背景视频播放器：关窗即释放解码资源
+            try
+            {
+                _backgroundVideoPlayer?.Dispose();
+                _backgroundVideoPlayer = null;
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
 
             // 先停电平表定时器：否则窗口销毁后它仍会 tick 并访问已分离的 XAML 元素，
             // 在退出时抛 COMException (0x8000FFFF)。
@@ -991,6 +1500,151 @@ namespace CelesteMusicPlayer
         /// <summary>应用自定义背景图片(设置里选择)；与封面背景互斥——自定义优先。
         /// 无路径时恢复封面背景（用最近缓存的当前曲目封面）。
         /// 设置里开了「背景高斯模糊」时，自定义图片同样先做模糊再铺满窗口。</summary>
+        private Windows.Media.Playback.MediaPlayer? _backgroundVideoPlayer;
+
+        private static readonly string[] VideoBackgroundExtensions =
+        {
+            ".mp4", ".m4v", ".mkv", ".webm", ".mov", ".avi", ".wmv", ".ts", ".mpg", ".mpeg", ".flv"
+        };
+
+        private static bool IsVideoBackgroundPath(string path)
+        {
+            string ext;
+            try
+            {
+                ext = System.IO.Path.GetExtension(path).ToLowerInvariant();
+            }
+            catch (Exception)
+            {
+                return false;
+            }
+
+            foreach (string v in VideoBackgroundExtensions)
+            {
+                if (v == ext) return true;
+            }
+
+            return false;
+        }
+
+        /// <summary>停掉并隐藏背景视频（切回图片背景 / 清空背景时调用）。</summary>
+        private void StopCustomBackgroundVideo()
+        {
+            if (CustomBackgroundVideo != null)
+            {
+                CustomBackgroundVideo.Visibility = Visibility.Collapsed;
+            }
+
+            if (_backgroundVideoPlayer == null) return;
+            try
+            {
+                _backgroundVideoPlayer.Pause();
+                _backgroundVideoPlayer.Source = null;
+                _backgroundVideoPausedByMinimize = false;
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught);
+            }
+        }
+
+        // —— 视频背景「最小化暂停」：最小化时暂停解码省电，还原后继续 ——
+        private bool _backgroundVideoPausedByMinimize;
+
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        private static extern bool IsIconic(IntPtr hWnd);
+
+        private void OnAppWindowChangedForBackgroundVideo(AppWindow sender, AppWindowChangedEventArgs args)
+        {
+            // AppWindow.Changed 回调不在 UI 线程上，且最小化瞬间布局还没稳定，丢到 UI 队列里稍后判
+            DispatcherQueue.TryEnqueue(UpdateBackgroundVideoMinimizeState);
+        }
+
+        private void UpdateBackgroundVideoMinimizeState()
+        {
+            if (_backgroundVideoPlayer == null || _backgroundVideoPlayer.Source == null)
+            {
+                return; // 没在放视频，不用管
+            }
+
+            try
+            {
+                IntPtr hwnd = _mainWindowHwnd != IntPtr.Zero
+                    ? _mainWindowHwnd
+                    : WinRT.Interop.WindowNative.GetWindowHandle(this);
+                if (hwnd == IntPtr.Zero)
+                {
+                    return;
+                }
+
+                if (IsIconic(hwnd))
+                {
+                    if (!_backgroundVideoPausedByMinimize)
+                    {
+                        _backgroundVideoPlayer.Pause();
+                        _backgroundVideoPausedByMinimize = true;
+                        StartupLog.Write("背景视频：窗口最小化，已暂停解码");
+                    }
+                }
+                else if (_backgroundVideoPausedByMinimize
+                         && CustomBackgroundVideo != null
+                         && CustomBackgroundVideo.Visibility == Visibility.Visible)
+                {
+                    _backgroundVideoPlayer.Play();
+                    _backgroundVideoPausedByMinimize = false;
+                    StartupLog.Write("背景视频：窗口还原，继续播放");
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught);
+            }
+        }
+
+        /// <summary>把视频铺满窗口当背景：循环播放、强制静音、不进系统媒体浮层(SMTC)。</summary>
+        private void ApplyCustomBackgroundVideo(string path, int request)
+        {
+            if (request != _customBackgroundRequest) return;
+
+            // 视频与图片互斥：图片层退场
+            CustomBackgroundImage.Source = null;
+            CustomBackgroundImage.Visibility = Visibility.Collapsed;
+
+            try
+            {
+                if (_backgroundVideoPlayer == null)
+                {
+                    _backgroundVideoPlayer = new Windows.Media.Playback.MediaPlayer
+                    {
+                        IsLoopingEnabled = true,
+                        IsMuted = true,
+                        AutoPlay = false,
+                    };
+                    // 关键：不让这个播放器接管系统媒体浮层(SMTC)，否则背景视频会顶掉正歌的"正在播放"卡片
+                    _backgroundVideoPlayer.CommandManager.IsEnabled = false;
+                    CustomBackgroundVideo.SetMediaPlayer(_backgroundVideoPlayer);
+
+                    // 最小化省电：窗口最小化时暂停视频解码，还原时继续
+                    AppWindow.Changed -= OnAppWindowChangedForBackgroundVideo;
+                    AppWindow.Changed += OnAppWindowChangedForBackgroundVideo;
+                }
+
+                _backgroundVideoPlayer.Source = Windows.Media.Core.MediaSource.CreateFromUri(new Uri(path));
+                CustomBackgroundVideo.Visibility = Visibility.Visible;
+                _backgroundVideoPlayer.Play();
+
+                global::CelesteMusicPlayer.StartupLog.Write("自定义背景：视频已应用 " + path);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught);
+                CustomBackgroundVideo.Visibility = Visibility.Collapsed;
+            }
+
+            // 与封面背景互斥（同图片逻辑）
+            ClearAlbumArtBackground();
+        }
+
         private void ApplyCustomBackground(string? path)
         {
             int request = ++_customBackgroundRequest;
@@ -1001,12 +1655,24 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // 经典不透明界面与背景图层完全无关：图片/视频一律不显示（切回现有界面时由 ApplyUiStyleMode 恢复）
+                if (IsClassicUiStyleActive())
+                {
+                    if (request != _customBackgroundRequest) return;
+
+                    CustomBackgroundImage.Source = null;
+                    CustomBackgroundImage.Visibility = Visibility.Collapsed;
+                    StopCustomBackgroundVideo();
+                    return;
+                }
+
                 if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
                 {
                     if (request != _customBackgroundRequest) return;
 
                     CustomBackgroundImage.Source = null;
                     CustomBackgroundImage.Visibility = Visibility.Collapsed;
+                    StopCustomBackgroundVideo();
 
                     // 恢复封面背景：用最近一次的当前曲目封面重绘（没有就保持空）
                     if (AlbumArtBackgroundImage != null)
@@ -1015,6 +1681,16 @@ namespace CelesteMusicPlayer
                     }
                     return;
                 }
+
+                // 视频背景：循环静音铺满，不走图片的模糊管线（那套 GDI+ 模糊只认静态图）
+                if (IsVideoBackgroundPath(path))
+                {
+                    ApplyCustomBackgroundVideo(path, request);
+                    return;
+                }
+
+                // 图片路径：先把视频层停掉（含后续图片解码失败的情况）
+                StopCustomBackgroundVideo();
 
                 AppSettingsState settings = AppSettingsStore.Load();
                 int blurRadius = settings.BackgroundGaussBlur ? settings.GaussBlurRadius : 0;

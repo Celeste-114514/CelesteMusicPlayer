@@ -537,6 +537,26 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="界面风格" />
+                                <TextBlock Text="经典风格为不透明界面：浅色/深色/跟随系统，侧栏彩色图标；背景图式风格保持原样" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ComboBox
+                                x:Name="UiStyleModeCombo"
+                                Grid.Column="1"
+                                Width="220"
+                                SelectionChanged="UiStyleModeCombo_SelectionChanged">
+                                <ComboBoxItem Content="背景图式（默认）" Tag="" />
+                                <ComboBoxItem Content="经典 · 跟随系统" Tag="ClassicSystem" />
+                                <ComboBoxItem Content="经典 · 浅色" Tag="ClassicLight" />
+                                <ComboBoxItem Content="经典 · 深色" Tag="ClassicDark" />
+                            </ComboBox>
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="毛玻璃背景" />
                                 <TextBlock Text="主窗口、迷你播放器与设置页使用亚克力透明效果" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                             </StackPanel>
@@ -731,15 +751,15 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="主窗口背景图片" />
-                                <TextBlock Opacity="0.6" FontSize="11" Text="选择图片作为主窗口背景(留空则使用专辑封面背景)" />
+                                <TextBlock Text="主窗口背景（图片/视频）" />
+                                <TextBlock Opacity="0.6" FontSize="11" Text="选择图片或视频作主窗口背景；视频循环静音播放，模糊仅对图片生效；留空则用专辑封面背景" />
                             </StackPanel>
                             <TextBox
                                 x:Name="BackgroundPathTextBox"
                                 Grid.Column="1"
                                 Width="220"
                                 VerticalAlignment="Center"
-                                PlaceholderText="背景图片路径" />
+                                PlaceholderText="背景图片/视频路径" />
                             <StackPanel Orientation="Horizontal" Grid.Column="2" Spacing="6">
                                 <Button Content="浏览…" Click="BrowseBackgroundButton_Click" />
                                 <Button Content="清除" Click="ClearBackgroundButton_Click" />

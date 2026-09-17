@@ -36,6 +36,9 @@ namespace CelesteMusicPlayer
             AppWindow.Resize(new Windows.Graphics.SizeInt32(640, 620));
             Title = "选择列";
 
+            // 经典界面：窗口内容跟随主程序明暗主题（背景图式下不介入）
+            FrostedGlass.ApplyWindowTheme(this);
+
             BuildFieldChecks();
             RebuildOrderPanel();
         }

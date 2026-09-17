@@ -5,11 +5,11 @@ using System.Text.RegularExpressions;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>音频格式信息格式化（HiFi 显示：采样率 / 位深 / 码率 / 声道）。</summary>
+    /// <summary>音频格式信息格式化（HiFi 显示：编码器 / 位深 / 采样率 / 码率 / 声道）。</summary>
     public static class AudioInfoFormatter
     {
         // 每个文件只解析一次并缓存（含 ffmpeg 兜底开销昂贵的那些格式），避免列表/启动反复读盘与反复起进程。
-        private readonly record struct AudioInfoData(int Rate, int Bits, int Kbps, int Channels);
+        private readonly record struct AudioInfoData(int Rate, int Bits, int Kbps, int Channels, string Codec);
 
         private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, AudioInfoData> InfoCache =
             new(System.StringComparer.OrdinalIgnoreCase);
@@ -26,12 +26,12 @@ namespace CelesteMusicPlayer
 
             try
             {
-                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out int channels))
+                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out int channels, out string codec))
                 {
                     return null;
                 }
 
-                string encoder = ResolveEncoderName(path, rate);
+                string encoder = ResolveCodecName(codec, Path.GetExtension(path), rate);
                 string bitsPart = bits > 0 ? bits + "bit" : string.Empty;
                 string ratePart = rate > 0 ? FormatSampleRate(rate) : string.Empty;
                 string bitDepth = string.Empty;
@@ -73,7 +73,7 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 状态条第三行短格式信息："ALAC · 16bit/44kHz · 1411kbps"。
+        /// 状态条第三行短格式信息："Free Lossless Audio Codec · 16bit/44.1kHz · 1411kbps"。
         /// 读取失败返回空串（调用侧据此隐藏该行）。
         /// </summary>
         public static string FormatShortLine(string path)
@@ -85,12 +85,12 @@ namespace CelesteMusicPlayer
 
             try
             {
-                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out _))
+                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out _, out string codec))
                 {
                     return string.Empty;
                 }
 
-                string encoder = ResolveEncoderName(path, rate);
+                string encoder = ResolveCodecName(codec, Path.GetExtension(path), rate);
                 string bitsPart = bits > 0 ? bits + "bit" : string.Empty;
                 string ratePart = rate > 0 ? FormatSampleRate(rate) : string.Empty;
                 string bitDepth = string.Empty;
@@ -129,8 +129,8 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 歌曲面板第三行的格式胶囊内容（每段一个胶囊）：格式 / 位深·采样率 / 比特率。
-        /// 如 ["FLAC","16bit/44kHz","1411kbps"]；读取失败返回空列表。
+        /// 歌曲面板第三行的格式胶囊内容（每段一个胶囊）：编码器 / 位深·采样率 / 比特率。
+        /// 如 ["Free Lossless Audio Codec","16bit/44.1kHz","1411kbps"]；读取失败返回空列表。
         /// </summary>
         public static System.Collections.Generic.IReadOnlyList<string> FormatChips(string path)
         {
@@ -142,12 +142,12 @@ namespace CelesteMusicPlayer
 
             try
             {
-                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out _))
+                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out _, out string codec))
                 {
                     return result;
                 }
 
-                string encoder = ResolveEncoderName(path, rate);
+                string encoder = ResolveCodecName(codec, Path.GetExtension(path), rate);
                 if (encoder.Length > 0)
                 {
                     result.Add(encoder);
@@ -188,8 +188,8 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 编码器 + 位深/采样率质量行，如 "MPEG-4 ALAC · 16bit/44kHz"、"FLAC · 24bit/96kHz"、"DSD128 · 2.82MHz"。
-        /// 编码器按容器/扩展名推断（M4A→MPEG-4 ALAC、DSD→DSD64/128/256等）；读取失败返回空串。
+        /// 编码器 + 位深/采样率质量行，如 "MPEG-4 ALAC · 16bit/44.1kHz"、"Free Lossless Audio Codec · 24bit/96kHz"、"DSD128 · 2.82MHz"。
+        /// 编码器按真实音频编码器（ffmpeg 探测，m4a 能区分 AAC / ALAC）显示规范名；读取失败返回空串。
         /// </summary>
         public static string FormatQualityLine(string path)
         {
@@ -200,12 +200,12 @@ namespace CelesteMusicPlayer
 
             try
             {
-                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out _))
+                if (!TryGetPartsCached(path, out int rate, out int bits, out int kbps, out _, out string codec))
                 {
                     return string.Empty;
                 }
 
-                string encoder = ResolveEncoderName(path, rate);
+                string encoder = ResolveCodecName(codec, Path.GetExtension(path), rate);
                 string bitsPart = bits > 0 ? bits + "bit" : string.Empty;
                 string ratePart = rate > 0 ? FormatSampleRate(rate) : string.Empty;
                 string depth = string.Empty;
@@ -241,35 +241,170 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>根据容器/扩展名 + 采样率推断编码器显示名。</summary>
-        private static string ResolveEncoderName(string path, int rate)
+        /// <summary>
+        /// 把真实音频编码器（ffmpeg 报的 codec 名，或容器/扩展名推断）映射成用户可读的「编码器名」。
+        /// 优先用 ffmpeg 探到的真实编码器；探不到时退回按容器猜测（对 flac/mp3/wav 这类单义容器仍然准确）。
+        /// 关键：显示的是编码器（codec）而不是容器格式 —— 比如 m4a 既可能是 AAC 也可能是 ALAC，
+        /// 只有看编码器才分得清；ffmpeg 报的 "pcm_s16le" 之类带后缀的名字不会原样显示（统一成 "Linear PCM"）。
+        /// </summary>
+        private static string ResolveCodecName(string codec, string ext, int rate)
         {
-            string ext = (Path.GetExtension(path)?.TrimStart('.').Trim() ?? "").ToLowerInvariant();
+            if (!string.IsNullOrEmpty(codec))
+            {
+                string? mapped = MapCodecName(codec, rate);
+                if (mapped != null)
+                {
+                    return mapped;
+                }
+            }
+
+            return MapExtensionName(ext, rate);
+        }
+
+        /// <summary>ffmpeg 报的编码器 token（如 alac / flac / aac / mp3 / pcm_s16le / dsd_lsbf）→ 规范显示名。</summary>
+        private static string? MapCodecName(string codec, int rate)
+        {
+            string c = codec.Trim().ToLowerInvariant();
+            if (c.Length == 0)
+            {
+                return null;
+            }
+
+            // DSD 系列：按采样率给 DSD64/128/256/512
+            if (c.StartsWith("dsd"))
+            {
+                return ResolveDsdName(rate);
+            }
+
+            // PCM 系列（pcm_s16le / pcm_f32le / fltp 等）：统一叫 Linear PCM，不显示 ffmpeg 后缀
+            if (c.StartsWith("pcm") || c is "flt" or "fltp")
+            {
+                return "Linear PCM";
+            }
+
+            if (CodecDisplayNames.TryGetValue(c, out string? name) && name != null)
+            {
+                return name;
+            }
+
+            // 不认识的编码器：不臆造，退回按容器名显示
+            return null;
+        }
+
+        /// <summary>常见 ffmpeg 编码器 token → 规范显示名（与用户给的样式一致）。</summary>
+        private static readonly System.Collections.Generic.Dictionary<string, string> CodecDisplayNames =
+            new(System.StringComparer.OrdinalIgnoreCase)
+            {
+                ["alac"] = "MPEG-4 ALAC",
+                ["flac"] = "Free Lossless Audio Codec",
+                ["mp3"] = "MPEG 1 Layer III",
+                ["mp2"] = "MPEG 1 Layer II",
+                ["aac"] = "MPEG-4 AAC",
+                ["ac3"] = "Dolby Digital (AC-3)",
+                ["eac3"] = "Dolby Digital Plus",
+                ["opus"] = "Opus",
+                ["vorbis"] = "Vorbis",
+                ["dts"] = "DTS",
+                ["truehd"] = "Dolby TrueHD",
+                ["mlp"] = "Meridian Lossless Packing",
+                ["ape"] = "Monkey's Audio",
+                ["wavpack"] = "WavPack",
+                ["tta"] = "True Audio",
+                ["tak"] = "TAK",
+                ["mpc"] = "Musepack",
+                ["musepack"] = "Musepack",
+                ["wmav1"] = "Windows Media Audio",
+                ["wmav2"] = "Windows Media Audio",
+                ["amr_nb"] = "AMR-NB",
+                ["amr_wb"] = "AMR-WB",
+                ["speex"] = "Speex",
+                ["cook"] = "Cook",
+                ["atrac1"] = "ATRAC1",
+                ["atrac3"] = "ATRAC3",
+                ["atrac3p"] = "ATRAC3+",
+                ["ilbc"] = "iLBC",
+                ["g722"] = "G.722",
+                ["g726"] = "G.726",
+                ["sbc"] = "SBC",
+                ["aptx"] = "aptX",
+            };
+
+        /// <summary>按容器/扩展名推断的编码器显示名（ffmpeg 探不到时的兜底，单义容器仍然准确）。</summary>
+        private static string MapExtensionName(string ext, int rate)
+        {
+            ext = (ext?.TrimStart('.').Trim() ?? "").ToLowerInvariant();
+            switch (ext)
+            {
+                case "flac":
+                    return "Free Lossless Audio Codec";
+                case "mp3":
+                    return "MPEG 1 Layer III";
+                case "mp2":
+                    return "MPEG 1 Layer II";
+                case "alac":
+                    return "MPEG-4 ALAC";
+                // MPEG-4 家族是「AAC 或 ALAC」二义容器：尽量用 ffmpeg 探真实编码器；
+                // 探不到时保守显示 MPEG-4 ALAC（最佳猜测，不臆造）。
+                case "m4a":
+                case "mp4":
+                case "m4b":
+                case "m4v":
+                case "mov":
+                case "3gp":
+                    return "MPEG-4 ALAC";
+                case "wav":
+                case "wave":
+                    return "Linear PCM";
+                case "aac":
+                    return "MPEG-4 AAC";
+                case "ape":
+                    return "Monkey's Audio";
+                case "ogg":
+                    return "Vorbis";
+                case "opus":
+                    return "Opus";
+                case "dsf":
+                case "dff":
+                    return ResolveDsdName(rate);
+                case "wv":
+                    return "WavPack";
+                case "tta":
+                    return "True Audio";
+                case "tak":
+                    return "TAK";
+                case "mpc":
+                    return "Musepack";
+                case "wma":
+                    return "Windows Media Audio";
+                case "mka":
+                    return "Matroska Audio";
+                case "caf":
+                    return "Core Audio Format";
+                case "aif":
+                case "aiff":
+                    return "AIFF";
+                default:
+                    return string.IsNullOrEmpty(ext) ? string.Empty : ext.ToUpperInvariant();
+            }
+        }
+
+        /// <summary>这些容器里「编码器」与「扩展名」未必一致（m4a 可能是 AAC 也可能是 ALAC），
+        /// 必须靠 ffmpeg 真正探测，不能只按扩展名猜。</summary>
+        private static bool IsCodecAmbiguousContainer(string ext)
+        {
             switch (ext)
             {
                 case "m4a":
                 case "mp4":
-                    return "MPEG-4 ALAC";
-                case "alac":
-                    return "ALAC";
-                case "flac":
-                    return "FLAC";
-                case "mp3":
-                    return "MP3";
-                case "wav":
-                    return "WAV/PCM";
-                case "aac":
-                    return "AAC";
-                case "ape":
-                    return "APE";
+                case "m4b":
+                case "m4v":
+                case "mov":
+                case "3gp":
+                case "mka":
                 case "ogg":
-                case "opus":
-                    return "Ogg/Opus";
-                case "dsf":
-                case "dff":
-                    return ResolveDsdName(rate);
+                    return true;
                 default:
-                    return string.IsNullOrEmpty(ext) ? string.Empty : ext.ToUpperInvariant();
+                    return false;
             }
         }
 
@@ -304,22 +439,24 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>带缓存的读取：每个路径只解析一次（含 ffmpeg 兜底），随后命中缓存。</summary>
-        private static bool TryGetPartsCached(string path, out int rate, out int bits, out int kbps, out int channels)
+        private static bool TryGetPartsCached(string path, out int rate, out int bits, out int kbps, out int channels, out string codec)
         {
             rate = 0;
             bits = 0;
             kbps = 0;
             channels = 0;
+            codec = string.Empty;
             if (InfoCache.TryGetValue(path, out AudioInfoData hit))
             {
                 rate = hit.Rate;
                 bits = hit.Bits;
                 kbps = hit.Kbps;
                 channels = hit.Channels;
+                codec = hit.Codec;
                 return true;
             }
 
-            if (!ProbePartsUncached(path, out int r, out int b, out int k, out int c))
+            if (!ProbePartsUncached(path, out int r, out int b, out int k, out int c, out string cd))
             {
                 return false;
             }
@@ -329,21 +466,24 @@ namespace CelesteMusicPlayer
                 InfoCache.Clear();
             }
 
-            InfoCache[path] = new AudioInfoData(r, b, k, c);
+            InfoCache[path] = new AudioInfoData(r, b, k, c, cd);
             rate = r;
             bits = b;
             kbps = k;
             channels = c;
+            codec = cd;
             return true;
         }
 
-        /// <summary>读取采样率/位深/码率/声道；TagLib 读不全时用 ffmpeg 兜底。</summary>
-        private static bool ProbePartsUncached(string path, out int rate, out int bits, out int kbps, out int channels)
+        /// <summary>读取采样率/位深/码率/声道/编码器；TagLib 读不全或容器二义时用 ffmpeg 兜底。</summary>
+        private static bool ProbePartsUncached(string path, out int rate, out int bits, out int kbps, out int channels, out string codec)
         {
             rate = 0;
             bits = 0;
             kbps = 0;
             channels = 0;
+            codec = string.Empty;
+            string ext = (Path.GetExtension(path)?.TrimStart('.').Trim() ?? "").ToLowerInvariant();
             try
             {
                 try
@@ -359,9 +499,12 @@ namespace CelesteMusicPlayer
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioInfoFormatter.cs", caught); }
 
-                if (bits <= 0 || kbps <= 0)
+                // 需要起 ffmpeg 的两种情况：
+                //  1) TagLib 没读全（位深/码率缺失）—— 与原逻辑一致；
+                //  2) 容器二义（m4a/mp4/mka/ogg 等），必须探真实编码器才能分清 AAC/ALAC 等。
+                if (bits <= 0 || kbps <= 0 || IsCodecAmbiguousContainer(ext))
                 {
-                    ProbeWithFfmpeg(path, ref rate, ref bits, ref kbps, ref channels);
+                    ProbeWithFfmpeg(path, ref rate, ref bits, ref kbps, ref channels, ref codec);
                 }
 
                 return true;
@@ -372,8 +515,24 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>把采样率格式化成 HiFi 播放器常见的写法：44100→"44.1kHz"、96000→"96kHz"、2822400→"2.82MHz"。</summary>
         private static string FormatSampleRate(int rate)
-            => rate + "hz";
+        {
+            if (rate >= 1_000_000)
+            {
+                return TrimTrailingZero(rate / 1_000_000.0) + "MHz";
+            }
+
+            if (rate >= 1000)
+            {
+                return TrimTrailingZero(rate / 1000.0) + "kHz";
+            }
+
+            return rate + "Hz";
+        }
+
+        private static string TrimTrailingZero(double v)
+            => v.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture);
 
         private static string FormatChannels(int channels)
         {
@@ -385,8 +544,8 @@ namespace CelesteMusicPlayer
             };
         }
 
-        /// <summary>用内置 ffmpeg -i 输出解析采样率/位深/码率/声道（robust 于 TagLib 读不到的格式）。</summary>
-        private static void ProbeWithFfmpeg(string path, ref int rate, ref int bits, ref int kbps, ref int channels)
+        /// <summary>用内置 ffmpeg -i 输出解析采样率/位深/码率/声道/编码器（robust 于 TagLib 读不到的格式）。</summary>
+        private static void ProbeWithFfmpeg(string path, ref int rate, ref int bits, ref int kbps, ref int channels, ref string codec)
         {
             string? ffmpeg = AudioPlaybackEngine.FindFfmpeg();
             if (ffmpeg == null)
@@ -415,6 +574,16 @@ namespace CelesteMusicPlayer
                     if (!line.Contains("Audio:", StringComparison.OrdinalIgnoreCase))
                     {
                         continue;
+                    }
+
+                    // 编码器：Audio: 之后第一个 token（如 alac / aac / mp3 / pcm_s16le / dsd_lsbf）
+                    if (string.IsNullOrEmpty(codec))
+                    {
+                        Match mc = Regex.Match(line, @"Audio:\s*([a-zA-Z0-9_]+)");
+                        if (mc.Success)
+                        {
+                            codec = mc.Groups[1].Value.ToLowerInvariant();
+                        }
                     }
 
                     // 码率： 例如 "128 kb/s"（有的音频行内不含，需另找）

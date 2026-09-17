@@ -77,6 +77,17 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 
 ## 📝 更新日志
 
+### v26.9.17（2026-09-17）
+- ✨ 视觉与界面
+  - 🪟 **新增毛玻璃 / 模糊视觉特效**（`FrostedGlass`）
+  - 🎨 **主界面布局与 UI / 主题大幅打磨**（`MainWindow.xaml` / `UiTheme` / `NowPlayingLayout`）
+  - 📝 **音频信息格式化重写**（`AudioInfoFormatter`）
+- 🐛 修复 / 重构
+  - 🪟 一批工具 / 设置窗口同步适配与打磨（均衡器、标签编辑器、歌词编辑器、房间 / 耳机校正、重复文件、播放队列、迷你播放器、搜索、排序配置、取色器、歌手头像等）
+  - 🎵 播放与曲库逻辑微调（`Playback` / `Playback3` / `Library2` / `Misc` / `Settings`）
+- 🛠️ 优化使用体验
+  - ⚙️ 设置项与关于面板联动调整；文件关联窗口同步
+
 ### v26.9.16（2026-09-16）
 - ✨ 新增功能
   - 🔄 **程序内检查更新体系**：抽离独立 `UpdateChecker` 模块，关于面板可手动检查、启动自动检查；发现新版本时在系统托盘弹气泡通知，并支持一键「下载更新」自动拉取安装包并启动覆盖安装（沿用 26.9.10.3 的退出交还文件锁逻辑）

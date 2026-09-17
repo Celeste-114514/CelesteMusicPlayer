@@ -34,6 +34,9 @@ namespace CelesteMusicPlayer
             AppWindow.Resize(new Windows.Graphics.SizeInt32(640, 560));
             Title = "自定义排序";
 
+            // 经典界面：窗口内容跟随主程序明暗主题（背景图式下不介入）
+            FrostedGlass.ApplyWindowTheme(this);
+
             BuildRows();
             GlobalAscButton.IsChecked = _initialAsc;
             GlobalDescButton.IsChecked = !_initialAsc;

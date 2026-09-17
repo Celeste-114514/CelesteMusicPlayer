@@ -122,6 +122,8 @@ namespace CelesteMusicPlayer
             else
             {
                 SystemBackdrop = null;
+                // 关毛玻璃时窗口不经过 ApplyWindowBackdrop，这里补一次：经典界面下弹窗也要分深浅色
+                FrostedGlass.ApplyWindowTheme(this);
             }
         }
 

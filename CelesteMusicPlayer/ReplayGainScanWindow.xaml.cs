@@ -33,6 +33,9 @@ namespace CelesteMusicPlayer
         {
             InitializeComponent();
             _provider = provider;
+
+            // 经典界面：窗口内容跟随主程序明暗主题（背景图式下不介入）
+            FrostedGlass.ApplyWindowTheme(this);
         }
 
         private async void StartButton_Click(object sender, RoutedEventArgs e)

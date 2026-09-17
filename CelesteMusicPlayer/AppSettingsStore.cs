@@ -197,6 +197,10 @@ namespace CelesteMusicPlayer
         public string ProgressBarStyle { get; set; } = "Gradient"; // Gradient / Waveform / Spotify / AppleLine
         public string CustomBackgroundPath { get; set; } = string.Empty;
         public string ThemePreset { get; set; } = string.Empty;
+
+        /// <summary>主程序界面风格："" = 现有（背景图式，默认）；ClassicSystem / ClassicLight / ClassicDark = 经典不透明界面。</summary>
+        public string UiStyleMode { get; set; } = string.Empty;
+
         public bool ShowPlaylistTitle { get; set; } = true;
         public bool ShowPlaylistArtist { get; set; } = true;
         public bool ShowPlaylistAlbum { get; set; } = true;
@@ -622,6 +626,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         },
         CustomBackgroundPath = s.CustomBackgroundPath?.Trim() ?? string.Empty,
         ThemePreset = s.ThemePreset?.Trim() ?? string.Empty,
+        UiStyleMode = s.UiStyleMode?.Trim() ?? string.Empty,
         PlaylistDensity = s.PlaylistDensity is "Compact" or "Comfortable" ? s.PlaylistDensity : "Comfortable",
             EnableSmtc = s.EnableSmtc,
             EnableGlobalHotkeys = s.EnableGlobalHotkeys,

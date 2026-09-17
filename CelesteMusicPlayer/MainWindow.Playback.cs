@@ -2650,7 +2650,7 @@ namespace CelesteMusicPlayer
             if (sender is not Border chrome) return;
             var dc = (sender as FrameworkElement)?.DataContext as PlaylistItem;
             if (dc == null || IsSongInListSelected(chrome, dc)) return;
-            chrome.Background = PlaylistDetailHoverBg;
+            chrome.Background = ResolveRowHoverBrush(chrome);
         }
 
 
@@ -2683,7 +2683,7 @@ namespace CelesteMusicPlayer
             if (sender is not Border chrome) return;
             var dc = (sender as FrameworkElement)?.DataContext as PlaylistItem;
             if (dc == null || PlaylistDetailRowIsSelected(dc)) return;
-            chrome.Background = PlaylistDetailHoverBg;
+            chrome.Background = ResolveRowHoverBrush(chrome);
         }
 
 

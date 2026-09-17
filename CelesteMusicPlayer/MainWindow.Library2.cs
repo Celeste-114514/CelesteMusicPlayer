@@ -1175,114 +1175,124 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>
-        /// 左侧分类：歌曲/专辑/艺术家/文件夹为圆角选中；
-        /// 播放列表为胶囊框，选中时填主题色、文字对比色。
+        /// 左侧导航高亮。经典界面：所有条目统一成「半透明灰圆角底 + 左侧一根直竖条（主题色）」，
+        /// 左对齐、切换时竖条淡入（观感对齐设置页）。
+        /// 背景图式界面：分类与工具（音效 / 标签排序 / 播放列表）同款 —— 透明底、选中填主题色、左对齐；
+        /// 工具按钮原来那圈胶囊背景已按用户要求去掉。
         /// </summary>
         private void UpdateLibraryNavHighlight()
         {
-            Brush accent = ResolveAccentBrush();
-            Brush fg = ColorHelper.ResolveContrastingForeground(accent);
-            var transparent = new SolidColorBrush(Colors.Transparent);
-            Brush capsuleIdle = ResolveCapsuleFillBrush();
-            Brush capsuleBorder = ResolveNavCapsuleBorderBrush();
-
-            Button[] libraryButtons =
+            try
             {
-                NavSongsButton,
-                NavAlbumsButton,
-                NavArtistsButton,
-                NavAlbumArtistsButton,
-                NavFoldersButton,
-                NavFavoritesButton,
-                NavRatingsButton,
-                NavRecentButton,
-                NavPlaylistWallButton,
-                NavGenreButton,
-                NavYearButton
-            };
+                Brush accent = ResolveAccentBrush();
+                Brush fg = ColorHelper.ResolveContrastingForeground(accent);
+                var transparent = new SolidColorBrush(Colors.Transparent);
+                bool classicNav = IsClassicUiStyleActive();
 
-            foreach (Button button in libraryButtons)
-            {
-                button.CornerRadius = new CornerRadius(8);
-                button.BorderThickness = new Thickness(0);
-                string tag = button.Tag as string ?? string.Empty;
-                bool active = string.Equals(_currentCategory, tag, StringComparison.Ordinal)
-                    || (tag == "Genres" && _currentCategory is "Genres" or "GenreSongs")
-                    || (tag == "Years" && _currentCategory is "Years" or "YearSongs");
-                if (active)
+                // 当前分类是哪个（用于判断要不要播"切换"动画：同一次切换里只让新选中的那个播）
+                string? activeTag = null;
+                foreach (NavItemRef item in NavItems)
                 {
-                    button.Background = accent;
-                    button.Foreground = fg;
+                    string tag = item.Button.Tag as string ?? string.Empty;
+                    if (IsNavCategoryActive(tag))
+                    {
+                        activeTag = tag;
+                    }
                 }
-                else
-                {
-                    button.Background = transparent;
-                    button.ClearValue(Control.ForegroundProperty);
-                }
-            }
 
-            const double playlistCapsuleHeight = 40;
-            UserPlaylistNavButton.Height = playlistCapsuleHeight;
-            UserPlaylistNavButton.MinHeight = playlistCapsuleHeight;
-            UserPlaylistNavButton.CornerRadius = new CornerRadius(playlistCapsuleHeight / 2.0);
-            UserPlaylistNavButton.HorizontalContentAlignment = HorizontalAlignment.Center;
-            bool playlistActive = string.Equals(_currentCategory, "PlaylistWall", StringComparison.Ordinal);
-            if (playlistActive)
-            {
-                UserPlaylistNavButton.Background = accent;
-                UserPlaylistNavButton.Foreground = fg;
-                UserPlaylistNavButton.BorderThickness = new Thickness(0);
-                UserPlaylistNavButton.ClearValue(Control.BorderBrushProperty);
-            }
-            else
-            {
-                UserPlaylistNavButton.Background = capsuleIdle;
-                UserPlaylistNavButton.BorderThickness = new Thickness(1);
-                UserPlaylistNavButton.BorderBrush = capsuleBorder;
-                UserPlaylistNavButton.ClearValue(Control.ForegroundProperty);
-            }
+                bool animateSelection = classicNav && activeTag != null
+                    && !string.Equals(activeTag, _lastAnimatedNavTag, StringComparison.Ordinal);
+                _lastAnimatedNavTag = activeTag;
 
-            // 标签排序胶囊按钮（与播放列表同款）
-            NavTagSortButton.CornerRadius = new CornerRadius(playlistCapsuleHeight / 2.0);
-            NavTagSortButton.HorizontalContentAlignment = HorizontalAlignment.Center;
-            bool tagSortActive = string.Equals(_currentCategory, "TagSort", StringComparison.Ordinal);
-            if (tagSortActive)
-            {
-                NavTagSortButton.Background = accent;
-                NavTagSortButton.Foreground = fg;
-                NavTagSortButton.BorderThickness = new Thickness(0);
-                NavTagSortButton.ClearValue(Control.BorderBrushProperty);
-            }
-            else
-            {
-                NavTagSortButton.Background = capsuleIdle;
-                NavTagSortButton.BorderThickness = new Thickness(1);
-                NavTagSortButton.BorderBrush = capsuleBorder;
-                NavTagSortButton.ClearValue(Control.ForegroundProperty);
-            }
+                foreach (NavItemRef item in NavItems)
+                {
+                    string tag = item.Button.Tag as string ?? string.Empty;
+                    bool active = IsNavCategoryActive(tag);
+                    Button button = item.Button;
 
-            // 音效处理胶囊按钮（占位，后续接入 ECHO 音效页面）
-            if (NavAudioFxButton != null)
+                    if (classicNav)
+                    {
+                        // 经典界面：分类与工具统一款式（用户要求音效/标签/播放列表与上方分类一致）
+                        button.CornerRadius = new CornerRadius(8);
+                        button.BorderThickness = new Thickness(0);
+                        button.ClearValue(Control.BorderBrushProperty);
+                        button.ClearValue(Control.ForegroundProperty);
+                        button.HorizontalContentAlignment = HorizontalAlignment.Left;
+                        ResetNavCapsuleChrome(button);
+
+                        if (active)
+                        {
+                            // 底色对象要留着给动画用（淡入），所以这里现搓一个画笔
+                            button.Background = new SolidColorBrush(ResolveClassicRowSelectionColor(button))
+                            {
+                                Opacity = animateSelection ? 0d : 1d
+                            };
+                        }
+                        else
+                        {
+                            button.Background = transparent;
+                        }
+                    }
+                    else
+                    {
+                        // 背景图式的分类按钮（原样保留）
+                        button.CornerRadius = new CornerRadius(8);
+                        button.BorderThickness = new Thickness(0);
+                        button.ClearValue(Control.BorderBrushProperty);
+                        button.HorizontalContentAlignment = HorizontalAlignment.Left;
+                        ResetNavCapsuleChrome(button);
+                        if (active)
+                        {
+                            button.Background = accent;
+                            button.Foreground = fg;
+                        }
+                        else
+                        {
+                            button.Background = transparent;
+                            button.ClearValue(Control.ForegroundProperty);
+                        }
+                    }
+
+                    // 竖条指示条：只有「经典 + 选中」才出现
+                    if (item.Indicator != null)
+                    {
+                        if (classicNav && active)
+                        {
+                            item.Indicator.Background = accent;
+                            item.Indicator.Visibility = Visibility.Visible;
+                            AnimateNavSelection(item, animateSelection);
+                        }
+                        else
+                        {
+                            item.Indicator.Visibility = Visibility.Collapsed;
+                            item.Indicator.Opacity = 0;
+                        }
+                    }
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Library2.cs.UpdateLibraryNavHighlight", caught); }
+        }
+
+        /// <summary>某个 tag 是不是当前分类（流派/年份各有"分类页"和"分类下的歌曲列表"两种取值）。</summary>
+        /// <summary>
+        /// 清掉历史版本给"胶囊按钮"设过的固定高度。
+        /// 音效 / 标签排序 / 播放列表这 3 个按钮早先是胶囊样式（Height=40、CornerRadius=20），
+        /// 现在与分类同款；不清干净的话，切过一次界面风格之后旧值会残留，看着就跟别的不一样高。
+        /// </summary>
+        private static void ResetNavCapsuleChrome(Button button)
+        {
+            if (!double.IsNaN(button.Height) || !double.IsNaN(button.MinHeight))
             {
-                NavAudioFxButton.CornerRadius = new CornerRadius(playlistCapsuleHeight / 2.0);
-                NavAudioFxButton.HorizontalContentAlignment = HorizontalAlignment.Center;
-                bool fxActive = string.Equals(_currentCategory, "AudioFX", StringComparison.Ordinal);
-                if (fxActive)
-                {
-                    NavAudioFxButton.Background = accent;
-                    NavAudioFxButton.Foreground = fg;
-                    NavAudioFxButton.BorderThickness = new Thickness(0);
-                    NavAudioFxButton.ClearValue(Control.BorderBrushProperty);
-                }
-                else
-                {
-                    NavAudioFxButton.Background = capsuleIdle;
-                    NavAudioFxButton.BorderThickness = new Thickness(1);
-                    NavAudioFxButton.BorderBrush = capsuleBorder;
-                    NavAudioFxButton.ClearValue(Control.ForegroundProperty);
-                }
+                button.ClearValue(FrameworkElement.HeightProperty);
+                button.ClearValue(FrameworkElement.MinHeightProperty);
             }
         }
+
+        private bool IsNavCategoryActive(string tag)
+            => !string.IsNullOrEmpty(tag)
+               && (string.Equals(_currentCategory, tag, StringComparison.Ordinal)
+                   || (tag == "Genres" && _currentCategory is "Genres" or "GenreSongs")
+                   || (tag == "Years" && _currentCategory is "Years" or "YearSongs"));
 
 
         private void ApplyMultiSelectAlbumItemStyle(GridView grid)
@@ -1398,6 +1408,13 @@ namespace CelesteMusicPlayer
         {
             if (AlbumArtBackgroundImage == null)
             {
+                return;
+            }
+
+            // 经典不透明界面：封面背景与它完全无关，切歌时不允许重新铺上
+            if (IsClassicUiStyleActive())
+            {
+                ClearAlbumArtBackground();
                 return;
             }
 

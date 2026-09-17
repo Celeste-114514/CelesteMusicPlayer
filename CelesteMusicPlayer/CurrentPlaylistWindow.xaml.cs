@@ -71,6 +71,9 @@ namespace CelesteMusicPlayer
             titleBar.ButtonInactiveForegroundColor = Color.FromArgb(255, 140, 140, 140);
             titleBar.ButtonHoverForegroundColor = Colors.White;
             titleBar.ButtonPressedForegroundColor = Colors.White;
+
+            // 经典界面：标题栏按钮与窗口内容跟随主程序明暗主题（背景图式下不介入）
+            FrostedGlass.ApplyWindowTheme(this);
         }
 
         private void ApplyChromeStyles()

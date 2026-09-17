@@ -117,6 +117,7 @@ namespace CelesteMusicPlayer
             else
             {
                 SystemBackdrop = null;
+                FrostedGlass.ApplyWindowTheme(this);
             }
         }
 

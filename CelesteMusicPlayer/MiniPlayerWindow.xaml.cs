@@ -148,6 +148,8 @@ namespace CelesteMusicPlayer
                     SystemBackdrop = null;
                 }
 
+                // 经典界面：迷你条也要跟着主程序的明暗主题走（背景图式下本调用不介入）
+                FrostedGlass.ApplyWindowTheme(this);
                 ApplyChromeBackground(enabled);
             });
         }
@@ -158,7 +160,9 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void ApplyChromeBackground(bool frosted)
         {
-            ChromeBorder.Background = frosted
+            // 经典界面下没有 Desktop Acrylic 可透（背板被关掉了），必须走不透明底，
+            // 否则半透明压暗层盖在空背景上＝一条发灰的透明条。
+            ChromeBorder.Background = frosted && FrostedGlass.ClassicMode == null
                 ? FrostedGlass.CreateMiniPlayerDimOverlay()
                 : FrostedGlass.CreateMiniPlayerBrush();
         }

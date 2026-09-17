@@ -212,16 +212,14 @@ namespace CelesteMusicPlayer
                 AboutDownloadProgress.Value = 100;
                 AboutUpdateStatusText.Text = $"下载完成，正在启动安装向导（{tag}）。安装过程中请按提示操作，程序将覆盖安装到原目录。";
 
-                // 弹出安装向导（NSIS 会读注册表 InstallLocation 自动定位原目录覆盖安装）
+                // 弹出安装向导（NSIS 会读注册表 InstallLocation 自动定位原目录覆盖安装），
+                // 并在「安装完成后自动删掉刚下载的安装包」，不留在硬盘上。
+                // 关键：用脱钩的 cmd 进程启动安装向导并 /wait 它结束，结束后再删除安装包。
+                // 本程序随后退出不影响这个 cmd —— 它仍在后台跑，所以「装完才删」这件事一定能做完。
                 try
                 {
-                    ProcessStartInfo psi = new ProcessStartInfo
-                    {
-                        FileName = targetPath,
-                        UseShellExecute = true,
-                    };
-                    Process? started = Process.Start(psi);
-                    if (started != null)
+                    bool launched = LaunchInstallerWithCleanup(targetPath, tmpDir);
+                    if (launched)
                     {
                         AboutUpdateStatusText.Text = "安装向导已启动，本程序即将退出以释放文件并完成更新…";
                         // 稍等安装向导真正拉起后，主动退出本程序，释放被占用的 exe/dll 句柄，
@@ -249,6 +247,51 @@ namespace CelesteMusicPlayer
             {
                 AboutDownloadUpdateButton.IsEnabled = true;
                 AboutCheckUpdateButton.IsEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// 启动安装向导，并安排「安装完成后自动删除刚下载的安装包与临时目录」。
+        /// 实现：用一个**脱钩的 cmd 进程**执行 <c>start /wait 安装包 &amp;&amp; del 安装包</c>。
+        /// cmd 进程不隶属于本程序（无控制台/无窗口），本程序随后退出也不会杀掉它，
+        /// 于是它能等到安装向导真正结束才删除安装包 —— 这是「装完才删」能落地的关键。
+        /// 返回 true 表示安装向导已成功拉起（无论后续安装成败，本程序都应退出让位）。
+        /// </summary>
+        private static bool LaunchInstallerWithCleanup(string installerPath, string tmpDir)
+        {
+            string qi = "\"" + installerPath + "\"";
+            string qd = "\"" + tmpDir + "\"";
+            // start 的第一个带引号参数会被当成窗口标题，故用一个空 "" 占位；
+            // 安装成功（退出码 0）才删安装包，取消/失败则保留以便用户重试；
+            // 末尾再尽力删掉空掉的临时目录（失败无所谓，2&gt;nul 吞掉报错）。
+            string args = "/c start \"\" /wait " + qi + " && del /f /q " + qi + " & rmdir /q " + qd + " 2>nul";
+            try
+            {
+                ProcessStartInfo psi = new ProcessStartInfo
+                {
+                    FileName = "cmd.exe",
+                    Arguments = args,
+                    UseShellExecute = true,
+                    CreateNoWindow = true,
+                    WindowStyle = ProcessWindowStyle.Hidden
+                };
+                Process.Start(psi);
+                return true;
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("SettingsWindow.About.LaunchInstaller", caught);
+                // 清理机制起不来不应耽误更新本身：退回「直接启动安装向导」的旧行为，
+                // 安装包会留着，下次启动下载前会被同名残留清理逻辑删掉，不会无限堆积。
+                try
+                {
+                    Process.Start(new ProcessStartInfo { FileName = installerPath, UseShellExecute = true });
+                    return true;
+                }
+                catch
+                {
+                    return false;
+                }
             }
         }
 

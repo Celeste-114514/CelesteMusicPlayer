@@ -104,7 +104,7 @@ namespace CelesteMusicPlayer
                     SetPlaybackOrder(order, persist: false);
                 }
 
-                ApplyFrostedGlassPreference(settings.EnableFrostedGlass);
+                ApplyUiStyleMode(settings); // 界面风格（现有/经典浅色/深色/跟随系统）；现有模式内部回落毛玻璃开关
                 _miniPlayerWindow?.SetAlwaysOnTop(settings.MiniPlayerAlwaysOnTop);
                 _miniPlayerWindow?.ApplyBackdropPreference(settings.EnableFrostedGlass);
                 SettingsWindow.ApplyBackdropIfOpen();

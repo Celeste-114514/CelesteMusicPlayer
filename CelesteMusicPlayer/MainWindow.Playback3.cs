@@ -91,13 +91,38 @@ namespace CelesteMusicPlayer
                 {
                     chrome.Width = list.ActualWidth;
                 }
-                if (selected)
+
+                if (IsClassicUiStyleActive())
                 {
+                    // 经典 Windows 选中样式：左侧常驻 3px 边框（未选中时透明，避免选中瞬间内容横移），
+                    // 选中时左边框变主题色竖条 + 底色为半透明灰（随明暗主题切换）；文字保持原色。
+                    // 专辑封面等方形元素走 AlbumRowChrome，不经此分支，不受影响。
+                    chrome.BorderThickness = new Thickness(3, 0, 0, 0);
+                    bool darkRow = container.ActualTheme == ElementTheme.Dark;
+                    if (selected)
+                    {
+                        chrome.Background = new SolidColorBrush(darkRow
+                            ? Windows.UI.Color.FromArgb(58, 255, 255, 255)
+                            : Windows.UI.Color.FromArgb(40, 128, 128, 128));
+                        chrome.BorderBrush = accent;
+                        ClearForegroundOnDescendants(chrome);
+                    }
+                    else
+                    {
+                        chrome.Background = unselectedBg;
+                        chrome.BorderBrush = new SolidColorBrush(Colors.Transparent);
+                        ClearForegroundOnDescendants(chrome);
+                    }
+                }
+                else if (selected)
+                {
+                    chrome.BorderThickness = new Thickness(0);
                     chrome.Background = accent;
                     ApplyForegroundToDescendants(chrome, selectedFg);
                 }
                 else
                 {
+                    chrome.BorderThickness = new Thickness(0);
                     chrome.Background = unselectedBg;
                     ClearForegroundOnDescendants(chrome);
                 }
@@ -105,7 +130,20 @@ namespace CelesteMusicPlayer
             else if (selected)
             {
                 // 兜底：无模板 Border 时仍尽量圆角
-                container.Background = accent;
+                if (IsClassicUiStyleActive())
+                {
+                    bool darkRow = container.ActualTheme == ElementTheme.Dark;
+                    container.Background = new SolidColorBrush(darkRow
+                        ? Windows.UI.Color.FromArgb(58, 255, 255, 255)
+                        : Windows.UI.Color.FromArgb(40, 128, 128, 128));
+                    container.BorderThickness = new Thickness(3, 0, 0, 0);
+                    container.BorderBrush = accent;
+                }
+                else
+                {
+                    container.Background = accent;
+                }
+
                 container.Foreground = selectedFg;
                 ApplyForegroundToDescendants(container, selectedFg);
             }

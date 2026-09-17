@@ -470,6 +470,7 @@ namespace CelesteMusicPlayer
             try
             {
                 UpdateLibraryNavHighlight();
+                ApplyNowPlayingTitleColor();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
@@ -582,24 +583,31 @@ namespace CelesteMusicPlayer
 
         private void ApplyNavVisibilityFromSettings(AppSettingsState settings)
         {
-            if (NavFavoritesButton != null)
+            SetNavEntryVisibility(NavFavoritesButton, settings.ShowNavFavorites);
+            SetNavEntryVisibility(NavRecentButton, settings.ShowNavRecent);
+            SetNavEntryVisibility(NavGenreButton, settings.ShowNavGenre);
+            SetNavEntryVisibility(NavYearButton, settings.ShowNavYear);
+        }
+
+        /// <summary>
+        /// 显示 / 隐藏一个左侧导航条目。
+        /// ⚠️ 必须连外层那个 Grid 一起隐藏，不能只隐藏 Button：
+        /// 每个条目是「Grid 包 [Button + 指示条 Border]」，指示条是常驻元素（Height=16、Opacity=0、Visibility=Visible），
+        /// 只把 Button 设成 Collapsed 的话 Grid 还留着 16px 高 ——
+        /// 用户就看到了「播放队列」和「播放最多」之间凭空多出两格空白（隐藏的流派 + 年份），还把左侧顶出滚动条。
+        /// </summary>
+        private static void SetNavEntryVisibility(FrameworkElement? button, bool visible)
+        {
+            if (button == null)
             {
-                NavFavoritesButton.Visibility = settings.ShowNavFavorites ? Visibility.Visible : Visibility.Collapsed;
+                return;
             }
 
-            if (NavRecentButton != null)
+            Visibility v = visible ? Visibility.Visible : Visibility.Collapsed;
+            button.Visibility = v;
+            if (button.Parent is FrameworkElement entry)
             {
-                NavRecentButton.Visibility = settings.ShowNavRecent ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            if (NavGenreButton != null)
-            {
-                NavGenreButton.Visibility = settings.ShowNavGenre ? Visibility.Visible : Visibility.Collapsed;
-            }
-
-            if (NavYearButton != null)
-            {
-                NavYearButton.Visibility = settings.ShowNavYear ? Visibility.Visible : Visibility.Collapsed;
+                entry.Visibility = v;
             }
         }
 
@@ -968,6 +976,11 @@ namespace CelesteMusicPlayer
 
                 NowPlayingPane.Opacity = 0;
                 NowPlayingPane.Visibility = Visibility.Visible;
+                // 播放页是盖在整个主内容区上的一层透明板：左侧音乐库面板必须让位，
+                // 否则会在播放页底下透出来（用户反馈过）。
+                SetLibraryNavHiddenForNowPlaying(true);
+                StartupLog.Write($"[深度] 展开播放页：mcBack={(mcBack != null)} depthIn={(depthIn != null)} " +
+                                 $"导航面板={LeftCategoryGrid?.Visibility}");
                 DispatcherQueue.TryEnqueue(() => UpdateNowPlayingCardLayout());
                 // 进入播放页时按当前设置套用布局（经典/水面），并重算倒影尺寸
                 ApplyNowPlayingLayout();
@@ -979,13 +992,18 @@ namespace CelesteMusicPlayer
                     mcBack?.Begin();
                     depthIn?.Begin();
                 }
-                catch
+                catch (Exception caught)
                 {
+                    // 以前这里是空 catch：景深动画一旦起不来（比如 TargetName 解析不到），
+                    // 表现就是"播放页底下的左侧分类/分隔线全透出来"，而日志里一个字都没有。
+                    global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs.SetNowPlayingPaneVisible(展开)", caught);
                     NowPlayingPane.Opacity = 1;
                 }
             }
             else
             {
+                // 收起播放页：先把左侧面板放回来，好让"景深恢复"动画把它淡入
+                SetLibraryNavHiddenForNowPlaying(false);
                 try
                 {
                     mcBack?.Stop();
@@ -1002,8 +1020,25 @@ namespace CelesteMusicPlayer
                 }
                 catch
                 {
+                    // 动画起不来时手动把状态摆正：播放页收起 + 主内容区不透明（否则会剩下一片"退后"的暗界面）
+                    try
+                    {
+                        mcRestore?.Stop();
+                        depthOut?.Stop();
+                    }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+
                     NowPlayingPane.Visibility = Visibility.Collapsed;
                     NowPlayingPane.Opacity = 1;
+                    if (LeftCategoryGrid != null)
+                    {
+                        LeftCategoryGrid.Opacity = 1;
+                    }
+
+                    if (LibraryPaneRoot != null)
+                    {
+                        LibraryPaneRoot.Opacity = 1;
+                    }
                 }
             }
         }

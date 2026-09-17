@@ -1891,6 +1891,15 @@ namespace CelesteMusicPlayer
 
         private Brush ResolveNavCapsuleBorderBrush()
         {
+            // 经典界面：Application.Resources 里的这些键取到的是"系统主题"那一份色值，
+            // 与经典模式选的浅色/深色不一定一致（跟随系统时更明显），所以这里直接按经典主题给色。
+            if (FrostedGlass.ClassicMode != null)
+            {
+                return new SolidColorBrush(FrostedGlass.ClassicMode == "Light"
+                    ? Color.FromArgb(28, 0, 0, 0)
+                    : Color.FromArgb(46, 255, 255, 255));
+            }
+
             if (Application.Current.Resources.TryGetValue("ControlStrokeColorDefaultBrush", out object? brushObj)
                 && brushObj is Brush brush)
             {
@@ -1909,6 +1918,14 @@ namespace CelesteMusicPlayer
 
         private Brush ResolveCapsuleFillBrush()
         {
+            // 同上：经典界面下按经典主题给一套明确的中性底色
+            if (FrostedGlass.ClassicMode != null)
+            {
+                return new SolidColorBrush(FrostedGlass.ClassicMode == "Light"
+                    ? Color.FromArgb(16, 0, 0, 0)
+                    : Color.FromArgb(26, 255, 255, 255));
+            }
+
             if (Application.Current.Resources.TryGetValue("SubtleFillColorSecondaryBrush", out object? brushObj)
                 && brushObj is Brush brush)
             {
@@ -1927,6 +1944,15 @@ namespace CelesteMusicPlayer
 
         private Brush CreateMultiSelectFrostBrush()
         {
+            // 经典界面：多选态不给未选中行铺底色。
+            // 原因：原实现用 ResolveUiBaseTintColor() 取基色，浅色主题下几个候选色都"接近白"被跳过，
+            // 最后落到深灰回退色(42,42,42)，于是浅色界面里所有歌曲行都变成一片深色底
+            //（鼠标划过时又被悬停底色顶掉 → 就是你看到的"滑过就消失"）。
+            if (FrostedGlass.ClassicMode != null)
+            {
+                return new SolidColorBrush(Colors.Transparent);
+            }
+
             if (_cachedMultiSelectFrostBrush != null)
             {
                 return _cachedMultiSelectFrostBrush;

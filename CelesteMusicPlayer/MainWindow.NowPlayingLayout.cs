@@ -142,25 +142,8 @@ namespace CelesteMusicPlayer
                     NowPlayingCoverImage.Stretch = Stretch.Uniform;
                 }
 
-                // 标题：水面用主题强调色（AccentTextFillColorPrimaryBrush 由 ThemeColorService 注入），
-                // 经典恢复为标准主文本色。信息块本身不做倒影。
-                if (NowPlayingTitleText != null)
-                {
-                    Brush titleBrush;
-                    if ((water || stage || lyrics || mirror || center) && Application.Current.Resources.TryGetValue("AccentTextFillColorPrimaryBrush", out object? accentObj) && accentObj is Brush ab)
-                    {
-                        titleBrush = ab;
-                    }
-                    else if (Application.Current.Resources.TryGetValue("TextFillColorPrimaryBrush", out object? textObj) && textObj is Brush tb)
-                    {
-                        titleBrush = tb;
-                    }
-                    else
-                    {
-                        titleBrush = NowPlayingTitleText.Foreground ?? new SolidColorBrush(Colors.White);
-                    }
-                    NowPlayingTitleText.Foreground = titleBrush;
-                }
+                // 标题：所有布局统一用主题色（用户要求）
+                ApplyNowPlayingTitleColor();
 
                 // 切换布局时同步播放条样式（水面内嵌 / 经典悬浮）
                 ApplyFloatingBarStyle();
@@ -210,6 +193,27 @@ namespace CelesteMusicPlayer
             catch (Exception caught)
             {
                 StartupLog.WriteException("MainWindow.ApplyNowPlayingLayout", caught);
+            }
+        }
+
+        /// <summary>
+        /// 播放页里的歌曲标题颜色：所有布局统一用主题色（用户要求）。
+        /// ⚠️ 以前经典布局走的是 Application.Resources["TextFillColorPrimaryBrush"] ——
+        /// 主题字典按"应用主题"（而不是界面选定的明暗）解析，经典浅色 + 系统深色时取到白色，
+        /// 于是浅色界面的播放页里标题糊成一片白。别再走主题字典查找。
+        /// </summary>
+        internal void ApplyNowPlayingTitleColor()
+        {
+            try
+            {
+                if (NowPlayingTitleText != null)
+                {
+                    NowPlayingTitleText.Foreground = ResolveAccentBrush();
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.ApplyNowPlayingTitleColor", caught);
             }
         }
 

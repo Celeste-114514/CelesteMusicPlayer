@@ -52,6 +52,9 @@ namespace CelesteMusicPlayer
             AppWindow.Resize(new Windows.Graphics.SizeInt32(520, 520));
             Title = "编辑艺术家头像";
 
+            // 经典界面：窗口内容跟随主程序明暗主题（背景图式下不介入）
+            FrostedGlass.ApplyWindowTheme(this);
+
             CropViewport.Clip = new RectangleGeometry
             {
                 Rect = new Rect(0, 0, ViewSize, ViewSize)

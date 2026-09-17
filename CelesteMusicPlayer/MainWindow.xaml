@@ -42,6 +42,16 @@
             VerticalAlignment="Stretch"
             IsHitTestVisible="False"
             Visibility="Collapsed" />
+        <!-- 自定义背景视频(设置里选,与图片互斥)：循环、静音、无控制条铺满 -->
+        <MediaPlayerElement
+            x:Name="CustomBackgroundVideo"
+            Stretch="UniformToFill"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            AutoPlay="False"
+            IsHitTestVisible="False"
+            AreTransportControlsEnabled="False"
+            Visibility="Collapsed" />
 
         <Grid RowSpacing="0">
         <Grid.RowDefinitions>
@@ -335,303 +345,361 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
                     <TextBlock
+                        x:Name="LibraryNavTitleText"
                         Grid.Column="0"
                         FontSize="12"
                         FontWeight="SemiBold"
                         Opacity="0.7"
                         VerticalAlignment="Center"
                         Text="音乐库" />
-                    <FontIcon
-                        Grid.Column="1"
-                        Margin="6,0,0,0"
-                        FontSize="12"
-                        Opacity="0.7"
-                        VerticalAlignment="Center"
-                        Glyph="&#xE8D6;" />
+                    <!-- 音乐库面板的收起/展开按钮已按用户要求移除：面板固定展开，不再有窄栏图标模式。 -->
                 </Grid>
-                <StackPanel
-                    x:Name="CategoryNavPanel"
+                <!-- 音乐库导航：分类条目集中在一个可滚动面板里，音效 / 标签排序 / 播放列表固定在面板底部
+                     （经典界面下与 Windows 设置同款：圆角灰底 + 左侧一根直竖条主题色指示条，切换带淡入动画）
+                     ⚠️ 每个条目都是「Grid 包一层」：指示条必须画在按钮外面，画在按钮的左边框上会被
+                     圆角裁成一段弧（用户反馈过"竖条是弧形"），别再改回 BorderThickness 方案。 -->
+                <ScrollViewer
+                    x:Name="CategoryNavScroll"
                     Grid.Row="1"
-                    Spacing="2">
-                    <Button
-                        x:Name="NavSongsButton"
-                        Tag="Songs"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE8D6;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="歌曲" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="NavAlbumsButton"
-                        Tag="Albums"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE93C;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="专辑" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="NavArtistsButton"
-                        Tag="Artists"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE77B;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="艺术家" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="NavAlbumArtistsButton"
-                        Tag="AlbumArtists"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE716;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="专辑艺术家" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="NavFavoritesButton"
-                        Tag="Favorites"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xEB51;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="我喜欢的音乐" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="NavRatingsButton"
-                        Tag="Ratings"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE8BF;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="评分" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="NavRecentButton"
-                        Tag="Recent"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE81C;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="最近播放" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="NavPlaylistWallButton"
-                        Tag="UserPlaylist"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="NavPlaylistWallButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon Glyph="&#xE7B3;" FontSize="14" VerticalAlignment="Center" />
-                                <TextBlock Text="播放队列" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="NavGenreButton"
-                        Tag="Genres"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE8EC;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="流派" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="NavYearButton"
-                        Tag="Years"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE787;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="年份" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="NavMostPlayedButton"
-                        Tag="MostPlayed"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE768;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="播放最多" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <Button
-                        x:Name="NavFoldersButton"
-                        Tag="Folders"
-                        Margin="4,2"
-                        Padding="8,10"
-                        FontSize="14"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        CornerRadius="8"
-                        Click="CategoryNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <FontIcon Glyph="&#xE8B7;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="媒体库" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                </StackPanel>
+                    Padding="0"
+                    HorizontalScrollMode="Disabled"
+                    HorizontalScrollBarVisibility="Disabled"
+                    VerticalScrollMode="Auto"
+                    VerticalScrollBarVisibility="Hidden">
+                    <StackPanel
+                        x:Name="CategoryNavPanel"
+                        Spacing="0">
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavSongsButton"
+                                Tag="Songs"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="CategoryNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8D6;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="🎵" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="歌曲" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavSongsIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavAlbumsButton"
+                                Tag="Albums"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="CategoryNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE93C;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="💿" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="专辑" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavAlbumsIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavArtistsButton"
+                                Tag="Artists"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="CategoryNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE77B;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="🎤" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="艺术家" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavArtistsIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavAlbumArtistsButton"
+                                Tag="AlbumArtists"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="CategoryNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE716;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="🎙️" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="专辑艺术家" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavAlbumArtistsIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavFavoritesButton"
+                                Tag="Favorites"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="CategoryNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xEB51;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="❤️" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="我喜欢的音乐" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavFavoritesIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavRatingsButton"
+                                Tag="Ratings"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="CategoryNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8BF;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="⭐" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="评分" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavRatingsIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavRecentButton"
+                                Tag="Recent"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="CategoryNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE81C;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="🕒" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="最近播放" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavRecentIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavPlaylistWallButton"
+                                Tag="UserPlaylist"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="NavPlaylistWallButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE7B3;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="📋" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="播放队列" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavPlaylistWallIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavGenreButton"
+                                Tag="Genres"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="CategoryNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8EC;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="🎼" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="流派" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavGenreIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavYearButton"
+                                Tag="Years"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="CategoryNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE787;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="📅" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="年份" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavYearIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavMostPlayedButton"
+                                Tag="MostPlayed"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="CategoryNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE768;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="🔥" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="播放最多" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavMostPlayedIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavFoldersButton"
+                                Tag="Folders"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="CategoryNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xE8B7;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="📁" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="媒体库" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavFoldersIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                    </StackPanel>
+                </ScrollViewer>
 
+                <!-- 底部工具组：吸在左侧面板下方（用户要求），仅在经典界面显示上方那条分组线 -->
                 <StackPanel
+                    x:Name="NavToolPanel"
                     Grid.Row="2"
-                    Spacing="6"
-                    Margin="4,8,4,4">
-                    <!-- 音效处理：入口占位（后续阶段接入 ECHO 音效页面） -->
-                    <Button
-                        x:Name="NavAudioFxButton"
-                        Tag="AudioFX"
-                        Padding="8,10"
-                        FontSize="14"
-                        Height="40"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Background="Transparent"
-                        BorderThickness="1"
-                        CornerRadius="20"
-                        Click="NavAudioFxButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                            <FontIcon Glyph="&#xE91F;" FontSize="14" VerticalAlignment="Center" />
-                            <TextBlock Text="音效处理" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <!-- 标签排序（三竖图标），与音效处理同级竖排 -->
-                    <Button
-                        x:Name="NavTagSortButton"
-                        Tag="TagSort"
-                        Padding="8,10"
-                        FontSize="14"
-                        Height="40"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Background="Transparent"
-                        BorderThickness="1"
-                        CornerRadius="20"
-                        Click="NavTagSortButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                            <FontIcon
-                                x:Name="NavTagSortIcon"
-                                Glyph="&#xE8CB;"
-                                FontSize="16"
-                                VerticalAlignment="Center" />
-                            <TextBlock Text="标签排序" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <!-- 播放列表，与上面两按钮同级竖排 -->
-                    <Button
-                        x:Name="UserPlaylistNavButton"
-                        Tag="PlaylistWall"
-                        Padding="8,10"
-                        FontSize="14"
-                        Height="40"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Background="Transparent"
-                        BorderThickness="1"
-                        CornerRadius="20"
-                        Click="UserPlaylistNavButton_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <Path
-                                x:Name="UserPlaylistNavIcon"
-                                Width="16"
-                                Height="16"
-                                VerticalAlignment="Center"
-                                Stretch="Uniform"
-                                Fill="Transparent"
-                                Stroke="{ThemeResource TextFillColorPrimaryBrush}"
-                                StrokeThickness="1.4"
-                                Data="M3,3 L7,3 L7,7 L3,7 Z M9,3 L13,3 L13,7 L9,7 Z M3,9 L7,9 L7,13 L3,13 Z M9,9 L13,9 L13,13 L9,13 Z" />
-                            <TextBlock Text="播放列表" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
+                    Margin="0,2,0,0">
+                    <Border
+                        x:Name="LibraryNavInnerDivider"
+                        Height="1"
+                        Margin="10,0,10,3"
+                        Visibility="Collapsed"
+                        Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <Grid Margin="0,0,0,3">
+                        <Button
+                            x:Name="NavAudioFxButton"
+                            Tag="AudioFX"
+                            Padding="8,6"
+                            FontSize="14"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="8"
+                            Click="NavAudioFxButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE91F;" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Tag="NavEmoji" Text="🎚️" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                <TextBlock Tag="NavLabel" Text="音效处理" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="NavAudioFxIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                    </Grid>
+                    <Grid Margin="0,0,0,3">
+                        <Button
+                            x:Name="NavTagSortButton"
+                            Tag="TagSort"
+                            Padding="8,6"
+                            FontSize="14"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="8"
+                            Click="NavTagSortButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon
+                                    x:Name="NavTagSortIcon"
+                                    Glyph="&#xE8CB;"
+                                    FontSize="16"
+                                    VerticalAlignment="Center" />
+                                <TextBlock Tag="NavEmoji" Text="🏷️" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                <TextBlock Tag="NavLabel" Text="标签排序" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="NavTagSortIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                    </Grid>
+                    <Grid Margin="0,0,0,3">
+                        <Button
+                            x:Name="UserPlaylistNavButton"
+                            Tag="PlaylistWall"
+                            Padding="8,6"
+                            FontSize="14"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="8"
+                            Click="UserPlaylistNavButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Path
+                                    x:Name="UserPlaylistNavIcon"
+                                    Width="16"
+                                    Height="16"
+                                    VerticalAlignment="Center"
+                                    Stretch="Uniform"
+                                    Fill="Transparent"
+                                    Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                                    StrokeThickness="1.4"
+                                    Data="M3,3 L7,3 L7,7 L3,7 Z M9,3 L13,3 L13,7 L9,7 Z M3,9 L7,9 L7,13 L3,13 Z M9,9 L13,9 L13,13 L9,13 Z" />
+                                <TextBlock Tag="NavEmoji" Text="📃" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                <TextBlock Tag="NavLabel" Text="播放列表" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="UserPlaylistNavIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                    </Grid>
                 </StackPanel>
             </Grid>
+
+            <!-- 音乐库面板与右侧内容区之间的分隔线已按用户要求移除 -->
 
         <!-- 中：歌曲列表 / 专辑浏览（侧键前进/后退） -->
             <Grid

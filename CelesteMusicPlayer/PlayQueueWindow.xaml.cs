@@ -57,6 +57,9 @@ namespace CelesteMusicPlayer
                 titleBar.ExtendsContentIntoTitleBar = true;
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("PlayQueueWindow.xaml.cs", caught); }
+
+            // 经典界面：标题栏按钮与窗口内容跟随主程序明暗主题（背景图式下不介入）
+            FrostedGlass.ApplyWindowTheme(this);
         }
 
         /// <summary>刷新：高亮当前播放项 + 更新"接下来 N 首"计数。</summary>

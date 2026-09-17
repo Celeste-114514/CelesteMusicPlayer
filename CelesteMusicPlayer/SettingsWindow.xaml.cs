@@ -34,6 +34,11 @@ namespace CelesteMusicPlayer
         /// <summary>AppSettingsStore.Changed 的订阅句柄；窗口关闭时必须解绑（静态事件，不解绑会留住本窗口实例）。</summary>
         private Action? _storeChangedHandler;
         private bool _uiReady;
+        /// <summary>窗口显示后的"延迟加载"是否已跑过（快捷键列表 / 设置回填 / 文件关联状态）。</summary>
+        private bool _deferredInitDone;
+        /// <summary>设备下拉的"代次"：后台枚举返回时若已不是最新一次，就放弃填充，
+        /// 免得用户在枚举期间切换输出模式导致两次填充交错、列表串味。</summary>
+        private int _deviceComboGeneration;
         private bool _loadAsyncIgnore;
         private string? _loadedOutputDeviceId;
         /// <summary>设备下拉用 seed 重填时若 seed 在新模式下未能匹配，置 true；
@@ -136,8 +141,10 @@ namespace CelesteMusicPlayer
 
         public SettingsWindow()
         {
+            var initWatch = Stopwatch.StartNew();
             _loadingUi = true;
             InitializeComponent();
+            long initMs = initWatch.ElapsedMilliseconds;
             WindowIconHelper.Apply(this);
             Title = "选项设置";
             ExtendsContentIntoTitleBar = true;
@@ -160,9 +167,11 @@ namespace CelesteMusicPlayer
             }
 
             InitComboBoxes();
-            ReloadHotkeyList();
-            LoadFromStore();
-            RefreshAssociationStatus();
+
+            // ⚠️ 重活（快捷键列表 / 设置回填 / 音频设备枚举 / 文件关联查询）已挪到窗口显示之后，
+            // 见 RunDeferredInit()。以前这些是同步跑在构造里的，用户点「选项设置」得等它们全做完
+            // 窗口才出现，观感就是"点了没反应、卡一下才弹出来"。
+            StartupLog.Write($"[设置窗口] 构造完成 InitializeComponent={initMs}ms 合计={initWatch.ElapsedMilliseconds}ms");
 
             if (SettingsNav.MenuItems.Count > 0)
             {
@@ -187,8 +196,12 @@ namespace CelesteMusicPlayer
             AppSettingsStore.Changed += _storeChangedHandler;
 
             _uiReady = true;
-            _loadingUi = false;
+            // 仍保持拦截状态：设置还没回填完，这期间的用户操作不能被写回（RunDeferredInit 末尾放开）
+            _loadingUi = true;
             _lastAppliedAccent = ThemeColorService.CurrentAccent;
+
+            // 等窗口真正被激活（第一帧画出来）后再补内容
+            Activated += SettingsWindow_FirstActivated;
 
             Closed += (_, _) =>
             {
@@ -209,13 +222,95 @@ namespace CelesteMusicPlayer
         {
             if (_instance != null)
             {
-                _instance.LoadFromStore();
+                // 先把窗口顶到前台，内容刷新（含音频设备枚举）排到队尾
                 _instance.Activate();
+                _instance.QueueReloadFromStore();
                 return;
             }
 
             _instance = new SettingsWindow();
             _instance.Activate();
+        }
+
+        /// <summary>窗口首次激活后触发一次：把重活排到 UI 队列尾部，让窗口先把第一帧画出来。</summary>
+        private void SettingsWindow_FirstActivated(object sender, Microsoft.UI.Xaml.WindowActivatedEventArgs args)
+        {
+            Activated -= SettingsWindow_FirstActivated;
+            if (!DispatcherQueue.TryEnqueue(
+                    Microsoft.UI.Dispatching.DispatcherQueuePriority.Low,
+                    () => RunDeferredInit()))
+            {
+                RunDeferredInit();
+            }
+        }
+
+        /// <summary>
+        /// 窗口显示之后才做的重活：快捷键列表、设置回填（内部会同步枚举 WASAPI 设备 / ASIO 驱动）、
+        /// 文件关联状态。同步跑在构造函数里会让窗口"卡一下才弹出来"。
+        /// </summary>
+        private void RunDeferredInit()
+        {
+            if (_deferredInitDone)
+            {
+                return;
+            }
+
+            _deferredInitDone = true;
+            var watch = Stopwatch.StartNew();
+            try
+            {
+                _loadingUi = true;
+                ReloadHotkeyList();
+                long t1 = watch.ElapsedMilliseconds;
+                LoadFromStore();
+                long t2 = watch.ElapsedMilliseconds;
+                RefreshAssociationStatus();
+                StartupLog.Write($"[设置窗口] 延迟加载 快捷键={t1}ms 设置回填={t2 - t1}ms 关联={watch.ElapsedMilliseconds - t2}ms 合计={watch.ElapsedMilliseconds}ms");
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.RunDeferredInit", caught);
+            }
+            finally
+            {
+                _loadingUi = false;
+            }
+        }
+
+        /// <summary>窗口已存在时重新打开：内容刷新（含设备枚举）排到队尾，先把窗口激活到前台。</summary>
+        private void QueueReloadFromStore()
+        {
+            void Reload()
+            {
+                if (!_deferredInitDone)
+                {
+                    return; // 首次加载还没跑，它会把设置一起回填，别重复枚举设备
+                }
+
+                var watch = Stopwatch.StartNew();
+                try
+                {
+                    _loadingUi = true;
+                    LoadFromStore();
+                    RefreshAssociationStatus();
+                    StartupLog.Write($"[设置窗口] 重开刷新 {watch.ElapsedMilliseconds}ms");
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.QueueReloadFromStore", caught);
+                }
+                finally
+                {
+                    _loadingUi = false;
+                }
+            }
+
+            // 用默认（Normal）优先级：Low 会被主窗口的后台活（缩略图泵、波形解码等）压住，
+            // 表现为"重开设置窗口后内容半天不刷新"。Normal 排在这些活前面，仍不会挡住窗口激活。
+            if (!DispatcherQueue.TryEnqueue(() => Reload()))
+            {
+                Reload();
+            }
         }
 
         /// <summary>打开设置窗口并定位到「媒体库」板块。</summary>
@@ -433,6 +528,7 @@ namespace CelesteMusicPlayer
                 SetToggle(OpenMiniPlayerSwitch, s.OpenMiniPlayerOnStartup);
 
                 // 外观
+                SelectComboByTag(UiStyleModeCombo, s.UiStyleMode);
                 SetToggle(FrostedGlassSwitch, s.EnableFrostedGlass);
                 SetToggle(ShowSpectrumSwitch, s.ShowSpectrum);
                 SetToggle(ShowAlbumCoverSwitch, s.ShowAlbumCover);
@@ -527,7 +623,7 @@ namespace CelesteMusicPlayer
                 SelectComboByTag(DsdOutputModeCombo, string.IsNullOrWhiteSpace(s.DsdOutputMode) ? "Pcm" : s.DsdOutputMode);
                 UpdateVolumeSettingLockForMode(); // 模式决定设置页音量条是否锁定
                 StartupLog.Write("设置加载 输出模式=" + (s.OutputMode ?? "null") + " 下拉选中=" + (OutputModeCombo?.SelectedItem is ComboBoxItem _m && _m.Tag is string _mt ? _mt : "(null)") + " 设备=" + (s.OutputDeviceId ?? "null"));
-                _loadAsyncIgnore = true;
+                // _loadAsyncIgnore 的置位已挪进 InitOutputDeviceComboAsync（只在填下拉框时短暂拦事件）；
                 _ = InitOutputDeviceComboAsync(s.OutputDeviceId);
 
                 // 快捷键
@@ -679,98 +775,133 @@ namespace CelesteMusicPlayer
         /// <summary>异步枚举输出设备并填充下拉框，默认选中 OutputDeviceId（空=系统默认）。</summary>
         private async System.Threading.Tasks.Task InitOutputDeviceComboAsync(string selectedId)
         {
-            // 异步填充全程置 _loadingUi=true：填清空/重填/选中任何 SelectionChanged 都不触发保存，
-            // 避免把中间态（Shared/空）写回覆盖用户设置；finally 恢复。
+            // ⚠️ 慢活（WASAPI 设备枚举）必须在后台线程跑：本机实测枚举一次要 1.2~1.4 秒
+            //（MMDevice 属性存储逐个读友好名 + 音频服务往返）。以前它是同步跑在 UI 线程上的，
+            // 正是"点选项设置卡一下、窗口才弹出来"的主因。
+            // 而且这里只在真正动下拉框（清空/填项/选中）的那几毫秒里置 _loadingUi=true 拦事件，
+            // 免得刚打开设置窗口的一两秒内用户改设置被吞掉（以前整个枚举期间都在拦）。
+            int generation = ++_deviceComboGeneration;
+            _deviceSeedMatchFail = false; // 本次 seed 重填的匹配结果在下方判定
+            var prevSelection = new HashSet<string>();
+            if (OutputDeviceCombo?.SelectedItem is ComboBoxItem cur && cur.Tag is string cid)
+            {
+                prevSelection.Add(cid);
+            }
+
+            bool asioMode = string.Equals(GetSelectedOutputMode(), "Asio", StringComparison.OrdinalIgnoreCase);
+            _loadedOutputDeviceId = selectedId;
+            if (OutputDeviceCombo == null)
+            {
+                return;
+            }
+
+            if (!asioMode)
+            {
+                // WASAPI：先把设备列表取回来（慢活在后台线程）
+                System.Collections.Generic.IReadOnlyList<(string Id, string Name)> devices;
+                string defaultId;
+                try
+                {
+                    (devices, defaultId) = await System.Threading.Tasks.Task.Run(() =>
+                        (HiFiOutputBackend.EnumerateWasapiDevices(), HiFiOutputBackend.GetDefaultWasapiDeviceId()));
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.InitOutputDeviceComboAsync", caught);
+                    devices = Array.Empty<(string, string)>();
+                    defaultId = string.Empty;
+                }
+
+                if (generation != _deviceComboGeneration)
+                {
+                    return; // 期间又有新的填充请求（用户切了输出模式），本次结果作废
+                }
+
+                // 回到 UI 线程填下拉框（几毫秒的活）
+                _loadingUi = true;
+                try
+                {
+                    StartupLog.Write("输出设备下拉枚举 数量=" + devices.Count + " 默认=" + defaultId + " 已选=" + selectedId);
+                    foreach ((string id, string name) in devices)
+                    {
+                        StartupLog.Write("  设备 id=" + id + " name=" + name);
+                    }
+
+                    OutputDeviceCombo.Items.Clear();
+
+                    // 第一项：系统默认（Tag 为空字符串）
+                    var defaultItem = new ComboBoxItem { Content = "系统默认", Tag = "" };
+                    Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(defaultItem, "跟随 Windows 默认输出设备");
+                    OutputDeviceCombo.Items.Add(defaultItem);
+                    foreach ((string id, string name) in devices)
+                    {
+                        string label = string.Equals(id, defaultId, System.StringComparison.OrdinalIgnoreCase)
+                            ? name + " (默认)"
+                            : name;
+                        OutputDeviceCombo.Items.Add(new ComboBoxItem { Content = label, Tag = id });
+                    }
+
+                    // 选中保存的设备（或系统默认）；若用户已手动选过则保留
+                    string target = string.IsNullOrWhiteSpace(selectedId) ? "" : selectedId;
+                    if (prevSelection.Count > 0 && string.IsNullOrEmpty(target))
+                    {
+                        target = prevSelection.First();
+                    }
+
+                    bool wasapiMatched = SelectRenderDeviceCombo(OutputDeviceCombo, target);
+                    _deviceSeedMatchFail = !wasapiMatched && !string.IsNullOrWhiteSpace(selectedId);
+                }
+                finally
+                {
+                    _loadAsyncIgnore = false; // 无论如何都复位，防止永真拦截用户后续保存
+                    _loadingUi = false;       // 填充完成，恢复可保存
+                }
+
+                return;
+            }
+
+            // ASIO 模式：枚举 ASIO 驱动（驱动名即设备标识），无默认可选时提供“系统默认”占位。
+            // 这条路径保持同步：ASIO 驱动 DLL 交给后台线程加载容易出问题，且只有切到 ASIO 才会走。
             _loadingUi = true;
             try
             {
-                _deviceSeedMatchFail = false; // 本次 seed 重填的匹配结果在下方判定
-                var prevSelection = new HashSet<string>();
-                if (OutputDeviceCombo?.SelectedItem is ComboBoxItem cur && cur.Tag is string cid)
-                {
-                    prevSelection.Add(cid);
-                }
-
-                bool asioMode = string.Equals(GetSelectedOutputMode(), "Asio", StringComparison.OrdinalIgnoreCase);
-                _loadedOutputDeviceId = selectedId;
-                if (OutputDeviceCombo == null)
-                {
-                    return;
-                }
-
                 OutputDeviceCombo.Items.Clear();
-
-                if (asioMode)
+                var drivers = HiFiOutputBackend.EnumerateAsioDrivers();
+                StartupLog.Write("ASIO 驱动下拉枚举 数量=" + drivers.Count + " 已选=" + selectedId);
+                foreach (string drv in drivers)
                 {
-                    // ASIO 模式：枚举 ASIO 驱动（驱动名即设备标识），无默认可选时提供“系统默认”占位
-                    var drivers = HiFiOutputBackend.EnumerateAsioDrivers();
-                    StartupLog.Write("ASIO 驱动下拉枚举 数量=" + drivers.Count + " 已选=" + selectedId);
+                    StartupLog.Write("  ASIO driver=" + drv);
+                }
+
+                if (drivers.Count == 0)
+                {
+                    OutputDeviceCombo.Items.Add(new ComboBoxItem { Content = "（未检测到 ASIO 驱动）", Tag = "" });
+                }
+                else
+                {
                     foreach (string drv in drivers)
                     {
-                        StartupLog.Write("  ASIO driver=" + drv);
+                        OutputDeviceCombo.Items.Add(new ComboBoxItem { Content = drv, Tag = drv });
                     }
-                    if (drivers.Count == 0)
-                    {
-                        OutputDeviceCombo.Items.Add(new ComboBoxItem { Content = "（未检测到 ASIO 驱动）", Tag = "" });
-                    }
-                    else
-                    {
-                        foreach (string drv in drivers)
-                        {
-                            OutputDeviceCombo.Items.Add(new ComboBoxItem { Content = drv, Tag = drv });
-                        }
-                    }
-
-                    // 选中已保存的驱动名；无匹配回落第一个
-                    bool asioMatched = SelectRenderDeviceCombo(OutputDeviceCombo, selectedId);
-                    if (!asioMatched && OutputDeviceCombo.Items.Count > 0)
-                    {
-                        OutputDeviceCombo.SelectedIndex = 0;
-                        _deviceSeedMatchFail = !string.IsNullOrWhiteSpace(selectedId);
-                    }
-                    return;
                 }
 
-                // WASAPI 模式：用 NAudio 枚举渲染设备（与 HiFi 独占输出同源，ID 稳定）
-                var devices = HiFiOutputBackend.EnumerateWasapiDevices();
-                string defaultId = HiFiOutputBackend.GetDefaultWasapiDeviceId();
-                StartupLog.Write("输出设备下拉枚举 数量=" + devices.Count + " 默认=" + defaultId + " 已选=" + selectedId);
-                foreach (var dev in devices)
+                // 选中已保存的驱动名；无匹配回落第一个
+                bool asioMatched = SelectRenderDeviceCombo(OutputDeviceCombo, selectedId);
+                if (!asioMatched && OutputDeviceCombo.Items.Count > 0)
                 {
-                    StartupLog.Write("  设备 id=" + dev.Id + " name=" + dev.Name);
+                    OutputDeviceCombo.SelectedIndex = 0;
+                    _deviceSeedMatchFail = !string.IsNullOrWhiteSpace(selectedId);
                 }
-
-                // 第一项：系统默认（Tag 为空字符串）
-                var defaultItem = new ComboBoxItem { Content = "系统默认", Tag = "" };
-                Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(defaultItem, "跟随 Windows 默认输出设备");
-                OutputDeviceCombo.Items.Add(defaultItem);
-                foreach ((string id, string name) in devices)
-                {
-                    string label = string.Equals(id, defaultId, System.StringComparison.OrdinalIgnoreCase)
-                        ? name + " (默认)"
-                        : name;
-                    OutputDeviceCombo.Items.Add(new ComboBoxItem { Content = label, Tag = id });
-                }
-
-                // 选中保存的设备（或系统默认）；若用户已手动选过则保留
-                string target = string.IsNullOrWhiteSpace(selectedId) ? "" : selectedId;
-                if (prevSelection.Count > 0 && string.IsNullOrEmpty(target))
-                {
-                    target = prevSelection.First();
-                }
-
-                bool wasapiMatched = SelectRenderDeviceCombo(OutputDeviceCombo, target);
-                _deviceSeedMatchFail = !wasapiMatched && !string.IsNullOrWhiteSpace(selectedId);
             }
             finally
             {
-                _loadAsyncIgnore = false; // 无论如何都复位，防止永真拦截用户后续保存
-                _loadingUi = false; // 异步填充完成，恢复可保存
+                _loadAsyncIgnore = false;
+                _loadingUi = false;
             }
         }
 
         /// <summary>输出模式切换：Shared/独占/ASIO 变化时刷新设备下拉列表（WASAPI 设备 ⇄ ASIO 驱动）。</summary>
-        private void OutputModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async void OutputModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loadingUi || !_uiReady)
             {
@@ -793,11 +924,10 @@ namespace CelesteMusicPlayer
                 seedDevice = GetSelectedOutputDeviceId();
             }
 
-            // InitOutputDeviceComboAsync 方法体无 await（同步执行），这里同步完成重填；
-            // 用 try/catch 兜底，避免枚举/UI 异常留下空下拉并在随后持久化时误写空设备。
+            // 设备枚举在后台线程跑（WASAPI 那条约 1 秒），这里 await 不会卡住界面
             try
             {
-                InitOutputDeviceComboAsync(seedDevice).GetAwaiter().GetResult();
+                await InitOutputDeviceComboAsync(seedDevice);
             }
             catch
             {
@@ -986,6 +1116,7 @@ namespace CelesteMusicPlayer
             s.MiniPlayerAlwaysOnTop = MiniAlwaysOnTopSwitch?.IsOn ?? s.MiniPlayerAlwaysOnTop;
             s.OpenMiniPlayerOnStartup = OpenMiniPlayerSwitch?.IsOn ?? s.OpenMiniPlayerOnStartup;
 
+            s.UiStyleMode = GetComboTagString(UiStyleModeCombo, "");
             s.EnableFrostedGlass = FrostedGlassSwitch?.IsOn ?? s.EnableFrostedGlass;
             s.ShowSpectrum = ShowSpectrumSwitch?.IsOn ?? s.ShowSpectrum;
             s.ShowAlbumCover = ShowAlbumCoverSwitch?.IsOn ?? s.ShowAlbumCover;
@@ -1352,6 +1483,13 @@ namespace CelesteMusicPlayer
                 picker.FileTypeFilter.Add(".png");
                 picker.FileTypeFilter.Add(".bmp");
                 picker.FileTypeFilter.Add(".webp");
+                picker.FileTypeFilter.Add(".mp4");
+                picker.FileTypeFilter.Add(".m4v");
+                picker.FileTypeFilter.Add(".mkv");
+                picker.FileTypeFilter.Add(".webm");
+                picker.FileTypeFilter.Add(".mov");
+                picker.FileTypeFilter.Add(".avi");
+                picker.FileTypeFilter.Add(".wmv");
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
                 Windows.Storage.StorageFile file = await picker.PickSingleFileAsync();
                 if (file != null)
@@ -1460,6 +1598,13 @@ namespace CelesteMusicPlayer
         private void AccentSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateAccentColorButton();
+        }
+
+        /// <summary>界面风格（现有/经典浅色/深色/跟随系统）：立即持久化，主窗口订阅后会实时套用。</summary>
+        private void UiStyleModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingUi) return;
+            PersistAllFromUi();
         }
 
         private void ThemePresetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -2003,6 +2148,8 @@ namespace CelesteMusicPlayer
             else
             {
                 SystemBackdrop = null;
+                // 关毛玻璃时窗口不经过 ApplyWindowBackdrop，这里补一次：经典界面下弹窗也要分深浅色
+                FrostedGlass.ApplyWindowTheme(this);
             }
         }
 
