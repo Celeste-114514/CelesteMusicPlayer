@@ -38,12 +38,9 @@
 
 ## 🖥️ 截图
 
-<img width="1386" height="793" alt="QQ20260917-001225" src="https://github.com/user-attachments/assets/89ceb778-2d5d-4521-9656-e5e74ac77238" />
-<img width="1386" height="793" alt="QQ20260917-001125" src="https://github.com/user-attachments/assets/35879753-1ecc-412a-ad34-74db8c6d9bda" />
-<img width="1386" height="793" alt="QQ20260917-001114" src="https://github.com/user-attachments/assets/f871ba50-8153-4c36-84e3-07c6856148d1" />
-<img width="1386" height="793" alt="QQ20260917-001104" src="https://github.com/user-attachments/assets/c72d4fc3-0ddf-40ea-afe0-ac3c44ed7954" />
-
-
+<img width="1386" height="793" alt="QQ20260917-165924" src="https://github.com/user-attachments/assets/a373ad4a-b2f7-43a7-add3-49d6b1354aaf" />
+<img width="1386" height="793" alt="QQ20260917-165955" src="https://github.com/user-attachments/assets/79b428d0-a790-4e1c-82ad-cc9beeb23390" />
+<img width="1386" height="793" alt="QQ20260917-170248" src="https://github.com/user-attachments/assets/edf73c43-240e-4340-afcd-49b8990a40d1" />
 
 
 ## 🛠️ 技术栈
