@@ -1443,6 +1443,11 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 封面框"无框"效果：有封面图时隐藏边框线和底色（视觉无框），无封面时显示框 + 光盘占位图标。
         /// 与专辑墙 x:Bind 的 CoverFrameThickness / CoverFrameBackground 保持一致。
+        ///
+        /// ⚠️ 占位图标必须一起藏起来：图标是「一个圆圈 + 中间一个音符」（E958），
+        /// 正方形封面能把它整个盖住，看不出问题；但**长方形封面**用 Uniform 完整显示时上下有留白，
+        /// 占位图标的圆圈轮廓就从留白处露出来，看起来像给封面"套了一圈"（用户报的播放页歌词布局
+        /// 左上角封面那个圈就是这个）。有封面时一律 Collapsed。
         /// </summary>
         private static void ApplyCoverFrame(Border frame, Image image)
         {
@@ -1460,6 +1465,18 @@ namespace CelesteMusicPlayer
             else if (Application.Current.Resources.TryGetValue("SubtleFillColorSecondaryBrush", out var b) && b is Brush brush)
             {
                 frame.Background = brush;
+            }
+
+            // 藏 / 显封面框里的占位图标（结构：Border → Grid → [FontIcon, Image]）
+            if (frame.Child is Panel panel)
+            {
+                foreach (var child in panel.Children)
+                {
+                    if (child is FontIcon placeholder)
+                    {
+                        placeholder.Visibility = hasCover ? Visibility.Collapsed : Visibility.Visible;
+                    }
+                }
             }
         }
 
@@ -1490,7 +1507,12 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void UpdateTransportNowPlaying(PlaylistItem? item, ImageSource? cover)
+        /// <param name="coverKnown">
+        /// false = 封面还在后台解析中（切歌瞬间先刷标题的那次调用）：
+        /// 此时**保持**播放条上原有的封面与占位图标状态不动，避免「先闪一下光盘占位图、再被真封面盖住」的眨眼感。
+        /// true  = 封面已确定（可能是 null，表示这首歌确实没有内嵌封面），照实刷新并同步占位图标。
+        /// </param>
+        private void UpdateTransportNowPlaying(PlaylistItem? item, ImageSource? cover, bool coverKnown = true)
         {
             if (item == null)
             {
@@ -1513,8 +1535,11 @@ namespace CelesteMusicPlayer
                 string.IsNullOrWhiteSpace(item.FormatInfoLine)
                     ? Visibility.Collapsed
                     : Visibility.Visible;
-            TransportCoverImage.Source = cover;
-            ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
+            if (coverKnown)
+            {
+                TransportCoverImage.Source = cover;
+                ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
+            }
             _miniPlayerWindow?.RefreshFromOwner();
         }
 
@@ -1605,7 +1630,7 @@ namespace CelesteMusicPlayer
 
             NowPlayingTitleText.Text = item.Title;
             UpdateNowPlayingArtistAlbumText(item);
-            UpdateTransportNowPlaying(item, null);
+            UpdateTransportNowPlaying(item, null, coverKnown: false);
             _ = UpdateAudioInfoTextAsync(item.FilePath);
 
             byte[]? coverBytes = await Task.Run(() => ExtractCoverBytes(item.FilePath));

@@ -3,7 +3,7 @@
 
 ; ---------- Metadata ----------
 !define APP_NAME "CelesteMusicPlayer"
-!define APP_VERSION "26.9.17"
+!define APP_VERSION "26.9.17.1"
 !define APP_EXE "CelesteMusicPlayer.exe"
 !define PUBLISH_DIR "C:\Users\admin\source\repos\CelesteMusicPlayer\CelesteMusicPlayer\bin\Release\net9.0-windows10.0.19041.0\win-x64\publish"
 !define APP_GUID "{F0C207C6-BD8C-4D7A-9127-F1B67F17E65B}"
@@ -21,14 +21,30 @@ SetCompressor lzma
 
 ; ---------- Modern UI 2 ----------
 !include "MUI2.nsh"
+!include "LogicLib.nsh"
+!include "FileFunc.nsh"
 !insertmacro MUI_PAGE_WELCOME
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_COMPONENTS
 !insertmacro MUI_PAGE_INSTFILES
-!define MUI_FINISHPAGE_RUN "$INSTDIR\${APP_EXE}"
+; 完成页「立即运行」交给函数控制：正常安装会运行；应用内更新（带 /UPDATE）由更新助手负责重启，避免重复启动。
+!define MUI_FINISHPAGE_RUN_FUNCTION "RunAppIfNotUpdate"
 !define MUI_FINISHPAGE_RUN_TEXT "立即运行 ${APP_NAME}"
 !define MUI_FINISHPAGE_RUN_CHECKED
 !insertmacro MUI_PAGE_FINISH
+
+; 完成页勾选「立即运行」时调用：
+; 正常安装（命令行无 /UPDATE）直接运行主程序；
+; 应用内更新（CelesteUpdater 传入 /UPDATE）由更新助手在装完后负责重启，避免主程序被启动两次。
+; 直接在函数里解析命令行，避免自定义 .onInit 与 MUI 多语言初始化冲突。
+Function RunAppIfNotUpdate
+  ${GetParameters} $R0
+  ${GetOptions} $R0 "/UPDATE" $R1
+  ; ${GetOptions} 找不到 /UPDATE 时会置错误标志；这里「有错误」= 普通安装，应当运行主程序。
+  ${If} ${Errors}
+    ExecShell "open" "$INSTDIR\${APP_EXE}"
+  ${EndIf}
+FunctionEnd
 
 ; ---------- Uninstall pages ----------
 !insertmacro MUI_UNPAGE_CONFIRM

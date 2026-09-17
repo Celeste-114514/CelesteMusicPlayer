@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- WinExe 而非 Exe：更新助手在后台静默运行，不弹控制台窗口 -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>CelesteUpdater</AssemblyName>
+    <RootNamespace>CelesteUpdater</RootNamespace>
+    <AssemblyVersion>26.9.17.1</AssemblyVersion>
+    <FileVersion>26.9.17.1</FileVersion>
+    <!-- 纯进程/文件操作，不需要 WinUI / XAML，构建轻量、稳定 -->
+    <PublishTrimmed>false</PublishTrimmed>
+    <PublishReadyToRun>false</PublishReadyToRun>
+  </PropertyGroup>
+</Project>

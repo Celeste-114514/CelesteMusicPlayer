@@ -553,6 +553,8 @@ namespace CelesteMusicPlayer
                 ShowDurationColCheck.IsChecked = s.ShowPlaylistDuration;
                 SelectComboByTag(PlaylistDensityCombo, s.PlaylistDensity);
                 BackgroundPathTextBox.Text = s.CustomBackgroundPath;
+                SelectBackgroundPresetRadio(s.BackgroundPreset);
+                SetToggle(BackgroundPresetMotionSwitch, s.BackgroundPresetMotion);
                 WaveformProgressSwitch.IsOn = s.ProgressBarStyle == "Waveform";
                 _accentHex = string.IsNullOrWhiteSpace(s.CustomAccentColor) ? "#0078D4" : s.CustomAccentColor;
                 UpdateAccentColorButton();
@@ -1134,6 +1136,8 @@ namespace CelesteMusicPlayer
             s.CustomAccentColor = string.IsNullOrWhiteSpace(_accentHex) ? "#0078D4" : _accentHex;
             s.ProgressBarStyle = WaveformProgressSwitch.IsOn ? "Waveform" : "Gradient";
             s.CustomBackgroundPath = BackgroundPathTextBox?.Text?.Trim() ?? string.Empty;
+            s.BackgroundPreset = GetBackgroundPresetTag();
+            s.BackgroundPresetMotion = BackgroundPresetMotionSwitch?.IsOn ?? true;
             s.ThemePreset = GetComboTagString(ThemePresetCombo, "");
             s.NowPlayingLayout = GetComboTagString(NowPlayingLayoutCombo, "Classic");
             s.ShowPlaylistTitle = ShowTitleColCheck.IsChecked ?? true;
@@ -1428,6 +1432,12 @@ namespace CelesteMusicPlayer
         private void SettingToggle_Toggled(object sender, RoutedEventArgs e)
         {
             PersistAllFromUi();
+
+            // 「预设背景缓慢移动」需要当场起停动画，其它开关不用打扰背景
+            if (ReferenceEquals(sender, BackgroundPresetMotionSwitch))
+            {
+                MainWindow.Instance?.RefreshBackgroundMotion();
+            }
         }
 
         private void OnThemeColorChangedSettings(Windows.UI.Color accent)
@@ -1504,7 +1514,38 @@ namespace CelesteMusicPlayer
         private void ClearBackgroundButton_Click(object sender, RoutedEventArgs e)
         {
             BackgroundPathTextBox.Text = string.Empty;
+            SelectBackgroundPresetRadio(string.Empty);
             PersistAllFromUi();
+        }
+
+        private void BackgroundPresetRadio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_loadingUi || sender is not RadioButton rb || !rb.IsChecked.GetValueOrDefault())
+            {
+                return;
+            }
+
+            string tag = rb.Tag as string ?? string.Empty;
+            AppSettingsStore.Update(s => s.BackgroundPreset = tag);
+            // 通知主窗口立即应用新背景（设置窗口开着时也能看到效果）。
+            // 选「无」时要把自定义路径交回去，否则会把用户已设的图片/视频也一起清掉。
+            MainWindow.Instance?.ApplyCustomBackground(AppSettingsStore.Load().CustomBackgroundPath);
+        }
+
+        private void SelectBackgroundPresetRadio(string preset)
+        {
+            BackgroundPresetNoneRadio.IsChecked = string.IsNullOrWhiteSpace(preset);
+            BackgroundPresetAuroraRadio.IsChecked = preset == BackgroundPresetGenerator.PresetAurora;
+            BackgroundPresetSunsetRadio.IsChecked = preset == BackgroundPresetGenerator.PresetSunset;
+            BackgroundPresetMidnightRadio.IsChecked = preset == BackgroundPresetGenerator.PresetMidnight;
+        }
+
+        private string GetBackgroundPresetTag()
+        {
+            if (BackgroundPresetAuroraRadio?.IsChecked == true) return BackgroundPresetGenerator.PresetAurora;
+            if (BackgroundPresetSunsetRadio?.IsChecked == true) return BackgroundPresetGenerator.PresetSunset;
+            if (BackgroundPresetMidnightRadio?.IsChecked == true) return BackgroundPresetGenerator.PresetMidnight;
+            return string.Empty;
         }
 
         private void ApplySettingsButton_Click(object sender, RoutedEventArgs e)

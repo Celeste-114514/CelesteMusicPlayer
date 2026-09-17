@@ -4,8 +4,13 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using Microsoft.UI;
+using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Windows.Graphics;
+using Windows.UI;
+using Color = Windows.UI.Color;
 
 namespace CelesteMusicPlayer
 {
@@ -32,10 +37,52 @@ namespace CelesteMusicPlayer
         public ReplayGainScanWindow(MainWindow owner, Func<ReplayGainScanScope, List<RgScanInput>> provider)
         {
             InitializeComponent();
+            WindowIconHelper.Apply(this);
             _provider = provider;
 
-            // 经典界面：窗口内容跟随主程序明暗主题（背景图式下不介入）
-            FrostedGlass.ApplyWindowTheme(this);
+            Title = "ReplayGain 扫描";
+            ExtendsContentIntoTitleBar = true;
+            SetTitleBar(AppTitleBar);
+            AppWindow.Resize(new SizeInt32(720, 700));
+
+            ConfigureTitleBarButtons();
+            ApplyBackdropFromSettings();
+        }
+
+        private void ConfigureTitleBarButtons()
+        {
+            if (!AppWindowTitleBar.IsCustomizationSupported())
+            {
+                return;
+            }
+
+            AppWindowTitleBar titleBar = AppWindow.TitleBar;
+            titleBar.ButtonBackgroundColor = Colors.Transparent;
+            titleBar.ButtonInactiveBackgroundColor = Colors.Transparent;
+            titleBar.ButtonHoverBackgroundColor = Color.FromArgb(36, 255, 255, 255);
+            titleBar.ButtonPressedBackgroundColor = Color.FromArgb(60, 255, 255, 255);
+            titleBar.ButtonForegroundColor = Color.FromArgb(255, 220, 220, 220);
+            titleBar.ButtonInactiveForegroundColor = Color.FromArgb(255, 140, 140, 140);
+            titleBar.ButtonHoverForegroundColor = Colors.White;
+            titleBar.ButtonPressedForegroundColor = Colors.White;
+        }
+
+        /// <summary>
+        /// 与其他弹窗一致：开毛玻璃用桌面亚克力背景，关毛玻璃则显式补明暗主题，
+        /// 避免根面板透明却没 backdrop 时露出系统黑底。
+        /// </summary>
+        private void ApplyBackdropFromSettings()
+        {
+            AppSettingsState s = AppSettingsStore.Load();
+            if (s.EnableFrostedGlass)
+            {
+                FrostedGlass.ApplyWindowBackdrop(this);
+            }
+            else
+            {
+                SystemBackdrop = null;
+                FrostedGlass.ApplyWindowTheme(this);
+            }
         }
 
         private async void StartButton_Click(object sender, RoutedEventArgs e)

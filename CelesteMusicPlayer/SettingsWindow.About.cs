@@ -1,5 +1,6 @@
 using System;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Reflection;
@@ -247,6 +248,98 @@ namespace CelesteMusicPlayer
             {
                 AboutDownloadUpdateButton.IsEnabled = true;
                 AboutCheckUpdateButton.IsEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// 用独立的「更新助手」(CelesteUpdater.exe) 完成更新。
+        /// 做法（参考 DeskBox 的更新链路）：先把 CelesteUpdater.* 复制到临时目录
+        /// （避免被 NSIS 覆盖安装时锁住助手自身），再以脱离主程序的方式启动它，
+        /// 由它负责：等主程序退出 → 跑安装包 → 装完自动重启主程序。
+        /// 返回 true 表示已成功拉起更新助手（主程序随后应立即退出让位）。
+        /// 若本机没有 CelesteUpdater.exe（旧版安装），返回 false 交由 LaunchInstallerWithCleanup 兜底。
+        /// </summary>
+        private static bool LaunchInstallerViaUpdater(string installerPath, string tmpDir)
+        {
+            string baseDir = AppContext.BaseDirectory;
+            string helperExe = Path.Combine(baseDir, "CelesteUpdater.exe");
+            if (!File.Exists(helperExe))
+            {
+                return false;
+            }
+
+            // 重启时要拉起的主程序路径：优先取当前运行中的进程路径，否则退回安装目录里的 exe。
+            string? appPath = Environment.ProcessPath;
+            if (string.IsNullOrWhiteSpace(appPath) || !File.Exists(appPath))
+            {
+                appPath = Path.Combine(baseDir, "CelesteMusicPlayer.exe");
+            }
+
+            // 把更新助手复制到临时目录（脱离安装目录），避免 NSIS 覆盖安装时锁住它。
+            string helperDir = PrepareDetachedUpdaterHelper(baseDir);
+            if (string.IsNullOrWhiteSpace(helperDir) ||
+                !File.Exists(Path.Combine(helperDir, "CelesteUpdater.exe")))
+            {
+                return false;
+            }
+
+            string helperPath = Path.Combine(helperDir, "CelesteUpdater.exe");
+            try
+            {
+                var psi = new ProcessStartInfo
+                {
+                    FileName = helperPath,
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    WorkingDirectory = helperDir
+                };
+                psi.ArgumentList.Add("--pid");
+                psi.ArgumentList.Add(Environment.ProcessId.ToString(CultureInfo.InvariantCulture));
+                psi.ArgumentList.Add("--installer");
+                psi.ArgumentList.Add(installerPath);
+                psi.ArgumentList.Add("--app");
+                psi.ArgumentList.Add(appPath);
+                psi.ArgumentList.Add("--update");
+                Process.Start(psi);
+                return true;
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("SettingsWindow.About.LaunchUpdater", caught);
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 把 CelesteUpdater.*（exe/dll/deps/runtimeconfig/pdb）复制到
+        /// %LOCALAPPDATA%\CelesteMusicPlayer\update-helper\&lt;时间戳&gt;-&lt;pid&gt; 目录，
+        /// 返回该目录路径；失败返回空字符串。每次更新用独立目录，旧的在下一次更新时被清理。
+        /// </summary>
+        private static string PrepareDetachedUpdaterHelper(string appDirectory)
+        {
+            try
+            {
+                string helperRoot = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "CelesteMusicPlayer",
+                    "update-helper");
+                string helperDir = Path.Combine(
+                    helperRoot,
+                    $"{DateTimeOffset.UtcNow:yyyyMMddHHmmss}-{Environment.ProcessId.ToString(CultureInfo.InvariantCulture)}");
+                Directory.CreateDirectory(helperDir);
+
+                foreach (var sourcePath in Directory.EnumerateFiles(appDirectory, "CelesteUpdater.*", SearchOption.TopDirectoryOnly))
+                {
+                    string targetPath = Path.Combine(helperDir, Path.GetFileName(sourcePath));
+                    File.Copy(sourcePath, targetPath, overwrite: true);
+                }
+
+                return helperDir;
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("SettingsWindow.About.PrepareUpdater", caught);
+                return string.Empty;
             }
         }
 

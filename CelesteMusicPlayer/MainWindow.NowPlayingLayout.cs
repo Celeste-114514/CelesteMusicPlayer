@@ -127,14 +127,23 @@ namespace CelesteMusicPlayer
                 }
 
                 // 「水面」布局的封面：完整正方形、无圆角。
+                // 「歌词」布局的封面：左上角的一枚小封面，必须老老实实是个方图 ——
+                // 之前沿用圆角 10 + 1px 边框，长方形封面在小尺寸下会被看成"套了个圈"，用户明确说难看。
+                // 现在歌词布局：圆角 0、边框 0、底色透明，只有图本身。
                 // Stretch=Uniform 完整显示（长方形封面不裁切、居中、上下或左右留白透明）——
                 // 用户要求长方形封面也要显示完整；倒影生成端用同一规则取"实际显示区域"的底边镜像，
                 // 并按留白量把倒影上移贴住封面底边（见 UpdateNowPlayingReflectionGeometry）。
                 // 水面布局去掉 1px 边框：避免可见图片被内缩 1px 造成倒影相对封面偏移。
                 if (NowPlayingCoverBorder != null)
                 {
-                    NowPlayingCoverBorder.CornerRadius = water ? new CornerRadius(0) : new CornerRadius(10);
-                    NowPlayingCoverBorder.BorderThickness = water ? new Thickness(0) : new Thickness(1);
+                    NowPlayingCoverBorder.CornerRadius = _layoutIsLyrics
+                        ? new CornerRadius(0)
+                        : water
+                            ? new CornerRadius(0)
+                            : new CornerRadius(10);
+                    NowPlayingCoverBorder.BorderThickness = water || _layoutIsLyrics
+                        ? new Thickness(0)
+                        : new Thickness(1);
                 }
 
                 if (NowPlayingCoverImage != null)

@@ -2064,9 +2064,10 @@ namespace CelesteMusicPlayer
 
         private void ExitApplication()
         {
-            AppSettingsStore.MarkAppCleanExit();
-            PersistPlaybackSession();
+            // 先标记允许关闭，避免任何 Closing 处理器再弹“最小化到托盘还是退出”的对话框
             _allowClose = true;
+
+            // 立刻销毁托盘/任务栏图标：用户一点“退出”，图标马上消失
             try
             {
                 _trayIcon?.Dispose();
@@ -2081,9 +2082,15 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
-            Close();
-            // 托盘/子窗口等引用可能阻止进程退出,必须显式结束进程
-            Application.Current.Exit();
+            // 持久化关键状态（干净退出标记 / 续播进度），失败也不影响退出
+            try { AppSettingsStore.MarkAppCleanExit(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            try { PersistPlaybackSession(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+
+            // 直接、强制结束进程。不调用 Close()/Application.Current.Exit()，
+            // 因为它们在 WinUI3 里可能卡在窗口拆除或资源释放上几秒，导致
+            // “托盘图标已没、主程序却还停好几秒”。Environment.Exit(0) 是进程级强杀，
+            // 立即终止所有线程与窗口，干净利落。
+            Environment.Exit(0);
         }
 
 

@@ -79,6 +79,7 @@ namespace CelesteMusicPlayer
         public OnlineSearchWindow()
         {
             InitializeComponent();
+            WindowIconHelper.Apply(this);
             Title = "在线搜索";
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);

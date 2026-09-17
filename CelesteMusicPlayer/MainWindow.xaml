@@ -187,7 +187,7 @@
                     Background="Transparent"
                     BorderThickness="0"
                     Click="SelectLocalAudioButton_Click"
-                    ToolTipService.ToolTip="选择本地音频">
+                    ToolTipService.ToolTip="选项">
                     <FontIcon Glyph="&#xE700;" FontSize="16" />
                 </Button>
                 <Button

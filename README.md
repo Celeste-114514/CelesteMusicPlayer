@@ -73,6 +73,15 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 
 ## 📝 更新日志
 
+### v26.9.17.1（2026-09-17）
+- ✨ 新增功能
+  - 🔄 **独立更新助手 `CelesteUpdater`**：应用内「下载更新」完成后，由它负责「等主程序退出 → 跑安装包 → 自动重启主程序」，全程无需手动找安装包路径（程序内更新闭环完善）；安装脚本新增 `/UPDATE` 参数，更新场景下不再重复启动主程序
+  - 🎨 **背景预设生成**（`BackgroundPresetGenerator` + `UiTheme` 大幅打磨）：主题/背景预设（极光 / 日落 / 午夜等）
+- 🔊 改进
+  - 🎚️ ReplayGain 扫描窗口与扫描器改进
+- ⚙️ 调整
+  - 设置页（关于/更新、背景预设）UI 调整；播放相关（`Playback3` / `NowPlayingLayout` / `Misc`）小幅打磨
+
 ### v26.9.17（2026-09-17）
 - ✨ 视觉与界面
   - 🪟 **新增毛玻璃 / 模糊视觉特效**（`FrostedGlass`）

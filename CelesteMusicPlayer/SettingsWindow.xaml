@@ -751,8 +751,8 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="主窗口背景（图片/视频）" />
-                                <TextBlock Opacity="0.6" FontSize="11" Text="选择图片或视频作主窗口背景；视频循环静音播放，模糊仅对图片生效；留空则用专辑封面背景" />
+                                <TextBlock Text="主窗口背景（图片/视频/预设）" />
+                                <TextBlock Opacity="0.6" FontSize="11" Text="下方预设优先；选「无」时用这里填的图片或视频；都为空则用专辑封面背景。视频循环静音播放，模糊仅对图片生效" />
                             </StackPanel>
                             <TextBox
                                 x:Name="BackgroundPathTextBox"
@@ -764,6 +764,62 @@
                                 <Button Content="浏览…" Click="BrowseBackgroundButton_Click" />
                                 <Button Content="清除" Click="ClearBackgroundButton_Click" />
                             </StackPanel>
+                        </Grid>
+
+                        <Grid ColumnSpacing="16" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Grid.Column="0"
+                                VerticalAlignment="Center"
+                                Text="背景预设" />
+                            <StackPanel
+                                Grid.Column="1"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <RadioButton
+                                    x:Name="BackgroundPresetNoneRadio"
+                                    Content="无"
+                                    Tag=""
+                                    GroupName="BackgroundPresetGroup"
+                                    Checked="BackgroundPresetRadio_Checked" />
+                                <RadioButton
+                                    x:Name="BackgroundPresetAuroraRadio"
+                                    Content="极光"
+                                    Tag="Aurora"
+                                    GroupName="BackgroundPresetGroup"
+                                    Checked="BackgroundPresetRadio_Checked" />
+                                <RadioButton
+                                    x:Name="BackgroundPresetSunsetRadio"
+                                    Content="日落"
+                                    Tag="Sunset"
+                                    GroupName="BackgroundPresetGroup"
+                                    Checked="BackgroundPresetRadio_Checked" />
+                                <RadioButton
+                                    x:Name="BackgroundPresetMidnightRadio"
+                                    Content="深夜"
+                                    Tag="Midnight"
+                                    GroupName="BackgroundPresetGroup"
+                                    Checked="BackgroundPresetRadio_Checked" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid ColumnSpacing="16" Margin="0,8,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="预设背景缓慢移动" />
+                                <TextBlock Opacity="0.6" FontSize="11" Text="给静态预设加极轻微的缩放/漂移，观感接近动态背景，但不占体积、无版权问题；仅对上面的预设生效" />
+                            </StackPanel>
+                            <ToggleSwitch
+                                x:Name="BackgroundPresetMotionSwitch"
+                                Grid.Column="1"
+                                VerticalAlignment="Center"
+                                Toggled="SettingToggle_Toggled" />
                         </Grid>
 
                         <Grid ColumnSpacing="16" Margin="0,12,0,0">

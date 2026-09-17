@@ -8,9 +8,9 @@
     <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>CelesteMusicPlayer</RootNamespace>
-    <Version>26.9.17</Version>
-    <AssemblyVersion>26.9.17</AssemblyVersion>
-    <FileVersion>26.9.17</FileVersion>
+    <Version>26.9.17.1</Version>
+    <AssemblyVersion>26.9.17.1</AssemblyVersion>
+    <FileVersion>26.9.17.1</FileVersion>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
     <Platforms>x86;x64;ARM64</Platforms>
@@ -72,6 +72,15 @@
   <!-- 允许 EQ 声道隔离回归测试工程访问 internal 类型 -->
   <ItemGroup>
     <InternalsVisibleTo Include="EqRegression" />
+  </ItemGroup>
+
+  <!--
+    独立更新助手 CelesteUpdater：随主程序一起发布到 publish 目录（NSIS 用 File /r 整目录打包带走）。
+    应用内「下载更新」完成后会把 CelesteUpdater.* 复制到临时目录再启动它，
+    由它等主程序退出 → 跑安装包 → 自动重启主程序，用户全程无需手动找安装包路径。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\CelesteUpdater\CelesteUpdater.csproj" />
   </ItemGroup>
 
   <!--

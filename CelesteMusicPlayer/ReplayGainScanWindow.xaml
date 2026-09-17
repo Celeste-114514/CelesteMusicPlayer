@@ -12,8 +12,10 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- 标题栏 -->
         <Grid
             x:Name="AppTitleBar"
             Height="48"
@@ -29,41 +31,104 @@
             </StackPanel>
         </Grid>
 
-        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
-            <StackPanel Padding="16" Spacing="12">
-                <TextBlock TextWrapping="Wrap" Foreground="{ThemeResource SystemBaseMediumColor}">
-                    计算每首曲目的响度（ReplayGain 2.0 / EBU R128），把增益与峰值写回标签。
-                    播放端开启 ReplayGain（单曲/专辑）后即自动统一整库响度。仅写入标签，不改动音频数据。
-                </TextBlock>
+        <!-- 内容 -->
+        <ScrollViewer
+            Grid.Row="1"
+            Padding="24,8,24,12"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="16" MaxWidth="720" HorizontalAlignment="Stretch">
 
-                <StackPanel Spacing="4">
-                    <TextBlock Text="扫描范围" FontWeight="SemiBold" />
-                    <RadioButtons x:Name="ScopeRadio">
-                        <RadioButton x:Name="ScopeLibrary" Content="整库" Tag="Library" IsChecked="True" />
-                        <RadioButton x:Name="ScopePlaylist" Content="当前播放列表" Tag="Playlist" />
-                        <RadioButton x:Name="ScopeSelection" Content="选中曲目" Tag="Selection" />
-                    </RadioButtons>
-                </StackPanel>
+                <!-- 说明 -->
+                <Border
+                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                    <StackPanel Spacing="6">
+                        <TextBlock Text="关于 ReplayGain" FontWeight="SemiBold" />
+                        <TextBlock
+                            FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords"
+                            Text="计算每首曲目的响度（ReplayGain 2.0 / EBU R128），把增益与峰值写回标签。播放端开启 ReplayGain（单曲/专辑）后即自动统一整库响度。仅写入标签，不改动音频数据。" />
+                    </StackPanel>
+                </Border>
 
-                <CheckBox x:Name="WriteTagsBox" Content="写入标签（不勾则仅预览计算结果）" IsChecked="True" />
+                <!-- 扫描范围 -->
+                <Border
+                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="扫描范围" FontWeight="SemiBold" />
+                        <RadioButtons x:Name="ScopeRadio">
+                            <RadioButton x:Name="ScopeLibrary" Content="整库" Tag="Library" IsChecked="True" />
+                            <RadioButton x:Name="ScopePlaylist" Content="当前播放列表" Tag="Playlist" />
+                            <RadioButton x:Name="ScopeSelection" Content="选中曲目" Tag="Selection" />
+                        </RadioButtons>
+                    </StackPanel>
+                </Border>
 
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <Button x:Name="StartButton" Content="开始扫描" Click="StartButton_Click" />
-                    <Button x:Name="CancelButton" Content="取消" IsEnabled="False" Click="CancelButton_Click" />
-                </StackPanel>
+                <!-- 选项 -->
+                <Border
+                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="选项" FontWeight="SemiBold" />
+                        <CheckBox x:Name="WriteTagsBox" Content="写入标签（不勾则仅预览计算结果）" IsChecked="True" />
+                    </StackPanel>
+                </Border>
 
-                <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="1" Value="0" />
-                <TextBlock x:Name="StatusText" Text="就绪" Foreground="{ThemeResource SystemBaseMediumColor}" />
+                <!-- 进度 -->
+                <Border
+                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="进度" FontWeight="SemiBold" />
+                        <ProgressBar x:Name="ProgressBar" Minimum="0" Maximum="1" Value="0" />
+                        <TextBlock x:Name="StatusText" Text="就绪" Foreground="{ThemeResource SystemBaseMediumColor}" />
+                    </StackPanel>
+                </Border>
 
-                <TextBox
-                    x:Name="LogBox"
-                    IsReadOnly="True"
-                    AcceptsReturn="True"
-                    TextWrapping="Wrap"
-                    FontFamily="Consolas"
-                    Height="220"
-                    ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                <!-- 日志 -->
+                <Border
+                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="8"
+                    Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="日志" FontWeight="SemiBold" />
+                        <TextBox
+                            x:Name="LogBox"
+                            IsReadOnly="True"
+                            AcceptsReturn="True"
+                            TextWrapping="Wrap"
+                            FontFamily="Consolas"
+                            Height="220"
+                            ScrollViewer.VerticalScrollBarVisibility="Auto" />
+                    </StackPanel>
+                </Border>
+
             </StackPanel>
         </ScrollViewer>
+
+        <!-- 底部动作 -->
+        <StackPanel
+            Grid.Row="2"
+            Orientation="Horizontal"
+            HorizontalAlignment="Right"
+            Spacing="8"
+            Margin="24,12,24,20">
+            <Button x:Name="StartButton" Content="开始扫描" Style="{StaticResource AccentButtonStyle}" Click="StartButton_Click" />
+            <Button x:Name="CancelButton" Content="取消" IsEnabled="False" Click="CancelButton_Click" />
+        </StackPanel>
     </Grid>
 </Window>

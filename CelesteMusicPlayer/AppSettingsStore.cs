@@ -196,6 +196,13 @@ namespace CelesteMusicPlayer
         public string CustomAccentColor { get; set; } = "#0078D4";
         public string ProgressBarStyle { get; set; } = "Gradient"; // Gradient / Waveform / Spotify / AppleLine
         public string CustomBackgroundPath { get; set; } = string.Empty;
+
+        /// <summary>内置背景预设名：Aurora / Sunset / Midnight；空字符串表示不使用预设（走 CustomBackgroundPath）。</summary>
+        public string BackgroundPreset { get; set; } = string.Empty;
+
+        /// <summary>预设背景是否做「缓慢移动」（极其轻微的缩放/平移，用来替代体积大又有版权风险的视频背景）。</summary>
+        public bool BackgroundPresetMotion { get; set; } = true;
+
         public string ThemePreset { get; set; } = string.Empty;
 
         /// <summary>主程序界面风格："" = 现有（背景图式，默认）；ClassicSystem / ClassicLight / ClassicDark = 经典不透明界面。</summary>
@@ -625,6 +632,8 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             _ => "Gradient"
         },
         CustomBackgroundPath = s.CustomBackgroundPath?.Trim() ?? string.Empty,
+        BackgroundPreset = s.BackgroundPreset?.Trim() ?? string.Empty,
+        BackgroundPresetMotion = s.BackgroundPresetMotion,
         ThemePreset = s.ThemePreset?.Trim() ?? string.Empty,
         UiStyleMode = s.UiStyleMode?.Trim() ?? string.Empty,
         PlaylistDensity = s.PlaylistDensity is "Compact" or "Comfortable" ? s.PlaylistDensity : "Comfortable",

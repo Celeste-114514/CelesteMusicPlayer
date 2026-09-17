@@ -58,6 +58,7 @@ namespace CelesteMusicPlayer
         {
             _owner = owner;
             InitializeComponent();
+            WindowIconHelper.Apply(this);
             Title = "重复文件检测";
             ExtendsContentIntoTitleBar = true;
             SetTitleBar(AppTitleBar);

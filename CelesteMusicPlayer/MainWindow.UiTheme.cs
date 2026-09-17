@@ -432,6 +432,7 @@ namespace CelesteMusicPlayer
                     }
 
                     StopCustomBackgroundVideo();
+                    StopBackgroundMotion();
 
                     // 侧栏分类图标：经典界面专属的彩色 emoji 图标 + 分组线
                     ApplyClassicNavIconColors(classic: true);
@@ -1110,6 +1111,7 @@ namespace CelesteMusicPlayer
             // 背景视频播放器：关窗即释放解码资源
             try
             {
+                StopBackgroundMotion();
                 _backgroundVideoPlayer?.Dispose();
                 _backgroundVideoPlayer = null;
             }
@@ -1548,9 +1550,122 @@ namespace CelesteMusicPlayer
             }
         }
 
+        // =====================================================================
+        // 预设背景的「缓慢移动」：用极轻微的缩放 + 平移让静态图活起来，
+        // 用来替代体积大、还可能踩版权的视频背景。由合成线程驱动，几乎不吃 CPU。
+        // =====================================================================
+
+        private Microsoft.UI.Xaml.Media.Animation.Storyboard? _backgroundMotionStoryboard;
+        private CompositeTransform? _backgroundMotionTransform;
+
+        /// <summary>按设置决定是否给当前背景加/去缓慢移动（仅对内置预设生效）。</summary>
+        internal void RefreshBackgroundMotion()
+        {
+            try
+            {
+                AppSettingsState settings = AppSettingsStore.Load();
+                bool want = BackgroundPresetGenerator.IsKnownPreset(settings.BackgroundPreset)
+                            && settings.BackgroundPresetMotion
+                            && !IsClassicUiStyleActive();
+                ApplyBackgroundMotion(want);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.RefreshBackgroundMotion", caught);
+            }
+        }
+
+        private void ApplyBackgroundMotion(bool enable)
+        {
+            StopBackgroundMotion();
+            if (!enable || CustomBackgroundImage == null)
+            {
+                return;
+            }
+
+            try
+            {
+                var transform = new CompositeTransform { CenterX = 0, CenterY = 0 };
+                CustomBackgroundImage.RenderTransformOrigin = new Windows.Foundation.Point(0.5, 0.5);
+                CustomBackgroundImage.RenderTransform = transform;
+                _backgroundMotionTransform = transform;
+
+                var storyboard = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+
+                // 24 秒一个来回：缓慢放大到 1.06，同时轻微左右漂移，反向后回到原处。
+                AddMotion(storyboard, transform, "ScaleX", 1.0, 1.06, 24);
+                AddMotion(storyboard, transform, "ScaleY", 1.0, 1.06, 24);
+                AddMotion(storyboard, transform, "TranslateX", -14, 14, 31);
+                AddMotion(storyboard, transform, "TranslateY", -8, 8, 41);
+
+                _backgroundMotionStoryboard = storyboard;
+                storyboard.Begin();
+                StartupLog.Write("背景预设：已启用缓慢移动");
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ApplyBackgroundMotion", caught);
+                StopBackgroundMotion();
+            }
+        }
+
+        private static void AddMotion(
+            Microsoft.UI.Xaml.Media.Animation.Storyboard storyboard,
+            CompositeTransform transform,
+            string property,
+            double from,
+            double to,
+            double seconds)
+        {
+            var animation = new Microsoft.UI.Xaml.Media.Animation.DoubleAnimation
+            {
+                From = from,
+                To = to,
+                Duration = new Duration(TimeSpan.FromSeconds(seconds)),
+                AutoReverse = true,
+                RepeatBehavior = Microsoft.UI.Xaml.Media.Animation.RepeatBehavior.Forever,
+                EnableDependentAnimation = false,
+                EasingFunction = new Microsoft.UI.Xaml.Media.Animation.SineEase
+                {
+                    EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseInOut
+                }
+            };
+
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(animation, transform);
+            Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(
+                animation, "CompositeTransform." + property);
+            storyboard.Children.Add(animation);
+        }
+
+        private void StopBackgroundMotion()
+        {
+            try
+            {
+                _backgroundMotionStoryboard?.Stop();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.StopBackgroundMotion", caught);
+            }
+
+            _backgroundMotionStoryboard = null;
+            _backgroundMotionTransform = null;
+
+            try
+            {
+                if (CustomBackgroundImage != null)
+                {
+                    CustomBackgroundImage.RenderTransform = null;
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.StopBackgroundMotion", caught);
+            }
+        }
+
         // —— 视频背景「最小化暂停」：最小化时暂停解码省电，还原后继续 ——
         private bool _backgroundVideoPausedByMinimize;
-
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         private static extern bool IsIconic(IntPtr hWnd);
 
@@ -1645,9 +1760,19 @@ namespace CelesteMusicPlayer
             ClearAlbumArtBackground();
         }
 
-        private void ApplyCustomBackground(string? path)
+        /// <summary>套用主窗口背景（内置预设优先；否则用传入的自定义图片/视频路径）。</summary>
+        internal void ApplyCustomBackground(string? path)
         {
             int request = ++_customBackgroundRequest;
+
+            // 内置预设优先级高于自定义路径：选中预设时走生成器，避免空路径/不存在路径回退到封面背景。
+            string preset = AppSettingsStore.Load().BackgroundPreset;
+            if (BackgroundPresetGenerator.IsKnownPreset(preset))
+            {
+                _ = ApplyCustomBackgroundPresetAsync(preset, request);
+                return;
+            }
+
             _ = ApplyCustomBackgroundAsync(path, request);
         }
 
@@ -1673,6 +1798,7 @@ namespace CelesteMusicPlayer
                     CustomBackgroundImage.Source = null;
                     CustomBackgroundImage.Visibility = Visibility.Collapsed;
                     StopCustomBackgroundVideo();
+                    StopBackgroundMotion();
 
                     // 恢复封面背景：用最近一次的当前曲目封面重绘（没有就保持空）
                     if (AlbumArtBackgroundImage != null)
@@ -1767,8 +1893,86 @@ namespace CelesteMusicPlayer
 
                 // 互斥：自定义背景显示期间，封面背景（含压暗层）清掉
                 ClearAlbumArtBackground();
+
+                // 走自定义图片路径时不需要预设的缓慢移动
+                RefreshBackgroundMotion();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
+        }
+
+
+        /// <summary>
+        /// 内置背景预设：调用生成器拿到缓存图片路径，再走自定义图片背景的模糊/显示流程。
+        /// 失败时回退到清除自定义背景（恢复封面背景）。
+        /// </summary>
+        private async System.Threading.Tasks.Task ApplyCustomBackgroundPresetAsync(string preset, int request)
+        {
+            try
+            {
+                string? path = BackgroundPresetGenerator.GetPresetPath(preset);
+                if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path))
+                {
+                    StartupLog.Write($"背景预设 {preset} 生成失败，回退到封面背景");
+                    await ApplyCustomBackgroundAsync(null, request);
+                    return;
+                }
+
+                StopCustomBackgroundVideo();
+
+                AppSettingsState settings = AppSettingsStore.Load();
+                int blurRadius = settings.BackgroundGaussBlur ? settings.GaussBlurRadius : 0;
+
+                byte[]? pixels = await System.Threading.Tasks.Task.Run(() =>
+                {
+                    try
+                    {
+                        byte[] raw = System.IO.File.ReadAllBytes(path);
+                        if (blurRadius <= 0)
+                        {
+                            return raw;
+                        }
+
+                        return AlbumArtBackground.CreateHeavilyBlurredPng(raw, workSize: 192, blurRadius: blurRadius * 2);
+                    }
+                    catch (Exception caught)
+                    {
+                        global::CelesteMusicPlayer.StartupLog.WriteException($"ApplyCustomBackgroundPresetAsync.{preset}", caught);
+                        return null;
+                    }
+                });
+
+                if (request != _customBackgroundRequest) return;
+
+                BitmapImage? image = null;
+                if (pixels != null && pixels.Length > 0)
+                {
+                    image = await CreateBitmapFromBytesAsync(pixels);
+                }
+
+                if (image == null)
+                {
+                    // 模糊失败时直出原图，至少能有背景
+                    BitmapImage fallback = new() { DecodePixelWidth = 1920 };
+                    using (System.IO.FileStream fs = System.IO.File.OpenRead(path))
+                    {
+                        fallback.SetSource(fs.AsRandomAccessStream());
+                    }
+                    image = fallback;
+                }
+
+                if (image == null || request != _customBackgroundRequest) return;
+
+                CustomBackgroundImage.Source = image;
+                CustomBackgroundImage.Visibility = Visibility.Visible;
+                ClearAlbumArtBackground();
+
+                // 预设背景可选「缓慢移动」，按设置起停
+                RefreshBackgroundMotion();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException($"ApplyCustomBackgroundPresetAsync.{preset}", caught);
+            }
         }
 
 

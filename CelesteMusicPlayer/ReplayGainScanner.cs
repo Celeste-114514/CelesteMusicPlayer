@@ -33,15 +33,17 @@ namespace CelesteMusicPlayer
         /// <summary>RG 2.0 参考响度（dB SPL），写入 REFERENCE_LOUDNESS 标签。</summary>
         public const double ReferenceLoudnessDb = 89.0;
 
-        // ebur128 Summary 块里的两项：
+        // 集成响度来自 ebur128 的 Summary 块：
         //   Integrated loudness:
         //     I:         -27.1 LUFS
-        //   True peak:
-        //     Peak:      -24.1 dBFS
+        // 峰值时来自串联的 volumedetect 滤镜输出：
+        //   [Parsed_volumedetect_1 @ ...] max_volume: -24.1 dB
         private static readonly Regex IntegratedRegex =
             new("Integrated loudness:\\s*I:\\s*([-\\d.]+)\\s*LUFS", RegexOptions.Singleline);
-        private static readonly Regex TruePeakRegex =
-            new("True peak:\\s*Peak:\\s*([-\\d.]+)\\s*dBFS", RegexOptions.Singleline);
+        // 峰值时：本机自带 ffmpeg 的 ebur128 不输出 True peak 段（其 true_peak 选项不被支持），
+        // 故改用 volumedetect 的 max_volume（采样峰值，ReplayGain 规范同样接受）。
+        private static readonly Regex PeakRegex =
+            new("max_volume:\\s*([-\\d.]+)\\s*dB", RegexOptions.Singleline);
 
         /// <summary>单曲目测量结果。</summary>
         public sealed class TrackResult
@@ -86,7 +88,7 @@ namespace CelesteMusicPlayer
             string? ffmpeg = AudioPlaybackEngine.FindFfmpeg();
             if (ffmpeg == null) { r.Error = "找不到 ffmpeg.exe"; return r; }
 
-            string args = $"-hide_banner -nostats -i \"{path}\" -af ebur128 -f null -";
+            string args = $"-hide_banner -nostats -i \"{path}\" -af ebur128,volumedetect -f null -";
             string? output = await RunFfmpegAsync(ffmpeg, args, ct).ConfigureAwait(false);
             if (output == null) { r.Error = "ffmpeg 执行失败"; return r; }
             if (!TryParseSummary(output, out double i, out double tp))
@@ -120,7 +122,7 @@ namespace CelesteMusicPlayer
             var sbIn = new StringBuilder();
             foreach (string p in parts) sbIn.Append(p);
             for (int k = 0; k < paths.Count; k++) sbIn.Append($"[{k}a]");
-            string filter = $"-filter_complex \"{sbIn}concat=n={paths.Count}:v=0:a=1,ebur128\"";
+            string filter = $"-filter_complex \"{sbIn}concat=n={paths.Count}:v=0:a=1,ebur128,volumedetect\"";
 
             string args = $"-hide_banner -nostats{inputs} {filter} -f null -";
             string? output = await RunFfmpegAsync(ffmpeg, args, ct).ConfigureAwait(false);
@@ -204,17 +206,22 @@ namespace CelesteMusicPlayer
             frame.Text = new[] { value };
         }
 
-        private static bool TryParseSummary(string output, out double integrated, out double truePeak)
+        private static bool TryParseSummary(string output, out double integrated, out double peakDb)
         {
             integrated = 0;
-            truePeak = 0;
+            peakDb = 0;
             Match mi = IntegratedRegex.Match(output);
-            Match mp = TruePeakRegex.Match(output);
-            if (!mi.Success || !mp.Success) return false;
+            if (!mi.Success) return false;
             if (!double.TryParse(mi.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out integrated))
                 return false;
-            if (!double.TryParse(mp.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out truePeak))
-                return false;
+
+            // 峰值时：取 volumedetect 的 max_volume（采样峰值）。抓不到时按 0 dBFS（线性 1.0）兜底，
+            // 避免因为缺峰值就把整批曲目判为“无法解析”而被跳过（这是原先“所有歌都扫不出”的根因）。
+            Match mp = PeakRegex.Match(output);
+            if (mp.Success && double.TryParse(mp.Groups[1].Value, NumberStyles.Float, CultureInfo.InvariantCulture, out double p))
+                peakDb = p;
+            else
+                peakDb = 0.0;
             return true;
         }
 
