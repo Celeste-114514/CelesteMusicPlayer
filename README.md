@@ -38,14 +38,10 @@
 
 ## 🖥️ 截图
 
-<img width="2022" height="1153" alt="QQ20260822-022810" src="https://github.com/user-attachments/assets/5f09a6e1-64bb-4996-bc67-8e7c6648d8da" />
-<img width="2028" height="1181" alt="QQ20260822-023000" src="https://github.com/user-attachments/assets/ad398e2b-e2e1-4941-a4b6-d389e5d2cdb2" />
-<img width="2022" height="1153" alt="QQ20260822-022927" src="https://github.com/user-attachments/assets/b5bdd631-2bfa-4e90-9770-c6bb0ab9239b" />
-<img width="2022" height="1153" alt="QQ20260822-022920" src="https://github.com/user-attachments/assets/222b74b0-1fe6-45c8-a073-60ab6cae1d84" />
-<img width="2022" height="1153" alt="QQ20260822-022901" src="https://github.com/user-attachments/assets/f3524832-e282-4915-bff7-b2cf4982b550" />
-<img width="2022" height="1153" alt="QQ20260822-022840" src="https://github.com/user-attachments/assets/e462445d-48d1-45bc-bbe5-7ca3a5159436" />
-<img width="2022" height="1153" alt="QQ20260822-022831" src="https://github.com/user-attachments/assets/87aee0fc-873d-458e-a667-46cd5265d12e" />
-<img width="2022" height="1153" alt="QQ20260822-022817" src="https://github.com/user-attachments/assets/a32ef812-fc88-4fb1-aa6b-53defc41c1d8" />
+<img width="1386" height="793" alt="QQ20260917-001225" src="https://github.com/user-attachments/assets/89ceb778-2d5d-4521-9656-e5e74ac77238" />
+<img width="1386" height="793" alt="QQ20260917-001125" src="https://github.com/user-attachments/assets/35879753-1ecc-412a-ad34-74db8c6d9bda" />
+<img width="1386" height="793" alt="QQ20260917-001114" src="https://github.com/user-attachments/assets/f871ba50-8153-4c36-84e3-07c6856148d1" />
+<img width="1386" height="793" alt="QQ20260917-001104" src="https://github.com/user-attachments/assets/c72d4fc3-0ddf-40ea-afe0-ac3c44ed7954" />
 
 
 
@@ -91,7 +87,7 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 ### v26.9.16（2026-09-16）
 - ✨ 新增功能
   - 🔄 **程序内检查更新体系**：抽离独立 `UpdateChecker` 模块，关于面板可手动检查、启动自动检查；发现新版本时在系统托盘弹气泡通知，并支持一键「下载更新」自动拉取安装包并启动覆盖安装（沿用 26.9.10.3 的退出交还文件锁逻辑）
-  - 🖼️ **正在播放界面重构**：重写 Now Playing 布局与反射视觉（`MainWindow.NowPlayingLayout` / `NowPlayingReflection`）
+  - 🖼️ **正在播放界面重构**：重写 Now Playing 布局与反射视觉（`MainWindow.NowPlayingLayout` / `NowPlayingReflection`），新增各种布局（水面，剧场，黑胶等）
 - 🐛 修复 / 重构
   - 🔊 播放引擎链路重构（续播 / 定位 / 状态同步与异常处理梳理）；保持 bit-perfect 输出不变（仅整理逻辑与日志，未触碰音频输出字节流）
   - 🎵 歌词模块增强；系统托盘新增「发现新版本」气泡通知；设置窗口补充更新相关开关
