@@ -100,6 +100,16 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // 本地测试模式：跳过 GitHub，直接用本地安装包让「下载更新」按钮出现并走完整链路。
+                if (TryGetDevUpdate(out string devTag, out string devInstaller))
+                {
+                    _latestTag = devTag;
+                    _latestSetupUrl = new Uri(devInstaller).AbsoluteUri;
+                    AboutUpdateStatusText.Text = $"【本地测试】模拟发现新版本 {devTag}（当前 {currentVer}）。点击「下载更新」用本地安装包 {Path.GetFileName(devInstaller)} 验证更新链路。";
+                    AboutDownloadUpdateButton.Visibility = Visibility.Visible;
+                    return;
+                }
+
                 string? latestTag = await FetchLatestVersionAsync();
                 _latestTag = latestTag;
                 if (string.IsNullOrEmpty(latestTag))
@@ -145,11 +155,55 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 应用内下载安装包到临时目录（带进度），下载完成后弹出安装向导（覆盖安装到原路径）。
+        /// 本地测试开关：若存在 %LOCALAPPDATA%\CelesteMusicPlayer\dev-update.txt
+        /// （第一行 = 假版本号如 v99.0.0，第二行 = 本地安装包绝对路径），
+        /// 则「检查更新」跳过 GitHub、「下载更新」用这个本地文件走完整更新链路。
+        /// 仅用于验证更新接线（主程序是否正确调用 CelesteUpdater）；文件不存在时对正常用户零影响。
+        /// 安装包可指向任意 .exe/.bat（哪怕记事本）来验证"等退出→跑安装包→重启→删包"这套动作，
+        /// 也可指向本地真打的 NSIS 包验证版本号真的变了。
+        /// </summary>
+        private static bool TryGetDevUpdate(out string tag, out string installerPath)
+        {
+            tag = string.Empty;
+            installerPath = string.Empty;
+            try
+            {
+                string marker = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "CelesteMusicPlayer",
+                    "dev-update.txt");
+                if (!File.Exists(marker))
+                {
+                    return false;
+                }
+
+                string[] lines = File.ReadAllLines(marker);
+                if (lines.Length < 2)
+                {
+                    return false;
+                }
+
+                tag = lines[0].Trim();
+                installerPath = lines[1].Trim();
+                return !string.IsNullOrWhiteSpace(tag)
+                       && !string.IsNullOrWhiteSpace(installerPath)
+                       && File.Exists(installerPath);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 应用内下载安装包到临时目录（带进度），下载完成后启动更新助手（或 cmd 兜底）完成覆盖安装。
+        /// 若 url 以 file:// 开头（本地测试模式），跳过网络下载，直接复制本地安装包再走同一套启动逻辑。
         /// </summary>
         private async System.Threading.Tasks.Task DownloadAndLaunchInstallerAsync(string url, string tag)
         {
-            string fileName = Path.GetFileName(new Uri(url).AbsolutePath);
+            bool devLocal = url.StartsWith("file://", StringComparison.OrdinalIgnoreCase);
+
+            string fileName = Path.GetFileName(devLocal ? new Uri(url).LocalPath : new Uri(url).AbsolutePath);
             if (string.IsNullOrWhiteSpace(fileName))
             {
                 fileName = "CelesteMusicPlayer-Setup.exe";
@@ -176,6 +230,32 @@ namespace CelesteMusicPlayer
             AboutCheckUpdateButton.IsEnabled = false;
             AboutDownloadProgress.Visibility = Visibility.Visible;
             AboutDownloadProgress.Value = 0;
+
+            // 本地测试模式：复制本地安装包到临时目录，跳过 HTTP 下载，直接进启动流程。
+            if (devLocal)
+            {
+                try
+                {
+                    File.Copy(new Uri(url).LocalPath, targetPath, overwrite: true);
+                    AboutDownloadProgress.Value = 100;
+                    AboutUpdateStatusText.Text = $"【本地测试】已就位安装包 {fileName}，正在启动更新助手…";
+                    await LaunchUpdateAndExitAsync(targetPath, tmpDir);
+                }
+                catch (Exception caught)
+                {
+                    StartupLog.WriteException("SettingsWindow.About.DevCopy", caught);
+                    AboutUpdateStatusText.Text = "本地测试失败：无法复制本地安装包。";
+                    AboutDownloadProgress.Visibility = Visibility.Collapsed;
+                }
+                finally
+                {
+                    AboutDownloadUpdateButton.IsEnabled = true;
+                    AboutCheckUpdateButton.IsEnabled = true;
+                }
+
+                return;
+            }
+
             AboutUpdateStatusText.Text = $"正在下载 {fileName} …";
 
             try
@@ -212,31 +292,7 @@ namespace CelesteMusicPlayer
 
                 AboutDownloadProgress.Value = 100;
                 AboutUpdateStatusText.Text = $"下载完成，正在启动安装向导（{tag}）。安装过程中请按提示操作，程序将覆盖安装到原目录。";
-
-                // 弹出安装向导（NSIS 会读注册表 InstallLocation 自动定位原目录覆盖安装），
-                // 并在「安装完成后自动删掉刚下载的安装包」，不留在硬盘上。
-                // 关键：用脱钩的 cmd 进程启动安装向导并 /wait 它结束，结束后再删除安装包。
-                // 本程序随后退出不影响这个 cmd —— 它仍在后台跑，所以「装完才删」这件事一定能做完。
-                try
-                {
-                    bool launched = LaunchInstallerWithCleanup(targetPath, tmpDir);
-                    if (launched)
-                    {
-                        AboutUpdateStatusText.Text = "安装向导已启动，本程序即将退出以释放文件并完成更新…";
-                        // 稍等安装向导真正拉起后，主动退出本程序，释放被占用的 exe/dll 句柄，
-                        // 确保 NSIS 能顺利覆盖安装（安装包内部也会再 taskkill 一次作为兜底）。
-                        await System.Threading.Tasks.Task.Delay(800);
-                        Microsoft.UI.Xaml.Application.Current?.Exit();
-                        // 兜底：若上面的优雅退出未能真正终止进程，强制结束以释放文件锁，
-                        // 避免安装包因文件被占用而更新失败。
-                        Environment.Exit(0);
-                    }
-                }
-                catch (Exception caught)
-                {
-                    StartupLog.WriteException("SettingsWindow.About.LaunchInstaller", caught);
-                    AboutUpdateStatusText.Text = $"下载完成，但无法自动启动安装程序。请手动运行：\n{targetPath}";
-                }
+                await LaunchUpdateAndExitAsync(targetPath, tmpDir);
             }
             catch (Exception caught)
             {
@@ -248,6 +304,40 @@ namespace CelesteMusicPlayer
             {
                 AboutDownloadUpdateButton.IsEnabled = true;
                 AboutCheckUpdateButton.IsEnabled = true;
+            }
+        }
+
+        /// <summary>
+        /// 启动更新流程并让本程序退出让位：优先用独立更新助手 CelesteUpdater（等本进程退出后再装，
+        /// 避免文件占用导致覆盖失败），本机没有助手时退回脱钩 cmd 直接拉起安装向导。
+        /// HTTP 下载与本地测试两条路径共用这一段，保证测的就是真实接线。
+        /// </summary>
+        private async System.Threading.Tasks.Task LaunchUpdateAndExitAsync(string targetPath, string tmpDir)
+        {
+            // 优先用独立的「更新助手」CelesteUpdater 完成更新：它会先等本程序真正退出，
+            // 再运行安装包 —— 从根上避免"安装程序撞上主进程占用 exe → 覆盖失败 → 版本没更新"
+            //（用户实测反馈：下载完程序关闭后重开仍是旧版本）。
+            // 若本机没有 CelesteUpdater.exe（旧版安装），退回脱钩 cmd 直接启动安装向导兜底。
+            try
+            {
+                bool launched = LaunchInstallerViaUpdater(targetPath, tmpDir)
+                                || LaunchInstallerWithCleanup(targetPath, tmpDir);
+                if (launched)
+                {
+                    AboutUpdateStatusText.Text = "安装向导已启动，本程序即将退出以释放文件并完成更新…";
+                    // 稍等安装向导真正拉起后，主动退出本程序，释放被占用的 exe/dll 句柄，
+                    // 确保 NSIS 能顺利覆盖安装（安装包内部也会再 taskkill 一次作为兜底）。
+                    await System.Threading.Tasks.Task.Delay(800);
+                    Microsoft.UI.Xaml.Application.Current?.Exit();
+                    // 兜底：若上面的优雅退出未能真正终止进程，强制结束以释放文件锁，
+                    // 避免安装包因文件被占用而更新失败。
+                    Environment.Exit(0);
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("SettingsWindow.About.LaunchInstaller", caught);
+                AboutUpdateStatusText.Text = $"下载完成，但无法自动启动安装程序。请手动运行：\n{targetPath}";
             }
         }
 
