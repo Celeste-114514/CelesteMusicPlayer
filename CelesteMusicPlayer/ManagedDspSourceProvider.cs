@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using NAudio.Dsp;
 using NAudio.Wave;
@@ -59,6 +59,44 @@ namespace CelesteMusicPlayer
         private readonly SpectrumAnalyzer _spectrum = new(SpectrumBandCount);
         private bool _spectrumEnabled;
 
+        // 输出安全监控统计：测量 post-DSP、编码回写前的实际输出样本（峰值 / 削波计数）。
+        // 只在 ProcessBlock 内更新 —— 直通路径不经过此处，因此不影响 bit-perfect。
+        private volatile float _outPeak;     // 会话内最大 |样本|（线性）
+        private volatile int _outClipCount;  // 会话内达到满刻度的样本数
+        private volatile bool _outStatEnabled;
+
+        /// <summary>会话内输出峰值（dBFS；无数据为负无穷）。</summary>
+        public float OutputPeakDbfs
+        {
+            get
+            {
+                float p = _outPeak;
+                if (p <= 0f) return float.NegativeInfinity;
+                return (float)(20.0 * Math.Log10(p));
+            }
+        }
+
+        /// <summary>会话内削波样本计数（|样本| 达到满刻度）。</summary>
+        public int OutputClipCount => _outClipCount;
+
+        /// <summary>输出统计开关。随播放会话开启；关闭后清零并零开销。</summary>
+        public void SetOutputStats(bool enabled)
+        {
+            _outStatEnabled = enabled;
+            if (!enabled)
+            {
+                _outPeak = 0f;
+                _outClipCount = 0;
+            }
+        }
+
+        /// <summary>清零峰值与削波计数（换曲 / 手动重置）。</summary>
+        public void ResetOutputStats()
+        {
+            _outPeak = 0f;
+            _outClipCount = 0;
+        }
+
         // 软件总音量（共享/ASIO 用，采样级增益；NAudio WasapiOut.Volume 不支持，故由 DSP 链实现）。
         private volatile float _volumeGain = 1f;
 
@@ -73,6 +111,17 @@ namespace CelesteMusicPlayer
         private volatile StreamingPartitionedConvolver? _convolver;
         private volatile bool _convEnabled;
         private float _convGain = 1f; // 线性增益（由 GainDb 换算；状态更新时变化，读侧极端误差可忽略）
+        private float _convTrim = 1f; // 卷积微调余量（由 TrimDb 换算，对齐 ECHO roomCorrectionTrimDb：-24~+6 dB）
+        private volatile bool _convClipRisk; // 卷积输出达到满刻度（削波被钳位）
+
+        /// <summary>卷积输出是否出现过削波（已被钳到 ±1）。界面据此提示「削波风险」。</summary>
+        public bool ConvolutionClippingRisk => _convClipRisk;
+
+        /// <summary>已加载 IR 的 taps 数（未加载为 0）。</summary>
+        public int ConvolutionIrTaps => _convolver?.IrLengthFrames ?? 0;
+
+        /// <summary>卷积引入的延迟帧数（等于分区块大小 1024）。</summary>
+        public int ConvolutionLatencyFrames => _convolver?.LatencyFrames ?? 0;
 
         // DSP 总旁路（A/B 对比用）：开 = 全部 DSP 跳过、输出 bit-perfect，但设置保留（关掉即恢复）。
         // 旁路时 Read 走直通路径；电平表仍走 MeasurePassthrough 测量（不改写输出）。
@@ -451,8 +500,11 @@ namespace CelesteMusicPlayer
 
                 var conv = new StreamingPartitionedConvolver(ir, _channels);
                 _convGain = (float)Math.Pow(10.0, Math.Clamp(state.GainDb, -24.0, 24.0) / 20.0);
+                // 卷积微调余量（对齐 ECHO roomCorrectionTrimDb：-24 ~ +6 dB）
+                _convTrim = (float)Math.Pow(10.0, Math.Clamp(state.TrimDb, -24.0, 6.0) / 20.0);
                 _convolver = conv;
                 _convEnabled = true;
+                _convClipRisk = false;
                 RefreshActive();
             }
             catch
@@ -520,6 +572,7 @@ namespace CelesteMusicPlayer
             bool doConv = _convEnabled;
             StreamingPartitionedConvolver? convolver = _convolver;
             float convGain = _convGain;
+            float convTrim = _convTrim;
             bool chSwap = _chSwap, chInvL = _chInvL, chInvR = _chInvR, chMono = _chMono, monoL = _chMonoLeft, monoR = _chMonoRight;
             bool isFloat = _isFloat;
             int bits = _format.BitsPerSample;
@@ -553,24 +606,8 @@ namespace CelesteMusicPlayer
             // 解码：byte → float（抽成独立方法，电平表测量与 DSP 共用）
             DecodeToFloat(b, offset, n, buf);
 
-            // 房间校正（卷积 FIR）：链首块级处理（在音量/EQ 之前），流式分区卷积 in-place。
-            // 卷积引入 BlockSize(1024) 帧延迟，但输出逐帧连续，对实时播放正确。
-            if (doConv && convolver != null)
-            {
-                convolver.Process(buf, frames, ch);
-                if (convGain != 1f)
-                {
-                    for (int i = 0; i < n; i++)
-                    {
-                        buf[i] *= convGain;
-                    }
-                }
-            }
-
-            // 逐帧 DSP。
-            // 多声道：所有声道都经过「音量 → EQ → ReplayGain → Headroom → 限幅」这套全局 DSP；
-            // 仅当立体声（前两个声道）时再做声道处理（交换 / mono / 反相 / 左右增益）。
-            // 旧实现只处理 L/R 两声道，5.1 等多声道的第 3~6 声道完全不过任何 DSP。
+            // ---- 信号链顺序（对齐 ECHO DspChain）：软件音量 → 参数 EQ → 卷积(FIR) → ReplayGain
+            //      → 声道工具 → Headroom 余量 → 安全限幅 → 测量 ----
             BiQuadFilter[][] eq = _eqFilters;
             int eqChains = eq.Length;
 
@@ -602,6 +639,8 @@ namespace CelesteMusicPlayer
 
             float hg = doHeadroom ? (float)_headroomGain : 1f;
 
+            // 阶段 1：软件总音量 + 参数 EQ（含 preamp）。多声道时所有声道都过这套全局 DSP
+            //（旧实现只处理 L/R 两声道，5.1 的第 3~6 声道完全不过任何 DSP）。
             for (int f = 0; f < frames; f++)
             {
                 int baseIdx = f * ch;
@@ -610,7 +649,7 @@ namespace CelesteMusicPlayer
                     int idx = baseIdx + c;
                     float s = buf[idx];
 
-                    // 软件总音量（采样级增益，恒在 EQ/声道/RG 之前）
+                    // 软件总音量（采样级增益，恒在最前）
                     if (volumeGain != 1f) s *= volumeGain;
 
                     if (doEq)
@@ -620,12 +659,44 @@ namespace CelesteMusicPlayer
                         if (preampGain != 1f) s *= preampGain;
                     }
 
-                    if (rgActive) s *= rgg;
-                    if (doHeadroom) s *= hg;
-                    if (doLimiter) s = SoftLimit(s);
-                    else if (wantsClip) s = SoftLimit(s);
-
                     buf[idx] = s;
+                }
+            }
+
+            // 阶段 2：房间校正（卷积 FIR）—— 按 ECHO 链序放在 EQ 之后、ReplayGain 之前。
+            // 块级 in-place 分区卷积，引入 BlockSize(1024) 帧延迟，输出逐帧连续。
+            // 卷积常把峰值顶高：乘完「卷积增益 × 微调余量(trim)」后达到满刻度即钳到 ±1 并标记
+            // 削波风险（对齐 ECHO ConvolutionProcessor::protectClippingSample）。
+            bool convRisk = false;
+            if (doConv && convolver != null)
+            {
+                convolver.Process(buf, frames, ch);
+                float convTotal = convGain * convTrim;
+                for (int i = 0; i < n; i++)
+                {
+                    float s = buf[i] * convTotal;
+                    if (s > 1f) { s = 1f; convRisk = true; }
+                    else if (s < -1f) { s = -1f; convRisk = true; }
+                    buf[i] = s;
+                }
+            }
+
+            if (convRisk != _convClipRisk)
+            {
+                _convClipRisk = convRisk;
+            }
+
+            // 阶段 3：ReplayGain 增益 + 声道工具（交换 / 单声道 / 反相 / 左右增益 / Crossfeed / 延迟）
+            for (int f = 0; f < frames; f++)
+            {
+                int baseIdx = f * ch;
+
+                if (rgActive)
+                {
+                    for (int c = 0; c < ch; c++)
+                    {
+                        buf[baseIdx + c] *= rgg;
+                    }
                 }
 
                 // 声道处理：仅立体声前两声道有意义
@@ -663,10 +734,40 @@ namespace CelesteMusicPlayer
                 }
             }
 
+            // 阶段 4：Headroom 余量预衰减 + 安全限幅。放在最后才能真正压住前面所有增益抬起的峰值
+            //（ECHO 同样是 headroom → safety limiter 位于链尾）。
+            if (wantsClip)
+            {
+                for (int i = 0; i < n; i++)
+                {
+                    float s = buf[i];
+                    if (doHeadroom) s *= hg;
+                    if (doLimiter) s = SoftLimit(s);
+                    else if (wantsClip) s = SoftLimit(s);
+                    buf[i] = s;
+                }
+            }
+
+
             // 实时电平/频谱：测量 post-DSP 信号（即实际送往输出的样本）
             if (_meterEnabled)
             {
                 _levelMeter.Update(buf, n, ch);
+            }
+
+            // 输出安全监控：同一批 post-DSP 样本统计峰值与削波计数（编码回写前，反映真实送出电平）
+            if (_outStatEnabled)
+            {
+                float pk = 0f;
+                int cc = 0;
+                for (int i = 0; i < n; i++)
+                {
+                    float a = buf[i] < 0 ? -buf[i] : buf[i];
+                    if (a > pk) pk = a;
+                    if (a >= 0.99999f) cc++;
+                }
+                if (pk > _outPeak) _outPeak = pk;
+                if (cc > 0) _outClipCount += cc;
             }
 
             if (_spectrumEnabled)

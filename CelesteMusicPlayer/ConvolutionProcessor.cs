@@ -153,11 +153,15 @@ namespace CelesteMusicPlayer
         private readonly CF[][][] _irSpectra; // [channel][partition][bin]
         private readonly int _irChannels;
         private readonly int _partitionCount;
+        private readonly int _irLengthFrames;
         private readonly float[][] _inTail;   // [ch][BlockSize]
         private readonly float[][] _outTail;  // [ch][FftSize]（前 BlockSize 为待输出）
         private readonly int[] _inPos;        // [ch] 当前输入尾位置
 
         public int LatencyFrames => BlockSize;
+
+        /// <summary>已加载 IR 的长度（taps / 帧数），用于界面显示与延迟估算。</summary>
+        public int IrLengthFrames => _irLengthFrames;
 
         public StreamingPartitionedConvolver(float[][] ir, int channels)
         {
@@ -168,6 +172,7 @@ namespace CelesteMusicPlayer
                 _irChannels = 1;
             }
 
+            _irLengthFrames = ir[0].Length;
             _partitionCount = Math.Max(1, (ir[0].Length + BlockSize - 1) / BlockSize);
 
             // 预计算每声道每分区 FFT 频谱

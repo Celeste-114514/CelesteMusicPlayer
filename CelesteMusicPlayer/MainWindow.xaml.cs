@@ -59,6 +59,11 @@ namespace CelesteMusicPlayer
     {
         public int Index { get; set; }
 
+        /// <summary>行首序号文本：极客界面下补零成 003 式（等宽字下对齐成一张数据表），其它界面原样数字。</summary>
+        public string IndexLabel => MainWindow.GeekUiStyleCached
+            ? Index.ToString("000", System.Globalization.CultureInfo.InvariantCulture)
+            : Index.ToString(System.Globalization.CultureInfo.InvariantCulture);
+
         public string Title { get; set; } = string.Empty;
 
         public string Artist { get; set; } = "未知艺术家";
@@ -70,6 +75,18 @@ namespace CelesteMusicPlayer
 
         /// <summary>音轨号（Tag.Track）；0 表示未知</summary>
         public uint Track { get; set; }
+
+        /// <summary>网络音乐（WebDAV）：这一首在服务器上的相对路径；空 = 本地文件。</summary>
+        public string RemotePath { get; set; } = string.Empty;
+
+        /// <summary>是否来自网络音乐库。</summary>
+        public bool IsRemote => !string.IsNullOrEmpty(RemotePath);
+
+        /// <summary>
+        /// 网络音乐右侧那列小字（文件大小 / 缓存状态）。
+        /// 本地曲目靠内嵌标签拿时长，网络曲目没下载前读不到，就用这个顶上。
+        /// </summary>
+        public string RemoteHint { get; set; } = string.Empty;
 
         /// <summary>碟片号（Tag.Disc）；0 表示未知</summary>
         public uint Disc { get; set; }
@@ -89,14 +106,23 @@ namespace CelesteMusicPlayer
         {
             get
             {
+                // 网络曲目没下载前读不到时长 —— 那列直接显示大小/缓存状态，比一排 00:00 有用。
+                if (IsRemote && Duration <= TimeSpan.Zero && !string.IsNullOrEmpty(RemoteHint))
+                {
+                    return RemoteHint;
+                }
+
                 var t = Duration < TimeSpan.Zero ? TimeSpan.Zero : Duration;
                 return t.TotalHours >= 1 ? t.ToString(@"h\:mm\:ss") : t.ToString(@"mm\:ss");
             }
         }
 
         /// <summary>歌曲面板第三行的格式胶囊：格式 / 位深·采样率 / 比特率（如 ["FLAC","16bit/44kHz","1411kbps"]）。
-        /// 懒计算 + AudioInfoFormatter 按路径缓存，避免启动/建条目时同步解析。</summary>
+        /// 懒计算 + AudioInfoFormatter 按路径缓存，避免启动/建条目时同步解析。
+        /// 极客界面下包一层方括号（[FLAC] [16bit/44kHz]…），配合等宽字读起来像终端元数据行；
+        /// 排序用的取下标逻辑（TagSortFields）不受影响 —— 每段前缀一致，相对顺序不变。</summary>
         private IReadOnlyList<string>? _formatChips;
+        private IReadOnlyList<string>? _geekFormatChips;
         public IReadOnlyList<string> FormatChips
         {
             get
@@ -104,7 +130,24 @@ namespace CelesteMusicPlayer
                 _formatChips ??= string.IsNullOrWhiteSpace(FilePath)
                     ? System.Array.Empty<string>()
                     : AudioInfoFormatter.FormatChips(FilePath);
-                return _formatChips;
+
+                if (!MainWindow.GeekUiStyleCached)
+                {
+                    return _formatChips;
+                }
+
+                if (_geekFormatChips == null)
+                {
+                    var wrapped = new string[_formatChips.Count];
+                    for (int i = 0; i < _formatChips.Count; i++)
+                    {
+                        wrapped[i] = "[" + _formatChips[i] + "]";
+                    }
+
+                    _geekFormatChips = wrapped;
+                }
+
+                return _geekFormatChips;
             }
         }
 
@@ -118,8 +161,10 @@ namespace CelesteMusicPlayer
         /// <summary>用户评分 0..5（0 = 未评分）。</summary>
         public int Rating { get; set; }
 
-        /// <summary>仅文件名（媒体库/文件夹详情列表显示用）。</summary>
-        public string FileName => System.IO.Path.GetFileName(FilePath);
+        /// <summary>仅文件名（媒体库/文件夹详情列表显示用）。
+        /// 网络曲目取服务器上的名字 —— 本地缓存文件名带路径哈希前缀，直接取会露出一串乱码似的前缀。</summary>
+        public string FileName =>
+            System.IO.Path.GetFileName(IsRemote ? RemotePath : FilePath);
 
         /// <summary>CUE 分轨起始秒；0 表示整曲。</summary>
         public double StartTimeSeconds { get; set; }
@@ -138,7 +183,7 @@ namespace CelesteMusicPlayer
         /// </summary>
         public string DisplayTitle =>
             string.IsNullOrWhiteSpace(Title)
-                ? Path.GetFileNameWithoutExtension(FilePath)
+                ? Path.GetFileNameWithoutExtension(IsRemote ? RemotePath : FilePath)
                 : Title.Trim();
 
         /// <summary>歌曲面板第二行："艺术家 - 专辑"（用曲目/演出艺术家，而非专辑艺术家）。</summary>
@@ -374,6 +419,15 @@ namespace CelesteMusicPlayer
         public bool IsFolder { get; init; }
 
         public int Depth { get; init; }
+
+        /// <summary>
+        /// 网络音乐（WebDAV）：这一行在服务器上的相对路径，形如 "Music/Album"。
+        /// 空 = 本地磁盘上的文件/文件夹。展开、下载都以它为准。
+        /// </summary>
+        public string RemotePath { get; init; } = string.Empty;
+
+        /// <summary>是否是网络音乐库里的一行（决定展开/双击走网络还是走磁盘）。</summary>
+        public bool IsRemote => !string.IsNullOrEmpty(RemotePath);
 
         /// <summary>子项是否已从磁盘枚举过</summary>
         public bool ChildrenLoaded { get; set; }

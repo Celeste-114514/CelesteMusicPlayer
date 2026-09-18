@@ -30,6 +30,7 @@ namespace CelesteMusicPlayer
         internal const string LayoutLyrics = "Lyrics";
         internal const string LayoutMirror = "Mirror";
         internal const string LayoutCenter = "Center";
+        internal const string LayoutTerminal = "Terminal";
 
         private bool _nowPlayingLayoutHooked;
 
@@ -55,6 +56,9 @@ namespace CelesteMusicPlayer
         /// <summary>当前是否为「居中」布局。</summary>
         private bool _layoutIsCenter;
 
+        /// <summary>当前是否为「终端」（极客）布局。整块面板自绘，跟其它布局不共用元素。</summary>
+        private bool _layoutIsTerminal;
+
         /// <summary>
         /// 读取设置里的播放页布局并套用。触发时机：启动、进入播放页、以及设置变更（AppSettingsStore.Changed）。
         /// 未知取值一律回退「经典」，避免配置异常把界面弄坏。
@@ -64,10 +68,20 @@ namespace CelesteMusicPlayer
             try
             {
                 string layout = AppSettingsStore.Load().NowPlayingLayout;
+
                 if (!IsKnownLayout(layout))
                 {
                     layout = LayoutClassic;
                 }
+
+                // 极客界面只提供终端这一个播放页布局（用户拍板）。
+                // 这里不改写设置：切回其它界面风格时，原来选的布局会自己回来。
+                if (IsGeekUiStyleActive())
+                {
+                    layout = LayoutTerminal;
+                }
+
+                RebuildLayoutFlyout();
 
                 bool water = layout == LayoutWater;
                 bool vinyl = layout == LayoutVinyl;
@@ -75,9 +89,11 @@ namespace CelesteMusicPlayer
                 bool lyrics = layout == LayoutLyrics;
                 bool mirror = layout == LayoutMirror;
                 bool center = layout == LayoutCenter;
+                bool terminal = layout == LayoutTerminal;
                 bool layoutChanged = _layoutIsWater != water || _layoutIsVinyl != vinyl
                                      || _layoutIsStage != stage || _layoutIsLyrics != lyrics
                                      || _layoutIsMirror != mirror || _layoutIsCenter != center
+                                     || _layoutIsTerminal != terminal
                                      || _nowPlayingLayoutName != layout;
                 _layoutIsWater = water;
                 _layoutIsVinyl = vinyl;
@@ -85,6 +101,7 @@ namespace CelesteMusicPlayer
                 _layoutIsLyrics = lyrics;
                 _layoutIsMirror = mirror;
                 _layoutIsCenter = center;
+                _layoutIsTerminal = terminal;
                 _nowPlayingLayoutName = layout;
 
                 // 封面倒影：仅「水面」布局显示
@@ -100,16 +117,30 @@ namespace CelesteMusicPlayer
                 {
                     VinylStage.Visibility = vinyl ? Visibility.Visible : Visibility.Collapsed;
                 }
+                // 封面列：黑胶让位给唱机；终端布局整块面板自绘，也不用这一列。
                 if (NowPlayingCoverColumn != null)
                 {
-                    NowPlayingCoverColumn.Visibility = vinyl ? Visibility.Collapsed : Visibility.Visible;
+                    NowPlayingCoverColumn.Visibility = vinyl || terminal ? Visibility.Collapsed : Visibility.Visible;
                 }
                 if (WaveformCanvas != null)
                 {
                     // 波形（频谱）只在「经典 / 水面 / 剧场 / 镜像」里出现：
-                    // 黑胶右半区要放信息和歌词；歌词布局要的是大歌词；居中布局是纯上下结构。
-                    bool showWave = !vinyl && !lyrics && !center;
+                    // 黑胶右半区要放信息和歌词；歌词布局要的是大歌词；居中布局是纯上下结构；
+                    // 终端布局用自己的方块频谱画布。
+                    bool showWave = !vinyl && !lyrics && !center && !terminal;
                     WaveformCanvas.Visibility = showWave ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                // 歌词区：终端布局不放歌词（那页是监控台，不是阅读页）
+                if (LyricsSection != null)
+                {
+                    LyricsSection.Visibility = terminal ? Visibility.Collapsed : Visibility.Visible;
+                }
+
+                // 歌曲信息块（标题/艺术家/专辑）：终端布局把这些放进自己的键值对里
+                if (NowPlayingMetaPanel != null)
+                {
+                    NowPlayingMetaPanel.Visibility = terminal ? Visibility.Collapsed : Visibility.Visible;
                 }
 
                 bool classic = layout == LayoutClassic;
@@ -166,6 +197,16 @@ namespace CelesteMusicPlayer
                     NowPlayingLayoutButtonText.Text = "布局：" + LayoutDisplayName(layout);
                 }
 
+                // 双保险：极客界面下布局菜单只有「终端」一项，右上角按钮没有存在意义。
+                // RebuildLayoutFlyout 已按模式隐藏，这里在每次应用布局时再强制一遍
+                //（用户实测进入播放页后按钮仍然出现，不能只靠菜单重建时机）。
+                if (NowPlayingLayoutButton != null)
+                {
+                    NowPlayingLayoutButton.Visibility = IsGeekUiStyleActive()
+                        ? Visibility.Collapsed
+                        : Visibility.Visible;
+                }
+
                 if (water)
                 {
                     // 播着歌直接切到「水面」时倒影还是空的：用当前封面补生成一张，
@@ -198,6 +239,13 @@ namespace CelesteMusicPlayer
                     // 不重刷的话当前这张背景还是按上一个布局的半径生成的。
                     _ = ApplyAlbumArtBackgroundAsync(_lastCoverBytes, _nowPlayingPath ?? string.Empty);
                 }
+
+                // 布局规则（波形槽在哪些布局出现、封面列是否让位）先落地，
+                // 可视化模式再在其上覆盖可见性（径向隐藏波形槽等）。
+                ApplyNowPlayingVisual();
+
+                // 终端布局：整块面板的自绘与刷新（只在 Terminal 下做事，其它布局秒退）
+                ApplyTerminalLayout(layoutChanged);
             }
             catch (Exception caught)
             {
@@ -229,7 +277,7 @@ namespace CelesteMusicPlayer
         internal static bool IsKnownLayout(string? layout)
             => layout == LayoutClassic || layout == LayoutWater || layout == LayoutVinyl
                || layout == LayoutStage || layout == LayoutLyrics || layout == LayoutMirror
-               || layout == LayoutCenter;
+               || layout == LayoutCenter || layout == LayoutTerminal;
 
         internal static string LayoutDisplayName(string layout) => layout switch
         {
@@ -239,8 +287,62 @@ namespace CelesteMusicPlayer
             LayoutLyrics => "歌词",
             LayoutMirror => "镜像",
             LayoutCenter => "居中",
+            LayoutTerminal => "终端",
             _ => "经典"
         };
+
+        /// <summary>
+        /// 动态生成布局菜单。「终端」属于极客 UI，只有开了极客模式才列出来 ——
+        /// 关掉极客模式时那一页连同入口一起消失，不会留在常规 UI 里。
+        /// </summary>
+        private void RebuildLayoutFlyout()
+        {
+            // 极客界面：布局菜单只剩终端一项，右上角的「布局」按钮没有存在的意义，整个隐藏。
+            if (NowPlayingLayoutButton != null)
+            {
+                NowPlayingLayoutButton.Visibility = IsGeekUiStyleActive()
+                    ? Visibility.Collapsed
+                    : Visibility.Visible;
+            }
+
+            if (NowPlayingLayoutFlyout == null)
+            {
+                return;
+            }
+
+            try
+            {
+                NowPlayingLayoutFlyout.Items.Clear();
+
+                void Add(string text, string tag)
+                {
+                    var item = new MenuFlyoutItem { Text = text, Tag = tag };
+                    item.Click += NowPlayingLayoutMenuItem_Click;
+                    NowPlayingLayoutFlyout.Items.Add(item);
+                }
+
+                // 极客界面：只列终端一项（菜单里其它布局在这一模式下不可用）
+                if (IsGeekUiStyleActive())
+                {
+                    Add("终端（极客监控台：流信息/频谱/电平/相位）", LayoutTerminal);
+                    return;
+                }
+
+                // 8 种布局全部列出：7 种常规 + 终端（极客监控台）。终端为独立布局，不再受任何开关门控。
+                Add("经典（原有版式）", LayoutClassic);
+                Add("水面倒影", LayoutWater);
+                Add("黑胶唱机", LayoutVinyl);
+                Add("剧场（三栏：歌词/封面/信息）", LayoutStage);
+                Add("歌词（小封面 + 大歌词）", LayoutLyrics);
+                Add("镜像（封面在右）", LayoutMirror);
+                Add("居中（上下结构）", LayoutCenter);
+                Add("终端（极客监控台：流信息/频谱/电平/相位）", LayoutTerminal);
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.RebuildLayoutFlyout", caught);
+            }
+        }
 
 
         /// <summary>当前倒影贴图的实际像素尺寸（512 坐标系）。正方形封面 dispH=512；
@@ -656,6 +758,18 @@ namespace CelesteMusicPlayer
                 VinylDisc.Width = size;
                 VinylDisc.Height = size;
             }
+
+            // 径向频谱画布：比唱盘大一圈（单边留 64 给柱子），柱子从唱盘边缘往外长。
+            // 画布必须挂在 VinylStage 上而不是 VinylDisc 里 —— 唱盘带旋转动画，跟进去会一起转。
+            if (RadialVisualCanvas != null)
+            {
+                double canvasSize = Math.Round(size + 128);
+                RadialVisualCanvas.Width = canvasSize;
+                RadialVisualCanvas.Height = canvasSize;
+            }
+
+            // 柱子的内圈半径 = 唱盘半径 + 4（DrawRadialVisual 据此定位）
+            _radialInnerRadius = size / 2 + 4;
 
             if (VinylArtEllipse != null)
             {

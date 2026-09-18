@@ -85,6 +85,8 @@ namespace CelesteMusicPlayer
                     {
                         "Light" or "ClassicLight" => ElementTheme.Light,
                         "Dark" or "ClassicDark" => ElementTheme.Dark,
+                        // 极客界面：恒为深色（近黑终端风）
+                        "Geek" => ElementTheme.Dark,
                         _ => ElementTheme.Default,
                     };
                 }
@@ -137,9 +139,11 @@ namespace CelesteMusicPlayer
             {
                 if (ClassicMode != null)
                 {
-                    panel.Background = new SolidColorBrush(ClassicIsLight
-                        ? Color.FromArgb(255, 243, 243, 243)
-                        : Color.FromArgb(255, 32, 32, 32));
+                    panel.Background = new SolidColorBrush(ClassicMode == "Geek"
+                        ? Color.FromArgb(255, 11, 15, 11)          // 极客：与主窗口 RootShell 同一款近黑
+                        : ClassicIsLight
+                            ? Color.FromArgb(255, 243, 243, 243)
+                            : Color.FromArgb(255, 32, 32, 32));
                     PaintedRoots.AddOrUpdate(panel, panel);
                 }
                 else if (PaintedRoots.TryGetValue(panel, out _))
@@ -207,6 +211,12 @@ namespace CelesteMusicPlayer
             // 经典界面：面板一律不透明纯色（浅色=白卡，深色=炭灰卡），不再透出背后内容
             if (ClassicMode != null)
             {
+                if (ClassicMode == "Geek")
+                {
+                    // 极客界面：近黑面板，比主底(#0B0F0B)亮一档带层次，微绿调呼应终端
+                    return new SolidColorBrush(Color.FromArgb(255, 22, 27, 22));
+                }
+
                 return new SolidColorBrush(
                     ClassicIsLight
                         ? Color.FromArgb(255, 255, 255, 255)

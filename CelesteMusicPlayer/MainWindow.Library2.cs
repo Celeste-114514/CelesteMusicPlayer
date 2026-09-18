@@ -1188,6 +1188,9 @@ namespace CelesteMusicPlayer
                 Brush fg = ColorHelper.ResolveContrastingForeground(accent);
                 var transparent = new SolidColorBrush(Colors.Transparent);
                 bool classicNav = IsClassicUiStyleActive();
+                bool geekNav = IsGeekUiStyleActive();
+                // 极客界面与经典一样走「竖条 + 半透明底」选中款：整行填强调色的胶囊款在近黑底上过于突兀（用户实测反馈）。
+                bool barNav = classicNav || geekNav;
 
                 // 当前分类是哪个（用于判断要不要播"切换"动画：同一次切换里只让新选中的那个播）
                 string? activeTag = null;
@@ -1200,7 +1203,7 @@ namespace CelesteMusicPlayer
                     }
                 }
 
-                bool animateSelection = classicNav && activeTag != null
+                bool animateSelection = barNav && activeTag != null
                     && !string.Equals(activeTag, _lastAnimatedNavTag, StringComparison.Ordinal);
                 _lastAnimatedNavTag = activeTag;
 
@@ -1210,10 +1213,10 @@ namespace CelesteMusicPlayer
                     bool active = IsNavCategoryActive(tag);
                     Button button = item.Button;
 
-                    if (classicNav)
+                    if (barNav)
                     {
-                        // 经典界面：分类与工具统一款式（用户要求音效/标签/播放列表与上方分类一致）
-                        button.CornerRadius = new CornerRadius(8);
+                        // 经典 / 极客界面：分类与工具统一款式（竖条 + 半透明底；极客额外直角）
+                        button.CornerRadius = geekNav ? new CornerRadius(0) : new CornerRadius(8);
                         button.BorderThickness = new Thickness(0);
                         button.ClearValue(Control.BorderBrushProperty);
                         button.ClearValue(Control.ForegroundProperty);
@@ -1253,10 +1256,10 @@ namespace CelesteMusicPlayer
                         }
                     }
 
-                    // 竖条指示条：只有「经典 + 选中」才出现
+                    // 竖条指示条：经典 / 极客且选中才出现
                     if (item.Indicator != null)
                     {
-                        if (classicNav && active)
+                        if (barNav && active)
                         {
                             item.Indicator.Background = accent;
                             item.Indicator.Visibility = Visibility.Visible;
@@ -1368,7 +1371,7 @@ namespace CelesteMusicPlayer
                 : new SolidColorBrush(Colors.Transparent);
 
             container.Background = new SolidColorBrush(Colors.Transparent);
-            container.CornerRadius = new CornerRadius(8);
+            container.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
             container.BorderThickness = new Thickness(0);
             DisableContainerSelectionCheckMark(container);
 
@@ -1379,16 +1382,19 @@ namespace CelesteMusicPlayer
             Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "AlbumRowChrome");
             if (chrome != null)
             {
-                chrome.CornerRadius = new CornerRadius(8);
-                if (selected)
+                chrome.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
+                if (!TryApplyBarStyleRowSelection(chrome, selected, accent, unselectedBg))
                 {
-                    chrome.Background = accent;
-                    ApplyForegroundToDescendants(chrome, selectedFg);
-                }
-                else
-                {
-                    chrome.Background = unselectedBg;
-                    ClearForegroundOnDescendants(chrome);
+                    if (selected)
+                    {
+                        chrome.Background = accent;
+                        ApplyForegroundToDescendants(chrome, selectedFg);
+                    }
+                    else
+                    {
+                        chrome.Background = unselectedBg;
+                        ClearForegroundOnDescendants(chrome);
+                    }
                 }
             }
             else if (selected)
@@ -1412,7 +1418,8 @@ namespace CelesteMusicPlayer
             }
 
             // 经典不透明界面：封面背景与它完全无关，切歌时不允许重新铺上
-            if (IsClassicUiStyleActive())
+            // 经典 / 极客（不透明界面）与封面背景完全无关：切歌换封面也不许把背景图铺回来
+            if (IsOpaqueUiStyleActive())
             {
                 ClearAlbumArtBackground();
                 return;

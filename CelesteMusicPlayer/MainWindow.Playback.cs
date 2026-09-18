@@ -397,9 +397,10 @@ namespace CelesteMusicPlayer
 
                 // 波形高度：水面布局先算出来 —— 封面尺寸要按「水面线」反推（见下），经典固定 40。
                 // 上下加高（用户反馈"上下太短"）。
+                // 经典：波形固定 40；示波器/李萨如给 110（矮了波形线会挤成一条）
                 double waveformHeight = _layoutIsWater
                     ? Math.Max(110, Math.Min(paneHeight * 0.22, 170))
-                    : 40;
+                    : (VisualNeedsTallSlot() ? 110 : 40);
 
                 // 大封面：经典按面板高度 50%，上限 340、下限 240；
                 // 水面布局用户要求更大封面；剧场居中要抢眼；歌词布局故意做小（当"小唱片"）。
@@ -847,7 +848,9 @@ namespace CelesteMusicPlayer
                     LyricsSection.VerticalAlignment = VerticalAlignment.Center;
                     // 歌词区底部留出播放条高度 → 歌词不会压在进度条上
                     LyricsSection.Margin = new Thickness(0, 0, 0, transportReserve);
-                    LyricsSection.Visibility = Visibility.Visible;
+                    // 终端布局没有"经典"这一支，会落到本 else：但终端页是监控台，不显示滚动歌词，
+                    // 否则会与终端自绘元素重叠（用户实测反馈）。这里按终端强制折叠。
+                    LyricsSection.Visibility = _layoutIsTerminal ? Visibility.Collapsed : Visibility.Visible;
 
                     // 波形：左下，封面列下方
                     Grid.SetColumn(WaveformCanvas, 0);
@@ -2197,7 +2200,7 @@ namespace CelesteMusicPlayer
             Brush selectedFg = ColorHelper.ResolveContrastingForeground(accent);
 
             container.Background = new SolidColorBrush(Colors.Transparent);
-            container.CornerRadius = new CornerRadius(10);
+            container.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(10);
             container.BorderThickness = new Thickness(0);
             DisableContainerSelectionCheckMark(container);
 
@@ -2207,24 +2210,28 @@ namespace CelesteMusicPlayer
             if (chrome != null)
             {
                 chrome.MinHeight = 36;
-                chrome.CornerRadius = new CornerRadius(10);
+                chrome.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(10);
                 chrome.VerticalAlignment = VerticalAlignment.Stretch;
                 // 选中矩形铺满整行（与文件夹面板一致），但右侧给垂直滚动条留 16px，不顶到滚动条
                 if (TagSortGroupListView.ActualWidth > 0)
                 {
                     chrome.Width = Math.Max(0, TagSortGroupListView.ActualWidth - 16);
                 }
-                if (selected)
+                Brush tagSortUnselected = item is TagSortGroupHeader
+                    ? new SolidColorBrush(Windows.UI.Color.FromArgb(0x22, 255, 255, 255))
+                    : new SolidColorBrush(Colors.Transparent);
+                if (!TryApplyBarStyleRowSelection(chrome, selected, accent, tagSortUnselected))
                 {
-                    chrome.Background = accent;
-                    ApplyForegroundToDescendants(chrome, selectedFg);
-                }
-                else
-                {
-                    chrome.Background = item is TagSortGroupHeader
-                        ? new SolidColorBrush(Windows.UI.Color.FromArgb(0x22, 255, 255, 255))
-                        : new SolidColorBrush(Colors.Transparent);
-                    ClearForegroundOnDescendants(chrome);
+                    if (selected)
+                    {
+                        chrome.Background = accent;
+                        ApplyForegroundToDescendants(chrome, selectedFg);
+                    }
+                    else
+                    {
+                        chrome.Background = tagSortUnselected;
+                        ClearForegroundOnDescendants(chrome);
+                    }
                 }
             }
             else if (selected)
@@ -3426,30 +3433,36 @@ namespace CelesteMusicPlayer
                 : ReferenceEquals(list.SelectedItem, song);
 
             container.Background = new SolidColorBrush(Colors.Transparent);
-            container.CornerRadius = new CornerRadius(8);
+            container.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
             container.BorderThickness = new Thickness(0);
             DisableContainerSelectionCheckMark(container);
+
+            // 极客化行内细节：格式胶囊去药丸、封面直角（非极客恢复原样）。
+            ApplyGeekRowDetailChrome(container);
 
             Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "SongRowChrome");
             if (chrome != null)
             {
                 chrome.MinHeight = 40;
-                chrome.CornerRadius = new CornerRadius(8);
+                chrome.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
                 chrome.VerticalAlignment = VerticalAlignment.Stretch;
                 if (list.ActualWidth > 0)
                 {
                     chrome.Width = list.ActualWidth;
                 }
 
-                if (selected)
+                if (!TryApplyBarStyleRowSelection(chrome, selected, accent, new SolidColorBrush(Colors.Transparent)))
                 {
-                    chrome.Background = accent;
-                    ApplyForegroundToDescendants(chrome, selectedFg);
-                }
-                else
-                {
-                    chrome.Background = new SolidColorBrush(Colors.Transparent);
-                    ClearForegroundOnDescendants(chrome);
+                    if (selected)
+                    {
+                        chrome.Background = accent;
+                        ApplyForegroundToDescendants(chrome, selectedFg);
+                    }
+                    else
+                    {
+                        chrome.Background = new SolidColorBrush(Colors.Transparent);
+                        ClearForegroundOnDescendants(chrome);
+                    }
                 }
             }
         }

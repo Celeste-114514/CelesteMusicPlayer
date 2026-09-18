@@ -55,6 +55,9 @@
                 <NavigationViewItem Content="媒体库" Tag="MediaLib">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8B7;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="WebDAV" Tag="WebDAV">
+                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE774;" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="全局快捷键" Tag="Hotkeys">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE8FD;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
@@ -549,6 +552,7 @@
                                 <ComboBoxItem Content="经典 · 跟随系统" Tag="ClassicSystem" />
                                 <ComboBoxItem Content="经典 · 浅色" Tag="ClassicLight" />
                                 <ComboBoxItem Content="经典 · 深色" Tag="ClassicDark" />
+                                <ComboBoxItem Content="极客（终端风：近黑 + 等宽字 + 技术读数）" Tag="Geek" />
                             </ComboBox>
                         </Grid>
                         <Grid ColumnSpacing="16">
@@ -1550,6 +1554,188 @@
                             <Button x:Name="SaveQqCookieButton" Grid.Column="2" Content="保存" Click="SaveQqCookieButton_Click" MinWidth="56" />
                         </Grid>
                         <TextBlock x:Name="StreamingStatusText" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords" Text="" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- 网络音乐库（WebDAV） -->
+                <ScrollViewer
+                    x:Name="PanelWebDav"
+                    Visibility="Collapsed"
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="20,12,24,24">
+                    <StackPanel Spacing="14" MaxWidth="680">
+                        <TextBlock Text="网络音乐库（WebDAV）" FontSize="17" FontWeight="SemiBold" />
+                        <TextBlock
+                            FontSize="12"
+                            Opacity="0.65"
+                            TextWrapping="WrapWholeWords"
+                            Text="连接 PikPak、群晖、坚果云等支持 WebDAV 的网盘或 NAS。保存后，主界面左侧「媒体库」下方会出现这个音乐库，按文件夹一层层展开浏览；点歌时先把文件下载到本地缓存，再走和普通本地文件完全一样的播放链路（音效、bit-perfect 都不受影响）。" />
+
+                        <!-- 连接信息 -->
+                        <Border
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="连接信息" FontSize="14" FontWeight="SemiBold" />
+
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="88" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="显示名称" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBox
+                                        x:Name="WebDavNameBox"
+                                        Grid.Column="1"
+                                        PlaceholderText="留空则自动用网址的主机名" />
+                                </Grid>
+                                <TextBlock
+                                    Text="这个名字会显示在主界面左侧「媒体库」下方（例如填 PikPak）。"
+                                    FontSize="11"
+                                    Opacity="0.55"
+                                    TextWrapping="WrapWholeWords" />
+
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="88" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="服务器地址" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBox
+                                        x:Name="WebDavUrlBox"
+                                        Grid.Column="1"
+                                        PlaceholderText="https://服务器地址/dav" />
+                                </Grid>
+
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="88" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="用户名" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBox x:Name="WebDavUserBox" Grid.Column="1" PlaceholderText="可留空（匿名访问）" />
+                                </Grid>
+
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="88" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="密码" FontSize="12" VerticalAlignment="Center" />
+                                    <PasswordBox x:Name="WebDavPasswordBox" Grid.Column="1" PlaceholderText="留空表示保持不变" />
+                                </Grid>
+                                <TextBlock
+                                    Text="密码用 Windows DPAPI 加密后存在本机，只有当前 Windows 账号能解开。"
+                                    FontSize="11"
+                                    Opacity="0.55"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 代理 -->
+                        <Border
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="代理" FontSize="14" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="88" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="方式" FontSize="12" VerticalAlignment="Center" />
+                                    <ComboBox
+                                        x:Name="WebDavProxyCombo"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        SelectionChanged="WebDavProxyCombo_SelectionChanged">
+                                        <ComboBoxItem Content="跟随系统代理" Tag="System" />
+                                        <ComboBoxItem Content="不使用代理（局域网 NAS）" Tag="None" />
+                                        <ComboBoxItem Content="手动指定" Tag="Manual" />
+                                    </ComboBox>
+                                </Grid>
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="88" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="96" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="代理地址" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBox x:Name="WebDavProxyHostBox" Grid.Column="1" PlaceholderText="如 127.0.0.1" />
+                                    <TextBox x:Name="WebDavProxyPortBox" Grid.Column="2" PlaceholderText="端口" />
+                                </Grid>
+                                <TextBlock
+                                    Text="服务器在境外就选「跟随系统」或手动填；局域网里的 NAS 选「不使用代理」更干净。"
+                                    FontSize="11"
+                                    Opacity="0.55"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 缓存 -->
+                        <Border
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="本地缓存" FontSize="14" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="88" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="缓存目录" FontSize="12" VerticalAlignment="Center" />
+                                    <TextBox x:Name="WebDavCacheDirBox" Grid.Column="1" PlaceholderText="留空用默认位置" />
+                                </Grid>
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="88" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="上限 (MB)" FontSize="12" VerticalAlignment="Center" />
+                                    <NumberBox
+                                        x:Name="WebDavCacheLimitNumberBox"
+                                        Grid.Column="1"
+                                        Minimum="128"
+                                        Maximum="102400"
+                                        SmallChange="512"
+                                        LargeChange="1024"
+                                        SpinButtonPlacementMode="Inline" />
+                                    <Button
+                                        x:Name="WebDavClearCacheButton"
+                                        Grid.Column="2"
+                                        Content="清理缓存"
+                                        Click="WebDavClearCacheButton_Click" />
+                                </Grid>
+                                <TextBlock x:Name="WebDavCacheUsageText" FontSize="11" Opacity="0.55" Text="暂无缓存" />
+                            </StackPanel>
+                        </Border>
+
+                        <TextBlock
+                            x:Name="WebDavStatusText"
+                            FontSize="12"
+                            Opacity="0.8"
+                            TextWrapping="WrapWholeWords"
+                            Text="" />
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="WebDavTestButton" Content="测试连接" Click="WebDavTestButton_Click" />
+                            <Button
+                                x:Name="WebDavSaveButton"
+                                Content="保存并连接"
+                                Style="{ThemeResource AccentButtonStyle}"
+                                Click="WebDavSaveButton_Click" />
+                            <Button x:Name="WebDavDeleteButton" Content="删除此音乐库" Click="WebDavDeleteButton_Click" />
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
 

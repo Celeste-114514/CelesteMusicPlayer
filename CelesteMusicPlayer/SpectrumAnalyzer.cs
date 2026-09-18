@@ -26,6 +26,13 @@ namespace CelesteMusicPlayer
         private int _writePos;
         private bool _hasData;
 
+        // —— 双声道捕获（示波器「李萨如」模式用）：可选开启，关闭时零开销。
+        //    渲染线程在 Push 里顺手多写一份 L/R，不参与、不影响任何播放路径（bit-perfect 无关）。
+        private readonly float[] _ringL;        // 左声道环形缓冲
+        private readonly float[] _ringR;        // 右声道环形缓冲
+        private int _stereoWritePos;
+        private bool _stereoCapture;
+
         private int _sampleRate;
         private bool _enabled;
 
@@ -52,6 +59,8 @@ namespace CelesteMusicPlayer
             _fftSize = n;
 
             _ring = new float[n * 2];
+            _ringL = new float[n * 2];
+            _ringR = new float[n * 2];
             _work = new float[n];
             _fft = new CF[n];
             _window = new float[n];
@@ -145,54 +154,86 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            float[] ring = _ring;
-            int cap = ring.Length;
+                float[] ring = _ring;
+                int cap = ring.Length;
+                float[] ringL = _ringL;
+                float[] ringR = _ringR;
+                int stereoCap = ringL.Length;
+                int stereoPos = _stereoWritePos;
 
-            lock (_gate)
-            {
-                int pos = _writePos;
-                int i = 0;
-
-                while (i < frames)
+                lock (_gate)
                 {
-                    int chunk = frames - i;
-                    int room = cap - pos;
-                    if (chunk > room)
-                    {
-                        chunk = room;
-                    }
+                    int pos = _writePos;
+                    int i = 0;
 
-                    if (channels == 1)
+                    while (i < frames)
                     {
-                        Array.Copy(samples, i, ring, pos, chunk);
-                    }
-                    else
-                    {
-                        float inv = 1.0f / channels;
-                        int s = i * channels;
-                        for (int k = 0; k < chunk; k++, s += channels)
+                        int chunk = frames - i;
+                        int room = cap - pos;
+                        if (chunk > room)
                         {
-                            float acc = 0f;
-                            for (int c = 0; c < channels; c++)
-                            {
-                                acc += samples[s + c];
-                            }
+                            chunk = room;
+                        }
 
-                            ring[pos + k] = acc * inv;
+                        if (channels == 1)
+                        {
+                            Array.Copy(samples, i, ring, pos, chunk);
+
+                            if (_stereoCapture)
+                            {
+                                // 单声道：L=R=样本本身（李萨如退化为对角线，正常）
+                                int s1 = i;
+                                for (int k = 0; k < chunk; k++)
+                                {
+                                    ringL[stereoPos] = ringR[stereoPos] = samples[s1 + k];
+                                    stereoPos++;
+                                    if (stereoPos >= stereoCap)
+                                    {
+                                        stereoPos = 0;
+                                    }
+                                }
+                            }
+                        }
+                        else
+                        {
+                            float inv = 1.0f / channels;
+                            int s = i * channels;
+                            for (int k = 0; k < chunk; k++, s += channels)
+                            {
+                                float acc = 0f;
+                                for (int c = 0; c < channels; c++)
+                                {
+                                    acc += samples[s + c];
+                                }
+
+                                ring[pos + k] = acc * inv;
+
+                                if (_stereoCapture)
+                                {
+                                    // 只取前两个声道（多声道场景下李萨如看 L/R 就够了）
+                                    ringL[stereoPos] = samples[s];
+                                    ringR[stereoPos] = samples[s + 1];
+                                    stereoPos++;
+                                    if (stereoPos >= stereoCap)
+                                    {
+                                        stereoPos = 0;
+                                    }
+                                }
+                            }
+                        }
+
+                        i += chunk;
+                        pos += chunk;
+                        if (pos >= cap)
+                        {
+                            pos = 0;
                         }
                     }
 
-                    i += chunk;
-                    pos += chunk;
-                    if (pos >= cap)
-                    {
-                        pos = 0;
-                    }
+                    _writePos = pos;
+                    _hasData = true;
+                    _stereoWritePos = stereoPos;
                 }
-
-                _writePos = pos;
-                _hasData = true;
-            }
         }
 
         /// <summary>
@@ -321,6 +362,110 @@ namespace CelesteMusicPlayer
             for (int b = count; b < bandsOut.Length; b++)
             {
                 bandsOut[b] = 0f;
+            }
+
+            return true;
+        }
+
+        /// <summary>
+        /// UI 线程：取最近的单声道样本（旧→新排列）到 outSamples，用于示波器画实时波形线。
+        /// 纯只读拷贝，与播放路径无关。返回 false = 暂无数据（未播放/未启用）。
+        /// </summary>
+        public bool TryGetSamples(float[] outSamples)
+        {
+            if (outSamples == null || outSamples.Length == 0 || !_enabled)
+            {
+                return false;
+            }
+
+            int n = Math.Min(outSamples.Length, _fftSize);
+            int cap = _ring.Length;
+
+            lock (_gate)
+            {
+                if (!_hasData)
+                {
+                    return false;
+                }
+
+                int end = _writePos;
+                int start = end - n;
+                if (start < 0)
+                {
+                    start += cap;
+                }
+
+                int first = n;
+                if (first > cap - start)
+                {
+                    first = cap - start;
+                }
+
+                Array.Copy(_ring, start, outSamples, 0, first);
+                if (first < n)
+                {
+                    Array.Copy(_ring, 0, outSamples, first, n - first);
+                }
+            }
+
+            return true;
+        }
+
+        /// <summary>开关双声道样本捕获（李萨如模式用）。默认关闭，开启后渲染线程每帧多两次写。</summary>
+        public void SetStereoCapture(bool enabled)
+        {
+            if (_stereoCapture == enabled)
+            {
+                return;
+            }
+
+            _stereoCapture = enabled;
+            if (!enabled)
+            {
+                lock (_gate)
+                {
+                    _stereoWritePos = 0;
+                }
+            }
+        }
+
+        /// <summary>
+        /// UI 线程：取最近的 L/R 样本对（旧→新排列），用于李萨如图形。
+        /// 需要 <see cref="SetStereoCapture"/>(true) 已开启。返回 false = 无数据。
+        /// </summary>
+        public bool TryGetStereoSamples(float[] leftOut, float[] rightOut)
+        {
+            if (leftOut == null || rightOut == null || leftOut.Length == 0
+                || leftOut.Length != rightOut.Length || !_enabled || !_stereoCapture)
+            {
+                return false;
+            }
+
+            int n = Math.Min(leftOut.Length, _ringL.Length);
+            int cap = _ringL.Length;
+
+            lock (_gate)
+            {
+                int end = _stereoWritePos;
+                int start = end - n;
+                if (start < 0)
+                {
+                    start += cap;
+                }
+
+                int first = n;
+                if (first > cap - start)
+                {
+                    first = cap - start;
+                }
+
+                Array.Copy(_ringL, start, leftOut, 0, first);
+                Array.Copy(_ringR, start, rightOut, 0, first);
+                if (first < n)
+                {
+                    Array.Copy(_ringL, 0, leftOut, first, n - first);
+                    Array.Copy(_ringR, 0, rightOut, first, n - first);
+                }
             }
 
             return true;

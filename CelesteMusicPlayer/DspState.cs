@@ -218,11 +218,32 @@ namespace CelesteMusicPlayer
         /// <summary>卷积输出增益（dB，默认 0）。</summary>
         public double GainDb { get; set; }
 
+        /// <summary>卷积后的微调余量（dB，-24 ~ +6，默认 0）。对齐 ECHO 的 roomCorrectionTrimDb：
+        /// 用于抵消 IR 卷积带来的整体电平变化（卷积常把峰值顶高），防叠加后削波。</summary>
+        public double TrimDb { get; set; }
+
+        /// <summary>当前 IR 的显示名（文件名）。</summary>
+        public string IrName { get; set; } = string.Empty;
+
+        /// <summary>当前 IR 的 taps 数（加载后回写，仅界面显示用）。</summary>
+        public int IrTapCount { get; set; }
+
+        /// <summary>当前 IR 的采样率（加载后回写，仅界面显示用）。</summary>
+        public int IrSampleRate { get; set; }
+
+        /// <summary>当前 IR 的声道数（1=单声道 / 2=立体声，加载后回写）。</summary>
+        public int IrChannels { get; set; }
+
         public RoomCorrectionState Clone() => new()
         {
             Enabled = Enabled,
             IrPath = IrPath,
-            GainDb = GainDb
+            GainDb = GainDb,
+            TrimDb = TrimDb,
+            IrName = IrName,
+            IrTapCount = IrTapCount,
+            IrSampleRate = IrSampleRate,
+            IrChannels = IrChannels
         };
     }
 

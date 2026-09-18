@@ -40,6 +40,24 @@ namespace CelesteMusicPlayer
         /// <summary>HiFi 输出时实际协商的输出格式（WASAPI 设备端），否则 null。</summary>
         public string? ActualOutputFormat => _hifiOut?.ActualOutputFormat;
 
+        /// <summary>输出安全监控：本次会话输出峰值（dBFS；无数据为负无穷）。</summary>
+        public float OutputPeakDbfs => _hifiOut?.OutputPeakDbfs ?? float.NegativeInfinity;
+
+        /// <summary>输出安全监控：本次会话达到满刻度的样本数（削波计数）。</summary>
+        public int OutputClipCount => _hifiOut?.OutputClipCount ?? 0;
+
+        /// <summary>清零输出峰值与削波计数。</summary>
+        public void ResetOutputStats() => _hifiOut?.ResetOutputStats();
+
+        /// <summary>卷积输出是否出现过削波（房间校正页提示用）。</summary>
+        public bool ConvolutionClippingRisk => _hifiOut?.ConvolutionClippingRisk ?? false;
+
+        /// <summary>已加载 IR 的 taps 数（未加载为 0）。</summary>
+        public int ConvolutionIrTaps => _hifiOut?.ConvolutionIrTaps ?? 0;
+
+        /// <summary>卷积引入的延迟帧数。</summary>
+        public int ConvolutionLatencyFrames => _hifiOut?.ConvolutionLatencyFrames ?? 0;
+
         /// <summary>当前播放源的原始格式描述（WAV 直通源）。</summary>
         public string? SourceFormatDescription => _hifiOut?.SourceFormatDescription;
 
@@ -53,6 +71,15 @@ namespace CelesteMusicPlayer
         /// <summary>读取实时频谱（真 FFT，对数分频）到调用方数组，返回是否取到。
         /// false = 未播放 / DSD 直出 / 样本不足，UI 应回退到装饰性动画。UI 线程调用。</summary>
         public bool TryGetSpectrum(float[] bandsOut) => _hifiOut?.TryGetSpectrum(bandsOut) ?? false;
+
+        /// <summary>读取最近实时样本（post-DSP，旧→新），供示波器。false = 暂无数据。UI 线程调用。</summary>
+        public bool TryGetSamples(float[] outSamples) => _hifiOut?.TryGetSamples(outSamples) ?? false;
+
+        /// <summary>开关双声道样本捕获（李萨如用）。不用时关闭（零开销）。</summary>
+        public void SetStereoCapture(bool enabled) => _hifiOut?.SetStereoCapture(enabled);
+
+        /// <summary>读取最近 L/R 样本对（旧→新），供李萨如图形。false = 无数据。UI 线程调用。</summary>
+        public bool TryGetStereoSamples(float[] leftOut, float[] rightOut) => _hifiOut?.TryGetStereoSamples(leftOut, rightOut) ?? false;
 
         /// <summary>设置交叉淡化时长（毫秒），0 = 关闭（无缝硬切）。播放中调用立即生效。</summary>
         public void SetCrossfade(int milliseconds) => _hifiOut?.SetCrossfade(milliseconds);

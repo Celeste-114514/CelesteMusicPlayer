@@ -628,6 +628,9 @@ namespace CelesteMusicPlayer
                 // _loadAsyncIgnore 的置位已挪进 InitOutputDeviceComboAsync（只在填下拉框时短暂拦事件）；
                 _ = InitOutputDeviceComboAsync(s.OutputDeviceId);
 
+                // 网络音乐库（WebDAV）
+                LoadWebDavIntoUi(s);
+
                 // 快捷键
                 SetToggle(EnableGlobalHotkeysSwitch, s.EnableGlobalHotkeys);
             }
@@ -1240,6 +1243,10 @@ namespace CelesteMusicPlayer
                 s.LastFmLeastSeconds = (int)Math.Round(LastFmLeastSecondsSlider.Value);
             }
 
+            // 网络音乐库（WebDAV）：让「应用 / 保存并关闭」也能一起存，
+            // 省得用户改完地址去点底部的保存却发现没生效。
+            PopulateWebDavIntoState(s);
+
             s.EnableGlobalHotkeys = EnableGlobalHotkeysSwitch.IsOn;
         }
 
@@ -1401,6 +1408,7 @@ namespace CelesteMusicPlayer
             PanelGeneral.Visibility = tag == "General" ? Visibility.Visible : Visibility.Collapsed;
             PanelPlayback.Visibility = tag == "Playback" ? Visibility.Visible : Visibility.Collapsed;
             PanelMediaLib.Visibility = tag == "MediaLib" ? Visibility.Visible : Visibility.Collapsed;
+            PanelWebDav.Visibility = tag == "WebDAV" ? Visibility.Visible : Visibility.Collapsed;
             PanelHotkeys.Visibility = tag == "Hotkeys" ? Visibility.Visible : Visibility.Collapsed;
             PanelLibraryHealth.Visibility = tag == "LibraryHealth" ? Visibility.Visible : Visibility.Collapsed;
             PanelStreaming.Visibility = tag == "Streaming" ? Visibility.Visible : Visibility.Collapsed;

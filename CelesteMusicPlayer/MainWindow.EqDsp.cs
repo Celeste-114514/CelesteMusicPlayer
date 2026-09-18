@@ -171,7 +171,12 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>应用 OPRA 耳机校正曲线到播放器 EQ。</summary>
-        internal void ApplyOpraCurve(EqCurveState curve) => ApplyEqCurveToPlayer(curve);
+        internal void ApplyOpraCurve(EqCurveState curve)
+        {
+            // 标记耳机校正已生效（左侧导航圆点 / 监控页「活跃 DSP」据此点亮）
+            _opraApplied = !string.IsNullOrEmpty(curve?.PresetId);
+            ApplyEqCurveToPlayer(curve);
+        }
 
         /// <summary>把一条曲线应用到播放器（曲线状态 + 持久化 + 面板同步 + DSP 实时生效 + 链路显示）。
         /// OPRA 耳机校正、Equalizer APO 导入等「外部曲线入口」共用这一条路径。</summary>
@@ -952,6 +957,8 @@ namespace CelesteMusicPlayer
         private void AudioFxChannelSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
             if (!_audioFxLoading) ApplyDspToEngine();
+            // 左右偏差条与声道滑杆同源，跟着一起动
+            UpdateDspChannelBars();
         }
 
 
@@ -1049,6 +1056,8 @@ namespace CelesteMusicPlayer
             _audioEngine?.SetRoomCorrection(RoomCorrectionStore.Load());
 
             UpdateDspBitPerfectUi();
+            // 任何 DSP 改动都同步刷新左侧导航圆点 / 模块页徽章 / 左右偏差条
+            UpdateDspNavIndicators();
         }
 
 
@@ -1078,6 +1087,7 @@ namespace CelesteMusicPlayer
                     DspBypassStatusText.Text = "已旁路：所有 DSP 暂时不参与处理，输出恢复 bit-perfect。设置全部保留，关闭开关即恢复。";
                 }
 
+                UpdateDspNavIndicators();
                 return;
             }
 
@@ -1101,6 +1111,8 @@ namespace CelesteMusicPlayer
                     ? "⚠ 使用 DSP（EQ/声道平衡/限幅）→ 输出非 bit-perfect"
                     : "音效处理：全部关闭 → bit-perfect 直通";
             }
+
+            UpdateDspNavIndicators();
         }
 
         /// <summary>DSP 总旁路开关（A/B 对比）：开 = 全部 DSP 立即旁路（bit-perfect），设置保留。

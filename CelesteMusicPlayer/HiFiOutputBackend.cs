@@ -52,6 +52,13 @@ namespace CelesteMusicPlayer
         private double _lastDsdPrefillLogSec = double.NegativeInfinity; // 限频 DSD ring 欠载诊断日志
         private MMDevice? _device;     // 用于调设备/系统主音量（WASAPI）；ASIO 无统一接口为 null
         private bool _isPlaying;
+
+        // 立体声采样捕获（李萨如用）的"意图"。
+        // 之前只有一次性命令：切到终端页时开的标志，只作用于当时存在的 _dspProvider；
+        // 而 _dspProvider 是每次开播/切歌新建的（PlayWavAsync 里 BuildDspProvider），
+        // 新建后标志丢失 → 李萨如永远取不到 L/R 样本，只能画"无信号"对角线。
+        // 现在记住意图，建链后统一重放，任何先后顺序都能生效。
+        private bool _stereoCaptureWanted;
         private TimeSpan _pausedPosition;
         private TimeSpan? _pendingSeekTarget; // DSD/native 播放中 seek 的待消费目标：防止 updatePosition/Pause 用旧的 FramesWritten 把它覆盖掉（否则选进度后进度条不变/从头重播）
         private float _resumeVolume = 1f;
@@ -225,6 +232,24 @@ namespace CelesteMusicPlayer
         /// <summary>当前是否处于 DSP 总旁路。</summary>
         public bool IsBypassAll => _dspProvider?.IsBypassAll ?? false;
 
+        /// <summary>输出安全监控：本次会话输出峰值（dBFS；无数据为负无穷）。</summary>
+        public float OutputPeakDbfs => _dspProvider?.OutputPeakDbfs ?? float.NegativeInfinity;
+
+        /// <summary>输出安全监控：本次会话达到满刻度的样本数（削波计数）。</summary>
+        public int OutputClipCount => _dspProvider?.OutputClipCount ?? 0;
+
+        /// <summary>清零输出峰值与削波计数。</summary>
+        public void ResetOutputStats() => _dspProvider?.ResetOutputStats();
+
+        /// <summary>卷积输出是否出现过削波（房间校正页提示用）。</summary>
+        public bool ConvolutionClippingRisk => _dspProvider?.ConvolutionClippingRisk ?? false;
+
+        /// <summary>已加载 IR 的 taps 数（未加载为 0）。</summary>
+        public int ConvolutionIrTaps => _dspProvider?.ConvolutionIrTaps ?? 0;
+
+        /// <summary>卷积引入的延迟帧数（分区块大小）。</summary>
+        public int ConvolutionLatencyFrames => _dspProvider?.ConvolutionLatencyFrames ?? 0;
+
         /// <summary>读取实时电平快照（post-DSP 信号）到调用方数组。返回是否取到
         /// （未播放、或 DSD/DoP 直出不挂 DSP 链时为 false）。UI 线程调用。</summary>
         public bool TryGetLevels(float[] peakOut, float[] rmsOut)
@@ -253,6 +278,28 @@ namespace CelesteMusicPlayer
             }
 
             return s.TryCompute(bandsOut);
+        }
+
+        /// <summary>读取最近的实时样本（post-DSP，旧→新），供示波器画波形线。
+        /// 纯只读拷贝，与播放路径无关。返回 false = 暂无数据。UI 线程调用。</summary>
+        public bool TryGetSamples(float[] outSamples)
+        {
+            SpectrumAnalyzer? s = _dspProvider?.Spectrum;
+            return s != null && s.TryGetSamples(outSamples);
+        }
+
+        /// <summary>开关双声道样本捕获（李萨如模式用）。离开示波器时记得关掉（零开销原则）。</summary>
+        public void SetStereoCapture(bool enabled)
+        {
+            _stereoCaptureWanted = enabled;
+            _dspProvider?.Spectrum.SetStereoCapture(enabled);
+        }
+
+        /// <summary>读取最近的 L/R 样本对（旧→新），供李萨如图形。返回 false = 无数据。UI 线程调用。</summary>
+        public bool TryGetStereoSamples(float[] leftOut, float[] rightOut)
+        {
+            SpectrumAnalyzer? s = _dspProvider?.Spectrum;
+            return s != null && s.TryGetStereoSamples(leftOut, rightOut);
         }
 
         private static bool HasNonZeroGain(double[] gains)
@@ -640,6 +687,13 @@ namespace CelesteMusicPlayer
                 // 开启实时频谱采样（与电平表共用同一批 post-DSP 样本；
                 // requireExact 即 DSD/DoP 直出时同样测不到 → 关闭）。
                 _dspProvider.SetSpectrum(!requireExact);
+                // 立体声捕获意图重放：新建的 _dspProvider 不带这个标志，
+                // 「先切终端页、再开播」或中途切歌都会丢，这里补回来。
+                // DSD/DoP 直出时频谱整体关闭，描了也取不到样本，属预期。
+                _dspProvider.Spectrum.SetStereoCapture(_stereoCaptureWanted);
+                // 输出安全监控统计（峰值 / 削波计数）：同样只测 post-DSP 信号，
+                // requireExact（DSD/DoP 直出）不经 DSP 链 → 关闭，保持 1-bit 直通。
+                _dspProvider.SetOutputStats(!requireExact);
                 switch (mode)
                 {
                     case OutputMode.WasapiShared:

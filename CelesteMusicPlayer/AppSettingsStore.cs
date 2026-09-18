@@ -299,6 +299,34 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         public string QqCookie { get; set; } = string.Empty;
         public string AppleMusicCookie { get; set; } = string.Empty;
 
+        // —— 网络音乐库（WebDAV：PikPak / 群晖 / 坚果云 等）——
+        /// <summary>WebDAV 服务器地址；空=未配置。</summary>
+        public string WebDavUrl { get; set; } = string.Empty;
+
+        /// <summary>显示在主界面左侧「音乐库」下方的名字（如 PikPak）；空=自动取网址主机名。</summary>
+        public string WebDavDisplayName { get; set; } = string.Empty;
+
+        /// <summary>WebDAV 用户名。</summary>
+        public string WebDavUser { get; set; } = string.Empty;
+
+        /// <summary>WebDAV 密码。落盘时走 DPAPI 加密（与 Cookie 同一套处理），内存态保持明文。</summary>
+        public string WebDavPassword { get; set; } = string.Empty;
+
+        /// <summary>代理模式：System=跟随系统（默认）/ None=不使用 / Manual=手动指定。</summary>
+        public string WebDavProxyMode { get; set; } = "System";
+
+        /// <summary>手动代理主机（ProxyMode=Manual 时生效）。</summary>
+        public string WebDavProxyHost { get; set; } = string.Empty;
+
+        /// <summary>手动代理端口，默认 7890（Clash 系常见默认值）。</summary>
+        public int WebDavProxyPort { get; set; } = 7890;
+
+        /// <summary>网络音乐缓存目录；空=用默认位置（LocalAppData\CelesteMusicPlayer\WebDavCache）。</summary>
+        public string WebDavCacheDir { get; set; } = string.Empty;
+
+        /// <summary>网络音乐缓存上限（MB）；超出后按最后访问时间清理。</summary>
+        public int WebDavCacheLimitMb { get; set; } = 4096;
+
         /// <summary>声道：Stereo / Left / Right。</summary>
         public string AudioChannel { get; set; } = "Stereo";
 
@@ -311,6 +339,13 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         /// 后续会扩展：BigCover（大背景）、Vinyl（黑胶唱片）、Minimal（极简）。
         /// </summary>
         public string NowPlayingLayout { get; set; } = "Classic";
+
+        /// <summary>
+        /// 播放信息页的可视化元素（占用原波形区的位置）。
+        /// 取值：Waveform（波形，默认，现状）/ Bars（频谱柱：方块段+峰值帽）/ Radial（径向频谱：环绕封面）/
+        /// Scope（示波器：实时波形线）/ Lissajous（示波器：李萨如相位图）。
+        /// </summary>
+        public string NowPlayingVisual { get; set; } = "Waveform";
 
         /// <summary>首次运行是否已经弹过「文件关联」选择窗口。只弹一次，用户关掉就记住，不再打扰。</summary>
         public bool FileAssociationPromptShown { get; set; }
@@ -361,6 +396,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                         _cache.NetEaseCookie = SecretProtector.Unprotect(_cache.NetEaseCookie);
                         _cache.QqCookie = SecretProtector.Unprotect(_cache.QqCookie);
                         _cache.AppleMusicCookie = SecretProtector.Unprotect(_cache.AppleMusicCookie);
+                        _cache.WebDavPassword = SecretProtector.Unprotect(_cache.WebDavPassword);
                     }
                     else
                     {
@@ -421,15 +457,18 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             {
                 // 落盘前加密 Cookie（DPAPI 当前用户作用域）；内存对象保持明文不变。
                 string ne = state.NetEaseCookie, qq = state.QqCookie, ap = state.AppleMusicCookie;
+                string wd = state.WebDavPassword;
                 state.NetEaseCookie = SecretProtector.Protect(ne);
                 state.QqCookie = SecretProtector.Protect(qq);
                 state.AppleMusicCookie = SecretProtector.Protect(ap);
+                state.WebDavPassword = SecretProtector.Protect(wd);
                 string json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(GetFilePath(), json);
                 // 还原明文，保持内存态与缓存一致（下次读取仍是明文）。
                 state.NetEaseCookie = ne;
                 state.QqCookie = qq;
                 state.AppleMusicCookie = ap;
+                state.WebDavPassword = wd;
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
         }
@@ -494,6 +533,24 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 "Left" or "Right" => s.AudioChannel,
                 _ => "Stereo"
             };
+            // 网络音乐库（WebDAV）：代理模式白名单 + 端口兜底，避免配置文件被手改坏后无法连接。
+            s.WebDavProxyMode = s.WebDavProxyMode switch
+            {
+                "None" or "Manual" => s.WebDavProxyMode,
+                _ => "System"
+            };
+            if (s.WebDavProxyPort <= 0 || s.WebDavProxyPort > 65535)
+            {
+                s.WebDavProxyPort = 7890;
+            }
+
+            s.WebDavCacheLimitMb = Math.Clamp(s.WebDavCacheLimitMb, 128, 102_400);
+            s.WebDavUrl ??= string.Empty;
+            s.WebDavDisplayName ??= string.Empty;
+            s.WebDavUser ??= string.Empty;
+            s.WebDavPassword ??= string.Empty;
+            s.WebDavProxyHost ??= string.Empty;
+            s.WebDavCacheDir ??= string.Empty;
             if (string.IsNullOrWhiteSpace(s.LyricSavePolicy))
             {
                 s.LyricSavePolicy = "Ask";
@@ -685,6 +742,16 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             NetEaseCookie = s.NetEaseCookie,
             QqCookie = s.QqCookie,
             AppleMusicCookie = s.AppleMusicCookie,
+            // 网络音乐库（WebDAV）：同样必须随 Clone 拷贝，否则「填好地址密码、重启后全空」。
+            WebDavUrl = s.WebDavUrl,
+            WebDavDisplayName = s.WebDavDisplayName,
+            WebDavUser = s.WebDavUser,
+            WebDavPassword = s.WebDavPassword,
+            WebDavProxyMode = s.WebDavProxyMode,
+            WebDavProxyHost = s.WebDavProxyHost,
+            WebDavProxyPort = s.WebDavProxyPort,
+            WebDavCacheDir = s.WebDavCacheDir,
+            WebDavCacheLimitMb = s.WebDavCacheLimitMb,
             CustomHotkeys = s.CustomHotkeys.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase),
             // 标签排序面板（模块 A/B/C）：Clone 必须原样拷贝，否则 Load() 返回克隆里这些字段恒为默认，
             // 导致分类字段配置、列配置、自定义分组、上次激活项在重启后丢失（此前自定义分组记忆功能因此失效）。
@@ -698,6 +765,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             // 播放信息页布局：新字段必须随 Clone 拷贝，否则 Load() 返回的克隆里恒为默认，
             // 表现为「选了水面布局、重启后自己变回经典」，与保存是否成功无关。
             NowPlayingLayout = string.IsNullOrWhiteSpace(s.NowPlayingLayout) ? "Classic" : s.NowPlayingLayout,
+            NowPlayingVisual = string.IsNullOrWhiteSpace(s.NowPlayingVisual) ? "Waveform" : s.NowPlayingVisual,
             FileAssociationPromptShown = s.FileAssociationPromptShown
         };
 

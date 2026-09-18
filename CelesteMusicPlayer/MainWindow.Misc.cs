@@ -429,6 +429,9 @@ namespace CelesteMusicPlayer
 
             // 面板已从盘加载完成，之后才允许 DSP handler 持久化/应用（启动阶段误触发需屏蔽）。
             _audioFxPanelReady = true;
+
+            // 模块导航：默认定位第一个模块，并按当前状态点亮各模块圆点
+            InitDspNav();
         }
 
 
@@ -680,9 +683,27 @@ namespace CelesteMusicPlayer
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Collapsed;
                     FolderListBorder.Visibility = Visibility.Visible;
+                    SetFolderBrowserMode(isWebDav: false);
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
                     RefreshFolderBrowserRoots();
+                    break;
+
+                case "WebDav":
+                    LibraryPaneTitle.Text = "网络音乐库";
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Collapsed;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Visible;
+                    // 同一个「文件夹」界面复用给网络库：台头换名字、藏掉「添加文件夹」（网络库不是加本地目录）
+                    SetFolderBrowserMode(isWebDav: true);
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    RefreshWebDavBrowserRoots();
                     break;
 
                 case "PlaylistWall":
@@ -1249,10 +1270,17 @@ namespace CelesteMusicPlayer
             var flyout = new MenuFlyout { Placement = FlyoutPlacementMode.Bottom };
             PlaylistItem songRef = song;
 
-            var play = new MenuFlyoutItem { Text = "播放" };
+            var play = new MenuFlyoutItem { Text = songRef.IsRemote ? "下载并播放" : "播放" };
             play.Icon = new FontIcon { Glyph = "\uE768" };
             play.Click += (_, _) =>
             {
+                if (songRef.IsRemote)
+                {
+                    // 网络曲目：本地还没有这个文件，先下载再播
+                    _ = PlayWebDavItemAsync(songRef);
+                    return;
+                }
+
                 PlaylistItem? track = EnsureTrackInLibrary(songRef.FilePath);
                 if (track != null)
                 {
@@ -1261,20 +1289,24 @@ namespace CelesteMusicPlayer
             };
             flyout.Items.Add(play);
 
-            var add = new MenuFlyoutItem { Text = "加入播放队列" };
-            add.Icon = new FontIcon { Glyph = "\uE710" };
-            add.Click += (_, _) => AddToUserPlaylistBack(songRef);
-            flyout.Items.Add(add);
+            // 下面几项都要求文件已经在本地磁盘上，网络曲目（未下载）点不动，干脆不显示。
+            if (!songRef.IsRemote)
+            {
+                var add = new MenuFlyoutItem { Text = "加入播放队列" };
+                add.Icon = new FontIcon { Glyph = "\uE710" };
+                add.Click += (_, _) => AddToUserPlaylistBack(songRef);
+                flyout.Items.Add(add);
 
-            var edit = new MenuFlyoutItem { Text = "编辑标签" };
-            edit.Icon = new FontIcon { Glyph = "\uE8D2" };
-            edit.Click += (_, _) => TagEditorWindow.ShowBatch(new[] { songRef.FilePath });
-            flyout.Items.Add(edit);
+                var edit = new MenuFlyoutItem { Text = "编辑标签" };
+                edit.Icon = new FontIcon { Glyph = "\uE8D2" };
+                edit.Click += (_, _) => TagEditorWindow.ShowBatch(new[] { songRef.FilePath });
+                flyout.Items.Add(edit);
 
-            var del = new MenuFlyoutItem { Text = "从媒体库中删除" };
-            del.Icon = new FontIcon { Glyph = "\uE74D" };
-            del.Click += (_, _) => _ = DeleteMediaSongWithConfirmAsync(songRef);
-            flyout.Items.Add(del);
+                var del = new MenuFlyoutItem { Text = "从媒体库中删除" };
+                del.Icon = new FontIcon { Glyph = "\uE74D" };
+                del.Click += (_, _) => _ = DeleteMediaSongWithConfirmAsync(songRef);
+                flyout.Items.Add(del);
+            }
 
             var multi = new MenuFlyoutItem { Text = "多选" };
             multi.Icon = new FontIcon { Glyph = "\uE700" };
@@ -1301,6 +1333,32 @@ namespace CelesteMusicPlayer
             flyout.Items.Add(multi);
 
             flyout.ShowAt(MediaDetailsList ?? (FrameworkElement)sender, e.GetPosition(MediaDetailsList ?? (FrameworkElement)sender));
+            e.Handled = true;
+        }
+
+
+        /// <summary>双击详情区歌曲：直接播放（网络曲目先下载）。</summary>
+        private void MediaDetailsList_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
+        {
+            var song = (e.OriginalSource as FrameworkElement)?.DataContext as PlaylistItem;
+            if (song == null)
+            {
+                return;
+            }
+
+            if (song.IsRemote)
+            {
+                _ = PlayWebDavItemAsync(song);
+                e.Handled = true;
+                return;
+            }
+
+            PlaylistItem? track = EnsureTrackInLibrary(song.FilePath);
+            if (track != null)
+            {
+                PlayPlaylistItem(track);
+            }
+
             e.Handled = true;
         }
 
@@ -2138,7 +2196,8 @@ namespace CelesteMusicPlayer
 
         private void WaveformCanvas_SizeChanged(object sender, SizeChangedEventArgs e)
         {
-            DrawWaveformBars();
+            // 按当前可视化模式重绘（波形 / 频谱柱 / 示波器都共用这块画布）
+            DrawVisualSlot();
         }
 
 

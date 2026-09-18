@@ -204,11 +204,20 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                string irPath = IrPathTextBox.Text?.Trim() ?? string.Empty;
+                var prev = RoomCorrectionStore.Load();
                 var state = new RoomCorrectionState
                 {
                     Enabled = EnabledToggle.IsOn,
-                    IrPath = IrPathTextBox.Text?.Trim() ?? string.Empty,
-                    GainDb = Math.Round(GainSlider.Value, 1)
+                    IrPath = irPath,
+                    GainDb = Math.Round(GainSlider.Value, 1),
+                    // 微调余量（trim）不在本窗口调整，沿用上次设置
+                    TrimDb = prev.TrimDb,
+                    // IR 元信息（界面显示用）：本次预检成功则用新值，否则沿用旧值
+                    IrName = string.IsNullOrWhiteSpace(irPath) ? string.Empty : System.IO.Path.GetFileName(irPath),
+                    IrTapCount = _loadedIr != null ? _loadedIr[0].Length : prev.IrTapCount,
+                    IrSampleRate = _loadedIrRate > 0 ? _loadedIrRate : prev.IrSampleRate,
+                    IrChannels = _loadedIr != null ? _loadedIr.Length : prev.IrChannels
                 };
 
                 RoomCorrectionStore.Save(state);

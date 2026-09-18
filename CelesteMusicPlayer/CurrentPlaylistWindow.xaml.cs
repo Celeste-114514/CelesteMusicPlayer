@@ -588,16 +588,19 @@ namespace CelesteMusicPlayer
                 : new SolidColorBrush(Colors.Transparent);
 
             container.Background = new SolidColorBrush(Colors.Transparent);
-            container.CornerRadius = new CornerRadius(8);
+            container.CornerRadius = MainWindow.IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
             container.BorderThickness = new Thickness(0);
 
-            if (selected)
+            if (!MainWindow.TryApplyBarStyleRowSelection(chrome, selected, _owner.GetAccentBrush(), unselected))
             {
-                chrome.Background = _owner.GetAccentBrush();
-            }
-            else
-            {
-                chrome.Background = unselected;
+                if (selected)
+                {
+                    chrome.Background = _owner.GetAccentBrush();
+                }
+                else
+                {
+                    chrome.Background = unselected;
+                }
             }
         }
 

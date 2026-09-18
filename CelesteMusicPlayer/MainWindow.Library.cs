@@ -812,7 +812,7 @@ namespace CelesteMusicPlayer
                     Tag = key,
                     Height = 32,
                     Padding = new Thickness(12, 0, 12, 0),
-                    CornerRadius = new CornerRadius(16),
+                    CornerRadius = new CornerRadius(IsGeekUiStyleActive() ? 0 : 16),
                     BorderThickness = new Thickness(1),
                     VerticalContentAlignment = VerticalAlignment.Center,
                     Content = def.Label,
@@ -827,7 +827,7 @@ namespace CelesteMusicPlayer
                 Height = 32,
                 Width = 32,
                 Padding = new Thickness(0),
-                CornerRadius = new CornerRadius(16),
+                CornerRadius = new CornerRadius(IsGeekUiStyleActive() ? 0 : 16),
                 BorderThickness = new Thickness(1),
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Content = "＋",
@@ -1771,7 +1771,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            LibrarySearchBox.PlaceholderText = _currentCategory switch
+            SetLibrarySearchBasePrompt(_currentCategory switch
             {
                 "Songs" => "搜索标题、专辑、艺术家",
                 "Albums" => "搜索专辑、艺术家",
@@ -1780,7 +1780,7 @@ namespace CelesteMusicPlayer
                 "Folders" => "搜索文件名",
                 "UserPlaylist" => "搜索标题、艺术家、专辑、年份",
                 _ => "搜索"
-            };
+            });
 
             ApplyLibrarySearchNow();
         }
@@ -1990,9 +1990,20 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>刷新媒体库：重新枚举根列表，并重载当前选中项的详情。</summary>
+        /// <summary>刷新：本地媒体库重新枚举根列表；网络音乐库重新连一次服务器。</summary>
         private void RefreshMediaFoldersButton_Click(object sender, RoutedEventArgs e)
         {
+            if (string.Equals(_currentCategory, WebDavCategory, StringComparison.Ordinal))
+            {
+                RefreshWebDavBrowserRoots();
+                if (FolderBrowserView.SelectedItem is FolderBrowserItem remote)
+                {
+                    LoadWebDavFolderSongs(remote);
+                }
+
+                return;
+            }
+
             if (_currentCategory != "Folders")
             {
                 return;
@@ -2110,6 +2121,14 @@ namespace CelesteMusicPlayer
 
             FolderBrowserView.SelectedItem = item;
 
+            if (item.IsRemote)
+            {
+                // 网络音乐库：展开要发一次网络请求，走异步版本
+                _ = ToggleWebDavFolderExpandAsync(item);
+                e.Handled = true;
+                return;
+            }
+
             if (item.IsFolder)
             {
                 ToggleFolderExpand(item);
@@ -2130,6 +2149,18 @@ namespace CelesteMusicPlayer
                 ?? FindFolderBrowserItem(fe);
             if (item == null || !item.IsFolder)
             {
+                return;
+            }
+
+            if (item.IsRemote)
+            {
+                _ = ToggleWebDavFolderExpandAsync(item);
+                if (item.IsFolder)
+                {
+                    LoadWebDavFolderSongs(item);
+                }
+
+                e.Handled = true;
                 return;
             }
 
@@ -2265,6 +2296,26 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            if (item.IsRemote)
+            {
+                // 网络音乐库：双击文件夹 → 列歌；双击文件 → 先下载再播
+                if (item.IsFolder)
+                {
+                    LoadWebDavFolderSongs(item);
+                }
+                else
+                {
+                    _ = PlayWebDavItemAsync(new PlaylistItem
+                    {
+                        Title = System.IO.Path.GetFileNameWithoutExtension(item.DisplayName),
+                        FilePath = item.FullPath,
+                        RemotePath = item.RemotePath
+                    });
+                }
+
+                return;
+            }
+
             if (item.IsFolder)
             {
                 // 双击文件夹：加载其内歌曲到右侧详情区
@@ -2313,6 +2364,13 @@ namespace CelesteMusicPlayer
             MediaDetailsList.ItemsSource = null;
             MediaDetailsEmptyHint.Visibility = Visibility.Visible;
             MediaDetailsList.Visibility = Visibility.Visible;
+
+            if (item.IsRemote)
+            {
+                MediaDetailsEmptyHint.Text = item.IsFolder ? "双击文件夹查看歌曲" : "双击下载并播放";
+                return;
+            }
+
             MediaDetailsEmptyHint.Text = item.IsFolder ? "双击文件夹查看歌曲" : "双击查看";
         }
 
@@ -2337,6 +2395,14 @@ namespace CelesteMusicPlayer
             if (!_isMultiSelectMode)
             {
                 FolderBrowserView.SelectedItem = item;
+            }
+
+            // 网络音乐库的行：本地那套菜单（打开所在文件夹、加入媒体库…）不适用，
+            // 与其弹一堆点不动的项，不如不弹。
+            if (item.IsRemote)
+            {
+                e.Handled = true;
+                return;
             }
 
             if (item.IsFolder)
@@ -2631,7 +2697,7 @@ namespace CelesteMusicPlayer
                 : new SolidColorBrush(Colors.Transparent);
 
             container.Background = new SolidColorBrush(Colors.Transparent);
-            container.CornerRadius = new CornerRadius(8);
+            container.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
             container.BorderThickness = new Thickness(0);
             DisableContainerSelectionCheckMark(container);
 
@@ -2647,21 +2713,24 @@ namespace CelesteMusicPlayer
             if (chrome != null)
             {
                 chrome.MinHeight = 36;
-                chrome.CornerRadius = new CornerRadius(8);
+                chrome.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
                 chrome.VerticalAlignment = VerticalAlignment.Stretch;
                 if (FolderBrowserView != null && FolderBrowserView.ActualWidth > 0)
                 {
                     chrome.Width = FolderBrowserView.ActualWidth; // 行内容铺满整行，选中矩形右侧铺满
                 }
-                if (selected || searchHit)
+                if (!TryApplyBarStyleRowSelection(chrome, selected || searchHit, accent, unselectedBg))
                 {
-                    chrome.Background = accent;
-                    ApplyForegroundToDescendants(chrome, selectedFg);
-                }
-                else
-                {
-                    chrome.Background = unselectedBg;
-                    ClearForegroundOnDescendants(chrome);
+                    if (selected || searchHit)
+                    {
+                        chrome.Background = accent;
+                        ApplyForegroundToDescendants(chrome, selectedFg);
+                    }
+                    else
+                    {
+                        chrome.Background = unselectedBg;
+                        ClearForegroundOnDescendants(chrome);
+                    }
                 }
             }
             else if (selected || searchHit)

@@ -7,8 +7,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>CelesteUpdater</AssemblyName>
     <RootNamespace>CelesteUpdater</RootNamespace>
-    <AssemblyVersion>26.9.17.1</AssemblyVersion>
-    <FileVersion>26.9.17.1</FileVersion>
+    <AssemblyVersion>26.9.19.0</AssemblyVersion>
+    <FileVersion>26.9.19.0</FileVersion>
     <!-- 纯进程/文件操作，不需要 WinUI / XAML，构建轻量、稳定 -->
     <PublishTrimmed>false</PublishTrimmed>
     <PublishReadyToRun>false</PublishReadyToRun>

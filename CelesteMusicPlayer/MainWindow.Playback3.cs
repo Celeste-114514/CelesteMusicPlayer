@@ -71,9 +71,12 @@ namespace CelesteMusicPlayer
 
             // 容器本身保持透明，避免 Presenter 方角选中层
             container.Background = new SolidColorBrush(Colors.Transparent);
-            container.CornerRadius = new CornerRadius(8);
+            container.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
             container.BorderThickness = new Thickness(0);
             DisableContainerSelectionCheckMark(container);
+
+            // 极客化行内细节：格式胶囊去药丸、封面直角（非极客恢复原样）。
+            ApplyGeekRowDetailChrome(container);
 
             bool selected = multiOnThisList
                 ? VisualTreeWalker.IsItemSelected(list, song, selectedSet)
@@ -83,7 +86,7 @@ namespace CelesteMusicPlayer
             if (chrome != null)
             {
                 chrome.MinHeight = 40;
-                chrome.CornerRadius = new CornerRadius(8);
+                chrome.CornerRadius = IsGeekUiStyleActive() ? new CornerRadius(0) : new CornerRadius(8);
                 chrome.VerticalAlignment = VerticalAlignment.Stretch;
                 // 让行内容横向铺满列表宽度（选中矩形也因此铺满整行、字段对齐表头）。
                 // 用显式宽度而非仅靠 HorizontalContentAlignment，确保在 ScrollViewer 布局下也生效。
@@ -92,10 +95,11 @@ namespace CelesteMusicPlayer
                     chrome.Width = list.ActualWidth;
                 }
 
-                if (IsClassicUiStyleActive())
+                if (IsOpaqueUiStyleActive())
                 {
-                    // 经典 Windows 选中样式：左侧常驻 3px 边框（未选中时透明，避免选中瞬间内容横移），
+                    // 经典 / 极客界面选中样式：左侧常驻 3px 边框（未选中时透明，避免选中瞬间内容横移），
                     // 选中时左边框变主题色竖条 + 底色为半透明灰（随明暗主题切换）；文字保持原色。
+                    // 整行填强调色的款在极客近黑底上过于突兀（用户实测反馈），与左侧导航保持一致。
                     // 专辑封面等方形元素走 AlbumRowChrome，不经此分支，不受影响。
                     chrome.BorderThickness = new Thickness(3, 0, 0, 0);
                     bool darkRow = container.ActualTheme == ElementTheme.Dark;
@@ -130,7 +134,7 @@ namespace CelesteMusicPlayer
             else if (selected)
             {
                 // 兜底：无模板 Border 时仍尽量圆角
-                if (IsClassicUiStyleActive())
+                if (IsOpaqueUiStyleActive())
                 {
                     bool darkRow = container.ActualTheme == ElementTheme.Dark;
                     container.Background = new SolidColorBrush(darkRow
@@ -807,7 +811,7 @@ namespace CelesteMusicPlayer
             }
             else if (!_waveformTimer.IsRunning)
             {
-                DrawWaveformBars();
+                DrawVisualSlot();
             }
             // 暂停/停止：若定时器仍在跑，由 Tick 做回落动画后自行 Stop
         }
@@ -1502,7 +1506,7 @@ namespace CelesteMusicPlayer
                 _waveLevels[i] = IdleLevel(i);
             }
 
-            DrawWaveformBars();
+            DrawVisualSlot();
             ClearAlbumArtBackground();
         }
 
@@ -1601,6 +1605,9 @@ namespace CelesteMusicPlayer
                     "信号链：源[" + src + "] → 输出[" + outp + "] | " +
                     "模式=" + exclusivo + (hifi ? "" : "（系统混音）") +
                     " | DSP: " + dsp;
+
+                // 终端布局的左栏用的是同一批数据，这里顺带刷一次
+                UpdateTerminalInfo();
             }
             catch
             {
@@ -2143,8 +2150,12 @@ namespace CelesteMusicPlayer
 
             if (changed || playing)
             {
-                DrawWaveformBars();
+                // 按当前可视化模式分发：波形 / 频谱柱 / 示波器（径向由封面画布自己画）
+                DrawVisualSlot();
             }
+
+            // 终端布局：自己的频谱/电平/相位/播放头（非终端布局里这行直接返回）
+            UpdateTerminalTick();
 
             if (!playing)
             {

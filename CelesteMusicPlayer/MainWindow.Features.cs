@@ -358,11 +358,7 @@ namespace CelesteMusicPlayer
                 SeekBySeconds(5);
                 e.Handled = true;
             }
-            else if (key == VirtualKey.F || key == VirtualKey.F3)
-            {
-                OpenFindSongWindow();
-                e.Handled = true;
-            }
+            // 「查找歌曲」已移除（老版本遗留），F / F3 不再绑定任何动作。
         }
 
         internal void ApplyExtendedSettingsLive(AppSettingsState settings)
@@ -428,7 +424,9 @@ namespace CelesteMusicPlayer
 
             try
             {
-                DrawWaveformBars();
+                // 按当前可视化档位重绘（波形 / 频谱柱 / 示波器 / 径向），
+                // 不能写死 DrawWaveformBars —— 那样切到频谱柱后一换主题色就会被画回波形。
+                DrawVisualSlot();
             }
             catch (Exception waveEx)
             {
@@ -587,6 +585,9 @@ namespace CelesteMusicPlayer
             SetNavEntryVisibility(NavRecentButton, settings.ShowNavRecent);
             SetNavEntryVisibility(NavGenreButton, settings.ShowNavGenre);
             SetNavEntryVisibility(NavYearButton, settings.ShowNavYear);
+
+            // 网络音乐库：配了地址才显示（名字取显示名，没填就用主机名）
+            ApplyWebDavNavEntry(settings);
         }
 
         /// <summary>
@@ -649,12 +650,25 @@ namespace CelesteMusicPlayer
 
         private void ApplySpectrumVisibilityFromSettings(AppSettingsState settings)
         {
-            if (WaveformCanvas == null)
+            // 「显示频谱」关掉时把可视化整体藏起来；打开时交给 ApplyNowPlayingVisual
+            // 按当前模式（波形/频谱柱/径向/示波器）决定到底显示哪一块画布，
+            // 避免这里只认 WaveformCanvas、把径向模式也给盖掉。
+            if (!settings.ShowSpectrum)
             {
+                if (WaveformCanvas != null)
+                {
+                    WaveformCanvas.Visibility = Visibility.Collapsed;
+                }
+
+                if (RadialVisualCanvas != null)
+                {
+                    RadialVisualCanvas.Visibility = Visibility.Collapsed;
+                }
+
                 return;
             }
 
-            WaveformCanvas.Visibility = settings.ShowSpectrum ? Visibility.Visible : Visibility.Collapsed;
+            ApplyNowPlayingVisual();
         }
 
         private void ApplyCoverVisibilityFromSettings(AppSettingsState settings)
@@ -1467,9 +1481,7 @@ namespace CelesteMusicPlayer
         {
             var flyout = new MenuFlyout { Placement = Microsoft.UI.Xaml.Controls.Primitives.FlyoutPlacementMode.Top };
 
-            var find = new MenuFlyoutItem { Text = "查找歌曲…" };
-            find.Click += (_, _) => OpenFindSongWindow();
-            flyout.Items.Add(find);
+            // 「查找歌曲…」已按用户要求移除（老版本遗留功能，窗口一并删除）。
 
             var onlineSearch = new MenuFlyoutItem { Text = "在线搜索…" };
             onlineSearch.Click += (_, _) => OnlineSearchWindow.ShowOrActivate();
@@ -1847,37 +1859,6 @@ namespace CelesteMusicPlayer
                     NowPlayingText.Text = "引擎预览播放结束";
                 }
             });
-        }
-
-        private void OpenFindSongWindow()
-        {
-            var tracks = _playlist.Select(p => (p.Title, p.Artist, p.Album, p.FilePath));
-            FindSongWindow.Show(
-                tracks,
-                onPlay: path =>
-                {
-                    PlaylistItem? item = FindLibraryItemByPath(path);
-                    if (item != null)
-                    {
-                        PlayPlaylistItem(item);
-                    }
-                },
-                onAddToPlaylist: path =>
-                {
-                    PlaylistItem? item = FindLibraryItemByPath(path);
-                    if (item != null)
-                    {
-                        AddSongsToUserPlaylist(new[] { item });
-                    }
-                },
-                onPlayNext: path =>
-                {
-                    PlaylistItem? item = FindLibraryItemByPath(path);
-                    if (item != null)
-                    {
-                        PlaySongsNext(new[] { item });
-                    }
-                });
         }
 
         private PlaylistItem? FindLibraryItemByPath(string path)
@@ -3132,12 +3113,11 @@ namespace CelesteMusicPlayer
         {
             flyout.Items.Add(new MenuFlyoutSeparator());
 
-            var find = new MenuFlyoutItem { Text = "查找歌曲…" };
-            find.Icon = new FontIcon { Glyph = "\uE721" };
-            find.Click += (_, _) => OpenFindSongWindow();
-            flyout.Items.Add(find);
+            // 「查找歌曲…」已按用户要求移除（老版本遗留功能，窗口一并删除）。
 
+            // 工具：图标用 Segoe Fluent 的「扳手/修复」字形
             var tools = new MenuFlyoutSubItem { Text = "工具" };
+            tools.Icon = new FontIcon { Glyph = "\uE90F" };
             var importM3u = new MenuFlyoutItem { Text = "导入 M3U…" };
             importM3u.Click += ImportM3u_Click;
             tools.Items.Add(importM3u);
