@@ -967,8 +967,13 @@ namespace CelesteMusicPlayer
             ApplyAccentSelectionResources(FolderBrowserView);
 
             SyncHeaderColumnsFromState();
-            // 启动默认页面 = 播放队列（左侧导航"播放队列"按钮 Tag=UserPlaylist，右列显示 _userPlaylist）
-            _currentCategory = "UserPlaylist";
+            // 启动默认页面：读设置「启动后进入」（默认 播放队列 = UserPlaylist；非法值回退播放队列）
+            string startupCategory = AppSettingsStore.Load().StartupCategory;
+            if (!AppSettingsStore.ValidStartupCategories.Contains(startupCategory))
+            {
+                startupCategory = "UserPlaylist";
+            }
+            _currentCategory = startupCategory;
             UpdateLibraryNavHighlight();
             ApplyCategoryView();
             _navCurrent = CaptureLibraryNavState();

@@ -53,6 +53,20 @@ namespace CelesteMusicPlayer
             (nameof(CloseWindowAction.Exit), "退出程序")
         };
 
+        /// <summary>「启动后进入」下拉选项：Id = 分类 Tag（与左侧导航一致），Label = 显示名。</summary>
+        private static readonly (string Id, string Label)[] StartupCategoryOptions =
+        {
+            ("UserPlaylist", "播放队列"),
+            ("Songs", "歌曲"),
+            ("Albums", "专辑"),
+            ("Artists", "艺术家"),
+            ("AlbumArtists", "专辑艺术家"),
+            ("Favorites", "我喜欢的音乐"),
+            ("Ratings", "评分"),
+            ("Recent", "最近播放"),
+            ("PlaylistWall", "播放列表"),
+        };
+
         private static readonly (PlaybackOrder Order, string Label)[] PlaybackOrderOptions =
         {
             (PlaybackOrder.ListLoop, "列表循环"),
@@ -415,6 +429,7 @@ namespace CelesteMusicPlayer
         private void InitComboBoxes()
         {
             FillCombo(CloseActionCombo, CloseOptions);
+            FillCombo(StartupCategoryCombo, StartupCategoryOptions);
             PlaybackOrderCombo.Items.Clear();
             foreach ((PlaybackOrder order, string label) in PlaybackOrderOptions)
             {
@@ -561,6 +576,7 @@ namespace CelesteMusicPlayer
 
                 // 常规
                 SelectComboByTag(CloseActionCombo, s.CloseAction);
+                SelectComboByTag(StartupCategoryCombo, s.StartupCategory);
                 SetToggle(RestoreLibrarySwitch, s.RestoreLibrary);
                 SetToggle(RestorePlaybackSwitch, s.RestorePlayback);
                 SetToggle(AutoRunSwitch, s.AutoRun);
@@ -1151,6 +1167,12 @@ namespace CelesteMusicPlayer
             s.PlaylistDensity = GetComboTagString(PlaylistDensityCombo, "Comfortable");
 
             s.CloseAction = GetComboTagString(CloseActionCombo, nameof(CloseWindowAction.Ask));
+            // 「启动后进入」写回：下拉 Tag 即分类名（与左侧导航一致）。只接受白名单内的分类，
+            // 未选中 / 非法值一律回退「播放队列」，与 AppSettingsStore.Normalize 的兜底保持一致。
+            string startupCategory = GetComboTagString(StartupCategoryCombo, "UserPlaylist");
+            s.StartupCategory = AppSettingsStore.ValidStartupCategories.Contains(startupCategory)
+                ? startupCategory
+                : "UserPlaylist";
             s.RestoreLibrary = RestoreLibrarySwitch?.IsOn ?? s.RestoreLibrary;
             s.RestorePlayback = RestorePlaybackSwitch?.IsOn ?? s.RestorePlayback;
             s.AutoRun = AutoRunSwitch?.IsOn ?? s.AutoRun;

@@ -18,6 +18,10 @@ namespace CelesteMusicPlayer
 
         public bool RestorePlayback { get; set; } = true;
 
+        /// <summary>启动后默认进入的分类（左侧导航 Tag）。默认 "UserPlaylist" = 播放队列。
+        /// 白名单见 <see cref="AppSettingsStore.ValidStartupCategories"/>；非法值由 Normalize 回退到播放队列。</summary>
+        public string StartupCategory { get; set; } = "UserPlaylist";
+
         public bool AutoRun { get; set; }
 
         public bool EnableFrostedGlass { get; set; } = true;
@@ -366,6 +370,19 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
 
     public static class AppSettingsStore
     {
+        /// <summary>「启动后进入」可选分类白名单（值与左侧导航按钮 Tag 一致）：
+        /// 播放队列 UserPlaylist / 歌曲 Songs / 专辑 Albums / 艺术家 Artists / 专辑艺术家 AlbumArtists /
+        /// 我喜欢的音乐 Favorites / 评分 Ratings / 最近播放 Recent / 播放列表 PlaylistWall。
+        /// 有意不含：播放最多 MostPlayed / 媒体库 Folders / 音效处理 AudioFX / 标签排序 TagSort /
+        /// 流派 Genres / 年份 Years / 网络音乐库 WebDav。
+        /// 放在 AppSettingsStore（而非 AppSettingsState）是因为引用方统一写 AppSettingsStore.xxx；
+        /// Normalize 内部的裸名引用也在本类内可直接解析。</summary>
+        internal static readonly HashSet<string> ValidStartupCategories = new(System.StringComparer.Ordinal)
+        {
+            "UserPlaylist", "Songs", "Albums", "Artists", "AlbumArtists",
+            "Favorites", "Ratings", "Recent", "PlaylistWall",
+        };
+
         private const string FileName = "app-settings.json";
         private static readonly object Gate = new();
         private static AppSettingsState? _cache;
@@ -501,6 +518,11 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 s.CloseAction = nameof(CloseWindowAction.Ask);
             }
 
+            if (string.IsNullOrWhiteSpace(s.StartupCategory) || !ValidStartupCategories.Contains(s.StartupCategory))
+            {
+                s.StartupCategory = "UserPlaylist";
+            }
+
             if (string.IsNullOrWhiteSpace(s.PlaybackOrder))
             {
                 s.PlaybackOrder = nameof(CelesteMusicPlayer.PlaybackOrder.ListLoop);
@@ -623,6 +645,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             CloseAction = s.CloseAction,
             RestoreLibrary = s.RestoreLibrary,
             RestorePlayback = s.RestorePlayback,
+            StartupCategory = s.StartupCategory,
             AutoRun = s.AutoRun,
             EnableFrostedGlass = s.EnableFrostedGlass,
             Volume = s.Volume,

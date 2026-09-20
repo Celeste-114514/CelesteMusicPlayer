@@ -890,6 +890,17 @@
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" MinWidth="200" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="启动后进入" />
+                                <TextBlock Text="打开程序时左侧默认选中的分类；选「播放队列」会定位到上次播放的歌曲" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ComboBox x:Name="StartupCategoryCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
