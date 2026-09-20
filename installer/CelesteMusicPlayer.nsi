@@ -2,19 +2,34 @@
 ; Build: makensis.exe installer\CelesteMusicPlayer.nsi
 
 ; ---------- Metadata ----------
+; APP_VERSION / PUBLISH_DIR / OUTFILE / VARIANT 由 tools\package-installers.ps1
+; 通过 makensis -D 传入（脚本内不再硬编码路径与版本号，换机器/换版本无需改脚本）。
 !define APP_NAME "CelesteMusicPlayer"
-!define APP_VERSION "26.9.19.1"
 !define APP_EXE "CelesteMusicPlayer.exe"
-!define PUBLISH_DIR "C:\Users\admin\source\repos\CelesteMusicPlayer\CelesteMusicPlayer\bin\Release\net9.0-windows10.0.19041.0\win-x64\publish"
 !define APP_GUID "{F0C207C6-BD8C-4D7A-9127-F1B67F17E65B}"
 !define REG_UNINST "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
 !define REG_RUN "Software\Microsoft\Windows\CurrentVersion\Run"
+
+!ifndef APP_VERSION
+  !error "APP_VERSION 未定义。请用 tools\package-installers.ps1 打包，不要直接手动 makensis。"
+!endif
+!ifndef PUBLISH_DIR
+  !error "PUBLISH_DIR 未定义。请用 tools\package-installers.ps1 打包，不要直接手动 makensis。"
+!endif
+!ifndef OUTFILE
+  !error "OUTFILE 未定义。请用 tools\package-installers.ps1 打包，不要直接手动 makensis。"
+!endif
+; VARIANT: fd = 框架依赖（默认）/ sc = 自包含。写入 install-variant.txt，
+; 应用内更新据此下载对应变体的安装包（见 UpdateChecker.InstalledVariant）。
+!ifndef VARIANT
+  !define VARIANT "fd"
+!endif
 
 Unicode true
 ; User-level install, no admin needed
 RequestExecutionLevel user
 Name "${APP_NAME}"
-OutFile "C:\Users\admin\Desktop\CelesteMusicPlayer-Setup-${APP_VERSION}.exe"
+OutFile "${OUTFILE}"
 InstallDir "$LOCALAPPDATA\Programs\${APP_NAME}"
 InstallDirRegKey HKCU "Software\${APP_NAME}" "InstallLocation"
 SetCompressor lzma
@@ -72,6 +87,12 @@ Section "播放器主程序（必需）" SEC_APP
   SetOverwrite on
   File /r "${PUBLISH_DIR}\*.*"
   WriteUninstaller "$INSTDIR\uninstall.exe"
+
+  ; 写入安装变体标记（fd/sc）。应用内更新读取它来决定下载哪个安装包，
+  ; 避免框架依赖版用户下到自包含包（反之亦然）。更新安装时由新安装包覆写。
+  FileOpen $0 "$INSTDIR\install-variant.txt" w
+  FileWrite $0 "${VARIANT}"
+  FileClose $0
 
   ; Add/Remove Programs (user-level)
   WriteRegStr HKCU "${REG_UNINST}" "DisplayName" "${APP_NAME}"
