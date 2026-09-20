@@ -356,6 +356,27 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>
+        /// 供选项设置「启动后进入」即时预览：直接切到指定分类（白名单内才生效）。
+        /// 与左侧导航点击等价，但不做「同分类提前返回」判断，便于从任意分类立即跳转。
+        /// </summary>
+        internal void NavigateLibraryCategory(string tag)
+        {
+            if (string.IsNullOrWhiteSpace(tag) || !AppSettingsStore.ValidStartupCategories.Contains(tag))
+            {
+                return;
+            }
+
+            ExitMultiSelectMode();
+            CommitLibraryNavigation(() =>
+            {
+                _currentCategory = tag;
+                ApplyCategoryView();
+            });
+            ApplySwitchPlaylistPausePreference();
+        }
+
+
         // 音效处理按钮：占位入口（后续阶段接入 ECHO 音效处理页面）
         private void NavAudioFxButton_Click(object sender, RoutedEventArgs e)
         {
@@ -1255,7 +1276,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            if (MediaDetailsList?.SelectionMode == ListViewSelectionMode.Multiple)
+            if (IsMultiSelectSelection(MediaDetailsList))
             {
                 // 已进入多选：右键加入选中
                 if (!MediaDetailsList.SelectedItems.Contains(song))
@@ -1315,6 +1336,7 @@ namespace CelesteMusicPlayer
                 if (MediaDetailsList != null)
                 {
                     MediaDetailsList.SelectionMode = ListViewSelectionMode.Multiple;
+                    AttachRangeMultiSelect(MediaDetailsList);
                     MediaDetailsList.SelectedItems.Clear();
                     MediaDetailsList.SelectedItems.Add(songRef);
                     RefreshMediaSongSelectionChrome();
@@ -1547,7 +1569,7 @@ namespace CelesteMusicPlayer
             if (!_isMultiSelectMode)
             {
                 PlaylistView.SelectedItem = null;
-                if (MediaDetailsList != null && MediaDetailsList.SelectionMode != ListViewSelectionMode.Multiple)
+                if (MediaDetailsList != null && !IsMultiSelectSelection(MediaDetailsList))
                 {
                     MediaDetailsList.SelectedItem = null;
                 }
@@ -1778,6 +1800,15 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>列表当前是否处于「可多选」的选择模式（Multiple / Extended 均算）。
+        /// 旧代码里散落的「== ListViewSelectionMode.Multiple」判断统一走这里，避免漏改。</summary>
+        internal static bool IsMultiSelectSelection(ListViewBase? list)
+            => RangeMultiSelect.IsMultiSelectMode(list);
+
+        /// <summary>给列表挂上 Shift 连选一段 / Ctrl 跳选（转发到共用实现 RangeMultiSelect）。</summary>
+        internal static void AttachRangeMultiSelect(ListViewBase? list)
+            => RangeMultiSelect.Attach(list);
+
         /// <summary>
         /// 通过 None 中转切换选择模式，安全清空选中项，避免 SelectedItems.Clear 崩溃。
         /// </summary>
@@ -1803,6 +1834,8 @@ namespace CelesteMusicPlayer
                 list.SelectedItem = null;
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+
+            AttachRangeMultiSelect(list);
         }
 
 
@@ -1827,6 +1860,8 @@ namespace CelesteMusicPlayer
                 grid.SelectedItem = null;
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+
+            AttachRangeMultiSelect(grid);
         }
 
 

@@ -1415,6 +1415,7 @@ namespace CelesteMusicPlayer
             _multiSelectFolderList = null;
             _isMultiSelectMode = true;
             TagSortPanelGridView.SelectionMode = ListViewSelectionMode.Multiple;
+            AttachRangeMultiSelect(TagSortPanelGridView);
             TagSortPanelGridView.IsItemClickEnabled = false;
 
             LibraryPaneTitle.Visibility = Visibility.Collapsed;
@@ -1484,6 +1485,7 @@ namespace CelesteMusicPlayer
             _multiSelectFolderList = null;
             _isMultiSelectMode = true;
             TagSortClassGridView.SelectionMode = ListViewSelectionMode.Multiple;
+            AttachRangeMultiSelect(TagSortClassGridView);
             TagSortClassGridView.IsItemClickEnabled = false;
 
             LibraryPaneTitle.Visibility = Visibility.Collapsed;

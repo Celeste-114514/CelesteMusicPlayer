@@ -390,6 +390,7 @@ namespace CelesteMusicPlayer
         {
             _isMultiSelectMode = true;
             PlaylistView.SelectionMode = ListViewSelectionMode.Multiple;
+            RangeMultiSelect.Attach(PlaylistView);
             ApplyMultiSelectItemStyle();
 
             MultiSelectTitlePanel.Visibility = Visibility.Visible;

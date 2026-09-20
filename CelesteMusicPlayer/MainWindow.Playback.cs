@@ -2929,6 +2929,7 @@ namespace CelesteMusicPlayer
         private void EnterPlaylistWallMultiSelect(PlaylistCardViewModel anchor)
         {
             PlaylistWallGridView.SelectionMode = ListViewSelectionMode.Multiple;
+            AttachRangeMultiSelect(PlaylistWallGridView);
             PlaylistWallGridView.IsItemClickEnabled = false;
             PlaylistWallMultiBar.Visibility = Visibility.Visible;
         }
@@ -3428,7 +3429,7 @@ namespace CelesteMusicPlayer
 
             Brush accent = ResolveAccentBrush();
             Brush selectedFg = ColorHelper.ResolveContrastingForeground(accent);
-            bool selected = list.SelectionMode == ListViewSelectionMode.Multiple
+            bool selected = IsMultiSelectSelection(list)
                 ? list.SelectedItems.Contains(song)
                 : ReferenceEquals(list.SelectedItem, song);
 
