@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.IO;
 using System.Net.Http;
 using System.Reflection;
 using System.Text.Json;
@@ -19,10 +21,12 @@ namespace CelesteMusicPlayer
         /// <summary>最近一次发现的新版本（仅当比当前版本新才非空）。关于面板据此直接展示状态，不必等用户手动点检查。</summary>
         public sealed class UpdateInfo
         {
-            public UpdateInfo(string tag, string? setupUrl)
+            public UpdateInfo(string tag, string? setupUrl, string packageKind, string? expectedSha256)
             {
                 Tag = tag;
                 SetupUrl = setupUrl;
+                PackageKind = packageKind;
+                ExpectedSha256 = expectedSha256;
             }
 
             /// <summary>版本 tag，如 "v26.9.14"。</summary>
@@ -30,6 +34,18 @@ namespace CelesteMusicPlayer
 
             /// <summary>安装包（Setup-*.exe）下载地址；无匹配资产为 null。</summary>
             public string? SetupUrl { get; }
+
+            /// <summary>所选安装包的变体："sc"=自包含，"fd"=框架依赖。</summary>
+            public string PackageKind { get; }
+
+            /// <summary>
+            /// 所选安装包的期望 SHA-256（来自 release 的 SHA256SUMS.txt，小写十六进制）。
+            /// 取不到为 null，此时应用放弃校验直接安装，不阻断更新。
+            /// </summary>
+            public string? ExpectedSha256 { get; }
+
+            /// <summary>供 UI 展示的包型中文名。</summary>
+            public string PackageKindText => PackageKind == "sc" ? "自包含版" : "框架依赖版";
         }
 
         /// <summary>启动期自动检查发现的新版本；未发现有更新时为 null。</summary>
@@ -89,13 +105,38 @@ namespace CelesteMusicPlayer
             return new Version(major, minor, build, revision);
         }
 
+        /// <summary>安装变体常量：sc=自包含，fd=框架依赖。</summary>
+        public const string VariantSelfContained = "sc";
+        public const string VariantFrameworkDependent = "fd";
+
         /// <summary>
-        /// 从 GitHub Releases latest 接口读取 tag_name 与安装包下载地址。
-        /// 返回 (tag, setupUrl)；网络异常或解析失败两项均为 null。
+        /// 读取当前安装变体：安装目录下 install-variant.txt（NSIS 安装时写入，内容 "fd"/"sc"）。
+        /// 文件不存在（旧安装/绿色版）时按框架依赖处理，与历史行为一致。
         /// </summary>
-        public static async Task<(string? Tag, string? SetupUrl)> FetchLatestAsync()
+        public static string InstalledVariant()
         {
-            string? setupUrl = null;
+            try
+            {
+                string marker = Path.Combine(AppContext.BaseDirectory, "install-variant.txt");
+                if (File.Exists(marker))
+                {
+                    string v = File.ReadAllText(marker).Trim();
+                    if (string.Equals(v, VariantSelfContained, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return VariantSelfContained;
+                    }
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("UpdateChecker.InstalledVariant", caught);
+            }
+
+            return VariantFrameworkDependent;
+        }
+
+        public static async Task<UpdateInfo?> FetchLatestAsync()
+        {
             try
             {
                 using var http = new HttpClient();
@@ -110,7 +151,13 @@ namespace CelesteMusicPlayer
                     tag = tagEl.GetString();
                 }
 
-                // 在 assets 里找安装包：优先 CelesteMusicPlayer-Setup-*.exe，其次任何 *.exe 里的 Setup/Install
+                string variant = InstalledVariant();
+
+                string? fdUrl = null;        // 框架依赖安装包：Setup-<ver>.exe（不含 -SC-）
+                string? scUrl = null;        // 自包含安装包：Setup-SC-<ver>.exe
+                string? fallbackUrl = null;  // 任意 .exe 资产，最后兜底
+                string? sumsUrl = null;      // SHA256SUMS.txt
+
                 if (doc.RootElement.TryGetProperty("assets", out JsonElement assets) && assets.ValueKind == JsonValueKind.Array)
                 {
                     foreach (JsonElement asset in assets.EnumerateArray())
@@ -122,39 +169,102 @@ namespace CelesteMusicPlayer
                             continue;
                         }
 
-                        if (name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                            (name.Contains("Setup", StringComparison.OrdinalIgnoreCase) ||
-                             name.Contains("Install", StringComparison.OrdinalIgnoreCase)))
+                        if (string.Equals(name, "SHA256SUMS.txt", StringComparison.OrdinalIgnoreCase))
                         {
-                            setupUrl = url;
-                            break;
+                            sumsUrl ??= url;
+                            continue;
                         }
-                    }
 
-                    // 兜底：没找到 Setup 命名，退而求其次取第一个 .exe（可能为绿色版/自解压包）
-                    if (setupUrl == null)
-                    {
-                        foreach (JsonElement asset in assets.EnumerateArray())
+                        if (!name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
                         {
-                            string? name = asset.TryGetProperty("name", out JsonElement n) ? n.GetString() : null;
-                            string? url = asset.TryGetProperty("browser_download_url", out JsonElement u) ? u.GetString() : null;
-                            if (!string.IsNullOrEmpty(name) && name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase) &&
-                                !string.IsNullOrEmpty(url))
-                            {
-                                setupUrl = url;
-                                break;
-                            }
+                            continue;
+                        }
+
+                        fallbackUrl ??= url;
+
+                        bool isSetup = name.Contains("Setup", StringComparison.OrdinalIgnoreCase)
+                            || name.Contains("Install", StringComparison.OrdinalIgnoreCase);
+                        if (!isSetup)
+                        {
+                            continue;
+                        }
+
+                        if (name.Contains("-SC-", StringComparison.OrdinalIgnoreCase))
+                        {
+                            scUrl ??= url;
+                        }
+                        else
+                        {
+                            fdUrl ??= url;
                         }
                     }
                 }
 
-                return (tag, setupUrl);
+                // 按已装变体选包：自包含优先 -SC- 包；框架依赖只取非 -SC- 包，
+                // 避免框架依赖用户下到 3 倍体积的自包含包。两侧都有最终兜底。
+                string? setupUrl = variant == "sc"
+                    ? (scUrl ?? fdUrl ?? fallbackUrl)
+                    : (fdUrl ?? fallbackUrl);
+
+                // SHA256SUMS.txt：取到就解析出所选安装包的期望哈希；取不到不阻断更新
+                string? expectedSha256 = null;
+                if (!string.IsNullOrEmpty(sumsUrl) && !string.IsNullOrEmpty(setupUrl))
+                {
+                    expectedSha256 = await FetchExpectedSha256Async(http, sumsUrl, setupUrl);
+                }
+
+                return new UpdateInfo(tag ?? string.Empty, setupUrl, variant, expectedSha256);
             }
             catch (Exception caught)
             {
                 StartupLog.WriteException("UpdateChecker.FetchLatest", caught);
-                return (null, null);
+                return null;
             }
+        }
+
+        /// <summary>
+        /// 下载 SHA256SUMS.txt 并解析出 setupUrl 对应文件名的哈希行（格式：&lt;hash&gt;  &lt;filename&gt;）。
+        /// 任何失败都返回 null（不阻断更新，仅放弃校验）。
+        /// </summary>
+        private static async Task<string?> FetchExpectedSha256Async(HttpClient http, string sumsUrl, string setupUrl)
+        {
+            try
+            {
+                string fileName = Path.GetFileName(new Uri(setupUrl).AbsolutePath);
+                if (string.IsNullOrEmpty(fileName))
+                {
+                    return null;
+                }
+
+                string text = await http.GetStringAsync(sumsUrl);
+                foreach (string rawLine in text.Split('\n'))
+                {
+                    string line = rawLine.Trim();
+                    if (line.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    int sep = line.IndexOf(' ');
+                    if (sep <= 0)
+                    {
+                        continue;
+                    }
+
+                    string hash = line.Substring(0, sep).Trim();
+                    string name = line.Substring(sep).Trim();
+                    if (string.Equals(name, fileName, StringComparison.OrdinalIgnoreCase) && hash.Length == 64)
+                    {
+                        return hash.ToLowerInvariant();
+                    }
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("UpdateChecker.FetchSha256Sums", caught);
+            }
+
+            return null;
         }
 
         /// <summary>
@@ -163,14 +273,15 @@ namespace CelesteMusicPlayer
         /// </summary>
         public static async Task<UpdateInfo?> CheckForUpdateAsync()
         {
-            (string? tag, string? setupUrl) = await FetchLatestAsync();
-            if (string.IsNullOrEmpty(tag) || CompareVersionStrings(tag, CurrentVersionText()) <= 0)
+            UpdateInfo? info = await FetchLatestAsync();
+            if (info == null || string.IsNullOrEmpty(info.Tag)
+                || CompareVersionStrings(info.Tag, CurrentVersionText()) <= 0)
             {
                 LatestAvailable = null;
                 return null;
             }
 
-            LatestAvailable = new UpdateInfo(tag, setupUrl);
+            LatestAvailable = info;
             return LatestAvailable;
         }
     }

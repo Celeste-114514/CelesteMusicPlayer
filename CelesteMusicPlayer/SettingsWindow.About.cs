@@ -25,6 +25,7 @@ namespace CelesteMusicPlayer
 
         /// <summary>最新版本安装包（Setup-*.exe）的下载 URL，无匹配资产为 null。</summary>
         private string? _latestSetupUrl;
+        private string? _latestExpectedSha256;
 
         /// <summary>当前程序集版本号字符串（如 "26.9.10.2"）。逻辑已抽到 UpdateChecker，这里只做转发。</summary>
         private static string CurrentVersionText() => UpdateChecker.CurrentVersionText();
@@ -42,9 +43,10 @@ namespace CelesteMusicPlayer
         /// </summary>
         private async System.Threading.Tasks.Task<string?> FetchLatestVersionAsync()
         {
-            (string? tag, string? setupUrl) = await UpdateChecker.FetchLatestAsync();
-            _latestSetupUrl = setupUrl;
-            return tag;
+            UpdateChecker.UpdateInfo? info = await UpdateChecker.FetchLatestAsync();
+            _latestSetupUrl = info?.SetupUrl;
+            _latestExpectedSha256 = info?.ExpectedSha256;
+            return info?.Tag;
         }
 
         /// <summary>
@@ -151,7 +153,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            _ = DownloadAndLaunchInstallerAsync(_latestSetupUrl, _latestTag);
+            _ = DownloadAndLaunchInstallerAsync(_latestSetupUrl, _latestTag, _latestExpectedSha256);
         }
 
         /// <summary>
@@ -199,7 +201,7 @@ namespace CelesteMusicPlayer
         /// 应用内下载安装包到临时目录（带进度），下载完成后启动更新助手（或 cmd 兜底）完成覆盖安装。
         /// 若 url 以 file:// 开头（本地测试模式），跳过网络下载，直接复制本地安装包再走同一套启动逻辑。
         /// </summary>
-        private async System.Threading.Tasks.Task DownloadAndLaunchInstallerAsync(string url, string tag)
+        private async System.Threading.Tasks.Task DownloadAndLaunchInstallerAsync(string url, string tag, string? expectedSha256)
         {
             bool devLocal = url.StartsWith("file://", StringComparison.OrdinalIgnoreCase);
 
@@ -292,6 +294,28 @@ namespace CelesteMusicPlayer
 
                 AboutDownloadProgress.Value = 100;
                 AboutUpdateStatusText.Text = $"下载完成，正在启动安装向导（{tag}）。安装过程中请按提示操作，程序将覆盖安装到原目录。";
+                // 安全校验：release 附带 SHA256SUMS.txt 时，下载完成后先比对 SHA-256，不符拒绝执行
+                if (!string.IsNullOrEmpty(expectedSha256))
+                {
+                    AboutUpdateStatusText.Text = "正在校验安装包完整性（SHA-256）…";
+                    string actualHash;
+                    using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
+                    using (FileStream fs = File.OpenRead(targetPath))
+                    {
+                        actualHash = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
+                    }
+
+                    if (!string.Equals(actualHash, expectedSha256, StringComparison.OrdinalIgnoreCase))
+                    {
+                        try { File.Delete(targetPath); } catch { }
+                        StartupLog.Write("SettingsWindow.About.HashMismatch expected=" + expectedSha256 + " actual=" + actualHash);
+                        AboutUpdateStatusText.Text = "安全校验失败：安装包哈希与官方发布不一致，已拒绝安装并删除文件。请稍后重试，或前往 GitHub Releases 手动下载。";
+                        AboutDownloadProgress.Visibility = Visibility.Collapsed;
+                        AboutDownloadUpdateButton.IsEnabled = true;
+                        AboutCheckUpdateButton.IsEnabled = true;
+                        return;
+                    }
+                }
                 await LaunchUpdateAndExitAsync(targetPath, tmpDir);
             }
             catch (Exception caught)
