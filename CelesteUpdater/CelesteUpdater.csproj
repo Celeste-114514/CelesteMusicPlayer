@@ -13,4 +13,11 @@
     <PublishTrimmed>false</PublishTrimmed>
     <PublishReadyToRun>false</PublishReadyToRun>
   </PropertyGroup>
+  <!-- 主程序以 CelesteSelfContainedDistribute=true 自包含发布时，本工程必须同步自包含，
+       否则自包含主程序引用框架依赖的 WinExe 会报 NETSDK1150、整个自包含构建失败。
+       该属性由命令行全局传入，ProjectReference 构建时会传播到本工程。 -->
+  <PropertyGroup Condition="'$(CelesteSelfContainedDistribute)' == 'true'">
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+  </PropertyGroup>
 </Project>
