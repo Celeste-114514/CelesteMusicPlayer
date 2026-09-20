@@ -262,8 +262,8 @@ namespace CelesteMusicPlayer
 
             try
             {
-                using var http = new HttpClient();
-                http.Timeout = TimeSpan.FromMinutes(30);
+                // 共享 HttpClient（P1-6）：安装包大文件下载使用 LongRunning 实例，不再每次新建
+                var http = HttpClients.LongRunning;
                 http.DefaultRequestHeaders.UserAgent.ParseAdd("CelesteMusicPlayer/" + CurrentVersionText());
 
                 using var response = await http.GetAsync(url, HttpCompletionOption.ResponseHeadersRead);

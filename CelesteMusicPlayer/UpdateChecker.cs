@@ -139,10 +139,10 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                using var http = new HttpClient();
-                http.Timeout = TimeSpan.FromSeconds(15);
-                http.DefaultRequestHeaders.UserAgent.ParseAdd("CelesteMusicPlayer/" + CurrentVersionText());
-                string json = await http.GetStringAsync(GithubReleasesApi);
+                // 共享 HttpClient（P1-6）：不再每次新建实例；15 秒超时改由 CTS 按调用控制
+                HttpClient http = HttpClients.Default;
+                using var cts = new System.Threading.CancellationTokenSource(TimeSpan.FromSeconds(15));
+                string json = await http.GetStringAsync(GithubReleasesApi, cts.Token);
                 using var doc = JsonDocument.Parse(json);
 
                 string? tag = null;

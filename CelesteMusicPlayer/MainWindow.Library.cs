@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -2888,10 +2888,9 @@ namespace CelesteMusicPlayer
                     string? url = await OnlineMusicApi.SearchArtistAvatarUrlAsync(key);
                     if (!string.IsNullOrWhiteSpace(url))
                     {
-                        using var http = new HttpClient { Timeout = TimeSpan.FromSeconds(8) };
-                        http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
-                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
-                        byte[] bytes = await http.GetByteArrayAsync(url);
+                        // 共享 HttpClient（P1-6）：8 秒超时改由 CTS 按调用控制，不再每次新建实例
+                        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                        byte[] bytes = await HttpClients.Default.GetByteArrayAsync(url, cts.Token);
                         if (bytes.Length > 0)
                         {
                             result = await CreateBitmapFromBytesAsync(bytes);
