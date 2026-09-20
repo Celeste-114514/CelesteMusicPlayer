@@ -30,3 +30,17 @@ jobs:
         # 自动验证：EQ 声道隔离（无八度偏移）、多声道各声道均生效、无 DSP 时数值直通。
         # 任意不变量被破坏即判失败，红标提醒。
         run: dotnet test tools/EqRegression/EqRegression.csproj -c Debug -p:Platform=x64
+
+      - name: 打包双安装包（框架依赖 + 自包含）
+        # 与本地 tools/package-installers.ps1 完全一致：windows-latest 运行器自带 NSIS 3，
+        # 版本号从 csproj 自动读取。产物在 dist/：Setup-<ver>.exe（fd）、Setup-SC-<ver>.exe（sc）、SHA256SUMS.txt
+        run: powershell -ExecutionPolicy Bypass -File tools/package-installers.ps1
+
+      - name: 上传安装包 artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: installers
+          path: |
+            dist/CelesteMusicPlayer-Setup-*.exe
+            dist/SHA256SUMS.txt
+          if-no-files-found: error
