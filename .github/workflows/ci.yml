@@ -3,8 +3,14 @@ name: CI
 on:
   push:
     branches: [ main, master, develop ]
+    # 打 tag（v*）时额外触发一次：用于把安装包与 SHA256SUMS.txt 自动发布到 Release（见最后一步）
+    tags: [ 'v*' ]
   pull_request:
     branches: [ main, master, develop ]
+
+# 最后一步需要创建 Release 并上传资产
+permissions:
+  contents: write
 
 jobs:
   build-and-test:
@@ -44,3 +50,30 @@ jobs:
             dist/CelesteMusicPlayer-Setup-*.exe
             dist/SHA256SUMS.txt
           if-no-files-found: error
+
+      - name: 发布到 Release（含 SHA256SUMS.txt）
+        # P0-1 闭环的关键一步：
+        # 客户端更新时会到 Release 里找 SHA256SUMS.txt 做 SHA-256 比对，
+        # 「找不到该文件就静默跳过校验」（UpdateChecker.cs）。
+        # 此前 CI 只把文件放进 Actions artifact，没进 Release —— 校验等于空转且没有任何提示。
+        # 这里保证：只要发版时打 tag（v*），安装包与哈希清单一定一起进 Release。
+        # 用 GitHub 官方预装的 gh CLI，不引入第三方 action。
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          $assets = @()
+          $assets += (Get-ChildItem -Path dist -Filter 'CelesteMusicPlayer-Setup-*.exe').FullName
+          $assets += (Resolve-Path 'dist/SHA256SUMS.txt').Path
+          if (-not $assets -or $assets.Count -lt 2) {
+            throw "dist 下缺少安装包或 SHA256SUMS.txt，拒绝发布（当前找到 $($assets.Count) 个文件）"
+          }
+          Write-Host "将上传 $($assets.Count) 个文件到 Release $tag"
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --generate-notes --title $tag @assets
+          } else {
+            gh release upload $tag @assets --clobber
+          }
