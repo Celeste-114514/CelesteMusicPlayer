@@ -952,13 +952,23 @@ namespace CelesteMusicPlayer
 
             bool dark = chrome.ActualTheme == ElementTheme.Dark;
             chrome.BorderThickness = new Thickness(3, 0, 0, 0);
+
+            // 条样式底色是「半透明灰」而不是强调色，文字必须显式回落到主题前景色。
+            // 注意：ListViewItem/GridViewItem 默认模板的 Selected 视觉状态是用 ObjectAnimation
+            // 把 ContentPresenter.Foreground 动画成白色（动画优先级高于任何本地值，压不住），
+            // 所以选中时必须给行内每个 TextBlock 显式设值（ApplyForegroundToDescendants）；
+            // 未选中时 Clear 让行内文字恢复 DataTemplate 各自的主题色层次。
+            var rowForeground = new SolidColorBrush(dark
+                ? Color.FromArgb(255, 255, 255, 255)
+                : Color.FromArgb(255, 0, 0, 0));
+
             if (selected)
             {
                 chrome.Background = new SolidColorBrush(dark
                     ? Color.FromArgb(58, 255, 255, 255)
                     : Color.FromArgb(40, 128, 128, 128));
                 chrome.BorderBrush = accent;
-                ClearForegroundOnDescendants(chrome);
+                ApplyForegroundToDescendants(chrome, rowForeground);
             }
             else
             {
@@ -1322,6 +1332,9 @@ namespace CelesteMusicPlayer
             ApplyCapsuleToControl(SortOrderButton, height, capsule, background, foreground);
             ApplyCapsuleToControl(ChangeSortButton, height, capsule, background, foreground);
             ApplyCapsuleToControl(AlbumSortButton, height, capsule, background, foreground);
+            // 专辑页「升序 / 降序」切换按钮：与 AlbumSortButton 同属专辑浏览页，之前漏加导致背景模式（非极客）下
+            // 露出默认透明底 + 默认方角。统一纳入胶囊样式入口后，常态为主题色底 + 半高圆角，极客下随全局走直角。
+            ApplyCapsuleToControl(AlbumSortOrderButton, height, capsule, background, foreground);
             if (ArtistSongSortButton != null)
             {
                 ApplyCapsuleToControl(ArtistSongSortButton, height, capsule, background, foreground);

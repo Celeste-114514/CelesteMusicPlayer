@@ -1328,7 +1328,7 @@
                                                     <ColumnDefinition Width="*" MinWidth="0" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Opacity="0.7" Text="{x:Bind IndexLabel}" />
+                                                <TextBlock Grid.Column="0" VerticalAlignment="Center" FontSize="14" FontWeight="SemiBold" Opacity="0.7" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind IndexLabel}" />
                                                 <Border
                                                     x:Name="RowCoverBorder"
                                                     Tag="RowCover"
@@ -1346,7 +1346,7 @@
                                                     </Grid>
                                                 </Border>
                                                 <StackPanel Grid.Column="2" VerticalAlignment="Center" Spacing="3">
-                                                    <TextBlock FontSize="14" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{x:Bind DisplayTitle}" />
+                                                    <TextBlock FontSize="14" FontWeight="SemiBold" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind DisplayTitle}" />
                                                     <TextBlock FontSize="11" FontWeight="Normal" Opacity="0.75" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{x:Bind ArtistAlbumText}" />
                                                     <ItemsControl ItemsSource="{x:Bind FormatChips}">
                                                         <ItemsControl.ItemsPanel>
@@ -1356,14 +1356,14 @@
                                                         </ItemsControl.ItemsPanel>
                                                         <ItemsControl.ItemTemplate>
                                                             <DataTemplate>
-                                                                <Border Tag="FmtChip" Padding="9,2" CornerRadius="9" Background="#33FFFFFF" BorderBrush="#22FFFFFF" BorderThickness="1">
-                                                                    <TextBlock FontSize="10" Opacity="0.85" Text="{Binding}" />
+                                                                <Border Tag="FmtChip" Padding="9,2" CornerRadius="9" Background="{ThemeResource SubtleFillColorSecondaryBrush}" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                                                                    <TextBlock FontSize="10" Opacity="0.85" Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{Binding}" />
                                                                 </Border>
                                                             </DataTemplate>
                                                         </ItemsControl.ItemTemplate>
                                                     </ItemsControl>
                                                 </StackPanel>
-                                                <TextBlock Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="12" FontWeight="SemiBold" Opacity="0.8" Margin="0,0,16,0" Text="{x:Bind DurationText}" />
+                                                <TextBlock Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right" FontSize="12" FontWeight="SemiBold" Opacity="0.8" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Margin="0,0,16,0" Text="{x:Bind DurationText}" />
                                             </Grid>
                                         </Border>
                                     </DataTemplate>
@@ -1570,6 +1570,7 @@
                                             FontSize="14"
                                             FontWeight="SemiBold"
                                             Opacity="0.7"
+                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                             Text="{x:Bind IndexLabel}" />
 
                                         <!-- 小封面 -->
@@ -1610,6 +1611,7 @@
                                                 TextWrapping="NoWrap"
                                                 TextTrimming="CharacterEllipsis"
                                                 Tag="Title"
+                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                                 PointerEntered="PlaylistCell_PointerEntered"
                                                 PointerExited="PlaylistCell_PointerExited"
                                                 PointerMoved="PlaylistCell_PointerMoved"
@@ -1639,12 +1641,13 @@
                                                         <Border Tag="FmtChip"
                                                             Padding="9,2"
                                                             CornerRadius="9"
-                                                            Background="#33FFFFFF"
-                                                            BorderBrush="#22FFFFFF"
+                                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                                             BorderThickness="1">
                                                             <TextBlock
                                                                 FontSize="10"
                                                                 Opacity="0.85"
+                                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                                                 Text="{Binding}" />
                                                         </Border>
                                                     </DataTemplate>
@@ -1660,6 +1663,7 @@
                                             FontSize="14"
                                             FontWeight="SemiBold"
                                             Opacity="0.8"
+                                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                             Margin="0,0,16,0"
                                             Text="{x:Bind DurationText, Mode=OneWay, FallbackValue='--:--'}" />
                                     </Grid>
@@ -2041,9 +2045,9 @@
                                                             <Grid.ColumnDefinitions>
                                                                 <ColumnDefinition Width="56" /><ColumnDefinition Width="*" /><ColumnDefinition Width="72" />
                                                             </Grid.ColumnDefinitions>
-                                                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.7" Text="{x:Bind TrackText}" />
-                                                            <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Title}" />
-                                                            <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.7" Text="{x:Bind DurationText}" />
+                                                            <TextBlock Grid.Column="0" VerticalAlignment="Center" Opacity="0.7" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind TrackText}" />
+                                                            <TextBlock Grid.Column="1" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind Title}" />
+                                                            <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.7" Foreground="{ThemeResource TextFillColorPrimaryBrush}" Text="{x:Bind DurationText}" />
                                                         </Grid>
                                                     </Border>
                                                 </DataTemplate>
@@ -2383,18 +2387,21 @@
                                                                 Grid.Column="0"
                                                                 VerticalAlignment="Center"
                                                                 TextTrimming="CharacterEllipsis"
+                                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                                                 Text="{x:Bind Title}" />
                                                             <TextBlock
                                                                 Grid.Column="1"
                                                                 VerticalAlignment="Center"
                                                                 Opacity="0.85"
                                                                 TextTrimming="CharacterEllipsis"
+                                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                                                 Text="{x:Bind Album}" />
                                                             <TextBlock
                                                                 Grid.Column="2"
                                                                 VerticalAlignment="Center"
                                                                 HorizontalAlignment="Right"
                                                                 Opacity="0.7"
+                                                                Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                                                 Text="{x:Bind DurationText}" />
                                                         </Grid>
                                                     </Border>

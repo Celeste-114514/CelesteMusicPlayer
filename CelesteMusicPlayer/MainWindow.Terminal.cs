@@ -152,7 +152,7 @@ namespace CelesteMusicPlayer
                     TerminalPathText.Text = string.IsNullOrEmpty(path) ? "—" : path;
                 }
 
-                bool hifi = _audioEngine?.IsHiFiMode == true || IsHiFiModeSelected();
+                bool hifi = IsHiFiModeSelected();
                 string? srcFmt = _audioEngine?.SourceFormatDescription;
                 string? outFmt = _audioEngine?.ActualOutputFormat;
 

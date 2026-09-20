@@ -103,13 +103,22 @@ namespace CelesteMusicPlayer
                     // 专辑封面等方形元素走 AlbumRowChrome，不经此分支，不受影响。
                     chrome.BorderThickness = new Thickness(3, 0, 0, 0);
                     bool darkRow = container.ActualTheme == ElementTheme.Dark;
+                    // 条样式底色是「半透明灰」不是强调色，文字必须回落到主题前景色。
+                    // 注意：ListViewItem 默认模板的 Selected 视觉状态是用 ObjectAnimation 把
+                    // ContentPresenter.Foreground 动画成白色（动画优先级高于任何本地值），
+                    // 所以光设置 container.Foreground 压不住 —— 必须给行内每个 TextBlock
+                    // 显式设值（ApplyForegroundToDescendants），显式值优先于继承。
+                    var rowForeground = new SolidColorBrush(darkRow
+                        ? Windows.UI.Color.FromArgb(255, 255, 255, 255)
+                        : Windows.UI.Color.FromArgb(255, 0, 0, 0));
+                    container.Foreground = rowForeground;
                     if (selected)
                     {
                         chrome.Background = new SolidColorBrush(darkRow
                             ? Windows.UI.Color.FromArgb(58, 255, 255, 255)
                             : Windows.UI.Color.FromArgb(40, 128, 128, 128));
                         chrome.BorderBrush = accent;
-                        ClearForegroundOnDescendants(chrome);
+                        ApplyForegroundToDescendants(chrome, rowForeground);
                     }
                     else
                     {
@@ -1573,7 +1582,7 @@ namespace CelesteMusicPlayer
 
             try
             {
-                bool hifi = _audioEngine?.IsHiFiMode == true || IsHiFiModeSelected();
+                bool hifi = IsHiFiModeSelected();
                 string? srcFmt = _audioEngine?.SourceFormatDescription;
                 string? outFmt = _audioEngine?.ActualOutputFormat;
 
