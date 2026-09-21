@@ -507,12 +507,10 @@ namespace CelesteMusicPlayer
                     ProbeWithFfmpeg(path, ref rate, ref bits, ref kbps, ref channels, ref codec);
                 }
 
-                // 保险：有损格式不存在 >16bit 的有效精度。无论 TagLib 还是 ffmpeg 给出多大，
-                // 只要是有损编解码器就按 16bit 呈现，防止解码器输出的浮点格式（fltp）被虚标成 32bit。
-                if (bits > 16 && IsLossyCodec(codec, ext))
-                {
-                    bits = 16;
-                }
+                // 不做"有损一律 16bit"这类按容器/类别的钳制——那会把真实信息抹掉：
+                // WMA Lossless、DTS-HD、E-AC3 等有损容器里同样可以装 24bit 有效精度，
+                // 32bit float 的 WAV/FLAC 真实位深就是 32。位深一律以探测到的真实值为准，
+                // 探测不到就不显示（见 ParseBitDepth：未知返回 0，由调用方省略该字段）。
 
                 return true;
             }
@@ -520,47 +518,6 @@ namespace CelesteMusicPlayer
             {
                 return false;
             }
-        }
-
-        /// <summary>是否为有损编解码器/容器（这些格式不存在 &gt;16bit 的有效精度）。
-        /// 用于把探测到的位深钳回 16bit，防止解码器输出的浮点格式（fltp）被虚标成 32bit。
-        /// 注意 m4a/mp4 **不在**此列——容器里可能是 ALAC 无损（真实 24bit），必须按 codec 区分，
-        /// 所以扩展名兜底里也没有 .m4a。</summary>
-        private static bool IsLossyCodec(string codec, string ext)
-        {
-            if (!string.IsNullOrEmpty(codec))
-            {
-                switch (codec)
-                {
-                    case "mp3":
-                    case "mp1":
-                    case "mp2":
-                    case "aac":
-                    case "aac_latm":
-                    case "opus":
-                    case "vorbis":
-                    case "wma":
-                    case "wmav1":
-                    case "wmav2":
-                    case "wmapro":
-                    case "wmavoice":
-                    case "musepack":
-                    case "mpc":
-                    case "ac3":
-                    case "eac3":
-                    case "atrac3":
-                    case "atrac3p":
-                    case "cook":
-                    case "speex":
-                        return true;
-                }
-            }
-
-            return ext switch
-            {
-                ".mp3" or ".ogg" or ".opus" or ".wma" or ".aac" or ".mpc" => true,
-                _ => false
-            };
         }
 
         /// <summary>把采样率格式化成 HiFi 播放器常见的写法：44100→"44.1kHz"、96000→"96kHz"、2822400→"2.82MHz"。</summary>
@@ -663,43 +620,82 @@ namespace CelesteMusicPlayer
                         };
                     }
 
-                    // 位深（2026-09-22 修）：
-                    //  1) 优先括号里声明的真实位深——FLAC/ALAC 显示为 "s32 (24 bit)"，24 才是真的，
-                    //     直接匹配 s32 会把 24bit 无损虚标成 32bit；
-                    //  2) fltp / flt 是**解码器的内部浮点格式，不是源位深**——MP3/AAC/Opus 等有损源
-                    //     的解码器一律输出 fltp，按 32bit 显示会让 MP3 虚标成 32bit。
-                    //     与播放链路 FfmpegDecoderBackend.ParseStreamFormat 的修正保持一致：
-                    //     有损源按其原生精度 16bit 呈现。
-                    Match mbParen = Regex.Match(line, @"\((\d+)\s*bit\)");
-                    if (mbParen.Success && bits <= 0)
+                    // 位深：只认探测到的真实值，探测不到就留 0（调用方省略该字段）。
+                    // 判定优先级与理由见 ParseBitDepth。
+                    if (bits <= 0)
                     {
-                        bits = int.Parse(mbParen.Groups[1].Value);
-                    }
-                    else
-                    {
-                        Match mbp = Regex.Match(line, @"(s16p|s24p|s32p|s08p|s16|s24|s32|s08|fltp?)\b");
-                        if (mbp.Success && bits <= 0)
+                        int parsed = ParseBitDepth(line, codec);
+                        if (parsed > 0)
                         {
-                            string v = mbp.Value;
-                            if (v == "flt" || v == "fltp")
-                            {
-                                bits = 16; // 浮点解码输出 → 有损源的原生精度，不是 32bit
-                            }
-                            else
-                            {
-                                bits = v switch
-                                {
-                                    "s08" or "s08p" => 8,
-                                    "s16" or "s16p" => 16,
-                                    "s24" or "s24p" => 24,
-                                    _ => 32
-                                };
-                            }
+                            bits = parsed;
                         }
                     }
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioInfoFormatter.cs", caught); }
+        }
+
+        /// <summary>从 ffmpeg 的 "Stream #…: Audio: …" 行解析位深；拿不到真实值时返回 0（调用方省略该字段）。
+        /// 这是音频播放器，规格显示必须对得起用户——**能拿到真实值就用真实值，宁可空着也不虚标**。
+        /// 判定优先级：
+        ///  1) 括号声明 <c>(24 bit)</c> —— ffmpeg 对整数打包格式给出的**权威有效位深**。
+        ///     24bit 的 FLAC/ALAC 报成 "s32 (24 bit)"：32 只是容器位宽，24 才是真实精度。
+        ///     （旧实现直接匹配 s32，把 24bit 无损虚标成 32bit，2026-09-22 修。）
+        ///  2) 整数采样格式 s16/s24/s32/u8 及其平面变体 —— 位深与之一一对应。
+        ///  3) 浮点 fltp/flt/dbl —— 这是**解码器内部格式**，真实位深要看 codec 是什么：
+        ///     · pcm_f32le / pcm_f64le：文件本身就是浮点存储 → 真实 32 / 64bit float；
+        ///     · flac（float 样本）→ 32；
+        ///     · mp3 / aac / vorbis / opus 等有损编码：ISO 规范里解码输出就是 16bit PCM，
+        ///       ffmpeg 内部用 float 只是它的实现方式，不代表源是浮点 → 16bit（这是真实值，不是猜测）；
+        ///     · dsd_*：1bit 脉冲密度调制 → 1bit。
+        ///  4) 未知 codec 或没匹配上 → 0，不显示。
+        /// **不做"有损一律 16bit"这类按容器/类别的钳制**：WMA Lossless、DTS-HD、E-AC3
+        /// 这类有损容器里同样可以装 24bit 有效精度，一刀切会把真实信息抹掉。</summary>
+        private static int ParseBitDepth(string line, string codec)
+        {
+            // 1) 权威有效位深声明
+            Match mp = Regex.Match(line, @"\((\d+)\s*bit\)");
+            if (mp.Success && int.TryParse(mp.Groups[1].Value, out int declared) && declared > 0)
+            {
+                return declared;
+            }
+
+            // 2) 整数采样格式（s16p 必须排在 s16 之前，否则只匹配到前缀）
+            Match mi = Regex.Match(line, @"\b(s16p|s24p|s32p|s08p|u16p|u24p|u32p|u08p|s16|s24|s32|s08|u16|u24|u32|u08)\b");
+            if (mi.Success)
+            {
+                return mi.Value switch
+                {
+                    "s08" or "s08p" or "u08" or "u08p" => 8,
+                    "s16" or "s16p" or "u16" or "u16p" => 16,
+                    "s24" or "s24p" or "u24" or "u24p" => 24,
+                    _ => 32
+                };
+            }
+
+            // 3) 浮点 / DSD：真实位深取决于 codec，而不是"有损还是无损"
+            bool isFloat = Regex.IsMatch(line, @"\b(fltp?|dblp?|dbl)\b");
+            bool isDsd = codec.StartsWith("dsd", StringComparison.Ordinal);
+            if (!isFloat && !isDsd)
+            {
+                return 0;
+            }
+
+            return codec switch
+            {
+                "pcm_f32le" or "pcm_f32be" => 32,
+                "pcm_f64le" or "pcm_f64be" => 64,
+                "flac" => 32,                       // FLAC 支持 float 样本；整数样本走分支 1/2
+                "dsd_lsbf" or "dsd_msbf"
+                    or "dsd_lsbf_planar" or "dsd_msbf_planar" => 1,
+                // ISO/IEC 规范下，这些有损编码的解码输出就是 16bit PCM
+                "mp3" or "mp1" or "mp2" or "mp3adu" or "mp3on4"
+                    or "aac" or "aac_latm" or "vorbis" or "opus"
+                    or "musepack" or "mpc" or "mpc7" or "mpc8"
+                    or "wma" or "wmav1" or "wmav2"
+                    or "atrac3" or "atrac3p" or "cook" or "speex" => 16,
+                _ => 0                              // 未知：不显示，也不猜
+            };
         }
 
     }

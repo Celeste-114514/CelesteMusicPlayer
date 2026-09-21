@@ -629,8 +629,31 @@ namespace CelesteMusicPlayer
                         else if (streamLine.Contains("fltp", StringComparison.Ordinal)
                               || streamLine.Contains("flt,", StringComparison.Ordinal))
                         {
-                            // 浮点解码输出 ≠ 源位深：有损源按 16bit（其原生精度），体积不翻倍。
-                            bits = 16;
+                            // 浮点解码输出 ≠ 源位深，真实位深要看 codec 是什么，不能一律 16bit：
+                            //  · 文件本身就是浮点存储（pcm_f32le / pcm_f64le / float 编码的 FLAC）
+                            //    → 尊重真实精度，按 32 / 64bit 转码。降级到 16bit 是**真丢精度**，
+                            //      对音频播放器来说不能接受；
+                            //  · mp3 / aac / vorbis / opus / wma 等有损编码：ISO 规范下解码输出
+                            //    就是 16bit PCM，ffmpeg 内部用 float 只是实现方式 → 16bit。
+                            //    这既是真实值，也避免 WAV 缓存体积翻倍越过阈值掉进流式读盘；
+                            //  · 其余未知 → 16bit 安全默认（宁可保守，也不要撑爆缓存）。
+                            if (streamLine.Contains("pcm_f64", StringComparison.Ordinal))
+                            {
+                                bits = 64;
+                            }
+                            else if (streamLine.Contains("pcm_f32", StringComparison.Ordinal))
+                            {
+                                bits = 32;
+                            }
+                            else if (streamLine.Contains("flac", StringComparison.Ordinal))
+                            {
+                                // FLAC 支持 float 样本；整数样本不会走到这一支（会是 s16/s32 (24 bit)）
+                                bits = 32;
+                            }
+                            else
+                            {
+                                bits = 16;
+                            }
                         }
                     }
                 }
