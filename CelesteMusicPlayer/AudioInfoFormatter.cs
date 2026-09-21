@@ -507,12 +507,60 @@ namespace CelesteMusicPlayer
                     ProbeWithFfmpeg(path, ref rate, ref bits, ref kbps, ref channels, ref codec);
                 }
 
+                // 保险：有损格式不存在 >16bit 的有效精度。无论 TagLib 还是 ffmpeg 给出多大，
+                // 只要是有损编解码器就按 16bit 呈现，防止解码器输出的浮点格式（fltp）被虚标成 32bit。
+                if (bits > 16 && IsLossyCodec(codec, ext))
+                {
+                    bits = 16;
+                }
+
                 return true;
             }
             catch
             {
                 return false;
             }
+        }
+
+        /// <summary>是否为有损编解码器/容器（这些格式不存在 &gt;16bit 的有效精度）。
+        /// 用于把探测到的位深钳回 16bit，防止解码器输出的浮点格式（fltp）被虚标成 32bit。
+        /// 注意 m4a/mp4 **不在**此列——容器里可能是 ALAC 无损（真实 24bit），必须按 codec 区分，
+        /// 所以扩展名兜底里也没有 .m4a。</summary>
+        private static bool IsLossyCodec(string codec, string ext)
+        {
+            if (!string.IsNullOrEmpty(codec))
+            {
+                switch (codec)
+                {
+                    case "mp3":
+                    case "mp1":
+                    case "mp2":
+                    case "aac":
+                    case "aac_latm":
+                    case "opus":
+                    case "vorbis":
+                    case "wma":
+                    case "wmav1":
+                    case "wmav2":
+                    case "wmapro":
+                    case "wmavoice":
+                    case "musepack":
+                    case "mpc":
+                    case "ac3":
+                    case "eac3":
+                    case "atrac3":
+                    case "atrac3p":
+                    case "cook":
+                    case "speex":
+                        return true;
+                }
+            }
+
+            return ext switch
+            {
+                ".mp3" or ".ogg" or ".opus" or ".wma" or ".aac" or ".mpc" => true,
+                _ => false
+            };
         }
 
         /// <summary>把采样率格式化成 HiFi 播放器常见的写法：44100→"44.1kHz"、96000→"96kHz"、2822400→"2.82MHz"。</summary>
@@ -615,24 +663,38 @@ namespace CelesteMusicPlayer
                         };
                     }
 
-                    // 位深： s16 / s32 / flt (f32) / s24 （flac 显示为 s16/s24/s32；ffmpeg 常带 p 后缀如 s16p/s32p）
-                    Match mbp = Regex.Match(line, @"(s16p|s24p|s32p|s08p|s16|s24|s32|s08|fltp?)\b");
-                    if (mbp.Success && bits <= 0)
+                    // 位深（2026-09-22 修）：
+                    //  1) 优先括号里声明的真实位深——FLAC/ALAC 显示为 "s32 (24 bit)"，24 才是真的，
+                    //     直接匹配 s32 会把 24bit 无损虚标成 32bit；
+                    //  2) fltp / flt 是**解码器的内部浮点格式，不是源位深**——MP3/AAC/Opus 等有损源
+                    //     的解码器一律输出 fltp，按 32bit 显示会让 MP3 虚标成 32bit。
+                    //     与播放链路 FfmpegDecoderBackend.ParseStreamFormat 的修正保持一致：
+                    //     有损源按其原生精度 16bit 呈现。
+                    Match mbParen = Regex.Match(line, @"\((\d+)\s*bit\)");
+                    if (mbParen.Success && bits <= 0)
                     {
-                        string v = mbp.Value;
-                        if (v == "flt" || v == "fltp")
+                        bits = int.Parse(mbParen.Groups[1].Value);
+                    }
+                    else
+                    {
+                        Match mbp = Regex.Match(line, @"(s16p|s24p|s32p|s08p|s16|s24|s32|s08|fltp?)\b");
+                        if (mbp.Success && bits <= 0)
                         {
-                            bits = 32;
-                        }
-                        else
-                        {
-                            bits = v switch
+                            string v = mbp.Value;
+                            if (v == "flt" || v == "fltp")
                             {
-                                "s08" or "s08p" => 8,
-                                "s16" or "s16p" => 16,
-                                "s24" or "s24p" => 24,
-                                _ => 32
-                            };
+                                bits = 16; // 浮点解码输出 → 有损源的原生精度，不是 32bit
+                            }
+                            else
+                            {
+                                bits = v switch
+                                {
+                                    "s08" or "s08p" => 8,
+                                    "s16" or "s16p" => 16,
+                                    "s24" or "s24p" => 24,
+                                    _ => 32
+                                };
+                            }
                         }
                     }
                 }
