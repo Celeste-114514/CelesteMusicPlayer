@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Threading;
 using System.Runtime.InteropServices;
 using NAudio.Wave;
@@ -460,6 +461,19 @@ namespace CelesteMusicPlayer
                 var waits = new WaitHandle[] { _stopSignal, _renderSignal };
                 int pollMs = FillPollMilliseconds;
 
+                // ---- 高精度渲染诊断（2026-09-22）----
+                // 旧诊断用 Environment.TickCount64 计时，它的精度只有 ~15.6ms（Windows 默认时钟粒度），
+                // 于是"读源耗时 15ms"其实是量化噪音、根本不能当证据——实测每次读数都恰好落在 15/16ms。
+                // 改用 Stopwatch（高精度计数器），并额外统计「相邻两次补货的间隔」：
+                //   间隔抖（远大于 pollMs） = 渲染线程没按时醒 → GC 暂停 / 系统 DPC / 驱动 / 等锁；
+                //   读源慢（单次 Read 耗时长）              = 磁盘或源慢（云盘/杀毒扫描/转码抢 I/O）。
+                // 两者在日志里分开报，一眼能看出卡顿到底归谁。
+                long tsPrev = 0, tsReport = Stopwatch.GetTimestamp(), tsGapLog = 0, tsReadLog = 0, tsShortLog = 0;
+                double maxGapMs = 0, maxReadMs = 0;
+                double minPad = double.MaxValue, sumPad = 0;
+                long loops = 0, gapSpikes = 0, padZero = 0;
+                double reportEverySec = 10.0;
+
                 while (!_requestStop && !_disposed)
                 {
                     // 关键（2026-09-21 修独占卡顿）：**不等设备事件**。
@@ -471,6 +485,26 @@ namespace CelesteMusicPlayer
                     if (_requestStop || _disposed) break;
                     // wi==0 停止信号；wi==1 设备事件（也顺手补货）；WaitTimeout(258) 轮询到点。
                     if (wi == 0) continue;
+
+                    long tsNow = Stopwatch.GetTimestamp();
+                    if (tsPrev != 0)
+                    {
+                        double gapMs = (tsNow - tsPrev) * 1000.0 / Stopwatch.Frequency;
+                        if (gapMs > maxGapMs) maxGapMs = gapMs;
+                        if (gapMs > pollMs * 3.0)
+                        {
+                            gapSpikes++;
+                            if (tsNow - tsGapLog > Stopwatch.Frequency * 2)
+                            {
+                                tsGapLog = tsNow;
+                                StartupLog.Write(string.Format(
+                                    "[渲染诊断] 补货间隔尖峰={0:F1}ms（轮询{1}ms）→ 渲染线程没按时醒（GC暂停/DPC/驱动/等锁），不是读源慢",
+                                    gapMs, pollMs));
+                            }
+                        }
+                    }
+                    tsPrev = tsNow;
+                    loops++;
 
                     // 消费线程安全 seek 请求：在 render 线程自身重定位源，避免与正在读源的并发冲突
                     TimeSpan? seekReq;
@@ -492,18 +526,15 @@ namespace CelesteMusicPlayer
                     // 读不满整缓冲就整体提交不足数据 → underrun → "时不时顿一下"。
                     if (_audioClient!.GetCurrentPadding(out uint pad) != NativeWasapi.S_OK) break;
 
-                    // 欠载计数：设备缓冲里一帧不剩 = 喇叭正在播静音。这是卡顿的硬指标。
-                    // 补货轮询跑起来后这里应当长期为 0；持续上涨说明缓冲还是不够大/读源太慢。
-                    if (pad == 0)
-                    {
-                        long n = Interlocked.Increment(ref _underrunCount);
-                        long nowU = Environment.TickCount64;
-                        if (nowU - _lastUnderrunLogMs > 2000)
-                        {
-                            _lastUnderrunLogMs = nowU;
-                            StartupLog.Write($"[源诊断] 设备缓冲被啃空(underrun #{n}) 缓冲={maxFrames}帧/{BufferMilliseconds}ms 补货轮询={pollMs}ms");
-                        }
-                    }
+                    // 缓冲水位统计（2026-09-22 修正判据）：
+                    // 独占 + 事件驱动下周期恒等于缓冲，实测 pad 在每个周期边界必然归零一次
+                    // （旧日志里 underrun 严格每 100ms +1、2.1 秒恰好 +21，规律得不像真欠载，
+                    //  而是这个 API 配置的固有现象）。所以「pad==0 次数」不能当欠载硬指标。
+                    // 有意义的是**水位**：平均/最低 padding 越接近满缓冲，抗抖动余量越足；
+                    // 长期贴着 0 才说明补货真的跟不上。
+                    if (pad < minPad) minPad = pad;
+                    sumPad += pad;
+                    if (pad == 0) padZero++;
 
                     int toFill = (int)Math.Min((long)maxFrames - pad, maxFrames);
                     if (toFill <= 0) continue; // 缓冲仍是满的（设备还没消耗）：无空闲空间可写
@@ -512,31 +543,34 @@ namespace CelesteMusicPlayer
 
                     int want = toFill * _srcBlock;
                     int got;
-                    long readStart = Environment.TickCount64;
+                    // 高精度计时（2026-09-22）：旧代码用 Environment.TickCount64，精度只有 ~15.6ms，
+                    // 读数被量化成 15/16ms，看着像"读源慢"其实是时钟粒度的假象。这里改用 Stopwatch。
+                    long readStart = Stopwatch.GetTimestamp();
                     got = ReadFully(src, srcBuf, want);
-                    long readMs = Environment.TickCount64 - readStart;
-                    // 诊断：单次读源耗时尖峰（>12ms）→ 读文件/源慢（磁盘/云盘定点区段）会成为卡顿点。
-                    // 若读取总快但播放仍卡在固定位置，则指向设备/驱动/定时器层（与此处无关）。
-                    if (readMs > 12 && _lastReadSlowMs < Environment.TickCount64)
+                    double readMs = (Stopwatch.GetTimestamp() - readStart) * 1000.0 / Stopwatch.Frequency;
+                    if (readMs > maxReadMs) maxReadMs = readMs;
+                    // 真实阈值 8ms：一次只补 pollMs(12ms) 的量，读它超过 8ms 说明磁盘/源确实慢。
+                    if (readMs > 8 && tsNow - tsReadLog > Stopwatch.Frequency * 2)
                     {
-                        _lastReadSlowMs = Environment.TickCount64 + 1000; // 限频 1s 一次
+                        tsReadLog = tsNow;
                         var ps = src.ProbeCurrentState;
                         long pos = ps?.Pos ?? 0, len = ps?.Len ?? 0;
-                        StartupLog.Write($"[源诊断] 读源耗时尖峰={readMs}ms（需{want}B）srcPos={pos}/{len} nextMount={src.NextMounted}");
+                        StartupLog.Write(string.Format(
+                            "[渲染诊断] 读源慢={0:F2}ms（需{1}B）srcPos={2}/{3} nextMount={4}",
+                            readMs, want, pos, len, src.NextMounted));
                     }
 
                     if (got < want)
                     {
                         Array.Clear(srcBuf, got, want - got); // 不足部分静音，避免旧/越界数据
-                        // 诊断：本次 WASAPI 缓冲未能从数据源读满（潜在 underrun → 播放卡顿）。
-                        // 正常无缝续接时 ReadFully 可跨曲填满；此处仅当磁盘读不足或源已尽时出现。
-                        long nowMs = Environment.TickCount64;
-                        if (nowMs - _lastUnderrunLogMs > 1000) // 限频，避免刷屏
+                        // 这才是**真的**欠载：源没喂满本次要的量（曲末/无缝未续上/磁盘跟不上）。
+                        Interlocked.Increment(ref _underrunCount);
+                        if (tsNow - tsShortLog > Stopwatch.Frequency) // 限频 1s 一次
                         {
-                            _lastUnderrunLogMs = nowMs;
+                            tsShortLog = tsNow;
                             var ps = src.ProbeCurrentState;
                             long pos = ps?.Pos ?? 0, len = ps?.Len ?? 0;
-                            StartupLog.Write($"[源诊断] render underrun: 需要{want}B 读得{got}B srcPos={pos}/{len} nextMount={src.NextMounted}");
+                            StartupLog.Write($"[渲染诊断] 源没喂满：需要{want}B 读得{got}B srcPos={pos}/{len} nextMount={src.NextMounted}");
                         }
                     }
 
@@ -551,6 +585,23 @@ namespace CelesteMusicPlayer
 
                     rc.ReleaseBuffer((uint)toFill, 0);
                     lock (_framesLock) { _framesWritten += toFill; }
+
+                    // 每 10 秒汇总一次：卡顿归因就看这行。
+                    //   水位长期贴 0 + 读源慢     → 磁盘/源跟不上（需 feeder 队列或换缓存策略）
+                    //   水位健康但间隔尖峰多      → 渲染线程被系统挂起（GC/DPC/驱动），应用侧救不了多少
+                    if ((tsNow - tsReport) / (double)Stopwatch.Frequency > reportEverySec)
+                    {
+                        double avgPad = loops > 0 ? sumPad / loops : 0;
+                        double zeroRatio = loops > 0 ? (double)padZero / loops : 0;
+                        StartupLog.Write(string.Format(
+                            "[渲染统计] {0:F0}s 补货{1}次 | 缓冲水位 最低{2:F0}/平均{3:F0}/满{4}帧，空缓冲{5}次({6:P0}) | 补货间隔 最大{7:F1}ms 尖峰{8}次 | 读源 最大{9:F2}ms | 真欠载{10}次",
+                            (tsNow - tsReport) / (double)Stopwatch.Frequency, loops,
+                            minPad == double.MaxValue ? 0 : minPad, avgPad, maxFrames, padZero, zeroRatio,
+                            maxGapMs, gapSpikes, maxReadMs, UnderrunCount));
+                        tsReport = tsNow;
+                        maxGapMs = 0; maxReadMs = 0; minPad = double.MaxValue; sumPad = 0;
+                        loops = 0; gapSpikes = 0; padZero = 0;
+                    }
                 }
 
                 bool completed = !_requestStop && !_disposed;

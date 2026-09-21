@@ -359,8 +359,18 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>超过此大小的 WAV 不再整体读入内存，改走带缓冲的顺序流，避免长音频整段 PCM 常驻 RAM。
-        /// 64MB ≈ 16bit/44.1kHz 立体声约 6.3 分钟，覆盖绝大多数单曲 → 常规曲目行为与旧版完全一致。</summary>
-        private const long WaveWholeFileInMemoryMaxBytes = 64L * 1024 * 1024;
+        /// 2026-09-22 从 64MB 提到 192MB：
+        /// 旧阈值按「16bit/44.1kHz 约 6.3 分钟」定，但高规格源转出的 WAV 远大于此——
+        /// 24bit/44.1kHz 立体声约 15.9MB/分钟（6 分钟就 95MB）、24bit/96kHz 约 34.6MB/分钟（5 分钟 173MB），
+        /// 实测缓存里 148MB 的 WAV 并不罕见。于是**绝大多数高规格曲目都掉进流式读盘分支**，
+        /// 播放过程中每 12ms 打一次磁盘，这才是卡顿的持续来源（小 MP3 若被误判成 32bit 也会掉进来）。
+        /// 192MB 覆盖 24bit/96kHz 的 5.5 分钟、24bit/44.1kHz 的 12 分钟，配合下面的内存安全阀使用。</summary>
+        private const long WaveWholeFileInMemoryMaxBytes = 192L * 1024 * 1024;
+
+        /// <summary>整读内存的安全阀：可用内存低于此值时不走「整首入内存」，退回流式，
+        /// 防止重演历史上「放几首就吃掉 2~3GB」的内存暴涨（大数组都落在大对象堆、回收滞后）。
+        /// 取 1.5GB：留足两首 192MB 常驻 + ffmpeg 转码 + 常规 UI 的余量。</summary>
+        private const long MinAvailableMemoryForWholeFileBytes = 1500L * 1024 * 1024;
 
         /// <summary>大文件流式读取的读缓冲（8MB）：顺序读 + 系统预读，使 render 实时线程几乎不会真正阻塞在磁盘上，
         /// 同时把内存占用从「整首 PCM」压成常量。</summary>
@@ -383,12 +393,22 @@ namespace CelesteMusicPlayer
             try { size = new FileInfo(path).Length; }
             catch { size = 0; }
 
-            if (size > 0 && size <= WaveWholeFileInMemoryMaxBytes)
+            // 2026-09-22：走哪条分支现在打日志。播放卡顿排查时，
+            // 只要某首歌走的是「流式」，它就还在播放过程中打磁盘——这是判断卡顿来源的关键信息。
+            bool wholeInMemory = size > 0 && size <= WaveWholeFileInMemoryMaxBytes && HasEnoughMemoryForWholeFile();
+            if (wholeInMemory)
             {
                 byte[] data = File.ReadAllBytes(path);
                 var ms = new MemoryStream(data, writable: false);
+                StartupLog.Write(string.Format("[读源] 整读内存 {0:F1}MB ← {1}",
+                    size / (1024.0 * 1024.0), Path.GetFileName(path)));
                 return new WaveFileReader(ms);
             }
+
+            StartupLog.Write(string.Format("[读源] 流式读盘 {0:F1}MB{1} ← {2}",
+                size / (1024.0 * 1024.0),
+                (size > WaveWholeFileInMemoryMaxBytes) ? "(超阈值)" : "(内存不足，安全阀退回)",
+                Path.GetFileName(path)));
 
             // FileShare.Delete：允许缓存清理逻辑在流仍打开时删除该文件，避免删不掉导致磁盘缓存堆积。
             var fs = new FileStream(
@@ -399,6 +419,21 @@ namespace CelesteMusicPlayer
                 WaveStreamReadBufferBytes,
                 FileOptions.SequentialScan);
             return new WaveFileReader(fs);
+        }
+
+        /// <summary>当前可用内存是否够把整首 WAV 读进内存（见 <see cref="MinAvailableMemoryForWholeFileBytes"/>）。
+        /// 探测不到时保守放行（仍走整读），避免在老环境里退化成「所有歌都流式」。</summary>
+        private static bool HasEnoughMemoryForWholeFile()
+        {
+            try
+            {
+                long available = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
+                return available <= 0 || available >= MinAvailableMemoryForWholeFileBytes;
+            }
+            catch
+            {
+                return true;
+            }
         }
 
         /// <summary>最近一次失败原因。</summary>

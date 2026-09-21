@@ -599,8 +599,14 @@ namespace CelesteMusicPlayer
                 //   3) 采样格式 s16/s24/s32 —— 纯 PCM WAV 只显示 s16；
                 //      （\b 词边界 + 结尾可选 p，保证 pcm_s16le 这类编码器名、s302m 这类冷门编码器名不会被误中：
                 //        s 前面是下划线/后面紧跟字母时都不是词边界；s16p/s32p 这类平面写法也能取到）
-                //   4) fltp / flt —— 浮点平面采样（AAC/MP3/Opus 等有损解码的输出），按 32bit 处理，
-                //      避免有损源被无谓地按 16bit 重转（旧实现靠横幅碰巧给 16bit）。
+                //   4) fltp / flt —— **解码器的内部浮点采样格式，不是源的位深**（2026-09-22 修正）。
+                //      MP3/AAC/Opus/Vorbis/WMA 等有损格式的解码器一律输出 fltp，但这不代表源有 32bit：
+                //      这些格式的有效精度就是 16bit，把 fltp 当 32bit 会让转码器选 pcm_s32le，
+                //      WAV 缓存体积直接翻倍——5 分钟 MP3 从 ~53MB 涨到 ~106MB，越过 OpenWaveSource
+                //      的 64MB 阈值，从「整首读进内存」掉进「8MB 流式读盘」分支，播放时每 12ms 打一次磁盘。
+                //      这就是"MP3 明明很小也卡"的直接原因（日志里所有 .mp3 都被探测成 32bit 可佐证）。
+                //      修正：无括号位深声明 + 浮点输出 → 按 16bit 处理（有损源的原生精度，体积回到内存友好区间）。
+                //      无损源（FLAC/ALAC 24bit）都带 "(24 bit)" 括号，走分支 1，不受此影响。
                 var mBitsParen = Regex.Match(streamLine, @"\((\d+)\s*bit\)");
                 if (mBitsParen.Success)
                 {
@@ -623,7 +629,8 @@ namespace CelesteMusicPlayer
                         else if (streamLine.Contains("fltp", StringComparison.Ordinal)
                               || streamLine.Contains("flt,", StringComparison.Ordinal))
                         {
-                            bits = 32;
+                            // 浮点解码输出 ≠ 源位深：有损源按 16bit（其原生精度），体积不翻倍。
+                            bits = 16;
                         }
                     }
                 }
