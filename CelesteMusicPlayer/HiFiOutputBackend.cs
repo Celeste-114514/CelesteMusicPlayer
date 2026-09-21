@@ -62,6 +62,7 @@ namespace CelesteMusicPlayer
         private TimeSpan _pausedPosition;
         private TimeSpan? _pendingSeekTarget; // DSD/native 播放中 seek 的待消费目标：防止 updatePosition/Pause 用旧的 FramesWritten 把它覆盖掉（否则选进度后进度条不变/从头重播）
         private float _resumeVolume = 1f;
+        private bool _softVolumeEnabled; // HiFi 软件音量开关（设置页）：独占/ASIO 下滑条走 DSP 采样级衰减；DSD/DoP 直出时无效
         private float _pausedDeviceVol = -1f; // 暂停瞬间记录的真实设备主音量（供恢复回到该值，避免误用 0.02 防爆音残留）
         private string? _activeWavPath;
         private long _nativePosBaselineFrames; // 原生独占下当前曲目起始帧基准（用于按曲目换算相对进度，避免跨曲累加）
@@ -1188,10 +1189,45 @@ namespace CelesteMusicPlayer
             return -1f;
         }
 
+        /// <summary>HiFi 软件音量开关（设置页驱动，播放中可切）。开启后独占/ASIO 下滑块改走 DSP 链采样级衰减
+        /// （音量≠100% 即破坏 bit-perfect，UI 徽标会提示"音量"），端点主音量归位满幅避免双重衰减。
+        /// DSD/DoP 直出不经 DSP 链，此开关对它无效。</summary>
+        public bool SoftwareVolumeEnabled
+        {
+            get => _softVolumeEnabled;
+            set => _softVolumeEnabled = value;
+        }
+
+        /// <summary>软件音量当前是否真正在生效（开关开 + 独占/ASIO + 非 DSD 直出 + 音量≠100%）。
+        /// 直通徽标据此提示"非 bit-perfect：音量"。</summary>
+        public bool IsSoftwareVolumeActive => _softVolumeEnabled && !_isDsd
+            && (CurrentMode == OutputMode.WasapiExclusive || CurrentMode == OutputMode.Asio)
+            && Math.Abs(_resumeVolume - 1f) > 0.0001f;
+
         public void SetVolume(float volume)
         {
             _resumeVolume = Math.Clamp(volume, 0f, 1f);
             bool hifiDevice = CurrentMode == OutputMode.WasapiExclusive || CurrentMode == OutputMode.Asio;
+
+            // HiFi 软件音量（设置页开关）：独占/ASIO 下经 DSP 链做采样级衰减，音量≠100% 即破坏
+            // bit-perfect（徽标会提示"音量"）。端点主音量先归位满幅，避免与设备音量双重衰减。
+            // DSD/DoP 直出不经 DSP 链（requireExact 直接用无缝源），此分支不会命中。
+            if (_softVolumeEnabled && hifiDevice && !_isDsd)
+            {
+                try
+                {
+                    // AudioEndpointVolume 的 COM QueryInterface 在独占模式/部分设备上会抛
+                    // InvalidCastException(E_NOINTERFACE)，必须整体包 try，不能只包赋值。
+                    if (_device?.AudioEndpointVolume != null)
+                    {
+                        _device.AudioEndpointVolume.MasterVolumeLevelScalar = 1f;
+                    }
+                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+
+                _dspProvider?.SetVolumeGain(_resumeVolume);
+                return;
+            }
 
             // 独占/ASIO（及 DSD 直出）：bit-perfect，控设备主音量——滑块 100%→满、其它非线性压缩（slider²）。
             if (hifiDevice || (_isDsd))

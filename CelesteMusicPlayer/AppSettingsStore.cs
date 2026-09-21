@@ -35,6 +35,11 @@ namespace CelesteMusicPlayer
         /// <summary>HiFi 输出模式：Shared / WasapiExclusive / Asio。独占时所有曲目经 NAudio 输出。</summary>
         public string OutputMode { get; set; } = "Shared";
 
+        /// <summary>HiFi 软件音量：开启后独占/ASIO 模式下主界面音量条解冻可拖（DSP 采样级衰减，
+        /// 音量≠100% 即失去 bit-perfect，界面徽标会提示"音量"）；关闭时音量条固定 100%，
+        /// 音量由 DAC 硬件旋钮 / 系统端点音量控制（不破坏直通）。DSD/DoP 直出时此开关无效。默认关。</summary>
+        public bool HiFiSoftwareVolume { get; set; }
+
 
         /// <summary><see cref="PlaybackOrder"/> 名称</summary>
         public string PlaybackOrder { get; set; } = nameof(CelesteMusicPlayer.PlaybackOrder.ListLoop);
@@ -651,6 +656,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             Volume = s.Volume,
             OutputDeviceId = s.OutputDeviceId,
             OutputMode = s.OutputMode,
+            HiFiSoftwareVolume = s.HiFiSoftwareVolume,
             PlaybackOrder = s.PlaybackOrder,
             MiniPlayerAlwaysOnTop = s.MiniPlayerAlwaysOnTop,
             OpenDesktopLyricsOnStartup = s.OpenDesktopLyricsOnStartup,

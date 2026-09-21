@@ -932,6 +932,22 @@ namespace CelesteMusicPlayer
             ApplyOutputGain();
         }
 
+        /// <summary>HiFi 软件音量开关（设置页"HiFi 软件音量"）。开启后独占/ASIO 下滑块走 DSP 采样级衰减（失去 bit-perfect）。</summary>
+        public bool SoftwareVolumeEnabled
+        {
+            get => _hifiOut?.SoftwareVolumeEnabled ?? false;
+            set
+            {
+                if (_hifiOut != null)
+                {
+                    _hifiOut.SoftwareVolumeEnabled = value;
+                }
+            }
+        }
+
+        /// <summary>软件音量是否真正生效中（开关开 + 独占/ASIO + 非 DSD 直出 + 音量≠100%）。直通徽标提示用。</summary>
+        public bool IsSoftwareVolumeActive => _hifiOut?.IsSoftwareVolumeActive ?? false;
+
         /// <summary>设置源音频实际时长（元数据/TagLib）。HiFi 引擎用它作为进度/播完上限，规避 DSD 转 PCM 尾部 padding 导致时长越界。</summary>
         public void SetSourceDuration(TimeSpan sourceDuration)
         {

@@ -68,6 +68,27 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>HiFi 独占/ASIO 下主界面音量条是否应解冻：设置页「HiFi 软件音量」开关开启，
+        /// 且当前不是 DSD 直出播放（DSD 数据源绕过 DSP 链，软件音量无效，滑块保持冻结）。
+        /// 共享模式恒 false（共享下滑条本就实时可调，不经此判断）。</summary>
+        private bool IsHiFiSoftVolumeUiUnlocked()
+        {
+            if (!IsHiFiModeSelected())
+            {
+                return false;
+            }
+
+            if (!AppSettingsStore.Load().HiFiSoftwareVolume)
+            {
+                return false;
+            }
+
+            string? src = _audioEngine?.SourceFormatDescription;
+            return string.IsNullOrWhiteSpace(src)
+                || src.IndexOf("DSD", System.StringComparison.OrdinalIgnoreCase) < 0;
+        }
+
+
         /// <summary>对主窗口进行窗口过程子类化，拦截 WM_GETMINMAXINFO 设置最小尺寸。</summary>
         private void SetupMinSizeHooks()
         {
