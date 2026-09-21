@@ -757,6 +757,13 @@ namespace CelesteMusicPlayer
 
         private void AdjustVolumeBy(double delta)
         {
+            // HiFi 独占/ASIO 且「HiFi 软件音量」未开启：滑块恒 100%，热键/滚轮不挪位，
+            // 避免出现"显示 95% 实际没变"的假状态（此时调音量请用 DAC 旋钮 / 系统音量端）。
+            if (IsHiFiModeSelected() && !IsHiFiSoftVolumeUiUnlocked())
+            {
+                return;
+            }
+
             VolumeSlider.Value = Math.Clamp(VolumeSlider.Value + delta, 0, 100);
         }
 
@@ -2750,11 +2757,14 @@ namespace CelesteMusicPlayer
             bool chOn = extra.ChannelBalance?.IsActive == true;
             bool limiterOn = extra.Safety?.EnableLimiter != false;
             bool rgOn = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
+            // HiFi 软件音量（独占/ASIO + 设置页开关 + 音量≠100%）：DSP 链采样级衰减，同样破坏 bit-perfect。
+            bool volOn = _audioEngine?.IsSoftwareVolumeActive ?? false;
             var active = new System.Collections.Generic.List<string>();
             if (eqOn) active.Add("EQ");
             if (chOn) active.Add("声道");
             if (limiterOn) active.Add("限幅");
             if (rgOn) active.Add("ReplayGain");
+            if (volOn) active.Add("音量");
             activeText = active.Count == 0 ? string.Empty : string.Join("、", active);
             return active.Count == 0;
         }
