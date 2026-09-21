@@ -1137,6 +1137,17 @@
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="HiFi 软件音量" />
+                                <TextBlock Text="独占 / ASIO 模式专用。关闭：主界面音量条固定 100%，音量由 DAC 旋钮或系统音量端调节（不破坏直通）。开启：音量条可拖动，但为程序内数字衰减，会失去 bit-perfect（界面徽标有提示）。DSD 直出播放时此开关无效。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="HiFiSoftwareVolumeSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" MinWidth="240" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">

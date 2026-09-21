@@ -62,20 +62,31 @@ namespace CelesteMusicPlayer
             {
                 bool hifi = IsHiFiModeSelected();
                 _applyingSettingsVolume = true;
+                if (_audioEngine != null)
+                {
+                    // HiFi 软件音量开关切换即时生效（播放中也可切）
+                    _audioEngine.SoftwareVolumeEnabled = settings.HiFiSoftwareVolume;
+                }
                 try
                 {
                     if (hifi)
                     {
-                        // HiFi 独占（bit-perfect）：数字音量恒 100%，设备主音量（DAC 级）随滑块可调。
-                        // 独占：软件音量条固定 100%；实际音量由系统托盘(DAC 设备主音量)控制，bit-perfect 保真。
-                        // 注意：这里只把 UI 滑块显示成 100%，绝不能改 _volumeToSave——
+                        // HiFi 独占（bit-perfect）：默认数字音量恒 100%，设备主音量（DAC 级）随滑块可调；
+                        // 设置页开启「HiFi 软件音量」后，音量条解冻并改走 DSP 衰减（失去 bit-perfect，徽标有提示）。
+                        // 注意：关闭软件音量时只把 UI 滑块显示成 100%，绝不能改 _volumeToSave——
                         // 否则切到 HiFi 后退出，会把用户在共享模式下的真实音量偏好覆盖成 100，
                         // 下次重启共享模式音量就"重置"了。
-                        VolumeSlider.Value = VolumeSlider.Maximum;
+                        bool softVol = IsHiFiSoftVolumeUiUnlocked();
+                        VolumeSlider.Value = softVol ? Math.Clamp(settings.Volume, 0, 100) : VolumeSlider.Maximum;
                         MediaPlayer? hifiPlayer = GetPlayer();
                         if (hifiPlayer != null)
                         {
-                            hifiPlayer.Volume = 1.0; // 引擎路径下 MediaPlayer 常停用，兜底置满
+                            hifiPlayer.Volume = softVol ? settings.Volume / 100.0 : 1.0; // 引擎路径下 MediaPlayer 常停用，兜底置满
+                        }
+
+                        if (softVol)
+                        {
+                            _audioEngine?.SetVolume(settings.Volume / 100.0);
                         }
 
                         UpdateVolumeIcon(VolumeSlider.Value);

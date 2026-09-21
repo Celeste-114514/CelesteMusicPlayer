@@ -596,6 +596,7 @@ namespace CelesteMusicPlayer
                 // 播放
                 SetSlider(VolumeSettingSlider, s.Volume);
                 SetTextBlock(VolumeValueText, $"{(int)Math.Round(s.Volume)}%");
+                SetToggle(HiFiSoftwareVolumeSwitch, s.HiFiSoftwareVolume);
                 SelectPlaybackOrder(s.PlaybackOrder);
                 SetToggle(EnableSmtcSwitch, s.EnableSmtc);
                 SetToggle(EnableFadeSwitch, s.EnableFade);
@@ -692,7 +693,9 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>设置页音量滑条：HiFi 独占下调 DAC 驱动音量，共享下调数字音量；两者都可调。</summary>
+        /// <summary>设置页音量滑条：始终显示保存的音量值（跨模式统一偏好）。
+        /// 实际路由由模式决定——共享=程序内数字衰减；独占/ASIO 默认=DAC/系统端点音量（不破坏直通），
+        /// 开启「HiFi 软件音量」后=DSP 衰减（失去 bit-perfect，徽标提示）。滑条本身不锁定。</summary>
         private void UpdateVolumeSettingLockForMode()
         {
             if (VolumeSettingSlider == null)
@@ -700,34 +703,42 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // 音量滑条在共享与 HiFi 独占下都可调：共享调 MediaPlayer 数字音量（系统混音），
-            // HiFi 独占调 DAC 设备/驱动级主音量（不破坏 bit-perfect，方便无实体音量键的小尾巴）。
-            // 因此不再锁定/禁用，仅统一用保存音量回填并显示。
             double saved = AppSettingsStore.Load().Volume;
             SetSlider(VolumeSettingSlider, saved);
             SetTextBlock(VolumeValueText, $"{(int)Math.Round(saved)}%");
         }
 
-        /// <summary>切换输出模式到 HiFi 独占（WASAPI 独占 / ASIO）时弹一次说明，提醒用户：
-        /// 播放器数字音量固定 100%（bit-perfect），请用 DAC/驱动音量或程序音量条调响（无实体音量键的小尾巴也能量轻）。</summary>
+        /// <summary>切换输出模式到 HiFi（WASAPI 独占 / ASIO）时弹一次说明：播放器默认不调音量（bit-perfect），
+        /// 音量走 DAC 硬件旋钮 / 系统端点音量；设备无实体音量键时引导开启本页「HiFi 软件音量」（会失去直通）。</summary>
         private void MaybeWarnHiFiVolume()
         {
             string mode = GetSelectedOutputMode();
-            bool hifi = string.Equals(mode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase)
-                || string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase);
-            if (!hifi)
+            bool exclusive = string.Equals(mode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase);
+            bool asio = string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase);
+            if (!exclusive && !asio)
             {
                 return;
             }
+
+            string title = exclusive ? "WASAPI 独占输出提示" : "ASIO 输出提示";
+            string body = exclusive
+                ? "已切换到 WASAPI 独占，播放器将尽力直通（bit-perfect）。\n\n" +
+                  "播放器内部数字音量固定为 100%（不参与衰减），音量有三种调法：\n" +
+                  "1. DAC / 耳放上的硬件旋钮（最推荐，完全不碰数字信号）；\n" +
+                  "2. Windows 任务栏音量条（调节 DAC 端点音量，部分设备支持，同样不破坏直通）；\n" +
+                  "3. 在下方「HiFi 软件音量」开关开启后，用主界面音量条调节——此为程序内数字衰减，会失去 bit-perfect（界面徽标会有提示）。\n\n" +
+                  "如果以上都无法调节音量（如无旋钮小尾巴），建议选第 3 种。DSD 直出播放时软件音量不可用，请用硬件旋钮。"
+                : "已切换到 ASIO 输出。ASIO 没有统一的系统音量接口，播放器默认不调音量。\n\n" +
+                  "请用声卡硬件旋钮或声卡驱动面板调节音量；\n" +
+                  "如果设备没有实体音量键（如无旋钮小尾巴），可在下方开启「HiFi 软件音量」开关——此为程序内数字衰减，会失去 bit-perfect（界面徽标会有提示）。\n\n" +
+                  "DSD 直出播放时软件音量不可用，请用硬件旋钮。";
 
             try
             {
                 var dialog = new ContentDialog
                 {
-                    Title = "HiFi 独占输出提示",
-                    Content = "已切换到 WASAPI 独占 / ASIO，播放器将尽力直通（bit-perfect）。\n\n" +
-                              "播放器内部数字音量固定为 100%（不参与衰减），音量请在你的 DAC / 耳机 / 驱动端调节，或使用右下角音量条调节 DAC 音量。\n\n" +
-                              "如果你的设备没有实体音量键（如无旋钮的小尾巴），用音量条即可调轻，不会破坏直通音质。",
+                    Title = title,
+                    Content = body,
                     CloseButtonText = "知道了",
                     DefaultButton = ContentDialogButton.Close,
                     XamlRoot = Content.XamlRoot
@@ -1190,8 +1201,9 @@ namespace CelesteMusicPlayer
             s.AutoDownloadOnlyWhenTagFull = AutoDownloadOnlyWhenTagFullSwitch?.IsOn ?? s.AutoDownloadOnlyWhenTagFull;
 
             // 音量滑条在共享与 HiFi 独占下都可调：HiFi 下调节的是 DAC 设备/驱动级主音量（不破坏 bit-perfect），
-            // 一并持久化，切换模式/重启后沿用用户设定。
+            // 设置页「HiFi 软件音量」开关开启后改走 DSP 衰减（失去 bit-perfect，徽标提示），一并持久化。
             s.Volume = VolumeSettingSlider.Value;
+            s.HiFiSoftwareVolume = HiFiSoftwareVolumeSwitch?.IsOn ?? s.HiFiSoftwareVolume;
             // 同步到跨入口唯一真值源：设置页与主界面是两个独立滑条，
             // 若主界面滑条因故未同步，退出时会用旧值把这里保存的音量覆盖回默认 80。
             MainWindow.LastUserVolume = Math.Clamp(VolumeSettingSlider.Value, 0, 100);
@@ -1467,6 +1479,11 @@ namespace CelesteMusicPlayer
             if (ReferenceEquals(sender, BackgroundPresetMotionSwitch))
             {
                 MainWindow.Instance?.RefreshBackgroundMotion();
+            }
+            else if (ReferenceEquals(sender, HiFiSoftwareVolumeSwitch))
+            {
+                // HiFi 软件音量切换即时刷新主窗口音量条冻结态（解冻 / 钉 100%）与引擎音量路由
+                MainWindow.Instance?.ApplySettingsLive(AppSettingsStore.Load());
             }
         }
 

@@ -426,14 +426,16 @@ namespace CelesteMusicPlayer
                 player.Volume = e.NewValue / 100.0;
             }
 
-            // 设备/引擎音量：独占下软件音量条固定 100%，且程序不设设备主音量（bit-perfect 直通，实际音量由系统托盘控制）；
-            // 共享沿用原机制（数字增益随滑块）。
-            if (!IsHiFiModeSelected())
+            // 设备/引擎音量：共享=数字增益随滑块；独占/ASIO 默认软件音量条固定 100%（实际音量由 DAC 硬件旋钮/
+            // 系统端点音量控制，bit-perfect 保真）；设置页开启「HiFi 软件音量」后，独占/ASIO 下滑条改走
+            // DSP 采样级衰减（音量≠100% 即破坏 bit-perfect，界面徽标会提示"音量"）。
+            bool softVol = IsHiFiSoftVolumeUiUnlocked();
+            if (!IsHiFiModeSelected() || softVol)
             {
                 _audioEngine?.SetVolume(e.NewValue / 100.0);
             }
 
-            if (!_applyingSettingsVolume && !IsHiFiModeSelected() && _volumeStartupApplied)
+            if (!_applyingSettingsVolume && (!IsHiFiModeSelected() || softVol) && _volumeStartupApplied)
             {
                 // 记录用户最后一次主动设定的音量（跨入口唯一真值源）
                 LastUserVolume = Math.Clamp(e.NewValue, 0, 100);
@@ -1431,11 +1433,14 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                // HiFi 独占：音量条固定 100% 不动，调音量请用系统托盘（DAC 设备主音量，bit-perfect 保真）。
-                if (IsHiFiModeSelected())
+                // HiFi 独占/ASIO：默认音量条固定 100% 不动——调 DAC 硬件旋钮或系统端点音量（bit-perfect 保真）；
+                // 设置页开启「HiFi 软件音量」后允许拖动（DSP 采样级衰减，失去 bit-perfect，徽标有提示）。
+                if (IsHiFiModeSelected() && !IsHiFiSoftVolumeUiUnlocked())
                 {
                     VolumeSlider.Value = VolumeSlider.Maximum;
-                    NowPlayingText.Text = "请在系统托盘音量条内修改音量";
+                    NowPlayingText.Text = string.Equals(AppSettingsStore.Load().OutputMode, "Asio", System.StringComparison.OrdinalIgnoreCase)
+                        ? "ASIO 模式请用声卡旋钮调音量，或在设置-播放中开启 HiFi 软件音量"
+                        : "请在 DAC / 系统音量端调节，或在设置-播放中开启 HiFi 软件音量";
                     return;
                 }
 
