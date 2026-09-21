@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
   一键打包 CelesteMusicPlayer 双安装包（框架依赖 + 自包含）并生成 SHA256SUMS.txt。

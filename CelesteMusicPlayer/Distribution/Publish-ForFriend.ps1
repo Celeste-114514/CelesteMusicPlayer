@@ -1,4 +1,4 @@
-# One-click publish: self-contained zip for friends (no .NET / Windows App Runtime install).
+﻿# One-click publish: self-contained zip for friends (no .NET / Windows App Runtime install).
 # Save this file as UTF-8. Avoid fancy quotes in Write-Host strings.
 param(
     [ValidateSet("x64", "x86", "arm64")]
