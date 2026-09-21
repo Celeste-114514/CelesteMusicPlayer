@@ -27,6 +27,9 @@ namespace CelesteMusicPlayer
         private string? _latestSetupUrl;
         private string? _latestExpectedSha256;
 
+        /// <summary>最新版本将下载的安装包变体："sc"=自包含，"fd"=框架依赖。默认 fd（与旧安装一致）。</summary>
+        private string _latestPackageKind = UpdateChecker.VariantFrameworkDependent;
+
         /// <summary>当前程序集版本号字符串（如 "26.9.10.2"）。逻辑已抽到 UpdateChecker，这里只做转发。</summary>
         private static string CurrentVersionText() => UpdateChecker.CurrentVersionText();
 
@@ -46,6 +49,7 @@ namespace CelesteMusicPlayer
             UpdateChecker.UpdateInfo? info = await UpdateChecker.FetchLatestAsync();
             _latestSetupUrl = info?.SetupUrl;
             _latestExpectedSha256 = info?.ExpectedSha256;
+            _latestPackageKind = info?.PackageKind ?? UpdateChecker.VariantFrameworkDependent;
             return info?.Tag;
         }
 
@@ -74,7 +78,7 @@ namespace CelesteMusicPlayer
 
             if (!string.IsNullOrEmpty(info.SetupUrl))
             {
-                AboutUpdateStatusText.Text = $"发现新版本 {info.Tag}（当前 {currentVer}）。点击「下载更新」下载安装包。";
+                AboutUpdateStatusText.Text = $"发现新版本 {info.Tag}（当前 {currentVer}）。将下载{DescribePackageKind(info.SetupUrl, info.PackageKind)}安装包，点击「下载更新」。";
                 AboutDownloadUpdateButton.Visibility = Visibility.Visible;
             }
             else
@@ -125,7 +129,7 @@ namespace CelesteMusicPlayer
                 {
                     if (!string.IsNullOrEmpty(_latestSetupUrl))
                     {
-                        AboutUpdateStatusText.Text = $"发现新版本 {latestTag}（当前 {currentVer}）。点击「下载更新」下载安装包。";
+                        AboutUpdateStatusText.Text = $"发现新版本 {latestTag}（当前 {currentVer}）。将下载{DescribePackageKind(_latestSetupUrl, _latestPackageKind)}安装包，点击「下载更新」。";
                         AboutDownloadUpdateButton.Visibility = Visibility.Visible;
                     }
                     else
@@ -500,6 +504,31 @@ namespace CelesteMusicPlayer
                     return false;
                 }
             }
+        }
+
+        /// <summary>
+        /// 描述「将下载哪种安装包」：优先按最终下载地址里的 -SC- 标记判断
+        /// （兜底时已装变体与实际包型可能不一致，地址才是真正会下到的东西），
+        /// 地址看不出时回落到按已安装变体推断。供关于面板状态栏提示用。
+        /// </summary>
+        private static string DescribePackageKind(string? setupUrl, string packageKind)
+        {
+            if (!string.IsNullOrEmpty(setupUrl) &&
+                setupUrl.Contains("-SC-", StringComparison.OrdinalIgnoreCase))
+            {
+                return "自包含版";
+            }
+
+            if (!string.IsNullOrEmpty(setupUrl) &&
+                (setupUrl.Contains("Setup", StringComparison.OrdinalIgnoreCase) ||
+                 setupUrl.Contains("Install", StringComparison.OrdinalIgnoreCase)))
+            {
+                return "框架依赖版";
+            }
+
+            return string.Equals(packageKind, UpdateChecker.VariantSelfContained, StringComparison.OrdinalIgnoreCase)
+                ? "自包含版"
+                : "框架依赖版";
         }
 
         private static string FormatBytes(long bytes)
