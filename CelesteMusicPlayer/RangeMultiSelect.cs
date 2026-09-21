@@ -1,5 +1,5 @@
 using System;
-using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml.Controls;
 
 namespace CelesteMusicPlayer
@@ -13,8 +13,16 @@ namespace CelesteMusicPlayer
     /// </summary>
     internal static class RangeMultiSelect
     {
-        private static readonly Dictionary<ListViewBase, int> AnchorIndex = new();
-        private static bool _suppressRangeSelection;
+        // 用 ConditionalWeakTable<ListViewBase, StrongBox<int>> 而不是 Dictionary<ListViewBase, int>：
+        // 静态字典会永久持有 ListView 强引用，窗口反复开关时连同其可视化树一起无法回收
+        // （「播放长音频内存暴涨」同类问题的另一处表现）。ConditionalWeakTable 的条目
+        // 随 key 被 GC 一并消亡，无需也无法手动清理。
+        // TValue 必须是引用类型，故用 StrongBox<int> 承载锚点索引。
+        private static readonly ConditionalWeakTable<ListViewBase, StrongBox<int>> AnchorIndex = new();
+
+        // 重入深度而非 bool：批量 SelectedItems.Add 过程中 SelectionChanged 可能同步重入，
+        // 用 bool 会被外层提前清掉导致范围选择自我触发。计数保证嵌套层级全部退出后才复位。
+        private static int _suppressDepth;
 
         /// <summary>列表当前是否处于可多选的选择模式（Multiple / Extended 均算）。</summary>
         internal static bool IsMultiSelectMode(ListViewBase? list)
@@ -51,7 +59,7 @@ namespace CelesteMusicPlayer
 
         private static void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_suppressRangeSelection)
+            if (_suppressDepth > 0)
             {
                 return;
             }
@@ -72,7 +80,8 @@ namespace CelesteMusicPlayer
                 index = list.SelectedIndex;
             }
 
-            bool hasAnchor = AnchorIndex.TryGetValue(list, out int anchor);
+            bool hasAnchor = AnchorIndex.TryGetValue(list, out StrongBox<int>? anchorBox);
+            int anchor = anchorBox?.Value ?? -1;
 
             if (index >= 0 && hasAnchor && anchor >= 0 && anchor < list.Items.Count
                 && anchor != index && IsShiftDown())
@@ -80,7 +89,7 @@ namespace CelesteMusicPlayer
                 int from = Math.Min(anchor, index);
                 int to = Math.Max(anchor, index);
 
-                _suppressRangeSelection = true;
+                _suppressDepth++;
                 try
                 {
                     for (int i = from; i <= to && i < list.Items.Count; i++)
@@ -98,13 +107,22 @@ namespace CelesteMusicPlayer
                 }
                 finally
                 {
-                    _suppressRangeSelection = false;
+                    _suppressDepth--;
                 }
             }
 
             if (index >= 0)
             {
-                AnchorIndex[list] = index;
+                // 已存在则更新盒子内的值，不存在则新增。不能用索引器赋值——
+                // ConditionalWeakTable 首次写入时 key 不存在，索引器会抛 KeyNotFoundException。
+                if (AnchorIndex.TryGetValue(list, out StrongBox<int>? existing) && existing != null)
+                {
+                    existing.Value = index;
+                }
+                else
+                {
+                    AnchorIndex.Add(list, new StrongBox<int>(index));
+                }
             }
         }
     }
