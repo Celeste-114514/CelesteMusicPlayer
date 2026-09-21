@@ -107,6 +107,11 @@ namespace CelesteMusicPlayer
         /// 共享（系统混音）与独占（原生 WASAPI 事件驱动）均生效，改动后下次开播生效；默认 100ms。</summary>
         public int OutputBufferMs { get; set; } = 100;
 
+        /// <summary>独占输出内核 A/B 开关："self"=自研（默认，C# 托管渲染线程，全功能 bit-perfect 直通）；
+        /// "echo"=ECHO 核心（C++ 原生渲染线程只 memcpy 环形缓冲，.NET GC 冻不到它——卡顿试验田，
+        /// 暂不支持 DSD/DoP：选了 echo 播 DSD 也自动回退自研）。改动后下次开播生效。</summary>
+        public string ExclusiveEngine { get; set; } = "self";
+
         public bool LyricFuzzyMatch { get; set; } = true;
 
         public bool ShowLyricTranslate { get; set; } = true;
@@ -775,6 +780,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DsdUsePcmFallback = s.DsdUsePcmFallback,
             DsdOutputMode = s.DsdOutputMode,
             OutputBufferMs = s.OutputBufferMs,
+            ExclusiveEngine = s.ExclusiveEngine,
             OnlineSearchDefaultSource = s.OnlineSearchDefaultSource,
             ArtistAvatarSource = s.ArtistAvatarSource,
             StreamingServiceUrl = s.StreamingServiceUrl,

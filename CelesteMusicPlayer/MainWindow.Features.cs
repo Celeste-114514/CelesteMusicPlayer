@@ -2641,6 +2641,38 @@ namespace CelesteMusicPlayer
             card.Background = active ? activeBg : null;
         }
 
+        /// <summary>独占输出内核 A/B 卡片点击：self=自研（默认），echo=ECHO 核心（C++ 原生渲染线程）。</summary>
+        private void ExclusiveEngineCard_Click(object sender, RoutedEventArgs e)
+        {
+            if (_audioCombosLoading)
+            {
+                return;
+            }
+
+            if (sender is not Button b || b.Tag is not string engine)
+            {
+                return;
+            }
+
+            AppSettingsStore.Update(s => s.ExclusiveEngine = engine);
+            UpdateEngineCardHighlight(engine);
+            StartupLog.Write("[设置] 独占输出内核切换为 " + (engine == "echo" ? "ECHO 核心（实验）" : "自研") + "（下一首歌生效）");
+            RefreshAudioSettingsPanel();
+        }
+
+        /// <summary>内核两张卡片：选中的用主题色高亮。</summary>
+        private void UpdateEngineCardHighlight(string engine)
+        {
+            Windows.UI.Color accent = ResolveAccentColor();
+            var activeBorder = new Microsoft.UI.Xaml.Media.SolidColorBrush(accent);
+            var activeBg = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(46, accent.R, accent.G, accent.B));
+            var normalBorder = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(60, 120, 120, 120));
+
+            bool echo = string.Equals(engine, "echo", StringComparison.OrdinalIgnoreCase);
+            SetModeCard(EngineSelfCard, !echo, activeBorder, activeBg, normalBorder);
+            SetModeCard(EngineEchoCard, echo, activeBorder, activeBg, normalBorder);
+        }
+
         private async void AudioOutputDeviceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_audioCombosLoading)
@@ -2723,6 +2755,9 @@ namespace CelesteMusicPlayer
                 {
                     DeviceDspMemoryToggle.IsOn = DeviceDspProfileStore.IsEnabled();
                 }
+
+                // 独占输出内核 A/B 卡片高亮同步
+                UpdateEngineCardHighlight(AppSettingsStore.Load().ExclusiveEngine);
 
                 if (DeviceDspHint != null)
                 {

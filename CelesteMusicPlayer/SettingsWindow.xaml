@@ -1910,6 +1910,36 @@
                                     NavigateUri="https://afdian.com/a/celeste_114514" />
                             </StackPanel>
                         </Border>
+
+                        <!-- LGPL-3.0 署名：独占输出内核（ECHO audio-host）动态链接声明 -->
+                        <Border
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="开源声明" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock
+                                    FontSize="12"
+                                    Opacity="0.8"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="本程序的「独占输出内核（ECHO 核心）」包含基于 ECHO 播放器 audio-host 模块修改的代码，以独立动态库 celeste_audio_core.dll 形式分发，依据 LGPL-3.0 许可。该库可被同名文件替换；程序其余部分为 MIT 许可，不受 LGPL 传染。" />
+                                <HyperlinkButton
+                                    Content="LGPL-3.0 许可全文（gnu.org）↗"
+                                    FontSize="12"
+                                    NavigateUri="https://www.gnu.org/licenses/lgpl-3.0.html" />
+                                <HyperlinkButton
+                                    Content="ECHO 原项目（github.com/takase1121/echo）↗"
+                                    FontSize="12"
+                                    NavigateUri="https://github.com/takase1121/echo" />
+                                <TextBlock
+                                    FontSize="12"
+                                    Opacity="0.8"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="celeste_audio_core.dll 的对应完整源码以 LGPL-3.0 发布于本仓库 native/echo-core/ 目录；如需书面源码要约或编译帮助，请通过上方联系方式联系作者。" />
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

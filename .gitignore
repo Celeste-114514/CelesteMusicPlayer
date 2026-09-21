@@ -43,3 +43,8 @@ streaming-plugin/streamingserver
 
 # 2026-08-28: git 对象库损坏后保留的备份目录（确认无需恢复后可手动删除）
 .git.damaged-*/
+
+# ===== 原生（ECHO 核心）编译中间产物（celeste_audio_core.dll 本体要入库随包分发）=====
+native/echo-core/build/*.obj
+native/echo-core/build/*.exp
+native/echo-core/build/*.lib

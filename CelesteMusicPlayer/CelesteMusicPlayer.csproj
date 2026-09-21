@@ -45,9 +45,16 @@
     <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
   </PropertyGroup>
 
-  <ItemGroup>
-    <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-    <Content Include="Assets\ffmpeg\ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <ItemGroup>
+        <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="Assets\ffmpeg\ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <!-- ECHO 核心音频 DLL（独占输出内核 A/B 开关的 "echo" 项；内含 ECHO audio-host 代码，LGPL-3.0，
+             源码见 native/echo-core/，本文件即"可替换的动态链接库"。
+             LGPL 合规要件（源码可获取声明 + 关于页署名）见 native/echo-core/README-LGPL.md。
+             仅 x64 构建随包（native/echo-core/build.bat 只编 x64；x86/ARM64 下选中 echo 会回退自研）。
+             DLL 本体随仓库分发（可用 build.bat 重新生成）；加 Exists 条件防止文件缺失时构建直接失败，
+             缺失时只是 echo 项不可用（选中会得到友好错误并回退自研）。 -->
+        <Content Include="..\native\echo-core\build\celeste_audio_core.dll" Link="celeste_audio_core.dll" Condition="Exists('..\native\echo-core\build\celeste_audio_core.dll')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- SACD 解码外部工具 sacd_extract.exe：不随包发布，用户自行放到 Assets\sacd\ 后构建自动带上（通配空目录不报错） -->
     <Content Include="Assets\sacd\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\AppIcon.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

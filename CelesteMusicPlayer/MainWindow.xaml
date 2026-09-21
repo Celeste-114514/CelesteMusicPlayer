@@ -6797,6 +6797,54 @@
                         </StackPanel>
                     </StackPanel>
 
+                    <!-- 独占输出内核（A/B 试验田：自研托管渲染线程 vs ECHO C++ 原生渲染线程） -->
+                    <StackPanel Spacing="8" Margin="0,16,0,0">
+                        <TextBlock Text="独占输出内核" FontSize="14" FontWeight="SemiBold" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button
+                                x:Name="EngineSelfCard"
+                                Grid.Column="0"
+                                Height="52"
+                                Padding="0"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                Click="ExclusiveEngineCard_Click"
+                                Tag="self"
+                                HorizontalAlignment="Stretch"
+                                ToolTipService.ToolTip="自研：C# 托管渲染线程（默认，全功能）">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="自研" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="默认 / 全功能" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="EngineEchoCard"
+                                Grid.Column="1"
+                                Height="52"
+                                Padding="0"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                Click="ExclusiveEngineCard_Click"
+                                Tag="echo"
+                                HorizontalAlignment="Stretch"
+                                ToolTipService.ToolTip="ECHO 核心：C++ 原生渲染线程（实验，抗卡顿；不支持 DSD/DoP）">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="ECHO 核心" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="实验 / 抗卡顿" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <TextBlock
+                            FontSize="12"
+                            Opacity="0.6"
+                            TextWrapping="WrapWholeWords"
+                            Text="切换渲染线程的实现：自研是 C# 线程（系统回收内存时可能把它冻一下，偶发卡顿）；ECHO 核心把渲染搬进 C++ 原生线程（冻不到它），音频数据仍来自同一套链路，音质口径不变。改动下一首歌生效；选 ECHO 核心播 DSD 会自动回退自研。" />
+                    </StackPanel>
+
                     <!-- 底部说明 -->
                     <TextBlock
                         FontSize="12"

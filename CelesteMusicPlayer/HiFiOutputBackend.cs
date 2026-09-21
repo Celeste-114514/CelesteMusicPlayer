@@ -45,7 +45,7 @@ namespace CelesteMusicPlayer
         private ReplayGainState? _rgState;
         private double _rgTrackDb, _rgAlbumDb, _rgPeak = 1.0;
         private RoomCorrectionState? _roomCorrection; // 房间校正（卷积 FIR）状态
-        private NativeWasapiExclusiveOut? _native; // 原生 WASAPI 独占输出器（WasapiExclusive 模式替代 NAudio WasapiOut）
+        private IExclusiveOutput? _native; // 独占输出器（WasapiExclusive 模式）：自研 NativeWasapiExclusiveOut 或 ECHO 核心 EchoCoreOutput（设置里 A/B 切换）
         private bool _useNative; // 当前播放是否走原生独占输出
         private bool _isDsd;     // 当前是否 DSD/DoP 直出（独占 + 禁降级）
         private DoPWaveSource? _dsdSource; // DSD/DoP 数据源（仅向独占通道喂 DoP 帧）
@@ -677,6 +677,19 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>是否使用 ECHO 核心独占输出（设置项 ExclusiveEngine="echo"）。默认 self=自研，可随时回退。</summary>
+        private static bool UseEchoCore()
+        {
+            try
+            {
+                return string.Equals(AppSettingsStore.Load().ExclusiveEngine, "echo", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false; // 设置读失败时保守回退自研（自研是已知工作路径）
+            }
+        }
+
         /// <summary>从 PCM WAV 文件以指定模式播放。<paramref name="requireExact"/> 为 true（DSD/DoP 容器 WAV）时独占只做源格式精确直通，禁止降级（保 bit-perfect）。</summary>
         public bool PlayWavAsync(string wavPath, OutputMode mode, string? deviceIdentifier = null, TimeSpan? seekTo = null, bool requireExact = false)
         {
@@ -751,7 +764,10 @@ namespace CelesteMusicPlayer
                             return false;
                         }
 
-                        var nat = new NativeWasapiExclusiveOut();
+                        // A/B 开关（设置项 ExclusiveEngine）：默认 self=自研托管渲染线程；
+                        // echo=ECHO 核心（C++ 原生渲染线程只 memcpy，.NET GC 冻不到 → 治卡顿试验田）。
+                        // 任选其一失败都可一键切回，互不影响（两边 Init 前都只做本地协商）。
+                        IExclusiveOutput nat = UseEchoCore() ? new EchoCoreOutput() : new NativeWasapiExclusiveOut();
                         nat.BufferMilliseconds = OutputBufferMs; // 事件驱动缓冲跟随设置（默认 100ms，可调低延迟/抗卡顿）
                         // DSP 链在独占下同样生效：传 _dspProvider（包住无缝源，内部短路直通）。
                         // requireExact（DSD/DoP 直出）强制用源原样，禁止 DSP 破坏 1-bit 容器。
@@ -1412,10 +1428,20 @@ namespace CelesteMusicPlayer
             else if (_waveFile != null && _waveFile.Length > 16
                 && (!_useNative || (_native?.IsStarted == true))) // native 模式下仅在渲染线程真正启动时判定，避免重建窗口期的旧 reader 误判为已读尽
             {
-                // 数据源已真实读到末尾（最可靠，避免依赖被源时长改短的 Duration；DSD 转码 WAV 读尽即播完）。
-                // 阈值与 SeamlessWaveProvider.HasReadyNext 的 -8 对齐，避免"源已读尽但续接尚未标记"的窗口被误判为需要重建。
-                // 要求 Position>0 且 Length>16，避免空/极小缓存文件（Length 异常小）在开播即被误判为已读尽。
-                sourceExhausted = _waveFile.Position >= _waveFile.Length - 8 && _waveFile.Position > 0;
+                if (_useNative && _native is EchoCoreOutput echo)
+                {
+                    // ECHO 核心：feeder 超前读源备货（ring 最多囤 ~600ms），reader 游标到头时
+                    // 歌曲尾巴还在 ring/设备缓冲里。必须等 ring 也播空（IsDrained）才判播完，
+                    // 否则切歌会把歌曲尾巴切掉。
+                    sourceExhausted = echo.IsDrained;
+                }
+                else
+                {
+                    // 数据源已真实读到末尾（最可靠，避免依赖被源时长改短的 Duration；DSD 转码 WAV 读尽即播完）。
+                    // 阈值与 SeamlessWaveProvider.HasReadyNext 的 -8 对齐，避免"源已读尽但续接尚未标记"的窗口被误判为需要重建。
+                    // 要求 Position>0 且 Length>16，避免空/极小缓存文件（Length 异常小）在开播即被误判为已读尽。
+                    sourceExhausted = _waveFile.Position >= _waveFile.Length - 8 && _waveFile.Position > 0;
+                }
             }
 
             // 修复：外层判定原来要求 _waveFile!=null，导致 DSD(_waveFile 恒 null) 播完(sourceExhausted)永不触发

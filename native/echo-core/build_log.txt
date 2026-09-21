@@ -1,0 +1,19 @@
+wasapi_exclusive.cpp
+PcmRingAudioSource.cpp
+celeste_bridge.cpp
+ChannelBalanceProcessor.cpp
+ConvolutionProcessor.cpp
+DspChain.cpp
+DspHeadroomProcessor.cpp
+EqProcessor.cpp
+LevelMeterProcessor.cpp
+PlaybackRateProcessor.cpp
+ReplayGainProcessor.cpp
+audio-host\src\wasapi_exclusive.cpp(163): warning C4996: 'wcsncpy': This function or variable may be unsafe. Consider using wcsncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+audio-host\src\wasapi_exclusive.cpp(202): warning C4996: 'wcsncpy': This function or variable may be unsafe. Consider using wcsncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+audio-host\src\wasapi_exclusive.cpp(303): warning C4996: 'wcsncpy': This function or variable may be unsafe. Consider using wcsncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+audio-host\src\wasapi_exclusive.cpp(718): warning C4996: 'wcsncpy': This function or variable may be unsafe. Consider using wcsncpy_s instead. To disable deprecation, use _CRT_SECURE_NO_WARNINGS. See online help for details.
+  正在创建库 build\celeste_audio_core.lib 和对象 build\celeste_audio_core.exp
+CL_RC=0
+celeste_audio_core.dll
+BUILD_OK 

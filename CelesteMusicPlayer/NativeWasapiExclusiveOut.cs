@@ -12,7 +12,7 @@ namespace CelesteMusicPlayer
     /// 事件驱动音频线程把源 PCM 直写 render 缓冲，不经 NAudio 的 sample 转换层。
     /// 设备原生支持源格式时样本字节整块直通（严格 bit-perfect）；否则降级到设备 FLOAT32 做标准量化。
     /// </summary>
-    internal sealed class NativeWasapiExclusiveOut : IDisposable
+    internal sealed class NativeWasapiExclusiveOut : IExclusiveOutput, IDisposable
     {
         private enum Kind { Float32, Pcm24Packed, Pcm24In32, Pcm32, Pcm16 }
 
