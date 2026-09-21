@@ -471,8 +471,17 @@ namespace CelesteMusicPlayer
                 long tsPrev = 0, tsReport = Stopwatch.GetTimestamp(), tsGapLog = 0, tsReadLog = 0, tsShortLog = 0;
                 double maxGapMs = 0, maxReadMs = 0;
                 double minPad = double.MaxValue, sumPad = 0;
-                long loops = 0, gapSpikes = 0, padZero = 0;
+                long loops = 0, gapSpikes = 0, padZero = 0, starve = 0;
                 double reportEverySec = 10.0;
+
+                // GC 归因（2026-09-22 加）：ECHO 在同一台机器上不卡，而它是 Rust 写的、**没有 GC**。
+                // Celeste 是 .NET：gen2 / 大对象堆回收会 STW（stop-the-world）暂停**所有**托管线程，
+                // 渲染线程也不例外，再高的线程优先级、再好的 MMCSS 也躲不掉。
+                // 而一首歌要整读 37MB + 预载下一首 33MB 进大对象堆 —— 正是 gen2 的典型触发源，
+                // 这与"起播时卡顿尤为明显""跟文件大小无关""ECHO 不卡"三条现象完全吻合。
+                // 因此每次尖峰都记下各代 GC 增量：gen2 涨了 = GC 是元凶；全 0 = 系统/驱动侧。
+                int gc0 = GC.CollectionCount(0), gc1 = GC.CollectionCount(1), gc2 = GC.CollectionCount(2);
+                double bufMsReal = _rate > 0 ? maxFrames * 1000.0 / _rate : 0; // 缓冲真实时长（毫秒）
 
                 while (!_requestStop && !_disposed)
                 {
@@ -494,12 +503,19 @@ namespace CelesteMusicPlayer
                         if (gapMs > pollMs * 3.0)
                         {
                             gapSpikes++;
+                            // 间隔 > 缓冲时长 = 设备在这段时间里必然把存货啃光并饿着 → 实锤可闻断音
+                            if (bufMsReal > 0 && gapMs > bufMsReal) starve++;
                             if (tsNow - tsGapLog > Stopwatch.Frequency * 2)
                             {
                                 tsGapLog = tsNow;
+                                int n0 = GC.CollectionCount(0), n1 = GC.CollectionCount(1), n2 = GC.CollectionCount(2);
                                 StartupLog.Write(string.Format(
-                                    "[渲染诊断] 补货间隔尖峰={0:F1}ms（轮询{1}ms）→ 渲染线程没按时醒（GC暂停/DPC/驱动/等锁），不是读源慢",
-                                    gapMs, pollMs));
+                                    "[渲染诊断] 补货间隔尖峰={0:F1}ms（轮询{1}ms／缓冲{2:F0}ms）{3} GC: gen0+{4} gen1+{5} gen2+{6} 堆={7:F0}MB 模式={8}",
+                                    gapMs, pollMs, bufMsReal,
+                                    (bufMsReal > 0 && gapMs > bufMsReal) ? "★超过缓冲=必然断流" : "",
+                                    n0 - gc0, n1 - gc1, n2 - gc2,
+                                    GC.GetTotalMemory(false) / 1048576.0, System.Runtime.GCSettings.LatencyMode));
+                                gc0 = n0; gc1 = n1; gc2 = n2;
                             }
                         }
                     }
@@ -593,14 +609,18 @@ namespace CelesteMusicPlayer
                     {
                         double avgPad = loops > 0 ? sumPad / loops : 0;
                         double zeroRatio = loops > 0 ? (double)padZero / loops : 0;
+                        int m0 = GC.CollectionCount(0), m1 = GC.CollectionCount(1), m2 = GC.CollectionCount(2);
                         StartupLog.Write(string.Format(
-                            "[渲染统计] {0:F0}s 补货{1}次 | 缓冲水位 最低{2:F0}/平均{3:F0}/满{4}帧，空缓冲{5}次({6:P0}) | 补货间隔 最大{7:F1}ms 尖峰{8}次 | 读源 最大{9:F2}ms | 真欠载{10}次",
+                            "[渲染统计] {0:F0}s 补货{1}次 | 水位 最低{2:F0}/平均{3:F0}/满{4}帧，空缓冲{5}次({6:P0}) | 间隔 最大{7:F1}ms 尖峰{8}次 断流{9}次 | 读源 最大{10:F2}ms | 真欠载{11}次 | GC gen0+{12} gen1+{13} gen2+{14} 堆{15:F0}MB 模式={16}",
                             (tsNow - tsReport) / (double)Stopwatch.Frequency, loops,
                             minPad == double.MaxValue ? 0 : minPad, avgPad, maxFrames, padZero, zeroRatio,
-                            maxGapMs, gapSpikes, maxReadMs, UnderrunCount));
+                            maxGapMs, gapSpikes, starve, maxReadMs, UnderrunCount,
+                            m0 - gc0, m1 - gc1, m2 - gc2,
+                            GC.GetTotalMemory(false) / 1048576.0, System.Runtime.GCSettings.LatencyMode));
                         tsReport = tsNow;
                         maxGapMs = 0; maxReadMs = 0; minPad = double.MaxValue; sumPad = 0;
-                        loops = 0; gapSpikes = 0; padZero = 0;
+                        loops = 0; gapSpikes = 0; padZero = 0; starve = 0;
+                        gc0 = m0; gc1 = m1; gc2 = m2;
                     }
                 }
 

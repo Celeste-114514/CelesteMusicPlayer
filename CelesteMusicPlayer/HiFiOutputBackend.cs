@@ -1207,9 +1207,19 @@ namespace CelesteMusicPlayer
         /// <summary>暂停前记录的真实设备主音量（供恢复使用）；未暂停或无设备返回 -1。</summary>
         public float GetPausedDeviceVolume() => _pausedDeviceVol;
 
+        /// <summary>该设备不支持 IAudioEndpointVolume（独占模式下的 USB DAC 很常见）。
+        /// 一旦确认就记下来，后续不再反复 QueryInterface —— 每次失败都要抛一次 COM 异常
+        /// 并写一条日志，异常开销 + 磁盘写入都不小（2026-09-22 修）。</summary>
+        private bool _endpointVolumeUnsupported;
+
         /// <summary>当前设备主音量标量 0..1；无设备/ASIO 返回 -1（未知）。</summary>
         public float GetDeviceVolume()
         {
+            if (_endpointVolumeUnsupported)
+            {
+                return -1f;
+            }
+
             try
             {
                 // 注意：AudioEndpointVolume 的 COM QueryInterface 在独占模式/部分设备上
@@ -1218,6 +1228,13 @@ namespace CelesteMusicPlayer
                 {
                     return _device.AudioEndpointVolume.MasterVolumeLevelScalar;
                 }
+            }
+            catch (InvalidCastException)
+            {
+                // 这是设备能力的固有事实（0x80004002 E_NOINTERFACE），不是偶发错误：
+                // 记下来以后不再尝试，避免"每次查询抛一次异常 + 刷一条日志"。
+                _endpointVolumeUnsupported = true;
+                global::CelesteMusicPlayer.StartupLog.Write("[设备音量] 当前设备不支持端点音量接口（独占 DAC 常见），后续不再查询");
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 

@@ -39,6 +39,21 @@ namespace CelesteMusicPlayer
             }
             catch (Exception ex) { StartupLog.WriteException("App.PrimaryLanguageOverride", ex); }
 
+            // 低延迟 GC（2026-09-22 加，针对独占模式偶发卡顿）：
+            // .NET 的 gen2 / 大对象堆回收是 STW（stop-the-world）——它会暂停**所有**托管线程，
+            // 音频渲染线程也不例外，再高的线程优先级、MMCSS "Pro Audio" 也躲不掉。
+            // 实测渲染线程被挂起 34~101ms，而设备缓冲只有 100ms → 挂起超过缓冲就是可闻断音。
+            // 同一台机器上 ECHO 不卡，而它是 Rust 写的、**没有 GC**，现象高度吻合。
+            // SustainedLowLatency：让运行时尽量把 gen2 回收放到后台、避免长时间阻塞式 STW，
+            // 专为"整个进程生命周期都需要低延迟"的场景设计（设一次即可，不要反复切换）。
+            // 代价是回收更保守、内存占用略高——对播放器可接受。
+            try
+            {
+                System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
+                StartupLog.Write($"[GC] 已设为低延迟模式 LatencyMode={System.Runtime.GCSettings.LatencyMode} IsServerGC={System.Runtime.GCSettings.IsServerGC}");
+            }
+            catch (Exception ex) { StartupLog.WriteException("App.GCLatencyMode", ex); }
+
             InitializeComponent();
             StartupLog.Write("App InitializeComponent done");
 
