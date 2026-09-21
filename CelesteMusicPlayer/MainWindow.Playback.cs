@@ -300,8 +300,15 @@ namespace CelesteMusicPlayer
                 // 音量滑条在共享与 HiFi 独占下都可用：HiFi 下调 DAC 设备/驱动级主音量（不破坏 bit-perfect），
                 // 用保存音量回填，避免切模式/重启后音量跳回默认值（此前误加 IsHiFiModeSelected 条件，
                 // 导致共享模式重启后音量不回填、停在 XAML 默认 80%）。
-                VolumeSlider.Value = Math.Clamp(settings.Volume, 0, 100);
                 _volumeToSave = Math.Clamp(settings.Volume, 0, 100); // 启动即同步，避免退出时以旧/0 值写盘
+                // HiFi 独占/ASIO 且未开「HiFi 软件音量」：数字音量不走 DSP，滑条恒显示 100%
+                // （实际音量由 DAC 旋钮 / 系统端点音量控制，保 bit-perfect）。
+                // 必须与 SetVolumeFromPointer（点一下音量条）和 ApplySettingsLive（设置页改完即时生效）
+                // 三处口径一致 —— 此前启动时按保存值回填（如 63%），用户点一下音量条才跳到 100%，
+                // 看起来像"启动音量不对/要手动点一下才满"。
+                // 注意：只改显示，绝不动 _volumeToSave，否则退出时会把用户在共享模式下的真实偏好覆盖成 100。
+                bool hifiVolumeLocked = IsHiFiModeSelected() && !IsHiFiSoftVolumeUiUnlocked();
+                VolumeSlider.Value = hifiVolumeLocked ? VolumeSlider.Maximum : Math.Clamp(settings.Volume, 0, 100);
                 // 回填完成：此后（用户真实拖动等）音量变化才允许写盘。
                 // 关键：XAML 里 VolumeSlider 的 Value 默认值在 InitializeComponent 时触发 ValueChanged，
                 // 若不加此闸门，那个默认值（原 80）会在启动回填前抢先写盘，覆盖用户上次保存的音量。

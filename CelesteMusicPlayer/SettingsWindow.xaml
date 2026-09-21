@@ -1274,10 +1274,16 @@
                         </Border>
 
                         <TextBlock
-                            Text="播放引擎为 Windows MediaPlayer（无 BASS/FFmpeg 切换）"
+                            Text="播放引擎：HiFi 音频链路（FFmpeg 解码 → PCM 直出，输出为 WASAPI 独占／共享 或 ASIO）"
                             FontSize="12"
                             Opacity="0.55"
                             Margin="0,8,0,0"
+                            TextWrapping="WrapWholeWords" />
+                        <TextBlock
+                            Text="输出缓冲区、采样率升频、交叉淡化等音频项，在主界面右上角「音频设置」面板里。"
+                            FontSize="12"
+                            Opacity="0.55"
+                            Margin="0,4,0,0"
                             TextWrapping="WrapWholeWords" />
                     </StackPanel>
                 </ScrollViewer>
