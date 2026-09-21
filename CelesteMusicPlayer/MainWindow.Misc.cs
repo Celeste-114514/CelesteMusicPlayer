@@ -2215,6 +2215,16 @@ namespace CelesteMusicPlayer
             {
 
             _waveformPath = path;
+
+            // 错峰（2026-09-21）：起播那一瞬间会同时跑两个满负荷的 ffmpeg —— 一个整轨转码、
+            // 一个整轨解波形。两个一起抢 CPU，独占渲染线程就饿着 → 每首歌开头最容易顿。
+            // 波形不是立刻要看的东西，让转码先跑 900ms 再开工。
+            await System.Threading.Tasks.Task.Delay(900);
+            if (!string.Equals(_waveformPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                return; // 已切歌
+            }
+
             float[] wave = await WaveformDataProvider.GetWaveformAsync(path, 180);
             if (!string.Equals(_waveformPath, path, StringComparison.OrdinalIgnoreCase))
             {

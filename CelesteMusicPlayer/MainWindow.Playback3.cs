@@ -2687,6 +2687,10 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>预加载节流用：上次预加载的时刻与目标路径。</summary>
+        private long _lastPreloadTick;
+        private string? _lastPreloadPath;
+
         /// <summary>引擎开播后预加载下一首到无缝源（共享/ASIO、顺序播放）。同格式可无缝续接，否则由上层重建。</summary>
         private async System.Threading.Tasks.Task PreloadSeamlessNextAsync(PlaylistItem current)
         {
@@ -2694,6 +2698,22 @@ namespace CelesteMusicPlayer
             {
                 return;
             }
+
+            // 节流（2026-09-21）：预加载 = spawn 一次 ffmpeg 整轨转码 + 把 ≤64MB 的 WAV 整读进内存（大对象堆）。
+            // 它有 6 个调用点（开播、无缝切歌后、拖动进度条、扫描歌词…），拖动一次进度条就触发一轮，
+            // 连着拖就是连着转码 + 连着大对象分配 → GC 一暂停，独占渲染线程就断音。
+            // 规则：同一首 5 秒内不重复预载；任意两次预载间隔 <800ms 直接跳过（专治拖动风暴）。
+            long preloadNow = System.Environment.TickCount64;
+            bool sameTarget = !string.IsNullOrWhiteSpace(_lastPreloadPath)
+                && string.Equals(_lastPreloadPath, current.FilePath, System.StringComparison.OrdinalIgnoreCase);
+            if (preloadNow - _lastPreloadTick < 800 || (sameTarget && preloadNow - _lastPreloadTick < 5000))
+            {
+                StartupLog.Write("预加载: 节流跳过 (<800ms 或同一首<5s) path=" + System.IO.Path.GetFileName(current.FilePath ?? ""));
+                return;
+            }
+
+            _lastPreloadTick = preloadNow;
+            _lastPreloadPath = current.FilePath;
 
             // DSD 播完自动切歌优先：DSD 源不参与无缝预加载（走原 Stop→PlayNext，避免无缝与 DSD 时长修正冲突）
             string curExt = System.IO.Path.GetExtension(current.FilePath).ToLowerInvariant();

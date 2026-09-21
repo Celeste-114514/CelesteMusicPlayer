@@ -29,7 +29,7 @@ namespace CelesteMusicPlayer
                 return hit;
             }
 
-            await Gate.WaitAsync(ct);
+            await Gate.WaitAsync(ct).ConfigureAwait(false);
             try
             {
                 if (Cache.TryGetValue(path, out hit) && hit.Length == bucketCount)
@@ -37,7 +37,7 @@ namespace CelesteMusicPlayer
                     return hit;
                 }
 
-                float[] result = await DecodeAsync(path, bucketCount, ct);
+                float[] result = await DecodeAsync(path, bucketCount, ct).ConfigureAwait(false);
                 if (result.Length > 0)
                 {
                     Cache[path] = result;
@@ -79,12 +79,18 @@ namespace CelesteMusicPlayer
             try
             {
                 using Process proc = Process.Start(psi)!;
+                // 波形解码是整首歌的完整解码，CPU 占用很高；起播时它和「转码 ffmpeg」同时跑，
+                // 两个满负荷进程会一起抢占 WASAPI 独占渲染线程。降到低优先级（与转码一致）。
+                try { proc.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception caught) { StartupLog.WriteException("WaveformDataProvider.cs", caught); }
                 _ = proc.StandardError.ReadToEndAsync(); // 丢弃 stderr，防止管道阻塞
                 var peaks = new List<float>(2_000_000);
                 var buf = new byte[8192];
                 while (true)
                 {
-                    int n = await proc.StandardOutput.BaseStream.ReadAsync(buf.AsMemory(0, buf.Length), ct);
+                    // ConfigureAwait(false)：解码循环别回到 UI 线程执行。
+                    // 一首 4 分钟的歌在这里要循环几百次 8KB 读取 + 近 200 万次采样累加，
+                    // 旧实现每次 await 都跳回 UI 线程，等于把整首歌的解码算力压在 UI 线程上。
+                    int n = await proc.StandardOutput.BaseStream.ReadAsync(buf.AsMemory(0, buf.Length), ct).ConfigureAwait(false);
                     if (n <= 0)
                     {
                         break;

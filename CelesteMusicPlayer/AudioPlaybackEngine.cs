@@ -61,6 +61,15 @@ namespace CelesteMusicPlayer
         /// <summary>当前播放源的原始格式描述（WAV 直通源）。</summary>
         public string? SourceFormatDescription => _hifiOut?.SourceFormatDescription;
 
+        /// <summary>
+        /// 转码前探测到的「源文件原始格式」（如 "44100hz / 24bit / 2声道"），即未经任何转码的源本身规格。
+        /// 与 <see cref="SourceFormatDescription"/>（实际送链路的 WAV 格式）比对，可识别"转码悄悄降级"：
+        /// 探测失败回退 16bit、设备不认时的重采样回退，都会让两者不一致——此时链路显示必须标注"转码已降级"、
+        /// bit-perfect 徽标必须报"转码降位/重采样"，不允许拿降级后的格式自称直通。
+        /// 非 ffmpeg 路径（WAV 直通 / DSD DoP）或探测失败时为 null。
+        /// </summary>
+        public string? OriginalSourceFormatDescription => FfmpegDecoderBackend.LastOriginalSourceDescription;
+
         /// <summary>读取实时电平快照（post-DSP 信号）到调用方数组。返回是否取到
         /// （未播放或 DSD 直出时为 false）。UI 线程调用。</summary>
         public bool TryGetLevels(float[] peakOut, float[] rmsOut) => _hifiOut?.TryGetLevels(peakOut, rmsOut) ?? false;

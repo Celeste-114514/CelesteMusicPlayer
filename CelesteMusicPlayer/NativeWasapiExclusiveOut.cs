@@ -71,11 +71,23 @@ namespace CelesteMusicPlayer
         public bool IsStarted { get; private set; }
 
         /// <summary>事件驱动缓冲大小（毫秒），须在 <see cref="Init"/> 之前设置。默认 100ms。
-        /// 事件驱动模式下缓冲越小延迟越低（越跟手），越小越依赖设备/驱动的调度精度，过低可能卡顿/爆音。</summary>
+        /// 独占模式下这个值同时就是设备事件周期（见 <see cref="TryInitialize"/> 的说明）。
+        /// 缓冲越大抗抖动余量越大（渲染线程偶尔慢一拍也不会断音），起播/拖动响应的延迟也越大。</summary>
         public int BufferMilliseconds { get; set; } = 100;
+
+        /// <summary>渲染线程主动补货的轮询间隔（毫秒）。独占模式下事件周期必须等于缓冲，
+        /// 也就是说事件只会在「整块缓冲被啃光」的那一刻才来——等到那一刻再读源，设备嘴里已经是空的，
+        /// 读源的 15ms 就是 15ms 的静音。所以渲染线程不等事件、自己按这个间隔醒来补货：
+        /// 设备缓冲被保持在接近满的水位，读源抖动被剩余存货吸收（2026-09-21 修）。</summary>
+        private int FillPollMilliseconds => Math.Clamp(BufferMilliseconds / 8, 2, 15);
 
         /// <summary>最近一次初始化是否触发了 AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED 对齐 dance（供日志排障）。</summary>
         public bool LastAlignDance { get; private set; }
+
+        /// <summary>累计欠载次数：渲染线程醒来时设备缓冲已被啃空（padding=0）的次数。
+        /// 持续上涨 = 补货速度跟不上设备消耗，是卡顿的硬指标（供日志/后续自动调大缓冲用）。</summary>
+        public long UnderrunCount => Interlocked.Read(ref _underrunCount);
+        private long _underrunCount;
 
         /// <summary>用指定设备 + 输出源（PCM 无缝源或 DSD/DoP 源）初始化（格式协商 + Initialize + 取 render client + 绑定事件）。
         /// <paramref name="requireExactFormat"/> 为 true（DSD/DoP 直出）时只尝试「源格式精确直通」，任何降级都视为失败，
@@ -120,7 +132,7 @@ namespace CelesteMusicPlayer
                 _dstBlock = src.BlockAlign;
                 _direct = true;
                 ActualFormatDescription = src.SampleRate + " Hz / " + src.BitsPerSample + " bit(源直通" + (requireExactFormat ? "/DoP" : "") + ") / " + src.Channels + " ch";
-                StartupLog.Write(initLog + "  → 源直通成功 " + ActualFormatDescription + (srcAlignDance ? "（含对齐dance）" : ""));
+                StartupLog.Write(initLog + "  → 源直通成功 " + ActualFormatDescription + DescribePeriod() + (srcAlignDance ? "（含对齐dance）" : ""));
                 LastAlignDance = srcAlignDance;
                 FinishInit();
                 return true;
@@ -185,6 +197,13 @@ namespace CelesteMusicPlayer
             return false; // Pcm24In32/Pcm24Packed 无同布局源直通
         }
 
+        /// <summary>初始化日志用：描述缓冲/周期配置。独占模式下二者恒等（微软规定），
+        /// 抗抖动靠的是渲染线程按 <see cref="FillPollMilliseconds"/> 主动补货，而不是靠缩小周期。</summary>
+        private string DescribePeriod()
+        {
+            return $" [周期=缓冲{BufferMilliseconds}ms 补货轮询{FillPollMilliseconds}ms]";
+        }
+
         /// <summary>线程安全请求 seek（render 线程在下一帧消费并重定位源，避免与正在读源的线程竞争）。</summary>
         public void SeekTo(TimeSpan pos)
         {
@@ -198,6 +217,44 @@ namespace CelesteMusicPlayer
         public bool Play(TimeSpan? initialPosition = null)
         {
             if (_audioClient == null) return false;
+
+            // 预填充（pre-roll）：Start 之前先把整缓冲写成静音。事件驱动模式下设备 Start 后
+            // 要过一个周期（10ms）才发首个事件，空缓冲起步会让设备最初这 10ms 无数据可播
+            // → 每首曲目开头"啪/顿"一声。预滚后设备嘴里始终有货，第一个事件只管增量补空闲空间。
+            if (_renderClient != null && _bufferFrames > 0)
+            {
+                // 预填充（pre-roll）：Start 之前先把整缓冲填满。
+                // 旧实现填的是静音——设备会老老实实把这一整块静音播完（100ms 无声）才轮到真实音频，
+                // 每首歌开头白白空一段。改成直接填真实音频（源布局与设备布局一致时），
+                // 起播即出声；读不满/非直通布局时才退回静音兜底。
+                int preFrames = (int)_bufferFrames;
+                byte[] preBuf = System.Buffers.ArrayPool<byte>.Shared.Rent(preFrames * _dstBlock);
+                try
+                {
+                    Array.Clear(preBuf, 0, preFrames * _dstBlock);
+                    uint flags = NativeWasapi.AUDCLNT_BUFFERFLAGS_SILENT;
+                    if (_direct && _provider != null)
+                    {
+                        int got = ReadFully(_provider, preBuf, preFrames * _srcBlock);
+                        if (got > 0)
+                        {
+                            preFrames = got / _dstBlock;
+                            flags = 0; // 真实音频，不能标 SILENT
+                        }
+                    }
+
+                    if (preFrames > 0 && _renderClient.GetBuffer((uint)preFrames, out IntPtr pre) == NativeWasapi.S_OK)
+                    {
+                        System.Runtime.InteropServices.Marshal.Copy(preBuf, 0, pre, preFrames * _dstBlock);
+                        _renderClient.ReleaseBuffer((uint)preFrames, flags);
+                    }
+                }
+                finally
+                {
+                    System.Buffers.ArrayPool<byte>.Shared.Return(preBuf);
+                }
+            }
+
             int hr = _audioClient.Start();
             if (hr != NativeWasapi.S_OK)
             {
@@ -267,19 +324,38 @@ namespace CelesteMusicPlayer
             _audioClient.Reset();
         }
 
-        /// <summary>尝试以给定独占格式初始化并取 render client；成功返回 S_OK。</summary>
+        /// <summary>尝试以给定独占格式初始化并取 render client；成功返回 S_OK。
+        /// 周期策略（2026-09-21 定论，勿再改回小周期）：
+        /// 微软 MSDN 对 IAudioClient::Initialize 的硬规定——**独占模式 + 事件驱动**
+        /// （AUDCLNT_STREAMFLAGS_EVENTCALLBACK）下 hnsPeriodicity 必须等于 hnsBufferDuration，
+        /// 否则 Initialize 必然失败。2026-09-21 那次「小周期 10ms + 缓冲 100ms」的修复因此
+        /// 从未真正生效：设备拒绝了请求，代码静默退回周期=缓冲，日志里留下的
+        /// `[周期=缓冲100ms]` 就是证据。所以这里不再做无谓的两次尝试，直接用 周期=缓冲。
+        /// 抗卡顿改由渲染线程主动补货实现（见 <see cref="FillPollMilliseconds"/> 与 RenderLoop）。
+        /// </summary>
         private static int TryInitialize(NativeWasapi.IMMDevice device, ref NativeWasapi.WAVEFORMATEXTENSIBLE wave,
-            out NativeWasapi.IAudioClient? ac, out NativeWasapi.IAudioRenderClient? rc, out uint frames, out bool alignDance, int bufferMs)
+            out NativeWasapi.IAudioClient? ac, out NativeWasapi.IAudioRenderClient? rc, out uint frames,
+            out bool alignDance, int bufferMs)
+        {
+            return InitExclusiveOnce(device, ref wave, out ac, out rc, out frames, out alignDance, bufferMs, bufferMs);
+        }
+
+        /// <summary>单次独占初始化（缓冲 + 周期）。含 AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED 对齐 dance。
+        /// 失败时释放全部 COM 对象并返回 HRESULT（ac/rc 置 null）。</summary>
+        private static int InitExclusiveOnce(NativeWasapi.IMMDevice device, ref NativeWasapi.WAVEFORMATEXTENSIBLE wave,
+            out NativeWasapi.IAudioClient? ac, out NativeWasapi.IAudioRenderClient? rc, out uint frames,
+            out bool alignDance, int bufferMs, int periodMs)
         {
             ac = null; rc = null; frames = 0; alignDance = false;
             var c = NativeWasapi.ActivateAudioClient(device);
             if (c == null) return NativeWasapi.REGDB_E_CLASSNOTREG;
 
-            // 缓冲毫秒 → 100ns 单位（1ms = 10,000）。事件驱动模式下每次回调整块处理缓冲（含 DSP），
-            // 缓冲越大单次回调耗时越长，在 352800Hz 开 EQ 时易造成 render 实时峰值 → 整体变慢/卡顿；
-            // 缓冲越小延迟越低但越依赖设备/驱动调度精度。默认 100ms 折中稳定性与单次处理块大小。
-            long hns = Math.Clamp(bufferMs, 10, 1000) * 10000L;
-            int hr = c.Initialize(NativeWasapi.AUDCLNT_SHAREMODE_EXCLUSIVE, NativeWasapi.AUDCLNT_STREAMFLAGS_EVENTCALLBACK, hns, hns, ref wave, IntPtr.Zero);
+            // 缓冲毫秒 → 100ns 单位（1ms = 10,000）。独占 + 事件驱动下周期恒等于缓冲（微软规定），
+            // 即设备会在「整块缓冲被啃光」时才发事件。缓冲越大，渲染线程攒的存货越多、越抗抖动，
+            // 但起播/拖动的响应延迟也越大。默认 100ms 折中稳定性与响应速度。
+            long hnsBuf = Math.Clamp(bufferMs, 10, 1000) * 10000L;
+            long hnsPer = hnsBuf;
+            int hr = c.Initialize(NativeWasapi.AUDCLNT_SHAREMODE_EXCLUSIVE, NativeWasapi.AUDCLNT_STREAMFLAGS_EVENTCALLBACK, hnsBuf, hnsPer, ref wave, IntPtr.Zero);
 
             if (hr == NativeWasapi.AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED)
             {
@@ -290,8 +366,9 @@ namespace CelesteMusicPlayer
                     c.Reset(); Marshal.ReleaseComObject(c); c = null;
                     c = NativeWasapi.ActivateAudioClient(device);
                     if (c == null) return NativeWasapi.REGDB_E_CLASSNOTREG;
-                    hns = FrameCountToHns(aligned, wave.Format.nSamplesPerSec);
-                    hr = c.Initialize(NativeWasapi.AUDCLNT_SHAREMODE_EXCLUSIVE, NativeWasapi.AUDCLNT_STREAMFLAGS_EVENTCALLBACK, hns, hns, ref wave, IntPtr.Zero);
+                    hnsBuf = FrameCountToHns(aligned, wave.Format.nSamplesPerSec);
+                    hnsPer = Math.Min(hnsPer, hnsBuf); // 对齐后周期仍不得越过缓冲
+                    hr = c.Initialize(NativeWasapi.AUDCLNT_SHAREMODE_EXCLUSIVE, NativeWasapi.AUDCLNT_STREAMFLAGS_EVENTCALLBACK, hnsBuf, hnsPer, ref wave, IntPtr.Zero);
                 }
             }
 
@@ -381,12 +458,19 @@ namespace CelesteMusicPlayer
                 var srcWf = src.WaveFormat;
                 byte[] srcBuf = new byte[maxFrames * _srcBlock];
                 var waits = new WaitHandle[] { _stopSignal, _renderSignal };
+                int pollMs = FillPollMilliseconds;
 
                 while (!_requestStop && !_disposed)
                 {
-                    int wi = WaitHandle.WaitAny(waits, -1); // 无限等待 WASAPI 事件（对齐 ECHO INFINITE），避免轮询导致卡顿
+                    // 关键（2026-09-21 修独占卡顿）：**不等设备事件**。
+                    // 独占模式下事件周期恒等于缓冲，事件只在「整块缓冲被啃光」那一刻才来——
+                    // 等到那一刻再读源，设备嘴里已经是空的，读源/GC/等锁的 15ms 就是 15ms 的静音。
+                    // 改成按 pollMs 主动醒来，每次把空闲空间（缓冲 − padding）补满：
+                    // 设备缓冲被维持在接近满的水位，剩余存货就是抗抖动的余量。
+                    int wi = WaitHandle.WaitAny(waits, pollMs);
                     if (_requestStop || _disposed) break;
-                    if (wi != 1) continue; // 非 render 信号或超时
+                    // wi==0 停止信号；wi==1 设备事件（也顺手补货）；WaitTimeout(258) 轮询到点。
+                    if (wi == 0) continue;
 
                     // 消费线程安全 seek 请求：在 render 线程自身重定位源，避免与正在读源的并发冲突
                     TimeSpan? seekReq;
@@ -401,12 +485,35 @@ namespace CelesteMusicPlayer
                         lock (_framesLock) { _framesWritten = (long)(seekReq.Value.TotalSeconds * _rate); }
                     }
 
-                    // ECHO 式：每次取整缓冲，写满后整体提交；无需 GetCurrentPadding/frames 换算 → 无越界
-                    if (rc.GetBuffer((uint)maxFrames, out IntPtr dst) != NativeWasapi.S_OK) break;
+                    // 只填「空闲空间」= 整缓冲 − 设备已排队未播帧（GetCurrentPadding）。
+                    // 事件驱动标准做法（对齐微软 RenderAudio 示例）：小周期下设备每 10ms 发一次事件，
+                    // 每次只补这 10ms 的空闲；读源/GC/调度抖动（实测 15ms 尖峰）由设备嘴里
+                    // 剩下的 ~90ms 存货吸收，不再变成可闻卡顿。旧实现每次取整缓冲（100ms），
+                    // 读不满整缓冲就整体提交不足数据 → underrun → "时不时顿一下"。
+                    if (_audioClient!.GetCurrentPadding(out uint pad) != NativeWasapi.S_OK) break;
 
+                    // 欠载计数：设备缓冲里一帧不剩 = 喇叭正在播静音。这是卡顿的硬指标。
+                    // 补货轮询跑起来后这里应当长期为 0；持续上涨说明缓冲还是不够大/读源太慢。
+                    if (pad == 0)
+                    {
+                        long n = Interlocked.Increment(ref _underrunCount);
+                        long nowU = Environment.TickCount64;
+                        if (nowU - _lastUnderrunLogMs > 2000)
+                        {
+                            _lastUnderrunLogMs = nowU;
+                            StartupLog.Write($"[源诊断] 设备缓冲被啃空(underrun #{n}) 缓冲={maxFrames}帧/{BufferMilliseconds}ms 补货轮询={pollMs}ms");
+                        }
+                    }
+
+                    int toFill = (int)Math.Min((long)maxFrames - pad, maxFrames);
+                    if (toFill <= 0) continue; // 缓冲仍是满的（设备还没消耗）：无空闲空间可写
+
+                    if (rc.GetBuffer((uint)toFill, out IntPtr dst) != NativeWasapi.S_OK) break;
+
+                    int want = toFill * _srcBlock;
                     int got;
                     long readStart = Environment.TickCount64;
-                    got = ReadFully(src, srcBuf, maxFrames * _srcBlock);
+                    got = ReadFully(src, srcBuf, want);
                     long readMs = Environment.TickCount64 - readStart;
                     // 诊断：单次读源耗时尖峰（>12ms）→ 读文件/源慢（磁盘/云盘定点区段）会成为卡顿点。
                     // 若读取总快但播放仍卡在固定位置，则指向设备/驱动/定时器层（与此处无关）。
@@ -415,12 +522,12 @@ namespace CelesteMusicPlayer
                         _lastReadSlowMs = Environment.TickCount64 + 1000; // 限频 1s 一次
                         var ps = src.ProbeCurrentState;
                         long pos = ps?.Pos ?? 0, len = ps?.Len ?? 0;
-                        StartupLog.Write($"[源诊断] 读源耗时尖峰={readMs}ms（需{maxFrames * _srcBlock}B）srcPos={pos}/{len} nextMount={src.NextMounted}");
+                        StartupLog.Write($"[源诊断] 读源耗时尖峰={readMs}ms（需{want}B）srcPos={pos}/{len} nextMount={src.NextMounted}");
                     }
 
-                    if (got < srcBuf.Length)
+                    if (got < want)
                     {
-                        Array.Clear(srcBuf, got, srcBuf.Length - got); // 不足部分静音，避免旧/越界数据
+                        Array.Clear(srcBuf, got, want - got); // 不足部分静音，避免旧/越界数据
                         // 诊断：本次 WASAPI 缓冲未能从数据源读满（潜在 underrun → 播放卡顿）。
                         // 正常无缝续接时 ReadFully 可跨曲填满；此处仅当磁盘读不足或源已尽时出现。
                         long nowMs = Environment.TickCount64;
@@ -429,21 +536,21 @@ namespace CelesteMusicPlayer
                             _lastUnderrunLogMs = nowMs;
                             var ps = src.ProbeCurrentState;
                             long pos = ps?.Pos ?? 0, len = ps?.Len ?? 0;
-                            StartupLog.Write($"[源诊断] render underrun: 需要{srcBuf.Length}B 读得{got}B srcPos={pos}/{len} nextMount={src.NextMounted}");
+                            StartupLog.Write($"[源诊断] render underrun: 需要{want}B 读得{got}B srcPos={pos}/{len} nextMount={src.NextMounted}");
                         }
                     }
 
                     if (_direct)
                     {
-                        Marshal.Copy(srcBuf, 0, dst, maxFrames * _dstBlock);
+                        Marshal.Copy(srcBuf, 0, dst, want);
                     }
                     else
                     {
-                        ConvertToFloat(dst, srcBuf, maxFrames, srcWf);
+                        ConvertToFloat(dst, srcBuf, toFill, srcWf);
                     }
 
-                    rc.ReleaseBuffer((uint)maxFrames, 0);
-                    lock (_framesLock) { _framesWritten += maxFrames; }
+                    rc.ReleaseBuffer((uint)toFill, 0);
+                    lock (_framesLock) { _framesWritten += toFill; }
                 }
 
                 bool completed = !_requestStop && !_disposed;

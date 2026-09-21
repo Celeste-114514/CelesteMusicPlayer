@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -44,6 +45,49 @@ namespace CelesteMusicPlayer
         /// <summary>失败回调：由引擎在构造时挂接，转码失败时用于设置 LastError 并触发 Failed 事件。</summary>
         public Action<Exception>? FailureHandler { get; set; }
 
+        /// <summary>
+        /// 最近一次 BuildTranscodeArgs 探测到的「源文件原始格式」（如 "44100hz / 24bit / 2声道"），
+        /// 即未经任何转码的源本身规格；探测失败或走 DSD 分支时为 null。
+        /// 用途：链路显示与 bit-perfect 徽章把它与「实际送链路的 WAV 格式」比对，
+        /// 一旦源被悄悄降级（探测失败回退 16bit、设备不认时的重采样回退），显示必须现形，不允许谎报直通。
+        /// 静态属性：转码参数构造与播放在同一线程链路上串行发生，按"最近一次"语义使用。
+        /// </summary>
+        public static string? LastOriginalSourceDescription { get; private set; }
+
+        // ===== 探测结果缓存 + 缓存文件访问时间（2026-09-21 加） =====
+
+        /// <summary>源格式探测结果缓存：key = 路径|最后修改时间|文件长度。
+        /// 旧实现每一首歌起播都要 spawn 一次 ffmpeg 去探测，而预加载下一首会再探测一次——
+        /// 同一首歌一次播放周期里被探测两遍，且是同步阻塞（WaitForExit 最多 3 秒），
+        /// 在 UI 线程上就是实打实的卡死。缓存后同一文件同一版本只探测一次。</summary>
+        private static readonly ConcurrentDictionary<string, (int Rate, int Channels, int Bits)> s_probeCache
+            = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>缓存 WAV 的最近使用时刻（Environment.TickCount64）。清理时跳过最近用过的，
+        /// 保证「正在播的、刚预载的」永远不会被删（旧实现删最旧的一半，可能把在播文件删掉）。</summary>
+        private static readonly ConcurrentDictionary<string, long> s_cacheLastUse
+            = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>上次清理时刻，用于限流（避免每转一首歌就扫一次整个缓存目录 + 删一批文件）。</summary>
+        private static long s_lastTrimTick;
+
+        /// <summary>标记某个缓存 WAV 正在被使用（播放/预载命中时调用），清理时会跳过它。</summary>
+        public static void MarkCacheUsed(string? wavPath)
+        {
+            if (string.IsNullOrWhiteSpace(wavPath))
+            {
+                return;
+            }
+
+            s_cacheLastUse[wavPath] = Environment.TickCount64;
+            // 防止无限增长：超过 256 条就整体丢弃重建（条目只在播放期间有意义）
+            if (s_cacheLastUse.Count > 256)
+            {
+                s_cacheLastUse.Clear();
+                s_cacheLastUse[wavPath] = Environment.TickCount64;
+            }
+        }
+
         /// <summary>该后端能解码的格式（与 AudioPlaybackEngine.NeedsFfmpeg 一致的全量白名单）。</summary>
         public bool CanDecode(string path)
         {
@@ -75,7 +119,7 @@ namespace CelesteMusicPlayer
 
             string cacheDir = GetCacheDir();
             string partial = Path.Combine(cacheDir, Guid.NewGuid().ToString("N") + ".partial.wav");
-            string transcodeArgs = BuildTranscodeArgs(path, partial, outputMode, devicePreference);
+            string transcodeArgs = await BuildTranscodeArgsAsync(path, partial, outputMode, devicePreference);
             string key = GetCacheKey(path, transcodeArgs);
             string cachedWav = Path.Combine(cacheDir, key + ".wav");
             string targetWav;
@@ -83,6 +127,7 @@ namespace CelesteMusicPlayer
             if (File.Exists(cachedWav))
             {
                 targetWav = cachedWav;
+                MarkCacheUsed(cachedWav); // 标记为在播，缓存清理时跳过
                 status?.Invoke("正在播放（已缓存）…");
             }
             else
@@ -187,11 +232,12 @@ namespace CelesteMusicPlayer
 
                 string cacheDir = GetCacheDir();
                 string partial = Path.Combine(cacheDir, Guid.NewGuid().ToString("N") + ".partial.wav");
-                string transcodeArgs = BuildTranscodeArgs(path, partial, outputMode, devicePreference);
+                string transcodeArgs = await BuildTranscodeArgsAsync(path, partial, outputMode, devicePreference);
                 string key = GetCacheKey(path, transcodeArgs);
                 string cachedWav = Path.Combine(cacheDir, key + ".wav");
                 if (File.Exists(cachedWav))
                 {
+                    MarkCacheUsed(cachedWav); // 预载命中也算在用，别被清理删掉
                     return cachedWav;
                 }
 
@@ -219,6 +265,7 @@ namespace CelesteMusicPlayer
                     catch (Exception caught) { StartupLog.WriteException("FfmpegDecoderBackend.cs", caught); }
                 }
 
+                MarkCacheUsed(cachedWav);
                 TrimCache(cacheDir);
                 return cachedWav;
             }
@@ -341,9 +388,10 @@ namespace CelesteMusicPlayer
 
         /// <summary>构建 ffmpeg 转码参数：按源位深输出原生 PCM（16bit→s16le / 24bit→s24le / 32bit→s32le），
         /// 保留源采样率与声道，供 WaveFileReader 原样直通（严格 bit-perfect）。探测失败回退 16/44.1/2。</summary>
-        private string BuildTranscodeArgs(string srcPath, string dstPath, HiFiOutputBackend.OutputMode outputMode, string? devicePreference)
+        private async Task<string> BuildTranscodeArgsAsync(string srcPath, string dstPath, HiFiOutputBackend.OutputMode outputMode, string? devicePreference)
         {
             string ext = Path.GetExtension(srcPath).ToLowerInvariant();
+            LastOriginalSourceDescription = null; // 每首歌重新探测，防止上一首的残留造成误判
             if (ext is ".dsf" or ".dff")
             {
                 // 共享模式（系统混音/共享）：统一折叠为 16bit/44.1kHz PCM，保证设备/系统可播（非 bit-perfect，可听优先）。
@@ -356,9 +404,15 @@ namespace CelesteMusicPlayer
                 return string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -ar 352800 -sample_fmt s32 \"{1}\"", srcPath, dstPath);
             }
 
-            var srcFmt = ProbeSourceFormat(srcPath);
+            // 异步探测（2026-09-21 改）：旧实现在这里同步 spawn ffmpeg 并 ReadToEnd + WaitForExit(3000)，
+            // 起播与预加载各跑一次，阻塞调用线程最多 3 秒 —— 这是"MP3 也卡"的主要来源之一。
+            var srcFmt = await ProbeSourceFormatAsync(srcPath);
             if (srcFmt is (int rate, int ch, int bits) && rate > 0 && ch > 0)
             {
+                // 记录源文件原始格式（未经转码），供链路显示与 bit-perfect 诚实判定比对
+                LastOriginalSourceDescription = rate + "hz / " + bits + "bit / " + ch + "声道";
+                StartupLog.Write($"[转码] 源探测 {System.IO.Path.GetFileName(srcPath)} → {rate}hz/{bits}bit/{ch}ch");
+
                 // 共享模式：采样率对齐设备 MixFormat，声道固定 2（立体声），输出统一用 pcm_f32le（IEEE float）。
                 // 声道不再跟随设备 MixFormat：部分设备（HDMI/DP 外接显示器）会报告 6/8 声道，
                 // 转出的多声道 WAV 在立体声设备的共享模式下会被 IAudioClient::Initialize 拒绝
@@ -382,11 +436,29 @@ namespace CelesteMusicPlayer
             }
 
             // 探测失败回退：固定 16bit/44.1kHz/立体声，保证可播。
+            // 注意：高于 16bit/44.1kHz 的源在这里会被静默降级，日志必须留痕，链路显示据此标注"转码已降级"。
+            LastOriginalSourceDescription = null;
+            StartupLog.Write("[转码警告] 源格式探测失败，按 16bit/44100Hz/立体声兜底（高于此规格的源会被降级）：" + srcPath);
             return string.Format("-y -i \"{0}\" -vn -acodec pcm_s16le -ar 44100 -ac 2 \"{1}\"", srcPath, dstPath);
         }
 
-        /// <summary>用 ffmpeg -i 探测源音频格式，返回 (采样率, 声道数, 位深)；探测失败返回 null。</summary>
-        private static (int Rate, int Channels, int Bits)? ProbeSourceFormat(string path)
+        /// <summary>探测缓存 key：路径 + 最后修改时间 + 文件长度。三者任一变化都视为源文件变了，重新探测。</summary>
+        private static string MakeProbeKey(string path)
+        {
+            try
+            {
+                var fi = new FileInfo(path);
+                return path + "|" + fi.LastWriteTimeUtc.Ticks + "|" + fi.Length;
+            }
+            catch
+            {
+                return path; // 取不到文件信息时不缓存（每次都探测）
+            }
+        }
+
+        /// <summary>用 ffmpeg -i 探测源音频格式，返回 (采样率, 声道数, 位深)；探测失败返回 null。
+        /// 异步 + 结果缓存（2026-09-21 改）：不再同步阻塞调用线程。</summary>
+        private static async Task<(int Rate, int Channels, int Bits)?> ProbeSourceFormatAsync(string path)
         {
             try
             {
@@ -394,6 +466,12 @@ namespace CelesteMusicPlayer
                 if (string.IsNullOrWhiteSpace(ffmpeg))
                 {
                     return null;
+                }
+
+                string key = MakeProbeKey(path);
+                if (s_probeCache.TryGetValue(key, out var cached))
+                {
+                    return cached;
                 }
 
                 var psi = new ProcessStartInfo(ffmpeg)
@@ -405,18 +483,91 @@ namespace CelesteMusicPlayer
                     Arguments = "-i \"" + path + "\""
                 };
 
-                using var proc = Process.Start(psi)!;
-                string stderr = proc.StandardError.ReadToEnd();
-                proc.WaitForExit(3000);
+                string stderr;
+                using (var proc = Process.Start(psi)!)
+                {
+                    // 探测也要降优先级：它是起播路径上的进程，不该和 WASAPI 渲染线程抢 CPU
+                    try { proc.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception caught) { StartupLog.WriteException("FfmpegDecoderBackend.cs", caught); }
+
+                    Task<string> readTask = proc.StandardError.ReadToEndAsync();
+                    Task waitTask = proc.WaitForExitAsync();
+                    // 兜底超时：源文件在云盘/网络盘上时 ffmpeg 可能长时间不返回，
+                    // 不能让它把起播流程无限挂住（旧实现是 WaitForExit(3000) 硬超时）。
+                    Task timeoutTask = Task.Delay(5000);
+                    Task done = await Task.WhenAny(Task.WhenAll(readTask, waitTask), timeoutTask);
+                    if (done == timeoutTask)
+                    {
+                        try { proc.Kill(true); } catch (Exception caught) { StartupLog.WriteException("FfmpegDecoderBackend.cs", caught); }
+                        StartupLog.Write("[转码警告] 源格式探测超时(5s)，按兜底规格转码：" + path);
+                        return null;
+                    }
+
+                    stderr = await readTask;
+                }
+
+                var parsed = ParseStreamFormat(stderr);
+                if (parsed.HasValue)
+                {
+                    s_probeCache[key] = parsed.Value;
+                    if (s_probeCache.Count > 512)
+                    {
+                        s_probeCache.Clear(); // 粗放但够用：曲库再大也不会累积到内存问题
+                    }
+                }
+
+                return parsed;
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>从 ffmpeg -i 的 stderr 里解析音轨格式（采样率/声道/位深）；解析不出返回 null。</summary>
+        private static (int Rate, int Channels, int Bits)? ParseStreamFormat(string stderr)
+        {
+            if (string.IsNullOrEmpty(stderr))
+            {
+                return null;
+            }
+
+            {
+                // ===== 只解析 "Stream #0:N: Audio:" 这一行，绝不能对整段 stderr 做正则 =====
+                //
+                // 本项目内置的 ffmpeg 是裁剪版自定义构建，stderr 顶部的 configuration: 横幅用
+                // --enable-encoder='pcm_s16le,pcm_s16be,pcm_s24le,pcm_s32le,...' 的形式罗列全部编解码器。
+                // 旧实现对整段 stderr 匹配，被横幅抢先命中（2026-09-21 实测根因）：
+                //   · 位深：s(\d+) 命中横幅里的 pcm_s16le → 24bit 源被误判成 16bit，
+                //     转码按 16bit 输出，独占模式把 16bit WAV 当"源直通"，
+                //     于是 24bit 歌曲在链路里显示 16bit 还谎称 bit-perfect；
+                //   · 声道：(mono|stereo|...|6\.1|...) 命中 libavutil 61. 6.100 的版本号 → 声道被误判成 7。
+                // 先定位音频流描述行再取数，横幅 / 版本号 / 元数据都干扰不到。
+                // 注意：这与 ffmpeg 版本无关——任何显式列出编码器名的构建（定制 slim 版必然如此）都有此横幅，
+                // 所以换 ffmpeg 二进制治不了这个病，必须按行解析。
+                string? streamLine = null;
+                foreach (var line in stderr.Split('\n'))
+                {
+                    if (line.Contains("Stream #", StringComparison.Ordinal)
+                        && line.Contains("Audio:", StringComparison.Ordinal))
+                    {
+                        streamLine = line;
+                        break;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(streamLine))
+                {
+                    return null;
+                }
 
                 int rate = 0, channels = 0, bits = 0;
-                var mRate = Regex.Match(stderr, @"(\d+)\s*Hz");
+                var mRate = Regex.Match(streamLine, @"(\d+)\s*Hz");
                 if (mRate.Success)
                 {
                     rate = int.Parse(mRate.Groups[1].Value);
                 }
 
-                var mCh = Regex.Match(stderr, @"(mono|stereo|2\.1|5\.1|6\.1|7\.1)");
+                var mCh = Regex.Match(streamLine, @"(mono|stereo|2\.1|5\.1|6\.1|7\.1)");
                 if (mCh.Success)
                 {
                     channels = mCh.Groups[1].Value switch
@@ -430,19 +581,50 @@ namespace CelesteMusicPlayer
                         _ => 0
                     };
                 }
-
-                // 位深优先取 "NN bits"（24bit 源 ffmpeg 会显示 s32, 24 bits），没有再取 s16/s24 采样格式。
-                var mBits = Regex.Match(stderr, @"(\d+)\s*bits");
-                if (mBits.Success)
+                else
                 {
-                    bits = int.Parse(mBits.Groups[1].Value);
+                    // 个别容器只写 "N channels"（部分 mov/mkv 音轨）
+                    var mCh2 = Regex.Match(streamLine, @"(\d+)\s*channels?");
+                    if (mCh2.Success)
+                    {
+                        channels = int.Parse(mCh2.Groups[1].Value);
+                    }
+                }
+
+                // 位深优先级（全部只在流信息行内匹配，碰不到横幅）：
+                //   1) 括号里的 "NN bit" —— FLAC/ALAC/WavPack 的 24bit 源显示 s32 (24 bit)，这是真实位深；
+                //      （旧正则写的是复数 "NN bits"，匹配不上 ffmpeg 的单数 "(24 bit)" 写法，只能走 s(\d+) 兜底，
+                //        于是每次都命中横幅里的 pcm_s16le —— 两个缺陷叠加才是完整根因）
+                //   2) "NN bits" —— 旧版 ffmpeg 的复数写法，保留兼容；
+                //   3) 采样格式 s16/s24/s32 —— 纯 PCM WAV 只显示 s16；
+                //      （\b 词边界 + 结尾可选 p，保证 pcm_s16le 这类编码器名、s302m 这类冷门编码器名不会被误中：
+                //        s 前面是下划线/后面紧跟字母时都不是词边界；s16p/s32p 这类平面写法也能取到）
+                //   4) fltp / flt —— 浮点平面采样（AAC/MP3/Opus 等有损解码的输出），按 32bit 处理，
+                //      避免有损源被无谓地按 16bit 重转（旧实现靠横幅碰巧给 16bit）。
+                var mBitsParen = Regex.Match(streamLine, @"\((\d+)\s*bit\)");
+                if (mBitsParen.Success)
+                {
+                    bits = int.Parse(mBitsParen.Groups[1].Value);
                 }
                 else
                 {
-                    var mBits2 = Regex.Match(stderr, @"s(\d+)");
-                    if (mBits2.Success)
+                    var mBits = Regex.Match(streamLine, @"(\d+)\s*bits?");
+                    if (mBits.Success)
                     {
-                        bits = int.Parse(mBits2.Groups[1].Value);
+                        bits = int.Parse(mBits.Groups[1].Value);
+                    }
+                    else
+                    {
+                        var mBits2 = Regex.Match(streamLine, @"\bs(\d+)(p)?\b");
+                        if (mBits2.Success)
+                        {
+                            bits = int.Parse(mBits2.Groups[1].Value);
+                        }
+                        else if (streamLine.Contains("fltp", StringComparison.Ordinal)
+                              || streamLine.Contains("flt,", StringComparison.Ordinal))
+                        {
+                            bits = 32;
+                        }
                     }
                 }
 
@@ -452,10 +634,6 @@ namespace CelesteMusicPlayer
                 }
 
                 return (rate, channels, bits);
-            }
-            catch
-            {
-                return null;
             }
         }
 
@@ -476,8 +654,13 @@ namespace CelesteMusicPlayer
                     System.Text.Encoding.UTF8.GetBytes(sourcePath.ToLowerInvariant())));
                 // 转码参数里含随机临时输出路径，统一替换成固定占位符后再哈希，
                 // 使"转码策略"（codec/-ar/-ac 等）决定 key，而非每次不同的临时路径。
+                // 旧正则写的是 \?\w+\.partial\.[^"]*，只能匹配 "\xxx.partial.wav" 这类开头；
+                // 而 partial 是绝对路径（C:\...\abcd.partial.wav，带盘符），替换永远不命中 →
+                // 每次转码 key 都不同 → 缓存永不命中 → 同一首歌每播一次都整首重转码
+                // （实测缓存目录里同一首歌堆了 3 份 16bit WAV；云盘源还会放大成播放卡顿）。
+                // 改为匹配任意盘的绝对路径：引号内任意字符 + .partial.wav + 引号（2026-09-21 修）。
                 string sig = Regex.Replace(
-                    transcodeArgs, @"""\\?\w+\.partial\.[^""]*""", "\"OUT.wav\"");
+                    transcodeArgs, @"""[^""]*\.partial\.wav""", "\"OUT.wav\"");
                 string sigHash = Convert.ToHexString(System.Security.Cryptography.SHA1.HashData(
                     System.Text.Encoding.UTF8.GetBytes(sig)));
                 return hash + "_" + fi.LastWriteTimeUtc.Ticks + "_" + sigHash.Substring(0, 12);
@@ -488,8 +671,12 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>缓存超限(默认 2GB)时删除最旧文件。</summary>
-        private static void TrimCache(string cacheDir, long maxBytes = 2L * 1024 * 1024 * 1024)
+        /// <summary>缓存超限时的温和清理（2026-09-21 重写）。
+        /// 旧策略的问题：超限就「一次性删掉最旧的一半」。实测一次删掉 21 个文件 / 958MB，
+        /// 这场持续数秒的大批量删除正好和正在读盘的播放抢 I/O —— 播放卡死的直接来源。
+        /// 新策略四条：① 按最久未用（LRU）排序；② 每次最多删 64MB，只降到低水位（上限 85%），
+        /// 剩下的留给下一次；③ 两次清理间隔 ≥30s；④ 正在播 / 刚预载的文件跳过不删。</summary>
+        private static void TrimCache(string cacheDir)
         {
             try
             {
@@ -498,35 +685,153 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                var files = Directory.GetFiles(cacheDir, "*.wav")
-                    .Select(f => new FileInfo(f))
-                    .OrderBy(f => f.LastWriteTimeUtc)
-                    .ToList();
-                long total = files.Sum(f => SafeFileLength(f.FullName));
+                // ③ 限流：距上次清理不足 30s 直接返回，别每转一首歌就扫一遍目录
+                long now = Environment.TickCount64;
+                if (now - s_lastTrimTick < 30_000)
+                {
+                    return;
+                }
 
-                // 健康清理策略：只有超过上限才触发；一次性删除「最早写入」的一半文件，
-                // 把缓存体量直接压到一半，而不是逐个删到刚好 ≤ 上限——
-                // 避免频繁的全量扫描/删除 I/O 抖动，也给后续写入留出更大缓冲。
+                s_lastTrimTick = now;
+                long maxBytes = CacheLimitBytes();
+                string[] all = Directory.GetFiles(cacheDir, "*.wav");
+                long total = all.Sum(SafeFileLength);
                 if (total <= maxBytes)
                 {
                     return;
                 }
 
-                int removeCount = Math.Max(1, files.Count / 2);
+                // ① LRU：先删最久没被用过的；④ 在用的（当前播放 + 预载的下一首）永不进候选
+                var candidates = all
+                    .Where(f => !IsCacheInUse(f))
+                    .Select(f => new FileInfo(f))
+                    .OrderBy(f => LastUseTick(f.FullName))
+                    .ThenBy(f => f.LastWriteTimeUtc)
+                    .ToList();
+
+                // ② 只降到低水位，且本次最多删 64MB
+                long lowWater = (long)(maxBytes * 0.85);
+                long budget = Math.Min(total - lowWater, 64L * 1024 * 1024);
                 long removedBytes = 0;
-                for (int i = 0; i < removeCount && i < files.Count; i++)
+                int removedCount = 0;
+                foreach (var f in candidates)
                 {
+                    if (removedBytes >= budget)
+                    {
+                        break;
+                    }
+
                     try
                     {
-                        removedBytes += SafeFileLength(files[i].FullName);
-                        files[i].Delete();
+                        removedBytes += SafeFileLength(f.FullName);
+                        f.Delete();
+                        removedCount++;
                     }
                     catch (Exception caught) { StartupLog.WriteException("FfmpegDecoderBackend.cs", caught); }
                 }
 
-                StartupLog.Write($"[TrimCache] 超上限(max={maxBytes / (1024.0 * 1024.0):0.0}MB)，清理最早 {removeCount} 个文件，释放约 {removedBytes / (1024.0 * 1024.0):0.0}MB，删除前总计 {total / (1024.0 * 1024.0):0.0}MB");
+                if (removedCount > 0)
+                {
+                    StartupLog.Write($"[TrimCache] 温和清理：删 {removedCount} 个 / 释放 {removedBytes / (1024.0 * 1024.0):0.0}MB"
+                        + $"（上限 {maxBytes / (1024.0 * 1024.0):0.0}MB，清理前 {total / (1024.0 * 1024.0):0.0}MB，本次预算 {budget / (1024.0 * 1024.0):0.0}MB）");
+                }
             }
             catch (Exception caught) { StartupLog.WriteException("FfmpegDecoderBackend.cs", caught); }
+        }
+
+        /// <summary>缓存上限（字节），读设置项 TranscodeCacheLimitMb；未配置或非法值回落 2GB。</summary>
+        private static long CacheLimitBytes()
+        {
+            try
+            {
+                int mb = AppSettingsStore.Load().TranscodeCacheLimitMb;
+                if (mb >= 64)
+                {
+                    return (long)mb * 1024 * 1024;
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("FfmpegDecoderBackend.cs", caught); }
+
+            return DefaultCacheLimitBytes;
+        }
+
+        private const long DefaultCacheLimitBytes = 2L * 1024 * 1024 * 1024;
+
+        /// <summary>该缓存 WAV 是否正在被使用（最近 5 分钟内被 MarkCacheUsed 标记过）。</summary>
+        private static bool IsCacheInUse(string path)
+        {
+            return s_cacheLastUse.TryGetValue(path, out long tick)
+                && Environment.TickCount64 - tick < 5 * 60 * 1000L;
+        }
+
+        /// <summary>该缓存 WAV 最近一次被使用的时刻；从未用过返回 0（优先被清理）。</summary>
+        private static long LastUseTick(string path)
+        {
+            return s_cacheLastUse.TryGetValue(path, out long tick) ? tick : 0;
+        }
+
+        /// <summary>设置页用：统计转码缓存占用（字节数 + 文件数）。</summary>
+        public static (long Bytes, int Count) GetTranscodeCacheUsage()
+        {
+            try
+            {
+                string dir = GetCacheDir();
+                if (!Directory.Exists(dir))
+                {
+                    return (0, 0);
+                }
+
+                long total = 0;
+                int count = 0;
+                foreach (string f in Directory.EnumerateFiles(dir))
+                {
+                    total += SafeFileLength(f);
+                    count++;
+                }
+
+                return (total, count);
+            }
+            catch (Exception caught) { StartupLog.WriteException("FfmpegDecoderBackend.cs", caught); }
+
+            return (0, 0);
+        }
+
+        /// <summary>设置页用：清空转码缓存。返回 (删除文件数, 释放字节数)。
+        /// 正在播放 / 已预载的曲目缓存会保留（删掉会让在播的曲子读不到数据），UI 上如实说明。</summary>
+        public static (int Count, long Bytes) ClearTranscodeCache()
+        {
+            int count = 0;
+            long bytes = 0;
+            try
+            {
+                string dir = GetCacheDir();
+                if (!Directory.Exists(dir))
+                {
+                    return (0, 0);
+                }
+
+                foreach (string f in Directory.EnumerateFiles(dir))
+                {
+                    if (IsCacheInUse(f))
+                    {
+                        continue; // 在播/预载的，本次跳过
+                    }
+
+                    try
+                    {
+                        bytes += SafeFileLength(f);
+                        File.Delete(f);
+                        count++;
+                    }
+                    catch (Exception caught) { StartupLog.WriteException("FfmpegDecoderBackend.cs", caught); }
+                }
+
+                s_lastTrimTick = 0; // 清过了，允许下次立即触发温和清理
+                StartupLog.Write($"[缓存] 用户手动清理转码缓存：删除 {count} 个，释放 {bytes / (1024.0 * 1024.0):0.0}MB");
+            }
+            catch (Exception caught) { StartupLog.WriteException("FfmpegDecoderBackend.cs", caught); }
+
+            return (count, bytes);
         }
 
         /// <summary>解析 ffmpeg 输出中的 "Duration: HH:MM:SS.xx"。</summary>

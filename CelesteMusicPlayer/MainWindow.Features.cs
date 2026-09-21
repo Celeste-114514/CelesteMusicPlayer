@@ -2678,7 +2678,7 @@ namespace CelesteMusicPlayer
 
                 AudioLinkSourceFmt.Text = string.IsNullOrWhiteSpace(src)
                     ? (hifi ? "（解析中…）" : "MediaPlayer（系统解码）")
-                    : src;
+                    : AppendSourceDegradeNote(src);
                 AudioLinkOutputFmt.Text = string.IsNullOrWhiteSpace(outp)
                     ? (hifi ? "（解析中…）" : "系统混音器（Shared）")
                     : outp;
@@ -2743,6 +2743,38 @@ namespace CelesteMusicPlayer
                 RefreshSrcSessionState();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+        }
+
+        /// <summary>链路「源格式」行收尾：若探测到的源文件规格高于实际送链路的 WAV 规格（转码静默降级），
+        /// 在行内注明源文件真实规格与降级事实，绝不让显示说谎（2026-09-21 用户实测 24bit 显示成 16bit 后加固）。</summary>
+        private string AppendSourceDegradeNote(string chainSrc)
+        {
+            try
+            {
+                string? orig = _audioEngine?.OriginalSourceFormatDescription;
+                if (string.IsNullOrWhiteSpace(orig)
+                    || !TryParseFormatText(orig, out int oRate, out int oBits)
+                    || !TryParseFormatText(chainSrc, out int sRate, out int sBits))
+                {
+                    return chainSrc;
+                }
+
+                if (oBits > sBits)
+                {
+                    return chainSrc + $"（源文件 {orig}，转码已降级）";
+                }
+
+                if (oRate > sRate)
+                {
+                    return chainSrc + $"（源文件 {orig}，转码已重采样）";
+                }
+
+                return chainSrc;
+            }
+            catch
+            {
+                return chainSrc;
+            }
         }
 
         /// <summary>计算与音频设置面板徽章同一口径的链路纯净度：任一 DSP（EQ/声道平衡/限幅/ReplayGain）
@@ -2829,6 +2861,23 @@ namespace CelesteMusicPlayer
                 if (!IsHiFiModeSelected())
                 {
                     causes.Add("系统混音器（共享模式）");
+                }
+
+                // 5) 转码降级：探测到的源文件规格 vs 实际送链路的 WAV 规格。
+                //    只在源被做"低"了才算（位深变小 / 采样率变低）；共享模式主动用 f32 + 设备率不在此列。
+                //    专门抓"探测失败回退 16bit、设备不认时的重采样回退"造成的静默降级——
+                //    没有这一条，降级后的 WAV 与输出格式一致，徽标会谎报 bit-perfect（2026-09-21 用户实测）。
+                string? orig = _audioEngine?.OriginalSourceFormatDescription;
+                if (TryParseFormatText(orig, out int origRate, out int origBits))
+                {
+                    if (origBits > srcBits)
+                    {
+                        causes.Add($"转码降位 {origBits}→{srcBits}bit");
+                    }
+                    else if (origRate > srcRate)
+                    {
+                        causes.Add($"转码重采样 {origRate}→{srcRate}hz");
+                    }
                 }
             }
 

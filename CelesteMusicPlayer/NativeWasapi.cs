@@ -23,6 +23,7 @@ namespace CelesteMusicPlayer
         public const uint AUDCLNT_STREAMFLAGS_EVENTCALLBACK = 0x00040000;
         public const uint AUDCLNT_STREAMFLAGS_AUTOCONVERTPCM = 0x80000000;
         public const uint AUDCLNT_STREAMFLAGS_SRC_DEFAULT_QUALITY = 0x08000000;
+        public const uint AUDCLNT_BUFFERFLAGS_SILENT = 0x2; // ReleaseBuffer 的 dwFlags：本块为静音（设备据此省功耗/判定 underrun）
         public const int DEVICE_STATE_ACTIVE = 0x1;
         public const int S_OK = 0;
         public const int E_PENDING = unchecked((int)0x8000000A);
