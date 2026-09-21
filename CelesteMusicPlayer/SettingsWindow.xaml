@@ -1228,6 +1228,51 @@
                             </StackPanel>
                             <ToggleSwitch x:Name="ContinueWhenSwitchPlaylistSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
                         </Grid>
+                        <!-- 转码缓存：FFmpeg 转出的 PCM WAV 落盘缓存（HiFi 链路的中间产物） -->
+                        <Border
+                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                            BorderThickness="1"
+                            CornerRadius="10"
+                            Padding="16">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="转码缓存" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="播放非 WAV 格式（FLAC / MP3 / APE / DSF…）时，FFmpeg 会先把整首转成 PCM WAV 存到这里，再由播放链路读取。缓存命中就不再重复转码。"
+                                    FontSize="12"
+                                    Opacity="0.65"
+                                    TextWrapping="WrapWholeWords" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="88" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Text="上限 (MB)" FontSize="12" VerticalAlignment="Center" />
+                                    <NumberBox
+                                        x:Name="TranscodeCacheLimitNumberBox"
+                                        Grid.Column="1"
+                                        Minimum="256"
+                                        Maximum="102400"
+                                        SmallChange="512"
+                                        LargeChange="1024"
+                                        SpinButtonPlacementMode="Inline"
+                                        ValueChanged="TranscodeCacheLimitNumberBox_ValueChanged" />
+                                    <Button
+                                        x:Name="TranscodeClearCacheButton"
+                                        Grid.Column="2"
+                                        Content="清理缓存"
+                                        Click="TranscodeClearCacheButton_Click" />
+                                </Grid>
+                                <TextBlock x:Name="TranscodeCacheUsageText" FontSize="11" Opacity="0.55" Text="暂无缓存" />
+                                <TextBlock
+                                    Text="超出上限后会自动按「最久未用」分批清理（每次只删一小批，正在播放的那首不会被删）。"
+                                    FontSize="11"
+                                    Opacity="0.55"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
+
                         <TextBlock
                             Text="播放引擎为 Windows MediaPlayer（无 BASS/FFmpeg 切换）"
                             FontSize="12"

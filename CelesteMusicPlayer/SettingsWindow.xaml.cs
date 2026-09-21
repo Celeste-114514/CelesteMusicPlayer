@@ -609,6 +609,15 @@ namespace CelesteMusicPlayer
                 SetToggle(ShowTaskbarProgressSwitch, s.ShowTaskbarProgress);
                 SetToggle(ContinueWhenSwitchPlaylistSwitch, s.ContinueWhenSwitchPlaylist);
 
+                // 转码缓存（FFmpeg 转出的 PCM WAV）
+                if (TranscodeCacheLimitNumberBox != null)
+                {
+                    double tLimit = s.TranscodeCacheLimitMb > 0 ? s.TranscodeCacheLimitMb : 2048;
+                    TranscodeCacheLimitNumberBox.Value = Math.Clamp(tLimit, 256, 102_400);
+                }
+
+                UpdateTranscodeCacheUsage();
+
                 // 媒体库
                 SetToggle(AutoUpdateLibrarySwitch, s.AutoUpdateLibrary);
                 _watchFolders = s.LibraryWatchFolders?.ToList() ?? new List<string>();
@@ -981,6 +990,92 @@ namespace CelesteMusicPlayer
                 ? mode : "Dop");
         }
 
+        /// <summary>转码缓存上限改动：即时持久化（清理阈值下次转码后生效）。</summary>
+        private void TranscodeCacheLimitNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
+        {
+            if (_loadingUi || !_uiReady)
+            {
+                return;
+            }
+
+            if (double.IsNaN(args.NewValue) || double.IsInfinity(args.NewValue))
+            {
+                return;
+            }
+
+            int mb = (int)Math.Clamp(Math.Round(args.NewValue), 256, 102_400);
+            AppSettingsStore.Update(s => s.TranscodeCacheLimitMb = mb);
+            UpdateTranscodeCacheUsage();
+        }
+
+        /// <summary>手动清理转码缓存：把 FFmpeg 转出来的 PCM WAV 全部删掉（正在播放 / 已预载的那首保留）。</summary>
+        private void TranscodeClearCacheButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (TranscodeClearCacheButton != null)
+            {
+                TranscodeClearCacheButton.IsEnabled = false;
+            }
+
+            try
+            {
+                // 删几百 MB 到几 GB 的文件不能在 UI 线程上干，会整窗卡住
+                _ = System.Threading.Tasks.Task.Run(() =>
+                {
+                    (int count, long bytes) = FfmpegDecoderBackend.ClearTranscodeCache();
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (TranscodeCacheUsageText != null)
+                        {
+                            double mb = bytes / (1024.0 * 1024.0);
+                            TranscodeCacheUsageText.Text = count > 0
+                                ? $"已清理 {count} 个文件，释放 {mb:0.0} MB（正在播放的那首已保留）"
+                                : "没有可清理的缓存（正在播放的那首会等播完再清）。";
+                        }
+
+                        if (TranscodeClearCacheButton != null)
+                        {
+                            TranscodeClearCacheButton.IsEnabled = true;
+                        }
+                    });
+                });
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("SettingsWindow.xaml.cs", caught);
+                if (TranscodeClearCacheButton != null)
+                {
+                    TranscodeClearCacheButton.IsEnabled = true;
+                }
+            }
+        }
+
+        /// <summary>刷新转码缓存占用显示（后台统计，避免扫描大目录卡住 UI）。</summary>
+        private void UpdateTranscodeCacheUsage()
+        {
+            if (TranscodeCacheUsageText == null)
+            {
+                return;
+            }
+
+            TranscodeCacheUsageText.Text = "正在统计…";
+            _ = System.Threading.Tasks.Task.Run(() =>
+            {
+                (long bytes, int count) = FfmpegDecoderBackend.GetTranscodeCacheUsage();
+                double mb = bytes / (1024.0 * 1024.0);
+                int limitMb = AppSettingsStore.Load().TranscodeCacheLimitMb;
+                string text = count > 0
+                    ? $"当前占用：{mb:0.0} MB / 上限 {limitMb} MB（{count} 个文件）"
+                    : "暂无缓存";
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (TranscodeCacheUsageText != null)
+                    {
+                        TranscodeCacheUsageText.Text = text;
+                    }
+                });
+            });
+        }
+
         /// <summary>选中设备下拉：空 = 系统默认；否则按去掉 \?\ 前缀的设备 ID 匹配，防回显成“系统默认”。
         /// 返回是否成功按 <paramref name="selectedId"/> 精确命中（空串视为命中，回落时返回 false）。</summary>
         private bool SelectRenderDeviceCombo(ComboBox? combo, string selectedId)
@@ -1244,6 +1339,13 @@ namespace CelesteMusicPlayer
             s.AutoPlayWhenStart = AutoPlayWhenStartSwitch?.IsOn ?? s.AutoPlayWhenStart;
             s.ShowTaskbarProgress = ShowTaskbarProgressSwitch?.IsOn ?? s.ShowTaskbarProgress;
             s.ContinueWhenSwitchPlaylist = ContinueWhenSwitchPlaylistSwitch?.IsOn ?? s.ContinueWhenSwitchPlaylist;
+
+            if (TranscodeCacheLimitNumberBox != null
+                && !double.IsNaN(TranscodeCacheLimitNumberBox.Value)
+                && !double.IsInfinity(TranscodeCacheLimitNumberBox.Value))
+            {
+                s.TranscodeCacheLimitMb = (int)Math.Clamp(Math.Round(TranscodeCacheLimitNumberBox.Value), 256, 102_400);
+            }
 
             s.AutoUpdateLibrary = AutoUpdateLibrarySwitch?.IsOn ?? s.AutoUpdateLibrary;
             s.LibraryWatchFolders = (_watchFolders ?? new List<string>()).ToList();

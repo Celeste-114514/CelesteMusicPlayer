@@ -336,6 +336,11 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         /// <summary>网络音乐缓存上限（MB）；超出后按最后访问时间清理。</summary>
         public int WebDavCacheLimitMb { get; set; } = 4096;
 
+        /// <summary>转码缓存（FFmpeg 转出的 PCM WAV）上限（MB），默认 2048（2GB）。
+        /// 超限后由 FfmpegDecoderBackend.TrimCache 按「最久未用」温和清理（每次只删一小批、播放中不删），
+        /// 不再一次性删掉一半 —— 一次性删几百 MB 会和正在读盘的播放抢 I/O，表现为播放卡顿。</summary>
+        public int TranscodeCacheLimitMb { get; set; } = 2048;
+
         /// <summary>声道：Stereo / Left / Right。</summary>
         public string AudioChannel { get; set; } = "Stereo";
 
