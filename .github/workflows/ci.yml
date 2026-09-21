@@ -25,7 +25,14 @@ jobs:
           dotnet-version: '9.0.x'
 
       - name: Restore main project
-        run: dotnet restore CelesteMusicPlayer/CelesteMusicPlayer.csproj
+        # -r win-x64 必须显式传给每个工程：命令行给主工程传 RID 不会传播给
+        # ProjectReference 引用的 CelesteUpdater，顺带还原它时只生成 net9.0
+        # 目标、缺 net9.0/win-x64，Build 步骤带自包含标志时必报 NETSDK1047。
+        run: dotnet restore CelesteMusicPlayer/CelesteMusicPlayer.csproj -r win-x64 -p:Platform=x64
+
+      - name: Restore updater project
+        # 同上：CelesteUpdater 必须单独、直接带 -r win-x64 还原，保证其 assets 含 RID 目标。
+        run: dotnet restore CelesteUpdater/CelesteUpdater.csproj -r win-x64 -p:Platform=x64
 
       - name: Build main (Release x64 self-contained)
         # 先编译主程序 Release，测试工程通过 HintPath 引用其产物（CelesteMusicPlayer.dll）。
