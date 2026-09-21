@@ -44,6 +44,12 @@ jobs:
         # 任意不变量被破坏即判失败，红标提醒。
         run: dotnet test tools/EqRegression/EqRegression.csproj -c Debug -p:Platform=x64
 
+      - name: 安装 NSIS（打包安装包需要）
+        # windows-latest 镜像不自带 NSIS（曾误以为自带，实测报"找不到 makensis.exe"）。
+        # 运行器预装 Chocolatey，choco 装的 nsis 会进 PATH 并在 Program Files (x86)\NSIS 落地，
+        # package-installers.ps1 的 Get-Makensis 两条查找路径都能覆盖。
+        run: choco install nsis -y --no-progress
+
       - name: 打包双安装包（框架依赖 + 自包含）
         # 与本地 tools/package-installers.ps1 完全一致：windows-latest 运行器自带 NSIS 3，
         # 版本号从 csproj 自动读取。产物在 dist/：Setup-<ver>.exe（fd）、Setup-SC-<ver>.exe（sc）、SHA256SUMS.txt
