@@ -1,10 +1,10 @@
 ﻿# CelesteMusicPlayer
 
-一个基于 **WinUI 3 / .NET 9** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和[ECHO-NEXT](https://github.com/moekotori/ECHO)设计开发。代码全部由AI生成，主要模型为deepseek。
+一个基于 **WinUI 3 / .NET 9** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和 [ECHO-NEXT](https://github.com/moekotori/ECHO) 设计开发。代码全部由 AI 生成。
 
 ## 🙏 一些作者的碎碎念
 
-这个播放器是因为目前网上的播放器没有能完全符合我需求的，几乎所有播放器都不支持我想要把专辑按照时间顺序排列（foobar和musicbee支持但是有点丑），musicplayer2在我高中时候就在用了，基本上就缺一个排序功能，外观也一般般，正好最近AI浪潮，就先借朋友的cursor账号试了一下改了一下musicplayer2，于是后续继续开发下去了，我自己对代码一无所知，只有最基础最基础的入门知识。这个播放器也算是我用AI花了蛮久开发的，希望各位能用的舒服用的开心，那我也不枉花钱买那么多token了（
+这个播放器源于我自己的一个执念：想把专辑按时间顺序排列，试了一圈播放器都没找到顺手又好看的，索性自己动手。开发全程由 AI 协作完成，断断续续打磨了很久，希望各位用得舒服、用得开心。
 
 联系我 [t.me/celesteabsolomb](https://t.me/celesteabsolomb)
 
@@ -15,9 +15,8 @@
 - 🎵 本地音乐库：扫描文件夹 / 多选导入，自动读取标签（标题、艺术家、专辑、年份、封面）
 - 🎧 广泛格式支持：MP3 / FLAC / WAV / M4A / APE / WavPack / TTA / DSD等；DSD 支持「转 PCM」或「DoP 直出」可选（Shared 模式下自动转 PCM）
   - **SACD 镜像（.iso）直接播放**：打开 .iso 自动解出整张 SACD 逐轨 DSD（DSF）加入播放列表，支持 DoP 直出 / PCM 转码
-  - 内置 [FFmpeg](https://www.gyan.dev/ffmpeg/builds/) 
 - 📋 输出模式：AUDIO 输出设备可选择，WASAPI 共享 / WASAPI 独占 / ASIO输出
-- 🎯 HiFi 独占输出：基于 NAudio / 原生 WASAPI 从 PCM WAV 流式输出，兼顾音质；独占设备音量可调（系统托盘/输出设备调整，软件内不可调整）、切歌音量不再重置
+- 🎯 HiFi 独占输出：基于 NAudio / 原生 WASAPI 从 PCM WAV 流式输出，兼顾音质；切歌音量不再重置
 - 🎚️ **DSP 三模式统一信号链**（共享 / WASAPI 独占 / ASIO）：曲线 EQ（专业 / 简单模式 / 预设保存加载）、10 段均衡器、声道平衡、安全限幅（soft-knee 软削波 + 自动峰值余量）防爆音
 - 🔊 **ReplayGain 响度归一化**：单曲 / 专辑统一响度、10ms 平滑渐变、peak 防削波、额外增益可调；支持整库 / 播放列表 / 选中范围一键扫描并写回标签
 - 💡 **bit-perfect 指示灯**：主界面实时显示当前是否为 bit-perfect 直出
@@ -30,10 +29,10 @@
 - 🎨 主题：主题预设 / 自定义主题色、毛玻璃背景、波形进度条
 - 🪟 迷你播放器、当前播放列表窗口（拖拽排序）、独立播放队列窗口、睡眠定时器
 - 🗂️ 播放列表墙：命名播放列表网格浏览、创建/重命名/删除、批量多选、封面、导入/导出
-- 🏷️ 标签分类浏览：按艺术家 / 专辑艺术家 / 专辑 / 流派 / 年份分类浏览曲库（Musicbee式分类，标签没那么多但是我自己很需要）； 自定义排序：1–5 个元数据字段排序链 + 整体升降序（如"专辑按时间顺序排列"）
+- 🏷️ 标签分类浏览：按艺术家 / 专辑艺术家 / 专辑 / 流派 / 年份分类浏览曲库；自定义排序：1–5 个元数据字段排序链 + 整体升降序（如"专辑按时间顺序排列"）
 - ⌨️ 全局快捷键、媒体键（SMTC）、系统托盘、开机自启
 - 📊 播放统计（播放次数 / 收听时长 / 收藏 / 评分 / 最近播放）
-- 🌐 在线搜索（网易云 / QQ 128k MP3 / Apple Music）、Last.fm 记录、在线歌词下载；支持播放器内保存各平台 Cookie 登录态
+- 🌐 在线搜索：按歌名 / 歌手一键搜索歌词、封面与歌曲信息（网易云 / QQ / Apple Music），同步 Last.fm 播放记录；也可下载网易云 / QQ 在线音源（QQ 为 128kbps MP3）
 - 🏷️ 标签编辑器（包括批量编辑、按文件名填充、批量下载歌词封面）
 
 ## 🖥️ 截图
@@ -67,6 +66,8 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 ```
 
 默认发布产物为**框架依赖**（体积小）；目标机器缺运行环境时程序启动会**弹窗提示并提供官方下载链接**。如需免安装自包含包，用上面的 `CelesteSelfContainedDistribute=true` 命令。
+
+正式版本由 CI 自动发布：推送 `vX.Y.Z` tag 后，自动完成构建、回归测试、打包（框架依赖 + 自包含双安装包）并发布到 GitHub Release，无需手动打包上传。
 
 ## 📝 更新日志
 
