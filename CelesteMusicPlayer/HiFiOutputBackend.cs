@@ -1,6 +1,8 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Runtime.InteropServices;
 using NAudio.CoreAudioApi;
 using NAudio.Wave;
@@ -650,6 +652,135 @@ namespace CelesteMusicPlayer
             }
         }
 
+        // ===== 阶段二：独占协商计划（"任意格式尽量 bit-perfect"的实体） =====
+
+        /// <summary>采样率候选阶梯（降序）。352800/705600 属 DSD 转出分支，不纳入本阶梯。</summary>
+        private static readonly int[] s_rateLadder = { 192000, 176400, 96000, 88200, 48000, 44100 };
+
+        /// <summary>设备独占支持采样率探测缓存：key = 设备 ID（设备变更天然分离，无需手动清）。
+        /// 值为 null = 探测失败（也缓存，避免每首歌都重试 COM）。</summary>
+        private static readonly ConcurrentDictionary<string, int[]?> s_supportedRatesCache
+            = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>阶段二独占协商计划：目标采样率 + 选择理由 + 设备支持率列表。</summary>
+        public sealed class ExclusivePlan
+        {
+            public int SourceRate { get; }
+            public int TargetRate { get; }
+            /// <summary>是否发生了重采样（目标率≠源率）。</summary>
+            public bool Resampled => TargetRate != SourceRate;
+            /// <summary>人话原因（面板/日志同文）。</summary>
+            public string Reason { get; }
+            /// <summary>本次探测到的设备独占支持率列表（首次运行日志打印，供核对）。</summary>
+            public IReadOnlyList<int> SupportedRates { get; }
+
+            public ExclusivePlan(int sourceRate, int targetRate, string reason, IReadOnlyList<int> supportedRates)
+            {
+                SourceRate = sourceRate;
+                TargetRate = targetRate;
+                Reason = reason;
+                SupportedRates = supportedRates;
+            }
+        }
+
+        /// <summary>
+        /// 阶段二：起播/预加载时问 DAC「独占吃得下源采样率吗」，给出转码目标率。
+        ///   - 吃得下 → 目标率 = 源率（同格式 WAV，bit-perfect；与阶段二前行为逐字节一致）
+        ///   - 吃不下 → 目标率 = ≤源率 的最高支持档（绝不主动升频，升频是用户设置里的独立功能）；
+        ///     仅当支持率全部 &gt; 源率（极罕见）时取最低支持档保底
+        ///   - 探测失败（COM 异常）→ 返回 null，调用方保守放行源率，走现有兜底（AudioPlaybackEngine 的 MixFormat 重转）
+        /// 探测按设备缓存（进程内），首次运行打印完整支持率列表；只在 WASAPI 独占模式调用。
+        /// </summary>
+        public static ExclusivePlan? ProbeExclusivePlan(string? deviceId, int sourceRate, int channels)
+        {
+            if (sourceRate <= 0)
+            {
+                return null;
+            }
+
+            int[]? rates = GetSupportedRatesCached(deviceId, sourceRate, channels);
+            if (rates == null || rates.Length == 0)
+            {
+                return null; // 探测失败或设备不认任何候选率 → 保守放行源率
+            }
+
+            int target;
+            if (rates.Contains(sourceRate))
+            {
+                target = sourceRate; // 正常路径：源率即支持（如用户 KA13），零变化
+            }
+            else
+            {
+                int? below = rates.Where(r => r < sourceRate).OrderByDescending(r => r).FirstOrDefault();
+                target = below ?? rates.Min(); // 全都不低于源率（罕见）→ 取最低支持档保底
+            }
+
+            string reason = target == sourceRate
+                ? "设备支持 " + sourceRate + "Hz（源率直通）"
+                : "设备不支持 " + sourceRate + "Hz，已重采样到 " + target + "Hz";
+            StartupLog.Write("[链路] 独占协商计划 源率=" + sourceRate + " 目标率=" + target
+                + " 支持率=[" + string.Join(",", rates) + "] " + reason);
+            return new ExclusivePlan(sourceRate, target, reason, rates);
+        }
+
+        private static int[]? GetSupportedRatesCached(string? deviceId, int sourceRate, int channels)
+        {
+            string key = string.IsNullOrWhiteSpace(deviceId) ? "<默认设备>" : deviceId;
+            if (s_supportedRatesCache.TryGetValue(key, out var cached))
+            {
+                return cached;
+            }
+
+            int[]? probed = ProbeSupportedRates(deviceId, sourceRate, channels);
+            s_supportedRatesCache[key] = probed; // null 也缓存：探测失败不应每首歌重试
+            if (probed != null && probed.Length > 0)
+            {
+                StartupLog.Write("[链路] 设备独占支持采样率（首次探测，供核对）：" + key + " → [" + string.Join(", ", probed) + "]");
+            }
+
+            return probed;
+        }
+
+        /// <summary>对「源率 + 阶梯率」探测独占支持：pcm16 / float32 / pcm32 任一支持即算该率可用
+        ///（三者覆盖自研与 ECHO 两条协商链的首选容器；探测说能吃，协商就一定过）。
+        /// 源率总是第一个探测——正常路径只此一项命中，目标率=源率，参数与阶段二前逐字节一致。</summary>
+        private static int[]? ProbeSupportedRates(string? deviceId, int sourceRate, int channels)
+        {
+            try
+            {
+                int ch = channels <= 0 ? 2 : channels;
+                var probes = new List<int> { sourceRate };
+                foreach (int rate in s_rateLadder)
+                {
+                    if (rate != sourceRate && !probes.Contains(rate))
+                    {
+                        probes.Add(rate);
+                    }
+                }
+
+                var rates = new List<int>();
+                foreach (int rate in probes)
+                {
+                    bool ok = IsExclusiveFormatSupported(deviceId, new WaveFormat(rate, 16, ch));
+                    if (!ok) ok = IsExclusiveFormatSupported(deviceId, WaveFormat.CreateIeeeFloatWaveFormat(rate, ch));
+                    if (!ok) ok = IsExclusiveFormatSupported(deviceId, new WaveFormat(rate, 32, ch));
+                    if (ok) rates.Add(rate);
+                }
+
+                return rates.Count == 0 ? null : rates.ToArray();
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>清空设备支持率探测缓存（设备插拔/驱动变更后调用；进程内缓存按设备 ID 分离，通常无需手动清）。</summary>
+        public static void ClearExclusivePlanCache()
+        {
+            s_supportedRatesCache.Clear();
+        }
+
         /// <summary>解析用于调设备/系统音量的 MMDevice（失败返回 null → 不调设备音量）。</summary>
         private static MMDevice? ResolveDeviceForVolume(string? deviceId)
         {
@@ -900,6 +1031,12 @@ namespace CelesteMusicPlayer
                     : FfmpegDecoderBackend.LastOriginalSourceDescription;
                 ChainFormat.TranscodeWav = wavFmt;
                 ChainFormat.Outcome = ComputeTranscodeOutcome(wavFmt);
+                // 阶段二：重采样原因上屏（"设备不支持 96k，已重采样到 48k"）。
+                // 仅在计划与当前 WAV 率一致时采用，避免 MixFormat 兜底重转后拿着陈旧计划说话。
+                var tplan = FfmpegDecoderBackend.LastTranscodePlan;
+                ChainFormat.TranscodeReason = tplan != null && tplan.Resampled && tplan.TargetRate == wavFmt.Rate
+                    ? tplan.Reason
+                    : null;
                 ChainFormat.DeviceOutput = null;
                 ChainFormat.Device = DevicePath.Unknown;
                 ChainFormat.DeviceEndpointName = null;

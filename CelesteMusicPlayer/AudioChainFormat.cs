@@ -86,6 +86,10 @@ namespace CelesteMusicPlayer
         /// <summary>源文件的人话格式（DSD 等无 PCM 探测值时展示，如 "2822.4kHz / 2声道 1-bit DSD"）。</summary>
         public string? SourceFileDescription { get; set; }
 
+        /// <summary>阶段二转码计划原因（如"设备不支持 96000Hz，已重采样到 48000Hz"）。
+        /// 仅 Outcome=ResampledToDevice 且计划与当前 WAV 率一致时非空；供结论行把重采样缘由说清楚。</summary>
+        public string? TranscodeReason { get; set; }
+
         /// <summary>链路是否曾完成过一次协商（区分"未播放"与"播放过又停止"）。</summary>
         public bool HasSession { get; set; }
 
@@ -102,6 +106,7 @@ namespace CelesteMusicPlayer
             SharedMode = false;
             IsDsdPath = false;
             SourceFileDescription = null;
+            TranscodeReason = null;
             HasSession = false;
         }
 

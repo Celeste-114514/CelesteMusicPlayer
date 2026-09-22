@@ -2687,6 +2687,8 @@ namespace CelesteMusicPlayer
                 appliedDevice = did;
                 ClearPreferredOutputDevice();
                 AppSettingsStore.Update(s => s.OutputDeviceId = did);
+                // 阶段二：设备变更 → 清独占支持率探测缓存，新设备首次起播重新探测（缓存按设备 ID 分离，此处双保险）
+                HiFiOutputBackend.ClearExclusivePlanCache();
                 await ApplyOutputDeviceAsync(did);
             }
 
@@ -2865,7 +2867,12 @@ namespace CelesteMusicPlayer
             string note = chain.OutcomeNote(); // （已重采样，迁就设备）/（已降级：规格被做低）/（源探测失败…）
             if (note.Length > 0)
             {
-                parts.Add("转码" + note);
+                // 阶段二：重采样时把缘由一起说清（"设备不支持 96k，已重采样到 48k"），不只写"迁就设备"
+                string detail = chain.Outcome == TranscodeOutcome.ResampledToDevice
+                    && !string.IsNullOrWhiteSpace(chain.TranscodeReason)
+                    ? "转码" + note + "（" + chain.TranscodeReason + "）"
+                    : "转码" + note;
+                parts.Add(detail);
             }
 
             parts.Add(chain.VerdictNote());

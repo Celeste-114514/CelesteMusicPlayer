@@ -69,6 +69,13 @@ namespace CelesteMusicPlayer
         /// </summary>
         public static bool LastTranscodeWasFallback { get; private set; }
 
+        /// <summary>
+        /// 最近一次转码参数构建时的独占协商计划（阶段二：HiFiOutputBackend.ProbeExclusivePlan 的结果）。
+        /// 语义同为"最近一次"：转码参数构造与播放在同一线程链路上串行发生。
+        /// 非独占模式 / 未探测时为 null；PlayWavAsync 据此把"设备不支持 96k"这类原因写进链路状态上屏。
+        /// </summary>
+        public static HiFiOutputBackend.ExclusivePlan? LastTranscodePlan { get; private set; }
+
         // ===== 探测结果缓存 + 缓存文件访问时间（2026-09-21 加） =====
 
         /// <summary>源格式探测结果缓存：key = 路径|最后修改时间|文件长度。
@@ -409,6 +416,7 @@ namespace CelesteMusicPlayer
             LastOriginalSourceDescription = null; // 每首歌重新探测，防止上一首的残留造成误判
             LastProbedSourceFormat = null;
             LastTranscodeWasFallback = false;
+            LastTranscodePlan = null; // 阶段二：协商计划同样只对"最近一次"有效，先清防残留
             if (ext is ".dsf" or ".dff")
             {
                 // 共享模式（系统混音/共享）：统一折叠为 16bit/44.1kHz PCM，保证设备/系统可播（非 bit-perfect，可听优先）。
@@ -450,6 +458,23 @@ namespace CelesteMusicPlayer
 
                 // 严格按源位深输出（bit-perfect）：16→s16le、24→s24le、32→s32le。
                 string enc = bits switch { <= 16 => "pcm_s16le", <= 24 => "pcm_s24le", _ => "pcm_s32le" };
+                // 阶段二：独占模式先问 DAC 吃得下源采样率吗（探测按设备缓存，仅首次有 COM 开销）。
+                //   吃得下 → 目标率=源率，参数与阶段二之前逐字节一致（同一首歌缓存键不变、不重转码）；
+                //   吃不下 → 选 ≤源率 的最高支持档，注入 -ar；缓存键自动分开（GetCacheKey 含参数指纹）。
+                //   探测失败 → 返回 null，保守放行源率，由引擎现有 MixFormat 兜底重转（可播优先，非本处职责）。
+                if (outputMode == HiFiOutputBackend.OutputMode.WasapiExclusive)
+                {
+                    var plan = HiFiOutputBackend.ProbeExclusivePlan(devicePreference, rate, Math.Min(ch, 2));
+                    LastTranscodePlan = plan;
+                    if (plan != null && plan.TargetRate != rate)
+                    {
+                        StartupLog.Write("[链路] 转码目标率 " + rate + "→" + plan.TargetRate + "（" + plan.Reason + "）");
+                        return string.Format("-y -i \"{0}\" -vn -acodec {1} -ar {2} \"{3}\"", srcPath, enc, plan.TargetRate, dstPath);
+                    }
+
+                    StartupLog.Write("[链路] 目标率=源率 " + rate + "（设备支持，源率直通）");
+                }
+
                 return string.Format("-y -i \"{0}\" -vn -acodec {1} \"{2}\"", srcPath, enc, dstPath);
             }
 

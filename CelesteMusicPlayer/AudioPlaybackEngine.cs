@@ -343,6 +343,9 @@ namespace CelesteMusicPlayer
                     else
                     {
                         // WASAPI 独占：按设备 MixFormat 重转一次（保证可播）
+                        // 阶段二定位：这是「探测失败 / 设备确实不支持」的兜底路径，不再是常规路径——
+                        // 常规路径由 ProbeExclusivePlan 在转码前协商好目标率，WAV 出盘即设备率，协商首候选即过。
+                        StartupLog.Write("[链路] 设备协商失败，走 MixFormat 重采样兜底（探测失败或设备确实不支持源格式）");
                         int devRate = 0, devCh = 0, devBits = 0; bool devFloat = false;
                         var mf = HiFiOutputBackend.GetDeviceMixFormat(_devicePreference);
                         if (mf is (int r, int c, int b, bool fl) && r > 0 && c > 0)
