@@ -70,6 +70,14 @@ namespace CelesteMusicPlayer
         /// </summary>
         public string? OriginalSourceFormatDescription => FfmpegDecoderBackend.LastOriginalSourceDescription;
 
+        /// <summary>
+        /// 链路结构化格式状态（2026-09-22 音频链路重写阶段一）：源文件 / 转码 WAV / 设备端
+        /// 三段真实值 + bit-perfect 判定标志位。UI 链路面板与徽标只判这里的标志，
+        /// 不反解析 <see cref="SourceFormatDescription"/> / <see cref="ActualOutputFormat"/> 描述串。
+        /// 未播放时 HasSession=false、各段为 null。
+        /// </summary>
+        public ChainFormatState? ChainFormat => _hifiOut?.ChainFormat;
+
         /// <summary>读取实时电平快照（post-DSP 信号）到调用方数组。返回是否取到
         /// （未播放或 DSD 直出时为 false）。UI 线程调用。</summary>
         public bool TryGetLevels(float[] peakOut, float[] rmsOut) => _hifiOut?.TryGetLevels(peakOut, rmsOut) ?? false;
@@ -275,7 +283,8 @@ namespace CelesteMusicPlayer
             // HiFi 独占模式：转码后的 PCM WAV 直接经 NAudio 输出（WASAPI 独占 / ASIO）
             if (IsHiFiMode)
             {
-                bool ok = PlayWavHiFi(targetWav);
+                bool dsdSrc = IsDsdFile(path); // DSD 转 PCM：链路标注"1-bit 原生（已转 PCM）"，不算"源未探测"
+                bool ok = PlayWavHiFi(targetWav, sourceIsDsd: dsdSrc);
                 if (!ok)
                 {
                     // 源格式（尤其是 DSD 转出的高采样率 PCM，如 DSD128→705.6kHz）设备不认时，
@@ -296,7 +305,7 @@ namespace CelesteMusicPlayer
                                 continue;
                             }
 
-                            if (PlayWavHiFi(fallback))
+                            if (PlayWavHiFi(fallback, sourceIsDsd: dsdSrc))
                             {
                                 CleanupTempWav();
                                 _lastTempWav = fallback;
@@ -322,12 +331,12 @@ namespace CelesteMusicPlayer
                                 string fallback = Path.Combine(Path.GetDirectoryName(targetWav) ?? cacheDir, key + ".fallback.wav");
                                 string enc2 = devFloat0 ? "pcm_f32le" : (devBits <= 16 ? "pcm_s16le" : "pcm_s32le");
                                 string args2 = string.Format("-y -i \"{0}\" -vn -c:a {1} -ar {2} -ac {3} \"{4}\"", path, enc2, devRate, devCh, fallback);
-                                if (await _decoder.RunFfmpegAsync(args2, status) && File.Exists(fallback))
-                                {
-                                    CleanupTempWav();
-                                    _lastTempWav = fallback;
-                                    ok = PlayWavHiFi(fallback);
-                                }
+                            if (await _decoder.RunFfmpegAsync(args2, status) && File.Exists(fallback))
+                            {
+                                CleanupTempWav();
+                                _lastTempWav = fallback;
+                                ok = PlayWavHiFi(fallback, sourceIsDsd: dsdSrc);
+                            }
                             }
                         }
                     }
@@ -350,7 +359,7 @@ namespace CelesteMusicPlayer
                             {
                                 CleanupTempWav();
                                 _lastTempWav = fallback;
-                                ok = PlayWavHiFi(fallback);
+                                ok = PlayWavHiFi(fallback, sourceIsDsd: dsdSrc);
                             }
                         }
                     }
@@ -368,8 +377,9 @@ namespace CelesteMusicPlayer
             return await PlayFileAsync(targetWav);
         }
 
-        /// <summary>用 HiFiOutputBackend 播放转码后的 PCM WAV（WASAPI 独占 / ASIO）。</summary>
-        private bool PlayWavHiFi(string wavPath, bool requireExact = false)
+        /// <summary>用 HiFiOutputBackend 播放转码后的 PCM WAV（WASAPI 独占 / ASIO）。
+        /// <paramref name="sourceIsDsd"/> 源文件是 DSD（转 PCM 输出）时置位，链路据此标注 DSD 路径。</summary>
+        private bool PlayWavHiFi(string wavPath, bool requireExact = false, bool sourceIsDsd = false)
         {
             try
             {
@@ -389,7 +399,7 @@ namespace CelesteMusicPlayer
                 _hifiOut.SetResampleTargetRate(st.SrcTargetHz);
                 _hifiOut.SetSrcQuality(st.SrcQuality);
                 _hifiOut.SetSrcDither(st.SrcDither);
-                bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference, requireExact: requireExact);
+                bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference, requireExact: requireExact, sourceIsDsd: sourceIsDsd);
                 StartupLog.Write("HiFi播放 mode=" + _outputMode + " 设备=" + (_hifiOut.OutputDeviceName ?? "?") + " (pref=" + (_devicePreference ?? "默认") + ") ok=" + ok + (ok ? "" : " err=" + (_hifiOut.LastError ?? "")));
                 if (!ok)
                 {

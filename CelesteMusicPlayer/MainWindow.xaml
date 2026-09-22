@@ -6651,7 +6651,9 @@
                                 HorizontalAlignment="Stretch">
                                 <StackPanel Spacing="3">
                                     <TextBlock Text="源" FontSize="10" Opacity="0.7" />
+                                    <!-- 两行各说各话：源文件真实格式（探测值） / 实际送链路的转码 WAV（WAV 头） -->
                                     <TextBlock x:Name="AudioLinkSourceFmt" Text="—" FontFamily="Consolas" FontSize="12" TextWrapping="WrapWholeWords" TextTrimming="None" HorizontalAlignment="Stretch" />
+                                    <TextBlock x:Name="AudioLinkTranscodeWavFmt" Text="" FontFamily="Consolas" FontSize="11" Opacity="0.85" TextWrapping="WrapWholeWords" TextTrimming="None" HorizontalAlignment="Stretch" />
                                 </StackPanel>
                             </Border>
                             <Border
@@ -6677,7 +6679,9 @@
                                 HorizontalAlignment="Stretch">
                                 <StackPanel Spacing="3">
                                     <TextBlock Text="输出" FontSize="10" Opacity="0.7" />
+                                    <!-- 两行：设备端实际格式（结构化协商值） / 结论（源直通·数值有损·重采样·待确认） -->
                                     <TextBlock x:Name="AudioLinkOutputFmt" Text="—" FontFamily="Consolas" FontSize="12" TextWrapping="WrapWholeWords" TextTrimming="None" HorizontalAlignment="Stretch" />
+                                    <TextBlock x:Name="AudioLinkOutputVerdict" Text="" FontFamily="Consolas" FontSize="11" Opacity="0.85" TextWrapping="WrapWholeWords" TextTrimming="None" HorizontalAlignment="Stretch" />
                                 </StackPanel>
                             </Border>
                         </StackPanel>

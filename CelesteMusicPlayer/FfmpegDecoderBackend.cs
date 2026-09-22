@@ -54,6 +54,21 @@ namespace CelesteMusicPlayer
         /// </summary>
         public static string? LastOriginalSourceDescription { get; private set; }
 
+        /// <summary>
+        /// 最近一次探测到的「源文件真实格式」（结构化），与 <see cref="LastOriginalSourceDescription"/>
+        /// 同源同步写入（探测失败 / DSD 分支时为 null）。供链路结构化状态（ChainFormatState.SourceFile）
+        /// 与 bit-perfect 徽标比对使用——徽标判标志位，不再从描述串反解析。
+        /// 语义同为"最近一次"：转码参数构造与播放在同一线程链路上串行发生。
+        /// </summary>
+        public static AudioFormat? LastProbedSourceFormat { get; private set; }
+
+        /// <summary>
+        /// 最近一次转码参数构建是否走了「探测失败兜底」（固定 16bit/44.1kHz/立体声）。
+        /// DSD 分支（直转 PCM/容器率）不置位——那是设计路径，不是降级。
+        /// 链路结构化状态据此区分 FailedFallback 与设计路径，避免 DSD 歌被误标"兜底降级"。
+        /// </summary>
+        public static bool LastTranscodeWasFallback { get; private set; }
+
         // ===== 探测结果缓存 + 缓存文件访问时间（2026-09-21 加） =====
 
         /// <summary>源格式探测结果缓存：key = 路径|最后修改时间|文件长度。
@@ -392,6 +407,8 @@ namespace CelesteMusicPlayer
         {
             string ext = Path.GetExtension(srcPath).ToLowerInvariant();
             LastOriginalSourceDescription = null; // 每首歌重新探测，防止上一首的残留造成误判
+            LastProbedSourceFormat = null;
+            LastTranscodeWasFallback = false;
             if (ext is ".dsf" or ".dff")
             {
                 // 共享模式（系统混音/共享）：统一折叠为 16bit/44.1kHz PCM，保证设备/系统可播（非 bit-perfect，可听优先）。
@@ -411,6 +428,7 @@ namespace CelesteMusicPlayer
             {
                 // 记录源文件原始格式（未经转码），供链路显示与 bit-perfect 诚实判定比对
                 LastOriginalSourceDescription = rate + "hz / " + bits + "bit / " + ch + "声道";
+                LastProbedSourceFormat = new AudioFormat(rate, bits, ch, false);
                 StartupLog.Write($"[转码] 源探测 {System.IO.Path.GetFileName(srcPath)} → {rate}hz/{bits}bit/{ch}ch");
 
                 // 共享模式：采样率对齐设备 MixFormat，声道固定 2（立体声），输出统一用 pcm_f32le（IEEE float）。
@@ -438,6 +456,8 @@ namespace CelesteMusicPlayer
             // 探测失败回退：固定 16bit/44.1kHz/立体声，保证可播。
             // 注意：高于 16bit/44.1kHz 的源在这里会被静默降级，日志必须留痕，链路显示据此标注"转码已降级"。
             LastOriginalSourceDescription = null;
+            LastProbedSourceFormat = null;
+            LastTranscodeWasFallback = true;
             StartupLog.Write("[转码警告] 源格式探测失败，按 16bit/44100Hz/立体声兜底（高于此规格的源会被降级）：" + srcPath);
             return string.Format("-y -i \"{0}\" -vn -acodec pcm_s16le -ar 44100 -ac 2 \"{1}\"", srcPath, dstPath);
         }

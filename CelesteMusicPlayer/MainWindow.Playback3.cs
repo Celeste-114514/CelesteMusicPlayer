@@ -1588,18 +1588,18 @@ namespace CelesteMusicPlayer
             try
             {
                 bool hifi = IsHiFiModeSelected();
-                string? srcFmt = _audioEngine?.SourceFormatDescription;
-                string? outFmt = _audioEngine?.ActualOutputFormat;
+                var chain = _audioEngine?.ChainFormat;
 
-                // 源格式：HiFi 直通取 WAV 源；否则为系统 MediaPlayer 解码路径
-                string src = string.IsNullOrWhiteSpace(srcFmt)
-                    ? (hifi ? "（未知/解析中）" : "MediaPlayer（系统解码）")
-                    : srcFmt;
+                // 与链路面板同一口径（ChainFormat 结构化值）：源文件 → 转码 WAV 一段讲清
+                string src = chain is { HasSession: true }
+                    ? (chain.SourceFile?.Describe() ?? chain.SourceFileDescription ?? "DSD/未探测")
+                      + " → WAV " + (chain.TranscodeWav?.Describe() ?? "?") + chain.OutcomeNote()
+                    : (hifi ? "（未知/解析中）" : "MediaPlayer（系统解码）");
 
-                // 输出格式 / 设备
-                string outp = string.IsNullOrWhiteSpace(outFmt)
-                    ? (hifi ? "（未知/解析中）" : "系统混音器（Shared）")
-                    : outFmt + (hifi ? "" : "（Shared）");
+                // 输出格式 / 设备（含结论：源直通·数值有损·重采样·待确认）
+                string outp = chain?.DeviceOutput is AudioFormat dev
+                    ? dev.Describe() + " · " + chain.VerdictNote()
+                    : (hifi ? "（未知/解析中）" : "系统混音器（Shared）");
 
                 string exclusivo = hifi ? "独占" : "共享";
 

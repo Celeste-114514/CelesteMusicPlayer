@@ -153,21 +153,39 @@ namespace CelesteMusicPlayer
                 }
 
                 bool hifi = IsHiFiModeSelected();
-                string? srcFmt = _audioEngine?.SourceFormatDescription;
-                string? outFmt = _audioEngine?.ActualOutputFormat;
+                var chain = _audioEngine?.ChainFormat;
 
                 if (TerminalSrcText != null)
                 {
-                    TerminalSrcText.Text = string.IsNullOrWhiteSpace(srcFmt)
-                        ? (hifi ? "（解析中）" : "系统解码")
-                        : srcFmt;
+                    // 与链路面板同一口径（ChainFormat 结构化值）：源文件 → 转码 WAV 一段讲清，不混一行
+                    if (chain != null && chain.HasSession)
+                    {
+                        string sf = chain.SourceFile?.Describe() ?? chain.SourceFileDescription ?? "DSD/未探测";
+                        string wv = chain.TranscodeWav?.Describe() ?? "?";
+                        TerminalSrcText.Text = sf + " → WAV " + wv + chain.OutcomeNote();
+                    }
+                    else
+                    {
+                        string? srcFmt = _audioEngine?.SourceFormatDescription;
+                        TerminalSrcText.Text = string.IsNullOrWhiteSpace(srcFmt)
+                            ? (hifi ? "（解析中）" : "系统解码")
+                            : srcFmt;
+                    }
                 }
 
                 if (TerminalOutText != null)
                 {
-                    TerminalOutText.Text = string.IsNullOrWhiteSpace(outFmt)
-                        ? (hifi ? "（解析中）" : "系统混音器")
-                        : outFmt;
+                    if (chain?.DeviceOutput is AudioFormat dev)
+                    {
+                        TerminalOutText.Text = dev.Describe() + " · " + chain.VerdictNote();
+                    }
+                    else
+                    {
+                        string? outFmt = _audioEngine?.ActualOutputFormat;
+                        TerminalOutText.Text = string.IsNullOrWhiteSpace(outFmt)
+                            ? (hifi ? "（解析中）" : "系统混音器")
+                            : outFmt;
+                    }
                 }
 
                 if (TerminalOutputText != null)

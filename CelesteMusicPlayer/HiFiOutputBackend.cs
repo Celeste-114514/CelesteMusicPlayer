@@ -451,6 +451,74 @@ namespace CelesteMusicPlayer
         /// <summary>当前播放源的原始格式（WAV 直通源），如 "44100 Hz / 16 bit / 2声道"。</summary>
         public string? SourceFormatDescription { get; private set; }
 
+        /// <summary>
+        /// 链路结构化格式状态（2026-09-22 音频链路重写阶段一地基）：
+        /// 源文件 / 转码 WAV / 设备端三段真实值 + 判定标志位，一条状态从解码器流到面板。
+        /// bit-perfect 徽标只判这里的标志，绝不从 <see cref="ActualOutputFormat"/> 等描述串反解析
+        /// （2026-09-22 用户实测：描述串嵌源位深，正则反解析导致徽标谎报绿灯）。
+        /// 未播放时 <see cref="ChainFormatState.HasSession"/>=false，各段为 null。
+        /// </summary>
+        public ChainFormatState ChainFormat { get; } = new ChainFormatState();
+
+        /// <summary>按 WAV 头与最近一次源探测值推算转码结果（阶段二起改由转码计划直接填充，此处保持同口径）。
+        /// 规则：率不同=已重采样（含共享模式对齐 MixFormat）；位深被做低=已降级；
+        /// 位深变高/浮点性与源不同=容器扩容（数值无损）；其余=同格式。</summary>
+        private TranscodeOutcome ComputeTranscodeOutcome(AudioFormat wav)
+        {
+            // 探测失败兜底（16/44.1/2）：高于此规格的源被静默降级，必须现形
+            if (FfmpegDecoderBackend.LastTranscodeWasFallback)
+            {
+                return TranscodeOutcome.FailedFallback;
+            }
+
+            var src = FfmpegDecoderBackend.LastProbedSourceFormat;
+            if (src == null)
+            {
+                // DSD 直转 PCM 等设计路径（无 PCM 源探测值，也不该按降级算）
+                return TranscodeOutcome.SameFormat;
+            }
+
+            if (wav.Rate != src.Value.Rate) return TranscodeOutcome.ResampledToDevice;
+            if (wav.Bits < src.Value.Bits) return TranscodeOutcome.Downsampled;
+            if (wav.Bits > src.Value.Bits || wav.IsFloat != src.Value.IsFloat) return TranscodeOutcome.ContainerWidened;
+            return TranscodeOutcome.SameFormat;
+        }
+
+        /// <summary>格式层 bit-perfect 判定（[链路] 日志用；DSP 干预由 UI 徽标另行计入，两边口径一致）。
+        /// 共享模式 / 转码降级·重采样·兜底 / 设备端数值有损或格式转换 / 设备率≠WAV 率 → false。</summary>
+        private bool FormatLayerPure()
+        {
+            if (ChainFormat.SharedMode)
+            {
+                return false;
+            }
+
+            if (ChainFormat.IsDsdPath)
+            {
+                // DSD：输出 PCM 只是 1-bit 的封装载体，只要容器是直通/未捕获即视为格式层无损
+                return ChainFormat.Device is DevicePath.Lossless or DevicePath.Unknown;
+            }
+
+            if (ChainFormat.Outcome is not (TranscodeOutcome.SameFormat or TranscodeOutcome.ContainerWidened))
+            {
+                return false;
+            }
+
+            if (ChainFormat.Device is DevicePath.Degraded or DevicePath.Resampled)
+            {
+                return false;
+            }
+
+            var dev = ChainFormat.DeviceOutput;
+            var wav = ChainFormat.TranscodeWav;
+            if (dev != null && wav != null && dev.Value.Rate != wav.Value.Rate)
+            {
+                return false;
+            }
+
+            return true;
+        }
+
         /// <summary>播放后从 WasapiOut/AsioOut 读取实际输出格式并更新 <see cref="ActualOutputFormat"/>。</summary>
         private void CaptureActualOutputFormat()
         {
@@ -469,6 +537,10 @@ namespace CelesteMusicPlayer
                     int bits = wf.BitsPerSample;
                     // 24bit 可能实际是 IeeeFloat/32；对 DoP/独占显示核心格式
                     ActualOutputFormat = wf.SampleRate + "hz / " + bits + "bit / " + wf.Channels + " 声道";
+                    // 结构化：共享/ASIO 路径的设备端格式（NAudio WasapiOut.OutputWaveFormat）。
+                    // 徽标对共享模式另有"系统混音器"一等判定；ASIO 取不到该属性时保持 null（待播放确认，不假设直通）。
+                    ChainFormat.DeviceOutput = new AudioFormat(wf.SampleRate, wf.BitsPerSample, wf.Channels, wf.Encoding == WaveFormatEncoding.IeeeFloat);
+                    ChainFormat.DeviceEndpointName = wf.Encoding == WaveFormatEncoding.IeeeFloat ? "float32" : "PCM" + wf.BitsPerSample;
                 }
             }
             catch
@@ -690,8 +762,9 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>从 PCM WAV 文件以指定模式播放。<paramref name="requireExact"/> 为 true（DSD/DoP 容器 WAV）时独占只做源格式精确直通，禁止降级（保 bit-perfect）。</summary>
-        public bool PlayWavAsync(string wavPath, OutputMode mode, string? deviceIdentifier = null, TimeSpan? seekTo = null, bool requireExact = false)
+        /// <summary>从 PCM WAV 文件以指定模式播放。<paramref name="requireExact"/> 为 true（DSD/DoP 容器 WAV）时独占只做源格式精确直通，禁止降级（保 bit-perfect）。
+        /// <paramref name="sourceIsDsd"/> 标记源文件是 DSD（经 ffmpeg 转 PCM 输出）：链路据此标注 DSD 路径，显示"1-bit 原生（已转 PCM）"而非"源格式未探测"。</summary>
+        public bool PlayWavAsync(string wavPath, OutputMode mode, string? deviceIdentifier = null, TimeSpan? seekTo = null, bool requireExact = false, bool sourceIsDsd = false)
         {
             try
             {
@@ -815,6 +888,21 @@ namespace CelesteMusicPlayer
                 }
                 var srcWf = _waveFile.WaveFormat;
                 SourceFormatDescription = srcWf.SampleRate + "hz / " + srcWf.BitsPerSample + "bit / " + srcWf.Channels + "声道";
+                // 链路结构化状态（阶段一地基）：源文件 / 转码 WAV 两段各说各话；
+                // 设备端两段在下面的输出分支初始化后填（native 协商值 / NAudio OutputWaveFormat）。
+                var wavFmt = new AudioFormat(srcWf.SampleRate, srcWf.BitsPerSample, srcWf.Channels, srcWf.Encoding == WaveFormatEncoding.IeeeFloat);
+                ChainFormat.HasSession = true;
+                ChainFormat.IsDsdPath = sourceIsDsd;
+                ChainFormat.SharedMode = mode == OutputMode.WasapiShared;
+                ChainFormat.SourceFile = FfmpegDecoderBackend.LastProbedSourceFormat;
+                ChainFormat.SourceFileDescription = sourceIsDsd && FfmpegDecoderBackend.LastProbedSourceFormat == null
+                    ? "DSD 1-bit 原生（已转 PCM）"
+                    : FfmpegDecoderBackend.LastOriginalSourceDescription;
+                ChainFormat.TranscodeWav = wavFmt;
+                ChainFormat.Outcome = ComputeTranscodeOutcome(wavFmt);
+                ChainFormat.DeviceOutput = null;
+                ChainFormat.Device = DevicePath.Unknown;
+                ChainFormat.DeviceEndpointName = null;
                 Position = TimeSpan.Zero;
                 _pausedPosition = seekTo ?? TimeSpan.Zero;
                 _pendingSeekTarget = null;
@@ -841,6 +929,10 @@ namespace CelesteMusicPlayer
                     }
 
                     ActualOutputFormat = _native.ActualFormatDescription;
+                    // 设备端结构化协商结果（徽标判标志位，不反解析描述串）
+                    ChainFormat.DeviceOutput = _native.NegotiatedFormat;
+                    ChainFormat.Device = _native.DevicePathKind;
+                    ChainFormat.DeviceEndpointName = _native.DeviceEndpointName;
                 }
                 else
                 {
@@ -866,6 +958,17 @@ namespace CelesteMusicPlayer
                     _waveFile?.WaveFormat.BitsPerSample, _waveFile?.WaveFormat.SampleRate, _waveFile?.WaveFormat.Channels,
                     ActualOutputFormat ?? OutputDeviceName ?? "?",
                     (_native?.LastAlignDance == true) ? "是" : "否"));
+                // [链路] 结构化摘要（与面板/徽标同一口径 ChainFormat；格式层判定，DSP 另见面板徽标）
+                StartupLog.Write(string.Format(
+                    "[链路] 源={0} WAV={1} 设备={2} 端点={3} 转码={4} 设备路径={5} 共享={6} 格式判定={7}（DSP 另见徽标）",
+                    ChainFormat.SourceFile?.DescribeShort() ?? (ChainFormat.SourceFileDescription ?? "?"),
+                    ChainFormat.TranscodeWav?.DescribeShort() ?? "?",
+                    ChainFormat.DeviceOutput?.DescribeShort() ?? "?",
+                    ChainFormat.DeviceEndpointName ?? "?",
+                    ChainFormat.Outcome,
+                    ChainFormat.Device,
+                    ChainFormat.SharedMode ? "是" : "否",
+                    FormatLayerPure() ? "bit-perfect" : "非bit-perfect"));
                 return true;
             }
             catch (Exception ex)
@@ -1082,6 +1185,17 @@ namespace CelesteMusicPlayer
                 _sourceDuration = dop.TotalTime;
                 Position = TimeSpan.Zero;
                 SourceFormatDescription = dsd.Rate + " / " + dsd.Channels + "声道 1-bit DSD";
+                // 链路结构化状态：DSD 源（无 PCM 探测值）+ DoP 容器 + 设备端协商（上面 native 分支填）
+                ChainFormat.HasSession = true;
+                ChainFormat.IsDsdPath = true;
+                ChainFormat.SharedMode = false;
+                ChainFormat.SourceFile = null;
+                ChainFormat.SourceFileDescription = SourceFormatDescription;
+                ChainFormat.TranscodeWav = new AudioFormat(dop.WaveFormat.SampleRate, dop.WaveFormat.BitsPerSample, dop.WaveFormat.Channels, false);
+                ChainFormat.Outcome = TranscodeOutcome.SameFormat;
+                ChainFormat.DeviceOutput = null;
+                ChainFormat.Device = DevicePath.Unknown;
+                ChainFormat.DeviceEndpointName = null;
                 _pausedPosition = seekTo ?? TimeSpan.Zero;
                 _pendingSeekTarget = null;
                 if (seekTo != null && seekTo.Value > TimeSpan.Zero)
@@ -1101,6 +1215,10 @@ namespace CelesteMusicPlayer
                 }
 
                 ActualOutputFormat = _native.ActualFormatDescription;
+                // 设备端结构化协商结果（DSD/DoP：容器协商值，IsDsdPath 已置位）
+                ChainFormat.DeviceOutput = _native.NegotiatedFormat;
+                ChainFormat.Device = _native.DevicePathKind;
+                ChainFormat.DeviceEndpointName = _native.DeviceEndpointName;
                 _isPlaying = true;
                 CurrentMode = OutputMode.WasapiExclusive;
                 _nativePosBaselineFrames = 0;
@@ -1110,6 +1228,14 @@ namespace CelesteMusicPlayer
                     Path.GetFileName(dsdPath), dsd.Rate, dsd.Channels,
                     dop.WaveFormat.SampleRate, dop.WaveFormat.BitsPerSample, dop.WaveFormat.Channels,
                     ActualOutputFormat ?? OutputDeviceName ?? "?"));
+                StartupLog.Write(string.Format(
+                    "[链路] DSD 源={0} DoP容器={1}Hz/{2}bit/{3}ch 设备={4} 端点={5} 设备路径={6} 格式判定={7}（DSP 另见徽标）",
+                    SourceFormatDescription,
+                    dop.WaveFormat.SampleRate, dop.WaveFormat.BitsPerSample, dop.WaveFormat.Channels,
+                    ChainFormat.DeviceOutput?.DescribeShort() ?? "?",
+                    ChainFormat.DeviceEndpointName ?? "?",
+                    ChainFormat.Device,
+                    FormatLayerPure() ? "bit-perfect" : "非bit-perfect"));
                 return true;
             }
             catch (Exception ex)
@@ -1190,6 +1316,7 @@ namespace CelesteMusicPlayer
             OutputDeviceName = null;
             ActualOutputFormat = null;
             SourceFormatDescription = null;
+            ChainFormat.Reset();
             CurrentMode = null;
         }
 

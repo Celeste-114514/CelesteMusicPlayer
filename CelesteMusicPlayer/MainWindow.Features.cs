@@ -2705,30 +2705,35 @@ namespace CelesteMusicPlayer
                 }
 
                 bool hifi = IsHiFiModeSelected();
-                string? src = _audioEngine?.SourceFormatDescription;
-                string? outp = _audioEngine?.ActualOutputFormat;
+                var chain = _audioEngine?.ChainFormat;
 
-                AudioLinkSourceFmt.Text = string.IsNullOrWhiteSpace(src)
-                    ? (hifi ? "（解析中…）" : "MediaPlayer（系统解码）")
-                    : AppendSourceDegradeNote(src);
-                AudioLinkOutputFmt.Text = string.IsNullOrWhiteSpace(outp)
-                    ? (hifi ? "（解析中…）" : "系统混音器（Shared）")
-                    : outp;
+                // 源胶囊两行：源文件真实值 / 实际送链路的转码 WAV（各说各话，绝不混一行看串）
+                AudioLinkSourceFmt.Text = BuildSourceFileLine(chain, hifi);
+                AudioLinkTranscodeWavFmt.Text = BuildTranscodeWavLine(chain, hifi);
+                // 输出胶囊两行：设备端实际格式 / 结论
+                AudioLinkOutputFmt.Text = BuildDeviceLine(chain, hifi);
+                AudioLinkOutputVerdict.Text = BuildVerdictLine(chain, hifi);
                 AudioLinkMode.Text = hifi ? "独占（WASAPI 独占 / ASIO）" : "共享（系统混音）";
 
                 // DSP 摘要
                 bool eqOn = EqCurveStore.Load().HasEffect();
                 var extra = DspExtraStore.Load();
                 bool chOn = extra.ChannelBalance?.IsActive == true;
-                bool limiterOn = extra.Safety?.EnableLimiter != false;
+                bool limiterOn = extra.Safety?.EnableLimiter != false;   // 开关状态（设置摘要用）
+                bool limiterActive = extra.Safety?.AffectsBits == true; // 是否真让链路经过逐样本处理（headroom≠0 或显式关限幅）
                 bool rgOn = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
                 var active = new System.Collections.Generic.List<string>();
                 if (eqOn) active.Add("EQ");
                 if (chOn) active.Add("声道");
-                if (limiterOn) active.Add("限幅");
+                if (limiterActive) active.Add("限幅");
                 if (rgOn) active.Add("ReplayGain");
+                // 限幅单独开着、无其它 DSP 时：ManagedDspSourceProvider 明确"单独开不激活"（源 PCM 不会超 ±1，无需削波），
+                // 徽标不计数；摘要里标注"待命"，避免"全部旁路"文案与徽标绿灯自相矛盾（2026-09-22 修）。
+                string limiterStandby = limiterOn && !limiterActive
+                    ? " · 限幅待命（无其它 DSP 时不做逐样本处理，不影响 bit-perfect）"
+                    : string.Empty;
                 string dsp = active.Count == 0 ? "全部旁路" : string.Join(" / ", active) + "（开）";
-                AudioLinkDsp.Text = dsp + (hifi ? " [HiFi 直通链路]" : " [共享链路]");
+                AudioLinkDsp.Text = dsp + limiterStandby + (hifi ? " [HiFi 直通链路]" : " [共享链路]");
                 // bit-perfect：综合判定（DSP + 输出格式 + 是否共享模式），不再只看 DSP 开关
                 bool chainPure = EvaluateBitPerfectChain(out string chainReason, out bool chainConfirmed);
                 AudioLinkBitPerfect.Text = chainPure
@@ -2745,7 +2750,8 @@ namespace CelesteMusicPlayer
                 AudioProBuffer.Text = string.IsNullOrWhiteSpace(_audioEngine?.OutputDeviceId)
                     ? "系统默认"
                     : _audioEngine.OutputDeviceId;
-                AudioProDspChain.Text = "EQ" + (eqOn ? "✓" : "—") + " · 声道" + (chOn ? "✓" : "—") + " · 限幅" + (limiterOn ? "✓" : "—") + " · ReplayGain" + (rgOn ? "✓" : "—");
+                AudioProDspChain.Text = "EQ" + (eqOn ? "✓" : "—") + " · 声道" + (chOn ? "✓" : "—")
+                    + " · 限幅" + (limiterActive ? "✓" : (limiterOn ? "待" : "—")) + " · ReplayGain" + (rgOn ? "✓" : "—");
                 // 链路可视化着色 + bit-perfect 徽章（用整链判定，而非仅 DSP 开关）
                 ApplyLinkVisual(pure: chainPure, activeText: chainReason);
                 // 同步主界面常驻 bit-perfect 徽章
@@ -2780,36 +2786,81 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
-        /// <summary>链路「源格式」行收尾：若探测到的源文件规格高于实际送链路的 WAV 规格（转码静默降级），
-        /// 在行内注明源文件真实规格与降级事实，绝不让显示说谎（2026-09-21 用户实测 24bit 显示成 16bit 后加固）。</summary>
-        private string AppendSourceDegradeNote(string chainSrc)
+        /// <summary>链路「源」胶囊第一行：源文件真实格式（探测结构化值；DSD/探测失败如实说明，不编数）。
+        /// 绝不让显示说谎——2026-09-21 用户实测 24bit 显示成 16bit 后，本行只认 <see cref="ChainFormatState.SourceFile"/>。</summary>
+        private static string BuildSourceFileLine(ChainFormatState? chain, bool hifi)
         {
-            try
+            if (chain?.SourceFile is AudioFormat sf)
             {
-                string? orig = _audioEngine?.OriginalSourceFormatDescription;
-                if (string.IsNullOrWhiteSpace(orig)
-                    || !TryParseFormatText(orig, out int oRate, out int oBits)
-                    || !TryParseFormatText(chainSrc, out int sRate, out int sBits))
-                {
-                    return chainSrc;
-                }
-
-                if (oBits > sBits)
-                {
-                    return chainSrc + $"（源文件 {orig}，转码已降级）";
-                }
-
-                if (oRate > sRate)
-                {
-                    return chainSrc + $"（源文件 {orig}，转码已重采样）";
-                }
-
-                return chainSrc;
+                return "源文件：" + sf.Describe();
             }
-            catch
+
+            if (!string.IsNullOrWhiteSpace(chain?.SourceFileDescription))
             {
-                return chainSrc;
+                return "源文件：" + chain!.SourceFileDescription;
             }
+
+            if (chain?.Outcome == TranscodeOutcome.FailedFallback)
+            {
+                return "源文件：探测失败（已按兜底规格转码）";
+            }
+
+            return hifi ? "源文件：（解析中…）" : "源文件：MediaPlayer（系统解码）";
+        }
+
+        /// <summary>链路「源」胶囊第二行：实际送链路的转码 WAV（WAV 头真实值 + 转码结果注：
+        /// 同格式 / 容器扩容数值无损 / 已重采样 / 已降级 / 探测失败兜底）。</summary>
+        private static string BuildTranscodeWavLine(ChainFormatState? chain, bool hifi)
+        {
+            if (chain?.TranscodeWav is AudioFormat wav)
+            {
+                return "转码 WAV：" + wav.Describe() + chain.OutcomeNote();
+            }
+
+            return hifi ? "转码 WAV：（解析中…）" : "转码 WAV：不经转码（系统解码）";
+        }
+
+        /// <summary>链路「输出」胶囊第一行：设备端实际输出格式（结构化协商值；取不到时如实说未知，不假设直通）。</summary>
+        private static string BuildDeviceLine(ChainFormatState? chain, bool hifi)
+        {
+            if (chain?.DeviceOutput is AudioFormat dev)
+            {
+                return "设备端：" + dev.Describe()
+                    + (string.IsNullOrWhiteSpace(chain.DeviceEndpointName) ? string.Empty : "（" + chain.DeviceEndpointName + "）");
+            }
+
+            if (!hifi)
+            {
+                return "设备端：系统混音器（Shared）";
+            }
+
+            // 播放过但协商值缺失（如 ASIO 无 OutputWaveFormat）：不能假设直通
+            return chain?.HasSession == true ? "设备端：未知（协商值缺失，待确认）" : "设备端：（解析中…）";
+        }
+
+        /// <summary>链路「输出」胶囊第二行：结论。先讲转码层事实（重采样/降级），再讲设备端路径，
+        /// 两者独立——"设备端源直通"与"转码已重采样"可以同时成立且都必须说。</summary>
+        private static string BuildVerdictLine(ChainFormatState? chain, bool hifi)
+        {
+            if (!hifi)
+            {
+                return "结论：共享模式——系统混音器必然重采样，非 bit-perfect";
+            }
+
+            if (chain == null || !chain.HasSession)
+            {
+                return "结论：待播放确认";
+            }
+
+            var parts = new System.Collections.Generic.List<string>();
+            string note = chain.OutcomeNote(); // （已重采样，迁就设备）/（已降级：规格被做低）/（源探测失败…）
+            if (note.Length > 0)
+            {
+                parts.Add("转码" + note);
+            }
+
+            parts.Add(chain.VerdictNote());
+            return "结论：" + string.Join(" · ", parts);
         }
 
         /// <summary>计算与音频设置面板徽章同一口径的链路纯净度：任一 DSP（EQ/声道平衡/限幅/ReplayGain）
@@ -2822,14 +2873,16 @@ namespace CelesteMusicPlayer
             bool eqOn = EqCurveStore.Load().HasEffect();
             var extra = DspExtraStore.Load();
             bool chOn = extra.ChannelBalance?.IsActive == true;
-            bool limiterOn = extra.Safety?.EnableLimiter != false;
+            // 限幅计数口径与 DSP 链实际激活对齐（DspSafetyState.AffectsBits）：
+            // 设了余量(负增益)或显式关软限幅才算激活；单独开着限幅、无其它 DSP 时链路不逐样本处理，只待命不计数。
+            bool limiterActive = extra.Safety?.AffectsBits == true;
             bool rgOn = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
             // HiFi 软件音量（独占/ASIO + 设置页开关 + 音量≠100%）：DSP 链采样级衰减，同样破坏 bit-perfect。
             bool volOn = _audioEngine?.IsSoftwareVolumeActive ?? false;
             var active = new System.Collections.Generic.List<string>();
             if (eqOn) active.Add("EQ");
             if (chOn) active.Add("声道");
-            if (limiterOn) active.Add("限幅");
+            if (limiterActive) active.Add("限幅");
             if (rgOn) active.Add("ReplayGain");
             if (volOn) active.Add("音量");
             activeText = active.Count == 0 ? string.Empty : string.Join("、", active);
@@ -2837,21 +2890,22 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 综合判定整条链路是否 bit-perfect（2026-09-12 修；2026-09-22 补降级标记与共享模式前置）。
+        /// 综合判定整条链路是否 bit-perfect（2026-09-22 重写为标志位判定）。
         ///
-        /// 旧实现只看 DSP 开关，导致「共享模式 + 系统 48khz + 源 44.1khz」这种必然被系统混音器
-        /// 重采样的情形仍显示 bit-perfect —— 那行文案自己都写着「需结合输出格式确认」却没做。
+        /// 地基是 <see cref="ChainFormatState"/>：源文件 / 转码 WAV / 设备端三段真实值 + 判定标志，
+        /// 由解码器与输出内核结构化填写。徽标只判这些标志，**绝不从人话描述串反解析数字**——
+        /// 2026-09-22 用户实测：描述串嵌源位深，正则从源段解析出 24bit 与源相等 → 绿灯谎报。
         ///
-        /// 现在的判定（任一命中即非 bit-perfect）：
-        ///   1) 任一 DSP 生效（EQ / 声道平衡 / 限幅 / ReplayGain）
-        ///   2) 共享模式（系统混音器介入，即使格式一致也不保证逐字节直通；设置层已知，与是否在播无关）
-        ///   3) 输出采样率 ≠ 源采样率 → 发生重采样
-        ///   4) 输出位深 ≠ 源位深 → 发生位深转换
-        ///   5) 输出描述带「已降级」标记（链路自己判定端点格式低于源）→ 降级
-        ///   6) 转码降级：探测到的源文件规格 vs 实际送链路的 WAV 规格（只在源被做"低"了时算）
-        /// DSD 源走 DoP/原生封装，输出格式是承载用的 PCM，不做 PCM 重采样比对。
-        /// 输出格式尚未捕获（未播放）时只按 DSP/共享模式判定，confirmed=false，UI 标注「待播放确认」。
-        /// 输出格式已捕获但解析不出率/位深（端点 "?" 等）时按"无法确认"处理，绝不假设直通。
+        /// 判定（任一命中即非 bit-perfect）：
+        ///   1) 任一 DSP 真正激活（EQ / 声道平衡 / ReplayGain / 余量或显式关限幅 / HiFi 软件音量；
+        ///      限幅单独开着只待命，不计数）
+        ///   2) 共享模式（系统混音器介入；设置层已知，与是否在播无关）
+        ///   3) 转码层：WAV 相对源被重采样 / 降位 / 探测失败兜底（<see cref="ChainFormatState.Outcome"/>）
+        ///   4) 设备端：协商出的设备率≠WAV 率；或端点数值有损（<see cref="DevicePath.Degraded"/>）/
+        ///      非直通转换（<see cref="DevicePath.Resampled"/>）
+        ///   5) 播放过但设备协商值缺失（ASIO 等）：不假设直通，按"无法确认"转琥珀
+        /// DSD/DoP 路径跳过 PCM 重采样比对（输出 PCM 只是 1-bit 的封装载体），只看设备容器是否直通。
+        /// 未播放（HasSession=false）时只按 DSP/共享模式判定，confirmed=false，UI 标注「待播放确认」。
         /// 只读状态用于显示，不改动任何音频字节流。
         /// </summary>
         private bool EvaluateBitPerfectChain(out string reason, out bool confirmed)
@@ -2861,7 +2915,7 @@ namespace CelesteMusicPlayer
 
             var causes = new System.Collections.Generic.List<string>();
 
-            // 1) DSP 是否参与处理
+            // 1) DSP 是否真正参与处理
             bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
             if (!bypass)
             {
@@ -2878,95 +2932,76 @@ namespace CelesteMusicPlayer
                 causes.Add("系统混音器（共享模式）");
             }
 
-            // 3)4)5)6) 源格式与输出格式比对
-            string? src = _audioEngine?.SourceFormatDescription;
-            string? outp = _audioEngine?.ActualOutputFormat;
-            bool isDsd = !string.IsNullOrWhiteSpace(src)
-                && src.IndexOf("DSD", StringComparison.OrdinalIgnoreCase) >= 0;
-
-            // 输出链路自带的降级标记（EchoCoreOutput.DescribeOutput 生成）：
-            // 描述串里嵌的是源的率/位深，只靠下面的正则比对会被源的参数蒙混过关
-            // （2026-09-22 用户实测：24bit/96kHz 显示"设备 ?（设备端格式低于源，已降级）"，
-            // 而徽标从源那段解析出 24bit 与源相等 → 绿灯谎报）。链路自己判定无损才消这条。
-            if (!string.IsNullOrWhiteSpace(outp) && outp.Contains("已降级"))
+            // 3)4)5) 结构化链路状态：全部判标志位，不反解析任何描述串
+            var chain = _audioEngine?.ChainFormat;
+            if (chain != null && chain.HasSession)
             {
-                causes.Add("设备端格式低于源（输出链路已降级）");
-            }
-
-            if (isDsd)
-            {
-                // DSD：DoP/原生直通，输出 PCM 只是封装载体，不做重采样判定
-                confirmed = true;
-            }
-            else if (TryParseFormatText(src, out int srcRate, out int srcBits)
-                  && TryParseFormatText(outp, out int outRate, out int outBits))
-            {
-                confirmed = true;
-                if (srcRate != outRate)
+                if (chain.IsDsdPath)
                 {
-                    causes.Add($"重采样 {srcRate}→{outRate}hz");
-                }
-                else if (srcBits != outBits)
-                {
-                    causes.Add($"位深转换 {srcBits}→{outBits}bit");
-                }
-
-                // 转码降级：探测到的源文件规格 vs 实际送链路的 WAV 规格。
-                //    只在源被做"低"了才算（位深变小 / 采样率变低）；共享模式主动用 f32 + 设备率不在此列。
-                //    专门抓"探测失败回退 16bit、设备不认时的重采样回退"造成的静默降级——
-                //    没有这一条，降级后的 WAV 与输出格式一致，徽标会谎报 bit-perfect（2026-09-21 用户实测）。
-                string? orig = _audioEngine?.OriginalSourceFormatDescription;
-                if (TryParseFormatText(orig, out int origRate, out int origBits))
-                {
-                    if (origBits > srcBits)
+                    // DSD/DoP：1-bit 原生封装直通，输出 PCM 只是承载，不做重采样比对
+                    confirmed = true;
+                    if (chain.Device == DevicePath.Degraded)
                     {
-                        causes.Add($"转码降位 {origBits}→{srcBits}bit");
+                        causes.Add("DSD 设备端容器低于源，数值有损");
                     }
-                    else if (origRate > srcRate)
+                    else if (chain.Device == DevicePath.Resampled)
                     {
-                        causes.Add($"转码重采样 {origRate}→{srcRate}hz");
+                        causes.Add("DSD 设备端对封装做了转换（非直通）");
                     }
                 }
-            }
-            else if (!string.IsNullOrWhiteSpace(outp))
-            {
-                // 输出格式已捕获但解析不出率/位深（端点格式未知等）：
-                // 不能假设直通，按"无法确认"处理，徽标转琥珀，宁可误报不可漏报。
-                causes.Add("输出格式无法识别（" + outp + "）");
+                else
+                {
+                    // 3) 转码层：实际送链的 WAV 相对源文件发生了什么
+                    switch (chain.Outcome)
+                    {
+                        case TranscodeOutcome.ResampledToDevice:
+                            causes.Add("转码已重采样（迁就设备采样率）");
+                            break;
+                        case TranscodeOutcome.Downsampled:
+                            causes.Add("转码降级（规格被做低）");
+                            break;
+                        case TranscodeOutcome.FailedFallback:
+                            causes.Add("源探测失败，按兜底规格转码");
+                            break;
+                    }
+
+                    // 4) 设备端：协商值 vs 实际送链的 WAV（两者都有才算"已确认"）
+                    var dev = chain.DeviceOutput;
+                    var wav = chain.TranscodeWav;
+                    if (dev != null && wav != null)
+                    {
+                        confirmed = true;
+                        if (dev.Value.Rate != wav.Value.Rate)
+                        {
+                            causes.Add($"重采样 {wav.Value.Rate}→{dev.Value.Rate}hz");
+                        }
+
+                        if (chain.Device == DevicePath.Degraded)
+                        {
+                            causes.Add("设备端格式低于源，数值有损");
+                        }
+                        else if (chain.Device == DevicePath.Resampled)
+                        {
+                            causes.Add("设备端格式转换（非直通）");
+                        }
+                        else if (chain.Device == DevicePath.Lossless && dev.Value.Bits < wav.Value.Bits)
+                        {
+                            // 双保险：Lossless 判定说数值无损，但容器位深反而更低时仍要现形
+                            causes.Add($"位深转换 {wav.Value.Bits}→{dev.Value.Bits}bit");
+                        }
+                    }
+                    else
+                    {
+                        // 5) 播放过但设备协商值缺失（ASIO 无 OutputWaveFormat / 内核未回报）：
+                        //    不能假设直通，按"无法确认"处理，徽标转琥珀，宁可误报不可漏报。
+                        causes.Add("设备端格式未知，无法确认直通");
+                        confirmed = true;
+                    }
+                }
             }
 
             reason = string.Join(" · ", causes);
             return causes.Count == 0;
-        }
-
-        /// <summary>
-        /// 从格式描述串里解析采样率与位深，如 "44100hz / 16bit / 2声道" → (44100, 16)。
-        /// DSD 描述（"DSD64 / 2声道 1-bit DSD"）没有 hz，返回 false 交由调用方特殊处理。
-        /// </summary>
-        private static bool TryParseFormatText(string? text, out int sampleRate, out int bits)
-        {
-            sampleRate = 0;
-            bits = 0;
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                return false;
-            }
-
-            var rateMatch = System.Text.RegularExpressions.Regex.Match(
-                text, @"(\d+)\s*hz", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (rateMatch.Success)
-            {
-                int.TryParse(rateMatch.Groups[1].Value, out sampleRate);
-            }
-
-            var bitMatch = System.Text.RegularExpressions.Regex.Match(
-                text, @"(\d+)\s*bit", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-            if (bitMatch.Success)
-            {
-                int.TryParse(bitMatch.Groups[1].Value, out bits);
-            }
-
-            return sampleRate > 0;
         }
 
         /// <summary>按设备记忆：若开启且当前设备有已存配置档，则套用该设备的 DSP 配置（不碰音频字节流）。</summary>

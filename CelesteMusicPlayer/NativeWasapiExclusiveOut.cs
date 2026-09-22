@@ -69,6 +69,16 @@ namespace CelesteMusicPlayer
 
         public string? LastError { get; private set; }
         public string? ActualFormatDescription { get; private set; }
+
+        /// <summary>设备端协商结果（结构化）。Init 未成功时为 null。
+        /// 两条成功路径（源直通 / 同布局候选降级）下设备端格式都与源同布局 → 数值无损。</summary>
+        public AudioFormat? NegotiatedFormat { get; private set; }
+
+        /// <summary>设备端路径分类。成功即 Lossless（同布局直通）；失败保持 Unknown。</summary>
+        public DevicePath DevicePathKind { get; private set; } = DevicePath.Unknown;
+
+        /// <summary>设备端点容器格式名（协商接受的容器类型，仅展示）。</summary>
+        public string? DeviceEndpointName { get; private set; }
         public bool IsStarted { get; private set; }
 
         /// <summary>事件驱动缓冲大小（毫秒），须在 <see cref="Init"/> 之前设置。默认 100ms。
@@ -133,6 +143,10 @@ namespace CelesteMusicPlayer
                 _dstBlock = src.BlockAlign;
                 _direct = true;
                 ActualFormatDescription = src.SampleRate + " Hz / " + src.BitsPerSample + " bit(源直通" + (requireExactFormat ? "/DoP" : "") + ") / " + src.Channels + " ch";
+                // 结构化协商结果：设备按源格式（或同布局容器）直接吃下 → 源直通，数值无损。
+                NegotiatedFormat = new AudioFormat(src.SampleRate, src.BitsPerSample, src.Channels, src.Encoding == WaveFormatEncoding.IeeeFloat);
+                DevicePathKind = DevicePath.Lossless;
+                DeviceEndpointName = _kind.ToString();
                 StartupLog.Write(initLog + "  → 源直通成功 " + ActualFormatDescription + DescribePeriod() + (srcAlignDance ? "（含对齐dance）" : ""));
                 LastAlignDance = srcAlignDance;
                 FinishInit();
@@ -180,6 +194,10 @@ namespace CelesteMusicPlayer
                 _dstBlock = src.BlockAlign;
                 _direct = true; // 与源同布局 → 源字节整块直通（bit-perfect）
                 ActualFormatDescription = src.SampleRate + " Hz / " + src.BitsPerSample + " bit / " + src.Channels + " ch";
+                // 结构化协商结果：SameLayout 已保证容器与源同布局（率/位深/数值无损）→ Lossless。
+                NegotiatedFormat = new AudioFormat(src.SampleRate, src.BitsPerSample, src.Channels, src.Encoding == WaveFormatEncoding.IeeeFloat);
+                DevicePathKind = DevicePath.Lossless;
+                DeviceEndpointName = kind.ToString();
                 StartupLog.Write(initLog + "  → 候选降级 " + kind + " 成功 " + ActualFormatDescription + (LastAlignDance ? "（含对齐dance）" : ""));
                 FinishInit();
                 return true;

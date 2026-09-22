@@ -56,6 +56,16 @@ namespace CelesteMusicPlayer
 
         public string? ActualFormatDescription { get; private set; }
 
+        /// <summary>设备端协商结果（结构化）。Init 未成功时为 null。
+        /// 率=DLL 协商出的端点率；位深=端点容器位深（pcm24in32/pcm24=24、float32/pcm32=32、pcm16=16）。</summary>
+        public AudioFormat? NegotiatedFormat { get; private set; }
+
+        /// <summary>设备端路径分类：lossless 判定成立=Lossless，否则 Degraded（端点低于源，数值有损）。</summary>
+        public DevicePath DevicePathKind { get; private set; } = DevicePath.Unknown;
+
+        /// <summary>设备端点容器格式名（DLL 协商名的人话版，如 "PCM24-in-32"）。</summary>
+        public string? DeviceEndpointName { get; private set; }
+
         public bool LastAlignDance => false; // DLL 内部消化了对齐 dance，不向上暴露
 
         /// <summary>协商后的采样率（帧/秒）。Init 前为 0。</summary>
@@ -200,6 +210,11 @@ namespace CelesteMusicPlayer
             _rate = (int)st.SampleRate;
             _bufferFrames = st.BufferFrames;
             _endpointFormat = string.IsNullOrEmpty(st.Format) ? "?" : st.Format;
+            // 结构化协商结果（徽标判标志位，绝不反解析描述串：951796f 教训）：
+            // 端点容器位深与 lossless 判定都从 DLL 协商名直接得出，不猜。
+            NegotiatedFormat = new AudioFormat(_rate, EndpointBits(), _channels, _endpointFormat == "float32");
+            DevicePathKind = ComputeEndpointLossless() ? DevicePath.Lossless : DevicePath.Degraded;
+            DeviceEndpointName = EndpointFriendlyName();
             ActualFormatDescription = DescribeOutput(src);
 
             StartupLog.Write(string.Format(
@@ -418,27 +433,44 @@ namespace CelesteMusicPlayer
 
         // ---------- 描述 ----------
 
-        private string DescribeOutput(WaveFormat src)
+        /// <summary>DLL 协商用的端点格式名（wasapi_exclusive.cpp make_format 定名）→ 人话。
+        /// pcm24in32 = 24bit 装进 32bit 容器（WASAPI 设备最常见的 24bit 形态）；
+        /// pcm24 = 24bit 紧密排列。两者对 ≤24bit 源都数值无损（DLL 取整已修四舍五入）。</summary>
+        private string EndpointFriendlyName() => _endpointFormat switch
         {
-            // DLL 协商用的端点格式名（wasapi_exclusive.cpp 532-557 行定义）→ 人话。
-            // pcm24in32 = 24bit 装进 32bit 容器（WASAPI 设备最常见的 24bit 形态）；
-            // pcm24 = 24bit 紧密排列。两者对 ≤24bit 源都数值无损（DLL 取整已修四舍五入）。
-            string endpoint = _endpointFormat switch
-            {
-                "float32" => "float32",
-                "pcm24in32" => "PCM24-in-32",
-                "pcm24" => "PCM24",
-                "pcm32" => "PCM32",
-                "pcm16" => "PCM16",
-                _ => _endpointFormat,
-            };
-            // 数值无损判定：float32 端点无损承载 ≤24bit 整数与 float32 源；
-            // PCM 端点在与源位深一致（或更高）时同样无损（DLL 取整已修成四舍五入）。
-            bool lossless =
-                (_srcFloat && _endpointFormat == "float32")
+            "float32" => "float32",
+            "pcm24in32" => "PCM24-in-32",
+            "pcm24" => "PCM24",
+            "pcm32" => "PCM32",
+            "pcm16" => "PCM16",
+            _ => _endpointFormat,
+        };
+
+        /// <summary>端点容器位深（按 DLL 协商名；未知端点名按源位深保守展示，判定仍以 lossless 为准）。</summary>
+        private int EndpointBits() => _endpointFormat switch
+        {
+            "float32" => 32,
+            "pcm24in32" or "pcm24" => 24,
+            "pcm32" => 32,
+            "pcm16" => 16,
+            _ => _srcBits,
+        };
+
+        /// <summary>数值无损判定（结构化属性 <see cref="DevicePathKind"/> 与人话描述共用同一判定，杜绝两处口径漂移）：
+        /// float32 端点无损承载 ≤24bit 整数与 float32 源；
+        /// PCM 端点在与源位深一致（或更高）时同样无损（DLL 取整已修成四舍五入）。</summary>
+        private bool ComputeEndpointLossless()
+        {
+            return (_srcFloat && _endpointFormat == "float32")
                 || (!_srcFloat && _srcBits <= 24 && (_endpointFormat == "float32" || _endpointFormat == "pcm24in32" || _endpointFormat == "pcm24"))
                 || (!_srcFloat && _srcBits <= 16 && _endpointFormat == "pcm16")
                 || (!_srcFloat && _srcBits <= 32 && _endpointFormat == "pcm32");
+        }
+
+        private string DescribeOutput(WaveFormat src)
+        {
+            string endpoint = EndpointFriendlyName();
+            bool lossless = ComputeEndpointLossless();
             return string.Format("{0} Hz / {1}bit / {2}ch → 设备 {3}{4}",
                 src.SampleRate, _srcBits, _channels, endpoint,
                 lossless ? "（数值无损）" : "（设备端格式低于源，已降级）");

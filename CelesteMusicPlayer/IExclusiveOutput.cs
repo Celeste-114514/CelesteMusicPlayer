@@ -23,6 +23,19 @@ namespace CelesteMusicPlayer
         /// <summary>设备端实际输出格式描述（链路状态栏显示，口径必须诚实：降级要写明）。</summary>
         string? ActualFormatDescription { get; }
 
+        /// <summary>
+        /// 设备端协商结果（结构化）。Init 失败/未初始化时为 null。
+        /// 徽标与链路面板据此判定，绝不从 <see cref="ActualFormatDescription"/> 反解析数字
+        /// （2026-09-22 用户实测：描述串嵌源位深，正则从源段解析导致徽标谎报绿灯）。
+        /// </summary>
+        AudioFormat? NegotiatedFormat { get; }
+
+        /// <summary>设备端路径分类：源直通 / 数值无损 / 已降级 / 未知。</summary>
+        DevicePath DevicePathKind { get; }
+
+        /// <summary>设备端点容器格式名（如 "PCM24-in-32" / "float32" / "Pcm16"）。仅供链路面板展示。</summary>
+        string? DeviceEndpointName { get; }
+
         bool IsStarted { get; }
 
         /// <summary>事件驱动缓冲大小（毫秒），须在 <see cref="Init"/> 之前设置。</summary>
