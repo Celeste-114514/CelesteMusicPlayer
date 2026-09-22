@@ -13,9 +13,11 @@ namespace CelesteMusicPlayer
     ///         托管 feeder 线程只负责「读源 → 灌缓冲」，被 GC 冻住的间隙由
     ///         ring 里 ~500ms 存货吸收，不直接碰设备。
     ///
-    /// 数据精度链：源 PCM（16/24/32bit 整数或 float32）→ float32（2^n 缩放，精确可逆）
-    ///   → ring → 设备端点格式（DLL 按 FLOAT32→PCM24-in-32→PCM16→PCM32 协商，
-    ///   取整已改为四舍五入，24bit 往返无 ±1 LSB 误差）。数值无损，bit-perfect 成立。
+    /// 数据精度链：源 PCM（16/24/32bit 整数）→ float32（2^n 缩放，精确可逆）
+    ///   → ring → 设备端点容器（按源位深首选协商：16bit 源首选 pcm16、24bit 源首选
+    ///   pcm24in32，设备不支持才回落到 FLOAT32→PCM24-in-32→PCM16→PCM32 旧序；
+    ///   取整已改为四舍五入，24bit 往返无 ±1 LSB 误差）。样本值逐位一致，bit-perfect 成立。
+    /// 32bit 整数源不设首选：float 中间量仅 24 位精度，维持 auto + Degraded 诚实判定。
     /// </summary>
     internal sealed class EchoCoreOutput : IExclusiveOutput
     {
@@ -132,6 +134,17 @@ namespace CelesteMusicPlayer
             _srcBlockAlign = src.BlockAlign;
             _srcBits = src.BitsPerSample;
             _srcFloat = src.Encoding == WaveFormatEncoding.IeeeFloat;
+
+            // 首选端点容器：端点容器与源一致才谈得上"源直通"——16bit 源首选 pcm16，
+            // 不再被撑进 pcm24-in-32（2026-09-22 用户要求的字节直通改造；设备不支持时
+            // DLL 自动回落旧候选序，数值仍无损）。32bit 整数源不设首选（0=auto）：
+            // C#→DLL 的 float 中间量只有 24 位精度，设 pcm32 反而是谎报，
+            // 维持 auto 让链路判定据实显示 Degraded。
+            uint preferredFormat;
+            if (_srcFloat) preferredFormat = 1;            // float32 源 → float32 端点
+            else if (_srcBits == 16) preferredFormat = 2;  // 16bit → pcm16
+            else if (_srcBits == 24) preferredFormat = 3;  // 24bit → pcm24in32
+            else preferredFormat = 0;                      // auto（32bit 整数源等）
             if (src.Channels < 1 || src.Channels > 2)
             {
                 LastError = "ECHO 核心仅支持 1/2 声道独占（当前 " + src.Channels + "ch）。";
@@ -175,7 +188,7 @@ namespace CelesteMusicPlayer
             {
                 rc = EchoCoreAudio.celeste_audio_start((uint)src.SampleRate, (uint)_channels,
                     (uint)requestFrames, deviceId,
-                    prefillFrames > 0 ? prefill : null, (uint)prefillFrames, out handle);
+                    prefillFrames > 0 ? prefill : null, (uint)prefillFrames, preferredFormat, out handle);
             }
             catch (DllNotFoundException)
             {
@@ -217,12 +230,15 @@ namespace CelesteMusicPlayer
             DeviceEndpointName = EndpointFriendlyName();
             ActualFormatDescription = DescribeOutput(src);
 
+            // 首选容器命中/回落一并进日志：命中=端点容器=源容器（"源直通"的最硬证据）
+            string prefName = PreferredFormatName(preferredFormat);
+            bool prefHonored = preferredFormat == 0 || _endpointFormat == prefName;
             StartupLog.Write(string.Format(
-                "ECHO核心 协商成功 源={0}bit/{1}Hz/{2}ch → 设备 {3} Hz/{4} 缓冲{5}帧({6}ms) 容量{7}帧 | {8}",
+                "ECHO核心 协商成功 源={0}bit/{1}Hz/{2}ch → 设备 {3} Hz/{4} 缓冲{5}帧({6}ms) 容量{7}帧 | {8} 首选={9}{10}",
                 _srcBits, src.SampleRate, _channels,
                 _rate, _endpointFormat, _bufferFrames,
                 _rate > 0 ? _bufferFrames * 1000.0 / _rate : 0, st.CapacityFrames,
-                ActualFormatDescription));
+                ActualFormatDescription, prefName, prefHonored ? "（命中）" : "（设备不支持，回落）"));
             return true;
         }
 
@@ -432,6 +448,16 @@ namespace CelesteMusicPlayer
         }
 
         // ---------- 描述 ----------
+
+        /// <summary>首选容器的 ABI 名（与 celeste_bridge.cpp preferred_format_name 一致）。</summary>
+        private static string PreferredFormatName(uint f) => f switch
+        {
+            1 => "float32",
+            2 => "pcm16",
+            3 => "pcm24in32",
+            4 => "pcm32",
+            _ => "auto",
+        };
 
         /// <summary>DLL 协商用的端点格式名（wasapi_exclusive.cpp make_format 定名）→ 人话。
         /// pcm24in32 = 24bit 装进 32bit 容器（WASAPI 设备最常见的 24bit 形态）；

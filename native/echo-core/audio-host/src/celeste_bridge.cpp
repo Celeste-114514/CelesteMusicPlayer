@@ -14,8 +14,10 @@
 //
 // bit-perfect 说明：整条链路是 float32。16bit/24bit 整数 PCM 与 float32 之间的转换
 // 是精确可逆的（float32 有 24 位有效精度，24bit PCM 取值范围 ±2^23），无数值损失；
-// 设备格式按 ECHO 的顺序协商（IEEE_FLOAT → PCM24-in-32 → PCM16 → PCM32）。
-// 32bit 整数源请先在 C# 侧降级或改走其它输出路径（后续版本加格式偏好参数）。
+// 设备端点容器按「源位深首选 + ECHO 原候选序回落」协商（preferredFormat：
+// 0=auto 旧序 IEEE_FLOAT → PCM24-in-32 → PCM16 → PCM32；1=float32；2=pcm16；
+// 3=pcm24in32；4=pcm32），16bit 源不再被撑进 24in32 容器。
+// 32bit 整数源请勿设首选（C# 侧传 auto）：float 中间量只有 24 位精度，设 pcm32 反而是谎报。
 
 #include "wasapi_exclusive.h"
 #include "PcmRingAudioSource.h"
@@ -79,9 +81,20 @@ void celeste_notification_callback(void* userData, const wasapi_host_notificatio
                      notification->event, notification->code);
 }
 
+// 首选容器的 ABI 名（与 C# EchoCoreOutput.PreferredFormatName 一致，仅供日志）。
+const char* preferred_format_name(uint32_t preferredFormat) {
+    switch (preferredFormat) {
+        case 1: return "float32";
+        case 2: return "pcm16";
+        case 3: return "pcm24in32";
+        case 4: return "pcm32";
+        default: return "auto";
+    }
+}
+
 int start_engine(celeste_engine* engine, uint32_t sampleRate, uint32_t channels,
                  uint32_t requestedBufferFrames, const wchar_t* deviceId,
-                 const float* prefill, uint32_t prefillFrames)
+                 const float* prefill, uint32_t prefillFrames, uint32_t preferredFormat)
 {
     // 环形缓冲容量 = 一个设备周期 + 500ms 存货（吸收 GC 停顿/读源抖动）
     const int reserveFrames = static_cast<int>(
@@ -126,6 +139,7 @@ int start_engine(celeste_engine* engine, uint32_t sampleRate, uint32_t channels,
         sampleRate,
         channels,
         requestedBufferFrames,
+        preferredFormat, // 源位深首选端点容器（0=auto 旧候选序）
         celeste_render_callback,
         engine,
         celeste_notification_callback,
@@ -160,6 +174,14 @@ int start_engine(celeste_engine* engine, uint32_t sampleRate, uint32_t channels,
     std::snprintf(engine->endpointFormat, sizeof(engine->endpointFormat), "%s",
                   ready.format[0] != '\0' ? ready.format : "?");
 
+    // 首选容器命中/回落：selected==preferred = 源容器直通达成；否则设备不支持首选，
+    // 已按旧候选序落到更宽的容器（数值仍无损，判定由 C# 侧据实展示）。
+    const char* prefName = preferred_format_name(preferredFormat);
+    const int prefHonored = (preferredFormat == 0) || (std::strcmp(ready.format, prefName) == 0);
+    std::fprintf(stderr,
+                 "[celeste-audio-core] format preference: preferred=%s selected=%s (%s)\n",
+                 prefName, ready.format, prefHonored ? "honored" : "fallback");
+
     std::fprintf(stderr,
                  "[celeste-audio-core] exclusive started: rate=%u ch=%u bufferFrames=%d "
                  "capacityFrames=%d endpointFormat=%s hwRate=%u\n",
@@ -180,10 +202,14 @@ extern "C" {
 // deviceId：设备 ID 宽字符串（IMMDevice::GetId），空 = 默认渲染设备。
 // prefill/prefillFrames：起播预填的真实音频（≤一个周期，C# feeder 先读好），
 //   设备启动时首缓冲直接用它，起播即出声（不填静音）。
+// preferredFormat：源位深首选端点容器（0=auto 旧候选序 IEEE_FLOAT→PCM24-in-32→
+//   PCM16→PCM32；1=float32；2=pcm16；3=pcm24in32；4=pcm32）。设备不支持首选时
+//   DLL 自动回落到旧候选序（落到更宽容器，数值仍无损），绝不因此播放失败。
 __declspec(dllexport) int celeste_audio_start(uint32_t sampleRate, uint32_t channels,
                                               uint32_t requestedBufferFrames,
                                               const wchar_t* deviceId,
                                               const float* prefill, uint32_t prefillFrames,
+                                              uint32_t preferredFormat,
                                               void** outEngineHandle)
 {
     if (outEngineHandle == nullptr)
@@ -193,13 +219,15 @@ __declspec(dllexport) int celeste_audio_start(uint32_t sampleRate, uint32_t chan
         return -101;
     if (requestedBufferFrames == 0)
         return -102;
+    if (preferredFormat > 4)
+        return -104; // 合法值 0~4（编码见 preferred_format_name）
 
     auto* engine = new (std::nothrow) celeste_engine();
     if (engine == nullptr)
         return -103;
 
     const int rc = start_engine(engine, sampleRate, channels, requestedBufferFrames,
-                                deviceId, prefill, prefillFrames);
+                                deviceId, prefill, prefillFrames, preferredFormat);
     if (rc != 0)
     {
         delete engine;

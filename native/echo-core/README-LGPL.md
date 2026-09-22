@@ -54,4 +54,10 @@ ECHO 原项目自述许可为 LGPL-3.0（仓库根 `LICENSE`，GPL-3.0 §7 附�
   `wasapi_exclusive_start` 增加 `deviceId` 参数按设备 ID 精确选设备。
 - `convert_float_to_endpoint`：取整由向零截断改为四舍五入 + 对称 2^n 系数 +
   钳位，保证 16/24/32bit 整数 PCM 与 float32 互转的 bit-perfect（±1 LSB 修复）。
+- `celeste_bridge.cpp` / `wasapi_exclusive.cpp`：`celeste_audio_start` 与
+  `wasapi_exclusive_start` 增加 `preferredFormat` 参数（源位深首选端点容器：
+  0=auto 旧候选序 IEEE_FLOAT→PCM24-in-32→PCM16→PCM32；1=float32；2=pcm16；
+  3=pcm24in32；4=pcm32），候选序重构为「首选 + 旧序其余」，设备不支持首选时
+  自动回落，行为与旧序一致；16bit 源不再被撑进 pcm24-in-32 容器
+  （2026-09-22 用户要求的字节直通改造，内核改动已获用户授权）。
 - 删除 ECHO 原 Rust 侧的流媒体/歌单等与 Celeste 无关的部分（本目录只保留音频链路）。

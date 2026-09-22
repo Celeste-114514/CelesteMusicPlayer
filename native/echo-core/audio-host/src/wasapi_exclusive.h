@@ -58,6 +58,13 @@ void wasapi_exclusive_free_devices(wasapi_exclusive_device_info* devices);
 // deviceId：设备 ID（IMMDevice::GetId 的宽字符串）。非空时优先按 ID 精确匹配，
 // 匹配不到再回退 targetDeviceName / targetDeviceIndex；为空且 index<0 = 默认设备。
 // （Celeste 接入：C# 侧持有的是设备 ID，不是友好名称，同名/歧义名称会选错设备。）
+//
+// preferredFormat：首选端点容器（ABI 编码，C# 与 celeste_bridge.cpp 共用）：
+//   0 = auto（沿用旧候选序 FLOAT32 → PCM24-in-32 → PCM16 → PCM32）
+//   1 = float32    2 = pcm16    3 = pcm24in32    4 = pcm32
+// 非 0 时首选排候选序最前；设备不支持首选则自动回落到旧候选序（行为与旧版一致，
+// 绝不因首选失败而播放失败）。DoP 通道（wasapi_exclusive_start_dop）忽略本参数。
+// Celeste 接入改动（2026-09-22）：让 16bit 源拿到 pcm16 端点，不再被撑进 24in32 容器。
 int wasapi_exclusive_start(
     const char* targetDeviceName,
     int targetDeviceIndex,
@@ -65,6 +72,7 @@ int wasapi_exclusive_start(
     uint32_t sampleRate,
     uint32_t channels,
     uint32_t requestedBufferFrames,
+    uint32_t preferredFormat,
     wasapi_render_callback callback,
     void* userData,
     wasapi_host_notification_callback notificationCallback,

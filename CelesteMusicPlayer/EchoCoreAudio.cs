@@ -24,10 +24,11 @@ namespace CelesteMusicPlayer
         /// <param name="requestedBufferFrames">请求的设备缓冲帧数（DLL 按设备对齐规则调整）。</param>
         /// <param name="deviceId">设备 ID 宽字符串（IMMDevice::GetId），null/空 = 默认渲染设备。</param>
         /// <param name="prefillFrames">预填帧数（≤一个周期的真实音频，起播即出声）。</param>
+        /// <param name="preferredFormat">源位深首选端点容器：0=auto（旧候选序）、1=float32、2=pcm16、3=pcm24in32、4=pcm32；设备不支持时 DLL 自动回落旧候选序。</param>
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         public static extern int celeste_audio_start(uint sampleRate, uint channels, uint requestedBufferFrames,
             [MarshalAs(UnmanagedType.LPWStr)] string? deviceId,
-            float[]? prefill, uint prefillFrames, out IntPtr engineHandle);
+            float[]? prefill, uint prefillFrames, uint preferredFormat, out IntPtr engineHandle);
 
         /// <summary>feeder 推送交错 float PCM。环形缓冲满时阻塞（背压，stop 时返回 -3 中断）。</summary>
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]

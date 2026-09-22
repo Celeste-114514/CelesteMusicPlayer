@@ -912,11 +912,25 @@ static HRESULT initialize_exclusive_client(
     return S_OK;
 }
 
+// 首选端点容器（ABI 编码，C# 与 celeste_bridge.cpp 共用）：
+//   0=auto（沿用旧候选序）1=float32 2=pcm16 3=pcm24in32 4=pcm32。
+// 有效首选返回 1 并填 *out；auto/非法值返回 0（调用方按旧候选序走）。
+static int preferred_kind_from_abi(uint32_t preferredFormat, wasapi_sample_format* out) {
+    switch (preferredFormat) {
+        case 1: *out = WASAPI_FORMAT_FLOAT32; return 1;
+        case 2: *out = WASAPI_FORMAT_PCM16; return 1;
+        case 3: *out = WASAPI_FORMAT_PCM24_IN_32; return 1;
+        case 4: *out = WASAPI_FORMAT_PCM32; return 1;
+        default: return 0;
+    }
+}
+
 static HRESULT initialize_exclusive_client_for_render_mode(
     IMMDevice* device,
     uint32_t sampleRate,
     uint32_t channels,
     uint32_t requestedBufferFrames,
+    uint32_t preferredFormat,
     wasapi_render_mode renderMode,
     wasapi_format_desc* outFormat,
     IAudioClient** outClient,
@@ -938,10 +952,27 @@ static HRESULT initialize_exclusive_client_for_render_mode(
     *outBufferFrames = 0;
     memset(outFormat, 0, sizeof(*outFormat));
 
-    const wasapi_sample_format* kinds = renderMode == WASAPI_RENDER_DOP ? dopKinds : pcmKinds;
-    const size_t kindCount = renderMode == WASAPI_RENDER_DOP
-        ? sizeof(dopKinds) / sizeof(dopKinds[0])
-        : sizeof(pcmKinds) / sizeof(pcmKinds[0]);
+    /* 候选序：首选容器排最前，其余按旧序补齐——设备不支持首选时自然回落到旧行为。
+       DoP（DSD 直出）用自己的容器序，忽略首选：DSD 源不走容器协商。
+       Celeste 接入改动（2026-09-22）：preferredFormat 让 16bit 源拿到 pcm16 端点，
+       不再被撑进 pcm24-in-32 容器（用户要求的"源容器直通"）。 */
+    wasapi_sample_format kinds[8];
+    size_t kindCount = 0;
+    if (renderMode == WASAPI_RENDER_DOP) {
+        for (size_t i = 0; i < sizeof(dopKinds) / sizeof(dopKinds[0]); ++i) {
+            kinds[kindCount++] = dopKinds[i];
+        }
+    } else {
+        wasapi_sample_format preferred;
+        const int hasPreferred = preferred_kind_from_abi(preferredFormat, &preferred);
+        if (hasPreferred) {
+            kinds[kindCount++] = preferred;
+        }
+        for (size_t i = 0; i < sizeof(pcmKinds) / sizeof(pcmKinds[0]); ++i) {
+            if (hasPreferred && pcmKinds[i] == preferred) continue;
+            kinds[kindCount++] = pcmKinds[i];
+        }
+    }
     HRESULT lastUnsupported = AUDCLNT_E_UNSUPPORTED_FORMAT;
 
     for (size_t i = 0; i < kindCount; ++i) {
@@ -1210,6 +1241,7 @@ static int wasapi_exclusive_start_impl(
     uint32_t sampleRate,
     uint32_t channels,
     uint32_t requestedBufferFrames,
+    uint32_t preferredFormat,
     wasapi_render_callback callback,
     wasapi_dop_render_callback dopCallback,
     void* userData,
@@ -1266,6 +1298,7 @@ static int wasapi_exclusive_start_impl(
         sampleRate,
         channels,
         requestedBufferFrames,
+        preferredFormat,
         renderMode,
         &format,
         &audioClient,
@@ -1413,6 +1446,7 @@ int wasapi_exclusive_start(
     uint32_t sampleRate,
     uint32_t channels,
     uint32_t requestedBufferFrames,
+    uint32_t preferredFormat,
     wasapi_render_callback callback,
     void* userData,
     wasapi_host_notification_callback notificationCallback,
@@ -1428,6 +1462,7 @@ int wasapi_exclusive_start(
         sampleRate,
         channels,
         requestedBufferFrames,
+        preferredFormat,
         callback,
         NULL,
         userData,
@@ -1461,6 +1496,7 @@ int wasapi_exclusive_start_dop(
         sampleRate,
         channels,
         requestedBufferFrames,
+        0, // DoP：DSD 直出用自己的容器序，忽略首选
         NULL,
         callback,
         userData,
