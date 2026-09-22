@@ -10,6 +10,12 @@ namespace CelesteMusicPlayer
     /// 每容器帧：L/R 各 (bits/8) 字节小端；低 16bit=DSD 数据，第 3 字节=DoP 标记(0x05/0xFA 交替)，
     /// 24bit 时帧=6B；32bit 时帧=8B（第 4 字节=0 高 8 位填充，部分 DAC/KA13 认同 32bit DoP 容器）。
     ///
+    /// 位序（DoP 1.1 规范图 USB_DSDviaPCM_1v0.jpg 实证）：24bit 帧 MSB→LSB = [标记 8bit][t₀][t₁]…[t₁₅]，
+    /// 最老比特 t₀ 在 16bit 字段的 MSB（bit15）。小端 wire 布局 = [次 8bit 原样][老 8bit 原样][标记]，
+    /// **零位反转**——DSF 本就是 MSB-first，规范只要求两字节交换位置，不做任何逐位反转。
+    /// （2026-09-22 修：旧代码 Rev8+交换使 DAC 解出的流 = 每 16bit 组时间反转，实测音频误差 +3.1dB
+    /// ＞信号本身 = DSD 滋滋根因；规范图+音频域判决双证据见 .workbuddy/tmp/dop_verdict3.py）
+    ///
     /// 整曲封装进内存：render 只从内存顺序 memcpy，绝无欠载/并发填充；源尽补 0x69 静音；Seek 直接改偏移。
     /// </summary>
     internal sealed class DoPWaveSource : IWaveSourceProvider, IDisposable
@@ -123,7 +129,8 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>封装 whole 个原始 L,R,L,R… 交织字节为 DoP 容器帧；返回产出字节数。
-        /// 位序：DSF MSB-first → DoP 容器 LSB-first → 逐字节位反转。</summary>
+        /// 位序（DoP 1.1 规范图）：24bit 帧 MSB→LSB = [标记][t₀…t₁₅]，t₀=最老比特在 16bit 字段 MSB；
+        /// 小端 wire = [次字节原样][老字节原样][标记]，无位反转。</summary>
         private int EncodeBlock(byte[] raw, int whole, byte[] dopp, long startByte)
         {
             int fp = 0;
@@ -133,14 +140,14 @@ namespace CelesteMusicPlayer
             {
                 int i = f * 4;
                 byte m = ((fi + f) & 1) == 0 ? (byte)0x05 : (byte)0xFA;
-                // L 通道
-                dopp[fp++] = Rev8[raw[i]];      // 低字节
-                dopp[fp++] = Rev8[raw[i + 2]];  // 高字节
-                dopp[fp++] = m;                 // marker
+                // L 通道：raw[i]=老 8bit(t0..t7)、raw[i+2]=次 8bit(t8..t15)，均 MSB-first 原样
+                dopp[fp++] = raw[i + 2]; // 低字节 = 次 8bit 原样
+                dopp[fp++] = raw[i];     // 高字节 = 老 8bit 原样（t0 落在字段 MSB）
+                dopp[fp++] = m;          // marker
                 if (_bpF == 8) dopp[fp++] = 0;  // 32bit 高 8 位
                 // R 通道
-                dopp[fp++] = Rev8[raw[i + 1]];
-                dopp[fp++] = Rev8[raw[i + 3]];
+                dopp[fp++] = raw[i + 3];
+                dopp[fp++] = raw[i + 1];
                 dopp[fp++] = m;
                 if (_bpF == 8) dopp[fp++] = 0;
             }
@@ -226,16 +233,40 @@ namespace CelesteMusicPlayer
                 else break;
             }
 
-            if (total > 0 && _totalFrames > 0 && _diagMilestone < 4 && _framesRead >= _totalFrames * MilestoneFracs[_diagMilestone])
+            // 抽样诊断：按【真实进度】打标签（旧代码用名义 milestone 当标签，遇读游标突发领先时
+            // 会把 47% 标成 10%，2026-09-22 修）；同时做 marker 合法性自检——编码器按构造只产
+            // 0x05/0xFA，抽到其它值（如 21:40 会话出现的 0xAA）说明链路某处坏了 1 字节，大声报。
+            if (total > 0 && _totalFrames > 0 && _diagMilestone < 4)
             {
-                int t = Math.Min(12, total);
-                var sb = new System.Text.StringBuilder(36);
-                for (int i = 0; i < t; i++) sb.Append(buffer[offset + i].ToString("X2"));
-                StartupLog.Write(string.Format(
-                    "[DoP抽样{0}%] 进度={1:F1}/{2:F1}s 字节={3}",
-                    (int)(MilestoneFracs[_diagMilestone] * 100),
-                    (double)_framesRead / _frameRate, (double)_totalFrames / _frameRate, sb.ToString()));
-                _diagMilestone++;
+                int pct = (int)(_framesRead * 100 / _totalFrames);
+                if (pct >= (int)(MilestoneFracs[_diagMilestone] * 100))
+                {
+                    int t = Math.Min(12, total);
+                    var sb = new System.Text.StringBuilder(36);
+                    int badMarker = 0;
+                    byte badValue = 0;
+                    for (int i = 0; i < t; i++)
+                    {
+                        byte bv = buffer[offset + i];
+                        sb.Append(bv.ToString("X2"));
+                        // 6B 帧(24bit)/8B 帧(32bit) 的第 3 字节 = marker
+                        if (i % _bpF == 2 && bv != 0x05 && bv != 0xFA)
+                        {
+                            badMarker++;
+                            badValue = bv;
+                        }
+                    }
+
+                    StartupLog.Write(string.Format(
+                        "[DoP抽样 真实进度{0}%] 位置={1:F1}/{2:F1}s 帧={3} 字节={4}{5}",
+                        pct,
+                        (double)_framesRead / _frameRate, (double)_totalFrames / _frameRate,
+                        _framesRead, sb.ToString(),
+                        badMarker > 0
+                            ? " ⚠marker非法×" + badMarker + "(如0x" + badValue.ToString("X2") + ")—链路有字节损坏！"
+                            : " marker合法"));
+                    _diagMilestone++;
+                }
             }
 
             if (total < want)
@@ -293,24 +324,6 @@ namespace CelesteMusicPlayer
             try { _src.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DoPWaveSource.cs", caught); }
         }
 
-        private static readonly byte[] Rev8 = BuildRevTable();
         private static readonly double[] MilestoneFracs = { 0.10, 0.40, 0.70, 0.99 };
-        private static byte[] BuildRevTable()
-        {
-            var t = new byte[256];
-            for (int i = 0; i < 256; i++)
-            {
-                byte b = (byte)i, r = 0;
-                for (int k = 0; k < 8; k++)
-                {
-                    r = (byte)((r << 1) | (b & 1));
-                    b >>= 1;
-                }
-
-                t[i] = r;
-            }
-
-            return t;
-        }
     }
 }
