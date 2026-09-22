@@ -379,9 +379,12 @@ namespace CelesteMusicPlayer
         private const int WaveStreamReadBufferBytes = 8 * 1024 * 1024;
 
         /// <summary>打开 WAV 源。
-        /// 小文件（≤ WaveWholeFileInMemoryMaxBytes）：整体读入内存后返回其 WaveFileReader，
+        /// 小文件（≤ WaveWholeFileInMemoryMaxBytes）：整体读入【非托管内存】后返回其 WaveFileReader，
         ///   使 render 实时线程只从内存读、磁盘 I/O 移到播放前/预载时 —— 用于根治低质量 PCM 卡顿
         ///   （此前 render 每填满一轮 WASAPI 缓冲都在实时线程内同步读盘：SeamlessWaveProvider.Read→WaveFileReader.Read）。
+        ///   2026-09-22 C2：整读目标从 managed byte[] 换成 Marshal.AllocHGlobal（见
+        ///   <see cref="UnmanagedMemoryFileStream"/>）——旧做法整首落 LOH，两首常驻 ~384MB，
+        ///   gen2/LOH 回收 STW 冻渲染线程 = PCM 卡顿/内存暴涨根因；字节仍一次性驻留但 GC 完全看不见。
         /// 大文件：改用带 8MB 缓冲的 FileStream 顺序流，内存占用为常量。
         ///   【内存暴涨修复】1 小时立体声 16bit/44.1kHz 的解码 WAV 约 635MB，24bit/高码率更大。
         ///   旧实现无条件 File.ReadAllBytes 整段入内存；且无缝预载（PrepareNext）会再加载「下一首」一整份，
@@ -400,9 +403,8 @@ namespace CelesteMusicPlayer
             bool wholeInMemory = size > 0 && size <= WaveWholeFileInMemoryMaxBytes && HasEnoughMemoryForWholeFile();
             if (wholeInMemory)
             {
-                byte[] data = File.ReadAllBytes(path);
-                var ms = new MemoryStream(data, writable: false);
-                StartupLog.Write(string.Format("[读源] 整读内存 {0:F1}MB ← {1}",
+                var ms = UnmanagedMemoryFileStream.Open(path);
+                StartupLog.Write(string.Format("[读源] 整读非托管内存 {0:F1}MB ← {1}",
                     size / (1024.0 * 1024.0), Path.GetFileName(path)));
                 return new WaveFileReader(ms);
             }
