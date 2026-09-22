@@ -31,6 +31,20 @@ namespace CelesteMusicPlayer
         // 且不依赖 ACM（AudioFileReader 读 24bit 等需 ACM，缺 driver 会抛 "NoDriver calling acmFormatSuggest"）。
         private WaveFileReader? _waveFile;
         private IWavePlayer? _output; // WasapiOut 或 AsioOut
+        // ---------- ASIO STA 宿主（2026-09-23）----------
+        // ASIO 驱动 COM 铁律：FiiO ASIO Driver 这类 Apartment 线程模型的组件，
+        // 激活（CoCreateInstance）线程必须是 STA。NAudio AsioOut 的构造函数
+        // 就 Activator.CreateInstance 激活驱动 COM（GetAsioDriverByName），
+        // 而播放链路全程 ConfigureAwait(false)，构造/Init/Play 实际都跑在
+        // 线程池（MTA）→ 必报 "Unable to instantiate ASIO. Check if STAThread is set"。
+        // 解法：常驻一条 STA 专线线程，AsioOut 全生命周期（构造/Init/Play/Stop/Dispose）
+        // 都 post 到该线程串行执行；空闲时抽干 STA 消息队列
+        // （COM 跨单元封送到本线程的调用、部分驱动的窗口消息都靠消息泵递送）。
+        private System.Threading.Thread? _asioThread;
+        private readonly object _asioLock = new();
+        private readonly BlockingCollection<AsioJob?> _asioQueue = new(); // null = 毒丸（请求关停）
+        private volatile bool _asioHostShutdown;
+        private readonly System.Threading.ManualResetEventSlim _asioThreadStarted = new(false);
         private SeamlessWaveProvider? _seamless; // NAudio 输出（共享/ASIO）的无缝续接源（当前+下一首）
         private double[]? _eqGains; // (旧) 10 段 EQ 增益(dB)，独立 EQ 窗口用
         private EqCurveState? _eqCurve; // 动态 EQ 曲线状态（DSP 面板用）
@@ -838,6 +852,185 @@ namespace CelesteMusicPlayer
             }
         }
 
+        // ---------- ASIO STA 宿主实现 ----------
+
+        /// <summary>post 到 STA 宿主线程的工作项：异常原样带回调用线程，保留上层重试/错误路径。</summary>
+        private sealed class AsioJob
+        {
+            public required Func<object?> Work;
+            public object? Result;
+            public Exception? Error;
+            public readonly System.Threading.ManualResetEventSlim Done = new(false);
+        }
+
+        /// <summary>确保 ASIO STA 宿主线程已就绪（幂等）；首次调用阻塞到线程进入 STA 消息循环。</summary>
+        private void EnsureAsioThread()
+        {
+            if (_asioThread != null) return;
+            lock (_asioLock)
+            {
+                if (_asioThread != null) return;
+                _asioThreadStarted.Reset();
+                _asioHostShutdown = false;
+                var t = new System.Threading.Thread(AsioThreadMain)
+                {
+                    IsBackground = true,
+                    Name = "ASIO STA Host",
+                };
+                try
+                {
+                    if (!t.TrySetApartmentState(System.Threading.ApartmentState.STA))
+                    {
+                        throw new InvalidOperationException("TrySetApartmentState(STA) 返回 false，ASIO 驱动无法激活。");
+                    }
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught);
+                    throw new InvalidOperationException("无法把 ASIO 宿主线程设为 STA，ASIO 驱动无法激活。", caught);
+                }
+                _asioThread = t;
+                t.Start();
+                // 等线程真正进入循环再放行：保证之后的 COM 激活一定落在这个 STA 上
+                if (!_asioThreadStarted.Wait(System.TimeSpan.FromSeconds(5)))
+                {
+                    throw new TimeoutException("ASIO STA 宿主线程 5s 内未就绪。");
+                }
+            }
+        }
+
+        /// <summary>STA 宿主线程主循环：取活执行，空闲抽干消息队列（COM STA 没有消息泵会冻住跨单元调用/驱动回调）。</summary>
+        private void AsioThreadMain()
+        {
+            _asioThreadStarted.Set();
+            var idlePoll = System.TimeSpan.FromMilliseconds(50); // 50ms 空转：抽消息及时，开销可忽略
+            while (!_asioHostShutdown)
+            {
+                try
+                {
+                    if (_asioQueue.TryTake(out AsioJob? job, idlePoll))
+                    {
+                        if (job == null) break; // 毒丸：请求关停
+                        try
+                        {
+                            job.Result = job.Work();
+                        }
+                        catch (Exception ex)
+                        {
+                            job.Error = ex; // 原样带回，不吞
+                        }
+                        finally
+                        {
+                            job.Done.Set();
+                        }
+                    }
+                    PumpStaMessages();
+                }
+                catch (Exception caught) when (caught is System.ObjectDisposedException or System.InvalidOperationException)
+                {
+                    // 队列被外部 Dispose（当前代码不会）：退出循环，宿主线程寿终
+                    break;
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught);
+                }
+            }
+        }
+
+        /// <summary>是否正处在 STA 宿主线程上（防自投递自等待的死锁）。</summary>
+        private bool IsOnAsioThread => _asioThread != null && System.Threading.Thread.CurrentThread == _asioThread;
+
+        /// <summary>把工作 post 到 ASIO STA 宿主线程并等待完成；工作异常原样回抛（栈信息保留），超时抛 TimeoutException。</summary>
+        private object? AsioPost(Func<object?> work, string what, int timeoutMs)
+        {
+            // 就在 STA 宿主线程上：直接执行（语义等价，且根除自投递死锁）
+            if (IsOnAsioThread) return work();
+            EnsureAsioThread();
+            var job = new AsioJob { Work = work };
+            _asioQueue.Add(job);
+            if (!job.Done.Wait(timeoutMs))
+            {
+                throw new TimeoutException($"ASIO STA 线程未在 {timeoutMs}ms 内完成「{what}」（驱动可能卡死）");
+            }
+            if (job.Error != null)
+            {
+                System.Runtime.ExceptionServices.ExceptionDispatchInfo.Capture(job.Error).Throw();
+            }
+            return job.Result;
+        }
+
+        private T? AsioInvoke<T>(Func<T> work, string what, int timeoutMs = 10000) where T : class
+            => (T?)AsioPost(() => (object?)work(), what, timeoutMs);
+
+        private void AsioInvokeVoid(Action work, string what, int timeoutMs = 10000) => _ = AsioPost(() => { work(); return (object?)null; }, what, timeoutMs);
+
+        /// <summary>按模式销毁 NAudio 输出实例：ASIO 必须回 STA 宿主线程执行（COM 家线程 + 防终结器线程碰驱动），内部吞异常。</summary>
+        private void DisposeOutputQuiet(OutputMode mode)
+        {
+            var outp = _output;
+            if (outp == null) return;
+            try
+            {
+                if (mode == OutputMode.Asio) AsioInvokeVoid(() => outp.Dispose(), "AsioOut.Dispose");
+                else outp.Dispose();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught);
+            }
+        }
+
+        /// <summary>抽干当前 STA 线程的 Windows 消息队列：COM 跨单元封送到本线程的调用、驱动自己的窗口消息都靠它递送。</summary>
+        private static void PumpStaMessages()
+        {
+            while (PeekMessage(out TagMSG msg, IntPtr.Zero, 0, 0, PM_REMOVE))
+            {
+                TranslateMessage(ref msg);
+                DispatchMessage(ref msg);
+            }
+        }
+
+        private const uint PM_REMOVE = 1;
+
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        private struct TagMSG
+        {
+            public IntPtr hwnd;
+            public uint message;
+            public IntPtr wParam;
+            public IntPtr lParam;
+            public uint time;
+            public int ptX;
+            public int ptY;
+        }
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool PeekMessage(out TagMSG lpMsg, IntPtr hWnd, uint wMsgFilterMin, uint wMsgFilterMax, uint wRemoveMsg);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        private static extern bool TranslateMessage(ref TagMSG lpMsg);
+
+        [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Auto)]
+        private static extern IntPtr DispatchMessage(ref TagMSG lpMsg);
+
+        /// <summary>关停 ASIO STA 宿主线程（仅 Dispose 调用；播放中途的 Cleanup 不杀线程，避免驱动反复加载/卸载）。</summary>
+        private void ShutdownAsioHost()
+        {
+            var t = _asioThread;
+            if (t == null) return;
+            _asioHostShutdown = true;
+            try { _asioQueue.Add(null); } // 毒丸叫醒阻塞中的宿主
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+            if (!t.Join(System.TimeSpan.FromSeconds(5)))
+            {
+                StartupLog.Write("[ASIO] STA 宿主线程 5s 未退出（驱动 Dispose 可能卡死）；后台线程不阻塞应用退出");
+            }
+            _asioThread = null;
+        }
+
         /// <summary>初始化 NAudio 输出（共享/ASIO）。共享模式下 WASAPI 在快速 Stop→重建（如自动切歌）时，
         /// 旧的 IAudioClient 尚未被 COM 完全释放，紧接着的 AudioClient.Initialize 会偶发返回
         /// E_INVALIDARG（"Value does not fall within the expected range"），表现为"自动切歌必失败、手动重试才成功"。
@@ -849,7 +1042,16 @@ namespace CelesteMusicPlayer
             {
                 try
                 {
-                    _output!.Init(_dspProvider!);
+                    if (mode == OutputMode.Asio)
+                    {
+                        // ASIO：Init 里一排 COM 调用（Capabilities/SetSampleRate/CreateBuffers…），
+                        // 驱动 COM 对象的"家"是 STA 宿主线程，必须回该线程执行。
+                        AsioInvokeVoid(() => _output!.Init(_dspProvider!), "AsioOut.Init");
+                    }
+                    else
+                    {
+                        _output!.Init(_dspProvider!);
+                    }
                     return;
                 }
                 catch (Exception ex)
@@ -861,16 +1063,16 @@ namespace CelesteMusicPlayer
                         throw; // 重试耗尽，向上抛出（由 PlayWavAsync 的 catch 记录 LastError）
                     }
 
-                    // 释放失败的输出实例，等待旧 WASAPI 会话释放后再重建
-                    try { _output!.Dispose(); } catch (Exception d) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", d); }
+                    // 释放失败的输出实例（ASIO 回 STA 线程 Dispose），等待旧 WASAPI 会话释放后再重建
+                    DisposeOutputQuiet(mode);
                     _output = null;
                     // 短暂等待让底层 AudioClient 完全释放（COM 释放 + WASAPI 内部清理）
                     System.Threading.Thread.Sleep(80);
-                    // 重建输出实例
+                    // 重建输出实例（ASIO 的构造含驱动 COM 激活，同样必须落在 STA 宿主线程）
                     _output = mode switch
                     {
                         OutputMode.WasapiShared => CreateWasapiOut(AudioClientShareMode.Shared, deviceIdentifier, OutputBufferMs),
-                        OutputMode.Asio => new AsioOut(deviceIdentifier ?? (AsioOut.GetDriverNames().Length > 0 ? AsioOut.GetDriverNames()[0] : string.Empty)),
+                        OutputMode.Asio => AsioInvoke(() => new AsioOut(deviceIdentifier ?? (AsioOut.GetDriverNames().Length > 0 ? AsioOut.GetDriverNames()[0] : string.Empty)), "重试重建 AsioOut"),
                         _ => CreateWasapiOut(AudioClientShareMode.Shared, deviceIdentifier, OutputBufferMs),
                     };
                     if (_output == null)
@@ -1004,7 +1206,19 @@ namespace CelesteMusicPlayer
                         }
 
                         _device = null; // ASIO 无统一端点音量，靠声卡硬件旋钮
-                        _output = new AsioOut(driver);
+                        // 构造即激活驱动 COM（GetAsioDriverByName），必须落在 STA 专线线程；
+                        // 在 MTA 上必报 "Unable to instantiate ASIO. Check if STAThread is set"。
+                        _output = AsioInvoke(
+                            () =>
+                            {
+                                var o = new AsioOut(driver);
+                                StartupLog.Write(string.Format(
+                                    "[ASIO] 驱动已在 STA 宿主线程激活：{0}（宿主持久线程={1} 套间={2}）",
+                                    driver, Environment.CurrentManagedThreadId,
+                                    System.Threading.Thread.CurrentThread.GetApartmentState()));
+                                return o;
+                            },
+                            "构造 AsioOut(" + driver + ")");
                         OutputDeviceName = "ASIO: " + driver;
                         break;
 
@@ -1082,7 +1296,10 @@ namespace CelesteMusicPlayer
                     CaptureActualOutputFormat();
                     StartupLog.Write("[DSP] HiFi输出（NAudio）挂载统一 DSP 链（内部短路直通按需启用）");
                     _output.PlaybackStopped += Output_PlaybackStopped;
-                    _output.Play();
+                    if (mode == OutputMode.Asio)
+                        AsioInvokeVoid(() => _output!.Play(), "AsioOut.Play"); // driver.Start() 是 COM 调用，回 STA 宿主线程执行
+                    else
+                        _output!.Play();
                 }
 
                 _isPlaying = true;
@@ -1755,7 +1972,10 @@ namespace CelesteMusicPlayer
                         }
                         else
                         {
-                            _output?.Stop(); // 触发 Output_PlaybackStopped（内含 PlaybackStopped）
+                            if (_activeMode == OutputMode.Asio)
+                                AsioInvokeVoid(() => _output!.Stop(), "AsioOut.Stop(播完重建)"); // driver.Stop() 是 COM 调用
+                            else
+                                _output?.Stop(); // 触发 Output_PlaybackStopped（内含 PlaybackStopped）
                         }
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
@@ -1770,16 +1990,22 @@ namespace CelesteMusicPlayer
             _positionTimer.Stop();
             if (_output != null)
             {
+                var outp = _output;
                 _output.PlaybackStopped -= Output_PlaybackStopped;
+                bool asio = _activeMode == OutputMode.Asio;
                 try
                 {
-                    _output.Stop();
+                    if (asio) AsioInvokeVoid(() => outp.Stop(), "AsioOut.Stop"); // driver.Stop() 是 COM 调用
+                    else outp.Stop();
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
                 try
                 {
-                    _output.Dispose();
+                    // ASIO 的 Dispose 释放驱动 COM（DisposeBuffers/ReleaseComAsioDriver）且带终结器：
+                    // 决不能落到 GC 终结器线程上执行，必须回 STA 宿主线程。
+                    if (asio) AsioInvokeVoid(() => outp.Dispose(), "AsioOut.Dispose");
+                    else outp.Dispose();
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
             }
@@ -1806,10 +2032,14 @@ namespace CelesteMusicPlayer
         {
             if (_output != null)
             {
+                var outp = _output;
                 _output.PlaybackStopped -= Output_PlaybackStopped;
+                bool asio = _activeMode == OutputMode.Asio;
                 try
                 {
-                    _output.Dispose();
+                    // 同 StopCore：ASIO 的 Dispose 是驱动 COM 释放，必须回 STA 宿主线程
+                    if (asio) AsioInvokeVoid(() => outp.Dispose(), "AsioOut.Dispose(cleanup)");
+                    else outp.Dispose();
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
@@ -1835,6 +2065,10 @@ namespace CelesteMusicPlayer
             _isPlaying = false;
         }
 
-        public void Dispose() => Cleanup();
+        public void Dispose()
+        {
+            Cleanup(); // 先把 AsioOut/驱动在 STA 宿主线程上释放干净
+            ShutdownAsioHost(); // 再关停宿主线程（仅此处关停；播放中途 Cleanup 保留线程，避免驱动反复加载）
+        }
     }
 }
