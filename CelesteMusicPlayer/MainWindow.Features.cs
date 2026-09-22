@@ -2837,18 +2837,21 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 综合判定整条链路是否 bit-perfect（2026-09-12 修）。
+        /// 综合判定整条链路是否 bit-perfect（2026-09-12 修；2026-09-22 补降级标记与共享模式前置）。
         ///
         /// 旧实现只看 DSP 开关，导致「共享模式 + 系统 48khz + 源 44.1khz」这种必然被系统混音器
         /// 重采样的情形仍显示 bit-perfect —— 那行文案自己都写着「需结合输出格式确认」却没做。
         ///
         /// 现在的判定（任一命中即非 bit-perfect）：
         ///   1) 任一 DSP 生效（EQ / 声道平衡 / 限幅 / ReplayGain）
-        ///   2) 输出采样率 ≠ 源采样率 → 发生重采样
-        ///   3) 输出位深 ≠ 源位深 → 发生位深转换
-        ///   4) 共享模式（系统混音器介入，即使格式一致也不保证逐字节直通）
+        ///   2) 共享模式（系统混音器介入，即使格式一致也不保证逐字节直通；设置层已知，与是否在播无关）
+        ///   3) 输出采样率 ≠ 源采样率 → 发生重采样
+        ///   4) 输出位深 ≠ 源位深 → 发生位深转换
+        ///   5) 输出描述带「已降级」标记（链路自己判定端点格式低于源）→ 降级
+        ///   6) 转码降级：探测到的源文件规格 vs 实际送链路的 WAV 规格（只在源被做"低"了时算）
         /// DSD 源走 DoP/原生封装，输出格式是承载用的 PCM，不做 PCM 重采样比对。
-        /// 输出格式尚未捕获（未播放）时只按 DSP 判定，confirmed=false，UI 需标注「待播放确认」。
+        /// 输出格式尚未捕获（未播放）时只按 DSP/共享模式判定，confirmed=false，UI 标注「待播放确认」。
+        /// 输出格式已捕获但解析不出率/位深（端点 "?" 等）时按"无法确认"处理，绝不假设直通。
         /// 只读状态用于显示，不改动任何音频字节流。
         /// </summary>
         private bool EvaluateBitPerfectChain(out string reason, out bool confirmed)
@@ -2868,11 +2871,27 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            // 2)3) 源格式与输出格式比对
+            // 2) 共享模式：Windows 音频引擎介入，格式即使一致也不保证直通。
+            //    这是设置层就已知的事实，不依赖播放中的输出格式捕获，未播放时也要判。
+            if (!IsHiFiModeSelected())
+            {
+                causes.Add("系统混音器（共享模式）");
+            }
+
+            // 3)4)5)6) 源格式与输出格式比对
             string? src = _audioEngine?.SourceFormatDescription;
             string? outp = _audioEngine?.ActualOutputFormat;
             bool isDsd = !string.IsNullOrWhiteSpace(src)
                 && src.IndexOf("DSD", StringComparison.OrdinalIgnoreCase) >= 0;
+
+            // 输出链路自带的降级标记（EchoCoreOutput.DescribeOutput 生成）：
+            // 描述串里嵌的是源的率/位深，只靠下面的正则比对会被源的参数蒙混过关
+            // （2026-09-22 用户实测：24bit/96kHz 显示"设备 ?（设备端格式低于源，已降级）"，
+            // 而徽标从源那段解析出 24bit 与源相等 → 绿灯谎报）。链路自己判定无损才消这条。
+            if (!string.IsNullOrWhiteSpace(outp) && outp.Contains("已降级"))
+            {
+                causes.Add("设备端格式低于源（输出链路已降级）");
+            }
 
             if (isDsd)
             {
@@ -2892,13 +2911,7 @@ namespace CelesteMusicPlayer
                     causes.Add($"位深转换 {srcBits}→{outBits}bit");
                 }
 
-                // 4) 共享模式：Windows 音频引擎介入，格式即使一致也不保证直通
-                if (!IsHiFiModeSelected())
-                {
-                    causes.Add("系统混音器（共享模式）");
-                }
-
-                // 5) 转码降级：探测到的源文件规格 vs 实际送链路的 WAV 规格。
+                // 转码降级：探测到的源文件规格 vs 实际送链路的 WAV 规格。
                 //    只在源被做"低"了才算（位深变小 / 采样率变低）；共享模式主动用 f32 + 设备率不在此列。
                 //    专门抓"探测失败回退 16bit、设备不认时的重采样回退"造成的静默降级——
                 //    没有这一条，降级后的 WAV 与输出格式一致，徽标会谎报 bit-perfect（2026-09-21 用户实测）。
@@ -2914,6 +2927,12 @@ namespace CelesteMusicPlayer
                         causes.Add($"转码重采样 {origRate}→{srcRate}hz");
                     }
                 }
+            }
+            else if (!string.IsNullOrWhiteSpace(outp))
+            {
+                // 输出格式已捕获但解析不出率/位深（端点格式未知等）：
+                // 不能假设直通，按"无法确认"处理，徽标转琥珀，宁可误报不可漏报。
+                causes.Add("输出格式无法识别（" + outp + "）");
             }
 
             reason = string.Join(" · ", causes);
@@ -3019,8 +3038,10 @@ namespace CelesteMusicPlayer
                 var green = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 46, 160, 67));
                 var amber = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 214, 148, 45));
                 MainBitPerfectBadge.Background = pure ? green : amber;
+                // confirmed=false = 输出格式还没捕获（未播放）或无法识别：绿灯也要注明"待播放确认"，
+                // 不能让人以为已经核实过（2026-09-22 用户实测徽标谎报后收紧口径）。
                 MainBitPerfectText.Text = pure
-                    ? "✓ bit-perfect · 直通"
+                    ? (confirmed ? "✓ bit-perfect · 直通" : "✓ bit-perfect · 待播放确认")
                     : (confirmed ? "非 bit-perfect · " + reason : "待播放确认 · " + reason);
                 MainBitPerfectText.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 255, 255, 255));
             }

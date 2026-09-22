@@ -152,6 +152,14 @@ int start_engine(celeste_engine* engine, uint32_t sampleRate, uint32_t channels,
     engine->channels = ready.channels > 0 ? ready.channels : channels;
     engine->started.store(true, std::memory_order_release);
 
+    // 设备端点格式名透出给统计口子（C# 组链路描述 + bit-perfect 徽标用）。
+    // 之前只打进 stderr 日志、endpointFormat 永远是空 → stats 返回 "?" →
+    // C# 描述显示"设备 ?"且误判"已降级"，徽标还被源的位深蒙混过关照样亮绿
+    // （2026-09-22 用户实测 24bit/96kHz）。wasapi_exclusive_start 成功路径
+    // 必填 ready.format（wasapi_exclusive.cpp result=0 前），空值只可能是防御。
+    std::snprintf(engine->endpointFormat, sizeof(engine->endpointFormat), "%s",
+                  ready.format[0] != '\0' ? ready.format : "?");
+
     std::fprintf(stderr,
                  "[celeste-audio-core] exclusive started: rate=%u ch=%u bufferFrames=%d "
                  "capacityFrames=%d endpointFormat=%s hwRate=%u\n",

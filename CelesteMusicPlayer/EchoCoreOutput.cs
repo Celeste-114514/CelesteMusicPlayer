@@ -420,19 +420,23 @@ namespace CelesteMusicPlayer
 
         private string DescribeOutput(WaveFormat src)
         {
+            // DLL 协商用的端点格式名（wasapi_exclusive.cpp 532-557 行定义）→ 人话。
+            // pcm24in32 = 24bit 装进 32bit 容器（WASAPI 设备最常见的 24bit 形态）；
+            // pcm24 = 24bit 紧密排列。两者对 ≤24bit 源都数值无损（DLL 取整已修四舍五入）。
             string endpoint = _endpointFormat switch
             {
                 "float32" => "float32",
-                "pcm24" => "PCM24-in-32",
-                "pcm16" => "PCM16",
+                "pcm24in32" => "PCM24-in-32",
+                "pcm24" => "PCM24",
                 "pcm32" => "PCM32",
+                "pcm16" => "PCM16",
                 _ => _endpointFormat,
             };
             // 数值无损判定：float32 端点无损承载 ≤24bit 整数与 float32 源；
             // PCM 端点在与源位深一致（或更高）时同样无损（DLL 取整已修成四舍五入）。
             bool lossless =
                 (_srcFloat && _endpointFormat == "float32")
-                || (!_srcFloat && _srcBits <= 24 && (_endpointFormat == "float32" || _endpointFormat == "pcm24"))
+                || (!_srcFloat && _srcBits <= 24 && (_endpointFormat == "float32" || _endpointFormat == "pcm24in32" || _endpointFormat == "pcm24"))
                 || (!_srcFloat && _srcBits <= 16 && _endpointFormat == "pcm16")
                 || (!_srcFloat && _srcBits <= 32 && _endpointFormat == "pcm32");
             return string.Format("{0} Hz / {1}bit / {2}ch → 设备 {3}{4}",
