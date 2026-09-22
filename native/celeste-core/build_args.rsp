@@ -1,0 +1,17 @@
+/nologo
+/EHsc
+/std:c++17
+/O2
+/MD
+/W3
+/utf-8
+/DNOMINMAX
+/D_CRT_SECURE_NO_WARNINGS
+/I"C:/Program Files\Microsoft Visual Studio\18\Community\VC\Tools\MSVC\14.52.36725/include"
+/I"C:/Program Files (x86)\Windows Kits\10/Include/10.0.28000.0/ucrt"
+/I"C:/Program Files (x86)\Windows Kits\10/Include/10.0.28000.0/um"
+/I"C:/Program Files (x86)\Windows Kits\10/Include/10.0.28000.0/shared"
+/Isrc
+src/celeste_core.cpp
+/Fobuild/celeste_core.obj
+/c

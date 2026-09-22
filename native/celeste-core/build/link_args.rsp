@@ -1,0 +1,15 @@
+/NOLOGO
+/DLL
+/OUT:build/celeste_core.dll
+build/celeste_core.obj
+build/libs/msvcrt.lib
+build/libs/msvcmrt.lib
+build/libs/vcruntime.lib
+build/libs/ucrt.lib
+build/libs/kernel32.lib
+build/libs/user32.lib
+build/libs/advapi32.lib
+build/libs/ole32.lib
+build/libs/avrt.lib
+build/libs/winmm.lib
+build/libs/uuid.lib

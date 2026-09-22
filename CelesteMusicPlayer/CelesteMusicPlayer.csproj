@@ -55,6 +55,11 @@
              DLL 本体随仓库分发（可用 build.bat 重新生成）；加 Exists 条件防止文件缺失时构建直接失败，
              缺失时只是 echo 项不可用（选中会得到友好错误并回退自研）。 -->
         <Content Include="..\native\echo-core\build\celeste_audio_core.dll" Link="celeste_audio_core.dll" Condition="Exists('..\native\echo-core\build\celeste_audio_core.dll')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <!-- 自研原生内核音频 DLL（独占输出内核三选一的 "native2" 项；MIT，源码见 native/celeste-core/，
+             用 build.sh 重新生成。仅 x64 构建随包；x86/ARM64 下选中 native2 会回退自研。
+             DLL 本体随仓库分发；加 Exists 条件防止文件缺失时构建直接失败，
+             缺失时只是 native2 项不可用（选中会得到友好错误并回退自研）。 -->
+        <Content Include="..\native\celeste-core\build\celeste_core.dll" Link="celeste_core.dll" Condition="Exists('..\native\celeste-core\build\celeste_core.dll')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- SACD 解码外部工具 sacd_extract.exe：不随包发布，用户自行放到 Assets\sacd\ 后构建自动带上（通配空目录不报错） -->
     <Content Include="Assets\sacd\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\AppIcon.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

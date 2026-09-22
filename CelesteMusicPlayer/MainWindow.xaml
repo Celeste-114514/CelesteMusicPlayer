@@ -6801,11 +6801,12 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <!-- 独占输出内核（A/B 试验田：自研托管渲染线程 vs ECHO C++ 原生渲染线程） -->
+                    <!-- 独占输出内核（三选一试验田：自研托管渲染线程 / ECHO C++ / 自研原生内核） -->
                     <StackPanel Spacing="8" Margin="0,16,0,0">
                         <TextBlock Text="独占输出内核" FontSize="14" FontWeight="SemiBold" />
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
@@ -6841,12 +6842,47 @@
                                     <TextBlock Text="实验 / 抗卡顿" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
                                 </StackPanel>
                             </Button>
+                            <Button
+                                x:Name="EngineNative2Card"
+                                Grid.Column="2"
+                                Height="52"
+                                Padding="0"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                Click="ExclusiveEngineCard_Click"
+                                Tag="native2"
+                                HorizontalAlignment="Stretch"
+                                ToolTipService.ToolTip="原生内核：C++ 原生渲染线程 + 整数字节直喂（实验，抗卡顿且字节级 bit-perfect；不支持 DSD/DoP）">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="原生内核" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="实验 / 字节直通" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
                         </Grid>
                         <TextBlock
                             FontSize="12"
                             Opacity="0.6"
                             TextWrapping="WrapWholeWords"
-                            Text="切换渲染线程的实现：自研是 C# 线程（系统回收内存时可能把它冻一下，偶发卡顿）；ECHO 核心把渲染搬进 C++ 原生线程（冻不到它），音频数据仍来自同一套链路，音质口径不变。改动下一首歌生效；选 ECHO 核心播 DSD 会自动回退自研。" />
+                            Text="切换渲染线程的实现：自研是 C# 线程（系统回收内存时可能把它冻一下，偶发卡顿）；ECHO 核心与原生内核把渲染搬进 C++ 原生线程（冻不到它），音频数据仍来自同一套链路。原生内核的 feeder 直接送整数字节给设备（不过 float），DSP 全关时端到端 bit-perfect。改动下一首歌生效；选 C++ 内核播 DSD 会自动回退自研。" />
+                        <Grid ColumnSpacing="8" Margin="0,4,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button
+                                x:Name="EngineSelfTestButton"
+                                Grid.Column="0"
+                                Content="播放测试音（3 秒 1kHz）"
+                                Click="EngineSelfTest_Click"
+                                ToolTipService.ToolTip="用内存生成的正弦波走完整播放链路试听，不进音乐库。先在上面选好内核再点。" />
+                            <TextBlock
+                                x:Name="EngineSelfTestStatus"
+                                Grid.Column="1"
+                                FontSize="12"
+                                Opacity="0.7"
+                                VerticalAlignment="Center"
+                                TextWrapping="WrapWholeWords" />
+                        </Grid>
                     </StackPanel>
 
                     <!-- 底部说明 -->

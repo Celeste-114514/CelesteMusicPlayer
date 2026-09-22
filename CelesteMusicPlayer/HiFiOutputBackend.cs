@@ -1097,6 +1097,21 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>是否使用自研原生内核独占输出（设置项 ExclusiveEngine="native2"，celeste_core.dll）。
+        /// C++ 原生渲染线程 + feeder 整数字节直喂（DSP 全关时端到端 bit-perfect）。
+        /// 任一环境失败（DLL 缺失等）Init 返回 false，由上层按现有路径回退自研。</summary>
+        private static bool UseNativeCore()
+        {
+            try
+            {
+                return string.Equals(AppSettingsStore.Load().ExclusiveEngine, "native2", StringComparison.OrdinalIgnoreCase);
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
         /// <summary>从 PCM WAV 文件以指定模式播放。<paramref name="requireExact"/> 为 true（DSD/DoP 容器 WAV）时独占只做源格式精确直通，禁止降级（保 bit-perfect）。
         /// <paramref name="sourceIsDsd"/> 标记源文件是 DSD（经 ffmpeg 转 PCM 输出）：链路据此标注 DSD 路径，显示"1-bit 原生（已转 PCM）"而非"源格式未探测"。</summary>
         public bool PlayWavAsync(string wavPath, OutputMode mode, string? deviceIdentifier = null, TimeSpan? seekTo = null, bool requireExact = false, bool sourceIsDsd = false)
@@ -1173,9 +1188,12 @@ namespace CelesteMusicPlayer
                         }
 
                         // A/B 开关（设置项 ExclusiveEngine）：默认 self=自研托管渲染线程；
-                        // echo=ECHO 核心（C++ 原生渲染线程只 memcpy，.NET GC 冻不到 → 治卡顿试验田）。
+                        // echo=ECHO 核心、native2=自研原生内核（celeste_core.dll，C++ 原生渲染线程，
+                        // .NET GC 冻不到 → 治卡顿试验田；native2 的 feeder 走整数字节直喂，DSP 全关时端到端 bit-perfect）。
                         // 任选其一失败都可一键切回，互不影响（两边 Init 前都只做本地协商）。
-                        IExclusiveOutput nat = UseEchoCore() ? new EchoCoreOutput() : new NativeWasapiExclusiveOut();
+                        IExclusiveOutput nat = UseNativeCore() ? new NativeCoreOutput()
+                            : UseEchoCore() ? new EchoCoreOutput()
+                            : new NativeWasapiExclusiveOut();
                         nat.BufferMilliseconds = OutputBufferMs; // 事件驱动缓冲跟随设置（默认 100ms，可调低延迟/抗卡顿）
                         // DSP 链在独占下同样生效：传 _dspProvider（包住无缝源，内部短路直通）。
                         // requireExact（DSD/DoP 直出）强制用源原样，禁止 DSP 破坏 1-bit 容器。
@@ -1938,6 +1956,11 @@ namespace CelesteMusicPlayer
                     // 歌曲尾巴还在 ring/设备缓冲里。必须等 ring 也播空（IsDrained）才判播完，
                     // 否则切歌会把歌曲尾巴切掉。
                     sourceExhausted = echo.IsDrained;
+                }
+                else if (_useNative && _native is NativeCoreOutput nativeCore)
+                {
+                    // 自研原生内核：同上——feeder 灌 ring 常备 1.5s 存货，reader 到头时尾巴还在 ring/设备里。
+                    sourceExhausted = nativeCore.IsDrained;
                 }
                 else
                 {

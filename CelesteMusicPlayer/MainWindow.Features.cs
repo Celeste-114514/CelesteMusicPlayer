@@ -2641,7 +2641,7 @@ namespace CelesteMusicPlayer
             card.Background = active ? activeBg : null;
         }
 
-        /// <summary>独占输出内核 A/B 卡片点击：self=自研（默认），echo=ECHO 核心（C++ 原生渲染线程）。</summary>
+        /// <summary>独占输出内核卡片点击：self=自研（默认），echo=ECHO 核心，native2=自研原生内核（C++ 原生渲染线程 + 整数字节直喂）。</summary>
         private void ExclusiveEngineCard_Click(object sender, RoutedEventArgs e)
         {
             if (_audioCombosLoading)
@@ -2656,11 +2656,45 @@ namespace CelesteMusicPlayer
 
             AppSettingsStore.Update(s => s.ExclusiveEngine = engine);
             UpdateEngineCardHighlight(engine);
-            StartupLog.Write("[设置] 独占输出内核切换为 " + (engine == "echo" ? "ECHO 核心（实验）" : "自研") + "（下一首歌生效）");
+            StartupLog.Write("[设置] 独占输出内核切换为 " + EngineDisplayName(engine) + "（下一首歌生效）");
             RefreshAudioSettingsPanel();
         }
 
-        /// <summary>内核两张卡片：选中的用主题色高亮。</summary>
+        /// <summary>内核标识 → 面板显示名（三处共用：点击日志 / 自检状态 / 高亮）。</summary>
+        private static string EngineDisplayName(string engine) => engine switch
+        {
+            "echo" => "ECHO 核心（实验）",
+            "native2" => "原生内核（实验）",
+            _ => "自研",
+        };
+
+        /// <summary>内核自检：内存生成 3 秒 1kHz 正弦测试音（48k/16bit/立体声），走完整播放链路试听，
+        /// 不进音乐库、不碰曲库索引。用来快速验证当前选中的内核「起播即出声、无爆音、无卡顿」。</summary>
+        private void EngineSelfTest_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string engine = AppSettingsStore.Load().ExclusiveEngine ?? "self";
+                string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "celeste_selftest_1khz_3s.wav");
+                new SineWaveSource().WriteWav(path);
+                PlayExternalFileAsync(path);
+                if (EngineSelfTestStatus != null)
+                {
+                    EngineSelfTestStatus.Text = $"已用「{EngineDisplayName(engine)}」播放 3 秒 1kHz 测试音：注意起播是否立即出声、有没有爆音或卡顿（临时文件 {path}）。";
+                }
+                StartupLog.Write($"[设置] 内核自检播放测试音 engine={engine} wav={path}");
+            }
+            catch (Exception ex)
+            {
+                if (EngineSelfTestStatus != null)
+                {
+                    EngineSelfTestStatus.Text = "测试音播放失败：" + ex.Message;
+                }
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs(EngineSelfTest_Click)", ex);
+            }
+        }
+
+        /// <summary>内核三张卡片：选中的用主题色高亮。</summary>
         private void UpdateEngineCardHighlight(string engine)
         {
             Windows.UI.Color accent = ResolveAccentColor();
@@ -2669,8 +2703,10 @@ namespace CelesteMusicPlayer
             var normalBorder = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(60, 120, 120, 120));
 
             bool echo = string.Equals(engine, "echo", StringComparison.OrdinalIgnoreCase);
-            SetModeCard(EngineSelfCard, !echo, activeBorder, activeBg, normalBorder);
+            bool native2 = string.Equals(engine, "native2", StringComparison.OrdinalIgnoreCase);
+            SetModeCard(EngineSelfCard, !echo && !native2, activeBorder, activeBg, normalBorder);
             SetModeCard(EngineEchoCard, echo, activeBorder, activeBg, normalBorder);
+            SetModeCard(EngineNative2Card, native2, activeBorder, activeBg, normalBorder);
         }
 
         private async void AudioOutputDeviceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
