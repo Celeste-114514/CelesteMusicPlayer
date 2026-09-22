@@ -989,6 +989,7 @@ namespace CelesteMusicPlayer
                         try { Marshal.ReleaseComObject(natDev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
                         _native = nat;
+                        nat.Failed += Native_Failed; // C3：渲染线程致命错误（如设备静默丢弃护栏）要能停摆并留痕
                         _useNative = true;
                         OutputDeviceName = nat.ActualFormatDescription != null ? "WASAPI 独占（" + nat.ActualFormatDescription + "）" : "WASAPI 独占(原生)";
                         break;
@@ -1315,6 +1316,7 @@ namespace CelesteMusicPlayer
                 try { Marshal.ReleaseComObject(natDev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
                 _native = nat;
+                nat.Failed += Native_Failed; // C3：DSD/DoP 直出路同样接致命错误（ECHO/自研两侧行为一致）
                 _useNative = true;
                 _isDsd = true;
                 OutputDeviceName = nat.ActualFormatDescription != null
@@ -1600,6 +1602,25 @@ namespace CelesteMusicPlayer
             _positionTimer.Stop();
             Position = Duration;
             PlaybackStopped?.Invoke();
+        }
+
+        /// <summary>
+        /// 自研/ECHO 渲染线程致命错误（如 2026-09-23 C3 设备静默丢弃护栏触发）：
+        /// 大声记日志 + 停摆（不自动切歌）。
+        /// 刻意不走 <see cref="PlaybackStopped"/>——那是"播完"语义（上层据此自动切下一首）；
+        /// 致命错误必须原地停下并留痕，不能悄悄跳歌装作没事。
+        /// </summary>
+        private void Native_Failed(Exception ex)
+        {
+            StartupLog.Write("[输出致命错误] " + ex.Message);
+            LastError = ex.Message;
+            if (_isPlaying)
+            {
+                _isPlaying = false;
+                _positionTimer.Stop();
+            }
+
+            Failed?.Invoke(ex);
         }
 
         private void UpdatePosition()

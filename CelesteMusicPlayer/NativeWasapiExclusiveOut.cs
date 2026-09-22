@@ -501,6 +501,18 @@ namespace CelesteMusicPlayer
                 int gc0 = GC.CollectionCount(0), gc1 = GC.CollectionCount(1), gc2 = GC.CollectionCount(2);
                 double bufMsReal = _rate > 0 ? maxFrames * 1000.0 / _rate : 0; // 缓冲真实时长（毫秒）
 
+                // ---- C3: 写入超速护栏（2026-09-23）----
+                // 场景：设备侧啃不动我们的写入（驱动谎报 GetCurrentPadding / 设备被拔或重置）时，
+                // ReleaseBuffer 照常返回 S_OK、日志一片健康（水位正常、无欠载、无间隔尖峰），
+                // 但字节被设备静默丢弃——用户听到的不是变快的歌就是无声，且现有诊断全部看不出来。
+                // 判据：每 2s 滚动统计「本循环写入的音频时长 ÷ 同一段墙钟时长」。
+                //   正常 ≈1.0×（设备实时消耗，我们只补空闲空间）；
+                //   >1.5× = 字节进去就被丢 = 设备静默丢弃 → 大声日志 + 抛错主动停止，不装作在播。
+                // 首次缓冲预填（Start 前的 pre-roll 与循环内首次整缓冲填充）不计入窗口，避免误报。
+                long c3WinStartTs = Stopwatch.GetTimestamp();
+                long c3WinFrames = 0;
+                bool c3FirstFill = true;
+
                 while (!_requestStop && !_disposed)
                 {
                     // 关键（2026-09-21 修独占卡顿）：**不等设备事件**。
@@ -619,6 +631,34 @@ namespace CelesteMusicPlayer
 
                     rc.ReleaseBuffer((uint)toFill, 0);
                     lock (_framesLock) { _framesWritten += toFill; }
+
+                    // C3 护栏计数（跳过本次循环生命周期的首次预填，只统计设备吃掉 demand 之后的部分）
+                    if (c3FirstFill) c3FirstFill = false;
+                    else c3WinFrames += toFill;
+
+                    // 每到 2s 结算一次窗口：写入音频时长 > 墙钟时长 ×1.5 = 设备静默丢弃
+                    if (_rate > 0)
+                    {
+                        long c3Now = Stopwatch.GetTimestamp();
+                        if (c3Now - c3WinStartTs >= Stopwatch.Frequency * 2)
+                        {
+                            double c3WinSec = (c3Now - c3WinStartTs) / (double)Stopwatch.Frequency;
+                            double c3AudioSec = c3WinFrames / (double)_rate;
+                            double c3Ratio = c3WinSec > 0 ? c3AudioSec / c3WinSec : 0;
+                            if (c3AudioSec > c3WinSec * 1.5)
+                            {
+                                StartupLog.Write(string.Format(
+                                    "[渲染诊断] ★设备静默丢弃：{0:F2}s 墙钟内写入 {1:F2}s 音频（{2:F1}× 实时）——设备没有在消耗我们写入的字节（驱动/设备异常），继续播只会变快或无声，主动报错停止",
+                                    c3WinSec, c3AudioSec, c3Ratio));
+                                throw new System.IO.IOException(string.Format(
+                                    "设备静默丢弃音频写入：{0:F2}s 墙钟内写入 {1:F2}s 音频（{2:F1}× 实时），独占设备行为异常",
+                                    c3WinSec, c3AudioSec, c3Ratio));
+                            }
+
+                            c3WinStartTs = c3Now;
+                            c3WinFrames = 0;
+                        }
+                    }
 
                     // 每 10 秒汇总一次：卡顿归因就看这行。
                     //   水位长期贴 0 + 读源慢     → 磁盘/源跟不上（需 feeder 队列或换缓存策略）

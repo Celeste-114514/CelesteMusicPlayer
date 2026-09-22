@@ -12,6 +12,12 @@ namespace CelesteMusicPlayer
         /// <summary>数据源自然播放到头（自研：渲染线程退出；ECHO：feeder 读尽且设备已停）。</summary>
         event Action? Ended;
 
+        /// <summary>
+        /// 渲染/输出过程致命错误（自研：渲染线程内抛错，如 2026-09-23 C3 设备静默丢弃护栏；
+        /// ECHO：feeder 线程抛错）。注意未接到上层 UI 前至少保证日志可查——调用方应订阅。
+        /// </summary>
+        event Action<Exception>? Failed;
+
         /// <summary>已写入/已播的总帧数（累加，不随曲目切换归零；上层按曲目相对进度换算）。</summary>
         long FramesWritten { get; }
 
