@@ -521,8 +521,17 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>把采样率格式化成 HiFi 播放器常见的写法：44100→"44.1kHz"、96000→"96kHz"、2822400→"2.82MHz"。</summary>
+        /// <summary>采样率是否可能是真实值。真实音频最低 8kHz（DSD 更高），
+        /// TagLib 偶尔返回 1/0 这类脏值，不能拿去显示，否则会出现"1Hz"。</summary>
+        private static bool IsPlausibleSampleRate(int rate) => rate >= 8000;
+
         private static string FormatSampleRate(int rate)
         {
+            if (!IsPlausibleSampleRate(rate))
+            {
+                return string.Empty; // 脏值宁可不显示，也不显示成"1Hz"
+            }
+
             if (rate >= 1_000_000)
             {
                 return TrimTrailingZero(rate / 1_000_000.0) + "MHz";
@@ -599,8 +608,11 @@ namespace CelesteMusicPlayer
                     }
 
                     // 采样率
+                    // 注意判据不是 rate <= 0：TagLib 对少数 ALAC/m4a 会返回 1 这种「>0 但绝无可能」
+                    // 的值（用户实机：192kHz 的曲子显示成 1Hz），必须按"是否可能是真值"判断，
+                    // 否则 ffmpeg 探到的真实采样率会被这个脏值挡住、永远用不上。
                     Match mr = Regex.Match(line, @"(\d+)\s*Hz");
-                    if (mr.Success && rate <= 0)
+                    if (mr.Success && !IsPlausibleSampleRate(rate))
                     {
                         rate = int.Parse(mr.Groups[1].Value);
                     }

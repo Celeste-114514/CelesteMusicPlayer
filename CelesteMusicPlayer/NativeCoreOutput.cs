@@ -38,6 +38,12 @@ namespace CelesteMusicPlayer
         private int _srcBlockAlign = 4;
         private int _srcBits = 16;
         private uint _srcTag = NativeCoreAudio.FmtPcm16;
+        // 实际灌进内核的容器标签。多数情况 == _srcTag（字节直通）；
+        // 只有 24bit 打包源会优先换成 4 字节容器（见 BuildFeedCandidates 注释）。
+        private uint _feedTag = NativeCoreAudio.FmtPcm16;
+        private int _feedBlockAlign = 4;
+        private byte[] _feedBuf = Array.Empty<byte>(); // 需要容器转换时的暂存（feed 布局，零分配复用）
+        private bool _expand24;                        // 源 3 字节打包 → 设备 4 字节容器（左对齐 v<<8）
         private int _carryLen; // 上一个读周期剩下的不足一帧字节（一般是 0）
         private readonly byte[] _carry = new byte[7]; // blockAlign 最大 8，余数最多 7 字节
 
@@ -230,15 +236,29 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.Write($"原生内核 预填不足：请求{requestFrames}帧 实得{prefillGotBytes / _srcBlockAlign}帧（源短或起播点靠近结尾）");
             }
-            uint prefillFrames = (uint)(prefillGotBytes / _srcBlockAlign);
-
-            int rc;
-            IntPtr handle;
+            // 端点容器候选：24bit 打包源先试 4 字节容器（ECHO 内核在这台 DAC 上实机零卡顿的
+            // 就是它），设备不支持（rc=-2）才退回 3 字节打包；其余源布局只有一个候选，行为不变。
+            uint[] candidates = BuildFeedCandidates(_srcTag);
+            int rc = 0;
+            IntPtr handle = IntPtr.Zero;
+            uint chosenTag = _srcTag;
             try
             {
-                rc = NativeCoreAudio.celeste_core_start((uint)src.SampleRate, (uint)_channels,
-                    (uint)requestFrames, deviceId, _srcTag,
-                    prefillFrames > 0 ? prefill : null, prefillFrames, out handle);
+                foreach (uint tag in candidates)
+                {
+                    byte[]? feed = PrepareFeed(prefill, prefillGotBytes, tag, out uint feedFrames);
+                    rc = NativeCoreAudio.celeste_core_start((uint)src.SampleRate, (uint)_channels,
+                        (uint)requestFrames, deviceId, tag,
+                        feedFrames > 0 ? feed : null, feedFrames, out handle);
+                    if (rc == 0 && handle != IntPtr.Zero) { chosenTag = tag; break; }
+                    handle = IntPtr.Zero;
+                    if (rc != -2)
+                    {
+                        break; // 非"设备不支持该容器"（例如设备被占用）：换容器也救不了，直接失败
+                    }
+                    StartupLog.Write("原生内核 端点容器 " + NativeCoreAudio.TagName(tag)
+                        + " 设备不支持（rc=-2，src=" + src.SampleRate + "Hz/" + _srcBits + "bit），尝试备选容器");
+                }
             }
             catch (DllNotFoundException)
             {
@@ -256,10 +276,14 @@ namespace CelesteMusicPlayer
             {
                 LastError = NativeCoreAudio.DescribeStartError(rc)
                     + (string.IsNullOrEmpty(deviceId) ? "（默认设备）" : " device=" + deviceId);
-                StartupLog.Write("原生内核 celeste_core_start 失败 rc=" + rc + " src=" + src.SampleRate + "/" + _srcBits + "bit/" + _channels + "ch tag=" + _srcTag);
+                StartupLog.Write("原生内核 celeste_core_start 失败 rc=" + rc + " src=" + src.SampleRate + "/" + _srcBits + "bit/" + _channels + "ch tag=" + chosenTag);
                 return false;
             }
             _handle = handle;
+            _feedTag = chosenTag;
+            _feedBlockAlign = _channels * TagBytes(chosenTag);
+            _expand24 = _srcTag == NativeCoreAudio.FmtPcm24 && chosenTag == NativeCoreAudio.FmtPcm24In32;
+            _feedBuf = _expand24 ? new byte[ChunkFrames * _feedBlockAlign] : Array.Empty<byte>();
 
             NativeCoreAudio.NativeCoreStats st;
             try { st = NativeCoreAudio.Stats(_handle); }
@@ -275,7 +299,7 @@ namespace CelesteMusicPlayer
 
             // 结构化协商结果（徽标判标志位，绝不反解析描述串：951796f 教训）。
             // 原生 Init 成功 ⟺ 端点容器 == 源布局；这里复核 stats 回报的容器名，不符=内部不一致，据实降级。
-            bool layoutMatch = string.Equals(_endpointFormat, NativeCoreAudio.TagName(_srcTag), StringComparison.Ordinal);
+            bool layoutMatch = string.Equals(_endpointFormat, NativeCoreAudio.TagName(_feedTag), StringComparison.Ordinal);
             NegotiatedFormat = new AudioFormat(_rate, EndpointBits(), _channels, _srcTag == NativeCoreAudio.FmtFloat32);
             DevicePathKind = layoutMatch ? DevicePath.Lossless : DevicePath.Degraded;
             DeviceEndpointName = EndpointFriendlyName();
@@ -288,7 +312,8 @@ namespace CelesteMusicPlayer
                 _rate, _endpointFormat, _bufferFrames,
                 _rate > 0 ? _bufferFrames * 1000.0 / _rate : 0, st.CapacityFrames,
                 ActualFormatDescription,
-                layoutMatch ? "" : " ⚠端点容器与源标签不符（内部不一致，已降级判定）"));
+                layoutMatch ? "" : " ⚠端点容器与源标签不符（内部不一致，已降级判定）",
+                _expand24 ? " | 源 24bit 打包 → 设备 24-in-32 容器（样本值逐位一致，与 ECHO 同容器）" : ""));
             return true;
         }
 
@@ -382,7 +407,15 @@ namespace CelesteMusicPlayer
                         break;
                     }
 
-                    int rc = NativeCoreAudio.celeste_core_write(_handle, _readBuf, (uint)got, _srcTag);
+                    byte[] toWrite = _readBuf;
+                    int writeBytes = got;
+                    if (_expand24)
+                    {
+                        writeBytes = Expand24To32(_readBuf, got, _feedBuf);
+                        toWrite = _feedBuf;
+                    }
+
+                    int rc = NativeCoreAudio.celeste_core_write(_handle, toWrite, (uint)writeBytes, _feedTag);
                     if (rc != 0)
                     {
                         FlushAgg("write 失败 rc=" + rc);
@@ -502,7 +535,14 @@ namespace CelesteMusicPlayer
             {
                 _provider!.Seek(pos);
                 int got = ReadRaw(_readBuf, _readBuf.Length);
-                int rc = NativeCoreAudio.celeste_core_replace(_handle, got > 0 ? _readBuf : null, (uint)got, _srcTag);
+                byte[] toWrite = _readBuf;
+                int writeBytes = got;
+                if (_expand24 && got > 0)
+                {
+                    writeBytes = Expand24To32(_readBuf, got, _feedBuf);
+                    toWrite = _feedBuf;
+                }
+                int rc = NativeCoreAudio.celeste_core_replace(_handle, writeBytes > 0 ? toWrite : null, (uint)writeBytes, _feedTag);
                 if (rc < 0)
                 {
                     StartupLog.Write("原生内核 replace 失败 rc=" + rc + "（seek 目标=" + pos.TotalSeconds.ToString("F2") + "s）");
@@ -567,6 +607,55 @@ namespace CelesteMusicPlayer
             _ => 0,
         };
 
+        /// <summary>端点容器候选顺序（第一个能用就用）。
+        /// 24bit 源首选 pcm24-in-32：2026-09-23 用户同文件同片段 A/B 实锤——ECHO 内核用
+        /// pcm24in32 在 192kHz 下零卡顿，而本内核用 3 字节紧密排列的 pcm24 偶发卡顿 2~3 次
+        /// （同期 ring 水位 93%+、补货尖峰 0、真欠载 0，说明不是喂不上，是设备吃这份 3 字节
+        /// 布局时会抖）。样本值完全一致，只是换了 4 字节容器；设备不支持首选自动退回打包格式。</summary>
+        private static uint[] BuildFeedCandidates(uint srcTag)
+            => srcTag == NativeCoreAudio.FmtPcm24
+                ? new[] { NativeCoreAudio.FmtPcm24In32, NativeCoreAudio.FmtPcm24 }
+                : new[] { srcTag };
+
+        /// <summary>源 3 字节打包 24bit → 设备 4 字节容器（24 位有效、左对齐 v&lt;&lt;8；
+        /// 与 ECHO 内核 wasapi_exclusive.cpp 的 WASAPI_FORMAT_PCM24_IN_32 同一约定）。
+        /// 返回写入 dst 的字节数。</summary>
+        private static int Expand24To32(byte[] src, int srcBytes, byte[] dst)
+        {
+            int n = srcBytes / 3;
+            for (int i = 0; i < n; i++)
+            {
+                int s = i * 3, d = i * 4;
+                dst[d] = 0;                 // 低字节补零 = 24 位有效值左对齐（v << 8）
+                dst[d + 1] = src[s];
+                dst[d + 2] = src[s + 1];
+                dst[d + 3] = src[s + 2];
+            }
+            return n * 4;
+        }
+
+        /// <summary>把预填读到的原始字节（源布局）转成指定端点容器布局，供 celeste_core_start 用。
+        /// 容器一致时零拷贝直接返回原数组。</summary>
+        private byte[]? PrepareFeed(byte[] raw, int rawBytes, uint tag, out uint frames)
+        {
+            frames = 0;
+            if (rawBytes <= 0) return null;
+            if (tag == _srcTag)
+            {
+                frames = (uint)(rawBytes / _srcBlockAlign);
+                return frames > 0 ? raw : null;
+            }
+            if (_srcTag == NativeCoreAudio.FmtPcm24 && tag == NativeCoreAudio.FmtPcm24In32)
+            {
+                int outBytes = (rawBytes / 3) * 4;
+                var buf = new byte[outBytes];
+                Expand24To32(raw, rawBytes, buf);
+                frames = (uint)(outBytes / Math.Max(1, _channels * 4));
+                return frames > 0 ? buf : null;
+            }
+            return null;
+        }
+
         /// <summary>DLL 协商用的端点格式名 → 人话。</summary>
         private string EndpointFriendlyName() => _endpointFormat switch
         {
@@ -591,7 +680,14 @@ namespace CelesteMusicPlayer
         private string DescribeOutput(WaveFormat src)
         {
             string endpoint = EndpointFriendlyName();
-            bool direct = string.Equals(_endpointFormat, NativeCoreAudio.TagName(_srcTag), StringComparison.Ordinal);
+            bool direct = string.Equals(_endpointFormat, NativeCoreAudio.TagName(_feedTag), StringComparison.Ordinal);
+            if (direct && _expand24)
+            {
+                // 容器从 3 字节打包换成 4 字节（24 位有效、左对齐）：样本值逐位一致，
+                // 与 ECHO 内核在同一台设备上实机零卡顿的容器完全相同。
+                return string.Format("{0} Hz / {1}bit / {2}ch → 设备 {3}（样本值逐位一致，24-in-32 容器）",
+                    src.SampleRate, _srcBits, _channels, endpoint);
+            }
             if (direct)
             {
                 // 端点容器 == 源布局，整数字节原样过：字节级 bit-perfect（全链不碰 float）
