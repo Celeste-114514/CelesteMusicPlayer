@@ -2715,25 +2715,31 @@ namespace CelesteMusicPlayer
                 AudioLinkOutputVerdict.Text = BuildVerdictLine(chain, hifi);
                 AudioLinkMode.Text = hifi ? "独占（WASAPI 独占 / ASIO）" : "共享（系统混音）";
 
-                // DSP 摘要
+                // DSP 摘要（口径与引擎 ManagedDspSourceProvider.RefreshActive 对齐：
+                // 只有真正逐样本处理的模块才计入"（开）"；限幅单独开着只待命、不计入）
                 bool eqOn = EqCurveStore.Load().HasEffect();
                 var extra = DspExtraStore.Load();
                 bool chOn = extra.ChannelBalance?.IsActive == true;
-                bool limiterOn = extra.Safety?.EnableLimiter != false;   // 开关状态（设置摘要用）
-                bool limiterActive = extra.Safety?.AffectsBits == true; // 是否真让链路经过逐样本处理（headroom≠0 或显式关限幅）
+                bool limiterOn = extra.Safety?.EnableLimiter != false;    // 限幅开关状态（≠激活：单独开只待命）
+                bool hasHeadroom = extra.Safety?.AffectsBits == true;    // 余量≠0：安全模块唯一真正逐样本处理的情形
                 bool rgOn = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
+                bool volOn = _audioEngine?.IsSoftwareVolumeActive ?? false; // HiFi 软件音量同样是采样级增益
                 var active = new System.Collections.Generic.List<string>();
                 if (eqOn) active.Add("EQ");
                 if (chOn) active.Add("声道");
-                if (limiterActive) active.Add("限幅");
+                if (hasHeadroom) active.Add("余量");
                 if (rgOn) active.Add("ReplayGain");
-                // 限幅单独开着、无其它 DSP 时：ManagedDspSourceProvider 明确"单独开不激活"（源 PCM 不会超 ±1，无需削波），
-                // 徽标不计数；摘要里标注"待命"，避免"全部旁路"文案与徽标绿灯自相矛盾（2026-09-22 修）。
-                string limiterStandby = limiterOn && !limiterActive
-                    ? " · 限幅待命（无其它 DSP 时不做逐样本处理，不影响 bit-perfect）"
-                    : string.Empty;
+                if (volOn) active.Add("音量");
+                // 限幅：开着且已有其它逐样本模块 → 随链生效（防削波）；开着但全链直通 → 待命（不动样本）；
+                // 关着 → 完全不介入，摘要里不出现。2026-09-22 用户实测"限幅没开却显示开了"根因：
+                // 旧 AffectsBits 口径把"显式关限幅"算成激活（DspState.cs 已修），此处同步改口径。
+                string limiterNote = !limiterOn
+                    ? string.Empty
+                    : (active.Count > 0
+                        ? " · 限幅生效（随 DSP 链防削波）"
+                        : " · 限幅待命（无其它 DSP 时不做逐样本处理，不影响 bit-perfect）");
                 string dsp = active.Count == 0 ? "全部旁路" : string.Join(" / ", active) + "（开）";
-                AudioLinkDsp.Text = dsp + limiterStandby + (hifi ? " [HiFi 直通链路]" : " [共享链路]");
+                AudioLinkDsp.Text = dsp + limiterNote + (hifi ? " [HiFi 直通链路]" : " [共享链路]");
                 // bit-perfect：综合判定（DSP + 输出格式 + 是否共享模式），不再只看 DSP 开关
                 bool chainPure = EvaluateBitPerfectChain(out string chainReason, out bool chainConfirmed);
                 AudioLinkBitPerfect.Text = chainPure
@@ -2750,8 +2756,11 @@ namespace CelesteMusicPlayer
                 AudioProBuffer.Text = string.IsNullOrWhiteSpace(_audioEngine?.OutputDeviceId)
                     ? "系统默认"
                     : _audioEngine.OutputDeviceId;
+                // 与上面 DSP 摘要同口径：余量✓=真在处理；限幅✓=随链生效、待=开着但全链直通、—=已关闭
+                bool limiterEngaged = limiterOn && active.Count > 0;
                 AudioProDspChain.Text = "EQ" + (eqOn ? "✓" : "—") + " · 声道" + (chOn ? "✓" : "—")
-                    + " · 限幅" + (limiterActive ? "✓" : (limiterOn ? "待" : "—")) + " · ReplayGain" + (rgOn ? "✓" : "—");
+                    + " · 余量" + (hasHeadroom ? "✓" : "—")
+                    + " · 限幅" + (limiterEngaged ? "✓" : (limiterOn ? "待" : "—")) + " · ReplayGain" + (rgOn ? "✓" : "—");
                 // 链路可视化着色 + bit-perfect 徽章（用整链判定，而非仅 DSP 开关）
                 ApplyLinkVisual(pure: chainPure, activeText: chainReason);
                 // 同步主界面常驻 bit-perfect 徽章
@@ -2863,8 +2872,9 @@ namespace CelesteMusicPlayer
             return "结论：" + string.Join(" · ", parts);
         }
 
-        /// <summary>计算与音频设置面板徽章同一口径的链路纯净度：任一 DSP（EQ/声道平衡/限幅/ReplayGain）
-        /// 生效即非 bit-perfect；DSP 总旁路优先视为直通。</summary>
+        /// <summary>计算与音频设置面板徽章同一口径的链路纯净度：任一真正逐样本处理的 DSP
+        ///（EQ / 声道平衡 / 余量 / ReplayGain / 房间校正卷积 / HiFi 软件音量）生效即非 bit-perfect；
+        /// 限幅单独开/关都只待命不计数；DSP 总旁路优先视为直通。</summary>
         private bool IsBitPerfectPure(out string activeText)
         {
             bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
@@ -2873,17 +2883,20 @@ namespace CelesteMusicPlayer
             bool eqOn = EqCurveStore.Load().HasEffect();
             var extra = DspExtraStore.Load();
             bool chOn = extra.ChannelBalance?.IsActive == true;
-            // 限幅计数口径与 DSP 链实际激活对齐（DspSafetyState.AffectsBits）：
-            // 设了余量(负增益)或显式关软限幅才算激活；单独开着限幅、无其它 DSP 时链路不逐样本处理，只待命不计数。
-            bool limiterActive = extra.Safety?.AffectsBits == true;
+            // 余量≠0 = 安全模块唯一真正逐样本处理的情形（DspSafetyState.AffectsBits 现口径，2026-09-22 修：
+            // 旧口径把"显式关限幅"也算激活，导致用户"限幅没开"却被显示/计成"开"）。限幅单独开关都不计数。
+            bool hasHeadroom = extra.Safety?.AffectsBits == true;
             bool rgOn = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
+            var room = RoomCorrectionStore.Load();
+            bool firOn = room.Enabled && !string.IsNullOrWhiteSpace(room.IrPath);
             // HiFi 软件音量（独占/ASIO + 设置页开关 + 音量≠100%）：DSP 链采样级衰减，同样破坏 bit-perfect。
             bool volOn = _audioEngine?.IsSoftwareVolumeActive ?? false;
             var active = new System.Collections.Generic.List<string>();
             if (eqOn) active.Add("EQ");
             if (chOn) active.Add("声道");
-            if (limiterActive) active.Add("限幅");
+            if (hasHeadroom) active.Add("余量");
             if (rgOn) active.Add("ReplayGain");
+            if (firOn) active.Add("房间校正");
             if (volOn) active.Add("音量");
             activeText = active.Count == 0 ? string.Empty : string.Join("、", active);
             return active.Count == 0;
@@ -2897,8 +2910,8 @@ namespace CelesteMusicPlayer
         /// 2026-09-22 用户实测：描述串嵌源位深，正则从源段解析出 24bit 与源相等 → 绿灯谎报。
         ///
         /// 判定（任一命中即非 bit-perfect）：
-        ///   1) 任一 DSP 真正激活（EQ / 声道平衡 / ReplayGain / 余量或显式关限幅 / HiFi 软件音量；
-        ///      限幅单独开着只待命，不计数）
+        ///   1) 任一 DSP 真正激活（EQ / 声道平衡 / ReplayGain / 余量 / 房间校正卷积 / HiFi 软件音量；
+        ///      限幅单独开/关都只待命，不计数）
         ///   2) 共享模式（系统混音器介入；设置层已知，与是否在播无关）
         ///   3) 转码层：WAV 相对源被重采样 / 降位 / 探测失败兜底（<see cref="ChainFormatState.Outcome"/>）
         ///   4) 设备端：协商出的设备率≠WAV 率；或端点数值有损（<see cref="DevicePath.Degraded"/>）/
@@ -2919,7 +2932,10 @@ namespace CelesteMusicPlayer
             bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
             if (!bypass)
             {
-                if (IsBitPerfectPure(out string dspText) && string.IsNullOrEmpty(dspText) == false)
+                // 2026-09-22 修：旧条件写反成 IsBitPerfectPure(...) && dspText 非空——
+                // 而 IsBitPerfectPure 返回 true 时 dspText 必为空串，条件永假，
+                // 导致"开着 EQ 徽标也可能绿灯"的严重谎报。IsBitPerfectPure=false 时才有 activeText。
+                if (!IsBitPerfectPure(out string dspText))
                 {
                     causes.Add("DSP：" + dspText);
                 }

@@ -104,9 +104,12 @@ namespace CelesteMusicPlayer
             HeadroomDb = Math.Clamp(HeadroomDb, -12.0, 0.0);
         }
 
-        /// <summary>是否因本模块让输出「必经过 DSP」：设了余量(负增益)或明确关闭软限幅保护时视为激活；
-        /// 默认软限幅保护不算，避免让无其它 DSP 的播放也走逐样本链而拖慢（此时源 PCM 不会超 ±1，软限幅无需处理）。</summary>
-        public bool AffectsBits => Math.Abs(HeadroomDb) > 0.001 || !EnableLimiter;
+        /// <summary>是否因本模块让输出「必经过 DSP」：只有设了余量(负增益)才算。
+        /// 限幅开关单独开/关都不改变样本值——开着只是待命（源 PCM 不超 ±1 时无需削波），
+        /// 关着则完全不介入；两者都保持数值直通。旧口径把「显式关限幅」也算激活
+        /// (Math.Abs(HeadroomDb) &gt; 0.001 || !EnableLimiter)，导致面板把"限幅已关"显示成
+        /// "限幅（开）"（2026-09-22 用户实测 bug），现已钳掉，只保留余量判定。</summary>
+        public bool AffectsBits => Math.Abs(HeadroomDb) > 0.001;
     }
 
     /// <summary>DSP 附加状态（声道平衡 + 安全限幅）持久化。</summary>

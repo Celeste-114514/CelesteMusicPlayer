@@ -1097,19 +1097,27 @@ namespace CelesteMusicPlayer
             }
 
             bool eqActive = _audioFxEq != null && _audioFxEq.HasEffect();
-            bool active = eqActive
-                || AudioFxChannelToggle.IsOn
-                || Math.Abs(AudioFxSafetyHeadroomSlider.Value) > 0.01
-                || AudioFxSafetyLimiterToggle.IsOn
-                || RoomCorrectionStore.Load().Enabled;
+            // 口径与链路面板 IsBitPerfectPure / 引擎 RefreshActive 对齐：只列真正逐样本处理的模块。
+            // 2026-09-22 用户实测修：①限幅单独开/关都不计入（开=待命不动样本、关=不介入），
+            // 旧代码把 AudioFxSafetyLimiterToggle.IsOn 算成 active 是错的；②补入漏掉的 ReplayGain；
+            // ③卷积要求 Enabled 且真导入过 IR（绿点/徽章不能凭空亮）；④HiFi 软件音量同样破坏 bit-perfect。
+            bool chActive = AudioFxChannelToggle.IsOn || AudioFxChannelCrossfeedToggle.IsOn;
+            bool headroomActive = AudioFxSafetyHeadroomSlider != null && Math.Abs(AudioFxSafetyHeadroomSlider.Value) > 0.01;
+            bool rgActive = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
+            var room = RoomCorrectionStore.Load();
+            bool firActive = room.Enabled && !string.IsNullOrWhiteSpace(room.IrPath);
+            bool volActive = _audioEngine?.IsSoftwareVolumeActive ?? false;
+            bool active = eqActive || chActive || headroomActive || rgActive || firActive || volActive;
 
             AudioFxBitPerfectStatusText.Text = active ? "非 bit-perfect（已使用 DSP）" : "bit-perfect 直通";
             // 主界面信息条（左上角）提示：使用 DSP 时输出非 bit-perfect
             if (_currentCategory == "AudioFX")
             {
                 NowPlayingText.Text = active
-                    ? "⚠ 使用 DSP（EQ/声道平衡/限幅）→ 输出非 bit-perfect"
-                    : "音效处理：全部关闭 → bit-perfect 直通";
+                    ? "⚠ 使用 DSP（EQ/声道/余量/ReplayGain/卷积）→ 输出非 bit-perfect"
+                    : (AudioFxSafetyLimiterToggle.IsOn
+                        ? "音效处理：全部关闭 → bit-perfect 直通（限幅待命，无其它 DSP 时不处理样本）"
+                        : "音效处理：全部关闭 → bit-perfect 直通");
             }
 
             UpdateDspNavIndicators();

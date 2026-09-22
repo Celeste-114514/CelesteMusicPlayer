@@ -131,11 +131,37 @@ namespace CelesteMusicPlayer
 
             return Device switch
             {
-                DevicePath.Lossless => "源直通（数值无损）",
+                DevicePath.Lossless => DescribeLosslessEndpoint(),
                 DevicePath.Degraded => "设备端格式低于源，数值有损",
                 DevicePath.Resampled => "设备端重采样/格式转换（非直通）",
                 _ => "待播放确认"
             };
+        }
+
+        /// <summary>Lossless 路径的分级结论：端点容器与链路位深一致 = 源直通；端点容器更宽 = 数值无损的
+        /// 容器扩容（如 16bit 链路装进 pcm24-in-32 端点：样本值逐一相等，但并非字节直通）。
+        /// 2026-09-22 用户原话"我源文件 16bit、设备却显示 24bit(pcm24-in-32)，这是真的 bit-perfect 吗"——
+        /// 结论行必须把这件事讲清楚，不能一律用"源直通"一词带过。</summary>
+        private string DescribeLosslessEndpoint()
+        {
+            if (DeviceOutput == null || TranscodeWav == null)
+            {
+                return "源直通（数值无损）";
+            }
+
+            int linkBits = TranscodeWav.Value.Bits;
+            int devBits = DeviceOutput.Value.Bits;
+            if (devBits > linkBits)
+            {
+                return $"容器扩容（{linkBits}bit 装入 {devBits}bit 端点容器，样本值不变，数值无损）";
+            }
+
+            if (devBits < linkBits)
+            {
+                return $"端点位深低于链路（{linkBits}→{devBits}bit，数值有损）";
+            }
+
+            return "源直通（数值无损）";
         }
     }
 }
