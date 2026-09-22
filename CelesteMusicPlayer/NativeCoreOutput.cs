@@ -47,6 +47,27 @@ namespace CelesteMusicPlayer
         private int _bufferFrames;
         private string _endpointFormat = "?";
 
+        // ---------- feeder 侧窗口诊断（2026-09-23 用户实机：native2 偶有卡顿但比自研少） ----------
+        // 内核渲染线程是原生 C++（CRITICAL+1ms 定时器，不受 GC 影响），其补货间隔/欠载统计
+        // 内核一直在记（maxGapMs/spikeCount/underrun，读走即清零的窗口值），但 C# 侧此前无人
+        // 读取——播放全程零诊断输出，卡顿无法归因。这里把统计接到 feeder 循环打成日志，
+        // 与自研内核 [渲染统计]/[渲染诊断] 同口径，三引擎日志可直接 A/B 对比。
+        private readonly System.Diagnostics.Stopwatch _aggWatch = new();
+        private int _aggWrites;
+        private int _aggMaxGap;
+        private ulong _aggSpikes;
+        private int _aggMinReady;
+        private long _aggReadySum;
+        private int _aggReadyCount;
+        private int _lastReady;
+        private double _readMaxMs;
+        private int _gc0Base, _gc1Base, _gc2Base;
+        private long _underrunCbBase, _underrunFramesBase;
+        private int _lastCapacity;
+
+        private static readonly TimeSpan AggPeriod = TimeSpan.FromSeconds(5);
+        private const int SpikeThresholdMs = 30; // 轮询12ms 下 >2.5× 视为异常尖峰
+
         public event Action? Ended;
         public event Action<Exception>? Failed;
 
@@ -283,6 +304,7 @@ namespace CelesteMusicPlayer
                 : 0;
             _stopRequested = false;
             IsStarted = true;
+            AggReset();
 
             _feeder = new Thread(FeederLoop)
             {
@@ -347,17 +369,34 @@ namespace CelesteMusicPlayer
                         if (_stopRequested) break;
                     }
 
+                    var sw = System.Diagnostics.Stopwatch.StartNew();
                     int got = ReadRaw(_readBuf, _readBuf.Length);
+                    sw.Stop();
+                    if (sw.Elapsed.TotalMilliseconds > _readMaxMs) _readMaxMs = sw.Elapsed.TotalMilliseconds;
                     if (got <= 0)
                     {
                         // 源尽：标记输入结束。ring 播完剩余存货即 drained（不再计欠载），
                         // 之后由上层 UpdatePosition 的 IsDrained 判定 Stop→切下一首。
+                        FlushAgg("源尽收尾");
                         NativeCoreAudio.celeste_core_mark_input_ended(_handle);
                         break;
                     }
 
                     int rc = NativeCoreAudio.celeste_core_write(_handle, _readBuf, (uint)got, _srcTag);
-                    if (rc != 0) break; // -3=stop 已请求；-4/-5=格式异常；都退出
+                    if (rc != 0)
+                    {
+                        FlushAgg("write 失败 rc=" + rc);
+                        break; // -3=stop 已请求；-4/-5=格式异常；都退出
+                    }
+
+                    // 窗口统计：write 返回间隔 = 上一块被设备消耗掉的时长，
+                    // 采样节奏天然对齐 feeder，无需额外定时器/线程。
+                    AggSample();
+                    if (_aggMaxGap >= SpikeThresholdMs)
+                    {
+                        WriteSpikeLine();
+                        _aggMaxGap = 0; // 已报过，吞掉避免每轮重复打同一尖峰
+                    }
                 }
             }
             catch (Exception ex)
@@ -370,6 +409,90 @@ namespace CelesteMusicPlayer
 
             // feeder 自然退出（源尽）不算停止：设备会话还活着（ring 播完余货即 drained），
             // IsStarted 保持 true，与自研/ECHO 两条路径口径一致。播完检测由上层用 IsDrained 统一做。
+        }
+
+        // ---------- feeder 窗口诊断实现 ----------
+
+        private void AggReset()
+        {
+            _aggWatch.Restart();
+            _aggWrites = 0;
+            _aggMaxGap = 0;
+            _aggSpikes = 0;
+            _aggMinReady = int.MaxValue;
+            _aggReadySum = 0;
+            _aggReadyCount = 0;
+            _lastReady = 0;
+            _lastCapacity = 0;
+            _readMaxMs = 0;
+            _gc0Base = GC.CollectionCount(0);
+            _gc1Base = GC.CollectionCount(1);
+            _gc2Base = GC.CollectionCount(2);
+            _underrunCbBase = 0;
+            _underrunFramesBase = 0;
+        }
+
+        private void AggSample()
+        {
+            var win = SnapshotWindow();
+            _aggWrites++;
+            if (win.MaxGapMs > _aggMaxGap) _aggMaxGap = win.MaxGapMs;
+            _aggSpikes += win.Spikes;
+            if (win.ReadyFrames < _aggMinReady) _aggMinReady = win.ReadyFrames;
+            _aggReadySum += win.ReadyFrames;
+            _aggReadyCount++;
+            _lastReady = win.ReadyFrames;
+            _lastCapacity = win.CapacityFrames;
+            if (_aggWatch.Elapsed >= AggPeriod) FlushAgg(null);
+        }
+
+        /// <summary>尖峰即打（与自研内核 [渲染诊断] 同风格）。
+        /// 注意口径：尖峰发生在原生渲染线程，feeder 被 GC 冻**不会**直接造成渲染尖峰
+        /// （feeder 有 1.6s ring 兜底）——这行的用途是记录尖峰当时的水位与 feeder 状态。</summary>
+        private void WriteSpikeLine()
+        {
+            StartupLog.Write(string.Format(
+                "[原生内核诊断] 渲染间隔尖峰={0}ms（轮询12ms／缓冲{1}帧={2:F0}ms）ring余{3}/{4}帧 feeder读源最大{5:F2}ms 欠载累计{6}次",
+                _aggMaxGap, _bufferFrames,
+                _rate > 0 ? _bufferFrames * 1000.0 / _rate : 0,
+                _lastReady, _lastCapacity,
+                _readMaxMs, UnderrunCount));
+        }
+
+        private void FlushAgg(string? tail)
+        {
+            if (_aggWrites == 0) return;
+            NativeCoreAudio.NativeCoreStats st;
+            try { st = NativeCoreAudio.Stats(_handle); }
+            catch { return; }
+            long dCb = (long)st.UnderrunCallbacks - _underrunCbBase;
+            long dFr = (long)st.UnderrunFrames - _underrunFramesBase;
+            _underrunCbBase = (long)st.UnderrunCallbacks;
+            _underrunFramesBase = (long)st.UnderrunFrames;
+            int minReady = _aggMinReady == int.MaxValue ? 0 : _aggMinReady;
+            long avgReady = _aggReadyCount > 0 ? _aggReadySum / _aggReadyCount : 0;
+            double heapMb = GC.GetTotalMemory(false) / (1024.0 * 1024.0);
+            StartupLog.Write(string.Format(
+                "[原生内核统计] {0:F0}s 补货{1}次 | ring水位 最低{2}/平均{3}/满{4}帧 | 渲染间隔 最大{5:F1}ms 尖峰{6}次 | feeder读源 最大{7:F2}ms | 真欠载{8}次({9}帧) | GC gen0+{10} gen1+{11} gen2+{12} 堆{13:F0}MB 模式={14}{15}",
+                _aggWatch.Elapsed.TotalSeconds, _aggWrites,
+                minReady, avgReady, st.CapacityFrames,
+                _aggMaxGap, _aggSpikes,
+                _readMaxMs,
+                dCb, dFr,
+                GC.CollectionCount(0) - _gc0Base, GC.CollectionCount(1) - _gc1Base, GC.CollectionCount(2) - _gc2Base,
+                heapMb, System.Runtime.GCSettings.LatencyMode,
+                string.IsNullOrEmpty(tail) ? "" : " | " + tail));
+            _aggWatch.Restart();
+            _aggWrites = 0;
+            _aggMaxGap = 0;
+            _aggSpikes = 0;
+            _aggMinReady = int.MaxValue;
+            _aggReadySum = 0;
+            _aggReadyCount = 0;
+            _readMaxMs = 0;
+            _gc0Base = GC.CollectionCount(0);
+            _gc1Base = GC.CollectionCount(1);
+            _gc2Base = GC.CollectionCount(2);
         }
 
         /// <summary>feeder 线程内消费 seek：重定位源 → 读一小段 → replace 进 ring（重置统计 + 淡入）。</summary>
