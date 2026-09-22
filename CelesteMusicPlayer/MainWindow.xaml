@@ -3718,7 +3718,7 @@
                                                 <ToggleSwitch
                                                     x:Name="AudioFxSafetyLimiterToggle"
                                                     Header="启用安全限幅器（soft-clip）"
-                                                    IsOn="True"
+                                                    IsOn="False"
                                                     OnContent=""
                                                     OffContent=""
                                                     Toggled="AudioFxSafetyLimiter_Toggled" />

@@ -380,7 +380,9 @@ namespace CelesteMusicPlayer
             hd = Math.Clamp(hd, -12.0, 0.0);
             double targetGain = Math.Pow(10.0, hd / 20.0);
             _headroomDb = hd;
-            _limiterEnabled = state?.EnableLimiter ?? true;
+            // 未推过安全状态（引擎初始化期）按新装默认：限幅关（bit-perfect 优先）；
+            // 老用户盘上的值由 ApplyDspToEngine 启动时经 SetSafety 推入覆盖。
+            _limiterEnabled = state?.EnableLimiter ?? false;
             _headroomSmoothTotal = _format.SampleRate > 0 ? Math.Max(1, (int)(_format.SampleRate * SmoothingMs / 1000.0)) : 1;
             if (Math.Abs(_headroomGain - targetGain) > 1e-5)
             {

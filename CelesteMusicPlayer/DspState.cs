@@ -88,8 +88,9 @@ namespace CelesteMusicPlayer
 
         /// <summary>安全限幅器：对超 0dBFS 的样本做软削波（soft clip / brickwall ±1.0）。
         /// 注意：此开关只影响「已有其它 DSP（EQ/声道/headroom）」时的削波保护；
-        /// 单独开限幅、无其它 DSP 时不做任何逐样本处理（源 PCM 不会超 ±1，无需削波），保持 bit-perfect 直通。</summary>
-        public bool EnableLimiter { get; set; } = true;
+        /// 单独开限幅、无其它 DSP 时不做任何逐样本处理（源 PCM 不会超 ±1，无需削波），保持 bit-perfect 直通。
+        /// 新装默认关（2026-09-22 用户拍板阶段三）：已存过 dsp-extra.json 的老用户读盘值优先，绝不被改写。</summary>
+        public bool EnableLimiter { get; set; } = false;
 
         public DspSafetyState Clone() => new()
         {
@@ -97,7 +98,9 @@ namespace CelesteMusicPlayer
             EnableLimiter = EnableLimiter
         };
 
-        public static DspSafetyState Default() => new() { HeadroomDb = 0, EnableLimiter = true };
+        // 新装默认关（阶段三，2026-09-22 用户拍板）：没有 dsp-extra.json 的新装走这里；
+        // 老用户读盘值优先，绝不被 Default() 改写。
+        public static DspSafetyState Default() => new() { HeadroomDb = 0, EnableLimiter = false };
 
         public void Normalize()
         {
