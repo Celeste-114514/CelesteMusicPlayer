@@ -466,8 +466,28 @@ namespace CelesteMusicPlayer
             // Pro Audio 任务提升（foobar/Exclusive-Mode 示例做法）：降低独占音频线程的调度延迟/爆音。
             uint taskIdx = 0;
             IntPtr avrtTask = NativeWasapi.AvSetMmThreadCharacteristicsW("Pro Audio", out taskIdx);
+            bool timerPeriodRaised = false;
             try
             {
+                // 2026-09-23 实机卡顿定位：只注册 MMCSS 而不设置频段内优先级
+                // = AvSetMmThreadPriority 缺失 → NORMAL(0)，落在 Pro Audio 频段最底层。
+                // 用户日志实锤：补货间隔 45~123ms 尖峰（≈15.6ms 系统时钟的 3/5/8 倍）、
+                // 堆仅 20MB、真欠载 0——不是 GC、不是磁盘，是渲染线程排不上队。
+                // 微软 Exclusive 示例即 AvSetMmThreadPriority(task, CRITICAL)。
+                if (avrtTask != IntPtr.Zero && !NativeWasapi.AvSetMmThreadPriority(avrtTask, NativeWasapi.AVRT_PRIORITY_CRITICAL))
+                {
+                    StartupLog.Write("AvSetMmThreadPriority(CRITICAL) 失败，渲染线程可能调度延迟");
+                }
+
+                // WaitHandle.WaitAny(timeout) 的唤醒粒度 = 系统时钟分辨率（默认 ~15.6ms），
+                // 12ms 轮询被量化成 15/31/47ms。播放期间提到 1ms，让轮询真正按 12ms 跑。
+                // timeBeginPeriod 计数成对，失败也将 timerPeriodRaised 置真（尽力归还）。
+                timerPeriodRaised = true;
+                if (NativeWasapi.timeBeginPeriod(1) != NativeWasapi.TIMERR_NOERROR)
+                {
+                    StartupLog.Write("timeBeginPeriod(1) 失败，轮询粒度仍为系统默认 ~15.6ms");
+                }
+
                 var rc = _renderClient!;
                 var src = _provider;
                 if (src == null) return;
@@ -520,12 +540,18 @@ namespace CelesteMusicPlayer
                     // 等到那一刻再读源，设备嘴里已经是空的，读源/GC/等锁的 15ms 就是 15ms 的静音。
                     // 改成按 pollMs 主动醒来，每次把空闲空间（缓冲 − padding）补满：
                     // 设备缓冲被维持在接近满的水位，剩余存货就是抗抖动的余量。
+                    // GC 精确归因（2026-09-23）：旧口径在日志点采样 GC 计数，而尖峰日志
+                    // 限频 2s——距上次采样 ≥2s，"gen2+1"只能证明"这两秒内发生过 GC"，
+                    // 证明不了它造成了本次迟到。改成每轮 WaitAny 前后各采一次计数，
+                    // 差值 = 真正冻结在本次间隔里的 GC；全 0 = 铁证 GC 不背锅。
+                    int gc0Before = GC.CollectionCount(0), gc1Before = GC.CollectionCount(1), gc2Before = GC.CollectionCount(2);
                     int wi = WaitHandle.WaitAny(waits, pollMs);
                     if (_requestStop || _disposed) break;
                     // wi==0 停止信号；wi==1 设备事件（也顺手补货）；WaitTimeout(258) 轮询到点。
                     if (wi == 0) continue;
 
                     long tsNow = Stopwatch.GetTimestamp();
+                    int gc0After = GC.CollectionCount(0), gc1After = GC.CollectionCount(1), gc2After = GC.CollectionCount(2);
                     if (tsPrev != 0)
                     {
                         double gapMs = (tsNow - tsPrev) * 1000.0 / Stopwatch.Frequency;
@@ -540,9 +566,10 @@ namespace CelesteMusicPlayer
                                 tsGapLog = tsNow;
                                 int n0 = GC.CollectionCount(0), n1 = GC.CollectionCount(1), n2 = GC.CollectionCount(2);
                                 StartupLog.Write(string.Format(
-                                    "[渲染诊断] 补货间隔尖峰={0:F1}ms（轮询{1}ms／缓冲{2:F0}ms）{3} GC: gen0+{4} gen1+{5} gen2+{6} 堆={7:F0}MB 模式={8}",
+                                    "[渲染诊断] 补货间隔尖峰={0:F1}ms（轮询{1}ms／缓冲{2:F0}ms）{3} 本次间隔内 GC: gen0+{4} gen1+{5} gen2+{6}｜距上次日志 GC: gen0+{7} gen1+{8} gen2+{9} 堆={10:F0}MB 模式={11}",
                                     gapMs, pollMs, bufMsReal,
                                     (bufMsReal > 0 && gapMs > bufMsReal) ? "★超过缓冲=必然断流" : "",
+                                    gc0After - gc0Before, gc1After - gc1Before, gc2After - gc2Before,
                                     n0 - gc0, n1 - gc1, n2 - gc2,
                                     GC.GetTotalMemory(false) / 1048576.0, System.Runtime.GCSettings.LatencyMode));
                                 gc0 = n0; gc1 = n1; gc2 = n2;
@@ -702,6 +729,13 @@ namespace CelesteMusicPlayer
                 if (avrtTask != IntPtr.Zero)
                 {
                     try { NativeWasapi.AvRevertMmThreadCharacteristics(avrtTask); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NativeWasapiExclusiveOut.cs", caught); }
+                }
+                // timeBeginPeriod/timeEndPeriod 必须成对：不还 = 系统时钟被钉在 1ms，
+                // 全系统定时器精度、电池损耗都受影响（且 timeBeginPeriod 计数归属进程，
+                // 进程退出才彻底还清——不能指望它）。
+                if (timerPeriodRaised)
+                {
+                    NativeWasapi.timeEndPeriod(1);
                 }
             }
         }

@@ -157,6 +157,30 @@ namespace CelesteMusicPlayer
         [DllImport("avrt.dll", ExactSpelling = true)]
         public static extern bool AvRevertMmThreadCharacteristics(IntPtr avrtHandle);
 
+        // AVRT_PRIORITY_*：线程注册 MMCSS 后，其 BasePriority 被**忽略**，
+        // 实际调度优先级由 AvSetMmThreadPriority 决定；不调 = NORMAL(0)，
+        // 落在 "Pro Audio" 频段最底层——后台负载下渲染线程可能几十毫秒排不上队。
+        // 微软 Exclusive-Mode 示例即用 CRITICAL。2026-09-23 用户实机：
+        // 45~123ms 补货尖峰、堆仅 20MB、无真欠载，与缺此调用完全吻合。
+        public const int AVRT_PRIORITY_CRITICAL = 2;
+        public const int AVRT_PRIORITY_HIGH = 1;
+        public const int AVRT_PRIORITY_NORMAL = 0;
+
+        [DllImport("avrt.dll", ExactSpelling = true)]
+        public static extern bool AvSetMmThreadPriority(IntPtr avrtHandle, int priority);
+
+        // 系统定时器分辨率（winmm）：WaitHandle.WaitAny(timeout) 的唤醒粒度
+        // 受系统时钟分辨率限制（默认 ~15.6ms），12ms 补货轮询实际按
+        // 15/31/47/62ms 阶梯跳。播放期间提到 1ms（Win11 22H2 起为进程级，
+        // 停播归还不超期占用）。返回 TIMERR_NOERROR(0) 表示成功。
+        public const uint TIMERR_NOERROR = 0;
+
+        [DllImport("winmm.dll", ExactSpelling = true)]
+        public static extern uint timeBeginPeriod(uint uMilliseconds);
+
+        [DllImport("winmm.dll", ExactSpelling = true)]
+        public static extern uint timeEndPeriod(uint uMilliseconds);
+
         /// <summary>诊断：最近一次设备枚举的 HRESULT/状态（供排障日志）。</summary>
         public static string? LastEnumDiag;
 
