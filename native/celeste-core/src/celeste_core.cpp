@@ -564,6 +564,7 @@ struct celeste_engine {
     byte_ring ring;
     IAudioClient* client = nullptr;
     IAudioRenderClient* render = nullptr;
+    IAudioClock* clock = nullptr;       // I 轮探针用：设备实际播放游标（GetPosition）
     HANDLE render_event = nullptr;   // auto-reset：设备要数据
     HANDLE stop_event = nullptr;     // manual-reset：停止
     HANDLE thread = nullptr;
@@ -585,6 +586,11 @@ struct celeste_engine {
     // 窗口统计（stats() 读走即清零）
     std::atomic<int32_t> max_gap_ms{ 0 };
     std::atomic<uint64_t> spike_count{ 0 };
+
+    // I 轮设备侧探针（应用侧全绿仍偶发卡顿：唯一没测的轴=设备实际消费）
+    std::atomic<uint64_t> device_pos{ 0 };  // GetPosition 累计帧（即时值，不清零）
+    std::atomic<int32_t> pad_max{ 0 };      // 窗口内事件唤醒时 pad 最大值（应恒 0）
+    std::atomic<uint32_t> late_wakes{ 0 };  // 窗口内唤醒间隔 >1.5×缓冲周期 次数
 
     // 累计统计
     std::atomic<uint64_t> frames_played{ 0 };
@@ -690,6 +696,11 @@ static DWORD WINAPI render_proc(void* param)
         const double gap_ms = (double)(ts_now - ts_last) * 1000.0 / (double)qpc_freq();
         ts_last = ts_now;
         note_gap(e, gap_ms, (int)(buffer_ms + 0.5)); // 判据基准 = 一个缓冲周期（事件驱动下的正常间隔）
+        // I 轮探针：唤醒晚于 1.5 个周期 = 设备这一周期已经断供（静音/抖动已发生，
+        // 只是 ring 深、pop 不缺数据，所以欠载计数器看不见）。
+        if (gap_ms > buffer_ms * 1.5) {
+            e->late_wakes.fetch_add(1, std::memory_order_relaxed);
+        }
 
         // 只补空闲空间改为"每次填满整个设备缓冲"（与 ECHO 内核同策略）。
         // GetCurrentPadding 现在只作两用：设备失效探测 + 异常保护。
@@ -699,6 +710,14 @@ static DWORD WINAPI render_proc(void* param)
             std::fprintf(stderr, "[celeste-core] GetCurrentPadding 失败（设备失效/拔除？），渲染线程退出\n");
             e->failed.store(1, std::memory_order_release);
             break;
+        }
+        // I 轮探针：事件驱动下 render_event 到达时本周期应已播完，pad 必须为 0。
+        // >0 = 事件早到（相位漂移）或上一次的信号没被消费（合并周期）——两者都让
+        // 本次写入踏进设备还没播完的缓冲，是"统计全绿却卡"的候选根因。
+        int32_t pm = e->pad_max.load(std::memory_order_relaxed);
+        while ((int32_t)pad > pm &&
+               !e->pad_max.compare_exchange_weak(pm, (int32_t)pad, std::memory_order_relaxed)) {
+            // 失败时 pm 已刷新为最新值，重试
         }
         if (pad >= e->buffer_frames) continue;  // 异常：缓冲竟还满着，等下一事件再写
 
@@ -738,6 +757,15 @@ static DWORD WINAPI render_proc(void* param)
             std::fprintf(stderr, "[celeste-core] ReleaseBuffer 失败，渲染线程退出\n");
             e->failed.store(1, std::memory_order_release);
             break;
+        }
+        // I 轮探针：设备实际播放游标。与 framesPlayed 的差（滞后）稳定 = 设备在平稳
+        // 消费；滞后持续增长 = 设备内部跟不上（USB 驱动交不够货），应用侧无感。
+        // 注意：位置在 IAudioClock 上（IAudioClient 没有 GetPosition 成员）。
+        if (e->clock != nullptr) {
+            UINT64 dev_pos = 0, qpc_pos = 0;
+            if (e->clock->GetPosition(&dev_pos, &qpc_pos) == S_OK) {
+                e->device_pos.store((uint64_t)dev_pos, std::memory_order_relaxed);
+            }
         }
         e->frames_played.fetch_add((uint64_t)to_fill, std::memory_order_relaxed);
 
@@ -799,6 +827,8 @@ static int start_engine_impl(celeste_engine* e, uint32_t rate, uint32_t channels
         com_leave(&com);
         return -1;
     }
+    // I 轮探针：设备播放游标走 IAudioClock 服务（失败不致命，只少一条诊断轴）
+    client->GetService(__uuidof(IAudioClock), (void**)&e->clock);
     e->client = client;
     e->buffer_frames = buffer_frames;
     e->rate = rate;
@@ -900,6 +930,7 @@ fail_after_events:
     e->render_event = nullptr;
     CloseHandle(e->stop_event);
     e->stop_event = nullptr;
+    if (e->clock != nullptr) { e->clock->Release(); e->clock = nullptr; }
     e->render->Release();
     e->render = nullptr;
     client->Release();
@@ -1024,6 +1055,9 @@ __declspec(dllexport) int celeste_core_stats(void* engineHandle, celeste_core_st
     out->failed = e->failed.load(std::memory_order_relaxed);
     out->maxGapMs = e->max_gap_ms.exchange(0, std::memory_order_relaxed);
     out->spikeCount = e->spike_count.exchange(0, std::memory_order_relaxed);
+    out->devicePosition = e->device_pos.load(std::memory_order_relaxed);
+    out->padMaxFrames = e->pad_max.exchange(0, std::memory_order_relaxed);
+    out->lateWakeups = e->late_wakes.exchange(0, std::memory_order_relaxed);
     snprintf(out->format, sizeof(out->format), "%s",
              e->endpoint_name[0] != '\0' ? e->endpoint_name : "?");
     return 0;
@@ -1059,6 +1093,10 @@ __declspec(dllexport) void celeste_core_stop(void* engineHandle)
         if (e->render != nullptr) {
             e->render->Release();
             e->render = nullptr;
+        }
+        if (e->clock != nullptr) {
+            e->clock->Release();
+            e->clock = nullptr;
         }
         if (e->client != nullptr) {
             e->client->Release();

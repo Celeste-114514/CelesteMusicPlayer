@@ -26,6 +26,10 @@ namespace CelesteMusicPlayer
         // ring 常备 1.5s 存货，块越小背压越平滑、P/Invoke 次数略多（开销可忽略）。
         private const int ChunkFrames = 4096;
 
+        // 起播预填周期数：prime 用掉 1 个，其余留给 feeder 启动/JIT 窗口（I 轮实机：
+        // 1 周期裕量下开播瞬间 ring 见底 4096 帧）。硬顶 1.2s 防超 ring 容量卡死 Init。
+        private const int kPrefillPeriods = 3;
+
         private readonly object _seekLock = new();
         private Thread? _feeder;
         private volatile bool _stopRequested;
@@ -70,9 +74,21 @@ namespace CelesteMusicPlayer
         private int _gc0Base, _gc1Base, _gc2Base;
         private long _underrunCbBase, _underrunFramesBase;
         private int _lastCapacity;
+        // I 轮设备侧探针的窗口累计（内核给的是读走即清零的窗口值，这里再跨 write 聚合到 5s 行）
+        private int _aggPadMax;
+        private uint _aggLateWakes;
+        private bool _aggFailed;
+        private ulong _devBase;        // 设备游标基准（Play/replace 后重新取）
+        private ulong _fpBase;         // framesPlayed 基准（replace 会归零，必须成对重置）
+        private bool _devNeedBaseline; // 下一次采样时重置基准（Play 后 / replace 后）
+        private long _aggDevDelta;     // 窗口内设备实际播放帧增量
+        private long _aggLag;          // 窗口末 我们写入增量 - 设备播放增量（>一个周期=设备跟不上）
 
         private static readonly TimeSpan AggPeriod = TimeSpan.FromSeconds(5);
-        private const int SpikeThresholdMs = 30; // 轮询12ms 下 >2.5× 视为异常尖峰
+        // 尖峰判据：H 轮起渲染是事件驱动，正常唤醒间隔 = 一个缓冲周期（100ms）。
+        // 旧的 30ms 阈值会把每次正常唤醒都刷成"尖峰"（10 行/秒日志洪水），
+        // 改为 2 个缓冲周期：只有真异常才即时打。
+        private const double SpikePeriodsThreshold = 2.0;
 
         public event Action? Ended;
         public event Action<Exception>? Failed;
@@ -135,13 +151,18 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>渲染线程窗口统计（诊断）：[上次读取以来的最大补货间隔ms, 尖峰次数, ring存货帧, 容量帧]。
-        /// maxGapMs/spikeCount 是「自上次调用起」的窗口值（内核读走即清零），调用方轮询即得连续曲线。</summary>
-        public (int MaxGapMs, ulong Spikes, int ReadyFrames, int CapacityFrames) SnapshotWindow()
+        /// <summary>渲染线程窗口统计（诊断）：[上次读取以来的最大补货间隔ms, 尖峰次数, ring存货帧, 容量帧,
+        /// 设备播放游标(累计帧), 窗口内pad最大值, 窗口内唤醒晚点次数, 渲染线程是否已失败]。
+        /// maxGapMs/spikeCount/padMaxFrames/lateWakeups 是「自上次调用起」的窗口值（内核读走即清零，
+        /// 注意：任何额外的 Stats() 调用都会清掉还没读的窗口数据，所以现场值要在同一次调用里取走）；
+        /// DevicePosition 是即时累计值，调用方自行取差分。</summary>
+        public (int MaxGapMs, ulong Spikes, int ReadyFrames, int CapacityFrames,
+                ulong DevicePosition, int PadMaxFrames, uint LateWakeups, int Failed) SnapshotWindow()
         {
-            if (_handle == IntPtr.Zero) return (0, 0, 0, 0);
+            if (_handle == IntPtr.Zero) return (0, 0, 0, 0, 0, 0, 0, 0);
             var st = NativeCoreAudio.Stats(_handle);
-            return (st.MaxGapMs, st.SpikeCount, st.ReadyFrames, st.CapacityFrames);
+            return (st.MaxGapMs, st.SpikeCount, st.ReadyFrames, st.CapacityFrames,
+                    st.DevicePosition, st.PadMaxFrames, st.LateWakeups, st.Failed);
         }
 
         public bool Init(NativeWasapi.IMMDevice device, IWaveSourceProvider provider, bool requireExactFormat = false)
@@ -226,15 +247,21 @@ namespace CelesteMusicPlayer
                 deviceId = null;
             }
 
-            // 起播预填：先读最多一个周期的**真实字节**。设备启动时首缓冲直接填它（不填静音），
-            // 起播即出声——与自研/ECHO 两条路径的 pre-roll 修复同一口径。
-            int prefillBytes = requestFrames * _srcBlockAlign;
+            // 起播预填：先读最多 kPrefillPeriods 个周期的**真实字节**。设备启动时首缓冲
+            // 直接填它（不填静音），起播即出声；多出来的存货留在 ring 里，兜住 feeder
+            // 线程创建 + 首次 JIT + 首轮读源的窗口（实机日志：1 周期裕量下开播瞬间
+            // ring 见底到 4096 帧 ≈ 90ms，虽没欠载但太薄）。
+            // ⚠️ 硬顶 1.2s：C++ start 阶段的 ring push 在满时会阻塞，而那时还没有消费
+            // 线程——预填超过 ring 容量（缓冲+1.5s 储备）= Init 直接卡死。
+            int prefillFramesWanted = Math.Min(requestFrames * kPrefillPeriods,
+                                               (int)((long)src.SampleRate * 1200 / 1000));
+            int prefillBytes = prefillFramesWanted * _srcBlockAlign;
             _readBuf = new byte[ChunkFrames * _srcBlockAlign];
             var prefill = new byte[prefillBytes];
             int prefillGotBytes = ReadRaw(prefill, prefillBytes);
             if (prefillGotBytes < prefillBytes)
             {
-                StartupLog.Write($"原生内核 预填不足：请求{requestFrames}帧 实得{prefillGotBytes / _srcBlockAlign}帧（源短或起播点靠近结尾）");
+                StartupLog.Write($"原生内核 预填不足：请求{prefillFramesWanted}帧 实得{prefillGotBytes / _srcBlockAlign}帧（源短或起播点靠近结尾）");
             }
             // 端点容器候选：24bit 打包源先试 4 字节容器（ECHO 内核在这台 DAC 上实机零卡顿的
             // 就是它），设备不支持（rc=-2）才退回 3 字节打包；其余源布局只有一个候选，行为不变。
@@ -425,10 +452,22 @@ namespace CelesteMusicPlayer
                     // 窗口统计：write 返回间隔 = 上一块被设备消耗掉的时长，
                     // 采样节奏天然对齐 feeder，无需额外定时器/线程。
                     AggSample();
-                    if (_aggMaxGap >= SpikeThresholdMs)
+                    // 真尖峰：间隔 ≥2 个缓冲周期（H 轮起事件驱动，正常唤醒 = 1 个周期；
+                    // 旧的 30ms 阈值在 100ms 节拍下每轮误报，日志 10 行/秒盖住真异常）
+                    if (_aggMaxGap >= BufferPeriodMs * SpikePeriodsThreshold)
                     {
                         WriteSpikeLine();
                         _aggMaxGap = 0; // 已报过，吞掉避免每轮重复打同一尖峰
+                    }
+                    // I 轮设备侧异常：唤醒晚点 / pad 非 0 / 设备滞后超一个缓冲 / 渲染线程失败。
+                    // 任一出现即打现场（同样吞掉，等 5s 统计行汇总）
+                    else if (_aggLateWakes > 0 || _aggPadMax > 0 || _aggFailed ||
+                             Math.Abs(_aggLag) > (_bufferFrames > 0 ? _bufferFrames : int.MaxValue))
+                    {
+                        WriteAnomalyLine();
+                        _aggLateWakes = 0;
+                        _aggPadMax = 0;
+                        _aggFailed = false;
                     }
                 }
             }
@@ -463,6 +502,14 @@ namespace CelesteMusicPlayer
             _gc2Base = GC.CollectionCount(2);
             _underrunCbBase = 0;
             _underrunFramesBase = 0;
+            _aggPadMax = 0;
+            _aggLateWakes = 0;
+            _aggFailed = false;
+            _devBase = 0;
+            _fpBase = 0;
+            _devNeedBaseline = true; // Play 后第一次采样取基准（replace 也会置位）
+            _aggDevDelta = 0;
+            _aggLag = 0;
         }
 
         private void AggSample()
@@ -476,20 +523,52 @@ namespace CelesteMusicPlayer
             _aggReadyCount++;
             _lastReady = win.ReadyFrames;
             _lastCapacity = win.CapacityFrames;
+            if (win.PadMaxFrames > _aggPadMax) _aggPadMax = win.PadMaxFrames;
+            _aggLateWakes += win.LateWakeups;
+            if (win.Failed != 0) _aggFailed = true;
+            // 设备游标 vs 我们写入的帧：基准重置后取差分，避免 replace 归零 framesPlayed 造成的假滞后
+            if (_devNeedBaseline)
+            {
+                _devBase = win.DevicePosition;
+                _fpBase = (ulong)FramesWritten;
+                _devNeedBaseline = false;
+                _aggDevDelta = 0;
+                _aggLag = 0;
+            }
+            else
+            {
+                _aggDevDelta = (long)(win.DevicePosition - _devBase);
+                _aggLag = (long)((ulong)FramesWritten - _fpBase) - _aggDevDelta;
+            }
             if (_aggWatch.Elapsed >= AggPeriod) FlushAgg(null);
         }
 
-        /// <summary>尖峰即打（与自研内核 [渲染诊断] 同风格）。
-        /// 注意口径：尖峰发生在原生渲染线程，feeder 被 GC 冻**不会**直接造成渲染尖峰
-        /// （feeder 有 1.6s ring 兜底）——这行的用途是记录尖峰当时的水位与 feeder 状态。</summary>
+        /// <summary>事件驱动下，间隔 ≥2 个缓冲周期才算真尖峰（旧 30ms 阈值在 100ms 节拍下
+        /// 每轮都误报，10 行/秒的日志洪水反而盖住真异常）。打点口径同自研内核 [渲染诊断]。</summary>
+        private double BufferPeriodMs => _rate > 0 ? _bufferFrames * 1000.0 / _rate : 0;
+
         private void WriteSpikeLine()
         {
             StartupLog.Write(string.Format(
-                "[原生内核诊断] 渲染间隔尖峰={0}ms（轮询12ms／缓冲{1}帧={2:F0}ms）ring余{3}/{4}帧 feeder读源最大{5:F2}ms 欠载累计{6}次",
+                "[原生内核诊断] 渲染间隔尖峰={0}ms（事件驱动／缓冲{1}帧={2:F0}ms）ring余{3}/{4}帧 feeder读源最大{5:F2}ms 欠载累计{6}次",
                 _aggMaxGap, _bufferFrames,
-                _rate > 0 ? _bufferFrames * 1000.0 / _rate : 0,
+                BufferPeriodMs,
                 _lastReady, _lastCapacity,
                 _readMaxMs, UnderrunCount));
+        }
+
+        /// <summary>I 轮设备侧探针异常即打：唤醒晚点（设备已断供）/ pad 非 0（事件早到或
+        /// 信号合并）/ 设备滞后增长（USB 驱动交不够货）/ 渲染线程失败。这些都是
+        /// "统计全绿却听得出卡"的候选根因，各配一句现场水位与 feeder 状态。
+        /// 注意：本行不能再调 Stats()——窗口值读走即清零，会把下一段窗口数据吃掉，
+        /// 所以 Failed 用 AggSample 同一次快照里取走的 _aggFailed。</summary>
+        private void WriteAnomalyLine()
+        {
+            StartupLog.Write(string.Format(
+                "[原生内核诊断] 设备侧异常 唤醒晚点{0}次 pad最大{1}帧 设备滞后{2}帧 开演以来设备播放推进{3}帧 ring余{4}/{5}帧 feeder读源最大{6:F2}ms 欠载累计{7}次 渲染线程失败={8}",
+                _aggLateWakes, _aggPadMax, _aggLag, _aggDevDelta,
+                _lastReady, _lastCapacity, _readMaxMs, UnderrunCount,
+                _aggFailed ? "是" : "否"));
         }
 
         private void FlushAgg(string? tail)
@@ -506,14 +585,17 @@ namespace CelesteMusicPlayer
             long avgReady = _aggReadyCount > 0 ? _aggReadySum / _aggReadyCount : 0;
             double heapMb = GC.GetTotalMemory(false) / (1024.0 * 1024.0);
             StartupLog.Write(string.Format(
-                "[原生内核统计] {0:F0}s 补货{1}次 | ring水位 最低{2}/平均{3}/满{4}帧 | 渲染间隔 最大{5:F1}ms 尖峰{6}次 | feeder读源 最大{7:F2}ms | 真欠载{8}次({9}帧) | GC gen0+{10} gen1+{11} gen2+{12} 堆{13:F0}MB 模式={14}{15}",
+                "[原生内核统计] {0:F0}s 补货{1}次 | ring水位 最低{2}/平均{3}/满{4}帧 | 渲染间隔 最大{5:F1}ms 尖峰{6}次 | 唤醒晚点{7}次 pad最大{8}帧 | 设备推进{9}帧 滞后{10}帧 | feeder读源 最大{11:F2}ms | 真欠载{12}次({13}帧) | GC gen0+{14} gen1+{15} gen2+{16} 堆{17:F0}MB 模式={18} 渲染线程={19}{20}",
                 _aggWatch.Elapsed.TotalSeconds, _aggWrites,
                 minReady, avgReady, st.CapacityFrames,
                 _aggMaxGap, _aggSpikes,
+                _aggLateWakes, _aggPadMax,
+                _aggDevDelta, _aggLag,
                 _readMaxMs,
                 dCb, dFr,
                 GC.CollectionCount(0) - _gc0Base, GC.CollectionCount(1) - _gc1Base, GC.CollectionCount(2) - _gc2Base,
                 heapMb, System.Runtime.GCSettings.LatencyMode,
+                st.Failed != 0 ? "已失败" : "正常",
                 string.IsNullOrEmpty(tail) ? "" : " | " + tail));
             _aggWatch.Restart();
             _aggWrites = 0;
@@ -526,6 +608,9 @@ namespace CelesteMusicPlayer
             _gc0Base = GC.CollectionCount(0);
             _gc1Base = GC.CollectionCount(1);
             _gc2Base = GC.CollectionCount(2);
+            _aggPadMax = 0;
+            _aggLateWakes = 0;
+            _aggFailed = false;
         }
 
         /// <summary>feeder 线程内消费 seek：重定位源 → 读一小段 → replace 进 ring（重置统计 + 淡入）。</summary>
@@ -550,6 +635,9 @@ namespace CelesteMusicPlayer
                 // replace 内部把 framesPlayed 归零，这里把基准挪到 seek 目标，
                 // FramesWritten = 基准 + 已播，进度条连续不回头。
                 _framesBaseline = _rate > 0 ? (long)(pos.TotalSeconds * _rate) : 0;
+                // 设备侧探针基准成对重置：framesPlayed 已归零，设备游标没有，
+                // 不重置会算出假滞后（I 轮）。
+                _devNeedBaseline = true;
             }
             catch (Exception caught)
             {

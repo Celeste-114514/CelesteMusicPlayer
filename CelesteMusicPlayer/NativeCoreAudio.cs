@@ -71,7 +71,12 @@ namespace CelesteMusicPlayer
         [DllImport(Dll, CallingConvention = CallingConvention.Cdecl, ExactSpelling = true)]
         public static extern void celeste_core_destroy(IntPtr engineHandle);
 
-        /// <summary>统计快照。字段布局必须与 celeste_core.h 的 celeste_core_stats_t 逐个对齐（x64）。</summary>
+        /// <summary>
+        /// 统计快照。字段布局必须与 celeste_core.h 的 celeste_core_stats_t 逐个对齐（x64）。
+        /// 末尾三字段是 I 轮设备侧探针（2026-09-23：应用侧全绿仍偶发卡顿，补设备实际消费轴）：
+        /// DevicePosition=设备播放游标（IAudioClock::GetPosition，自流启动累计帧）；
+        /// PadMaxFrames/lateWakeups=自上次 Stats() 起的窗口值（内核读走即清零）。
+        /// </summary>
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         public struct NativeCoreStats
         {
@@ -91,6 +96,9 @@ namespace CelesteMusicPlayer
             public ulong SpikeCount;
             [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)]
             public string Format;
+            public ulong DevicePosition;
+            public int PadMaxFrames;
+            public uint LateWakeups;
         }
 
         /// <summary>取统计快照（结构体大小由本方法填好，DLL 侧据此拒绝旧版越界读）。</summary>

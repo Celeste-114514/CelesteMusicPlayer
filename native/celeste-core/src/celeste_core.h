@@ -35,7 +35,8 @@
 // 统计快照。字段布局必须与 C# NativeCoreAudio.NativeCoreStats 逐个对齐。
 // 口径：
 //   framesPlayed/underrunCallbacks/underrunFrames = 累计值（C# 侧取差分）；
-//   maxGapMs/spikeCount = 自上次 celeste_core_stats() 起的窗口值（读走即清零）；
+//   maxGapMs/spikeCount/padMaxFrames/lateWakeups = 自上次 celeste_core_stats() 起的
+//     窗口值（读走即清零）；
 //   其余为即时状态。
 struct celeste_core_stats_t {
     uint32_t structSize;        // = sizeof(本结构体)，前向兼容防线
@@ -53,6 +54,11 @@ struct celeste_core_stats_t {
     int32_t  maxGapMs;          // 窗口内相邻两次补货最大间隔（毫秒；卡顿硬指标）
     uint64_t spikeCount;        // 窗口内间隔尖峰次数（> 3×轮询间隔）
     char     format[32];        // 端点容器名：pcm16/pcm24in32/pcm24/pcm32/float32
+    // ---- I 轮设备侧探针（2026-09-23：应用侧全绿仍偶发卡顿，补设备实际消费轴）----
+    // 三者回答同一个问题：设备到底有没有在平稳消费我们写进去的数据。
+    uint64_t devicePosition;    // 设备播放游标（IAudioClient::GetPosition，自流启动累计帧，即时值）
+    int32_t  padMaxFrames;      // 窗口内事件唤醒时 GetCurrentPadding 最大值（应恒 0；>0 = 事件早到/陈旧信号）
+    uint32_t lateWakeups;       // 窗口内唤醒间隔 > 1.5×缓冲周期 的次数（线程醒晚 = 设备已断供）
 };
 
 #endif // _WIN32
