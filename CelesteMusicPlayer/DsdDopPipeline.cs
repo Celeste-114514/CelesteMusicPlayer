@@ -105,21 +105,62 @@ namespace CelesteMusicPlayer
             ReadU32(fs);          // bits per sample(=1)
             ReadU64(fs);          // sampleCount
             uint blockSize = ReadU32(fs); // e.g. 4096
+            fs.Position += 4;          // reserved：fmt 块体 = 36 字节语义 + 4 字节保留 = 40。
+            // 2026-09-23 实机教训：漏跳这 4 字节 → data 标签读成 0x00000000 → 整张 DSD 专辑
+            // （DSD REMASTERED 版本）集体误判"缺 data 块"回退 PCM。此布局来自旧代码实证（bd89457 前）。
 
-            while (ReadTag(fs, 4) == "data")
+            // data 块
+            (long Start, long Avail)? dataChunk = null;
+            if (ReadTag(fs, 4) == "data")
             {
                 long size = ReadI64(fs);
                 long start = fs.Position;
-                long avail = Math.Min(size, fs.Length - start);
-                StartupLog.Write(string.Format(
-                    "[DSF解析] 频道={0} blockSize={1} freq={2} dataBytes={3}",
-                    ch, blockSize, freq, Math.Max(0, avail)));
-                return new DsdBitstream(
-                    fs as FileStream ?? throw new InvalidDataException("DSF 需文件流"),
-                    start, Math.Max(0, avail), freq, (int)ch, (int)blockSize);
+                dataChunk = (start, Math.Min(size, fs.Length - start));
+            }
+            else
+            {
+                // 兜底：畸形 fmt（reserved 变长等未知布局）时，在头部小窗内扫描 data 标签，
+                // 防未知块布局再次"整张专辑集体失明"。
+                dataChunk = ScanForDataChunk(fs);
             }
 
-            throw new InvalidDataException("DSF 缺 data 块。");
+            if (dataChunk == null)
+            {
+                throw new InvalidDataException("DSF 缺 data 块。");
+            }
+
+            StartupLog.Write(string.Format(
+                "[DSF解析] 频道={0} blockSize={1} freq={2} dataBytes={3}",
+                ch, blockSize, freq, Math.Max(0, dataChunk.Value.Avail)));
+            return new DsdBitstream(
+                fs as FileStream ?? throw new InvalidDataException("DSF 需文件流"),
+                dataChunk.Value.Start, Math.Max(0, dataChunk.Value.Avail), freq, (int)ch, (int)blockSize);
+        }
+
+        /// <summary>fmt 块布局畸形（reserved 变长等）时兜底：在文件头小窗内找 data 块。
+        /// 判据：4 字节 "data" 标签 + 8 字节 size&gt;0 且数据不越过文件尾（防巧合命中）。</summary>
+        private static (long Start, long Avail)? ScanForDataChunk(Stream fs)
+        {
+            long scanFrom = 44; // 覆盖"无 reserved"极端变体；巧合命中由 size 合理性校验拦下
+            long scanTo = Math.Min(fs.Length - 12, scanFrom + 4096);
+            for (long p = scanFrom; p <= scanTo; p++)
+            {
+                fs.Position = p;
+                if (ReadTag(fs, 4) != "data")
+                {
+                    continue;
+                }
+
+                long size = ReadI64(fs);
+                long start = fs.Position;
+                if (size > 0 && start + size <= fs.Length)
+                {
+                    StartupLog.Write($"[DSF解析] 畸形 fmt 布局，扫描兜底命中 data 块 @{p} size={size}");
+                    return (start, Math.Min(size, fs.Length - start));
+                }
+            }
+
+            return null;
         }
 
         public int Channels => _channels;
