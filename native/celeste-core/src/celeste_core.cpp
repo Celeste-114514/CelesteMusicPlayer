@@ -659,42 +659,50 @@ static DWORD WINAPI render_proc(void* param)
         std::fprintf(stderr, "[celeste-core] AvSetMmThreadCharacteristics(Pro Audio) 失败\n");
     }
 
-    // 轮询粒度提到 1ms（WaitForMultipleObjects 超时会被系统时钟量化）；成对归还。
+    // 等待是 INFINITE（不依赖超时），1ms 时钟粒度仍有助于事件响应的及时性；成对归还。
     const bool timer_raised = (timeBeginPeriod(1) == TIMERR_NOERROR);
     if (!timer_raised) {
-        std::fprintf(stderr, "[celeste-core] timeBeginPeriod(1) 失败，轮询粒度 ≈15.6ms\n");
+        std::fprintf(stderr, "[celeste-core] timeBeginPeriod(1) 失败，事件响应可能被时钟量化\n");
     }
 
     const double buffer_ms = e->rate > 0 ? (double)e->buffer_frames * 1000.0 / (double)e->rate : 0.0;
-    int poll_ms = (int)(buffer_ms / 8.0 + 0.5);
-    if (poll_ms < kPollMinMs) poll_ms = kPollMinMs;
-    if (poll_ms > kPollMaxMs) poll_ms = kPollMaxMs;
+    // 2026-09-23 实机定论（补货尖峰 0 / 真欠载 0 / ring 水位 93%+ 却仍卡顿 2~3 次）：
+    //   根因不是"数据不够"，而是补货"写法"不对——12ms 轮询 + 只填空闲空间，
+    //   使唤醒相位与设备周期无关、每 12ms 都往缓冲中段塞一小块，USB 驱动
+    //   （FiiO KA13）对这种不规则相位小块写入会抖动。
+    //   修复：与 ECHO 内核（实机零卡顿）完全同策略——INFINITE 死等 render_event，
+    //   每次填满**整个**设备缓冲。
+    // 尖峰判据基准 = 一个缓冲周期（事件驱动下的正常唤醒间隔）。
 
     std::vector<uint8_t> scratch((size_t)e->buffer_frames * (size_t)e->frame_bytes);
     HANDLE waits[2] = { e->stop_event, e->render_event };
     int64_t ts_last = now_qpc();
 
     while (!e->stop_requested.load(std::memory_order_acquire)) {
-        const DWORD wait = WaitForMultipleObjects(2, waits, FALSE, (DWORD)poll_ms);
+        // 事件驱动优先：正常每 ~100ms（一个设备周期）被 render_event 唤醒一次。
+        // 2s 兜底超时只防"驱动完全不发事件"时彻底无声；正常路径永远走不到这里，
+        // 所以不会重新引入 12ms 轮询那种与设备周期无关的相位漂移（那正是卡顿根因）。
+        const DWORD wait = WaitForMultipleObjects(2, waits, FALSE, 2000);
         if (e->stop_requested.load(std::memory_order_acquire)) break;
         (void)wait; // stop=0 / render=1 / 超时：都走同一套补货检查
 
         const int64_t ts_now = now_qpc();
         const double gap_ms = (double)(ts_now - ts_last) * 1000.0 / (double)qpc_freq();
         ts_last = ts_now;
-        note_gap(e, gap_ms, poll_ms);
+        note_gap(e, gap_ms, (int)(buffer_ms + 0.5)); // 判据基准 = 一个缓冲周期（事件驱动下的正常间隔）
 
-        // 只补空闲空间（独占 + 事件驱动下周期 = 缓冲，主动补货把水位顶满）
+        // 只补空闲空间改为"每次填满整个设备缓冲"（与 ECHO 内核同策略）。
+        // GetCurrentPadding 现在只作两用：设备失效探测 + 异常保护。
+        // 独占 + 事件驱动下 render_event 到达时本周期已播完，pad 应为 0。
         UINT32 pad = 0;
         if (e->client->GetCurrentPadding(&pad) != S_OK) {
             std::fprintf(stderr, "[celeste-core] GetCurrentPadding 失败（设备失效/拔除？），渲染线程退出\n");
             e->failed.store(1, std::memory_order_release);
             break;
         }
+        if (pad >= e->buffer_frames) continue;  // 异常：缓冲竟还满着，等下一事件再写
 
-        int to_fill = (int)e->buffer_frames - (int)pad;
-        if (to_fill <= 0) continue;  // 缓冲还满着：无空闲可写
-        if ((uint32_t)to_fill > e->buffer_frames) to_fill = (int)e->buffer_frames;
+        const int to_fill = (int)e->buffer_frames;
 
         BYTE* dst = nullptr;
         if (e->render->GetBuffer((UINT32)to_fill, &dst) != S_OK) {
