@@ -51,6 +51,8 @@ static const int kRingMaxFrames = 4000000;  // ring 容量 sanity cap（帧）
 static const int kPollMinMs = 1;
 static const int kPollMaxMs = 15;
 static const int kStopJoinMs = 5000;        // 等渲染线程退出的上限
+static const int kProbeIntervalMs = 50;     // K 轮：设备侧探针旁路线程轮询间隔（滞后/游标是慢变量，20Hz 足够）
+static const int kProbeJoinMs = 1000;       // 等探针线程退出的上限（一圈 = 两次驱动 COM 调用 + 50ms 睡，留足余量）
 static const int kWasapiTimeoutMs = 3000;   // Activate/GetDevicePeriod/Initialize/Start 单步超时（驱动可能挂住）
 static const int kFadeMs = 10;              // replace（seek/切歌）后淡入时长
 
@@ -567,7 +569,8 @@ struct celeste_engine {
     IAudioClock* clock = nullptr;       // I 轮探针用：设备实际播放游标（GetPosition）
     HANDLE render_event = nullptr;   // auto-reset：设备要数据
     HANDLE stop_event = nullptr;     // manual-reset：停止
-    HANDLE thread = nullptr;
+    HANDLE thread = nullptr;         // 渲染线程（拥有设备，MMCSS CRITICAL）
+    HANDLE probe_thread = nullptr;   // K 轮：设备侧探针旁路线程（Normal 优先级，绝不碰音频路径）
 
     uint32_t rate = 0;
     uint32_t channels = 0;
@@ -650,8 +653,55 @@ static void apply_fade(celeste_engine* e, uint8_t* scratch, int frames)
     e->fade_frames -= n;
 }
 
-// 渲染线程：轮询补货 + memcpy 直通（端点布局 == 源布局，协商保证）。
+// K 轮探针线程：设备侧诊断（pad / 设备播放游标）从渲染线程热路径搬到这里。
+// 2026-09-23 实机复测假说：I 轮把 GetCurrentPadding/GetPosition 放进渲染线程每次
+// 唤醒的路径里，这两个到驱动的 COM 调用偶发 30ms USB 往返，正好落在"两次唤醒之间"，
+// 被记账成"晚醒"——而 ECHO 内核（实机零卡顿）这两个调用一个都没有，热路径形状完全
+// 不同。本线程 Normal 优先级、20Hz 慢轮询，探针抖动再也不会被算进音频断供。
+// 注意：本线程读 e->client/e->clock，celeste_core_stop 必须先 join 本线程
+// 再释放 COM（否则 UAF）。
+static DWORD WINAPI probe_proc(void* param)
+{
+    auto* e = static_cast<celeste_engine*>(param);
+    com_scope com = com_enter();  // 与渲染线程同样的每线程 COM 初始化
+
+    while (!e->stop_requested.load(std::memory_order_acquire))
+    {
+        // pad 走势探针：设备停滞时 pad 不再消退（与 device_pos 停增互相印证）
+        if (e->client != nullptr)
+        {
+            UINT32 pad = 0;
+            if (e->client->GetCurrentPadding(&pad) == S_OK)
+            {
+                int32_t pm = e->pad_max.load(std::memory_order_relaxed);
+                while ((int32_t)pad > pm &&
+                       !e->pad_max.compare_exchange_weak(pm, (int32_t)pad, std::memory_order_relaxed))
+                {
+                }
+            }
+        }
+        // 设备实际播放游标（IAudioClock，GetPosition 是它的成员不是 IAudioClient 的）
+        if (e->clock != nullptr)
+        {
+            UINT64 dev_pos = 0, qpc_pos = 0;
+            if (e->clock->GetPosition(&dev_pos, &qpc_pos) == S_OK)
+            {
+                e->device_pos.store((uint64_t)dev_pos, std::memory_order_relaxed);
+            }
+        }
+        if (WaitForSingleObject(e->stop_event, kProbeIntervalMs) == WAIT_OBJECT_0) break;
+    }
+
+    com_leave(&com);
+    return 0;
+}
+
+// 渲染线程：事件驱动补货 + memcpy 直通（端点布局 == 源布局，协商保证）。
 // 本线程不分配（除退出前的一次性 Stop/Reset）、不抛、不碰 C#：只动 ring / WASAPI。
+// K 轮起热路径与 ECHO 内核完全同形状：wait → 记间隔 → GetBuffer(整缓冲) → memcpy 直通
+// → ReleaseBuffer。**不放任何驱动查询**（GetCurrentPadding/GetPosition 见 probe_proc）——
+// 查询驱动的 COM 调用偶发 30ms USB 往返会被记账成"晚醒"（2026-09-23 复测假说，
+// 等 K 轮实机判决）。驱动查询只在 GetBuffer 失败的容错路径出现一次。
 static DWORD WINAPI render_proc(void* param)
 {
     auto* e = static_cast<celeste_engine*>(param);
@@ -720,32 +770,31 @@ static DWORD WINAPI render_proc(void* param)
             e->wake_total.store(seq + 1, std::memory_order_release);
         }
 
-        // 只补空闲空间改为"每次填满整个设备缓冲"（与 ECHO 内核同策略）。
-        // GetCurrentPadding 现在只作两用：设备失效探测 + 异常保护。
-        // 独占 + 事件驱动下 render_event 到达时本周期已播完，pad 应为 0。
-        UINT32 pad = 0;
-        if (e->client->GetCurrentPadding(&pad) != S_OK) {
-            std::fprintf(stderr, "[celeste-core] GetCurrentPadding 失败（设备失效/拔除？），渲染线程退出\n");
-            e->failed.store(1, std::memory_order_release);
-            break;
-        }
-        // I 轮探针：事件驱动下 render_event 到达时本周期应已播完，pad 必须为 0。
-        // >0 = 事件早到（相位漂移）或上一次的信号没被消费（合并周期）——两者都让
-        // 本次写入踏进设备还没播完的缓冲，是"统计全绿却卡"的候选根因。
-        int32_t pm = e->pad_max.load(std::memory_order_relaxed);
-        while ((int32_t)pad > pm &&
-               !e->pad_max.compare_exchange_weak(pm, (int32_t)pad, std::memory_order_relaxed)) {
-            // 失败时 pm 已刷新为最新值，重试
-        }
-        if (pad >= e->buffer_frames) continue;  // 异常：缓冲竟还满着，等下一事件再写
-
-        const int to_fill = (int)e->buffer_frames;
+        // 每次填满整个设备缓冲（与 ECHO 内核同策略——实机零卡顿的那个）。
+        // K 轮：正常路径零驱动查询。事件驱动下 render_event 到达时本周期已播完，
+        // 直接 GetBuffer(整缓冲)；要不到 = 没被消费的陈旧信号（缓冲还满着），
+        // 这时才退化为一次 GetCurrentPadding 容错：满=跳过等下一事件，
+        // 查询本身失败=设备真失效。
+        int to_fill = (int)e->buffer_frames;
 
         BYTE* dst = nullptr;
-        if (e->render->GetBuffer((UINT32)to_fill, &dst) != S_OK) {
-            std::fprintf(stderr, "[celeste-core] GetBuffer 失败（设备失效/拔除？），渲染线程退出\n");
-            e->failed.store(1, std::memory_order_release);
-            break;
+        if (e->render->GetBuffer((UINT32)to_fill, &dst) != S_OK)
+        {
+            UINT32 pad = 0;
+            if (e->client->GetCurrentPadding(&pad) != S_OK)
+            {
+                std::fprintf(stderr, "[celeste-core] GetCurrentPadding 失败（设备失效/拔除？），渲染线程退出\n");
+                e->failed.store(1, std::memory_order_release);
+                break;
+            }
+            if (pad >= e->buffer_frames) continue;  // 陈旧信号：缓冲还满着，等下一事件
+            to_fill = (int)(e->buffer_frames - pad);
+            if (e->render->GetBuffer((UINT32)to_fill, &dst) != S_OK)
+            {
+                std::fprintf(stderr, "[celeste-core] GetBuffer(%u) 失败（设备失效/拔除？），渲染线程退出\n", to_fill);
+                e->failed.store(1, std::memory_order_release);
+                break;
+            }
         }
 
         const int need = to_fill * e->frame_bytes;
@@ -776,15 +825,8 @@ static DWORD WINAPI render_proc(void* param)
             e->failed.store(1, std::memory_order_release);
             break;
         }
-        // I 轮探针：设备实际播放游标。与 framesPlayed 的差（滞后）稳定 = 设备在平稳
-        // 消费；滞后持续增长 = 设备内部跟不上（USB 驱动交不够货），应用侧无感。
-        // 注意：位置在 IAudioClock 上（IAudioClient 没有 GetPosition 成员）。
-        if (e->clock != nullptr) {
-            UINT64 dev_pos = 0, qpc_pos = 0;
-            if (e->clock->GetPosition(&dev_pos, &qpc_pos) == S_OK) {
-                e->device_pos.store((uint64_t)dev_pos, std::memory_order_relaxed);
-            }
-        }
+        // 设备侧探针（IAudioClock::GetPosition / GetCurrentPadding）已移至 probe_proc
+        // 旁路线程（K 轮：热路径里的驱动 COM 调用偶发 30ms USB 往返，会被记账成晚醒）。
         e->frames_played.fetch_add((uint64_t)to_fill, std::memory_order_relaxed);
 
         if (e->ring.input_ended() && e->ring.ready() == 0) {
@@ -933,6 +975,13 @@ static int start_engine_impl(celeste_engine* e, uint32_t rate, uint32_t channels
         client->Stop();  // 设备已 Start：先停掉（此刻只有主线程碰 COM，无竞争）
         client->Reset();
         goto fail_after_events;
+    }
+
+    // K 轮：设备侧探针旁路线程。诊断专用，起不来不致命（只少 pad/游标两条诊断轴）。
+    e->probe_thread = CreateThread(nullptr, 0, probe_proc, e, 0, nullptr);
+    if (e->probe_thread == nullptr) {
+        std::fprintf(stderr, "[celeste-core] 探针线程创建失败（%lu）：设备侧诊断降级，不影响播放\n",
+                     GetLastError());
     }
 
     e->started.store(true, std::memory_order_release);
@@ -1115,6 +1164,26 @@ __declspec(dllexport) void celeste_core_stop(void* engineHandle)
             e->engine_leaked = true;
             CloseHandle(e->thread);  // 句柄可关（线程对象本身由泄漏持有）
             e->thread = nullptr;
+            return;
+        }
+    }
+
+    // K 轮：探针线程必须在 COM 释放前回收——它还在轮询 client/clock。
+    // 渲染线程已 join（或泄漏），此刻 stop_requested 已置位，探针 ≤50ms+一圈 COM 内退出。
+    if (e->probe_thread != nullptr)
+    {
+        if (WaitForSingleObject(e->probe_thread, kProbeJoinMs) == WAIT_OBJECT_0)
+        {
+            CloseHandle(e->probe_thread);
+            e->probe_thread = nullptr;
+        }
+        else
+        {
+            // 探针卡死在驱动调用里（极罕见）：整体泄漏，进程退出收尸（与渲染线程
+            // join 超时同口径）。COM 因此永不释放，绝不放着一个活着轮询的线程释放。
+            CloseHandle(e->probe_thread);  // 句柄可关（线程对象本身由泄漏持有）
+            e->probe_thread = nullptr;
+            e->engine_leaked = true;
             return;
         }
     }

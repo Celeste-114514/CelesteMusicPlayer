@@ -160,7 +160,9 @@ namespace CelesteMusicPlayer
         /// maxGapMs/spikeCount/padMaxFrames/lateWakeups 是「自上次调用起」的窗口值（内核读走即清零，
         /// 注意：任何额外的 Stats() 调用都会清掉还没读的窗口数据，所以现场值要在同一次调用里取走）；
         /// DevicePosition 是即时累计值，调用方自行取差分；
-        /// 晚醒明细是「开演以来」单调序号语义（不清零）：调用方按序号只打印 >已打印序号 的新事件。</summary>
+        /// 晚醒明细是「开演以来」单调序号语义（不清零）：调用方按序号只打印 >已打印序号 的新事件。
+        /// ⚠️ K 轮起 PadMaxFrames 改由旁路探针线程 20Hz 随机相位采样（不再是"事件唤醒时"）：
+        /// 正常播放时 pad >0 是常态，仅作趋势参考（长期不消退 = 设备停滞旁证），不再触发异常。</summary>
         public (int MaxGapMs, ulong Spikes, int ReadyFrames, int CapacityFrames,
                 ulong DevicePosition, int PadMaxFrames, uint LateWakeups, int Failed,
                 uint WakeTotal, int WakeBase, int WakeCount, double[] WakeStartMs, double[] WakeGapMs) SnapshotWindow()
@@ -466,11 +468,13 @@ namespace CelesteMusicPlayer
                         WriteSpikeLine();
                         _aggMaxGap = 0; // 已报过，吞掉避免每轮重复打同一尖峰
                     }
-                    // I 轮设备侧异常：唤醒晚点 / pad 非 0 / 设备滞后超一个缓冲 / 渲染线程失败。
+                    // I 轮设备侧异常：唤醒晚点 / 设备滞后超一个缓冲 / 渲染线程失败。
                     // 任一出现即打现场（同样吞掉，等 5s 统计行汇总）。
-                    // J 轮：pad 异常加"设备已在推进"条件——开播热身期（USB DAC 192k 冷启动锁时钟，
-                    // 设备游标还没动）pad 满 buffers 是正常现象，实机误报过两条，不再算异常。
-                    else if (_aggLateWakes > 0 || (_aggPadMax > 0 && _aggDevDelta > 0) || _aggFailed ||
+                    // K 轮：pad 不再单独触发异常——探针挪到旁路线程随机相位采样，
+                    // 设备正常播放时 pad 本来就 >0，"pad 非 0"失去判别力，仅留作
+                    // 统计行里的趋势参考（pad 长期不消退 = 设备停滞的旁证）。
+                    // 开播热身期（USB DAC 冷启动锁时钟）同样由滞后判据自然豁免。
+                    else if (_aggLateWakes > 0 || _aggFailed ||
                              Math.Abs(_aggLag) > (_bufferFrames > 0 ? _bufferFrames : int.MaxValue))
                     {
                         WriteAnomalyLine();
