@@ -1181,6 +1181,17 @@
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" MinWidth="240" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="ASIO 喂料器（治卡顿）" />
+                                <TextBlock Text="开=后台线程提前备好约 4 秒音频，声卡驱动每次只来取货（拷贝），不让它在自己的回调线程里现读磁盘——中大文件 / 快速操作时的“一卡一卡”就是这么来的，也是 foobar 走 ASIO 不卡的同一做法。关=老路径（驱动回调里现读）。改动后下次开播生效。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="AsioFeederSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="4" VerticalAlignment="Center">

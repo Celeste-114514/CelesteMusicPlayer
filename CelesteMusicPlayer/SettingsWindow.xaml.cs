@@ -655,6 +655,7 @@ namespace CelesteMusicPlayer
                 SelectComboByTag(DsdOutputModeCombo, string.IsNullOrWhiteSpace(s.DsdOutputMode) ? "Pcm" : s.DsdOutputMode);
                 SelectComboByTag(DopContainerCombo, string.IsNullOrWhiteSpace(s.DopContainerMode) ? "Packed24" : s.DopContainerMode);
                 SetToggle(DsdPreloadSwitch, s.DsdPreloadEnabled);
+                SetToggle(AsioFeederSwitch, s.AsioFeederEnabled);
                 if (DsdCachePathBox != null)
                 {
                     DsdCachePathBox.Text = DsdPreloadService.CacheRoot;
@@ -1435,6 +1436,7 @@ namespace CelesteMusicPlayer
             s.DopContainerMode = DopContainerCombo?.SelectedItem is ComboBoxItem dci && dci.Tag is string dct
                 ? dct : "Packed24";
             s.DsdPreloadEnabled = DsdPreloadSwitch?.IsOn ?? s.DsdPreloadEnabled;
+            s.AsioFeederEnabled = AsioFeederSwitch?.IsOn ?? s.AsioFeederEnabled;
             StartupLog.Write("设置保存 输出模式=" + (s.OutputMode ?? "null") + " 设备=" + (s.OutputDeviceId ?? "null"));
             s.EnableFade = EnableFadeSwitch?.IsOn ?? s.EnableFade;
             if (FadeMsSlider != null)

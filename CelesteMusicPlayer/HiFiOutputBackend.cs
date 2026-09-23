@@ -88,7 +88,10 @@ namespace CelesteMusicPlayer
                                  // 与 _isDsd 分开：本路径的源是普通 WAV 文件（走 OpenWaveSource/SeamlessWaveProvider），
                                  // 位置换算一律走通用帧计数，绝不能混进 _dsdSource 的 DoP 游标逻辑。
         private DoP24LeSource? _dsdSource; // DSD/DoP 数据源（仅向独占/ASIO 通道喂 DoP24 容器帧）
+        private AsioFeederProvider? _asioFeeder; // ASIO 喂料器（复刻 foobar 架构：驱动回调只 memcpy、备货线程填 ring）；
+                                                 // null=关设置或旧直读路径。详见 AsioFeederProvider 类注释。
         private double _lastDsdPrefillLogSec = double.NegativeInfinity; // 限频 DSD ring 欠载诊断日志
+        private double _lastAsioUnderrunLogSec = double.NegativeInfinity; // 限频 ASIO 喂料器欠载诊断日志
         private MMDevice? _device;     // 用于调设备/系统主音量（WASAPI）；ASIO 无统一接口为 null
         private bool _isPlaying;
 
@@ -1035,6 +1038,8 @@ namespace CelesteMusicPlayer
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught);
             }
+
+            if (mode == OutputMode.Asio) DisposeFeederQuiet(); // 驱动回调停了才停 feeder（防回调碰已释放的 ring）
         }
 
         /// <summary>抽干当前 STA 线程的 Windows 消息队列：COM 跨单元封送到本线程的调用、驱动自己的窗口消息都靠它递送。</summary>
@@ -1103,7 +1108,23 @@ namespace CelesteMusicPlayer
                         // ASIO：Init 里一排 COM 调用（Capabilities/SetSampleRate/CreateBuffers…），
                         // 驱动 COM 对象的"家"是 STA 宿主线程，必须回该线程执行。
                         // 喂源经 AsioSource()：24bit 源必须先扩成 24-in-32 容器（NAudio 硬伤，见其注释）。
-                        AsioInvokeVoid(() => _output!.Init(AsioSource()), "AsioOut.Init");
+                        var chain = AsioSource();
+                        if (AsioFeederEnabled())
+                        {
+                            // 喂料器模式（2026-09-24）：NAudio 回调线程原样跑读链（持锁+同步磁盘读）是
+                            // ASIO 卡顿的真凶。改由 feeder 线程备货填 ring，驱动回调只 memcpy，
+                            // 与 foobar foo_out_asio / 自研独占内核同架构；出问题可一键关开关回退。
+                            _asioFeeder?.Dispose();
+                            _asioFeeder = new AsioFeederProvider(chain, identity: () => _seamless?.Current);
+                            _asioFeeder.Start();
+                            AsioInvokeVoid(() => _output!.Init(_asioFeeder), "AsioOut.Init(喂料器)");
+                        }
+                        else
+                        {
+                            _asioFeeder?.Dispose();
+                            _asioFeeder = null;
+                            AsioInvokeVoid(() => _output!.Init(chain), "AsioOut.Init");
+                        }
                     }
                     else
                     {
@@ -1175,7 +1196,45 @@ namespace CelesteMusicPlayer
             return src;
         }
 
-        /// <summary>是否使用 ECHO 核心独占输出（设置项 ExclusiveEngine="echo"）。默认 self=自研，可随时回退。</summary>
+        /// <summary>ASIO 喂料器开关（设置项，默认 true）：开=驱动回调只 memcpy（feeder 线程备货填 ring，
+        /// 复刻 foobar 架构，2026-09-24 用于治 ASIO 卡顿）；关=旧直读路径（回调线程跑整条读链）。
+        /// 读取异常保守回退 true（新路径已实测前链路独立验证；真出问题用户可手动关）。</summary>
+        private static bool AsioFeederEnabled()
+        {
+            try
+            {
+                return AppSettingsStore.Load().AsioFeederEnabled;
+            }
+            catch
+            {
+                return true;
+            }
+        }
+
+        /// <summary>停并释放 ASIO 喂料器（在 AsioOut.Stop/Dispose 之后调用——驱动回调停了才停 feeder，
+        /// 防回调读已释放的 ring）。纯托管、无 COM，任意线程可调。</summary>
+        private void DisposeFeederQuiet()
+        {
+            try { _asioFeeder?.Dispose(); }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+            _asioFeeder = null;
+        }
+
+        /// <summary>限频记录 ASIO 喂料器欠载（ring 被抽干、补了静音）。>0 说明备货跟不上或 seek 冷启动，
+        /// 与"一卡一卡"现象对照定位用；全 0 而仍卡则与 feeder 无关（转移阵地查驱动/USB）。</summary>
+        private void LogAsioUnderrunThrottled()
+        {
+            if (_asioFeeder == null) return;
+            double sec = Position.TotalSeconds;
+            if (sec - _lastAsioUnderrunLogSec <= 3.0) return;
+            long underBytes = _asioFeeder.UnderrunBytes;
+            if (underBytes <= 0) return;
+            _lastAsioUnderrunLogSec = sec;
+            StartupLog.Write(string.Format(
+                "[ASIO诊断] 喂料器欠载累计={0} 字节（补静音，{1:F2}s 音频量）；ring 水位={2} 字节",
+                underBytes, underBytes / (double)Math.Max(1, _asioFeeder.WaveFormat.AverageBytesPerSecond),
+                _asioFeeder.BufferedBytes));
+        }
 
         /// <summary>是否使用 ECHO 核心独占输出（设置项 ExclusiveEngine="echo"）。默认 self=自研，可随时回退。</summary>
         private static bool UseEchoCore()
@@ -1844,7 +1903,24 @@ namespace CelesteMusicPlayer
 
             // Init 里一排 COM 调用（Capabilities/SetSampleRate/CreateBuffers…），必须回 STA 宿主线程。
             // fail-closed：Init 抛异常即整体失败（PlayDsdAsync 的 catch 接管），不硬撑。
-            AsioInvokeVoid(() => _output!.Init(asioProv), "AsioOut.Init(DoP)");
+            // 喂料器（同 PCM 路径）：AsioDoPProvider 的装箱也从驱动回调线程搬到 feeder 线程；
+            // ring 空时补合法 DoP 静音帧（不松 DoP 锁）。字节链一个不改。
+            IWaveProvider asioInitSrc = asioProv;
+            if (AsioFeederEnabled())
+            {
+                _asioFeeder?.Dispose();
+                _asioFeeder = new AsioFeederProvider(asioProv, dopSilence: true);
+                _asioFeeder.Start();
+                asioInitSrc = _asioFeeder;
+                StartupLog.Write("[ASIO] DoP 出口启用喂料器（装箱+备货全在 feeder 线程，驱动回调只 memcpy）");
+            }
+            else
+            {
+                _asioFeeder?.Dispose();
+                _asioFeeder = null;
+            }
+
+            AsioInvokeVoid(() => _output!.Init(asioInitSrc), "AsioOut.Init(DoP)");
             _output.PlaybackStopped += Output_PlaybackStopped;
 
             if (seekTo != null && seekTo.Value > TimeSpan.Zero)
@@ -1970,6 +2046,7 @@ namespace CelesteMusicPlayer
             {
                 // DSD/DoP + ASIO：DoP 源自带环（Seek 内部冲刷环 + 生产者重定位），直接 seek 源
                 try { _dsdSource.Seek(position); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+                _asioFeeder?.Reset(position); // 喂料器 ring 里是 seek 前的旧存货，清掉重灌（否则先播旧音频再跳位）
                 return;
             }
 
@@ -1984,6 +2061,8 @@ namespace CelesteMusicPlayer
                 _waveFile.CurrentTime = position;
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+
+            _asioFeeder?.Reset(position); // 同上：丢弃 seek 前存货，从新位置重灌（feeder 从 reader 新位置读）
         }
 
         /// <summary>暂停前记录的真实设备主音量（供恢复使用）；未暂停或无设备返回 -1。</summary>
@@ -2162,15 +2241,34 @@ namespace CelesteMusicPlayer
                 }
                 else
                 {
-                    var curReader = _seamless?.Current ?? _waveFile;
-                    Position = curReader != null ? curReader.CurrentTime : TimeSpan.Zero;
+                    // ASIO 喂料器模式下 reader 游标超前于实际播放（feeder 提前备货），
+                    // 用 feeder「已播出量」为准：进度与正在播放的声音一致，不跑秒。
+                    if (_asioFeeder != null)
+                    {
+                        Position = _asioFeeder.PlaybackPosition;
+                        LogAsioUnderrunThrottled();
+                    }
+                    else
+                    {
+                        var curReader = _seamless?.Current ?? _waveFile;
+                        Position = curReader != null ? curReader.CurrentTime : TimeSpan.Zero;
+                    }
                 }
             }
             else if (_isDsd && _dsdSource != null)
             {
-                // DSD/DoP + ASIO：无渲染线程写帧计数，用 DoP 源自身游标（持锁读，Seek 时同步归位）
-                int rate = _dsdSource.WaveFormat.SampleRate;
-                Position = rate > 0 ? TimeSpan.FromSeconds((double)_dsdSource.FramesRead / rate) : TimeSpan.Zero;
+                // DSD/DoP + ASIO：无渲染线程写帧计数。喂料器模式下 DoP 源游标同样超前，
+                // 同样以 feeder 已播出量为准；旧直读路径沿用源游标（持锁读，Seek 时同步归位）。
+                if (_asioFeeder != null)
+                {
+                    Position = _asioFeeder.PlaybackPosition;
+                    LogAsioUnderrunThrottled();
+                }
+                else
+                {
+                    int rate = _dsdSource.WaveFormat.SampleRate;
+                    Position = rate > 0 ? TimeSpan.FromSeconds((double)_dsdSource.FramesRead / rate) : TimeSpan.Zero;
+                }
 
                 // 诊断：DSD ring 预读欠载补静音统计（>0 说明预读跟不上/起播冷启动→短暂无声，是潜在卡顿点）。
                 // 限频记录，便于与"雪花/卡顿"音频现象对照定位根因。
@@ -2224,6 +2322,13 @@ namespace CelesteMusicPlayer
                 // DSD：无 WaveFileReader，用播放位置≥源总时长判定播完（触发 Stop→下层切下一首）。
                 // 独占与 ASIO 两条出口都适用（ASIO DoP 位置由 DoP 源游标推进，见 UpdatePosition）。
                 sourceExhausted = Duration > TimeSpan.Zero && Position >= Duration;
+            }
+            else if (_asioFeeder != null)
+            {
+                // ASIO 喂料器：feeder 提前读源，reader 游标超前于真实播放，不能当判据。
+                // 「上游读尽 + ring 存货播空」= 真播完（有无缝续接时上游不会读尽，gapless 不受影响；
+                // 无下一首读尽后 Drained 才 true，歌尾不会被切）。
+                sourceExhausted = _asioFeeder.Drained;
             }
             else if (_waveFile != null && _waveFile.Length > 16
                 && (!_useNative || (_native?.IsStarted == true))) // native 模式下仅在渲染线程真正启动时判定，避免重建窗口期的旧 reader 误判为已读尽
@@ -2309,6 +2414,8 @@ namespace CelesteMusicPlayer
                     else outp.Dispose();
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+
+                DisposeFeederQuiet(); // 喂料器只服务 ASIO；非 ASIO 会话这里为 null，空操作
             }
 
             _output = null;
@@ -2346,6 +2453,7 @@ namespace CelesteMusicPlayer
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
 
                 _output = null;
+                DisposeFeederQuiet(); // 喂料器只服务 ASIO；非 ASIO 会话这里为 null，空操作
             }
 
             if (_native != null)

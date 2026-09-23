@@ -103,6 +103,12 @@ namespace CelesteMusicPlayer
         /// 读预生成 WAV=绿灯不卡）。命中缓存即自动使用；不命中仍走原来的实时装箱，行为完全不变。</summary>
         public bool DsdPreloadEnabled { get; set; } = true;
 
+        /// <summary>ASIO 喂料器（默认 true）：复刻 foobar foo_out_asio 的「驱动回调只拷贝」架构——
+        /// 后台 feeder 线程备货填 4 秒 ring，ASIO 驱动回调只 memcpy，把同步读盘/锁竞争/转换链
+        /// 从驱动回调线程搬走，治 ASIO 一卡一卡（2026-09-24 定案：回调线程现读=卡顿真凶）。
+        /// 关=旧直读路径（回调线程跑整条读链），独立可回退。改动后下次开播生效。</summary>
+        public bool AsioFeederEnabled { get; set; } = true;
+
         /// <summary>DSD 预加载缓存目录。空=D:\CelesteDsdCache。用户可改到任意剩余空间大的盘。</summary>
         public string DsdCachePath { get; set; } = string.Empty;
 
@@ -780,6 +786,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DsdOutputMode = s.DsdOutputMode,
             DopContainerMode = string.IsNullOrWhiteSpace(s.DopContainerMode) ? "Packed24" : s.DopContainerMode,
             DsdPreloadEnabled = s.DsdPreloadEnabled,
+            AsioFeederEnabled = s.AsioFeederEnabled,
             DsdCachePath = s.DsdCachePath ?? string.Empty,
             OutputBufferMs = s.OutputBufferMs,
             ExclusiveEngine = s.ExclusiveEngine,
