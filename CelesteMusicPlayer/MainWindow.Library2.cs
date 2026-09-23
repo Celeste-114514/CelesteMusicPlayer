@@ -870,6 +870,9 @@ namespace CelesteMusicPlayer
                 AlbumDetailDsdHint.Visibility = allDsd ? Visibility.Visible : Visibility.Collapsed;
             }
 
+            // DSD 预加载区域（专辑内一首 DSD 都没有则整块隐藏）
+            UpdateAlbumDetailPreloadUi(tracks);
+
             // 行3：编码器 | 位深/采样率 | 总时长（在后台线程算质量行，避免 CD 大专辑打开卡顿）
             if (AlbumDetailTechText != null)
             {

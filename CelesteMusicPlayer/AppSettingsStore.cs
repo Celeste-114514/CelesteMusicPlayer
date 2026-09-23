@@ -92,6 +92,20 @@ namespace CelesteMusicPlayer
         /// 把 DSD 1-bit 封进 DoP 容器直通 DAC，bit-perfect；其余情形自动回退 PCM 并写日志）。</summary>
         public string DsdOutputMode { get; set; } = "Pcm";
 
+        /// <summary>DoP 容器摆位（仅 DsdOutputMode="Dop" 时生效）："Packed24"=24bit 紧凑，标记在每采样
+        /// 第 3 字节（默认，旧行为零变化；KA13 能识别但非 FiiO 驱动原生路径，锁不稳会周期性掉锁）；
+        /// "Container32"=32bit 标准集装箱，标记在最高字节（payload&lt;&lt;8，FiiO 等原生认 DSD 的驱动的正装）。
+        /// 2026-09-23 KA13 实测：24bit 紧凑 DoP 一卡一卡、PCM 平滑、foobar(ASIO 原生 DSD) 平滑后新增此选项。</summary>
+        public string DopContainerMode { get; set; } = "Packed24";
+
+        /// <summary>DSD 预加载：提前把整首 DSF 装箱成 DoP(24bit 紧凑) 的 PCM WAV 缓存文件，
+        /// 播放时直接从文件顺序读，绕开"边播边装箱"的实时流水线（KA13 实测：实时装箱=固定位置卡顿，
+        /// 读预生成 WAV=绿灯不卡）。命中缓存即自动使用；不命中仍走原来的实时装箱，行为完全不变。</summary>
+        public bool DsdPreloadEnabled { get; set; } = true;
+
+        /// <summary>DSD 预加载缓存目录。空=D:\CelesteDsdCache。用户可改到任意剩余空间大的盘。</summary>
+        public string DsdCachePath { get; set; } = string.Empty;
+
         /// <summary>输出缓冲区大小（毫秒）。越小越跟手（低延迟），越大越抗卡顿/爆音。
         /// 共享（系统混音）与独占（原生 WASAPI 事件驱动）均生效，改动后下次开播生效；默认 100ms。</summary>
         public int OutputBufferMs { get; set; } = 100;
@@ -764,6 +778,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             SrcQuality = s.SrcQuality,
             SrcDither = s.SrcDither,
             DsdOutputMode = s.DsdOutputMode,
+            DopContainerMode = string.IsNullOrWhiteSpace(s.DopContainerMode) ? "Packed24" : s.DopContainerMode,
+            DsdPreloadEnabled = s.DsdPreloadEnabled,
+            DsdCachePath = s.DsdCachePath ?? string.Empty,
             OutputBufferMs = s.OutputBufferMs,
             ExclusiveEngine = s.ExclusiveEngine,
             OnlineSearchDefaultSource = s.OnlineSearchDefaultSource,

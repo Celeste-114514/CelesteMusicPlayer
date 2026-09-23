@@ -1,5 +1,6 @@
 using System;
 using System.Buffers;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -432,7 +433,8 @@ namespace CelesteMusicPlayer
         private const int BpF = 6;                     // 24bit：每立体声帧 6 字节（L3+R3）
         private const int RingBytesWanted = 32 << 20;
 
-        private readonly DsdBitstream _src;
+        private readonly DsdBitstream? _src;           // 预生成旁路模式下为 null（数据直接来自 _prebuilt）
+        private FileStream? _prebuilt;                 // 非 null = 预生成缓存旁路：直接从文件顺序读，不经环/装箱线程
         private readonly int _frameRate;               // DoP 容器帧率（= native/16）
         private readonly bool _lsbFirst;               // 跟随源文件位序：true=装箱前做字节内 bit 反转
         private readonly long _totalFrames;            // DoP 容器帧总数
@@ -452,6 +454,19 @@ namespace CelesteMusicPlayer
         private int _diagMilestone;
         private volatile bool _disposed;
         private Thread? _encode;
+
+        // 卡顿打点（2026-09-23 夜）：用户报"固定位置卡顿"且第二遍一模一样（排除读盘/缓存干扰），
+        // 必须在音频线程之外取证。打点只写定长环形数组（无锁、无 I/O、无日志），
+        // 由装箱线程（非实时线程）定期或播放结束时统一落盘——绝不在 render/ASIO 回调线程做磁盘写。
+        private const int StallCap = 64;
+        private const long StallThresholdUs = 3000; // 3ms：正常 Read 是几十微秒，超阈值即异常
+        private readonly long[] _stallUs = new long[StallCap];
+        private readonly long[] _stallFrame = new long[StallCap];
+        private readonly long[] _stallAvail = new long[StallCap];
+        private readonly long[] _stallWaitUs = new long[StallCap];
+        private int _stallIdx;
+        private int _stallTotal;
+        private long _lastStallFlushTicks;
 
         /// <summary>诊断：读到整曲末尾补"合法静音"帧累计。</summary>
         public long PrefillFrames { get; private set; }
@@ -484,6 +499,52 @@ namespace CelesteMusicPlayer
                 Priority = ThreadPriority.BelowNormal
             };
             _encode.Start();
+        }
+
+        /// <summary>
+        /// 预生成缓存旁路：从 DsdPreloadService 生成的 DoP(24bit 紧凑) WAV 直接顺序读，
+        /// 完全绕开 DsdBitstream 读源 → 装箱线程 → 32MB 环这条实时流水线。
+        /// 下游（render 线程、进度、Seek、WaveFormat、徽标）全部复用，行为与实时装箱一致。
+        /// 头损坏/格式不符一律抛异常 → 由上层 fail-closed 回退到实时装箱，绝不静默出坏声。
+        /// </summary>
+        public static DoP24LeSource FromPrebuilt(string wavPath)
+        {
+            byte[] h = new byte[44];
+            using (var probe = new FileStream(wavPath, FileMode.Open, FileAccess.Read, FileShare.Read, 1 << 16))
+            {
+                int n = probe.Read(h, 0, 44);
+                if (n < 44
+                    || global::System.Text.Encoding.ASCII.GetString(h, 0, 4) != "RIFF"
+                    || global::System.Text.Encoding.ASCII.GetString(h, 8, 4) != "WAVE")
+                {
+                    throw new InvalidDataException("DSD 预载缓存文件头损坏：" + wavPath);
+                }
+            }
+
+            int channels = BitConverter.ToUInt16(h, 22);
+            int rate = (int)BitConverter.ToUInt32(h, 24);
+            int bits = BitConverter.ToUInt16(h, 34);
+            uint dataBytes = BitConverter.ToUInt32(h, 40);
+            if (bits != 24 || channels != 2 || rate <= 0 || dataBytes < BpF)
+            {
+                throw new InvalidDataException(
+                    $"DSD 预载缓存格式不符（期望 24bit/2ch DoP，实际 {bits}bit/{channels}ch/{rate}Hz）");
+            }
+
+            return new DoP24LeSource(wavPath, rate, dataBytes / BpF);
+        }
+
+        private DoP24LeSource(string wavPath, int frameRate, long totalFrames)
+        {
+            _src = null;
+            _frameRate = frameRate;
+            _lsbFirst = true;               // 旁路不再装箱，位序只影响编码阶段
+            _totalFrames = totalFrames;
+            _ring = IntPtr.Zero;
+            _ringBytes = 0;
+            _prebuilt = new FileStream(wavPath, FileMode.Open, FileAccess.Read, FileShare.Read,
+                1 << 20, FileOptions.SequentialScan);
+            _prebuilt.Position = 44;        // 跳过 44B 标准 PCM 头
         }
 
         public WaveFormat WaveFormat => new WaveFormat(_frameRate, 24, 2);
@@ -667,6 +728,11 @@ namespace CelesteMusicPlayer
 
         public void WaitForPrefill(TimeSpan timeout)
         {
+            if (_prebuilt != null)
+            {
+                return; // 预生成缓存已在盘上，无需等后台装箱
+            }
+
             long need = (long)(PrebufferSeconds * _frameRate * BpF);
             var deadline = DateTime.UtcNow + timeout;
             lock (_lock)
@@ -687,6 +753,33 @@ namespace CelesteMusicPlayer
                 return 0;
             }
 
+            // 预生成缓存旁路：一次 FileStream 顺序读即可，无环、无装箱线程、无等待
+            if (_prebuilt != null)
+            {
+                int got = _prebuilt.Read(buffer, offset, want);
+                got -= got % BpF;
+                if (got > 0)
+                {
+                    _framesRead += got / BpF;
+                }
+
+                if (got < want)
+                {
+                    lock (_lock)
+                    {
+                        _frameIndex = _framesRead;
+                        PrefillFrames += FillSilenceTo(buffer, offset + got, want - got);
+                    }
+
+                    return want;
+                }
+
+                return got;
+            }
+
+            long t0 = Stopwatch.GetTimestamp();
+            long waitUs = 0;
+            long availAtStart = -1;
             int total = 0;
             // 等待封装追进度（环空且后台线程仍未收尾）：等 PulseAll，超时兜底补静音。
             var waitDeadline = Environment.TickCount64 + 1500;
@@ -697,6 +790,11 @@ namespace CelesteMusicPlayer
                 {
                     // 只取"已入环"的字节数（_writePos），而非虚拟总长；生产者环满等待时二者差值被容量封顶
                     avail = _writePos - _readPos;
+                }
+
+                if (availAtStart < 0)
+                {
+                    availAtStart = avail;
                 }
 
                 if (avail <= 0)
@@ -716,7 +814,9 @@ namespace CelesteMusicPlayer
                     {
                         if (!_disposed && !_done && _writePos - _readPos <= 0)
                         {
+                            long w0 = Stopwatch.GetTimestamp();
                             Monitor.Wait(_lock, 10);
+                            waitUs += (Stopwatch.GetTimestamp() - w0) * 1_000_000 / Stopwatch.Frequency;
                         }
                     }
 
@@ -813,6 +913,20 @@ namespace CelesteMusicPlayer
         {
             long frame = (long)Math.Round(position.TotalSeconds * _frameRate);
             frame = Math.Clamp(frame, 0, _totalFrames);
+
+            if (_prebuilt != null)
+            {
+                long off = 44 + frame * BpF;
+                if (off <= _prebuilt.Length)
+                {
+                    _prebuilt.Position = off;
+                }
+
+                _framesRead = frame;
+                _frameIndex = frame;
+                return;
+            }
+
             lock (_lock)
             {
                 // 冲刷环 + 通知生产者重定位源（生产者在锁外读盘，不能在锁内直接 seek 源）。
@@ -859,18 +973,117 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            try { _src.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DsdDopPipeline.cs", caught); }
+            try { _prebuilt?.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DsdDopPipeline.cs", caught); }
+            try { _src?.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DsdDopPipeline.cs", caught); }
         }
 
         private static readonly double[] MilestoneFracs = { 0.10, 0.40, 0.70, 0.99 };
     }
 
     /// <summary>
+    /// DoP 32bit 标准容器转运层：把已验证 byte-perfect 的 24bit 紧凑 DoP 帧
+    /// [lo][hi][marker] 重铸为 32bit 标准 DoP [0x00][lo][hi][marker]
+    /// （即 payload&lt;&lt;8：标记移到 32 位字最高字节）。
+    /// 背景（2026-09-23 KA13 实测）：FiiO 自家驱动 fiio_usbaudio.sys 原生认 DSD
+    /// （内部 DSD_32b/DSD_64b 标识），标准 DoP 正装=32bit 集装箱+标记最高字节；
+    /// 24bit 紧凑能被设备识别（绿灯）但非驱动原生路径=锁不稳→周期性掉锁=可闻"一卡一卡"。
+    /// 环/装箱/bit 反转链路一行不动（全流校验已证正确），只在外层重铸，
+    /// 设置可随时切回 24bit 紧凑（旧行为零变化）。
+    /// </summary>
+    internal sealed class DoP32PackedSource : IWaveSourceProvider, IDisposable
+    {
+        private const int ChunkFrames = 1 << 14; // 每次向内层索取的帧数（24bit 临时缓冲=98304B，有界）
+        private readonly DoP24LeSource _src;
+        private readonly byte[] _in;
+
+        public DoP32PackedSource(DoP24LeSource src)
+        {
+            _src = src ?? throw new ArgumentNullException(nameof(src));
+            WaveFormat = new WaveFormat(src.WaveFormat.SampleRate, 32, src.WaveFormat.Channels);
+            _in = new byte[ChunkFrames * 6];
+        }
+
+        public WaveFormat WaveFormat { get; }
+
+        public TimeSpan TotalTime => _src.TotalTime;
+
+        public (long Pos, long Len, bool SameAsOuter)? ProbeCurrentState => _src.ProbeCurrentState;
+
+        public bool NextMounted => _src.NextMounted;
+
+        public int Read(byte[] buffer, int offset, int count)
+        {
+            int frames = count / 8; // 32bit 立体声帧 = 8 字节
+            if (frames <= 0)
+            {
+                return 0;
+            }
+
+            // 内层 Read 自带"读满或补 0x69 静音"语义；按 ChunkFrames 分块搬运，临时缓冲有界。
+            int produced = 0;
+            while (produced < frames)
+            {
+                int take = Math.Min(ChunkFrames, frames - produced);
+                int got24 = _src.Read(_in, 0, take * 6);
+                if (got24 <= 0)
+                {
+                    break; // 源尽异常（正常不会：内层补尾已填满）
+                }
+
+                int avail = got24 / 6;
+                int fp = offset + produced * 8;
+                for (int f = 0; f < avail; f++)
+                {
+                    int i = f * 6;
+                    buffer[fp++] = 0x00;
+                    buffer[fp++] = _in[i];
+                    buffer[fp++] = _in[i + 1];
+                    buffer[fp++] = _in[i + 2];
+                    buffer[fp++] = 0x00;
+                    buffer[fp++] = _in[i + 3];
+                    buffer[fp++] = _in[i + 4];
+                    buffer[fp++] = _in[i + 5];
+                }
+
+                produced += avail;
+                if (avail < take)
+                {
+                    break; // 内层短读（理论不出现）→ 剩余零填充
+                }
+            }
+
+            // 兜底：未产满的帧零填充保帧对齐（正常不会到这）
+            for (int f = produced; f < frames; f++)
+            {
+                int fp = offset + f * 8;
+                buffer[fp] = 0x00;
+                buffer[fp + 1] = 0x00;
+                buffer[fp + 2] = 0x00;
+                buffer[fp + 3] = 0x00;
+                buffer[fp + 4] = 0x00;
+                buffer[fp + 5] = 0x00;
+                buffer[fp + 6] = 0x00;
+                buffer[fp + 7] = 0x00;
+            }
+
+            return frames * 8;
+        }
+
+        public void Seek(TimeSpan position) => _src.Seek(position);
+
+        public void Dispose()
+        {
+            try { _src.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DsdDopPipeline.cs", caught); }
+        }
+    }
+
+    /// <summary>
     /// ASIO DoP 装箱（ECHO write_asio_dop_sample 配方）：NAudio AsioOut 只支持 16/32bit 源，
-    /// DoP 24bit 容器必须重铸为 32bit——Int32LSB 右对齐变体：每样本 [lo][hi][marker][0]
-    /// （DSD 占低 16bit、标记占 bits 23..16）。绝不经过 Widen24To32Provider（value&lt;&lt;8 会把标记挤到最高字节）。
-    /// KA13 无 ASIO 驱动，本路径默认不可达；fail-closed：任何异常即失败，由上层回退 PCM。
-    /// ⚠ 若将来接实录 ASIO 设备不认 DSD：换成 payload&lt;&lt;8 左移变体（[0][lo][hi][marker]），以设备日志为准。
+    /// DoP 24bit 容器必须重铸为 32bit——标准 DoP 32 变体：每样本 [0][lo][hi][marker]
+    /// （payload&lt;&lt;8，DSD 占低 16bit、标记占最高字节 bits 31..24）。
+    /// 2026-09-23 KA13 实测修正：旧摆位 [lo][hi][marker][0]（标记 bits 23..16）FiiO 驱动不认
+    /// （黄灯=当 352.8kHz PCM32 直放=静音）；fiio_usbaudio.sys 的 DSD_32b 正装=标记最高字节。
+    /// fail-closed：任何异常即失败，由上层回退 PCM。
     /// </summary>
     internal sealed class AsioDoPProvider : IWaveProvider, IDisposable
     {
@@ -911,14 +1124,14 @@ namespace CelesteMusicPlayer
                 if (f < availFrames)
                 {
                     int i = f * 6;
+                    buffer[offset + fp++] = 0x00;
                     buffer[offset + fp++] = _in[i];
                     buffer[offset + fp++] = _in[i + 1];
                     buffer[offset + fp++] = _in[i + 2];
-                    buffer[offset + fp++] = 0;
+                    buffer[offset + fp++] = 0x00;
                     buffer[offset + fp++] = _in[i + 3];
                     buffer[offset + fp++] = _in[i + 4];
                     buffer[offset + fp++] = _in[i + 5];
-                    buffer[offset + fp++] = 0;
                 }
                 else
                 {
@@ -926,12 +1139,12 @@ namespace CelesteMusicPlayer
                     byte m = ((_silenceFrames++) & 1) == 0 ? (byte)0x05 : (byte)0xFA;
                     buffer[offset + fp++] = 0x69;
                     buffer[offset + fp++] = 0x69;
+                    buffer[offset + fp++] = 0x00;
                     buffer[offset + fp++] = m;
-                    buffer[offset + fp++] = 0;
                     buffer[offset + fp++] = 0x69;
                     buffer[offset + fp++] = 0x69;
+                    buffer[offset + fp++] = 0x00;
                     buffer[offset + fp++] = m;
-                    buffer[offset + fp++] = 0;
                 }
             }
 

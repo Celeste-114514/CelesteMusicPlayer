@@ -1159,6 +1159,44 @@
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" MinWidth="240" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="DoP 容器摆位" />
+                                <TextBlock Text="仅 DSD 输出=DoP 直出时生效。24bit 紧凑=标记在每个采样第 3 字节（默认）；32bit 标准=标记在最高字节，FiiO 等原生认 DSD 的驱动的正统走法——如果你的 DAC 放 DSD 一卡一灯绿着，换这项。改动后下次开播生效。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ComboBox x:Name="DopContainerCombo" Grid.Column="1" MinWidth="240" HorizontalAlignment="Stretch" SelectionChanged="DopContainerCombo_SelectionChanged" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" MinWidth="240" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="DSD 整轨直读（预加载）" />
+                                <TextBlock Text="把 DSD 整首先装成一个缓存文件，播放时直接读文件输出，绕开「边播边装箱」（部分 DAC 上表现为固定位置卡顿）。已在专辑详情页预生成的曲目开播即用；没预生成的会在开播时现场整首转完再播（约几秒，转完自动存进缓存，下次就是秒播）。曲名、封面、标签一律沿用原 DSF。仅 WASAPI 独占下生效；关掉这个开关就完全回到原来的行为。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="DsdPreloadSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="4" VerticalAlignment="Center">
+                                <TextBlock Text="DSD 缓存目录" />
+                                <TextBlock x:Name="DsdCacheStatText" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <TextBox x:Name="DsdCachePathBox" MinWidth="280" PlaceholderText="例如 D:\CelesteDsdCache" />
+                                <Button Content="应用" Click="DsdCacheApplyButton_Click" />
+                                <Button Content="打开" Click="DsdCacheOpenButton_Click" />
+                                <Button Content="清空缓存" Click="DsdCacheClearButton_Click" />
+                            </StackPanel>
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">

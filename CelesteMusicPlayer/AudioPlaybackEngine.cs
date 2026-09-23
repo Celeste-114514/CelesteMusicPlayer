@@ -280,6 +280,38 @@ namespace CelesteMusicPlayer
             //     · WASAPI 独占 / ASIO：高质量 pcm_s32le @ 352800Hz。
 
             bool preferDop = string.Equals(AppSettingsStore.Load().DsdOutputMode, "Dop", StringComparison.OrdinalIgnoreCase);
+
+            // ── DSD「整轨 DoP WAV 直读」（2026-09-24 FiiO KA13 实测定案）──────────────────────
+            // 旧链路是"边播边装箱"（DsdBitstream 读源 → 装箱线程 → 32MB 环 → 渲染线程），在固定位置卡顿；
+            // 同一份字节内容先整轨落成一个标准 PCM WAV（内容就是 DoP 帧流），再用普通播放通路原样播这个文件
+            // = 绿灯且不卡，等价于把缓存 WAV 导入媒体库播放，但曲名/封面/标签一律沿用原 DSF。
+            //   · 已预加载     → 直接读缓存，秒播
+            //   · 没预加载     → 当场把整首转完再播（约 5 秒），转完同样落缓存，之后就是秒播
+            // dopPayload=true：独占下绕过 DSP / SRC / 降混，但**允许输出器协商容器**
+            // （24bit → PCM24-in-32 是样本值逐位一致的换装，DoP 标记不受影响）。
+            // 这里绝不能用 requireExact=true：native2 原生内核会直接拒绝起播
+            // （实测报"暂不支持 DSD/DoP 精确直出"），反而落回卡顿的旧链路。
+            // 失败一律回落旧链路（DoP 实时装箱 → PCM 转码），保证永远能出声。
+            if (preferDop && DsdPreloadService.Enabled && IsDsdFile(path)
+                && _outputMode == HiFiOutputBackend.OutputMode.WasapiExclusive)
+            {
+                string? dopWav = await EnsureDsdDopWavAsync(path, status).ConfigureAwait(false);
+                if (!string.IsNullOrEmpty(dopWav))
+                {
+                    CleanupTempWav();
+                    _lastTempWav = null; // 缓存文件归缓存管理，不随临时 WAV 清理
+                    if (PlayWavHiFi(dopWav!, sourceIsDsd: true, dopPayload: true))
+                    {
+                        StartupLog.Write("[DSD整轨] 播放 DoP WAV（独占原样直通，标签沿用原曲）: " + dopWav
+                            + " | 原曲=" + Path.GetFileName(path));
+                        return true;
+                    }
+
+                    // 设备不认该容器（如 352.8k/24bit）→ 落回下面的 DoP 实时装箱 / PCM 转码
+                    StartupLog.Write("[DSD整轨] DoP WAV 播放失败，回落旧链路: " + (_hifiOut?.LastError ?? "?"));
+                }
+            }
+
             if (preferDop && _outputMode != HiFiOutputBackend.OutputMode.WasapiShared && IsDsdFile(path))
             {
                 bool dopOk = await TryPlayDsdPreloadAsync(path, status).ConfigureAwait(false);
@@ -421,7 +453,7 @@ namespace CelesteMusicPlayer
 
         /// <summary>用 HiFiOutputBackend 播放转码后的 PCM WAV（WASAPI 独占 / ASIO）。
         /// <paramref name="sourceIsDsd"/> 源文件是 DSD（转 PCM 输出）时置位，链路据此标注 DSD 路径。</summary>
-        private bool PlayWavHiFi(string wavPath, bool requireExact = false, bool sourceIsDsd = false)
+        private bool PlayWavHiFi(string wavPath, bool requireExact = false, bool sourceIsDsd = false, bool dopPayload = false)
         {
             try
             {
@@ -441,7 +473,7 @@ namespace CelesteMusicPlayer
                 _hifiOut.SetResampleTargetRate(st.SrcTargetHz);
                 _hifiOut.SetSrcQuality(st.SrcQuality);
                 _hifiOut.SetSrcDither(st.SrcDither);
-                bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference, requireExact: requireExact, sourceIsDsd: sourceIsDsd);
+                bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference, requireExact: requireExact, sourceIsDsd: sourceIsDsd, dopPayload: dopPayload);
                 StartupLog.Write("HiFi播放 mode=" + _outputMode + " 设备=" + (_hifiOut.OutputDeviceName ?? "?") + " (pref=" + (_devicePreference ?? "默认") + ") ok=" + ok + (ok ? "" : " err=" + (_hifiOut.LastError ?? "")));
                 if (!ok)
                 {
@@ -461,6 +493,42 @@ namespace CelesteMusicPlayer
                 LastError = ex.Message;
                 RaiseFailed(ex);
                 return false;
+            }
+        }
+
+        /// <summary>取该 DSD 的「整轨 DoP WAV」：命中缓存直接返回；没预加载过则当场把整首装箱完再返回
+        /// （后台线程，约 5 秒，转完落进同一个缓存目录，之后就是秒播，可在设置里单独删）。
+        /// 返回 null = 这条路不可用（生成失败/异常），调用方回落旧链路。播放侧始终用原 DSF 的曲名与标签。</summary>
+        private async Task<string?> EnsureDsdDopWavAsync(string dsf, Action<string>? status)
+        {
+            try
+            {
+                if (DsdPreloadService.TryGetCached(dsf, out string cached))
+                {
+                    StartupLog.Write("[DSD整轨] 命中预加载缓存: " + cached);
+                    return cached;
+                }
+
+                status?.Invoke("正在预生成 DSD（整轨转 DoP WAV）…");
+                var built = await Task.Run(() =>
+                {
+                    bool ok = DsdPreloadService.Build(dsf, out string w, out string? e);
+                    return (Ok: ok, Wav: w, Err: e);
+                }).ConfigureAwait(false);
+
+                if (!built.Ok || string.IsNullOrEmpty(built.Wav) || !File.Exists(built.Wav))
+                {
+                    StartupLog.Write("[DSD整轨] 生成失败，回落旧链路: " + (built.Err ?? "未知") + " | " + dsf);
+                    return null;
+                }
+
+                StartupLog.Write("[DSD整轨] 已现场生成: " + built.Wav);
+                return built.Wav;
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("AudioPlaybackEngine.cs", caught);
+                return null;
             }
         }
 

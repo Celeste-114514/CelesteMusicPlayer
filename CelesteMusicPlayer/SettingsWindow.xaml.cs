@@ -452,6 +452,10 @@ namespace CelesteMusicPlayer
             DsdOutputModeCombo.Items.Add(new ComboBoxItem { Content = "DoP 直出（HiFi，独占/ASIO）", Tag = "Dop" });
             DsdOutputModeCombo.Items.Add(new ComboBoxItem { Content = "转 PCM（兼容，先可听）", Tag = "Pcm" });
 
+            DopContainerCombo.Items.Clear();
+            DopContainerCombo.Items.Add(new ComboBoxItem { Content = "24bit 紧凑（默认）", Tag = "Packed24" });
+            DopContainerCombo.Items.Add(new ComboBoxItem { Content = "32bit 标准（标记最高字节）", Tag = "Container32" });
+
             WriteId3v23Combo.Items.Clear();
             WriteId3v23Combo.Items.Add(new ComboBoxItem { Content = "ID3v2.3", Tag = true });
             WriteId3v23Combo.Items.Add(new ComboBoxItem { Content = "ID3v2.4", Tag = false });
@@ -649,6 +653,14 @@ namespace CelesteMusicPlayer
                 // 音频输出模式 + 设备
                 SelectComboByTag(OutputModeCombo, s.OutputMode);
                 SelectComboByTag(DsdOutputModeCombo, string.IsNullOrWhiteSpace(s.DsdOutputMode) ? "Pcm" : s.DsdOutputMode);
+                SelectComboByTag(DopContainerCombo, string.IsNullOrWhiteSpace(s.DopContainerMode) ? "Packed24" : s.DopContainerMode);
+                SetToggle(DsdPreloadSwitch, s.DsdPreloadEnabled);
+                if (DsdCachePathBox != null)
+                {
+                    DsdCachePathBox.Text = DsdPreloadService.CacheRoot;
+                }
+
+                RefreshDsdCacheStat();
                 UpdateVolumeSettingLockForMode(); // 模式决定设置页音量条是否锁定
                 StartupLog.Write("设置加载 输出模式=" + (s.OutputMode ?? "null") + " 下拉选中=" + (OutputModeCombo?.SelectedItem is ComboBoxItem _m && _m.Tag is string _mt ? _mt : "(null)") + " 设备=" + (s.OutputDeviceId ?? "null"));
                 // _loadAsyncIgnore 的置位已挪进 InitOutputDeviceComboAsync（只在填下拉框时短暂拦事件）；
@@ -990,6 +1002,103 @@ namespace CelesteMusicPlayer
                 ? mode : "Dop");
         }
 
+        /// <summary>DoP 容器摆位切换（24bit 紧凑 / 32bit 标准）：仅持久化，下次开播生效。</summary>
+        private void DopContainerCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingUi || !_uiReady)
+            {
+                return;
+            }
+
+            AppSettingsStore.Update(s => s.DopContainerMode = DopContainerCombo?.SelectedItem is ComboBoxItem item && item.Tag is string mode
+                ? mode : "Packed24");
+        }
+
+        // ---- DSD 预加载缓存目录 ----
+        private void RefreshDsdCacheStat()
+        {
+            if (DsdCacheStatText == null)
+            {
+                return;
+            }
+
+            (long bytes, int files) = DsdPreloadService.Stat();
+            DsdCacheStatText.Text = files == 0
+                ? $"当前目录：{DsdPreloadService.CacheRoot}（暂无缓存）"
+                : $"当前目录：{DsdPreloadService.CacheRoot} — 已用 {bytes / 1024.0 / 1024.0:F0}MB / {files} 个文件";
+        }
+
+        private void DsdCacheApplyButton_Click(object sender, RoutedEventArgs e)
+        {
+            string p = DsdCachePathBox?.Text?.Trim() ?? string.Empty;
+            if (string.IsNullOrEmpty(p))
+            {
+                p = string.Empty; // 空=回落默认目录
+            }
+
+            AppSettingsStore.Update(s => s.DsdCachePath = p);
+            RefreshDsdCacheStat();
+        }
+
+        private void DsdCacheOpenButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string dir = DsdPreloadService.CacheRoot;
+                if (!Directory.Exists(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = "explorer.exe",
+                    Arguments = dir,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("SettingsWindow.xaml.cs", caught);
+            }
+        }
+
+        // 两段式确认（点一次变"确认删除？"，再点才真删）——不依赖 ContentDialog/XamlRoot
+        private bool _dsdCacheClearArmed;
+
+        private void DsdCacheClearButton_Click(object sender, RoutedEventArgs e)
+        {
+            var btn = sender as Button;
+            (long bytes, int files) = DsdPreloadService.Stat();
+
+            if (!_dsdCacheClearArmed)
+            {
+                if (files == 0)
+                {
+                    RefreshDsdCacheStat();
+                    return;
+                }
+
+                _dsdCacheClearArmed = true;
+                if (btn != null)
+                {
+                    btn.Content = $"确认删除 {files} 个（约 {bytes / 1024.0 / 1024.0:F0}MB）？";
+                }
+
+                return;
+            }
+
+            _dsdCacheClearArmed = false;
+            if (btn != null)
+            {
+                btn.Content = "清空缓存";
+            }
+
+            int n = DsdPreloadService.ClearAll();
+            RefreshDsdCacheStat();
+            StartupLog.Write($"[DSD预载] 用户清空缓存，删除 {n} 个文件");
+        }
+
         /// <summary>转码缓存上限改动：即时持久化（清理阈值下次转码后生效）。</summary>
         private void TranscodeCacheLimitNumberBox_ValueChanged(NumberBox sender, NumberBoxValueChangedEventArgs args)
         {
@@ -1323,6 +1432,9 @@ namespace CelesteMusicPlayer
             s.OutputMode = GetSelectedOutputMode();
             s.DsdOutputMode = DsdOutputModeCombo?.SelectedItem is ComboBoxItem dsi && dsi.Tag is string dst
                 ? dst : "Dop";
+            s.DopContainerMode = DopContainerCombo?.SelectedItem is ComboBoxItem dci && dci.Tag is string dct
+                ? dct : "Packed24";
+            s.DsdPreloadEnabled = DsdPreloadSwitch?.IsOn ?? s.DsdPreloadEnabled;
             StartupLog.Write("设置保存 输出模式=" + (s.OutputMode ?? "null") + " 设备=" + (s.OutputDeviceId ?? "null"));
             s.EnableFade = EnableFadeSwitch?.IsOn ?? s.EnableFade;
             if (FadeMsSlider != null)
