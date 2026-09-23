@@ -45,6 +45,8 @@ namespace CelesteMusicPlayer
         private readonly BlockingCollection<AsioJob?> _asioQueue = new(); // null = 毒丸（请求关停）
         private volatile bool _asioHostShutdown;
         private readonly System.Threading.ManualResetEventSlim _asioThreadStarted = new(false);
+        // 本次 ASIO 会话喂源是否被 24-in-32 容器扩容（AsioSource 置位）：仅设备端诚实展示用
+        private volatile bool _asioWiden24;
         private SeamlessWaveProvider? _seamless; // NAudio 输出（共享/ASIO）的无缝续接源（当前+下一首）
         private double[]? _eqGains; // (旧) 10 段 EQ 增益(dB)，独立 EQ 窗口用
         private EqCurveState? _eqCurve; // 动态 EQ 曲线状态（DSP 面板用）
@@ -560,6 +562,12 @@ namespace CelesteMusicPlayer
                     int bits = wf.BitsPerSample;
                     // 24bit 可能实际是 IeeeFloat/32；对 DoP/独占显示核心格式
                     ActualOutputFormat = wf.SampleRate + "hz / " + bits + "bit / " + wf.Channels + " 声道";
+                    // ASIO 24-in-32 扩容会话：设备端显示的是 32bit 容器，据实标注容器性质
+                    // （规格显示必须真实：源 24bit 左对齐装进 32bit，样本值逐位一致，非原生 32bit 音质）
+                    if (_asioWiden24 && bits == 32)
+                    {
+                        ActualOutputFormat += "（24-in-32 容器：源 24bit 左对齐装入，样本值逐位一致）";
+                    }
                     // 结构化：共享/ASIO 路径的设备端格式（NAudio WasapiOut.OutputWaveFormat）。
                     // 徽标对共享模式另有"系统混音器"一等判定；ASIO 取不到该属性时保持 null（待播放确认，不假设直通）。
                     ChainFormat.DeviceOutput = new AudioFormat(wf.SampleRate, wf.BitsPerSample, wf.Channels, wf.Encoding == WaveFormatEncoding.IeeeFloat);
@@ -1067,7 +1075,8 @@ namespace CelesteMusicPlayer
                     {
                         // ASIO：Init 里一排 COM 调用（Capabilities/SetSampleRate/CreateBuffers…），
                         // 驱动 COM 对象的"家"是 STA 宿主线程，必须回该线程执行。
-                        AsioInvokeVoid(() => _output!.Init(_dspProvider!), "AsioOut.Init");
+                        // 喂源经 AsioSource()：24bit 源必须先扩成 24-in-32 容器（NAudio 硬伤，见其注释）。
+                        AsioInvokeVoid(() => _output!.Init(AsioSource()), "AsioOut.Init");
                     }
                     else
                     {
@@ -1103,6 +1112,39 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
+        }
+
+        /// <summary>
+        /// ASIO 专用喂源：24bit 源必须先扩成 24-in-32 容器 PCM32。
+        /// 背景（2026-09-23 ASIO 双击播放必崩实锤，日志四连全部 24bit 源）：
+        /// NAudio 2.2.1 的 AsioOut 只支持 16/32bit（含 float32）源——
+        /// AsioSampleConvertor.SelectSampleConvertor 对 24bit 源没有任何分支，convertor=null；
+        /// AsioOut.Init 不检查该 null 照常"成功"，driver.Start() 后驱动第一次
+        /// BufferSwitchCallBack 调 convertor(...) 即 NullReferenceException，
+        /// 且抛在 ASIO 驱动回调线程上 → AppDomain.UnhandledException → 进程直接崩。
+        /// 本仓转码 WAV 主体就是 24bit，等于 ASIO 输出对所有 24bit 曲目必崩。
+        /// 修复：喂 24-in-32 容器（样本值逐位一致，与 native2/ECHO 独占内核同一容器约定）。
+        /// FiiO KA13 驱动报 Int32LSB → NAudio 选中 ConvertorIntToInt2Channels 原样直拷、
+        /// 不做任何移位 → 端到端 bit-perfect。16/32bit/float32 源 NAudio 均有分支，原样返回。
+        /// 注意：DoP 容器绝不经过本类（DoP 32bit 非 24bit 不受影响；24bit DoP 若被扩容标记会错位）。
+        /// </summary>
+        private IWaveProvider AsioSource()
+        {
+            _asioWiden24 = false;
+            var src = _dspProvider;
+            if (src == null)
+            {
+                throw new InvalidOperationException("DSP 链未就绪，无法初始化 ASIO 输出。");
+            }
+
+            if (src.WaveFormat.BitsPerSample == 24)
+            {
+                _asioWiden24 = true;
+                StartupLog.Write("[ASIO] 源为 24bit：NAudio AsioOut 不支持 24bit 源（null 转换器→驱动回调 NPE 崩进程），已改喂 24-in-32 容器 PCM32（ConvertorIntToInt 原样直拷设备，样本值逐位一致，bit-perfect）");
+                return new Widen24To32Provider(src);
+            }
+
+            return src;
         }
 
         /// <summary>是否使用 ECHO 核心独占输出（设置项 ExclusiveEngine="echo"）。默认 self=自研，可随时回退。</summary>
@@ -2105,6 +2147,7 @@ namespace CelesteMusicPlayer
             _dsdSource = null;
             _isDsd = false;
             _dspProvider = null;
+            _asioWiden24 = false;
             _seamless?.Dispose();
             _seamless = null;
             _waveFile?.Dispose();

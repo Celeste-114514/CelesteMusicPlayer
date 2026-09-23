@@ -1,0 +1,33 @@
+修复 ASIO 输出双击播放必崩：NAudio AsioOut 不支持 24bit 源（null 转换器→驱动回调 NPE）
+
+现象：ASIO 输出模式下双击/切歌播放即进程崩溃，日志定格在
+AppDomain.UnhandledException: NullReferenceException
+  at NAudio.Wave.AsioOut.driver_BufferUpdate
+  at NAudio.Wave.Asio.AsioDriverExt.BufferSwitchCallBack
+（本机 2026-09-23 复崩四次：02:56 / 02:57 / 17:06:01 / 17:06:19，全部 24bit 源）
+
+根因（NAudio 2.2.1 源码级实锤）：
+AsioSampleConvertor.SelectSampleConvertor 的 switch 只有 16/32bit 两个源分支，
+24bit 源落在任何 case 之外 → convertor=null；AsioOut.InitRecordAndPlayback 不检查
+这个 null 照常成功（Config：Capabilities/SetSampleRate/CreateBuffers 全过），
+driver.Start() 后驱动第一次 BufferSwitchCallBack 调 convertor(...) 即 NPE。
+异常抛在 ASIO 驱动回调线程 → AppDomain.UnhandledException → 进程直接死。
+本仓转码 WAV 主体就是 24bit，等于 ASIO 输出对所有 24bit 曲目必崩。
+
+修复：
+- 新增 Widen24To32Provider：ASIO 专用喂源扩容器，24bit 打包（3B/样本）→
+  24-in-32 容器 PCM32（24 位有效左对齐 v<<8，低字节补零；与 NativeCoreOutput
+  Expand24To32、ECHO 内核 WASAPI_FORMAT_PCM24_IN_32 同一容器约定）。
+- HiFiOutputBackend.InitNaudioOutput 的 ASIO 分支改经 AsioSource()：24bit 源
+  自动包装。FiiO KA13 驱动报 Int32LSB → NAudio 选中 ConvertorIntToInt2Channels
+  原样直拷、零移位零缩放 → 样本值逐位一致，端到端 bit-perfect；容器正是独占
+  内核在同设备实测零卡顿的 pcm24in32。16/32bit/float32 源 NAudio 均有分支，
+  不包装、原样通过。
+- 设备端规格显示诚实化：ASIO 24-in-32 会话的 ActualOutputFormat 追加容器标注
+  （源 24bit 左对齐装入，样本值逐位一致），不谎报原生 32bit。
+- 其它输入模式（共享/三内核独占）零影响；DoP 容器不经本类（32bit DoP 不受影响）。
+
+验证：dotnet publish 一次通过（ec=0 / CS=0 / MSB=0 / Fatal=0），exe=78a4a90a，
+DLL 仍 7b139c03 未动；dist/run-latest 已同步（69 项，ffmpeg 在位）。
+待用户实机复测：ASIO + 24bit 曲目双击播放应正常出声，日志出现
+"[ASIO] 源为 24bit：……已改喂 24-in-32 容器 PCM32"。
