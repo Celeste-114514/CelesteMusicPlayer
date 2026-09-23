@@ -62,6 +62,9 @@ namespace CelesteMusicPlayer
         /// <summary>当前播放源的原始格式描述（WAV 直通源）。</summary>
         public string? SourceFormatDescription => _hifiOut?.SourceFormatDescription;
 
+        /// <summary>当前是否正处于 DSD/DoP 直出（结构化标志位，守卫拒绝回退 PCM 时为 false）。</summary>
+        public bool IsDsdDirectOut => _hifiOut?.IsDsdDirectOut ?? false;
+
         /// <summary>
         /// 转码前探测到的「源文件原始格式」（如 "44100hz / 24bit / 2声道"），即未经任何转码的源本身规格。
         /// 与 <see cref="SourceFormatDescription"/>（实际送链路的 WAV 格式）比对，可识别"转码悄悄降级"：
@@ -141,7 +144,6 @@ namespace CelesteMusicPlayer
 
         private string? _devicePreference;
         private HiFiOutputBackend? _hifiOut;
-        private NaudioDsdBackend? _dsdNaudioBackend; // A/B 诊断：NAudio WasapiOut 播 DoP 的后端（DsdUseNaudioOutput=true 时用）
         private HiFiOutputBackend.OutputMode _outputMode = HiFiOutputBackend.OutputMode.WasapiShared;
 
         /// <summary>是否为 HiFi 输出后端主导播放（三模式统一走 NAudio/HiFi DSP 链）。
@@ -267,10 +269,13 @@ namespace CelesteMusicPlayer
 
         private async Task<bool> PlayFileWithFfmpegCoreAsync(string path, Action<string>? status = null)
         {
-            // DSD（DSF/DFF）输出策略：
+            // DSD（DSF/DFF）输出策略（ECHO 方案）：
             //   - 设置「DSD 输出模式 = DoP 直出」且当前为 WASAPI 独占 / ASIO 时，走 DoP 原生直出
-            //     （DSD 1-bit 封进 176.4k..1411.2k DoP 容器直通 DAC，bit-perfect，不经 DSP/转码）；
-            //   - 其余情况（共享模式、或用户选了转 PCM）走 ffmpeg 转 PCM：
+            //     （DSD 1-bit 封进 176.4k/352.8k/705.6k DoP 容器直通 DAC，bit-perfect，不经 DSP/转码）。
+            //     守卫（任一不满足即自动降级，带原因写日志，绝不静默）：
+            //       仅 DSF；仅 DSD64/128/256；仅 1-2 声道；DSP 全关。
+            //     DFF/DST 压缩/DSD512/多声道/共享模式 → 回退 PCM。
+            //   - 其余情况（共享模式、或用户选了转 PCM、或守卫拒绝）走 ffmpeg 转 PCM：
             //     · 共享模式：16bit/44100Hz（系统可播，可听优先）；
             //     · WASAPI 独占 / ASIO：高质量 pcm_s32le @ 352800Hz。
 
@@ -283,7 +288,8 @@ namespace CelesteMusicPlayer
                     return true;
                 }
 
-                // DoP 直出失败（DAC 不支持 DoP/设备无法协商等）：降级转 PCM，保证可播。
+                // DoP 直出失败（守卫拒绝/设备无法协商等，具体原因见 [DSD] DoP 回退 PCM 日志）：
+                // 降级转 PCM，保证可播。
                 StartupLog.Write("DSD DoP 直出失败，降级转 PCM: " + path + " err=" + (LastError ?? ""));
                 status?.Invoke("DoP 直出不可用，转 PCM…");
             }
@@ -503,7 +509,7 @@ namespace CelesteMusicPlayer
             {
                 if (IsDsdFile(sourcePath))
                 {
-                    uint freq = BuiltInDsdDecoder.ProbeFreqHz(sourcePath);
+                    uint freq = DsdProbe.ProbeFreqHz(sourcePath);
                     if (freq > 0)
                     {
                         // 判断所属家族：与 48k 精确倍率吻合、且与 44.1k 倍率不吻合才算 48k 家族
@@ -538,9 +544,11 @@ namespace CelesteMusicPlayer
             return list.ToArray();
         }
 
-        /// <summary>DSD/DoP 原生直出（内存预读版）：后台预读线程把 DSF/DFF 解析封装为 DoP 容器帧
-        /// 写入内存环形缓冲，独占 render 线程只从内存取帧原样直通 DAC（bit-perfect）。
-        /// 不落盘、不走磁盘 I/O 实时读，杜绝"边播边从磁盘读/解 DSD"造成的电流音/卡顿。</summary>
+        /// <summary>DSD/DoP 原生直出（内存预读版，ECHO 方案）：后台装箱线程把 DSF 的 1-bit 数据
+        /// 封装为 DoP 容器帧写入内存环形缓冲，独占 render 线程只从内存取帧原样直通 DAC（bit-perfect）。
+        /// 不落盘、不走磁盘 I/O 实时读，杜绝"边播边从磁盘读/解 DSD"造成的电流音/卡顿。
+        /// 守卫（DSF/DSD64-256/1-2 声道/独占或 ASIO/DSP 全关）在 HiFiOutputBackend.PlayDsdAsync 内，
+        /// 任一不满足即返回 false，由上层转 PCM 回退。</summary>
         private async Task<bool> TryPlayDsdPreloadAsync(string dsdPath, Action<string>? status)
         {
             try
@@ -553,7 +561,7 @@ namespace CelesteMusicPlayer
 
                 status?.Invoke("DSD 缓冲直出：解析容器…");
                 // 同步在调用线程初始化 WASAPI 独占 + DoP 内存源（与 PCM 路径一致，避免 MTA 线程跨线程用 COM 报错）；
-                // 真正费时的 DSD 读取/封装由 DoPWaveSource 后台预读线程承担，不阻塞 UI。
+                // 真正费时的 DSD 读取/封装由 DoP24LeSource 后台装箱线程承担，不阻塞 UI。
                 bool played = PlayDsdHiFi(dsdPath, _devicePreference);
                 // 播放已启动（含起播预缓冲就绪）→ 清除顶部"解析容器"占位提示，避免整曲残留误导"一直在边解边播"
                 if (played)
@@ -572,7 +580,8 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>走 HiFiOutputBackend 的 DSD/DoP 内存预读直出（requireExact，禁降级）。</summary>
+        /// <summary>走 HiFiOutputBackend 的 DSD/DoP 内存预读直出（requireExact，禁降级）。
+        /// 按当前输出模式分派：独占 = DoP 容器原样直通；ASIO = 专用 32bit 装箱。</summary>
         private bool PlayDsdHiFi(string dsdPath, string? deviceId)
         {
             try
@@ -586,13 +595,7 @@ namespace CelesteMusicPlayer
                 _hifiOut.PositionChanged -= Hifi_PositionChanged;
                 _hifiOut.PositionChanged += Hifi_PositionChanged;
 
-                // A/B 诊断路径：DsdUseNaudioOutput=true 时用 NAudio WasapiOut(独占) 播 DoP，不进原生 render。
-                if (AppSettingsStore.Load().DsdUseNaudioOutput)
-                {
-                    return PlayDsdNaudio(dsdPath, deviceId);
-                }
-
-                bool ok = _hifiOut.PlayDsdAsync(dsdPath, deviceId, seekTo: null);
+                bool ok = _hifiOut.PlayDsdAsync(dsdPath, deviceId, seekTo: null, mode: _outputMode);
                 if (!ok)
                 {
                     LastError = _hifiOut.LastError ?? "DSD 内存直出失败";
@@ -611,50 +614,6 @@ namespace CelesteMusicPlayer
                 return false;
             }
         }
-
-        /// <summary>A/B：用 NAudio WasapiOut(独占) 直接播 DoP 数据源，判断电流/黄灯是否来自原生 render。
-        /// 仅诊断用：Pause/SkipPosition 在本路径降级为停止（不影响原生态走 _hifiOut）。</summary>
-        private bool PlayDsdNaudio(string dsdPath, string? deviceId)
-        {
-            try
-            {
-                bool hasDev = !string.IsNullOrWhiteSpace(deviceId);
-                var dec = DsdDecoderRegistry.Resolve(dsdPath);
-                if (dec == null)
-                {
-                    LastError = "没有可用的 DSD 解码器。";
-                    return false;
-                }
-
-                var dop = new DoPWaveSource(dec.Open(dsdPath), AppSettingsStore.Load().DsDoP32 ? 32 : 24);
-                var backend = new NaudioDsdBackend(dop);
-                if (!backend.Start())
-                {
-                    LastError = "NAudio DSD 播放启动失败";
-                    backend.Dispose();
-                    return false;
-                }
-
-                _dsdNaudioBackend = backend;
-                Duration = backend.TotalTime;
-                Position = TimeSpan.Zero;
-                _isPlaying = true;
-                StartupLog.Write("[NAudioDSD] 已用 NAudio WasapiOut(独占) 播 DoP — A/B 电流判断");
-                return true;
-            }
-            catch (Exception ex)
-            {
-                LastError = ex.Message;
-                RaiseFailed(ex);
-                return false;
-            }
-        }
-
-
-
-
-
-
 
         private void CleanupTempWav()
         {
@@ -1155,9 +1114,6 @@ namespace CelesteMusicPlayer
             }
 
             _isPlaying = false;
-            // A/B 诊断后端：停止并释放 NAudio DSD
-            try { _dsdNaudioBackend?.Dispose(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AudioPlaybackEngine.cs", caught); }
-            _dsdNaudioBackend = null;
             _positionTimer?.Stop();
             Position = TimeSpan.Zero;
             Duration = TimeSpan.Zero;

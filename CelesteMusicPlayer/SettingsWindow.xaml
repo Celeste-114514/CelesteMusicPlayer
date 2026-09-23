@@ -1152,7 +1152,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="DSD 输出" />
-                                <TextBlock Text="DoP 直出=DSD 1-bit 封进 DoP 容器直通 DAC（独占/ASIO，bit-perfect）；转 PCM=用 FFmpeg 转高采样 PCM（可听优先）。共享模式下自动转 PCM。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                                <TextBlock Text="DoP 直出=DSD 1-bit 封进 DoP 容器直通 DAC（仅 DSF / DSD64-128-256 / 1-2 声道 / 独占或 ASIO / DSP 全关，bit-perfect）；DFF、DST 压缩、DSD512、多声道、开着 EQ 等会自动转 PCM（日志有原因）。共享模式下自动转 PCM。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                             <ComboBox x:Name="DsdOutputModeCombo" Grid.Column="1" MinWidth="240" HorizontalAlignment="Stretch" SelectionChanged="DsdOutputModeCombo_SelectionChanged" />
                         </Grid>

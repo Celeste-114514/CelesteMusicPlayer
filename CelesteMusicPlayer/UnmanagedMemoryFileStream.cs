@@ -13,8 +13,8 @@ namespace CelesteMusicPlayer
     /// 2026-09-22 C2：取代 <see cref="HiFiOutputBackend.OpenWaveSource"/> 里的
     /// File.ReadAllBytes + MemoryStream 组合——旧做法整首 PCM 落在 managed byte[]，
     /// ≤192MB 的曲目全在大对象堆，叠加无缝预载的「下一首」，两首共 ~384MB LOH，
-    /// gen2/LOH 回收 STW 冻渲染线程 = PCM 卡顿根因（与 DSD 侧 BuiltInDsdStream/
-    /// DoPWaveSource 整读同一病根，2026-09-22 DSD 内存实锤）。
+    /// gen2/LOH 回收 STW 冻渲染线程 = PCM 卡顿根因（与 DSD 侧旧 BuiltInDsdStream/
+    /// DoP 整读同一病根，2026-09-22 DSD 内存实锤；现行 DsdBitstream 已改分段池化读）。
     /// 改为非托管后：内存仍一次性驻留（磁盘 I/O 在播放前完成，render 线程只读内存），
     /// 但 GC 完全看不见这些字节，GC 卡顿与内存暴涨一并消失。
     ///

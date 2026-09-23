@@ -87,20 +87,9 @@ namespace CelesteMusicPlayer
         // —— 歌词 ——
         public bool PreferInnerLyric { get; set; } = true;
 
-        /// <summary>A/B 诊断开关：true 时 DSD 直出走 NAudio WasapiOut(独占) 而非本机原生 render，
-        /// 用于判断电流/黄灯是否来自我们的原生 WASAPI 渲染层（默认 false=原生态）。</summary>
-        public bool DsdUseNaudioOutput { get; set; }
-
-        /// <summary>DSD 直出用 32bit DoP 容器（部分 DAC/KA13 认同 DoP 32bit 而 24bit 不认）。默认 false=24bit。</summary>
-        public bool DsDoP32 { get; set; }
-
-        /// <summary>诊断开关：true 时 DSD 不再走 DoP 直出，而是用 ffmpeg 把 DSF/DFF 转成高采样 PCM、
-        /// 走成熟的 PCM 独占通路播放。用于判断"电流/黄灯"是来自 DoP 直出链路，还是 KA13 对高采样率 USB 时钟/驱动本身的问题。
-        /// 默认 false=走 DoP 直出。</summary>
-        public bool DsdUsePcmFallback { get; set; }
-
         /// <summary>DSD 输出模式（用户可选择）："Pcm"=用 ffmpeg 转成高采样 PCM 输出（默认，保留现有独占/ASIO 的 PCM 方案）；
-        /// "Dop"=DoP 直出（独占/ASIO 下把 DSD 1-bit 封进 DoP 容器直通 DAC，bit-perfect）。</summary>
+        /// "Dop"=DoP 直出（ECHO 方案：仅 DSF/DSD64-256/1-2 声道/独占或 ASIO/DSP 全关，
+        /// 把 DSD 1-bit 封进 DoP 容器直通 DAC，bit-perfect；其余情形自动回退 PCM 并写日志）。</summary>
         public string DsdOutputMode { get; set; } = "Pcm";
 
         /// <summary>输出缓冲区大小（毫秒）。越小越跟手（低延迟），越大越抗卡顿/爆音。
@@ -771,13 +760,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             ShowPlaylistYear = s.ShowPlaylistYear,
             ShowPlaylistDuration = s.ShowPlaylistDuration,
             AudioChannel = s.AudioChannel,
-            // 诊断开关必须随 Clone 拷贝，否则 Load() 返回的克隆里恒为默认 false（此前导致 DSD 诊断 A/B 开关从未生效、配置被重写）。
-            DsDoP32 = s.DsDoP32,
             SrcTargetHz = s.SrcTargetHz,
             SrcQuality = s.SrcQuality,
             SrcDither = s.SrcDither,
-            DsdUseNaudioOutput = s.DsdUseNaudioOutput,
-            DsdUsePcmFallback = s.DsdUsePcmFallback,
             DsdOutputMode = s.DsdOutputMode,
             OutputBufferMs = s.OutputBufferMs,
             ExclusiveEngine = s.ExclusiveEngine,

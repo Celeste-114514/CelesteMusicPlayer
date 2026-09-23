@@ -66,7 +66,7 @@ namespace CelesteMusicPlayer
         private IExclusiveOutput? _native; // 独占输出器（WasapiExclusive 模式）：自研 NativeWasapiExclusiveOut 或 ECHO 核心 EchoCoreOutput（设置里 A/B 切换）
         private bool _useNative; // 当前播放是否走原生独占输出
         private bool _isDsd;     // 当前是否 DSD/DoP 直出（独占 + 禁降级）
-        private DoPWaveSource? _dsdSource; // DSD/DoP 数据源（仅向独占通道喂 DoP 帧）
+        private DoP24LeSource? _dsdSource; // DSD/DoP 数据源（仅向独占/ASIO 通道喂 DoP24 容器帧）
         private double _lastDsdPrefillLogSec = double.NegativeInfinity; // 限频 DSD ring 欠载诊断日志
         private MMDevice? _device;     // 用于调设备/系统主音量（WASAPI）；ASIO 无统一接口为 null
         private bool _isPlaying;
@@ -86,6 +86,11 @@ namespace CelesteMusicPlayer
         private long _nativePosBaselineFrames; // 原生独占下当前曲目起始帧基准（用于按曲目换算相对进度，避免跨曲累加）
         private OutputMode _activeMode;
         private string? _activeDeviceId;
+
+        /// <summary>当前是否正处于 DSD/DoP 直出（守卫全过且输出已起播）。
+        /// 徽标/文案据此结构化标志位判断，不从设置反推——守卫拒绝（DFF/DST/DSD512/多声道/
+        /// 共享模式/DSP 未关）回退 PCM 时此标志为 false。</summary>
+        public bool IsDsdDirectOut => _isDsd;
 
         /// <summary>播放位置变化（约 200ms 一次）。</summary>
         public event Action<TimeSpan>? PositionChanged;
@@ -1126,7 +1131,8 @@ namespace CelesteMusicPlayer
         /// 修复：喂 24-in-32 容器（样本值逐位一致，与 native2/ECHO 独占内核同一容器约定）。
         /// FiiO KA13 驱动报 Int32LSB → NAudio 选中 ConvertorIntToInt2Channels 原样直拷、
         /// 不做任何移位 → 端到端 bit-perfect。16/32bit/float32 源 NAudio 均有分支，原样返回。
-        /// 注意：DoP 容器绝不经过本类（DoP 32bit 非 24bit 不受影响；24bit DoP 若被扩容标记会错位）。
+        /// 注意：DSD/DoP 直出绝不经过本类——DoP 24bit 容器由 AsioDoPProvider 专用装箱
+        /// （[lo][hi][marker][0] Int32LSB 右对齐），本类的 value&lt;&lt;8 扩容会把标记挤出数据字节。
         /// </summary>
         private IWaveProvider AsioSource()
         {
@@ -1560,10 +1566,15 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// DSD/DoP 原生直出：解析 DSF/DFF → DoPWaveSource → WASAPI 独占（requireExact，禁降级）。
-        /// 数据 1-bit 从容器直接抽出并封装为 DoP 容器帧，不经 PCM 解码，也不挂任何 DSP/音量（bit-perfect）。
+        /// DSD/DoP 直出（ECHO 方案：仅 DSF + DSD64/128/256 + 独占/ASIO + DSP 全关）：
+        /// 解析 DSF → DsdBitstream → DoP24LeSource（24bit DoP 容器帧）→ 独占原样直通 / ASIO 专用装箱。
+        /// 数据 1-bit 从容器直接抽出并封装为 DoP 容器帧，不经 PCM 解码（bit-perfect）。
+        /// 守卫链（任一不满足即带原因拒绝，上层转 PCM 回退，绝不静默）：
+        ///   ① 容器探头（DsdProbe.Probe）：非 DSF / DFF(含 DST) / 声道>2 / 非 DSD64-256 一律回退；
+        ///   ② 输出模式守卫：共享混音器会重采样抹花 DoP 标记，必须独占或 ASIO；
+        ///   ③ DSP 守卫：EQ/声道/限幅/ReplayGain/卷积任一激活即回退（会改写容器字节）。
         /// </summary>
-        public bool PlayDsdAsync(string dsdPath, string? deviceIdentifier, TimeSpan? seekTo = null)
+        public bool PlayDsdAsync(string dsdPath, string? deviceIdentifier, TimeSpan? seekTo = null, OutputMode mode = OutputMode.WasapiExclusive)
         {
             try
             {
@@ -1575,60 +1586,46 @@ namespace CelesteMusicPlayer
                     return false;
                 }
 
-                // 解析 DSD 容器 → 1-bit 流 → DoP 封装
-                IDsDDecoder? decoder = DsdDecoderRegistry.Resolve(dsdPath);
-                if (decoder == null)
+                _activeMode = mode;
+
+                // 守卫①：只读文件头探测容器/倍率/声道（ECHO DsdProbe 同款，异常/坏头都变带原因拒绝）
+                DsdProbeResult probe = DsdProbe.Probe(dsdPath);
+                if (!probe.DopSupported)
                 {
-                    LastError = "没有可用的 DSD 解码器（内建解析器不可用）。";
-                    StartupLog.Write("DSD 直出失败：无解码器 path=" + dsdPath);
+                    string why = probe.RejectReason ?? "未知原因";
+                    LastError = "该 DSD 文件不支持 DoP 直出：" + why;
+                    StartupLog.Write("[DSD] DoP 回退 PCM：" + why + " | " + Path.GetFileName(dsdPath));
                     return false;
                 }
 
-                IDsDStream dsd = decoder.Open(dsdPath);
-                int dopBits = AppSettingsStore.Load().DsDoP32 ? 32 : 24;
-                var dop = new DoPWaveSource(dsd, dopBits);
+                // 守卫②：DoP 标记只能原样穿过独占/ASIO（共享混音器按 Windows 默认格式重采样会抹花标记）
+                if (mode != OutputMode.WasapiExclusive && mode != OutputMode.Asio)
+                {
+                    StartupLog.Write("[DSD] DoP 回退 PCM：当前输出模式(" + mode + ")非独占/ASIO");
+                    return false;
+                }
+
+                // 解析 DSF → 1-bit 流 → DoP24 封装（32MB 环 + 后台装箱线程；DFF 已在守卫①拦下）
+                DsdBitstream bitstream = DsdBitstream.Open(dsdPath);
+                var dop = new DoP24LeSource(bitstream);
+
+                // 守卫③：DSP 全关。用一次性 DSP 链的真实激活判据（单一事实来源，避免镜像漂移）。
+                // 模式已是独占/ASIO → BuildDspProvider 不会挂音量增益；其余任一 DSP 激活即拒。
+                var dspProbe = BuildDspProvider(dop);
+                if (dspProbe.IsActive)
+                {
+                    LastError = "DoP 直出要求关闭全部 DSP（EQ/声道/限幅/ReplayGain/卷积任一开启即自动回退 PCM）。";
+                    StartupLog.Write("[DSD] DoP 回退 PCM：DSP 链处于激活状态（EQ/声道/限幅/ReplayGain/卷积有未关项）");
+                    dop.Dispose();
+                    return false;
+                }
+
                 _dsdSource = dop;
                 _isDsd = true;
                 _activeWavPath = dsdPath;
-                _activeMode = OutputMode.WasapiExclusive;
                 _activeDeviceId = deviceIdentifier;
-
-                _device = ResolveDeviceForVolume(deviceIdentifier);
-                var natDev = NativeWasapi.GetRenderDeviceById(deviceIdentifier);
-                if (natDev == null)
-                {
-                    LastError = "无法解析输出设备。";
-                    Cleanup();
-                    return false;
-                }
-
-                var nat = new NativeWasapiExclusiveOut();
-                nat.BufferMilliseconds = OutputBufferMs; // DSD/DoP 直出同样遵循事件驱动缓冲设置
-                if (!nat.Init(natDev, dop, requireExactFormat: true))
-                {
-                    LastError = nat.LastError ?? "DSD/DoP 独占初始化失败";
-                    StartupLog.Write("DSD 独占初始化失败: " + LastError
-                        + " | DoP容器=" + dop.WaveFormat.SampleRate + "/" + dop.WaveFormat.BitsPerSample + "bit/" + dop.WaveFormat.Channels + "ch"
-                        + " | rate=" + dsd.Rate);
-                    try { Marshal.ReleaseComObject(natDev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
-                    Cleanup();
-                    return false;
-                }
-
-                try { Marshal.ReleaseComObject(natDev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
-
-                _native = nat;
-                nat.Failed += Native_Failed; // C3：DSD/DoP 直出路同样接致命错误（ECHO/自研两侧行为一致）
-                _useNative = true;
-                _isDsd = true;
-                OutputDeviceName = nat.ActualFormatDescription != null
-                    ? "WASAPI 独占（DSD/DoP " + nat.ActualFormatDescription + "）"
-                    : "WASAPI 独占（DSD/DoP）";
-                Duration = dop.TotalTime;
-                _sourceDuration = dop.TotalTime;
-                Position = TimeSpan.Zero;
-                SourceFormatDescription = dsd.Rate + " / " + dsd.Channels + "声道 1-bit DSD";
-                // 链路结构化状态：DSD 源（无 PCM 探测值）+ DoP 容器 + 设备端协商（上面 native 分支填）
+                SourceFormatDescription = DsdProbe.LevelName(probe.NativeRateHz) + " / " + probe.Channels + "声道 1-bit DSD";
+                // 链路结构化状态：DSD 源（无 PCM 探测值）+ DoP 容器 + 设备端协商（出口分支填）
                 ChainFormat.HasSession = true;
                 ChainFormat.IsDsdPath = true;
                 ChainFormat.SharedMode = false;
@@ -1639,46 +1636,20 @@ namespace CelesteMusicPlayer
                 ChainFormat.DeviceOutput = null;
                 ChainFormat.Device = DevicePath.Unknown;
                 ChainFormat.DeviceEndpointName = null;
+                Duration = dop.TotalTime;
+                _sourceDuration = dop.TotalTime;
+                Position = TimeSpan.Zero;
                 _pausedPosition = seekTo ?? TimeSpan.Zero;
                 _pendingSeekTarget = null;
-                if (seekTo != null && seekTo.Value > TimeSpan.Zero)
+
+                bool ok = mode == OutputMode.Asio
+                    ? StartDsdAsio(dop, probe, deviceIdentifier, seekTo)
+                    : StartDsdExclusive(dop, probe, deviceIdentifier, seekTo);
+                if (!ok)
                 {
-                    try { dop.Seek(seekTo.Value); Position = seekTo.Value; } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+                    return false; // 失败已置 LastError/日志并 Cleanup
                 }
 
-                _native.Ended += Native_Ended;
-                // 起播前等后台预读线程把 ring 填够预缓冲（对齐 ECHO 的 startupPrebuffer），
-                // 避免"边解边播受磁盘/解码速度影响"导致的起播欠载/卡顿（Ring 空时 render 会补 0x69 静音但那是无声间断）。
-                dop.WaitForPrefill(TimeSpan.FromMilliseconds(1200));
-                if (!_native.Play(_pausedPosition))
-                {
-                    LastError = _native.LastError ?? "DSD/DoP 播放启动失败";
-                    Cleanup();
-                    return false;
-                }
-
-                ActualOutputFormat = _native.ActualFormatDescription;
-                // 设备端结构化协商结果（DSD/DoP：容器协商值，IsDsdPath 已置位）
-                ChainFormat.DeviceOutput = _native.NegotiatedFormat;
-                ChainFormat.Device = _native.DevicePathKind;
-                ChainFormat.DeviceEndpointName = _native.DeviceEndpointName;
-                _isPlaying = true;
-                CurrentMode = OutputMode.WasapiExclusive;
-                _nativePosBaselineFrames = 0;
-                _positionTimer.Start();
-                StartupLog.Write(string.Format(
-                    "DSD直出启动 源={0} {1}/{2}ch 1-bit → DoP容器={3}Hz/{4}bit/{5}ch → 设备=[{6}] | bit-perfect，CPU DSP/音量已绕过",
-                    Path.GetFileName(dsdPath), dsd.Rate, dsd.Channels,
-                    dop.WaveFormat.SampleRate, dop.WaveFormat.BitsPerSample, dop.WaveFormat.Channels,
-                    ActualOutputFormat ?? OutputDeviceName ?? "?"));
-                StartupLog.Write(string.Format(
-                    "[链路] DSD 源={0} DoP容器={1}Hz/{2}bit/{3}ch 设备={4} 端点={5} 设备路径={6} 格式判定={7}（DSP 另见徽标）",
-                    SourceFormatDescription,
-                    dop.WaveFormat.SampleRate, dop.WaveFormat.BitsPerSample, dop.WaveFormat.Channels,
-                    ChainFormat.DeviceOutput?.DescribeShort() ?? "?",
-                    ChainFormat.DeviceEndpointName ?? "?",
-                    ChainFormat.Device,
-                    FormatLayerPure() ? "bit-perfect" : "非bit-perfect"));
                 return true;
             }
             catch (Exception ex)
@@ -1688,6 +1659,159 @@ namespace CelesteMusicPlayer
                 Failed?.Invoke(ex);
                 return false;
             }
+        }
+
+        /// <summary>DSD/DoP 独占出口：NativeWasapiExclusiveOut requireExact（禁降级），DoP 容器原样直通设备。</summary>
+        private bool StartDsdExclusive(DoP24LeSource dop, DsdProbeResult probe, string? deviceIdentifier, TimeSpan? seekTo)
+        {
+            _device = ResolveDeviceForVolume(deviceIdentifier);
+            var natDev = NativeWasapi.GetRenderDeviceById(deviceIdentifier);
+            if (natDev == null)
+            {
+                LastError = "无法解析输出设备。";
+                Cleanup();
+                return false;
+            }
+
+            var nat = new NativeWasapiExclusiveOut();
+            nat.BufferMilliseconds = OutputBufferMs; // DSD/DoP 直出同样遵循事件驱动缓冲设置
+            if (!nat.Init(natDev, dop, requireExactFormat: true))
+            {
+                LastError = nat.LastError ?? "DSD/DoP 独占初始化失败";
+                StartupLog.Write("DSD 独占初始化失败: " + LastError
+                    + " | DoP容器=" + dop.WaveFormat.SampleRate + "/" + dop.WaveFormat.BitsPerSample + "bit/" + dop.WaveFormat.Channels + "ch"
+                    + " | native=" + probe.NativeRateHz);
+                try { Marshal.ReleaseComObject(natDev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+                Cleanup();
+                return false;
+            }
+
+            try { Marshal.ReleaseComObject(natDev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+
+            _native = nat;
+            nat.Failed += Native_Failed; // C3：DSD/DoP 直出路同样接致命错误（ECHO/自研两侧行为一致）
+            _useNative = true;
+            OutputDeviceName = nat.ActualFormatDescription != null
+                ? "WASAPI 独占（DSD/DoP " + nat.ActualFormatDescription + "）"
+                : "WASAPI 独占（DSD/DoP）";
+
+            if (seekTo != null && seekTo.Value > TimeSpan.Zero)
+            {
+                try { dop.Seek(seekTo.Value); Position = seekTo.Value; } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+            }
+
+            _native.Ended += Native_Ended;
+            // 起播前等后台预读线程把 ring 填够预缓冲（对齐 ECHO 的 startupPrebuffer），
+            // 避免"边解边播受磁盘/解码速度影响"导致的起播欠载/卡顿（Ring 空时 render 会补 0x69 静音但那是无声间断）。
+            dop.WaitForPrefill(TimeSpan.FromMilliseconds(1200));
+            if (!_native.Play(_pausedPosition))
+            {
+                LastError = _native.LastError ?? "DSD/DoP 播放启动失败";
+                Cleanup();
+                return false;
+            }
+
+            ActualOutputFormat = _native.ActualFormatDescription;
+            // 设备端结构化协商结果（DSD/DoP：容器协商值，IsDsdPath 已置位）
+            ChainFormat.DeviceOutput = _native.NegotiatedFormat;
+            ChainFormat.Device = _native.DevicePathKind;
+            ChainFormat.DeviceEndpointName = _native.DeviceEndpointName;
+            _isPlaying = true;
+            CurrentMode = OutputMode.WasapiExclusive;
+            _nativePosBaselineFrames = 0;
+            _positionTimer.Start();
+            StartupLog.Write(string.Format(
+                "DSD直出启动 源={0} {1}/{2}ch 1-bit → DoP容器={3}Hz/{4}bit/{5}ch → 设备=[{6}] | bit-perfect，CPU DSP/音量已绕过",
+                Path.GetFileName(_activeWavPath ?? "?"), DsdProbe.LevelName(probe.NativeRateHz), probe.Channels,
+                dop.WaveFormat.SampleRate, dop.WaveFormat.BitsPerSample, dop.WaveFormat.Channels,
+                ActualOutputFormat ?? OutputDeviceName ?? "?"));
+            StartupLog.Write(string.Format(
+                "[链路] DSD 源={0} DoP容器={1}Hz/{2}bit/{3}ch 设备={4} 端点={5} 设备路径={6} 格式判定={7}（DSP 另见徽标）",
+                SourceFormatDescription,
+                dop.WaveFormat.SampleRate, dop.WaveFormat.BitsPerSample, dop.WaveFormat.Channels,
+                ChainFormat.DeviceOutput?.DescribeShort() ?? "?",
+                ChainFormat.DeviceEndpointName ?? "?",
+                ChainFormat.Device,
+                FormatLayerPure() ? "bit-perfect" : "非bit-perfect"));
+            return true;
+        }
+
+        /// <summary>
+        /// DSD/DoP ASIO 出口：DoP 24bit 容器经 AsioDoPProvider 重铸为 32bit Int32LSB 右对齐装箱
+        /// （[lo][hi][marker][0]），绝不经过 Widen24To32Provider（value&lt;&lt;8 会把标记挤出数据字节）。
+        /// 全链路 STA：构造（激活驱动 COM）/Init/Play 都回 STA 宿主线程（MTA 必失败）。
+        /// FiiO KA13 无 ASIO 驱动，本路径默认不可达；fail-closed：任何一步失败即整体失败，由上层回退 PCM。
+        /// </summary>
+        private bool StartDsdAsio(DoP24LeSource dop, DsdProbeResult probe, string? deviceIdentifier, TimeSpan? seekTo)
+        {
+            string driver = deviceIdentifier ?? (AsioOut.GetDriverNames().Length > 0 ? AsioOut.GetDriverNames()[0] : string.Empty);
+            if (string.IsNullOrEmpty(driver))
+            {
+                LastError = "未检测到 ASIO 驱动。";
+                Cleanup();
+                return false;
+            }
+
+            _device = null; // ASIO 无统一端点音量，靠声卡硬件旋钮
+            // DoP 24bit → 32bit 专用装箱（不经 Widen24To32Provider：标记会被挤位）
+            var asioProv = new AsioDoPProvider(dop);
+            // 构造即激活驱动 COM（GetAsioDriverByName），必须落在 STA 专线线程；
+            // 在 MTA 上必报 "Unable to instantiate ASIO. Check if STAThread is set"。
+            _output = AsioInvoke(
+                () =>
+                {
+                    var o = new AsioOut(driver);
+                    StartupLog.Write(string.Format(
+                        "[ASIO] 驱动已在 STA 宿主线程激活：{0}（宿主持久线程={1} 套间={2}）",
+                        driver, Environment.CurrentManagedThreadId,
+                        System.Threading.Thread.CurrentThread.GetApartmentState()));
+                    return o;
+                },
+                "构造 AsioOut(" + driver + ")");
+            if (_output == null)
+            {
+                LastError = "ASIO 驱动构造失败。";
+                Cleanup();
+                return false;
+            }
+
+            _asioWiden24 = false; // DoP 走专用装箱，不经 24-in-32 扩容
+            OutputDeviceName = "ASIO: " + driver;
+
+            // Init 里一排 COM 调用（Capabilities/SetSampleRate/CreateBuffers…），必须回 STA 宿主线程。
+            // fail-closed：Init 抛异常即整体失败（PlayDsdAsync 的 catch 接管），不硬撑。
+            AsioInvokeVoid(() => _output!.Init(asioProv), "AsioOut.Init(DoP)");
+            _output.PlaybackStopped += Output_PlaybackStopped;
+
+            if (seekTo != null && seekTo.Value > TimeSpan.Zero)
+            {
+                try { dop.Seek(seekTo.Value); Position = seekTo.Value; } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
+            }
+
+            // 起播前等后台装箱线程把 ring 填够预缓冲（同独占路径）
+            dop.WaitForPrefill(TimeSpan.FromMilliseconds(1200));
+            AsioInvokeVoid(() => _output!.Play(), "AsioOut.Play(DoP)"); // driver.Start() 是 COM 调用，回 STA 宿主线程执行
+            _isPlaying = true;
+            CurrentMode = OutputMode.Asio;
+            _positionTimer.Start();
+            // AsioOut 不暴露协商格式属性（CaptureActualOutputFormat 取不到），但容器格式由我们亲手构造，据实标注
+            ActualOutputFormat = driver + " DoP " + asioProv.WaveFormat.SampleRate + "Hz/" + asioProv.WaveFormat.BitsPerSample + "bit/" + asioProv.WaveFormat.Channels + "ch（Int32LSB 右对齐装箱）";
+            ChainFormat.DeviceOutput = null; // 设备端实际协商值取不到：不假设，留空待设备日志佐证
+            ChainFormat.DeviceEndpointName = "ASIO DoP 装箱(Int32LSB)";
+            StartupLog.Write(string.Format(
+                "DSD直出启动(ASIO) 源={0} {1}/{2}ch 1-bit → DoP容器={3}Hz/{4}bit → Int32LSB装箱={5}Hz/32bit/2ch | 驱动={6} | bit-perfect，CPU DSP/音量已绕过",
+                Path.GetFileName(_activeWavPath ?? "?"), DsdProbe.LevelName(probe.NativeRateHz), probe.Channels,
+                dop.WaveFormat.SampleRate, dop.WaveFormat.BitsPerSample,
+                asioProv.WaveFormat.SampleRate, driver));
+            StartupLog.Write(string.Format(
+                "[链路] DSD 源={0} DoP容器={1}Hz/{2}bit/{3}ch 设备={4} 端点={5} 设备路径={6} 格式判定={7}（DSP 另见徽标）",
+                SourceFormatDescription,
+                dop.WaveFormat.SampleRate, dop.WaveFormat.BitsPerSample, dop.WaveFormat.Channels,
+                ChainFormat.DeviceOutput?.DescribeShort() ?? "?",
+                ChainFormat.DeviceEndpointName ?? "?",
+                ChainFormat.Device,
+                FormatLayerPure() ? "bit-perfect" : "非bit-perfect"));
+            return true;
         }
 
         /// <summary>暂停播放：释放输出，记录暂停位置。（Echo 风格：暂停释放独占，避免 Pause/Play 缓冲重建爆音。）</summary>
@@ -1733,7 +1857,8 @@ namespace CelesteMusicPlayer
             bool ok;
             if (_isDsd || IsDsdFile(_activeWavPath ?? ""))
             {
-                ok = PlayDsdAsync(_activeWavPath ?? "", _activeDeviceId, resumeAt);
+                // DSD/DoP 恢复：沿用原来的输出模式（独占/ASIO），不要在 Resume 时悄悄降级
+                ok = PlayDsdAsync(_activeWavPath ?? "", _activeDeviceId, resumeAt, _activeMode);
             }
             else
             {
@@ -1774,6 +1899,13 @@ namespace CelesteMusicPlayer
                 // 记录待消费目标，避免随后 updatePosition/Pause 用尚未更新的 FramesWritten 把它覆盖（选进度后进度条不变/从头重播）。
                 _pendingSeekTarget = position;
                 _native.SeekTo(position);
+                return;
+            }
+
+            if (_isDsd && !_useNative && _dsdSource != null)
+            {
+                // DSD/DoP + ASIO：DoP 源自带环（Seek 内部冲刷环 + 生产者重定位），直接 seek 源
+                try { _dsdSource.Seek(position); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
                 return;
             }
 
@@ -1970,6 +2102,20 @@ namespace CelesteMusicPlayer
                     Position = curReader != null ? curReader.CurrentTime : TimeSpan.Zero;
                 }
             }
+            else if (_isDsd && _dsdSource != null)
+            {
+                // DSD/DoP + ASIO：无渲染线程写帧计数，用 DoP 源自身游标（持锁读，Seek 时同步归位）
+                int rate = _dsdSource.WaveFormat.SampleRate;
+                Position = rate > 0 ? TimeSpan.FromSeconds((double)_dsdSource.FramesRead / rate) : TimeSpan.Zero;
+
+                // 诊断：DSD ring 预读欠载补静音统计（>0 说明预读跟不上/起播冷启动→短暂无声，是潜在卡顿点）。
+                // 限频记录，便于与"雪花/卡顿"音频现象对照定位根因。
+                if (Position.TotalSeconds - _lastDsdPrefillLogSec > 2.0 && _dsdSource.PrefillFrames > 0)
+                {
+                    _lastDsdPrefillLogSec = Position.TotalSeconds;
+                    StartupLog.Write($"[DSD诊断] ring预读欠载补静音帧累计={_dsdSource.PrefillFrames} (t={Position.TotalSeconds:F1}s)");
+                }
+            }
             else if (_waveFile != null)
             {
                 Position = _waveFile.CurrentTime;
@@ -2009,9 +2155,10 @@ namespace CelesteMusicPlayer
             }
 
             bool sourceExhausted = false;
-            if (_isDsd && _native != null)
+            if (_isDsd)
             {
-                // DSD：无 WaveFileReader，用播放位置≥源总时长判定播完（触发 Stop→下层切下一首）
+                // DSD：无 WaveFileReader，用播放位置≥源总时长判定播完（触发 Stop→下层切下一首）。
+                // 独占与 ASIO 两条出口都适用（ASIO DoP 位置由 DoP 源游标推进，见 UpdatePosition）。
                 sourceExhausted = Duration > TimeSpan.Zero && Position >= Duration;
             }
             else if (_waveFile != null && _waveFile.Length > 16

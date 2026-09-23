@@ -6,7 +6,7 @@ namespace CelesteMusicPlayer
     /// <summary>
     /// HiFi 输出（WASAPI 独占渲染线程）可消费的音频源抽象。
     /// 既支持 PCM 无缝源（<see cref="SeamlessWaveProvider"/>），也支持 DSD 源
-    /// （<see cref="DoPWaveSource"/>，直接在独占通道内输出 DoP 封装的 PCM 容器帧）。
+    /// （<see cref="DoP24LeSource"/>，直接在独占通道内输出 DoP 封装的 PCM 容器帧）。
     /// render 线程只依赖这些成员，不关心底层是 PCM 还是 DoP——只要 WaveFormat 与
     /// 独占协商格式一致，样本字节即可原样直通（bit-perfect）。
     /// </summary>

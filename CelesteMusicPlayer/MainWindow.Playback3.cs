@@ -2574,10 +2574,9 @@ namespace CelesteMusicPlayer
                 _isEnginePaused = false;
                 _usingEnginePlayback = true;
                 NowPlayingText.Text = "正在播放（引擎）：" + item.Title + " - " + item.Artist;
-                // DSD：若走 DoP 直出（独占/ASIO + 设置=DoP）→ 提示直出；否则 ffmpeg 转 PCM → 提示转码。
-                bool dsdDop = IsDsdFile(item.FilePath)
-                    && IsHiFiModeSelected()
-                    && string.Equals(AppSettingsStore.Load().DsdOutputMode, "Dop", StringComparison.OrdinalIgnoreCase);
+                // DSD：以输出后端的结构化标志位为准——守卫全过且 DoP 直出已起播才提示直出；
+                // 守卫拒绝（DFF/DST/DSD512/多声道/共享/DSP 未关）或设备协商失败 → 已回退 PCM，如实提示转码。
+                bool dsdDop = _audioEngine?.IsDsdDirectOut == true;
                 if (dsdDop)
                 {
                     NowPlayingText.Text = "DSD DoP 直出（bit-perfect）· " + item.Title + " - " + item.Artist;
