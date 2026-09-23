@@ -83,6 +83,9 @@ namespace CelesteMusicPlayer
         private bool _devNeedBaseline; // 下一次采样时重置基准（Play 后 / replace 后）
         private long _aggDevDelta;     // 窗口内设备实际播放帧增量
         private long _aggLag;          // 窗口末 我们写入增量 - 设备播放增量（>一个周期=设备跟不上）
+        // J 轮晚醒逐次明细：内核按开演以来单调序号记账，这里只记"已打印到第几号"，
+        // 每次采样把新事件逐条打成 [原生内核晚醒]（每播放会话在 AggReset 归零）。
+        private int _printedWakeSeq = -1;
 
         private static readonly TimeSpan AggPeriod = TimeSpan.FromSeconds(5);
         // 尖峰判据：H 轮起渲染是事件驱动，正常唤醒间隔 = 一个缓冲周期（100ms）。
@@ -152,17 +155,21 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>渲染线程窗口统计（诊断）：[上次读取以来的最大补货间隔ms, 尖峰次数, ring存货帧, 容量帧,
-        /// 设备播放游标(累计帧), 窗口内pad最大值, 窗口内唤醒晚点次数, 渲染线程是否已失败]。
+        /// 设备播放游标(累计帧), 窗口内pad最大值, 窗口内唤醒晚点次数, 渲染线程是否已失败,
+        /// 晚醒总序号, 晚醒明细序号基准, 明细条数, 晚醒时刻数组(ms), 晚醒间隔数组(ms)]。
         /// maxGapMs/spikeCount/padMaxFrames/lateWakeups 是「自上次调用起」的窗口值（内核读走即清零，
         /// 注意：任何额外的 Stats() 调用都会清掉还没读的窗口数据，所以现场值要在同一次调用里取走）；
-        /// DevicePosition 是即时累计值，调用方自行取差分。</summary>
+        /// DevicePosition 是即时累计值，调用方自行取差分；
+        /// 晚醒明细是「开演以来」单调序号语义（不清零）：调用方按序号只打印 >已打印序号 的新事件。</summary>
         public (int MaxGapMs, ulong Spikes, int ReadyFrames, int CapacityFrames,
-                ulong DevicePosition, int PadMaxFrames, uint LateWakeups, int Failed) SnapshotWindow()
+                ulong DevicePosition, int PadMaxFrames, uint LateWakeups, int Failed,
+                uint WakeTotal, int WakeBase, int WakeCount, double[] WakeStartMs, double[] WakeGapMs) SnapshotWindow()
         {
-            if (_handle == IntPtr.Zero) return (0, 0, 0, 0, 0, 0, 0, 0);
+            if (_handle == IntPtr.Zero) return (0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, Array.Empty<double>(), Array.Empty<double>());
             var st = NativeCoreAudio.Stats(_handle);
             return (st.MaxGapMs, st.SpikeCount, st.ReadyFrames, st.CapacityFrames,
-                    st.DevicePosition, st.PadMaxFrames, st.LateWakeups, st.Failed);
+                    st.DevicePosition, st.PadMaxFrames, st.LateWakeups, st.Failed,
+                    st.LateWakeTotal, st.LateWakeBase, st.LateWakeCount, st.LateWakeStartMs, st.LateWakeGapMs);
         }
 
         public bool Init(NativeWasapi.IMMDevice device, IWaveSourceProvider provider, bool requireExactFormat = false)
@@ -460,8 +467,10 @@ namespace CelesteMusicPlayer
                         _aggMaxGap = 0; // 已报过，吞掉避免每轮重复打同一尖峰
                     }
                     // I 轮设备侧异常：唤醒晚点 / pad 非 0 / 设备滞后超一个缓冲 / 渲染线程失败。
-                    // 任一出现即打现场（同样吞掉，等 5s 统计行汇总）
-                    else if (_aggLateWakes > 0 || _aggPadMax > 0 || _aggFailed ||
+                    // 任一出现即打现场（同样吞掉，等 5s 统计行汇总）。
+                    // J 轮：pad 异常加"设备已在推进"条件——开播热身期（USB DAC 192k 冷启动锁时钟，
+                    // 设备游标还没动）pad 满 buffers 是正常现象，实机误报过两条，不再算异常。
+                    else if (_aggLateWakes > 0 || (_aggPadMax > 0 && _aggDevDelta > 0) || _aggFailed ||
                              Math.Abs(_aggLag) > (_bufferFrames > 0 ? _bufferFrames : int.MaxValue))
                     {
                         WriteAnomalyLine();
@@ -510,11 +519,13 @@ namespace CelesteMusicPlayer
             _devNeedBaseline = true; // Play 后第一次采样取基准（replace 也会置位）
             _aggDevDelta = 0;
             _aggLag = 0;
+            _printedWakeSeq = -1;    // 新播放会话：晚醒明细序号从头读（引擎也是新的）
         }
 
         private void AggSample()
         {
             var win = SnapshotWindow();
+            DrainWakeEvents(win);
             _aggWrites++;
             if (win.MaxGapMs > _aggMaxGap) _aggMaxGap = win.MaxGapMs;
             _aggSpikes += win.Spikes;
@@ -543,6 +554,28 @@ namespace CelesteMusicPlayer
             if (_aggWatch.Elapsed >= AggPeriod) FlushAgg(null);
         }
 
+        /// <summary>J 轮：把内核记账的每次晚醒逐条打出来（用户听得见的卡顿全部在这一类）。
+        /// 5s 统计行只报窗口 max——同窗口第二次晚醒会被整个掩盖（2026-09-23 复测实证：
+        /// 用户听得见 2 次、统计只显示 1 个 129ms）。明细按序号只打未读的新事件，不重不漏；
+        /// 事件时刻是「开演以来秒」，可与播放位置互相印证。</summary>
+        private void DrainWakeEvents((int MaxGapMs, ulong Spikes, int ReadyFrames, int CapacityFrames,
+                ulong DevicePosition, int PadMaxFrames, uint LateWakeups, int Failed,
+                uint WakeTotal, int WakeBase, int WakeCount, double[] WakeStartMs, double[] WakeGapMs) win)
+        {
+            if (win.WakeTotal <= (uint)(_printedWakeSeq + 1)) return; // 没有新事件
+            double expect = BufferPeriodMs;
+            for (int seq = _printedWakeSeq + 1; seq < (int)win.WakeTotal; seq++)
+            {
+                int idx = seq - win.WakeBase;
+                if (idx < 0 || idx >= win.WakeCount) continue; // 被更新的 laps 挤掉（5s 内晚醒 8+ 次才会发生）
+                double gap = win.WakeGapMs[idx];
+                StartupLog.Write(string.Format(
+                    "[原生内核晚醒] 第{0}次 开演后{1:F2}s 唤醒间隔{2:F0}ms（应{3:F0}ms，晚{4:F0}ms）＝设备断供{4:F0}ms",
+                    seq + 1, win.WakeStartMs[idx] / 1000.0, gap, expect, gap - expect));
+            }
+            _printedWakeSeq = (int)win.WakeTotal - 1;
+        }
+
         /// <summary>事件驱动下，间隔 ≥2 个缓冲周期才算真尖峰（旧 30ms 阈值在 100ms 节拍下
         /// 每轮都误报，10 行/秒的日志洪水反而盖住真异常）。打点口径同自研内核 [渲染诊断]。</summary>
         private double BufferPeriodMs => _rate > 0 ? _bufferFrames * 1000.0 / _rate : 0;
@@ -558,8 +591,9 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>I 轮设备侧探针异常即打：唤醒晚点（设备已断供）/ pad 非 0（事件早到或
-        /// 信号合并）/ 设备滞后增长（USB 驱动交不够货）/ 渲染线程失败。这些都是
-        /// "统计全绿却听得出卡"的候选根因，各配一句现场水位与 feeder 状态。
+        /// 信号合并，且设备已在推进——开播热身不算）/ 设备滞后增长（USB 驱动交不够货）/
+        /// 渲染线程失败。这些都是"统计全绿却听得出卡"的候选根因，各配一句现场水位与 feeder 状态。
+        /// J 轮起晚醒另有逐次明细行 [原生内核晚醒]（同窗口多次晚醒不再只报 max）。
         /// 注意：本行不能再调 Stats()——窗口值读走即清零，会把下一段窗口数据吃掉，
         /// 所以 Failed 用 AggSample 同一次快照里取走的 _aggFailed。</summary>
         private void WriteAnomalyLine()

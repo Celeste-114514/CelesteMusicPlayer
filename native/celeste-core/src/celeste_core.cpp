@@ -590,7 +590,15 @@ struct celeste_engine {
     // I 轮设备侧探针（应用侧全绿仍偶发卡顿：唯一没测的轴=设备实际消费）
     std::atomic<uint64_t> device_pos{ 0 };  // GetPosition 累计帧（即时值，不清零）
     std::atomic<int32_t> pad_max{ 0 };      // 窗口内事件唤醒时 pad 最大值（应恒 0）
-    std::atomic<uint32_t> late_wakes{ 0 };  // 窗口内唤醒间隔 >1.5×缓冲周期 次数
+    std::atomic<uint32_t> late_wakes{ 0 };  // 窗口内唤醒间隔 > 缓冲周期+8ms 次数（J 轮收紧）
+
+    // J 轮晚醒逐次明细：渲染线程单写（先写槽位、后 release 发布序号），
+    // stats 单读（acquire 序号后必见完整事件）。环形缓冲防无限增长；
+    // C# 每 5s 读空，正常不存在未读事件被挤掉（挤掉 = 5s 内晚醒 8 次以上，本身就该看）。
+    static constexpr uint32_t kWakeSlots = CELESTE_LATE_WAKE_SLOTS;
+    struct wake_event { double start_ms; double gap_ms; };
+    wake_event wake_events[kWakeSlots];
+    std::atomic<uint32_t> wake_total{ 0 };  // 开演以来已记录事件数（序号上界，单调递增）
 
     // 累计统计
     std::atomic<uint64_t> frames_played{ 0 };
@@ -683,6 +691,7 @@ static DWORD WINAPI render_proc(void* param)
     std::vector<uint8_t> scratch((size_t)e->buffer_frames * (size_t)e->frame_bytes);
     HANDLE waits[2] = { e->stop_event, e->render_event };
     int64_t ts_last = now_qpc();
+    const int64_t t0 = ts_last; // 开演基准：晚醒逐次明细的时间戳用它（线程 spawn 距 Start 仅 ms 级）
 
     while (!e->stop_requested.load(std::memory_order_acquire)) {
         // 事件驱动优先：正常每 ~100ms（一个设备周期）被 render_event 唤醒一次。
@@ -696,10 +705,19 @@ static DWORD WINAPI render_proc(void* param)
         const double gap_ms = (double)(ts_now - ts_last) * 1000.0 / (double)qpc_freq();
         ts_last = ts_now;
         note_gap(e, gap_ms, (int)(buffer_ms + 0.5)); // 判据基准 = 一个缓冲周期（事件驱动下的正常间隔）
-        // I 轮探针：唤醒晚于 1.5 个周期 = 设备这一周期已经断供（静音/抖动已发生，
-        // 只是 ring 深、pop 不缺数据，所以欠载计数器看不见）。
-        if (gap_ms > buffer_ms * 1.5) {
+        // J 轮阈值（2026-09-23 复测定论）：I 轮的 1.5× 周期（150ms）漏掉了实机 29ms 晚醒——
+        // 用户听得见的卡顿全部落在"晚醒但不够 150ms"的窗口里；且 5s 统计行只报 max，
+        // 同窗口第二次晚醒整个被掩盖（用户听得见 2 次、统计只显示 1 个 129ms）。
+        // 改「晚 8ms 即记」：正常唤醒恒 ~100.0ms（日志实证），8ms 远离正常抖动、
+        // 贴近可闻断供；并把每次晚醒逐次记入环形缓冲供 C# 打明细。
+        if (gap_ms > buffer_ms + 8.0) {
             e->late_wakes.fetch_add(1, std::memory_order_relaxed);
+            // 单写者（本线程）：先写槽位，再 release 发布序号。
+            const uint32_t seq = e->wake_total.load(std::memory_order_relaxed);
+            const uint32_t slot = seq % celeste_engine::kWakeSlots;
+            e->wake_events[slot].start_ms = (double)(ts_now - t0) * 1000.0 / (double)qpc_freq();
+            e->wake_events[slot].gap_ms = gap_ms;
+            e->wake_total.store(seq + 1, std::memory_order_release);
         }
 
         // 只补空闲空间改为"每次填满整个设备缓冲"（与 ECHO 内核同策略）。
@@ -1058,6 +1076,19 @@ __declspec(dllexport) int celeste_core_stats(void* engineHandle, celeste_core_st
     out->devicePosition = e->device_pos.load(std::memory_order_relaxed);
     out->padMaxFrames = e->pad_max.exchange(0, std::memory_order_relaxed);
     out->lateWakeups = e->late_wakes.exchange(0, std::memory_order_relaxed);
+    // J 轮晚醒逐次明细：monotonic-seq 语义，读方按序号只取未读的新事件（不重不漏）。
+    const uint32_t wake_total = e->wake_total.load(std::memory_order_acquire);
+    const uint32_t wake_count = wake_total < celeste_engine::kWakeSlots
+        ? wake_total : celeste_engine::kWakeSlots;
+    const uint32_t wake_base = wake_total - wake_count;
+    out->lateWakeTotal = wake_total;
+    out->lateWakeBase = static_cast<int32_t>(wake_base);
+    out->lateWakeCount = static_cast<int32_t>(wake_count);
+    for (uint32_t i = 0; i < wake_count; ++i) {
+        const auto& ev = e->wake_events[(wake_base + i) % celeste_engine::kWakeSlots];
+        out->lateWakeStartMs[i] = ev.start_ms;
+        out->lateWakeGapMs[i] = ev.gap_ms;
+    }
     snprintf(out->format, sizeof(out->format), "%s",
              e->endpoint_name[0] != '\0' ? e->endpoint_name : "?");
     return 0;

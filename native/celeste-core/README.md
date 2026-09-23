@@ -31,7 +31,7 @@ STW（暂停所有托管线程）会把渲染线程冻住几十毫秒，MMCSS/�
 | 调度三件套 | MMCSS "Pro Audio" + `AvSetMmThreadPriority(CRITICAL)` + 播放期 `timeBeginPeriod(1)`（finally 成对归还）。⚠️ 只注册 MMCSS 不设频段内优先级 = NORMAL = 频段最底层——这是 2026-09-23 实机定论的卡顿根因之一 |
 | 补货 | **事件驱动**（b0e8a73）：`WaitForMultipleObjects({stop,render}, INFINITE)`（2s 兜底仅防驱动完全不发事件），每次 `GetBuffer(bufferFrameCount)` 填满**整个**设备缓冲。判据基准 = 1 个缓冲周期。⚠️ 早期版本是"缓冲/8 轮询 + 只填空闲"——实机证明与设备周期无关的不规则小块写入会让 USB DAC（FiiO KA13）抖动，统计全绿也听得出卡 |
 | 预填 | C# 起播前读 ≤3 个周期真实字节（硬顶 1.2s，防超 ring 容量卡死 Init）；start 阶段 prime 首缓冲，余量留 ring 兜 feeder 线程创建+JIT 窗口 |
-| 统计 | `celeste_core_stats_t` 首字段 StructSize 防前向兼容越界；framesPlayed/underrun 累计（C# 取差分）；maxGapMs/spikeCount/padMaxFrames/lateWakeups 是窗口值（读走即清零，⚠️ 每次 stats 调用都会清窗口）；devicePosition = IAudioClock::GetPosition 设备实际播放游标（I 轮探针：我们写入帧 vs 设备实际消费帧） |
+| 统计 | `celeste_core_stats_t` 首字段 StructSize 防前向兼容越界；framesPlayed/underrun 累计（C# 取差分）；maxGapMs/spikeCount/padMaxFrames/lateWakeups 是窗口值（读走即清零，⚠️ 每次 stats 调用都会清窗口）；devicePosition = IAudioClock::GetPosition 设备实际播放游标（I 轮探针：我们写入帧 vs 设备实际消费帧）；**晚醒逐次明细**（J 轮）：lateWakeTotal/Base/Count/StartMs/GapMs，「开演以来」单调序号语义**不清零**——渲染线程每次"晚 8ms+"醒即记一条（环形 8 槽），C# 按序号只打印未读的新事件。⚠️ 5s 统计行只报窗口 max，同窗口第二次晚醒会被整个掩盖（实机：用户听得见 2 次、统计只显示 1 个 129ms），明细行才是对齐用户听感的口径 |
 | 超时包装 | Activate/GetDevicePeriod/Initialize/Start 各包 3000ms 超时（std::async + wait_for + 坟墓区统一 drain，绝不在超时路径析构 std::future）；Start 挂住 → `client_leaked_on_timeout`（-3），join 超时 → `engine_leaked`（进程退出收尸，绝不碰野指针） |
 | replace | seek/切歌 = clear ring + 重灌 + 统计归零 + 10ms 线性淡入（仅 2/4 字节布局） |
 

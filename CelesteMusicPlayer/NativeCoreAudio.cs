@@ -27,6 +27,8 @@ namespace CelesteMusicPlayer
         public const uint FmtPcm24In32 = 3;  // 4 字节/样本 LE，样本占高 24 位
         public const uint FmtPcm32 = 4;      // 4 字节/样本 LE
         public const uint FmtFloat32 = 5;    // 4 字节/样本 LE IEEE float
+        // 必须与 celeste_core.h 的 CELESTE_LATE_WAKE_SLOTS 一致（J 轮晚醒明细环形缓冲槽位）。
+        public const int WakeSlots = 8;
 
         /// <summary>
         /// 打开独占输出并起 C++ 渲染线程。端点容器必须与源布局一致才成功
@@ -73,9 +75,11 @@ namespace CelesteMusicPlayer
 
         /// <summary>
         /// 统计快照。字段布局必须与 celeste_core.h 的 celeste_core_stats_t 逐个对齐（x64）。
-        /// 末尾三字段是 I 轮设备侧探针（2026-09-23：应用侧全绿仍偶发卡顿，补设备实际消费轴）：
+        /// 末尾设备侧探针是 I 轮补的（2026-09-23：应用侧全绿仍偶发卡顿，补设备实际消费轴）：
         /// DevicePosition=设备播放游标（IAudioClock::GetPosition，自流启动累计帧）；
         /// PadMaxFrames/lateWakeups=自上次 Stats() 起的窗口值（内核读走即清零）。
+        /// LateWake* 五行是 J 轮晚醒逐次明细（2026-09-23 复测：5s 窗口 max 掩盖同窗口第二次
+        /// 晚醒）：开演以来单调序号语义、不清零，调用方按序号只读未打印的新事件。
         /// </summary>
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi)]
         public struct NativeCoreStats
@@ -99,12 +103,25 @@ namespace CelesteMusicPlayer
             public ulong DevicePosition;
             public int PadMaxFrames;
             public uint LateWakeups;
+            public uint LateWakeTotal;
+            public int LateWakeBase;
+            public int LateWakeCount;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+            public double[] LateWakeStartMs;
+            [MarshalAs(UnmanagedType.ByValArray, SizeConst = 8)]
+            public double[] LateWakeGapMs;
         }
 
         /// <summary>取统计快照（结构体大小由本方法填好，DLL 侧据此拒绝旧版越界读）。</summary>
         public static NativeCoreStats Stats(IntPtr handle)
         {
-            var st = new NativeCoreStats { StructSize = (uint)Marshal.SizeOf<NativeCoreStats>() };
+            var st = new NativeCoreStats
+            {
+                StructSize = (uint)Marshal.SizeOf<NativeCoreStats>(),
+                // ByValArray 预分配：封送器回填时 null 也能分配，但显式 new 少一次猜测。
+                LateWakeStartMs = new double[NativeCoreAudio.WakeSlots],
+                LateWakeGapMs = new double[NativeCoreAudio.WakeSlots],
+            };
             if (handle == IntPtr.Zero) return st;
             celeste_core_stats(handle, ref st);
             return st;

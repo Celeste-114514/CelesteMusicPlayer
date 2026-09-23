@@ -32,11 +32,18 @@
 #define CELESTE_FMT_PCM32     4  // 4 字节/样本，LE
 #define CELESTE_FMT_FLOAT32   5  // 4 字节/样本，LE，IEEE float
 
+// J 轮：晚醒逐次明细的环形缓冲槽位数（缺陷：5s 统计行只报窗口 max，
+// 同窗口第二次晚醒被整个掩盖——用户听得见 2 次、统计只显示 1 个 max）。
+// C# 侧 NativeCoreStats 同步镜像这两个数组。
+#define CELESTE_LATE_WAKE_SLOTS 8
+
 // 统计快照。字段布局必须与 C# NativeCoreAudio.NativeCoreStats 逐个对齐。
 // 口径：
 //   framesPlayed/underrunCallbacks/underrunFrames = 累计值（C# 侧取差分）；
 //   maxGapMs/spikeCount/padMaxFrames/lateWakeups = 自上次 celeste_core_stats() 起的
 //     窗口值（读走即清零）；
+//   lateWakeTotal/lateWakeBase/lateWakeCount/lateWakeStartMs/lateWakeGapMs =
+//     「开演以来」单调序号语义（不清零；C# 按序号只读新事件，见 J 轮注释）；
 //   其余为即时状态。
 struct celeste_core_stats_t {
     uint32_t structSize;        // = sizeof(本结构体)，前向兼容防线
@@ -58,7 +65,14 @@ struct celeste_core_stats_t {
     // 三者回答同一个问题：设备到底有没有在平稳消费我们写进去的数据。
     uint64_t devicePosition;    // 设备播放游标（IAudioClient::GetPosition，自流启动累计帧，即时值）
     int32_t  padMaxFrames;      // 窗口内事件唤醒时 GetCurrentPadding 最大值（应恒 0；>0 = 事件早到/陈旧信号）
-    uint32_t lateWakeups;       // 窗口内唤醒间隔 > 1.5×缓冲周期 的次数（线程醒晚 = 设备已断供）
+    uint32_t lateWakeups;       // 窗口内唤醒间隔 > 缓冲周期+8ms 的次数（线程醒晚 = 设备已断供）
+    // ---- J 轮：晚醒逐次明细（2026-09-23 复测：窗口 max 掩盖同窗口第二次晚醒，用户听得见的
+    // 卡顿全部落在"晚醒"这一类。改为开演以来逐次记录，C# 按序号只打印未读的新事件）----
+    uint32_t lateWakeTotal;     // 开演以来晚醒总次数（= 最后一条事件序号+1；单调递增）
+    int32_t  lateWakeBase;      // 本快照中第一条事件的序号
+    int32_t  lateWakeCount;     // 本快照事件条数（≤ CELESTE_LATE_WAKE_SLOTS）
+    double   lateWakeStartMs[CELESTE_LATE_WAKE_SLOTS]; // 事件时刻（开演以来毫秒）
+    double   lateWakeGapMs[CELESTE_LATE_WAKE_SLOTS];   // 那次唤醒间隔（毫秒；应 ≈ 缓冲周期）
 };
 
 #endif // _WIN32
