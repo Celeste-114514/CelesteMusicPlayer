@@ -21,6 +21,7 @@ namespace CelesteMusicPlayer
         private readonly uint _nativeHz;         // DSD 位时钟（2822400/5644800/11289600）
         private readonly int _channels;          // 1 或 2（探头已拦下 3+ 声道）
         private readonly int _blockSize;         // DSF 块交错粒度（bytes/声道/块）
+        private readonly bool _lsbFirst;         // 字节内位序：true=bit0 为最早采样点（DSF bitsPerSample=1，主流）
         private long _samplesRead;
 
         // 分段池化读：FileStream 保持打开 + ArrayPool<byte> 租 1MB 分段（容量/偏移按 stride 对齐
@@ -38,7 +39,7 @@ namespace CelesteMusicPlayer
         private readonly object _ioLock = new();
 
         private DsdBitstream(FileStream fs, long dataStart, long dataBytes,
-            uint nativeHz, int channels, int blockSize)
+            uint nativeHz, int channels, int blockSize, bool lsbFirst)
         {
             _fs = fs;
             _dataStart = dataStart;
@@ -46,6 +47,7 @@ namespace CelesteMusicPlayer
             _nativeHz = nativeHz;
             _channels = channels;
             _blockSize = blockSize;
+            _lsbFirst = lsbFirst;
 
             _stride = Math.Max(2, blockSize * Math.Max(2, channels));
             int seg = 1 << 20;
@@ -102,7 +104,7 @@ namespace CelesteMusicPlayer
             ReadU32(fs);          // channel type(0=stereo)
             uint ch = ReadU32(fs);
             uint freq = ReadU32(fs);   // e.g. 2822400
-            ReadU32(fs);          // bits per sample(=1)
+            uint bps = ReadU32(fs);    // bits per sample：1=LSB-first(bit0 最早采样点，主流 DSF)，8=MSB-first
             ReadU64(fs);          // sampleCount
             uint blockSize = ReadU32(fs); // e.g. 4096
             fs.Position += 4;          // reserved：fmt 块体 = 36 字节语义 + 4 字节保留 = 40。
@@ -130,11 +132,13 @@ namespace CelesteMusicPlayer
             }
 
             StartupLog.Write(string.Format(
-                "[DSF解析] 频道={0} blockSize={1} freq={2} dataBytes={3}",
-                ch, blockSize, freq, Math.Max(0, dataChunk.Value.Avail)));
+                "[DSF解析] 频道={0} blockSize={1} freq={2} dataBytes={3} bitsPerSample={4}({5})",
+                ch, blockSize, freq, Math.Max(0, dataChunk.Value.Avail),
+                bps, bps == 1 ? "LSB-first→装箱前做字节内bit反转" : (bps == 8 ? "MSB-first→原样装箱" : "未知值→按LSB-first处理")));
             return new DsdBitstream(
                 fs as FileStream ?? throw new InvalidDataException("DSF 需文件流"),
-                dataChunk.Value.Start, Math.Max(0, dataChunk.Value.Avail), freq, (int)ch, (int)blockSize);
+                dataChunk.Value.Start, Math.Max(0, dataChunk.Value.Avail), freq, (int)ch, (int)blockSize,
+                bps != 8); // 仅 bitsPerSample=8 视为 MSB-first；1 及其它值按 LSB-first（主流 DSF）
         }
 
         /// <summary>fmt 块布局畸形（reserved 变长等）时兜底：在文件头小窗内找 data 块。
@@ -165,6 +169,9 @@ namespace CelesteMusicPlayer
 
         public int Channels => _channels;
         public uint NativeRateHz => _nativeHz;
+
+        /// <summary>DSF 字节内位序：true=LSB-first（bitsPerSample=1，bit0 为最早采样点）——DoP 装箱前须做字节内 bit 反转。</summary>
+        public bool LsbFirst => _lsbFirst;
 
         /// <summary>DoP 传输速率（native/16）。</summary>
         public int DopRateHz => DsdProbe.TryDopRate(_nativeHz, out int hz) ? hz : 0;
@@ -409,8 +416,11 @@ namespace CelesteMusicPlayer
     /// DoP24（DSD over PCM）封装源：把 <see cref="DsdBitstream"/> 的 1-bit DSD 流封装为
     /// 176.4k/352.8k/705.6k × 24bit × 2ch 的 PCM 容器帧，供 WASAPI 独占原样直通（或经
     /// <see cref="AsioDoPProvider"/> 重铸为 32bit 喂 ASIO）。
-    /// 位序（DoP 1.1 规范图实证，2026-09-22 dop_fix）：小端 wire = [次 8bit 原样][老 8bit 原样][标记]，
-    /// 零位反转；标记 0x05/0xFA 按绝对帧序号奇偶交替；尾补 0x69 静音。
+    /// 位序（DoP 1.1 规范 + DSF 规范联合实证，2026-09-23 bitrev_fix）：
+    /// ① DSF 文件字节内 LSB-first（bitsPerSample=1：bit0 为最早采样点）→ 先对每个原始字节做
+    ///    字节内 bit 反转，得到 MSB-first 语义（t0 落 bit7）；
+    /// ② DoP 规范图：最老 bit 进 16bit 字段 MSB → 小端 wire = [次 8bit（t8..t15）][老 8bit（t0..t7）][标记]；
+    /// ③ 标记 0x05/0xFA 按绝对帧序号奇偶交替；尾补 0x69 静音（DoP 约定值，与位序无关）。
     /// 32MB 非托管环形缓冲（SPSC）：后台线程「读源→装箱→入环」（环满则等待，天然限流读盘），
     /// render 只从环内顺序取；内存定额与曲长无关（DSD64≈30s），AllocHGlobal 不在 GC 堆上。
     /// </summary>
@@ -424,6 +434,7 @@ namespace CelesteMusicPlayer
 
         private readonly DsdBitstream _src;
         private readonly int _frameRate;               // DoP 容器帧率（= native/16）
+        private readonly bool _lsbFirst;               // 跟随源文件位序：true=装箱前做字节内 bit 反转
         private readonly long _totalFrames;            // DoP 容器帧总数
         private readonly object _lock = new();
 
@@ -458,6 +469,7 @@ namespace CelesteMusicPlayer
         {
             _src = src ?? throw new ArgumentNullException(nameof(src));
             _frameRate = src.DopRateHz;
+            _lsbFirst = src.LsbFirst;
             _totalFrames = src.Channels > 0 ? src.TotalSamples / 16 : 0; // 每 DoP 帧=16 1-bit/声道
 
             // 环容量取 BpF 整数倍，保证帧不在环内被截断（跨回绕点的帧由两段拷贝处理）
@@ -536,7 +548,7 @@ namespace CelesteMusicPlayer
                     }
 
                     // 3) 装箱（锁外纯计算）。帧序号用绝对 _encodedFrames，不随环回绕/Seek 错乱
-                    int n = EncodeBlock(raw, whole, dopp, _encodedFrames);
+                    int n = EncodeBlock(raw, whole, dopp, _encodedFrames, _lsbFirst);
 
                     // 4) 入环（锁内两段拷贝，跨回绕点自动分段）
                     lock (_lock)
@@ -600,9 +612,12 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>封装 whole 个原始 L,R,L,R… 交织字节为 DoP 容器帧；返回产出字节数。
-        /// 位序（DoP 1.1 规范图）：小端 wire = [次字节原样][老字节原样][标记]，无位反转。
+        /// 两步位序（缺一即滋滋声）：
+        /// ① DSF 字节内 LSB-first（bit0=最早采样点）→ <see cref="Rev8Table"/> 做字节内 bit 反转，得到 MSB-first 语义；
+        /// ② DoP 规范图：最老 bit 进 16bit 字段 MSB → 小端 wire = [次 8bit（t8..t15）][老 8bit（t0..t7）][标记]。
         /// <param name="frameIndex">绝对帧序号（marker 奇偶用，不随环回绕/Seek 回退）。</param>
-        private static int EncodeBlock(byte[] raw, int whole, byte[] dopp, long frameIndex)
+        /// <param name="lsbFirst">源位序：true=反转（DSF bitsPerSample=1，主流）；false=MSB-first 原样（bitsPerSample=8）。</param>
+        private static int EncodeBlock(byte[] raw, int whole, byte[] dopp, long frameIndex, bool lsbFirst)
         {
             int fp = 0;
             long fi = frameIndex;
@@ -611,17 +626,43 @@ namespace CelesteMusicPlayer
             {
                 int i = f * 4;
                 byte m = ((fi + f) & 1) == 0 ? (byte)0x05 : (byte)0xFA;
-                // L 通道：raw[i]=老 8bit(t0..t7)、raw[i+2]=次 8bit(t8..t15)，均 MSB-first 原样
-                dopp[fp++] = raw[i + 2]; // 低字节 = 次 8bit 原样
-                dopp[fp++] = raw[i];     // 高字节 = 老 8bit 原样（t0 落在字段 MSB）
-                dopp[fp++] = m;          // marker
-                // R 通道
-                dopp[fp++] = raw[i + 3];
-                dopp[fp++] = raw[i + 1];
+                // L 通道：raw[i]=老 8bit(t0..t7)、raw[i+2]=次 8bit(t8..t15)
+                byte lOld = lsbFirst ? Rev8Table[raw[i]] : raw[i];
+                byte lMid = lsbFirst ? Rev8Table[raw[i + 2]] : raw[i + 2];
+                byte rOld = lsbFirst ? Rev8Table[raw[i + 1]] : raw[i + 1];
+                byte rMid = lsbFirst ? Rev8Table[raw[i + 3]] : raw[i + 3];
+                dopp[fp++] = lMid;    // 低字节 = 次 8bit（t8..t15，t15 落 bit0）
+                dopp[fp++] = lOld;    // 高字节 = 老 8bit（t0..t7，t0 落 bit7=16bit 字段 MSB，DoP 规范位）
+                dopp[fp++] = m;       // marker
+                dopp[fp++] = rMid;
+                dopp[fp++] = rOld;
                 dopp[fp++] = m;
             }
 
             return fp;
+        }
+
+        /// <summary>字节内 bit 反转查表（LSB-first→MSB-first）。</summary>
+        private static readonly byte[] Rev8Table = BuildRev8Table();
+
+        private static byte[] BuildRev8Table()
+        {
+            var t = new byte[256];
+            for (int i = 0; i < 256; i++)
+            {
+                int v = 0;
+                for (int b = 0; b < 8; b++)
+                {
+                    if ((i & (1 << b)) != 0)
+                    {
+                        v |= 1 << (7 - b);
+                    }
+                }
+
+                t[i] = (byte)v;
+            }
+
+            return t;
         }
 
         public void WaitForPrefill(TimeSpan timeout)
