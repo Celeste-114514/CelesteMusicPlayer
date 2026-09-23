@@ -457,6 +457,11 @@ namespace CelesteMusicPlayer
         /// <summary>最近一次失败原因。</summary>
         public string? LastError { get; private set; }
 
+        /// <summary>最近一次独占 Init 失败时 native2 内核的 start 返回码（0=native2 未参与或未取到）。
+        /// -1=设备被占/激活失败；-2=容器不支持。上层（AudioPlaybackEngine）据此决定是否值得走
+        /// MixFormat 重转兜底：-1 是设备忙，重转救不了还制造转码竞态，只有 -2/0 才兜底。</summary>
+        public int LastNativeStartRc { get; private set; }
+
         /// <summary>当前输出模式（只读，由 PlayWavAsync 决定并用 OutputDeviceName 记录）。</summary>
         public OutputMode? CurrentMode { get; private set; }
 
@@ -748,12 +753,28 @@ namespace CelesteMusicPlayer
             }
 
             int[]? probed = ProbeSupportedRates(deviceId, sourceRate, channels);
-            s_supportedRatesCache[key] = probed; // null 也缓存：探测失败不应每首歌重试
             if (probed != null && probed.Length > 0)
             {
                 StartupLog.Write("[链路] 设备独占支持采样率（首次探测，供核对）：" + key + " → [" + string.Join(", ", probed) + "]");
             }
 
+            // 首次探测可信度复核：USB DAC 枚举/驱动可能未就绪——首探测曾只报 [48000]，
+            // 几分钟后同样探测报全列表。若首探测不含源率，300ms 后复核一次取并集，
+            // 避免把"没枚举完"误判成"设备不支持源率"→ 无谓重采样劣化听感。
+            if (probed != null && probed.Length > 0 && sourceRate > 0 && !probed.Contains(sourceRate))
+            {
+                StartupLog.Write("[链路] 独占支持率首探测不含源率 " + sourceRate + "Hz（USB DAC 枚举未就绪？），300ms 后复核一次取并集");
+                System.Threading.Thread.Sleep(300);
+                int[]? reprobe = ProbeSupportedRates(deviceId, sourceRate, channels);
+                if (reprobe != null && reprobe.Length > 0)
+                {
+                    probed = probed.Union(reprobe).OrderByDescending(r => r).ToArray();
+                    s_supportedRatesCache[key] = probed; // 以并集刷新缓存，后续歌曲不再重复等待
+                    StartupLog.Write("[链路] 复核并集（最终采用）：[" + string.Join(", ", probed) + "]");
+                }
+            }
+
+            s_supportedRatesCache[key] = probed; // null 也缓存：探测失败不应每首歌重试
             return probed;
         }
 
@@ -1118,6 +1139,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                LastNativeStartRc = 0; // 每次尝试归零；仅 native2 Init 失败时被写成真实 start 返回码
                 StopCore();
 
                 if (!File.Exists(wavPath))
@@ -1200,8 +1222,11 @@ namespace CelesteMusicPlayer
                         var natProvider = requireExact ? (IWaveSourceProvider)_seamless : (IWaveSourceProvider)_dspProvider;
                         if (!nat.Init(natDev, natProvider, requireExactFormat: requireExact))
                         {
+                            // native2 的 start 返回码（0=非 native2 路径/未取到；-1=设备忙；-2=容器不支持）。
+                            // 上层只对 -2/0 走 MixFormat 重转兜底；-1 重转也白搭还制造 fallback.wav 竞态。
+                            if (nat is NativeCoreOutput nco) LastNativeStartRc = nco.LastStartErrorCode;
                             LastError = nat.LastError ?? "原生 WASAPI 初始化失败";
-                            StartupLog.Write("WasapiExclusive 原生初始化失败: " + (nat.LastError ?? "未知") + " | 源格式=" + (_waveFile?.WaveFormat.SampleRate) + "/" + (_waveFile?.WaveFormat.BitsPerSample) + "bit/" + (_waveFile?.WaveFormat.Channels) + "ch");
+                            StartupLog.Write("WasapiExclusive 原生初始化失败: " + (nat.LastError ?? "未知") + " | 源格式=" + (_waveFile?.WaveFormat.SampleRate) + "/" + (_waveFile?.WaveFormat.BitsPerSample) + "bit/" + (_waveFile?.WaveFormat.Channels) + "ch" + (LastNativeStartRc != 0 ? " startRc=" + LastNativeStartRc : ""));
                             try { Marshal.ReleaseComObject(natDev); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("HiFiOutputBackend.cs", caught); }
                             Cleanup();
                             return false;

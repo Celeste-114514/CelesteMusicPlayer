@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.Threading;
 using NAudio.Wave;
 
@@ -50,6 +52,11 @@ namespace CelesteMusicPlayer
         private bool _expand24;                        // 源 3 字节打包 → 设备 4 字节容器（左对齐 v<<8）
         private int _carryLen; // 上一个读周期剩下的不足一帧字节（一般是 0）
         private readonly byte[] _carry = new byte[7]; // blockAlign 最大 8，余数最多 7 字节
+
+        /// <summary>最近一次 Init 的 start 返回码（0=成功；-1=设备被占/激活失败；-2=容器不支持；
+        /// -3=启动超时）。上层据此决定失败后是否值得走 MixFormat 重转兜底：只有 -2/0 值得（真格式
+        /// 问题），-1 是设备忙（重转也白搭，还会制造 fallback.wav 转码竞态）。</summary>
+        public int LastStartErrorCode { get; private set; }
 
         private long _framesBaseline; // 当前曲目（或 seek 目标）起始帧基准，保持绝对进度
         private int _rate;
@@ -278,22 +285,38 @@ namespace CelesteMusicPlayer
             int rc = 0;
             IntPtr handle = IntPtr.Zero;
             uint chosenTag = _srcTag;
+            // 真实尝试序列（诊断诚实）：2026-09-23 15:50 事故里 break 时 chosenTag 还是初始值，
+            // 失败行把"根本没轮到"的容器印在 rc 旁边误导排查。现在无论成败都记 (tag, rc) 序列。
+            // rc=-1（设备被占/激活失败）= 上一个会话还没把设备交出来的瞬时窗口——连点播放/快速切歌时
+            // 自己顶自己；对 tag 序列原样原地重试一次（等 250ms）几乎必过，失败风暴就是这么止住的。
+            var attempts = new List<(uint Tag, int Rc)>();
             try
             {
-                foreach (uint tag in candidates)
+                for (int round = 0; round < 2; round++)
                 {
-                    byte[]? feed = PrepareFeed(prefill, prefillGotBytes, tag, out uint feedFrames);
-                    rc = NativeCoreAudio.celeste_core_start((uint)src.SampleRate, (uint)_channels,
-                        (uint)requestFrames, deviceId, tag,
-                        feedFrames > 0 ? feed : null, feedFrames, out handle);
-                    if (rc == 0 && handle != IntPtr.Zero) { chosenTag = tag; break; }
-                    handle = IntPtr.Zero;
-                    if (rc != -2)
+                    foreach (uint tag in candidates)
                     {
-                        break; // 非"设备不支持该容器"（例如设备被占用）：换容器也救不了，直接失败
+                        byte[]? feed = PrepareFeed(prefill, prefillGotBytes, tag, out uint feedFrames);
+                        rc = NativeCoreAudio.celeste_core_start((uint)src.SampleRate, (uint)_channels,
+                            (uint)requestFrames, deviceId, tag,
+                            feedFrames > 0 ? feed : null, feedFrames, out handle);
+                        attempts.Add((tag, rc));
+                        if (rc == 0 && handle != IntPtr.Zero) { chosenTag = tag; break; }
+                        handle = IntPtr.Zero;
+                        if (rc != -2)
+                        {
+                            break; // 非"设备不支持该容器"：换容器也救不了（-1 设备占用 → 整轮重试，见下）
+                        }
+                        StartupLog.Write("原生内核 端点容器 " + NativeCoreAudio.TagName(tag)
+                            + " 设备不支持（rc=-2，src=" + src.SampleRate + "Hz/" + _srcBits + "bit），尝试备选容器");
                     }
-                    StartupLog.Write("原生内核 端点容器 " + NativeCoreAudio.TagName(tag)
-                        + " 设备不支持（rc=-2，src=" + src.SampleRate + "Hz/" + _srcBits + "bit），尝试备选容器");
+                    // 只有"设备瞬时被占"值得重来一轮：容器不受支持（-2）已逐个试过，超时（-3）是驱动问题
+                    if (handle != IntPtr.Zero || rc != -1) break;
+                    if (round == 0)
+                    {
+                        StartupLog.Write("原生内核 start 设备瞬时不可用（rc=-1，上一会话设备尚未释放/被其它程序占用），250ms 后原地重试一次");
+                        System.Threading.Thread.Sleep(250);
+                    }
                 }
             }
             catch (DllNotFoundException)
@@ -312,9 +335,14 @@ namespace CelesteMusicPlayer
             {
                 LastError = NativeCoreAudio.DescribeStartError(rc)
                     + (string.IsNullOrEmpty(deviceId) ? "（默认设备）" : " device=" + deviceId);
-                StartupLog.Write("原生内核 celeste_core_start 失败 rc=" + rc + " src=" + src.SampleRate + "/" + _srcBits + "bit/" + _channels + "ch tag=" + chosenTag);
+                LastStartErrorCode = rc;
+                string triedText = attempts.Count == 0
+                    ? "（无尝试记录）"
+                    : string.Join(" → ", attempts.Select(a => NativeCoreAudio.TagName(a.Tag) + "(rc=" + a.Rc + ")"));
+                StartupLog.Write("原生内核 celeste_core_start 失败 rc=" + rc + " src=" + src.SampleRate + "/" + _srcBits + "bit/" + _channels + "ch 尝试序列: " + triedText);
                 return false;
             }
+            LastStartErrorCode = 0;
             _handle = handle;
             _feedTag = chosenTag;
             _feedBlockAlign = _channels * TagBytes(chosenTag);

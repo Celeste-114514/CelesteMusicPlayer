@@ -2,6 +2,7 @@
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
 using Windows.Devices.Enumeration;
@@ -188,6 +189,12 @@ namespace CelesteMusicPlayer
 
         private string? _lastTempWav;
 
+        // 播放请求串行闸：连点播放/快速切歌时排队执行，杜绝两个并发播放链互相
+        // StopCore + 抢 fallback.wav（2026-09-23 15:50 失败风暴+进度回跳事故）。
+        private readonly SemaphoreSlim _playGate = new(1, 1);
+        // 最近一次 HiFi Init 失败时 native2 的 start 返回码（0=未取到/成功；-1=设备忙；-2=容器不支持）。
+        private int _lastNativeStartRc;
+
         /// <summary>解码后端（阶段 A：默认 FFmpeg；路线二后续可按设置切换为精简 FFmpeg）。</summary>
         private readonly IDecoderBackend _decoder;
 
@@ -241,8 +248,24 @@ namespace CelesteMusicPlayer
                 ".opus" or ".mp2" or ".amr" or ".au" or ".cda" or ".mod" or ".s3m" or ".xm";
         }
 
-        /// <summary>用内置 FFmpeg 把文件转成临时 WAV 后播放（支持 APE/WavPack/TTA 等系统不支持的格式）。</summary>
+        /// <summary>用内置 FFmpeg 把文件转成临时 WAV 后播放（支持 APE/WavPack/TTA 等系统不支持的格式）。
+        /// 串行入口：播放请求（用户连点/自动切歌/无缝预加载竞态）一律排队，绝不并发起链——
+        /// 2026-09-23 15:50 事故：并发请求互相顶掉 WASAPI 独占会话 + 抢 fallback.wav 文件，
+        /// 表现为"失败风暴+进度条回跳"。</summary>
         public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null)
+        {
+            await _playGate.WaitAsync().ConfigureAwait(false);
+            try
+            {
+                return await PlayFileWithFfmpegCoreAsync(path, status).ConfigureAwait(false);
+            }
+            finally
+            {
+                _playGate.Release();
+            }
+        }
+
+        private async Task<bool> PlayFileWithFfmpegCoreAsync(string path, Action<string>? status = null)
         {
             // DSD（DSF/DFF）输出策略：
             //   - 设置「DSD 输出模式 = DoP 直出」且当前为 WASAPI 独占 / ASIO 时，走 DoP 原生直出
@@ -342,6 +365,16 @@ namespace CelesteMusicPlayer
                     }
                     else
                     {
+                        // native2 已把「设备瞬时被占」原地重试过一次，若仍 rc=-1（设备忙），
+                        // MixFormat 重转也救不了，只会制造 fallback.wav 转码-播放竞态
+                        // （2026-09-23 15:50 事故的进度回跳来源）——直接报错让用户重试。
+                        if (_lastNativeStartRc == -1)
+                        {
+                            LastError = "输出设备正忙（上一会话尚未释放或被其它程序占用），请再点一次播放。";
+                            StartupLog.Write("[链路] 跳过 MixFormat 兜底：native2 startRc=-1 设备忙，重转无益且制造竞态");
+                            RaiseFailed(new Exception(LastError));
+                            return false;
+                        }
                         // WASAPI 独占：按设备 MixFormat 重转一次（保证可播）
                         // 阶段二定位：这是「探测失败 / 设备确实不支持」的兜底路径，不再是常规路径——
                         // 常规路径由 ProbeExclusivePlan 在转码前协商好目标率，WAV 出盘即设备率，协商首候选即过。
@@ -406,9 +439,11 @@ namespace CelesteMusicPlayer
                 StartupLog.Write("HiFi播放 mode=" + _outputMode + " 设备=" + (_hifiOut.OutputDeviceName ?? "?") + " (pref=" + (_devicePreference ?? "默认") + ") ok=" + ok + (ok ? "" : " err=" + (_hifiOut.LastError ?? "")));
                 if (!ok)
                 {
+                    _lastNativeStartRc = _hifiOut.LastNativeStartRc;
                     LastError = _hifiOut.LastError ?? "HiFi 输出失败";
                     return false; // 交由上层尝试 MixFormat 回退；均失败时上层再报错。
                 }
+                _lastNativeStartRc = 0;
 
                 Duration = _hifiOut.Duration;
                 Position = TimeSpan.Zero;

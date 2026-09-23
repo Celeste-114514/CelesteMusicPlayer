@@ -25,6 +25,7 @@ STW（暂停所有托管线程）会把渲染线程冻住几十毫秒，MMCSS/�
 |---|---|
 | C ABI | 8 个导出：`celeste_core_start/write/replace/mark_input_ended/set_paused/stats/stop/destroy` |
 | 格式标签 | 1=pcm16(2B) 2=pcm24 packed(3B) 3=pcm24in32(4B,高位24位) 4=pcm32(4B) 5=float32(4B)；`write` 带标签做一致性校验 |
+| start 返回码 | 0=成功；-1=设备被占/激活失败（含 AUDCLNT_E_DEVICE_IN_USE，多为上一会话未释放的瞬时窗口——C# 侧 250ms 后对候选序列原样整轮重试一次，仍失败则跳过 MixFormat 兜底直接报"设备忙"）；-2=容器不支持（AUDCLNT_E_UNSUPPORTED_FORMAT——C# 换下一个候选容器）；-3=E_PENDING 启动超时（驱动问题，重试无益） |
 | bit-perfect | 端点容器 == 源布局 → 整数字节从 feeder 一路 memcpy 直通 DAC，不过 float |
 | 缓冲 | 设备真实周期（GetDevicePeriod，下限 10ms），周期=缓冲（MSDN 独占铁律） |
 | ring | 字节级 SPSC，mutex+cv；容量 = 1 周期 + 1.5s 存货（吸收 feeder 被冻 ≤64ms，余量 20×+） |
