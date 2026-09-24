@@ -286,6 +286,10 @@ namespace CelesteMusicPlayer
                 ? null
                 : IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
 
+            // 下载是否完整落盘。未完成时失败要清掉半截文件，避免下次重下撞上残留；
+            // 已完成（含哈希不符已删）时绝不能再删 —— 安装向导可能已经拿着这个文件在跑。
+            bool downloadCompleted = false;
+
             try
             {
                 // 共享 HttpClient（P1-6）：安装包大文件下载使用 LongRunning 实例，不再每次新建
@@ -299,8 +303,10 @@ namespace CelesteMusicPlayer
                 using var stream = await response.Content.ReadAsStreamAsync();
 
                 // 写入句柄必须限定在这个块里、块结束就释放：后面校验要读它、安装向导也要读它，
-                // 握着 FileShare.None 不放会导致"文件被另一个进程使用"。
-                using (var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
+                // 握着独占句柄不放会导致"文件被另一个进程使用"（v26.9.20 的必现故障就在这一步）。
+                // 共享方式给 Read 而不是 None：杀毒软件（火绒/Defender）会打开刚落盘的 exe 只读扫描，
+                // None 会把杀软也挡在外面导致创建失败；Read 只放行只读，不破坏写入独占性。
+                using (var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.Read, 81920, useAsync: true))
                 {
                     byte[] buffer = new byte[81920];
                     long downloaded = 0;
@@ -323,6 +329,7 @@ namespace CelesteMusicPlayer
                     }
                 }
 
+                downloadCompleted = true;
                 AboutDownloadProgress.Value = 100;
 
                 // 安全校验：release 附带 SHA256SUMS.txt 时，比对下载流的 SHA-256，不符拒绝执行
@@ -348,6 +355,12 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught)
             {
+                // 只清"没下完"的半截文件。下载已完成时不能删：安装向导可能已经拿它在装了。
+                if (!downloadCompleted)
+                {
+                    try { if (File.Exists(targetPath)) File.Delete(targetPath); } catch { }
+                }
+
                 // 失败原因分开说：网络类报错归网络，文件占用/其它归本地，别一律甩锅给网络
                 string reason = caught switch
                 {
