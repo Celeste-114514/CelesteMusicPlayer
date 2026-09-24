@@ -2359,6 +2359,18 @@ namespace CelesteMusicPlayer
             // 独占模式下走 DoP 原生直出。提示在 PlayExtendedWithEngineAsync 成功后给出。
             StartupLog.Write("StartPlayback: " + item.FilePath + " mode=" + (AppSettingsStore.Load().OutputMode));
 
+            // DSD×ECHO 内核提醒（2026-09-24 用户定案）：echo 内核不负责 DSD/DoP
+            // （EchoCoreOutput.Init 显式拒绝 requireExact）。独占 + echo + DSF 起播 →
+            // 左上角提醒切 native2。StartPlayback 是点歌/切歌/外部文件/自动连播的总漏斗，
+            // 只认 .dsf（DFF 本就不走 DoP，提醒它会误导）。
+            if (string.Equals(AppSettingsStore.Load().OutputMode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase)
+                && string.Equals(AppSettingsStore.Load().ExclusiveEngine, "echo", StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrEmpty(item.FilePath)
+                && item.FilePath.EndsWith(".dsf", StringComparison.OrdinalIgnoreCase))
+            {
+                ShowDsdEngineTip();
+            }
+
             // 三模式统一走 FFmpeg 引擎 + NAudio/HiFi 输出（共享 / WASAPI 独占 / ASIO），
             // 使曲线 EQ / 声道平衡 / 限幅在所有输出模式下都能实时生效、暂停后继续保留。
             // 直接按设置判断（而非 _audioEngine.IsHiFiMode），避免 engine 尚未创建/未设 mode 时的首次播放漏走。

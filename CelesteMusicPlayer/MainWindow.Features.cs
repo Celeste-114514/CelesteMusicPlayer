@@ -2715,6 +2715,67 @@ namespace CelesteMusicPlayer
             SetModeCard(EngineNative2Card, native2, activeBorder, activeBg, normalBorder);
         }
 
+        // ---------- DSD×ECHO 内核提醒卡（2026-09-24 用户定案） ----------
+        // 背景：echo 内核不负责 DSD/DoP（EchoCoreOutput.Init 显式拒绝 requireExact），
+        // 用户在 echo 下播 DSF 时左上角弹提醒，建议切 native2（DSD 整轨预加载后三内核里
+        // 只有 native2/self 可用；native2 实测绿灯不卡）。自带一键切换 + 15s 自动收起。
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _dsdEngineTipTimer;
+
+        /// <summary>播 DSD(DSF) 且当前独占内核为 echo 时，左上角显示切换提醒（每次起播重置 15s 计时）。</summary>
+        private void ShowDsdEngineTip()
+        {
+            try
+            {
+                if (DsdEngineTipCard == null || DsdEngineTipText == null)
+                {
+                    return;
+                }
+
+                DsdEngineTipText.Text = "当前输出内核是 ECHO（实验），它不负责 DSD/DoP 直出。"
+                    + "建议切换到「原生内核」再播放 DSD：音频设置 → 输出内核 → 原生内核（下一首歌生效）。";
+                DsdEngineTipCard.Visibility = Visibility.Visible;
+
+                if (_dsdEngineTipTimer == null)
+                {
+                    _dsdEngineTipTimer = DispatcherQueue.CreateTimer();
+                    _dsdEngineTipTimer.Interval = TimeSpan.FromSeconds(15);
+                    _dsdEngineTipTimer.Tick += (_, _) => HideDsdEngineTip();
+                }
+                _dsdEngineTipTimer.Stop();
+                _dsdEngineTipTimer.Start();
+                StartupLog.Write("[DSD提醒] ECHO 内核不负责 DSD/DoP，已左上角提醒切换原生内核（native2）");
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs(ShowDsdEngineTip)", caught); }
+        }
+
+        private void HideDsdEngineTip()
+        {
+            try
+            {
+                _dsdEngineTipTimer?.Stop();
+                if (DsdEngineTipCard != null)
+                {
+                    DsdEngineTipCard.Visibility = Visibility.Collapsed;
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs(HideDsdEngineTip)", caught); }
+        }
+
+        private void DsdEngineTipClose_Click(object sender, RoutedEventArgs e) => HideDsdEngineTip();
+
+        /// <summary>一键切换：ExclusiveEngine=native2（下一首歌生效），同步卡片高亮并收起提醒。</summary>
+        private void DsdEngineTipSwitch_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                AppSettingsStore.Update(s => s.ExclusiveEngine = "native2");
+                UpdateEngineCardHighlight("native2");
+                StartupLog.Write("[设置] DSD 提醒卡：一键切换独占内核=native2（下一首歌生效）");
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs(DsdEngineTipSwitch_Click)", caught); }
+            HideDsdEngineTip();
+        }
+
         private async void AudioOutputDeviceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_audioCombosLoading)
