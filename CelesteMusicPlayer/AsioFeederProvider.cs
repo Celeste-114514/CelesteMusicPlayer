@@ -65,6 +65,22 @@ namespace CelesteMusicPlayer
         private object? _lastIdentity;
         private bool _identitySeenFirst;
 
+        // ---------- 回调/喂料节奏诊断（2026-09-24，"几秒一次"卡顿取证） ----------
+        // 背景：FiiO ASIO + DoP 播放时喂料器 0 欠载、位置稳走，但用户仍听到几秒一次卡顿。
+        // 应用层全绿 ⇒ 断点在驱动回调线程被抢占（native 线程，GC 冻不住）或 DAC 端 DoP 失锁，
+        // 二者从 feeder 侧都不可见，只能记回调间隔分布反推。5s 一条，窗口值读走即清零。
+        private static readonly long DiagFreq = System.Diagnostics.Stopwatch.Frequency;
+        private long _lastCbTick;                    // 上次驱动回调时刻（0=未记）
+        private long _cbCount;                       // 窗口内回调次数
+        private long _cbGapMaxMs;                    // 窗口内回调间隔最大 ms
+        private long _cbGapSumMs;                    // 窗口内回调间隔合计 ms
+        private long _cbLate;                        // 窗口内晚醒次数（间隔 > 60ms）
+        private long _cbBytesLogged;                 // 驱动缓冲尺寸只打一次
+        private long _feederReads;                   // 窗口内 feeder 补货次数
+        private long _feederReadMaxMs;               // 窗口内 feeder 单次读源最大耗时
+        private long _feederMinAvail = long.MaxValue;// 窗口内 ring 水位最低字节
+        private long _lastDiagTick;                  // 上次诊断 flush 时刻（0=未记）
+
         /// <param name="source">上游源链（DSP 链 / Widen24To32 / AsioDoPProvider 均可）。</param>
         /// <param name="ringSeconds">ring 库存秒数（默认 4）。</param>
         /// <param name="targetSeconds">目标水位秒数（默认 1）。</param>
@@ -123,6 +139,32 @@ namespace CelesteMusicPlayer
         {
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));
             if (count <= 0) return 0;
+
+            // 回调节奏记账：相邻两次驱动回调的间隔。晚醒（大间隔）= 驱动缓冲已播空还没来取货 = 可闻卡顿。
+            long now = System.Diagnostics.Stopwatch.GetTimestamp();
+            long last = System.Threading.Interlocked.Exchange(ref _lastCbTick, now);
+            if (last != 0)
+            {
+                long gapMs = (now - last) * 1000 / DiagFreq;
+                lock (_gate)
+                {
+                    _cbCount++;
+                    _cbGapSumMs += gapMs;
+                    if (gapMs > _cbGapMaxMs) _cbGapMaxMs = gapMs;
+                    if (gapMs > 60) _cbLate++;
+                }
+            }
+            lock (_gate)
+            {
+                if (_cbBytesLogged == 0)
+                {
+                    _cbBytesLogged = 1;
+                    StartupLog.Write(string.Format(
+                        "[ASIO诊断] 驱动回调节奏：缓冲={0} 字节（{1:F1}ms @ {2}Hz/{3}bit/{4}ch，blockAlign={5}）",
+                        count, count * 1000.0 / Math.Max(1, WaveFormat.AverageBytesPerSecond),
+                        WaveFormat.SampleRate, WaveFormat.BitsPerSample, WaveFormat.Channels, _blockAlign));
+                }
+            }
 
             int got = 0;
             lock (_gate)
@@ -244,6 +286,15 @@ namespace CelesteMusicPlayer
         {
             while (!_stopping)
             {
+                // 诊断 flush：墙钟 5s 一条。_lastDiagTick 只有本线程读写，无需同步。
+                long diagNow = System.Diagnostics.Stopwatch.GetTimestamp();
+                if (_lastDiagTick == 0) _lastDiagTick = diagNow;
+                else if (diagNow - _lastDiagTick > 5 * DiagFreq)
+                {
+                    _lastDiagTick = diagNow;
+                    FlushDiag();
+                }
+
                 if (_upstreamEnded)
                 {
                     _needData.Wait(200); // 上游读尽：无事可做，等 Reset/Dispose
@@ -253,7 +304,11 @@ namespace CelesteMusicPlayer
                 ObserveIdentitySwitch();
 
                 bool needMore;
-                lock (_gate) needMore = _available < _targetBytes;
+                lock (_gate)
+                {
+                    needMore = _available < _targetBytes;
+                    if (_available < _feederMinAvail) _feederMinAvail = _available;
+                }
                 if (!needMore)
                 {
                     _needData.Wait(IdlePollMs);
@@ -270,6 +325,7 @@ namespace CelesteMusicPlayer
                 }
 
                 int n;
+                long readStart = System.Diagnostics.Stopwatch.GetTimestamp();
                 try
                 {
                     n = _source.Read(_staging, 0, want);
@@ -281,6 +337,11 @@ namespace CelesteMusicPlayer
                     StartupLog.Write("[ASIO] 喂料器上游读取异常，按读尽处理（上层将正常播完切歌）：" + ex.GetType().Name + ": " + ex.Message);
                     continue;
                 }
+                finally
+                {
+                    long readMs = (System.Diagnostics.Stopwatch.GetTimestamp() - readStart) * 1000 / DiagFreq;
+                    if (readMs > _feederReadMaxMs) _feederReadMaxMs = readMs;
+                }
 
                 n -= n % _blockAlign;
                 if (n <= 0)
@@ -288,6 +349,8 @@ namespace CelesteMusicPlayer
                     _upstreamEnded = true; // 源自然读尽（SeamlessWaveProvider 无下一首可续）
                     continue;
                 }
+
+                _feederReads++; // 窗口内成功补货次数（诊断用，仅本线程写）
 
                 lock (_gate)
                 {
@@ -298,6 +361,30 @@ namespace CelesteMusicPlayer
                     _available += n;
                 }
             }
+        }
+
+        /// <summary>
+        /// 诊断 flush：5s 一条，窗口值读走即清零（只在 feeder 线程调用）。
+        /// 回调统计由驱动回调线程写、这里读，故过 _gate；喂料统计仅 feeder 线程碰，直读。
+        /// 判读：最大间隔≈缓冲周期=健康；晚醒(>60ms)计数与用户听到的卡顿次数对得上=回调线程被抢占；
+        /// 水位最低=0 且伴随欠载=备货被饿；全绿仍卡=DAC 端 DoP 失锁或 USB 层抢占（应用层之上不可见）。
+        /// </summary>
+        private void FlushDiag()
+        {
+            long cbCount, cbMax, cbSum, cbLate;
+            lock (_gate)
+            {
+                cbCount = _cbCount; cbMax = _cbGapMaxMs; cbSum = _cbGapSumMs; cbLate = _cbLate;
+                _cbCount = 0; _cbGapMaxMs = 0; _cbGapSumMs = 0; _cbLate = 0;
+            }
+            long feederReads = _feederReads, feederMaxMs = _feederReadMaxMs, minAvail = _feederMinAvail;
+            _feederReads = 0; _feederReadMaxMs = 0; _feederMinAvail = long.MaxValue;
+            if (cbCount == 0 && feederReads == 0) return; // 空窗（未起播/seek 冷启动）不打
+
+            StartupLog.Write(string.Format(
+                "[ASIO诊断] 回调间隔 最大{0}ms 平均{1:F1}ms 晚醒(>60ms)={2}次 | 喂料 补货{3}次 读源单次最大{4}ms 水位最低{5}B(目标{6}B)",
+                cbMax, cbCount > 0 ? cbSum / (double)cbCount : 0, cbLate,
+                feederReads, feederMaxMs, minAvail == long.MaxValue ? -1 : minAvail, _targetBytes));
         }
 
         /// <summary>无缝续接观察：reader 引用变了=已切入下一首 → 进度线归零（与上层 SwitchedToNext 同步、互补成基线）。</summary>
