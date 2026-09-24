@@ -6907,7 +6907,7 @@
                             FontSize="12"
                             Opacity="0.6"
                             TextWrapping="WrapWholeWords"
-                            Text="切换渲染线程的实现：自研是 C# 线程（系统回收内存时可能把它冻一下，偶发卡顿）；ECHO 核心与原生内核把渲染搬进 C++ 原生线程（冻不到它），音频数据仍来自同一套链路。原生内核的 feeder 直接送整数字节给设备（不过 float），DSP 全关时端到端 bit-perfect。改动下一首歌生效；选 C++ 内核播 DSD 会自动回退自研。" />
+                            Text="切换渲染线程的实现：自研是 C# 线程（系统回收内存时可能把它冻一下，偶发卡顿）；ECHO 核心与原生内核把渲染搬进 C++ 原生线程（冻不到它），音频数据仍来自同一套链路。原生内核的 feeder 直接送整数字节给设备（不过 float），DSP 全关时端到端 bit-perfect。改动下一首歌生效。DSD 由整轨预加载播放，实测原生内核最佳；ECHO 内核不负责 DSD/DoP，用它播 DSD 时界面会提醒切换。" />
                         <Grid ColumnSpacing="8" Margin="0,4,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
