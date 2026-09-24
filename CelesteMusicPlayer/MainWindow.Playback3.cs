@@ -1603,7 +1603,7 @@ namespace CelesteMusicPlayer
 
                 string exclusivo = hifi ? "独占" : "共享";
 
-                // DSP 摘要：EQ 仅在 AudioGraph（非 HiFi 独占）下有效；不显示音量（用户不关心它在此链路里）。
+                // DSP 摘要：EQ 在 HiFi DSP 链里实时生效；DSP 全关时端到端 bit-perfect。
                 string dsp;
                 if (hifi)
                 {

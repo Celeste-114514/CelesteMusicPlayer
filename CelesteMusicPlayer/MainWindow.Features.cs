@@ -1544,10 +1544,6 @@ namespace CelesteMusicPlayer
             sleepTimer.Click += async (_, _) => await ShowSleepTimerDialogAsync();
             flyout.Items.Add(sleepTimer);
 
-            var enginePreview = new MenuFlyoutItem { Text = "音频引擎预览（当前曲目）" };
-            enginePreview.Click += async (_, _) => await PreviewWithEngineAsync();
-            flyout.Items.Add(enginePreview);
-
             flyout.Items.Add(new MenuFlyoutSeparator());
 
             var importM3u = new MenuFlyoutItem { Text = "导入 M3U 播放列表…" };
@@ -1810,59 +1806,6 @@ namespace CelesteMusicPlayer
             win.Activate();
         }
 
-
-        /// <summary>音频引擎（AudioGraph）预览：验证真实均衡器与新播放管线。</summary>
-        private async Task PreviewWithEngineAsync()
-        {
-            // 先暂停正在播放的 MediaPlayer，避免预览与播放双声
-            try
-            {
-                MediaPlayer? playing = GetPlayer();
-                if (playing != null && playing.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
-                {
-                    playing.Pause();
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-
-            string? path = _nowPlayingPath;
-            if (string.IsNullOrWhiteSpace(path) && _currentIndex >= 0 && _currentIndex < _playlist.Count)
-            {
-                path = _playlist[_currentIndex].FilePath;
-            }
-
-            if (string.IsNullOrWhiteSpace(path))
-            {
-                NowPlayingText.Text = "无当前曲目";
-                return;
-            }
-
-            _audioEngine ??= new AudioPlaybackEngine();
-            _audioEngine.PlaybackEnded -= EnginePreviewEnded;
-            _audioEngine.PlaybackEnded += EnginePreviewEnded;
-
-            try
-            {
-                _audioEngine.SetEqualizer(EqualizerStore.Load().BandGains);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-
-            bool ok = await _audioEngine.PlayFileAsync(path);
-            NowPlayingText.Text = ok
-                ? "音频引擎预览中（含真实均衡器）"
-                : "引擎预览失败（系统可能不支持该格式，见输出）";
-        }
-
-        private void EnginePreviewEnded()
-        {
-            _ = DispatcherQueue.TryEnqueue(() =>
-            {
-                if (NowPlayingText != null)
-                {
-                    NowPlayingText.Text = "引擎预览播放结束";
-                }
-            });
-        }
 
         private PlaylistItem? FindLibraryItemByPath(string path)
         {
