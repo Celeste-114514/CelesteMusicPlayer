@@ -6644,6 +6644,15 @@
                             </Button>
                         </Grid>
                         <ComboBox x:Name="AudioOutputDeviceCombo" HorizontalAlignment="Stretch" SelectionChanged="AudioOutputDeviceCombo_SelectionChanged" PlaceholderText="输出设备" />
+                        <!-- ASIO 卡顿排查提醒：2026-09-24 KA13 实测定案——驱动缓冲 5.8ms + USB 电源管理=几秒一次卡；
+                             选中 ASIO 模式时常显（RefreshAudioSettingsPanel 控制显隐） -->
+                        <TextBlock x:Name="AsioBufferTipText"
+                                   FontSize="11"
+                                   Opacity="0.75"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="0,6,0,0"
+                                   Text="ASIO 播放卡顿（几秒一次、不规律）先查两处：① 打开耳放/声卡的控制面板（如「FiiO USB Audio Control Panel」，开始菜单搜品牌名），把 ASIO Buffer Size 调到 10ms 以上；② 控制面板→电源选项→更改计划设置→更改高级电源设置，关闭「USB 选择性暂停」和「PCI Express 链接状态电源管理」并重启。本播放器已内置 4 秒备货缓冲，若仍卡，基本就是这两项。" />
                         <!-- 热插拔提示：设备拔插时短暂显示，10 秒后自动收起 -->
                         <TextBlock x:Name="AudioDeviceHotplugText"
                                    FontSize="11"

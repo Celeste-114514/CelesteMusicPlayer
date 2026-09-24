@@ -2603,6 +2603,12 @@ namespace CelesteMusicPlayer
             AppSettingsStore.Update(s => s.OutputMode = mode);
             ApplyEngineOutputMode(AppSettingsStore.Load());
             UpdateModeCardHighlight(mode);
+            if (string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase))
+            {
+                // 2026-09-24 KA13 定案：ASIO 几秒一卡=驱动缓冲过小 + USB 电源管理，喂料器已内置 4s ring 仍可能中招。
+                // 切模式时留痕，用户回日志也能看到排查入口（面板内亦有常显提示）。
+                StartupLog.Write("[设置] 已切换 ASIO 输出；若播放几秒一次不规则卡顿，请开音频设置面板看「ASIO 卡顿排查」提示（调大控制面板 ASIO 缓冲 + 关闭 USB 选择性暂停）");
+            }
             _audioCombosLoading = true;
             try
             {
@@ -2807,6 +2813,14 @@ namespace CelesteMusicPlayer
                 if (DeviceDspMemoryToggle != null)
                 {
                     DeviceDspMemoryToggle.IsOn = DeviceDspProfileStore.IsEnabled();
+                }
+
+                // ASIO 卡顿排查提醒（2026-09-24 KA13 实测定案：驱动缓冲 5.8ms + USB 电源管理=几秒一卡；
+                // 喂料器内置 4s ring 已排除备货问题，故选 ASIO 时常显此条，切换模式即时可查）
+                if (AsioBufferTipText != null)
+                {
+                    bool asioMode = string.Equals(AppSettingsStore.Load().OutputMode, "Asio", StringComparison.OrdinalIgnoreCase);
+                    AsioBufferTipText.Visibility = asioMode ? Visibility.Visible : Visibility.Collapsed;
                 }
 
                 // 独占输出内核 A/B 卡片高亮同步

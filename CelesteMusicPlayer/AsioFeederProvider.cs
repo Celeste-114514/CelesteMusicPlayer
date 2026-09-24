@@ -159,10 +159,21 @@ namespace CelesteMusicPlayer
                 if (_cbBytesLogged == 0)
                 {
                     _cbBytesLogged = 1;
+                    double bufMs = count * 1000.0 / Math.Max(1, WaveFormat.AverageBytesPerSecond);
                     StartupLog.Write(string.Format(
                         "[ASIO诊断] 驱动回调节奏：缓冲={0} 字节（{1:F1}ms @ {2}Hz/{3}bit/{4}ch，blockAlign={5}）",
-                        count, count * 1000.0 / Math.Max(1, WaveFormat.AverageBytesPerSecond),
+                        count, bufMs,
                         WaveFormat.SampleRate, WaveFormat.BitsPerSample, WaveFormat.Channels, _blockAlign));
+                    // 缓冲过小的对症提醒（2026-09-24 KA13 定案：5.8ms 驱动缓冲 + USB 电源管理
+                    // = 几秒一次不规则卡顿；喂料器 ring 满仓也救不了驱动侧断流）。
+                    // ≥10ms 视为安全，不打。这是「合适的提醒」的兜底位：用户没开面板也能从日志看到药方。
+                    if (bufMs < 10.0)
+                    {
+                        StartupLog.Write(string.Format(
+                            "[ASIO提示] 驱动缓冲仅 {0:F1}ms，偏小：若播放几秒一次不规则卡顿，请把耳放/声卡控制面板（如 FiiO USB Audio Control Panel）里的 ASIO 缓冲调到 10ms 以上；"
+                            + "并在 控制面板→电源选项→更改计划设置→更改高级电源设置 里关闭「USB 选择性暂停」「PCI Express 链接状态电源管理」后重启。本喂料器已备 4 秒货，仍卡多为此二者。",
+                            bufMs));
+                    }
                 }
             }
 
