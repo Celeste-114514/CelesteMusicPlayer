@@ -1882,7 +1882,7 @@
                                     FontSize="12"
                                     Opacity="0.8"
                                     TextWrapping="WrapWholeWords"
-                                    Text="CelesteMusicPlayer：为本地音乐文件打造的 Windows HiFi 播放器。支持 FLAC / APE / WAV / DSD 等无损格式，内置参数 EQ、声道平衡、房间校正（卷积）、采样率升频（SRC）、ReplayGain 响度归一化等音频处理。所有数据保存在本地，无需登录。" />
+                                    Text="CelesteMusicPlayer：为本地音乐文件打造的 Windows HiFi 播放器。支持 FLAC / APE / WAV / DSD 等无损格式与 SACD 镜像（.iso），WASAPI 独占 / ASIO 直出，内置参数 EQ、声道平衡、房间校正（卷积）、采样率升频（SRC）、ReplayGain 响度归一化等音频处理。所有数据保存在本地，无需登录。" />
                             </StackPanel>
                         </Border>
 
