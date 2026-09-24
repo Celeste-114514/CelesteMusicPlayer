@@ -570,6 +570,14 @@ namespace CelesteMusicPlayer
 
         private void UpdateAlbumSortButtonsUi()
         {
+            // 关键：下拉按钮曾在切到歌曲库 / 播放列表时被单独隐藏（那时整个 AlbumSortPanel 已折叠），
+            // 但切回专辑分类时没人把它恢复，结果面板只有升序/降序一个按钮、排序字段选不了。
+            // 这里统一按面板状态复位，避免按钮的可见性被别处改坏后残留。
+            if (AlbumSortButton != null)
+            {
+                AlbumSortButton.Visibility = Visibility.Visible;
+            }
+
             AlbumSortButton.Content = GetAlbumSortFieldName(_albumSortMode);
             if (AlbumSortOrderButton != null)
             {

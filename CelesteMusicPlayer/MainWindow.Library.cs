@@ -2522,6 +2522,11 @@ namespace CelesteMusicPlayer
                     settings.LibraryWatchFolders?.RemoveAll(q =>
                         string.Equals(q, folderRef.FullPath, StringComparison.OrdinalIgnoreCase));
                     AppSettingsStore.Save(settings);
+
+                    // 光改设置不够：曲库里已经收录的这些歌不会自己消失，
+                    // 必须把该文件夹下的曲目一并移出库，否则"删了文件夹、歌还在我的音乐库里"。
+                    await RemoveFolderTracksFromLibraryAsync(folderRef.FullPath);
+
                     RefreshFolderBrowserRoots();
                 };
                 flyout.Items.Add(removeItem);
@@ -2535,6 +2540,76 @@ namespace CelesteMusicPlayer
             {
                 flyout.ShowAt(FolderBrowserView, e.GetPosition(FolderBrowserView));
             }
+        }
+
+
+        /// <summary>
+        /// 「从媒体库中删除」文件夹后，把该文件夹（含子目录）下的曲目一并从曲库清掉。
+        /// 只改设置是不够的：已经收录进库的歌不会自己消失，用户会看到「文件夹移走了、歌还在我的音乐库里」。
+        /// 同时清掉「手动加入音乐库」的记录，避免重启后这些歌又被补回来；专辑 / 艺术家视图同步重建。
+        /// </summary>
+        private System.Threading.Tasks.Task RemoveFolderTracksFromLibraryAsync(string folderPath)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(folderPath))
+                {
+                    return System.Threading.Tasks.Task.CompletedTask;
+                }
+
+                string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(folderPath));
+                string prefix = root + Path.DirectorySeparatorChar;
+
+                var deadPaths = new System.Collections.Generic.List<string>();
+                var deadItems = new System.Collections.Generic.List<PlaylistItem>();
+
+                foreach (PlaylistItem item in _playlist)
+                {
+                    string? p = item?.FilePath;
+                    if (string.IsNullOrWhiteSpace(p))
+                    {
+                        continue;
+                    }
+
+                    string full;
+                    try
+                    {
+                        full = Path.GetFullPath(p);
+                    }
+                    catch
+                    {
+                        continue;
+                    }
+
+                    if (string.Equals(full, root, StringComparison.OrdinalIgnoreCase)
+                        || full.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        deadPaths.Add(p);
+                        deadItems.Add(item);
+                    }
+                }
+
+                if (deadPaths.Count == 0)
+                {
+                    return System.Threading.Tasks.Task.CompletedTask;
+                }
+
+                // 清曲库索引（内部会一并清 ManualLibraryFiles 记录，避免重启后被补回来）
+                RemoveFilesFromCurrentPlaylist(deadPaths);
+                RemoveSongsFromUserPlaylist(deadItems);
+                RenumberCollection(_playlist);
+                RenumberCollection(_userPlaylist);
+                NotifyCurrentPlaylistWindow();
+
+                _ = RefreshAlbumViewAsync();
+                _ = RefreshArtistViewAsync();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Library.RemoveFolderTracks", caught);
+            }
+
+            return System.Threading.Tasks.Task.CompletedTask;
         }
 
 

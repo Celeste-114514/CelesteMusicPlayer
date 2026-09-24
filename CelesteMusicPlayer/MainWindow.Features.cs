@@ -2204,7 +2204,7 @@ namespace CelesteMusicPlayer
             MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
             SongSortPanel.Visibility = Visibility.Visible;
             SetSongSortUiForCategory(isUserPlaylist: false);
-            AlbumSortButton.Visibility = Visibility.Collapsed;
+            AlbumSortPanel.Visibility = Visibility.Collapsed;
             PlaylistListBorder.Visibility = Visibility.Visible;
             AlbumListBorder.Visibility = Visibility.Collapsed;
             ArtistListBorder.Visibility = Visibility.Collapsed;
@@ -2299,7 +2299,7 @@ namespace CelesteMusicPlayer
             MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
             SongSortPanel.Visibility = Visibility.Visible;
             SetSongSortUiForCategory(isUserPlaylist: false);
-            AlbumSortButton.Visibility = Visibility.Collapsed;
+            AlbumSortPanel.Visibility = Visibility.Collapsed;
             PlaylistListBorder.Visibility = Visibility.Visible;
             AlbumListBorder.Visibility = Visibility.Collapsed;
             ArtistListBorder.Visibility = Visibility.Collapsed;
