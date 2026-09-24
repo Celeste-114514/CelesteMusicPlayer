@@ -21,7 +21,6 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
         private GlobalHotkeyService? _hotkeys;
-        private FadePlaybackController? _fadeController;
         private Microsoft.UI.Dispatching.DispatcherQueueTimer? _sleepTimer;
 
         /// <summary>睡眠定时器停止模式。</summary>
@@ -51,7 +50,6 @@ namespace CelesteMusicPlayer
             }
 
             _featuresInitialized = true;
-            _fadeController = new FadePlaybackController(DispatcherQueue);
 
             EqualizerWindow.Applied += OnEqualizerApplied;
             TagEditorWindow.TagsSaved += OnTagsSaved;
@@ -125,8 +123,6 @@ namespace CelesteMusicPlayer
                 _libraryWatch.Dispose();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-
-            _fadeController?.Cancel();
         }
 
         private void ConfigureSmtcFromSettings()
