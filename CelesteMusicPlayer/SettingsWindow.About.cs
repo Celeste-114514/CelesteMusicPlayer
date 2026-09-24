@@ -4,6 +4,7 @@ using System.Globalization;
 using System.IO;
 using System.Net.Http;
 using System.Reflection;
+using System.Security.Cryptography;
 using System.Text.Json;
 using System.Threading;
 using Microsoft.UI.Xaml;
@@ -229,8 +230,23 @@ namespace CelesteMusicPlayer
 
             string targetPath = Path.Combine(tmpDir, fileName);
 
-            // 清理同名的残留旧文件，避免重复下载时覆盖失败
-            try { if (File.Exists(targetPath)) File.Delete(targetPath); } catch { }
+            // 清理同名的残留旧文件，避免重复下载时覆盖失败。
+            // 若残留文件正被别的进程占用（杀毒软件扫描中）删不掉，就换个带时间戳的名字下载，
+            // 不然后面 FileMode.Create 打不开 → 整条更新链路卡死。
+            try
+            {
+                if (File.Exists(targetPath))
+                {
+                    File.Delete(targetPath);
+                }
+            }
+            catch
+            {
+                string stamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+                string baseName = Path.GetFileNameWithoutExtension(fileName);
+                string ext = Path.GetExtension(fileName);
+                targetPath = Path.Combine(tmpDir, baseName + "-" + stamp + ext);
+            }
 
             AboutDownloadUpdateButton.IsEnabled = false;
             AboutCheckUpdateButton.IsEnabled = false;
@@ -264,6 +280,12 @@ namespace CelesteMusicPlayer
 
             AboutUpdateStatusText.Text = $"正在下载 {fileName} …";
 
+            // 下载时顺带算 SHA-256（release 提供了期望值才算）。不再"下载完再打开文件读一遍算哈希"：
+            // 那样会撞上写入句柄还没释放（FileShare.None 自己锁自己）+ 杀软刚扫完 exe 的短暂占用。
+            using IncrementalHash? shaIncremental = string.IsNullOrEmpty(expectedSha256)
+                ? null
+                : IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+
             try
             {
                 // 共享 HttpClient（P1-6）：安装包大文件下载使用 LongRunning 实例，不再每次新建
@@ -275,39 +297,39 @@ namespace CelesteMusicPlayer
 
                 long? total = response.Content.Headers.ContentLength;
                 using var stream = await response.Content.ReadAsStreamAsync();
-                using var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true);
 
-                byte[] buffer = new byte[81920];
-                long downloaded = 0;
-                int read;
-                while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
+                // 写入句柄必须限定在这个块里、块结束就释放：后面校验要读它、安装向导也要读它，
+                // 握着 FileShare.None 不放会导致"文件被另一个进程使用"。
+                using (var fileStream = new FileStream(targetPath, FileMode.Create, FileAccess.Write, FileShare.None, 81920, useAsync: true))
                 {
-                    await fileStream.WriteAsync(buffer, 0, read);
-                    downloaded += read;
-                    if (total.HasValue && total.Value > 0)
+                    byte[] buffer = new byte[81920];
+                    long downloaded = 0;
+                    int read;
+                    while ((read = await stream.ReadAsync(buffer, 0, buffer.Length)) > 0)
                     {
-                        int pct = (int)Math.Clamp(downloaded * 100 / total.Value, 0, 100);
-                        AboutDownloadProgress.Value = pct;
-                        AboutUpdateStatusText.Text = $"正在下载 {fileName} … {pct}%（{FormatBytes(downloaded)} / {FormatBytes(total.Value)}）";
-                    }
-                    else
-                    {
-                        AboutUpdateStatusText.Text = $"正在下载 {fileName} … 已下载 {FormatBytes(downloaded)}";
+                        await fileStream.WriteAsync(buffer, 0, read);
+                        shaIncremental?.AppendData(buffer, 0, read);
+                        downloaded += read;
+                        if (total.HasValue && total.Value > 0)
+                        {
+                            int pct = (int)Math.Clamp(downloaded * 100 / total.Value, 0, 100);
+                            AboutDownloadProgress.Value = pct;
+                            AboutUpdateStatusText.Text = $"正在下载 {fileName} … {pct}%（{FormatBytes(downloaded)} / {FormatBytes(total.Value)}）";
+                        }
+                        else
+                        {
+                            AboutUpdateStatusText.Text = $"正在下载 {fileName} … 已下载 {FormatBytes(downloaded)}";
+                        }
                     }
                 }
 
                 AboutDownloadProgress.Value = 100;
-                AboutUpdateStatusText.Text = $"下载完成，正在启动安装向导（{tag}）。安装过程中请按提示操作，程序将覆盖安装到原目录。";
-                // 安全校验：release 附带 SHA256SUMS.txt 时，下载完成后先比对 SHA-256，不符拒绝执行
-                if (!string.IsNullOrEmpty(expectedSha256))
+
+                // 安全校验：release 附带 SHA256SUMS.txt 时，比对下载流的 SHA-256，不符拒绝执行
+                if (shaIncremental != null && !string.IsNullOrEmpty(expectedSha256))
                 {
                     AboutUpdateStatusText.Text = "正在校验安装包完整性（SHA-256）…";
-                    string actualHash;
-                    using (System.Security.Cryptography.SHA256 sha = System.Security.Cryptography.SHA256.Create())
-                    using (FileStream fs = File.OpenRead(targetPath))
-                    {
-                        actualHash = Convert.ToHexString(sha.ComputeHash(fs)).ToLowerInvariant();
-                    }
+                    string actualHash = Convert.ToHexString(shaIncremental.GetHashAndReset()).ToLowerInvariant();
 
                     if (!string.Equals(actualHash, expectedSha256, StringComparison.OrdinalIgnoreCase))
                     {
@@ -320,12 +342,26 @@ namespace CelesteMusicPlayer
                         return;
                     }
                 }
+
+                AboutUpdateStatusText.Text = $"下载完成，正在启动安装向导（{tag}）。安装过程中请按提示操作，程序将覆盖安装到原目录。";
                 await LaunchUpdateAndExitAsync(targetPath, tmpDir);
             }
             catch (Exception caught)
             {
+                // 失败原因分开说：网络类报错归网络，文件占用/其它归本地，别一律甩锅给网络
+                string reason = caught switch
+                {
+                    HttpRequestException => "网络中断或下载地址失效，请稍后重试或到「GitHub Releases ↗」手动下载。",
+                    System.Threading.Tasks.TaskCanceledException => "连接超时或网络中断，请稍后重试或到「GitHub Releases ↗」手动下载。",
+                    IOException => "安装包文件被占用（常见于杀毒软件正在扫描刚下载的文件），请稍后重试或到「GitHub Releases ↗」手动下载。",
+                    UnauthorizedAccessException => "没有写入临时目录的权限，请检查杀毒软件/权限设置后重试。",
+                    _ => caught.Message
+                };
+
                 StartupLog.WriteException("SettingsWindow.About.Download", caught);
-                AboutUpdateStatusText.Text = "下载失败：网络中断或下载地址失效，请稍后重试或到「GitHub Releases ↗」手动下载。";
+                AboutUpdateStatusText.Text = reason.StartsWith("下载失败", StringComparison.Ordinal)
+                    ? reason
+                    : "下载失败：" + reason;
                 AboutDownloadProgress.Visibility = Visibility.Collapsed;
             }
             finally
