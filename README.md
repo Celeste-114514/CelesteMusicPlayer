@@ -13,10 +13,10 @@
 ## ✨ 功能特性
 
 - 🎵 本地音乐库：扫描文件夹 / 多选导入，自动读取标签（标题、艺术家、专辑、年份、封面）
-- 🎧 广泛格式支持：MP3 / FLAC / WAV / M4A / APE / WavPack / TTA / DSD等；DSD 支持「转 PCM」或「DoP 直出」可选（Shared 模式下自动转 PCM）
+- 🎧 广泛格式支持：MP3 / FLAC / WAV / M4A / APE / WavPack / TTA / DSD等；DSD 支持「转 PCM」或「DoP 直出」可选（Shared 模式下自动转 PCM），DoP 容器 Packed24 / 32bit 两摆位可选、整轨预加载直出不卡顿
   - **SACD 镜像（.iso）直接播放**：打开 .iso 自动解出整张 SACD 逐轨 DSD（DSF）加入播放列表，支持 DoP 直出 / PCM 转码
-- 📋 输出模式：AUDIO 输出设备可选择，WASAPI 共享 / WASAPI 独占 / ASIO输出
-- 🎯 HiFi 独占输出：基于 NAudio / 原生 WASAPI 从 PCM WAV 流式输出，兼顾音质；切歌音量不再重置
+- 📋 输出模式：输出设备可选择，WASAPI 共享 / WASAPI 独占 / ASIO 直出；ASIO 走 foobar 式喂料器架构（预填缓冲、回调只搬内存），长播不卡
+- 🎯 HiFi 独占输出：三种渲染后端可选——托管渲染线程（默认）/ 自研 C++ 原生内核 native2 / ECHO 内核，一键切换、随时回退；HiFi 软件音量把系统音量钉在 100%、采样级完成增益，切歌音量不再重置
 - 🎚️ **DSP 三模式统一信号链**（共享 / WASAPI 独占 / ASIO）：曲线 EQ（专业 / 简单模式 / 预设保存加载）、10 段均衡器、声道平衡、安全限幅（soft-knee 软削波 + 自动峰值余量）防爆音
 - 🔊 **ReplayGain 响度归一化**：单曲 / 专辑统一响度、10ms 平滑渐变、peak 防削波、额外增益可调；支持整库 / 播放列表 / 选中范围一键扫描并写回标签
 - 💡 **bit-perfect 指示灯**：主界面实时显示当前是否为 bit-perfect 直出
@@ -40,6 +40,8 @@
 <img width="1386" height="793" alt="QQ20260917-165924" src="https://github.com/user-attachments/assets/a373ad4a-b2f7-43a7-add3-49d6b1354aaf" />
 <img width="1386" height="793" alt="QQ20260917-165955" src="https://github.com/user-attachments/assets/79b428d0-a790-4e1c-82ad-cc9beeb23390" />
 <img width="1386" height="793" alt="QQ20260917-170248" src="https://github.com/user-attachments/assets/edf73c43-240e-4340-afcd-49b8990a40d1" />
+<img width="1386" height="793" alt="极客「终端」播放页：音频流信息 + 方块频谱 + 电平峰值 + 相位图 + 播放队列" src="docs/screenshots/terminal-view.png" />
+<img width="1386" height="793" alt="艺术家视图：该艺术家的专辑墙" src="docs/screenshots/artist-albums.jpg" />
 
 
 ## 🛠️ 技术栈
@@ -70,6 +72,34 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
 正式版本由 CI 自动发布：推送 `vX.Y.Z` tag 后，自动完成构建、回归测试、打包（框架依赖 + 自包含双安装包）并发布到 GitHub Release，无需手动打包上传。
 
 ## 📝 更新日志
+
+### v26.9.24（2026-09-24）
+- ✨ 新增功能
+  - 🎛️ **新接入 ECHO 内核，并开发了 Native2 自研 C++ 音频内核**：独占输出三种渲染后端（ECHO / Native2 / 托管渲染线程）可在设置里一键切换、随时回退；用 ECHO 播 DSD 时界面会提醒一键切到 native2
+  - 🔊 **ASIO 喂料器重写**：复刻 foobar 的「喂料线程预填 4 秒环形缓冲、驱动回调只搬内存」架构，治 ASIO 输出一卡一卡
+  - 💿 **DSD 整轨预加载**：DoP 直出改为整首预装箱成标准 WAV（带指纹缓存），DSD 不再卡顿
+  - 🧩 **DoP 容器两摆位可选**：Packed24 / Container32（32bit 标准容器），在设置里切换
+- 🔊 改进
+  - 📊 **音频链路显示层重建**：状态结构化，bit-perfect / DSP / 限幅徽标按真实值显示，不再谎报；采样率位深只认真实探测值
+  - 🔗 独占模式协商 + 转码正式入链：任意格式「尽量 bit-perfect」直出；16/24bit 源不再被撑进 24-in-32 容器
+  - 🧹 **转码缓存治理**：新增清理入口、温和 LRU、容量上限可调
+  - ⚠️ **ASIO 卡顿软件内提醒**：驱动缓冲过小或 USB 电源管理有问题时，音频设置面板常显药方并自动写排查日志
+  - 🔒 渲染循环写入超速护栏：设备跟不上时立即现形并响亮报错，不再静默丢数据
+- 🐛 修复
+  - 💥 修复 ASIO 输出双击播放必崩（NAudio AsioOut 不支持 24bit 源）
+  - 🔇 修复 ASIO DoP 完全无声（喂料器大块请求数组越界）
+  - 🔌 修复 ASIO 偶发掉驱动（AsioOut 生命周期改由常驻 STA 线程托管）
+  - 📻 修复 DSD DoP 滋滋声根因（DSF 字节内位序未按 LSB-first 反转）
+  - 🚦 修复 DSD DoP 直出集体失明（DSF fmt 块漏跳 4 字节 reserved）
+  - 🧠 修复 DSD / PCM 播放卡顿的 GC 根因（池化分段读 + 32MB 非托管环 + PCM 非托管内存流）
+  - 🐢 修复自研内核 PCM 卡顿（MMCSS 关键优先级 + 播放期定时器）
+  - 🔢 修复有损源被误判 32bit 撑爆缓存、列表把有损音频显示成 32bit、192kHz 显示成 1Hz
+  - 🎨 修复 DSP 显示口径三连谎报、ECHO 内核 24bit 下格式显示「？」等问题
+  - ⚖️ 安全限幅新安装默认关闭（老用户读盘值优先）
+- 🔧 开发
+  - 移除 AudioGraph 旧输出路径与「音频引擎预览」后门（主链路早已不走这条路）
+  - 删除 FadePlaybackController 纯死代码
+  - DSD 链路三处过时/误导文案修正
 
 ### v26.9.20（2026-09-21）
 - ✨ 新增功能
