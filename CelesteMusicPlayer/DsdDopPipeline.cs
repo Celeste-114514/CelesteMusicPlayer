@@ -1110,42 +1110,57 @@ namespace CelesteMusicPlayer
                 return 0;
             }
 
-            int need24 = frames * 6;
-            int got24 = _src.Read(_in, 0, need24);
-            if (got24 <= 0)
+            // 按 InChunk 容量分块搬运（2026-09-24 修复）：上层 ASIO 喂料器一次会要 256KB 级大块，
+            // 若直接 need24=frames*6（256KB→192KB）远超 _in 的 128KB 容量，
+            // _src.Read 抛 ArgumentOutOfRangeException → feeder fail-closed 当读尽 → ring 恒空 → 全程静音（无声）。
+            // 字节摆位与原实现逐位一致，只改"分块"不改"装箱"。
+            int produced = 0;
+            while (produced < frames)
             {
-                return 0;
-            }
+                int take = Math.Min(InChunk / 6, frames - produced);
+                int got24 = _src.Read(_in, 0, take * 6);
+                if (got24 <= 0)
+                {
+                    if (produced == 0) return 0; // 源尽：保持原语义，上层据此走 Drain 播完流程
+                    break; // 中途源尽：剩余帧补合法静音，保满不短读
+                }
 
-            int availFrames = got24 / 6;
-            int fp = 0;
-            for (int f = 0; f < frames; f++)
-            {
-                if (f < availFrames)
+                int avail = got24 / 6;
+                int fp = offset + produced * 8;
+                for (int f = 0; f < avail; f++)
                 {
                     int i = f * 6;
-                    buffer[offset + fp++] = 0x00;
-                    buffer[offset + fp++] = _in[i];
-                    buffer[offset + fp++] = _in[i + 1];
-                    buffer[offset + fp++] = _in[i + 2];
-                    buffer[offset + fp++] = 0x00;
-                    buffer[offset + fp++] = _in[i + 3];
-                    buffer[offset + fp++] = _in[i + 4];
-                    buffer[offset + fp++] = _in[i + 5];
+                    buffer[fp++] = 0x00;
+                    buffer[fp++] = _in[i];
+                    buffer[fp++] = _in[i + 1];
+                    buffer[fp++] = _in[i + 2];
+                    buffer[fp++] = 0x00;
+                    buffer[fp++] = _in[i + 3];
+                    buffer[fp++] = _in[i + 4];
+                    buffer[fp++] = _in[i + 5];
                 }
-                else
+
+                produced += avail;
+                if (avail < take)
                 {
-                    // 源尽（正常不会到这：DoP24LeSource.Read 自带 0x69 补尾）——补合法静音帧防喇叭杂音
-                    byte m = ((_silenceFrames++) & 1) == 0 ? (byte)0x05 : (byte)0xFA;
-                    buffer[offset + fp++] = 0x69;
-                    buffer[offset + fp++] = 0x69;
-                    buffer[offset + fp++] = 0x00;
-                    buffer[offset + fp++] = m;
-                    buffer[offset + fp++] = 0x69;
-                    buffer[offset + fp++] = 0x69;
-                    buffer[offset + fp++] = 0x00;
-                    buffer[offset + fp++] = m;
+                    break; // 内层短读（理论不出现：DoP24LeSource.Read 自带补齐）
                 }
+            }
+
+            // 兜底：未产满的帧补合法 DoP 静音帧（[0x69 0x69 0x00 marker]，marker 每帧 0x05/0xFA 交替），
+            // 保帧对齐、防喇叭杂音、不松 DoP 锁
+            for (int f = produced; f < frames; f++)
+            {
+                byte m = ((_silenceFrames++) & 1) == 0 ? (byte)0x05 : (byte)0xFA;
+                int fp = offset + f * 8;
+                buffer[fp] = 0x69;
+                buffer[fp + 1] = 0x69;
+                buffer[fp + 2] = 0x00;
+                buffer[fp + 3] = m;
+                buffer[fp + 4] = 0x69;
+                buffer[fp + 5] = 0x69;
+                buffer[fp + 6] = 0x00;
+                buffer[fp + 7] = m;
             }
 
             return frames * 8;
