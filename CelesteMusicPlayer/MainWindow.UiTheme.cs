@@ -229,6 +229,10 @@ namespace CelesteMusicPlayer
                         RedrawProgressStyle();
                     }
 
+                    // 设置窗口里改「波形配色 / 白度」时即时重画进度条，用户当场看到效果（不必切歌或重启）
+                    AppSettingsStore.Changed -= OnSettingsChangedForProgressStyle;
+                    AppSettingsStore.Changed += OnSettingsChangedForProgressStyle;
+
                     // 启动即为波形模式:加载选中/第一首歌曲的波形预览(媒体库恢复完成后重试)
                     TryLoadWaveformPreview();
                     _ = RetryWaveformPreviewLaterAsync();
@@ -1798,6 +1802,21 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>
+        /// 设置变更后重画进度条：波形配色（渐变/纯色）与白度都是这里读的，
+        /// 不重画的话用户在设置里改完要切歌或重启才看得到。
+        /// ⚠️ 回调跑在设置保存的持锁期内，这里只排回 UI 线程，不在锁里做 UI 工作。
+        /// </summary>
+        private void OnSettingsChangedForProgressStyle()
+        {
+            try
+            {
+                DispatcherQueue.TryEnqueue(RedrawProgressStyle);
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
+        }
+
+
         /// <summary>波形(Poweramp)：波形条已播主题色/未播灰色，当前位置竖线。</summary>
         private void DrawWaveformStyle(Canvas canvas, double w, double h, double ratio, Color accent)
         {
@@ -1823,6 +1842,14 @@ namespace CelesteMusicPlayer
             double playedEdge = w * ratio;
             Color light = Lighten(accent, 0.55);
 
+            // 已播部分配色：Solid = 整段统一色（白色度可调），Gradient = 左端主题色 → 右端浅色（原行为）。
+            AppSettingsState waveSettings = AppSettingsStore.Load();
+            bool solidMode = waveSettings.WaveColorMode == "Solid";
+            // 纯色模式所有柱子同色，只建一个画刷复用（避免几百根柱子各建一个画刷）
+            Brush? solidBrush = solidMode
+                ? new SolidColorBrush(Lighten(accent, waveSettings.WaveSolidWhiteness))
+                : null;
+
             for (int i = 0; i < n; i++)
             {
                 double bh = Math.Max(2, _waveformData[i] * h * 0.95);
@@ -1839,13 +1866,21 @@ namespace CelesteMusicPlayer
                 double centerX = (i + 0.5) * barW;
                 if (centerX <= playedEdge)
                 {
-                    // 已播部分:主题色(两端浅色渐变)
-                    double t = centerX / Math.Max(1, playedEdge);
-                    rect.Fill = new SolidColorBrush(Color.FromArgb(
-                        255,
-                        (byte)(accent.R + (light.R - accent.R) * t),
-                        (byte)(accent.G + (light.G - accent.G) * t),
-                        (byte)(accent.B + (light.B - accent.B) * t)));
+                    if (solidBrush != null)
+                    {
+                        // 纯色：整段一个颜色，不随播放位置变化
+                        rect.Fill = solidBrush;
+                    }
+                    else
+                    {
+                        // 已播部分:主题色(两端浅色渐变)
+                        double t = centerX / Math.Max(1, playedEdge);
+                        rect.Fill = new SolidColorBrush(Color.FromArgb(
+                            255,
+                            (byte)(accent.R + (light.R - accent.R) * t),
+                            (byte)(accent.G + (light.G - accent.G) * t),
+                            (byte)(accent.B + (light.B - accent.B) * t)));
+                    }
                 }
                 else
                 {

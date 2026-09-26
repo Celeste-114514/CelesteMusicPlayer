@@ -575,6 +575,19 @@ namespace CelesteMusicPlayer
                 SelectBackgroundPresetRadio(s.BackgroundPreset);
                 SetToggle(BackgroundPresetMotionSwitch, s.BackgroundPresetMotion);
                 WaveformProgressSwitch.IsOn = s.ProgressBarStyle == "Waveform";
+                // 波形已播配色：渐变 / 纯色；白度只在纯色下有意义（渐变时置灰）
+                SelectComboByTag(WaveColorModeCombo, s.WaveColorMode == "Solid" ? "Solid" : "Gradient");
+                if (WaveSolidWhitenessSlider != null)
+                {
+                    WaveSolidWhitenessSlider.Value = Math.Clamp(s.WaveSolidWhiteness, 0.0, 1.0) * 100.0;
+                    WaveSolidWhitenessSlider.IsEnabled = s.WaveColorMode == "Solid";
+                }
+
+                if (WaveSolidWhitenessValueText != null)
+                {
+                    WaveSolidWhitenessValueText.Text = (int)Math.Round(Math.Clamp(s.WaveSolidWhiteness, 0.0, 1.0) * 100.0) + "%";
+                }
+
                 _accentHex = string.IsNullOrWhiteSpace(s.CustomAccentColor) ? "#0078D4" : s.CustomAccentColor;
                 UpdateAccentColorButton();
 
@@ -1370,6 +1383,12 @@ namespace CelesteMusicPlayer
             s.AccentSource = GetComboTagString(AccentSourceCombo, "System");
             s.CustomAccentColor = string.IsNullOrWhiteSpace(_accentHex) ? "#0078D4" : _accentHex;
             s.ProgressBarStyle = WaveformProgressSwitch.IsOn ? "Waveform" : "Gradient";
+            s.WaveColorMode = GetComboTagString(WaveColorModeCombo, "Gradient") == "Solid" ? "Solid" : "Gradient";
+            if (WaveSolidWhitenessSlider != null)
+            {
+                s.WaveSolidWhiteness = Math.Clamp(WaveSolidWhitenessSlider.Value / 100.0, 0.0, 1.0);
+            }
+
             s.CustomBackgroundPath = BackgroundPathTextBox?.Text?.Trim() ?? string.Empty;
             s.BackgroundPreset = GetBackgroundPresetTag();
             s.BackgroundPresetMotion = BackgroundPresetMotionSwitch?.IsOn ?? true;
@@ -1743,6 +1762,12 @@ namespace CelesteMusicPlayer
 
         private void SettingCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // 波形配色选「渐变」时白度不起作用 → 滑块置灰，避免误以为调了没反应
+            if (ReferenceEquals(sender, WaveColorModeCombo) && WaveSolidWhitenessSlider != null)
+            {
+                WaveSolidWhitenessSlider.IsEnabled = GetComboTagString(WaveColorModeCombo, "Gradient") == "Solid";
+            }
+
             PersistAllFromUi();
         }
 
@@ -1886,6 +1911,10 @@ namespace CelesteMusicPlayer
             else if (ReferenceEquals(sender, LastFmLeastSecondsSlider))
             {
                 LastFmLeastSecondsValueText.Text = $"{(int)Math.Round(e.NewValue)} 秒";
+            }
+            else if (ReferenceEquals(sender, WaveSolidWhitenessSlider))
+            {
+                WaveSolidWhitenessValueText.Text = $"{(int)Math.Round(e.NewValue)}%";
             }
 
             PersistAllFromUi();

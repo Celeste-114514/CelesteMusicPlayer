@@ -866,6 +866,42 @@
                                 VerticalAlignment="Center"
                                 Toggled="SettingToggle_Toggled" />
                         </Grid>
+                        <Grid ColumnSpacing="16" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" MinWidth="140" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="波形已播部分配色" />
+                                <TextBlock Opacity="0.6" FontSize="11" TextWrapping="WrapWholeWords" Text="渐变 = 从主题色渐渐变浅到当前位置；纯色 = 整段一个颜色" />
+                            </StackPanel>
+                            <ComboBox
+                                x:Name="WaveColorModeCombo"
+                                Grid.Column="1"
+                                MinWidth="140"
+                                VerticalAlignment="Center"
+                                SelectionChanged="SettingCombo_SelectionChanged">
+                                <ComboBoxItem Tag="Gradient" Content="渐变" />
+                                <ComboBoxItem Tag="Solid" Content="纯色" />
+                            </ComboBox>
+                        </Grid>
+                        <Grid ColumnSpacing="16" Margin="0,12,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="220" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="纯色白度" />
+                                <TextBlock x:Name="WaveSolidWhitenessValueText" Text="41%" FontSize="12" Opacity="0.65" />
+                            </StackPanel>
+                            <Slider
+                                x:Name="WaveSolidWhitenessSlider"
+                                Grid.Column="1"
+                                Minimum="0"
+                                Maximum="100"
+                                StepFrequency="1"
+                                ValueChanged="SettingSlider_ValueChanged" />
+                        </Grid>
                     </StackPanel>
                 </ScrollViewer>
 

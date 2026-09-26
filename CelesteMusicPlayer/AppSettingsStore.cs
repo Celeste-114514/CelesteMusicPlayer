@@ -220,6 +220,18 @@ namespace CelesteMusicPlayer
         public string ProgressBarStyle { get; set; } = "Gradient"; // Gradient / Waveform / Spotify / AppleLine
         public string CustomBackgroundPath { get; set; } = string.Empty;
 
+        /// <summary>
+        /// 波形进度条「已播部分」的配色：Gradient = 从左端主题色渐变到浅色（原行为）；
+        /// Solid = 整段统一颜色（不再随位置变化）。
+        /// </summary>
+        public string WaveColorMode { get; set; } = "Gradient"; // Gradient / Solid
+
+        /// <summary>
+        /// 纯色模式的「白色度」：0 = 原主题色（最深），1 = 纯白。
+        /// 内部按 Lighten(主题色, 该值) 计算，即向白色混合的比例。
+        /// </summary>
+        public double WaveSolidWhiteness { get; set; } = 0.41;
+
         /// <summary>内置背景预设名：Aurora / Sunset / Midnight；空字符串表示不使用预设（走 CustomBackgroundPath）。</summary>
         public string BackgroundPreset { get; set; } = string.Empty;
 
@@ -558,6 +570,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             s.DesktopLyricFontSize = Math.Clamp(s.DesktopLyricFontSize, 14, 64);
             s.LyricLineSpacing = Math.Clamp(s.LyricLineSpacing, 0, 40);
             s.GaussBlurRadius = Math.Clamp(s.GaussBlurRadius, 1, 8);
+            // 波形进度条配色：非法值一律回退「渐变」，白度夹在 0~1
+            s.WaveColorMode = s.WaveColorMode is "Gradient" or "Solid" ? s.WaveColorMode : "Gradient";
+            s.WaveSolidWhiteness = Math.Clamp(s.WaveSolidWhiteness, 0.0, 1.0);
             s.FileTooShortSec = Math.Clamp(s.FileTooShortSec, 0, 600);
             s.RecentPlayedRangeDays = Math.Clamp(s.RecentPlayedRangeDays, 0, 3650);
             s.LastFmLeastPercent = Math.Clamp(s.LastFmLeastPercent, 1, 100);
@@ -738,6 +753,8 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             _ => "Gradient"
         },
         CustomBackgroundPath = s.CustomBackgroundPath?.Trim() ?? string.Empty,
+        WaveColorMode = s.WaveColorMode is "Gradient" or "Solid" ? s.WaveColorMode : "Gradient",
+        WaveSolidWhiteness = Math.Clamp(s.WaveSolidWhiteness, 0.0, 1.0),
         BackgroundPreset = s.BackgroundPreset?.Trim() ?? string.Empty,
         BackgroundPresetMotion = s.BackgroundPresetMotion,
         ThemePreset = s.ThemePreset?.Trim() ?? string.Empty,
