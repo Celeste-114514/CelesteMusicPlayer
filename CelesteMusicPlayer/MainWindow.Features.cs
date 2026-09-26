@@ -252,6 +252,7 @@ namespace CelesteMusicPlayer
                 string? sessionFolder = LibrarySessionStore.TryLoad()?.FolderPath;
                 if (!string.IsNullOrWhiteSpace(sessionFolder)
                     && Directory.Exists(sessionFolder)
+                    && !LibraryPathGuard.IsInternalCacheDir(sessionFolder)
                     && !folders.Any(f => string.Equals(f, sessionFolder, StringComparison.OrdinalIgnoreCase)))
                 {
                     folders.Add(sessionFolder);

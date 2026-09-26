@@ -46,7 +46,7 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 按上次会话的文件夹或文件列表重新扫描，清空并替换当前音乐库展示。
         /// </summary>
-        /// <summary>按媒体库设置过滤路径：移除缺失文件 / 忽略过短文件。</summary>
+        /// <summary>按媒体库设置过滤路径：移除缺失文件 / 忽略过短文件 / 剔除内部缓存产物。</summary>
         private static string[] FilterLibraryPaths(IEnumerable<string> paths)
         {
             AppSettingsState s = AppSettingsStore.Load();
@@ -55,6 +55,12 @@ namespace CelesteMusicPlayer
                          .Where(p => !string.IsNullOrWhiteSpace(p))
                          .Distinct(StringComparer.OrdinalIgnoreCase))
             {
+                // 内部缓存产物（DSD DoP 缓存 / 转码缓存 / WebDAV 下载缓存）不是本地曲库内容，永不进媒体库
+                if (LibraryPathGuard.IsLibraryExcludedFile(path))
+                {
+                    continue;
+                }
+
                 if (s.RemoveMissingOnUpdate && !System.IO.File.Exists(path))
                 {
                     continue;

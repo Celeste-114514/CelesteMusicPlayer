@@ -49,6 +49,10 @@ namespace CelesteMusicPlayer
         /// </summary>
         private async Task RestoreLastLibraryAsync()
         {
+            // 一次性自愈：清掉历史版本写进曲库会话/索引的内部缓存路径（DSD DoP 缓存等），
+            // 否则每次重启都会把缓存文件夹恢复进音乐库（表现为专辑艺术家页多出「未知艺术家」）。
+            LibrarySessionStore.SelfHealInternalCachePaths();
+
             await RestoreLastLibraryCoreAsync();
             await AppendManualLibraryFilesAsync();
         }
@@ -629,6 +633,12 @@ namespace CelesteMusicPlayer
                 yield break;
             }
 
+            // 内部缓存目录（DSD DoP 缓存 / 转码缓存 / WebDAV 缓存）不是用户音乐，一律不扫
+            if (LibraryPathGuard.IsInternalCacheDir(folderPath))
+            {
+                yield break;
+            }
+
             // 逐目录递归:某个受保护子目录(无权限)只跳过该目录,不影响其它文件
             foreach (string path in EnumerateAudioFilesRecursive(folderPath))
             {
@@ -654,7 +664,8 @@ namespace CelesteMusicPlayer
             foreach (string path in files)
             {
                 string ext = Path.GetExtension(path);
-                if (AudioExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+                if (AudioExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase)
+                    && !LibraryPathGuard.IsLibraryExcludedFile(path))
                 {
                     yield return path;
                 }
@@ -662,6 +673,11 @@ namespace CelesteMusicPlayer
 
             foreach (string sub in subDirs)
             {
+                if (LibraryPathGuard.IsInternalCacheDir(sub))
+                {
+                    continue;
+                }
+
                 foreach (string path in EnumerateAudioFilesRecursive(sub))
                 {
                     yield return path;
@@ -2651,6 +2667,12 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 内部缓存目录（DSD DoP 缓存 / 转码缓存 / WebDAV 缓存）不是用户音乐，一律跳过
+            if (LibraryPathGuard.IsInternalCacheDir(folderPath))
+            {
+                return;
+            }
+
             try
             {
                 foreach (string dir in Directory.EnumerateDirectories(folderPath)
@@ -2681,7 +2703,8 @@ namespace CelesteMusicPlayer
                              .OrderBy(p => Path.GetFileName(p), StringComparer.CurrentCultureIgnoreCase))
                 {
                     string ext = Path.GetExtension(file);
-                    if (AudioExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
+                    if (AudioExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase)
+                        && !LibraryPathGuard.IsLibraryExcludedFile(file))
                     {
                         sink.Add(file);
                     }

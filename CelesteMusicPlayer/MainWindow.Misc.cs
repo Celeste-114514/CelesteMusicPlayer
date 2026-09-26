@@ -284,6 +284,12 @@ namespace CelesteMusicPlayer
                     continue;
                 }
 
+                // 内部缓存产物（DSD DoP 缓存 / 转码缓存 / WebDAV 下载缓存）不是本地曲库内容，不进音乐库
+                if (LibraryPathGuard.IsLibraryExcludedFile(path))
+                {
+                    continue;
+                }
+
                 if (!knownPaths.Add(path))
                 {
                     continue;

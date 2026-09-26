@@ -713,6 +713,8 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>转码缓存目录（%LOCALAPPDATA%\CelesteMusicPlayer\TranscodeCache）。</summary>
+        internal static string TranscodeCacheDir => GetCacheDir();
+
         private static string GetCacheDir()
         {
             string baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);

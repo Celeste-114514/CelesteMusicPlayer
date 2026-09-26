@@ -428,12 +428,12 @@ namespace CelesteMusicPlayer
 
                 string localPath = await Task.Run(() => WebDavCache.GetOrDownloadAsync(loc, entry, progress));
 
-                // 下完之后它就是个普通本地文件了：照常入库 + 播放，标签/封面/音效全走原链路。
+                // 本地缓存只当播放源用：WebDAV 下载缓存不进本地媒体库（用户明确要求），
+                // 标签/封面/音效全走原播放链路，但 _playlist / 曲库会话都不会收录它。
                 PlaylistItem track = CreatePlaylistItemFromPath(localPath);
                 track.RemotePath = entry.RelativePath;
 
-                PlaylistItem? inLibrary = EnsureTrackInLibrary(localPath);
-                PlayPlaylistItem(inLibrary ?? track);
+                PlayPlaylistItem(track);
 
                 ShowWebDavStatus("已开始播放：" + name);
                 WebDavCache.EnforceLimit(loc);

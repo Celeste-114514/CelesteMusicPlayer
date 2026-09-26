@@ -132,6 +132,7 @@ namespace CelesteMusicPlayer
         {
             string[] valid = (paths ?? Enumerable.Empty<string>())
                 .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p))
+                .Where(p => !LibraryPathGuard.IsLibraryExcludedFile(p))
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
@@ -206,6 +207,7 @@ namespace CelesteMusicPlayer
 
                 string[] valid = manual
                     .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p))
+                    .Where(p => !LibraryPathGuard.IsLibraryExcludedFile(p))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToArray();
 

@@ -940,6 +940,51 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 清除标签索引里的内部缓存产物（DSD DoP 缓存 / 转码缓存 / WebDAV 下载缓存下的文件，
+        /// 以及任何 *.dop24.wav）。历史版本曾把这些文件收进曲库索引，修复后统一清掉。
+        /// 返回删除行数；失败静默返回 -1。
+        /// </summary>
+        public static int PurgeInternalCacheTracks()
+        {
+            EnsureMigrated();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    int total = 0;
+
+                    // 1) 各缓存根目录前缀匹配（路径里可能含 % _ 等通配符，转义后配 ESCAPE）
+                    foreach (string root in LibraryPathGuard.LibraryExcludedRoots)
+                    {
+                        string escaped = root
+                            .Replace("\\", "\\\\")
+                            .Replace("%", "\\%")
+                            .Replace("_", "\\_");
+                        string pattern = escaped + "\\\\%";
+
+                        using var cmd = conn.CreateCommand();
+                        cmd.CommandText = "DELETE FROM tracks WHERE file_path LIKE $p ESCAPE '\\'";
+                        cmd.Parameters.AddWithValue("$p", pattern);
+                        total += cmd.ExecuteNonQuery();
+                    }
+
+                    // 2) 名字兜底：DSD 预加载缓存文件后缀（不依赖目录配置）
+                    using var cmd2 = conn.CreateCommand();
+                    cmd2.CommandText = "DELETE FROM tracks WHERE file_path LIKE $p ESCAPE '\\'";
+                    cmd2.Parameters.AddWithValue("$p", "%" + LibraryPathGuard.DopCacheExtension.Replace("_", "\\_"));
+                    total += cmd2.ExecuteNonQuery();
+
+                    return total;
+                }
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
         /// <summary>索引中的曲目总数（日志/诊断用）。失败返回 -1。</summary>
         public static int CountTracks()
         {

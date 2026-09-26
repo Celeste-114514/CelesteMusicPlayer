@@ -1080,6 +1080,12 @@ namespace CelesteMusicPlayer
                             continue;
                         }
 
+                        // 内部缓存产物不进任何用户可见列表
+                        if (LibraryPathGuard.IsInternalCacheFile(p))
+                        {
+                            continue;
+                        }
+
                         int libIdx = FindLibraryIndex(p);
                         rebuilt.Add(libIdx >= 0 ? _playlist[libIdx] : CreatePlaylistItemFromPath(p));
                     }
@@ -1398,7 +1404,8 @@ namespace CelesteMusicPlayer
                 };
                 foreach (PlaylistItem p in _userPlaylist)
                 {
-                    if (!string.IsNullOrWhiteSpace(p.FilePath))
+                    if (!string.IsNullOrWhiteSpace(p.FilePath)
+                        && !LibraryPathGuard.IsInternalCacheFile(p.FilePath))
                     {
                         state.Paths.Add(p.FilePath);
                     }
