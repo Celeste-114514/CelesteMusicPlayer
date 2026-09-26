@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Threading.Tasks;
 using Microsoft.UI;
 using Microsoft.UI.Input;
@@ -1686,6 +1687,407 @@ namespace CelesteMusicPlayer
             if (tag == "About")
             {
                 RefreshUpdateStatusFromCache();
+            }
+        }
+
+        // ── 设置项搜索（窗口顶部搜索框）──────────────────────────────
+        // 思路：XAML 里有几百个设置项，逐个加标签不现实，所以运行时遍历面板视觉树：
+        //   竖向 StackPanel = 分组容器（逐个子项决定去留）；Grid 行 = 一个完整设置项（整行一起留/藏）；
+        //   Border / ScrollViewer = 外壳（穿透到里面继续判断）。
+        // 清空关键词时按记录还原原始可见性（含本来就隐藏的条件项），不会把界面搞乱。
+
+        private sealed class SearchHitItem
+        {
+            public string Title = string.Empty;
+            public string PanelTag = string.Empty;
+            public string PanelName = string.Empty;
+            public FrameworkElement? Element;
+        }
+
+        private readonly List<(FrameworkElement Panel, string Tag, string Name)> _searchPanels = new();
+        private readonly Dictionary<FrameworkElement, Visibility> _searchOriginalVisibility = new();
+        private readonly Dictionary<NavigationViewItem, string> _searchNavOriginalText = new();
+        private readonly Dictionary<FrameworkElement, string> _searchTextCache = new();
+        private List<SearchHitItem> _searchHits = new();
+
+        private void InitSearchPanels()
+        {
+            if (_searchPanels.Count > 0)
+            {
+                return;
+            }
+
+            _searchPanels.Add((PanelLyrics, "Lyrics", "歌词设置"));
+            _searchPanels.Add((PanelAppearance, "Appearance", "外观设置"));
+            _searchPanels.Add((PanelGeneral, "General", "常规设置"));
+            _searchPanels.Add((PanelPlayback, "Playback", "播放设置"));
+            _searchPanels.Add((PanelMediaLib, "MediaLib", "媒体库"));
+            _searchPanels.Add((PanelWebDav, "WebDAV", "WebDAV"));
+            _searchPanels.Add((PanelHotkeys, "Hotkeys", "全局快捷键"));
+            _searchPanels.Add((PanelLibraryHealth, "LibraryHealth", "曲库健康"));
+            _searchPanels.Add((PanelStreaming, "Streaming", "流媒体"));
+            _searchPanels.Add((PanelAbout, "About", "关于"));
+
+            foreach (NavigationViewItem item in SettingsNav.MenuItems.OfType<NavigationViewItem>())
+            {
+                _searchNavOriginalText[item] = item.Content as string ?? string.Empty;
+            }
+        }
+
+        private static IEnumerable<DependencyObject> GetSearchChildren(DependencyObject d)
+        {
+            // 同一个子节点可能被两条路同时给到（VisualTreeHelper 和 Content 属性），
+            // 不去重会让同一行被统计多次、建议列表出现重复项。
+            var seen = new HashSet<DependencyObject>(ReferenceEqualityComparer.Instance);
+
+            int n = VisualTreeHelper.GetChildrenCount(d);
+            for (int i = 0; i < n; i++)
+            {
+                DependencyObject? c = VisualTreeHelper.GetChild(d, i);
+                if (c != null && seen.Add(c))
+                {
+                    yield return c;
+                }
+            }
+
+            // 下拉框的选项平时不在可视化树里，单独补上，让"选项文字"也能被搜到
+            if (d is ComboBox cb)
+            {
+                foreach (object it in cb.Items)
+                {
+                    if (it is DependencyObject dobj && seen.Add(dobj))
+                    {
+                        yield return dobj;
+                    }
+                }
+            }
+            else if (d is ContentControl cc && cc.Content is DependencyObject ccd && seen.Add(ccd))
+            {
+                yield return ccd;
+            }
+        }
+
+        private static void AppendOwnText(DependencyObject d, StringBuilder sb)
+        {
+            switch (d)
+            {
+                case TextBlock tb: AppendSearchText(sb, tb.Text); break;
+                case TextBox tbx: AppendSearchText(sb, tbx.PlaceholderText); AppendSearchText(sb, tbx.Header as string); break;
+                case ToggleSwitch ts: AppendSearchText(sb, ts.Header as string); break;
+                case Slider sl: AppendSearchText(sb, sl.Header as string); break;
+                case ComboBoxItem ci: AppendSearchText(sb, ci.Content as string); break;
+                case CheckBox cbx: AppendSearchText(sb, cbx.Content as string); break;
+                case RadioButton rb: AppendSearchText(sb, rb.Content as string); break;
+                case Button btn: AppendSearchText(sb, btn.Content as string); break;
+                case ContentControl cc2: AppendSearchText(sb, cc2.Content as string); break;
+            }
+        }
+
+        private static void AppendSearchText(StringBuilder sb, string? s)
+        {
+            if (!string.IsNullOrEmpty(s))
+            {
+                sb.Append(' ').Append(s);
+            }
+        }
+
+        /// <summary>算出某元素连同子孙的全部可搜索文本（本次搜索内缓存，避免每敲一个字都重复遍历）。</summary>
+        private string ComputeSearchText(FrameworkElement fe)
+        {
+            if (_searchTextCache.TryGetValue(fe, out string? cached))
+            {
+                return cached;
+            }
+
+            var sb = new StringBuilder();
+            AppendOwnText(fe, sb);
+            foreach (DependencyObject child in GetSearchChildren(fe))
+            {
+                if (child is FrameworkElement cfe)
+                {
+                    sb.Append(' ').Append(ComputeSearchText(cfe));
+                }
+            }
+
+            string text = sb.ToString();
+            _searchTextCache[fe] = text;
+            return text;
+        }
+
+        private static bool IsCollapsibleContainer(FrameworkElement fe)
+            => fe is StackPanel sp && sp.Orientation != Orientation.Horizontal;
+
+        private static bool IsPassthrough(FrameworkElement fe)
+            => fe is Border || fe is ScrollViewer || fe is ContentPresenter || fe is Viewbox
+               || (fe is ContentControl && fe is not ButtonBase);
+
+        private void SetSearchVisibility(FrameworkElement fe, bool visible)
+        {
+            if (!_searchOriginalVisibility.TryGetValue(fe, out Visibility orig))
+            {
+                orig = fe.Visibility;
+                _searchOriginalVisibility[fe] = orig;
+            }
+
+            fe.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>递归过滤：返回该元素子树里是否有命中项。</summary>
+        private bool FilterSearchNode(FrameworkElement fe, string kw, string tag, string name, List<SearchHitItem> hits)
+        {
+            bool selfMatch = ComputeSearchText(fe).IndexOf(kw, StringComparison.OrdinalIgnoreCase) >= 0;
+            bool keep = selfMatch;
+
+            if (IsCollapsibleContainer(fe))
+            {
+                List<FrameworkElement> children = GetSearchChildren(fe).OfType<FrameworkElement>().ToList();
+                var childKeep = new bool[children.Count];
+                for (int i = 0; i < children.Count; i++)
+                {
+                    childKeep[i] = FilterSearchNode(children[i], kw, tag, name, hits);
+                }
+
+                for (int i = 0; i < children.Count; i++)
+                {
+                    if (!childKeep[i])
+                    {
+                        continue;
+                    }
+
+                    // 命中的分组把紧挨在它上面的小标题一起留下，不然一堆设置行悬着没头
+                    for (int j = i - 1; j >= 0; j--)
+                    {
+                        if (children[j] is TextBlock heading && heading.FontSize >= 14)
+                        {
+                            SetSearchVisibility(children[j], true);
+                        }
+                        else
+                        {
+                            break;
+                        }
+                    }
+                }
+
+                keep = selfMatch || childKeep.Any(x => x);
+            }
+            else if (IsPassthrough(fe))
+            {
+                bool childAny = false;
+                foreach (FrameworkElement child in GetSearchChildren(fe).OfType<FrameworkElement>().ToList())
+                {
+                    childAny |= FilterSearchNode(child, kw, tag, name, hits);
+                }
+
+                keep = selfMatch || childAny;
+            }
+            else if (selfMatch)
+            {
+                // 一个完整设置项（两列 Grid 行 / 按钮组等）：整块留下并记进结果列表
+                hits.Add(new SearchHitItem
+                {
+                    Title = FirstTitleOf(fe),
+                    PanelTag = tag,
+                    PanelName = name,
+                    Element = fe
+                });
+            }
+
+            SetSearchVisibility(fe, keep);
+            return keep;
+        }
+
+        private static string FirstTitleOf(FrameworkElement fe)
+        {
+            TextBlock? tb = FindFirstTextBlock(fe);
+            string s = (tb?.Text ?? string.Empty).Replace('\r', ' ').Replace('\n', ' ').Trim();
+            if (s.Length > 40)
+            {
+                s = s.Substring(0, 40) + "…";
+            }
+
+            return s.Length == 0 ? "设置项" : s;
+        }
+
+        private static TextBlock? FindFirstTextBlock(DependencyObject root)
+        {
+            // 广度优先：取离得最近的那行文字当标题（不是随便抓一个深埋的文字）
+            var queue = new Queue<DependencyObject>();
+            var visited = new HashSet<DependencyObject>(ReferenceEqualityComparer.Instance);
+            queue.Enqueue(root);
+            visited.Add(root);
+
+            while (queue.Count > 0)
+            {
+                DependencyObject d = queue.Dequeue();
+                if (d is TextBlock tb && !string.IsNullOrWhiteSpace(tb.Text))
+                {
+                    return tb;
+                }
+
+                foreach (DependencyObject child in GetSearchChildren(d))
+                {
+                    if (visited.Add(child))
+                    {
+                        queue.Enqueue(child);
+                    }
+                }
+            }
+
+            return null;
+        }
+
+        private void RestoreSearchVisibility()
+        {
+            foreach (KeyValuePair<FrameworkElement, Visibility> kv in _searchOriginalVisibility)
+            {
+                kv.Key.Visibility = kv.Value;
+            }
+
+            _searchOriginalVisibility.Clear();
+        }
+
+        private void ResetNavText()
+        {
+            foreach (KeyValuePair<NavigationViewItem, string> kv in _searchNavOriginalText)
+            {
+                kv.Key.Content = kv.Value;
+            }
+        }
+
+        private void UpdateNavText(Dictionary<string, int> counts)
+        {
+            foreach (KeyValuePair<NavigationViewItem, string> kv in _searchNavOriginalText)
+            {
+                string tag = kv.Key.Tag as string ?? string.Empty;
+                kv.Key.Content = counts.TryGetValue(tag, out int c) && c > 0 ? $"{kv.Value} ({c})" : kv.Value;
+            }
+        }
+
+        private void SelectNavItem(string tag)
+        {
+            foreach (NavigationViewItem item in SettingsNav.MenuItems.OfType<NavigationViewItem>())
+            {
+                if (string.Equals(item.Tag as string, tag, StringComparison.Ordinal))
+                {
+                    if (!ReferenceEquals(SettingsNav.SelectedItem, item))
+                    {
+                        SettingsNav.SelectedItem = item;
+                    }
+
+                    break;
+                }
+            }
+        }
+
+        private void RunSettingsSearch(string? keyword, bool jumpToFirst)
+        {
+            InitSearchPanels();
+            string kw = (keyword ?? string.Empty).Trim();
+            _searchTextCache.Clear();
+
+            if (kw.Length == 0)
+            {
+                RestoreSearchVisibility();
+                _searchHits = new List<SearchHitItem>();
+                SettingsSearchHint.Text = string.Empty;
+                SettingsSearchBox.ItemsSource = null;
+                ResetNavText();
+                return;
+            }
+
+            var hits = new List<SearchHitItem>();
+            var counts = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach ((FrameworkElement panel, string tag, string name) in _searchPanels)
+            {
+                int before = hits.Count;
+                // 面板自身（ScrollViewer）的可见性交给导航切换管，这里只过滤它里面的内容
+                foreach (FrameworkElement child in GetSearchChildren(panel).OfType<FrameworkElement>().ToList())
+                {
+                    FilterSearchNode(child, kw, tag, name, hits);
+                }
+
+                counts[tag] = hits.Count - before;
+            }
+
+            _searchHits = hits;
+            UpdateNavText(counts);
+            SettingsSearchBox.ItemsSource = hits.Take(15)
+                .Select(h => string.IsNullOrEmpty(h.PanelName) ? h.Title : $"{h.Title}  ·  {h.PanelName}")
+                .ToList();
+            SettingsSearchHint.Text = hits.Count == 0 ? "没有匹配的设置项" : $"找到 {hits.Count} 项";
+
+            if (jumpToFirst && hits.Count > 0 && !string.IsNullOrEmpty(hits[0].PanelTag))
+            {
+                ShowPanel(hits[0].PanelTag);
+                SelectNavItem(hits[0].PanelTag);
+            }
+        }
+
+        private void SettingsSearchBox_TextChanged(AutoSuggestBox sender, AutoSuggestBoxTextChangedEventArgs args)
+        {
+            if (args.Reason != AutoSuggestionBoxTextChangeReason.UserInput)
+            {
+                return;
+            }
+
+            RunSettingsSearch(sender.Text, jumpToFirst: true);
+        }
+
+        private void SettingsSearchBox_QuerySubmitted(AutoSuggestBox sender, AutoSuggestBoxQuerySubmittedEventArgs args)
+        {
+            RunSettingsSearch(args.QueryText ?? sender.Text, jumpToFirst: true);
+            if (_searchHits.Count > 0)
+            {
+                BringIntoViewSafe(_searchHits[0].Element);
+            }
+        }
+
+        private void SettingsSearchBox_SuggestionChosen(AutoSuggestBox sender, AutoSuggestBoxSuggestionChosenEventArgs args)
+        {
+            if (args.SelectedItem is not string label)
+            {
+                return;
+            }
+
+            SearchHitItem? picked = null;
+            foreach (SearchHitItem h in _searchHits)
+            {
+                string text = string.IsNullOrEmpty(h.PanelName) ? h.Title : $"{h.Title}  ·  {h.PanelName}";
+                if (string.Equals(text, label, StringComparison.Ordinal))
+                {
+                    picked = h;
+                    break;
+                }
+            }
+
+            if (picked == null)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrEmpty(picked.PanelTag))
+            {
+                ShowPanel(picked.PanelTag);
+                SelectNavItem(picked.PanelTag);
+            }
+
+            BringIntoViewSafe(picked.Element);
+        }
+
+        private static void BringIntoViewSafe(FrameworkElement? element)
+        {
+            if (element == null)
+            {
+                return;
+            }
+
+            try
+            {
+                element.StartBringIntoView();
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("SettingsWindow.searchBringIntoView", caught);
             }
         }
 
