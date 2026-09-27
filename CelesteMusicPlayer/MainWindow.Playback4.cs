@@ -380,8 +380,12 @@ namespace CelesteMusicPlayer
         private void UpdatePlaybackOrderButtonUi()
         {
             bool trackOnce = _orderResolver.Order == PlaybackOrder.TrackOnce;
-            PlaybackOrderIcon.Visibility = trackOnce ? Visibility.Collapsed : Visibility.Visible;
-            PlaybackOrderTrackOnceGlyph.Visibility = trackOnce ? Visibility.Visible : Visibility.Collapsed;
+
+            // 极客模式：这个按钮已被字符化成「~」，图标再露出来就会和字符叠着画（用户实测的重影）。
+            // 切播放顺序会走这里重新设可见性，必须一并拦住。
+            bool geekAscii = GeekUiStyleCached;
+            PlaybackOrderIcon.Visibility = (trackOnce || geekAscii) ? Visibility.Collapsed : Visibility.Visible;
+            PlaybackOrderTrackOnceGlyph.Visibility = (trackOnce && !geekAscii) ? Visibility.Visible : Visibility.Collapsed;
 
             (string glyph, string name) = _orderResolver.Order switch
             {
@@ -396,6 +400,12 @@ namespace CelesteMusicPlayer
             if (!trackOnce)
             {
                 PlaybackOrderIcon.Glyph = glyph;
+            }
+
+            // 极客模式：图标被藏了、显示的是字符键 —— 字符也得跟着顺序切换（用户实测不变）。
+            if (geekAscii)
+            {
+                SetGeekPlaybackOrderKey(_orderResolver.Order);
             }
 
             ToolTipService.SetToolTip(PlaybackOrderButton, name + "（左键切换，右键选择）");

@@ -355,6 +355,11 @@ namespace CelesteMusicPlayer
                 SeekBySeconds(5);
                 e.Handled = true;
             }
+            else if (TryHandleGeekNavDigit(key))
+            {
+                // 极客模式编号菜单：数字键直达对应分类（按钮可见才生效，隐藏项不抢键）
+                e.Handled = true;
+            }
             // 「查找歌曲」已移除（老版本遗留），F / F3 不再绑定任何动作。
         }
 
@@ -942,6 +947,12 @@ namespace CelesteMusicPlayer
             {
                 FavoriteButtonIcon.Glyph = fav ? "\uEB52" : "\uEB51";
                 ToolTipService.SetToolTip(FavoriteButton, fav ? "取消喜欢" : "我喜欢的音乐");
+            }
+
+            // 极客模式：图标被字符 ♡/♥ 盖着 —— 心形也要跟着喜欢状态变（空心/实心红）。
+            if (GeekUiStyleCached)
+            {
+                SetGeekFavoriteState(fav);
             }
 
             // 任务栏缩略图按钮：把当前曲目的收藏状态同步到 thumbar

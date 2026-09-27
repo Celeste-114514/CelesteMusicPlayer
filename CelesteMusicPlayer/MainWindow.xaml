@@ -57,6 +57,8 @@
         <Grid.RowDefinitions>
             <!-- 与系统标题栏（最小化/最大化/关闭）合并的自定义栏 -->
             <RowDefinition Height="Auto" />
+            <!-- 极客模式链路读数条（非极客风格折叠，不占高度） -->
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
@@ -264,8 +266,28 @@
 
         </Grid>
 
+        <!-- 极客模式链路读数条：常驻显示 OUT / FMT / FLAG / BUF 四项引擎真数据。
+             非极客风格折叠。 -->
+        <Border
+            x:Name="GeekChainStrip"
+            Grid.Row="1"
+            Height="24"
+            Margin="16,2,16,0"
+            Padding="8,0"
+            BorderThickness="0,0,0,1"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+            Visibility="Collapsed">
+            <TextBlock
+                x:Name="GeekChainReadout"
+                VerticalAlignment="Center"
+                FontFamily="Consolas"
+                FontSize="11"
+                TextWrapping="NoWrap"
+                TextTrimming="CharacterEllipsis" />
+        </Border>
+
         <!-- 中部：分类 | 播放列表（右侧信息面板已停用，播放列表区扩张到底） -->
-        <Grid x:Name="MainContentGrid" Grid.Row="1" Margin="16,8,16,0" Tapped="MainContentGrid_Tapped">
+        <Grid x:Name="MainContentGrid" Grid.Row="2" Margin="16,8,16,0" Tapped="MainContentGrid_Tapped">
             <Grid.Resources>
                 <!-- 主内容区景深退后：切出播放信息面板时缩小变暗 -->
                 <Storyboard x:Name="MainContentDepthBackStoryboard">
@@ -727,6 +749,16 @@
                         </Button>
                         <Border x:Name="UserPlaylistNavIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
                     </Grid>
+                    <!-- 极客模式的曲库统计块：吸在侧栏最底（TRK 曲目 / ALB 专辑 / ART 艺术家），只读不点 -->
+                    <TextBlock
+                        x:Name="GeekLibStats"
+                        FontFamily="Consolas"
+                        FontSize="11"
+                        Margin="10,4,6,2"
+                        Opacity="0.75"
+                        IsHitTestVisible="False"
+                        TextTrimming="CharacterEllipsis"
+                        Visibility="Collapsed" />
                 </StackPanel>
             </Grid>
 
@@ -6103,7 +6135,7 @@
         <!-- 底部播放控制 -->
         <Grid
             x:Name="BottomTransportBar"
-            Grid.Row="2"
+            Grid.Row="3"
             MinHeight="70"
             Margin="16,6,16,10"
             ColumnSpacing="14">
@@ -6230,6 +6262,8 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="Auto" />
+                    <!-- 第三行 = 极客模式的命令行状态条（> 时间 / 总时长 · 输出格式 · 链路状态） -->
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
                 <Grid ColumnSpacing="8">
@@ -6250,6 +6284,17 @@
                             ValueChanged="ProgressSlider_ValueChanged" />
                         <Canvas
                             x:Name="ProgressStyleCanvas"
+                            IsHitTestVisible="False"
+                            Visibility="Collapsed" />
+                        <!-- 极客模式的字符进度条：盖在滑块上（滑块透明但照常能拖），
+                             等宽字下 █ / ░ 拼出的进度块，比圆头滑块更像终端。 -->
+                        <TextBlock
+                            x:Name="GeekProgressText"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Stretch"
+                            TextAlignment="Center"
+                            FontFamily="Consolas"
+                            FontSize="14"
                             IsHitTestVisible="False"
                             Visibility="Collapsed" />
                     </Grid>
@@ -6513,16 +6558,60 @@
                                 </Slider.Template>
                             </Slider>
                             <Canvas x:Name="VolumeStyleCanvas" />
+                            <!-- 极客模式：音量也字符化。靠左对齐 = 和底下 140px 画布（点击靶）完全重合，
+                                 格数按画布宽度算，长短和原来的竖线条一致 -->
+                            <TextBlock
+                                x:Name="GeekVolumeText"
+                                HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                FontFamily="Consolas"
+                                FontSize="11"
+                                IsHitTestVisible="False"
+                                Visibility="Collapsed" />
                         </Grid>
                     </StackPanel>
+                </Grid>
+                <!-- 极客模式命令行状态条：时间 / 输出格式 / 状态灯，全是引擎真数据 -->
+                <Grid Grid.Row="2" Margin="0,2,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        x:Name="GeekTransportStatus"
+                        Grid.Column="1"
+                        FontFamily="Consolas"
+                        FontSize="11"
+                        HorizontalAlignment="Center"
+                        TextWrapping="NoWrap"
+                        TextTrimming="CharacterEllipsis"
+                        Visibility="Collapsed" />
+                    <!-- 状态灯：绿=bit-perfect，琥珀=有 DSP 介入 -->
+                    <TextBlock
+                        x:Name="GeekStatusLamp"
+                        Grid.Column="2"
+                        HorizontalAlignment="Right"
+                        Margin="0,0,4,0"
+                        FontFamily="Consolas"
+                        FontSize="11"
+                        Visibility="Collapsed" />
                 </Grid>
             </Grid>
         </Grid>
         </Grid>
+        <!-- 极客模式 CRT 扫描线：铺在最上面的一层很淡的横向暗纹（设置里可关）。
+             不参与命中测试，也不影响音频链路。 -->
+        <Border
+            x:Name="GeekCrtOverlay"
+            IsHitTestVisible="False"
+            Visibility="Collapsed"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch" />
         <!-- 音频设置右侧滑出面板（从右边界向左延伸，仿 ECHO） -->
         <Grid
             x:Name="AudioSettingsOverlayHost"
-            Grid.RowSpan="3"
+            Grid.RowSpan="4"
             Visibility="Collapsed"
             IsHitTestVisible="False">
             <Grid.Resources>
