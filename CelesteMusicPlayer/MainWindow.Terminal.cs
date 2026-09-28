@@ -98,12 +98,23 @@ namespace CelesteMusicPlayer
             TerminalStage.BorderBrush = new SolidColorBrush(Microsoft.UI.Colors.Transparent);
         }
 
+        /// <summary>终端强调色：极客模式下跟随用户选的磷光色（琥珀/荧光绿/青），否则跟随应用强调色。</summary>
+        private Color TerminalAccentColor()
+        {
+            if (IsGeekUiStyleActive())
+            {
+                return PhosphorColor(AppSettingsStore.Load().GeekPhosphorColor);
+            }
+
+            return _waveAccentColor;
+        }
+
         /// <summary>强调色的元素按应用强调色刷一遍（不写死颜色，换主题自动跟随）。</summary>
         internal void ApplyTerminalAccent()
         {
             try
             {
-                Color accent = _waveAccentColor;
+                Color accent = TerminalAccentColor();
                 var brush = new SolidColorBrush(accent);
 
                 if (TerminalHeaderText != null)
@@ -345,7 +356,7 @@ namespace CelesteMusicPlayer
 
                 double barHeight = Math.Min(segCount * segH, maxSegH);
 
-                Color accent = _waveAccentColor;
+                Color accent = TerminalAccentColor();
                 byte alpha = (byte)(110 + Math.Round(norm * 145));
                 bar.Background = new SolidColorBrush(Color.FromArgb(alpha, accent.R, accent.G, accent.B));
                 bar.Width = barWidth;
@@ -468,7 +479,7 @@ namespace CelesteMusicPlayer
                 // 少了这一行就是 Stroke=null —— 线画出来了但完全透明，看着就像"李萨如没生效"。
                 _terminalPhaseLine = new Polyline
                 {
-                    Stroke = new SolidColorBrush(_waveAccentColor),
+                    Stroke = new SolidColorBrush(TerminalAccentColor()),
                     StrokeThickness = 1.2,
                     StrokeLineJoin = PenLineJoin.Round,
                     IsHitTestVisible = false
@@ -561,7 +572,7 @@ namespace CelesteMusicPlayer
 
             double gap = 2;
             double blockWidth = Math.Max(2, (width - gap * (TerminalPlayheadBlocks - 1)) / TerminalPlayheadBlocks);
-            Color accent = _waveAccentColor;
+            Color accent = TerminalAccentColor();
 
             for (int i = 0; i < TerminalPlayheadBlocks; i++)
             {
@@ -684,7 +695,7 @@ namespace CelesteMusicPlayer
 
         private TextBlock MakeQueueLine(string number, string title, bool current)
         {
-            Color accent = _waveAccentColor;
+            Color accent = TerminalAccentColor();
             return new TextBlock
             {
                 FontFamily = new FontFamily("Consolas"),

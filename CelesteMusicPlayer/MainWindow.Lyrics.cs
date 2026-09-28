@@ -229,13 +229,17 @@ namespace CelesteMusicPlayer
 
             foreach (LyricLine line in lyrics)
             {
+                // 极客模式：连"还没唱到的远处行"也是暗磷光而不是灰（建完 SyncLyricsToPosition 会立刻重染）
+                Color? geekLyricInit = GeekLyricAccentColor();
                 var tb = new TextBlock
                 {
                     TextAlignment = align,
                     TextWrapping = TextWrapping.WrapWholeWords,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     FontSize = 14,
-                    Foreground = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154)),
+                    Foreground = geekLyricInit is Color geekFar
+                        ? PhosphorShade(geekFar, 0x8C)
+                        : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154)),
                     Opacity = 0.55,
                     Tag = line
                 };
@@ -247,13 +251,17 @@ namespace CelesteMusicPlayer
                 }
                 else
                 {
-                    tb.Foreground = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
+                    tb.Foreground = geekLyricInit is Color geekPlain
+                        ? PhosphorShade(geekPlain, 0x8C)
+                        : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
                 }
                 if (line.CharTimes != null && line.CharTimes.Count == line.Text.Length)
                 {
                     // 逐字歌词：每字一个 Run，便于按字高亮
                     tb.Text = null;
-                    var unplayedBrush = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
+                    var unplayedBrush = geekLyricInit is Color geekUnplayedInit
+                        ? PhosphorShade(geekUnplayedInit, 0x8C)
+                        : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
                     foreach (char c in line.Text)
                     {
                         tb.Inlines.Add(new Microsoft.UI.Xaml.Documents.Run

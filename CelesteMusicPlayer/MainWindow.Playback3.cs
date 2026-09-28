@@ -1878,13 +1878,16 @@ namespace CelesteMusicPlayer
                 // 当前行未变：保持整行主题色，不把 Run 染成灰白
                 if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)
                 {
-                    Brush curAccent = ResolveAccentBrush();
+                    Color? curGeek = GeekLyricAccentColor();
+                    Brush curAccent = curGeek is Color curGeekColor
+                        ? new SolidColorBrush(curGeekColor)
+                        : ResolveAccentBrush();
                     TextBlock row = _lyricTextBlocks[_currentLyricIndex];
                     row.Foreground = curAccent;
                     row.Opacity = 1.0;
                     if (curAccent is SolidColorBrush scbCur2)
                     {
-                        ResetRowRunColors(row, scbCur2.Color.R, scbCur2.Color.G, scbCur2.Color.B);
+                        ResetRowRunColors(row, scbCur2.Color);
                     }
                 }
 
@@ -1898,7 +1901,11 @@ namespace CelesteMusicPlayer
             }
 
             // 方案A：当前句主题色强调 + 相邻句微亮（纯属性调整，不改行结构、不用 Inlines）
-            Brush accent = ResolveAccentBrush();
+            // 极客模式三层全换磷光色（画刷 alpha 分层，Opacity 不动）；经典模式保持原灰阶
+            Color? geekLyric = GeekLyricAccentColor();
+            Brush accent = geekLyric is Color geekAccent
+                ? new SolidColorBrush(geekAccent)
+                : ResolveAccentBrush();
             for (int i = 0; i < _lyricTextBlocks.Count; i++)
             {
                 TextBlock row = _lyricTextBlocks[i];
@@ -1912,28 +1919,36 @@ namespace CelesteMusicPlayer
                     // 当前行整行保持主题色（不把 Run 染成灰白，避免播放中被掩盖成灰色）
                     if (accent is SolidColorBrush scbCur)
                     {
-                        ResetRowRunColors(row, scbCur.Color.R, scbCur.Color.G, scbCur.Color.B);
+                        ResetRowRunColors(row, scbCur.Color);
                     }
                     else
                     {
-                        ResetRowRunColors(row, 255, 255, 255);
+                        ResetRowRunColors(row, Color.FromArgb(255, 255, 255, 255));
                     }
                 }
                 else if (dist == 1)
                 {
                     row.FontSize = 15;
                     row.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
-                    row.Foreground = new SolidColorBrush(Color.FromArgb(255, 205, 205, 205));
+                    row.Foreground = geekLyric is Color geekNear
+                        ? PhosphorShade(geekNear, 0xB3)
+                        : new SolidColorBrush(Color.FromArgb(255, 205, 205, 205));
                     row.Opacity = 0.85;
-                    ResetRowRunColors(row, 205, 205, 205);
+                    ResetRowRunColors(row, geekLyric is Color geekNearRun
+                        ? Color.FromArgb(0xB3, geekNearRun.R, geekNearRun.G, geekNearRun.B)
+                        : Color.FromArgb(255, 205, 205, 205));
                 }
                 else
                 {
                     row.FontSize = 14;
                     row.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
-                    row.Foreground = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
+                    row.Foreground = geekLyric is Color geekFar
+                        ? PhosphorShade(geekFar, 0x8C)
+                        : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
                     row.Opacity = 0.55;
-                    ResetRowRunColors(row, 154, 154, 154);
+                    ResetRowRunColors(row, geekLyric is Color geekFarRun
+                        ? Color.FromArgb(0x8C, geekFarRun.R, geekFarRun.G, geekFarRun.B)
+                        : Color.FromArgb(255, 154, 154, 154));
                 }
 
                 // 「水面」布局：非当前行按距离连续衰减，离当前句越远越淡（像没入水里）。
@@ -1996,8 +2011,14 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            var played = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
-            var unplayed = new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
+            // 极客模式：已唱=磷光满色、未唱=暗磷光（35%）；经典模式保持白 / 灰154
+            Color? geekChar = GeekLyricAccentColor();
+            var played = geekChar is Color geekPlayed
+                ? new SolidColorBrush(geekPlayed)
+                : new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
+            var unplayed = geekChar is Color geekUnplayed
+                ? PhosphorShade(geekUnplayed, 0x59)
+                : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154));
             for (int i = 0; i < row.Inlines.Count; i++)
             {
                 if (row.Inlines[i] is Microsoft.UI.Xaml.Documents.Run run)

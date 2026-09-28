@@ -604,7 +604,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="极客磷光色" />
-                                <TextBlock Text="极客界面里唯一的彩色：琥珀=老式 CRT，绿=荧光屏，青=监控屏" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                                <TextBlock Text="极客界面的统一颜色：字符键、播放信息页、终端读数都跟随它。琥珀=老式 CRT，绿=荧光屏，青=监控屏" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                             <ComboBox
                                 x:Name="GeekPhosphorCombo"

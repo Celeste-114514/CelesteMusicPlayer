@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Animation;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Media.Playback;
+using Color = Windows.UI.Color;
 
 namespace CelesteMusicPlayer
 {
@@ -265,7 +266,11 @@ namespace CelesteMusicPlayer
             {
                 if (NowPlayingTitleText != null)
                 {
-                    NowPlayingTitleText.Foreground = ResolveAccentBrush();
+                    // 极客模式：标题跟磷光色走（上色/还原由 ApplyGeekNowPlaying 统一管，
+                    // 这里直接写当前值，GeekStore 里记的原值不受影响）
+                    NowPlayingTitleText.Foreground = GeekLyricAccentColor() is Color geek
+                        ? new SolidColorBrush(geek)
+                        : ResolveAccentBrush();
                 }
             }
             catch (Exception caught)

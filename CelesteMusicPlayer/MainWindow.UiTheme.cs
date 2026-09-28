@@ -629,6 +629,9 @@ namespace CelesteMusicPlayer
                 // 极客布局：顶栏链路读数条 + 控制键 ASCII 化 + 音量字符条 + 状态灯
                 ApplyGeekShell(geek);
 
+                // 磷光色统一：播放条/顶栏字符键 + 播放歌曲信息页 + 歌词（跟随设置里的极客磷光色）
+                ApplyGeekNowPlaying(geek);
+
                 EnsureGeekReadoutTimer(geek);
                 if (geek)
                 {
@@ -2629,6 +2632,25 @@ namespace CelesteMusicPlayer
             }
 
             var brush = new SolidColorBrush(Color.FromArgb(255, r, g, b));
+            foreach (Microsoft.UI.Xaml.Documents.Inline inline in row.Inlines)
+            {
+                if (inline is Microsoft.UI.Xaml.Documents.Run run)
+                {
+                    run.Foreground = brush;
+                }
+            }
+        }
+
+
+        /// <summary>重载：按整色（可带 alpha）重置逐字 Run 颜色。极客磷光分层（暗磷光行）用。</summary>
+        private void ResetRowRunColors(TextBlock row, Color color)
+        {
+            if (row.Inlines.Count == 0)
+            {
+                return;
+            }
+
+            var brush = new SolidColorBrush(color);
             foreach (Microsoft.UI.Xaml.Documents.Inline inline in row.Inlines)
             {
                 if (inline is Microsoft.UI.Xaml.Documents.Run run)
