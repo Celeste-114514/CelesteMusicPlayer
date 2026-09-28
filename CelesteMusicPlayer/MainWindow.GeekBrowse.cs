@@ -33,14 +33,16 @@ namespace CelesteMusicPlayer
         private static readonly Color GeekPanelFill = Color.FromArgb(255, 0x12, 0x17, 0x12);
         private static readonly Color GeekHairline = Color.FromArgb(255, 0x2A, 0x33, 0x2A);
 
-        /// <summary>极客期间被改写过的元素样式：元素 → [(依赖属性, 原局部值)]。UnsetValue 表示原本没设过（还原时 ClearValue）。</summary>
-        private readonly Dictionary<FrameworkElement, List<KeyValuePair<DependencyProperty, object?>>> _geekBrowseBackup = new();
+        /// <summary>极客期间被改写过的元素样式：元素 → [(依赖属性, 原局部值)]。UnsetValue 表示原本没设过（还原时 ClearValue）。
+        /// 键用 DependencyObject 而不是 FrameworkElement：行内封面隐藏时要把该封面所在**列**的宽度归零，
+        /// ColumnDefinition 不是 FrameworkElement，但同样按「元素 + 依赖属性」记原值才能干净还原。</summary>
+        private readonly Dictionary<DependencyObject, List<KeyValuePair<DependencyProperty, object?>>> _geekBrowseBackup = new();
 
         /// <summary>
         /// 记一次改写。同一个「元素 + 属性」只记第一次的原值（后续重复调用不会把极客值当成原值存进去）。
         /// 已经等于目标值的调用直接跳过，避免每次刷新都写一遍依赖属性。
         /// </summary>
-        private void GeekStore(FrameworkElement element, DependencyProperty property, object? value)
+        private void GeekStore(DependencyObject element, DependencyProperty property, object? value)
         {
             if (!_geekBrowseBackup.TryGetValue(element, out var list))
             {
@@ -67,7 +69,9 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>按备份还原一棵子树（只还原被改过的元素，没动过的一律不碰）。
-        /// 顺带摘掉行表格线（GeekRule 是极客期间插进行模板里的额外元素，还原必须删干净）。</summary>
+        /// 顺带摘掉行表格线（GeekRule 是极客期间插进行模板里的额外元素，还原必须删干净）。
+        /// ColumnDefinition 不在可视树里（VisualTreeHelper 走不到），
+        /// 封面列归零的还原靠下面碰到 Grid 时额外扫一遍 ColumnDefinitions。</summary>
         private void GeekRestoreSubtree(DependencyObject node)
         {
             if (node is Panel host)
@@ -81,21 +85,45 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            if (node is FrameworkElement element && _geekBrowseBackup.TryGetValue(element, out var list))
+            if (node is Grid gridWithColumns)
+            {
+                foreach (ColumnDefinition column in gridWithColumns.ColumnDefinitions)
+                {
+                    if (_geekBrowseBackup.TryGetValue(column, out var columnList))
+                    {
+                        foreach (var pair in columnList)
+                        {
+                            if (pair.Value == DependencyProperty.UnsetValue)
+                            {
+                                column.ClearValue(pair.Key);
+                            }
+                            else
+                            {
+                                column.SetValue(pair.Key, pair.Value);
+                            }
+                        }
+
+                        _geekBrowseBackup.Remove(column);
+                    }
+                }
+            }
+
+            if (_geekBrowseBackup.TryGetValue(node, out var list))
             {
                 foreach (var pair in list)
                 {
+                    // ClearValue / SetValue 都是 DependencyObject 上的方法，ColumnDefinition 同样适用
                     if (pair.Value == DependencyProperty.UnsetValue)
                     {
-                        element.ClearValue(pair.Key);
+                        node.ClearValue(pair.Key);
                     }
                     else
                     {
-                        element.SetValue(pair.Key, pair.Value);
+                        node.SetValue(pair.Key, pair.Value);
                     }
                 }
 
-                _geekBrowseBackup.Remove(element);
+                _geekBrowseBackup.Remove(node);
             }
 
             int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);

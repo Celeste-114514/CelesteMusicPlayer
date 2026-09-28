@@ -343,6 +343,66 @@
                         <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
                     </DoubleAnimation>
                 </Storyboard>
+
+                <!-- ============ 极客 C 区表格化资源（MainWindow.GeekTables.cs 切换）============ -->
+                <!-- 垂直面板：三堵卡片墙的 ItemsWrapGrid 是横向环绕，做不成"一行一条"，
+                     切极客时整体换成 ItemsStackPanel，原面板由 GeekTables 备份还原 -->
+                <ItemsPanelTemplate x:Key="GeekVerticalItemsPanel">
+                    <ItemsStackPanel />
+                </ItemsPanelTemplate>
+
+                <!-- 专辑文字行：名称* | 艺术家180 | 曲目数72 | 总时长72 | DSD 标记。
+                     根底板带 Tag="AlbumRowChrome"（选中竖条逻辑按它找），子级自带 1px 表格线
+                     （与 EnsureGeekRowRule 同色 #16FFFFFF），模板换走即消失、无需还原 -->
+                <DataTemplate x:Key="GeekAlbumRowTemplate" x:DataType="local:AlbumEntry">
+                    <Border Tag="AlbumRowChrome" Padding="8,7" Background="Transparent" HorizontalAlignment="Stretch">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="0" />
+                                <ColumnDefinition Width="180" />
+                                <ColumnDefinition Width="72" />
+                                <ColumnDefinition Width="72" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{x:Bind Name}" ToolTipService.ToolTip="{x:Bind Name}" />
+                            <TextBlock Grid.Column="1" VerticalAlignment="Center" Opacity="0.72" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{x:Bind Artist}" ToolTipService.ToolTip="{x:Bind Artist}" />
+                            <TextBlock Grid.Column="2" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.72" Text="{x:Bind TrackCountText}" />
+                            <TextBlock Grid.Column="3" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.72" Text="{x:Bind TotalDurationText}" />
+                            <TextBlock Grid.Column="4" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.85" FontSize="11" Text="{x:Bind DsdTagText}" Visibility="{x:Bind DsdTagVisibility, Mode=OneWay}" />
+                            <Border Height="1" Background="#16FFFFFF" VerticalAlignment="Bottom" HorizontalAlignment="Stretch" IsHitTestVisible="False" Grid.ColumnSpan="99" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+
+                <!-- 艺术家文字行：名称* | 曲目数72 -->
+                <DataTemplate x:Key="GeekArtistRowTemplate" x:DataType="local:ArtistEntry">
+                    <Border Tag="ArtistRowChrome" Padding="8,7" Background="Transparent" HorizontalAlignment="Stretch">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="0" />
+                                <ColumnDefinition Width="72" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{x:Bind Name}" ToolTipService.ToolTip="{x:Bind Name}" />
+                            <TextBlock Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.72" Text="{x:Bind TrackCount}" />
+                            <Border Height="1" Background="#16FFFFFF" VerticalAlignment="Bottom" HorizontalAlignment="Stretch" IsHitTestVisible="False" Grid.ColumnSpan="99" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
+
+                <!-- 播放列表文字行：名称* | 歌曲数72 -->
+                <DataTemplate x:Key="GeekPlaylistCardRowTemplate" x:DataType="local:PlaylistCardViewModel">
+                    <Border Tag="PlaylistCardRowChrome" Padding="8,7" Background="Transparent" HorizontalAlignment="Stretch">
+                        <Grid ColumnSpacing="12">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" MinWidth="0" />
+                                <ColumnDefinition Width="72" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" VerticalAlignment="Center" TextWrapping="NoWrap" TextTrimming="CharacterEllipsis" Text="{x:Bind Name}" ToolTipService.ToolTip="{x:Bind Name}" />
+                            <TextBlock Grid.Column="1" VerticalAlignment="Center" HorizontalAlignment="Right" Opacity="0.72" Text="{x:Bind SongCountText}" />
+                            <Border Height="1" Background="#16FFFFFF" VerticalAlignment="Bottom" HorizontalAlignment="Stretch" IsHitTestVisible="False" Grid.ColumnSpan="99" />
+                        </Grid>
+                    </Border>
+                </DataTemplate>
             </Grid.Resources>
             <Grid.ColumnDefinitions>
                 <!-- 音乐库 -->
@@ -1043,6 +1103,8 @@
                     <Grid>
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto" />
+                            <!-- 极客列头行：Child 由 MainWindow.GeekTables 填/清，经典模式下恒空=零高度 -->
+                            <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                             <RowDefinition Height="Auto" />
                         </Grid.RowDefinitions>
@@ -1077,9 +1139,13 @@
                                 Content="导出为 m3u8"
                                 Click="ExportPlaylistsButton_Click" />
                         </Grid>
+                        <!-- 极客列头（播放列表墙）：经典模式无 Child 不可见；极客下由 GeekTables 填入 -->
+                        <Border
+                            x:Name="GeekPlaylistWallHeader"
+                            Grid.Row="1" />
                         <GridView
                         x:Name="PlaylistWallGridView"
-                        Grid.Row="1"
+                        Grid.Row="2"
                         SelectionMode="None"
                         IsItemClickEnabled="True"
                         ItemClick="PlaylistWallGridView_ItemClick"
@@ -1139,7 +1205,7 @@
                     <!-- 播放列表墙：无任何命中单时的空状态提示 -->
                     <StackPanel
                         x:Name="PlaylistWallEmptyHint"
-                        Grid.Row="1"
+                        Grid.Row="2"
                         VerticalAlignment="Center"
                         HorizontalAlignment="Center"
                         Spacing="10"
@@ -1160,7 +1226,7 @@
                     </StackPanel>
                     <Border
                         x:Name="PlaylistWallMultiBar"
-                        Grid.Row="2"
+                        Grid.Row="3"
                         Padding="0,8,0,0"
                         Visibility="Collapsed">
                         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
@@ -1418,6 +1484,12 @@
                             <RowDefinition Height="Auto" />
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
+
+                        <!-- 极客列头（歌曲面板）：与 PlaylistHeaderGrid 同格堆叠，后者恒 Collapsed 互不干扰；
+                             经典模式无 Child 零高度，极客下由 GeekTables 填入（钉在列表上方不随滚动） -->
+                        <Border
+                            x:Name="GeekSongsHeader"
+                            Grid.Row="0" />
 
                         <!-- 固定信息栏：标题 / 艺术家 / 专辑 / 年份 / 时长（胶囊底，列间可拖无竖线） -->
                         <Grid
@@ -1724,9 +1796,20 @@
                     Padding="12"
                     Visibility="Collapsed">
                     <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <!-- 极客列头（专辑墙）：绑定墙自身可见性 —— 进专辑详情 AlbumGridView
+                             被收起时列头跟着藏，返回时自动恢复；经典模式无 Child 不可见 -->
+                        <Border
+                            x:Name="GeekAlbumWallHeader"
+                            Grid.Row="0"
+                            Visibility="{x:Bind AlbumGridView.Visibility, Mode=OneWay}" />
                         <!-- 专辑墙 -->
                         <GridView
                             x:Name="AlbumGridView"
+                            Grid.Row="1"
                             SelectionMode="Single"
                             IsItemClickEnabled="True"
                             ItemClick="AlbumGridView_ItemClick"
@@ -1835,6 +1918,7 @@
                         <!-- 专辑详情：返回栏常驻；下方整页滚动（曲目无独立滚动条） -->
                         <Grid
                             x:Name="AlbumDetailPanel"
+                            Grid.Row="1"
                             Visibility="Collapsed">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -2136,9 +2220,19 @@
                     Padding="12"
                     Visibility="Collapsed">
                     <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+                        <!-- 极客列头（艺术家墙）：绑定墙自身可见性，进艺术家详情自动收起 -->
+                        <Border
+                            x:Name="GeekArtistWallHeader"
+                            Grid.Row="0"
+                            Visibility="{x:Bind ArtistGridView.Visibility, Mode=OneWay}" />
                         <!-- 艺术家墙 -->
                         <GridView
                             x:Name="ArtistGridView"
+                            Grid.Row="1"
                             SelectionMode="Single"
                             IsItemClickEnabled="True"
                             ItemClick="ArtistGridView_ItemClick">
@@ -2196,6 +2290,7 @@
                         <!-- 艺术家详情：返回栏常驻；下方内容可滚动 -->
                         <Grid
                             x:Name="ArtistDetailPanel"
+                            Grid.Row="1"
                             Visibility="Collapsed">
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto" />
@@ -2482,6 +2577,8 @@
                                 <Grid Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" RowSpacing="8">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
+                                        <!-- 极客列头行：Child 由 GeekTables 填/清；整面板随艺术家详情显隐 -->
+                                        <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
 
@@ -2560,9 +2657,14 @@
                                         </StackPanel>
                                     </Grid>
 
+                                    <!-- 极客列头（艺术家详情专辑墙） -->
+                                    <Border
+                                        x:Name="GeekArtistAlbumWallHeader"
+                                        Grid.Row="1" />
+
                                         <GridView
                                         x:Name="ArtistAlbumGridView"
-                                        Grid.Row="1"
+                                        Grid.Row="2"
                                         Margin="0,8,0,-30"
                                         SelectionMode="Single"
                                         IsItemClickEnabled="True"

@@ -620,6 +620,9 @@ namespace CelesteMusicPlayer
                 // 右侧浏览区重塑：直角 / 细线 / 无药丸（真正把它做成终端风，而不是经典换皮）
                 ApplyGeekBrowseSkin(geek);
 
+                // C 区主区表格化：四视图纯文字表格（封面隐藏/列头/卡片墙换文字行）
+                ApplyGeekTables(geek);
+
                 // 底部播放条的命令行化：字符进度块 + "> 时间 / 总时长" + 磷光色 / CRT 扫描线
                 ApplyGeekTransport(geek);
 
@@ -875,7 +878,7 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 行内细节按界面风格重塑（极客化浏览面板的行级部分）：
         /// - Tag="FmtChip" 格式标签：极客下去掉药丸底/圆角/描边，变暗灰纯文本（终端曲目列表的味道）；
-        /// - Tag="RowCover" 行内封面：极客下直角、去描边；
+        /// - Tag="RowCover" 行内封面：极客下整块隐藏、所在列宽归零（C 区表格化：纯文字表格不要封面）；
         /// - Tag 以 "RowChrome" 结尾的行底板：极客下在行底补一条 1px 表格线，整页读起来是一张数据表；
         /// - 行内其它圆角元素（选中块、标签底衬等）一并直角化。
         /// 原值一律走 GeekStore 备份，退出极客时逐项还原（不再手写"经典原值"，避免还原值和模板对不上）。
@@ -931,8 +934,10 @@ namespace CelesteMusicPlayer
                     }
                     else if (tag == "RowCover")
                     {
-                        GeekStore(b, Border.CornerRadiusProperty, new CornerRadius(0));
-                        GeekStore(b, Border.BorderThicknessProperty, new Thickness(0));
+                        // C 区表格化：封面整块藏起（纯文字表格不要封面），所在列宽归零，
+                        // 序号列直接贴到信息列，不留一条空沟。原值走 GeekStore，退出极客逐项还原。
+                        GeekStore(b, UIElement.VisibilityProperty, Visibility.Collapsed);
+                        GeekZeroCoverColumn(b);
                     }
                     else
                     {
@@ -952,6 +957,33 @@ namespace CelesteMusicPlayer
 
                 ApplyGeekRowDetailChromeInner(child);
             }
+        }
+
+        /// <summary>
+        /// 把行内封面所在的 Grid 列宽归零：封面 Collapse 之后 ColumnDefinition 仍会保留原宽度，
+        /// 不留一条空沟；列定义按「元素 + 依赖属性」走 GeekStore 记原值，退出极客随
+        /// GeekRestoreSubtree 一起还原。找不到父 Grid / 列越界就静默跳过（不影响封面隐藏本身）。
+        /// </summary>
+        private void GeekZeroCoverColumn(Border cover)
+        {
+            DependencyObject? current = VisualTreeHelper.GetParent(cover);
+            while (current != null && current is not Grid)
+            {
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            if (current is not Grid grid)
+            {
+                return;
+            }
+
+            int column = Grid.GetColumn(cover);
+            if (column < 0 || column >= grid.ColumnDefinitions.Count)
+            {
+                return;
+            }
+
+            GeekStore(grid.ColumnDefinitions[column], ColumnDefinition.WidthProperty, new GridLength(0));
         }
 
         /// <summary>给一行底板补 1px 表格线（已补过就直接返回；用 Tag="GeekRule" 认领，还原时按同 Tag 摘掉）。</summary>
