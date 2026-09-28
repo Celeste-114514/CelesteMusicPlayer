@@ -1838,7 +1838,10 @@
                                         Padding="6"
                                         Background="Transparent">
                                         <StackPanel Width="156" Spacing="6">
+                                            <!-- Tag 是给极客皮肤认人的：只把封面这一圈圆角磨成直角，
+                                                 卡片布局 / 文字 / 曲目数一概不动（见 ApplyGeekAlbumCardFrame）。 -->
                                             <Border
+                                                Tag="AlbumCoverFrame"
                                                 Width="146"
                                                 Height="146"
                                                 HorizontalAlignment="Center"
@@ -1858,6 +1861,7 @@
                                                         Source="{x:Bind CoverImage, Mode=OneWay}" />
                                                     <!-- DSD 专辑角标：左上角小三角 + 容器文字 -->
                                                     <Border
+                                                        Tag="AlbumDsdBadge"
                                                         HorizontalAlignment="Left"
                                                         VerticalAlignment="Top"
                                                         Padding="7,2"

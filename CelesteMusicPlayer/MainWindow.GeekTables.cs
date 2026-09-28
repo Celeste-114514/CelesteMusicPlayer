@@ -9,8 +9,12 @@ using Color = Windows.UI.Color;
 namespace CelesteMusicPlayer
 {
     /// <summary>
-    /// C 区主区表格化：曲库(歌曲) / 专辑 / 艺术家 / 播放列表 四个浏览视图在极客界面下
+    /// C 区主区表格化：曲库(歌曲) / 播放列表两个浏览视图在极客界面下
     /// 从「卡片 + 封面」重塑为「纯文字等宽表格」—— 无封面、列头大写 + 细线下划线、行间表格线。
+    ///
+    /// ⚠ 专辑墙 / 艺术家墙**不参与表格化**（用户拍板 2026-09-29）：这两面浏览墙保留经典皮肤的
+    /// 封面卡片样式，极客下只把专辑封面磨成直角、艺术家头像保持圆形。改动点在 UiTheme.cs 的
+    /// ApplyGeekAlbumCardFrame。（历史版本曾把四面墙全换成文字行，等于删掉封面，已废弃。）
     ///
     /// 两条路子，都沿用 GeekBrowse 那套「原值备份 → 切走还原」：
     ///   1. 歌曲列表（本来就是列表）：行内封面隐藏 + 封面列宽归零走 ApplyGeekRowDetailChrome
@@ -86,19 +90,15 @@ namespace CelesteMusicPlayer
 
         private void EnterGeekTables()
         {
-            // 1) 四堵卡片墙 → 文字表格。列头只在墙真的换成了表格时才填
+            // 1) 卡片墙 → 文字表格。列头只在墙真的换成了表格时才填
             //    （资源缺失导致转换失败时保持原样，不挂孤儿列头）。
-            //    艺术家详情里的专辑墙与曲库专辑墙同模板不同列头实例。
-            if (ConvertWallToTable(AlbumGridView, GeekAlbumRowTemplateKey))
-            {
-                GeekAlbumWallHeader.Child = BuildGeekAlbumHeader();
-            }
-
-            if (ConvertWallToTable(ArtistGridView, GeekArtistRowTemplateKey))
-            {
-                GeekArtistWallHeader.Child = BuildGeekArtistHeader();
-            }
-
+            //
+            //    ⚠ 专辑墙 / 艺术家墙**不再表格化**（用户拍板 2026-09-29）：浏览页面要保留
+            //    经典皮肤那套「封面卡片墙」的样子，极客下只接受两条最小改动 ——
+            //      专辑卡：封面从 10px 圆角磨成直角（AlbumCoverFrame，见 UiTheme.ApplyGeekAlbumCardFrame）
+            //      艺术家卡：头像保持圆形，其余原样
+            //    早期版本把这两面墙整个换成纯文字表格，等于把封面 / 头像删了，用户明确否掉。
+            //    仍然表格化的只剩播放列表墙，以及艺术家详情页里那张专辑墙（属详情页，非浏览页）。
             if (ConvertWallToTable(PlaylistWallGridView, GeekPlaylistCardRowTemplateKey))
             {
                 GeekPlaylistWallHeader.Child = BuildGeekPlaylistHeader();

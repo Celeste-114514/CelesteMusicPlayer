@@ -680,6 +680,13 @@ namespace CelesteMusicPlayer
             {
                 ApplyAlbumGridItemSelectionChrome(AlbumGridView, container, album);
             }
+
+            // 封面圆角跟着界面风格走。必须挂在这里：GridView 是虚拟化的，卡片会被回收复用，
+            // 只在「切皮肤那一刻」遍历现存卡片的话，之后滚动出来的新卡仍是 XAML 原值的圆角。
+            if (args.ItemContainer != null)
+            {
+                ApplyGeekAlbumCardFrame(args.ItemContainer);
+            }
         }
 
 

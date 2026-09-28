@@ -633,6 +633,9 @@ namespace CelesteMusicPlayer
                 // 详情页面：用户拍板「专辑详情页保留原来的经典布局」—— 这里只动封面一处
                 ApplyGeekDetailPages(geek);
 
+                // 浏览墙的专辑卡封面方角 / 还原（跟着上面的风格开关一起走）
+                RefreshGeekAlbumCards();
+
                 // 左侧分类图标：极客下换成等宽符号 + 磷光单色（这是另一套结构，浏览区那个扫描覆盖不到）
                 ApplyNavGeekGlyphs(geek);
 
@@ -670,26 +673,132 @@ namespace CelesteMusicPlayer
 
         /// <summary>
         /// 专辑详情页的极客化 —— 用户拍板（2026-09-29）：**保留原来的经典布局**，不做字符表格 /
-        /// 取景框那套重做，只把封面从 14px 圆角改成直角。理由：极客皮肤「圆角一律归零」是硬规矩，
-        /// 而且圆角会把封面图跟角落 一起裁掉，直角才是「整块图钉在面板上」的观感。
-        /// 只改 CornerRadius 一处（XAML 里写死的显式值，主题资源盖不掉），其它一律不动。
-        /// 原值走 GeekStore 备份，退出极客由 ApplyGeekBrowseSkin(false) 的子树还原兜底，
-        /// 这里再调一次 GeekRestoreSubtree 是为了「单独调用本方法」时也能干净摘掉。
+        /// 取景框那套重做，只做两处最小改动：封面圆角磨平 + 详情页几个按钮改极客款。
+        /// 理由：极客皮肤「圆角一律归零」是硬规矩，而且圆角会把封面图跟角落一起裁掉，
+        /// 直角才是「整块图钉在面板上」的观感。XAML 里 CornerRadius 是写死的显式值，
+        /// 主题资源盖不掉，只能按元素改；原值走 GeekStore 备份，退出极客逐棵还原。
         /// </summary>
         private void ApplyGeekDetailPages(bool geek)
         {
-            if (AlbumDetailCoverBorder == null)
+            ApplyDetailCoverFrame(AlbumDetailCoverBorder, geek);
+
+            var hairline = new SolidColorBrush(GeekHairline);
+            ButtonBase?[] detailButtons =
+            {
+                AlbumDetailBackButton,
+                AlbumDetailPlayButton,
+                AlbumDetailAddToPlaylistButton,
+                AlbumDetailAddToNamedListButton,
+                AlbumDetailSubArtistLink,
+                AlbumDetailPreloadButton,
+                AlbumDetailPreloadClearButton,
+            };
+
+            foreach (ButtonBase? button in detailButtons)
+            {
+                if (button == null)
+                {
+                    continue;
+                }
+
+                if (geek)
+                {
+                    // 直角 + 极客细线描边（描边只在模板本来就画边线时才看得见，纯图标键不受影响）
+                    GeekStore(button, Control.CornerRadiusProperty, new CornerRadius(0));
+                    GeekStore(button, Control.BorderBrushProperty, hairline);
+                }
+                else
+                {
+                    GeekRestoreSubtree(button);
+                }
+            }
+        }
+
+        /// <summary>封面框：极客下直角 + 极客细线边框（有封面时本就是 0 厚度的"无框"，看不出线）。</summary>
+        private void ApplyDetailCoverFrame(Border? frame, bool geek)
+        {
+            if (frame == null)
             {
                 return;
             }
 
             if (geek)
             {
-                GeekStore(AlbumDetailCoverBorder, Border.CornerRadiusProperty, new CornerRadius(0));
+                GeekStore(frame, Border.CornerRadiusProperty, new CornerRadius(0));
+                GeekStore(frame, Border.BorderBrushProperty, new SolidColorBrush(GeekHairline));
             }
             else
             {
-                GeekRestoreSubtree(AlbumDetailCoverBorder);
+                GeekRestoreSubtree(frame);
+            }
+        }
+
+        /// <summary>
+        /// 专辑浏览墙的一张卡：极客下把「封面那一圈圆角」磨成直角，其它（布局 / 文字 / 曲目数）一概不动
+        /// —— 用户拍板（2026-09-29）要的就是别的皮肤那种封面卡片的样子，只把封面改方角。
+        ///
+        /// 为什么挂在容器生成事件上而不是切皮肤那一刻遍历一遍：GridView 虚拟化会回收复用容器，
+        /// 那一刻遍历只管到已渲染出来的卡，之后滚动出来的新卡仍是 XAML 原值的圆角。
+        /// 同理这里**不走 GeekStore 备份** —— 容器会被复用、还原时机不可控，
+        /// 直接按「当前是不是极客」在两个值之间写死最稳（退出极客时同一事件会把经典值写回）。
+        /// </summary>
+        internal static void ApplyGeekAlbumCardFrame(DependencyObject cardRoot)
+        {
+            bool geek = IsGeekUiStyleActive();
+
+            if (cardRoot is GridViewItem container)
+            {
+                container.CornerRadius = geek ? new CornerRadius(0) : new CornerRadius(8);
+            }
+
+            var borders = new List<Border>();
+            CollectCardBorders(cardRoot, borders);
+
+            foreach (Border border in borders)
+            {
+                switch (border.Tag as string)
+                {
+                    case "AlbumRowChrome":
+                        border.CornerRadius = geek ? new CornerRadius(0) : new CornerRadius(8);
+                        break;
+                    case "AlbumCoverFrame":
+                        border.CornerRadius = geek ? new CornerRadius(0) : new CornerRadius(10);
+                        break;
+                    case "AlbumDsdBadge":
+                        border.CornerRadius = geek ? new CornerRadius(0) : new CornerRadius(0, 0, 8, 0);
+                        break;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 切换皮肤时把**已经渲染出来**的专辑卡也刷一遍：容器事件只能管到"新创建/复用"的卡，
+        /// 切皮肤时如果列表项没变，GridView 不一定重建容器 —— 少了这一趟，
+        /// 屏幕上现存的卡会留着上一个皮肤的圆角。只遍历已渲染的子节点，网格再大也是 O(可见数)。
+        /// </summary>
+        private void RefreshGeekAlbumCards()
+        {
+            if (AlbumGridView?.ItemsPanelRoot is Panel panel)
+            {
+                foreach (UIElement child in panel.Children)
+                {
+                    ApplyGeekAlbumCardFrame(child);
+                }
+            }
+        }
+
+        /// <summary>把一张卡片子树里的 Border 收进清单（卡片结构简单，递归够用；不深拷贝）。</summary>
+        private static void CollectCardBorders(DependencyObject node, List<Border> sink)
+        {
+            if (node is Border border)
+            {
+                sink.Add(border);
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(node);
+            for (int i = 0; i < count; i++)
+            {
+                CollectCardBorders(VisualTreeHelper.GetChild(node, i), sink);
             }
         }
 
