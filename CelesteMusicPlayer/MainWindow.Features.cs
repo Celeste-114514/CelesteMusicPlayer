@@ -3036,6 +3036,13 @@ namespace CelesteMusicPlayer
                 }
                 else
                 {
+                    // 变速（atempo）：重塑采样值的实时处理，与 DSP 参与同级地非 bit-perfect。
+                    // 倍率=1 时标志为 false，对默认链路零影响。
+                    if (chain.TempoShifted)
+                    {
+                        causes.Add("变速播放（atempo，非原始采样）");
+                    }
+
                     // 3) 转码层：实际送链的 WAV 相对源文件发生了什么
                     switch (chain.Outcome)
                     {

@@ -321,6 +321,12 @@ namespace CelesteMusicPlayer
                 return "SHARED";
             }
 
+            // 变速（atempo）重塑采样值，与 DSP 同级地非 bit-perfect
+            if (chain.TempoShifted)
+            {
+                return "TEMPO";
+            }
+
             bool dsp = chain.DspChainActive
                        || (_audioEngine?.IsSoftwareVolumeActive ?? false);
             // DSP 总旁路（A/B 对比）时全部 DSP 不参与处理，输出恢复 bit-perfect

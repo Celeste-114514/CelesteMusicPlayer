@@ -1270,7 +1270,7 @@ namespace CelesteMusicPlayer
         /// 但**允许输出器协商容器**（如 24bit→PCM24-in-32，样本值逐位一致，DoP 标记不受影响）。
         /// 2026-09-24 实测：native2 原生内核拒绝 requireExact（"暂不支持 DSD/DoP 精确直出"），
         /// 而"允许协商容器 + 绕过 DSP"正是把缓存 WAV 导入媒体库播放那条已验证绿灯不卡的路。</summary>
-        public bool PlayWavAsync(string wavPath, OutputMode mode, string? deviceIdentifier = null, TimeSpan? seekTo = null, bool requireExact = false, bool sourceIsDsd = false, bool dopPayload = false)
+        public bool PlayWavAsync(string wavPath, OutputMode mode, string? deviceIdentifier = null, TimeSpan? seekTo = null, bool requireExact = false, bool sourceIsDsd = false, bool dopPayload = false, bool tempoShifted = false)
         {
             try
             {
@@ -1411,8 +1411,10 @@ namespace CelesteMusicPlayer
                 }
 
                 Duration = _waveFile.TotalTime;
-                // 若调用了 SetSourceDuration（源元数据时长），优先用源时长，规避转码 WAV 尾部 padding 越界
-                if (_sourceDuration > TimeSpan.Zero && _sourceDuration < Duration)
+                // 若调用了 SetSourceDuration（源元数据时长），优先用源时长，规避转码 WAV 尾部 padding 越界。
+                // 变速（atempo）例外：此时 WAV 时长 = 原时长 / 倍率，就是真实播放时长，
+                // 拿源元数据时长覆盖会让进度条走到 100% 时音频才播了一半 —— 按 WAV 自己的来。
+                if (!tempoShifted && _sourceDuration > TimeSpan.Zero && _sourceDuration < Duration)
                 {
                     Duration = _sourceDuration;
                 }
@@ -1437,6 +1439,9 @@ namespace CelesteMusicPlayer
                 }
                 ChainFormat.TranscodeWav = wavFmt;
                 ChainFormat.Outcome = ComputeTranscodeOutcome(wavFmt);
+                // 变速（atempo）会重塑采样值，与 DSP 参与同级地非 bit-perfect：如实上标，
+                // 徽标/链路据此显示"变速播放"，绝不因为格式比对一致就谎报直通。
+                ChainFormat.TempoShifted = tempoShifted;
                 // 阶段二：重采样原因上屏（"设备不支持 96k，已重采样到 48k"）。
                 // 仅在计划与当前 WAV 率一致时采用，避免 MixFormat 兜底重转后拿着陈旧计划说话。
                 var tplan = FfmpegDecoderBackend.LastTranscodePlan;
@@ -1751,6 +1756,7 @@ namespace CelesteMusicPlayer
                 ChainFormat.HasSession = true;
                 ChainFormat.IsDsdPath = true;
                 ChainFormat.SharedMode = false;
+                ChainFormat.TempoShifted = false; // DSD/DoP 直出永不变速（显式复位，防上一首 PCM 变速值残留）
                 ChainFormat.SourceFile = null;
                 ChainFormat.SourceFileDescription = SourceFormatDescription;
                 ChainFormat.TranscodeWav = new AudioFormat(provider.WaveFormat.SampleRate, provider.WaveFormat.BitsPerSample, provider.WaveFormat.Channels, false);

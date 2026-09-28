@@ -417,6 +417,9 @@ namespace CelesteMusicPlayer
 
         private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
+            // 极客模式的字符音量条（VOL ███░░）跟着滑块走
+            UpdateGeekVolumeText();
+
             UpdateVolumeIcon(e.NewValue);
 
             // 共享模式：MediaPlayer 数字音量（跟随用户）。
@@ -973,6 +976,16 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 极客模式：进度条由字符块（GeekProgressText）接管，波形 / 频谱柱等自绘样式一律让位。
+            // 这里必须拦住 —— 波形加载完成 / 窗口缩放 / 改配色都会触发重绘，
+            // 不拦的话每次重绘都把波形画布重新顶出来，盖在字符进度条上（用户实测"波形一直还在"）。
+            if (GeekUiStyleCached)
+            {
+                ProgressStyleCanvas.Visibility = Visibility.Collapsed;
+                ProgressStyleCanvas.Children.Clear();
+                return;
+            }
+
             bool waveform = _progressBarStyle == "Waveform";
             if (!waveform)
             {
@@ -1362,6 +1375,27 @@ namespace CelesteMusicPlayer
 
             var canvas = VolumeStyleCanvas;
             canvas.Children.Clear();
+
+            // 极客模式：音量显示成字符条（VOL ███░░░），自绘竖线一律不画。
+            // 但必须铺一层几乎全透明的矩形当点击靶 —— 拖动处理器全挂在这块画布的 Pointer 事件上，
+            // Canvas 自身 Background=null 不接受命中，没靶就拖不动（用户实测"音量条完全动不了"）。
+            if (GeekUiStyleCached)
+            {
+                double gw = canvas.ActualWidth;
+                double gh = canvas.ActualHeight;
+                if (gw > 1 && gh > 1)
+                {
+                    canvas.Children.Add(new Microsoft.UI.Xaml.Shapes.Rectangle
+                    {
+                        Fill = new SolidColorBrush(Color.FromArgb(1, 0, 0, 0)),
+                        Width = gw,
+                        Height = gh
+                    });
+                }
+
+                return;
+            }
+
             double w = canvas.ActualWidth;
             double h = canvas.ActualHeight;
             if (w <= 1 || h <= 1)
@@ -2592,6 +2626,11 @@ namespace CelesteMusicPlayer
                 if (dsdDop)
                 {
                     NowPlayingText.Text = "DSD DoP 直出（bit-perfect）· " + item.Title + " - " + item.Artist;
+                    // 变速诚实性：DSD 不过 atempo，倍率≠1 时如实说明（bit-perfect 指的是直出，不含变速）
+                    if (FfmpegDecoderBackend.IsTempoActive(FfmpegDecoderBackend.GetTempoRate()))
+                    {
+                        NowPlayingText.Text += "（DSD 不支持变速，按 1x 播放）";
+                    }
                 }
                 else if (IsDsdFile(item.FilePath))
                 {
@@ -2599,6 +2638,11 @@ namespace CelesteMusicPlayer
                         ? (_audioEngine?.ActualOutputFormat ?? "PCM") : _audioEngine!.SourceFormatDescription!;
                     NowPlayingText.Text = "已转码为 " + pcmDesc + " 输出";
                     StartupLog.Write("DSD 已转码 PCM 输出: " + item.FilePath + " → " + (_audioEngine?.SourceFormatDescription ?? "?"));
+                    // 变速诚实性：DSD 1-bit 位流不过 atempo，倍率≠1 时如实说明按 1x 播
+                    if (FfmpegDecoderBackend.IsTempoActive(FfmpegDecoderBackend.GetTempoRate()))
+                    {
+                        NowPlayingText.Text += "（DSD 不支持变速，按 1x 播放）";
+                    }
                 }
                 // 设备主音量（DAC 驱动级）只由用户拖动音量条时设置，切歌不重置，保持用户设定的响度。
                 // （播放器数字音量恒 100% 直通，bit-perfect；无实体音量键的小尾巴可拖动音量条调轻）

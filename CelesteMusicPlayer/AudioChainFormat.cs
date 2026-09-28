@@ -83,6 +83,12 @@ namespace CelesteMusicPlayer
         /// <summary>是否 DSD/DoP 直出路径（跳过 PCM 重采样比对：输出 PCM 只是 1-bit 的封装载体）。</summary>
         public bool IsDsdPath { get; set; }
 
+        /// <summary>
+        /// 本次送链的 WAV 是否经过变速（ffmpeg atempo）。atempo 会重塑采样值，
+        /// 与 DSP 参与处理同级地认定为非 bit-perfect —— 徽标/链路必须如实显示。
+        /// </summary>
+        public bool TempoShifted { get; set; }
+
         /// <summary>源文件的人话格式（DSD 等无 PCM 探测值时展示，如 "2822.4kHz / 2声道 1-bit DSD"）。</summary>
         public string? SourceFileDescription { get; set; }
 
@@ -105,6 +111,7 @@ namespace CelesteMusicPlayer
             DspChainActive = false;
             SharedMode = false;
             IsDsdPath = false;
+            TempoShifted = false;
             SourceFileDescription = null;
             TranscodeReason = null;
             HasSession = false;

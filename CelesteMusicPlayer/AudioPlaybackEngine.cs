@@ -102,6 +102,14 @@ namespace CelesteMusicPlayer
         /// <summary>当前输出缓冲区大小（毫秒）。</summary>
         public int OutputBufferMs => _hifiOut?.OutputBufferMs ?? 0;
 
+        /// <summary>当前实际输出模式（共享 / WASAPI 独占 / ASIO）。null = 还没开过播。</summary>
+        public HiFiOutputBackend.OutputMode? CurrentOutputMode => _hifiOut?.CurrentMode;
+
+        /// <summary>当前输出设备描述（声卡名 / ASIO 驱动名）。null = 未知或系统默认。</summary>
+        public string? OutputDeviceName => _hifiOut?.OutputDeviceName;
+
+        // 注：链路结构化状态 `ChainFormat` 本类已有（文件上方），极客顶栏读数直接复用它。
+
         /// <summary>设置采样率升频目标（Hz，0=关闭）。播放中调用只保存，下次开播生效。</summary>
         public void SetResampleTargetRate(int hz) => _hifiOut?.SetResampleTargetRate(hz);
 
@@ -318,6 +326,10 @@ namespace CelesteMusicPlayer
                 return false;
             }
 
+            // 变速生效判定：紧跟本次转码读取（"最近一次"语义，本条调用链上是准的），
+            // 显式传给 PlayWavHiFi → ChainFormat.TempoShifted，不走静态值 stale。
+            bool tempoApplied = FfmpegDecoderBackend.LastTranscodeTempoApplied;
+
             // targetWav 形如 <cacheDir>/<key>.wav：下面的设备兼容回退分支要用 cacheDir 与 key
             // 构造同目录的备用 WAV 文件名（与原实现保持一致）。
             string cacheDir = Path.GetDirectoryName(targetWav) ?? string.Empty;
@@ -330,7 +342,7 @@ namespace CelesteMusicPlayer
             if (IsHiFiMode)
             {
                 bool dsdSrc = IsDsdFile(path); // DSD 转 PCM：链路标注"1-bit 原生（已转 PCM）"，不算"源未探测"
-                bool ok = PlayWavHiFi(targetWav, sourceIsDsd: dsdSrc);
+                bool ok = PlayWavHiFi(targetWav, sourceIsDsd: dsdSrc, tempoShifted: tempoApplied);
                 if (!ok)
                 {
                     // 源格式（尤其是 DSD 转出的高采样率 PCM，如 DSD128→705.6kHz）设备不认时，
@@ -438,8 +450,9 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>用 HiFiOutputBackend 播放转码后的 PCM WAV（WASAPI 独占 / ASIO）。
-        /// <paramref name="sourceIsDsd"/> 源文件是 DSD（转 PCM 输出）时置位，链路据此标注 DSD 路径。</summary>
-        private bool PlayWavHiFi(string wavPath, bool requireExact = false, bool sourceIsDsd = false, bool dopPayload = false)
+        /// <paramref name="sourceIsDsd"/> 源文件是 DSD（转 PCM 输出）时置位，链路据此标注 DSD 路径。
+        /// <paramref name="tempoShifted"/> 该 WAV 是否经过 atempo 变速（链路据此标注非 bit-perfect）。</summary>
+        private bool PlayWavHiFi(string wavPath, bool requireExact = false, bool sourceIsDsd = false, bool dopPayload = false, bool tempoShifted = false)
         {
             try
             {
@@ -459,7 +472,7 @@ namespace CelesteMusicPlayer
                 _hifiOut.SetResampleTargetRate(st.SrcTargetHz);
                 _hifiOut.SetSrcQuality(st.SrcQuality);
                 _hifiOut.SetSrcDither(st.SrcDither);
-                bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference, requireExact: requireExact, sourceIsDsd: sourceIsDsd, dopPayload: dopPayload);
+                bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference, requireExact: requireExact, sourceIsDsd: sourceIsDsd, dopPayload: dopPayload, tempoShifted: tempoShifted);
                 StartupLog.Write("HiFi播放 mode=" + _outputMode + " 设备=" + (_hifiOut.OutputDeviceName ?? "?") + " (pref=" + (_devicePreference ?? "默认") + ") ok=" + ok + (ok ? "" : " err=" + (_hifiOut.LastError ?? "")));
                 if (!ok)
                 {
