@@ -186,12 +186,12 @@ namespace CelesteMusicPlayer
             g.FillRectangle(brush, 0, top, Size, height);
         }
 
-        private static void DrawStars(Graphics g)
+        private static void DrawStars(Graphics g, int count = 180, int seed = 20260917)
         {
             // 固定种子：同一张预设每次生成完全一致
-            var rng = new Random(20260917);
+            var rng = new Random(seed);
             using var brush = new SolidBrush(Color.FromArgb(180, 220, 230, 255));
-            for (int i = 0; i < 180; i++)
+            for (int i = 0; i < count; i++)
             {
                 float x = (float)(rng.NextDouble() * Size);
                 float y = (float)(rng.NextDouble() * Size);

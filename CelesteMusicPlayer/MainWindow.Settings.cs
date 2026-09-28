@@ -147,6 +147,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                FrostedGlass.BackdropEnabled = enabled;
                 if (enabled)
                 {
                     FrostedGlass.ApplyWindowBackdrop(this);

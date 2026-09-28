@@ -419,6 +419,9 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // 毛玻璃开关先同步给 FrostedGlass：经典 / 极客风格下它决定窗口背板与根面板底色
+                FrostedGlass.BackdropEnabled = settings.EnableFrostedGlass;
+
                 string mode = settings.UiStyleMode;
                 bool classic = mode is "ClassicSystem" or "ClassicLight" or "ClassicDark";
                 // 极客：与经典并列的不透明风格，但走终端那套视觉 —— 近黑底、等宽字、直角、技术读数。
@@ -451,14 +454,24 @@ namespace CelesteMusicPlayer
                     // 结果经典浅色界面下面板被一律涂成深灰 —— 也就是"浅色模式里一片深色底"的根因。
                     FrostedGlass.ClassicMode = geek ? "Geek" : darkClassic ? "Dark" : "Light";
 
-                    // 经典界面与壁纸/背板无关：关掉 Desktop Acrylic，窗口给纯色底
-                    SystemBackdrop = null;
-                    RootShell.Background = new SolidColorBrush(
-                        geek
-                            ? Windows.UI.Color.FromArgb(255, 11, 15, 11)
-                            : darkClassic
-                                ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
-                                : Windows.UI.Color.FromArgb(255, 243, 243, 243));
+                    // 背板是否走毛玻璃由「外观设置」开关决定，经典 / 极客风格下同样生效：
+                    // 开 = 窗口背板走亚克力透出壁纸（此时不能给不透明底，否则会把毛玻璃盖住）；
+                    // 关 = 窗口给纯色底。面板卡片始终不透明，与本开关无关。
+                    if (settings.EnableFrostedGlass)
+                    {
+                        RootShell.ClearValue(Grid.BackgroundProperty);
+                        FrostedGlass.ApplyWindowBackdrop(this);
+                    }
+                    else
+                    {
+                        SystemBackdrop = null;
+                        RootShell.Background = new SolidColorBrush(
+                            geek
+                                ? Windows.UI.Color.FromArgb(255, 11, 15, 11)
+                                : darkClassic
+                                    ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
+                                    : Windows.UI.Color.FromArgb(255, 243, 243, 243));
+                    }
 
                     // 多选行底色缓存的取色依赖界面基色，切风格必须失效重算
                     _cachedMultiSelectFrostBrush = null;
@@ -607,6 +620,12 @@ namespace CelesteMusicPlayer
                 // 右侧浏览区重塑：直角 / 细线 / 无药丸（真正把它做成终端风，而不是经典换皮）
                 ApplyGeekBrowseSkin(geek);
 
+                // 底部播放条的命令行化：字符进度块 + "> 时间 / 总时长" + 磷光色 / CRT 扫描线
+                ApplyGeekTransport(geek);
+
+                // 极客布局：顶栏链路读数条 + 控制键 ASCII 化 + 音量字符条 + 状态灯
+                ApplyGeekShell(geek);
+
                 EnsureGeekReadoutTimer(geek);
                 if (geek)
                 {
@@ -630,6 +649,13 @@ namespace CelesteMusicPlayer
         /// <summary>把字体刷到可视树上已有的 TextBlock / Control（font=null 表示还原）。</summary>
         private static void ApplyFontToTree(DependencyObject node, Microsoft.UI.Xaml.Media.FontFamily? font)
         {
+            // 图标字形用的是字体里的特殊符号位（PUA 区），Consolas 里根本没有这些字符 →
+            // 渲染成缺字的问号框（用户实测：播放键与右上角按钮变问号）。图标一律不换字体。
+            if (node is FontIcon or SymbolIcon)
+            {
+                return;
+            }
+
             if (node is TextBlock tb)
             {
                 if (font == null)
@@ -647,8 +673,10 @@ namespace CelesteMusicPlayer
                 {
                     c.ClearValue(Control.FontFamilyProperty);
                 }
-                else
+                else if (!SubtreeHasIcon(c))
                 {
+                    // 含图标的控件不换字体：图标会继承父级字体，换成等宽就缺字变问号。
+                    // 它内部的文字部分由上面的 TextBlock 分支各自换，不受影响。
                     c.FontFamily = font;
                 }
             }
@@ -658,6 +686,26 @@ namespace CelesteMusicPlayer
             {
                 ApplyFontToTree(VisualTreeHelper.GetChild(node, i), font);
             }
+        }
+
+        /// <summary>子树里是否有图标字形（决定这个控件能不能换等宽字体）。</summary>
+        private static bool SubtreeHasIcon(DependencyObject node)
+        {
+            if (node is FontIcon or SymbolIcon)
+            {
+                return true;
+            }
+
+            int count = VisualTreeHelper.GetChildrenCount(node);
+            for (int i = 0; i < count; i++)
+            {
+                if (SubtreeHasIcon(VisualTreeHelper.GetChild(node, i)))
+                {
+                    return true;
+                }
+            }
+
+            return false;
         }
 
         private void EnsureGeekReadoutTimer(bool enable)
@@ -672,7 +720,12 @@ namespace CelesteMusicPlayer
 
                 _geekReadoutTimer = queue.CreateTimer();
                 _geekReadoutTimer.Interval = TimeSpan.FromMilliseconds(1000);
-                _geekReadoutTimer.Tick += (s, a) => UpdateGeekReadout();
+                _geekReadoutTimer.Tick += (s, a) =>
+                {
+                    UpdateGeekReadout();
+                    // 顶栏链路读数 / 音量字符条 / 状态灯同源刷新
+                    UpdateGeekShellTick();
+                };
             }
 
             if (enable)

@@ -240,8 +240,15 @@ namespace CelesteMusicPlayer
 
         public string ThemePreset { get; set; } = string.Empty;
 
-        /// <summary>主程序界面风格："" = 现有（背景图式，默认）；ClassicSystem / ClassicLight / ClassicDark = 经典不透明界面。</summary>
-        public string UiStyleMode { get; set; } = string.Empty;
+        /// <summary>主程序界面风格：Scene = 背景图式（图景）；ClassicSystem / ClassicLight / ClassicDark = 经典界面；Geek = 极客终端风。
+        /// 默认 ClassicSystem（经典 · 跟随系统）：经典界面下毛玻璃开关同样生效，可在「亚克力背板」与「纯色底」之间切换。</summary>
+        public string UiStyleMode { get; set; } = "ClassicSystem";
+
+        /// <summary>极客模式的磷光色（界面里唯一的彩色）：Amber = 琥珀（默认，老式 CRT）、Green = 荧光绿、Cyan = 青。</summary>
+        public string GeekPhosphorColor { get; set; } = "Amber";
+
+        /// <summary>极客模式是否叠一层 CRT 扫描线（很淡的横向暗纹）。默认开，随时可关。</summary>
+        public bool GeekCrtEnabled { get; set; } = true;
 
         public bool ShowPlaylistTitle { get; set; } = true;
         public bool ShowPlaylistArtist { get; set; } = true;
@@ -758,7 +765,18 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         BackgroundPreset = s.BackgroundPreset?.Trim() ?? string.Empty,
         BackgroundPresetMotion = s.BackgroundPresetMotion,
         ThemePreset = s.ThemePreset?.Trim() ?? string.Empty,
-        UiStyleMode = s.UiStyleMode?.Trim() ?? string.Empty,
+        // 界面风格：图景（背景图式）改用显式 "Scene" 表示。
+        // 早先图景用空字符串表示，老用户存档里的空值会把新默认顶掉 —— 改了默认值本机也看不到，
+        // 表现就是"默认皮肤还是图景"。现在空/未设置一律归到默认「经典 · 跟随系统」。
+        UiStyleMode = s.UiStyleMode?.Trim() is { Length: > 0 } uiStyle
+                      && uiStyle is "Scene" or "ClassicSystem" or "ClassicLight" or "ClassicDark" or "Geek"
+            ? uiStyle
+            : "ClassicSystem",
+        GeekPhosphorColor = s.GeekPhosphorColor?.Trim() is { Length: > 0 } phosphor
+                            && phosphor is "Amber" or "Green" or "Cyan"
+            ? phosphor
+            : "Amber",
+        GeekCrtEnabled = s.GeekCrtEnabled,
         PlaylistDensity = s.PlaylistDensity is "Compact" or "Comfortable" ? s.PlaylistDensity : "Comfortable",
             EnableSmtc = s.EnableSmtc,
             EnableGlobalHotkeys = s.EnableGlobalHotkeys,

@@ -550,6 +550,8 @@ namespace CelesteMusicPlayer
                 // 外观
                 SelectComboByTag(UiStyleModeCombo, s.UiStyleMode);
                 SetToggle(FrostedGlassSwitch, s.EnableFrostedGlass);
+                SelectComboByTag(GeekPhosphorCombo, s.GeekPhosphorColor);
+                SetToggle(GeekCrtSwitch, s.GeekCrtEnabled);
                 SetToggle(ShowSpectrumSwitch, s.ShowSpectrum);
                 SetToggle(ShowAlbumCoverSwitch, s.ShowAlbumCover);
                 SetToggle(EnableBackgroundSwitch, s.EnableBackground);
@@ -1367,8 +1369,10 @@ namespace CelesteMusicPlayer
             s.MiniPlayerAlwaysOnTop = MiniAlwaysOnTopSwitch?.IsOn ?? s.MiniPlayerAlwaysOnTop;
             s.OpenMiniPlayerOnStartup = OpenMiniPlayerSwitch?.IsOn ?? s.OpenMiniPlayerOnStartup;
 
-            s.UiStyleMode = GetComboTagString(UiStyleModeCombo, "");
+            s.UiStyleMode = GetComboTagString(UiStyleModeCombo, "ClassicSystem");
             s.EnableFrostedGlass = FrostedGlassSwitch?.IsOn ?? s.EnableFrostedGlass;
+            s.GeekPhosphorColor = GetComboTagString(GeekPhosphorCombo, "Amber");
+            s.GeekCrtEnabled = GeekCrtSwitch?.IsOn ?? s.GeekCrtEnabled;
             s.ShowSpectrum = ShowSpectrumSwitch?.IsOn ?? s.ShowSpectrum;
             s.ShowAlbumCover = ShowAlbumCoverSwitch?.IsOn ?? s.ShowAlbumCover;
             s.EnableBackground = EnableBackgroundSwitch?.IsOn ?? s.EnableBackground;
@@ -2122,6 +2126,23 @@ namespace CelesteMusicPlayer
                 // HiFi 软件音量切换即时刷新主窗口音量条冻结态（解冻 / 钉 100%）与引擎音量路由
                 MainWindow.Instance?.ApplySettingsLive(AppSettingsStore.Load());
             }
+            else if (ReferenceEquals(sender, FrostedGlassSwitch))
+            {
+                // 毛玻璃开关在经典 / 极客风格下同样生效：切完当场刷新主窗口背板与设置页自身，不用重启
+                MainWindow.Instance?.ApplySettingsLive(AppSettingsStore.Load());
+                ApplyBackdropIfOpen();
+            }
+            else if (ReferenceEquals(sender, GeekCrtSwitch))
+            {
+                // CRT 扫描线开关：切完当场叠上 / 撤掉那一层，不用重启
+                MainWindow.Instance?.ApplySettingsLive(AppSettingsStore.Load());
+            }
+        }
+
+        private void GeekPhosphorCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingUi) return;
+            PersistAllFromUi();
         }
 
         private void OnThemeColorChangedSettings(Windows.UI.Color accent)

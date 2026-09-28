@@ -146,6 +146,7 @@ namespace CelesteMusicPlayer
             try
             {
                 AppSettingsState settings = AppSettingsStore.Load();
+                FrostedGlass.BackdropEnabled = settings.EnableFrostedGlass;
                 if (!settings.EnableFrostedGlass)
                 {
                     SystemBackdrop = null;

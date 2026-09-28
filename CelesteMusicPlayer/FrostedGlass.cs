@@ -23,6 +23,12 @@ namespace CelesteMusicPlayer
         public static string? ClassicMode { get; set; }
 
         /// <summary>
+        /// 「外观设置 → 毛玻璃背景」开关的状态，由 MainWindow 应用设置时同步进来。
+        /// 经典 / 极客风格下开毛玻璃时，窗口根面板不能再刷不透明底，否则会把亚克力盖死。
+        /// </summary>
+        public static bool BackdropEnabled { get; set; } = true;
+
+        /// <summary>
         /// 经典界面是否浅色。
         /// 注意：MainWindow.ApplyUiStyleMode 存进来的是归一化后的 "Light" / "Dark"
         ///（不是 "ClassicLight"），这里把两种写法都认，避免模式串对不上导致浅色模式被当成深色。
@@ -37,18 +43,9 @@ namespace CelesteMusicPlayer
             // 先按主程序的界面风格把明暗主题下发到这个窗口（设置页/均衡器/标签编辑等弹窗都走这里）
             ApplyWindowTheme(window);
 
-            // 经典界面统一不透明，弹窗也不再用亚克力
-            if (ClassicMode != null)
-            {
-                try
-                {
-                    window.SystemBackdrop = null;
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("FrostedGlass.cs", caught); }
-
-                return;
-            }
-
+            // 毛玻璃只由「外观设置」里的开关决定，与界面风格（图景 / 经典 / 极客）无关。
+            // 经典 / 极客风格下开毛玻璃 = 窗口背板走亚克力透出壁纸，面板本身仍是不透明纯色卡片，
+            // 两者不冲突：卡片该不透明还是不透明，变的只是卡片之外的那层底。
             try
             {
                 window.SystemBackdrop = new DesktopAcrylicBackdrop();
@@ -137,7 +134,9 @@ namespace CelesteMusicPlayer
 
             try
             {
-                if (ClassicMode != null)
+                // 经典 / 极客风格下若开了毛玻璃，根面板必须保持透明，让窗口亚克力透出来；
+                // 否则不透明底会把背板盖死，开关看起来就"没用"。
+                if (ClassicMode != null && !BackdropEnabled)
                 {
                     panel.Background = new SolidColorBrush(ClassicMode == "Geek"
                         ? Color.FromArgb(255, 11, 15, 11)          // 极客：与主窗口 RootShell 同一款近黑

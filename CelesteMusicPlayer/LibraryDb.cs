@@ -1005,6 +1005,41 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 曲库三项统计（曲目 / 专辑 / 艺术家），一条 SQL 搞定，供极客模式侧栏统计块显示。
+        /// 空字符串不算一个专辑 / 艺术家。失败返回 (-1, -1, -1)。
+        /// </summary>
+        public static (int Tracks, int Albums, int Artists) CountLibraryStats()
+        {
+            EnsureMigrated();
+            try
+            {
+                lock (Gate)
+                {
+                    using var conn = Open(GetDbFilePath());
+                    using var cmd = conn.CreateCommand();
+                    cmd.CommandText =
+                        "SELECT COUNT(*), " +
+                        "COUNT(DISTINCT CASE WHEN album = '' THEN NULL ELSE album END), " +
+                        "COUNT(DISTINCT CASE WHEN artist = '' THEN NULL ELSE artist END) FROM tracks";
+                    using var r = cmd.ExecuteReader();
+                    if (r.Read())
+                    {
+                        return (
+                            Convert.ToInt32(r.GetInt64(0)),
+                            Convert.ToInt32(r.GetInt64(1)),
+                            Convert.ToInt32(r.GetInt64(2)));
+                    }
+
+                    return (-1, -1, -1);
+                }
+            }
+            catch
+            {
+                return (-1, -1, -1);
+            }
+        }
+
         /// <summary>SQL 参数个数上限的保守分块大小。</summary>
         private const int SqlChunkSize = 400;
 

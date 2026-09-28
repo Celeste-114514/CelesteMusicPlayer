@@ -579,8 +579,8 @@
                                 Grid.Column="1"
                                 Width="220"
                                 SelectionChanged="UiStyleModeCombo_SelectionChanged">
-                                <ComboBoxItem Content="背景图式（默认）" Tag="" />
-                                <ComboBoxItem Content="经典 · 跟随系统" Tag="ClassicSystem" />
+                                <ComboBoxItem Content="背景图式（图景）" Tag="Scene" />
+                                <ComboBoxItem Content="经典 · 跟随系统（默认）" Tag="ClassicSystem" />
                                 <ComboBoxItem Content="经典 · 浅色" Tag="ClassicLight" />
                                 <ComboBoxItem Content="经典 · 深色" Tag="ClassicDark" />
                                 <ComboBoxItem Content="极客（终端风：近黑 + 等宽字 + 技术读数）" Tag="Geek" />
@@ -596,6 +596,36 @@
                                 <TextBlock Text="主窗口、迷你播放器与设置页使用亚克力透明效果" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                             <ToggleSwitch x:Name="FrostedGlassSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="极客磷光色" />
+                                <TextBlock Text="极客界面里唯一的彩色：琥珀=老式 CRT，绿=荧光屏，青=监控屏" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ComboBox
+                                x:Name="GeekPhosphorCombo"
+                                Grid.Column="1"
+                                Width="140"
+                                SelectionChanged="GeekPhosphorCombo_SelectionChanged">
+                                <ComboBoxItem Content="琥珀（默认）" Tag="Amber" />
+                                <ComboBoxItem Content="荧光绿" Tag="Green" />
+                                <ComboBoxItem Content="青" Tag="Cyan" />
+                            </ComboBox>
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="极客 CRT 扫描线" />
+                                <TextBlock Text="极客界面叠一层很淡的横向暗纹，做出老显示器的味道" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="GeekCrtSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
                         </Grid>
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
