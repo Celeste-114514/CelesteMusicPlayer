@@ -310,6 +310,17 @@ namespace CelesteMusicPlayer
                 : settings.DesktopLyricFontFamily;
             _playedColor = ParseHexColor(settings.DesktopLyricPlayedColor, Color.FromArgb(255, 64, 180, 255));
             _unplayedColor = ParseHexColor(settings.DesktopLyricUnplayedColor, Color.FromArgb(255, 245, 245, 245));
+
+            // 弹窗跟随：极客界面下桌面歌词也终端化 —— 等宽字 + 磷光双色
+            // （已唱=磷光满色，未唱=暗一档，与主窗口歌词分层同规则）。
+            if (MainWindow.IsGeekUiStyleActive())
+            {
+                _fontFamilyName = "Consolas";
+                // GeekPhosphorColor 返回 Windows.UI.Color，本文件用 System.Drawing，手动转
+                var wp = MainWindow.GeekPhosphorColor();
+                _playedColor = Color.FromArgb(wp.A, wp.R, wp.G, wp.B);
+                _unplayedColor = Color.FromArgb(0x8C, wp.R, wp.G, wp.B);
+            }
             _outlineWidth = (float)Math.Clamp(settings.DesktopLyricOutlineWidth, 0, 4);
             _outlineColor = ParseHexColor(settings.DesktopLyricOutlineColor, Color.FromArgb(255, 0, 0, 0));
             _shadowStrength = Math.Clamp(settings.DesktopLyricShadowStrength, 0, 3);

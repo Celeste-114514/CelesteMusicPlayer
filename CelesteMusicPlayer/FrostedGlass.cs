@@ -111,6 +111,10 @@ namespace CelesteMusicPlayer
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("FrostedGlass.cs", caught); }
+
+            // 极客界面：二级窗口跟随主界面做终端化（等宽字体 + 直角 + 细线）。
+            // 底色/明暗上面已经给了，这里补视觉三件套；主窗口会由内部逻辑跳过（它有自己的 ApplyGeekChrome）。
+            GeekWindowSkin.Apply(window, ClassicMode == "Geek");
         }
 
         /// <summary>已挂过激活回调的窗口，避免重复挂（弱引用表，窗口关了自动释放）。</summary>

@@ -43,6 +43,10 @@ namespace CelesteMusicPlayer
                 _ => Color.FromArgb(255, 0xFF, 0xB0, 0x00),               // 琥珀（默认）：老式 CRT 的暖黄
             };
 
+        /// <summary>当前设置选中的磷光色（极客界面里唯一的彩色）。供桌面歌词等自绘窗口取色。</summary>
+        internal static Color GeekPhosphorColor()
+            => PhosphorColor(AppSettingsStore.Load().GeekPhosphorColor);
+
         /// <summary>极客 transport 总入口：由 ApplyGeekChrome 在界面风格切换时调用一次。</summary>
         internal void ApplyGeekTransport(bool geek)
         {

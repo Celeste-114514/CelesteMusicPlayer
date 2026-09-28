@@ -447,6 +447,9 @@ namespace CelesteMusicPlayer
                 // 极客专属外观（等宽字 / 直角 / 顶栏读数）：两个分支都要跑，切走时负责还原。
                 ApplyGeekChrome(geek);
 
+                // 二级窗口跟随：设置页 / 迷你播放器 / 各编辑窗口一起切极客皮肤或还原
+                GeekWindowSkin.RefreshAllOpen(geek);
+
                 if (opaque)
                 {
                     // 只存归一化后的 "Light" / "Dark"（极客存 "Geek"）。
