@@ -817,7 +817,8 @@
                         Margin="10,4,6,2"
                         Opacity="0.75"
                         IsHitTestVisible="False"
-                        TextTrimming="CharacterEllipsis"
+                        TextWrapping="Wrap"
+                        LineHeight="16"
                         Visibility="Collapsed" />
                 </StackPanel>
             </Grid>

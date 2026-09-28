@@ -28,6 +28,24 @@ namespace CelesteMusicPlayer
         /// <summary>极客期间被我上过色的元素清单（退出时逐个还原，不整树扫）。</summary>
         private readonly List<DependencyObject> _geekNowPlayingTinted = new();
 
+        /// <summary>
+        /// 进度条（播放页底部那条）的主题资源键：Slider 模板里的"已播放填充 / 滑块圆环"
+        /// 不读 Foreground 而是读这些键 —— 只改 Foreground 会出现"圆环变色、填充不变"。
+        /// 键写在这里是为了退出极客时能逐个摘干净。
+        /// </summary>
+        private static readonly string[] SliderAccentResourceKeys =
+        {
+            "SliderTrackValueFill",
+            "SliderTrackValueFillPointerOver",
+            "SliderTrackValueFillPressed",
+            "SliderTrackValueFillDisabled",
+            "SliderThumbBackground",
+            "SliderThumbBackgroundPointerOver",
+            "SliderThumbBackgroundPressed",
+            "SliderThumbBackgroundDisabled",
+            "SliderThumbBackgroundFocused",
+        };
+
         /// <summary>当前生效的磷光色；null = 极客没开。设置里换了色只重染，不重复刷整页。</summary>
         private Color? _geekNowPlayingPhosphor;
 
@@ -70,6 +88,10 @@ namespace CelesteMusicPlayer
                     {
                         GeekRestoreSubtree(element);
                     }
+
+                    // 进度条的颜色是写进它自己的资源字典的：GeekRestoreSubtree 只还原依赖属性，
+                    // 这几个键得单独摘掉，否则切回经典后进度条仍是磷光色
+                    RemoveSliderAccentOverrides();
 
                     _geekNowPlayingTinted.Clear();
                     _geekNowPlayingActive = false;
@@ -117,6 +139,31 @@ namespace CelesteMusicPlayer
 
             GeekTint(NowPlayingAudioInfoText, TextBlock.ForegroundProperty, info);
             GeekTint(SignalChainInfoText, TextBlock.ForegroundProperty, chain);
+
+            // 播放页底部那条进度条：默认跟主题强调色走，极客下必须跟磷光色一起变。
+            // 模板里的填充/圆环读的是上面那串资源键，所以画刷要写进它自己的资源字典。
+            if (NowPlayingProgressSlider != null)
+            {
+                GeekTint(NowPlayingProgressSlider, Control.ForegroundProperty, bright);
+                foreach (string key in SliderAccentResourceKeys)
+                {
+                    NowPlayingProgressSlider.Resources[key] = bright;
+                }
+            }
+        }
+
+        /// <summary>摘掉进度条上的极客配色（还原分支用）。</summary>
+        private void RemoveSliderAccentOverrides()
+        {
+            if (NowPlayingProgressSlider == null)
+            {
+                return;
+            }
+
+            foreach (string key in SliderAccentResourceKeys)
+            {
+                NowPlayingProgressSlider.Resources.Remove(key);
+            }
         }
 
         /// <summary>记原值 + 写极客值 + 进还原清单（三连，漏一个退出极客就会留残色）。</summary>

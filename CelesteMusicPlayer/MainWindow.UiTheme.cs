@@ -593,12 +593,19 @@ namespace CelesteMusicPlayer
                     root.Resources["ContentControlThemeFontFamily"] = mono;
                     root.Resources["ControlCornerRadius"] = new CornerRadius(0);
                     root.Resources["OverlayCornerRadius"] = new CornerRadius(0);
+
+                    // 上面三行只管"自己读资源"的模板：运行时新建的按钮 / 文本、以及
+                    // Content 被代码改写后重新生成的 TextBlock 都吃不到 —— 这就是用户实测
+                    // "极客界面各个按钮还是微软雅黑"的原因。隐式样式按类型匹配，之后新建的
+                    // 元素自动命中；FontIcon 反向钉住符号字体，免得继承等宽后缺字变问号框。
+                    ApplyGeekImplicitFontStyles(root, mono);
                 }
                 else
                 {
                     root.Resources.Remove("ContentControlThemeFontFamily");
                     root.Resources.Remove("ControlCornerRadius");
                     root.Resources.Remove("OverlayCornerRadius");
+                    ApplyGeekImplicitFontStyles(root, null);
                 }
 
                 // 资源只影响之后新建的元素，已在树上的这一批得手动刷一遍
@@ -622,6 +629,9 @@ namespace CelesteMusicPlayer
 
                 // 右侧浏览区重塑：直角 / 细线 / 无药丸（真正把它做成终端风，而不是经典换皮）
                 ApplyGeekBrowseSkin(geek);
+
+                // 左侧分类图标：极客下换成等宽符号 + 磷光单色（这是另一套结构，浏览区那个扫描覆盖不到）
+                ApplyNavGeekGlyphs(geek);
 
                 // C 区主区表格化：四视图纯文字表格（封面隐藏/列头/卡片墙换文字行）
                 ApplyGeekTables(geek);
@@ -695,6 +705,74 @@ namespace CelesteMusicPlayer
             {
                 ApplyFontToTree(VisualTreeHelper.GetChild(node, i), font);
             }
+        }
+
+        /// <summary>图标字形字体：等宽字体里没有这些私有区字形，继承过去会缺字成问号框，反向下钉。</summary>
+        private static readonly Microsoft.UI.Xaml.Media.FontFamily GeekIconSymbolFont =
+            new("Segoe Fluent Icons, Segoe MDL2 Assets");
+
+        /// <summary>隐式样式要覆盖的类型清单（隐式样式的资源键就是类型本身）。漏了的类型换不到等宽。
+        /// 全部写全限定名：本文件同时 using 了 TagLib（里面有 TextBox 等同名类型），简写会报 CS0104 歧义。</summary>
+        private static readonly Type[] GeekFontStyleTargets =
+        {
+            typeof(Microsoft.UI.Xaml.Controls.TextBlock),
+            typeof(Microsoft.UI.Xaml.Controls.RichTextBlock),
+            typeof(Microsoft.UI.Xaml.Controls.TextBox),
+            typeof(Microsoft.UI.Xaml.Controls.AutoSuggestBox),
+            typeof(Microsoft.UI.Xaml.Controls.PasswordBox),
+            typeof(Microsoft.UI.Xaml.Controls.Primitives.ButtonBase),
+            typeof(Microsoft.UI.Xaml.Controls.Button),
+            typeof(Microsoft.UI.Xaml.Controls.Primitives.ToggleButton),
+            typeof(Microsoft.UI.Xaml.Controls.Primitives.RepeatButton),
+            typeof(Microsoft.UI.Xaml.Controls.HyperlinkButton),
+            typeof(Microsoft.UI.Xaml.Controls.CheckBox),
+            typeof(Microsoft.UI.Xaml.Controls.RadioButton),
+            typeof(Microsoft.UI.Xaml.Controls.ComboBox),
+            typeof(Microsoft.UI.Xaml.Controls.ToggleSwitch),
+            typeof(Microsoft.UI.Xaml.Controls.AppBarButton),
+            typeof(Microsoft.UI.Xaml.Controls.MenuFlyoutItem),
+            typeof(Microsoft.UI.Xaml.Controls.ContentControl),
+        };
+
+        /// <summary>
+        /// 极客字体的隐式样式：mono 非空时给清单里每种类型挂一条「只设字体」的样式，null 时逐条摘掉。
+        /// 隐式样式只写字体这一个属性，不动控件默认模板；下面那棵树的遍历照旧负责已存在的元素。
+        /// </summary>
+        private static void ApplyGeekImplicitFontStyles(FrameworkElement root, Microsoft.UI.Xaml.Media.FontFamily? mono)
+        {
+            if (mono == null)
+            {
+                foreach (Type target in GeekFontStyleTargets)
+                {
+                    root.Resources.Remove(target);
+                }
+
+                root.Resources.Remove(typeof(Microsoft.UI.Xaml.Controls.FontIcon));
+                return;
+            }
+
+            foreach (Type target in GeekFontStyleTargets)
+            {
+                DependencyProperty? property =
+                    target == typeof(Microsoft.UI.Xaml.Controls.TextBlock) ? Microsoft.UI.Xaml.Controls.TextBlock.FontFamilyProperty
+                    : target == typeof(Microsoft.UI.Xaml.Controls.RichTextBlock) ? Microsoft.UI.Xaml.Controls.RichTextBlock.FontFamilyProperty
+                    : typeof(Microsoft.UI.Xaml.Controls.Control).IsAssignableFrom(target) ? Microsoft.UI.Xaml.Controls.Control.FontFamilyProperty
+                    : null;
+
+                if (property == null)
+                {
+                    continue;
+                }
+
+                var style = new Style(target);
+                style.Setters.Add(new Setter(property, mono));
+                root.Resources[target] = style;
+            }
+
+            // FontIcon 自己带 FontFamilyProperty（SymbolIcon 没有，MDL2 字形由系统兜底）
+            var iconStyle = new Style(typeof(Microsoft.UI.Xaml.Controls.FontIcon));
+            iconStyle.Setters.Add(new Setter(Microsoft.UI.Xaml.Controls.FontIcon.FontFamilyProperty, GeekIconSymbolFont));
+            root.Resources[typeof(Microsoft.UI.Xaml.Controls.FontIcon)] = iconStyle;
         }
 
         /// <summary>子树里是否有图标字形（决定这个控件能不能换等宽字体）。</summary>
@@ -884,7 +962,7 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 行内细节按界面风格重塑（极客化浏览面板的行级部分）：
         /// - Tag="FmtChip" 格式标签：极客下去掉药丸底/圆角/描边，变暗灰纯文本（终端曲目列表的味道）；
-        /// - Tag="RowCover" 行内封面：极客下整块隐藏、所在列宽归零（C 区表格化：纯文字表格不要封面）；
+        /// - Tag="RowCover" 行内封面：极客下保留（行首正方形封面框），只把圆角归零、描边换细线；
         /// - Tag 以 "RowChrome" 结尾的行底板：极客下在行底补一条 1px 表格线，整页读起来是一张数据表；
         /// - 行内其它圆角元素（选中块、标签底衬等）一并直角化。
         /// 原值一律走 GeekStore 备份，退出极客时逐项还原（不再手写"经典原值"，避免还原值和模板对不上）。
@@ -940,10 +1018,10 @@ namespace CelesteMusicPlayer
                     }
                     else if (tag == "RowCover")
                     {
-                        // C 区表格化：封面整块藏起（纯文字表格不要封面），所在列宽归零，
-                        // 序号列直接贴到信息列，不留一条空沟。原值走 GeekStore，退出极客逐项还原。
-                        GeekStore(b, UIElement.VisibilityProperty, Visibility.Collapsed);
-                        GeekZeroCoverColumn(b);
+                        // 用户决定（2026-09-29）：极客歌曲列表**保留封面** —— 行首放正方形封面框，
+                        // 只把圆角归零（其他皮肤维持各自的圆角款）。不再隐藏封面、也不再把列宽归零。
+                        GeekStore(b, Border.CornerRadiusProperty, new CornerRadius(0));
+                        GeekStore(b, Border.BorderBrushProperty, new SolidColorBrush(GeekHairline));
                     }
                     else
                     {
@@ -966,33 +1044,12 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 把行内封面所在的 Grid 列宽归零：封面 Collapse 之后 ColumnDefinition 仍会保留原宽度，
-        /// 不留一条空沟；列定义按「元素 + 依赖属性」走 GeekStore 记原值，退出极客随
-        /// GeekRestoreSubtree 一起还原。找不到父 Grid / 列越界就静默跳过（不影响封面隐藏本身）。
+        /// 给一行底板补 1px 表格线（用 Tag="GeekRule" 认领，还原时按同 Tag 摘掉）。
+        /// 线钉在行容器的底边 —— 行容器常是 VerticalAlignment=Center（比行底板矮），
+        /// 线会被抬上来正好压住最后一行文字（用户实测：横线与歌曲信息重叠）。
+        /// 所以先把居中的容器拉伸到底板同高再钉线：行内子元素各自自带
+        /// VerticalAlignment=Center，内容不会被拉散；拉伸与还原都走 GeekStore。
         /// </summary>
-        private void GeekZeroCoverColumn(Border cover)
-        {
-            DependencyObject? current = VisualTreeHelper.GetParent(cover);
-            while (current != null && current is not Grid)
-            {
-                current = VisualTreeHelper.GetParent(current);
-            }
-
-            if (current is not Grid grid)
-            {
-                return;
-            }
-
-            int column = Grid.GetColumn(cover);
-            if (column < 0 || column >= grid.ColumnDefinitions.Count)
-            {
-                return;
-            }
-
-            GeekStore(grid.ColumnDefinitions[column], ColumnDefinition.WidthProperty, new GridLength(0));
-        }
-
-        /// <summary>给一行底板补 1px 表格线（已补过就直接返回；用 Tag="GeekRule" 认领，还原时按同 Tag 摘掉）。</summary>
         private void EnsureGeekRowRule(Border chrome)
         {
             if (chrome.Child is not Panel host)
@@ -1002,10 +1059,15 @@ namespace CelesteMusicPlayer
 
             foreach (UIElement existing in host.Children)
             {
-                if (existing is Border ruleBorder && ruleBorder.Tag as string == "GeekRule")
+                if (existing is FrameworkElement existingElement && existingElement.Tag as string == "GeekRule")
                 {
                     return;
                 }
+            }
+
+            if (host.VerticalAlignment == VerticalAlignment.Center)
+            {
+                GeekStore(host, FrameworkElement.VerticalAlignmentProperty, VerticalAlignment.Stretch);
             }
 
             Thickness padding = chrome.Padding;
@@ -1092,6 +1154,11 @@ namespace CelesteMusicPlayer
             public FrameworkElement? Emoji;   // 经典模式用的彩色 emoji
             public TextBlock? Label;
             public bool IsTool;               // 音效处理 / 标签排序 / 播放列表
+
+            // 极客界面不用 Fluent 字形（它就是"塑料感"的来源）：换成等宽符号 + 磷光单色
+            public string GeekSymbol = string.Empty;
+            public Panel? GlyphHost;          // 图标挂在哪个容器上（符号文本插同一层）
+            public TextBlock? GeekGlyph;      // 懒创建；切出极客只是隐藏，不删元素
         }
 
         private List<NavItemRef>? _navItems;
@@ -1102,22 +1169,22 @@ namespace CelesteMusicPlayer
         private List<NavItemRef> BuildNavItems()
         {
             var items = new List<NavItemRef>();
-            AddNavItem(items, NavSongsButton, NavSongsIndicator, false);
-            AddNavItem(items, NavAlbumsButton, NavAlbumsIndicator, false);
-            AddNavItem(items, NavArtistsButton, NavArtistsIndicator, false);
-            AddNavItem(items, NavAlbumArtistsButton, NavAlbumArtistsIndicator, false);
-            AddNavItem(items, NavFavoritesButton, NavFavoritesIndicator, false);
-            AddNavItem(items, NavRatingsButton, NavRatingsIndicator, false);
-            AddNavItem(items, NavRecentButton, NavRecentIndicator, false);
-            AddNavItem(items, NavPlaylistWallButton, NavPlaylistWallIndicator, false);
-            AddNavItem(items, NavGenreButton, NavGenreIndicator, false);
-            AddNavItem(items, NavYearButton, NavYearIndicator, false);
-            AddNavItem(items, NavMostPlayedButton, NavMostPlayedIndicator, false);
-            AddNavItem(items, NavFoldersButton, NavFoldersIndicator, false);
-            AddNavItem(items, NavWebDavButton, NavWebDavIndicator, false);
-            AddNavItem(items, NavAudioFxButton, NavAudioFxIndicator, true);
-            AddNavItem(items, NavTagSortButton, NavTagSortIndicator, true);
-            AddNavItem(items, UserPlaylistNavButton, UserPlaylistNavIndicator, true);
+            AddNavItem(items, NavSongsButton, NavSongsIndicator, false, "♪");
+            AddNavItem(items, NavAlbumsButton, NavAlbumsIndicator, false, "■");
+            AddNavItem(items, NavArtistsButton, NavArtistsIndicator, false, "◉");
+            AddNavItem(items, NavAlbumArtistsButton, NavAlbumArtistsIndicator, false, "◎");
+            AddNavItem(items, NavFavoritesButton, NavFavoritesIndicator, false, "♥");
+            AddNavItem(items, NavRatingsButton, NavRatingsIndicator, false, "★");
+            AddNavItem(items, NavRecentButton, NavRecentIndicator, false, "↺");
+            AddNavItem(items, NavPlaylistWallButton, NavPlaylistWallIndicator, false, "≡");
+            AddNavItem(items, NavGenreButton, NavGenreIndicator, false, "※");
+            AddNavItem(items, NavYearButton, NavYearIndicator, false, "▒");
+            AddNavItem(items, NavMostPlayedButton, NavMostPlayedIndicator, false, "▲");
+            AddNavItem(items, NavFoldersButton, NavFoldersIndicator, false, "▤");
+            AddNavItem(items, NavWebDavButton, NavWebDavIndicator, false, "☁");
+            AddNavItem(items, NavAudioFxButton, NavAudioFxIndicator, true, "♫");
+            AddNavItem(items, NavTagSortButton, NavTagSortIndicator, true, "↕");
+            AddNavItem(items, UserPlaylistNavButton, UserPlaylistNavIndicator, true, "▦");
 
             // 自检：条目里的「字形 / emoji / 文字」是靠遍历按钮内容抓的，抓漏了会静默退化
             // （经典界面下 emoji 不显示、图标还是老的单色字形）。这里留一行日志便于核对。
@@ -1129,14 +1196,14 @@ namespace CelesteMusicPlayer
             return items;
         }
 
-        private static void AddNavItem(List<NavItemRef> items, Button? button, Border? indicator, bool isTool)
+        private static void AddNavItem(List<NavItemRef> items, Button? button, Border? indicator, bool isTool, string geekSymbol)
         {
             if (button == null)
             {
                 return;
             }
 
-            var item = new NavItemRef { Button = button, Indicator = indicator, IsTool = isTool };
+            var item = new NavItemRef { Button = button, Indicator = indicator, IsTool = isTool, GeekSymbol = geekSymbol };
 
             // 竖条以自身中心缩放（"长出来"的动画用）。XAML 里不写，省得 15 个条目抄 15 遍。
             if (indicator != null)
@@ -1147,8 +1214,14 @@ namespace CelesteMusicPlayer
 
             if (button.Content is DependencyObject content)
             {
-                foreach (DependencyObject node in WalkNavContent(content))
+                // 带父容器的遍历：极客符号要插在图标那一层，得知道图标挂在哪个 Panel 上
+                var queue = new Queue<(DependencyObject Node, Panel? Parent)>();
+                queue.Enqueue((content, null));
+
+                while (queue.Count > 0)
                 {
+                    (DependencyObject node, Panel? parent) = queue.Dequeue();
+
                     if (node is TextBlock block)
                     {
                         string? marker = block.Tag as string;
@@ -1164,6 +1237,23 @@ namespace CelesteMusicPlayer
                     else if (item.Glyph == null && node is FontIcon or Shapes.Path)
                     {
                         item.Glyph = (FrameworkElement)node;
+                        item.GlyphHost = parent;
+                    }
+
+                    if (node is Panel panel)
+                    {
+                        foreach (UIElement child in panel.Children)
+                        {
+                            queue.Enqueue((child, panel));
+                        }
+                    }
+                    else
+                    {
+                        int count = VisualTreeHelper.GetChildrenCount(node);
+                        for (int i = 0; i < count; i++)
+                        {
+                            queue.Enqueue((VisualTreeHelper.GetChild(node, i), parent));
+                        }
                     }
                 }
             }
@@ -1228,8 +1318,81 @@ namespace CelesteMusicPlayer
                 {
                     LibraryNavInnerDivider.Visibility = classic ? Visibility.Visible : Visibility.Collapsed;
                 }
+
+                // 极客界面同样要抢一次：终端里的分类不该再露出 Fluent 字形
+                ApplyNavGeekGlyphs(IsGeekUiStyleActive());
             }
             catch (Exception caught) { StartupLog.WriteException("MainWindow.UiTheme.cs.ApplyNavIconStyle", caught); }
+        }
+
+        /// <summary>
+        /// 极客界面的左侧分类图标：隐藏 Fluent 字形，换成等宽符号（磷光单色、固定宽度所以
+        /// 各条目的文字能严格对齐）。切回别的风格只隐藏不删 —— 元素是我在运行时插进
+        /// 按钮内容的容器里的，删了就没法再恢复原来的子元素顺序。
+        /// </summary>
+        private void ApplyNavGeekGlyphs(bool geek)
+        {
+            Color phosphor = PhosphorColor(AppSettingsStore.Load().GeekPhosphorColor);
+
+            foreach (NavItemRef item in NavItems)
+            {
+                bool showSymbol = geek && item.GlyphHost != null && item.GeekSymbol.Length > 0;
+
+                if (showSymbol && item.Emoji != null)
+                {
+                    item.Emoji.Visibility = Visibility.Collapsed;
+                }
+
+                TextBlock? symbol = item.GeekGlyph;
+                if (showSymbol)
+                {
+                    symbol ??= BuildNavGeekGlyph(item);
+                }
+
+                if (symbol != null)
+                {
+                    item.GeekGlyph = symbol;
+                    symbol.Visibility = showSymbol ? Visibility.Visible : Visibility.Collapsed;
+                    if (showSymbol)
+                    {
+                        symbol.Foreground = new SolidColorBrush(phosphor);
+                    }
+                }
+
+                if (item.Glyph != null)
+                {
+                    bool emojiShown = item.Emoji != null && item.Emoji.Visibility == Visibility.Visible;
+                    item.Glyph.Visibility = (emojiShown || (symbol?.Visibility == Visibility.Visible))
+                        ? Visibility.Collapsed
+                        : Visibility.Visible;
+                }
+            }
+        }
+
+        /// <summary>造一个插入式的等宽符号文本（放在原图标的位置上，宽度钉死所以不错位）。</summary>
+        private static TextBlock? BuildNavGeekGlyph(NavItemRef item)
+        {
+            Panel? host = item.GlyphHost;
+            if (host == null)
+            {
+                return null;
+            }
+
+            var symbol = new TextBlock
+            {
+                Text = item.GeekSymbol,
+                FontFamily = new Microsoft.UI.Xaml.Media.FontFamily("Consolas"),
+                FontSize = 13,
+                Width = 20,
+                TextAlignment = TextAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+                Tag = "GeekNavSymbol",
+            };
+
+            int index = item.Glyph is UIElement glyphElement ? host.Children.IndexOf(glyphElement) : -1;
+            host.Children.Insert(index >= 0 ? index : 0, symbol);
+            return symbol;
         }
 
         /// <summary>

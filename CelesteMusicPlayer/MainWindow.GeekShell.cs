@@ -211,10 +211,11 @@ namespace CelesteMusicPlayer
 
             try
             {
+                // 侧栏窄，三个读数横排一定被截断（用户实测 TRK 4007 之后就看不见了）→ 竖排三行
                 (int tracks, int albums, int artists) = LibraryDb.CountLibraryStats();
                 GeekLibStats.Text = tracks < 0
-                    ? "TRK --  ALB --  ART --"
-                    : $"TRK {tracks}  ALB {albums}  ART {artists}";
+                    ? "TRK --\nALB --\nART --"
+                    : $"TRK {tracks}\nALB {albums}\nART {artists}";
             }
             catch (Exception caught)
             {
