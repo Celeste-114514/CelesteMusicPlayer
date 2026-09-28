@@ -161,24 +161,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ApplyAudioChannelFromSettings()
-        {
-            MediaPlayer? player = GetPlayer();
-            if (player == null)
-            {
-                return;
-            }
-
-            string channel = AppSettingsStore.Load().AudioChannel;
-            player.AudioBalance = channel switch
-            {
-                "Left" => -1f,
-                "Right" => 1f,
-                _ => 0f
-            };
-        }
-
-
         private void ApplyAlwaysOnTopFromSettings()
         {
             try

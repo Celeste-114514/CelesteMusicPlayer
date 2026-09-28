@@ -165,6 +165,12 @@ namespace CelesteMusicPlayer
         /// <summary>字体族名，例如 Microsoft YaHei UI / SimHei / KaiTi。</summary>
         public string DesktopLyricFontFamily { get; set; } = "Microsoft YaHei UI";
 
+        /// <summary>主界面歌词（播放信息页 / 右侧歌词面板）当前行字号；邻行/远处行按 -4/-5 递减。默认 19。</summary>
+        public double MainLyricFontSize { get; set; } = 19;
+
+        /// <summary>主界面歌词字体；空=跟随系统默认。</summary>
+        public string MainLyricFontFamily { get; set; } = string.Empty;
+
         /// <summary>描边宽度（像素），0 = 不描边，上限 4。</summary>
         public double DesktopLyricOutlineWidth { get; set; }
 
@@ -217,7 +223,8 @@ namespace CelesteMusicPlayer
         public bool FollowSystemAccent { get; set; } = true;
         public string AccentSource { get; set; } = "System"; // System / Custom
         public string CustomAccentColor { get; set; } = "#0078D4";
-        public string ProgressBarStyle { get; set; } = "Gradient"; // Gradient / Waveform / Spotify / AppleLine
+        /// <summary>波形进度条开关：开=歌曲波形进度条，关=默认细条。早期有 4 种样式（渐变/波形/Spotify/Apple 线），已收敛。</summary>
+        public bool WaveformProgress { get; set; }
         public string CustomBackgroundPath { get; set; } = string.Empty;
 
         /// <summary>
@@ -261,13 +268,6 @@ namespace CelesteMusicPlayer
         public bool EnableSmtc { get; set; } = true;
 
         public bool EnableGlobalHotkeys { get; set; } = true;
-
-        public bool EnableFade { get; set; }
-
-        public int FadeMilliseconds { get; set; } = 500;
-
-        /// <summary>点击进度条定位后的行为：SeekAndPause（跳转并暂停，默认）/ SeekAndPlay（跳转并继续播放）。</summary>
-        public string ProgressBarClickBehavior { get; set; } = "SeekAndPause";
 
         public double PlaybackRate { get; set; } = 1.0;
 
@@ -373,9 +373,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         /// 超限后由 FfmpegDecoderBackend.TrimCache 按「最久未用」温和清理（每次只删一小批、播放中不删），
         /// 不再一次性删掉一半 —— 一次性删几百 MB 会和正在读盘的播放抢 I/O，表现为播放卡顿。</summary>
         public int TranscodeCacheLimitMb { get; set; } = 2048;
-
-        /// <summary>声道：Stereo / Left / Right。</summary>
-        public string AudioChannel { get; set; } = "Stereo";
 
         /// <summary>主窗口置顶。</summary>
         public bool AlwaysOnTop { get; set; }
@@ -571,10 +568,10 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 s.PlaybackOrder = nameof(CelesteMusicPlayer.PlaybackOrder.ListLoop);
             }
 
-            s.FadeMilliseconds = Math.Clamp(s.FadeMilliseconds, 0, 60_000);
             s.PlaybackRate = Math.Clamp(s.PlaybackRate, 0.25, 4.0);
             s.DesktopLyricOpacity = Math.Clamp(s.DesktopLyricOpacity, 20, 100);
             s.DesktopLyricFontSize = Math.Clamp(s.DesktopLyricFontSize, 14, 64);
+            s.MainLyricFontSize = Math.Clamp(s.MainLyricFontSize, 12, 48);
             s.LyricLineSpacing = Math.Clamp(s.LyricLineSpacing, 0, 40);
             s.GaussBlurRadius = Math.Clamp(s.GaussBlurRadius, 1, 8);
             // 波形进度条配色：非法值一律回退「渐变」，白度夹在 0~1
@@ -593,13 +590,8 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             };
             s.OnlineSearchDefaultSource = s.OnlineSearchDefaultSource switch
             {
-                "QQ" or "iTunes" => s.OnlineSearchDefaultSource,
+                "QQ" or "iTunes" or "MusicBrainz" => s.OnlineSearchDefaultSource,
                 _ => "NetEase"
-            };
-            s.AudioChannel = s.AudioChannel switch
-            {
-                "Left" or "Right" => s.AudioChannel,
-                _ => "Stereo"
             };
             // 网络音乐库（WebDAV）：代理模式白名单 + 端口兜底，避免配置文件被手改坏后无法连接。
             s.WebDavProxyMode = s.WebDavProxyMode switch
@@ -624,10 +616,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 s.LyricSavePolicy = "Ask";
             }
 
-            if (string.IsNullOrWhiteSpace(s.LyricAlign))
-            {
-                s.LyricAlign = "Center";
-            }
+            // 歌词对齐：早期有「自动」（实际按居中处理，名不副实），该选项已删；
+            // 存量配置里的旧值一律归一到居中，左/右之外同理。
+            s.LyricAlign = s.LyricAlign is "Left" or "Right" ? s.LyricAlign : "Center";
 
             if (string.IsNullOrWhiteSpace(s.DesktopLyricPlayedColor))
             {
@@ -643,6 +634,8 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             {
                 s.DesktopLyricFontFamily = "Microsoft YaHei UI";
             }
+
+            s.MainLyricFontFamily ??= string.Empty;
 
             s.DesktopLyricOutlineWidth = Math.Clamp(s.DesktopLyricOutlineWidth, 0, 4);
             s.DesktopLyricShadowStrength = Math.Clamp(s.DesktopLyricShadowStrength, 0, 3);
@@ -720,6 +713,8 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             LyricLineSpacing = s.LyricLineSpacing,
             LyricAlign = s.LyricAlign,
             LyricOffsetMs = s.LyricOffsetMs,
+            MainLyricFontSize = s.MainLyricFontSize,
+            MainLyricFontFamily = s.MainLyricFontFamily ?? string.Empty,
             DesktopLyricHideWithoutLyric = s.DesktopLyricHideWithoutLyric,
             DesktopLyricHideWhenPaused = s.DesktopLyricHideWhenPaused,
             DesktopLyricLockOnStart = s.DesktopLyricLockOnStart,
@@ -754,11 +749,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 ? (s.FollowSystemAccent ? "System" : "Custom")
                 : s.AccentSource,
             CustomAccentColor = string.IsNullOrWhiteSpace(s.CustomAccentColor) ? "#0078D4" : s.CustomAccentColor,
-        ProgressBarStyle = s.ProgressBarStyle switch
-        {
-            "Waveform" or "Spotify" or "AppleLine" => s.ProgressBarStyle,
-            _ => "Gradient"
-        },
+        WaveformProgress = s.WaveformProgress,
         CustomBackgroundPath = s.CustomBackgroundPath?.Trim() ?? string.Empty,
         WaveColorMode = s.WaveColorMode is "Gradient" or "Solid" ? s.WaveColorMode : "Gradient",
         WaveSolidWhiteness = Math.Clamp(s.WaveSolidWhiteness, 0.0, 1.0),
@@ -780,10 +771,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         PlaylistDensity = s.PlaylistDensity is "Compact" or "Comfortable" ? s.PlaylistDensity : "Comfortable",
             EnableSmtc = s.EnableSmtc,
             EnableGlobalHotkeys = s.EnableGlobalHotkeys,
-            EnableFade = s.EnableFade,
-            FadeMilliseconds = s.FadeMilliseconds,
             CrossfadeMs = s.CrossfadeMs,
-            ProgressBarClickBehavior = s.ProgressBarClickBehavior,
             PlaybackRate = s.PlaybackRate,
             StopWhenError = s.StopWhenError,
             AutoPlayWhenStart = s.AutoPlayWhenStart,
@@ -814,7 +802,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             ShowPlaylistAlbum = s.ShowPlaylistAlbum,
             ShowPlaylistYear = s.ShowPlaylistYear,
             ShowPlaylistDuration = s.ShowPlaylistDuration,
-            AudioChannel = s.AudioChannel,
             SrcTargetHz = s.SrcTargetHz,
             SrcQuality = s.SrcQuality,
             SrcDither = s.SrcDither,

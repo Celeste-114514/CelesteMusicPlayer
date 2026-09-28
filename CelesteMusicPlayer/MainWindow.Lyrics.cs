@@ -231,12 +231,15 @@ namespace CelesteMusicPlayer
             {
                 // 极客模式：连"还没唱到的远处行"也是暗磷光而不是灰（建完 SyncLyricsToPosition 会立刻重染）
                 Color? geekLyricInit = GeekLyricAccentColor();
+                (double sizeCurrent, double sizeNear, double sizeFar, double sizeTrans) = MainLyricFontSizes();
+                FontFamily? lyricFont = MainLyricFontFamily();
                 var tb = new TextBlock
                 {
                     TextAlignment = align,
                     TextWrapping = TextWrapping.WrapWholeWords,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
-                    FontSize = 14,
+                    FontSize = sizeFar,
+                    FontFamily = lyricFont,
                     Foreground = geekLyricInit is Color geekFar
                         ? PhosphorShade(geekFar, 0x8C)
                         : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154)),
@@ -246,7 +249,7 @@ namespace CelesteMusicPlayer
                 if (line.IsTranslation)
                 {
                     // 翻译行：小号、更淡，且不作为主题色高亮的目标
-                    tb.FontSize = 12;
+                    tb.FontSize = sizeTrans;
                     tb.Opacity = 0.40;
                 }
                 else
@@ -325,6 +328,24 @@ namespace CelesteMusicPlayer
             SyncLyricsToPosition(GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero);
             _desktopLyricsWindow?.SetLyrics(_lyricLines);
             _miniPlayerWindow?.RefreshFromOwner();
+        }
+
+
+        /// <summary>
+        /// 主歌词四档字号：当前行=设置值，邻行-4、远处行-5、翻译行-7。
+        /// 早期写死 19/15/14/12，现由「主歌词字号」设置驱动。
+        /// </summary>
+        private static (double Current, double Near, double Far, double Translation) MainLyricFontSizes()
+        {
+            double baseSize = Math.Clamp(AppSettingsStore.Load().MainLyricFontSize, 12, 48);
+            return (baseSize, baseSize - 4, baseSize - 5, baseSize - 7);
+        }
+
+        /// <summary>主歌词字体；未设置=null（跟随系统默认）。</summary>
+        private static FontFamily? MainLyricFontFamily()
+        {
+            string? name = AppSettingsStore.Load().MainLyricFontFamily;
+            return string.IsNullOrWhiteSpace(name) ? null : new FontFamily(name);
         }
 
 

@@ -123,7 +123,7 @@ namespace CelesteMusicPlayer
 
         private float[]? _waveformData;
         private string? _waveformPath;
-        private string _progressBarStyle = "Gradient";
+        private bool _waveformProgress;
         // 主题波形强调色（ResolveAccentColor 的缓存，避免频繁解析）
         private static Color _waveAccentColor = Color.FromArgb(255, 0, 120, 212);
         private SystemMediaTransportControls? _engineSmtc;
@@ -170,7 +170,6 @@ namespace CelesteMusicPlayer
 
             _mediaPlayer = new MediaPlayer();
             PlayerElement.SetMediaPlayer(_mediaPlayer);
-            ApplyAudioChannelFromSettings();
             _mediaPlayer.CommandManager.IsEnabled = false;
 
             _mediaPlayer.MediaOpened += Player_MediaOpened;
@@ -1274,7 +1273,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                _progressBarStyle = AppSettingsStore.Load().ProgressBarStyle;
+                _waveformProgress = AppSettingsStore.Load().WaveformProgress;
 
                 double duration = item.Duration.TotalSeconds;
                 if (duration > 1)

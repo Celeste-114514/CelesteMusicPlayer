@@ -217,7 +217,7 @@ namespace CelesteMusicPlayer
                     // 进度条样式:启动时读取设置(否则默认显示系统进度条)
                     try
                     {
-                        _progressBarStyle = AppSettingsStore.Load().ProgressBarStyle;
+                        _waveformProgress = AppSettingsStore.Load().WaveformProgress;
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 

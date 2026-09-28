@@ -2239,8 +2239,8 @@ namespace CelesteMusicPlayer
             }
 
             _waveformData = wave;
-            StartupLog.Write("波形回调: " + (wave?.Length > 0 ? "有数据" : "空") + " style=" + _progressBarStyle);
-            if (_progressBarStyle == "Waveform")
+            StartupLog.Write("波形回调: " + (wave?.Length > 0 ? "有数据" : "空") + " style=" + (_waveformProgress ? "Waveform" : "Gradient"));
+            if (_waveformProgress)
             {
                 RedrawProgressStyle();
             }

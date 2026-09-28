@@ -345,7 +345,7 @@ namespace CelesteMusicPlayer
         private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
             // 波形进度条必须随播放位置实时重绘,不能被 UI 更新标志拦截(否则播放中波形停住/错误)
-            if (_progressBarStyle == "Waveform")
+            if (_waveformProgress)
             {
                 RedrawProgressStyle();
             }
@@ -378,9 +378,8 @@ namespace CelesteMusicPlayer
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
-                // 用户点击进度条定位后：按设置决定「跳转并继续播放」或「跳转并暂停」。
-                if (_audioEngine.IsPlaying
-                    && AppSettingsStore.Load().ProgressBarClickBehavior != "SeekAndPlay")
+                // 用户点击进度条定位后：跳转并暂停（早期可选「跳转并继续播放」，该设置已删除，行为固定）。
+                if (_audioEngine.IsPlaying)
                 {
                     _audioEngine.Pause();
                     _isEnginePaused = true;
@@ -402,7 +401,7 @@ namespace CelesteMusicPlayer
             {
                 // 启动就绪态：还没有播放会话，直接 return 会让"拖进度条"完全没反应。
                 // 记下位置起播（起播后是否暂停按设置走），跟播放中拖进度条的手感一致。
-                bool pauseAfter = AppSettingsStore.Load().ProgressBarClickBehavior != "SeekAndPlay";
+                bool pauseAfter = true;
                 StartPlaybackFromPendingPosition(ProgressSlider.Value, pauseAfter);
                 return;
             }
@@ -986,7 +985,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            bool waveform = _progressBarStyle == "Waveform";
+            bool waveform = _waveformProgress;
             if (!waveform)
             {
                 // 默认样式:恢复系统进度条(主题色跟随主题设置)
@@ -1180,7 +1179,7 @@ namespace CelesteMusicPlayer
         /// <summary>未播放时加载列表选中(或第一首)歌曲的波形预览。</summary>
         private void TryLoadWaveformPreview()
         {
-            if (_progressBarStyle != "Waveform" || !string.IsNullOrEmpty(_nowPlayingPath))
+            if (!_waveformProgress || !string.IsNullOrEmpty(_nowPlayingPath))
             {
                 return;
             }
@@ -1902,6 +1901,9 @@ namespace CelesteMusicPlayer
 
             // 方案A：当前句主题色强调 + 相邻句微亮（纯属性调整，不改行结构、不用 Inlines）
             // 极客模式三层全换磷光色（画刷 alpha 分层，Opacity 不动）；经典模式保持原灰阶
+            // 字号/字体跟随「主歌词」设置（四档：当前=设置值，邻-4、远-5；翻译行建时-7）
+            (double sizeCur, double sizeNear, double sizeFar, _) = MainLyricFontSizes();
+            FontFamily? lyricFontSync = MainLyricFontFamily();
             Color? geekLyric = GeekLyricAccentColor();
             Brush accent = geekLyric is Color geekAccent
                 ? new SolidColorBrush(geekAccent)
@@ -1909,10 +1911,11 @@ namespace CelesteMusicPlayer
             for (int i = 0; i < _lyricTextBlocks.Count; i++)
             {
                 TextBlock row = _lyricTextBlocks[i];
+                row.FontFamily = lyricFontSync;
                 int dist = Math.Abs(i - index);
                 if (dist == 0)
                 {
-                    row.FontSize = 19;
+                    row.FontSize = sizeCur;
                     row.FontWeight = Microsoft.UI.Text.FontWeights.Bold;
                     row.Foreground = accent;
                     row.Opacity = 1.0;
@@ -1928,7 +1931,7 @@ namespace CelesteMusicPlayer
                 }
                 else if (dist == 1)
                 {
-                    row.FontSize = 15;
+                    row.FontSize = sizeNear;
                     row.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
                     row.Foreground = geekLyric is Color geekNear
                         ? PhosphorShade(geekNear, 0xB3)
@@ -1940,7 +1943,7 @@ namespace CelesteMusicPlayer
                 }
                 else
                 {
-                    row.FontSize = 14;
+                    row.FontSize = sizeFar;
                     row.FontWeight = Microsoft.UI.Text.FontWeights.Normal;
                     row.Foreground = geekLyric is Color geekFar
                         ? PhosphorShade(geekFar, 0x8C)
@@ -2404,10 +2407,10 @@ namespace CelesteMusicPlayer
             ScrobblePreviousIfAny();
 
             // 进度条样式(读设置缓存) + 异步加载波形(波形样式用)
-            _progressBarStyle = AppSettingsStore.Load().ProgressBarStyle;
+            _waveformProgress = AppSettingsStore.Load().WaveformProgress;
             // 保留旧波形直到新波形解码完成(避免加载过程闪占位)
             _waveformPath = null;
-            StartupLog.Write("波形加载开始: " + item.FilePath + " style=" + _progressBarStyle);
+            StartupLog.Write("波形加载开始: " + item.FilePath + " style=" + (_waveformProgress ? "Waveform" : "Gradient"));
             LoadWaveformForCurrentAsync(item.FilePath);
 
             // DSD(DSF/DFF) 在非 WASAPI 独占模式下自动转码为 PCM 输出（保留可听性，非 bit-perfect），
@@ -2891,9 +2894,9 @@ namespace CelesteMusicPlayer
                     NowPlayingText.Text = "正在播放（引擎）：" + next.Title + " - " + next.Artist;
                     _ = UpdateNowPlayingPanelAsync(next);
                     // 无缝续接后重新加载下一首的波形/进度条样式（否则会残留上一首的波形与时长）
-                    _progressBarStyle = AppSettingsStore.Load().ProgressBarStyle;
+                    _waveformProgress = AppSettingsStore.Load().WaveformProgress;
                     _waveformPath = null;
-                    StartupLog.Write("无缝切歌 波形加载开始: " + next.FilePath + " style=" + _progressBarStyle);
+                    StartupLog.Write("无缝切歌 波形加载开始: " + next.FilePath + " style=" + (_waveformProgress ? "Waveform" : "Gradient"));
                     LoadWaveformForCurrentAsync(next.FilePath);
                     UpdateNowPlayingOutputFormat();
                     RecordPlaybackStatsOnStart(next);

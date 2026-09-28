@@ -77,13 +77,6 @@ namespace CelesteMusicPlayer
             (PlaybackOrder.TrackOnce, "单曲播放")
         };
 
-        /// <summary>进度条点击后行为。</summary>
-        private static readonly (string Id, string Label)[] ProgressBarClickBehaviorOptions =
-        {
-            ("SeekAndPause", "跳转后暂停"),
-            ("SeekAndPlay", "跳转并继续播放")
-        };
-
         private static readonly (string Id, string Label)[] LyricSavePolicyOptions =
         {
             ("None", "不保存"),
@@ -93,10 +86,9 @@ namespace CelesteMusicPlayer
 
         private static readonly (string Id, string Label)[] LyricAlignOptions =
         {
-            ("Left", "左"),
-            ("Right", "右"),
+            ("Left", "左对齐"),
             ("Center", "居中"),
-            ("Auto", "自动")
+            ("Right", "右对齐")
         };
 
         private static readonly (string Id, string Label)[] LyricServiceOptions =
@@ -119,13 +111,6 @@ namespace CelesteMusicPlayer
         {
             ("NetEase", "网易云（真实歌手头像）"),
             ("iTunes", "iTunes（精确艺人，专辑封面）"),
-        };
-
-        private static readonly (string Id, string Label)[] AudioChannelOptions =
-        {
-            ("Stereo", "立体声"),
-            ("Left", "仅左声道"),
-            ("Right", "仅右声道")
         };
 
         private static readonly (int Days, string Label)[] RecentRangeOptions =
@@ -442,8 +427,6 @@ namespace CelesteMusicPlayer
             FillCombo(LyricDownloadServiceCombo, LyricServiceOptions);
             FillCombo(OnlineSearchSourceCombo, OnlineSearchSourceOptions);
             FillCombo(ArtistAvatarSourceCombo, ArtistAvatarSourceOptions);
-            FillCombo(AudioChannelCombo, AudioChannelOptions);
-            FillCombo(ProgressBarClickBehaviorCombo, ProgressBarClickBehaviorOptions);
             OutputModeCombo.Items.Clear();
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 共享（系统混音）", Tag = "Shared" });
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 独占（HiFi）", Tag = "WasapiExclusive" });
@@ -512,6 +495,9 @@ namespace CelesteMusicPlayer
                 SetTextBlock(LyricLineSpacingValueText, s.LyricLineSpacing.ToString());
                 SelectComboByTag(LyricAlignCombo, s.LyricAlign);
                 SetSlider(LyricOffsetSlider, s.LyricOffsetMs);
+                SetSlider(MainLyricFontSizeSlider, Math.Clamp(s.MainLyricFontSize, 12, 48));
+                SetTextBlock(MainLyricFontSizeValueText, Math.Clamp(s.MainLyricFontSize, 12, 48).ToString("0"));
+                SelectComboByTag(MainLyricFontFamilyCombo, s.MainLyricFontFamily ?? "");
                 SetTextBlock(LyricOffsetValueText, FormatLyricOffset(s.LyricOffsetMs));
 
                 SetToggle(OpenDesktopLyricsSwitch, s.OpenDesktopLyricsOnStartup);
@@ -577,7 +563,7 @@ namespace CelesteMusicPlayer
                 BackgroundPathTextBox.Text = s.CustomBackgroundPath;
                 SelectBackgroundPresetRadio(s.BackgroundPreset);
                 SetToggle(BackgroundPresetMotionSwitch, s.BackgroundPresetMotion);
-                WaveformProgressSwitch.IsOn = s.ProgressBarStyle == "Waveform";
+                WaveformProgressSwitch.IsOn = s.WaveformProgress;
                 // 波形已播配色：渐变 / 纯色；白度只在纯色下有意义（渐变时置灰）
                 SelectComboByTag(WaveColorModeCombo, s.WaveColorMode == "Solid" ? "Solid" : "Gradient");
                 if (WaveSolidWhitenessSlider != null)
@@ -606,8 +592,6 @@ namespace CelesteMusicPlayer
                 SelectComboByTag(LyricDownloadServiceCombo, s.LyricDownloadService);
                 SelectComboByTag(OnlineSearchSourceCombo, s.OnlineSearchDefaultSource);
                 SelectComboByTag(ArtistAvatarSourceCombo, string.IsNullOrWhiteSpace(s.ArtistAvatarSource) ? "NetEase" : s.ArtistAvatarSource);
-                SelectComboByTag(AudioChannelCombo, s.AudioChannel);
-                SelectComboByTag(ProgressBarClickBehaviorCombo, s.ProgressBarClickBehavior);
                 SetToggle(AlwaysOnTopSwitch, s.AlwaysOnTop);
                 SetToggle(SaveLyricToSongFolderSwitch, s.SaveLyricToSongFolder);
                 SetToggle(SaveCoverToSongFolderSwitch, s.SaveCoverToSongFolder);
@@ -619,9 +603,6 @@ namespace CelesteMusicPlayer
                 SetToggle(HiFiSoftwareVolumeSwitch, s.HiFiSoftwareVolume);
                 SelectPlaybackOrder(s.PlaybackOrder);
                 SetToggle(EnableSmtcSwitch, s.EnableSmtc);
-                SetToggle(EnableFadeSwitch, s.EnableFade);
-                SetSlider(FadeMsSlider, s.FadeMilliseconds);
-                SetTextBlock(FadeMsValueText, $"{s.FadeMilliseconds} ms");
                 SetSlider(PlaybackRateSlider, s.PlaybackRate);
                 SetTextBlock(PlaybackRateValueText, $"{s.PlaybackRate:0.00}×");
                 SetToggle(StopWhenErrorSwitch, s.StopWhenError);
@@ -1321,6 +1302,8 @@ namespace CelesteMusicPlayer
 
             s.LyricAlign = GetComboTagString(LyricAlignCombo, "Center");
             if (LyricOffsetSlider != null) s.LyricOffsetMs = (int)Math.Round(LyricOffsetSlider.Value);
+            s.MainLyricFontSize = Math.Clamp(MainLyricFontSizeSlider?.Value ?? s.MainLyricFontSize, 12, 48);
+            s.MainLyricFontFamily = GetComboTagString(MainLyricFontFamilyCombo, "") ?? "";
 
             s.OpenDesktopLyricsOnStartup = OpenDesktopLyricsSwitch?.IsOn ?? s.OpenDesktopLyricsOnStartup;
             s.DesktopLyricHideWithoutLyric = DesktopLyricHideWithoutLyricSwitch?.IsOn ?? s.DesktopLyricHideWithoutLyric;
@@ -1387,7 +1370,7 @@ namespace CelesteMusicPlayer
             s.CoverFolder = CoverFolderTextBox?.Text?.Trim() ?? string.Empty;
             s.AccentSource = GetComboTagString(AccentSourceCombo, "System");
             s.CustomAccentColor = string.IsNullOrWhiteSpace(_accentHex) ? "#0078D4" : _accentHex;
-            s.ProgressBarStyle = WaveformProgressSwitch.IsOn ? "Waveform" : "Gradient";
+            s.WaveformProgress = WaveformProgressSwitch.IsOn;
             s.WaveColorMode = GetComboTagString(WaveColorModeCombo, "Gradient") == "Solid" ? "Solid" : "Gradient";
             if (WaveSolidWhitenessSlider != null)
             {
@@ -1422,8 +1405,6 @@ namespace CelesteMusicPlayer
             s.LyricDownloadService = GetComboTagString(LyricDownloadServiceCombo, "NetEase");
             s.OnlineSearchDefaultSource = GetComboTagString(OnlineSearchSourceCombo, "NetEase");
             s.ArtistAvatarSource = GetComboTagString(ArtistAvatarSourceCombo, "NetEase");
-            s.AudioChannel = GetComboTagString(AudioChannelCombo, "Stereo");
-            s.ProgressBarClickBehavior = GetComboTagString(ProgressBarClickBehaviorCombo, "SeekAndPause");
             s.AlwaysOnTop = AlwaysOnTopSwitch?.IsOn ?? s.AlwaysOnTop;
             s.SaveLyricToSongFolder = SaveLyricToSongFolderSwitch?.IsOn ?? s.SaveLyricToSongFolder;
             s.SaveCoverToSongFolder = SaveCoverToSongFolderSwitch?.IsOn ?? s.SaveCoverToSongFolder;
@@ -1462,11 +1443,6 @@ namespace CelesteMusicPlayer
             s.DsdPreloadEnabled = DsdPreloadSwitch?.IsOn ?? s.DsdPreloadEnabled;
             s.AsioFeederEnabled = AsioFeederSwitch?.IsOn ?? s.AsioFeederEnabled;
             StartupLog.Write("设置保存 输出模式=" + (s.OutputMode ?? "null") + " 设备=" + (s.OutputDeviceId ?? "null"));
-            s.EnableFade = EnableFadeSwitch?.IsOn ?? s.EnableFade;
-            if (FadeMsSlider != null)
-            {
-                s.FadeMilliseconds = (int)Math.Round(FadeMsSlider.Value);
-            }
 
             if (PlaybackRateSlider != null)
             {
@@ -2291,10 +2267,6 @@ namespace CelesteMusicPlayer
                 // 记录最后一次用户设定的音量，供主窗口退出写盘时优先采用（统一两个音量入口的真值源）
                 MainWindow.LastUserVolume = Math.Clamp(e.NewValue, 0, 100);
             }
-            else if (ReferenceEquals(sender, FadeMsSlider))
-            {
-                FadeMsValueText.Text = $"{(int)Math.Round(e.NewValue)} ms";
-            }
             else if (ReferenceEquals(sender, PlaybackRateSlider))
             {
                 PlaybackRateValueText.Text = $"{e.NewValue:0.00}×";
@@ -2306,6 +2278,10 @@ namespace CelesteMusicPlayer
                 else if (ReferenceEquals(sender, LyricOffsetSlider))
                 {
                     LyricOffsetValueText.Text = FormatLyricOffset((int)Math.Round(e.NewValue));
+                }
+                else if (ReferenceEquals(sender, MainLyricFontSizeSlider))
+                {
+                    MainLyricFontSizeValueText.Text = ((int)Math.Round(e.NewValue)).ToString();
                 }
             else if (ReferenceEquals(sender, DesktopLyricOpacitySlider))
             {
@@ -2790,6 +2766,27 @@ namespace CelesteMusicPlayer
         {
             TrackStatsStore.ClearRecentlyPlayed();
             await ShowInfoDialogAsync("已清空", "最近播放记录已清除。");
+        }
+
+        /// <summary>打开日志文件（用系统默认的文本编辑器打开当前会话的启动/运行日志）。</summary>
+        private async void OpenLogFileButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                global::CelesteMusicPlayer.StartupLog.Flush();
+                string logPath = global::CelesteMusicPlayer.StartupLog.CurrentFilePath;
+                if (!File.Exists(logPath))
+                {
+                    await ShowInfoDialogAsync("没有日志", "还没有生成日志文件。");
+                    return;
+                }
+
+                Process.Start(new ProcessStartInfo(logPath) { UseShellExecute = true });
+            }
+            catch (Exception caught)
+            {
+                await ShowInfoDialogAsync("打开失败", "无法打开日志文件：" + caught.Message);
+            }
         }
 
         /// <summary>

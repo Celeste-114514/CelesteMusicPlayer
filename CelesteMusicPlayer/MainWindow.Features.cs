@@ -42,6 +42,13 @@ namespace CelesteMusicPlayer
         private DateTime _lastPlayStartUtc;
         private bool _featuresInitialized;
 
+        /// <summary>上次应用到「最近播放」列表的过滤天数（-1=未应用过）。设置变更时对比用。</summary>
+        private int _recentRangeDaysApplied = -1;
+
+        /// <summary>上次应用到歌词行的主歌词字号/字体。变更时强制重排字号。</summary>
+        private double _appliedMainLyricFontSize = -1;
+        private string? _appliedMainLyricFontFamily;
+
         private void InitializeMusicPlayer2Features()
         {
             if (_featuresInitialized)
@@ -65,6 +72,47 @@ namespace CelesteMusicPlayer
             ApplySpectrumVisibilityFromSettings(boot);
             ApplyCoverVisibilityFromSettings(boot);
             AttachGlobalMouseWheelVolume();
+            AttachLyricSaveConfirm();
+        }
+
+        /// <summary>
+        /// 「询问」歌词保存策略的确认弹窗。OnlineMusicApi 内部用了 ConfigureAwait(false)，
+        /// 回调可能在后台线程被调用——必须先切回 UI 线程再弹 ContentDialog。
+        /// </summary>
+        private void AttachLyricSaveConfirm()
+        {
+            OnlineMusicApi.LyricSaveConfirm = async candidatePath =>
+            {
+                TaskCompletionSource<bool> tcs = new();
+                bool enqueued = DispatcherQueue.TryEnqueue(async () =>
+                {
+                    try
+                    {
+                        var dialog = new ContentDialog
+                        {
+                            Title = "保存歌词",
+                            Content = "已找到歌词，是否保存到：\n" + Path.GetFileName(candidatePath),
+                            PrimaryButtonText = "保存",
+                            CloseButtonText = "不保存",
+                            DefaultButton = ContentDialogButton.Primary,
+                            XamlRoot = Content.XamlRoot
+                        };
+                        tcs.TrySetResult(await dialog.ShowAsync() == ContentDialogResult.Primary);
+                    }
+                    catch (Exception caught)
+                    {
+                        global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught);
+                        tcs.TrySetResult(false);
+                    }
+                });
+
+                if (!enqueued)
+                {
+                    return false; // 主窗口已销毁：不落盘
+                }
+
+                return await tcs.Task;
+            };
         }
 
         private void AttachGlobalMouseWheelVolume()
@@ -395,10 +443,10 @@ namespace CelesteMusicPlayer
             // 进度条样式：保存后即时切换
             try
             {
-                bool wasWaveform = _progressBarStyle == "Waveform";
-                _progressBarStyle = settings.ProgressBarStyle;
+                bool wasWaveform = _waveformProgress;
+                _waveformProgress = settings.WaveformProgress;
                 RedrawProgressStyle();
-                if (_progressBarStyle == "Waveform" && !wasWaveform)
+                if (_waveformProgress && !wasWaveform)
                 {
                     // 刚打开波形开关:立即加载当前播放(或选中)歌曲的波形
                     string? cur = _nowPlayingPath;
@@ -410,6 +458,20 @@ namespace CelesteMusicPlayer
                     if (!string.IsNullOrEmpty(cur))
                     {
                         LoadWaveformForCurrentAsync(cur);
+                    }
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+
+            // 最近播放范围：保存后即时过滤（0=全部；N=只留最近 N 天，正在看该列表才需要重刷）
+            try
+            {
+                if (_recentRangeDaysApplied != settings.RecentPlayedRangeDays)
+                {
+                    _recentRangeDaysApplied = settings.RecentPlayedRangeDays;
+                    if (string.Equals(_currentCategory, "Recent", StringComparison.Ordinal))
+                    {
+                        ApplyFavoritesOrRecentCategory();
                     }
                 }
             }
@@ -500,12 +562,6 @@ namespace CelesteMusicPlayer
             try
             {
                 ApplyPlaybackRateFromSettings();
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-
-            try
-            {
-                ApplyAudioChannelFromSettings();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
@@ -630,6 +686,10 @@ namespace CelesteMusicPlayer
                 _ => TextAlignment.Center
             };
 
+            // 主歌词字体：随设置即时换（字号走末尾的强制重排，按距离分档）
+            FontFamily? mainLyricFont = string.IsNullOrWhiteSpace(settings.MainLyricFontFamily)
+                ? null
+                : new FontFamily(settings.MainLyricFontFamily);
             foreach (var child in LyricsPanel.Children)
             {
                 if (child is TextBlock tb)
@@ -644,9 +704,20 @@ namespace CelesteMusicPlayer
                         if (inner is Border frame && frame.Child is TextBlock rowText)
                         {
                             rowText.TextAlignment = align;
+                            rowText.FontFamily = mainLyricFont;
                         }
                     }
                 }
+            }
+
+            // 主歌词字号变更：强制重排（SyncLyricsToPosition 按距离套用四档字号）
+            if (_lyricTextBlocks.Count > 0
+                && (_appliedMainLyricFontSize != settings.MainLyricFontSize
+                    || _appliedMainLyricFontFamily != (settings.MainLyricFontFamily ?? string.Empty)))
+            {
+                _appliedMainLyricFontSize = settings.MainLyricFontSize;
+                _appliedMainLyricFontFamily = settings.MainLyricFontFamily ?? string.Empty;
+                SyncLyricsToPosition(GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero, force: true);
             }
         }
 
@@ -2107,6 +2178,13 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
+                // Last.fm 总开关：关掉时不回传播放记录。早期只门控了「正在播放」广播，
+                // 漏了这里——表现为「关了 Last.fm，个人资料里的播放计数还在涨」。
+                if (!AppSettingsStore.Load().EnableLastFm)
+                {
+                    return;
+                }
+
                 PlaylistItem prev = _lastPlayedForScrobble;
                 LastFmScrobbler.QueueScrobble(new LastFmTrackInfo
                 {
@@ -2248,8 +2326,18 @@ namespace CelesteMusicPlayer
             {
                 // 最近播放 = 播放历史事件流水（每次播放一条记录，含播放时间/时长/是否播完）。
                 // 与 LibraryDb 记录点（切歌/播完）对应；双击等交互复用歌曲行通用逻辑。
+                // 「最近播放范围」设置：0=全部；N=只显示最近 N 天（本地时区换算成 UTC 比较）。
+                int recentRangeDays = AppSettingsStore.Load().RecentPlayedRangeDays;
+                DateTime rangeFromUtc = recentRangeDays > 0
+                    ? DateTime.UtcNow.AddDays(-recentRangeDays)
+                    : DateTime.MinValue;
                 foreach (LibraryDb.PlaybackHistoryEntry e in LibraryDb.LoadPlaybackHistory(200))
                 {
+                    if (e.PlayedAtUtc < rangeFromUtc)
+                    {
+                        continue; // 早于范围起点，跳过
+                    }
+
                     PlaylistItem? item = null;
                     if (System.IO.File.Exists(e.FilePath))
                     {

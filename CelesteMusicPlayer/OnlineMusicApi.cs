@@ -989,6 +989,12 @@ namespace CelesteMusicPlayer
         // 歌词下载（组合）
         // =====================================================================
 
+        /// <summary>
+        /// 「询问」歌词保存策略的确认回调：传入候选 .lrc 路径，返回是否落盘。
+        /// 由 UI 层（MainWindow）注入；为 null 时「询问」按「自动」处理。
+        /// </summary>
+        public static Func<string, Task<bool>>? LyricSaveConfirm;
+
         public static async Task<string?> SearchAndDownloadLyricAsync(
             string title,
             string artist,
@@ -1028,6 +1034,18 @@ namespace CelesteMusicPlayer
                 {
                     // 保存策略为「不保存」：仅本次会话使用（上层直接忽略返回值）
                     return null;
+                }
+
+                // 「询问」策略：歌词找到了才问是否落盘（先问后写，反悔不留垃圾文件）。
+                // 回调未注入（非 UI 上下文调用）时按「自动」处理。
+                if (LyricSaveConfirm != null
+                    && string.Equals(AppSettingsStore.Load().LyricSavePolicy, "Ask", StringComparison.OrdinalIgnoreCase))
+                {
+                    bool confirmed = await LyricSaveConfirm(lrcPath).ConfigureAwait(false);
+                    if (!confirmed)
+                    {
+                        return null; // 用户选不保存：仅本次会话使用
+                    }
                 }
 
                 string? dir = Path.GetDirectoryName(lrcPath);

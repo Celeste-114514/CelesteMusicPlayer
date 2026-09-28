@@ -2267,7 +2267,7 @@ namespace CelesteMusicPlayer
 
             // 未播放时:预览选中歌曲的波形(波形进度条模式)
             if (string.IsNullOrEmpty(_nowPlayingPath)
-                && _progressBarStyle == "Waveform"
+                && _waveformProgress
                 && e.AddedItems.Count > 0
                 && e.AddedItems[0] is PlaylistItem selItem
                 && !string.Equals(_waveformPath, selItem.FilePath, StringComparison.OrdinalIgnoreCase))

@@ -162,6 +162,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="歌词保存策略" />
+                                    <TextBlock Text="自动下载歌词后：不保存=只在本次播放用；自动=直接存到下面设置的目录；询问=每次弹窗问存不存" FontSize="12" Opacity="0.6" TextWrapping="WrapWholeWords" />
                                 </StackPanel>
                                 <ComboBox x:Name="LyricSavePolicyCombo" Grid.Column="1" MinWidth="180" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
                             </Grid>
@@ -216,6 +217,35 @@
                                     <TextBlock x:Name="LyricOffsetValueText" Text="0.00s" FontSize="12" Opacity="0.65" />
                                 </StackPanel>
                                 <Slider x:Name="LyricOffsetSlider" Grid.Column="1" Minimum="-2000" Maximum="2000" StepFrequency="10" ValueChanged="SettingSlider_ValueChanged" />
+                            </Grid>
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="220" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="主歌词字号" />
+                                    <TextBlock Text="正在唱的那句多大；邻句/远处句会自动小 4/5 号" FontSize="12" Opacity="0.6" />
+                                    <TextBlock x:Name="MainLyricFontSizeValueText" Text="19" FontSize="12" Opacity="0.65" />
+                                </StackPanel>
+                                <Slider x:Name="MainLyricFontSizeSlider" Grid.Column="1" Minimum="12" Maximum="48" StepFrequency="1" ValueChanged="SettingSlider_ValueChanged" />
+                            </Grid>
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" MinWidth="180" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="主歌词字体" />
+                                </StackPanel>
+                                <ComboBox x:Name="MainLyricFontFamilyCombo" Grid.Column="1" MinWidth="180" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged">
+                                    <ComboBoxItem Content="跟随系统" Tag="" />
+                                    <ComboBoxItem Content="微软雅黑" Tag="Microsoft YaHei UI" />
+                                    <ComboBoxItem Content="黑体" Tag="SimHei" />
+                                    <ComboBoxItem Content="等线" Tag="DengXian" />
+                                    <ComboBoxItem Content="宋体" Tag="SimSun" />
+                                    <ComboBoxItem Content="楷体" Tag="KaiTi" />
+                                </ComboBox>
                             </Grid>
                         </StackPanel>
 
@@ -1033,7 +1063,8 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="全局鼠标滚轮调节音量" />
+                                <TextBlock Text="鼠标滚轮调节音量" />
+                                <TextBlock Text="只在本程序窗口内生效（不是全系统热键）；光标放在音量条等滑块上时不响应" FontSize="12" Opacity="0.6" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                             <ToggleSwitch x:Name="GlobalMouseWheelVolumeSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
                         </Grid>
@@ -1179,28 +1210,6 @@
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" MinWidth="200" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="进度条点击行为" />
-                                <TextBlock Text="点击进度条定位后是否自动继续播放" FontSize="12" Opacity="0.65" />
-                            </StackPanel>
-                            <ComboBox x:Name="ProgressBarClickBehaviorCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" MinWidth="200" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="声道" />
-                                <TextBlock Text="仅左右声道切换，双声道合并暂不支持" FontSize="12" Opacity="0.65" />
-                            </StackPanel>
-                            <ComboBox x:Name="AudioChannelCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
@@ -1301,27 +1310,6 @@
                                 <Button Content="打开" Click="DsdCacheOpenButton_Click" />
                                 <Button Content="清空缓存" Click="DsdCacheClearButton_Click" />
                             </StackPanel>
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="淡入淡出" />
-                            </StackPanel>
-                            <ToggleSwitch x:Name="EnableFadeSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="220" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="淡入淡出时长" />
-                                <TextBlock x:Name="FadeMsValueText" Text="500 ms" FontSize="12" Opacity="0.65" />
-                            </StackPanel>
-                            <Slider x:Name="FadeMsSlider" Grid.Column="1" Minimum="0" Maximum="3000" StepFrequency="50" ValueChanged="SettingSlider_ValueChanged" />
                         </Grid>
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
@@ -1521,10 +1509,12 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="最近播放范围" />
+                                <TextBlock Text="「最近播放」列表只显示这么多天内的记录；全部=不限制" FontSize="12" Opacity="0.6" />
                             </StackPanel>
                             <ComboBox x:Name="RecentPlayedRangeDaysCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
                         </Grid>
                         <Button x:Name="ClearRecentPlayedButton" Content="清空最近播放" Click="ClearRecentPlayedButton_Click" HorizontalAlignment="Left" />
+                        <Button x:Name="OpenLogFileButton" Content="打开日志文件" Click="OpenLogFileButton_Click" HorizontalAlignment="Left" />
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
