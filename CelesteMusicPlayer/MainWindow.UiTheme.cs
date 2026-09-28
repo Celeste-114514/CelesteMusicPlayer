@@ -1577,6 +1577,13 @@ namespace CelesteMusicPlayer
 
                 private Brush ResolveAccentBrush()
         {
+            // 极客界面：磷光色是界面里唯一的彩色 —— 选中竖条/选中底/排序胶囊/导航高亮等
+            // 一切"强调色"都跟随它，不混用设置里的主题色（用户实测反馈过选中背景漏主题色）。
+            if (IsGeekUiStyleActive())
+            {
+                return new SolidColorBrush(GeekPhosphorColor());
+            }
+
             AppSettingsState settings = AppSettingsStore.Load();
             if (settings.AccentSource == "Custom")
             {
