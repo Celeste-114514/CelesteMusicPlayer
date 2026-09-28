@@ -36,12 +36,39 @@ namespace CelesteMusicPlayer
         private bool _geekProgressSliderSized;
 
         private static Color PhosphorColor(string? name)
-            => name switch
+        {
+            // 自定义磷光色：设置里存 "Custom:#RRGGBB"（兼容裸 "#RRGGBB"）。解析失败落回琥珀。
+            if (!string.IsNullOrWhiteSpace(name))
             {
-                PhosphorGreen => Color.FromArgb(255, 0x3E, 0xFF, 0x7A),   // 荧光绿
-                PhosphorCyan => Color.FromArgb(255, 0x35, 0xE0, 0xFF),    // 青
-                _ => Color.FromArgb(255, 0xFF, 0xB0, 0x00),               // 琥珀（默认）：老式 CRT 的暖黄
-            };
+                string value = name.Trim();
+                if (value.StartsWith("Custom:", StringComparison.OrdinalIgnoreCase))
+                {
+                    value = value.Substring("Custom:".Length).Trim();
+                }
+
+                if (value.StartsWith("#") && value.Length >= 7
+                    && uint.TryParse(value.AsSpan(1, 6), System.Globalization.NumberStyles.HexNumber, null, out uint rgb))
+                {
+                    return Color.FromArgb(255, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+                }
+
+                if (!string.Equals(value, PhosphorGreen, StringComparison.Ordinal)
+                    && !string.Equals(value, PhosphorCyan, StringComparison.Ordinal)
+                    && !string.Equals(value, PhosphorAmber, StringComparison.Ordinal))
+                {
+                    // 未知值（含被截坏的十六进制）：回退默认，避免整界面丢色
+                    return Color.FromArgb(255, 0xFF, 0xB0, 0x00);
+                }
+
+                switch (value)
+                {
+                    case PhosphorGreen: return Color.FromArgb(255, 0x3E, 0xFF, 0x7A);   // 荧光绿
+                    case PhosphorCyan: return Color.FromArgb(255, 0x35, 0xE0, 0xFF);    // 青
+                }
+            }
+
+            return Color.FromArgb(255, 0xFF, 0xB0, 0x00);                               // 琥珀（默认）：老式 CRT 的暖黄
+        }
 
         /// <summary>当前设置选中的磷光色（极客界面里唯一的彩色）。供桌面歌词等自绘窗口取色。</summary>
         internal static Color GeekPhosphorColor()

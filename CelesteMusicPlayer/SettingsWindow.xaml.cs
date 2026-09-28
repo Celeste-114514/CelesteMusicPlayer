@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
 using Microsoft.UI.Input;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -537,6 +538,7 @@ namespace CelesteMusicPlayer
                 SelectComboByTag(UiStyleModeCombo, s.UiStyleMode);
                 SetToggle(FrostedGlassSwitch, s.EnableFrostedGlass);
                 SelectComboByTag(GeekPhosphorCombo, s.GeekPhosphorColor);
+                ApplyGeekPhosphorCustomState(s.GeekPhosphorColor);
                 SetToggle(GeekCrtSwitch, s.GeekCrtEnabled);
                 SetToggle(ShowSpectrumSwitch, s.ShowSpectrum);
                 SetToggle(ShowAlbumCoverSwitch, s.ShowAlbumCover);
@@ -1354,7 +1356,11 @@ namespace CelesteMusicPlayer
 
             s.UiStyleMode = GetComboTagString(UiStyleModeCombo, "ClassicSystem");
             s.EnableFrostedGlass = FrostedGlassSwitch?.IsOn ?? s.EnableFrostedGlass;
-            s.GeekPhosphorColor = GetComboTagString(GeekPhosphorCombo, "Amber");
+            // 磷光色：预设存名字；选了「自定义」就存 "Custom:#RRGGBB"（取色器当前值）
+            string phosphorTag = GetComboTagString(GeekPhosphorCombo, "Amber");
+            s.GeekPhosphorColor = phosphorTag == "Custom" && GeekPhosphorPicker != null
+                ? $"Custom:#{((GeekPhosphorPicker.Color.R << 16) | (GeekPhosphorPicker.Color.G << 8) | GeekPhosphorPicker.Color.B):X6}"
+                : phosphorTag;
             s.GeekCrtEnabled = GeekCrtSwitch?.IsOn ?? s.GeekCrtEnabled;
             s.ShowSpectrum = ShowSpectrumSwitch?.IsOn ?? s.ShowSpectrum;
             s.ShowAlbumCover = ShowAlbumCoverSwitch?.IsOn ?? s.ShowAlbumCover;
@@ -2118,8 +2124,67 @@ namespace CelesteMusicPlayer
         private void GeekPhosphorCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loadingUi) return;
+
+            // 选「自定义…」时展开调色板；首次切入用当前生效的磷光色做起点，不突兀
+            if (GeekPhosphorPickerPanel != null && GeekPhosphorPicker != null)
+            {
+                bool isCustom = GetComboTagString(GeekPhosphorCombo, "Amber") == "Custom";
+                GeekPhosphorPickerPanel.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
+                if (isCustom && !_geekPhosphorPickerInitialized)
+                {
+                    Windows.UI.Color current = MainWindow.GeekPhosphorColor();
+                    GeekPhosphorPicker.Color = Windows.UI.Color.FromArgb(255, current.R, current.G, current.B);
+                    _geekPhosphorPickerInitialized = true;
+                }
+            }
+
             PersistAllFromUi();
         }
+
+        private void GeekPhosphorPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
+        {
+            if (_loadingUi) return;
+
+            // 拖动取色会连续触发：抖动 120ms 再落盘应用，避免整界面跟着每个中间值重染
+            _geekPhosphorPickerDebounce?.Stop();
+            if (_geekPhosphorPickerDebounce == null)
+            {
+                _geekPhosphorPickerDebounce = DispatcherQueue.CreateTimer();
+                _geekPhosphorPickerDebounce.Interval = TimeSpan.FromMilliseconds(120);
+                _geekPhosphorPickerDebounce.Tick += (_, _) =>
+                {
+                    _geekPhosphorPickerDebounce?.Stop();
+                    PersistAllFromUi();
+                };
+            }
+
+            _geekPhosphorPickerDebounce.Start();
+        }
+
+        /// <summary>按存档值恢复「自定义磷光色」的界面状态：是自定义 → 选中自定义项并展开取色器。</summary>
+        private void ApplyGeekPhosphorCustomState(string? stored)
+        {
+            bool isCustom = stored != null
+                && (stored.StartsWith("Custom:", StringComparison.OrdinalIgnoreCase) || stored.StartsWith("#"));
+            GeekPhosphorPickerPanel.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
+            if (isCustom && GeekPhosphorPicker != null)
+            {
+                string hex = stored.StartsWith("Custom:", StringComparison.OrdinalIgnoreCase)
+                    ? stored.Substring("Custom:".Length).Trim()
+                    : stored.Trim();
+                if (hex.StartsWith("#") && hex.Length >= 7
+                    && uint.TryParse(hex.AsSpan(1, 6), System.Globalization.NumberStyles.HexNumber, null, out uint rgb))
+                {
+                    GeekPhosphorPicker.Color = Windows.UI.Color.FromArgb(255, (byte)(rgb >> 16), (byte)(rgb >> 8), (byte)rgb);
+                }
+
+                _geekPhosphorPickerInitialized = true;
+            }
+        }
+
+        private bool _geekPhosphorPickerInitialized;
+        // 全限定：Windows.System 里也有一个同名类型，不写全会被判歧义（CS0104）
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _geekPhosphorPickerDebounce;
 
         private void OnThemeColorChangedSettings(Windows.UI.Color accent)
         {

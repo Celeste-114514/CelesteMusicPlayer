@@ -634,7 +634,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="极客磷光色" />
-                                <TextBlock Text="极客界面的统一颜色：字符键、播放信息页、终端读数都跟随它。琥珀=老式 CRT，绿=荧光屏，青=监控屏" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                                <TextBlock Text="极客界面的统一颜色：字符键、播放信息页、终端读数都跟随它。琥珀=老式 CRT，绿=荧光屏，青=监控屏；选「自定义」可用调色板任意取色" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                             <ComboBox
                                 x:Name="GeekPhosphorCombo"
@@ -644,7 +644,26 @@
                                 <ComboBoxItem Content="琥珀（默认）" Tag="Amber" />
                                 <ComboBoxItem Content="荧光绿" Tag="Green" />
                                 <ComboBoxItem Content="青" Tag="Cyan" />
+                                <ComboBoxItem Content="自定义…" Tag="Custom" />
                             </ComboBox>
+                        </Grid>
+                        <Grid x:Name="GeekPhosphorPickerPanel" ColumnSpacing="16" Visibility="Collapsed">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="自定义磷光色" />
+                                <TextBlock Text="拖动取色，极客界面实时跟随；只取 RGB（透明度不参与）" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ColorPicker
+                                x:Name="GeekPhosphorPicker"
+                                Grid.Column="1"
+                                Width="360"
+                                IsAlphaSliderVisible="False"
+                                IsAlphaTextInputVisible="False"
+                                IsHexInputVisible="True"
+                                ColorChanged="GeekPhosphorPicker_ColorChanged" />
                         </Grid>
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>

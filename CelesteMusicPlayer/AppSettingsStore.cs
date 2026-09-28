@@ -763,8 +763,12 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                       && uiStyle is "Scene" or "ClassicSystem" or "ClassicLight" or "ClassicDark" or "Geek"
             ? uiStyle
             : "ClassicSystem",
+        // 磷光色：三个预设名，或 "Custom:#RRGGBB"（设置里的调色板）。未知值回退琥珀。
         GeekPhosphorColor = s.GeekPhosphorColor?.Trim() is { Length: > 0 } phosphor
-                            && phosphor is "Amber" or "Green" or "Cyan"
+                            && (phosphor is "Amber" or "Green" or "Cyan"
+                                || (phosphor.StartsWith("Custom:#", StringComparison.OrdinalIgnoreCase)
+                                    && phosphor.Length >= "Custom:#".Length + 6
+                                    && uint.TryParse(phosphor.AsSpan("Custom:#".Length, 6), System.Globalization.NumberStyles.HexNumber, null, out _)))
             ? phosphor
             : "Amber",
         GeekCrtEnabled = s.GeekCrtEnabled,
