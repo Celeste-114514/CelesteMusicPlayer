@@ -630,6 +630,9 @@ namespace CelesteMusicPlayer
                 // 右侧浏览区重塑：直角 / 细线 / 无药丸（真正把它做成终端风，而不是经典换皮）
                 ApplyGeekBrowseSkin(geek);
 
+                // 详情页面：用户拍板「专辑详情页保留原来的经典布局」—— 这里只动封面一处
+                ApplyGeekDetailPages(geek);
+
                 // 左侧分类图标：极客下换成等宽符号 + 磷光单色（这是另一套结构，浏览区那个扫描覆盖不到）
                 ApplyNavGeekGlyphs(geek);
 
@@ -663,6 +666,31 @@ namespace CelesteMusicPlayer
             }
 
             button.CornerRadius = geek ? new CornerRadius(0) : new CornerRadius(normalRadius);
+        }
+
+        /// <summary>
+        /// 专辑详情页的极客化 —— 用户拍板（2026-09-29）：**保留原来的经典布局**，不做字符表格 /
+        /// 取景框那套重做，只把封面从 14px 圆角改成直角。理由：极客皮肤「圆角一律归零」是硬规矩，
+        /// 而且圆角会把封面图跟角落 一起裁掉，直角才是「整块图钉在面板上」的观感。
+        /// 只改 CornerRadius 一处（XAML 里写死的显式值，主题资源盖不掉），其它一律不动。
+        /// 原值走 GeekStore 备份，退出极客由 ApplyGeekBrowseSkin(false) 的子树还原兜底，
+        /// 这里再调一次 GeekRestoreSubtree 是为了「单独调用本方法」时也能干净摘掉。
+        /// </summary>
+        private void ApplyGeekDetailPages(bool geek)
+        {
+            if (AlbumDetailCoverBorder == null)
+            {
+                return;
+            }
+
+            if (geek)
+            {
+                GeekStore(AlbumDetailCoverBorder, Border.CornerRadiusProperty, new CornerRadius(0));
+            }
+            else
+            {
+                GeekRestoreSubtree(AlbumDetailCoverBorder);
+            }
         }
 
         /// <summary>把字体刷到可视树上已有的 TextBlock / Control（font=null 表示还原）。</summary>
