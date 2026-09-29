@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>CelesteDspCoreSmoke</AssemblyName>
+    <RootNamespace>CelesteDspCoreSmoke</RootNamespace>
+    <!-- 独立测试工程，不参与主项目构建 -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\build\celeste_dsp_core.dll" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+</Project>

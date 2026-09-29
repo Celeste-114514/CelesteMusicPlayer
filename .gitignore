@@ -56,3 +56,10 @@ native/celeste-core/build/*.obj
 native/celeste-core/build/*.exp
 native/celeste-core/build/*.lib
 native/celeste-core/build/build_*.log
+
+# ===== 原生（独立 DSP 内核 celeste_dsp_core）编译中间产物 =====
+# Stage A 只提交源码 + build.bat + 冒烟测试；DLL 本体随 Stage D 打包时再入库
+native/dsp-core/build/*.obj
+native/dsp-core/build/*.exp
+native/dsp-core/build/*.lib
+native/dsp-core/build/*.log
