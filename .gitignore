@@ -48,6 +48,7 @@ streaming-plugin/streamingserver
 native/echo-core/build/*.obj
 native/echo-core/build/*.exp
 native/echo-core/build/*.lib
+native/echo-core/*.obj
 
 # ===== 原生（自研 celeste-core）编译中间产物（celeste_core.dll 本体要入库随包分发）=====
 # 注意：build/libs/ 下的 .lib 是无空格拷贝，必须入库，不能被上面规则误伤
@@ -63,3 +64,4 @@ native/dsp-core/build/*.obj
 native/dsp-core/build/*.exp
 native/dsp-core/build/*.lib
 native/dsp-core/build/*.log
+native/dsp-core/build/*.dll
