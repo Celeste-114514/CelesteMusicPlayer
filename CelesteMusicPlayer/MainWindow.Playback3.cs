@@ -1848,17 +1848,20 @@ namespace CelesteMusicPlayer
 
         private void SyncLyricsToPosition(TimeSpan position, bool force = false, bool applyOffset = true)
         {
-            if (_lyricLines.Count == 0 || _lyricTextBlocks.Count == 0)
-            {
-                return;
-            }
-
             TimeSpan adj = applyOffset ? OffsetLyricPosition(position) : position;
 
-            // 终端布局歌词面板：与主歌词页同一节拍推进（独立高亮，互不干扰）
+            // 终端布局歌词面板：与主歌词页同一节拍推进（独立高亮，互不干扰）。
+            // ⚠️ 位置刻意放在主歌词页的早退之前：终端面板有行就该同步，
+            // 不该被主歌词页 TextBlock 列表的状态绑架（用户 2026-09-29 实测
+            // 「高亮不随进度走」，这条尾依赖是排查重点之一）。
             if (_layoutIsTerminal && _terminalLyricTexts.Count > 0)
             {
                 SyncTerminalLyricsToPosition(adj);
+            }
+
+            if (_lyricLines.Count == 0 || _lyricTextBlocks.Count == 0)
+            {
+                return;
             }
 
             int index = 0;
@@ -2143,6 +2146,9 @@ namespace CelesteMusicPlayer
             }
 
             // 立即把高亮切到目标行（点击跳转按原位置，不套用偏移）
+            global::CelesteMusicPlayer.StartupLog.Write(
+                $"[终端歌词] 双击跳转 target={target.TotalSeconds:F2}s → 强制同步(force=true, applyOffset=false) " +
+                $"layout={_layoutIsTerminal} rows={_terminalLyricTexts.Count}");
             SyncLyricsToPosition(target, force: true, applyOffset: false);
             // 单击选中：无视用户滚动状态，把该行滚到中间
             if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricTextBlocks.Count)

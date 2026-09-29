@@ -122,6 +122,9 @@ namespace CelesteMusicPlayer
             // 行刚建出来还没过布局（ActualHeight=0），滚动会被「行高未实测」挡掉；
             // 延后到布局完成后补滚一次，否则首屏停在第一行、不落在当前播放句上。
             DispatcherQueue.TryEnqueue(() => ScrollTerminalLyricIntoView(_terminalLyricIndex));
+            global::CelesteMusicPlayer.StartupLog.Write(
+                $"[终端歌词] 建行 rows={_terminalLyricTexts.Count} lyricLines={_lyricLines.Count} " +
+                $"path={_terminalLyricSongPath} layout={_layoutIsTerminal}");
         }
 
         /// <summary>时间戳 [mm:ss.xx]（厘秒，标到这一行的准确起唱点）。</summary>
@@ -134,7 +137,11 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void SyncTerminalLyricsToPosition(TimeSpan adj)
         {
-            if (!_terminalStageVisible || _terminalLyricTexts.Count == 0)
+            // 只依赖"有没有行"：不查 _terminalStageVisible —— 那个标志只在切布局时刷新，
+            // 用户 2026-09-29 实测「高亮不随进度走」的排查里，它是重点嫌疑（切进终端布局的
+            // 时序有多个入口，任何一条漏掉 ApplyTerminalLayout 就让同步整段静默死亡）。
+            // 行存在（ResetTerminalLyrics 会清行）就该同步，面板不可见时滚一下也无害。
+            if (_terminalLyricTexts.Count == 0)
             {
                 return;
             }
@@ -164,7 +171,19 @@ namespace CelesteMusicPlayer
             // index 没变也尝试滚动：双击当前高亮句时（用户先把面板滚去了别处）要能滚回来；
             // ScrollTerminalLyricIntoView 内部有 1px 防抖，不动时是几次属性读取，成本可忽略
             ScrollTerminalLyricIntoView(index);
+
+            // 诊断（1s 节流）：「高亮不随进度走」的尸检报告——adj/index/当前高亮一站式看全
+            if (Environment.TickCount64 - _lastTerminalLyricLogMs > 1000)
+            {
+                _lastTerminalLyricLogMs = Environment.TickCount64;
+                global::CelesteMusicPlayer.StartupLog.Write(
+                    $"[终端歌词] sync adj={adj.TotalSeconds:F2}s index={index} cur={_terminalLyricIndex} " +
+                    $"rows={_terminalLyricTexts.Count} lyricLines={_lyricLines.Count} " +
+                    $"layout={_layoutIsTerminal} stage={_terminalStageVisible}");
+            }
         }
+
+        private long _lastTerminalLyricLogMs;
 
         /// <summary>按当前高亮行重染全部行（高亮行变更 / 换磷光色时调用）。</summary>
         internal void RetintTerminalLyrics()
