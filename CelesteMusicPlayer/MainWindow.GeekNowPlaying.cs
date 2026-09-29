@@ -93,6 +93,18 @@ namespace CelesteMusicPlayer
                     // 这几个键得单独摘掉，否则切回经典后进度条仍是磷光色
                     RemoveSliderAccentOverrides();
 
+                    // 悬浮条字符进度条收回，滑块恢复不透明（拖动时一直被 Opacity=0 挡着视觉）
+                    if (GeekFloatingProgressText != null)
+                    {
+                        GeekFloatingProgressText.Visibility = Visibility.Collapsed;
+                        GeekFloatingProgressText.Inlines.Clear();
+                    }
+
+                    if (NowPlayingProgressSlider != null)
+                    {
+                        NowPlayingProgressSlider.Opacity = 1;
+                    }
+
                     _geekNowPlayingTinted.Clear();
                     _geekNowPlayingActive = false;
                     _geekNowPlayingPhosphor = null;
@@ -150,6 +162,80 @@ namespace CelesteMusicPlayer
                     NowPlayingProgressSlider.Resources[key] = bright;
                 }
             }
+
+            // 悬浮控制条（播放页底部那条）的进度条：字符化——滑块 Opacity=0 照常可拖，
+            // 上面盖一行 Consolas 字符块（用户 2026-09-29 反馈「详情页进度条没跟随极客样式」）。
+            // 底部常驻条那一套（GeekProgressText）在 GeekTransport.cs，这里是悬浮条的同款实现。
+            if (GeekFloatingProgressText != null)
+            {
+                GeekFloatingProgressText.Visibility = Visibility.Visible;
+                GeekFloatingProgressText.Foreground = bright;
+                if (!_geekFloatingTextSized)
+                {
+                    // 字符条自身尺寸变了（首次布局 / 悬浮条宽度重算）要重排格数
+                    GeekFloatingProgressText.SizeChanged += (_, _) => UpdateGeekFloatingProgressText();
+                    _geekFloatingTextSized = true;
+                }
+            }
+
+            if (NowPlayingProgressSlider != null)
+            {
+                // 滑块透明但**照常可拖**：拖动逻辑（PointerPressed/Released + seek）一行不改，
+                // 只是看不见圆头了。恢复见 ApplyGeekNowPlaying 的 else 分支。
+                NowPlayingProgressSlider.Opacity = 0;
+                if (!_geekFloatingSliderSized)
+                {
+                    // 格数按滑块实测宽度算：滑块尺寸一变就重排字符条
+                    NowPlayingProgressSlider.SizeChanged += (_, _) => UpdateGeekFloatingProgressText();
+                    _geekFloatingSliderSized = true;
+                }
+            }
+
+            UpdateGeekFloatingProgressText();
+        }
+
+        private bool _geekFloatingTextSized;
+        private bool _geekFloatingSliderSized;
+
+        /// <summary>
+        /// 悬浮控制条的字符进度条：读 NowPlayingProgressSlider 的 Value/Maximum/实测宽度，
+        /// 按等宽字格数（宽/0.55em，clamp 12~220）画 █ 实心 + 半透明，画法与主界面
+        /// GeekProgressText 完全一致（SetGeekBarText）。字符条 Collapsed（非极客）时直接跳过。
+        /// </summary>
+        private void UpdateGeekFloatingProgressText()
+        {
+            if (GeekFloatingProgressText == null || GeekFloatingProgressText.Visibility != Visibility.Visible)
+            {
+                return;
+            }
+
+            if (NowPlayingProgressSlider == null)
+            {
+                return;
+            }
+
+            double max = NowPlayingProgressSlider.Maximum;
+            double ratio = max > 0 ? Math.Clamp(NowPlayingProgressSlider.Value / max, 0.0, 1.0) : 0;
+
+            // 参考宽度拿滑块实测宽度（两者同格、完全同长）；布局未定时回落字符条自身宽度
+            double width = NowPlayingProgressSlider.ActualWidth;
+            if (width <= 40)
+            {
+                width = GeekFloatingProgressText.ActualWidth;
+            }
+
+            if (width <= 40)
+            {
+                return; // 布局还没定：等 SizeChanged / 下一次进度跳动再画
+            }
+
+            double perChar = Math.Max(1.0, GeekFloatingProgressText.FontSize * 0.55);
+            int blocks = (int)Math.Clamp(Math.Round(width / perChar), 12, 220);
+
+            int filled = (int)Math.Round(ratio * blocks);
+            filled = Math.Clamp(filled, 0, blocks);
+
+            SetGeekBarText(GeekFloatingProgressText, string.Empty, filled, blocks);
         }
 
         /// <summary>摘掉进度条上的极客配色（还原分支用）。</summary>

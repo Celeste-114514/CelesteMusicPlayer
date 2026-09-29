@@ -6284,6 +6284,18 @@
                                         Maximum="100"
                                         Value="0"
                                         ValueChanged="NowPlayingProgressSlider_ValueChanged" />
+                                    <!-- 极客模式的字符进度条：盖在滑块上（滑块透明但照常能拖），
+                                         与主界面 GeekProgressText 同一画法（█ 实心 + 半透明）。 -->
+                                    <TextBlock
+                                        x:Name="GeekFloatingProgressText"
+                                        Grid.Column="1"
+                                        VerticalAlignment="Center"
+                                        HorizontalAlignment="Stretch"
+                                        TextAlignment="Center"
+                                        FontFamily="Consolas"
+                                        FontSize="14"
+                                        IsHitTestVisible="False"
+                                        Visibility="Collapsed" />
                                     <TextBlock x:Name="FloatingTotalTime" Grid.Column="2" VerticalAlignment="Center" Text="00:00" FontSize="12" />
                                 </Grid>
                             </Grid>

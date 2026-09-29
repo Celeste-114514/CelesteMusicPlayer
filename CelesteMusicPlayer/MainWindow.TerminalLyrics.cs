@@ -102,8 +102,12 @@ namespace CelesteMusicPlayer
 
                 if (!line.IsTranslation)
                 {
-                    // 双击 = 从这句开始播放（与主歌词页一致；翻译行不跳）
                     TimeSpan target = line.Time;
+                    int rowIndex = TerminalLyricsPanel.Children.Count; // row 还没 Add，当前计数就是它的索引
+                    // 单击 = 滚到这句（用户 2026-09-29 反馈「点击歌词面板不跳转」：
+                    // 之前只接了 DoubleTapped，单击压根没接线）
+                    row.Tapped += (_, _) => ScrollTerminalLyricIntoView(rowIndex);
+                    // 双击 = 从这句开始播放（与主歌词页一致；翻译行不跳）
                     row.DoubleTapped += (_, _) => PlayFromLyricLine(target);
                 }
 
@@ -115,6 +119,9 @@ namespace CelesteMusicPlayer
 
             RetintTerminalLyrics();
             SyncTerminalLyricsToPosition(TerminalCurrentPosition());
+            // 行刚建出来还没过布局（ActualHeight=0），滚动会被「行高未实测」挡掉；
+            // 延后到布局完成后补滚一次，否则首屏停在第一行、不落在当前播放句上。
+            DispatcherQueue.TryEnqueue(() => ScrollTerminalLyricIntoView(_terminalLyricIndex));
         }
 
         /// <summary>时间戳 [mm:ss.xx]（厘秒，标到这一行的准确起唱点）。</summary>
@@ -149,13 +156,13 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            if (index == _terminalLyricIndex)
+            if (index != _terminalLyricIndex)
             {
-                return;
+                _terminalLyricIndex = index;
+                RetintTerminalLyrics();
             }
-
-            _terminalLyricIndex = index;
-            RetintTerminalLyrics();
+            // index 没变也尝试滚动：双击当前高亮句时（用户先把面板滚去了别处）要能滚回来；
+            // ScrollTerminalLyricIntoView 内部有 1px 防抖，不动时是几次属性读取，成本可忽略
             ScrollTerminalLyricIntoView(index);
         }
 
@@ -237,9 +244,19 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            GeneralTransform transform = row.TransformToVisual(TerminalLyricsScroll);
+            // 内容坐标：TransformToVisual(Scroll) 返回的是视觉坐标（已减掉当前滚动量），
+            // 拿它算 target 会少滚一个"当前滚动量"——双击跳转后面板纹丝不动就是这个原因。
+            GeneralTransform transform = row.TransformToVisual(TerminalLyricsPanel);
             double y = transform.TransformPoint(new Point(0, 0)).Y;
-            double target = Math.Max(0, y - TerminalLyricsScroll.ViewportHeight / 2.0 + row.ActualHeight / 2.0);
+
+            // clamp 到可滚范围；与当前偏移差 ≤1px 就不动（播放推进时每句都 ChangeView 会微抖）
+            double maxOffset = Math.Max(0, TerminalLyricsScroll.ExtentHeight - TerminalLyricsScroll.ViewportHeight);
+            double target = Math.Clamp(y - TerminalLyricsScroll.ViewportHeight / 2.0 + row.ActualHeight / 2.0, 0, maxOffset);
+            if (Math.Abs(TerminalLyricsScroll.VerticalOffset - target) <= 1)
+            {
+                return;
+            }
+
             TerminalLyricsScroll.ChangeView(null, target, null, false);
         }
     }
