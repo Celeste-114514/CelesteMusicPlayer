@@ -82,6 +82,13 @@ namespace CelesteMusicPlayer
                     layout = LayoutTerminal;
                 }
 
+                // 终端布局是极客皮肤的专属：其它界面风格下即使设置里存的是终端，也回退经典
+                //（用户拍板：其他皮肤不要显示终端布局）。同样不改写设置，切回极客会自己回来。
+                if (!IsGeekUiStyleActive() && layout == LayoutTerminal)
+                {
+                    layout = LayoutClassic;
+                }
+
                 RebuildLayoutFlyout();
 
                 bool water = layout == LayoutWater;
@@ -333,7 +340,8 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                // 8 种布局全部列出：7 种常规 + 终端（极客监控台）。终端为独立布局，不再受任何开关门控。
+                // 7 种常规布局。终端（极客监控台）是极客皮肤专属，不在这里列：
+                // 极客界面强制用它，其它界面不提供（用户拍板）。
                 Add("经典（原有版式）", LayoutClassic);
                 Add("水面倒影", LayoutWater);
                 Add("黑胶唱机", LayoutVinyl);
@@ -341,7 +349,6 @@ namespace CelesteMusicPlayer
                 Add("歌词（小封面 + 大歌词）", LayoutLyrics);
                 Add("镜像（封面在右）", LayoutMirror);
                 Add("居中（上下结构）", LayoutCenter);
-                Add("终端（极客监控台：流信息/频谱/电平/相位）", LayoutTerminal);
             }
             catch (Exception caught)
             {

@@ -5901,7 +5901,7 @@
 
                         <!-- 极客「终端」布局：一整块独立面板（固定近黑底 + 等宽字），只在 Terminal 布局显示。
                              三栏：左 = 音频流/信号链/文件；中 = 方块频谱 + 电平 + 峰值；右 = 相位图 + 状态；
-                             底部 = 播放头方块条 + 队列预览。
+                             底部 = 播放头字符进度条（与主界面极客传输条同款）+ 队列预览。
                              强调色的元素（表头 / 频谱柱 / 电平条 / 相位线 / 播放头 / 当前曲目）不在这里写死，
                              由 ApplyTerminalAccent 按应用强调色刷一遍，换主题会跟着变。
                              底部 Margin 92 是给页内控制条让位。 -->
@@ -5967,7 +5967,7 @@
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Grid.Column="0" FontFamily="Consolas" FontSize="11" Foreground="#FF7A8290" Text="FORMAT" />
-                                                <TextBlock x:Name="TerminalFormatText" Grid.Column="1" FontFamily="Consolas" FontSize="12" Foreground="#FFD7DAE0" Text="—" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="TerminalFormatText" Grid.Column="1" FontFamily="Consolas" FontSize="12" Foreground="#FFD7DAE0" Text="—" TextWrapping="Wrap" />
                                             </Grid>
                                             <Grid Margin="0,2">
                                                 <Grid.ColumnDefinitions>
@@ -5975,7 +5975,7 @@
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Grid.Column="0" FontFamily="Consolas" FontSize="11" Foreground="#FF7A8290" Text="OUTPUT" />
-                                                <TextBlock x:Name="TerminalOutputText" Grid.Column="1" FontFamily="Consolas" FontSize="12" Foreground="#FFD7DAE0" Text="—" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="TerminalOutputText" Grid.Column="1" FontFamily="Consolas" FontSize="12" Foreground="#FFD7DAE0" Text="—" TextWrapping="Wrap" />
                                             </Grid>
                                             <Grid Margin="0,2">
                                                 <Grid.ColumnDefinitions>
@@ -6006,7 +6006,7 @@
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Grid.Column="0" FontFamily="Consolas" FontSize="11" Foreground="#FF7A8290" Text="SRC" />
-                                                <TextBlock x:Name="TerminalSrcText" Grid.Column="1" FontFamily="Consolas" FontSize="12" Foreground="#FFD7DAE0" Text="—" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="TerminalSrcText" Grid.Column="1" FontFamily="Consolas" FontSize="12" Foreground="#FFD7DAE0" Text="—" TextWrapping="Wrap" />
                                             </Grid>
                                             <Grid Margin="0,2">
                                                 <Grid.ColumnDefinitions>
@@ -6014,7 +6014,7 @@
                                                     <ColumnDefinition Width="*" />
                                                 </Grid.ColumnDefinitions>
                                                 <TextBlock Grid.Column="0" FontFamily="Consolas" FontSize="11" Foreground="#FF7A8290" Text="OUT" />
-                                                <TextBlock x:Name="TerminalOutText" Grid.Column="1" FontFamily="Consolas" FontSize="12" Foreground="#FFD7DAE0" Text="—" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock x:Name="TerminalOutText" Grid.Column="1" FontFamily="Consolas" FontSize="12" Foreground="#FFD7DAE0" Text="—" TextWrapping="Wrap" />
                                             </Grid>
 
                                             <TextBlock
@@ -6029,7 +6029,7 @@
                                                 FontSize="11"
                                                 Foreground="#FF9AA2AE"
                                                 Text="—"
-                                                TextTrimming="CharacterEllipsis"
+                                                TextWrapping="Wrap"
                                                 ToolTipService.ToolTip="当前曲目路径" />
                                         </StackPanel>
                                     </ScrollViewer>
@@ -6143,7 +6143,7 @@
                                                 <ColumnDefinition Width="*" />
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Grid.Column="0" FontFamily="Consolas" FontSize="11" Foreground="#FF7A8290" Text="DEVICE" />
-                                            <TextBlock x:Name="TerminalDeviceText" Grid.Column="1" FontFamily="Consolas" FontSize="12" Foreground="#FFD7DAE0" Text="系统默认" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock x:Name="TerminalDeviceText" Grid.Column="1" FontFamily="Consolas" FontSize="12" Foreground="#FFD7DAE0" Text="系统默认" TextWrapping="Wrap" />
                                         </Grid>
                                     </StackPanel>
                                 </Grid>
@@ -6156,12 +6156,14 @@
                                         FontSize="11"
                                         Foreground="#FF7A8290"
                                         Text="PLAYHEAD" />
-                                    <Canvas
-                                        x:Name="TerminalPlayheadCanvas"
-                                        Height="10"
-                                        HorizontalAlignment="Stretch"
+                                    <TextBlock
+                                        x:Name="TerminalPlayheadText"
+                                        FontFamily="Consolas"
+                                        FontSize="14"
+                                        Foreground="#FF5DCAA5"
                                         SizeChanged="TerminalCanvas_SizeChanged"
-                                        Margin="0,0,0,12" />
+                                        Margin="0,0,0,12"
+                                        IsHitTestVisible="False" />
                                     <TextBlock
                                         x:Name="TerminalQueueHeader"
                                         Margin="0,0,0,6"

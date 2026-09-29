@@ -18,7 +18,6 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
         private const int TerminalBarCount = 32;
-        private const int TerminalPlayheadBlocks = 48;
 
         private readonly float[] _terminalPeakBuf = new float[8];
         private readonly float[] _terminalRmsBuf = new float[8];
@@ -26,7 +25,6 @@ namespace CelesteMusicPlayer
         private readonly float[] _terminalRight = new float[1024];
 
         private readonly Border?[] _terminalBars = new Border?[TerminalBarCount];
-        private readonly Border?[] _terminalBlocks = new Border?[TerminalPlayheadBlocks];
         private Polyline? _terminalPhaseLine;
 
         /// <summary>李萨如自动增益（平滑后）。≤0 表示下一帧直接取初值，不做平滑。</summary>
@@ -130,6 +128,11 @@ namespace CelesteMusicPlayer
                 if (TerminalLevelRFill != null)
                 {
                     TerminalLevelRFill.Background = brush;
+                }
+
+                if (TerminalPlayheadText != null)
+                {
+                    TerminalPlayheadText.Foreground = brush;
                 }
 
                 if (_terminalPhaseLine != null)
@@ -548,18 +551,23 @@ namespace CelesteMusicPlayer
         // 底部：播放头 + 队列 + 状态行
         // =====================================================================
 
-        /// <summary>播放头：一排小方块，走过的点亮（代替普通进度条）。</summary>
+        /// <summary>
+        /// 播放头：字符进度条 —— 与主界面极客传输条（底部那行 ████）同一套画法：
+        /// Consolas 等宽、实心部分磷光色、空心部分同字符半透明（SetGeekBarText 统一画，
+        /// 不会出现 ░ 缺字错位的问题），格数随面板宽度自适应。
+        /// 之前是一排 48 个小方块（Canvas），用户要求与极客传输条样式一致。
+        /// </summary>
         private void UpdateTerminalPlayhead()
         {
-            if (!_terminalStageVisible || TerminalPlayheadCanvas == null)
+            if (!_terminalStageVisible || TerminalPlayheadText == null)
             {
                 return;
             }
 
-            double width = TerminalPlayheadCanvas.ActualWidth;
-            double height = TerminalPlayheadCanvas.ActualHeight;
-            if (width <= 1 || height <= 1)
+            double width = TerminalPlayheadText.ActualWidth;
+            if (width <= 40)
             {
+                // 布局还没定：先不画，等 SizeChanged / 下一帧再画（与极客传输条同一策略）。
                 return;
             }
 
@@ -568,36 +576,13 @@ namespace CelesteMusicPlayer
             double ratio = duration > TimeSpan.Zero
                 ? Math.Clamp(position.TotalSeconds / duration.TotalSeconds, 0.0, 1.0)
                 : 0.0;
-            int filled = (int)Math.Round(ratio * TerminalPlayheadBlocks);
 
-            double gap = 2;
-            double blockWidth = Math.Max(2, (width - gap * (TerminalPlayheadBlocks - 1)) / TerminalPlayheadBlocks);
-            Color accent = TerminalAccentColor();
+            // 等宽字每格宽 ≈ 0.55em（Consolas 实际 0.5498em），与 UpdateGeekProgressText 同一口径。
+            double perChar = Math.Max(1.0, TerminalPlayheadText.FontSize * 0.55);
+            int blocks = (int)Math.Clamp(Math.Round(width / perChar), 12, 220);
+            int filled = (int)Math.Round(ratio * blocks);
 
-            for (int i = 0; i < TerminalPlayheadBlocks; i++)
-            {
-                Border? block = _terminalBlocks[i];
-                if (block == null)
-                {
-                    block = new Border
-                    {
-                        CornerRadius = new CornerRadius(1),
-                        IsHitTestVisible = false
-                    };
-                    _terminalBlocks[i] = block;
-                    TerminalPlayheadCanvas.Children.Add(block);
-                }
-
-                bool on = i < filled;
-                block.Background = on
-                    ? new SolidColorBrush(accent)
-                    : new SolidColorBrush(Color.FromArgb(255, 0x22, 0x25, 0x2B));
-                block.Width = blockWidth;
-                block.Height = height;
-                Canvas.SetLeft(block, i * (blockWidth + gap));
-                Canvas.SetTop(block, 0);
-            }
-
+            SetGeekBarText(TerminalPlayheadText, string.Empty, filled, blocks);
             UpdateTerminalStatus(position, duration);
         }
 
