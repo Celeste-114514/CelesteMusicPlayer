@@ -329,8 +329,9 @@ namespace CelesteMusicPlayer
 
         /// <summary>设置声道平衡状态（balance / 增益 / 交换 / mono / 反相 / 延迟 + Crossfeed 子能力）。
         /// null / 未启用 → 内核 balance 模块旁路。映射到内核 <c>celeste_dsp_balance_set</c>。
-        /// Crossfeed：强度 0-100% 直接映射 ECHO amount 0..1；截止频率取 ECHO 默认 700Hz
-        /// （Celeste 旧实现固定 ~200Hz；按「照搬 ECHO」统一，Stage C 新面板再暴露可调）。</summary>
+        /// Crossfeed：强度 0-100% 直接映射 ECHO amount 0..1；截止频率取
+        /// <see cref="ChannelBalanceState.CrossfeedCutoffHz"/>（默认 700Hz = ECHO 默认，
+        /// Celeste 旧实现固定 ~200Hz；Stage C 新面板已暴露 100..4000Hz 可调）。</summary>
         public void UpdateChannel(ChannelBalanceState? state)
         {
             bool on = _engineReady && state != null && state.Enabled;
@@ -350,6 +351,8 @@ namespace CelesteMusicPlayer
 
                     bool xfOn = state.CrossfeedEnabled && state.CrossfeedLevel > 0;
                     float xfAmount = xfOn ? (float)Math.Clamp(state.CrossfeedLevel / 100.0, 0.0, 1.0) : 0f;
+                    // 截止频率可调（Stage C 新面板暴露）：旧存档无此字段时反序列化为默认 700，行为与写死 700 完全一致
+                    float xfCutoff = (float)Math.Clamp(state.CrossfeedCutoffHz, 100.0, 4000.0);
 
                     // 三段频补 Celeste UI 暂无 → 全 0；band gains 数组长度须为 3
                     float[] zeroBands = new float[DspCoreInterop.BalanceBandCount];
@@ -367,7 +370,7 @@ namespace CelesteMusicPlayer
                         state.InvertLeft ? 1 : 0,
                         state.InvertRight ? 1 : 0,
                         1); // constantPower：ECHO 默认
-                    DspCoreInterop.celeste_dsp_crossfeed_set(xfOn ? 1 : 0, xfAmount, 700f);
+                    DspCoreInterop.celeste_dsp_crossfeed_set(xfOn ? 1 : 0, xfAmount, xfCutoff);
                 }
                 else
                 {

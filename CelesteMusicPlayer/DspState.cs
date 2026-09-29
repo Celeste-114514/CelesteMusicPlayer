@@ -45,6 +45,10 @@ namespace CelesteMusicPlayer
         /// <summary>Crossfeed 强度 0-100（%）。0 等同于关闭；内部映射到最高 70% 混音系数。</summary>
         public int CrossfeedLevel { get; set; }
 
+        /// <summary>Crossfeed 低通截止频率 Hz（100..4000）。Stage C 起可调；旧 dsp-extra.json
+        /// 没有此字段时反序列化保持默认 700（与内核 celeste_dsp_crossfeed_set 的 ECHO 默认一致），零迁移。</summary>
+        public int CrossfeedCutoffHz { get; set; } = 700;
+
         public ChannelBalanceState Clone() => new()
         {
             Enabled = Enabled,
@@ -58,7 +62,8 @@ namespace CelesteMusicPlayer
             LeftDelayMs = LeftDelayMs,
             RightDelayMs = RightDelayMs,
             CrossfeedEnabled = CrossfeedEnabled,
-            CrossfeedLevel = CrossfeedLevel
+            CrossfeedLevel = CrossfeedLevel,
+            CrossfeedCutoffHz = CrossfeedCutoffHz
         };
 
         public static ChannelBalanceState Default() => new() { MonoMode = "off" };
@@ -71,6 +76,7 @@ namespace CelesteMusicPlayer
             LeftDelayMs = Math.Clamp(LeftDelayMs, 0.0, 10.0);
             RightDelayMs = Math.Clamp(RightDelayMs, 0.0, 10.0);
             CrossfeedLevel = Math.Clamp(CrossfeedLevel, 0, 100);
+            CrossfeedCutoffHz = Math.Clamp(CrossfeedCutoffHz, 100, 4000);
             if (MonoMode is not ("off" or "left" or "right" or "sum"))
             {
                 MonoMode = "off";

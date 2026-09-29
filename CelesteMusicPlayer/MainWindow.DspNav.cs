@@ -320,6 +320,12 @@ namespace CelesteMusicPlayer
                 }
             }
 
+            // Stage C 新机架三模块（只列谁在处理，顺序由 DSP 机架窗口管）
+            var rack = DspRackStore.Load();
+            if (rack.Compressor.IsActive) on.Add("压缩");
+            if (rack.StereoField.IsActive) on.Add("声场");
+            if (rack.Matrix.IsActive) on.Add("矩阵");
+
             DspChainProcessText.Text = bypass ? "全部旁路" : (on.Count == 0 ? "无（直通）" : string.Join(" → ", on));
 
             int clip = _audioEngine?.OutputClipCount ?? 0;
@@ -442,6 +448,12 @@ namespace CelesteMusicPlayer
                     on.Add(names[i]);
                 }
             }
+
+            // Stage C 新机架三模块（DspRackWindow 管理；IsActive 与面板徽标同口径）
+            var rack = DspRackStore.Load();
+            if (rack.Compressor.IsActive) on.Add("压缩器");
+            if (rack.StereoField.IsActive) on.Add("立体声场");
+            if (rack.Matrix.IsActive) on.Add("声道矩阵");
 
             bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
             OutMonitorActiveDspText.Text = bypass
