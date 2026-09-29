@@ -806,13 +806,6 @@ namespace CelesteMusicPlayer
             _hifiOut?.SetSafety(state);
         }
 
-        /// <summary>设置 DSP 机架状态（模块顺序 + 压缩器 + 立体声场 + 声道矩阵）。
-        /// SetRack 内部会存盘 dsp-rack.json 并实时下发内核；播放中实时生效。</summary>
-        public void SetDspRack(RackState rack)
-        {
-            _hifiOut?.SetRack(rack);
-        }
-
         /// <summary>设置房间校正（卷积 FIR）。播放中实时生效。</summary>
         public void SetRoomCorrection(RoomCorrectionState? state)
         {

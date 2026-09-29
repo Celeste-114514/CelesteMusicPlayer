@@ -59,7 +59,6 @@ namespace CelesteMusicPlayer
             _featuresInitialized = true;
 
             EqualizerWindow.Applied += OnEqualizerApplied;
-            DspRackWindow.Applied += OnDspRackApplied;
             TagEditorWindow.TagsSaved += OnTagsSaved;
 
             ConfigureSmtcFromSettings();
@@ -767,20 +766,6 @@ namespace CelesteMusicPlayer
             NowPlayingText.Text = any
                 ? "均衡器已应用（输出非 bit-perfect）"
                 : "均衡器已应用（bit-perfect 直通）";
-        }
-
-        /// <summary>DSP 机架（顺序 / 压缩器 / 立体声场 / 声道矩阵 / Crossfeed 截止）已应用：
-        /// SetRack 内部存盘并实时下发内核；Crossfeed 截止频率走旧 dsp-extra.json 链路一起推。</summary>
-        private void OnDspRackApplied()
-        {
-            _audioEngine?.SetDspRack(DspRackStore.Load());
-            var extra = DspExtraStore.Load();
-            _audioEngine?.SetChannelBalance(extra.ChannelBalance);
-            try
-            {
-                RefreshAudioSettingsPanel();
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
         }
 
         private void OnTagsSaved(string path)
@@ -2559,12 +2544,6 @@ namespace CelesteMusicPlayer
 
         private void AudioSettingsCloseButton_Click(object sender, RoutedEventArgs e) => HideAudioSettingsPanel();
 
-        /// <summary>打开 DSP 机架设置窗口（Stage C：顺序/压缩器/立体声场/矩阵/Crossfeed 截止）。</summary>
-        private void OpenDspRackButton_Click(object sender, RoutedEventArgs e)
-        {
-            DspRackWindow.ShowOrActivate();
-        }
-
         private void AudioSettingsScrim_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e) => HideAudioSettingsPanel();
 
         private void HideAudioSettingsPanel()
@@ -2895,12 +2874,6 @@ namespace CelesteMusicPlayer
                 bool eqOn = EqCurveStore.Load().HasEffect();
                 var extra = DspExtraStore.Load();
                 bool chOn = extra.ChannelBalance?.IsActive == true;
-                // Stage C 新机架三模块（压缩器 / 立体声场 / 声道矩阵）：默认值 = 旁路不计入，
-                // 与 DspRackWindow 徽标、IsActive 同口径（2026-09-29 加，避免开着压缩机却显示全部旁路）
-                var rack = DspRackStore.Load();
-                bool compOn = rack.Compressor.IsActive;
-                bool fieldOn = rack.StereoField.IsActive;
-                bool matrixOn = rack.Matrix.IsActive;
                 bool limiterOn = extra.Safety?.EnableLimiter != false;    // 限幅开关状态（≠激活：单独开只待命）
                 bool hasHeadroom = extra.Safety?.AffectsBits == true;    // 余量≠0：安全模块唯一真正逐样本处理的情形
                 bool rgOn = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
@@ -2908,9 +2881,6 @@ namespace CelesteMusicPlayer
                 var active = new System.Collections.Generic.List<string>();
                 if (eqOn) active.Add("EQ");
                 if (chOn) active.Add("声道");
-                if (compOn) active.Add("压缩");
-                if (fieldOn) active.Add("声场");
-                if (matrixOn) active.Add("矩阵");
                 if (hasHeadroom) active.Add("余量");
                 if (rgOn) active.Add("ReplayGain");
                 if (volOn) active.Add("音量");
@@ -2943,8 +2913,6 @@ namespace CelesteMusicPlayer
                 // 与上面 DSP 摘要同口径：余量✓=真在处理；限幅✓=随链生效、待=开着但全链直通、—=已关闭
                 bool limiterEngaged = limiterOn && active.Count > 0;
                 AudioProDspChain.Text = "EQ" + (eqOn ? "✓" : "—") + " · 声道" + (chOn ? "✓" : "—")
-                    + " · 压缩" + (compOn ? "✓" : "—") + " · 声场" + (fieldOn ? "✓" : "—")
-                    + " · 矩阵" + (matrixOn ? "✓" : "—")
                     + " · 余量" + (hasHeadroom ? "✓" : "—")
                     + " · 限幅" + (limiterEngaged ? "✓" : (limiterOn ? "待" : "—")) + " · ReplayGain" + (rgOn ? "✓" : "—");
                 // 链路可视化着色 + bit-perfect 徽章（用整链判定，而非仅 DSP 开关）
@@ -3088,8 +3056,6 @@ namespace CelesteMusicPlayer
             bool rgOn = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
             var room = RoomCorrectionStore.Load();
             bool firOn = room.Enabled && !string.IsNullOrWhiteSpace(room.IrPath);
-            // Stage C 新机架三模块：任一 IsActive 即非 bit-perfect（口径同 DspRackWindow 徽标）
-            var rack = DspRackStore.Load();
             // HiFi 软件音量（独占/ASIO + 设置页开关 + 音量≠100%）：DSP 链采样级衰减，同样破坏 bit-perfect。
             bool volOn = _audioEngine?.IsSoftwareVolumeActive ?? false;
             var active = new System.Collections.Generic.List<string>();
@@ -3099,9 +3065,6 @@ namespace CelesteMusicPlayer
             if (rgOn) active.Add("ReplayGain");
             if (firOn) active.Add("房间校正");
             if (volOn) active.Add("音量");
-            if (rack.Compressor.IsActive) active.Add("压缩");
-            if (rack.StereoField.IsActive) active.Add("声场");
-            if (rack.Matrix.IsActive) active.Add("矩阵");
             activeText = active.Count == 0 ? string.Empty : string.Join("、", active);
             return active.Count == 0;
         }

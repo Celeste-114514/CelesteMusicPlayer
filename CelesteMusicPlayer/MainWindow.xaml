@@ -7013,22 +7013,6 @@
                         <TextBlock x:Name="AudioLinkBitPerfect" FontSize="12" Opacity="0.8" TextWrapping="WrapWholeWords" />
                     </StackPanel>
 
-                    <!-- DSP 机架（Stage C：ECHO 新模块总入口，独立窗口管理顺序/压缩器/立体声场/矩阵/Crossfeed 截止） -->
-                    <StackPanel Spacing="8" Margin="0,16,0,0">
-                        <TextBlock Text="DSP 机架" FontSize="14" FontWeight="SemiBold" />
-                        <Button
-                            x:Name="OpenDspRackButton"
-                            Content="打开 DSP 机架设置"
-                            HorizontalAlignment="Stretch"
-                            Click="OpenDspRackButton_Click"
-                            ToolTipService.ToolTip="8 模块处理顺序 + 压缩器 / 立体声场 / 声道矩阵 / Crossfeed 截止频率" />
-                        <TextBlock
-                            FontSize="12"
-                            Opacity="0.6"
-                            TextWrapping="WrapWholeWords"
-                            Text="来自 ECHO 的 DSP 机架：调整模块处理顺序、压缩器、立体声场、声道矩阵与 Crossfeed 截止频率。任一模块真正参与处理时输出非 bit-perfect；全部保持默认即直通。" />
-                    </StackPanel>
-
                     <!-- 专业播放状态 -->
                     <StackPanel Spacing="6" Margin="0,16,0,0">
                         <TextBlock Text="专业播放状态" FontSize="14" FontWeight="SemiBold" />
