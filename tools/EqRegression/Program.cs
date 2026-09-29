@@ -4,6 +4,12 @@ using System.IO;
 using NAudio.Wave;
 using Xunit;
 
+// 原生 DSP 内核（celeste_dsp_core）是进程级单实例，与 ECHO 架构一致：xunit 默认按测试类
+// 并行，并行类各自构造 ManagedDspSourceProvider 时会互相 destroy 对方正在使用的引擎 ——
+// 实测表现为测试主机 0xC0000005 崩溃 + "EQ 不生效" 假失败（每次完成数都不同）。
+// DSP 用例因此整程序集串行（本仓先例：共用 LibraryDb 全局状态的类同样收进同一 Collection）。
+[assembly: CollectionBehavior(DisableTestParallelization = true)]
+
 namespace CelesteMusicPlayer.EqRegression
 {
     /// <summary>

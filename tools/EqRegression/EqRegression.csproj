@@ -33,6 +33,10 @@
       <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.WindowsAppRuntime.*" />
       <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.Windows.SDK.NET.dll" />
       <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\e_sqlite3.dll" />
+      <!-- Stage B：DSP 机架内核（celeste_dsp_core 的 C ABI 桥）。测试进程经
+           DspCoreInterop 的解析器只在 AppContext.BaseDirectory 找它，缺了它引擎创建失败、
+           整条 DSP 链降级直通，EQ/电平表测试会假失败（CI 同理，必须随拷）。 -->
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\celeste_dsp_core.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(_Wasdk)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>

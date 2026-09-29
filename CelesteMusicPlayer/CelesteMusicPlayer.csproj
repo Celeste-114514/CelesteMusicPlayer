@@ -20,6 +20,9 @@
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
+    <!-- DspCoreInterop 用 fixed 指针直通 celeste_dsp_core.process（交错 float32 原地处理，
+         避免每块 P/Invoke 数组拷贝；float* 签名见 DspCoreInterop.cs） -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <!-- 始终使用 Program.cs 入口（启动前固定工作目录到 exe 目录） -->
     <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
     <!--
@@ -60,6 +63,11 @@
              DLL 本体随仓库分发；加 Exists 条件防止文件缺失时构建直接失败，
              缺失时只是 native2 项不可用（选中会得到友好错误并回退自研）。 -->
         <Content Include="..\native\celeste-core\build\celeste_core.dll" Link="celeste_core.dll" Condition="Exists('..\native\celeste-core\build\celeste_core.dll')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <!-- DSP 机架内核 celeste_dsp_core.dll（Stage B 起统一 DSP 链的运算核心；C ABI 桥接，
+             源码见 native/dsp-core/，build.bat 重新生成。x64 构建随包；x86/ARM64 下缺失时
+             ManagedDspSourceProvider 创建引擎失败 → 自动回退「DSP 全关」直通（日志记录），
+             不崩播放。DLL 本体暂不入库（.gitignore），Stage D 打包时随安装包分发）。 -->
+        <Content Include="..\native\dsp-core\build\celeste_dsp_core.dll" Link="celeste_dsp_core.dll" Condition="Exists('..\native\dsp-core\build\celeste_dsp_core.dll')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- SACD 解码外部工具 sacd_extract.exe：不随包发布，用户自行放到 Assets\sacd\ 后构建自动带上（通配空目录不报错） -->
     <Content Include="Assets\sacd\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <Content Include="Assets\AppIcon.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />

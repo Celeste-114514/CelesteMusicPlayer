@@ -52,6 +52,9 @@ namespace CelesteMusicPlayer
         private EqCurveState? _eqCurve; // 动态 EQ 曲线状态（DSP 面板用）
         private ChannelBalanceState? _channelBalance; // 声道平衡状态
         private DspSafetyState? _safety; // 安全限幅/余量状态
+        // DSP 机架状态（dsp-rack.json）：模块顺序 + 压缩器/立体声场/声道矩阵（Stage B/C）。
+        // 启动时加载，播放会话构建时下发内核；播放中可实时改（原子接口，下一音频块生效）。
+        private RackState _rack = DspRackStore.Load();
         private int _crossfadeMs; // 交叉淡化时长（毫秒），0 = 关闭（保持无缝硬切）
         private int _resampleTargetHz; // 采样率升频目标（Hz），0 = 关闭
         private string _srcQuality = ResamplingSourceProvider.QualityBalanced; // SRC 质量档位
@@ -205,6 +208,27 @@ namespace CelesteMusicPlayer
         {
             _roomCorrection = state?.Clone() ?? null;
             _dspProvider?.SetRoomCorrection(_roomCorrection);
+        }
+
+        /// <summary>设置 DSP 机架状态（模块顺序 + 压缩器/立体声场/声道矩阵）。持久化到
+        /// dsp-rack.json 并实时下发内核（顺序/参数均为原子接口，下一音频块生效）。</summary>
+        public void SetRack(RackState rack)
+        {
+            _rack = (rack ?? new RackState()).Clone();
+            DspRackStore.Save(_rack);
+            ApplyRack(_dspProvider);
+        }
+
+        /// <summary>把机架状态下发到内核（provider 存在时）。provider 为 null（未播放）时
+        /// 仅保存状态，下次播放会话构建 BuildDspProvider 时应用。</summary>
+        private void ApplyRack(ManagedDspSourceProvider? dsp)
+        {
+            if (dsp == null)
+            {
+                return;
+            }
+
+            dsp.ApplyRack(_rack);
         }
 
         /// <summary>设置交叉淡化时长（毫秒）。0 = 关闭（无缝硬切）。
@@ -1298,22 +1322,28 @@ namespace CelesteMusicPlayer
                 // 但**不**禁止容器协商（requireExactFormat 仍按 requireExact 传），否则 native2 等
                 // 原生内核会直接拒绝起播。
                 bool bypassDsp = requireExact || dopPayload;
-                IWaveSourceProvider chainInput = BuildSrcChain(_seamless, mode, deviceIdentifier, bypassDsp);
+                IWaveSourceProvider srcOut = BuildSrcChain(_seamless, mode, deviceIdentifier, bypassDsp);
+                // SRC 是否真正生效（BuildSrcChain 未启用时原样返回 _seamless）——DSP 上游有重采样
+                bool srcActive = !ReferenceEquals(srcOut, _seamless);
+                IWaveSourceProvider chainInput = srcOut;
                 // 多声道（5.1/7.1 转码产物，6ch/8ch）→ 立体声降混：
                 // 立体声设备的 WASAPI 共享模式下 IAudioClient::Initialize 会拒绝 6/8 声道格式，
                 // 返回 E_INVALIDARG，.NET 侧表现为 "Value does not fall within the expected range"，
                 // 整首歌直接播放失败（日志特征：仅多声道曲目失败，2ch 正常）。
                 // 降混放在 DSP 链之前，使 EQ / 声道平衡 / 限幅 / 电平表 / 频谱全程按 2 声道工作。
                 // requireExact（DSD / DoP 直出）容器本身是 2ch，不触发，保 bit-perfect。
+                bool downmixActive = false;
                 if (!bypassDsp && chainInput.WaveFormat.Channels > 2)
                 {
                     int srcCh = chainInput.WaveFormat.Channels;
                     chainInput = new StereoDownmixSourceProvider(chainInput);
+                    downmixActive = true;
                     StartupLog.Write($"多声道降混启用：{srcCh}ch → 2ch（设备为立体声，避免共享模式初始化被拒）");
                 }
-                // 统一 DSP 链（EQ→声道平衡→限幅）：任一激活则包住上游源使 DSP 在 NAudio(ASIO/共享) 与
-                // 原生 WASAPI 独占下都生效（非 bit-perfect）；全部关闭则 _dspProvider 内部短路直通。
-                _dspProvider = BuildDspProvider(chainInput);
+                // 统一 DSP 链（原生机架：EQ→卷积→RG→压缩→…→Headroom→限幅）：任一激活则包住上游源使
+                // DSP 在 NAudio(ASIO/共享) 与原生 WASAPI 独占下都生效（非 bit-perfect）；全部关闭则
+                // _dspProvider 内部短路直通。SRC/降混在 DSP 上游 → 限幅天花板收紧 1dB（ECHO 语义）。
+                _dspProvider = BuildDspProvider(chainInput, srcActive || downmixActive);
                 // 开启实时电平测量（测量 post-DSP 信号；无 DSP 时只解码测量不改写输出，仍 bit-perfect）。
                 // requireExact（DSD/DoP 直出）时独占通道直接读无缝源、不经 DSP 链，测不到也无需测 → 关闭。
                 _dspProvider.SetMetering(!bypassDsp);
@@ -1533,10 +1563,12 @@ namespace CelesteMusicPlayer
 
         /// <summary>构建统一 DSP 链（包住无缝源）。始终构建（而非"任一激活才建"），使播放中开启/调节
         /// EQ / 声道平衡 / 限幅时能实时生效（_dspProvider 恒存在，内部 _active 短路直通零开销）。
-        /// requireExact（DSD/DoP 直出）由调用处强制用无缝源，不经此链。</summary>
-        private ManagedDspSourceProvider BuildDspProvider(IWaveSourceProvider chainInput)
+        /// requireExact（DSD/DoP 直出）由调用处强制用无缝源，不经此链。
+        /// upstreamActive：SRC 升频 / 多声道降混发生在 DSP 链上游（限幅天花板收紧 1dB）。</summary>
+        private ManagedDspSourceProvider BuildDspProvider(IWaveSourceProvider chainInput, bool upstreamActive = false)
         {
             var dsp = new ManagedDspSourceProvider(chainInput);
+            dsp.SetUpstreamPcmActive(upstreamActive);
             if (_eqCurve != null)
             {
                 dsp.UpdateEqCurve(_eqCurve);
@@ -1550,6 +1582,8 @@ namespace CelesteMusicPlayer
             dsp.UpdateSafety(_safety);
             dsp.SetReplayGain(_rgState, _rgTrackDb, _rgAlbumDb, _rgPeak);
             dsp.SetRoomCorrection(_roomCorrection);
+            // 机架顺序 + 压缩器/立体声场/声道矩阵（dsp-rack.json 持久化状态）
+            dsp.ApplyRack(_rack);
             // 共享模式当前音量（播放会话重建后同步，避免音量丢失/跳回 100%）；
             // 独占/ASIO 走设备主音量，DSP 链保持全音量（不双重衰减）。
             if (_activeMode != OutputMode.WasapiExclusive && _activeMode != OutputMode.Asio)

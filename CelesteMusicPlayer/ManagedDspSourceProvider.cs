@@ -1,18 +1,21 @@
 ﻿using System;
-using System.Collections.Generic;
-using NAudio.Dsp;
 using NAudio.Wave;
 
 namespace CelesteMusicPlayer
 {
     /// <summary>
     /// 统一直管 DSP 源：包装 <see cref="SeamlessWaveProvider"/>，在 Read 时对源 PCM 依次做
-    /// 「10段EQ → 声道平衡 → 安全限幅(headroom + soft-clip)」。同时实现 <see cref="IWaveSourceProvider"/>
-    /// 与 <see cref="IWaveProvider"/>，因此既可用于 NAudio（ASIO/共享）输出，也可传给原生 WASAPI 独占
-    /// 渲染线程 —— 让 DSP 在独占输出下同样生效。
+    /// 「软件音量 → celeste_dsp_core 原生机架（EQ→卷积→ReplayGain→压缩→Crossfeed→立体声场→
+    /// 声道矩阵→声道平衡→Headroom→安全限幅）→ 电平表/频谱测量 → TPDF dither 回写」。
+    /// 机架运算全部在原生内核（C ABI，见 <see cref="DspCoreInterop"/>），本类只负责
+    /// 交错 PCM ↔ float 编解码、软件音量、测量与生命周期管理。
     ///
-    /// 任一 DSP 激活即非 bit-perfect（与 ECHO 的界定一致）；全部直通时数值直通。
-    /// DSD/DoP 直出（requireExact）路径不使用本 provider，保持 1-bit 直通。
+    /// 任一 DSP 激活即非 bit-perfect（与 ECHO 的界定一致）；全部直通时数值直通
+    /// （本类不进 ProcessBlock，内核同样不参与）。DSD/DoP 直出（requireExact）路径
+    /// 不使用本 provider，保持 1-bit 直通。
+    ///
+    /// 内核创建失败（DLL 缺失等）时本类安全降级：所有 Update 变 no-op、_active 恒 false，
+    /// 输出退回 bit-perfect 直通并写日志 —— 绝不抛异常穿到音频渲染线程。
     /// </summary>
     internal sealed class ManagedDspSourceProvider : IWaveProvider, IWaveSourceProvider
     {
@@ -21,32 +24,30 @@ namespace CelesteMusicPlayer
         private readonly int _channels;
         private readonly bool _isFloat;
 
-        // EQ：动态 band 滤波链（按 band 列表/类型重建，render 线程整数组原子读，UI 线程原子替换）
-        private volatile BiQuadFilter[][] _eqFilters = Array.Empty<BiQuadFilter[]>();
-        private double _preampGain = 1.0; // preamp（double 不能 volatile；仅在 EQ 状态更新时变化，读侧极端误差可忽略）
+        /// <summary>原生内核是否就绪（create 成功）。false = DSP 全关直通。</summary>
+        private bool _engineReady;
+
+        /// <summary>内核 process 出错后只记一次日志，避免渲染线程每块刷屏。</summary>
+        private bool _processErrLogged;
+
+        // 各模块「UI 意图」开关（内核状态以此为准下发；_rackActive 的合成源）
         private bool _eqEnabled;
-
-        // 声道平衡参数
         private bool _chEnabled;
-        private bool _chSwap, _chInvL, _chInvR, _chMono, _chMonoLeft, _chMonoRight;
-        private double _gainL, _gainR;
+        private bool _rgActive;
+        private bool _convEnabled;
+        private bool _compEnabled;
+        private bool _stereoEnabled;
+        private bool _matrixEnabled;
+        private double _headroomDb;
 
-        // 耳机 Crossfeed（声场交叉馈送）：把对侧声道经一阶低通后混入本侧，模拟扬声器串扰，
-        // 缓解耳机「头中定位」、声场更自然开阔。低频串扰为主（一阶 LP ~200Hz 截止）。
-        private bool _xfActive;
-        private double _xfMix;       // 混音系数（0..0.7，由强度%映射）
-        private float _xfLpCoef;     // 一阶低通系数（按采样率换算）
-        private float _xfLpL, _xfLpR; // 低通状态（本侧信号经低通后喂给对侧）
+        /// <summary>机架上是否有任一模块被 UI 启用（不含软音量/旁路）。</summary>
+        private bool _rackActive;
 
-        // 安全限幅
-        private double _headroomDb;       // 负值预衰减余量
-        private double _headroomGain;     // 当前平滑中的增益
-        private double _headroomStep;     // 每样本步进
-        private int _headroomSmoothLeft;  // 剩余平滑样本
-        private int _headroomSmoothTotal = 22050; // ~0.5s@44.1k，默认
-        private const int SmoothingMs = 50; // 快速但无爆音
-        private bool _limiterEnabled;
-        private volatile bool _active; // 任意 DSP 生效（EQ/声道/headroom/limiter）→ 决定 Read 是否走 ProcessBlock
+        // DSP 总旁路（A/B 对比用）：开 = 全部 DSP 跳过、输出 bit-perfect，但设置保留（关掉即恢复）。
+        // 旁路时 Read 走直通路径；电平表仍走 MeasurePassthrough 测量（不改写输出）。
+        private volatile bool _bypassAll;
+
+        private volatile bool _active; // 旁路关 且（机架激活 或 音量≠1）→ 走 ProcessBlock
 
         // 实时电平表：测量 post-DSP 信号（实际送往输出的信号）的每声道峰值/RMS。
         // 默认关闭（零开销、保持 bit-perfect）；播放开始时被开启。
@@ -97,43 +98,18 @@ namespace CelesteMusicPlayer
             _outClipCount = 0;
         }
 
-        // 软件总音量（共享/ASIO 用，采样级增益；NAudio WasapiOut.Volume 不支持，故由 DSP 链实现）。
+        // 软件总音量（共享/ASIO 用，采样级增益；NAudio WasapiOut.Volume 不支持，故由本类实现）。
+        // 恒在链首：内核机架（ECHO 设计）不含音量模块，音量增益之后的峰值由内核尾段
+        // Headroom/安全限幅统一保护，与 ECHO 语义一致。
         private volatile float _volumeGain = 1f;
 
-        // ReplayGain 响度归一化（对齐 ECHO ReplayGainProcessor：目标增益 + 10ms 平滑渐变）
-        private double _rgTargetDb;
-        private double _rgCurrentDb;
-        private int _rgRampLeft;
-        private int _rgRampTotal = 441; // ~10ms @44.1k，构造时按采样率重算
-        private bool _rgActive;
-
-        // 房间校正（卷积 FIR）：链首处理（音量/EQ 之前）。_convolver 原子替换（volatile），播放线程读取。
-        private volatile StreamingPartitionedConvolver? _convolver;
-        private volatile bool _convEnabled;
-        private float _convGain = 1f; // 线性增益（由 GainDb 换算；状态更新时变化，读侧极端误差可忽略）
-        private float _convTrim = 1f; // 卷积微调余量（由 TrimDb 换算，对齐 ECHO roomCorrectionTrimDb：-24~+6 dB）
-        private volatile bool _convClipRisk; // 卷积输出达到满刻度（削波被钳位）
-
-        /// <summary>卷积输出是否出现过削波（已被钳到 ±1）。界面据此提示「削波风险」。</summary>
-        public bool ConvolutionClippingRisk => _convClipRisk;
-
-        /// <summary>已加载 IR 的 taps 数（未加载为 0）。</summary>
-        public int ConvolutionIrTaps => _convolver?.IrLengthFrames ?? 0;
-
-        /// <summary>卷积引入的延迟帧数（等于分区块大小 1024）。</summary>
-        public int ConvolutionLatencyFrames => _convolver?.LatencyFrames ?? 0;
-
-        // DSP 总旁路（A/B 对比用）：开 = 全部 DSP 跳过、输出 bit-perfect，但设置保留（关掉即恢复）。
-        // 旁路时 Read 走直通路径；电平表仍走 MeasurePassthrough 测量（不改写输出）。
-        private volatile bool _bypassAll;
-
-        // 声道延迟差（左右各一环形缓冲 + 线性插值）。目标延迟按采样率换算，
-        // 当前延迟逐帧 ±1 样本渐变逼近（对齐 ECHO ChannelBalanceProcessor 的平滑思路，避免切值爆音）。
-        private float[] _delayRingL = new float[1];
-        private float[] _delayRingR = new float[1];
-        private int _delayPosL, _delayPosR;
-        private double _delayCurL, _delayCurR;       // 当前生效延迟（样本）
-        private double _delayTargetL, _delayTargetR; // 目标延迟（样本）
+        // ECHO 31 槽 EQ 默认频率（echo::eqFrequenciesHz；未占用槽回填用，保证内核拿到完整 31 槽）
+        private static readonly float[] EqDefaultFrequencies =
+        {
+            20f, 25f, 31.5f, 40f, 50f, 63f, 80f, 100f, 125f, 160f,
+            200f, 250f, 315f, 400f, 500f, 630f, 800f, 1000f, 1250f, 1600f,
+            2000f, 2500f, 3150f, 4000f, 5000f, 6300f, 8000f, 10000f, 12500f, 16000f, 20000f
+        };
 
         public ManagedDspSourceProvider(IWaveSourceProvider source)
         {
@@ -142,18 +118,59 @@ namespace CelesteMusicPlayer
             _channels = _format.Channels;
             _isFloat = _format.Encoding == WaveFormatEncoding.IeeeFloat;
 
-            if (_format.SampleRate > 0)
-            {
-                _headroomSmoothTotal = Math.Max(1, (int)(_format.SampleRate * SmoothingMs / 1000.0));
-                _rgRampTotal = Math.Max(1, (int)(_format.SampleRate * 0.01)); // ~10ms
-            }
+            CreateEngine();
+        }
 
-            _headroomGain = 1.0;
+        // 「换引擎」的进程级互斥锁：原生 bridge 的 g_engine 是进程级单实例（与 ECHO 架构一致），
+        // destroy+create 必须整段原子完成。两个 provider 同时构造时（并行测试类 / UI 连点），
+        // 若锁外交叉执行，另一边在用的引擎会被中途释放 → use-after-free（实测 0xC0000005）。
+        // 只在构造时持有，音频线程的 Read 热路径不经过它。
+        private static readonly object EngineSwapGate = new();
+
+        /// <summary>创建原生 DSP 内核（单实例：先销毁旧引擎再建；播放会话重建时走到这里）。
+        /// 失败仅记录并保持 _engineReady=false —— 上层所有 Update 变 no-op，输出直通。</summary>
+        private void CreateEngine()
+        {
+            try
+            {
+                int sr = _format.SampleRate;
+                int ch = Math.Max(1, _channels);
+                if (sr <= 0 || ch > DspCoreInterop.MaxChannels)
+                {
+                    StartupLog.Write($"[DSP] 内核创建跳过：格式异常 sr={sr} ch={ch}，DSP 全关直通");
+                    _engineReady = false;
+                    return;
+                }
+
+                // 单实例：销毁上一会话可能残留的引擎（含其设置/IR），全新构建。
+                // 整段加锁，见 EngineSwapGate 注释：换引擎动作不许被并发构造/读取交叉。
+                int rc;
+                lock (EngineSwapGate)
+                {
+                    DspCoreInterop.celeste_dsp_destroy();
+                    rc = DspCoreInterop.celeste_dsp_create(sr, DspCoreInterop.MaxBlockFrames, ch);
+                }
+                _engineReady = rc == DspCoreInterop.Ok;
+                if (_engineReady)
+                {
+                    int ver = DspCoreInterop.celeste_dsp_version();
+                    StartupLog.Write($"[DSP] celeste_dsp_core 就绪 ver=0x{ver:X8} sr={sr} maxBlock={DspCoreInterop.MaxBlockFrames} ch={ch}");
+                }
+                else
+                {
+                    StartupLog.Write($"[DSP] celeste_dsp_core 创建失败 rc={rc}（DLL 缺失或不兼容），DSP 全部回退直通");
+                }
+            }
+            catch (Exception caught)
+            {
+                _engineReady = false;
+                StartupLog.WriteException("ManagedDspSourceProvider.CreateEngine", caught);
+            }
         }
 
         #region 状态更新（播放中调用，下一次 Read 生效）
 
-        /// <summary>兼容旧 10 段 EQ（独立 EQ 窗口用）：组装为动态曲线状态再走统一引擎。</summary>
+        /// <summary>兼容旧 10 段 EQ（独立 EQ 窗口用）：组装为动态曲线状态再走统一内核映射。</summary>
         public void UpdateEq(double[]? gainsDb)
         {
             var curve = new EqCurveState { Enabled = true, PreampDb = 0, PresetId = "custom", PresetName = "自定义" };
@@ -168,64 +185,75 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            if (curve.Bands.Count == 0) { _eqEnabled = false; _eqFilters = Array.Empty<BiQuadFilter[]>(); RefreshActive(); return; }
+            if (curve.Bands.Count == 0)
+            {
+                UpdateEqCurve(null);
+                return;
+            }
             UpdateEqCurve(curve);
         }
 
         /// <summary>应用动态 EQ 曲线状态（band 列表 + preamp）。null / 无效果 → 关闭 EQ。
-        /// 播放中调用：整数组原子替换滤波链（volatile），render 线程下一次 Read 生效，无锁、可丝滑实时调节。</summary>
+        /// 映射到内核 31 槽参数化 EQ（前 N 槽按顺序填，其余 0/关）；Celeste 特有的
+        /// 「自动峰值余量折叠」保留，作为 preamp 下发。播放中实时生效（内核原子接口）。</summary>
         public void UpdateEqCurve(EqCurveState? curve)
         {
-            bool on = curve != null && curve.HasEffect();
+            bool on = _engineReady && curve != null && curve.HasEffect();
+            _eqEnabled = on;
             if (!on)
             {
-                _eqEnabled = false;
-                _preampGain = 1.0;
-                _eqFilters = Array.Empty<BiQuadFilter[]>();
-                RefreshActive();
+                if (_engineReady)
+                {
+                    // 内核 EQ 旁路（6ms 淡出由内核处理，爆音安全）
+                    DspCoreInterop.celeste_dsp_eq_set_enabled(0);
+                }
+                RefreshRackActive();
                 return;
             }
 
-            // 自动峰值余量补偿：估算所有启用 band 在频域的最大叠加增益 peakDb，
-            // 当用户未手动设 preamp 时，自动施加负余量把输出压回 0dB，避免极端增益（如 +10dB 低频增强）
-            // 触发 biQuad 过冲后只能靠削波产生爆音（对齐 ECHO 自动增益/余量思路）。
-            double peakDb = EstimateEqPeakDb(curve);
-            double autoCompDb = -Math.Max(0, peakDb);
-            autoCompDb = Math.Clamp(autoCompDb, -12, 0);
-            double userPre = Math.Abs(curve!.PreampDb) > 0.01 ? Math.Pow(10.0, Math.Clamp(curve.PreampDb, -24, 24) / 20.0) : 1.0;
-            if (Math.Abs(curve.PreampDb) > 0.01)
-            {
-                // 用户手动 set 了 preamp：尊重用户设定，但叠加的自动余量也纳入（仍防削波）
-                _preampGain = userPre * Math.Pow(10.0, autoCompDb / 20.0);
-            }
-            else
-            {
-                _preampGain = Math.Pow(10.0, autoCompDb / 20.0);
-            }
+            // Celeste 特有件：自动峰值余量补偿。估算所有启用 band 在频域的最大叠加增益 peakDb，
+            // 用户未手动设 preamp 时自动施加负余量把输出压回 0dB，避免极端增益（如 +10dB 低频增强）
+            // 触发过冲后只能靠限幅/削波产生爆音。用户手动设了 preamp 则两者叠加（仍防削波）。
+            double peakDb = EstimateEqPeakDb(curve!);
+            double autoCompDb = Math.Clamp(-Math.Max(0, peakDb), -12, 0);
+            double userPreDb = Math.Abs(curve!.PreampDb) > 0.01 ? curve.PreampDb : 0.0;
+            double preampDb = Math.Clamp(userPreDb + autoCompDb, DspCoreInteropMinPreamp, DspCoreInteropMaxPreamp);
 
-            // 按声道数建立独立滤波链：每个声道各持一组全新的 BiQuadFilter 实例。
-            // BiQuadFilter.Transform 是有状态的，共用实例会把交错多声道当成更高采样率单声道，
-            // 导致频响偏移（立体声下一个八度，多声道更多）。此前只建了 L/R 两条链，
-            // 使得 5.1 等多声道的第 3~6 声道完全不过 EQ。这里按 _channels 建链，所有声道都独立滤波。
-            int chCount = Math.Max(1, _channels);
-            var chains = new BiQuadFilter[chCount][];
-            for (int c = 0; c < chCount; c++)
+            // 31 槽映射：curve.Bands 按顺序填前 N 槽（N ≤ 31），其余增益 0 / 关闭。
+            // 频率/Q/类型用 band 自带值；未占用槽用 ECHO 默认频率回填（get_all 回读 round-trip 稳定）。
+            float[] gains = new float[DspCoreInterop.EqBandCount];
+            float[] freqs = new float[DspCoreInterop.EqBandCount];
+            float[] qs = new float[DspCoreInterop.EqBandCount];
+            int[] types = new int[DspCoreInterop.EqBandCount];
+            int[] bandEnabled = new int[DspCoreInterop.EqBandCount];
+            for (int i = 0; i < DspCoreInterop.EqBandCount; i++)
             {
-                var list = new List<BiQuadFilter>();
-                foreach (var band in curve.Bands)
-                {
-                    if (band is not { Enabled: true }) continue;
-                    var f = BuildBandFilter(band);
-                    if (f != null) list.Add(f);
-                }
-
-                chains[c] = list.ToArray();
+                gains[i] = 0f;
+                freqs[i] = EqDefaultFrequencies[i];
+                qs[i] = 1f;
+                types[i] = DspCoreInterop.EqPeaking;
+                bandEnabled[i] = 0;
             }
 
-            _eqFilters = chains;
-            _eqEnabled = true;
-            RefreshActive();
+            int count = Math.Min(curve.Bands.Count, DspCoreInterop.EqBandCount);
+            for (int i = 0; i < count; i++)
+            {
+                var b = curve.Bands[i];
+                if (b == null) continue;
+                gains[i] = (float)Math.Clamp(b.GainDb, -12, 12);
+                freqs[i] = (float)Math.Clamp(b.FrequencyHz, 20, 20000);
+                qs[i] = (float)Math.Clamp(b.Q, 0.1, 12);
+                types[i] = (int)b.FilterType;
+                bandEnabled[i] = b.Enabled ? 1 : 0;
+            }
+
+            DspCoreInterop.celeste_dsp_eq_set_all(gains, freqs, qs, types, bandEnabled, (float)preampDb, 1);
+            RefreshRackActive();
         }
+
+        // 内核 EQ preamp 合法范围（echo::eqMinPreampDb / eqMaxPreampDb）
+        private const double DspCoreInteropMinPreamp = -12.0;
+        private const double DspCoreInteropMaxPreamp = 6.0;
 
         /// <summary>估算一组 EQ band 在频域的最大叠加增益（dB）。保守起见对 peak 用带宽高斯近似、架/滤子做简化求和。</summary>
         private static double EstimateEqPeakDb(EqCurveState curve)
@@ -256,7 +284,7 @@ namespace CelesteMusicPlayer
         {
             if (Math.Abs(b.GainDb) < 0.01 && b.FilterType is not (EqFilterType.LowPass or EqFilterType.HighPass or EqFilterType.Notch))
             {
-                if (b.FilterType is EqFilterType.Peaking or EqFilterType.LowShelf or EqFilterType.HighShelf) return 0;
+                if (b.FilterType is (EqFilterType.Peaking or EqFilterType.LowShelf or EqFilterType.HighShelf)) return 0;
             }
 
             switch (b.FilterType)
@@ -299,148 +327,188 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>把单条 band 构造成 BiQuad 滤波器（按类型）。</summary>
-        private BiQuadFilter? BuildBandFilter(EqBand band)
-        {
-            float sr = _format.SampleRate;
-            float freq = (float)Math.Clamp(band.FrequencyHz, 20, sr * 0.45f);
-            float q = (float)Math.Clamp(band.Q, 0.1, 24);
-            float gain = (float)Math.Clamp(band.GainDb, -24, 24);
-            switch (band.FilterType)
-            {
-                case EqFilterType.Peaking: return BiQuadFilter.PeakingEQ(sr, freq, q, gain);
-                case EqFilterType.LowShelf: return BiQuadFilter.LowShelf(sr, freq, q, gain);
-                case EqFilterType.HighShelf: return BiQuadFilter.HighShelf(sr, freq, q, gain);
-                case EqFilterType.LowPass: return BiQuadFilter.LowPassFilter(sr, freq, q);
-                case EqFilterType.HighPass: return BiQuadFilter.HighPassFilter(sr, freq, q);
-                case EqFilterType.Notch: return BiQuadFilter.NotchFilter(sr, freq, q);
-                default: return BiQuadFilter.PeakingEQ(sr, freq, q, gain);
-            }
-        }
-
+        /// <summary>设置声道平衡状态（balance / 增益 / 交换 / mono / 反相 / 延迟 + Crossfeed 子能力）。
+        /// null / 未启用 → 内核 balance 模块旁路。映射到内核 <c>celeste_dsp_balance_set</c>。
+        /// Crossfeed：强度 0-100% 直接映射 ECHO amount 0..1；截止频率取 ECHO 默认 700Hz
+        /// （Celeste 旧实现固定 ~200Hz；按「照搬 ECHO」统一，Stage C 新面板再暴露可调）。</summary>
         public void UpdateChannel(ChannelBalanceState? state)
         {
-            if (state == null || !state.Enabled)
+            bool on = _engineReady && state != null && state.Enabled;
+            _chEnabled = on;
+
+            if (_engineReady)
             {
-                _chEnabled = false;
-                return;
-            }
-
-            _chEnabled = true;
-            _chSwap = state.SwapChannels;
-            _chInvL = state.InvertLeft;
-            _chInvR = state.InvertRight;
-            _chMono = !string.Equals(state.MonoMode, "off", StringComparison.Ordinal);
-            _chMonoLeft = string.Equals(state.MonoMode, "left", StringComparison.Ordinal);
-            _chMonoRight = string.Equals(state.MonoMode, "right", StringComparison.Ordinal);
-
-            double balance = Math.Clamp(state.Balance, -1.0, 1.0);
-            double panL = balance <= 0 ? 1.0 : Math.Cos(balance * Math.PI / 2.0);
-            double panR = balance >= 0 ? 1.0 : Math.Cos(balance * Math.PI / 2.0);
-            double lg = Math.Pow(10.0, Math.Clamp(state.LeftGainDb, -12.0, 12.0) / 20.0);
-            double rg = Math.Pow(10.0, Math.Clamp(state.RightGainDb, -12.0, 12.0) / 20.0);
-            _gainL = lg * panL;
-            _gainR = rg * panR;
-
-            // 声道延迟差：目标延迟样本数 = 毫秒 × 采样率 / 1000；延迟越大缓冲越长（上限 10ms + 2 保险）
-            double sr = _format.SampleRate > 0 ? _format.SampleRate : 44100.0;
-            _delayTargetL = Math.Clamp(state.LeftDelayMs, 0.0, 10.0) * sr / 1000.0;
-            _delayTargetR = Math.Clamp(state.RightDelayMs, 0.0, 10.0) * sr / 1000.0;
-            int ringLen = Math.Max(1, (int)(sr * 0.010) + 2);
-            if (_delayRingL.Length < ringLen)
-            {
-                _delayRingL = new float[ringLen];
-                _delayRingR = new float[ringLen];
-                _delayPosL = 0;
-                _delayPosR = 0;
-            }
-
-            // 耳机 Crossfeed：强度% 映射到 0..0.7 混音系数；一阶低通时间常数 ~0.8ms（≈200Hz 截止），只串扰低频
-            _xfActive = state.CrossfeedEnabled && state.CrossfeedLevel > 0;
-            if (_xfActive)
-            {
-                _xfMix = Math.Clamp(state.CrossfeedLevel, 0, 100) / 100.0 * 0.7;
-                double sr2 = _format.SampleRate > 0 ? _format.SampleRate : 44100.0;
-                double tau = 0.0008;
-                _xfLpCoef = (float)(1.0 - Math.Exp(-1.0 / (sr2 * tau)));
-            }
-            else
-            {
-                _xfMix = 0;
-                _xfLpL = 0f;
-                _xfLpR = 0f;
-            }
-
-            RefreshActive();
-        }
-
-        public void UpdateSafety(DspSafetyState? state)
-        {
-            double hd = state?.HeadroomDb ?? 0.0;
-            hd = Math.Clamp(hd, -12.0, 0.0);
-            double targetGain = Math.Pow(10.0, hd / 20.0);
-            _headroomDb = hd;
-            // 未推过安全状态（引擎初始化期）按新装默认：限幅关（bit-perfect 优先）；
-            // 老用户盘上的值由 ApplyDspToEngine 启动时经 SetSafety 推入覆盖。
-            _limiterEnabled = state?.EnableLimiter ?? false;
-            _headroomSmoothTotal = _format.SampleRate > 0 ? Math.Max(1, (int)(_format.SampleRate * SmoothingMs / 1000.0)) : 1;
-            if (Math.Abs(_headroomGain - targetGain) > 1e-5)
-            {
-                _headroomSmoothLeft = _headroomSmoothTotal;
-                _headroomStep = (targetGain - _headroomGain) / _headroomSmoothTotal;
-            }
-
-            RefreshActive();
-        }
-
-        /// <summary>设置 ReplayGain（对齐 ECHO ReplayGainProcessor.setConfig）。
-        /// 传每曲的 track/album 增益（dB）与 peak（线性）。按 state.Mode 选增益、叠加 preamp，
-        /// preventClipping 时若 peak×gain&gt;1 则截断到不削波的最大增益。mode=Off 目标 0dB 旁路。
-        /// 播放中可实时切换（10ms 平滑渐变，无爆音）。</summary>
-        public void SetReplayGain(ReplayGainState? state, double trackGainDb, double albumGainDb, double peak)
-        {
-            double gainDb = 0;
-            bool active = false;
-            bool preventClipping = state?.PreventClipping ?? true;
-            double preampDb = state?.PreampDb ?? 0.0;
-
-            if (state != null && state.Mode == ReplayGainMode.Track)
-            {
-                active = true;
-                gainDb = trackGainDb;
-            }
-            else if (state != null && state.Mode == ReplayGainMode.Album)
-            {
-                active = true;
-                gainDb = albumGainDb;
-            }
-
-            gainDb += preampDb;
-
-            // 防削波：若 peak × 线性增益 > 1，把增益压到最大不削波值（对齐 ECHO）
-            if (active && preventClipping && peak > 0.0)
-            {
-                double appliedLinear = Math.Pow(10.0, gainDb / 20.0);
-                if (peak * appliedLinear > 1.0)
+                if (on)
                 {
-                    double maxGain = 1.0 / peak;
-                    double maxGainDb = 20.0 * Math.Log10(maxGain);
-                    if (gainDb > maxGainDb) gainDb = maxGainDb;
+                    int mono = state!.MonoMode switch
+                    {
+                        "sum" => DspCoreInterop.MonoSum,
+                        "left" => DspCoreInterop.MonoLeft,
+                        "right" => DspCoreInterop.MonoRight,
+                        _ => DspCoreInterop.MonoOff
+                    };
+
+                    bool xfOn = state.CrossfeedEnabled && state.CrossfeedLevel > 0;
+                    float xfAmount = xfOn ? (float)Math.Clamp(state.CrossfeedLevel / 100.0, 0.0, 1.0) : 0f;
+
+                    // 三段频补 Celeste UI 暂无 → 全 0；band gains 数组长度须为 3
+                    float[] zeroBands = new float[DspCoreInterop.BalanceBandCount];
+
+                    // balance/gains/delay 交内核 clamp（C++ sanitizeState 兜底）
+                    DspCoreInterop.celeste_dsp_balance_set(
+                        1,
+                        (float)state.Balance,
+                        (float)state.LeftGainDb,
+                        (float)state.RightGainDb,
+                        zeroBands, zeroBands,
+                        (float)state.LeftDelayMs, (float)state.RightDelayMs,
+                        state.SwapChannels ? 1 : 0,
+                        mono,
+                        state.InvertLeft ? 1 : 0,
+                        state.InvertRight ? 1 : 0,
+                        1); // constantPower：ECHO 默认
+                    DspCoreInterop.celeste_dsp_crossfeed_set(xfOn ? 1 : 0, xfAmount, 700f);
+                }
+                else
+                {
+                    float[] zeroBands = new float[DspCoreInterop.BalanceBandCount];
+                    DspCoreInterop.celeste_dsp_crossfeed_set(0, 0f, 700f);
+                    DspCoreInterop.celeste_dsp_balance_set(
+                        0, 0f, 0f, 0f, zeroBands, zeroBands, 0f, 0f, 0,
+                        DspCoreInterop.MonoOff, 0, 0, 1);
                 }
             }
 
-            _rgActive = active;
-            _rgTargetDb = gainDb;
-            if (_rgRampLeft <= 0)
+            RefreshRackActive();
+        }
+
+        /// <summary>设置安全限幅/余量。HeadroomDb → 内核 headroom 模块（链尾预衰减）；
+        /// EnableLimiter → 内核进程级安全限幅开关（默认开，仅链活跃时介入）。</summary>
+        public void UpdateSafety(DspSafetyState? state)
+        {
+            double hd = Math.Clamp(state?.HeadroomDb ?? 0.0, -12.0, 0.0);
+            _headroomDb = hd;
+            if (_engineReady)
             {
-                _rgCurrentDb = gainDb; // 从未生效时直接到目标，避免开播瞬间渐变
-            }
-            else
-            {
-                _rgRampLeft = _rgRampTotal; // 平滑渐进
+                DspCoreInterop.celeste_dsp_headroom_set_db((float)hd);
+                // 与旧托管链口径一致：限幅开关单独开/关都不改样本，仅余量真正改变信号；
+                // 内核侧限幅本就只在链活跃时运行（全关早退路径跳过）。
+                DspCoreInterop.celeste_dsp_safety_set_enabled(state?.EnableLimiter ?? false ? 1 : 0);
             }
 
-            RefreshActive();
+            RefreshRackActive();
+        }
+
+        /// <summary>设置 ReplayGain（对齐 ECHO ReplayGainProcessor）。mode=Off 旁路；
+        /// 防削波截断由内核内部完成（ECHO 原语义）。播放中实时切换（内核 10ms 平滑）。</summary>
+        public void SetReplayGain(ReplayGainState? state, double trackGainDb, double albumGainDb, double peak)
+        {
+            bool on = _engineReady && state != null && state.Mode != ReplayGainMode.Off;
+            _rgActive = on;
+            if (_engineReady)
+            {
+                int mode = state?.Mode switch
+                {
+                    ReplayGainMode.Track => DspCoreInterop.RgTrack,
+                    ReplayGainMode.Album => DspCoreInterop.RgAlbum,
+                    _ => DspCoreInterop.RgOff
+                };
+                DspCoreInterop.celeste_dsp_rg_set(
+                    (float)trackGainDb,
+                    (float)albumGainDb,
+                    peak > 0 ? (float)peak : 1f,
+                    mode,
+                    (float)(state?.PreampDb ?? 0.0),
+                    state?.PreventClipping ?? true ? 1 : 0);
+            }
+
+            RefreshRackActive();
+        }
+
+        /// <summary>
+        /// 设置房间校正（卷积 FIR）。IR 从 <see cref="RoomCorrectionIrCache"/> 取（已按播放
+        /// 采样率重采样）， planar 拼接后交内核 <c>celeste_dsp_conv_load_ir</c>（8192 taps 上限，
+        /// 超限/校验失败 → 关闭卷积并记日志）。Celeste 的 Gain+Trim 两个参数合并为内核单一
+        /// trim（ECHO ConvolutionProcessor 只有 trimDb，范围 -24..+6）。
+        /// 播放中调用：下一次 Read 生效；换 IR 重置卷积流式状态（衔接差异可接受）。
+        /// </summary>
+        public void SetRoomCorrection(RoomCorrectionState? state)
+        {
+            if (!_engineReady || state == null || !state.Enabled || string.IsNullOrWhiteSpace(state.IrPath))
+            {
+                DisableConvolution();
+                return;
+            }
+
+            try
+            {
+                float[][]? ir = RoomCorrectionIrCache.GetOrLoad(state.IrPath, _format.SampleRate);
+                if (ir == null || ir.Length == 0 || ir.Length > 2 || ir[0] == null)
+                {
+                    StartupLog.Write("[DSP] 卷积 IR 加载失败（文件不可读/声道数超限），卷积关闭");
+                    DisableConvolution();
+                    return;
+                }
+
+                int tapsLen = ir[0].Length;
+                if (ir.Length == 2 && (ir[1] == null || ir[1].Length != tapsLen))
+                {
+                    StartupLog.Write("[DSP] 卷积 IR 左右声道 taps 数不一致，卷积关闭");
+                    DisableConvolution();
+                    return;
+                }
+
+                if (tapsLen <= 0 || tapsLen > DspCoreInterop.MaxIrTaps)
+                {
+                    StartupLog.Write($"[DSP] 卷积 IR taps={tapsLen} 超内核上限 {DspCoreInterop.MaxIrTaps}，卷积关闭");
+                    DisableConvolution();
+                    return;
+                }
+
+                // planar 拼接：[ch0 全部 taps][ch1 全部 taps]
+                float[] planar = new float[tapsLen * ir.Length];
+                Buffer.BlockCopy(ir[0], 0, planar, 0, tapsLen * 4);
+                if (ir.Length == 2)
+                {
+                    Buffer.BlockCopy(ir[1], 0, planar, tapsLen * 4, tapsLen * 4);
+                }
+
+                // GetOrLoad 已按播放采样率重采样 → 源采样率=播放采样率（内核不再重采样）
+                int rc = DspCoreInterop.celeste_dsp_conv_load_ir(planar, ir.Length, tapsLen, _format.SampleRate);
+                if (rc != DspCoreInterop.Ok)
+                {
+                    StartupLog.Write($"[DSP] 内核拒绝 IR rc={rc}（taps={tapsLen} ch={ir.Length}），卷积关闭");
+                    DisableConvolution();
+                    return;
+                }
+
+                // Celeste Gain+Trim 合并为内核 trim（内核仅 trimDb，-24..+6）
+                double trimDb = Math.Clamp(state.GainDb + state.TrimDb, -24.0, 6.0);
+                DspCoreInterop.celeste_dsp_conv_set_trim_db((float)trimDb);
+                DspCoreInterop.celeste_dsp_conv_set_enabled(1);
+                _convEnabled = true;
+                StartupLog.Write($"[DSP] 卷积 IR 已加载 taps={tapsLen} ch={ir.Length} trim={trimDb:F1}dB");
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("ManagedDspSourceProvider.SetRoomCorrection", caught);
+                DisableConvolution();
+                return;
+            }
+
+            RefreshRackActive();
+        }
+
+        private void DisableConvolution()
+        {
+            _convEnabled = false;
+            if (_engineReady)
+            {
+                DspCoreInterop.celeste_dsp_conv_set_enabled(0);
+                DspCoreInterop.celeste_dsp_conv_clear();
+            }
+
+            RefreshRackActive();
         }
 
         /// <summary>任意 DSP 是否激活（UI 据此提示"非 bit-perfect"）。</summary>
@@ -457,64 +525,92 @@ namespace CelesteMusicPlayer
         /// <summary>当前是否处于 DSP 总旁路。</summary>
         public bool IsBypassAll => _bypassAll;
 
-        /// <summary>重算 DSP 是否生效；当无任一 DSP 生效时后续 Read 直接直通（bit-perfect，零逐样本开销）。</summary>
-        private void RefreshActive()
+        /// <summary>重算机架激活标志（各 Update 里调用）。软音量与旁路不在此列
+        /// （它们在 RefreshActive 里单独参与）。</summary>
+        private void RefreshRackActive()
         {
-            // 注意：单独的「软限幅 EnableLimiter」不应激活托管 DSP 链 —— 源 PCM 不会超 ±1，
-            // 软限幅本就不改变样本，故保持 bit-perfect 直通。仅当 EQ/声道/headroom/音量/RG/卷积
-            // 任一真正改变信号时才走 ProcessBlock；这样独占模式下「无任何 DSP」即为严格 bit-perfect。
-            _active = !_bypassAll && (_eqEnabled || _chEnabled || _rgActive || Math.Abs(_headroomDb) > 0.001
-                || Math.Abs(_volumeGain - 1f) > 0.0001f || _convEnabled);
+            _rackActive = _eqEnabled || _chEnabled || _rgActive || _convEnabled
+                || _compEnabled || _stereoEnabled || _matrixEnabled
+                || Math.Abs(_headroomDb) > 0.001;
+            RefreshActive();
         }
 
-        /// <summary>设置采样级总音量基因（共享/ASIO 软件音量），0..2。音量=1 时不进 Processing。</summary>
+        /// <summary>重算 DSP 是否生效；当无任一 DSP 生效时后续 Read 直接直通（bit-perfect，零逐样本开销）。
+        /// 注意：单独的「安全限幅开关」不激活处理链 —— 源 PCM 不会超 ±1，限幅本就不改变样本
+        /// （内核侧同样只在链活跃时运行），故保持 bit-perfect 直通。</summary>
+        private void RefreshActive()
+        {
+            _active = !_bypassAll && (_rackActive || Math.Abs(_volumeGain - 1f) > 0.0001f);
+        }
+
+        /// <summary>设置采样级总音量基因（共享/ASIO 软件音量），0..2。音量=1 时不进 Processing。
+        /// 位于链首（内核机架外），其抬升的峰值由内核尾段 Headroom/限幅保护。</summary>
         public void SetVolumeGain(float gain)
         {
             _volumeGain = Math.Clamp(gain, 0f, 2f);
             RefreshActive();
         }
 
-        /// <summary>
-        /// 设置房间校正（卷积 FIR）。state 为 null / 未启用 / 无 IR 路径 → 关闭卷积。
-        /// IR 从 <see cref="RoomCorrectionIrCache"/> 取（没有则加载并缓存），构造分区卷积器后原子替换。
-        /// 播放中调用：下一次 Read 生效；换 IR 会重置卷积流式状态（短暂衔接差异可接受）。
-        /// </summary>
-        public void SetRoomCorrection(RoomCorrectionState? state)
+        /// <summary>上游 PCM 处理标志：SRC 升频 / 多声道降混发生在 DSP 链上游时置 true，
+        /// 内核据此把安全限幅天花板从 0dB 收紧到 -1dB（给上游处理留余量，对齐 ECHO 语义）。</summary>
+        public void SetUpstreamPcmActive(bool active)
         {
-            if (state == null || !state.Enabled || string.IsNullOrWhiteSpace(state.IrPath))
+            if (_engineReady)
             {
-                _convEnabled = false;
-                _convolver = null;
-                RefreshActive();
+                DspCoreInterop.celeste_dsp_set_upstream_active(active ? 1 : 0);
+            }
+        }
+
+        /// <summary>应用机架状态：模块处理顺序 + 压缩器 + 立体声场 + 声道矩阵（Stage B）。
+        /// 顺序非法时内核会拒绝（-3），此时回退内核默认顺序并记日志。</summary>
+        public void ApplyRack(RackState rack)
+        {
+            if (!_engineReady || rack == null)
+            {
                 return;
             }
 
-            try
-            {
-                float[][]? ir = RoomCorrectionIrCache.GetOrLoad(state.IrPath, _format.SampleRate);
-                if (ir == null)
-                {
-                    _convEnabled = false;
-                    _convolver = null;
-                    RefreshActive();
-                    return;
-                }
+            rack = rack.Clone();
+            rack.Normalize();
 
-                var conv = new StreamingPartitionedConvolver(ir, _channels);
-                _convGain = (float)Math.Pow(10.0, Math.Clamp(state.GainDb, -24.0, 24.0) / 20.0);
-                // 卷积微调余量（对齐 ECHO roomCorrectionTrimDb：-24 ~ +6 dB）
-                _convTrim = (float)Math.Pow(10.0, Math.Clamp(state.TrimDb, -24.0, 6.0) / 20.0);
-                _convolver = conv;
-                _convEnabled = true;
-                _convClipRisk = false;
-                RefreshActive();
-            }
-            catch
+            int rc = DspCoreInterop.celeste_dsp_rack_set_order(rack.RackOrder);
+            if (rc != DspCoreInterop.Ok)
             {
-                _convEnabled = false;
-                _convolver = null;
-                RefreshActive();
+                StartupLog.Write($"[DSP] 机架顺序被内核拒绝 rc={rc}，回退默认顺序");
+                DspCoreInterop.celeste_dsp_rack_reset_default();
             }
+
+            var comp = rack.Compressor;
+            DspCoreInterop.celeste_dsp_compressor_set(
+                comp.Enabled ? 1 : 0,
+                (float)comp.ThresholdDb,
+                (float)comp.Ratio,
+                (float)comp.AttackMs,
+                (float)comp.ReleaseMs,
+                (float)comp.KneeDb,
+                (float)comp.MakeupDb,
+                (float)comp.Mix);
+
+            var field = rack.StereoField;
+            DspCoreInterop.celeste_dsp_stereofield_set(
+                field.Enabled ? 1 : 0,
+                (float)field.Width,
+                (float)field.CenterGainDb,
+                (float)field.SideGainDb);
+
+            var matrix = rack.Matrix;
+            DspCoreInterop.celeste_dsp_matrix_set(
+                matrix.Enabled ? 1 : 0,
+                (float)matrix.LeftToLeft,
+                (float)matrix.RightToLeft,
+                (float)matrix.LeftToRight,
+                (float)matrix.RightToRight);
+
+            // 新三模块的启用意图纳入 _rackActive 门控（否则 _active=false 时内核根本不被调用）
+            _compEnabled = comp.IsActive;
+            _stereoEnabled = field.IsActive;
+            _matrixEnabled = matrix.IsActive;
+            RefreshRackActive();
         }
 
         #endregion
@@ -529,7 +625,16 @@ namespace CelesteMusicPlayer
 
         public bool NextMounted => _source.NextMounted;
 
-        public void Seek(TimeSpan position) => _source.Seek(position);
+        public void Seek(TimeSpan position)
+        {
+            _source.Seek(position);
+            // 清空机架滤波器历史/延迟线/卷积流式状态：否则 seek 前后不连续的信号
+            // 会被旧历史污染（旧托管链 EQ/卷积同理，行为对齐）。
+            if (_engineReady)
+            {
+                DspCoreInterop.celeste_dsp_reset();
+            }
+        }
 
         #endregion
 
@@ -566,34 +671,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // 循环前把状态快照到局部（避免每样本访问字段/属性），显著降低托管吞吐开销
-            bool doEq = _eqEnabled;
-            bool doCh = _chEnabled;
-            bool doHeadroom = Math.Abs(_headroomDb) > 0.001;
-            bool doLimiter = _limiterEnabled;
-            bool doConv = _convEnabled;
-            StreamingPartitionedConvolver? convolver = _convolver;
-            float convGain = _convGain;
-            float convTrim = _convTrim;
-            bool chSwap = _chSwap, chInvL = _chInvL, chInvR = _chInvR, chMono = _chMono, monoL = _chMonoLeft, monoR = _chMonoRight;
-            bool isFloat = _isFloat;
-            int bits = _format.BitsPerSample;
-            double gainL = _gainL, gainR = _gainR;
-            double delayTargetL = _delayTargetL, delayTargetR = _delayTargetR;
-            bool delayActiveL = delayTargetL > 0.5 || _delayCurL > 0.5;
-            bool delayActiveR = delayTargetR > 0.5 || _delayCurR > 0.5;
-            bool stereo = _channels >= 2;
-            bool doXf = _xfActive;
-            bool wantsClip = doHeadroom || doLimiter || doEq || doCh || _rgActive; // 只要有任何 DSP 即需 Clamp 保护
-            float preampGain = (float)_preampGain;
-            float volumeGain = _volumeGain;
-            bool rgActive = _rgActive;
-            double rgTargetDb = _rgTargetDb;
-            int rgRampLeft = _rgRampLeft;
-            int rgRampTotal = _rgRampTotal;
-            double rgCurrentDb = _rgCurrentDb;
-            int rgt = rgRampTotal > 0 ? rgRampTotal : 1;
-
             int frames = count / block;
             int ch = _channels;
             int n = frames * ch;
@@ -608,148 +685,45 @@ namespace CelesteMusicPlayer
             // 解码：byte → float（抽成独立方法，电平表测量与 DSP 共用）
             DecodeToFloat(b, offset, n, buf);
 
-            // ---- 信号链顺序（对齐 ECHO DspChain）：软件音量 → 参数 EQ → 卷积(FIR) → ReplayGain
-            //      → 声道工具 → Headroom 余量 → 安全限幅 → 测量 ----
-            BiQuadFilter[][] eq = _eqFilters;
-            int eqChains = eq.Length;
-
-            // ReplayGain 与 Headroom 的渐变进度按「每帧」推进一次（不随声道数放大）。
-            // 旧实现把这套推进写在声道循环里、随声道数翻倍，多声道下渐变速度会与预期不符。
-            if (rgActive)
-            {
-                if (rgRampLeft > 0)
-                {
-                    rgRampLeft--;
-                    rgCurrentDb += (rgTargetDb - rgCurrentDb) / rgt;
-                }
-                else
-                {
-                    rgCurrentDb = rgTargetDb;
-                }
-            }
-
-            float rgg = rgActive ? (float)Math.Pow(10.0, rgCurrentDb / 20.0) : 1f;
-
-            if (doHeadroom)
-            {
-                if (_headroomSmoothLeft > 0)
-                {
-                    _headroomGain += _headroomStep;
-                    _headroomSmoothLeft--;
-                }
-            }
-
-            float hg = doHeadroom ? (float)_headroomGain : 1f;
-
-            // 阶段 1：软件总音量 + 参数 EQ（含 preamp）。多声道时所有声道都过这套全局 DSP
-            //（旧实现只处理 L/R 两声道，5.1 的第 3~6 声道完全不过任何 DSP）。
-            for (int f = 0; f < frames; f++)
-            {
-                int baseIdx = f * ch;
-                for (int c = 0; c < ch; c++)
-                {
-                    int idx = baseIdx + c;
-                    float s = buf[idx];
-
-                    // 软件总音量（采样级增益，恒在最前）
-                    if (volumeGain != 1f) s *= volumeGain;
-
-                    if (doEq)
-                    {
-                        BiQuadFilter[] chain = eq[c < eqChains ? c : 0];
-                        for (int k = 0; k < chain.Length; k++) s = chain[k].Transform(s);
-                        if (preampGain != 1f) s *= preampGain;
-                    }
-
-                    buf[idx] = s;
-                }
-            }
-
-            // 阶段 2：房间校正（卷积 FIR）—— 按 ECHO 链序放在 EQ 之后、ReplayGain 之前。
-            // 块级 in-place 分区卷积，引入 BlockSize(1024) 帧延迟，输出逐帧连续。
-            // 卷积常把峰值顶高：乘完「卷积增益 × 微调余量(trim)」后达到满刻度即钳到 ±1 并标记
-            // 削波风险（对齐 ECHO ConvolutionProcessor::protectClippingSample）。
-            bool convRisk = false;
-            if (doConv && convolver != null)
-            {
-                convolver.Process(buf, frames, ch);
-                float convTotal = convGain * convTrim;
-                for (int i = 0; i < n; i++)
-                {
-                    float s = buf[i] * convTotal;
-                    if (s > 1f) { s = 1f; convRisk = true; }
-                    else if (s < -1f) { s = -1f; convRisk = true; }
-                    buf[i] = s;
-                }
-            }
-
-            if (convRisk != _convClipRisk)
-            {
-                _convClipRisk = convRisk;
-            }
-
-            // 阶段 3：ReplayGain 增益 + 声道工具（交换 / 单声道 / 反相 / 左右增益 / Crossfeed / 延迟）
-            for (int f = 0; f < frames; f++)
-            {
-                int baseIdx = f * ch;
-
-                if (rgActive)
-                {
-                    for (int c = 0; c < ch; c++)
-                    {
-                        buf[baseIdx + c] *= rgg;
-                    }
-                }
-
-                // 声道处理：仅立体声前两声道有意义
-                if (doCh && stereo)
-                {
-                    int li = baseIdx, ri = baseIdx + 1;
-                    float l = buf[li], r = buf[ri];
-                    if (chSwap) (l, r) = (r, l);
-                    if (chMono)
-                    {
-                        float m = monoL ? l : monoR ? r : (l + r) * 0.5f;
-                        l = m; r = m;
-                    }
-
-                    l = (float)(l * gainL);
-                    r = (float)(r * gainR);
-                    if (chInvL) l = -l;
-                    if (chInvR) r = -r;
-
-                    // 耳机 Crossfeed（Meier 式）：对侧信号经一阶低通后混入本侧，只串扰低频（缓解头中定位）
-                    if (doXf)
-                    {
-                        _xfLpR = _xfLpR + _xfLpCoef * (r - _xfLpR); // 右侧低通状态
-                        _xfLpL = _xfLpL + _xfLpCoef * (l - _xfLpL); // 左侧低通状态
-                        l = (float)(l + _xfMix * _xfLpR); // 右侧低频串入左
-                        r = (float)(r + _xfMix * _xfLpL); // 左侧低频串入右
-                    }
-
-                    // 声道延迟差：左右各一环形缓冲，目标延迟逐帧 ±1 样本渐变（无爆音）
-                    if (delayActiveL) l = ApplyDelay(l, _delayRingL, ref _delayPosL, ref _delayCurL, delayTargetL);
-                    if (delayActiveR) r = ApplyDelay(r, _delayRingR, ref _delayPosR, ref _delayCurR, delayTargetR);
-
-                    buf[li] = l;
-                    buf[ri] = r;
-                }
-            }
-
-            // 阶段 4：Headroom 余量预衰减 + 安全限幅。放在最后才能真正压住前面所有增益抬起的峰值
-            //（ECHO 同样是 headroom → safety limiter 位于链尾）。
-            if (wantsClip)
+            // 阶段 1：软件总音量（采样级增益，恒在最前；Celeste 特有件，内核机架无音量模块）
+            float volumeGain = _volumeGain;
+            if (volumeGain != 1f)
             {
                 for (int i = 0; i < n; i++)
                 {
-                    float s = buf[i];
-                    if (doHeadroom) s *= hg;
-                    if (doLimiter) s = SoftLimit(s);
-                    else if (wantsClip) s = SoftLimit(s);
-                    buf[i] = s;
+                    buf[i] *= volumeGain;
                 }
             }
 
+            // 阶段 2：原生 DSP 机架（交错 float32 原地处理）。
+            // 分块兜底：单块帧数超过内核上限 16384 时循环调用
+            // （如 352.8kHz × 100ms 输出缓冲 = 35280 帧）。内核返回负值 = 出错：
+            // 保留已处理部分、剩余原样送出、只记一次日志 —— 绝不静默改写、绝不抛到渲染线程。
+            if (_engineReady)
+            {
+                int done = 0;
+                unsafe
+                {
+                    fixed (float* p = buf)
+                    {
+                        while (done < frames)
+                        {
+                            int chunk = Math.Min(frames - done, DspCoreInterop.MaxBlockFrames);
+                            int rc = DspCoreInterop.celeste_dsp_process(p + (long)done * ch, chunk);
+                            if (rc <= 0)
+                            {
+                                if (!_processErrLogged)
+                                {
+                                    _processErrLogged = true;
+                                    StartupLog.Write($"[DSP] 内核 process 返回 {rc}（帧 {done}/{frames} sr={_format.SampleRate} ch={ch}），本块剩余原样送出");
+                                }
+                                break;
+                            }
+                            done += chunk;
+                        }
+                    }
+                }
+            }
 
             // 实时电平/频谱：测量 post-DSP 信号（即实际送往输出的样本）
             if (_meterEnabled)
@@ -777,25 +751,21 @@ namespace CelesteMusicPlayer
                 _spectrum.Push(buf, n, ch);
             }
 
-            // 回写 RG 渐变进度（供下一次 block 继续）
-            _rgCurrentDb = rgCurrentDb;
-            _rgRampLeft = Math.Max(0, rgRampLeft);
-
             // 编码：float → byte。整数回写时叠加 TPDF dither（幅度 = 目标位深 1 LSB）后舍入并钳制，
             // 消除截断量化失真（与 ResamplingSourceProvider 的 24bit dither 一致）；
             // 直通路径不经过此处，故不影响 bit-perfect。
-            float lsb = isFloat ? 0f : bits switch
+            float lsb = _isFloat ? 0f : _format.BitsPerSample switch
             {
                 32 => 1f / 2147483647f,
                 24 => 1f / 8388607f,
                 _ => 1f / 32767f
             };
-            if (isFloat)
+            if (_isFloat)
             {
                 int bo = offset;
                 for (int i = 0; i < n; i++, bo += 4) BitConverter.GetBytes(buf[i]).CopyTo(b, bo);
             }
-            else if (bits == 32)
+            else if (_format.BitsPerSample == 32)
             {
                 int bo = offset;
                 for (int i = 0; i < n; i++, bo += 4)
@@ -808,7 +778,7 @@ namespace CelesteMusicPlayer
                     b[bo + 2] = (byte)((iv >> 16) & 0xFF); b[bo + 3] = (byte)((iv >> 24) & 0xFF);
                 }
             }
-            else if (bits == 24)
+            else if (_format.BitsPerSample == 24)
             {
                 int bo = offset;
                 for (int i = 0; i < n; i++, bo += 3)
@@ -881,7 +851,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>频谱分析器实例（渲染线程写样本、UI 线程算 FFT，内部有锁）。</summary>
+        /// <summary>频谱分析器实例（渲染线程写样本、UI 线程读算 FFT，内部有锁）。</summary>
         public SpectrumAnalyzer Spectrum => _spectrum;
 
         /// <summary>byte → float 解码（支持 float / 32bit / 24bit / 16bit），供 DSP 与电平测量共用。</summary>
@@ -950,38 +920,59 @@ namespace CelesteMusicPlayer
 
         #endregion
 
-        /// <summary>软削波（soft-knee limiter）：对接近 ±1 的样本渐近饱和而非瞬时削平，
-        /// 避免参数增益过大时硬削产生的谐波爆音/电流杂音（对齐 ECHO 安全限幅思路）。
-        /// |x|≤0.9 完全线性（无失真），0.9~∞ 平滑压缩到 ±1。</summary>
-        private static float SoftLimit(float s)
+        #region 内核状态查询（UI 线程调用；供徽标 / Stage C 新模块面板）
+
+        /// <summary>机架是否有任一模块在真正处理（bypass 淡出完成后为 false）。</summary>
+        public bool ChainActive => _engineReady && DspCoreInterop.celeste_dsp_is_active() != 0;
+
+        /// <summary>链上任意模块报告削波风险（卷积顶高 / 立体声场 / 矩阵等）。</summary>
+        public bool HasClippingRisk => _engineReady && DspCoreInterop.celeste_dsp_has_clipping_risk() != 0;
+
+        /// <summary>安全限幅器正在保护（正在衰减）。</summary>
+        public bool LimiterProtecting => _engineReady && DspCoreInterop.celeste_dsp_limiter_protecting() != 0;
+
+        /// <summary>安全限幅器实时增益衰减（dB，正数）。</summary>
+        public float LimiterGainReductionDb => _engineReady ? DspCoreInterop.celeste_dsp_limiter_gr_db() : 0f;
+
+        /// <summary>安全限幅器当前天花板（dBFS；upstream 不活跃=0、活跃=-1）。</summary>
+        public float LimiterCeilingDb => _engineReady ? DspCoreInterop.celeste_dsp_limiter_ceiling_db() : 0f;
+
+        /// <summary>压缩器实时增益衰减（dB，正数）。</summary>
+        public float CompressorGainReductionDb => _engineReady ? DspCoreInterop.celeste_dsp_compressor_gr_db() : 0f;
+
+        /// <summary>卷积输出是否出现过削波（已被钳到 ±1；界面据此提示「削波风险」）。</summary>
+        public bool ConvolutionClippingRisk
         {
-            if (!float.IsFinite(s)) s = 0f;
-            float m = Math.Abs(s);
-            if (m <= 0.9f) return s;
-            float k = (m - 0.9f) / 0.1f;
-            // k≥0；用 1/(1+k) 而非 tanh，避免 fast-math/性能开销且曲线足够柔
-            float compressed = 0.9f + 0.1f * (1f - 1f / (1f + k));
-            return s > 0 ? compressed : -compressed;
+            get
+            {
+                if (!_engineReady) return false;
+                DspCoreInterop.celeste_dsp_conv_get_state(out _, out _, out _, out _, out _, out int risk, out _);
+                return risk != 0;
+            }
         }
 
-        /// <summary>声道延迟：环形缓冲延迟 + 线性插值（小数样本精度）。
-        /// 目标延迟逐帧 ±1 样本渐变逼近（对齐 ECHO ChannelBalanceProcessor 平滑思路，避免切值爆音）。
-        /// 环形缓冲初始全 0，延迟启动时的开头几毫秒输出 0（延迟的本意，正确行为）。</summary>
-        private static float ApplyDelay(float v, float[] ring, ref int pos, ref double cur, double target)
+        /// <summary>已加载 IR 的 taps 数（未加载为 0）。</summary>
+        public int ConvolutionIrTaps
         {
-            if (cur < target) cur = Math.Min(target, cur + 1.0);
-            else if (cur > target) cur = Math.Max(target, cur - 1.0);
-
-            int len = ring.Length;
-            ring[pos] = v;
-            double readPos = pos - cur;
-            if (readPos < 0) readPos += len;
-            int i0 = (int)readPos;
-            float frac = (float)(readPos - i0);
-            int i1 = i0 + 1 < len ? i0 + 1 : 0;
-            float s = ring[i0] * (1f - frac) + ring[i1] * frac;
-            pos = (pos + 1) % len;
-            return s;
+            get
+            {
+                if (!_engineReady) return 0;
+                DspCoreInterop.celeste_dsp_conv_get_state(out _, out int taps, out _, out _, out _, out _, out _);
+                return taps;
+            }
         }
+
+        /// <summary>卷积引入的延迟帧数（内核分区卷积延迟）。</summary>
+        public int ConvolutionLatencyFrames
+        {
+            get
+            {
+                if (!_engineReady) return 0;
+                DspCoreInterop.celeste_dsp_conv_get_state(out _, out _, out _, out _, out int latency, out _, out _);
+                return latency;
+            }
+        }
+
+        #endregion
     }
 }
