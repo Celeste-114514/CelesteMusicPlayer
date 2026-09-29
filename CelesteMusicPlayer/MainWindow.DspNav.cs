@@ -17,11 +17,34 @@ namespace CelesteMusicPlayer
     /// </summary>
     public sealed partial class MainWindow
     {
-        // 页面索引（与导航元数据表顺序一致；阶段 2 会在前面插入 Rack/压缩/交叉馈送/声场/矩阵）
-        private const int DspPageSafetyIndex = 7;
-        private const int DspPageFirIndex = 6;
-        private const int DspPageChannelIndex = 5;
-        private const int DspPageEqIndex = 3;
+        // 页面索引。早期写成硬编码常量（Safety=7 / Fir=6 / Channel=5 / Eq=3），
+        // 在导航中间插入新模块后必然错位；改为按 Page 引用从已构建的元数据表反查，
+        // 增删页面/调整顺序都不需要再同步这里（导航未构建时返回 -1，调用处均能容忍）。
+        private int DspPageSafetyIndex => FindDspPageIndex(DspPageSafety);
+        private int DspPageFirIndex => FindDspPageIndex(DspPageFir);
+        private int DspPageChannelIndex => FindDspPageIndex(DspPageChannel);
+        private int DspPageEqIndex => FindDspPageIndex(DspPageEq);
+        private int DspPageCompressorIndex => FindDspPageIndex(DspPageCompressor);
+        private int DspPageRackIndex => FindDspPageIndex(DspPageRack);
+
+        /// <summary>在导航表里查某个页面当前的下标；未构建 / 页面为空时返回 -1。</summary>
+        private int FindDspPageIndex(StackPanel? page)
+        {
+            if (page == null)
+            {
+                return -1;
+            }
+
+            for (int i = 0; i < _dspNavEntries.Count; i++)
+            {
+                if (ReferenceEquals(_dspNavEntries[i].Page, page))
+                {
+                    return i;
+                }
+            }
+
+            return -1;
+        }
 
         private int _dspPageIndex = -1;
         private DispatcherQueueTimer? _dspMonitorTimer;
@@ -63,13 +86,20 @@ namespace CelesteMusicPlayer
             DspNavPanel.Children.Clear();
 
             // ── 元数据表：加模块只需在这里加一行（标题 / 组 / 页面 / 徽章）──
+            // ⚠ 顺序同时决定另外三处的下标，新增/调整顺序时必须同步：
+            //    ① DspModuleActive() 的返回数组  ② UpdateDspHeroBadges() 的 badges/texts 数组
+            //    ③ 不依赖下标：页面索引常量已改为按 Page 引用反查，无需同步
             AddNavEntry("输入余量", "输入", DspPageHeadroom, DspBadgeHeadroom, DspBadgeHeadroomText);
             // 「响度 · ReplayGain」为过渡项：阶段 2 起 RG 并入「DSP Rack 编排」页行内展开，本项随之移除
             AddNavEntry("响度 · ReplayGain", "输入", DspPageRg, DspBadgeRg, DspBadgeRgText);
+            AddNavEntry("DSP 机架编排", "输入", DspPageRack, DspBadgeRack, DspBadgeRackText);
             AddNavEntry("ECHO SRC / 升频", "采样率", DspPageSrc, DspBadgeSrc, DspBadgeSrcText);
             AddNavEntry("参数 EQ", "塑形", DspPageEq, DspBadgeEq, DspBadgeEqText);
             AddNavEntry("耳机校正", "塑形", DspPageOpra, DspBadgeOpra, DspBadgeOpraText);
+            AddNavEntry("动态压缩器", "塑形", DspPageCompressor, DspBadgeComp, DspBadgeCompText);
             AddNavEntry("声道工具", "声道", DspPageChannel, DspBadgeChannel, DspBadgeChannelText);
+            AddNavEntry("立体声场", "声道", DspPageStereoField, DspBadgeField, DspBadgeFieldText);
+            AddNavEntry("声道矩阵", "声道", DspPageMatrix, DspBadgeMatrix, DspBadgeMatrixText);
             AddNavEntry("FIR / 房间校正", "空间", DspPageFir, DspBadgeFir, DspBadgeFirText);
             AddNavEntry("输出安全", "输出安全", DspPageSafety, DspBadgeSafety, DspBadgeSafetyText);
 
@@ -269,6 +299,19 @@ namespace CelesteMusicPlayer
             {
                 RedrawAudioFxEqCurve();
             }
+
+            // 压缩器页：只有本页可见时轮询增益衰减读数（200ms），离开即停
+            EnsureDspCompGrTimer(idx == DspPageCompressorIndex);
+            if (idx == DspPageCompressorIndex)
+            {
+                DspCompGr_Tick(this, EventArgs.Empty);
+            }
+
+            // 机架编排页：进入时刷新列表（顺序可能被别处改动过）
+            if (idx == DspPageRackIndex)
+            {
+                RefreshDspRackList(DspRackStore.Load().RackOrder);
+            }
         }
 
         /// <summary>首次进入音效页面时构建导航、定位到第一个模块，并刷新各模块启用指示。</summary>
@@ -276,6 +319,8 @@ namespace CelesteMusicPlayer
         {
             BuildDspNav();
             InitRoomCorrectionTrimUi();
+            LoadDspRackUi();
+            _dspRackReady = true;
             UpdateDspNavIndicators();
             if (_dspPageIndex < 0)
             {
@@ -304,8 +349,13 @@ namespace CelesteMusicPlayer
             bool ch = AudioFxChannelToggle != null && AudioFxChannelToggle.IsOn;
             bool rg = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
 
-            // 顺序与 BuildDspNav 元数据表一致：余量 / RG / SRC / EQ / OPRA / 声道 / FIR / 监控
-            return new[] { headroom, rg, srcHz > 0, eq, _opraApplied, ch, fir, true };
+            // 顺序与 BuildDspNav 元数据表一致：
+            // 余量 / RG / 机架编排 / SRC / EQ / OPRA / 压缩 / 声道 / 声场 / 矩阵 / FIR / 监控
+            // 机架编排恒 false：编排顺序不是"效果开关"，改顺序不产生处理，点不亮圆点
+            bool comp = DspCompActive();
+            bool field = DspFieldActive();
+            bool matrix = DspMatrixActive();
+            return new[] { headroom, rg, false, srcHz > 0, eq, _opraApplied, comp, ch, field, matrix, fir, true };
         }
 
         /// <summary>刷新左侧导航圆点：绿 = 该模块正在参与处理，灰 = 未启用。</summary>
@@ -337,23 +387,28 @@ namespace CelesteMusicPlayer
 
         // ---------- 模块页 Hero 状态徽章 ----------
 
-        /// <summary>刷新每个模块页右上角的徽章：绿 = 正在生效，灰 = 未启用，琥珀 = 已旁路。</summary>
+        /// <summary>刷新每个模块页右上角的徽章：绿 = 正在生效，灰 = 未启用，琥珀 = 已旁路。
+        /// 数组顺序必须与 BuildDspNav 元数据表、DspModuleActive() 保持一致。</summary>
         private void UpdateDspHeroBadges()
         {
             Border[] badges =
             {
-                DspBadgeHeadroom, DspBadgeRg, DspBadgeSrc, DspBadgeEq,
-                DspBadgeOpra, DspBadgeChannel, DspBadgeFir, DspBadgeSafety
+                DspBadgeHeadroom, DspBadgeRg, DspBadgeRack, DspBadgeSrc, DspBadgeEq,
+                DspBadgeOpra, DspBadgeComp, DspBadgeChannel, DspBadgeField,
+                DspBadgeMatrix, DspBadgeFir, DspBadgeSafety
             };
             TextBlock[] texts =
             {
-                DspBadgeHeadroomText, DspBadgeRgText, DspBadgeSrcText, DspBadgeEqText,
-                DspBadgeOpraText, DspBadgeChannelText, DspBadgeFirText, DspBadgeSafetyText
+                DspBadgeHeadroomText, DspBadgeRgText, DspBadgeRackText, DspBadgeSrcText, DspBadgeEqText,
+                DspBadgeOpraText, DspBadgeCompText, DspBadgeChannelText, DspBadgeFieldText,
+                DspBadgeMatrixText, DspBadgeFirText, DspBadgeSafetyText
             };
 
+            int safetyIndex = DspPageSafetyIndex;
             bool[] active = DspModuleActive();
             bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
 
+            // 末位是监控页，恒亮（它显示的是状态而不是处理模块）
             for (int i = 0; i < badges.Length; i++)
             {
                 if (badges[i] == null || texts[i] == null)
@@ -361,17 +416,17 @@ namespace CelesteMusicPlayer
                     continue;
                 }
 
-                // 末位是监控页，恒亮（它显示的是状态而不是处理模块）
-                bool on = i == DspPageSafetyIndex || active[i];
-                if (bypass && i != DspPageSafetyIndex)
+                bool on = i == safetyIndex || i == DspPageRackIndex || active[i];
+                if (bypass && i != safetyIndex)
                 {
-                    badges[i].Background = new SolidColorBrush(Color.FromArgb(255, 0xC0, 0x7A, 0x1A));
-                    texts[i].Text = "已旁路";
+                    SetDspBadgeState(badges[i], texts[i], "bypassed", "已旁路");
                 }
                 else if (on)
                 {
                     SetDspBadgeState(badges[i], texts[i], "on",
-                        i == DspPageSafetyIndex ? "监控中" : "生效中");
+                        i == safetyIndex ? "监控中"
+                        : i == DspPageRackIndex ? (DspRackOrderIsDefault() ? "默认顺序" : "自定义")
+                        : "生效中");
                 }
                 else
                 {

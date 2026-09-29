@@ -219,6 +219,9 @@ namespace CelesteMusicPlayer
             ApplyRack(_dspProvider);
         }
 
+        /// <summary>压缩器当前增益衰减（dB，正数）。未播放 / DSP 链未构建时返回 0。</summary>
+        public float CompressorGainReductionDb => _dspProvider?.CompressorGainReductionDb ?? 0f;
+
         /// <summary>把机架状态下发到内核（provider 存在时）。provider 为 null（未播放）时
         /// 仅保存状态，下次播放会话构建 BuildDspProvider 时应用。</summary>
         private void ApplyRack(ManagedDspSourceProvider? dsp)

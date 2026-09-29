@@ -1728,6 +1728,8 @@ namespace CelesteMusicPlayer
         private void AudioFxChannelCrossfeedSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
             if (!_audioFxLoading) ApplyDspToEngine();
+            // 强度与截止频率共用这个 handler：顺手刷新右侧 Hz 读数
+            RefreshCrossfeedCutoffReadout();
         }
 
 
@@ -1799,7 +1801,8 @@ namespace CelesteMusicPlayer
                 LeftDelayMs = AudioFxChannelLeftDelaySlider.Value,
                 RightDelayMs = AudioFxChannelRightDelaySlider.Value,
                 CrossfeedEnabled = AudioFxChannelCrossfeedToggle.IsOn,
-                CrossfeedLevel = (int)Math.Round(AudioFxChannelCrossfeedSlider.Value)
+                CrossfeedLevel = (int)Math.Round(AudioFxChannelCrossfeedSlider.Value),
+                CrossfeedCutoffHz = AudioFxChannelCrossfeedCutoffSlider.Value
             };
 
             var safety = new DspSafetyState

@@ -4589,6 +4589,7 @@
                                                         <RowDefinition Height="Auto" />
                                                         <RowDefinition Height="Auto" />
                                                         <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
                                                     </Grid.RowDefinitions>
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
@@ -4650,6 +4651,34 @@
                                                             x:Name="AudioFxChannelCrossfeedSlider"
                                                             Minimum="0" Maximum="100" StepFrequency="5" Value="40"
                                                             ValueChanged="AudioFxChannelCrossfeedSlider_ValueChanged" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="5" Grid.Column="0" Grid.ColumnSpan="2" Spacing="4">
+                                                        <Grid ColumnSpacing="12">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="Auto" />
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="低通截止 (Hz)" FontSize="12" VerticalAlignment="Center" />
+                                                            <Slider
+                                                                x:Name="AudioFxChannelCrossfeedCutoffSlider"
+                                                                Grid.Column="1"
+                                                                Minimum="100" Maximum="4000" StepFrequency="50" Value="700"
+                                                                ValueChanged="AudioFxChannelCrossfeedSlider_ValueChanged" />
+                                                            <TextBlock
+                                                                x:Name="AudioFxChannelCrossfeedCutoffText"
+                                                                Grid.Column="2"
+                                                                FontSize="12"
+                                                                FontWeight="SemiBold"
+                                                                VerticalAlignment="Center"
+                                                                MinWidth="56"
+                                                                Text="700 Hz" />
+                                                        </Grid>
+                                                        <TextBlock
+                                                            FontSize="11"
+                                                            Opacity="0.55"
+                                                            TextWrapping="Wrap"
+                                                            Text="截止频率决定混入对侧的「多低的低频」：调低只有很低的低音交叉，更像听音箱；调高则中频也跟着串过来，人声会往中间靠。ECHO 默认 700 Hz。" />
                                                     </StackPanel>
                                                 </Grid>
                                             </StackPanel>
@@ -5080,6 +5109,570 @@
                                                         </StackPanel>
                                                     </Border>
                                                 </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                    <!-- ===== 新增模块：动态压缩器（内核 Echo CompressorProcessor，对齐 ECHO 参数口径）===== -->
+                                    <StackPanel
+                                        x:Name="DspPageCompressor"
+                                        Spacing="12"
+                                        MaxWidth="880"
+                                        HorizontalAlignment="Left"
+                                        Visibility="Collapsed">
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="14,12">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border
+                                                    Grid.Column="0"
+                                                    Width="38"
+                                                    Height="38"
+                                                    CornerRadius="19"
+                                                    VerticalAlignment="Center"
+                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    <TextBlock
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="16"
+                                                        Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                                                        Text="◑" />
+                                                </Border>
+                                                <StackPanel
+                                                    Grid.Column="1"
+                                                    Spacing="1"
+                                                    VerticalAlignment="Center">
+                                                    <TextBlock
+                                                        FontSize="15"
+                                                        FontWeight="SemiBold"
+                                                        Text="动态压缩器" />
+                                                    <TextBlock
+                                                        FontSize="12"
+                                                        Opacity="0.62"
+                                                        TextWrapping="WrapWholeWords"
+                                                        Text="压平忽大忽小的音量起伏：超过阈值的部分按比例收小，安静段落相对抬起来。" />
+                                                </StackPanel>
+                                                <Border
+                                                    x:Name="DspBadgeComp"
+                                                    Grid.Column="2"
+                                                    Padding="10,3"
+                                                    VerticalAlignment="Center"
+                                                    CornerRadius="10"
+                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    <TextBlock
+                                                        x:Name="DspBadgeCompText"
+                                                        FontSize="12"
+                                                        FontWeight="SemiBold"
+                                                        Text="—" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="10">
+                                                <Grid ColumnSpacing="16">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <ToggleSwitch
+                                                        x:Name="DspCompToggle"
+                                                        Grid.Column="0"
+                                                        Header="启用"
+                                                        OnContent=""
+                                                        OffContent=""
+                                                        Toggled="DspComp_Toggled" />
+                                                    <TextBlock
+                                                        Grid.Column="1"
+                                                        FontSize="11"
+                                                        Opacity="0.6"
+                                                        VerticalAlignment="Center"
+                                                        TextWrapping="Wrap"
+                                                        Text="关闭时压缩器完全不在链上，输出保持 bit-perfect 不变。" />
+                                                </Grid>
+                                                <Grid ColumnSpacing="16" RowSpacing="8">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="阈值 (dB)" FontSize="12" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DspCompThresholdText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="-18.0 dB" />
+                                                        </Grid>
+                                                        <Slider x:Name="DspCompThresholdSlider" Minimum="-60" Maximum="0" StepFrequency="0.5" Value="-18" ValueChanged="DspCompSlider_ValueChanged" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="0" Grid.Column="1" Spacing="4">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="压缩比 (:1)" FontSize="12" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DspCompRatioText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="4.0 : 1" />
+                                                        </Grid>
+                                                        <Slider x:Name="DspCompRatioSlider" Minimum="1" Maximum="20" StepFrequency="0.1" Value="4" ValueChanged="DspCompSlider_ValueChanged" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="1" Grid.Column="0" Spacing="4">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="启动 (ms)" FontSize="12" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DspCompAttackText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="10.0 ms" />
+                                                        </Grid>
+                                                        <Slider x:Name="DspCompAttackSlider" Minimum="0.1" Maximum="200" StepFrequency="0.1" Value="10" ValueChanged="DspCompSlider_ValueChanged" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="释放 (ms)" FontSize="12" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DspCompReleaseText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="120 ms" />
+                                                        </Grid>
+                                                        <Slider x:Name="DspCompReleaseSlider" Minimum="5" Maximum="2000" StepFrequency="5" Value="120" ValueChanged="DspCompSlider_ValueChanged" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="2" Grid.Column="0" Spacing="4">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="软拐点 (dB)" FontSize="12" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DspCompKneeText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="6.0 dB" />
+                                                        </Grid>
+                                                        <Slider x:Name="DspCompKneeSlider" Minimum="0" Maximum="24" StepFrequency="0.5" Value="6" ValueChanged="DspCompSlider_ValueChanged" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="2" Grid.Column="1" Spacing="4">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="补偿增益 (dB)" FontSize="12" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DspCompMakeupText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="0.0 dB" />
+                                                        </Grid>
+                                                        <Slider x:Name="DspCompMakeupSlider" Minimum="-12" Maximum="24" StepFrequency="0.5" Value="0" ValueChanged="DspCompSlider_ValueChanged" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="3" Grid.Column="0" Grid.ColumnSpan="2" Spacing="4">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="干湿混合" FontSize="12" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DspCompMixText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="100%" />
+                                                        </Grid>
+                                                        <Slider x:Name="DspCompMixSlider" Minimum="0" Maximum="100" StepFrequency="1" Value="100" ValueChanged="DspCompSlider_ValueChanged" />
+                                                        <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="100% = 全部走压缩；往回调则是原声与压缩声混合，压得更柔和、痕迹更少。" />
+                                                    </StackPanel>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="10">
+                                                <TextBlock FontSize="13" FontWeight="SemiBold" Text="实时状态" />
+                                                <Grid ColumnSpacing="12">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <ProgressBar
+                                                        x:Name="DspCompGrBar"
+                                                        Grid.Column="0"
+                                                        Height="8"
+                                                        Minimum="0"
+                                                        Maximum="24"
+                                                        Value="0"
+                                                        CornerRadius="4" />
+                                                    <TextBlock
+                                                        x:Name="DspCompGrText"
+                                                        Grid.Column="1"
+                                                        FontSize="12"
+                                                        FontWeight="SemiBold"
+                                                        MinWidth="86"
+                                                        VerticalAlignment="Center"
+                                                        Text="0.0 dB" />
+                                                </Grid>
+                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="增益衰减量：压缩器这一刻压掉了多少 dB。指针经常顶到底说明压得太狠，可以抬高阈值或降低压缩比。" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button Content="轻度（广播感）" Tag="gentle" Click="DspCompPreset_Click" />
+                                                    <Button Content="中度（流行）" Tag="medium" Click="DspCompPreset_Click" />
+                                                    <Button Content="强压（夜间）" Tag="heavy" Click="DspCompPreset_Click" />
+                                                    <Button Content="恢复默认" Tag="default" Click="DspCompPreset_Click" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- ===== 新增模块：立体声场（M/S 域处理）===== -->
+                                    <StackPanel
+                                        x:Name="DspPageStereoField"
+                                        Spacing="12"
+                                        MaxWidth="880"
+                                        HorizontalAlignment="Left"
+                                        Visibility="Collapsed">
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="14,12">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border
+                                                    Grid.Column="0"
+                                                    Width="38"
+                                                    Height="38"
+                                                    CornerRadius="19"
+                                                    VerticalAlignment="Center"
+                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    <TextBlock
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="16"
+                                                        Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                                                        Text="◍" />
+                                                </Border>
+                                                <StackPanel
+                                                    Grid.Column="1"
+                                                    Spacing="1"
+                                                    VerticalAlignment="Center">
+                                                    <TextBlock
+                                                        FontSize="15"
+                                                        FontWeight="SemiBold"
+                                                        Text="立体声场" />
+                                                    <TextBlock
+                                                        FontSize="12"
+                                                        Opacity="0.62"
+                                                        TextWrapping="WrapWholeWords"
+                                                        Text="在「中间」与「两侧」两个维度上单独处理：调宽两侧，或单独放大中间的主唱人声。" />
+                                                </StackPanel>
+                                                <Border
+                                                    x:Name="DspBadgeField"
+                                                    Grid.Column="2"
+                                                    Padding="10,3"
+                                                    VerticalAlignment="Center"
+                                                    CornerRadius="10"
+                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    <TextBlock
+                                                        x:Name="DspBadgeFieldText"
+                                                        FontSize="12"
+                                                        FontWeight="SemiBold"
+                                                        Text="—" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="10">
+                                                <ToggleSwitch x:Name="DspFieldToggle" Header="启用" OnContent="" OffContent="" Toggled="DspField_Toggled" />
+                                                <StackPanel Spacing="4">
+                                                    <Grid ColumnSpacing="8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="声场宽度" FontSize="12" VerticalAlignment="Center" />
+                                                        <TextBlock x:Name="DspFieldWidthText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="100%" />
+                                                    </Grid>
+                                                    <Slider x:Name="DspFieldWidthSlider" Minimum="0" Maximum="200" StepFrequency="1" Value="100" ValueChanged="DspFieldSlider_ValueChanged" />
+                                                    <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="100% = 原始录音不动；0% = 完全合并成单声道；200% = 两侧信息拉到最开。超过 130% 人声容易变薄，建议谨慎。" />
+                                                </StackPanel>
+                                                <StackPanel Spacing="4">
+                                                    <Grid ColumnSpacing="8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="中间 (中置) 增益 (dB)" FontSize="12" VerticalAlignment="Center" />
+                                                        <TextBlock x:Name="DspFieldCenterText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="0.0 dB" />
+                                                    </Grid>
+                                                    <Slider x:Name="DspFieldCenterSlider" Minimum="-18" Maximum="18" StepFrequency="0.5" Value="0" ValueChanged="DspFieldSlider_ValueChanged" />
+                                                </StackPanel>
+                                                <StackPanel Spacing="4">
+                                                    <Grid ColumnSpacing="8">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <TextBlock Grid.Column="0" Text="两侧 (差信号) 增益 (dB)" FontSize="12" VerticalAlignment="Center" />
+                                                        <TextBlock x:Name="DspFieldSideText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="0.0 dB" />
+                                                    </Grid>
+                                                    <Slider x:Name="DspFieldSideSlider" Minimum="-18" Maximum="18" StepFrequency="0.5" Value="0" ValueChanged="DspFieldSlider_ValueChanged" />
+                                                </StackPanel>
+                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="「中间」是左右完全一样的那部分（通常是主唱、贝斯），「两侧」是左右有差异的那部分（通常是混响、氛围声）。" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button Content="原始" Tag="flat" Click="DspFieldPreset_Click" />
+                                                    <Button Content="略加宽" Tag="wide" Click="DspFieldPreset_Click" />
+                                                    <Button Content="人声提亮" Tag="vocal" Click="DspFieldPreset_Click" />
+                                                    <Button Content="收成单声道" Tag="mono" Click="DspFieldPreset_Click" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- ===== 新增模块：声道矩阵（2x2 线性混合）===== -->
+                                    <StackPanel
+                                        x:Name="DspPageMatrix"
+                                        Spacing="12"
+                                        MaxWidth="880"
+                                        HorizontalAlignment="Left"
+                                        Visibility="Collapsed">
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="14,12">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border
+                                                    Grid.Column="0"
+                                                    Width="38"
+                                                    Height="38"
+                                                    CornerRadius="19"
+                                                    VerticalAlignment="Center"
+                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    <TextBlock
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="16"
+                                                        Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                                                        Text="⊞" />
+                                                </Border>
+                                                <StackPanel
+                                                    Grid.Column="1"
+                                                    Spacing="1"
+                                                    VerticalAlignment="Center">
+                                                    <TextBlock
+                                                        FontSize="15"
+                                                        FontWeight="SemiBold"
+                                                        Text="声道矩阵" />
+                                                    <TextBlock
+                                                        FontSize="12"
+                                                        Opacity="0.62"
+                                                        TextWrapping="WrapWholeWords"
+                                                        Text="用四个系数决定「左/右」分别往「左/右」输出多少，可自定义任意线性混合关系。" />
+                                                </StackPanel>
+                                                <Border
+                                                    x:Name="DspBadgeMatrix"
+                                                    Grid.Column="2"
+                                                    Padding="10,3"
+                                                    VerticalAlignment="Center"
+                                                    CornerRadius="10"
+                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    <TextBlock
+                                                        x:Name="DspBadgeMatrixText"
+                                                        FontSize="12"
+                                                        FontWeight="SemiBold"
+                                                        Text="—" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="10">
+                                                <ToggleSwitch x:Name="DspMatrixToggle" Header="启用" OnContent="" OffContent="" Toggled="DspMatrix_Toggled" />
+                                                <Grid ColumnSpacing="16" RowSpacing="8">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="Auto" />
+                                                    </Grid.RowDefinitions>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Row="0" Grid.Column="0" Spacing="4">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="左 → 左" FontSize="12" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DspMatrixLlText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="1.00" />
+                                                        </Grid>
+                                                        <Slider x:Name="DspMatrixLlSlider" Minimum="-2" Maximum="2" StepFrequency="0.05" Value="1" ValueChanged="DspMatrixSlider_ValueChanged" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="0" Grid.Column="1" Spacing="4">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="右 → 左" FontSize="12" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DspMatrixRlText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="0.00" />
+                                                        </Grid>
+                                                        <Slider x:Name="DspMatrixRlSlider" Minimum="-2" Maximum="2" StepFrequency="0.05" Value="0" ValueChanged="DspMatrixSlider_ValueChanged" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="1" Grid.Column="0" Spacing="4">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="左 → 右" FontSize="12" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DspMatrixLrText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="0.00" />
+                                                        </Grid>
+                                                        <Slider x:Name="DspMatrixLrSlider" Minimum="-2" Maximum="2" StepFrequency="0.05" Value="0" ValueChanged="DspMatrixSlider_ValueChanged" />
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Row="1" Grid.Column="1" Spacing="4">
+                                                        <Grid ColumnSpacing="8">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <TextBlock Grid.Column="0" Text="右 → 右" FontSize="12" VerticalAlignment="Center" />
+                                                            <TextBlock x:Name="DspMatrixRrText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="1.00" />
+                                                        </Grid>
+                                                        <Slider x:Name="DspMatrixRrSlider" Minimum="-2" Maximum="2" StepFrequency="0.05" Value="1" ValueChanged="DspMatrixSlider_ValueChanged" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="「左 → 右」的意思是：把左声道的内容，按这个系数混进右声道。四系数全取 1 就是左右各半的混合；系数超过 1 会抬高整体音量，注意留意后面的输出安全页。" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button Content="直通 (单位矩阵)" Tag="identity" Click="DspMatrixPreset_Click" />
+                                                    <Button Content="左右互换" Tag="swap" Click="DspMatrixPreset_Click" />
+                                                    <Button Content="合并单声道" Tag="mono" Click="DspMatrixPreset_Click" />
+                                                    <Button Content="左右差值 (Karaoke 去唱)" Tag="karaoke" Click="DspMatrixPreset_Click" />
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+
+                                    <!-- ===== 新增模块：DSP 机架编排（处理顺序）===== -->
+                                    <StackPanel
+                                        x:Name="DspPageRack"
+                                        Spacing="12"
+                                        MaxWidth="880"
+                                        HorizontalAlignment="Left"
+                                        Visibility="Collapsed">
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="14,12">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border
+                                                    Grid.Column="0"
+                                                    Width="38"
+                                                    Height="38"
+                                                    CornerRadius="19"
+                                                    VerticalAlignment="Center"
+                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    <TextBlock
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="16"
+                                                        Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                                                        Text="☰" />
+                                                </Border>
+                                                <StackPanel
+                                                    Grid.Column="1"
+                                                    Spacing="1"
+                                                    VerticalAlignment="Center">
+                                                    <TextBlock
+                                                        FontSize="15"
+                                                        FontWeight="SemiBold"
+                                                        Text="DSP 机架编排" />
+                                                    <TextBlock
+                                                        FontSize="12"
+                                                        Opacity="0.62"
+                                                        TextWrapping="WrapWholeWords"
+                                                        Text="决定音频依次经过这些模块的先后顺序。默认即 ECHO 的顺序。" />
+                                                </StackPanel>
+                                                <Border
+                                                    x:Name="DspBadgeRack"
+                                                    Grid.Column="2"
+                                                    Padding="10,3"
+                                                    VerticalAlignment="Center"
+                                                    CornerRadius="10"
+                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    <TextBlock
+                                                        x:Name="DspBadgeRackText"
+                                                        FontSize="12"
+                                                        FontWeight="SemiBold"
+                                                        Text="—" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="10">
+                                                <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap" Text="选中一个模块后用「上移 / 下移」调整位置。改变顺序会轻微改变声音结果（模块串联不满足交换律），但不会破坏音质。" />
+                                                <ListView
+                                                    x:Name="DspRackList"
+                                                    Height="300"
+                                                    SelectionMode="Single"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="6"
+                                                    SelectionChanged="DspRackList_SelectionChanged" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button Content="上移" Click="DspRackUp_Click" />
+                                                    <Button Content="下移" Click="DspRackDown_Click" />
+                                                    <Button Content="恢复 ECHO 默认顺序" Click="DspRackReset_Click" />
+                                                </StackPanel>
+                                                <TextBlock
+                                                    x:Name="DspRackHintText"
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    TextWrapping="Wrap"
+                                                    Text="当前使用 ECHO 默认顺序。" />
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>

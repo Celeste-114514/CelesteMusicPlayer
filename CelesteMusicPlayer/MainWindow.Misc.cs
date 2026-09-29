@@ -457,6 +457,8 @@ namespace CelesteMusicPlayer
                 AudioFxChannelRightDelaySlider.Value = ch.RightDelayMs;
                 AudioFxChannelCrossfeedToggle.IsOn = ch.CrossfeedEnabled;
                 AudioFxChannelCrossfeedSlider.Value = ch.CrossfeedLevel;
+                // 老存档没有这个字段 → 反序列化得到默认 700，正好等于旧版写死值，行为不变
+                AudioFxChannelCrossfeedCutoffSlider.Value = ch.CrossfeedCutoffHz;
 
                 var safety = extra.Safety;
                 AudioFxSafetyHeadroomSlider.Value = safety.HeadroomDb;

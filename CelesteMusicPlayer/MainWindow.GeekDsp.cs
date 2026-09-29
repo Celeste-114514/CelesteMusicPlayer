@@ -340,6 +340,14 @@ namespace CelesteMusicPlayer
             Color on = Color.FromArgb(255, 0x3B, 0x6D, 0x11);
             Color off = Color.FromArgb(255, 0xB4, 0xB2, 0xA9);
 
+            // 「已旁路」是语义警示色，不参与主题化（否则失去警示作用）
+            if (state == "bypassed")
+            {
+                badge.Background = new SolidColorBrush(Color.FromArgb(255, 0xC0, 0x7A, 0x1A));
+                text.Foreground = new SolidColorBrush(Color.FromArgb(255, 0xFF, 0xFF, 0xFF));
+                return;
+            }
+
             if (GeekDspAccentColor() is Color phosphor)
             {
                 if (state == "on")

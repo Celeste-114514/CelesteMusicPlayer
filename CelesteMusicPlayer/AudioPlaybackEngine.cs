@@ -800,6 +800,16 @@ namespace CelesteMusicPlayer
             _hifiOut?.SetChannelBalance(state);
         }
 
+        /// <summary>设置 DSP 机架（8 模块顺序 + 压缩器 / 立体声场 / 声道矩阵）。
+        /// 持久化到 dsp-rack.json 并实时下发内核；未播放时仅存状态，下次播放会话应用。</summary>
+        public void SetRack(RackState rack)
+        {
+            _hifiOut?.SetRack(rack);
+        }
+
+        /// <summary>压缩器当前增益衰减（dB，正数）。未播放 / 未接 DSP 链时返回 0。</summary>
+        public float CompressorGainReductionDb => _hifiOut?.CompressorGainReductionDb ?? 0f;
+
         /// <summary>设置安全限幅/余量（HiFi 输出的统一 DSP 链）。</summary>
         public void SetSafety(DspSafetyState? state)
         {

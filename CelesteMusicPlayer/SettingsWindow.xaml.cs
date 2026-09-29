@@ -539,6 +539,8 @@ namespace CelesteMusicPlayer
                 SetToggle(FrostedGlassSwitch, s.EnableFrostedGlass);
                 SelectComboByTag(GeekPhosphorCombo, s.GeekPhosphorColor);
                 ApplyGeekPhosphorCustomState(s.GeekPhosphorColor);
+                // 记住加载时的磷光色：之后只有真的改了才提示重启，别一打开就弹
+                _lastAppliedGeekPhosphor = s.GeekPhosphorColor ?? "Amber";
                 SetToggle(GeekCrtSwitch, s.GeekCrtEnabled);
                 SetToggle(ShowSpectrumSwitch, s.ShowSpectrum);
                 SetToggle(ShowAlbumCoverSwitch, s.ShowAlbumCover);
@@ -2139,7 +2141,64 @@ namespace CelesteMusicPlayer
             }
 
             PersistAllFromUi();
+            NotifyGeekPhosphorChanged();
         }
+
+        /// <summary>
+        /// 磷光色被改动后调用：极客模式下只有一部分元素能当场重染，
+        /// 剩下的要重启才生效 —— 所以按约定弹窗问用户要不要立刻重启。
+        /// 只在「值真的变了」且「当前是极客皮肤」时提示，避免误触。
+        /// </summary>
+        private void NotifyGeekPhosphorChanged()
+        {
+            AppSettingsState s = AppSettingsStore.Load();
+            string now = s.GeekPhosphorColor ?? "Amber";
+            if (string.Equals(now, _lastAppliedGeekPhosphor, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _lastAppliedGeekPhosphor = now;
+
+            // 非极客皮肤下磷光色不参与显示，改了也没影响，不必打扰用户
+            if (!MainWindow.IsGeekUiStyleActive())
+            {
+                return;
+            }
+
+            PromptGeekPhosphorRestart();
+        }
+
+        /// <summary>磷光色已更改：部分元素已即时更新，其余需重启完全生效，弹窗询问是否立即重启。</summary>
+        private async void PromptGeekPhosphorRestart()
+        {
+            if (_geekPhosphorRestartPromptShown)
+            {
+                return;
+            }
+
+            _geekPhosphorRestartPromptShown = true;
+            try
+            {
+                ContentDialog dialog = new()
+                {
+                    Title = "极客磷光色已更改",
+                    Content = "部分界面元素已即时更新，其余（DSP 面板部分控件、已打开的迷你播放器、桌面歌词等）需要重启播放器才能完全生效。是否立即重启？",
+                    PrimaryButtonText = "立即重启",
+                    CloseButtonText = "稍后",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = Content.XamlRoot
+                };
+                if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+                {
+                    MainWindow.Instance?.RestartApp();
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
+        }
+
+        private string? _lastAppliedGeekPhosphor;
+        private bool _geekPhosphorRestartPromptShown;
 
         private void GeekPhosphorPicker_ColorChanged(ColorPicker sender, ColorChangedEventArgs args)
         {
@@ -2155,6 +2214,7 @@ namespace CelesteMusicPlayer
                 {
                     _geekPhosphorPickerDebounce?.Stop();
                     PersistAllFromUi();
+                    NotifyGeekPhosphorChanged();
                 };
             }
 
