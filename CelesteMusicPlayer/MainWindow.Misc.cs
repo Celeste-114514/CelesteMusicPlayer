@@ -481,6 +481,9 @@ namespace CelesteMusicPlayer
 
             // 模块导航：默认定位第一个模块，并按当前状态点亮各模块圆点
             InitDspNav();
+
+            // EQ 页快捷状态条（EQ 状态 / bit-perfect / 预增益 / 余量 / 预设）初始同步
+            UpdateAudioFxEqQuickStrip();
         }
 
 
@@ -514,6 +517,7 @@ namespace CelesteMusicPlayer
 
         private void ApplySimpleTones()
         {
+            PushEqUndoSnapshot(coalesce: true);
             var s = new EqCurveState { Enabled = AudioFxEqEnableToggle.IsOn, PreampDb = _audioFxEq.PreampDb, PresetId = "simple", PresetName = "简单模式" };
             SimpleEqStore.Save(new SimpleEqState { Bass = _eqSimpleBass, Vocal = _eqSimpleVocal, Air = _eqSimpleAir, Warm = _eqSimpleWarm });
             if (_eqSimpleBass > 0.01) AppendSimple(s, "bass", _eqSimpleBass);

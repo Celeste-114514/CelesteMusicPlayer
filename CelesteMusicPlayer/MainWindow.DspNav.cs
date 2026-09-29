@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -11,15 +10,18 @@ namespace CelesteMusicPlayer
 {
     /// <summary>
     /// 音效处理页面：左侧「处理链路」模块导航 + 右侧模块内容分区。
-    /// 顺序按信号链：输入余量 → 采样率 SRC → 参数 EQ → 耳机校正 → FIR → 声道 → ReplayGain → 输出安全监控。
+    /// 2026-09-29 起对齐 ECHO DSP 模块集：左导航按信号链分 6 组
+    /// （输入 / 采样率 / 塑形 / 声道 / 空间 / 输出安全），导航项由本文件的元数据表
+    /// 动态生成——新增模块只需在 <see cref="BuildDspNav"/> 里加一行，不再手写 XAML。
     /// 本文件只做页面切换与状态指示，不改动任何 DSP 处理逻辑。
     /// </summary>
     public sealed partial class MainWindow
     {
-        private const int DspPageCount = 8;
+        // 页面索引（与导航元数据表顺序一致；阶段 2 会在前面插入 Rack/压缩/交叉馈送/声场/矩阵）
         private const int DspPageSafetyIndex = 7;
-        private const int DspPageFirIndex = 4;
+        private const int DspPageFirIndex = 6;
         private const int DspPageChannelIndex = 5;
+        private const int DspPageEqIndex = 3;
 
         private int _dspPageIndex = -1;
         private DispatcherQueueTimer? _dspMonitorTimer;
@@ -27,49 +29,222 @@ namespace CelesteMusicPlayer
         /// <summary>耳机校正（OPRA）曲线是否已应用到当前 EQ。</summary>
         private bool _opraApplied;
 
+        /// <summary>导航项运行时态：标题 / 所属组 / 右侧页面 / 徽章控件。</summary>
+        private sealed class DspNavEntry
+        {
+            public required string Title { get; init; }
+            public required string Group { get; init; }
+            public StackPanel? Page { get; init; }
+            public Border? Badge { get; init; }
+            public TextBlock? BadgeText { get; init; }
+            public Button? Button { get; set; }
+            public Border? Bar { get; set; }
+            public TextBlock? Label { get; set; }
+            public Border? Dot { get; set; }
+        }
+
+        private readonly List<DspNavEntry> _dspNavEntries = new();
+        private bool _dspNavBuilt;
+
+        // ---------- 导航构建（元数据表驱动） ----------
+
+        /// <summary>
+        /// 按元数据表生成左侧导航：先插组标题，再插该组的模块项。
+        /// 组的划分对齐 ECHO：输入 / 采样率 / 塑形 / 声道 / 空间 / 输出安全。
+        /// </summary>
+        private void BuildDspNav()
+        {
+            if (_dspNavBuilt)
+            {
+                return;
+            }
+
+            _dspNavEntries.Clear();
+            DspNavPanel.Children.Clear();
+
+            // ── 元数据表：加模块只需在这里加一行（标题 / 组 / 页面 / 徽章）──
+            AddNavEntry("输入余量", "输入", DspPageHeadroom, DspBadgeHeadroom, DspBadgeHeadroomText);
+            // 「响度 · ReplayGain」为过渡项：阶段 2 起 RG 并入「DSP Rack 编排」页行内展开，本项随之移除
+            AddNavEntry("响度 · ReplayGain", "输入", DspPageRg, DspBadgeRg, DspBadgeRgText);
+            AddNavEntry("ECHO SRC / 升频", "采样率", DspPageSrc, DspBadgeSrc, DspBadgeSrcText);
+            AddNavEntry("参数 EQ", "塑形", DspPageEq, DspBadgeEq, DspBadgeEqText);
+            AddNavEntry("耳机校正", "塑形", DspPageOpra, DspBadgeOpra, DspBadgeOpraText);
+            AddNavEntry("声道工具", "声道", DspPageChannel, DspBadgeChannel, DspBadgeChannelText);
+            AddNavEntry("FIR / 房间校正", "空间", DspPageFir, DspBadgeFir, DspBadgeFirText);
+            AddNavEntry("输出安全", "输出安全", DspPageSafety, DspBadgeSafety, DspBadgeSafetyText);
+
+            string? currentGroup = null;
+            for (int navIndex = 0; navIndex < _dspNavEntries.Count; navIndex++)
+            {
+                DspNavEntry entry = _dspNavEntries[navIndex];
+                if (entry.Group != currentGroup)
+                {
+                    currentGroup = entry.Group;
+                    TextBlock header = new()
+                    {
+                        Text = currentGroup,
+                        FontSize = 11,
+                        FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                        Opacity = 0.55,
+                        Margin = new Thickness(8, 10, 0, 2)
+                    };
+                    DspNavPanel.Children.Add(header);
+                }
+
+                DspNavPanel.Children.Add(BuildNavItemGrid(entry, navIndex));
+            }
+
+            _dspNavBuilt = true;
+
+            // 自检日志：动态导航静默退化时（条目漏建/组标题漏插）只有这行能立刻定位
+            int groupCount = 0;
+            string? lastGroup = null;
+            foreach (DspNavEntry e in _dspNavEntries)
+            {
+                if (e.Group != lastGroup)
+                {
+                    lastGroup = e.Group;
+                    groupCount++;
+                }
+            }
+            int wiredButtons = 0;
+            int wiredBars = 0;
+            int wiredBadges = 0;
+            foreach (DspNavEntry e in _dspNavEntries)
+            {
+                if (e.Button != null)
+                {
+                    wiredButtons++;
+                }
+                if (e.Bar != null)
+                {
+                    wiredBars++;
+                }
+                if (e.Badge != null && e.BadgeText != null)
+                {
+                    wiredBadges++;
+                }
+            }
+            StartupLog.Write($"[DSP导航] 条目={_dspNavEntries.Count} 组={groupCount} 按钮={wiredButtons} 强调条={wiredBars} 徽章={wiredBadges}");
+        }
+
+        private void AddNavEntry(string title, string group, StackPanel? page, Border? badge, TextBlock? badgeText)
+        {
+            _dspNavEntries.Add(new DspNavEntry
+            {
+                Title = title,
+                Group = group,
+                Page = page,
+                Badge = badge,
+                BadgeText = badgeText
+            });
+        }
+
+        /// <summary>生成单个导航项：Grid(38px) 内 Button（圆点+标题），左侧叠强调条。</summary>
+        private Grid BuildNavItemGrid(DspNavEntry entry, int index)
+        {
+
+            Border dot = new()
+            {
+                Width = 7,
+                Height = 7,
+                CornerRadius = new CornerRadius(3.5),
+                VerticalAlignment = VerticalAlignment.Center,
+                Background = new SolidColorBrush(Color.FromArgb(255, 0xB4, 0xB2, 0xA9))
+            };
+            TextBlock label = new()
+            {
+                FontSize = 13,
+                VerticalAlignment = VerticalAlignment.Center,
+                Text = entry.Title
+            };
+            Grid inner = new() { ColumnSpacing = 8 };
+            inner.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            inner.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            dot.SetValue(Grid.ColumnProperty, 0);
+            label.SetValue(Grid.ColumnProperty, 1);
+            inner.Children.Add(dot);
+            inner.Children.Add(label);
+
+            Button button = new()
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                Padding = new Thickness(10, 0, 8, 0),
+                Background = new SolidColorBrush(Color.FromArgb(0, 0, 0, 0)),
+                BorderThickness = new Thickness(0),
+                CornerRadius = new CornerRadius(6),
+                Tag = index,
+                Content = inner
+            };
+            button.Click += DspNavButton_Click;
+
+            Border bar = new()
+            {
+                Width = 3,
+                Height = 16,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center,
+                CornerRadius = new CornerRadius(1.5),
+                Visibility = Visibility.Collapsed
+            };
+            if (Application.Current.Resources.TryGetValue("AccentFillColorDefaultBrush", out object? accent)
+                && accent is SolidColorBrush accentBrush)
+            {
+                bar.Background = accentBrush;
+            }
+
+            Grid grid = new() { Height = 38 };
+            grid.Children.Add(button);
+            grid.Children.Add(bar);
+
+            entry.Button = button;
+            entry.Bar = bar;
+            entry.Label = label;
+            entry.Dot = dot;
+            return grid;
+        }
+
         // ---------- 页面切换 ----------
 
         private void DspNavButton_Click(object sender, RoutedEventArgs e)
         {
-            if (sender is Button b && b.Tag is string tag && int.TryParse(tag, out int idx))
+            if (sender is Button b && b.Tag is int idx)
             {
                 SelectDspPage(idx);
             }
         }
 
-        /// <summary>切换到指定模块页面（0..7）。</summary>
+        /// <summary>切换到指定模块页面（0..7，顺序见 <see cref="BuildDspNav"/> 元数据表）。</summary>
         private void SelectDspPage(int idx)
         {
-            if (idx < 0 || idx >= DspPageCount)
+            if (idx < 0 || idx >= _dspNavEntries.Count)
             {
                 return;
             }
 
             _dspPageIndex = idx;
 
-            StackPanel[] pages =
+            for (int i = 0; i < _dspNavEntries.Count; i++)
             {
-                DspPageHeadroom, DspPageSrc, DspPageEq, DspPageOpra,
-                DspPageFir, DspPageChannel, DspPageRg, DspPageSafety
-            };
-            Border[] bars =
-            {
-                DspNavBar0, DspNavBar1, DspNavBar2, DspNavBar3,
-                DspNavBar4, DspNavBar5, DspNavBar6, DspNavBar7
-            };
-            TextBlock[] labels =
-            {
-                DspNavLabel0, DspNavLabel1, DspNavLabel2, DspNavLabel3,
-                DspNavLabel4, DspNavLabel5, DspNavLabel6, DspNavLabel7
-            };
-
-            for (int i = 0; i < DspPageCount; i++)
-            {
+                DspNavEntry entry = _dspNavEntries[i];
                 bool on = i == idx;
-                pages[i].Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-                bars[i].Visibility = on ? Visibility.Visible : Visibility.Collapsed;
-                labels[i].FontWeight = on ? FontWeights.SemiBold : FontWeights.Normal;
-                labels[i].Opacity = on ? 1.0 : 0.72;
+                if (entry.Page != null)
+                {
+                    entry.Page.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                if (entry.Bar != null)
+                {
+                    entry.Bar.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+                }
+
+                if (entry.Label != null)
+                {
+                    entry.Label.FontWeight = on ? Microsoft.UI.Text.FontWeights.SemiBold : Microsoft.UI.Text.FontWeights.Normal;
+                    entry.Label.Opacity = on ? 1.0 : 0.72;
+                }
             }
 
             // 只有在「输出安全监控」页才跑 500ms 刷新定时器，其它页面不占 UI 线程
@@ -89,11 +264,19 @@ namespace CelesteMusicPlayer
             {
                 UpdateDspChannelBars();
             }
+
+            // EQ 页：只有本页可见时才跑 ~15fps 频谱定时器（曲线背景用），离开即停
+            EnsureEqSpectrumTimer(idx == DspPageEqIndex);
+            if (idx == DspPageEqIndex)
+            {
+                RedrawAudioFxEqCurve();
+            }
         }
 
-        /// <summary>首次进入音效页面时定位到第一个模块，并刷新各模块启用指示。</summary>
+        /// <summary>首次进入音效页面时构建导航、定位到第一个模块，并刷新各模块启用指示。</summary>
         private void InitDspNav()
         {
+            BuildDspNav();
             InitRoomCorrectionTrimUi();
             UpdateDspNavIndicators();
             if (_dspPageIndex < 0)
@@ -123,22 +306,23 @@ namespace CelesteMusicPlayer
             bool ch = AudioFxChannelToggle != null && AudioFxChannelToggle.IsOn;
             bool rg = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
 
-            return new[] { headroom, srcHz > 0, eq, _opraApplied, fir, ch, rg, true };
+            // 顺序与 BuildDspNav 元数据表一致：余量 / RG / SRC / EQ / OPRA / 声道 / FIR / 监控
+            return new[] { headroom, rg, srcHz > 0, eq, _opraApplied, ch, fir, true };
         }
 
         /// <summary>刷新左侧导航圆点：绿 = 该模块正在参与处理，灰 = 未启用。</summary>
         private void UpdateDspNavIndicators()
         {
-            Border[] dots =
-            {
-                DspNavDot0, DspNavDot1, DspNavDot2, DspNavDot3,
-                DspNavDot4, DspNavDot5, DspNavDot6, DspNavDot7
-            };
-
             bool[] active = DspModuleActive();
-            for (int i = 0; i < dots.Length && i < active.Length; i++)
+            for (int i = 0; i < _dspNavEntries.Count && i < active.Length; i++)
             {
-                dots[i].Background = new SolidColorBrush(active[i]
+                Border? dot = _dspNavEntries[i].Dot;
+                if (dot == null)
+                {
+                    continue;
+                }
+
+                dot.Background = new SolidColorBrush(active[i]
                     ? Color.FromArgb(255, 0x3B, 0x6D, 0x11)
                     : Color.FromArgb(255, 0xB4, 0xB2, 0xA9));
             }
@@ -159,13 +343,13 @@ namespace CelesteMusicPlayer
         {
             Border[] badges =
             {
-                DspBadgeHeadroom, DspBadgeSrc, DspBadgeEq, DspBadgeOpra,
-                DspBadgeFir, DspBadgeChannel, DspBadgeRg, DspBadgeSafety
+                DspBadgeHeadroom, DspBadgeRg, DspBadgeSrc, DspBadgeEq,
+                DspBadgeOpra, DspBadgeChannel, DspBadgeFir, DspBadgeSafety
             };
             TextBlock[] texts =
             {
-                DspBadgeHeadroomText, DspBadgeSrcText, DspBadgeEqText, DspBadgeOpraText,
-                DspBadgeFirText, DspBadgeChannelText, DspBadgeRgText, DspBadgeSafetyText
+                DspBadgeHeadroomText, DspBadgeRgText, DspBadgeSrcText, DspBadgeEqText,
+                DspBadgeOpraText, DspBadgeChannelText, DspBadgeFirText, DspBadgeSafetyText
             };
 
             bool[] active = DspModuleActive();
@@ -309,7 +493,8 @@ namespace CelesteMusicPlayer
             double headroom = AudioFxSafetyHeadroomSlider?.Value ?? 0;
             DspChainHeadroomText.Text = FormatHelper.FormatAudioFxDb(headroom) + " dB";
 
-            string[] names = { "余量", "SRC", "EQ", "OPRA", "FIR", "声道", "RG" };
+            // 顺序与 DspModuleActive() 一致：余量 / RG / SRC / EQ / 耳机校正 / 声道 / FIR
+            string[] names = { "余量", "ReplayGain", "SRC", "EQ", "耳机校正", "声道工具", "FIR" };
             bool[] active = DspModuleActive();
             var on = new List<string>();
             for (int i = 0; i < names.Length && i < active.Length; i++)
@@ -432,7 +617,7 @@ namespace CelesteMusicPlayer
             OutMonitorOverloadText.Text = clip > 0 ? "⚠ 已削波" : (peak > -0.5f ? "接近满刻度" : "正常");
 
             // 活跃 DSP 清单：按信号链顺序列出正在参与处理的模块
-            string[] names = { "余量/限幅", "SRC 升频", "参数 EQ", "耳机校正", "FIR 卷积", "声道工具", "ReplayGain" };
+            string[] names = { "余量/限幅", "ReplayGain", "SRC 升频", "参数 EQ", "耳机校正", "声道工具", "FIR 卷积" };
             bool[] active = DspModuleActive();
             var on = new List<string>();
             for (int i = 0; i < names.Length && i < active.Length; i++)
