@@ -1855,6 +1855,12 @@ namespace CelesteMusicPlayer
 
             TimeSpan adj = applyOffset ? OffsetLyricPosition(position) : position;
 
+            // 终端布局歌词面板：与主歌词页同一节拍推进（独立高亮，互不干扰）
+            if (_layoutIsTerminal && _terminalLyricTexts.Count > 0)
+            {
+                SyncTerminalLyricsToPosition(adj);
+            }
+
             int index = 0;
             for (int i = 0; i < _lyricLines.Count; i++)
             {

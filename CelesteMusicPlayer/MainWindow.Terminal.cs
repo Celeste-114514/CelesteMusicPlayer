@@ -64,6 +64,8 @@ namespace CelesteMusicPlayer
             _audioEngine?.SetStereoCapture(true);
 
             ApplyTerminalAccent();
+            // 终端歌词面板：布局刚切进来（或首次应用）时，按现有歌词数据建行
+            BuildTerminalLyricsRows();
             UpdateTerminalInfo();
             UpdateTerminalQueue(force: true);
             DrawTerminalSpectrum();
@@ -164,6 +166,22 @@ namespace CelesteMusicPlayer
                 if (TerminalPathText != null)
                 {
                     TerminalPathText.Text = string.IsNullOrEmpty(path) ? "—" : path;
+                }
+
+                // 切歌：先把歌词面板清空（防旧歌歌词残留），首次进终端 / 歌词已就绪就直接建行；
+                // 异步歌词加载完成时 BuildLyricsUi 会再来一遍（结果相同）。
+                if (path != _terminalLyricSongPath)
+                {
+                    bool firstEntry = _terminalLyricSongPath.Length == 0;
+                    _terminalLyricSongPath = path;
+                    if (_layoutIsTerminal)
+                    {
+                        ResetTerminalLyrics("LOADING…");
+                        if (firstEntry)
+                        {
+                            BuildTerminalLyricsRows();
+                        }
+                    }
                 }
 
                 bool hifi = IsHiFiModeSelected();

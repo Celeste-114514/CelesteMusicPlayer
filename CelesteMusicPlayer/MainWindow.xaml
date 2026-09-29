@@ -6148,7 +6148,8 @@
                                     </StackPanel>
                                 </Grid>
 
-                                <!-- 底部：播放头 + 队列 -->
+                                <!-- 底部：播放头 + 歌词/队列双栏（用户拍板「方案甲」：
+                                     LYRICS 2/3 + QUEUE 1/3，中间 1px 竖线） -->
                                 <StackPanel Grid.Row="2" Margin="0,14,0,0">
                                     <TextBlock
                                         Margin="0,0,0,6"
@@ -6164,14 +6165,66 @@
                                         SizeChanged="TerminalCanvas_SizeChanged"
                                         Margin="0,0,0,12"
                                         IsHitTestVisible="False" />
-                                    <TextBlock
-                                        x:Name="TerminalQueueHeader"
-                                        Margin="0,0,0,6"
-                                        FontFamily="Consolas"
-                                        FontSize="11"
-                                        Foreground="#FF7A8290"
-                                        Text="QUEUE" />
-                                    <StackPanel x:Name="TerminalQueuePanel" />
+                                    <Grid Margin="0,2,0,0">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="2*" />
+                                            <ColumnDefinition Width="1*" />
+                                        </Grid.ColumnDefinitions>
+                                        <!-- 左：歌词滚动面板（跟随播放滚动 / 双击行跳转 / 当前行磷光高亮） -->
+                                        <Grid Grid.Column="0">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="*" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock
+                                                x:Name="TerminalLyricsHeader"
+                                                Margin="0,0,0,6"
+                                                FontFamily="Consolas"
+                                                FontSize="11"
+                                                Foreground="#FF7A8290"
+                                                Text="LYRICS · 跟唱滚动 · 双击跳转" />
+                                            <Grid Grid.Row="1">
+                                                <ScrollViewer
+                                                    x:Name="TerminalLyricsScroll"
+                                                    MaxHeight="160"
+                                                    VerticalScrollBarVisibility="Hidden"
+                                                    HorizontalScrollMode="Disabled">
+                                                    <StackPanel x:Name="TerminalLyricsPanel" Spacing="5" />
+                                                </ScrollViewer>
+                                                <TextBlock
+                                                    x:Name="TerminalLyricsEmpty"
+                                                    FontFamily="Consolas"
+                                                    FontSize="12"
+                                                    Foreground="#FF7A8290"
+                                                    Text="NO LYRICS"
+                                                    Visibility="Collapsed" />
+                                            </Grid>
+                                        </Grid>
+                                        <Border
+                                            Width="1"
+                                            HorizontalAlignment="Center"
+                                            Background="#FF2A332A" />
+                                        <!-- 右：队列预览（当前曲目高亮） -->
+                                        <Grid Grid.Column="1">
+                                            <Grid.RowDefinitions>
+                                                <RowDefinition Height="Auto" />
+                                                <RowDefinition Height="*" />
+                                            </Grid.RowDefinitions>
+                                            <TextBlock
+                                                x:Name="TerminalQueueHeader"
+                                                Margin="0,0,0,6"
+                                                FontFamily="Consolas"
+                                                FontSize="11"
+                                                Foreground="#FF7A8290"
+                                                Text="QUEUE" />
+                                            <ScrollViewer
+                                                Grid.Row="1"
+                                                MaxHeight="160"
+                                                VerticalScrollBarVisibility="Hidden">
+                                                <StackPanel x:Name="TerminalQueuePanel" />
+                                            </ScrollViewer>
+                                        </Grid>
+                                    </Grid>
                                 </StackPanel>
                             </Grid>
                         </Border>

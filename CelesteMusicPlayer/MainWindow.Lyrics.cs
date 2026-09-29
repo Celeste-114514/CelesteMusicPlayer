@@ -208,6 +208,11 @@ namespace CelesteMusicPlayer
             {
                 // 无歌词：右侧歌词区固定显示简短说明
                 ClearLyricsUi("该音频没有歌词");
+                // 终端布局歌词面板同步进入空态（无词可显示）
+                if (_layoutIsTerminal)
+                {
+                    ResetTerminalLyrics("NO LYRICS");
+                }
                 return;
             }
 
@@ -326,6 +331,11 @@ namespace CelesteMusicPlayer
             }
 
             SyncLyricsToPosition(GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero);
+            // 终端布局歌词面板：歌词就绪，按 _lyricLines 重建行（不看布局时这里不进）
+            if (_layoutIsTerminal)
+            {
+                BuildTerminalLyricsRows();
+            }
             _desktopLyricsWindow?.SetLyrics(_lyricLines);
             _miniPlayerWindow?.RefreshFromOwner();
         }

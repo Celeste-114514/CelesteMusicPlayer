@@ -195,6 +195,12 @@ namespace CelesteMusicPlayer
         /// <summary>立刻按当前风格重染歌词（极客开关 / 磷光色变更时调用；没加载歌词时是空操作）。</summary>
         private void RefreshLyricColorsForGeek()
         {
+            // 终端布局歌词面板：换磷光色时重染（主歌词页空/非空都不影响它）
+            if (_layoutIsTerminal)
+            {
+                RetintTerminalLyrics();
+            }
+
             if (_lyricTextBlocks.Count == 0)
             {
                 return;
