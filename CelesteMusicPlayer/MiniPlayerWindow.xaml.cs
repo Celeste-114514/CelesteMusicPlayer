@@ -78,6 +78,12 @@ namespace CelesteMusicPlayer
             ThemeColorService.ThemeColorChanged += OnThemeColorChangedMini;
             RefreshAccentFromOwner();
 
+            // 极客皮肤：迷你播放器是独立顶级窗口，主窗口的 ApplyGeekChrome 根本走不到这里，
+            // 得自带一份上色 + 圆角归零（详见 MiniPlayerWindow.Geek.cs）。
+            // 同时挂上设置变更订阅，用户在设置里切风格/换磷光色时开着的迷你条要实时跟。
+            HookGeekMiniSettings();
+            ApplyGeekMini(MainWindow.IsGeekUiStyleActive());
+
             OverlappedPresenter presenter = OverlappedPresenter.Create();
             presenter.IsResizable = false;
             presenter.IsMinimizable = false;
@@ -115,6 +121,8 @@ namespace CelesteMusicPlayer
 
             Closed += (_, _) =>
             {
+                // AppSettingsStore.Changed 是静态事件，不解绑会把本窗口实例一直攥在内存里
+                Safe(UnhookGeekMiniSettings);
                 Safe(() => ThemeColorService.ThemeColorChanged -= OnThemeColorChangedMini);
                 Safe(EndDrag);
                 Safe(RemoveWindowSubclassIfNeeded);
@@ -191,12 +199,11 @@ namespace CelesteMusicPlayer
         {
             Safe(() =>
             {
-                AppSettingsState s = AppSettingsStore.Load();
-                Windows.UI.Color accent = s.AccentSource == "Custom"
-                    ? (ThemeColorService.ParseHexColor(s.CustomAccentColor) ?? Windows.UI.Color.FromArgb(255, 0, 120, 212))
-                    : Windows.UI.Color.FromArgb(255, 0, 120, 212);
+                // 极客模式下换成磷光色，其余情况保持原来的主题色逻辑（详见 MiniPlayerWindow.Geek.cs）
+                Windows.UI.Color accent = CurrentAccentForMini();
 
                 ThemeColorService.ApplySliderAccent(ProgressSlider, accent);
+                ThemeColorService.ApplySliderAccent(VolumeSlider, accent);
 
                 // 播放按钮：强调色实心圆 + 自动选黑/白前景保证可读
                 PlayPauseButton.Background = new SolidColorBrush(accent);
@@ -804,7 +811,12 @@ namespace CelesteMusicPlayer
                 }
 
                 int inset = RegionInsetPx;
-                int radiusPx = Math.Max(6, (int)Math.Round(CornerRadiusDip * dpi / 96.0) - inset);
+                // _windowCornerDip：极客皮肤下为 0（圆角一律归零），否则是标准的 20
+                int radiusPx = Math.Max(6, (int)Math.Round(_windowCornerDip * dpi / 96.0) - inset);
+                if (_windowCornerDip <= 0)
+                {
+                    radiusPx = 0;
+                }
                 IntPtr rgn = CreateRoundRectRgn(inset, inset, w - inset + 1, h - inset + 1, radiusPx * 2, radiusPx * 2);
                 if (rgn == IntPtr.Zero)
                 {

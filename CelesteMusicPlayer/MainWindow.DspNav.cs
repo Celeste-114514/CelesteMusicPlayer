@@ -189,11 +189,9 @@ namespace CelesteMusicPlayer
                 CornerRadius = new CornerRadius(1.5),
                 Visibility = Visibility.Collapsed
             };
-            if (Application.Current.Resources.TryGetValue("AccentFillColorDefaultBrush", out object? accent)
-                && accent is SolidColorBrush accentBrush)
-            {
-                bar.Background = accentBrush;
-            }
+            // 选中条的颜色原来直接读全局 AccentFillColorDefaultBrush —— 极客模式下那仍是蓝的
+            // （极客不改全局资源），得改走「面板强调色」入口：极客返回磷光，否则回落系统主题色。
+            bar.Background = DspAccentBrush();
 
             Grid grid = new() { Height = 38 };
             grid.Children.Add(button);
@@ -322,9 +320,10 @@ namespace CelesteMusicPlayer
                     continue;
                 }
 
+                // 极客下「启用」<｜hy_place▁holder▁no▁813｜>磷光色；熄灭色也换一套（原来的 #B4B2A9 在极客深底上偏亮、太扎眼）
                 dot.Background = new SolidColorBrush(active[i]
-                    ? Color.FromArgb(255, 0x3B, 0x6D, 0x11)
-                    : Color.FromArgb(255, 0xB4, 0xB2, 0xA9));
+                    ? (GeekDspAccentColor() ?? Color.FromArgb(255, 0x3B, 0x6D, 0x11))
+                    : (_geekDspActive ? Color.FromArgb(255, 0x4A, 0x4A, 0x42) : Color.FromArgb(255, 0xB4, 0xB2, 0xA9)));
             }
 
             if (OutMonitorActiveDspText != null)
@@ -371,13 +370,12 @@ namespace CelesteMusicPlayer
                 }
                 else if (on)
                 {
-                    badges[i].Background = new SolidColorBrush(Color.FromArgb(255, 0x3B, 0x6D, 0x11));
-                    texts[i].Text = i == DspPageSafetyIndex ? "监控中" : "生效中";
+                    SetDspBadgeState(badges[i], texts[i], "on",
+                        i == DspPageSafetyIndex ? "监控中" : "生效中");
                 }
                 else
                 {
-                    badges[i].Background = new SolidColorBrush(Color.FromArgb(255, 0xB4, 0xB2, 0xA9));
-                    texts[i].Text = "未启用";
+                    SetDspBadgeState(badges[i], texts[i], "off", "未启用");
                 }
             }
         }

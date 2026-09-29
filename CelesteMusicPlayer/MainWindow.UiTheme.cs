@@ -651,6 +651,10 @@ namespace CelesteMusicPlayer
                 // 磷光色统一：播放条/顶栏字符键 + 播放歌曲信息页 + 歌词（跟随设置里的极客磷光色）
                 ApplyGeekNowPlaying(geek);
 
+                // 音效处理 DSP 面板的磷光色：把 ThemeColorService 那套 accent 资源键做成
+                // AudioFxBorder 上的元素级副本（极客下不能动全局资源，否则 0xc000027b）
+                ApplyGeekDsp(geek);
+
                 EnsureGeekReadoutTimer(geek);
                 if (geek)
                 {

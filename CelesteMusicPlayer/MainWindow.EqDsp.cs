@@ -507,6 +507,20 @@ namespace CelesteMusicPlayer
             Color nodeSel = dark ? Color.FromArgb(255, 0x2e, 0x71, 0x68) : Color.FromArgb(255, 0x0f, 0x76, 0x6e);
             Color nodeOff = Color.FromArgb(120, 128, 128, 128);
             Color specColor = dark ? Color.FromArgb(42, 0x2e, 0x71, 0x68) : Color.FromArgb(26, 0x0f, 0x76, 0x6e);
+
+            // 极客皮肤：曲线是代码往 Canvas 上画的 Shape，既不读 ThemeResource 也吃不到元素级资源字典，
+            // 必须在这里显式换成磷光色。保留原来的「三段渐变」结构（亮 → 主 → 暗），只把色相换成磷光。
+            if (GeekDspAccentColor() is Color ph)
+            {
+                c1 = MixToward(ph, Color.FromArgb(255, 255, 255, 255), 0.35);
+                c2 = ph;
+                c3 = MixToward(ph, Color.FromArgb(255, 0, 0, 0), 0.30);
+                fillTop = Color.FromArgb(46, ph.R, ph.G, ph.B);
+                fillBottom = Color.FromArgb(5, ph.R, ph.G, ph.B);
+                nodeNormal = MixToward(ph, Color.FromArgb(255, 255, 255, 255), 0.45);
+                nodeSel = ph;
+                specColor = Color.FromArgb(42, ph.R, ph.G, ph.B);
+            }
             var glyphBrush = new SolidColorBrush(Color.FromArgb(235, 255, 255, 255));
 
             // 1. 实时频谱背景（最底层）
