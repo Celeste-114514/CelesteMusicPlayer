@@ -31,6 +31,9 @@ namespace CelesteMusicPlayer
         /// 切歌调用：清掉上一首的歌词行（旧词不能留，等新词进来再建）。</summary>
         internal void ResetTerminalLyrics(string hint)
         {
+            // 换歌了，选择期没有意义：撤掉，别让旧歌的 hold 把新歌的面板钉在原地
+            EndTerminalLyricHold();
+
             _terminalLyricIndex = -1;
             _terminalLyricTexts.Clear();
             _terminalLyricFrames.Clear();
@@ -104,11 +107,21 @@ namespace CelesteMusicPlayer
                 {
                     TimeSpan target = line.Time;
                     int rowIndex = TerminalLyricsPanel.Children.Count; // row 还没 Add，当前计数就是它的索引
-                    // 单击 = 滚到这句（用户 2026-09-29 反馈「点击歌词面板不跳转」：
-                    // 之前只接了 DoubleTapped，单击压根没接线）
-                    row.Tapped += (_, _) => ScrollTerminalLyricIntoView(rowIndex);
-                    // 双击 = 从这句开始播放（与主歌词页一致；翻译行不跳）
-                    row.DoubleTapped += (_, _) => PlayFromLyricLine(target);
+                    // 单击 = 滚到这句 + 进「选择期」：3 秒内不自动回弹到播放位置，让用户
+                    // 从容决定要不要双击（用户 2026-09-29 反馈「点击后瞬间跳回当前进度」）；
+                    // 超时由 Hold 计时器负责滚回当前播放句。与主歌词页 3 秒选中同一体验。
+                    row.Tapped += (_, _) =>
+                    {
+                        ScrollTerminalLyricIntoView(rowIndex);
+                        BeginTerminalLyricHold();
+                    };
+                    // 双击 = 从这句开始播放（与主歌词页一致；翻译行不跳）。
+                    // 先撤选择期：否则 seek 后的强制同步会被 hold 挡着，滚不到目标行。
+                    row.DoubleTapped += (_, _) =>
+                    {
+                        EndTerminalLyricHold();
+                        PlayFromLyricLine(target);
+                    };
                 }
 
                 _terminalLyricTexts.Add(tb);
@@ -167,6 +180,12 @@ namespace CelesteMusicPlayer
             {
                 _terminalLyricIndex = index;
                 RetintTerminalLyrics();
+            }
+            // 选择期内不自动吸附：用户刚点了某句，这时候每 tick 滚回播放位置就等于
+            // 「点完瞬间被拽回」。高亮照常推进（真实播放状态），只是面板停住等人决定。
+            if (_terminalUserScrolling)
+            {
+                return;
             }
             // index 没变也尝试滚动：双击当前高亮句时（用户先把面板滚去了别处）要能滚回来；
             // ScrollTerminalLyricIntoView 内部有 1px 防抖，不动时是几次属性读取，成本可忽略
@@ -277,6 +296,50 @@ namespace CelesteMusicPlayer
             }
 
             TerminalLyricsScroll.ChangeView(null, target, null, false);
+        }
+
+        // ---- 「选择期」：点一句后给用户几秒决定是否双击跳转，超时才回当前播放句 ----
+
+        /// <summary>选择期时长（毫秒）。与主歌词页单击选中后的 3 秒自动取消保持一致。</summary>
+        private const int TerminalLyricHoldMs = 3000;
+
+        /// <summary>true = 用户刚点了某句，SyncTerminalLyricsToPosition 暂停自动回弹。</summary>
+        private bool _terminalUserScrolling;
+
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _terminalLyricHoldTimer;
+
+        /// <summary>
+        /// 进入选择期：面板停在用户点的那句，不再每 tick 被拽回播放位置。
+        /// 重复点击会续期（每次点击重新计时）。超时滚回当前播放句。
+        /// </summary>
+        private void BeginTerminalLyricHold()
+        {
+            _terminalUserScrolling = true;
+
+            if (_terminalLyricHoldTimer == null)
+            {
+                _terminalLyricHoldTimer = DispatcherQueue.CreateTimer();
+                _terminalLyricHoldTimer.Interval = TimeSpan.FromMilliseconds(TerminalLyricHoldMs);
+                _terminalLyricHoldTimer.Tick += (_, _) =>
+                {
+                    _terminalLyricHoldTimer.Stop();
+                    _terminalUserScrolling = false;
+                    // 超时：回当前播放句（高亮行）。若用户已双击跳转过，高亮已在目标行，
+                    // 这里滚过去正好对齐；没跳转就回到正在唱的那句。
+                    ScrollTerminalLyricIntoView(_terminalLyricIndex);
+                };
+            }
+
+            // Stop+Start = 重置计时周期（重复点击续期）
+            _terminalLyricHoldTimer.Stop();
+            _terminalLyricHoldTimer.Start();
+        }
+
+        /// <summary>退出选择期（双击跳转 / 切歌 / 重建行时调用）。</summary>
+        private void EndTerminalLyricHold()
+        {
+            _terminalUserScrolling = false;
+            _terminalLyricHoldTimer?.Stop();
         }
     }
 }
