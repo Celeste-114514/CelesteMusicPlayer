@@ -234,6 +234,15 @@ namespace CelesteMusicPlayer
 
         private void DspCompSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
+            // 启动阶段（InitializeComponent 解析 XAML）滑杆的 Value 初值会就地触发本事件，
+            // 此时同页后续控件的 x:Name 字段还没连上，直接刷读数会空引用、整个进程秒崩。
+            // InitDspNav 完成前（_dspRackReady=false）一律忽略，与 ApplyDspToEngine 的
+            // _audioFxPanelReady 守卫同一套路。LoadDspRackUi 期间由它自己显式刷读数，不缺这一次。
+            if (!_dspRackReady)
+            {
+                return;
+            }
+
             RefreshDspCompReadouts();
             if (!_dspRackLoading)
             {
@@ -327,6 +336,12 @@ namespace CelesteMusicPlayer
 
         private void DspFieldSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
+            // 说明同 DspCompSlider_ValueChanged：解析期初值就地触发，后续控件字段未连接前必须忽略。
+            if (!_dspRackReady)
+            {
+                return;
+            }
+
             RefreshDspFieldReadouts();
             if (!_dspRackLoading)
             {
@@ -374,6 +389,12 @@ namespace CelesteMusicPlayer
 
         private void DspMatrixSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
+            // 说明同 DspCompSlider_ValueChanged：解析期初值就地触发，后续控件字段未连接前必须忽略。
+            if (!_dspRackReady)
+            {
+                return;
+            }
+
             RefreshDspMatrixReadouts();
             if (!_dspRackLoading)
             {
