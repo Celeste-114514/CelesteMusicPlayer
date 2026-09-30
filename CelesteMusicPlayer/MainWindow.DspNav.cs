@@ -26,7 +26,6 @@ namespace CelesteMusicPlayer
         private int DspPageChannelIndex => FindDspPageIndex(DspPageChannel);
         private int DspPageEqIndex => FindDspPageIndex(DspPageEq);
         private int DspPageCompressorIndex => FindDspPageIndex(DspPageCompressor);
-        private int DspPageCrossfeedIndex => FindDspPageIndex(DspPageCrossfeed);
         private int DspPageSrcIndex => FindDspPageIndex(DspPageSrc);
         private int DspPageMatrixIndex => FindDspPageIndex(DspPageMatrix);
         private int DspPageFieldIndex => FindDspPageIndex(DspPageStereoField);
@@ -45,13 +44,13 @@ namespace CelesteMusicPlayer
         private const int DspActiveEq = 5;
         private const int DspActiveOpra = 6;
         private const int DspActiveComp = 7;
-        // ⚠ 2026-09-30：Crossfeed 拆成独立页，导航由 13 项变 14 项，下面全部顺延一位
-        private const int DspActiveCrossfeed = 8;
-        private const int DspActiveChannel = 9;
-        private const int DspActiveField = 10;
-        private const int DspActiveMatrix = 11;
-        private const int DspActiveFir = 12;
-        private const int DspActiveSafety = 13;
+        // ⚠ 2026-10-01：Crossfeed 从独立页并回「声道工具」页，导航回到 13 项，下面整体前移一位。
+        // 开关控件（DspPowerXfeed / AudioFxChannelCrossfeedToggle）都还在，只是不再单独占一页。
+        private const int DspActiveChannel = 8;
+        private const int DspActiveField = 9;
+        private const int DspActiveMatrix = 10;
+        private const int DspActiveFir = 11;
+        private const int DspActiveSafety = 12;
 
         /// <summary>在导航表里查某个页面当前的下标；未构建 / 页面为空时返回 -1。</summary>
         private int FindDspPageIndex(StackPanel? page)
@@ -129,8 +128,7 @@ namespace CelesteMusicPlayer
             AddNavEntry("参数 EQ", "塑形", DspPageEq, null, null);
             AddNavEntry("耳机校正", "塑形", DspPageOpra, null, null);
             AddNavEntry("动态压缩器", "塑形", DspPageCompressor, null, null);
-            // Crossfeed 2026-09-30 从「声道工具」页拆出，排在声道组第一项
-            AddNavEntry("耳机 Crossfeed", "声道", DspPageCrossfeed, null, null);
+            // Crossfeed 2026-10-01 并回「声道工具」页（不再单列一项）
             AddNavEntry("声道工具", "声道", DspPageChannel, null, null);
             AddNavEntry("立体声场", "声道", DspPageStereoField, null, null);
             AddNavEntry("声道矩阵", "声道", DspPageMatrix, null, null);
@@ -326,6 +324,8 @@ namespace CelesteMusicPlayer
             if (idx == DspPageChannelIndex)
             {
                 UpdateDspChannelBars();
+                // Crossfeed 已并回本页：它的侧声道频响曲线同样折叠时没有布局尺寸，切进来补画
+                RedrawDspXfeedCanvas();
             }
 
             // EQ 页：只有本页可见时才跑 ~15fps 频谱定时器（曲线背景用），离开即停
@@ -348,12 +348,6 @@ namespace CelesteMusicPlayer
             if (idx == DspPageMatrixIndex)
             {
                 RedrawDspMatrixCanvas();
-            }
-
-            // 耳机 Crossfeed 页：频响曲线同理
-            if (idx == DspPageCrossfeedIndex)
-            {
-                RedrawDspXfeedCanvas();
             }
 
             // 立体声场页：M/S 圆环同理
@@ -441,17 +435,15 @@ namespace CelesteMusicPlayer
             bool comp = DspCompActive();
             bool field = DspFieldActive();
             bool matrix = DspMatrixActive();
-            // Crossfeed 是「声道平衡」模块的子能力：父开关（声道工具）关着时它根本不会下发到内核，
-            // 所以圆点必须两个都满足才亮 —— 与 ManagedDspSourceProvider.UpdateChannel 的
-            // 「state.Enabled 才下发 crossfeed」口径一致。
-            bool xfeed = AudioFxChannelToggle != null && AudioFxChannelToggle.IsOn
-                && AudioFxChannelCrossfeedToggle != null && AudioFxChannelCrossfeedToggle.IsOn
-                && (AudioFxChannelCrossfeedSlider?.Value ?? 0) > 0.1;
+            // Crossfeed 2026-10-01 并回「声道工具」页，不再单独亮圆点：
+            // 它本来就是「声道平衡」模块的子能力（父开关关着时根本不会下发到内核，
+            // 见 ManagedDspSourceProvider.UpdateChannel 的「state.Enabled 才下发 crossfeed」），
+            // 自己开 Crossfeed 时联动会把父开关一并打开，所以父开关状态就够代表了。
 
             return new[]
             {
                 !string.IsNullOrEmpty(_dspProfileActiveName), false, headroom, rg, srcHz > 0, eq, _opraApplied,
-                comp, xfeed, ch, field, matrix, fir, true
+                comp, ch, field, matrix, fir, true
             };
         }
 
@@ -502,13 +494,13 @@ namespace CelesteMusicPlayer
             {
                 DspBadgeProfiles, DspBadgeRack, null, null, null, null,
                 null, null, null, null,
-                null, null, null, DspBadgeSafety
+                null, null, DspBadgeSafety
             };
             TextBlock?[] texts =
             {
                 DspBadgeProfilesText, DspBadgeRackText, null, null, null, null,
                 null, null, null, null,
-                null, null, null, DspBadgeSafetyText
+                null, null, DspBadgeSafetyText
             };
 
             int safetyIndex = DspPageSafetyIndex;
@@ -663,22 +655,50 @@ namespace CelesteMusicPlayer
             double headroom = AudioFxSafetyHeadroomSlider?.Value ?? 0;
             DspChainHeadroomText.Text = FormatHelper.FormatAudioFxDb(headroom) + " dB";
 
-            // 顺序按信号链：余量 / RG / SRC / EQ / 耳机校正 / Crossfeed / 声道 / FIR
+            // 顺序按信号链：余量 / RG / SRC / EQ / 耳机校正 / 声道工具（含 Crossfeed）/ FIR
             // 下标用 DspActive* 具名常量显式对应 —— 曾经的 names[i] ↔ active[i] 在页面增删后会整体错位
-            string[] names = { "余量", "ReplayGain", "SRC", "EQ", "耳机校正", "Crossfeed", "声道工具", "FIR" };
-            int[] slots =
-            {
-                DspActiveHeadroom, DspActiveRg, DspActiveSrc, DspActiveEq,
-                DspActiveOpra, DspActiveCrossfeed, DspActiveChannel, DspActiveFir
-            };
             bool[] active = DspModuleActive();
             var on = new List<string>();
-            for (int i = 0; i < names.Length && i < slots.Length && slots[i] < active.Length; i++)
+            if (DspActiveHeadroom < active.Length && active[DspActiveHeadroom])
             {
-                if (active[slots[i]])
-                {
-                    on.Add(names[i]);
-                }
+                on.Add("余量");
+            }
+
+            if (DspActiveRg < active.Length && active[DspActiveRg])
+            {
+                on.Add("ReplayGain");
+            }
+
+            if (DspActiveSrc < active.Length && active[DspActiveSrc])
+            {
+                on.Add("SRC");
+            }
+
+            if (DspActiveEq < active.Length && active[DspActiveEq])
+            {
+                on.Add("EQ");
+            }
+
+            if (DspActiveOpra < active.Length && active[DspActiveOpra])
+            {
+                on.Add("耳机校正");
+            }
+
+            if (DspActiveChannel < active.Length && active[DspActiveChannel])
+            {
+                on.Add("声道工具");
+            }
+
+            // Crossfeed 2026-10-01 并回声道工具页后不再单独占一个下标，
+            // 这里按控件直读，好在链路条上仍然看得见它有没有真的在跑
+            if (AudioFxChannelCrossfeedToggle?.IsOn == true && (AudioFxChannelCrossfeedSlider?.Value ?? 0) > 0.1)
+            {
+                on.Add("Crossfeed");
+            }
+
+            if (DspActiveFir < active.Length && active[DspActiveFir])
+            {
+                on.Add("FIR");
             }
 
             DspChainProcessText.Text = bypass ? "全部旁路" : (on.Count == 0 ? "无（直通）" : string.Join(" → ", on));

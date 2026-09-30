@@ -217,7 +217,7 @@ namespace CelesteMusicPlayer
                     }
                 },
                 () => AudioFxChannelToggle != null && !AudioFxChannelToggle.IsOn
-                    ? "先打开「声道工具」的总开关"
+                    ? "先打开本页顶部的「声道工具」总开关"
                     : null);
 
             // ⑧ 声道工具 / ⑨ 立体声场 / ⑩ 声道矩阵：镜像页内模块开关
