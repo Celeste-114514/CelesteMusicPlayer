@@ -968,7 +968,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="波形进度条" />
-                                <TextBlock Opacity="0.6" FontSize="11" Text="用歌曲波形作为进度条(echo next 风格);关闭时使用默认进度条" />
+                                <TextBlock Opacity="0.6" FontSize="11" Text="用歌曲波形填充进度条；关闭时使用默认进度条" />
                             </StackPanel>
                             <ToggleSwitch
                                 x:Name="WaveformProgressSwitch"
@@ -1288,7 +1288,7 @@
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="DoP 容器摆位" />
-                                <TextBlock Text="仅 DSD 输出=DoP 直出时生效。24bit 紧凑=标记在每个采样第 3 字节（默认）；32bit 标准=标记在最高字节，FiiO 等原生认 DSD 的驱动的正统走法——如果你的 DAC 放 DSD 一卡一灯绿着，换这项。改动后下次开播生效。注意：WASAPI 独占下的 DSD 已走整轨预加载（缓存恒为 24bit 紧凑，不吃这一项）；本项只对 ASIO DoP 直出生效。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                                <TextBlock Text="仅 DSD 输出=DoP 直出时生效。24bit 紧凑=标记在每个采样第 3 字节（默认）；32bit 标准=FiiO 等原生 DSD 驱动的正统走法——如果你的 DAC 放 DSD 一卡一灯绿着，换这项。改动后下次开播生效（WASAPI 独占走整轨预加载，恒用 24bit 紧凑；本项只对 ASIO DoP 生效）。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                             <ComboBox x:Name="DopContainerCombo" Grid.Column="1" MinWidth="240" HorizontalAlignment="Stretch" SelectionChanged="DopContainerCombo_SelectionChanged" />
                         </Grid>

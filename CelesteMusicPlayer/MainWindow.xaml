@@ -3768,12 +3768,12 @@
                                                     FontSize="11"
                                                     Opacity="0.6"
                                                     TextWrapping="WrapWholeWords"
-                                                    Text="升频不会凭空补出音乐里没有的细节，它的作用是把数字滤波产生的失真推到人耳听不见的更高频段，让听感更接近原始模拟信号。所以升频后输出不再是 bit-perfect。" />
+                                                    Text="升频不能无中生有。它把滤波失真推到人耳听不见的高频，听感更干净；开了它输出就不再是 bit-perfect。" />
                                                 <TextBlock
                                                     FontSize="11"
                                                     Opacity="0.6"
                                                     TextWrapping="WrapWholeWords"
-                                                    Text="抖动（dither）是在降位深时加一层极轻微的噪声，换取更小的量化失真；位深没变时可以关掉。" />
+                                                    Text="抖动：降位深时加一层极轻的噪声，换更小的失真。位深没变就关掉。" />
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
@@ -4250,7 +4250,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="按耳机品牌型号套用目标曲线，折算成 EQ 段生效，数据源 Roon OPRA 库。" />
+                                                        Text="选耳机品牌型号，套用 OPRA 库的目标曲线（折算成 EQ 段）。" />
                                                 </StackPanel>
                                                 <Border
                                                     x:Name="DspBadgeOpra"
@@ -4285,7 +4285,7 @@
                                                         FontSize="11"
                                                         Opacity="0.65"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="从 OPRA 开源数据库搜索耳机型号（上千款 / 上万条曲线）并应用校正 EQ，无需登录。曲线经实测/仿真补偿到目标频响。" />
+                                                        Text="OPRA 开源库，上千款耳机 / 上万条曲线，搜到型号直接套，不用登录。" />
                                                 </StackPanel>
                                                 <Button
                                                     x:Name="OpenOpraButton"
@@ -4310,7 +4310,7 @@
                                                     FontSize="11"
                                                     Opacity="0.6"
                                                     TextWrapping="WrapWholeWords"
-                                                    Text="耳机校正按你选的品牌型号，从 Roon OPRA 库取一条目标曲线，再折算成 EQ 段写进「参数 EQ」。所以它和 EQ 是同一条链路：校正生效时 EQ 页会显示这条曲线，手动改 EQ 会覆盖校正结果。" />
+                                                    Text="校正和 EQ 是同一条链路：校正生效时 EQ 页显示的就是这条曲线，你手动改 EQ 会盖掉校正结果。" />
                                                 <TextBlock
                                                     FontSize="11"
                                                     Opacity="0.6"
@@ -4399,7 +4399,7 @@
                                                         FontSize="11"
                                                         Opacity="0.65"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="导入测量得到的脉冲响应 WAV（IR）做真卷积处理，用于房间声学校正 / 音箱耳机补偿，与参数 EQ 不同：它能还原真实脉冲响应。启用后输出非 bit-perfect。" />
+                                                        Text="导入测量得到的脉冲响应（IR），用真卷积做房间 / 音箱 / 耳机校正——不是 EQ 那种近似。开了输出非 bit-perfect。" />
                                                 </StackPanel>
                                                 <Button
                                                     x:Name="OpenRoomCorrectionButton"
@@ -5323,7 +5323,7 @@
                                                         VerticalAlignment="Center"
                                                         Text="0.0 dB" />
                                                 </Grid>
-                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="增益衰减量：压缩器这一刻压掉了多少 dB。指针经常顶到底说明压得太狠，可以抬高阈值或降低压缩比。" />
+                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="压缩器这一刻压掉了多少 dB。指针经常顶到底 = 压太狠，抬高阈值或降低压缩比。" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <Button Content="轻度（广播感）" Tag="gentle" Click="DspCompPreset_Click" />
                                                     <Button Content="中度（流行）" Tag="medium" Click="DspCompPreset_Click" />
@@ -5379,7 +5379,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="在「中间」与「两侧」两个维度上单独处理：调宽两侧，或单独放大中间的主唱人声。" />
+                                                        Text="「中间」和「两侧」分开调：拉宽两侧，或单挑中间的主唱人声。" />
                                                 </StackPanel>
                                                 <Border
                                                     x:Name="DspBadgeField"
@@ -5414,7 +5414,7 @@
                                                         <TextBlock x:Name="DspFieldWidthText" Grid.Column="1" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" Text="100%" />
                                                     </Grid>
                                                     <Slider x:Name="DspFieldWidthSlider" Minimum="0" Maximum="200" StepFrequency="1" Value="100" ValueChanged="DspFieldSlider_ValueChanged" />
-                                                    <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="100% = 原始录音不动；0% = 完全合并成单声道；200% = 两侧信息拉到最开。超过 130% 人声容易变薄，建议谨慎。" />
+                                                    <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="100% = 不动；0% = 合并成单声道；200% = 两侧拉到最开。超过 130% 人声容易变薄，慎用。" />
                                                 </StackPanel>
                                                 <StackPanel Spacing="4">
                                                     <Grid ColumnSpacing="8">
@@ -5438,7 +5438,7 @@
                                                     </Grid>
                                                     <Slider x:Name="DspFieldSideSlider" Minimum="-18" Maximum="18" StepFrequency="0.5" Value="0" ValueChanged="DspFieldSlider_ValueChanged" />
                                                 </StackPanel>
-                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="「中间」是左右完全一样的那部分（通常是主唱、贝斯），「两侧」是左右有差异的那部分（通常是混响、氛围声）。" />
+                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="「中间」是左右完全一样的那部分（通常是主唱、贝斯），「两侧」是左右有差异的那部分（混响、氛围声）。" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <Button Content="原始" Tag="flat" Click="DspFieldPreset_Click" />
                                                     <Button Content="略加宽" Tag="wide" Click="DspFieldPreset_Click" />
@@ -5494,7 +5494,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="用四个系数决定「左/右」分别往「左/右」输出多少，可自定义任意线性混合关系。" />
+                                                        Text="四个系数决定每个声道往左右输出各混多少。" />
                                                 </StackPanel>
                                                 <Border
                                                     x:Name="DspBadgeMatrix"
@@ -5573,7 +5573,7 @@
                                                         <Slider x:Name="DspMatrixRrSlider" Minimum="-2" Maximum="2" StepFrequency="0.05" Value="1" ValueChanged="DspMatrixSlider_ValueChanged" />
                                                     </StackPanel>
                                                 </Grid>
-                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="「左 → 右」的意思是：把左声道的内容，按这个系数混进右声道。四系数全取 1 就是左右各半的混合；系数超过 1 会抬高整体音量，注意留意后面的输出安全页。" />
+                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="「左 → 右」= 把左声道按这个系数混进右。全取 1 就是左右各半；超过 1 会抬高总音量，留意后面的输出安全页。" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <Button Content="直通 (单位矩阵)" Tag="identity" Click="DspMatrixPreset_Click" />
                                                     <Button Content="左右互换" Tag="swap" Click="DspMatrixPreset_Click" />
@@ -5653,7 +5653,7 @@
                                             CornerRadius="10"
                                             Padding="16">
                                             <StackPanel Spacing="10">
-                                                <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap" Text="选中一个模块后用「上移 / 下移」调整位置。改变顺序会轻微改变声音结果（模块串联不满足交换律），但不会破坏音质。" />
+                                                <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap" Text="选中模块，用「上移 / 下移」调顺序。先后顺序会轻微改变声音（先 A 后 B ≠ 先 B 后 A），但不影响音质。" />
                                                 <ListView
                                                     x:Name="DspRackList"
                                                     Height="300"
@@ -7551,7 +7551,7 @@
                             FontSize="12"
                             Opacity="0.6"
                             TextWrapping="WrapWholeWords"
-                            Text="切换渲染线程的实现：自研是 C# 线程（系统回收内存时可能把它冻一下，偶发卡顿）；ECHO 核心与原生内核把渲染搬进 C++ 原生线程（冻不到它），音频数据仍来自同一套链路。原生内核的 feeder 直接送整数字节给设备（不过 float），DSP 全关时端到端 bit-perfect。改动下一首歌生效。DSD 由整轨预加载播放，实测原生内核最佳；ECHO 内核不负责 DSD/DoP，用它播 DSD 时界面会提醒切换。" />
+                            Text="自研 = C# 线程，系统回收内存时可能被冻一下（偶发卡顿）。ECHO 核心 / 原生内核把渲染搬进 C++ 原生线程，冻不到，音频还是同一套链路。原生内核直接送整数字节给设备，DSP 全关时端到端 bit-perfect；DSD 实测它最稳。ECHO 内核不管 DSD/DoP，用它播 DSD 时界面会提醒你切。改动下一首歌生效。" />
                         <Grid ColumnSpacing="8" Margin="0,4,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
