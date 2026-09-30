@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -31,6 +31,7 @@ namespace CelesteMusicPlayer
         private double _dspHeadroomMemory = -3.0;
         private int _dspSrcMemoryIndex = 4;   // 96 kHz
         private int _dspRgMemoryIndex = 1;    // 单曲 (Track)
+        private double _dspXfeedMemory = 25.0; // 耳机 Crossfeed 的强度百分比
 
         private sealed class DspPowerEntry
         {
@@ -161,7 +162,7 @@ namespace CelesteMusicPlayer
                 },
                 () => _opraApplied ? null : "先应用一条校正曲线");
 
-            // ⑥ 动态压缩器 / ⑦ 声道工具 / ⑧ 立体声场 / ⑨ 声道矩阵：镜像页内模块开关
+            // ⑥ 动态压缩器：镜像页内模块开关
             AddPower(DspPowerComp, DspPowerCompHint,
                 () => DspCompToggle != null && DspCompToggle.IsOn,
                 on =>
@@ -172,6 +173,54 @@ namespace CelesteMusicPlayer
                     }
                 });
 
+            // ⑦ 耳机 Crossfeed：它是「声道平衡」模块的子能力 —— ManagedDspSourceProvider.UpdateChannel
+            //    只在 balance 总开关打开时才把 crossfeed 下发到内核。所以在电源开关上打开它时必须
+            //    连带把「声道工具」的总开关也打开，否则用户点了开关没有任何反应。
+            //    关掉时只关自己，不去动总开关（总开关还管着平衡/增益/延迟等一堆东西）。
+            AddPower(DspPowerXfeed, DspPowerXfeedHint,
+                () => AudioFxChannelToggle != null && AudioFxChannelToggle.IsOn
+                    && AudioFxChannelCrossfeedToggle != null && AudioFxChannelCrossfeedToggle.IsOn,
+                on =>
+                {
+                    if (AudioFxChannelCrossfeedToggle == null)
+                    {
+                        return;
+                    }
+
+                    Slider? level = AudioFxChannelCrossfeedSlider;
+
+                    if (on)
+                    {
+                        if (AudioFxChannelToggle != null && !AudioFxChannelToggle.IsOn)
+                        {
+                            AudioFxChannelToggle.IsOn = true;
+                        }
+
+                        // 强度为 0 时就算开了也不会有任何变化，拉回上次的档位（没记录就用 25%）
+                        if (level != null && level.Value < 0.1)
+                        {
+                            level.Value = Math.Clamp(
+                                _dspXfeedMemory > 0.1 ? _dspXfeedMemory : 25.0,
+                                level.Minimum, level.Maximum);
+                        }
+
+                        AudioFxChannelCrossfeedToggle.IsOn = true;
+                    }
+                    else
+                    {
+                        if (level != null && level.Value > 0.1)
+                        {
+                            _dspXfeedMemory = level.Value;
+                        }
+
+                        AudioFxChannelCrossfeedToggle.IsOn = false;
+                    }
+                },
+                () => AudioFxChannelToggle != null && !AudioFxChannelToggle.IsOn
+                    ? "先打开「声道工具」的总开关"
+                    : null);
+
+            // ⑧ 声道工具 / ⑨ 立体声场 / ⑩ 声道矩阵：镜像页内模块开关
             AddPower(DspPowerChannel, DspPowerChannelHint,
                 () => AudioFxChannelToggle != null && AudioFxChannelToggle.IsOn,
                 on =>
@@ -202,7 +251,7 @@ namespace CelesteMusicPlayer
                     }
                 });
 
-            // ⑩ FIR / 房间校正：开关 = 卷积启用且已导入 IR；没导 IR 时禁用
+            // ⑪ FIR / 房间校正：开关 = 卷积启用且已导入 IR；没导 IR 时禁用
             AddPower(DspPowerFir, DspPowerFirHint,
                 () =>
                 {

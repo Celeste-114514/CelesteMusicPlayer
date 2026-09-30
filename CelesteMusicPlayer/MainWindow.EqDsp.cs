@@ -1726,14 +1726,21 @@ namespace CelesteMusicPlayer
         private void AudioFxChannelCrossfeed_Toggled(object sender, RoutedEventArgs e)
         {
             if (!_audioFxLoading) ApplyDspToEngine();
+            // 独立页顶部的电源开关镜像这一个，一起同步
+            SyncDspPowerSwitches();
+            RedrawDspXfeedCurve();
         }
 
 
         private void AudioFxChannelCrossfeedSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
-            if (!_audioFxLoading) ApplyDspToEngine();
-            // 强度与截止频率共用这个 handler：顺手刷新右侧 Hz 读数
+            // 拖动曲线上的截止竖线期间不落盘：一次拖动会触发几百次本事件，
+            // 每次 ApplyDspToEngine 都要写一遍 DspExtraStore 并下发内核。松手时统一补一次。
+            if (!_audioFxLoading && !_dspXfeedSuppressPush) ApplyDspToEngine();
+            // 强度与截止频率共用这个 handler：顺手刷新右侧 Hz 读数和强度百分比
             RefreshCrossfeedCutoffReadout();
+            RefreshDspXfeedLevelReadout();
+            RedrawDspXfeedCurve();
         }
 
 

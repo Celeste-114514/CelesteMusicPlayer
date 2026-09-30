@@ -456,6 +456,9 @@ namespace CelesteMusicPlayer
                 AudioFxChannelLeftDelaySlider.Value = ch.LeftDelayMs;
                 AudioFxChannelRightDelaySlider.Value = ch.RightDelayMs;
                 AudioFxChannelCrossfeedToggle.IsOn = ch.CrossfeedEnabled;
+                // Crossfeed 已独立成页：强度和截止的两处读数要在加载时同步一次
+                RefreshDspXfeedLevelReadout();
+                RefreshCrossfeedCutoffReadout();
                 AudioFxChannelCrossfeedSlider.Value = ch.CrossfeedLevel;
                 // 老存档没有这个字段 → 反序列化得到默认 700，正好等于旧版写死值，行为不变
                 AudioFxChannelCrossfeedCutoffSlider.Value = ch.CrossfeedCutoffHz;
