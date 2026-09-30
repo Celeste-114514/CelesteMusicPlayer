@@ -3059,6 +3059,13 @@
                                     Height="32"
                                     Margin="10,0,0,0"
                                     Click="TagSortClassWallSwitchToGroupButton_Click" />
+                            <Button x:Name="TagSortGoBrowseButton"
+                                    Content="一屏浏览"
+                                    Padding="12,4"
+                                    Height="32"
+                                    Margin="6,0,0,0"
+                                    Click="TagSortGoBrowseButton_Click"
+                                    ToolTipService.ToolTip="左边分类框 + 右边常驻歌单，不用点进去再返回" />
                         </StackPanel>
 
                         <!-- 分类墙：一个分类一张封面卡片 -->
@@ -3359,6 +3366,201 @@
                                         </ListView>
                                     </Grid>
                                 </Grid>
+                            </Grid>
+                        </Grid>
+                    </Grid>
+
+                    <!-- 一屏浏览（重构阶段 1）：左分类框列 + 右常驻歌单，点框内一项右栏立刻跟着变 -->
+                    <Grid
+                        Grid.Row="1"
+                        x:Name="TagSortBrowseRoot"
+                        Visibility="Collapsed"
+                        RowSpacing="8">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                        </Grid.RowDefinitions>
+
+                        <!-- 顶栏：结果计数 + 清除筛选 —— 播放全部 —— 回旧版分类墙 -->
+                        <Grid Grid.Row="0">
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <TextBlock x:Name="TagSortBrowseCountText"
+                                           VerticalAlignment="Center"
+                                           FontSize="13"
+                                           Opacity="0.75"
+                                           Text="" />
+                                <Button x:Name="TagSortBrowseClearButton"
+                                        Content="清除筛选"
+                                        Height="30"
+                                        Padding="12,0"
+                                        Visibility="Collapsed"
+                                        Click="TagSortBrowseClearButton_Click" />
+                            </StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                <Button
+                                    x:Name="TagSortBrowsePlayAllButton"
+                                    Height="30"
+                                    Padding="12,0"
+                                    CornerRadius="15"
+                                    Click="TagSortBrowsePlayAllButton_Click"
+                                    ToolTipService.ToolTip="按当前列表顺序替换播放队列并从第一首播放">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE768;" FontSize="13" VerticalAlignment="Center" />
+                                        <TextBlock Text="播放当前列表" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+                                <Button x:Name="TagSortBrowseLegacyButton"
+                                        Content="旧版分类墙"
+                                        Height="30"
+                                        Padding="12,0"
+                                        Click="TagSortBrowseLegacyButton_Click"
+                                        ToolTipService.ToolTip="回到原来的封面卡片式分类墙（重构完成前保留）" />
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Grid.Row="1">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="210" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <!-- 左：分类框列（一个框 = 一个分类维度；框内行 = 文件夹） -->
+                            <ScrollViewer x:Name="TagSortFacetScroll"
+                                          VerticalScrollBarVisibility="Auto"
+                                          Padding="0,0,4,0">
+                                <ItemsControl x:Name="TagSortFacetPanel" Spacing="10">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="local:TagSortFacetBox">
+                                            <Border Padding="8,6"
+                                                    CornerRadius="8"
+                                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1">
+                                                <Grid RowSpacing="4">
+                                                    <Grid.RowDefinitions>
+                                                        <RowDefinition Height="Auto" />
+                                                        <RowDefinition Height="*" />
+                                                    </Grid.RowDefinitions>
+                                                    <!-- 框标题：分类名 + 取值数量 -->
+                                                    <Grid Grid.Row="0" ColumnSpacing="6">
+                                                        <Grid.ColumnDefinitions>
+                                                            <ColumnDefinition Width="Auto" />
+                                                            <ColumnDefinition Width="*" />
+                                                            <ColumnDefinition Width="Auto" />
+                                                        </Grid.ColumnDefinitions>
+                                                        <FontIcon Grid.Column="0"
+                                                                  Glyph="&#xE8B7;"
+                                                                  FontSize="13"
+                                                                  Opacity="0.75"
+                                                                  VerticalAlignment="Center" />
+                                                        <TextBlock Grid.Column="1"
+                                                                   Text="{x:Bind Label}"
+                                                                   FontSize="13"
+                                                                   FontWeight="SemiBold"
+                                                                   VerticalAlignment="Center"
+                                                                   TextTrimming="CharacterEllipsis" />
+                                                        <TextBlock Grid.Column="2"
+                                                                   Text="{x:Bind CountText}"
+                                                                   FontSize="11"
+                                                                   Opacity="0.6"
+                                                                   VerticalAlignment="Center" />
+                                                    </Grid>
+                                                    <!-- 框内：一行一个文件夹（取值 + 当前条件下的数量） -->
+                                                    <ListView
+                                                        Grid.Row="1"
+                                                        MaxHeight="300"
+                                                        ItemsSource="{x:Bind Entries}"
+                                                        SelectionMode="Single"
+                                                        IsItemClickEnabled="True"
+                                                        ItemClick="TagSortFacetItemClick"
+                                                        SelectionChanged="TagSortFacetList_SelectionChanged"
+                                                        Tag="{x:Bind Key}">
+                                                        <ListView.ItemContainerStyle>
+                                                            <Style TargetType="ListViewItem">
+                                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                                <Setter Property="Padding" Value="0" />
+                                                                <Setter Property="MinHeight" Value="26" />
+                                                                <Setter Property="CornerRadius" Value="4" />
+                                                                <Setter Property="Margin" Value="0,1" />
+                                                            </Style>
+                                                        </ListView.ItemContainerStyle>
+                                                        <ListView.ItemTemplate>
+                                                            <DataTemplate x:DataType="local:TagSortFacetEntry">
+                                                                <Grid ColumnSpacing="6" Padding="4,0,4,0">
+                                                                    <Grid.ColumnDefinitions>
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                        <ColumnDefinition Width="*" />
+                                                                        <ColumnDefinition Width="Auto" />
+                                                                    </Grid.ColumnDefinitions>
+                                                                    <FontIcon Grid.Column="0"
+                                                                              Glyph="&#xE8F4;"
+                                                                              FontSize="11"
+                                                                              Opacity="0.55"
+                                                                              VerticalAlignment="Center"
+                                                                              IsHitTestVisible="False" />
+                                                                    <TextBlock Grid.Column="1"
+                                                                               Text="{x:Bind Value}"
+                                                                               FontSize="13"
+                                                                               VerticalAlignment="Center"
+                                                                               TextTrimming="CharacterEllipsis"
+                                                                               ToolTipService.ToolTip="{x:Bind Value}" />
+                                                                    <TextBlock Grid.Column="2"
+                                                                               Text="{x:Bind CountText}"
+                                                                               FontSize="11"
+                                                                               Opacity="0.6"
+                                                                               VerticalAlignment="Center" />
+                                                                </Grid>
+                                                            </DataTemplate>
+                                                        </ListView.ItemTemplate>
+                                                    </ListView>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
+
+                            <!-- 右：常驻歌单（列头 + 动态列列表，与旧面板同款行为） -->
+                            <Grid Grid.Column="1" RowSpacing="2">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="28" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+                                <Grid x:Name="TagSortBrowseHeaderGrid" Background="Transparent" />
+                                <ListView
+                                    x:Name="TagSortBrowseSongList"
+                                    Grid.Row="1"
+                                    SelectionMode="Extended"
+                                    DoubleTapped="TagSortBrowseSongList_DoubleTapped"
+                                    RightTapped="TagSortBrowseSongList_RightTapped"
+                                    ContainerContentChanging="TagSortBrowseSongList_ContainerContentChanging"
+                                    SelectionChanged="TagSortBrowseSongList_SelectionChanged">
+                                    <ListView.ItemContainerStyle>
+                                        <Style TargetType="ListViewItem">
+                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                                            <Setter Property="Padding" Value="0" />
+                                            <Setter Property="MinHeight" Value="40" />
+                                            <Setter Property="CornerRadius" Value="8" />
+                                            <Setter Property="Margin" Value="0,2" />
+                                            <Setter Property="Background" Value="Transparent" />
+                                        </Style>
+                                    </ListView.ItemContainerStyle>
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="local:PlaylistItem">
+                                            <Border Tag="SongRowChrome" MinHeight="40" CornerRadius="8" Padding="0,0,12,0" Background="Transparent">
+                                                <Grid ColumnSpacing="12" />
+                                            </Border>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                <TextBlock x:Name="TagSortBrowseEmptyHint"
+                                           Grid.Row="1"
+                                           Visibility="Collapsed"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"
+                                           Opacity="0.6"
+                                           Text="换个分类试试，或者点「清除筛选」" />
                             </Grid>
                         </Grid>
                     </Grid>
