@@ -848,10 +848,12 @@ namespace CelesteMusicPlayer
             {
                 try
                 {
-                    double duration = _audioEngine.Duration.TotalSeconds;
-                    double next = _audioEngine.Position.TotalSeconds + seconds;
+                    // seconds 是"原歌曲时间"里跳多少（热键 ±5）：先还原成源时间，seek 前再换算回 WAV 时间
+                    double scale = TempoScale();
+                    double duration = _audioEngine.Duration.TotalSeconds * scale;
+                    double next = _audioEngine.Position.TotalSeconds * scale + seconds;
                     next = Math.Clamp(next, 0, duration > 0 ? duration : next);
-                    _audioEngine.Seek(TimeSpan.FromSeconds(next));
+                    _audioEngine.Seek(TimeSpan.FromSeconds(next / scale));
 
                     // seek 会丢弃无缝源里已预加载的下一首，重挂一次
                     if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)

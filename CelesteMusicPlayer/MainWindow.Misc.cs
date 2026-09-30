@@ -486,13 +486,9 @@ namespace CelesteMusicPlayer
 
             // EQ 页快捷状态条（EQ 状态 / bit-perfect / 预增益 / 余量 / 预设）初始同步
             UpdateAudioFxEqQuickStrip();
-        }
 
-
-        /// <summary>打开耳机校正（OPRA）独立窗口。</summary>
-        private void OpenOpraButton_Click(object sender, RoutedEventArgs e)
-        {
-            HeadphoneCorrectionWindow.OpenOrActivate();
+            // 顶部「设备 / 输出模式 / 会话格式」状态条初始同步
+            UpdateDspDeviceStatus();
         }
 
         /// <summary>打开房间校正（卷积 FIR）独立窗口。</summary>

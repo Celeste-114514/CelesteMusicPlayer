@@ -368,7 +368,8 @@ namespace CelesteMusicPlayer
             {
                 try
                 {
-                    _audioEngine.Seek(TimeSpan.FromSeconds(ProgressSlider.Value));
+                    // 进度条上是"原歌曲时间"，引擎吃的是（可能被 atempo 拉伸的）WAV 时间
+                    _audioEngine.Seek(TimeSpan.FromSeconds(ProgressSlider.Value / TempoScale()));
                     // seek 会丢弃无缝源里已预加载的下一首（位置已变，续接会错位）。
                     // 重挂下一首，避免 seek 后播到尾时因 _next 为空而无法无缝续接。
                     if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
@@ -658,6 +659,33 @@ namespace CelesteMusicPlayer
             StartupLog.Write("[托盘] " + (fav ? "已收藏 " : "已取消收藏 ") + path);
         }
 
+
+        /// <summary>迷你播放器等外部入口：按"原歌曲时间"跳转（自动处理变速倍率换算）。</summary>
+        internal void SeekSourceSeconds(double seconds)
+        {
+            if (_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
+            {
+                try
+                {
+                    // 进度条上是源时间，引擎吃 WAV 时间
+                    _audioEngine.Seek(TimeSpan.FromSeconds(seconds / TempoScale()));
+                    if (ProgressSlider != null)
+                    {
+                        ProgressSlider.Value = seconds;
+                    }
+
+                    if (CurrentTimeText != null)
+                    {
+                        CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(seconds));
+                    }
+                }
+                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+
+                return;
+            }
+
+            SeekPublic(TimeSpan.FromSeconds(seconds));
+        }
 
         internal void SeekPublic(TimeSpan position)
         {
@@ -1655,6 +1683,9 @@ namespace CelesteMusicPlayer
 
                 // 终端布局的左栏用的是同一批数据，这里顺带刷一次
                 UpdateTerminalInfo();
+
+                // DSP 面板顶部状态条（设备 / 模式 / 会话格式）跟着会话变化刷新
+                UpdateDspDeviceStatus();
             }
             catch
             {
@@ -2052,7 +2083,8 @@ namespace CelesteMusicPlayer
             bool handled = false;
             if (_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
             {
-                _audioEngine.Seek(target);
+                // 歌词时刻是"原歌曲时间"，换算回 WAV 时间再 seek
+                _audioEngine.Seek(TimeSpan.FromSeconds(target.TotalSeconds / TempoScale()));
                 handled = true;
             }
 
@@ -2514,19 +2546,21 @@ namespace CelesteMusicPlayer
 
             try
             {
+                double scale = TempoScale();
                 double duration = _audioEngine.Duration.TotalSeconds;
-                if (duration > 1 && startAt > duration - 0.5)
+                if (duration > 1 && startAt > duration * scale - 0.5)
                 {
-                    startAt = Math.Max(0, duration - 0.5);
+                    startAt = Math.Max(0, duration * scale - 0.5);
                 }
 
+                // target 是"原歌曲时间"（进度条/歌词/SMTC 口径），引擎 seek 要换算回 WAV 时间
                 var target = TimeSpan.FromSeconds(startAt);
-                _audioEngine.Seek(target);
+                _audioEngine.Seek(TimeSpan.FromSeconds(startAt / scale));
 
-                ProgressSlider.Maximum = Math.Max(1, duration);
+                ProgressSlider.Maximum = Math.Max(1, duration * scale);
                 ProgressSlider.Value = startAt;
                 CurrentTimeText.Text = FormatTime(target);
-                UpdateSmtcTimeline(target);
+                UpdateSmtcTimeline(target, TimeSpan.FromSeconds(duration * scale));
 
                 // 歌词直接跳到该位置对应的那句（别从第一句慢慢滚过去）
                 SyncLyricsToPosition(target, force: true, applyOffset: false);
@@ -2691,10 +2725,12 @@ namespace CelesteMusicPlayer
                     PlayPauseIcon.Glyph = "\uE769";
                 }
 
-                // 引擎桥接：时长 / 进度条 / 波形
-                ProgressSlider.Maximum = Math.Max(1, _audioEngine.Duration.TotalSeconds);
+                // 引擎桥接：时长 / 进度条 / 波形（变速时进度条按"原歌曲时间"：WAV 时长 × 倍率）
+                double tempoScale = TempoScale();
+                double totalWav = _audioEngine.Duration.TotalSeconds;
+                ProgressSlider.Maximum = Math.Max(1, totalWav * tempoScale);
                 ProgressSlider.Value = 0;
-                TotalTimeText.Text = FormatTime(_audioEngine.Duration);
+                TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(totalWav * tempoScale));
                 _audioEngine.PositionChanged -= EnginePositionChanged;
                 _audioEngine.PositionChanged += EnginePositionChanged;
                 UpdateWaveformTimerForPlaybackState(true);
@@ -2914,9 +2950,12 @@ namespace CelesteMusicPlayer
                     RecordPlaybackStatsOnStart(next);
                     if (_audioEngine != null)
                     {
-                        ProgressSlider.Maximum = Math.Max(1, _audioEngine.Duration.TotalSeconds);
+                        // 无缝切歌同样按"原歌曲时间"显示总时长（变速时 WAV 被拉伸过）
+                        double scale = TempoScale();
+                        double wavSeconds = _audioEngine.Duration.TotalSeconds;
+                        ProgressSlider.Maximum = Math.Max(1, wavSeconds * scale);
                         ProgressSlider.Value = 0;
-                        TotalTimeText.Text = FormatTime(_audioEngine.Duration);
+                        TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(wavSeconds * scale));
                     }
                     ConfigureEngineSmtc(next, playing: true);
                     AdvanceUserPlaylistIndexTo(next);

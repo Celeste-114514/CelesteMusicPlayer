@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -1252,6 +1252,10 @@ namespace CelesteMusicPlayer
         private void SyncAudioFxEqSimpleFromState(bool restoreFromStore = true)
         {
             // 简单模式各滑块值：默认从持久化恢复（避免重启后回到 0），重置时清空。
+            // 进出都保留调用方原有的 _audioFxLoading：本方法会被 LoadAudioFxUiFromStore 的
+            // "整段加载"包裹调用，直接置 false 会把外层守卫提前解除，导致后半段控件赋值
+            // 当场触发回写（半载状态写盘）。2026-09-30 听音方案重载面板时踩到，改为保存/恢复。
+            bool prevLoading = _audioFxLoading;
             _audioFxLoading = true;
             try
             {
@@ -1274,7 +1278,7 @@ namespace CelesteMusicPlayer
                 AudioFxEqSimpleAirSlider.Value = _eqSimpleAir;
                 AudioFxEqSimpleWarmSlider.Value = _eqSimpleWarm;
             }
-            finally { _audioFxLoading = false; }
+            finally { _audioFxLoading = prevLoading; }
         }
 
 
@@ -1833,6 +1837,9 @@ namespace CelesteMusicPlayer
             {
                 return;
             }
+
+            // 顶部设备/模式状态条：旁路态、"DSP 生效/直通" 徽章随本方法一起刷新
+            UpdateDspDeviceStatus();
 
             // 同步主界面常驻 bit-perfect 徽章（与音频设置面板口径一致）
             RefreshMainBitPerfectBadge();

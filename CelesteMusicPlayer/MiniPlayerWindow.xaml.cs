@@ -625,7 +625,7 @@ namespace CelesteMusicPlayer
             Safe(() =>
             {
                 double seconds = ProgressSlider.Value;
-                _owner.SeekPublic(TimeSpan.FromSeconds(seconds));
+                _owner.SeekSourceSeconds(seconds);
                 CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(seconds));
             });
         }

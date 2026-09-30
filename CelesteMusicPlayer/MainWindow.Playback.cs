@@ -49,9 +49,15 @@ namespace CelesteMusicPlayer
 
         internal bool IsEngineActiveNow => _audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused);
 
-        internal TimeSpan EnginePositionValue => _audioEngine?.Position ?? TimeSpan.Zero;
+        // 这俩给界面/历史/迷你播放器用，一律按"原歌曲时间"：引擎里是（可能被 atempo
+        // 拉伸过的）WAV 时间，乘倍率还原。要喂引擎 seek 的地方别用这俩。
+        internal TimeSpan EnginePositionValue => _audioEngine == null
+            ? TimeSpan.Zero
+            : TimeSpan.FromSeconds(_audioEngine.Position.TotalSeconds * TempoScale());
 
-        internal TimeSpan EngineDurationValue => _audioEngine?.Duration ?? TimeSpan.Zero;
+        internal TimeSpan EngineDurationValue => _audioEngine == null
+            ? TimeSpan.Zero
+            : TimeSpan.FromSeconds(_audioEngine.Duration.TotalSeconds * TempoScale());
 
         private static readonly string[] AudioExtensions =
         {
@@ -1374,7 +1380,8 @@ namespace CelesteMusicPlayer
             {
                 if (_audioEngine != null && (_audioEngine.IsPlaying || _isEnginePaused))
                 {
-                    return _audioEngine.Position.TotalSeconds;
+                    // 进度条按"原歌曲时间"走：引擎位置是（可能被 atempo 拉伸的）WAV 时间，乘倍率还原
+                    return _audioEngine.Position.TotalSeconds * TempoScale();
                 }
 
                 MediaPlayer? mp = GetPlayer();
@@ -1445,6 +1452,37 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>
+        /// 当前播放的"源时间刻度"倍率。atempo 变速后 WAV 时长 = 原时长 ÷ 倍率，
+        /// 而进度条一律按"原歌曲时间"显示：总时长 = WAV 时长 × 倍率，位置 = WAV 位置 × 倍率，
+        /// 反过来 seek 时引擎位置 = 界面位置 ÷ 倍率。
+        /// 未变速 / DSD / 非引擎播放恒为 1.0。
+        /// 2026-09-30 用户要求：变速不要把进度条总时长拉长（1min 的歌 0.5x 变 2min）。
+        /// </summary>
+        private double TempoScale()
+        {
+            try
+            {
+                if (!_usingEnginePlayback || _audioEngine == null)
+                {
+                    return 1.0;
+                }
+
+                if (_audioEngine.ChainFormat is not { TempoShifted: true })
+                {
+                    return 1.0;
+                }
+
+                double rate = Math.Clamp(AppSettingsStore.Load().PlaybackRate, 0.5, 2.0);
+                return Math.Abs(rate - 1.0) < 0.001 ? 1.0 : rate;
+            }
+            catch
+            {
+                return 1.0;
+            }
+        }
+
+
+        /// <summary>
         /// 设播放倍速：持久化 +（引擎在播 PCM 时）当前曲目以原位重起。
         /// 重起走的是正式播放入口（_playGate 串行），失败会留下错误提示；
         /// 倍率 = 1.0 时转码参数与从前逐字节一致，缓存键不变，不会触发重转码。
@@ -1499,7 +1537,10 @@ namespace CelesteMusicPlayer
                 _usingEnginePlayback = true;
                 if (resumeAt > TimeSpan.Zero)
                 {
-                    _audioEngine.Seek(resumeAt);
+                    // 旧倍率下的 WAV 位置 → 源位置 → 新倍率下的 WAV 位置
+                    double prevScale = Math.Abs(prev - 1.0) < 0.001 ? 1.0 : prev;
+                    double sourcePos = resumeAt.TotalSeconds * prevScale;
+                    _audioEngine.Seek(TimeSpan.FromSeconds(sourcePos / clamped));
                 }
 
                 if (wasPaused)
@@ -1508,10 +1549,14 @@ namespace CelesteMusicPlayer
                     _isEnginePaused = true;
                 }
 
-                // 进度条 / 总时长按变速后的真实时长重算（atempo 后 WAV 时长=原时长/倍率）
-                ProgressSlider.Maximum = Math.Max(1, _audioEngine.Duration.TotalSeconds);
-                ProgressSlider.Value = resumeAt.TotalSeconds;
-                TotalTimeText.Text = FormatTime(_audioEngine.Duration);
+                // 进度条 / 总时长保持"原歌曲时间"：0.5x 的 1min 歌曲总时长仍显示 1min
+                double totalWav = _audioEngine.Duration.TotalSeconds;
+                double shownPos = resumeAt > TimeSpan.Zero
+                    ? resumeAt.TotalSeconds * (Math.Abs(prev - 1.0) < 0.001 ? 1.0 : prev)
+                    : 0;
+                ProgressSlider.Maximum = Math.Max(1, totalWav * clamped);
+                ProgressSlider.Value = shownPos;
+                TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(totalWav * clamped));
                 NowPlayingText.Text = "正在播放（" + rateText + "）" + (wasPaused ? " · 已暂停" : "");
             }
             finally

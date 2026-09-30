@@ -145,7 +145,7 @@ namespace CelesteMusicPlayer
                 // 只能靠外部 200ms 的 Sync 强制推帧 → 实际只有 5fps，进度条一跳一跳地闪。
                 PositionProvider = () =>
                     _usingEnginePlayback && _audioEngine != null
-                        ? _audioEngine.Position
+                        ? TimeSpan.FromSeconds(_audioEngine.Position.TotalSeconds * TempoScale())
                         : (GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero)
             };
             _desktopLyricsWindow.ClosedByUser += OnDesktopLyricsClosedByUser;

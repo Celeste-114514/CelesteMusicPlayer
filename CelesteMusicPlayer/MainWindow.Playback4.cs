@@ -122,15 +122,17 @@ namespace CelesteMusicPlayer
                     UpdateSmtcTimeline(position);
                 }
 
-                // 时长变化时同步进度条上限
-                double duration = _audioEngine?.Duration.TotalSeconds ?? 0;
+                // 时长变化时同步进度条上限（变速播放按"原歌曲时间"显示：WAV 时长 × 倍率）
+                double scale = TempoScale();
+                double duration = (_audioEngine?.Duration.TotalSeconds ?? 0) * scale;
                 if (duration > 1 && Math.Abs(ProgressSlider.Maximum - duration) > 1)
                 {
                     ProgressSlider.Maximum = duration;
-                    TotalTimeText.Text = FormatTime(_audioEngine!.Duration);
+                    TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(duration));
                 }
 
-                double seconds = position.TotalSeconds;
+                // 界面/歌词/SMTC/迷你播放器全部消费"源时间"：引擎位置 × 倍率
+                double seconds = position.TotalSeconds * scale;
                 if (seconds >= 0
                     && seconds <= ProgressSlider.Maximum
                     && Math.Abs(ProgressSlider.Value - seconds) >= 0.05)
@@ -146,20 +148,22 @@ namespace CelesteMusicPlayer
                     }
                 }
 
-                string timeText = FormatTime(position);
+                string timeText = FormatTime(TimeSpan.FromSeconds(seconds));
                 if (CurrentTimeText != null
                     && !string.Equals(CurrentTimeText.Text, timeText, StringComparison.Ordinal))
                 {
                     CurrentTimeText.Text = timeText;
                 }
 
-                _desktopLyricsWindow?.Sync(position);
-                _miniPlayerWindow?.SyncPosition(position, _audioEngine?.Duration ?? TimeSpan.Zero);
-                _taskbarProgress?.SetProgress(position.TotalSeconds, ProgressSlider.Maximum, paused: false);
+                TimeSpan sourcePos = TimeSpan.FromSeconds(seconds);
+                TimeSpan sourceDuration = TimeSpan.FromSeconds(duration);
+                _desktopLyricsWindow?.Sync(sourcePos);
+                _miniPlayerWindow?.SyncPosition(sourcePos, sourceDuration);
+                _taskbarProgress?.SetProgress(seconds, ProgressSlider.Maximum, paused: false);
 
                 // 引擎（HiFi 独占/ASIO）路径也要推进当前歌词行与滚动，
                 // 否则歌词不随播放滚动（普通 MediaPlayer 路径由 PositionTimer_Tick 调用）。
-                SyncLyricsToPosition(position);
+                SyncLyricsToPosition(sourcePos);
 
                 // ★ 定期把进度写盘：PositionTimer_Tick 在 _usingEnginePlayback 时会直接早退，
                 // 而所有播放都走引擎 → 进度从来没被保存过，下次启动只能从头开始。

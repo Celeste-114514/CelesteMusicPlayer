@@ -712,8 +712,9 @@ namespace CelesteMusicPlayer
         }
 
         private TimeSpan TerminalCurrentPosition()
+            // 终端页显示"原歌曲时间"：变速时引擎位置（WAV 时间）乘倍率还原
             => _usingEnginePlayback && _audioEngine != null
-                ? _audioEngine.Position
+                ? TimeSpan.FromSeconds(_audioEngine.Position.TotalSeconds * TempoScale())
                 : (GetPlayer()?.PlaybackSession.Position ?? TimeSpan.Zero);
 
         private TimeSpan TerminalCurrentDuration()

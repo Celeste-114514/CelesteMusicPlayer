@@ -483,8 +483,10 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 渲染链路全景：SRC（固定）→ 8 个内核模块（可调）→ 耳机校正（固定，随 EQ）→
-        /// 输出安全（固定，末端）。状态文字/颜色按此刻各模块真实生效情况生成。
+        /// 渲染链路全景：只列 8 个可排序的内核模块（草稿顺序）。
+        /// SRC / 耳机校正 / 输出安全是链路结构决定的上下游，不在机架里、不参与排序——
+        /// 它们各自在「采样率」「耳机校正」「输出安全」页面上呈现。
+        /// 状态文字/颜色按此刻各模块真实生效情况生成。
         /// </summary>
         private void RenderDspRackList()
         {
@@ -496,14 +498,7 @@ namespace CelesteMusicPlayer
             bool bypassed = DspRackGlobalBypassed;
             List<DspRackRow> rows = new();
 
-            // ① SRC 升频：机架外上游，固定
-            rows.Add(MakeFixedRow(
-                "SRC / 升频",
-                "重采样目标采样率，位于机架最上游，先于所有机架模块。",
-                SrcRowActive() ? DspRackState.On : DspRackState.Off,
-                SrcRowActive() ? "生效中" : "未启用"));
-
-            // ② 8 个内核模块：当前草稿顺序
+            // 8 个内核模块：当前草稿顺序（可上下移）
             for (int i = 0; i < _dspRackOrderDraft.Length && i < RackModuleNames.Length; i++)
             {
                 int id = _dspRackOrderDraft[i];
@@ -527,21 +522,6 @@ namespace CelesteMusicPlayer
                 });
             }
 
-            // ③ 耳机校正：曲线写入参数 EQ，随 EQ 生效（固定）
-            rows.Add(MakeFixedRow(
-                "耳机校正",
-                "校正曲线写入参数 EQ 的频点，随 EQ 一同生效；在「参数 EQ」页可继续微调。",
-                _opraApplied ? DspRackState.On : DspRackState.Off,
-                _opraApplied ? "生效中" : "未应用"));
-
-            // ④ 输出安全：输入余量 + 限幅，固定在链路末端
-            bool safetyActive = AudioFxSafetyHeadroomSlider != null && Math.Abs(AudioFxSafetyHeadroomSlider.Value) > 0.01;
-            rows.Add(MakeFixedRow(
-                "输出安全",
-                "输入余量与限幅，固定在链路最末端（机架之后）；机架顺序对它无影响。",
-                safetyActive ? DspRackState.On : DspRackState.Off,
-                safetyActive ? "生效中" : "待命"));
-
             _dspRackRows = rows;
 
             int restore = DspRackList.SelectedIndex;
@@ -553,31 +533,6 @@ namespace CelesteMusicPlayer
             }
 
             ShowDspRackHint();
-        }
-
-        private DspRackRow MakeFixedRow(string name, string hint, DspRackState state, string stateText)
-        {
-            return new DspRackRow
-            {
-                SlotLabel = "固定",
-                Name = name,
-                Hint = hint,
-                StateText = stateText,
-                StateBrush = DspRackStateBrush(state),
-                Movable = false,
-                ModuleId = -1
-            };
-        }
-
-        /// <summary>SRC 固定行是否生效（目标采样率已设且非 0；口径同导航圆点）。</summary>
-        private bool SrcRowActive()
-        {
-            if (SrcRateCombo == null || SrcRateCombo.SelectedIndex < 0 || SrcRateCombo.SelectedIndex >= SrcRateOptions.Length)
-            {
-                return false;
-            }
-
-            return SrcRateOptions[SrcRateCombo.SelectedIndex].Hz > 0;
         }
 
         /// <summary>机架 8 模块此刻是否真正参与处理（供行状态；全局旁路由调用方叠加 Bypassed）。</summary>
@@ -667,7 +622,7 @@ namespace CelesteMusicPlayer
             ShowDspRackHint();
         }
 
-        /// <summary>上移/下移只在选中「可调顺序」行时可用；固定行禁用。</summary>
+        /// <summary>上移/下移只在选中可调序行时可用（机架 8 行全部可调）。</summary>
         private void UpdateDspRackMoveButtons()
         {
             if (DspRackUpButton == null || DspRackDownButton == null)
@@ -692,7 +647,7 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>把选中模块上下移动一格（delta=-1 上移 / +1 下移），立即下发内核。
-        /// 固定行（SRC / 耳机校正 / 输出安全）不做任何事。</summary>
+        /// 机架里只有 8 个可排序模块，没有固定行。</summary>
         private void MoveDspRackEntry(int delta)
         {
             if (DspRackList == null || _dspRackOrderDraft == null)
@@ -701,13 +656,13 @@ namespace CelesteMusicPlayer
             }
 
             int i = DspRackList.SelectedIndex;
-            // 行下标 0 是 SRC 固定行；内核 8 模块占 1..8
-            if (i < 1 || i > _dspRackOrderDraft.Length)
+            // 行下标即机架下标：0..7 一一对应 8 个内核模块
+            if (i < 0 || i >= _dspRackOrderDraft.Length)
             {
                 return;
             }
 
-            int rackIndex = i - 1;
+            int rackIndex = i;
             int j = rackIndex + delta;
             if (rackIndex < 0 || rackIndex >= _dspRackOrderDraft.Length || j < 0 || j >= _dspRackOrderDraft.Length)
             {
@@ -817,8 +772,8 @@ namespace CelesteMusicPlayer
     }
 
     /// <summary>
-    /// 机架编排页的一行（链路全景）：8 个内核模块（Movable，可上下移）+ 3 个固定环节
-    /// （SRC 上游 / 耳机校正随 EQ / 输出安全末端，位置由链路结构决定）。
+    /// 机架编排页的一行（链路全景）：8 个内核模块按机架顺序排列，全部可上下移。
+    /// SRC / 耳机校正 / 输出安全是链路结构决定的上下游，不占机架槽位。
     /// 状态色在生成行时按当前皮肤算好（极客=磷光，经典=主题 accent），
     /// 皮肤切换时整表重建即可换色（ApplyGeekDsp 收尾调用）。
     /// 顶层类而非 MainWindow 嵌套类——XAML x:Bind 的 x:DataType 只可靠解析顶层类型，
@@ -832,12 +787,10 @@ namespace CelesteMusicPlayer
         public required string StateText { get; init; }
         public required Brush StateBrush { get; init; }
 
-        /// <summary>true = 可上下移（内核机架 8 槽之一）；false = 固定位置只读行。</summary>
+        /// <summary>true = 可上下移（机架 8 行全部可调；保留字段兜底防御）。</summary>
         public bool Movable { get; init; }
 
-        /// <summary>内核模块 ID；固定行为 -1。</summary>
+        /// <summary>内核模块 ID。</summary>
         public int ModuleId { get; init; } = -1;
-
-        public Visibility FixedBadgeVisibility => Movable ? Visibility.Collapsed : Visibility.Visible;
     }
 }

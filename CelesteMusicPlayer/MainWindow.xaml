@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Window
     x:Class="CelesteMusicPlayer.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -3424,6 +3424,48 @@
                                 <RowDefinition Height="*" />
                             </Grid.RowDefinitions>
                             <StackPanel Grid.Row="0" Spacing="10" Margin="0,0,0,12">
+                                <!-- 顶部状态条：正在使用的设备 + 输出模式 + 会话格式/状态（MainWindow.DspStatus.cs 刷新） -->
+                                <Border
+                                    x:Name="DspDeviceStatusBar"
+                                    Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                    BorderThickness="1"
+                                    CornerRadius="8"
+                                    Padding="12,8">
+                                    <Grid ColumnSpacing="10">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <FontIcon
+                                            Grid.Column="0"
+                                            Glyph="&#xE7F6;"
+                                            FontSize="16"
+                                            VerticalAlignment="Center"
+                                            Opacity="0.7" />
+                                        <StackPanel Grid.Column="1" Spacing="2">
+                                            <TextBlock
+                                                x:Name="DspDeviceNameText"
+                                                FontSize="13"
+                                                FontWeight="SemiBold"
+                                                Text="正在使用：—" />
+                                            <TextBlock
+                                                x:Name="DspOutputModeText"
+                                                FontSize="11"
+                                                Opacity="0.7"
+                                                Text="输出模式：—" />
+                                        </StackPanel>
+                                        <TextBlock
+                                            x:Name="DspSessionFormatText"
+                                            Grid.Column="2"
+                                            VerticalAlignment="Center"
+                                            FontSize="11"
+                                            Opacity="0.7"
+                                            TextAlignment="Right"
+                                            Text="未在播放" />
+                                    </Grid>
+                                </Border>
                                 <TextBlock
                                     x:Name="DspBypassStatusText"
                                     FontSize="11"
@@ -3466,6 +3508,202 @@
                                 HorizontalScrollBarVisibility="Disabled"
                                 Padding="0,0,12,0">
                                 <Grid>
+                                    <!-- ===== 听音方案：整套 DSP 设置的命名快照，保存 / 切换（2026-09-30） ===== -->
+                                    <StackPanel
+                                        x:Name="DspPageProfiles"
+                                        Spacing="12"
+                                        MaxWidth="880"
+                                        HorizontalAlignment="Left"
+                                        Visibility="Collapsed">
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="14,12">
+                                            <Grid ColumnSpacing="12">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Border
+                                                    Grid.Column="0"
+                                                    Width="38"
+                                                    Height="38"
+                                                    CornerRadius="19"
+                                                    VerticalAlignment="Center"
+                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    <TextBlock
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        FontSize="16"
+                                                        Foreground="{ThemeResource AccentFillColorDefaultBrush}"
+                                                        Text="◎" />
+                                                </Border>
+                                                <StackPanel
+                                                    Grid.Column="1"
+                                                    Spacing="1"
+                                                    VerticalAlignment="Center">
+                                                    <TextBlock
+                                                        FontSize="15"
+                                                        FontWeight="SemiBold"
+                                                        Text="听音方案" />
+                                                    <TextBlock
+                                                        FontSize="12"
+                                                        Opacity="0.62"
+                                                        TextWrapping="WrapWholeWords"
+                                                        Text="把当前整条 DSP 链路存成一份命名方案，之后一键切回来，不用再逐个模块重调。" />
+                                                </StackPanel>
+                                                <Border
+                                                    x:Name="DspBadgeProfiles"
+                                                    Grid.Column="2"
+                                                    Padding="10,3"
+                                                    VerticalAlignment="Center"
+                                                    CornerRadius="10"
+                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    <TextBlock
+                                                        x:Name="DspBadgeProfilesText"
+                                                        FontSize="12"
+                                                        FontWeight="SemiBold"
+                                                        Text="—" />
+                                                </Border>
+                                            </Grid>
+                                        </Border>
+                                        <TextBlock
+                                            x:Name="DspProfileStatusText"
+                                            FontSize="11"
+                                            Opacity="0.65"
+                                            TextWrapping="WrapWholeWords"
+                                            Text="当前：手动设置（未套用任何方案）" />
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="10">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock
+                                                        FontSize="15"
+                                                        FontWeight="SemiBold"
+                                                        Text="存成新方案" />
+                                                    <TextBlock
+                                                        FontSize="12"
+                                                        Opacity="0.6"
+                                                        TextWrapping="WrapWholeWords"
+                                                        Text="一份方案 = 机架顺序 + EQ 曲线（含耳机校正）+ 压缩器 / 立体声场 / 声道矩阵 + 声道工具与输出安全 + ReplayGain + 房间校正 + 升频三件套。" />
+                                                </StackPanel>
+                                                <Grid ColumnSpacing="8">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBox
+                                                        x:Name="DspProfileNameBox"
+                                                        Grid.Column="0"
+                                                        MaxLength="40"
+                                                        VerticalContentAlignment="Center"
+                                                        PlaceholderText="给这套设置起个名字，比如：夜间耳机、客厅音箱" />
+                                                    <Button
+                                                        x:Name="DspProfileSaveButton"
+                                                        Grid.Column="1"
+                                                        Content="保存为方案"
+                                                        Style="{StaticResource AccentButtonStyle}"
+                                                        Click="DspProfileSave_Click" />
+                                                </Grid>
+                                                <TextBlock
+                                                    x:Name="DspProfileSaveHintText"
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    TextWrapping="WrapWholeWords"
+                                                    Text="名字留空会自动叫「方案 1」「方案 2」；与已有方案重名即覆盖更新那一份。" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="10">
+                                                <TextBlock
+                                                    FontSize="15"
+                                                    FontWeight="SemiBold"
+                                                    Text="我的方案" />
+                                                <ListView
+                                                    x:Name="DspProfileList"
+                                                    Height="260"
+                                                    SelectionMode="Single"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="6"
+                                                    SelectionChanged="DspProfileList_SelectionChanged" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button
+                                                        x:Name="DspProfileApplyButton"
+                                                        Content="应用方案"
+                                                        IsEnabled="False"
+                                                        Style="{StaticResource AccentButtonStyle}"
+                                                        Click="DspProfileApply_Click" />
+                                                    <Button
+                                                        x:Name="DspProfileUpdateButton"
+                                                        Content="更新为当前设置"
+                                                        IsEnabled="False"
+                                                        Click="DspProfileUpdate_Click" />
+                                                    <Button
+                                                        x:Name="DspProfileDeleteButton"
+                                                        Content="删除方案"
+                                                        IsEnabled="False"
+                                                        Click="DspProfileDelete_Click" />
+                                                </StackPanel>
+                                                <TextBlock
+                                                    x:Name="DspProfileHintText"
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    TextWrapping="WrapWholeWords"
+                                                    Text="还没有方案。" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="6">
+                                                <TextBlock
+                                                    FontSize="13"
+                                                    FontWeight="SemiBold"
+                                                    Text="怎么用 / 边界" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Opacity="0.62"
+                                                    TextWrapping="WrapWholeWords"
+                                                    Text="· 应用方案 = 把快照写回各项设置，和手动逐个模块改走同一条下发链路，正在播放时立即生效。" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Opacity="0.62"
+                                                    TextWrapping="WrapWholeWords"
+                                                    Text="· 应用之后又改了任一模块，当前设置就不再属于那份方案，徽章会变回「手动设置」；想留住改动就选中它点「更新为当前设置」。" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Opacity="0.62"
+                                                    TextWrapping="WrapWholeWords"
+                                                    Text="· 升频目标采样率会改变输出格式，和手动改一样要下一首（下次开播）才生效。" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Opacity="0.62"
+                                                    TextWrapping="WrapWholeWords"
+                                                    Text="· 方案不含输出设备与输出模式（那是「按设备记忆 DSP」管的事）；方案上限 50 份，超出时最旧的会被挤掉。" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Opacity="0.62"
+                                                    TextWrapping="WrapWholeWords"
+                                                    Text="· 方案只存在 dsp-profiles.json 里，删掉该文件即全部清空，各模块当前设置不受影响。" />
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
                                     <StackPanel
                                         x:Name="DspPageHeadroom"
                                         Spacing="12"
@@ -3513,19 +3751,26 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="全局预衰减，给后面的 EQ / 卷积留出空间，防止叠加之后削波爆音。" />
                                                 </StackPanel>
-                                                <Border
-                                                    x:Name="DspBadgeHeadroom"
+                                                <StackPanel
                                                     Grid.Column="2"
-                                                    Padding="10,3"
-                                                    VerticalAlignment="Center"
-                                                    CornerRadius="10"
-                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
                                                     <TextBlock
-                                                        x:Name="DspBadgeHeadroomText"
-                                                        FontSize="12"
+                                                        x:Name="DspPowerHeadroomHint"
+                                                        Text="已旁路"
+                                                        FontSize="11"
                                                         FontWeight="SemiBold"
-                                                        Text="—" />
-                                                </Border>
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                        Visibility="Collapsed" />
+                                                    <ToggleSwitch
+                                                        x:Name="DspPowerHeadroom"
+                                                        OnContent=""
+                                                        OffContent=""
+                                                        VerticalAlignment="Center"
+                                                        Toggled="DspPowerSwitch_Toggled" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                         <Border
@@ -3647,19 +3892,26 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="把音频重采样到更高采样率，只升不降；仅 WASAPI 独占模式生效。" />
                                                 </StackPanel>
-                                                <Border
-                                                    x:Name="DspBadgeSrc"
+                                                <StackPanel
                                                     Grid.Column="2"
-                                                    Padding="10,3"
-                                                    VerticalAlignment="Center"
-                                                    CornerRadius="10"
-                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
                                                     <TextBlock
-                                                        x:Name="DspBadgeSrcText"
-                                                        FontSize="12"
+                                                        x:Name="DspPowerSrcHint"
+                                                        Text="已旁路"
+                                                        FontSize="11"
                                                         FontWeight="SemiBold"
-                                                        Text="—" />
-                                                </Border>
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                        Visibility="Collapsed" />
+                                                    <ToggleSwitch
+                                                        x:Name="DspPowerSrc"
+                                                        OnContent=""
+                                                        OffContent=""
+                                                        VerticalAlignment="Center"
+                                                        Toggled="DspPowerSwitch_Toggled" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                         <Border
@@ -3824,19 +4076,26 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="每段单独调频率 / 增益 / Q 与滤波类型，六种滤波器可选，另有简单模式四滑杆。" />
                                                 </StackPanel>
-                                                <Border
-                                                    x:Name="DspBadgeEq"
+                                                <StackPanel
                                                     Grid.Column="2"
-                                                    Padding="10,3"
-                                                    VerticalAlignment="Center"
-                                                    CornerRadius="10"
-                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
                                                     <TextBlock
-                                                        x:Name="DspBadgeEqText"
-                                                        FontSize="12"
+                                                        x:Name="DspPowerEqHint"
+                                                        Text="已旁路"
+                                                        FontSize="11"
                                                         FontWeight="SemiBold"
-                                                        Text="—" />
-                                                </Border>
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                        Visibility="Collapsed" />
+                                                    <ToggleSwitch
+                                                        x:Name="DspPowerEq"
+                                                        OnContent=""
+                                                        OffContent=""
+                                                        VerticalAlignment="Center"
+                                                        Toggled="DspPowerSwitch_Toggled" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                         <Border
@@ -4252,49 +4511,142 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="选耳机品牌型号，套用 OPRA 库的目标曲线（折算成 EQ 段）。" />
                                                 </StackPanel>
-                                                <Border
-                                                    x:Name="DspBadgeOpra"
+                                                <StackPanel
                                                     Grid.Column="2"
-                                                    Padding="10,3"
-                                                    VerticalAlignment="Center"
-                                                    CornerRadius="10"
-                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
                                                     <TextBlock
-                                                        x:Name="DspBadgeOpraText"
-                                                        FontSize="12"
+                                                        x:Name="DspPowerOpraHint"
+                                                        Text="已旁路"
+                                                        FontSize="11"
                                                         FontWeight="SemiBold"
-                                                        Text="—" />
-                                                </Border>
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                        Visibility="Collapsed" />
+                                                    <ToggleSwitch
+                                                        x:Name="DspPowerOpra"
+                                                        OnContent=""
+                                                        OffContent=""
+                                                        VerticalAlignment="Center"
+                                                        Toggled="DspPowerSwitch_Toggled" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
+                                        <!-- 搜索行：品牌 / 型号关键词（2026-09-30 由独立窗口内嵌，流程不变） -->
                                         <Border
                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                             BorderThickness="1"
                                             CornerRadius="8"
                                             Padding="12,8">
-                                            <Grid ColumnSpacing="12">
+                                            <Grid ColumnSpacing="10">
                                                 <Grid.ColumnDefinitions>
                                                     <ColumnDefinition Width="*" />
                                                     <ColumnDefinition Width="Auto" />
                                                 </Grid.ColumnDefinitions>
-                                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                                    <TextBlock Text="🎧 耳机校正（OPRA）" FontWeight="SemiBold" />
-                                                    <TextBlock
-                                                        x:Name="OpraStatusText"
-                                                        FontSize="11"
-                                                        Opacity="0.65"
-                                                        TextWrapping="WrapWholeWords"
-                                                        Text="OPRA 开源库，上千款耳机 / 上万条曲线，搜到型号直接套，不用登录。" />
-                                                </StackPanel>
+                                                <TextBox
+                                                    x:Name="OpraSearchBox"
+                                                    PlaceholderText="输入耳机品牌 / 型号，如 Sennheiser HD 600、Sony WH-1000XM5…"
+                                                    VerticalContentAlignment="Center"
+                                                    KeyDown="OpraSearchBox_KeyDown" />
                                                 <Button
-                                                    x:Name="OpenOpraButton"
+                                                    x:Name="OpraSearchButton"
                                                     Grid.Column="1"
-                                                    Content="打开耳机校正"
-                                                    VerticalAlignment="Center"
-                                                    Click="OpenOpraButton_Click" />
+                                                    Content="搜索"
+                                                    Style="{StaticResource AccentButtonStyle}"
+                                                    Click="OpraSearchButton_Click" />
                                             </Grid>
                                         </Border>
+                                        <TextBlock
+                                            x:Name="OpraStatusText"
+                                            FontSize="11"
+                                            Opacity="0.65"
+                                            TextWrapping="WrapWholeWords"
+                                            Text="进入本页自动加载 OPRA 数据库（联网查询，离线时用上次缓存）。" />
+                                        <TextBlock
+                                            x:Name="OpraSearchStatusText"
+                                            FontSize="11"
+                                            Opacity="0.6"
+                                            TextWrapping="WrapWholeWords" />
+                                        <!-- 主体：左搜索结果 / 右曲线详情 -->
+                                        <Grid ColumnSpacing="14">
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="5*" />
+                                                <ColumnDefinition Width="6*" />
+                                            </Grid.ColumnDefinitions>
+                                            <ListView
+                                                x:Name="OpraResultList"
+                                                SelectionMode="Single"
+                                                IsItemClickEnabled="True"
+                                                MaxHeight="340"
+                                                ItemClick="OpraResultList_ItemClick">
+                                                <ListView.ItemTemplate>
+                                                    <DataTemplate x:DataType="local:OpraSearchResult">
+                                                        <Grid Padding="2,8" ColumnSpacing="10">
+                                                            <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="*" />
+                                                                <ColumnDefinition Width="Auto" />
+                                                            </Grid.ColumnDefinitions>
+                                                            <StackPanel Spacing="1">
+                                                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Text="{x:Bind VendorName}" FontSize="12" Opacity="0.65" TextTrimming="CharacterEllipsis" />
+                                                            </StackPanel>
+                                                            <TextBlock Grid.Column="1" Text="{x:Bind EqCount}" FontSize="11" Opacity="0.55" VerticalAlignment="Center" />
+                                                        </Grid>
+                                                    </DataTemplate>
+                                                </ListView.ItemTemplate>
+                                            </ListView>
+                                            <StackPanel
+                                                Grid.Column="1"
+                                                Spacing="8">
+                                                <TextBlock
+                                                    x:Name="OpraDetailTitle"
+                                                    FontSize="16"
+                                                    FontWeight="SemiBold"
+                                                    TextWrapping="WrapWholeWords" />
+                                                <TextBlock
+                                                    x:Name="OpraDetailSubTitle"
+                                                    FontSize="12"
+                                                    Opacity="0.65"
+                                                    TextWrapping="WrapWholeWords" />
+                                                <TextBlock Text="选择校正曲线" FontSize="13" FontWeight="SemiBold" />
+                                                <ListView
+                                                    x:Name="OpraEqList"
+                                                    MaxHeight="200"
+                                                    SelectionMode="Single"
+                                                    IsItemClickEnabled="True"
+                                                    ItemClick="OpraEqList_ItemClick">
+                                                    <ListView.ItemTemplate>
+                                                        <DataTemplate x:DataType="local:OpraProductEqSummary">
+                                                            <Grid Padding="2,6">
+                                                                <StackPanel Spacing="1">
+                                                                    <TextBlock Text="{x:Bind Author}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock Text="{x:Bind EqCountLabel}" FontSize="11" Opacity="0.6" />
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ListView.ItemTemplate>
+                                                </ListView>
+                                                <TextBlock
+                                                    x:Name="OpraEqDetailText"
+                                                    FontSize="12"
+                                                    Opacity="0.7"
+                                                    TextWrapping="WrapWholeWords" />
+                                                <TextBlock
+                                                    x:Name="OpraEqStatusText"
+                                                    FontSize="12"
+                                                    Opacity="0.75"
+                                                    TextWrapping="WrapWholeWords" />
+                                                <Button
+                                                    x:Name="OpraApplyButton"
+                                                    Content="应用该曲线到均衡器"
+                                                    HorizontalAlignment="Left"
+                                                    Style="{StaticResource AccentButtonStyle}"
+                                                    IsEnabled="False"
+                                                    Click="OpraApplyButton_Click" />
+                                            </StackPanel>
+                                        </Grid>
                                         <Border
                                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -4366,19 +4718,26 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="导入测量得到的脉冲响应做真卷积，用于房间校正或音箱补偿。" />
                                                 </StackPanel>
-                                                <Border
-                                                    x:Name="DspBadgeFir"
+                                                <StackPanel
                                                     Grid.Column="2"
-                                                    Padding="10,3"
-                                                    VerticalAlignment="Center"
-                                                    CornerRadius="10"
-                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
                                                     <TextBlock
-                                                        x:Name="DspBadgeFirText"
-                                                        FontSize="12"
+                                                        x:Name="DspPowerFirHint"
+                                                        Text="已旁路"
+                                                        FontSize="11"
                                                         FontWeight="SemiBold"
-                                                        Text="—" />
-                                                </Border>
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                        Visibility="Collapsed" />
+                                                    <ToggleSwitch
+                                                        x:Name="DspPowerFir"
+                                                        OnContent=""
+                                                        OffContent=""
+                                                        VerticalAlignment="Center"
+                                                        Toggled="DspPowerSwitch_Toggled" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                         <Border
@@ -4543,19 +4902,26 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="左右平衡 / 增益 / 延迟 / 单声道 / 交换 / 反相 / Crossfeed。" />
                                                 </StackPanel>
-                                                <Border
-                                                    x:Name="DspBadgeChannel"
+                                                <StackPanel
                                                     Grid.Column="2"
-                                                    Padding="10,3"
-                                                    VerticalAlignment="Center"
-                                                    CornerRadius="10"
-                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
                                                     <TextBlock
-                                                        x:Name="DspBadgeChannelText"
-                                                        FontSize="12"
+                                                        x:Name="DspPowerChannelHint"
+                                                        Text="已旁路"
+                                                        FontSize="11"
                                                         FontWeight="SemiBold"
-                                                        Text="—" />
-                                                </Border>
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                        Visibility="Collapsed" />
+                                                    <ToggleSwitch
+                                                        x:Name="DspPowerChannel"
+                                                        OnContent=""
+                                                        OffContent=""
+                                                        VerticalAlignment="Center"
+                                                        Toggled="DspPowerSwitch_Toggled" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                         <Border
@@ -4791,19 +5157,26 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="按单曲或专辑统一响度，避免切歌时忽大忽小。" />
                                                 </StackPanel>
-                                                <Border
-                                                    x:Name="DspBadgeRg"
+                                                <StackPanel
                                                     Grid.Column="2"
-                                                    Padding="10,3"
-                                                    VerticalAlignment="Center"
-                                                    CornerRadius="10"
-                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
                                                     <TextBlock
-                                                        x:Name="DspBadgeRgText"
-                                                        FontSize="12"
+                                                        x:Name="DspPowerRgHint"
+                                                        Text="已旁路"
+                                                        FontSize="11"
                                                         FontWeight="SemiBold"
-                                                        Text="—" />
-                                                </Border>
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                        Visibility="Collapsed" />
+                                                    <ToggleSwitch
+                                                        x:Name="DspPowerRg"
+                                                        OnContent=""
+                                                        OffContent=""
+                                                        VerticalAlignment="Center"
+                                                        Toggled="DspPowerSwitch_Toggled" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                         <Border
@@ -5159,19 +5532,26 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="压平忽大忽小的音量起伏：超过阈值的部分按比例收小，安静段落相对抬起来。" />
                                                 </StackPanel>
-                                                <Border
-                                                    x:Name="DspBadgeComp"
+                                                <StackPanel
                                                     Grid.Column="2"
-                                                    Padding="10,3"
-                                                    VerticalAlignment="Center"
-                                                    CornerRadius="10"
-                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
                                                     <TextBlock
-                                                        x:Name="DspBadgeCompText"
-                                                        FontSize="12"
+                                                        x:Name="DspPowerCompHint"
+                                                        Text="已旁路"
+                                                        FontSize="11"
                                                         FontWeight="SemiBold"
-                                                        Text="—" />
-                                                </Border>
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                        Visibility="Collapsed" />
+                                                    <ToggleSwitch
+                                                        x:Name="DspPowerComp"
+                                                        OnContent=""
+                                                        OffContent=""
+                                                        VerticalAlignment="Center"
+                                                        Toggled="DspPowerSwitch_Toggled" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                         <Border
@@ -5381,19 +5761,26 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="「中间」和「两侧」分开调：拉宽两侧，或单挑中间的主唱人声。" />
                                                 </StackPanel>
-                                                <Border
-                                                    x:Name="DspBadgeField"
+                                                <StackPanel
                                                     Grid.Column="2"
-                                                    Padding="10,3"
-                                                    VerticalAlignment="Center"
-                                                    CornerRadius="10"
-                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
                                                     <TextBlock
-                                                        x:Name="DspBadgeFieldText"
-                                                        FontSize="12"
+                                                        x:Name="DspPowerFieldHint"
+                                                        Text="已旁路"
+                                                        FontSize="11"
                                                         FontWeight="SemiBold"
-                                                        Text="—" />
-                                                </Border>
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                        Visibility="Collapsed" />
+                                                    <ToggleSwitch
+                                                        x:Name="DspPowerField"
+                                                        OnContent=""
+                                                        OffContent=""
+                                                        VerticalAlignment="Center"
+                                                        Toggled="DspPowerSwitch_Toggled" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                         <Border
@@ -5496,19 +5883,26 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="四个系数决定每个声道往左右输出各混多少。" />
                                                 </StackPanel>
-                                                <Border
-                                                    x:Name="DspBadgeMatrix"
+                                                <StackPanel
                                                     Grid.Column="2"
-                                                    Padding="10,3"
-                                                    VerticalAlignment="Center"
-                                                    CornerRadius="10"
-                                                    Background="{ThemeResource AccentFillColorSecondaryBrush}">
+                                                    Orientation="Horizontal"
+                                                    Spacing="8"
+                                                    VerticalAlignment="Center">
                                                     <TextBlock
-                                                        x:Name="DspBadgeMatrixText"
-                                                        FontSize="12"
+                                                        x:Name="DspPowerMatrixHint"
+                                                        Text="已旁路"
+                                                        FontSize="11"
                                                         FontWeight="SemiBold"
-                                                        Text="—" />
-                                                </Border>
+                                                        VerticalAlignment="Center"
+                                                        Foreground="{ThemeResource SystemFillColorCautionBrush}"
+                                                        Visibility="Collapsed" />
+                                                    <ToggleSwitch
+                                                        x:Name="DspPowerMatrix"
+                                                        OnContent=""
+                                                        OffContent=""
+                                                        VerticalAlignment="Center"
+                                                        Toggled="DspPowerSwitch_Toggled" />
+                                                </StackPanel>
                                             </Grid>
                                         </Border>
                                         <Border
@@ -5657,10 +6051,10 @@
                                                     FontSize="11"
                                                     Opacity="0.6"
                                                     TextWrapping="Wrap"
-                                                    Text="链路全景：声音按下列顺序流过。带序号的 8 个模块可用「上移 / 下移」调整先后；标「固定位置」的环节由链路结构决定，不参与排序。先后顺序会轻微改变声音（先 A 后 B ≠ 先 B 后 A），但不影响音质。" />
+                                                    Text="链路全景：声音按下列顺序流过。8 个模块都能用「上移 / 下移」调整先后。采样率、耳机校正、输出安全是链路结构决定的上下游，不在机架里、不参与排序。先后顺序会轻微改变声音（先 A 后 B ≠ 先 B 后 A），但不影响音质。" />
                                                 <ListView
                                                     x:Name="DspRackList"
-                                                    Height="420"
+                                                    Height="340"
                                                     SelectionMode="Single"
                                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                                     BorderThickness="1"
@@ -5682,17 +6076,7 @@
                                                                     Opacity="0.55"
                                                                     Text="{x:Bind SlotLabel}" />
                                                                 <StackPanel Grid.Column="1" Spacing="1">
-                                                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                                                        <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
-                                                                        <Border
-                                                                            Padding="5,0"
-                                                                            CornerRadius="8"
-                                                                            VerticalAlignment="Center"
-                                                                            Background="{ThemeResource ControlFillColorSecondaryBrush}"
-                                                                            Visibility="{x:Bind FixedBadgeVisibility}">
-                                                                            <TextBlock FontSize="10" Opacity="0.7" Text="固定位置" />
-                                                                        </Border>
-                                                                    </StackPanel>
+                                                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
                                                                     <TextBlock
                                                                         FontSize="11"
                                                                         Opacity="0.55"
