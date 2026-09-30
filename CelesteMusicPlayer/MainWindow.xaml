@@ -4860,12 +4860,15 @@
                                                             FontWeight="SemiBold"
                                                             Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
                                                     </Border>
+                                                    <!-- 来源徽章同时是筛选开关：点一下只看这一类来源的曲线，再点看全部 -->
                                                     <Border
                                                         x:Name="OpraSampleBadge"
                                                         Padding="7,2"
                                                         CornerRadius="10"
                                                         VerticalAlignment="Center"
                                                         Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                                        ToolTipService.ToolTip="点一下只看这一类来源的曲线，再点回到全部"
+                                                        Tapped="OpraSourceBadge_Tapped"
                                                         Visibility="Collapsed">
                                                         <TextBlock
                                                             x:Name="OpraSampleBadgeText"

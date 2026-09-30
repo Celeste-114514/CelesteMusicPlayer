@@ -28,6 +28,91 @@ namespace CelesteMusicPlayer
         private OpraProductEqSummary? _opraPreviewEq;
         private OpraSearchResult? _opraPreviewProduct;
 
+        /// <summary>来源筛选：null=全部，"community"=只看社区测量，"opra"=只看 OPRA 库。</summary>
+        private string? _opraSourceFilter;
+
+        /// <summary>OPRA 库没有独立的来源字段，只能按作者名保守判断（命中 autoeq 才算社区测量）。</summary>
+        private static bool IsCommunityAuthor(string? author)
+            => author != null && author.Contains("autoeq", StringComparison.OrdinalIgnoreCase);
+
+        /// <summary>点来源徽章 = 在「只看这一类 / 看全部」之间切换。</summary>
+        private void OpraSourceBadge_Tapped(object sender, Microsoft.UI.Xaml.Input.TappedRoutedEventArgs e)
+        {
+            try
+            {
+                if (_opraPreviewEq == null)
+                {
+                    return;
+                }
+
+                string thisSource = IsCommunityAuthor(_opraPreviewEq.Author) ? "community" : "opra";
+                _opraSourceFilter = _opraSourceFilter == thisSource ? null : thisSource;
+                ApplyOpraEqFilter();
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.OpraSourceBadge_Tapped", caught);
+            }
+        }
+
+        /// <summary>按当前来源筛选重铺曲线列表（列表本体来自 _opraEqs，不重新查库）。</summary>
+        private void ApplyOpraEqFilter()
+        {
+            if (OpraEqList == null)
+            {
+                return;
+            }
+
+            List<OpraProductEqSummary> shown = _opraEqs;
+            if (_opraSourceFilter != null)
+            {
+                bool wantCommunity = _opraSourceFilter == "community";
+                shown = _opraEqs.Where(x => IsCommunityAuthor(x.Author) == wantCommunity).ToList();
+            }
+
+            OpraEqList.ItemsSource = shown;
+            UpdateOpraSourceBadge();
+
+            if (OpraEqStatusText != null && _opraSourceFilter != null && shown.Count == 0)
+            {
+                OpraEqStatusText.Text = _opraSourceFilter == "community"
+                    ? "该型号没有社区测量的曲线，再点一次来源徽章可看全部。"
+                    : "该型号没有 OPRA 库自有曲线，再点一次来源徽章可看全部。";
+            }
+        }
+
+        /// <summary>刷新来源徽章的文字与选中态（选中 = 正在按该来源筛选）。</summary>
+        private void UpdateOpraSourceBadge()
+        {
+            if (OpraSampleBadge == null || OpraSampleBadgeText == null)
+            {
+                return;
+            }
+
+            bool community = _opraPreviewEq != null && IsCommunityAuthor(_opraPreviewEq.Author);
+            string label = community ? "社区测量" : "OPRA 库";
+            bool active = _opraSourceFilter != null
+                && _opraSourceFilter == (community ? "community" : "opra");
+
+            OpraSampleBadge.Visibility = Visibility.Visible;
+            OpraSampleBadgeText.Text = active
+                ? label + " · 已筛选（点此看全部）"
+                : label + " · 点此只看这类";
+
+            // 主动筛查时加一圈强调边框，让「点了有效果」看得见
+            OpraSampleBadge.BorderThickness = active ? new Thickness(1) : new Thickness(0);
+            OpraSampleBadge.BorderBrush = active
+                ? new SolidColorBrush(DspAccentColor())
+                : null;
+            OpraSampleBadge.Opacity = active ? 1.0 : 0.85;
+        }
+
+        /// <summary>当前主题/皮肤下的强调色（复用 DspAccentBrush：极客下自动是磷光色）。</summary>
+        private Color DspAccentColor()
+            => DspAccentBrush() is SolidColorBrush scb
+                ? scb.Color
+                : Color.FromArgb(255, 0x0F, 0x76, 0x6E);
+
         // ─────────────────────────────────────────────────────────────
         // 热门品牌墙
         // ─────────────────────────────────────────────────────────────
@@ -208,19 +293,15 @@ namespace CelesteMusicPlayer
 
             try
             {
-                bool autoEq = eq.Author != null
-                    && eq.Author.Contains("autoeq", StringComparison.OrdinalIgnoreCase);
+                bool autoEq = IsCommunityAuthor(eq.Author);
 
                 if (OpraAutoEqBadge != null)
                 {
                     OpraAutoEqBadge.Visibility = autoEq ? Visibility.Visible : Visibility.Collapsed;
                 }
 
-                if (OpraSampleBadge != null && OpraSampleBadgeText != null)
-                {
-                    OpraSampleBadge.Visibility = Visibility.Visible;
-                    OpraSampleBadgeText.Text = autoEq ? "社区测量" : "OPRA 库";
-                }
+                // 来源徽章由 UpdateOpraSourceBadge 统一刷新（含「点此筛选」文案与选中态）
+                UpdateOpraSourceBadge();
 
                 if (OpraFavoriteButton != null)
                 {
@@ -240,6 +321,7 @@ namespace CelesteMusicPlayer
         {
             _opraPreviewEq = null;
             _opraPreviewProduct = null;
+            _opraSourceFilter = null;
 
             if (OpraAutoEqBadge != null)
             {
@@ -324,30 +406,61 @@ namespace CelesteMusicPlayer
                 const double fMin = 20.0, fMax = 20000.0;
                 double logMin = Math.Log10(fMin), logMax = Math.Log10(fMax);
 
-                // 纵轴自适应：至少 ±6dB，避免小幅度曲线看起来像平地
-                double peak = Math.Abs(corr.Curve.PreampDb);
-                foreach (EqBand b in corr.Curve.Bands)
+                // ── 纵轴贴合曲线真实范围 ──
+                // OPRA 曲线的预增益几乎都是负的（防止叠加增益把峰值顶到削波），
+                // 所以「实际响应」整条会沉到 0 dB 以下。若照旧的 ±对称刻度画，
+                // 形状会被压扁成贴着 0 的一条线 —— 这里改成贴合 min/max，
+                // 并额外画一条「形状」虚线（扣掉预增益），两者差别一眼可见。
+                int samples = 240;
+                var freqs = new double[samples];
+                var shapeDb = new double[samples];
+                double lo = 0, hi = 0;
+                for (int i = 0; i < samples; i++)
                 {
-                    if (Math.Abs(b.GainDb) > peak)
+                    double f = Math.Pow(10.0, logMin + (logMax - logMin) * i / (samples - 1));
+                    double s = 0;
+                    foreach (EqBand b in corr.Curve.Bands)
                     {
-                        peak = Math.Abs(b.GainDb);
+                        if (b.Enabled)
+                        {
+                            s += ApproxBandGain(f, b);
+                        }
+                    }
+
+                    freqs[i] = f;
+                    shapeDb[i] = s;
+                    double o = s + corr.Curve.PreampDb;
+                    if (i == 0)
+                    {
+                        lo = Math.Min(s, o);
+                        hi = Math.Max(s, o);
+                    }
+                    else
+                    {
+                        lo = Math.Min(lo, Math.Min(s, o));
+                        hi = Math.Max(hi, Math.Max(s, o));
                     }
                 }
 
-                double maxDb = Math.Max(6.0, Math.Ceiling(peak / 3.0) * 3.0);
+                lo -= 1.0;
+                hi += 1.0;
+                if (hi - lo < 8.0)
+                {
+                    double mid = (hi + lo) / 2;
+                    lo = mid - 4.0;
+                    hi = mid + 4.0;
+                }
 
+                double span = hi - lo;
                 double X(double f) => padL + (Math.Log10(Math.Clamp(f, fMin, fMax)) - logMin) / (logMax - logMin) * plotW;
-                double Y(double db) => padT + plotH / 2 - (db / maxDb) * (plotH / 2);
+                double Y(double db) => padT + (hi - db) / span * plotH;
 
                 bool dark = IsDspCanvasHostDark(OpraPreviewHost);
                 Color gridWeak = dark ? Color.FromArgb(24, 255, 255, 255) : Color.FromArgb(28, 0, 0, 0);
                 Color gridStrong = dark ? Color.FromArgb(64, 255, 255, 255) : Color.FromArgb(74, 0, 0, 0);
                 Color labelColor = dark ? Color.FromArgb(170, 255, 255, 255) : Color.FromArgb(145, 30, 30, 30);
-                Color accent = dark ? Color.FromArgb(255, 0x2e, 0x71, 0x68) : Color.FromArgb(255, 0x0f, 0x76, 0x6e);
-                if (GeekDspAccentColor() is Color ph)
-                {
-                    accent = ph;
-                }
+                Color accent = DspAccentColor();
+                bool zeroVisible = lo + 0.5 < 0 && 0 < hi - 0.5;
 
                 var children = canvas.Children;
                 children.Clear();
@@ -363,52 +476,72 @@ namespace CelesteMusicPlayer
                     children.Add(MakeOpraLabel(t, X(f) - 16, padT + plotH + 4, 32, TextAlignment.Center, labelColor));
                 }
 
-                // 0 dB 基准线加粗，横轴刻度给 ±maxDb 和 0
-                children.Add(new Shapes.Line
+                // 0 dB 基准线：只有落在可视区内才画（画在框外会误导）
+                if (zeroVisible)
                 {
-                    X1 = padL, Y1 = Y(0), X2 = padL + plotW, Y2 = Y(0),
-                    Stroke = new SolidColorBrush(gridStrong), StrokeThickness = 1.4
-                });
-                foreach (double db in new[] { maxDb, 0.0, -maxDb })
+                    children.Add(new Shapes.Line
+                    {
+                        X1 = padL, Y1 = Y(0), X2 = padL + plotW, Y2 = Y(0),
+                        Stroke = new SolidColorBrush(gridStrong), StrokeThickness = 1.4
+                    });
+                }
+
+                var ticks = new SortedSet<double>();
+                ticks.Add(Math.Round(hi - 0.5));
+                ticks.Add(Math.Round(lo + 0.5));
+                if (zeroVisible)
+                {
+                    ticks.Add(0);
+                }
+
+                foreach (double db in ticks)
                 {
                     children.Add(MakeOpraLabel(
                         (db > 0 ? "+" : "") + db.ToString("0"), 0, Y(db) - 7, 38, TextAlignment.Right, labelColor));
                 }
 
-                var pts = new PointCollection();
-                int samples = 220;
+                var shapePts = new PointCollection();
+                var outPts = new PointCollection();
                 for (int i = 0; i < samples; i++)
                 {
-                    double f = Math.Pow(10.0, logMin + (logMax - logMin) * i / (samples - 1));
-                    double g = corr.Curve.PreampDb;
-                    foreach (EqBand b in corr.Curve.Bands)
+                    shapePts.Add(new Windows.Foundation.Point(X(freqs[i]), Y(shapeDb[i])));
+                    outPts.Add(new Windows.Foundation.Point(X(freqs[i]), Y(shapeDb[i] + corr.Curve.PreampDb)));
+                }
+
+                // 面积只在 0 线可见时填（否则会糊成一大块色）
+                if (zeroVisible)
+                {
+                    var area = new PointCollection();
+                    area.Add(new Windows.Foundation.Point(X(fMin), Y(0)));
+                    foreach (Windows.Foundation.Point p in outPts)
                     {
-                        if (b.Enabled)
-                        {
-                            g += ApproxBandGain(f, b);
-                        }
+                        area.Add(p);
                     }
 
-                    pts.Add(new Windows.Foundation.Point(X(f), Y(g)));
+                    area.Add(new Windows.Foundation.Point(X(fMax), Y(0)));
+                    children.Add(new Shapes.Polygon
+                    {
+                        Points = area,
+                        Fill = new SolidColorBrush(Color.FromArgb((byte)(dark ? 40 : 34), accent.R, accent.G, accent.B)),
+                        Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(padL, padT, plotW, plotH) }
+                    });
                 }
 
-                var area = new PointCollection();
-                area.Add(new Windows.Foundation.Point(X(fMin), Y(0)));
-                foreach (Windows.Foundation.Point p in pts)
-                {
-                    area.Add(p);
-                }
-
-                area.Add(new Windows.Foundation.Point(X(fMax), Y(0)));
-                children.Add(new Shapes.Polygon
-                {
-                    Points = area,
-                    Fill = new SolidColorBrush(Color.FromArgb((byte)(dark ? 40 : 34), accent.R, accent.G, accent.B)),
-                    Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(padL, padT, plotW, plotH) }
-                });
+                // 形状虚线（不含预增益）：这才是「哪里抬、哪里压」
+                // ⚠ 每个 Shape 各自 new 一份几何/集合：WinRT 的 setter 会接管传入实例，共用会抛异常
                 children.Add(new Shapes.Polyline
                 {
-                    Points = pts,
+                    Points = shapePts,
+                    Stroke = new SolidColorBrush(Color.FromArgb((byte)(dark ? 150 : 130), accent.R, accent.G, accent.B)),
+                    StrokeThickness = 1.4,
+                    StrokeDashArray = new DoubleCollection { 4, 4 },
+                    StrokeLineJoin = PenLineJoin.Round,
+                    Clip = new RectangleGeometry { Rect = new Windows.Foundation.Rect(padL - 2, padT - 2, plotW + 4, plotH + 4) }
+                });
+
+                children.Add(new Shapes.Polyline
+                {
+                    Points = outPts,
                     Stroke = new SolidColorBrush(accent),
                     StrokeThickness = 2.2,
                     StrokeLineJoin = PenLineJoin.Round,
@@ -417,10 +550,15 @@ namespace CelesteMusicPlayer
 
                 if (OpraPreviewNote != null)
                 {
-                    double lo = SumOpraGainAt(corr.Curve, 60.0);
-                    double hi = SumOpraGainAt(corr.Curve, 8000.0);
-                    OpraPreviewNote.Text = $"共 {corr.Curve.Bands.Count} 段（预增益 {(corr.Curve.PreampDb >= 0 ? "+" : "")}{corr.Curve.PreampDb:0.#} dB）："
-                        + $"低音 60Hz {(lo >= 0 ? "+" : "")}{lo:0.#} dB，高音 8kHz {(hi >= 0 ? "+" : "")}{hi:0.#} dB。";
+                    // 报「形状」值（不含预增益）：预增益是防止叠加削波用的整体下移，
+                    // 混进来会让人以为低音被压了，而实际只是整条曲线一起沉下去。
+                    double loDb = SumOpraGainAt(corr.Curve, 60.0) - corr.Curve.PreampDb;
+                    double hiDb = SumOpraGainAt(corr.Curve, 8000.0) - corr.Curve.PreampDb;
+                    OpraPreviewNote.Text =
+                        $"共 {corr.Curve.Bands.Count} 段。实线 = 套用后的实际响应，虚线 = 校正形状（不含预增益）。"
+                        + $"预增益 {(corr.Curve.PreampDb >= 0 ? "+" : "")}{corr.Curve.PreampDb:0.#} dB 是负数在这是正常的："
+                        + "它是为了防止几段增益叠起来顶到削波，整条曲线被一起压低，不代表低音也被压了 —— 看虚线才知道抬了哪、压了哪。"
+                        + $"60Hz {(loDb >= 0 ? "+" : "")}{loDb:0.#} dB，8kHz {(hiDb >= 0 ? "+" : "")}{hiDb:0.#} dB。";
                 }
             }
             catch (Exception caught)

@@ -151,10 +151,9 @@ namespace CelesteMusicPlayer
             {
                 _opraSelectedProduct = r;
                 _opraEqs = _opra.GetEqsForProduct(r.ProductId);
-                if (OpraEqList != null)
-                {
-                    OpraEqList.ItemsSource = _opraEqs;
-                }
+
+                // 走筛选入口而不是直接铺列表：换型号时用户选过的来源筛选保持生效
+                ApplyOpraEqFilter();
 
                 if (OpraDetailTitle != null)
                 {
