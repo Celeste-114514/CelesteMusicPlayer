@@ -5680,34 +5680,155 @@
                                             CornerRadius="10"
                                             Padding="16">
                                             <StackPanel Spacing="10">
-                                                <TextBlock FontSize="13" FontWeight="SemiBold" Text="实时状态" />
                                                 <Grid ColumnSpacing="12">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="Auto" />
                                                     </Grid.ColumnDefinitions>
-                                                    <ProgressBar
-                                                        x:Name="DspCompGrBar"
-                                                        Grid.Column="0"
-                                                        Height="8"
-                                                        Minimum="0"
-                                                        Maximum="24"
-                                                        Value="0"
-                                                        CornerRadius="4" />
                                                     <TextBlock
-                                                        x:Name="DspCompGrText"
-                                                        Grid.Column="1"
-                                                        FontSize="12"
+                                                        Grid.Column="0"
+                                                        FontSize="13"
                                                         FontWeight="SemiBold"
-                                                        MinWidth="86"
                                                         VerticalAlignment="Center"
-                                                        Text="0.0 dB" />
+                                                        Text="实时监测" />
+                                                    <StackPanel
+                                                        Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="8"
+                                                        VerticalAlignment="Center">
+                                                        <TextBlock
+                                                            FontSize="11"
+                                                            Opacity="0.6"
+                                                            VerticalAlignment="Center"
+                                                            Text="电平表显示" />
+                                                        <ToggleSwitch
+                                                            x:Name="DspCompPeakToggle"
+                                                            IsOn="True"
+                                                            OnContent="峰值"
+                                                            OffContent="RMS"
+                                                            VerticalAlignment="Center"
+                                                            Toggled="DspCompMeterMode_Toggled" />
+                                                    </StackPanel>
                                                 </Grid>
-                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="压缩器这一刻压掉了多少 dB。指针经常顶到底 = 压太狠，抬高阈值或降低压缩比。" />
+                                                <Grid ColumnSpacing="20">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="240" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <StackPanel Grid.Column="0" Spacing="16">
+                                                        <StackPanel Spacing="4">
+                                                            <TextBlock
+                                                                FontSize="11"
+                                                                Opacity="0.6"
+                                                                Text="输入电平 · 估算" />
+                                                            <TextBlock
+                                                                x:Name="DspCompInText"
+                                                                FontSize="26"
+                                                                FontWeight="SemiBold"
+                                                                Text="—" />
+                                                            <Canvas
+                                                                x:Name="DspCompInMeterCanvas"
+                                                                Height="10"
+                                                                Background="Transparent" />
+                                                        </StackPanel>
+                                                        <StackPanel Spacing="4">
+                                                            <TextBlock
+                                                                FontSize="11"
+                                                                Opacity="0.6"
+                                                                Text="压缩量（这一刻压掉多少）" />
+                                                            <TextBlock
+                                                                x:Name="DspCompGrText"
+                                                                MinWidth="90"
+                                                                FontSize="26"
+                                                                FontWeight="SemiBold"
+                                                                Text="0.0 dB" />
+                                                        </StackPanel>
+                                                    </StackPanel>
+                                                    <StackPanel Grid.Column="1" Spacing="4">
+                                                        <TextBlock
+                                                            FontSize="11"
+                                                            Opacity="0.6"
+                                                            Text="最近 8 秒压缩量" />
+                                                        <Border
+                                                            x:Name="DspCompGrHost"
+                                                            Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                            BorderThickness="1"
+                                                            CornerRadius="8">
+                                                            <Canvas
+                                                                x:Name="DspCompGrCanvas"
+                                                                Height="110"
+                                                                Background="Transparent"
+                                                                SizeChanged="DspCompGrCanvas_SizeChanged" />
+                                                        </Border>
+                                                        <TextBlock
+                                                            FontSize="10"
+                                                            Opacity="0.5"
+                                                            Text="线越高压得越狠；贴着底 = 没在压。" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <TextBlock
+                                                    FontSize="10"
+                                                    Opacity="0.5"
+                                                    TextWrapping="Wrap"
+                                                    Text="电平表量的是全部处理完之后的声音，入口电平是用它倒推回去的，中间隔着 EQ、音量、余量这些环节。所以这里只能看「在压还是在放」的趋势，别当准数。" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock
+                                                    FontSize="13"
+                                                    FontWeight="SemiBold"
+                                                    Text="传递曲线" />
+                                                <Border
+                                                    x:Name="DspCompCurveHost"
+                                                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="8">
+                                                    <Canvas
+                                                        x:Name="DspCompCurveCanvas"
+                                                        Height="250"
+                                                        Background="Transparent"
+                                                        SizeChanged="DspCompCurveCanvas_SizeChanged" />
+                                                </Border>
+                                                <TextBlock
+                                                    FontSize="10"
+                                                    Opacity="0.55"
+                                                    TextWrapping="Wrap"
+                                                    Text="横轴是进去的电平，纵轴是出来的电平（已含补偿增益）。虚线是完全不压；竖线是阈值，越过它才开始压。拐点越宽，过渡越柔。" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="10">
+                                                <TextBlock
+                                                    FontSize="13"
+                                                    FontWeight="SemiBold"
+                                                    Text="预设" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Opacity="0.55"
+                                                    TextWrapping="Wrap"
+                                                    Text="一键铺好七条滑杆，之后还能手动微调。" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <Button Content="轻度（广播感）" Tag="gentle" Click="DspCompPreset_Click" />
                                                     <Button Content="中度（流行）" Tag="medium" Click="DspCompPreset_Click" />
                                                     <Button Content="强压（夜间）" Tag="heavy" Click="DspCompPreset_Click" />
+                                                    <Button Content="人声" Tag="vocal" Click="DspCompPreset_Click" />
+                                                    <Button Content="乐器" Tag="drums" Click="DspCompPreset_Click" />
+                                                    <Button Content="总线" Tag="bus" Click="DspCompPreset_Click" />
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <Button Content="恢复默认" Tag="default" Click="DspCompPreset_Click" />
                                                 </StackPanel>
                                             </StackPanel>

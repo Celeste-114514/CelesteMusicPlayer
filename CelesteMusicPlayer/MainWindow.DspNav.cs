@@ -331,6 +331,8 @@ namespace CelesteMusicPlayer
             EnsureDspCompGrTimer(idx == DspPageCompressorIndex);
             if (idx == DspPageCompressorIndex)
             {
+                // 画布折叠时 ActualWidth=0、画不出来，切回来立刻补一次（SizeChanged 也会补一路）
+                RedrawDspCompCanvas();
                 DspCompGr_Tick(this, EventArgs.Empty);
             }
 

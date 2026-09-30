@@ -108,6 +108,10 @@ namespace CelesteMusicPlayer
                 RefreshDspMatrixReadouts();
                 RefreshDspRackList(rack.RackOrder);
                 RefreshCrossfeedCutoffReadout();
+
+                // 画布不读 ThemeResource、也不参与 XAML 布局期的自动刷新，必须显式画一次。
+                // （折叠状态下 ActualWidth=0，Draw 内部会直接返回，切页时由 SelectDspPage 补画）
+                RedrawDspCompTransferCurve();
             }
             finally
             {
@@ -230,6 +234,8 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 关掉时曲线退化为「输出 = 输入」的斜线，打开时恢复压缩曲线 —— 必须重画
+            RedrawDspCompTransferCurve();
             PushDspRackToEngine();
         }
 
@@ -245,6 +251,10 @@ namespace CelesteMusicPlayer
             }
 
             RefreshDspCompReadouts();
+
+            // 传递曲线是参数的函数，任何一条滑杆动了都得重画（曲线的形状会跟着变）
+            RedrawDspCompTransferCurve();
+
             if (!_dspRackLoading)
             {
                 PushDspRackToEngine();
@@ -266,6 +276,12 @@ namespace CelesteMusicPlayer
                     "gentle" => (-24.0, 2.0, 20.0, 200.0, 12.0, 0.0, 100.0),
                     "medium" => (-18.0, 4.0, 10.0, 120.0, 6.0, 0.0, 100.0),
                     "heavy" => (-12.0, 8.0, 3.0, 60.0, 3.0, 3.0, 100.0),
+                    // 人声：比中速更柔、补偿一点点把齿音之外的部分托回来
+                    "vocal" => (-20.0, 3.0, 8.0, 150.0, 8.0, 1.5, 100.0),
+                    // 乐器/打击：启动快、压缩比高，压住瞬态但不拖尾
+                    "drums" => (-14.0, 6.0, 2.0, 80.0, 3.0, 1.0, 100.0),
+                    // 总线：几乎不压，只做兜底粘合并保留动态
+                    "bus" => (-22.0, 2.5, 30.0, 300.0, 12.0, 0.0, 100.0),
                     _ => (-18.0, 4.0, 10.0, 120.0, 6.0, 0.0, 100.0)
                 };
 
@@ -279,21 +295,17 @@ namespace CelesteMusicPlayer
             DspCompMixSlider.Value = preset.mix;
 
             PushDspRackToEngine();
+
+            // 预设一次改写七条滑杆，每条的 ValueChanged 都会触发一次重画；
+            // 这里最后统一再画一次即可（Redraw 是全清重建，重复调用无害）。
+            RedrawDspCompTransferCurve();
         }
 
-        // 压缩器 GR 实时读数（仅本页可见时轮询）
+        // 压缩器每拍刷新（仅本页可见时轮询）：压缩量读数 + 8 秒折线 + 入口电平。
+        // 绘制全部交给 MainWindow.DspComp.cs，这里只负责把内核读数取出来递过去。
         private void DspCompGr_Tick(object sender, object e)
         {
-            float gr = _audioEngine?.CompressorGainReductionDb ?? 0f;
-            if (DspCompGrText != null)
-            {
-                DspCompGrText.Text = gr.ToString("0.0") + " dB";
-            }
-
-            if (DspCompGrBar != null)
-            {
-                DspCompGrBar.Value = gr;
-            }
+            UpdateDspCompMeters(_audioEngine?.CompressorGainReductionDb ?? 0f);
         }
 
         private void EnsureDspCompGrTimer(bool enable)
