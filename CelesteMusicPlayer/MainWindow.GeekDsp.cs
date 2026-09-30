@@ -142,6 +142,7 @@ namespace CelesteMusicPlayer
                 RedrawAudioFxEqCurve();
                 RefreshDspRackRows();
                 RedrawDspCompCanvas();
+                RedrawDspMatrixCanvas();
             }
             catch (Exception caught)
             {

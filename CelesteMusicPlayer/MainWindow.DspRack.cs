@@ -112,6 +112,7 @@ namespace CelesteMusicPlayer
                 // 画布不读 ThemeResource、也不参与 XAML 布局期的自动刷新，必须显式画一次。
                 // （折叠状态下 ActualWidth=0，Draw 内部会直接返回，切页时由 SelectDspPage 补画）
                 RedrawDspCompTransferCurve();
+                RedrawDspMatrixFlow();
             }
             finally
             {
@@ -397,6 +398,8 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 关掉时流图退化为「旁路的样子」（左→左、右→右 直通），要同步画出来
+            RedrawDspMatrixFlow();
             PushDspRackToEngine();
         }
 
@@ -409,6 +412,10 @@ namespace CelesteMusicPlayer
             }
 
             RefreshDspMatrixReadouts();
+
+            // 矩阵流图跟着四个系数走（画图内部有 null 守卫，面板未构建时安全返回）
+            RedrawDspMatrixFlow();
+
             if (!_dspRackLoading)
             {
                 PushDspRackToEngine();
@@ -428,6 +435,11 @@ namespace CelesteMusicPlayer
                 "swap" => (0.0, 1.0, 1.0, 0.0),
                 "mono" => (0.5, 0.5, 0.5, 0.5),
                 "karaoke" => (1.0, -1.0, -1.0, 1.0),
+                // 加宽：把对侧以反相、小比例混回来，抵消一部分左右共同的成分（≈ 削弱中间、放大两侧）。
+                // 系数刻意压在 1.25 以内，超过就容易让中间塌陷、人声失真。
+                "widen" => (1.25, -0.25, -0.25, 1.25),
+                "leftonly" => (1.0, 0.0, 0.0, 0.0),
+                "rightonly" => (0.0, 0.0, 0.0, 1.0),
                 _ => (1.0, 0.0, 0.0, 1.0)
             };
 
@@ -438,6 +450,9 @@ namespace CelesteMusicPlayer
             DspMatrixRrSlider.Value = preset.rr;
 
             PushDspRackToEngine();
+
+            // 流图会跟着四个系数变，没必要等滑杆各自的 ValueChanged 慢慢重画
+            RedrawDspMatrixFlow();
         }
 
         // ─────────────────────────────────────────────────────────────

@@ -26,6 +26,8 @@ namespace CelesteMusicPlayer
         private int DspPageChannelIndex => FindDspPageIndex(DspPageChannel);
         private int DspPageEqIndex => FindDspPageIndex(DspPageEq);
         private int DspPageCompressorIndex => FindDspPageIndex(DspPageCompressor);
+        private int DspPageMatrixIndex => FindDspPageIndex(DspPageMatrix);
+        private int DspPageFieldIndex => FindDspPageIndex(DspPageStereoField);
         private int DspPageRackIndex => FindDspPageIndex(DspPageRack);
         private int DspPageOpraIndex => FindDspPageIndex(DspPageOpra);
         private int DspPageProfilesIndex => FindDspPageIndex(DspPageProfiles);
@@ -334,6 +336,12 @@ namespace CelesteMusicPlayer
                 // 画布折叠时 ActualWidth=0、画不出来，切回来立刻补一次（SizeChanged 也会补一路）
                 RedrawDspCompCanvas();
                 DspCompGr_Tick(this, EventArgs.Empty);
+            }
+
+            // 声道矩阵页：信号流图同理，折叠时没有布局尺寸，切进来补画
+            if (idx == DspPageMatrixIndex)
+            {
+                RedrawDspMatrixCanvas();
             }
 
             // 机架编排页：进入时刷新列表（顺序可能被别处改动过）

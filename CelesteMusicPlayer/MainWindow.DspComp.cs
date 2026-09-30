@@ -245,7 +245,7 @@ namespace CelesteMusicPlayer
             {
                 double w = canvas.ActualWidth;
                 double h = canvas.ActualHeight;
-                bool dark = IsDspCompHostDark(DspCompCurveHost);
+                bool dark = IsDspCanvasHostDark(DspCompCurveHost);
                 Color trough = dark ? Color.FromArgb(38, 255, 255, 255) : Color.FromArgb(34, 0, 0, 0);
 
                 canvas.Children.Clear();
@@ -317,7 +317,7 @@ namespace CelesteMusicPlayer
 
                 canvas.Children.Clear();
 
-                bool dark = IsDspCompHostDark(DspCompGrHost);
+                bool dark = IsDspCanvasHostDark(DspCompGrHost);
                 Color grid = dark ? Color.FromArgb(26, 255, 255, 255) : Color.FromArgb(30, 0, 0, 0);
                 Color label = dark ? Color.FromArgb(150, 255, 255, 255) : Color.FromArgb(140, 30, 30, 30);
                 Color accent = dark ? Color.FromArgb(255, 0x2e, 0x71, 0x68) : Color.FromArgb(255, 0x0f, 0x76, 0x6e);
@@ -460,7 +460,7 @@ namespace CelesteMusicPlayer
                 double X(double db) => padL + (db - minDb) / (maxDb - minDb) * plotW;
                 double Y(double db) => padT + (maxDb - db) / (maxDb - minDb) * plotH;
 
-                bool dark = IsDspCompHostDark(DspCompCurveHost);
+                bool dark = IsDspCanvasHostDark(DspCompCurveHost);
                 Color gridWeak = dark ? Color.FromArgb(24, 255, 255, 255) : Color.FromArgb(28, 0, 0, 0);
                 Color gridStrong = dark ? Color.FromArgb(64, 255, 255, 255) : Color.FromArgb(74, 0, 0, 0);
                 Color labelColor = dark ? Color.FromArgb(170, 255, 255, 255) : Color.FromArgb(145, 30, 30, 30);
@@ -599,8 +599,9 @@ namespace CelesteMusicPlayer
         /// 宿主底色偏暗 = 深色主题。判断方式与 EQ 曲线的 IsEqCurveDarkTheme 一致：
         /// 直接看宿主 Border 的 Background 亮度，不依赖 Application.RequestedTheme
         /// （客户区可以单独指定 RequestedTheme，全局主题未必等于实际渲染色）。
+        /// 所有纯代码画的画布（EQ 曲线 / 压缩器曲线 / GR 折线 / 矩阵流图）共用这一个判断。
         /// </summary>
-        private bool IsDspCompHostDark(Border? host)
+        private bool IsDspCanvasHostDark(Border? host)
         {
             try
             {
@@ -612,7 +613,7 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught)
             {
-                StartupLog.WriteException("MainWindow.IsDspCompHostDark", caught);
+                StartupLog.WriteException("MainWindow.IsDspCanvasHostDark", caught);
             }
 
             return true;
