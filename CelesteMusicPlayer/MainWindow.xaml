@@ -4010,6 +4010,146 @@
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                             BorderThickness="1"
                                             CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="10">
+                                                <TextBlock
+                                                    FontSize="13"
+                                                    FontWeight="SemiBold"
+                                                    Text="怎么用" />
+                                                <Grid ColumnSpacing="10">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Button
+                                                        Grid.Column="0"
+                                                        Tag="off"
+                                                        HorizontalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Stretch"
+                                                        VerticalContentAlignment="Stretch"
+                                                        Click="SrcModeButton_Click">
+                                                        <StackPanel Padding="2" Spacing="4">
+                                                            <TextBlock Text="不动" FontWeight="SemiBold" />
+                                                            <TextBlock
+                                                                FontSize="11"
+                                                                Opacity="0.65"
+                                                                TextWrapping="Wrap"
+                                                                Text="原采样率直出，一个字节都不改" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                    <Button
+                                                        Grid.Column="1"
+                                                        Tag="integer"
+                                                        HorizontalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Stretch"
+                                                        VerticalContentAlignment="Stretch"
+                                                        Click="SrcModeButton_Click">
+                                                        <StackPanel Padding="2" Spacing="4">
+                                                            <TextBlock Text="整数倍" FontWeight="SemiBold" />
+                                                            <TextBlock
+                                                                FontSize="11"
+                                                                Opacity="0.65"
+                                                                TextWrapping="Wrap"
+                                                                Text="44.1 上 88.2 这种，滤波器最省事" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                    <Button
+                                                        Grid.Column="2"
+                                                        Tag="fixed96"
+                                                        HorizontalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Stretch"
+                                                        VerticalContentAlignment="Stretch"
+                                                        Click="SrcModeButton_Click">
+                                                        <StackPanel Padding="2" Spacing="4">
+                                                            <TextBlock Text="统一 96k" FontWeight="SemiBold" />
+                                                            <TextBlock
+                                                                FontSize="11"
+                                                                Opacity="0.65"
+                                                                TextWrapping="Wrap"
+                                                                Text="不管源是什么都上 96k，DAC 常见做法" />
+                                                        </StackPanel>
+                                                    </Button>
+                                                </Grid>
+                                                <TextBlock
+                                                    x:Name="SrcModeNote"
+                                                    FontSize="11"
+                                                    Opacity="0.62"
+                                                    TextWrapping="Wrap"
+                                                    Text="—" />
+                                                <TextBlock
+                                                    FontSize="10"
+                                                    Opacity="0.5"
+                                                    TextWrapping="Wrap"
+                                                    Text="点卡片只是帮你把上面的目标采样率设好，之后照样能手改。整数倍那张要看当前这首歌的采样率，播放中才点得准。" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock
+                                                    FontSize="13"
+                                                    FontWeight="SemiBold"
+                                                    Text="信号怎么走" />
+                                                <Border
+                                                    x:Name="SrcChainHost"
+                                                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="8">
+                                                    <Canvas
+                                                        x:Name="SrcChainCanvas"
+                                                        Height="118"
+                                                        Background="Transparent"
+                                                        SizeChanged="SrcChainCanvas_SizeChanged" />
+                                                </Border>
+                                                <TextBlock
+                                                    x:Name="SrcChainNote"
+                                                    FontSize="11"
+                                                    Opacity="0.62"
+                                                    TextWrapping="Wrap"
+                                                    Text="—" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock
+                                                    FontSize="13"
+                                                    FontWeight="SemiBold"
+                                                    Text="重采样滤波器（示意图）" />
+                                                <Border
+                                                    x:Name="SrcFilterHost"
+                                                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="8">
+                                                    <Canvas
+                                                        x:Name="SrcFilterCanvas"
+                                                        Height="180"
+                                                        Background="Transparent"
+                                                        SizeChanged="SrcFilterCanvas_SizeChanged" />
+                                                </Border>
+                                                <TextBlock
+                                                    FontSize="10"
+                                                    Opacity="0.55"
+                                                    TextWrapping="Wrap"
+                                                    Text="这只是示意图，不是实测曲线。真实的长什么样取决于质量档位和目标采样率，这里只画「通带保持平坦、过了点就快速掉下去」这个共性形状。" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
                                             Padding="14,12">
                                             <StackPanel Spacing="6">
                                                 <TextBlock

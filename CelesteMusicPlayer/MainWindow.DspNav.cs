@@ -27,6 +27,7 @@ namespace CelesteMusicPlayer
         private int DspPageEqIndex => FindDspPageIndex(DspPageEq);
         private int DspPageCompressorIndex => FindDspPageIndex(DspPageCompressor);
         private int DspPageCrossfeedIndex => FindDspPageIndex(DspPageCrossfeed);
+        private int DspPageSrcIndex => FindDspPageIndex(DspPageSrc);
         private int DspPageMatrixIndex => FindDspPageIndex(DspPageMatrix);
         private int DspPageFieldIndex => FindDspPageIndex(DspPageStereoField);
         private int DspPageRackIndex => FindDspPageIndex(DspPageRack);
@@ -365,6 +366,12 @@ namespace CelesteMusicPlayer
             if (idx == DspPageRackIndex)
             {
                 RefreshDspRackList(DspRackStore.Load().RackOrder);
+            }
+
+            // SRC 页：链路图/示意曲线折叠时没有布局尺寸，切进来补一次
+            if (idx == DspPageSrcIndex)
+            {
+                RedrawSrcCanvas();
             }
 
             // 耳机校正页：第一次进入时加载 OPRA 数据库（之后复用内存态）

@@ -99,6 +99,8 @@ namespace CelesteMusicPlayer
                 // 播放中调用只保存（SRC 改变输出格式，必须下次开播生效）；引擎侧同样只透传保存
                 _audioEngine?.SetResampleTargetRate(hz);
                 RefreshSrcSessionState();
+                // 链路图与示意曲线都跟着目标采样率变
+                RedrawSrcCanvas();
             }
             catch (Exception caught)
             {
@@ -121,6 +123,7 @@ namespace CelesteMusicPlayer
                 }
 
                 _audioEngine?.SetSrcQuality(key);
+                RedrawSrcCanvas();
             }
             catch (Exception caught)
             {
@@ -159,6 +162,8 @@ namespace CelesteMusicPlayer
             SrcSessionStateText.Text = string.IsNullOrEmpty(desc)
                 ? "尚未播放"
                 : "当前会话：" + desc;
+            // 链路图上的源/目标采样率就来自这段会话描述，一起刷
+            RedrawSrcChain();
         }
 
         /// <summary>刷新右侧状态文字：关闭 / 已开启。</summary>
