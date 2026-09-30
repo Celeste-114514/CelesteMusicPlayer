@@ -140,6 +140,7 @@ namespace CelesteMusicPlayer
                 // 纯代码绘制的部分，重刷一遍
                 RefreshDspNavGeekAccent();
                 RedrawAudioFxEqCurve();
+                RefreshDspRackRows();
             }
             catch (Exception caught)
             {

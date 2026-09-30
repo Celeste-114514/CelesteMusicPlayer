@@ -373,7 +373,7 @@ namespace CelesteMusicPlayer
                     continue;
                 }
 
-                // 极客下「启用」<｜hy_place▁holder▁no▁813｜>磷光色；熄灭色也换一套（原来的 #B4B2A9 在极客深底上偏亮、太扎眼）
+                // 极客下「启用」圆点走磷光色；熄灭色也换一套（原来的 #B4B2A9 在极客深底上偏亮、太扎眼）
                 dot.Background = new SolidColorBrush(active[i]
                     ? (GeekDspAccentColor() ?? Color.FromArgb(255, 0x3B, 0x6D, 0x11))
                     : (_geekDspActive ? Color.FromArgb(255, 0x4A, 0x4A, 0x42) : Color.FromArgb(255, 0xB4, 0xB2, 0xA9)));
@@ -383,6 +383,9 @@ namespace CelesteMusicPlayer
             {
                 UpdateDspOutputMonitor();
             }
+
+            // 机架编排页的行状态与导航圆点同源，一起刷（页面不可见时刷新无副作用，控件判空即可）
+            RefreshDspRackRows();
 
             UpdateDspHeroBadges();
             UpdateDspChannelBars();

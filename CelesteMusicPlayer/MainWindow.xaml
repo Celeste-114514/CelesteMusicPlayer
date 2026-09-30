@@ -5653,18 +5653,76 @@
                                             CornerRadius="10"
                                             Padding="16">
                                             <StackPanel Spacing="10">
-                                                <TextBlock FontSize="11" Opacity="0.6" TextWrapping="Wrap" Text="选中模块，用「上移 / 下移」调顺序。先后顺序会轻微改变声音（先 A 后 B ≠ 先 B 后 A），但不影响音质。" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    TextWrapping="Wrap"
+                                                    Text="链路全景：声音按下列顺序流过。带序号的 8 个模块可用「上移 / 下移」调整先后；标「固定位置」的环节由链路结构决定，不参与排序。先后顺序会轻微改变声音（先 A 后 B ≠ 先 B 后 A），但不影响音质。" />
                                                 <ListView
                                                     x:Name="DspRackList"
-                                                    Height="300"
+                                                    Height="420"
                                                     SelectionMode="Single"
                                                     BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                                     BorderThickness="1"
                                                     CornerRadius="6"
-                                                    SelectionChanged="DspRackList_SelectionChanged" />
+                                                    SelectionChanged="DspRackList_SelectionChanged">
+                                                    <ListView.ItemTemplate>
+                                                        <DataTemplate x:DataType="local:DspRackRow">
+                                                            <Grid Padding="4,7" ColumnSpacing="10">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock
+                                                                    Grid.Column="0"
+                                                                    Width="34"
+                                                                    VerticalAlignment="Center"
+                                                                    FontSize="12"
+                                                                    Opacity="0.55"
+                                                                    Text="{x:Bind SlotLabel}" />
+                                                                <StackPanel Grid.Column="1" Spacing="1">
+                                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                        <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
+                                                                        <Border
+                                                                            Padding="5,0"
+                                                                            CornerRadius="8"
+                                                                            VerticalAlignment="Center"
+                                                                            Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                                                            Visibility="{x:Bind FixedBadgeVisibility}">
+                                                                            <TextBlock FontSize="10" Opacity="0.7" Text="固定位置" />
+                                                                        </Border>
+                                                                    </StackPanel>
+                                                                    <TextBlock
+                                                                        FontSize="11"
+                                                                        Opacity="0.55"
+                                                                        Text="{x:Bind Hint}"
+                                                                        TextTrimming="CharacterEllipsis" />
+                                                                </StackPanel>
+                                                                <StackPanel
+                                                                    Grid.Column="2"
+                                                                    Orientation="Horizontal"
+                                                                    Spacing="6"
+                                                                    VerticalAlignment="Center">
+                                                                    <Ellipse
+                                                                        Width="8"
+                                                                        Height="8"
+                                                                        VerticalAlignment="Center"
+                                                                        Fill="{x:Bind StateBrush}" />
+                                                                    <TextBlock
+                                                                        MinWidth="44"
+                                                                        VerticalAlignment="Center"
+                                                                        FontSize="11"
+                                                                        Opacity="0.7"
+                                                                        Text="{x:Bind StateText}" />
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ListView.ItemTemplate>
+                                                </ListView>
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button Content="上移" Click="DspRackUp_Click" />
-                                                    <Button Content="下移" Click="DspRackDown_Click" />
+                                                    <Button x:Name="DspRackUpButton" Content="上移" Click="DspRackUp_Click" />
+                                                    <Button x:Name="DspRackDownButton" Content="下移" Click="DspRackDown_Click" />
                                                     <Button Content="恢复默认顺序" Click="DspRackReset_Click" />
                                                 </StackPanel>
                                                 <TextBlock

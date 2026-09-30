@@ -21,6 +21,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
+using Windows.UI;
 
 namespace CelesteMusicPlayer
 {
@@ -428,6 +429,42 @@ namespace CelesteMusicPlayer
         }
 
         // ─────────────────────────────────────────────────────────────
+        // 机架编排（链路全景视图）—— 行模型 DspRackRow 见本文件底部顶层类
+        // ─────────────────────────────────────────────────────────────
+
+        /// <summary>行状态级别。</summary>
+        private enum DspRackState
+        {
+            Off = 0,
+            On = 1,
+            Bypassed = 2
+        }
+
+        /// <summary>行状态点颜色：on=面板强调色（极客磷光/经典 accent）；已旁路=琥珀（语义色，
+        /// 不主题化，与模块页 Hero 徽章口径一致）；off=灰（极客下换暗灰，原 #B4B2A9 在深底太扎眼）。</summary>
+        private Brush DspRackStateBrush(DspRackState state)
+        {
+            if (state == DspRackState.On)
+            {
+                return DspAccentBrush();
+            }
+
+            if (state == DspRackState.Bypassed)
+            {
+                return new SolidColorBrush(Color.FromArgb(255, 0xC0, 0x7A, 0x1A));
+            }
+
+            return new SolidColorBrush(_geekDspActive
+                ? Color.FromArgb(255, 0x4A, 0x4A, 0x42)
+                : Color.FromArgb(255, 0xB4, 0xB2, 0xA9));
+        }
+
+        private List<DspRackRow> _dspRackRows = new();
+
+        /// <summary>当前是否被 DSP 总旁路（总旁路时机架行一律显示"已旁路"）。</summary>
+        private bool DspRackGlobalBypassed => DspBypassToggle != null && DspBypassToggle.IsOn;
+
+        // ─────────────────────────────────────────────────────────────
         // 事件：机架编排
         // ─────────────────────────────────────────────────────────────
 
@@ -445,6 +482,10 @@ namespace CelesteMusicPlayer
             RenderDspRackList();
         }
 
+        /// <summary>
+        /// 渲染链路全景：SRC（固定）→ 8 个内核模块（可调）→ 耳机校正（固定，随 EQ）→
+        /// 输出安全（固定，末端）。状态文字/颜色按此刻各模块真实生效情况生成。
+        /// </summary>
         private void RenderDspRackList()
         {
             if (DspRackList == null || _dspRackOrderDraft == null)
@@ -452,21 +493,153 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            List<string> items = new();
+            bool bypassed = DspRackGlobalBypassed;
+            List<DspRackRow> rows = new();
+
+            // ① SRC 升频：机架外上游，固定
+            rows.Add(MakeFixedRow(
+                "SRC / 升频",
+                "重采样目标采样率，位于机架最上游，先于所有机架模块。",
+                SrcRowActive() ? DspRackState.On : DspRackState.Off,
+                SrcRowActive() ? "生效中" : "未启用"));
+
+            // ② 8 个内核模块：当前草稿顺序
             for (int i = 0; i < _dspRackOrderDraft.Length && i < RackModuleNames.Length; i++)
             {
                 int id = _dspRackOrderDraft[i];
-                items.Add((i + 1) + ".  " + RackModuleNames[id]);
+                DspRackState state = RackModuleActive(id)
+                    ? (bypassed ? DspRackState.Bypassed : DspRackState.On)
+                    : DspRackState.Off;
+                rows.Add(new DspRackRow
+                {
+                    SlotLabel = (i + 1) + ".",
+                    Name = RackModuleNames[id],
+                    Hint = RackModuleHints[id],
+                    StateText = state switch
+                    {
+                        DspRackState.On => "生效中",
+                        DspRackState.Bypassed => "已旁路",
+                        _ => "未启用"
+                    },
+                    StateBrush = DspRackStateBrush(state),
+                    Movable = true,
+                    ModuleId = id
+                });
             }
 
+            // ③ 耳机校正：曲线写入参数 EQ，随 EQ 生效（固定）
+            rows.Add(MakeFixedRow(
+                "耳机校正",
+                "校正曲线写入参数 EQ 的频点，随 EQ 一同生效；在「参数 EQ」页可继续微调。",
+                _opraApplied ? DspRackState.On : DspRackState.Off,
+                _opraApplied ? "生效中" : "未应用"));
+
+            // ④ 输出安全：输入余量 + 限幅，固定在链路末端
+            bool safetyActive = AudioFxSafetyHeadroomSlider != null && Math.Abs(AudioFxSafetyHeadroomSlider.Value) > 0.01;
+            rows.Add(MakeFixedRow(
+                "输出安全",
+                "输入余量与限幅，固定在链路最末端（机架之后）；机架顺序对它无影响。",
+                safetyActive ? DspRackState.On : DspRackState.Off,
+                safetyActive ? "生效中" : "待命"));
+
+            _dspRackRows = rows;
+
             int restore = DspRackList.SelectedIndex;
-            DspRackList.ItemsSource = items;
-            if (restore >= 0 && restore < items.Count)
+            DspRackList.ItemsSource = null;
+            DspRackList.ItemsSource = rows;
+            if (restore >= 0 && restore < rows.Count)
             {
                 DspRackList.SelectedIndex = restore;
             }
 
             ShowDspRackHint();
+        }
+
+        private DspRackRow MakeFixedRow(string name, string hint, DspRackState state, string stateText)
+        {
+            return new DspRackRow
+            {
+                SlotLabel = "固定",
+                Name = name,
+                Hint = hint,
+                StateText = stateText,
+                StateBrush = DspRackStateBrush(state),
+                Movable = false,
+                ModuleId = -1
+            };
+        }
+
+        /// <summary>SRC 固定行是否生效（目标采样率已设且非 0；口径同导航圆点）。</summary>
+        private bool SrcRowActive()
+        {
+            if (SrcRateCombo == null || SrcRateCombo.SelectedIndex < 0 || SrcRateCombo.SelectedIndex >= SrcRateOptions.Length)
+            {
+                return false;
+            }
+
+            return SrcRateOptions[SrcRateCombo.SelectedIndex].Hz > 0;
+        }
+
+        /// <summary>机架 8 模块此刻是否真正参与处理（供行状态；全局旁路由调用方叠加 Bypassed）。</summary>
+        private bool RackModuleActive(int moduleId)
+        {
+            switch (moduleId)
+            {
+                case DspCoreInterop.RackEqualizer:
+                    return _audioFxEq != null && _audioFxEq.Enabled && _audioFxEq.HasEffect();
+                case DspCoreInterop.RackConvolution:
+                    return RoomCorrectionStore.Load().Enabled;
+                case DspCoreInterop.RackReplayGain:
+                    return ReplayGainStore.Load().Mode != ReplayGainMode.Off;
+                case DspCoreInterop.RackCompressor:
+                    return DspCompActive();
+                case DspCoreInterop.RackCrossfeed:
+                    return AudioFxChannelCrossfeedToggle != null && AudioFxChannelCrossfeedToggle.IsOn
+                        && (AudioFxChannelCrossfeedSlider?.Value ?? 0) > 0.1;
+                case DspCoreInterop.RackStereoField:
+                    return DspFieldActive();
+                case DspCoreInterop.RackChannelMatrix:
+                    return DspMatrixActive();
+                case DspCoreInterop.RackChannelBalance:
+                    return ChannelBalanceActive();
+                default:
+                    return false;
+            }
+        }
+
+        /// <summary>声道平衡（机架最后一项）是否产生实际处理：任一非默认值即算。</summary>
+        private bool ChannelBalanceActive()
+        {
+            if (AudioFxChannelToggle == null || !AudioFxChannelToggle.IsOn)
+            {
+                return false;
+            }
+
+            double balance = AudioFxChannelBalanceSlider?.Value ?? 0;
+            double lg = AudioFxChannelLeftGainSlider?.Value ?? 0;
+            double rg = AudioFxChannelRightGainSlider?.Value ?? 0;
+            double ld = AudioFxChannelLeftDelaySlider?.Value ?? 0;
+            double rd = AudioFxChannelRightDelaySlider?.Value ?? 0;
+            return Math.Abs(balance) > 0.005
+                || Math.Abs(lg) > 0.05
+                || Math.Abs(rg) > 0.05
+                || Math.Abs(ld) > 0.05
+                || Math.Abs(rd) > 0.05
+                || (AudioFxChannelSwapToggle?.IsOn ?? false)
+                || (AudioFxChannelInvertLToggle?.IsOn ?? false)
+                || (AudioFxChannelInvertRToggle?.IsOn ?? false)
+                || (AudioFxChannelMonoCombo?.SelectedIndex ?? 0) > 0;
+        }
+
+        /// <summary>仅重刷行状态（不动顺序）：导航指示刷新 / 皮肤切换时调用。</summary>
+        private void RefreshDspRackRows()
+        {
+            if (DspRackList == null || _dspRackOrderDraft == null)
+            {
+                return;
+            }
+
+            RenderDspRackList();
         }
 
         private void ShowDspRackHint()
@@ -477,20 +650,35 @@ namespace CelesteMusicPlayer
             }
 
             int index = DspRackList?.SelectedIndex ?? -1;
-            if (index >= 0 && _dspRackOrderDraft != null && index < _dspRackOrderDraft.Length)
+            if (index >= 0 && _dspRackRows.Count > 0 && index < _dspRackRows.Count)
             {
-                int id = _dspRackOrderDraft[index];
-                DspRackHintText.Text = RackModuleHints[id];
+                DspRackHintText.Text = _dspRackRows[index].Name + "：" + _dspRackRows[index].Hint;
             }
             else
             {
-                DspRackHintText.Text = "先选中一个模块，这里会显示它的作用说明。";
+                DspRackHintText.Text = "点选任意一行查看它的作用说明。";
             }
+
+            UpdateDspRackMoveButtons();
         }
 
         private void DspRackList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             ShowDspRackHint();
+        }
+
+        /// <summary>上移/下移只在选中「可调顺序」行时可用；固定行禁用。</summary>
+        private void UpdateDspRackMoveButtons()
+        {
+            if (DspRackUpButton == null || DspRackDownButton == null)
+            {
+                return;
+            }
+
+            int index = DspRackList?.SelectedIndex ?? -1;
+            bool movable = index >= 0 && index < _dspRackRows.Count && _dspRackRows[index].Movable;
+            DspRackUpButton.IsEnabled = movable && index > 0 && _dspRackRows[index - 1].Movable;
+            DspRackDownButton.IsEnabled = movable && index < _dspRackRows.Count - 1 && _dspRackRows[index + 1].Movable;
         }
 
         private void DspRackUp_Click(object sender, RoutedEventArgs e)
@@ -503,7 +691,8 @@ namespace CelesteMusicPlayer
             MoveDspRackEntry(1);
         }
 
-        /// <summary>把选中模块上下移动一格（delta=-1 上移 / +1 下移），立即下发内核。</summary>
+        /// <summary>把选中模块上下移动一格（delta=-1 上移 / +1 下移），立即下发内核。
+        /// 固定行（SRC / 耳机校正 / 输出安全）不做任何事。</summary>
         private void MoveDspRackEntry(int delta)
         {
             if (DspRackList == null || _dspRackOrderDraft == null)
@@ -512,13 +701,20 @@ namespace CelesteMusicPlayer
             }
 
             int i = DspRackList.SelectedIndex;
-            int j = i + delta;
-            if (i < 0 || i >= _dspRackOrderDraft.Length || j < 0 || j >= _dspRackOrderDraft.Length)
+            // 行下标 0 是 SRC 固定行；内核 8 模块占 1..8
+            if (i < 1 || i > _dspRackOrderDraft.Length)
             {
                 return;
             }
 
-            (_dspRackOrderDraft[i], _dspRackOrderDraft[j]) = (_dspRackOrderDraft[j], _dspRackOrderDraft[i]);
+            int rackIndex = i - 1;
+            int j = rackIndex + delta;
+            if (rackIndex < 0 || rackIndex >= _dspRackOrderDraft.Length || j < 0 || j >= _dspRackOrderDraft.Length)
+            {
+                return;
+            }
+
+            (_dspRackOrderDraft[rackIndex], _dspRackOrderDraft[j]) = (_dspRackOrderDraft[j], _dspRackOrderDraft[rackIndex]);
             CommitDspRackOrder();
         }
 
@@ -618,5 +814,30 @@ namespace CelesteMusicPlayer
 
             return true;
         }
+    }
+
+    /// <summary>
+    /// 机架编排页的一行（链路全景）：8 个内核模块（Movable，可上下移）+ 3 个固定环节
+    /// （SRC 上游 / 耳机校正随 EQ / 输出安全末端，位置由链路结构决定）。
+    /// 状态色在生成行时按当前皮肤算好（极客=磷光，经典=主题 accent），
+    /// 皮肤切换时整表重建即可换色（ApplyGeekDsp 收尾调用）。
+    /// 顶层类而非 MainWindow 嵌套类——XAML x:Bind 的 x:DataType 只可靠解析顶层类型，
+    /// 与项目里 PlaylistItem / AlbumEntry / TagSortCategoryEntry 等行模型的既有做法一致。
+    /// </summary>
+    public sealed class DspRackRow
+    {
+        public required string SlotLabel { get; init; }
+        public required string Name { get; init; }
+        public required string Hint { get; init; }
+        public required string StateText { get; init; }
+        public required Brush StateBrush { get; init; }
+
+        /// <summary>true = 可上下移（内核机架 8 槽之一）；false = 固定位置只读行。</summary>
+        public bool Movable { get; init; }
+
+        /// <summary>内核模块 ID；固定行为 -1。</summary>
+        public int ModuleId { get; init; } = -1;
+
+        public Visibility FixedBadgeVisibility => Movable ? Visibility.Collapsed : Visibility.Visible;
     }
 }
