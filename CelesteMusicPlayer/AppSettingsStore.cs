@@ -401,6 +401,12 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         /// <summary>分类字段 key 列表（按顺序显示在分类按钮组）；空 = 默认 5 个（艺术家/专辑艺术家/专辑/流派/年份）。</summary>
         public List<string> TagSortCategoryFields { get; set; } = new();
 
+        /// <summary>
+        /// 一屏浏览左侧分类框的字段顺序（自上而下一层一个框）。空 = 左侧一个框都不摆，
+        /// 由用户点「选择分类字段」自己加——「一切由用户决定」这条是 2026-09-30 定下来的。
+        /// </summary>
+        public List<string> TagSortFacetFields { get; set; } = new();
+
         /// <summary>分组浏览（模块 C）的自定义多字段序列（自上而下嵌套）；空 = 默认 艺术家/专辑。作为“自定义”下拉项的快照独立保存，切到预设也不会被覆盖。</summary>
         public List<string> TagSortGroupFields { get; set; } = new();
 
@@ -837,6 +843,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             // 导致分类字段配置、列配置、自定义分组、上次激活项在重启后丢失（此前自定义分组记忆功能因此失效）。
             TagSortColumns = s.TagSortColumns.Select(c => new ListColumnSpec { Key = c.Key, Weight = c.Weight, Visible = c.Visible }).ToList(),
             TagSortCategoryFields = s.TagSortCategoryFields.ToList(),
+            TagSortFacetFields = (s.TagSortFacetFields ?? new List<string>()).ToList(),
             TagSortGroupFields = s.TagSortGroupFields.ToList(),
             TagSortGroupActivePreset = s.TagSortGroupActivePreset,
             // 主窗口置顶此前漏拷：保存写进了文件，但 Load() 返回的克隆里恒为 false，

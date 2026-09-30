@@ -3424,101 +3424,145 @@
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
 
-                            <!-- 左：分类框列（一个框 = 一个分类维度；框内行 = 文件夹） -->
-                            <ScrollViewer x:Name="TagSortFacetScroll"
-                                          VerticalScrollBarVisibility="Auto"
-                                          Padding="0,0,4,0">
-                                <ItemsControl x:Name="TagSortFacetPanel" Spacing="10">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="local:TagSortFacetBox">
-                                            <Border Padding="8,6"
-                                                    CornerRadius="8"
-                                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                                    BorderThickness="1">
-                                                <Grid RowSpacing="4">
-                                                    <Grid.RowDefinitions>
-                                                        <RowDefinition Height="Auto" />
-                                                        <RowDefinition Height="*" />
-                                                    </Grid.RowDefinitions>
-                                                    <!-- 框标题：分类名 + 取值数量 -->
-                                                    <Grid Grid.Row="0" ColumnSpacing="6">
-                                                        <Grid.ColumnDefinitions>
-                                                            <ColumnDefinition Width="Auto" />
-                                                            <ColumnDefinition Width="*" />
-                                                            <ColumnDefinition Width="Auto" />
-                                                        </Grid.ColumnDefinitions>
-                                                        <FontIcon Grid.Column="0"
-                                                                  Glyph="&#xE8B7;"
-                                                                  FontSize="13"
-                                                                  Opacity="0.75"
-                                                                  VerticalAlignment="Center" />
-                                                        <TextBlock Grid.Column="1"
-                                                                   Text="{x:Bind Label}"
-                                                                   FontSize="13"
-                                                                   FontWeight="SemiBold"
-                                                                   VerticalAlignment="Center"
-                                                                   TextTrimming="CharacterEllipsis" />
-                                                        <TextBlock Grid.Column="2"
-                                                                   Text="{x:Bind CountText}"
-                                                                   FontSize="11"
-                                                                   Opacity="0.6"
-                                                                   VerticalAlignment="Center" />
-                                                    </Grid>
-                                                    <!-- 框内：一行一个文件夹（取值 + 当前条件下的数量） -->
-                                                    <ListView
-                                                        Grid.Row="1"
-                                                        MaxHeight="300"
-                                                        ItemsSource="{x:Bind Entries}"
-                                                        SelectionMode="Single"
-                                                        IsItemClickEnabled="True"
-                                                        ItemClick="TagSortFacetItemClick"
-                                                        SelectionChanged="TagSortFacetList_SelectionChanged"
-                                                        Tag="{x:Bind Key}">
-                                                        <ListView.ItemContainerStyle>
-                                                            <Style TargetType="ListViewItem">
-                                                                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                                                <Setter Property="Padding" Value="0" />
-                                                                <Setter Property="MinHeight" Value="26" />
-                                                                <Setter Property="CornerRadius" Value="4" />
-                                                                <Setter Property="Margin" Value="0,1" />
-                                                            </Style>
-                                                        </ListView.ItemContainerStyle>
-                                                        <ListView.ItemTemplate>
-                                                            <DataTemplate x:DataType="local:TagSortFacetEntry">
-                                                                <Grid ColumnSpacing="6" Padding="4,0,4,0">
-                                                                    <Grid.ColumnDefinitions>
-                                                                        <ColumnDefinition Width="Auto" />
-                                                                        <ColumnDefinition Width="*" />
-                                                                        <ColumnDefinition Width="Auto" />
-                                                                    </Grid.ColumnDefinitions>
-                                                                    <FontIcon Grid.Column="0"
-                                                                              Glyph="&#xE8F4;"
-                                                                              FontSize="11"
-                                                                              Opacity="0.55"
-                                                                              VerticalAlignment="Center"
-                                                                              IsHitTestVisible="False" />
-                                                                    <TextBlock Grid.Column="1"
-                                                                               Text="{x:Bind Value}"
-                                                                               FontSize="13"
-                                                                               VerticalAlignment="Center"
-                                                                               TextTrimming="CharacterEllipsis"
-                                                                               ToolTipService.ToolTip="{x:Bind Value}" />
-                                                                    <TextBlock Grid.Column="2"
-                                                                               Text="{x:Bind CountText}"
-                                                                               FontSize="11"
-                                                                               Opacity="0.6"
-                                                                               VerticalAlignment="Center" />
-                                                                </Grid>
-                                                            </DataTemplate>
-                                                        </ListView.ItemTemplate>
-                                                    </ListView>
-                                                </Grid>
-                                            </Border>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
+                            <!-- 左：分类框列（一层一个分类维度；框内一行 = 该维度的一个取值） -->
+                            <Grid RowSpacing="6">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto" />
+                                    <RowDefinition Height="*" />
+                                </Grid.RowDefinitions>
+
+                                <!-- 加一层：新层只装上一层筛完剩下的（级联钻取） -->
+                                <Button x:Name="TagSortAddFacetButton"
+                                        Grid.Row="0"
+                                        HorizontalAlignment="Stretch"
+                                        Height="32"
+                                        Padding="10,0"
+                                        Click="TagSortAddFacetButton_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE710;" FontSize="12" VerticalAlignment="Center" />
+                                        <TextBlock Text="选择分类字段" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
+
+                                <ScrollViewer Grid.Row="1"
+                                              x:Name="TagSortFacetScroll"
+                                              VerticalScrollBarVisibility="Auto"
+                                              Padding="0,0,4,0">
+                                    <Grid>
+                                        <ItemsControl x:Name="TagSortFacetPanel" Spacing="10">
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate x:DataType="local:TagSortFacetBox">
+                                                    <Border Padding="8,6"
+                                                            CornerRadius="8"
+                                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                            BorderThickness="1">
+                                                        <Grid RowSpacing="4">
+                                                            <Grid.RowDefinitions>
+                                                                <RowDefinition Height="Auto" />
+                                                                <RowDefinition Height="*" />
+                                                            </Grid.RowDefinitions>
+                                                            <!-- 框标题：层级 + 分类名 + 取值数量 + 收起 -->
+                                                            <Grid Grid.Row="0" ColumnSpacing="6">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="*" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock Grid.Column="0"
+                                                                           Text="{x:Bind Title}"
+                                                                           FontSize="13"
+                                                                           FontWeight="SemiBold"
+                                                                           VerticalAlignment="Center"
+                                                                           TextTrimming="CharacterEllipsis" />
+                                                                <TextBlock Grid.Column="1"
+                                                                           Text="{x:Bind CountText}"
+                                                                           FontSize="11"
+                                                                           Opacity="0.6"
+                                                                           VerticalAlignment="Center" />
+                                                                <Button Grid.Column="2"
+                                                                        Tag="{x:Bind Key}"
+                                                                        Click="TagSortFacetRemove_Click"
+                                                                        Width="22"
+                                                                        Height="22"
+                                                                        Padding="0"
+                                                                        CornerRadius="4"
+                                                                        BorderThickness="0"
+                                                                        Background="Transparent"
+                                                                        VerticalAlignment="Center"
+                                                                        ToolTipService.ToolTip="收起这一层">
+                                                                    <FontIcon Glyph="&#xE711;" FontSize="10" />
+                                                                </Button>
+                                                            </Grid>
+                                                            <!-- 框内：一行一个取值（选中的行高亮 + 打勾） -->
+                                                            <ListView
+                                                                Grid.Row="1"
+                                                                MaxHeight="300"
+                                                                ItemsSource="{x:Bind Entries}"
+                                                                SelectionMode="None"
+                                                                IsItemClickEnabled="True"
+                                                                ItemClick="TagSortFacetItemClick"
+                                                                Tag="{x:Bind Key}">
+                                                                <ListView.ItemContainerStyle>
+                                                                    <Style TargetType="ListViewItem">
+                                                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                                        <Setter Property="Padding" Value="0" />
+                                                                        <Setter Property="MinHeight" Value="26" />
+                                                                        <Setter Property="CornerRadius" Value="4" />
+                                                                        <Setter Property="Margin" Value="0,1" />
+                                                                    </Style>
+                                                                </ListView.ItemContainerStyle>
+                                                                <ListView.ItemTemplate>
+                                                                    <DataTemplate x:DataType="local:TagSortFacetEntry">
+                                                                        <Border Background="{x:Bind RowBackground, Mode=OneWay}"
+                                                                                CornerRadius="4"
+                                                                                Padding="4,0">
+                                                                            <Grid ColumnSpacing="6">
+                                                                                <Grid.ColumnDefinitions>
+                                                                                    <ColumnDefinition Width="Auto" />
+                                                                                    <ColumnDefinition Width="*" />
+                                                                                    <ColumnDefinition Width="Auto" />
+                                                                                </Grid.ColumnDefinitions>
+                                                                                <FontIcon Grid.Column="0"
+                                                                                          Glyph="{x:Bind MarkGlyph, Mode=OneWay}"
+                                                                                          Foreground="{x:Bind MarkBrush, Mode=OneWay}"
+                                                                                          FontSize="11"
+                                                                                          VerticalAlignment="Center"
+                                                                                          IsHitTestVisible="False" />
+                                                                                <TextBlock Grid.Column="1"
+                                                                                           Text="{x:Bind Value}"
+                                                                                           FontSize="13"
+                                                                                           VerticalAlignment="Center"
+                                                                                           TextTrimming="CharacterEllipsis"
+                                                                                           ToolTipService.ToolTip="{x:Bind Value}" />
+                                                                                <TextBlock Grid.Column="2"
+                                                                                           Text="{x:Bind CountText}"
+                                                                                           FontSize="11"
+                                                                                           Opacity="0.6"
+                                                                                           VerticalAlignment="Center" />
+                                                                            </Grid>
+                                                                        </Border>
+                                                                    </DataTemplate>
+                                                                </ListView.ItemTemplate>
+                                                            </ListView>
+                                                        </Grid>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+
+                                        <!-- 一个框都没加时的提示 -->
+                                        <TextBlock x:Name="TagSortFacetEmptyHint"
+                                                   Visibility="Collapsed"
+                                                   Margin="4,10,4,0"
+                                                   VerticalAlignment="Top"
+                                                   TextWrapping="Wrap"
+                                                   FontSize="13"
+                                                   Opacity="0.6"
+                                                   Text="左侧还是空的。点上面的按钮挑个分类，选一项就开始筛；不够用就再加一层，新的一层只在上一层剩下的里面挑。" />
+                                    </Grid>
+                                </ScrollViewer>
+                            </Grid>
 
                             <!-- 右：常驻歌单（列头 + 动态列列表，与旧面板同款行为） -->
                             <Grid Grid.Column="1" RowSpacing="2">
