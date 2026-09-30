@@ -3794,7 +3794,7 @@
                                                         FontSize="12"
                                                         Opacity="0.6"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="一份方案 = 机架顺序 + EQ 曲线（含耳机校正）+ 压缩器 / 立体声场 / 声道矩阵 + 声道工具与输出安全 + ReplayGain + 房间校正 + 升频三件套。" />
+                                                        Text="一套设置全存进去：机架顺序、EQ、压缩器、立体声场、声道矩阵、ReplayGain、房间校正、升频，一个不落。" />
                                                 </StackPanel>
                                                 <Grid ColumnSpacing="8">
                                                     <Grid.ColumnDefinitions>
@@ -4129,7 +4129,7 @@
                                                         FontSize="12"
                                                         Opacity="0.6"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="WDL 高质量重采样。只升频、不降频；仅 WASAPI 独占模式生效，设备不支持目标采样率时自动退回不升频。" />
+                                                        Text="WDL 那套高质量重采样。只升不降；只有 WASAPI 独占模式管这个，设备吃不下目标采样率就自动不升。" />
                                                 </StackPanel>
                                             <Grid ColumnSpacing="8">
                                                 <Grid.ColumnDefinitions>
@@ -4344,7 +4344,7 @@
                                                     FontSize="10"
                                                     Opacity="0.55"
                                                     TextWrapping="Wrap"
-                                                    Text="这只是示意图，不是实测曲线。真实的长什么样取决于质量档位和目标采样率，这里只画「通带保持平坦、过了点就快速掉下去」这个共性形状。" />
+                                                    Text="示意图，不是实测曲线。换成别的档位或目标采样率，真实曲线都不一样；这里只画它们的共样——通带平，过了截止点就快速往下掉。" />
                                             </StackPanel>
                                         </Border>
                                         <Border
@@ -4357,12 +4357,12 @@
                                                 <TextBlock
                                                     FontSize="13"
                                                     FontWeight="SemiBold"
-                                                    Text="升频到底改变了什么" />
+                                                    Text="升频改变了什么" />
                                                 <TextBlock
                                                     FontSize="11"
                                                     Opacity="0.6"
                                                     TextWrapping="WrapWholeWords"
-                                                    Text="升频不能无中生有。它把滤波失真推到人耳听不见的高频，听感更干净；开了它输出就不再是 bit-perfect。" />
+                                                    Text="多出来的那部分是滤波器整出来的，不是真细节，但听着干净；开了它输出就不再 bit-perfect。" />
                                                 <TextBlock
                                                     FontSize="11"
                                                     Opacity="0.6"
@@ -4851,7 +4851,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="选耳机品牌型号，套用 OPRA 库的目标曲线（折算成 EQ 段）。" />
+                                                        Text="选你耳机的牌子型号，直接套 OPRA 库的目标曲线，底下就是转成 EQ 段来跑。" />
                                                 </StackPanel>
                                                 <StackPanel
                                                     Grid.Column="2"
@@ -5602,7 +5602,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="把对侧的低频混一点进来，缓解耳机特有的「声音卡在脑袋中间」。" />
+                                                        Text="把对侧的低频混一点进来，治耳机「声音卡在脑袋中间」的毛病。" />
                                                 </StackPanel>
                                                 <StackPanel
                                                     Grid.Column="2"
@@ -5651,7 +5651,7 @@
                                                         Opacity="0.6"
                                                         VerticalAlignment="Center"
                                                         TextWrapping="Wrap"
-                                                        Text="把对侧声道低频经低通混入本侧，缓解耳机「头中定位」、声场更自然开阔。" />
+                                                        Text="把对侧的低频混一点进来，治耳机「声音卡在脑袋中间」的毛病。" />
                                                 </Grid>
                                                 <StackPanel Spacing="4">
                                                     <Grid ColumnSpacing="8">
@@ -6182,7 +6182,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="压平忽大忽小的音量起伏：超过阈值的部分按比例收小，安静段落相对抬起来。" />
+                                                        Text="超过阈值的部分按比例收小，安静段相对抬起来，听着就不忽大忽小了。" />
                                                 </StackPanel>
                                                 <StackPanel
                                                     Grid.Column="2"
@@ -6599,7 +6599,7 @@
                                                     </Grid>
                                                     <Slider x:Name="DspFieldSideSlider" Minimum="-18" Maximum="18" StepFrequency="0.5" Value="0" ValueChanged="DspFieldSlider_ValueChanged" />
                                                 </StackPanel>
-                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="「中间」是左右完全一样的那部分（通常是主唱、贝斯），「两侧」是左右有差异的那部分（混响、氛围声）。" />
+                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="「中间」= 左右一模一样的声音，主唱贝斯基本都在这；「两侧」= 左右有差的部分，混响、氛围声这些。" />
                                             </StackPanel>
                                         </Border>
                                         <Border
@@ -6932,7 +6932,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="决定音频依次经过这些模块的先后顺序。默认顺序即出厂预设。" />
+                                                        Text="模块谁前谁后。默认就是出厂排法。" />
                                                 </StackPanel>
                                                 <Border
                                                     x:Name="DspBadgeRack"
@@ -6960,7 +6960,7 @@
                                                     FontSize="11"
                                                     Opacity="0.6"
                                                     TextWrapping="Wrap"
-                                                    Text="链路全景：声音按下列顺序流过。8 个模块都能用「上移 / 下移」调整先后。采样率、耳机校正、输出安全是链路结构决定的上下游，不在机架里、不参与排序。先后顺序会轻微改变声音（先 A 后 B ≠ 先 B 后 A），但不影响音质。" />
+                                                    Text="声音就照这个顺序流。8 个模块能用「上移 / 下移」调先后；采样率、耳机校正、输出安全是链路定死的上下游，不参与排序。先后会轻微改变声音（先 A 后 B ≠ 先 B 后 A），音质不受影响。" />
                                                 <ListView
                                                     x:Name="DspRackList"
                                                     Height="340"
