@@ -4533,6 +4533,51 @@
                                                 </StackPanel>
                                             </Grid>
                                         </Border>
+                                        <!-- 热门品牌：点一下就按该品牌搜，省得打字 -->
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="14,12">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock
+                                                    FontSize="13"
+                                                    FontWeight="SemiBold"
+                                                    Text="热门品牌" />
+                                                <GridView
+                                                    x:Name="OpraVendorWall"
+                                                    SelectionMode="Single"
+                                                    IsItemClickEnabled="True"
+                                                    ItemClick="OpraVendorWall_ItemClick"
+                                                    MaxHeight="132"
+                                                    ScrollViewer.HorizontalScrollMode="Disabled">
+                                                    <GridView.ItemTemplate>
+                                                        <DataTemplate x:DataType="local:OpraVendorChip">
+                                                            <Border
+                                                                Padding="12,6"
+                                                                CornerRadius="14"
+                                                                Background="{ThemeResource ControlFillColorSecondaryBrush}">
+                                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
+                                                                    <TextBlock
+                                                                        Text="{x:Bind CountLabel}"
+                                                                        FontSize="11"
+                                                                        Opacity="0.6"
+                                                                        VerticalAlignment="Center" />
+                                                                </StackPanel>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </GridView.ItemTemplate>
+                                                </GridView>
+                                                <TextBlock
+                                                    x:Name="OpraVendorWallNote"
+                                                    FontSize="10"
+                                                    Opacity="0.55"
+                                                    TextWrapping="Wrap"
+                                                    Text="品牌和数量都来自 OPRA 数据库，要等数据库加载完才显示得出来。" />
+                                            </StackPanel>
+                                        </Border>
                                         <!-- 搜索行：品牌 / 型号关键词（2026-09-30 由独立窗口内嵌，流程不变） -->
                                         <Border
                                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
@@ -4557,6 +4602,57 @@
                                                     Style="{StaticResource AccentButtonStyle}"
                                                     Click="OpraSearchButton_Click" />
                                             </Grid>
+                                        </Border>
+                                        <!-- 最近用过 / 收藏：下次进来不用再搜一遍 -->
+                                        <Border
+                                            x:Name="OpraRecentCard"
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="14,12"
+                                            Visibility="Collapsed">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock
+                                                    FontSize="13"
+                                                    FontWeight="SemiBold"
+                                                    Text="最近用过 / 收藏" />
+                                                <ListView
+                                                    x:Name="OpraRecentList"
+                                                    MaxHeight="160"
+                                                    SelectionMode="Single"
+                                                    IsItemClickEnabled="True"
+                                                    ItemClick="OpraRecentList_ItemClick">
+                                                    <ListView.ItemTemplate>
+                                                        <DataTemplate x:DataType="local:OpraRecentEntry">
+                                                            <Grid Padding="2,6" ColumnSpacing="8">
+                                                                <Grid.ColumnDefinitions>
+                                                                    <ColumnDefinition Width="Auto" />
+                                                                    <ColumnDefinition Width="*" />
+                                                                </Grid.ColumnDefinitions>
+                                                                <TextBlock
+                                                                    Grid.Column="0"
+                                                                    Text="{x:Bind Mark}"
+                                                                    FontSize="13"
+                                                                    VerticalAlignment="Center" />
+                                                                <StackPanel Grid.Column="1" Spacing="1">
+                                                                    <TextBlock Text="{x:Bind Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                                    <TextBlock
+                                                                        Text="{x:Bind SubTitle}"
+                                                                        FontSize="11"
+                                                                        Opacity="0.6"
+                                                                        TextTrimming="CharacterEllipsis" />
+                                                                </StackPanel>
+                                                            </Grid>
+                                                        </DataTemplate>
+                                                    </ListView.ItemTemplate>
+                                                </ListView>
+                                                <TextBlock
+                                                    FontSize="10"
+                                                    Opacity="0.55"
+                                                    TextWrapping="Wrap"
+                                                    Text="点任意一条直接打开；★ 是收藏，🕘 是最近用过。" />
+                                            </StackPanel>
                                         </Border>
                                         <TextBlock
                                             x:Name="OpraStatusText"
@@ -4610,6 +4706,33 @@
                                                     FontSize="12"
                                                     Opacity="0.65"
                                                     TextWrapping="WrapWholeWords" />
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <Border
+                                                        x:Name="OpraAutoEqBadge"
+                                                        Padding="7,2"
+                                                        CornerRadius="10"
+                                                        VerticalAlignment="Center"
+                                                        Background="{ThemeResource AccentFillColorSecondaryBrush}"
+                                                        Visibility="Collapsed">
+                                                        <TextBlock
+                                                            Text="AutoEQ"
+                                                            FontSize="10"
+                                                            FontWeight="SemiBold"
+                                                            Foreground="{ThemeResource AccentFillColorDefaultBrush}" />
+                                                    </Border>
+                                                    <Border
+                                                        x:Name="OpraSampleBadge"
+                                                        Padding="7,2"
+                                                        CornerRadius="10"
+                                                        VerticalAlignment="Center"
+                                                        Background="{ThemeResource ControlFillColorSecondaryBrush}"
+                                                        Visibility="Collapsed">
+                                                        <TextBlock
+                                                            x:Name="OpraSampleBadgeText"
+                                                            FontSize="10"
+                                                            Opacity="0.7" />
+                                                    </Border>
+                                                </StackPanel>
                                                 <TextBlock Text="选择校正曲线" FontSize="13" FontWeight="SemiBold" />
                                                 <ListView
                                                     x:Name="OpraEqList"
@@ -4633,18 +4756,44 @@
                                                     FontSize="12"
                                                     Opacity="0.7"
                                                     TextWrapping="WrapWholeWords" />
+                                                <TextBlock Text="这条曲线长什么样" FontSize="13" FontWeight="SemiBold" />
+                                                <Border
+                                                    x:Name="OpraPreviewHost"
+                                                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                    BorderThickness="1"
+                                                    CornerRadius="8">
+                                                    <Canvas
+                                                        x:Name="OpraPreviewCanvas"
+                                                        Height="170"
+                                                        Background="Transparent"
+                                                        SizeChanged="OpraPreviewCanvas_SizeChanged" />
+                                                </Border>
+                                                <TextBlock
+                                                    x:Name="OpraPreviewNote"
+                                                    FontSize="11"
+                                                    Opacity="0.62"
+                                                    TextWrapping="Wrap"
+                                                    Text="在上面选一条曲线，这里就画出它把哪些频率抬起来、哪些压下去。" />
                                                 <TextBlock
                                                     x:Name="OpraEqStatusText"
                                                     FontSize="12"
                                                     Opacity="0.75"
                                                     TextWrapping="WrapWholeWords" />
-                                                <Button
-                                                    x:Name="OpraApplyButton"
-                                                    Content="应用该曲线到均衡器"
-                                                    HorizontalAlignment="Left"
-                                                    Style="{StaticResource AccentButtonStyle}"
-                                                    IsEnabled="False"
-                                                    Click="OpraApplyButton_Click" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button
+                                                        x:Name="OpraApplyButton"
+                                                        Content="应用该曲线到均衡器"
+                                                        HorizontalAlignment="Left"
+                                                        Style="{StaticResource AccentButtonStyle}"
+                                                        IsEnabled="False"
+                                                        Click="OpraApplyButton_Click" />
+                                                    <Button
+                                                        x:Name="OpraFavoriteButton"
+                                                        Content="收藏"
+                                                        IsEnabled="False"
+                                                        Click="OpraFavoriteButton_Click" />
+                                                </StackPanel>
                                             </StackPanel>
                                         </Grid>
                                         <Border

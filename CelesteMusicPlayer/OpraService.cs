@@ -387,6 +387,42 @@ namespace CelesteMusicPlayer
 
         private sealed record OpraTarget(OpraProduct Product, int Score, OpraVendor Vendor);
 
+        /// <summary>
+        /// 按「旗下标有多少款型号」倒序取热门厂商，给 UI 的厂商墙用。
+        /// 数据库还没加载完（或为空）时返回空表 —— 调用方据此决定要不要显示这一区。
+        /// </summary>
+        public List<OpraVendor> GetTopVendors(int limit = 14)
+        {
+            Db? db = _db;
+            if (db == null || db.Vendors.Count == 0)
+            {
+                return new List<OpraVendor>();
+            }
+
+            Dictionary<string, int> counts = db.Products.Values
+                .GroupBy(p => p.VendorId)
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            return db.Vendors.Values
+                .Where(v => counts.ContainsKey(v.Id))
+                .OrderByDescending(v => counts[v.Id])
+                .ThenBy(v => v.Name, StringComparer.OrdinalIgnoreCase)
+                .Take(limit)
+                .Select(v => new OpraVendor(v.Id, v.Name, v.LogoPath, v.Blurb))
+                .ToList();
+        }
+
+        /// <summary>某厂商名下的产品数（厂商墙角落显示用）；未知厂商返回 0。</summary>
+        public int GetProductCountByVendor(string vendorId)
+        {
+            if (_db == null)
+            {
+                return 0;
+            }
+
+            return _db.Products.Values.Count(p => p.VendorId == vendorId);
+        }
+
         /// <summary>获取某产品的全部曲线。</summary>
         public List<OpraProductEqSummary> GetEqsForProduct(string productId)
         {

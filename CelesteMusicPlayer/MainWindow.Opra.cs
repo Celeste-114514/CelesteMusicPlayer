@@ -49,6 +49,9 @@ namespace CelesteMusicPlayer
                         $"OPRA 已就绪：{status.VendorCount} 厂商 / {status.ProductCount} 型号 / {status.EqCount} 条曲线"
                         + (status.Source == "network" ? "（已联网下载）" : "（使用本地缓存）");
                 }
+
+                // 数据库就绪才铺品牌墙（厂商与型号数都来自这个库）
+                BuildOpraVendorWall();
             }
             catch (Exception ex)
             {
@@ -175,6 +178,8 @@ namespace CelesteMusicPlayer
                     OpraApplyButton.IsEnabled = false;
                 }
 
+                // 换了型号，旧的曲线预览/徽章/收藏状态全部作废
+                ClearOpraPreview();
                 _opraSelectedEq = null;
             }
         }
@@ -192,6 +197,12 @@ namespace CelesteMusicPlayer
                 if (OpraEqDetailText != null)
                 {
                     OpraEqDetailText.Text = $"作者：{s.Author}\n滤波段数：{s.BandCount}\n预增益：{(s.PreampDb >= 0 ? "+" : "")}{s.PreampDb:0.##} dB";
+                }
+
+                // 选中即预览（徽章 + 曲线形状 + 收藏按钮状态一起更新）
+                if (_opraSelectedProduct != null)
+                {
+                    UpdateOpraPreview(_opraSelectedProduct, s);
                 }
             }
         }
@@ -231,6 +242,9 @@ namespace CelesteMusicPlayer
                 {
                     OpraEqStatusText.Text = $"已应用：{corr.ProductVendorAndName()}（{corr.ImportedBandCount} 段 + {corr.Curve.PreampDb} dB）\n提示：可在「参数 EQ」页查看/微调，开启 EQ 后输出非 bit-perfect。";
                 }
+
+                // 记进「最近用过」，下次进来不用再搜一遍
+                NoteOpraApplied(corr);
             }
             catch (Exception ex)
             {
@@ -250,6 +264,7 @@ namespace CelesteMusicPlayer
 
         private void ClearOpraDetail()
         {
+            ClearOpraPreview();
             _opraEqs = new List<OpraProductEqSummary>();
             if (OpraEqList != null)
             {

@@ -371,6 +371,9 @@ namespace CelesteMusicPlayer
             if (idx == DspPageOpraIndex)
             {
                 EnsureOpraLoaded();
+                // 历史列表与曲线预览都可能被别的入口改动过，切进来刷新一次
+                RefreshOpraRecentList();
+                RedrawOpraCanvas();
             }
 
             // 听音方案页：进入时重算列表与「当前设置属于哪份方案」（刚在别处改过设置的判定在这落地）
