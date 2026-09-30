@@ -344,6 +344,12 @@ namespace CelesteMusicPlayer
                 RedrawDspMatrixCanvas();
             }
 
+            // 立体声场页：M/S 圆环同理
+            if (idx == DspPageFieldIndex)
+            {
+                RedrawDspFieldCanvas();
+            }
+
             // 机架编排页：进入时刷新列表（顺序可能被别处改动过）
             if (idx == DspPageRackIndex)
             {

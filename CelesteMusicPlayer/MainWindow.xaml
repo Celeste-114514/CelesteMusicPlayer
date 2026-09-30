@@ -5947,11 +5947,93 @@
                                                     <Slider x:Name="DspFieldSideSlider" Minimum="-18" Maximum="18" StepFrequency="0.5" Value="0" ValueChanged="DspFieldSlider_ValueChanged" />
                                                 </StackPanel>
                                                 <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="「中间」是左右完全一样的那部分（通常是主唱、贝斯），「两侧」是左右有差异的那部分（混响、氛围声）。" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="8">
+                                                <TextBlock FontSize="13" FontWeight="SemiBold" Text="声场一览" />
+                                                <Grid ColumnSpacing="20">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="230" />
+                                                        <ColumnDefinition Width="*" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <Border
+                                                        x:Name="DspFieldRingHost"
+                                                        Grid.Column="0"
+                                                        Background="{ThemeResource LayerFillColorDefaultBrush}"
+                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                        BorderThickness="1"
+                                                        CornerRadius="8">
+                                                        <Canvas
+                                                            x:Name="DspFieldRingCanvas"
+                                                            Height="210"
+                                                            Background="Transparent"
+                                                            SizeChanged="DspFieldRingCanvas_SizeChanged"
+                                                            PointerPressed="DspFieldRing_PointerPressed"
+                                                            PointerMoved="DspFieldRing_PointerMoved"
+                                                            PointerReleased="DspFieldRing_PointerReleased"
+                                                            PointerCanceled="DspFieldRing_PointerReleased" />
+                                                    </Border>
+                                                    <StackPanel Grid.Column="1" Spacing="4">
+                                                        <TextBlock
+                                                            FontSize="11"
+                                                            Opacity="0.6"
+                                                            Text="中间实际增益" />
+                                                        <TextBlock
+                                                            x:Name="DspFieldMidReadout"
+                                                            FontSize="22"
+                                                            FontWeight="SemiBold"
+                                                            Text="0.0 dB" />
+                                                        <TextBlock
+                                                            FontSize="11"
+                                                            Opacity="0.6"
+                                                            Text="两侧实际增益（已含宽度）"
+                                                            Margin="0,10,0,0" />
+                                                        <TextBlock
+                                                            x:Name="DspFieldSideReadout"
+                                                            FontSize="22"
+                                                            FontWeight="SemiBold"
+                                                            Text="0.0 dB" />
+                                                        <TextBlock
+                                                            x:Name="DspFieldCorrText"
+                                                            FontSize="11"
+                                                            Opacity="0.62"
+                                                            TextWrapping="Wrap"
+                                                            Margin="0,10,0,0"
+                                                            Text="—" />
+                                                    </StackPanel>
+                                                </Grid>
+                                                <TextBlock
+                                                    FontSize="10"
+                                                    Opacity="0.5"
+                                                    TextWrapping="Wrap"
+                                                    Text="这个点可以直接拖：左右拖改宽度，上下拖改更偏向中间还是两侧。松手才写进设置。" />
+                                            </StackPanel>
+                                        </Border>
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="16">
+                                            <StackPanel Spacing="10">
+                                                <TextBlock FontSize="13" FontWeight="SemiBold" Text="预设" />
+                                                <TextBlock
+                                                    FontSize="11"
+                                                    Opacity="0.55"
+                                                    TextWrapping="Wrap"
+                                                    Text="一键铺好三个参数，铺完照样能手动微调。" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <Button Content="原始" Tag="flat" Click="DspFieldPreset_Click" />
                                                     <Button Content="略加宽" Tag="wide" Click="DspFieldPreset_Click" />
                                                     <Button Content="人声提亮" Tag="vocal" Click="DspFieldPreset_Click" />
                                                     <Button Content="收成单声道" Tag="mono" Click="DspFieldPreset_Click" />
+                                                    <Button Content="氛围感" Tag="ambient" Click="DspFieldPreset_Click" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>

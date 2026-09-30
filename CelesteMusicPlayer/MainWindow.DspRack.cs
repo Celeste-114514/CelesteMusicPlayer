@@ -113,6 +113,7 @@ namespace CelesteMusicPlayer
                 // （折叠状态下 ActualWidth=0，Draw 内部会直接返回，切页时由 SelectDspPage 补画）
                 RedrawDspCompTransferCurve();
                 RedrawDspMatrixFlow();
+                RedrawDspFieldRing();
             }
             finally
             {
@@ -345,6 +346,8 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 关掉时圆环变灰、读数显示「旁路」，必须重画
+            RedrawDspFieldRing();
             PushDspRackToEngine();
         }
 
@@ -357,7 +360,13 @@ namespace CelesteMusicPlayer
             }
 
             RefreshDspFieldReadouts();
-            if (!_dspRackLoading)
+
+            // 圆环上的手柄位置是这三个参数的函数，动一条就得重画
+            RedrawDspFieldRing();
+
+            // 圆环拖动期间不落盘：一次拖动会触发几百次本事件，每次 SetRack 都要
+            // 写一次 dsp-rack.json 并下发内核。松手（PointerReleased）时统一补一次。
+            if (!_dspRackLoading && !_dspFieldSuppressPush)
             {
                 PushDspRackToEngine();
             }
@@ -376,6 +385,8 @@ namespace CelesteMusicPlayer
                 "wide" => (130.0, 0.0, 0.0),
                 "vocal" => (100.0, 3.0, 0.0),
                 "mono" => (0.0, 0.0, 0.0),
+                // 氛围感：两侧抬 3dB 再拉宽，混响和声场会明显往外扩
+                "ambient" => (140.0, 0.0, 3.0),
                 _ => (100.0, 0.0, 0.0)
             };
 
@@ -385,6 +396,7 @@ namespace CelesteMusicPlayer
             DspFieldSideSlider.Value = preset.side;
 
             PushDspRackToEngine();
+            RedrawDspFieldRing();
         }
 
         // ─────────────────────────────────────────────────────────────
