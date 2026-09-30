@@ -2079,15 +2079,15 @@
                                     FontSize="12"
                                     Opacity="0.8"
                                     TextWrapping="WrapWholeWords"
-                                    Text="本程序的「独占输出内核（ECHO 核心）」包含基于 ECHO 播放器 audio-host 模块修改的代码，以独立动态库 celeste_audio_core.dll 形式分发，依据 LGPL-3.0 许可。该库可被同名文件替换；程序其余部分为 MIT 许可，不受 LGPL 传染。" />
+                                    Text="本程序的「独占输出内核（ECHO 核心）」包含基于 ECHO 播放器 audio-host 模块修改的代码（采样自 2026 年 9 月的上游版本，当时依据 LGPL-3.0 许可），以独立动态库 celeste_audio_core.dll 形式分发，依据 LGPL-3.0 许可。该库可被同名文件替换；程序其余部分为 MIT 许可，不受 LGPL 传染。ECHO 上游项目现已迁移（Moekotori/ECHO），其新代码改用 AGPL-3.0 许可；本项目未使用其新代码，许可状态不变。" />
                                 <HyperlinkButton
                                     Content="LGPL-3.0 许可全文（gnu.org）↗"
                                     FontSize="12"
                                     NavigateUri="https://www.gnu.org/licenses/lgpl-3.0.html" />
                                 <HyperlinkButton
-                                    Content="ECHO 原项目（github.com/takase1121/echo）↗"
+                                    Content="ECHO 现项目（github.com/Moekotori/ECHO）↗"
                                     FontSize="12"
-                                    NavigateUri="https://github.com/takase1121/echo" />
+                                    NavigateUri="https://github.com/Moekotori/ECHO" />
                                 <TextBlock
                                     FontSize="12"
                                     Opacity="0.8"

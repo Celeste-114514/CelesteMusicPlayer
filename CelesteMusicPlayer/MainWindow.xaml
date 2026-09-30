@@ -3364,8 +3364,8 @@
                     </Grid>
                 </Border>
 
-                <!-- 音效处理 DSP 面板：EQ / 声道平衡 / 安全限幅（对齐 ECHO 音效处理工作台） -->
-                <!-- 音效处理 DSP 面板：左侧按信号链导航 + 右侧分页内容（对齐 ECHO 音效处理工作台） -->
+                <!-- 音效处理 DSP 面板：EQ / 声道平衡 / 安全限幅 -->
+                <!-- 音效处理 DSP 面板：左侧按信号链导航 + 右侧分页内容 -->
                 <Border
                     x:Name="AudioFxBorder"
                     Grid.Row="1"
@@ -3846,7 +3846,7 @@
                                             CornerRadius="10"
                                             Padding="16">
                                             <StackPanel Spacing="12">
-                                                <!-- 标题行：EQ 开关 + 专业/简单 + 预设（对齐 ECHO 头部四段式） -->
+                                                <!-- 标题行：EQ 开关 + 专业/简单 + 预设 -->
                                                 <Grid ColumnSpacing="16">
                                                     <Grid.ColumnDefinitions>
                                                         <ColumnDefinition Width="*" />
@@ -3883,7 +3883,7 @@
                                                         VerticalAlignment="Center"
                                                         SelectionChanged="AudioFxEqPreset_SelectionChanged" />
                                                 </Grid>
-                                                <!-- 快捷状态条（对齐 ECHO quick strip：EQ 状态 / bit-perfect / preamp / 余量 / 预设） -->
+                                                <!-- 快捷状态条（EQ 状态 / bit-perfect / preamp / 余量 / 预设） -->
                                                 <StackPanel x:Name="AudioFxEqQuickStrip" Orientation="Horizontal" Spacing="8">
                                                     <Border
                                                         x:Name="AudioFxEqPillStatus"
@@ -4051,7 +4051,7 @@
                                                         Opacity="0.7"
                                                         Text="预增益 (preamp)：0.0 dB" />
                                                 </Grid>
-                                                <!-- 选中 band 控制台（专业模式）：类型 / 滑杆 + ECHO 风步进 -->
+                                                <!-- 选中 band 控制台（专业模式）：类型 / 滑杆 + 细步进 -->
                                                 <Grid
                                                     x:Name="AudioFxEqBandEditor"
                                                     ColumnSpacing="10"
@@ -4124,7 +4124,7 @@
                                                         VerticalAlignment="Center"
                                                         Click="AudioFxEqBandDelete_Click" />
                                                 </Grid>
-                                                <!-- 步进行（对齐 ECHO 频段控制台：频率/增益微调 + Q 预设） -->
+                                                <!-- 步进行（频段控制台：频率/增益微调 + Q 预设） -->
                                                 <StackPanel
                                                     x:Name="AudioFxEqStepperRow"
                                                     Orientation="Horizontal"
@@ -4422,7 +4422,7 @@
                                                         FontSize="12"
                                                         Opacity="0.6"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="已加载脉冲响应的参数，以及卷积后的电平微调（trim，对齐 ECHO roomCorrectionTrimDb）。" />
+                                                        Text="已加载脉冲响应的参数，以及卷积后的电平微调（trim）。" />
                                                 </StackPanel>
                                                 <TextBlock
                                                     x:Name="RoomIrInfoText"
@@ -4678,7 +4678,7 @@
                                                             FontSize="11"
                                                             Opacity="0.55"
                                                             TextWrapping="Wrap"
-                                                            Text="截止频率决定混入对侧的「多低的低频」：调低只有很低的低音交叉，更像听音箱；调高则中频也跟着串过来，人声会往中间靠。ECHO 默认 700 Hz。" />
+                                                            Text="截止频率决定混入对侧的「多低的低频」：调低只有很低的低音交叉，更像听音箱；调高则中频也跟着串过来，人声会往中间靠。默认 700 Hz。" />
                                                     </StackPanel>
                                                 </Grid>
                                             </StackPanel>
@@ -5629,7 +5629,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="决定音频依次经过这些模块的先后顺序。默认即 ECHO 的顺序。" />
+                                                        Text="决定音频依次经过这些模块的先后顺序。默认顺序即出厂预设。" />
                                                 </StackPanel>
                                                 <Border
                                                     x:Name="DspBadgeRack"
@@ -5665,14 +5665,14 @@
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <Button Content="上移" Click="DspRackUp_Click" />
                                                     <Button Content="下移" Click="DspRackDown_Click" />
-                                                    <Button Content="恢复 ECHO 默认顺序" Click="DspRackReset_Click" />
+                                                    <Button Content="恢复默认顺序" Click="DspRackReset_Click" />
                                                 </StackPanel>
                                                 <TextBlock
                                                     x:Name="DspRackHintText"
                                                     FontSize="11"
                                                     Opacity="0.6"
                                                     TextWrapping="Wrap"
-                                                    Text="当前使用 ECHO 默认顺序。" />
+                                                    Text="当前使用默认顺序。" />
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>
@@ -7163,7 +7163,7 @@
             Visibility="Collapsed"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch" />
-        <!-- 音频设置右侧滑出面板（从右边界向左延伸，仿 ECHO） -->
+        <!-- 音频设置右侧滑出面板（从右边界向左延伸） -->
         <Grid
             x:Name="AudioSettingsOverlayHost"
             Grid.RowSpan="4"

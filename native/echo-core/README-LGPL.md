@@ -8,12 +8,14 @@
 
 | 组件 | 来源 | 许可 |
 | --- | --- | --- |
-| `audio-host/src/`（WASAPI 独占输出、PCM 环形缓冲、C 导出桥） | 改编自 [ECHO 播放器](https://github.com/takase1121/echo) 的 audio-host 模块（Rust 转写为 C++） | **LGPL-3.0** |
+| `audio-host/src/`（WASAPI 独占输出、PCM 环形缓冲、C 导出桥） | 改编自 [ECHO 播放器](https://github.com/Moekotori/ECHO) 的 audio-host 模块（2026-09 采样版，Rust 转写为 C++） | **LGPL-3.0** |
 | `audio-engine/`（EQ / 卷积 / ReplayGain / 限幅 / 电平等 DSP 链） | 同上，ECHO audio-engine | **LGPL-3.0** |
 | `audio-engine/third_party/nlohmann_json.hpp` | [nlohmann/json](https://github.com/nlohmann/json) v3.11 | MIT（与 LGPL-3.0 兼容，见 FSF 许可兼容列表） |
 
-ECHO 原项目自述许可为 LGPL-3.0（仓库根 `LICENSE`，GPL-3.0 §7 附加许可形式）。
-本目录代码按 LGPL-3.0 继续分发。
+ECHO 原项目（当时仓库地址 `takase1121/echo`）自述许可为 LGPL-3.0（仓库根
+`LICENSE`，GPL-3.0 §7 附加许可形式）。本目录代码采样自该 2026-09 版本，按
+LGPL-3.0 继续分发。ECHO 上游现迁至 `Moekotori/ECHO`，其新代码已改为
+AGPL-3.0-only；**本项目未使用上游新代码**（AGPL 版本），许可状态不变。
 
 ## 为什么 CelesteMusicPlayer（MIT）不受影响
 
@@ -40,7 +42,7 @@ ECHO 原项目自述许可为 LGPL-3.0（仓库根 `LICENSE`，GPL-3.0 §7 附�
 
 - LGPL-3.0 全文：<https://www.gnu.org/licenses/lgpl-3.0.html>
 - GPL-3.0 全文（LGPL-3.0 §3 引用）：<https://www.gnu.org/licenses/gpl-3.0.html>
-- ECHO 原项目：<https://github.com/takase1121/echo>
+- ECHO 原项目（已迁移）：<https://github.com/Moekotori/ECHO>
 - nlohmann/json MIT 许可：<https://github.com/nlohmann/json/blob/develop/LICENSE.MIT>
 
 ## 修改说明（相对 ECHO 上游）

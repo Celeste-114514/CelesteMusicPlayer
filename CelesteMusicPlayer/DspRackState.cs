@@ -276,7 +276,7 @@ namespace CelesteMusicPlayer
                     try
                     {
                         JsonFile.Write(path, _cache);
-                        StartupLog.Write("[DSP] dsp-rack.json 首次生成（默认 ECHO 机架顺序；旧设置沿用既有 store，行为不变）");
+                        StartupLog.Write("[DSP] dsp-rack.json 首次生成（默认机架顺序；旧设置沿用既有 store，行为不变）");
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("DspRackStore.Load", caught); }
                 }

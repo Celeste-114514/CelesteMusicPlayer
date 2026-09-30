@@ -89,11 +89,13 @@ namespace CelesteMusicPlayer
             // ⚠ 顺序同时决定另外三处的下标，新增/调整顺序时必须同步：
             //    ① DspModuleActive() 的返回数组  ② UpdateDspHeroBadges() 的 badges/texts 数组
             //    ③ 不依赖下标：页面索引常量已改为按 Page 引用反查，无需同步
+            // 「DSP 机架编排」置顶且不挂组标题（2026-09-30 用户拍板）：它是总纲性页面，
+            // 放在「输入」组上方、左侧导航最第一位。
+            AddNavEntry("DSP 机架编排", "", DspPageRack, DspBadgeRack, DspBadgeRackText);
             AddNavEntry("输入余量", "输入", DspPageHeadroom, DspBadgeHeadroom, DspBadgeHeadroomText);
             // 「响度 · ReplayGain」为过渡项：阶段 2 起 RG 并入「DSP Rack 编排」页行内展开，本项随之移除
             AddNavEntry("响度 · ReplayGain", "输入", DspPageRg, DspBadgeRg, DspBadgeRgText);
-            AddNavEntry("DSP 机架编排", "输入", DspPageRack, DspBadgeRack, DspBadgeRackText);
-            AddNavEntry("ECHO SRC / 升频", "采样率", DspPageSrc, DspBadgeSrc, DspBadgeSrcText);
+            AddNavEntry("SRC / 升频", "采样率", DspPageSrc, DspBadgeSrc, DspBadgeSrcText);
             AddNavEntry("参数 EQ", "塑形", DspPageEq, DspBadgeEq, DspBadgeEqText);
             AddNavEntry("耳机校正", "塑形", DspPageOpra, DspBadgeOpra, DspBadgeOpraText);
             AddNavEntry("动态压缩器", "塑形", DspPageCompressor, DspBadgeComp, DspBadgeCompText);
@@ -107,7 +109,8 @@ namespace CelesteMusicPlayer
             for (int navIndex = 0; navIndex < _dspNavEntries.Count; navIndex++)
             {
                 DspNavEntry entry = _dspNavEntries[navIndex];
-                if (entry.Group != currentGroup)
+                // 空组名 = 置顶项（如「DSP 机架编排」），不渲染组标题
+                if (!string.IsNullOrEmpty(entry.Group) && entry.Group != currentGroup)
                 {
                     currentGroup = entry.Group;
                     TextBlock header = new()
@@ -350,12 +353,12 @@ namespace CelesteMusicPlayer
             bool rg = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
 
             // 顺序与 BuildDspNav 元数据表一致：
-            // 余量 / RG / 机架编排 / SRC / EQ / OPRA / 压缩 / 声道 / 声场 / 矩阵 / FIR / 监控
+            // 机架编排 / 余量 / RG / SRC / EQ / OPRA / 压缩 / 声道 / 声场 / 矩阵 / FIR / 监控
             // 机架编排恒 false：编排顺序不是"效果开关"，改顺序不产生处理，点不亮圆点
             bool comp = DspCompActive();
             bool field = DspFieldActive();
             bool matrix = DspMatrixActive();
-            return new[] { headroom, rg, false, srcHz > 0, eq, _opraApplied, comp, ch, field, matrix, fir, true };
+            return new[] { false, headroom, rg, srcHz > 0, eq, _opraApplied, comp, ch, field, matrix, fir, true };
         }
 
         /// <summary>刷新左侧导航圆点：绿 = 该模块正在参与处理，灰 = 未启用。</summary>
@@ -393,13 +396,13 @@ namespace CelesteMusicPlayer
         {
             Border[] badges =
             {
-                DspBadgeHeadroom, DspBadgeRg, DspBadgeRack, DspBadgeSrc, DspBadgeEq,
+                DspBadgeRack, DspBadgeHeadroom, DspBadgeRg, DspBadgeSrc, DspBadgeEq,
                 DspBadgeOpra, DspBadgeComp, DspBadgeChannel, DspBadgeField,
                 DspBadgeMatrix, DspBadgeFir, DspBadgeSafety
             };
             TextBlock[] texts =
             {
-                DspBadgeHeadroomText, DspBadgeRgText, DspBadgeRackText, DspBadgeSrcText, DspBadgeEqText,
+                DspBadgeRackText, DspBadgeHeadroomText, DspBadgeRgText, DspBadgeSrcText, DspBadgeEqText,
                 DspBadgeOpraText, DspBadgeCompText, DspBadgeChannelText, DspBadgeFieldText,
                 DspBadgeMatrixText, DspBadgeFirText, DspBadgeSafetyText
             };
