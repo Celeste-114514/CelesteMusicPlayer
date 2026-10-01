@@ -194,8 +194,9 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>应用动态 EQ 曲线状态（band 列表 + preamp）。null / 无效果 → 关闭 EQ。
-        /// 映射到内核 31 槽参数化 EQ（前 N 槽按顺序填，其余 0/关）；Celeste 特有的
-        /// 「自动峰值余量折叠」保留，作为 preamp 下发。播放中实时生效（内核原子接口）。</summary>
+        /// 映射到内核 31 槽参数化 EQ（前 N 槽按顺序填，其余 0/关）。预增益口径：
+        /// 自带预增益的曲线（OPRA/AutoEq/APO 导入）直接采信；无预增益的用户自建曲线按
+        /// 峰值估算自动折算负余量（Celeste 特有件，防过冲爆音）。播放中实时生效（内核原子接口）。</summary>
         public void UpdateEqCurve(EqCurveState? curve)
         {
             bool on = _engineReady && curve != null && curve.HasEffect();
@@ -211,13 +212,30 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // Celeste 特有件：自动峰值余量补偿。估算所有启用 band 在频域的最大叠加增益 peakDb，
-            // 用户未手动设 preamp 时自动施加负余量把输出压回 0dB，避免极端增益（如 +10dB 低频增强）
-            // 触发过冲后只能靠限幅/削波产生爆音。用户手动设了 preamp 则两者叠加（仍防削波）。
+            // Celeste 特有件：峰值余量处理。估算所有启用 band 在频域的最大叠加增益 peakDb。
+            // ① 用户自建曲线（无预增益）：自动施加负余量把输出压回 0dB，避免极端增益
+            //    （如 +10dB 低频增强）过冲后只能靠限幅/削波产生爆音。
+            // ② 自带预增益的曲线（OPRA/AutoEq/APO 导入）：预增益本身已按这条曲线的峰值
+            //    算过削波余量，直接采信、不再叠加。旧逻辑对两类曲线都叠 autoComp，导入曲线
+            //    被双重衰减且多数钳到 -12dB 上限——实测连切 5 条 OPRA 曲线总增益
+            //    -7.8/-8.4/-10.4/-10.7/-10.7dB 逐条递减，用户听感「用一个再用一个越来越低」。
             double peakDb = EstimateEqPeakDb(curve!);
-            double autoCompDb = Math.Clamp(-Math.Max(0, peakDb), -12, 0);
             double userPreDb = Math.Abs(curve!.PreampDb) > 0.01 ? curve.PreampDb : 0.0;
-            double preampDb = Math.Clamp(userPreDb + autoCompDb, DspCoreInteropMinPreamp, DspCoreInteropMaxPreamp);
+            double preampDb;
+            if (Math.Abs(userPreDb) > 0.01)
+            {
+                preampDb = Math.Clamp(userPreDb, DspCoreInteropMinPreamp, DspCoreInteropMaxPreamp);
+            }
+            else
+            {
+                double autoCompDb = Math.Clamp(-Math.Max(0, peakDb), -12, 0);
+                preampDb = Math.Clamp(autoCompDb, DspCoreInteropMinPreamp, DspCoreInteropMaxPreamp);
+            }
+
+            if (Math.Abs(preampDb - curve!.PreampDb) > 0.05)
+            {
+                StartupLog.Write($"[DSP] EQ 预增益: 曲线={curve!.PreampDb:0.##}dB → 生效={preampDb:0.##}dB（峰值估算 {peakDb:0.##}dB）");
+            }
 
             // 31 槽映射：curve.Bands 按顺序填前 N 槽（N ≤ 31），其余增益 0 / 关闭。
             // 频率/Q/类型用 band 自带值；未占用槽用 ECHO 默认频率回填（get_all 回读 round-trip 稳定）。
