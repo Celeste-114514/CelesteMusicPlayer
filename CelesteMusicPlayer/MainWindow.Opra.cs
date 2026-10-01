@@ -7,9 +7,9 @@ using System.Threading.Tasks;
 namespace CelesteMusicPlayer
 {
     /// <summary>
-    /// 耳机校正（OPRA）内嵌页：搜索 / 选曲线 / 应用全流程在 DSP 板块「耳机校正」页完成。
-    /// 2026-09-30 由原独立窗口 HeadphoneCorrectionWindow 迁入（用户要求整合进主程序），
-    /// 服务层 OpraService 与「应用后走 ApplyOpraCurve」的链路不变。
+    /// 耳机校正（OPRA）区块：搜索 / 选曲线 / 应用全流程在 DSP 板块「参数 EQ」页下半部分完成。
+    /// 2026-09-30 由原独立窗口 HeadphoneCorrectionWindow 迁入，2026-10-01 再并入 EQ 页
+    /// （不再单独占一页）；服务层 OpraService 与「应用后走 ApplyOpraCurve」的链路不变。
     /// </summary>
     public sealed partial class MainWindow
     {
@@ -21,7 +21,7 @@ namespace CelesteMusicPlayer
         private List<OpraProductEqSummary> _opraEqs = new();
         private OpraProductEqSummary? _opraSelectedEq;
 
-        /// <summary>第一次进入耳机校正页时加载 OPRA 数据库（联网失败自动用本地缓存）。</summary>
+        /// <summary>第一次在 EQ 页展开耳机校正时加载 OPRA 数据库（联网失败自动用本地缓存）。</summary>
         private void EnsureOpraLoaded()
         {
             if (_opraDbLoadStarted)

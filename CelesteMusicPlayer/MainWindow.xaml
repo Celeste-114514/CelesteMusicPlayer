@@ -4214,7 +4214,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="每段单独调频率 / 增益 / Q 与滤波类型，六种滤波器可选，另有简单模式四滑杆。" />
+                                                        Text="每段单独调频率 / 增益 / Q 与滤波类型，六种滤波器可选，另有简单模式四滑杆。页面下半部分可按耳机型号套 OPRA 校正曲线。" />
                                                 </StackPanel>
                                                 <StackPanel
                                                     Grid.Column="2"
@@ -4603,13 +4603,7 @@
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
-                                    </StackPanel>
-                                    <StackPanel
-                                        x:Name="DspPageOpra"
-                                        Spacing="12"
-                                        MaxWidth="880"
-                                        HorizontalAlignment="Left"
-                                        Visibility="Collapsed">
+                                        <!-- ▼▼ 耳机校正（OPRA）2026-10-01 并入 EQ 页：以下区块整体迁入，元素原样保留 ▼▼ -->
                                         <Border
                                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -4799,7 +4793,7 @@
                                             FontSize="11"
                                             Opacity="0.65"
                                             TextWrapping="WrapWholeWords"
-                                            Text="进入本页自动加载 OPRA 数据库（联网查询，离线时用上次缓存）。" />
+                                            Text="打开本页时自动加载 OPRA 数据库（联网查询，离线时用上次缓存）。" />
                                         <TextBlock
                                             x:Name="OpraSearchStatusText"
                                             FontSize="11"
@@ -4954,7 +4948,7 @@
                                                     FontSize="11"
                                                     Opacity="0.6"
                                                     TextWrapping="WrapWholeWords"
-                                                    Text="校正和 EQ 是同一条链路：校正生效时 EQ 页显示的就是这条曲线，你手动改 EQ 会盖掉校正结果。" />
+                                                    Text="校正和 EQ 是同一条链路：应用校正后，上面的 EQ 面板显示的就是这条曲线，你手动改 EQ 会盖掉校正结果。" />
                                                 <TextBlock
                                                     FontSize="11"
                                                     Opacity="0.6"

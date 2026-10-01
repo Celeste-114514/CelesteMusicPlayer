@@ -100,6 +100,10 @@ namespace CelesteMusicPlayer
         private bool _audioFxEqDragging;
         private bool _audioFxEqBuilt;
         private bool _audioFxLoading;
+        // 外部曲线（耳机校正 opra-* / Equalizer APO 导入等）在预设下拉里的动态展示项：
+        // 按需创建、挂在「管理（删除）我的预设…」之前，选中它纯展示、不切预设
+        // （守卫见 AudioFxEqPreset_SelectionChanged 顶部）。
+        private ComboBoxItem? _audioFxEqExternalItem;
         // 音效面板是否已完成读写盘的加载。启动阶段(未真正进入面板)控件以 XAML 默认值
         // (限幅器 IsOn=True 等)加载会触发 Toggled/SelectionChanged，若此时允许 ApplyDspToEngine
         // 会把默认的"打开"状态保存到盘，覆盖用户上次关闭的设置 —— 必须用该标志屏蔽。
@@ -195,8 +199,7 @@ namespace CelesteMusicPlayer
         /// <summary>应用 OPRA 耳机校正曲线到播放器 EQ。</summary>
         internal void ApplyOpraCurve(EqCurveState curve)
         {
-            // 标记耳机校正已生效（左侧导航圆点 / 监控页「活跃 DSP」据此点亮）
-            _opraApplied = !string.IsNullOrEmpty(curve?.PresetId);
+            // 「耳机校正生效」由 _opraApplied 计算属性按曲线 id 直读，这里不再赋值
             ApplyEqCurveToPlayer(curve);
         }
 
@@ -217,6 +220,9 @@ namespace CelesteMusicPlayer
             // 若音效面板已构建，同步其 EQ 显示（打开 OPRA 面板前通常已打开音效工作台）。
             if (_audioFxEqBuilt)
             {
+                // 同步过程会改 Toggle / ComboBox 选中项，handler 就地触发；_audioFxLoading 屏蔽，
+                // 否则预设下拉的反向应用会把刚下发的这条曲线覆盖成「平坦」（2026-10-01 修）。
+                _audioFxLoading = true;
                 try
                 {
                     AudioFxEqEnableToggle.IsOn = true;
@@ -227,6 +233,7 @@ namespace CelesteMusicPlayer
                     RefreshAudioFxEqBandEditor();
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+                finally { _audioFxLoading = false; }
             }
 
             _audioEngine?.SetEqCurve(curve);
@@ -257,17 +264,106 @@ namespace CelesteMusicPlayer
             {
                 if (AudioFxEqPresetCombo.Items[i] is ComboBoxItem { Tag: string t } && string.Equals(t, presetId, StringComparison.Ordinal))
                 {
+                    // 回到固定预设：摘掉动态外部项，免得它变成「点了没反应、名字还对不上」的死项
+                    DropAudioFxEqExternalItem();
                     AudioFxEqPresetCombo.SelectedIndex = i;
                     return;
                 }
             }
 
+            // 固定项里没有这个 id：外部曲线（耳机校正 / APO 导入等）动态挂一项，让下拉显示
+            // 真实曲线名而不是回落「平坦」——后者会让用户以为曲线没应用上（2026-10-01 反馈）
+            if (!string.IsNullOrEmpty(presetId)
+                && _audioFxEq != null
+                && string.Equals(_audioFxEq.PresetId, presetId, StringComparison.Ordinal))
+            {
+                SelectAudioFxEqExternalItem(_audioFxEq);
+                return;
+            }
+
+            DropAudioFxEqExternalItem();
             AudioFxEqPresetCombo.SelectedIndex = 0;
+        }
+
+        /// <summary>从预设下拉里摘掉动态外部项（切回固定预设 / 下拉重建后按需重挂）。</summary>
+        private void DropAudioFxEqExternalItem()
+        {
+            if (_audioFxEqExternalItem == null)
+            {
+                return;
+            }
+
+            AudioFxEqPresetCombo?.Items.Remove(_audioFxEqExternalItem);
+            _audioFxEqExternalItem = null;
+        }
+
+        /// <summary>
+        /// 把外部曲线挂成预设下拉里的动态项（♫ + 曲线名）并选中它。
+        /// RefreshAudioFxUserPresetItems 重建下拉时会清掉这一项，这里按需重建 + 重挂。
+        /// </summary>
+        private void SelectAudioFxEqExternalItem(EqCurveState curve)
+        {
+            if (AudioFxEqPresetCombo == null || string.IsNullOrEmpty(curve.PresetId))
+            {
+                return;
+            }
+
+            string content = "♫ " + (string.IsNullOrWhiteSpace(curve.PresetName) ? curve.PresetId : curve.PresetName);
+            int manageAt = -1;
+            for (int i = 0; i < AudioFxEqPresetCombo.Items.Count; i++)
+            {
+                if (AudioFxEqPresetCombo.Items[i] is ComboBoxItem { Tag: string t } && string.Equals(t, "manage", StringComparison.Ordinal))
+                {
+                    manageAt = i;
+                    break;
+                }
+            }
+
+            if (_audioFxEqExternalItem == null)
+            {
+                _audioFxEqExternalItem = new ComboBoxItem { Content = content, Tag = curve.PresetId };
+                if (manageAt >= 0)
+                {
+                    AudioFxEqPresetCombo.Items.Insert(manageAt, _audioFxEqExternalItem);
+                }
+                else
+                {
+                    AudioFxEqPresetCombo.Items.Add(_audioFxEqExternalItem);
+                }
+            }
+            else
+            {
+                _audioFxEqExternalItem.Content = content;
+                _audioFxEqExternalItem.Tag = curve.PresetId;
+                if (!AudioFxEqPresetCombo.Items.Contains(_audioFxEqExternalItem))
+                {
+                    if (manageAt >= 0)
+                    {
+                        AudioFxEqPresetCombo.Items.Insert(manageAt, _audioFxEqExternalItem);
+                    }
+                    else
+                    {
+                        AudioFxEqPresetCombo.Items.Add(_audioFxEqExternalItem);
+                    }
+                }
+            }
+
+            if (!ReferenceEquals(AudioFxEqPresetCombo.SelectedItem, _audioFxEqExternalItem))
+            {
+                AudioFxEqPresetCombo.SelectedItem = _audioFxEqExternalItem;
+            }
         }
 
 
         private async void AudioFxEqPreset_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // 动态外部项（耳机校正 / APO 导入的曲线）只是「当前曲线」的展示位，不切预设：
+            // 走到下面会按 presetId 新建曲线，把刚应用的那条覆盖成平坦
+            if (ReferenceEquals(AudioFxEqPresetCombo.SelectedItem, _audioFxEqExternalItem))
+            {
+                return;
+            }
+
             if (_audioFxLoading || AudioFxEqPresetCombo.SelectedItem is not ComboBoxItem { Tag: string presetId })
             {
                 return;

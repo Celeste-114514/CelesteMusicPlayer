@@ -30,7 +30,6 @@ namespace CelesteMusicPlayer
         private int DspPageMatrixIndex => FindDspPageIndex(DspPageMatrix);
         private int DspPageFieldIndex => FindDspPageIndex(DspPageStereoField);
         private int DspPageRackIndex => FindDspPageIndex(DspPageRack);
-        private int DspPageOpraIndex => FindDspPageIndex(DspPageOpra);
         private int DspPageProfilesIndex => FindDspPageIndex(DspPageProfiles);
 
         // DspModuleActive() 返回数组的具名下标，顺序与 BuildDspNav 元数据表一致。
@@ -42,15 +41,14 @@ namespace CelesteMusicPlayer
         private const int DspActiveRg = 3;
         private const int DspActiveSrc = 4;
         private const int DspActiveEq = 5;
-        private const int DspActiveOpra = 6;
-        private const int DspActiveComp = 7;
-        // ⚠ 2026-10-01：Crossfeed 从独立页并回「声道工具」页，导航回到 13 项，下面整体前移一位。
-        // 开关控件（DspPowerXfeed / AudioFxChannelCrossfeedToggle）都还在，只是不再单独占一页。
-        private const int DspActiveChannel = 8;
-        private const int DspActiveField = 9;
-        private const int DspActiveMatrix = 10;
-        private const int DspActiveFir = 11;
-        private const int DspActiveSafety = 12;
+        private const int DspActiveComp = 6;
+        // ⚠ 2026-10-01：Crossfeed 从独立页并回「声道工具」页；同日耳机校正并入 EQ 页，
+        // 导航 13 → 12 项，下面整体再前移一位。开关控件都还在，只是不再单独占一页。
+        private const int DspActiveChannel = 7;
+        private const int DspActiveField = 8;
+        private const int DspActiveMatrix = 9;
+        private const int DspActiveFir = 10;
+        private const int DspActiveSafety = 11;
 
         /// <summary>在导航表里查某个页面当前的下标；未构建 / 页面为空时返回 -1。</summary>
         private int FindDspPageIndex(StackPanel? page)
@@ -74,8 +72,11 @@ namespace CelesteMusicPlayer
         private int _dspPageIndex = -1;
         private DispatcherQueueTimer? _dspMonitorTimer;
 
-        /// <summary>耳机校正（OPRA）曲线是否已应用到当前 EQ。</summary>
-        private bool _opraApplied;
+        /// <summary>耳机校正（OPRA）曲线是否正作为当前 EQ 曲线。
+        /// 2026-10-01 由「应用时置位的字段」改为按曲线 id 直读：换预设 / 重置 / 应用方案
+        /// 切走曲线后，链路条与监控页不会再留陈旧态。只有 opra- 前缀的曲线才算
+        /// （与 MainWindow.DspProfiles 应用方案时同口径）。</summary>
+        private bool _opraApplied => _audioFxEq?.PresetId?.StartsWith("opra-", StringComparison.OrdinalIgnoreCase) == true;
 
         /// <summary>导航项运行时态：标题 / 所属组 / 右侧页面 / 徽章控件。</summary>
         private sealed class DspNavEntry
@@ -126,7 +127,8 @@ namespace CelesteMusicPlayer
             AddNavEntry("响度 · ReplayGain", "输入", DspPageRg, null, null);
             AddNavEntry("SRC / 升频", "采样率", DspPageSrc, null, null);
             AddNavEntry("参数 EQ", "塑形", DspPageEq, null, null);
-            AddNavEntry("耳机校正", "塑形", DspPageOpra, null, null);
+            // 耳机校正 2026-10-01 并入 EQ 页（品牌墙 / 搜索 / 曲线列表 / 预览 / 应用都在该页下半部分），
+            // 不再单列一项；进入 EQ 页时会一并初始化（见 SelectDspPage）
             AddNavEntry("动态压缩器", "塑形", DspPageCompressor, null, null);
             // Crossfeed 2026-10-01 并回「声道工具」页（不再单列一项）
             AddNavEntry("声道工具", "声道", DspPageChannel, null, null);
@@ -333,6 +335,11 @@ namespace CelesteMusicPlayer
             if (idx == DspPageEqIndex)
             {
                 RedrawAudioFxEqCurve();
+                // 耳机校正（2026-10-01 并入本页）：第一次进入加载 OPRA 数据库（之后复用内存态）；
+                // 历史列表与曲线预览都可能被别处改动过，切进来刷新一次
+                EnsureOpraLoaded();
+                RefreshOpraRecentList();
+                RedrawOpraCanvas();
             }
 
             // 压缩器页：只有本页可见时轮询增益衰减读数（200ms），离开即停
@@ -366,15 +373,6 @@ namespace CelesteMusicPlayer
             if (idx == DspPageSrcIndex)
             {
                 RedrawSrcCanvas();
-            }
-
-            // 耳机校正页：第一次进入时加载 OPRA 数据库（之后复用内存态）
-            if (idx == DspPageOpraIndex)
-            {
-                EnsureOpraLoaded();
-                // 历史列表与曲线预览都可能被别的入口改动过，切进来刷新一次
-                RefreshOpraRecentList();
-                RedrawOpraCanvas();
             }
 
             // 听音方案页：进入时重算列表与「当前设置属于哪份方案」（刚在别处改过设置的判定在这落地）
@@ -429,7 +427,8 @@ namespace CelesteMusicPlayer
             bool rg = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
 
             // 顺序与 BuildDspNav 元数据表一致（具名下标见 DspActive* 常量）：
-            // 听音方案 / 机架编排 / 余量 / RG / SRC / EQ / OPRA / 压缩 / 声道 / 声场 / 矩阵 / FIR / 监控
+            // 听音方案 / 机架编排 / 余量 / RG / SRC / EQ / 压缩 / 声道 / 声场 / 矩阵 / FIR / 监控
+            // （耳机校正 2026-10-01 并入 EQ 页，不再占下标；链路条里的「耳机校正」按曲线直读）
             // 方案页圆点 = 当前设置属于某份已保存方案（是"当前状态"，不是处理模块，故跟着方案走）；
             // 机架编排恒 false：编排顺序不是"效果开关"，改顺序不产生处理，点不亮圆点
             bool comp = DspCompActive();
@@ -442,7 +441,7 @@ namespace CelesteMusicPlayer
 
             return new[]
             {
-                !string.IsNullOrEmpty(_dspProfileActiveName), false, headroom, rg, srcHz > 0, eq, _opraApplied,
+                !string.IsNullOrEmpty(_dspProfileActiveName), false, headroom, rg, srcHz > 0, eq,
                 comp, ch, field, matrix, fir, true
             };
         }
@@ -493,14 +492,14 @@ namespace CelesteMusicPlayer
             Border?[] badges =
             {
                 DspBadgeProfiles, DspBadgeRack, null, null, null, null,
-                null, null, null, null,
-                null, null, DspBadgeSafety
+                null, null, null, null, null,
+                DspBadgeSafety
             };
             TextBlock?[] texts =
             {
                 DspBadgeProfilesText, DspBadgeRackText, null, null, null, null,
-                null, null, null, null,
-                null, null, DspBadgeSafetyText
+                null, null, null, null, null,
+                DspBadgeSafetyText
             };
 
             int safetyIndex = DspPageSafetyIndex;
@@ -679,7 +678,8 @@ namespace CelesteMusicPlayer
                 on.Add("EQ");
             }
 
-            if (DspActiveOpra < active.Length && active[DspActiveOpra])
+            // 耳机校正 2026-10-01 并入 EQ 页，不再占导航下标：按当前 EQ 曲线直读（与下面 Crossfeed 同处理）
+            if (_opraApplied)
             {
                 on.Add("耳机校正");
             }
@@ -813,11 +813,11 @@ namespace CelesteMusicPlayer
             OutMonitorOverloadText.Text = clip > 0 ? "⚠ 已削波" : (peak > -0.5f ? "接近满刻度" : "正常");
 
             // 活跃 DSP 清单：按信号链顺序列出正在参与处理的模块（具名下标，见 DspActive* 常量）
-            string[] names = { "余量/限幅", "ReplayGain", "SRC 升频", "参数 EQ", "耳机校正", "声道工具", "FIR 卷积" };
+            string[] names = { "余量/限幅", "ReplayGain", "SRC 升频", "参数 EQ", "声道工具", "FIR 卷积" };
             int[] slots =
             {
                 DspActiveHeadroom, DspActiveRg, DspActiveSrc, DspActiveEq,
-                DspActiveOpra, DspActiveChannel, DspActiveFir
+                DspActiveChannel, DspActiveFir
             };
             bool[] active = DspModuleActive();
             var on = new List<string>();
@@ -827,6 +827,13 @@ namespace CelesteMusicPlayer
                 {
                     on.Add(names[i]);
                 }
+            }
+
+            // 耳机校正曲线寄存在 EQ 里（2026-10-01 并入 EQ 页）：按曲线直读，插在「参数 EQ」之后保持链序
+            if (_opraApplied)
+            {
+                int eqAt = on.IndexOf("参数 EQ");
+                on.Insert(eqAt >= 0 ? eqAt + 1 : on.Count, "耳机校正");
             }
 
             bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;

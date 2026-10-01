@@ -418,8 +418,7 @@ namespace CelesteMusicPlayer
                 // 2) 面板从盘重载（启动期同一条路径：面板始终以 store 为唯一真值）
                 ReloadDspPanelFromStores();
 
-                // 耳机校正标记：与 ApplyOpraCurve 同口径，只有 OPRA 曲线才算"耳机校正生效"
-                _opraApplied = eq.PresetId?.StartsWith("opra-", StringComparison.OrdinalIgnoreCase) == true;
+                // 耳机校正标记按当前 EQ 曲线 id 直读（_opraApplied 计算属性），无需在此赋值
 
                 // 3) 走既有下发入口推进引擎（各自内部持久化 + SetXxx，与手动改动同链路）
                 ApplyDspToEngine();
