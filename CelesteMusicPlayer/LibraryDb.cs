@@ -1006,10 +1006,15 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 曲库三项统计（曲目 / 专辑 / 艺术家），一条 SQL 搞定，供极客模式侧栏统计块显示。
+        /// 曲库三项统计（曲目 / 专辑 / 艺术家），供极客模式侧栏统计块显示。
+        /// 口径与歌曲面板完全同源：文件还在磁盘上 且 落在用户配置的扫描根内（或在手动
+        /// 文件清单里）。手动删歌后索引记录不会自己消失、扫描根外目录的历史残留也不会
+        /// 自己走，照旧全数会让读数比面板大一截（实测 4097 条索引 vs 面板 3609 首）。
         /// 空字符串不算一个专辑 / 艺术家。失败返回 (-1, -1, -1)。
         /// </summary>
-        public static (int Tracks, int Albums, int Artists) CountLibraryStats()
+        public static (int Tracks, int Albums, int Artists) CountLibraryStats(
+            IReadOnlyCollection<string>? watchRoots = null,
+            IReadOnlyCollection<string>? manualFiles = null)
         {
             EnsureMigrated();
             try
@@ -1018,20 +1023,53 @@ namespace CelesteMusicPlayer
                 {
                     using var conn = Open(GetDbFilePath());
                     using var cmd = conn.CreateCommand();
-                    cmd.CommandText =
-                        "SELECT COUNT(*), " +
-                        "COUNT(DISTINCT CASE WHEN album = '' THEN NULL ELSE album END), " +
-                        "COUNT(DISTINCT CASE WHEN artist = '' THEN NULL ELSE artist END) FROM tracks";
+                    cmd.CommandText = "SELECT file_path, album, artist FROM tracks";
+                    int tracks = 0;
+                    var albums = new HashSet<string>(StringComparer.Ordinal);
+                    var artists = new HashSet<string>(StringComparer.Ordinal);
+                    // 前缀匹配带目录边界，避免“D:\音乐2”被“D:\音乐”误收
+                    var roots = watchRoots?
+                        .Where(r => !string.IsNullOrWhiteSpace(r))
+                        .Select(r => r.TrimEnd('\\', '/') + "\\")
+                        .ToList();
+                    var manual = manualFiles is { Count: > 0 }
+                        ? new HashSet<string>(manualFiles, StringComparer.OrdinalIgnoreCase)
+                        : null;
+                    bool scoped = watchRoots != null || manualFiles != null;
                     using var r = cmd.ExecuteReader();
-                    if (r.Read())
+                    while (r.Read())
                     {
-                        return (
-                            Convert.ToInt32(r.GetInt64(0)),
-                            Convert.ToInt32(r.GetInt64(1)),
-                            Convert.ToInt32(r.GetInt64(2)));
+                        string path = r.GetString(0);
+                        if (!File.Exists(path))
+                        {
+                            continue;
+                        }
+
+                        if (scoped)
+                        {
+                            bool inRoot = roots != null && roots.Any(root =>
+                                path.StartsWith(root, StringComparison.OrdinalIgnoreCase));
+                            if (!inRoot && manual?.Contains(path) != true)
+                            {
+                                continue;
+                            }
+                        }
+
+                        tracks++;
+                        string album = r.IsDBNull(1) ? string.Empty : r.GetString(1);
+                        string artist = r.IsDBNull(2) ? string.Empty : r.GetString(2);
+                        if (album.Length > 0)
+                        {
+                            albums.Add(album);
+                        }
+
+                        if (artist.Length > 0)
+                        {
+                            artists.Add(artist);
+                        }
                     }
 
-                    return (-1, -1, -1);
+                    return (tracks, albums.Count, artists.Count);
                 }
             }
             catch

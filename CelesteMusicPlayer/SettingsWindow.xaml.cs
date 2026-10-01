@@ -2460,11 +2460,48 @@ namespace CelesteMusicPlayer
             UpdateAccentColorButton();
         }
 
-        /// <summary>界面风格（现有/经典浅色/深色/跟随系统）：立即持久化，主窗口订阅后会实时套用。</summary>
+        /// <summary>
+        /// 界面风格（现有/经典浅色/深色/跟随系统/极客）：立即持久化 + 提示重启。
+        /// 运行时热切换做不干净——RequestedTheme 一切换整树模板重建，极客风的元素级
+        /// 资源副本、ASCII 字符键、字符进度条在切回时都有残留窗口（实测重叠在案），
+        /// 所以与主题色/磷光色同一口径：先落盘，再告诉用户重启才完整。
+        /// </summary>
         private void UiStyleModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (_loadingUi) return;
             PersistAllFromUi();
+            PromptUiStyleRestart();
+        }
+
+        private bool _uiStyleRestartPromptShown;
+
+        /// <summary>界面风格已切换：热切换只能生效一部分，弹窗询问是否立即重启。</summary>
+        private async void PromptUiStyleRestart()
+        {
+            // 连切多个风格只问一次，不叠弹窗（选了"稍后"横竖都要重启）
+            if (_uiStyleRestartPromptShown)
+            {
+                return;
+            }
+
+            _uiStyleRestartPromptShown = true;
+            try
+            {
+                ContentDialog dialog = new()
+                {
+                    Title = "界面风格已切换",
+                    Content = "换风格得重启才换得干净。现在重启吗？重启会打断播放。",
+                    PrimaryButtonText = "立即重启",
+                    CloseButtonText = "稍后",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = Content.XamlRoot
+                };
+                if (await dialog.ShowAsync() == ContentDialogResult.Primary)
+                {
+                    MainWindow.Instance?.RestartApp();
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.xaml.cs", caught); }
         }
 
         private void ThemePresetCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
