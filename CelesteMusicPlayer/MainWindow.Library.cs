@@ -775,16 +775,10 @@ namespace CelesteMusicPlayer
         {
             LoadTagSortConfig();
             BuildTagSortFieldButtons();
-            RebuildTagSortColumnHeadersAll();
+            RebuildTagSortColumnHeaders();
             TagSortBorder.Visibility = Visibility.Visible;
-            // 默认进一屏浏览（左分类框 + 右常驻歌单）；旧分类墙保留可切换，重构完成后再评估去留
-            ShowTagSortBrowse();
+            ShowTagSortClassWall();
         }
-
-
-        /// <summary>旧分类墙顶栏的「一屏浏览」入口。</summary>
-        private void TagSortGoBrowseButton_Click(object sender, RoutedEventArgs e)
-            => ShowTagSortBrowse();
 
 
         /// <summary>从设置加载列配置与分类字段（空=默认），并校准当前分类字段仍在按钮组内。</summary>
@@ -862,20 +856,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>分类字段配置/切换后的刷新：按当前显示的视图走（一屏浏览 or 旧分类墙）。</summary>
-        private void RefreshTagSortForCurrentView()
-        {
-            if (_tagSortBrowseActive)
-            {
-                ApplyTagSortBrowseFilter();
-            }
-            else
-            {
-                ShowTagSortClassWall();
-            }
-        }
-
-
         private void TagSortFieldConfigButton_Click(object sender, RoutedEventArgs e)
         {
             var win = new TagSortFieldConfigWindow(_tagSortCategoryFields);
@@ -888,7 +868,7 @@ namespace CelesteMusicPlayer
                 }
                 AppSettingsStore.Update(s => s.TagSortCategoryFields = fields.ToList());
                 BuildTagSortFieldButtons();
-                RefreshTagSortForCurrentView();
+                ShowTagSortClassWall();
             };
             win.Activate();
         }
@@ -928,7 +908,7 @@ namespace CelesteMusicPlayer
                 _tagSortClassField = field;
                 _tagSortClassValue = string.Empty;
                 ApplyTagSortFieldButtons();
-                RefreshTagSortForCurrentView();
+                ShowTagSortClassWall();
             }
         }
 
@@ -936,11 +916,10 @@ namespace CelesteMusicPlayer
         // ---------------- 模块 A：曲目列表列定制（动态列头 + 动态行 + 列头排序/右键菜单） ----------------
 
         /// <summary>按列配置重建列表列头（# 固定列 + 可见配置列），箭头标记当前排序列。</summary>
-        private void RebuildTagSortColumnHeaders(Grid? target = null)
+        private void RebuildTagSortColumnHeaders()
         {
-            Grid headerGrid = target ?? TagSortColumnHeaderGrid;
-            headerGrid.ColumnDefinitions.Clear();
-            headerGrid.Children.Clear();
+            TagSortColumnHeaderGrid.ColumnDefinitions.Clear();
+            TagSortColumnHeaderGrid.Children.Clear();
 
             TagSortColumnHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(48) });
             var idxText = new TextBlock
@@ -959,7 +938,7 @@ namespace CelesteMusicPlayer
             {
                 var spec = visible[i];
                 var def = TagSortFields.Find(spec.Key);
-                headerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(spec.Weight, GridUnitType.Star) });
+                TagSortColumnHeaderGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(spec.Weight, GridUnitType.Star) });
 
                 string arrow = string.Equals(_tagSortPanelSongSortField, spec.Key, StringComparison.Ordinal)
                     ? (_tagSortPanelSongSortAsc ? " ↑" : " ↓") : "";
@@ -977,18 +956,7 @@ namespace CelesteMusicPlayer
                 btn.Click += TagSortColumnHeader_Click;
                 btn.RightTapped += TagSortColumnHeader_RightTapped;
                 Grid.SetColumn(btn, i + 1);
-                headerGrid.Children.Add(btn);
-            }
-        }
-
-
-        /// <summary>列头/列配置变化后重建列头（旧面板 + 一屏浏览面板都刷，共享同一排序列状态）。</summary>
-        private void RebuildTagSortColumnHeadersAll()
-        {
-            RebuildTagSortColumnHeaders(TagSortColumnHeaderGrid);
-            if (_tagSortBrowseActive && TagSortBrowseHeaderGrid != null)
-            {
-                RebuildTagSortColumnHeaders(TagSortBrowseHeaderGrid);
+                TagSortColumnHeaderGrid.Children.Add(btn);
             }
         }
 
@@ -1008,7 +976,7 @@ namespace CelesteMusicPlayer
                     _tagSortPanelSongSortAsc = true;
                 }
                 ReapplyTagSortPanelSongs();
-                RebuildTagSortColumnHeadersAll();
+                RebuildTagSortColumnHeaders();
             }
         }
 
@@ -1063,19 +1031,19 @@ namespace CelesteMusicPlayer
                         _tagSortPanelSongSortAsc = !_tagSortPanelSongSortAsc;
                     else { _tagSortPanelSongSortField = field; _tagSortPanelSongSortAsc = true; }
                     ReapplyTagSortPanelSongs();
-                    RebuildTagSortColumnHeadersAll();
+                    RebuildTagSortColumnHeaders();
                     break;
                 case "asc":
                     _tagSortPanelSongSortField = field;
                     _tagSortPanelSongSortAsc = true;
                     ReapplyTagSortPanelSongs();
-                    RebuildTagSortColumnHeadersAll();
+                    RebuildTagSortColumnHeaders();
                     break;
                 case "desc":
                     _tagSortPanelSongSortField = field;
                     _tagSortPanelSongSortAsc = false;
                     ReapplyTagSortPanelSongs();
-                    RebuildTagSortColumnHeadersAll();
+                    RebuildTagSortColumnHeaders();
                     break;
                 case "left":
                     MoveVisibleTagSortColumn(field, -1);
@@ -1106,7 +1074,7 @@ namespace CelesteMusicPlayer
             _tagSortColumns = visible.Concat(hidden).ToList();
             _tagSortColumnVersion++;
             SaveTagSortConfig();
-            RebuildTagSortColumnHeadersAll();
+            RebuildTagSortColumnHeaders();
             ReapplyTagSortPanelSongs();
         }
 
@@ -1125,7 +1093,7 @@ namespace CelesteMusicPlayer
             spec.Visible = false;
             _tagSortColumnVersion++;
             SaveTagSortConfig();
-            RebuildTagSortColumnHeadersAll();
+            RebuildTagSortColumnHeaders();
             ReapplyTagSortPanelSongs();
         }
 
@@ -1139,7 +1107,7 @@ namespace CelesteMusicPlayer
                 _tagSortColumns = cols;
                 _tagSortColumnVersion++;
                 SaveTagSortConfig();
-                RebuildTagSortColumnHeadersAll();
+                RebuildTagSortColumnHeaders();
                 ReapplyTagSortPanelSongs();
             };
             win.Activate();
@@ -1180,16 +1148,9 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>按当前列排序重建曲目列表（旧面板 Songs 视角 / 新一屏浏览面板共用）。</summary>
+        /// <summary>按当前列排序重建曲目列表（仅 Songs 视角）。</summary>
         private void ReapplyTagSortPanelSongs()
         {
-            if (_tagSortBrowseActive)
-            {
-                // 一屏浏览：筛选 + 排序列状态共享，一次刷新右栏
-                ApplyTagSortBrowseFilter();
-                return;
-            }
-
             if (!string.Equals(_tagSortPanelMode, "Songs", StringComparison.Ordinal)) return;
             var ordered = SortTagSortPanelSongs(_tagSortClassSongs.ToList());
             var songs = new ObservableCollection<PlaylistItem>();

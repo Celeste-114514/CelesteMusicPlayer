@@ -3059,13 +3059,6 @@
                                     Height="32"
                                     Margin="10,0,0,0"
                                     Click="TagSortClassWallSwitchToGroupButton_Click" />
-                            <Button x:Name="TagSortGoBrowseButton"
-                                    Content="一屏浏览"
-                                    Padding="12,4"
-                                    Height="32"
-                                    Margin="6,0,0,0"
-                                    Click="TagSortGoBrowseButton_Click"
-                                    ToolTipService.ToolTip="左边分类框 + 右边常驻歌单，不用点进去再返回" />
                         </StackPanel>
 
                         <!-- 分类墙：一个分类一张封面卡片 -->
@@ -3368,250 +3361,6 @@
                                 </Grid>
                             </Grid>
                         </Grid>
-
-                        <!-- 一屏浏览（重构阶段 1）：左分类框列 + 右常驻歌单，点框内一项右栏立刻跟着变 -->
-                    <Grid
-                        Grid.Row="1"
-                        x:Name="TagSortBrowseRoot"
-                        Visibility="Collapsed"
-                        RowSpacing="8">
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto" />
-                            <RowDefinition Height="*" />
-                        </Grid.RowDefinitions>
-
-                        <!-- 顶栏：结果计数 + 清除筛选 —— 播放全部 —— 回旧版分类墙 -->
-                        <Grid Grid.Row="0">
-                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                <TextBlock x:Name="TagSortBrowseCountText"
-                                           VerticalAlignment="Center"
-                                           FontSize="13"
-                                           Opacity="0.75"
-                                           Text="" />
-                                <Button x:Name="TagSortBrowseClearButton"
-                                        Content="清除筛选"
-                                        Height="30"
-                                        Padding="12,0"
-                                        Visibility="Collapsed"
-                                        Click="TagSortBrowseClearButton_Click" />
-                            </StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                                <Button
-                                    x:Name="TagSortBrowsePlayAllButton"
-                                    Height="30"
-                                    Padding="12,0"
-                                    CornerRadius="15"
-                                    Click="TagSortBrowsePlayAllButton_Click"
-                                    ToolTipService.ToolTip="按当前列表顺序替换播放队列并从第一首播放">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <FontIcon Glyph="&#xE768;" FontSize="13" VerticalAlignment="Center" />
-                                        <TextBlock Text="播放当前列表" VerticalAlignment="Center" />
-                                    </StackPanel>
-                                </Button>
-                                <Button x:Name="TagSortBrowseLegacyButton"
-                                        Content="旧版分类墙"
-                                        Height="30"
-                                        Padding="12,0"
-                                        Click="TagSortBrowseLegacyButton_Click"
-                                        ToolTipService.ToolTip="回到原来的封面卡片式分类墙（重构完成前保留）" />
-                            </StackPanel>
-                        </Grid>
-
-                        <Grid Grid.Row="1">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="210" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-
-                            <!-- 左：分类框列（一层一个分类维度；框内一行 = 该维度的一个取值） -->
-                            <Grid RowSpacing="6">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" />
-                                </Grid.RowDefinitions>
-
-                                <!-- 加一层：新层只装上一层筛完剩下的（级联钻取） -->
-                                <Button x:Name="TagSortAddFacetButton"
-                                        Grid.Row="0"
-                                        HorizontalAlignment="Stretch"
-                                        Height="32"
-                                        Padding="10,0"
-                                        Click="TagSortAddFacetButton_Click">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <FontIcon Glyph="&#xE710;" FontSize="12" VerticalAlignment="Center" />
-                                        <TextBlock Text="选择分类字段" VerticalAlignment="Center" />
-                                    </StackPanel>
-                                </Button>
-
-                                <ScrollViewer Grid.Row="1"
-                                              x:Name="TagSortFacetScroll"
-                                              VerticalScrollBarVisibility="Auto"
-                                              Padding="0,0,4,0">
-                                    <Grid>
-                                        <ItemsControl x:Name="TagSortFacetPanel">
-                                            <ItemsControl.ItemsPanel>
-                                                <ItemsPanelTemplate>
-                                                    <StackPanel Spacing="10" />
-                                                </ItemsPanelTemplate>
-                                            </ItemsControl.ItemsPanel>
-                                            <ItemsControl.ItemTemplate>
-                                                <DataTemplate x:DataType="local:TagSortFacetBox">
-                                                    <Border Padding="8,6"
-                                                            CornerRadius="8"
-                                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                                            BorderThickness="1">
-                                                        <Grid RowSpacing="4">
-                                                            <Grid.RowDefinitions>
-                                                                <RowDefinition Height="Auto" />
-                                                                <RowDefinition Height="*" />
-                                                            </Grid.RowDefinitions>
-                                                            <!-- 框标题：层级 + 分类名 + 取值数量 + 收起 -->
-                                                            <Grid Grid.Row="0" ColumnSpacing="6">
-                                                                <Grid.ColumnDefinitions>
-                                                                    <ColumnDefinition Width="*" />
-                                                                    <ColumnDefinition Width="Auto" />
-                                                                    <ColumnDefinition Width="Auto" />
-                                                                </Grid.ColumnDefinitions>
-                                                                <TextBlock Grid.Column="0"
-                                                                           Text="{x:Bind Title}"
-                                                                           FontSize="13"
-                                                                           FontWeight="SemiBold"
-                                                                           VerticalAlignment="Center"
-                                                                           TextTrimming="CharacterEllipsis" />
-                                                                <TextBlock Grid.Column="1"
-                                                                           Text="{x:Bind CountText}"
-                                                                           FontSize="11"
-                                                                           Opacity="0.6"
-                                                                           VerticalAlignment="Center" />
-                                                                <Button Grid.Column="2"
-                                                                        Tag="{x:Bind Key}"
-                                                                        Click="TagSortFacetRemove_Click"
-                                                                        Width="22"
-                                                                        Height="22"
-                                                                        Padding="0"
-                                                                        CornerRadius="4"
-                                                                        BorderThickness="0"
-                                                                        Background="Transparent"
-                                                                        VerticalAlignment="Center"
-                                                                        ToolTipService.ToolTip="收起这一层">
-                                                                    <FontIcon Glyph="&#xE711;" FontSize="10" />
-                                                                </Button>
-                                                            </Grid>
-                                                            <!-- 框内：一行一个取值（选中的行高亮 + 打勾） -->
-                                                            <ListView
-                                                                Grid.Row="1"
-                                                                MaxHeight="300"
-                                                                ItemsSource="{x:Bind Entries}"
-                                                                SelectionMode="None"
-                                                                IsItemClickEnabled="True"
-                                                                ItemClick="TagSortFacetItemClick"
-                                                                Tag="{x:Bind Key}">
-                                                                <ListView.ItemContainerStyle>
-                                                                    <Style TargetType="ListViewItem">
-                                                                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                                                        <Setter Property="Padding" Value="0" />
-                                                                        <Setter Property="MinHeight" Value="26" />
-                                                                        <Setter Property="CornerRadius" Value="4" />
-                                                                        <Setter Property="Margin" Value="0,1" />
-                                                                    </Style>
-                                                                </ListView.ItemContainerStyle>
-                                                                <ListView.ItemTemplate>
-                                                                    <DataTemplate x:DataType="local:TagSortFacetEntry">
-                                                                        <Border Background="{x:Bind RowBackground, Mode=OneWay}"
-                                                                                CornerRadius="4"
-                                                                                Padding="4,0">
-                                                                            <Grid ColumnSpacing="6">
-                                                                                <Grid.ColumnDefinitions>
-                                                                                    <ColumnDefinition Width="Auto" />
-                                                                                    <ColumnDefinition Width="*" />
-                                                                                    <ColumnDefinition Width="Auto" />
-                                                                                </Grid.ColumnDefinitions>
-                                                                                <FontIcon Grid.Column="0"
-                                                                                          Glyph="{x:Bind MarkGlyph, Mode=OneWay}"
-                                                                                          Foreground="{x:Bind MarkBrush, Mode=OneWay}"
-                                                                                          FontSize="11"
-                                                                                          VerticalAlignment="Center"
-                                                                                          IsHitTestVisible="False" />
-                                                                                <TextBlock Grid.Column="1"
-                                                                                           Text="{x:Bind Value}"
-                                                                                           FontSize="13"
-                                                                                           VerticalAlignment="Center"
-                                                                                           TextTrimming="CharacterEllipsis"
-                                                                                           ToolTipService.ToolTip="{x:Bind Value}" />
-                                                                                <TextBlock Grid.Column="2"
-                                                                                           Text="{x:Bind CountText}"
-                                                                                           FontSize="11"
-                                                                                           Opacity="0.6"
-                                                                                           VerticalAlignment="Center" />
-                                                                            </Grid>
-                                                                        </Border>
-                                                                    </DataTemplate>
-                                                                </ListView.ItemTemplate>
-                                                            </ListView>
-                                                        </Grid>
-                                                    </Border>
-                                                </DataTemplate>
-                                            </ItemsControl.ItemTemplate>
-                                        </ItemsControl>
-
-                                        <!-- 一个框都没加时的提示 -->
-                                        <TextBlock x:Name="TagSortFacetEmptyHint"
-                                                   Visibility="Collapsed"
-                                                   Margin="4,10,4,0"
-                                                   VerticalAlignment="Top"
-                                                   TextWrapping="Wrap"
-                                                   FontSize="13"
-                                                   Opacity="0.6"
-                                                   Text="左侧还是空的。点上面的按钮挑个分类，选一项就开始筛；不够用就再加一层，新的一层只在上一层剩下的里面挑。" />
-                                    </Grid>
-                                </ScrollViewer>
-                            </Grid>
-
-                            <!-- 右：常驻歌单（列头 + 动态列列表，与旧面板同款行为） -->
-                            <Grid Grid.Column="1" RowSpacing="2">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="28" />
-                                    <RowDefinition Height="*" />
-                                </Grid.RowDefinitions>
-                                <Grid x:Name="TagSortBrowseHeaderGrid" Background="Transparent" />
-                                <ListView
-                                    x:Name="TagSortBrowseSongList"
-                                    Grid.Row="1"
-                                    SelectionMode="Extended"
-                                    DoubleTapped="TagSortBrowseSongList_DoubleTapped"
-                                    RightTapped="TagSortBrowseSongList_RightTapped"
-                                    ContainerContentChanging="TagSortBrowseSongList_ContainerContentChanging"
-                                    SelectionChanged="TagSortBrowseSongList_SelectionChanged">
-                                    <ListView.ItemContainerStyle>
-                                        <Style TargetType="ListViewItem">
-                                            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                                            <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                                            <Setter Property="Padding" Value="0" />
-                                            <Setter Property="MinHeight" Value="40" />
-                                            <Setter Property="CornerRadius" Value="8" />
-                                            <Setter Property="Margin" Value="0,2" />
-                                            <Setter Property="Background" Value="Transparent" />
-                                        </Style>
-                                    </ListView.ItemContainerStyle>
-                                    <ListView.ItemTemplate>
-                                        <DataTemplate x:DataType="local:PlaylistItem">
-                                            <Border Tag="SongRowChrome" MinHeight="40" CornerRadius="8" Padding="0,0,12,0" Background="Transparent">
-                                                <Grid ColumnSpacing="12" />
-                                            </Border>
-                                        </DataTemplate>
-                                    </ListView.ItemTemplate>
-                                </ListView>
-                                <TextBlock x:Name="TagSortBrowseEmptyHint"
-                                           Grid.Row="1"
-                                           Visibility="Collapsed"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"
-                                           Opacity="0.6"
-                                           Text="换个分类试试，或者点「清除筛选」" />
-                            </Grid>
-                        </Grid>
-                    </Grid>
                     </Grid>
                 </Border>
 
@@ -3843,7 +3592,7 @@
                                                         FontSize="12"
                                                         Opacity="0.6"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="一套设置全存进去：机架顺序、EQ、压缩器、立体声场、声道矩阵、ReplayGain、房间校正、升频，一个不落。" />
+                                                        Text="一份方案 = 机架顺序 + EQ 曲线（含耳机校正）+ 压缩器 / 立体声场 / 声道矩阵 + 声道工具与输出安全 + ReplayGain + 房间校正 + 升频三件套。" />
                                                 </StackPanel>
                                                 <Grid ColumnSpacing="8">
                                                     <Grid.ColumnDefinitions>
@@ -4178,7 +3927,7 @@
                                                         FontSize="12"
                                                         Opacity="0.6"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="WDL 那套高质量重采样。只升不降；只有 WASAPI 独占模式管这个，设备吃不下目标采样率就自动不升。" />
+                                                        Text="WDL 高质量重采样。只升频、不降频；仅 WASAPI 独占模式生效，设备不支持目标采样率时自动退回不升频。" />
                                                 </StackPanel>
                                             <Grid ColumnSpacing="8">
                                                 <Grid.ColumnDefinitions>
@@ -4393,7 +4142,7 @@
                                                     FontSize="10"
                                                     Opacity="0.55"
                                                     TextWrapping="Wrap"
-                                                    Text="示意图，不是实测曲线。换成别的档位或目标采样率，真实曲线都不一样；这里只画它们的共样——通带平，过了截止点就快速往下掉。" />
+                                                    Text="这只是示意图，不是实测曲线。真实的长什么样取决于质量档位和目标采样率，这里只画「通带保持平坦、过了点就快速掉下去」这个共性形状。" />
                                             </StackPanel>
                                         </Border>
                                         <Border
@@ -4406,12 +4155,12 @@
                                                 <TextBlock
                                                     FontSize="13"
                                                     FontWeight="SemiBold"
-                                                    Text="升频改变了什么" />
+                                                    Text="升频到底改变了什么" />
                                                 <TextBlock
                                                     FontSize="11"
                                                     Opacity="0.6"
                                                     TextWrapping="WrapWholeWords"
-                                                    Text="多出来的那部分是滤波器整出来的，不是真细节，但听着干净；开了它输出就不再 bit-perfect。" />
+                                                    Text="升频不能无中生有。它把滤波失真推到人耳听不见的高频，听感更干净；开了它输出就不再是 bit-perfect。" />
                                                 <TextBlock
                                                     FontSize="11"
                                                     Opacity="0.6"
@@ -4900,7 +4649,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="选你耳机的牌子型号，直接套 OPRA 库的目标曲线，底下就是转成 EQ 段来跑。" />
+                                                        Text="选耳机品牌型号，套用 OPRA 库的目标曲线（折算成 EQ 段）。" />
                                                 </StackPanel>
                                                 <StackPanel
                                                     Grid.Column="2"
@@ -5651,7 +5400,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="把对侧的低频混一点进来，治耳机「声音卡在脑袋中间」的毛病。" />
+                                                        Text="把对侧的低频混一点进来，缓解耳机特有的「声音卡在脑袋中间」。" />
                                                 </StackPanel>
                                                 <StackPanel
                                                     Grid.Column="2"
@@ -5700,7 +5449,7 @@
                                                         Opacity="0.6"
                                                         VerticalAlignment="Center"
                                                         TextWrapping="Wrap"
-                                                        Text="把对侧的低频混一点进来，治耳机「声音卡在脑袋中间」的毛病。" />
+                                                        Text="把对侧声道低频经低通混入本侧，缓解耳机「头中定位」、声场更自然开阔。" />
                                                 </Grid>
                                                 <StackPanel Spacing="4">
                                                     <Grid ColumnSpacing="8">
@@ -6231,7 +5980,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="超过阈值的部分按比例收小，安静段相对抬起来，听着就不忽大忽小了。" />
+                                                        Text="压平忽大忽小的音量起伏：超过阈值的部分按比例收小，安静段落相对抬起来。" />
                                                 </StackPanel>
                                                 <StackPanel
                                                     Grid.Column="2"
@@ -6648,7 +6397,7 @@
                                                     </Grid>
                                                     <Slider x:Name="DspFieldSideSlider" Minimum="-18" Maximum="18" StepFrequency="0.5" Value="0" ValueChanged="DspFieldSlider_ValueChanged" />
                                                 </StackPanel>
-                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="「中间」= 左右一模一样的声音，主唱贝斯基本都在这；「两侧」= 左右有差的部分，混响、氛围声这些。" />
+                                                <TextBlock FontSize="11" Opacity="0.55" TextWrapping="Wrap" Text="「中间」是左右完全一样的那部分（通常是主唱、贝斯），「两侧」是左右有差异的那部分（混响、氛围声）。" />
                                             </StackPanel>
                                         </Border>
                                         <Border
@@ -6981,7 +6730,7 @@
                                                         FontSize="12"
                                                         Opacity="0.62"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="模块谁前谁后。默认就是出厂排法。" />
+                                                        Text="决定音频依次经过这些模块的先后顺序。默认顺序即出厂预设。" />
                                                 </StackPanel>
                                                 <Border
                                                     x:Name="DspBadgeRack"
@@ -7009,7 +6758,7 @@
                                                     FontSize="11"
                                                     Opacity="0.6"
                                                     TextWrapping="Wrap"
-                                                    Text="声音就照这个顺序流。8 个模块能用「上移 / 下移」调先后；采样率、耳机校正、输出安全是链路定死的上下游，不参与排序。先后会轻微改变声音（先 A 后 B ≠ 先 B 后 A），音质不受影响。" />
+                                                    Text="链路全景：声音按下列顺序流过。8 个模块都能用「上移 / 下移」调整先后。采样率、耳机校正、输出安全是链路结构决定的上下游，不在机架里、不参与排序。先后顺序会轻微改变声音（先 A 后 B ≠ 先 B 后 A），但不影响音质。" />
                                                 <ListView
                                                     x:Name="DspRackList"
                                                     Height="340"
