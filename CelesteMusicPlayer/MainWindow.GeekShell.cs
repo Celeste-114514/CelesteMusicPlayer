@@ -55,7 +55,10 @@ namespace CelesteMusicPlayer
                 var mono = new FontFamily("Consolas");
 
                 ApplyGeekChainStrip(geek, phosphor);
-                ApplyGeekAsciiKeys(geek);
+
+                // 极客按键图标：Icon=保留和其他皮肤同一套图标、只上磷光色；Glyph=换字符键
+                bool iconMode = !string.Equals(settings.GeekIconStyle, "Glyph", StringComparison.Ordinal);
+                ApplyGeekAsciiKeys(geek, iconMode);
                 ApplyGeekVolumeBar(geek, phosphor);
                 ApplyGeekSidebar(geek, mono, phosphor);
 
@@ -83,6 +86,7 @@ namespace CelesteMusicPlayer
             UpdateGeekStatusLamp();
             UpdateGeekLibStatsThrottled();
             RehideAsciiIcons();
+            RetintGeekIcons();
         }
 
         // ---------- B：左栏编号菜单 + 曲库统计块 ----------
@@ -621,19 +625,40 @@ namespace CelesteMusicPlayer
             yield return (ShowCurrentPlaylistButton, "=");
         }
 
-        private void ApplyGeekAsciiKeys(bool geek)
+        /// <summary>
+        /// 极客按键总入口。iconMode=true 走「图形图标」：按钮原样不动（图标大小和其他皮肤一致），
+        /// 只登记进同一份清单，由 TintAsciiKeys 把图标刷成磷光色。
+        /// iconMode=false 走老的字符键：藏图标、盖字符。
+        /// </summary>
+        private void ApplyGeekAsciiKeys(bool geek, bool iconMode)
         {
             if (geek)
             {
+                // 换了模式：先把上一模式留下的字符层 / 登记清干净，否则两套会叠在一起
+                if (_geekAsciiIconMode is bool oldMode && oldMode != iconMode)
+                {
+                    RestoreAsciiButtons();
+                }
+
+                _geekAsciiIconMode = iconMode;
+
                 foreach ((Button? button, string ascii) in GeekAsciiKeys())
                 {
-                    WrapButtonAscii(button, ascii);
+                    if (iconMode)
+                    {
+                        RegisterGeekIconKey(button);
+                    }
+                    else
+                    {
+                        WrapButtonAscii(button, ascii);
+                    }
                 }
 
                 _geekPlayLabel = PlayPauseButton != null
                                  && _geekAsciiButtons.TryGetValue(PlayPauseButton, out GeekButtonBackup? backup)
                     ? backup.Label
                     : null;
+                StartupLog.Write($"极客按键：{(iconMode ? "图形图标" : "字符键")}，登记 {_geekAsciiButtons.Count} 个按键");
                 SetGeekPlayKeyState(IsPlaybackActuallyPlaying());
                 // 顺序键 / 喜欢键 / 全屏键的状态同步：启动路径下这些键的状态由各自的
                 // 业务调用推过来，但「经典 → 极客」切换时没有任何业务触发，
@@ -646,8 +671,39 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            _geekAsciiIconMode = null;
             _geekPlayLabel = null;
             RestoreAsciiButtons();
+        }
+
+        /// <summary>当前生效的按键模式：true=图形图标，false=字符键，null=没在极客下。</summary>
+        private bool? _geekAsciiIconMode;
+
+        /// <summary>
+        /// 图形图标模式下的登记：按钮什么都别动（图标本来就是方块、大小和其他皮肤一样），
+        /// 但得进 _geekAsciiButtons 这份清单 —— TintAsciiKeys 靠它把图标刷成磷光色。
+        /// 备份里 Label / Host / Icons 全空，还原时自然什么都不做。
+        /// </summary>
+        private void RegisterGeekIconKey(Button? button)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            if (!_geekAsciiButtons.ContainsKey(button))
+            {
+                _geekAsciiButtons[button] = new GeekButtonBackup { Content = button.Content };
+                return;
+            }
+
+            // 兜底：这份备份里若记着「某个图标被藏过」，图标模式下必须露出来
+            // （从字符键切过来、或者跑过一次补藏时都会留下这种记录）
+            GeekButtonBackup existing = _geekAsciiButtons[button];
+            foreach (KeyValuePair<UIElement, Visibility> iconState in existing.Icons)
+            {
+                iconState.Key.Visibility = iconState.Value;
+            }
         }
 
         private void WrapButtonAscii(Button? button, string ascii)
@@ -830,6 +886,13 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void RehideAsciiIcons()
         {
+            // 图形图标模式：图标就是要给用户看的，补藏会把它全藏掉（播放条 / 顶栏一片空白）。
+            // 补藏只服务于字符键模式（藏图标、露字符）。
+            if (_geekAsciiIconMode != false)
+            {
+                return;
+            }
+
             foreach (KeyValuePair<Button, GeekButtonBackup> pair in _geekAsciiButtons)
             {
                 HideAsciiIcons(pair.Key, pair.Value);

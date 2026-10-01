@@ -1473,11 +1473,15 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void ApplyNavGeekGlyphs(bool geek)
         {
-            Color phosphor = PhosphorColor(AppSettingsStore.Load().GeekPhosphorColor);
+            AppSettingsState settings = AppSettingsStore.Load();
+            Color phosphor = PhosphorColor(settings.GeekPhosphorColor);
+
+            // 图形图标模式：左栏不换等宽符号，保留和其他皮肤同一套图标，只把颜色刷成磷光色
+            bool iconMode = !string.Equals(settings.GeekIconStyle, "Glyph", StringComparison.Ordinal);
 
             foreach (NavItemRef item in NavItems)
             {
-                bool showSymbol = geek && item.GlyphHost != null && item.GeekSymbol.Length > 0;
+                bool showSymbol = geek && !iconMode && item.GlyphHost != null && item.GeekSymbol.Length > 0;
 
                 if (showSymbol && item.Emoji != null)
                 {
@@ -1506,6 +1510,14 @@ namespace CelesteMusicPlayer
                     item.Glyph.Visibility = (emojiShown || (symbol?.Visibility == Visibility.Visible))
                         ? Visibility.Collapsed
                         : Visibility.Visible;
+
+                    // 图形图标模式：原图标露出来，颜色统一白色（和其他皮肤一致）
+                    if (geek && iconMode
+                        && item.Glyph.Visibility == Visibility.Visible
+                        && item.Glyph is Microsoft.UI.Xaml.Controls.IconElement navIcon)
+                    {
+                        WhitenGeekIcon(navIcon, new SolidColorBrush(GeekIconWhite));
+                    }
                 }
             }
         }

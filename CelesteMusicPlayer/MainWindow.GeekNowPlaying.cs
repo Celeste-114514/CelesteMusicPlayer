@@ -108,6 +108,7 @@ namespace CelesteMusicPlayer
                     _geekNowPlayingTinted.Clear();
                     _geekNowPlayingActive = false;
                     _geekNowPlayingPhosphor = null;
+                    _geekGlyphBrush = null;
 
                     RefreshLyricColorsForGeek();
                 }
@@ -118,14 +119,119 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>ASCII 字符键统一磷光色：顶栏功能键 + 底部播放条按键都在 _geekAsciiButtons 里。</summary>
+        /// <summary>当前按键色画刷（补色复用，免得每秒新建）：图形图标模式=白，字符键模式=磷光色。</summary>
+        private SolidColorBrush? _geekGlyphBrush;
+
+        /// <summary>极客下图标的统一色：白色。和其他皮肤（图景 / 经典）保持一致。</summary>
+        private static readonly Color GeekIconWhite = Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF);
+
+        /// <summary>顶栏功能键 + 底部播放条按键上色。
+        /// 图形图标模式：图标一律白色（跟其他皮肤同一套图标、同一套颜色），
+        ///   只刷「自己没写死颜色」的图标 —— 业务显式设色的（实心红心之类）原样保留；
+        /// 字符键模式：字符沿用磷光色，靠按钮 Foreground 往下继承就够。</summary>
         private void TintAsciiKeys(Color phosphor)
         {
-            SolidColorBrush brush = new(phosphor);
+            bool iconMode = _geekAsciiIconMode == true;
+            _geekGlyphBrush = new SolidColorBrush(iconMode ? GeekIconWhite : phosphor);
+
             foreach (Button button in _geekAsciiButtons.Keys)
             {
-                GeekTint(button, Control.ForegroundProperty, brush);
+                if (iconMode)
+                {
+                    // 只刷图标本身，按钮 Foreground 不动（动了会连带把按钮里的文字也染了）
+                    TintIconsInSubtree(button, _geekGlyphBrush, onlyIfUnset: true);
+                }
+                else
+                {
+                    GeekTint(button, Control.ForegroundProperty, _geekGlyphBrush);
+                }
             }
+        }
+
+        /// <summary>把一棵子树里的图标字形直接刷成指定颜色（不依赖 Foreground 继承）。
+        /// onlyIfUnset=true 时只刷「自己没写死前景色」的图标，业务显式设色的不动。</summary>
+        internal void TintIconsInSubtree(DependencyObject node, SolidColorBrush brush, bool onlyIfUnset = false)
+        {
+            if (node is Microsoft.UI.Xaml.Controls.FontIcon or Microsoft.UI.Xaml.Controls.SymbolIcon)
+            {
+                bool alreadyColored = node.ReadLocalValue(Microsoft.UI.Xaml.Controls.IconElement.ForegroundProperty)
+                                      != DependencyProperty.UnsetValue;
+
+                if (!onlyIfUnset || !alreadyColored)
+                {
+                    GeekTint(node as FrameworkElement, Microsoft.UI.Xaml.Controls.IconElement.ForegroundProperty, brush);
+                }
+
+                // 图标本身是叶子（FontIcon 的 Glyph 不建子元素），不用再往下走
+                return;
+            }
+
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(node);
+            for (int i = 0; i < count; i++)
+            {
+                TintIconsInSubtree(Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(node, i), brush, onlyIfUnset);
+            }
+        }
+
+        /// <summary>
+        /// 每秒自愈补色。图标模式下令牌可能被业务代码重建内容（播放 / 暂停换字形、
+        /// 切歌重建播放条），重建出来的图标是新元素、没有局部前景色 ——
+        /// 这里持续补，最慢一秒内颜色回来。非图形图标模式零开销。
+        /// </summary>
+        internal void RetintGeekIcons()
+        {
+            if (_geekAsciiIconMode != true || _geekGlyphBrush == null)
+            {
+                return;
+            }
+
+            foreach (Button button in _geekAsciiButtons.Keys)
+            {
+                TintIconsInSubtree(button, _geekGlyphBrush, onlyIfUnset: true);
+            }
+
+            // 左栏分类图标（图形图标模式下保留原图标，颜色同样走白色）
+            foreach (NavItemRef item in NavItems)
+            {
+                if (item.Glyph is Microsoft.UI.Xaml.Controls.IconElement navIcon
+                    && navIcon.Visibility == Visibility.Visible)
+                {
+                    WhitenGeekIcon(navIcon, _geekGlyphBrush);
+                }
+            }
+
+            // 播放信息页标题栏三个按钮：整个按钮被染成磷光色，里面图标要拉回白色
+            WhitenGeekIconIn(NowPlayingCollapseButton, _geekGlyphBrush);
+            WhitenGeekIconIn(NowPlayingVisualButton, _geekGlyphBrush);
+            WhitenGeekIconIn(NowPlayingLayoutButton, _geekGlyphBrush);
+        }
+
+        /// <summary>单个图标刷成极客统一色（白色）。自己写死过颜色的图标不动。</summary>
+        private void WhitenGeekIcon(Microsoft.UI.Xaml.Controls.IconElement? icon, SolidColorBrush brush)
+        {
+            if (icon == null)
+            {
+                return;
+            }
+
+            if (icon.ReadLocalValue(Microsoft.UI.Xaml.Controls.IconElement.ForegroundProperty)
+                != DependencyProperty.UnsetValue)
+            {
+                return;
+            }
+
+            GeekTint(icon as FrameworkElement, Microsoft.UI.Xaml.Controls.IconElement.ForegroundProperty, brush);
+        }
+
+        /// <summary>把一个按钮里的图标刷成极客统一色（白色）。</summary>
+        private void WhitenGeekIconIn(FrameworkElement? button, SolidColorBrush brush)
+        {
+            if (button == null)
+            {
+                return;
+            }
+
+            TintIconsInSubtree(button, brush, onlyIfUnset: true);
         }
 
         /// <summary>播放歌曲信息页：三个按钮 + 四层文字（标题 → 歌手专辑 → 音频信息 → 信号链）。</summary>
@@ -141,6 +247,15 @@ namespace CelesteMusicPlayer
             GeekTint(NowPlayingCollapseButton, Control.ForegroundProperty, bright);
             GeekTint(NowPlayingVisualButton, Control.ForegroundProperty, bright);
             GeekTint(NowPlayingLayoutButton, Control.ForegroundProperty, bright);
+
+            // 图形图标模式：按钮整体是磷光色，里面那颗图标拉回白色（和其他皮肤一致）
+            if (_geekAsciiIconMode == true)
+            {
+                var iconWhite = new SolidColorBrush(GeekIconWhite);
+                WhitenGeekIconIn(NowPlayingCollapseButton, iconWhite);
+                WhitenGeekIconIn(NowPlayingVisualButton, iconWhite);
+                WhitenGeekIconIn(NowPlayingLayoutButton, iconWhite);
+            }
 
             // 标题最亮
             GeekTint(NowPlayingTitleText, TextBlock.ForegroundProperty, bright);
