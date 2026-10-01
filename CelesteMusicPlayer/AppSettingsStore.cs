@@ -261,6 +261,12 @@ namespace CelesteMusicPlayer
         /// <summary>极客模式是否叠一层 CRT 扫描线（很淡的横向暗纹）。默认开，随时可关。</summary>
         public bool GeekCrtEnabled { get; set; } = true;
 
+        /// <summary>极客皮肤下按键上画什么：
+        /// "Icon" = 图形图标（和其他皮肤同一套图标，颜色跟磷光色走，默认）；
+        /// "Glyph" = 字符键（♪ ≡ ↻ ⤢ / |&lt; &lt;&lt; &gt; &gt;&gt; &gt;| 这套字符，更像老终端）。
+        /// 字符键在等宽字体里缺字形会被压成瘦条，所以默认走图形图标。</summary>
+        public string GeekIconStyle { get; set; } = "Icon";
+
         public bool ShowPlaylistTitle { get; set; } = true;
         public bool ShowPlaylistArtist { get; set; } = true;
         public bool ShowPlaylistAlbum { get; set; } = true;
@@ -779,6 +785,11 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             ? phosphor
             : "Amber",
         GeekCrtEnabled = s.GeekCrtEnabled,
+        // 极客按键样式：只有「图形图标 / 字符键」两种，其它值（含老存档的空值）一律回退图形图标
+        GeekIconStyle = s.GeekIconStyle?.Trim() is { Length: > 0 } iconStyle
+                        && iconStyle is "Icon" or "Glyph"
+            ? iconStyle
+            : "Icon",
         PlaylistDensity = s.PlaylistDensity is "Compact" or "Comfortable" ? s.PlaylistDensity : "Comfortable",
             EnableSmtc = s.EnableSmtc,
             EnableGlobalHotkeys = s.EnableGlobalHotkeys,

@@ -99,6 +99,12 @@ namespace CelesteMusicPlayer
             ("EmbeddedUnsynced", "内嵌未同步歌词优先")
         };
 
+        private static readonly (string Id, string Label)[] GeekIconStyleOptions =
+        {
+            ("Icon", "图形图标（白色）"),
+            ("Glyph", "字符键（♪ ≡ ↻ ⤢）")
+        };
+
         private static readonly (string Id, string Label)[] LyricServiceOptions =
         {
             ("NetEase", "网易云音乐"),
@@ -433,6 +439,7 @@ namespace CelesteMusicPlayer
             FillCombo(LyricSavePolicyCombo, LyricSavePolicyOptions);
             FillCombo(LyricAlignCombo, LyricAlignOptions);
             FillCombo(LyricSourcePriorityCombo, LyricSourcePriorityOptions);
+            FillCombo(GeekIconStyleCombo, GeekIconStyleOptions);
             FillCombo(LyricDownloadServiceCombo, LyricServiceOptions);
             FillCombo(OnlineSearchSourceCombo, OnlineSearchSourceOptions);
             FillCombo(ArtistAvatarSourceCombo, ArtistAvatarSourceOptions);
@@ -550,6 +557,7 @@ namespace CelesteMusicPlayer
                 // 记住加载时的磷光色：之后只有真的改了才提示重启，别一打开就弹
                 _lastAppliedGeekPhosphor = s.GeekPhosphorColor ?? "Amber";
                 SetToggle(GeekCrtSwitch, s.GeekCrtEnabled);
+                SelectComboByTag(GeekIconStyleCombo, s.GeekIconStyle);
                 SetToggle(ShowSpectrumSwitch, s.ShowSpectrum);
                 SetToggle(ShowAlbumCoverSwitch, s.ShowAlbumCover);
                 SetToggle(EnableBackgroundSwitch, s.EnableBackground);
@@ -1372,6 +1380,7 @@ namespace CelesteMusicPlayer
                 ? $"Custom:#{((GeekPhosphorPicker.Color.R << 16) | (GeekPhosphorPicker.Color.G << 8) | GeekPhosphorPicker.Color.B):X6}"
                 : phosphorTag;
             s.GeekCrtEnabled = GeekCrtSwitch?.IsOn ?? s.GeekCrtEnabled;
+            s.GeekIconStyle = GetComboTagString(GeekIconStyleCombo, "Icon");
             s.ShowSpectrum = ShowSpectrumSwitch?.IsOn ?? s.ShowSpectrum;
             s.ShowAlbumCover = ShowAlbumCoverSwitch?.IsOn ?? s.ShowAlbumCover;
             s.EnableBackground = EnableBackgroundSwitch?.IsOn ?? s.EnableBackground;

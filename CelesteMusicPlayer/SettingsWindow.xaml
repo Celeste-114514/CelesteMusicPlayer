@@ -647,6 +647,17 @@
                                 <ComboBoxItem Content="自定义…" Tag="Custom" />
                             </ComboBox>
                         </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="极客按键图标" />
+                                <TextBlock Text="极客皮肤下按键上画什么。图形图标=跟其他皮肤同一套图标，颜色统一白色；字符键=♪ ≡ ↻ ⤢ 这套字符，更像老终端" FontSize="12" Opacity="0.6" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ComboBox x:Name="GeekIconStyleCombo" Grid.Column="1" MinWidth="180" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
+                        </Grid>
                         <Grid x:Name="GeekPhosphorPickerPanel" ColumnSpacing="16" Visibility="Collapsed">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
