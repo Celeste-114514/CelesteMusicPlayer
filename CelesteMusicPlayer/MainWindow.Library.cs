@@ -55,6 +55,67 @@ namespace CelesteMusicPlayer
 
             await RestoreLastLibraryCoreAsync();
             await AppendManualLibraryFilesAsync();
+            await AppendMediaFolderTracksAsync();
+        }
+
+
+        /// <summary>
+        /// 把「媒体库」里配的每个文件夹的音频补进音乐库。
+        /// 之前只有「选择文件夹」那条路会把歌收进库，往媒体库里加文件夹只是记了个路径：
+        /// 于是文件夹在媒体库页面看得见，里面的歌却一首都不在「我的音乐库」里
+        /// （标签排序跟着一起空）。
+        /// 这里每次都按设置重扫一遍（文件夹列表本身存在设置里，不用往曲库会话里塞路径），
+        /// 只补库里还没有的，已经在库的原样不动。
+        /// </summary>
+        private async Task AppendMediaFolderTracksAsync()
+        {
+            try
+            {
+                List<string> roots = (AppSettingsStore.Load().LibraryWatchFolders ?? new List<string>())
+                    .Where(p => !string.IsNullOrWhiteSpace(p) && Directory.Exists(p))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+
+                if (roots.Count == 0)
+                {
+                    return;
+                }
+
+                List<string> scanned = await System.Threading.Tasks.Task.Run(() =>
+                {
+                    var list = new List<string>();
+                    foreach (string root in roots)
+                    {
+                        list.AddRange(FilterLibraryPaths(EnumerateAudioFiles(root)));
+                    }
+
+                    return list;
+                });
+
+                if (scanned.Count == 0)
+                {
+                    return;
+                }
+
+                var known = new HashSet<string>(_playlist.Select(i => i.FilePath), StringComparer.OrdinalIgnoreCase);
+                string[] missing = scanned
+                    .Where(p => !known.Contains(p))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToArray();
+
+                if (missing.Length == 0)
+                {
+                    StartupLog.Write($"[library] 媒体库文件夹 {roots.Count} 个根，扫到 {scanned.Count} 首，都在库里了");
+                    return;
+                }
+
+                LoadAndAddFiles(missing, persist: false);
+                StartupLog.Write($"[library] 媒体库文件夹补入 {missing.Length} 首，库内共 {_playlist.Count} 首");
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Library.cs", caught);
+            }
         }
 
 
@@ -267,6 +328,7 @@ namespace CelesteMusicPlayer
 
                 // 重扫描会清空列表按文件夹重建，手动加入音乐库的散装文件不在文件夹里，得补回来
                 await AppendManualLibraryFilesAsync();
+                await AppendMediaFolderTracksAsync();
 
                 NowPlayingText.Text = $"已重新扫描，共 {_playlist.Count} 首";
             }
