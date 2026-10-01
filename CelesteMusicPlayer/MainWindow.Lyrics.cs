@@ -244,13 +244,20 @@ namespace CelesteMusicPlayer
                     TextWrapping = TextWrapping.WrapWholeWords,
                     HorizontalAlignment = HorizontalAlignment.Stretch,
                     FontSize = sizeFar,
-                    FontFamily = lyricFont,
                     Foreground = geekLyricInit is Color geekFar
                         ? PhosphorShade(geekFar, 0x8C)
                         : new SolidColorBrush(Color.FromArgb(255, 154, 154, 154)),
                     Opacity = 0.55,
                     Tag = line
                 };
+                // ⚠️ 字体只在真的选了字体时才赋值：FontFamily 属性不接受 null ——
+                // WinRT 会把 null 变成字符串 "Unknown"，XAML 解析不过就抛
+                // COMException(0x800F1001)，建行循环在第一句当场中断，
+                // 表现就是「播放页一句歌词都没有」（主歌词字体=跟随系统时必中）。
+                if (lyricFont != null)
+                {
+                    tb.FontFamily = lyricFont;
+                }
                 if (line.IsTranslation)
                 {
                     // 翻译行：小号、更淡，且不作为主题色高亮的目标

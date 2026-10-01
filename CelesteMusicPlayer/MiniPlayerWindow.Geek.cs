@@ -133,8 +133,18 @@ namespace CelesteMusicPlayer
                         return;
                     }
 
-                    // null = 回落主题默认字体
-                    captured.FontFamily = isGeek ? mono : null;
+                    // 退出极客 = 回落主题默认字体。
+                    // ⚠️ 不能直接赋 null：FontFamily 属性不接受 null，WinRT 会把它变成
+                    // 字符串 "Unknown"，XAML 解析不过就抛 COMException(0x800F1001)。
+                    // 还原一律用 ClearValue（与 UiTheme 里换字体的还原分支同款写法）。
+                    if (isGeek)
+                    {
+                        captured.FontFamily = mono;
+                    }
+                    else
+                    {
+                        captured.ClearValue(TextBlock.FontFamilyProperty);
+                    }
                 });
             }
 

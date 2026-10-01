@@ -704,7 +704,11 @@ namespace CelesteMusicPlayer
                         if (inner is Border frame && frame.Child is TextBlock rowText)
                         {
                             rowText.TextAlignment = align;
-                            rowText.FontFamily = mainLyricFont;
+                            // 同上：未选字体时不要赋 null（会抛 "Unknown" is not a valid value）
+                            if (mainLyricFont != null)
+                            {
+                                rowText.FontFamily = mainLyricFont;
+                            }
                         }
                     }
                 }

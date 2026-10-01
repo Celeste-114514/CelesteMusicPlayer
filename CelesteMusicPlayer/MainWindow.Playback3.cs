@@ -1750,7 +1750,16 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            BuildLyricsUi(lyrics);
+            try
+            {
+                // 建行整段兜底：以前这里的异常会静默吞掉（Task 未 await），
+                // 症状只有「播放页没有歌词」而日志一片干净，排查全靠猜。
+                BuildLyricsUi(lyrics);
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("BuildLyricsUi", caught);
+            }
             _ = MaybeAutoDownloadExtrasAsync(item, lyrics, coverBytes);
         }
 
@@ -1951,7 +1960,11 @@ namespace CelesteMusicPlayer
             for (int i = 0; i < _lyricTextBlocks.Count; i++)
             {
                 TextBlock row = _lyricTextBlocks[i];
-                row.FontFamily = lyricFontSync;
+                // 同 BuildLyricsUi：未选字体（跟随系统）时不碰 FontFamily，赋 null 会抛异常
+                if (lyricFontSync != null)
+                {
+                    row.FontFamily = lyricFontSync;
+                }
                 int dist = Math.Abs(i - index);
                 if (dist == 0)
                 {
