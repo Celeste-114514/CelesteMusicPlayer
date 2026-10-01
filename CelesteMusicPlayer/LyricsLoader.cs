@@ -22,7 +22,20 @@ namespace CelesteMusicPlayer
         public bool IsTranslation { get; init; }
     }
 
-    /// <summary>解析同名 .lrc / 内嵌纯文本歌词（尊重设置：优先内嵌、歌词文件夹、模糊匹配、隐藏空行）。</summary>
+    /// <summary>歌词来源优先级取值（存在设置项 LyricSourcePriority 里）。</summary>
+    public static class LyricSourcePriority
+    {
+        /// <summary>外挂 LRC 优先（默认）。</summary>
+        public const string ExternalLrc = "ExternalLrc";
+
+        /// <summary>内嵌同步歌词优先（带 LRC 时间戳的内嵌歌词）。</summary>
+        public const string EmbeddedSynced = "EmbeddedSynced";
+
+        /// <summary>内嵌未同步歌词优先（纯文本内嵌歌词，如 UNSYNCEDLYRICS）。</summary>
+        public const string EmbeddedUnsynced = "EmbeddedUnsynced";
+    }
+
+    /// <summary>解析同名 .lrc / 内嵌歌词（尊重设置：来源优先级、歌词文件夹、模糊匹配、隐藏空行）。</summary>
     public static class LyricsLoader
     {
         public static List<LyricLine> LoadForAudio(string audioPath)
@@ -34,36 +47,59 @@ namespace CelesteMusicPlayer
                 return lines;
             }
 
-            if (settings.PreferInnerLyric)
+            // 按用户选的来源优先级依次找，第一个非空的就用；三种都没有才返回空（界面显示"没有歌词"）。
+            foreach (string source in SourceOrder(settings.LyricSourcePriority))
             {
-                lines = TryLoadEmbedded(audioPath);
+                lines = source switch
+                {
+                    LyricSourcePriority.ExternalLrc => TryLoadExternalLrc(audioPath, settings),
+                    LyricSourcePriority.EmbeddedSynced => TryLoadEmbedded(audioPath, LyricSourcePriority.EmbeddedSynced),
+                    LyricSourcePriority.EmbeddedUnsynced => TryLoadEmbedded(audioPath, LyricSourcePriority.EmbeddedUnsynced),
+                    _ => new List<LyricLine>()
+                };
+
                 if (lines.Count > 0)
                 {
                     return PostProcess(lines, settings);
                 }
             }
 
-            string? lrcPath = FindLrcPath(audioPath, settings);
-            if (lrcPath != null)
-            {
-                try
-                {
-                    string text = File.ReadAllText(lrcPath, DetectEncoding(lrcPath));
-                    lines = ParseLrc(text);
-                    if (lines.Count > 0)
-                    {
-                        return PostProcess(lines, settings);
-                    }
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("LyricsLoader.cs", caught); }
-            }
-
-            if (!settings.PreferInnerLyric)
-            {
-                lines = TryLoadEmbedded(audioPath);
-            }
-
             return PostProcess(lines, settings);
+        }
+
+        /// <summary>选中的来源排最前，其余按 外挂→内嵌同步→内嵌未同步 补位。</summary>
+        private static string[] SourceOrder(string priority) => priority switch
+        {
+            LyricSourcePriority.EmbeddedSynced => new[]
+            {
+                LyricSourcePriority.EmbeddedSynced, LyricSourcePriority.ExternalLrc, LyricSourcePriority.EmbeddedUnsynced
+            },
+            LyricSourcePriority.EmbeddedUnsynced => new[]
+            {
+                LyricSourcePriority.EmbeddedUnsynced, LyricSourcePriority.ExternalLrc, LyricSourcePriority.EmbeddedSynced
+            },
+            _ => new[]
+            {
+                LyricSourcePriority.ExternalLrc, LyricSourcePriority.EmbeddedSynced, LyricSourcePriority.EmbeddedUnsynced
+            }
+        };
+
+        private static List<LyricLine> TryLoadExternalLrc(string audioPath, AppSettingsState settings)
+        {
+            string? lrcPath = FindLrcPath(audioPath, settings);
+            if (lrcPath == null)
+            {
+                return new List<LyricLine>();
+            }
+
+            try
+            {
+                string text = File.ReadAllText(lrcPath, DetectEncoding(lrcPath));
+                return ParseLrc(text);
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("LyricsLoader.cs", caught); }
+
+            return new List<LyricLine>();
         }
 
         private static List<LyricLine> PostProcess(List<LyricLine> lines, AppSettingsState settings)
@@ -76,49 +112,109 @@ namespace CelesteMusicPlayer
             return lines;
         }
 
-        private static List<LyricLine> TryLoadEmbedded(string audioPath)
+        /// <summary>读内嵌歌词。slot 决定要"同步"还是"未同步"那一档：
+        /// FLAC/OGG 的 LYRICS 与 UNSYNCEDLYRICS 是两个独立字段，带时间戳的算同步、纯文本算未同步
+        /// （LYRICS 里存纯文本时也归未同步档，UNSYNCEDLYRICS 优先）；MP3/M4A 等只有一坨
+        /// 内嵌歌词（Tag.Lyrics），同样按有没有时间戳分档。</summary>
+        private static List<LyricLine> TryLoadEmbedded(string audioPath, string slot)
         {
             var lines = new List<LyricLine>();
             try
             {
                 using TagLib.File tagFile = TagLib.File.Create(audioPath);
-                string? embedded = tagFile.Tag.Lyrics;
+                string? embedded = ReadEmbeddedLyrics(tagFile, slot);
                 if (string.IsNullOrWhiteSpace(embedded))
                 {
                     return lines;
                 }
 
-                // 若内嵌本身是 LRC，直接解析
-                if (embedded.Contains('[') && Regex.IsMatch(embedded, @"\[\d{1,2}:\d{1,2}"))
-                {
-                    return ParseLrc(embedded);
-                }
-
-                string[] raw = embedded.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None)
-                    .Select(s => s.Trim())
-                    .Where(s => s.Length > 0)
-                    .ToArray();
-
-                TimeSpan duration = tagFile.Properties.Duration;
-                if (duration <= TimeSpan.Zero)
-                {
-                    duration = TimeSpan.FromSeconds(Math.Max(raw.Length, 1) * 4);
-                }
-
-                for (int i = 0; i < raw.Length; i++)
-                {
-                    double t = duration.TotalSeconds * i / Math.Max(raw.Length, 1);
-                    lines.Add(new LyricLine
-                    {
-                        Time = TimeSpan.FromSeconds(t),
-                        Text = raw[i]
-                    });
-                }
+                lines = BuildEmbeddedLines(embedded, tagFile.Properties.Duration);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("LyricsLoader.cs", caught); }
 
             return lines;
         }
+
+        private static string? ReadEmbeddedLyrics(TagLib.File tagFile, string slot)
+        {
+            string? synced = null;   // 带时间戳的内嵌歌词
+            string? plain = null;    // 纯文本内嵌歌词
+
+            if (tagFile.GetTag(TagLib.TagTypes.Xiph) is TagLib.Ogg.XiphComment xiph)
+            {
+                // LYRICS / UNSYNCEDLYRICS 是两个独立字段，要分开读（Tag.Lyrics 看到的可能是合并后的结果）
+                string? lyrics = xiph.GetFirstField("LYRICS");
+                string? unsynced = xiph.GetFirstField("UNSYNCEDLYRICS");
+                if (!string.IsNullOrWhiteSpace(unsynced))
+                {
+                    plain = unsynced;
+                }
+                else if (!string.IsNullOrWhiteSpace(lyrics) && !HasLrcTimestamps(lyrics))
+                {
+                    plain = lyrics;
+                }
+
+                if (!string.IsNullOrWhiteSpace(lyrics) && HasLrcTimestamps(lyrics))
+                {
+                    synced = lyrics;
+                }
+            }
+            else
+            {
+                string? raw = tagFile.Tag.Lyrics;
+                if (!string.IsNullOrWhiteSpace(raw))
+                {
+                    if (HasLrcTimestamps(raw))
+                    {
+                        synced = raw;
+                    }
+                    else
+                    {
+                        plain = raw;
+                    }
+                }
+            }
+
+            return slot == LyricSourcePriority.EmbeddedSynced ? synced : plain;
+        }
+
+        /// <summary>内嵌歌词文本 → 歌词行。本身带 LRC 时间戳就按 LRC 解析；
+        /// 纯文本则按曲长均摊成伪时间行（未同步歌词的既有展示方式）。</summary>
+        private static List<LyricLine> BuildEmbeddedLines(string embedded, TimeSpan duration)
+        {
+            var lines = new List<LyricLine>();
+
+            if (HasLrcTimestamps(embedded))
+            {
+                return ParseLrc(embedded);
+            }
+
+            string[] raw = embedded.Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None)
+                .Select(s => s.Trim())
+                .Where(s => s.Length > 0)
+                .ToArray();
+
+            if (duration <= TimeSpan.Zero)
+            {
+                duration = TimeSpan.FromSeconds(Math.Max(raw.Length, 1) * 4);
+            }
+
+            for (int i = 0; i < raw.Length; i++)
+            {
+                double t = duration.TotalSeconds * i / Math.Max(raw.Length, 1);
+                lines.Add(new LyricLine
+                {
+                    Time = TimeSpan.FromSeconds(t),
+                    Text = raw[i]
+                });
+            }
+
+            return lines;
+        }
+
+        /// <summary>文本里有没有 LRC 时间戳（[mm:ss] / [mm:ss.xx]）。</summary>
+        private static bool HasLrcTimestamps(string text) =>
+            text.Contains('[') && Regex.IsMatch(text, @"\[\d{1,2}:\d{1,2}");
 
         private static string? FindLrcPath(string audioPath, AppSettingsState settings)
         {

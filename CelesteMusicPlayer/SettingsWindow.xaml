@@ -115,13 +115,13 @@
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" MinWidth="180" />
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
-                                    <TextBlock Text="优先使用内嵌歌词" />
-                                    <TextBlock Text="播放时优先读取音频文件内嵌歌词" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                                    <TextBlock Text="歌词来源优先级" />
+                                    <TextBlock Text="一首歌可能同时有外挂 LRC、内嵌同步歌词、内嵌未同步歌词。选哪种优先显示；找不到就按「外挂 → 内嵌同步 → 内嵌未同步」往下找，三种都没有才显示没有歌词。内嵌歌词带时间戳算同步，纯文本算未同步。" FontSize="12" Opacity="0.6" TextWrapping="WrapWholeWords" />
                                 </StackPanel>
-                                <ToggleSwitch x:Name="PreferInnerLyricSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                                <ComboBox x:Name="LyricSourcePriorityCombo" Grid.Column="1" MinWidth="180" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
                             </Grid>
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>

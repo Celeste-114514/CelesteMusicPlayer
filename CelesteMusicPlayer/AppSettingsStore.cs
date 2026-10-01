@@ -85,7 +85,11 @@ namespace CelesteMusicPlayer
         public string CoverFolder { get; set; } = string.Empty;
 
         // —— 歌词 ——
-        public bool PreferInnerLyric { get; set; } = true;
+        /// <summary>歌词来源优先级："ExternalLrc"=外挂 LRC 优先（默认）；
+        /// "EmbeddedSynced"=内嵌同步歌词优先（带 LRC 时间戳的内嵌歌词）；
+        /// "EmbeddedUnsynced"=内嵌未同步歌词优先（纯文本内嵌歌词，如 UNSYNCEDLYRICS）。
+        /// 选中的来源找不到时，按 外挂→内嵌同步→内嵌未同步 的顺序继续找，三种都没有就显示"没有歌词"。</summary>
+        public string LyricSourcePriority { get; set; } = "ExternalLrc";
 
         /// <summary>DSD 输出模式（用户可选择）："Pcm"=用 ffmpeg 转成高采样 PCM 输出（默认，保留现有独占/ASIO 的 PCM 方案）；
         /// "Dop"=DoP 直出（ECHO 方案：仅 DSF/DSD64-256/1-2 声道/独占或 ASIO/DSP 全关，
@@ -704,7 +708,10 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             AutoDownloadOnlyWhenTagFull = s.AutoDownloadOnlyWhenTagFull,
             LyricFolder = s.LyricFolder,
             CoverFolder = s.CoverFolder,
-            PreferInnerLyric = s.PreferInnerLyric,
+            // 歌词来源优先级：非法值一律回退「外挂 LRC 优先」
+            LyricSourcePriority = s.LyricSourcePriority is "ExternalLrc" or "EmbeddedSynced" or "EmbeddedUnsynced"
+                ? s.LyricSourcePriority
+                : "ExternalLrc",
             LyricFuzzyMatch = s.LyricFuzzyMatch,
             ShowLyricTranslate = s.ShowLyricTranslate,
             LyricSavePolicy = s.LyricSavePolicy,

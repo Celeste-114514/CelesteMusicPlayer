@@ -92,6 +92,13 @@ namespace CelesteMusicPlayer
             ("Right", "右对齐")
         };
 
+        private static readonly (string Id, string Label)[] LyricSourcePriorityOptions =
+        {
+            ("ExternalLrc", "外挂 LRC 优先"),
+            ("EmbeddedSynced", "内嵌同步歌词优先"),
+            ("EmbeddedUnsynced", "内嵌未同步歌词优先")
+        };
+
         private static readonly (string Id, string Label)[] LyricServiceOptions =
         {
             ("NetEase", "网易云音乐"),
@@ -425,6 +432,7 @@ namespace CelesteMusicPlayer
 
             FillCombo(LyricSavePolicyCombo, LyricSavePolicyOptions);
             FillCombo(LyricAlignCombo, LyricAlignOptions);
+            FillCombo(LyricSourcePriorityCombo, LyricSourcePriorityOptions);
             FillCombo(LyricDownloadServiceCombo, LyricServiceOptions);
             FillCombo(OnlineSearchSourceCombo, OnlineSearchSourceOptions);
             FillCombo(ArtistAvatarSourceCombo, ArtistAvatarSourceOptions);
@@ -485,7 +493,7 @@ namespace CelesteMusicPlayer
                 if (QqCookieBox != null) QqCookieBox.Text = s.QqCookie;
 
                 // 歌词
-                SetToggle(PreferInnerLyricSwitch, s.PreferInnerLyric);
+                SelectComboByTag(LyricSourcePriorityCombo, s.LyricSourcePriority);
                 SetToggle(LyricFuzzyMatchSwitch, s.LyricFuzzyMatch);
                 SetToggle(ShowLyricTranslateSwitch, s.ShowLyricTranslate);
                 SetText(LyricFolderTextBox, s.LyricFolder);
@@ -1283,7 +1291,7 @@ namespace CelesteMusicPlayer
             }
 
             // 任一关键控件尚未生成时，跳过整次写回，避免半初始化 NRE
-            if (PreferInnerLyricSwitch == null
+            if (LyricSourcePriorityCombo == null
                 || DesktopLyricFontSizeSlider == null
                 || DesktopLyricPlayedColorTextBox == null
                 || VolumeSettingSlider == null
@@ -1292,7 +1300,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            s.PreferInnerLyric = PreferInnerLyricSwitch.IsOn;
+            s.LyricSourcePriority = GetComboTagString(LyricSourcePriorityCombo, "ExternalLrc");
             s.LyricFuzzyMatch = LyricFuzzyMatchSwitch?.IsOn ?? s.LyricFuzzyMatch;
             s.ShowLyricTranslate = ShowLyricTranslateSwitch?.IsOn ?? s.ShowLyricTranslate;
             s.LyricFolder = LyricFolderTextBox?.Text?.Trim() ?? string.Empty;
