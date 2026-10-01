@@ -37,11 +37,13 @@
 
 ## 🖥️ 截图
 
-<img width="1386" height="793" alt="QQ20260917-165924" src="https://github.com/user-attachments/assets/a373ad4a-b2f7-43a7-add3-49d6b1354aaf" />
+<img width="2082" height="1191" alt="QQ20261002-023624" src="https://github.com/user-attachments/assets/1b4bbecc-170d-402f-bd21-5cca83924aa2" />
 <img width="1386" height="793" alt="QQ20260917-165955" src="https://github.com/user-attachments/assets/79b428d0-a790-4e1c-82ad-cc9beeb23390" />
 <img width="1386" height="793" alt="QQ20260917-170248" src="https://github.com/user-attachments/assets/edf73c43-240e-4340-afcd-49b8990a40d1" />
-<img width="1386" height="793" alt="极客「终端」播放页：音频流信息 + 方块频谱 + 电平峰值 + 相位图 + 播放队列" src="docs/screenshots/terminal-view.png" />
-<img width="1386" height="793" alt="艺术家视图：该艺术家的专辑墙" src="docs/screenshots/artist-albums.jpg" />
+<img width="2082" height="1191" alt="QQ20261001-205353" src="https://github.com/user-attachments/assets/1b2a2f46-669b-46bc-9f49-61c7ca9b85d0" />
+<img width="2560" height="1528" alt="QQ20261002-023642" src="https://github.com/user-attachments/assets/ef0ae764-a904-4103-95c1-a672e7b02554" />
+
+
 
 
 ## 🛠️ 技术栈
