@@ -55,7 +55,7 @@ namespace CelesteMusicPlayer
                 var mono = new FontFamily("Consolas");
 
                 ApplyGeekChainStrip(geek, phosphor);
-                ApplyGeekAsciiKeys(geek, mono);
+                ApplyGeekAsciiKeys(geek);
                 ApplyGeekVolumeBar(geek, phosphor);
                 ApplyGeekSidebar(geek, mono, phosphor);
 
@@ -584,6 +584,16 @@ namespace CelesteMusicPlayer
 
         // ---------- ASCII 键位：把图标按钮换成字符键 ----------
 
+        /// <summary>字符键专用字体。这些键画的是符号字符（♪ ≡ ↻ ⤢ ♡ ♥ → ∞ □ × 等），
+        /// 其中大半在 Consolas 里没有字形 —— 用等宽字体会被回退，回退字形又受等宽的
+        /// 窄字宽约束，实测渲染成 10x21 的瘦条（经典皮肤的图标是 23x22 的方块）。
+        /// 显式给符号字体，字形按自身比例画。逗号分隔是回退链，和 GeekIconSymbolFont 同写法。</summary>
+        private static readonly FontFamily GeekGlyphFont =
+            new("Segoe UI Symbol, Segoe UI, Segoe Fluent Icons, Segoe MDL2 Assets");
+
+        /// <summary>字符键字号。12 时比经典皮肤的图标（23x22）视觉上小一圈，提到 17 后与图标等重。</summary>
+        private const double GeekGlyphFontSize = 17;
+
         private IEnumerable<(Button? Button, string Ascii)> GeekAsciiKeys()
         {
             // 顶栏四个功能键：用户明确反馈字母（A/M/R/F）不直观，换成一眼能看懂的字符号。
@@ -611,13 +621,13 @@ namespace CelesteMusicPlayer
             yield return (ShowCurrentPlaylistButton, "=");
         }
 
-        private void ApplyGeekAsciiKeys(bool geek, FontFamily mono)
+        private void ApplyGeekAsciiKeys(bool geek)
         {
             if (geek)
             {
                 foreach ((Button? button, string ascii) in GeekAsciiKeys())
                 {
-                    WrapButtonAscii(button, ascii, mono);
+                    WrapButtonAscii(button, ascii);
                 }
 
                 _geekPlayLabel = PlayPauseButton != null
@@ -640,7 +650,7 @@ namespace CelesteMusicPlayer
             RestoreAsciiButtons();
         }
 
-        private void WrapButtonAscii(Button? button, string ascii, FontFamily mono)
+        private void WrapButtonAscii(Button? button, string ascii)
         {
             if (button == null)
             {
@@ -663,8 +673,11 @@ namespace CelesteMusicPlayer
             var label = new TextBlock
             {
                 Text = ascii,
-                FontFamily = mono,
-                FontSize = 12,
+                // 字符键用符号字体，不用等宽 —— ♪ ≡ ↻ ♡ 这些在 Consolas 里缺字，
+                // 回退后字形被等宽的窄字宽挤扁（实测 10x21，又小又瘦）。
+                // 换符号字体后按字形自身比例渲染，和经典皮肤的图标一样方正。
+                FontFamily = GeekGlyphFont,
+                FontSize = GeekGlyphFontSize,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 IsHitTestVisible = false,
