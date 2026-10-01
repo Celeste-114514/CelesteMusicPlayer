@@ -47,6 +47,10 @@ namespace CelesteMusicPlayer
                 FullScreenIcon.Glyph = isFullScreen ? "\uE73F" : "\uE740";
             }
 
+            // 极客模式下图标被 ASCII 字符键盖着：⤡ / ⤢ 也得跟着状态走，
+            // 否则用户点进去发现字符永远停在初值上（不知道再点一下是退还是进）。
+            SetGeekFullScreenKey(isFullScreen);
+
             if (FullScreenButton != null)
             {
                 ToolTipService.SetToolTip(FullScreenButton, isFullScreen ? "退出全屏" : "全屏");

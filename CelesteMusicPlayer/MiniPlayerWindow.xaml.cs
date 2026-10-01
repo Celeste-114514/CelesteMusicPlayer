@@ -35,6 +35,8 @@ namespace CelesteMusicPlayer
 
         private bool _updatingProgress;
         private bool _userSeeking;
+        private uint _progressPointerId;
+        private bool _progressOnThumb;
         private bool _updatingVolume;
         private bool _alwaysOnTop = true;
         private bool _queueOpen;
@@ -83,6 +85,11 @@ namespace CelesteMusicPlayer
             // 同时挂上设置变更订阅，用户在设置里切风格/换磷光色时开着的迷你条要实时跟。
             HookGeekMiniSettings();
             ApplyGeekMini(MainWindow.IsGeekUiStyleActive());
+
+            // 进度条的指针事件必须代码挂 + handledEventsToo：Slider 内部会把
+            // PointerPressed/Released 标成 Handled，XAML 挂的处理器收不到，
+            // _userSeeking 永远 false —— 表现为"进度条拖不动、松手也没反应"。
+            HookProgressSliderPointer();
 
             OverlappedPresenter presenter = OverlappedPresenter.Create();
             presenter.IsResizable = false;
@@ -552,7 +559,15 @@ namespace CelesteMusicPlayer
             DependencyObject? node = src;
             while (node != null)
             {
-                if (node is Button || node is Slider)
+                // 队列列表 / 滚动区 / 输入框也要豁免：在列表上按住想滚一下，
+                // 结果整条迷你播放器被拖着跑（实测反馈）。ListView 模板里自带
+                // ScrollViewer，顺着父链都能被这一网打尽。
+                if (node is Button
+                    || node is Slider
+                    || node is ListViewBase
+                    || node is Microsoft.UI.Xaml.Controls.Primitives.SelectorItem
+                    || node is ScrollViewer
+                    || node is TextBox)
                 {
                     return true;
                 }
@@ -598,19 +613,143 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 指针事件挂接（构造器里调一次）。⚠ 不能用 XAML 属性挂、也不能用 += 裸挂：
+        /// Slider 的类处理函数会把 PointerPressed/Released 标记为 Handled，
+        /// 这两种挂法都收不到 → _userSeeking 永远 false（主窗口踩过并注释在案）。
+        /// handledEventsToo:true 才能无论事件有没有被吃掉都收到。
+        /// </summary>
+        private void HookProgressSliderPointer()
+        {
+            Safe(() =>
+            {
+                ProgressSlider.AddHandler(
+                    UIElement.PointerPressedEvent,
+                    new PointerEventHandler(ProgressSlider_PointerPressed),
+                    handledEventsToo: true);
+                ProgressSlider.AddHandler(
+                    UIElement.PointerMovedEvent,
+                    new PointerEventHandler(ProgressSlider_PointerMoved),
+                    handledEventsToo: true);
+                ProgressSlider.AddHandler(
+                    UIElement.PointerExitedEvent,
+                    new PointerEventHandler(ProgressSlider_PointerExited),
+                    handledEventsToo: true);
+                ProgressSlider.AddHandler(
+                    UIElement.PointerReleasedEvent,
+                    new PointerEventHandler(ProgressSlider_PointerReleased),
+                    handledEventsToo: true);
+                ProgressSlider.AddHandler(
+                    UIElement.PointerCaptureLostEvent,
+                    new PointerEventHandler(ProgressSlider_PointerCaptureLost),
+                    handledEventsToo: true);
+            });
+        }
+
         private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
+            // 起拖标志先立：下面的落点赋值会触发 ValueChanged，赶在标志前面的话
+            // 时间文本不会跟着跳，看起来就是"点了没反应"。
             _userSeeking = true;
+            _progressPointerId = e.Pointer.PointerId;
+            _progressOnThumb = IsInsideThumb(e.OriginalSource);
+
+            // 点在滑块圆头上 → 原生拖动照常工作（Thumb 自己跟手），我们不插手，
+            // 只等松开时提交。点在轨道上 → 原生 Slider 只负责把圆头瞬移过去，
+            // 按住继续拖它不管，这里按指针横坐标自己算落点，并把指针捕获过来
+            // 让拖动全程都有事件（不然拖出滑块边界就断）。
+            if (!_progressOnThumb)
+            {
+                SeekMiniFromPointer(e);
+                try
+                {
+                    ProgressSlider.CapturePointer(e.Pointer);
+                }
+                catch (Exception caught)
+                {
+                    StartupLog.WriteException("MiniPlayerWindow.ProgressSlider_PointerPressed", caught);
+                }
+            }
+        }
+
+        private void ProgressSlider_PointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            // 按住拖动跟随指针。圆头起手的那次不跟（原生 Thumb 自己会走，
+            // 我们插手等于两套定位互相打脸）。指针 id 卡着：不是起手那根
+            // 手指/鼠标的事件一律不理。
+            if (_userSeeking && !_progressOnThumb && e.Pointer.PointerId == _progressPointerId)
+            {
+                SeekMiniFromPointer(e);
+            }
+        }
+
+        private void ProgressSlider_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            // 撒手撒在窗口外、且没人捕获指针时，Released 永远不会到这个滑块上，
+            // _userSeeking 会卡在 true —— 之后播放推进全被拦住，进度条像死了。
+            // 这里补一次提交（有捕获时不归我们管，等 CaptureLost）。
+            if (_userSeeking
+                && (ProgressSlider.PointerCaptures == null || ProgressSlider.PointerCaptures.Count == 0))
+            {
+                CommitMiniSeek();
+            }
         }
 
         private void ProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
         {
+            try
+            {
+                ProgressSlider.ReleasePointerCapture(e.Pointer);
+            }
+            catch (Exception caught)
+            {
+                // 没捕获过（原生滑块自己在管）就会走到这里，属正常路径
+                StartupLog.WriteException("MiniPlayerWindow.ProgressSlider_PointerReleased", caught);
+            }
+
             CommitMiniSeek();
         }
 
         private void ProgressSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
         {
             CommitMiniSeek();
+        }
+
+        /// <summary>
+        /// 按指针在滑轨上的横坐标落点。WinUI 的 Slider 只认"攥住滑块圆头拖"，
+        /// 点轨道 / 在轨道上按住拖都没有原生响应 —— 用户实测反馈的"进度条拖不动"。
+        /// 宽高还没定时 ratio 会落在 0 或 1，无伤大雅（布局一定下来下次移动就准了）。
+        /// </summary>
+        private void SeekMiniFromPointer(PointerRoutedEventArgs e)
+        {
+            Safe(() =>
+            {
+                if (ProgressSlider.Maximum <= 0)
+                {
+                    return;
+                }
+
+                double px = e.GetCurrentPoint(ProgressSlider).Position.X;
+                double ratio = Math.Clamp(px / Math.Max(1, ProgressSlider.ActualWidth), 0, 1);
+                ProgressSlider.Value = ratio * ProgressSlider.Maximum;
+            });
+        }
+
+        /// <summary>按下的位置是不是在滑块圆头里（圆头起手 = 原生拖动，不接管）。</summary>
+        private static bool IsInsideThumb(object? originalSource)
+        {
+            DependencyObject? node = originalSource as DependencyObject;
+            while (node != null)
+            {
+                if (node is Microsoft.UI.Xaml.Controls.Primitives.Thumb)
+                {
+                    return true;
+                }
+
+                node = VisualTreeHelper.GetParent(node);
+            }
+
+            return false;
         }
 
         /// <summary>用户拖完进度条后才真正跳转（指针抬起/捕获丢失都算拖完）。</summary>

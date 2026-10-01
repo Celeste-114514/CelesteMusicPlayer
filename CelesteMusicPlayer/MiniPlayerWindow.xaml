@@ -223,7 +223,7 @@
                         </Grid>
 
                         <!-- 进度行 -->
-                        <Grid Grid.Row="1" ColumnSpacing="8">
+                        <Grid x:Name="ProgressRowGrid" Grid.Row="1" ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="44" />
                                 <ColumnDefinition Width="*" />
@@ -235,6 +235,10 @@
                                 FontSize="12"
                                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                                 Text="00:00" />
+                            <!-- 指针事件不写在 XAML：Slider 内部会把 PointerPressed/Released 标成
+                                 Handled，XAML 挂的处理器默认收不到 → _userSeeking 永远为 false，
+                                 拖动不生效、松手也不会 seek（主窗口同一个坑，见 Playback.cs）。
+                                 改由代码 AddHandler(handledEventsToo:true) 挂接。 -->
                             <Slider
                                 x:Name="ProgressSlider"
                                 Grid.Column="1"
@@ -242,9 +246,6 @@
                                 Maximum="100"
                                 Value="0"
                                 VerticalAlignment="Center"
-                                PointerPressed="ProgressSlider_PointerPressed"
-                                PointerReleased="ProgressSlider_PointerReleased"
-                                PointerCaptureLost="ProgressSlider_PointerCaptureLost"
                                 ValueChanged="ProgressSlider_ValueChanged" />
                             <TextBlock
                                 x:Name="TotalTimeText"

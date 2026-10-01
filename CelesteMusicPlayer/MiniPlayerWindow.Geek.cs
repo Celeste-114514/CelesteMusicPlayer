@@ -75,6 +75,10 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
+                // 先落状态再跑任务：任务里（如字符进度条首次刷新）要读 _geekMiniActive
+                // 做守卫，循环后再置位会让那一刷被自己挡掉
+                _geekMiniActive = geek;
+
                 EnsureGeekMiniJobs();
                 foreach (Action<bool> job in _geekMiniJobs)
                 {
@@ -86,8 +90,6 @@ namespace CelesteMusicPlayer
                 _lastRegionW = -1;
                 _lastRegionH = -1;
                 ApplyRoundedWindowRegion();
-
-                _geekMiniActive = geek;
 
                 // 强调色（滑块 + 播放实心圆）走同一条链路，只是把 accent 换成磷光
                 RefreshAccentFromOwner();
@@ -160,6 +162,110 @@ namespace CelesteMusicPlayer
                     }
                 });
             }
+
+            // ── 极客字符进度条：滑块整体隐形，Consolas 字符块盖在原位 ──
+            // 和主窗口底部播放条同一套语言（那边是 GeekProgressText）：极客模式下
+            // WinUI 那个带圆头滑块的进度条太"现代 UI"，跟终端风格不搭。拖动逻辑一行不改
+            //（指针事件全挂在 Slider 上，字符条 IsHitTestVisible=false 不挡命中）。
+            _geekMiniJobs.Add(isGeek =>
+            {
+                if (ProgressSlider == null)
+                {
+                    return;
+                }
+
+                if (isGeek)
+                {
+                    EnsureGeekMiniProgressBar();
+                    if (_geekMiniProgressText != null)
+                    {
+                        // 换磷光色（force 重入）时画刷也要跟着换，不然字符条停在旧色上
+                        _geekMiniProgressText.Foreground = new SolidColorBrush(MainWindow.GeekPhosphorColor());
+                        _geekMiniProgressText.Visibility = Visibility.Visible;
+                        ProgressSlider.Opacity = 0;
+                        UpdateMiniGeekProgressText();
+                    }
+                }
+                else
+                {
+                    if (_geekMiniProgressText != null)
+                    {
+                        _geekMiniProgressText.Visibility = Visibility.Collapsed;
+                    }
+
+                    ProgressSlider.Opacity = 1;
+                }
+            });
+        }
+
+        private TextBlock? _geekMiniProgressText;
+        private bool _geekMiniProgressHooked;
+
+        /// <summary>按需创建字符进度条（只建一次；之后切风格只切可见性）。</summary>
+        private void EnsureGeekMiniProgressBar()
+        {
+            if (_geekMiniProgressText != null || ProgressRowGrid == null)
+            {
+                return;
+            }
+
+            var bar = new TextBlock
+            {
+                FontFamily = new FontFamily("Consolas"),
+                FontSize = 11,
+                VerticalAlignment = VerticalAlignment.Center,
+                IsHitTestVisible = false,
+                Foreground = new SolidColorBrush(MainWindow.GeekPhosphorColor()),
+                Text = string.Empty,
+            };
+            // 和滑块同格同列：宽度天然一致，垂直居中压在滑轨上
+            Grid.SetColumn(bar, 1);
+            ProgressRowGrid.Children.Add(bar);
+            _geekMiniProgressText = bar;
+
+            if (!_geekMiniProgressHooked)
+            {
+                // 位置推进（程序性赋值）和用户拖动都会走 ValueChanged，
+                // 宽度变化重排格数 —— 全都挂在滑块上，一处刷新两不误
+                ProgressSlider.ValueChanged += (_, _) => UpdateMiniGeekProgressText();
+                ProgressSlider.SizeChanged += (_, _) => UpdateMiniGeekProgressText();
+                _geekMiniProgressHooked = true;
+            }
+        }
+
+        /// <summary>
+        /// 字符进度条刷新：格数按滑块实测宽度算（铺满整行才和原来的滑轨同长）。
+        /// 画法复用主窗口的 SetGeekBarText：█ 实心 + 同字形半透明，绝不混字符
+        /// （混字符会因缺字被换字体补，基线和宽都对不上，实测错位）。
+        /// </summary>
+        private void UpdateMiniGeekProgressText()
+        {
+            if (!_geekMiniActive
+                || _geekMiniProgressText == null
+                || _geekMiniProgressText.Visibility != Visibility.Visible)
+            {
+                return;
+            }
+
+            double max = ProgressSlider.Maximum;
+            double ratio = max > 0 ? Math.Clamp(ProgressSlider.Value / max, 0, 1) : 0;
+
+            double width = ProgressSlider.ActualWidth;
+            if (width <= 40)
+            {
+                width = _geekMiniProgressText.ActualWidth;
+            }
+
+            if (width <= 40)
+            {
+                return; // 布局还没定：等 SizeChanged / 下一次进度跳动再画
+            }
+
+            double perChar = Math.Max(1.0, _geekMiniProgressText.FontSize * 0.55);
+            int blocks = (int)Math.Clamp(Math.Round(width / perChar), 12, 120);
+            int filled = (int)Math.Clamp(Math.Round(ratio * blocks), 0, blocks);
+
+            MainWindow.SetGeekBarText(_geekMiniProgressText, string.Empty, filled, blocks);
         }
 
         private void TrackBorder(Microsoft.UI.Xaml.Controls.Border? border, double normalRadius)

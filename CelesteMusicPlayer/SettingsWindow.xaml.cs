@@ -1641,7 +1641,10 @@ namespace CelesteMusicPlayer
             // 该项会永久残留 → 「设置里关着但开机仍自启」。这里每次都同步，开关为关即清掉残留。
             ApplyAutoRunRegistry(saved.AutoRun);
 
-            MainWindow.Instance?.ApplySettingsLive(AppSettingsStore.Load());
+            // ⚠ 不要再在这里调 ApplySettingsLive：PersistAndApply 内部已经调过一次
+            // （上面 :1541）。每次保存连打两发，界面风格 / 磷光色这类即时生效的设置
+            // 会被完整应用两轮 —— 音量图标备份被第二轮的 Collapsed 值污染、
+            // 日志里同一条「已应用」出现两条，都是它干的。只保留这一行覆盖层偏好。
             MainWindow.Instance?.ApplyOverlayPreferenceFromSettings(saved);
         }
 

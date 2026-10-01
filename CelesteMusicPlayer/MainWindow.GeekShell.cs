@@ -24,6 +24,7 @@ namespace CelesteMusicPlayer
         private const int GeekVolumeBlocks = 10;
 
         private bool _geekVolumeCanvasSized;
+        private bool _volumeBackupTaken;
 
         private TextBlock? _geekPlayLabel;
         private Visibility _volumeIconVisibility = Visibility.Visible;
@@ -36,6 +37,9 @@ namespace CelesteMusicPlayer
         {
             public object? Content;
             public TextBlock? Label;
+
+            /// <summary>纯图标按钮外面套的字符宿主 Grid（还原时整包换回原内容）。</summary>
+            public Grid? Host;
 
             /// <summary>被藏掉的图标 → 原可见性。用字典去重：补藏可能对同一个图标跑多次。</summary>
             public Dictionary<UIElement, Visibility> Icons = new();
@@ -78,6 +82,7 @@ namespace CelesteMusicPlayer
             UpdateGeekVolumeText();
             UpdateGeekStatusLamp();
             UpdateGeekLibStatsThrottled();
+            RehideAsciiIcons();
         }
 
         // ---------- B：左栏编号菜单 + 曲库统计块 ----------
@@ -384,9 +389,25 @@ namespace CelesteMusicPlayer
             // 极客下音量条由字符画，原画布的竖线与喇叭图标让位（保留备份，切风格还原）
             if (geek)
             {
+                // 备份只采一次：设置保存会连续触发两次应用（双击 apply），
+                // 第二遍会把已经 Collapsed 的值当"原值"备份走，切回经典后喇叭图标就没了。
+                if (!_volumeBackupTaken)
+                {
+                    if (VolumeIcon != null)
+                    {
+                        _volumeIconVisibility = VolumeIcon.Visibility;
+                    }
+
+                    if (VolumeStyleCanvas != null)
+                    {
+                        _volumeCanvasVisibility = VolumeStyleCanvas.Visibility;
+                    }
+
+                    _volumeBackupTaken = true;
+                }
+
                 if (VolumeIcon != null)
                 {
-                    _volumeIconVisibility = VolumeIcon.Visibility;
                     VolumeIcon.Visibility = Visibility.Collapsed;
                 }
 
@@ -395,18 +416,26 @@ namespace CelesteMusicPlayer
                 // 等于把唯一的点击靶撤了，字符条就完全拖不动（用户实测）。
                 if (VolumeStyleCanvas != null)
                 {
-                    _volumeCanvasVisibility = VolumeStyleCanvas.Visibility;
                     VolumeStyleCanvas.Visibility = Visibility.Visible;
                     EnsureVolumeHitTarget();
                 }
             }
             else
             {
-                if (VolumeIcon != null) VolumeIcon.Visibility = _volumeIconVisibility;
+                if (_volumeBackupTaken)
+                {
+                    if (VolumeIcon != null) VolumeIcon.Visibility = _volumeIconVisibility;
+                    if (VolumeStyleCanvas != null)
+                    {
+                        VolumeStyleCanvas.Visibility = _volumeCanvasVisibility;
+                    }
+
+                    _volumeBackupTaken = false;
+                }
+
+                // 退出极客时把自绘竖线画回来（极客期间 DrawVolumeStyle 一直只铺透明靶）
                 if (VolumeStyleCanvas != null)
                 {
-                    VolumeStyleCanvas.Visibility = _volumeCanvasVisibility;
-                    // 退出极客时把自绘竖线画回来（极客期间 DrawVolumeStyle 一直只铺透明靶）
                     DrawVolumeStyle();
                 }
             }
@@ -555,12 +584,13 @@ namespace CelesteMusicPlayer
 
         private IEnumerable<(Button? Button, string Ascii)> GeekAsciiKeys()
         {
-            // 顶栏：功能键用字母（与工具提示一致），系统键用窗口符号的普通字符写法。
+            // 顶栏四个功能键：用户明确反馈字母（A/M/R/F）不直观，换成一眼能看懂的字符号。
+            // 音频设置=音符、选项=汉堡、刷新=环箭、全屏=斜向双箭（进出全屏两种态）。
             // 一律不套方括号 —— 用户明确要求，加了框看着像标签不像按键。
-            yield return (AudioSettingsButton, "A");
-            yield return (SelectLocalAudioButton, "M");
-            yield return (RefreshCurrentPageButton, "R");
-            yield return (FullScreenButton, "F");
+            yield return (AudioSettingsButton, "♪");
+            yield return (SelectLocalAudioButton, "≡");
+            yield return (RefreshCurrentPageButton, "↻");
+            yield return (FullScreenButton, "⤢");
             // 最小化用「减号」而不是下划线：下划线压在字底，看着整个键往下掉
             yield return (WindowMinButton, "−");
             yield return (WindowMaxRestoreButton, "□");
@@ -593,6 +623,14 @@ namespace CelesteMusicPlayer
                     ? backup.Label
                     : null;
                 SetGeekPlayKeyState(IsPlaybackActuallyPlaying());
+                // 顺序键 / 喜欢键 / 全屏键的状态同步：启动路径下这些键的状态由各自的
+                // 业务调用推过来，但「经典 → 极客」切换时没有任何业务触发，
+                // 不主动同步的话会停顿在 GeekAsciiKeys 里的初值字符上（实测顺序键卡在 ~）。
+                SetGeekPlaybackOrderKey(_orderResolver.Order);
+                SetGeekFavoriteState(
+                    !string.IsNullOrWhiteSpace(_nowPlayingPath)
+                    && (TrackStatsStore.Get(_nowPlayingPath)?.IsFavorite ?? false));
+                SetGeekFullScreenKey(_fullScreen?.IsFullScreen ?? false);
                 return;
             }
 
@@ -611,14 +649,14 @@ namespace CelesteMusicPlayer
             {
                 // 之前包过：再补藏一次图标。启动极早阶段包的按钮视觉树还没长好，
                 // 那一次扫描会扑空（图标找不到 → 没藏 → ASCII 字符叠画在原图标上，用户实测的重影就是它）
-                HideIconsInTree(button, already);
+                HideAsciiIcons(button, already);
                 return;
             }
 
             var backup = new GeekButtonBackup { Content = button.Content };
 
             // 先藏掉所有图标字形：它们在等宽字体里缺字，会渲染成问号框
-            HideIconsInTree(button, backup);
+            HideAsciiIcons(button, backup);
 
             var label = new TextBlock
             {
@@ -652,6 +690,7 @@ namespace CelesteMusicPlayer
 
                 host.Children.Add(label);
                 button.Content = host;
+                backup.Host = host;
             }
 
             _geekAsciiButtons[button] = backup;
@@ -659,9 +698,64 @@ namespace CelesteMusicPlayer
             // 内容挂好后立刻再扫一次（图标已随原内容搬进宿主）。
             // 但启动极早阶段树还没长好、扫描可能仍扑空 —— 所以再挂一个 Loaded 补藏，
             // 图标真正进入可视树的那一刻一定被藏掉。Loaded 只在首次入树时触发，不会重复刷。
-            HideIconsInTree(button, backup);
+            HideAsciiIcons(button, backup);
             GeekButtonBackup captured = backup;
-            button.Loaded += (s, e) => HideIconsInTree(button, captured);
+            button.Loaded += (s, e) => HideAsciiIcons(button, captured);
+        }
+
+        /// <summary>
+        /// 补藏一棵按钮里的所有图标字形。两条路都走，缺一不可：
+        ///   ① 内容树（button.Content 的子树）—— 不依赖模板是否实例化，
+        ///      切风格那一下根元素 RequestedTheme 切换会触发整树重建模板，
+        ///      那一瞬 VisualTreeHelper 从 Button 出发数不到子节点（GetChildrenCount=0），
+        ///      而按钮早已 Loaded 过、补藏句柄不会再触发 —— 这就是
+        ///      「别的皮肤切极客时图标和字符重叠」的根因（launch 路径树没长好，
+        ///      反而是 Loaded 句柄兜住的，所以启动即极客没有重叠）。
+        ///   ② 可视树（VisualTreeHelper）—— 兜内容树走不到的角色（极少，双保险）。
+        /// 两条路写同一个备份字典，天然去重；已 Collapsed 的再 Collapsed 也无副作用。
+        /// </summary>
+        private static void HideAsciiIcons(Button button, GeekButtonBackup backup)
+        {
+            HideIconsInContent(button.Content, backup);
+            HideIconsInTree(button, backup);
+        }
+
+        /// <summary>内容树（逻辑树）补藏：Panel.Children / Border.Child / Content 一路往下。</summary>
+        private static void HideIconsInContent(object? content, GeekButtonBackup backup)
+        {
+            switch (content)
+            {
+                case null:
+                    return;
+                case FontIcon icon:
+                    backup.Icons[icon] = icon.Visibility;
+                    icon.Visibility = Visibility.Collapsed;
+                    return;
+                case SymbolIcon symbol:
+                    backup.Icons[symbol] = symbol.Visibility;
+                    symbol.Visibility = Visibility.Collapsed;
+                    return;
+            }
+
+            switch (content)
+            {
+                case Panel panel:
+                    foreach (UIElement child in panel.Children)
+                    {
+                        HideIconsInContent(child, backup);
+                    }
+
+                    break;
+                case Microsoft.UI.Xaml.Controls.Border border:
+                    HideIconsInContent(border.Child, backup);
+                    break;
+                case Microsoft.UI.Xaml.Controls.ContentControl control:
+                    HideIconsInContent(control.Content, backup);
+                    break;
+                case Microsoft.UI.Xaml.Controls.ContentPresenter presenter:
+                    HideIconsInContent(presenter.Content, backup);
+                    break;
+            }
         }
 
         private static void HideIconsInTree(DependencyObject node, GeekButtonBackup backup)
@@ -701,14 +795,45 @@ namespace CelesteMusicPlayer
                     iconState.Key.Visibility = iconState.Value;
                 }
 
-                // 纯图标按钮：把原始内容放回（字符宿主随之丢弃）
-                if (button.Content is not Panel)
+                // 纯图标按钮：把原始内容放回（字符宿主随之丢弃）。
+                // 旧判据是 button.Content is not Panel —— 宿主自己就是 Panel，判据恒假，
+                // 还原永远不执行：切回经典后纯图标按钮卡在宿主 Grid 里（图标 + 空字符层），
+                // 再切极客时两层会叠加。改成按「当前 Content 就是那个宿主」精确判定。
+                if (backup.Host != null && ReferenceEquals(button.Content, backup.Host))
                 {
                     button.Content = backup.Content;
                 }
             }
 
             _geekAsciiButtons.Clear();
+            _geekPlayLabel = null;
+        }
+
+        /// <summary>
+        /// 每秒自愈补藏：切极客时可视树重建的瞬时空窗可能漏掉图标（双保险第一道），
+        /// 这里在读数定时器里持续补，最慢一秒内重影必消。字典为空时零开销。
+        /// </summary>
+        private void RehideAsciiIcons()
+        {
+            foreach (KeyValuePair<Button, GeekButtonBackup> pair in _geekAsciiButtons)
+            {
+                HideAsciiIcons(pair.Key, pair.Value);
+            }
+        }
+
+        /// <summary>全屏键字符跟着状态走：⤢ 进全屏 / ⤡ 退出（图标被藏，字符是唯一可见态）。</summary>
+        internal void SetGeekFullScreenKey(bool isFullScreen)
+        {
+            if (FullScreenButton == null
+                || !_geekAsciiButtons.TryGetValue(FullScreenButton, out GeekButtonBackup? backup))
+            {
+                return;
+            }
+
+            if (backup.Label != null)
+            {
+                backup.Label.Text = isFullScreen ? "⤡" : "⤢";
+            }
         }
     }
 }
