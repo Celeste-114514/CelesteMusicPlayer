@@ -338,6 +338,14 @@ namespace CelesteMusicPlayer
             {
                 ApplyCategoryView();
             }
+            else if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+            {
+                // 播放列表保持用户自己的顺序（添加顺序 / 手动拖动的结果）——
+                // 这里只是往曲库补歌，不该顺手把播放队列重排一遍。
+                // 2026-10-08 用户实测：启动恢复出的播放队列被自动按标题打乱，就是这条分支干的。
+                // 用户主动点排序按钮走 SortField/SortOrder 那条路径，不受这里影响。
+                RenumberCollection(_userPlaylist);
+            }
             else
             {
                 ApplySort(preservePlayingPath: playingPath);
