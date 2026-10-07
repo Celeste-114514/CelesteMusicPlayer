@@ -39,18 +39,47 @@ namespace CelesteMusicPlayer
             }
             catch (Exception ex) { StartupLog.WriteException("App.PrimaryLanguageOverride", ex); }
 
-            // 低延迟 GC（2026-09-22 加，针对独占模式偶发卡顿）：
+            // 低延迟 GC（2026-09-22 加，针对**独占模式**偶发卡顿）：
             // .NET 的 gen2 / 大对象堆回收是 STW（stop-the-world）——它会暂停**所有**托管线程，
             // 音频渲染线程也不例外，再高的线程优先级、MMCSS "Pro Audio" 也躲不掉。
             // 实测渲染线程被挂起 34~101ms，而设备缓冲只有 100ms → 挂起超过缓冲就是可闻断音。
             // 同一台机器上 ECHO 不卡，而它是 Rust 写的、**没有 GC**，现象高度吻合。
             // SustainedLowLatency：让运行时尽量把 gen2 回收放到后台、避免长时间阻塞式 STW，
             // 专为"整个进程生命周期都需要低延迟"的场景设计（设一次即可，不要反复切换）。
-            // 代价是回收更保守、内存占用略高——对播放器可接受。
+            //
+            // ⚠ 2026-10-07 修正：原注释说"代价是内存占用略高"——实测是严重偏高。
+            //   SustainedLowLatency 会让 GC 几乎不回收，垃圾全堆着不还：
+            //   3609 首曲库加载完就到 449MB 私有内存；播到第 5 首时整进程 1.4GB，
+            //   而其中托管堆只有 100~160MB —— 差额全是「没被回收的垃圾」。
+            //   这个 GC 模式是为**独占模式**的 STW 卡顿设计的，可你现在用
+            //   OutputMode=Shared（日志实测都是这个值）——系统混音器在下游兜着，
+            //   根本没有独占那个 STW 卡顿问题，却白白付了内存的代价。
+            // 现在改成：只在独占 / ASIO 模式下开低延迟 GC，共享模式用默认 GC（正常回收）。
+            // 依据：SettingsWindow 的 OutputModeCombo 只有三个取值
+            //   Shared / WasapiExclusive / Asio（见 SettingsWindow.xaml.cs:447-449），
+            //   后两者都是独占或类独占（设备直出、不经系统混音器），保留低延迟 GC。
+            //   ⚠ 共享模式那个 Tag 是 "Shared" 不是 "WasapiShared"（2026-10-08 订正）。
+            // 若将来切到独占模式，NativeWasapiExclusiveOut / NativeCoreOutput 里还有渲染线程的
+            //   实时探针（GC.GetTotalMemory + LatencyMode）可以继续观察卡顿。
             try
             {
-                System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
-                StartupLog.Write($"[GC] 已设为低延迟模式 LatencyMode={System.Runtime.GCSettings.LatencyMode} IsServerGC={System.Runtime.GCSettings.IsServerGC}");
+                string mode = (AppSettingsStore.Load().OutputMode ?? string.Empty).Trim();
+                bool exclusive =
+                    string.Equals(mode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase);
+
+                if (exclusive)
+                {
+                    System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.SustainedLowLatency;
+                    StartupLog.Write($"[GC] 独占/ASIO 输出({mode}) → 低延迟回收模式 LatencyMode={System.Runtime.GCSettings.LatencyMode} IsServerGC={System.Runtime.GCSettings.IsServerGC}");
+                }
+                else
+                {
+                    // Interactive：面向桌面应用的默认模式，正常回收内存。
+                    // 明确写出来而不是「什么都不做」，是为了让下次看日志的人知道这里是有意为之。
+                    System.Runtime.GCSettings.LatencyMode = System.Runtime.GCLatencyMode.Interactive;
+                    StartupLog.Write($"[GC] 共享输出({mode}) → 用默认回收模式 LatencyMode={System.Runtime.GCSettings.LatencyMode} IsServerGC={System.Runtime.GCSettings.IsServerGC}（低延迟模式只对独占有意义，不开）");
+                }
             }
             catch (Exception ex) { StartupLog.WriteException("App.GCLatencyMode", ex); }
 
@@ -107,6 +136,19 @@ namespace CelesteMusicPlayer
             StartupLog.Write("=== PID=" + Environment.ProcessId + "  启动时间=" + DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss") + " ===");
             StartupLog.Write("=======================================================");
             StartupLog.Write("OnLaunched");
+            // 2026-10-07 内存排查：启动基线。后续起播/切歌/视频背景都会再打一行，可直接看出增量归属。
+            MemProbe.Log("OnLaunched");
+            // 每 5 秒一行周期采样，抓「不切歌也在慢慢涨」这类泄漏。
+            // 只观察不回收，不干扰播放。排查完记得让用户关掉（见下方环境变量开关）。
+            try
+            {
+                if (Environment.GetEnvironmentVariable("CELESTE_MEMPROBE") == "1")
+                {
+                    MemProbe.StartSampling(5);
+                    StartupLog.Write("[MEM] 周期采样已开启（CELESTE_MEMPROBE=1，每 5 秒一行）");
+                }
+            }
+            catch (Exception caught) { StartupLog.WriteException("App.OnLaunched.memprobe", caught); }
             // 应用资源在启动回调里再注册，供播放列表列宽 Binding 使用
             Resources["PlaylistColumns"] = PlaylistColumnWidths.Instance;
 

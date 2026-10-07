@@ -67,6 +67,9 @@ namespace CelesteMusicPlayer
             finally
             {
                 StartupLog.Write("MainWindow_Loaded end");
+                // 2026-10-07 内存排查：窗口渲染层就绪后的基线。
+                // 与 OnLaunched 那行相减 = WinUI 渲染 + 控件树 + 播放器的固定开销。
+                MemProbe.Log("MainWindow已加载");
             }
         }
 
@@ -1938,6 +1941,9 @@ namespace CelesteMusicPlayer
             try
             {
                 StopBackgroundMotion();
+                // 2026-10-07：先 Close 源再 Dispose 播放器——MediaPlayer.Dispose() 不会替我们
+                //   释放 MediaSource 的解码器（引用计数还有别人），不 Close 等于漏一份。
+                CloseBackgroundVideoSource();
                 _backgroundVideoPlayer?.Dispose();
                 _backgroundVideoPlayer = null;
             }
@@ -2105,7 +2111,13 @@ namespace CelesteMusicPlayer
             {
                 _trayIcon ??= new AppTrayIcon(this);
                 _trayIcon.Show();
-                StartupLog.Write("托盘: MinimizeToTray 完成");
+                if (!_trayIcon.IsCreated)
+                {
+                    // 别再假装成功：图标没建起来就藏窗口，右下角会一个入口都没有。
+                    // 补救：再启动一次 CelesteMusicPlayer.exe，单实例会把命令转给本进程把窗口拉回来。
+                    StartupLog.Write("托盘: 图标尚未创建成功，已安排后台补建；若最终仍失败，可再次运行程序唤回窗口");
+                }
+                StartupLog.Write("托盘: MinimizeToTray 完成 (图标已创建=" + _trayIcon.IsCreated + ")");
                 AppWindow.Hide();
             }
             catch (Exception ex)
@@ -2360,6 +2372,8 @@ namespace CelesteMusicPlayer
         /// 无路径时恢复封面背景（用最近缓存的当前曲目封面）。
         /// 设置里开了「背景高斯模糊」时，自定义图片同样先做模糊再铺满窗口。</summary>
         private Windows.Media.Playback.MediaPlayer? _backgroundVideoPlayer;
+        /// <summary>当前视频背景的文件路径。用于「同一路径不重复换源」的判重（2026-10-07 内存修复）。</summary>
+        private string? _backgroundVideoPath;
 
         private static readonly string[] VideoBackgroundExtensions =
         {
@@ -2398,12 +2412,78 @@ namespace CelesteMusicPlayer
             try
             {
                 _backgroundVideoPlayer.Pause();
-                _backgroundVideoPlayer.Source = null;
+                // 2026-10-07 内存暴涨修复：只把 Source 置 null 只是松掉引用，
+                // 底层的 MediaSource（连同它的视频解码器与帧缓存）不会因此释放 ——
+                //   必须显式 Close()，否则每换一次背景就漏一份解码资源。
+                // 实测：不清的话 14 次换源把非托管内存推到 4.3GB。
+                CloseBackgroundVideoSource();
                 _backgroundVideoPausedByMinimize = false;
             }
             catch (Exception caught)
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.UiTheme.cs", caught);
+            }
+        }
+
+        /// <summary>
+        /// 关闭并丢弃当前的 MediaSource（若已持有）。
+        ///
+        /// 依据微软官方文档（MediaPlayerElement / play-audio-and-video-with-mediaplayer）：
+        ///   MediaSource 是 WinRT 原生对象，靠引用计数释放。把 <c>MediaPlayer.Source</c> 置 null
+        ///   **只是解除引用，不会** 释放视频解码器与帧缓存——MediaPlayerElement 仍持有它。
+        ///   必须依次做：Pause → Source=null → <b>SetMediaPlayer(null)</b> → <b>mediaSource.Dispose()</b>。
+        ///   注意释放方法是 Dispose()，不是 Close()（本 SDK 上 MediaSource 没有 Close）。
+        ///
+        /// 实测（2026-10-07）：不做这一步，14 次换背景就把非托管内存从 104MB 推到 4373MB。
+        /// </summary>
+        private void CloseBackgroundVideoSource()
+        {
+            // 先取源（置 null 后就取不到了）
+            var src = _backgroundVideoPlayer?.Source;
+            if (src == null)
+            {
+                _backgroundVideoPath = null;
+                return;
+            }
+
+            try
+            {
+                _backgroundVideoPlayer!.Pause();
+            }
+            catch { /* 源可能已失效，忽略 */ }
+
+            try
+            {
+                _backgroundVideoPlayer.Source = null;
+                CustomBackgroundVideo.Source = null;
+                // 关键一步：断开 MediaPlayerElement 与 MediaPlayer 的连接，
+                //   否则元素仍持有播放器，Dispose 之后它的解码资源不会真正回收。
+                CustomBackgroundVideo.SetMediaPlayer(null);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("CloseBackgroundVideoSource.detach", caught);
+            }
+
+            try
+            {
+                if (src is Windows.Media.Core.MediaSource ms)
+                {
+                    // 官方释放方式：Dispose，不是 Close（本 SDK 上没有 Close）。
+                    ms.Dispose();
+                    StartupLog.Write("[视频] 已 Dispose 旧 MediaSource，释放解码资源");
+                }
+                // IMediaPlaybackSource 接口本身不暴露 Dispose；
+                //   实践中这里拿到的就是 MediaSource，上面已覆盖。
+                //   真出现别的实现类型时，只能断开引用（上面已做）交由 GC/系统回收。
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("CloseBackgroundVideoSource.dispose", caught);
+            }
+            finally
+            {
+                _backgroundVideoPath = null;
             }
         }
 
@@ -2549,6 +2629,11 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
+                // 2026-10-07 记录：这里只覆盖【最小化】。被其它窗口完全遮住时视频仍在后台解码，
+                //   属于纯浪费；但 WinUI3 没有可靠的「被遮挡」通知（IsWindowVisible 在被盖住时仍为 true），
+                //   要做对需额外接 Win32 钩子（WM_WINDOWPOSCHANGED + 遮挡判定），复杂度与风险都偏高。
+                //   当前取舍：先保证「看得见时才解码」（最小化已停）；
+                //   后续若确认遮挡解码是主要开销，再单独加钩子，不要塞在这里草率实现。
                 if (IsIconic(hwnd))
                 {
                     if (!_backgroundVideoPausedByMinimize)
@@ -2556,6 +2641,9 @@ namespace CelesteMusicPlayer
                         _backgroundVideoPlayer.Pause();
                         _backgroundVideoPausedByMinimize = true;
                         StartupLog.Write("背景视频：窗口最小化，已暂停解码");
+                        // 2026-10-07 内存排查：暂停后视频帧缓存是否被释放（MediaPlayerElement
+                        // 可能仍留着解码帧）。若这里不降，说明视频是内存大户且没回收路径。
+                        MemProbe.Log("视频暂停后");
                     }
                 }
                 else if (_backgroundVideoPausedByMinimize
@@ -2600,10 +2688,29 @@ namespace CelesteMusicPlayer
                     AppWindow.Changed -= OnAppWindowChangedForBackgroundVideo;
                     AppWindow.Changed += OnAppWindowChangedForBackgroundVideo;
                 }
+                else if (string.Equals(_backgroundVideoPath, path, StringComparison.OrdinalIgnoreCase)
+                         && _backgroundVideoPlayer.Source != null)
+                {
+                    // 2026-10-07 内存暴涨修复：同一个视频被重复「应用」十几次，每次都重建 MediaSource。
+                    // MediaSource / MediaPlayer 靠引用计数释放——旧的从不 Close，解码器缓存就一份份堆着。
+                    // 实测 14 次调用把非托管内存从 104MB 推到 4373MB（单次跳变 +3.1GB）。
+                    // 调用方在曲库刷新 / 背景重算等时机反复请求同一背景，属正常行为 → 这里识别后直接跳过换源。
+                    MemProbe.Log("视频背景重复应用(同路径,已跳过换源)");
+                    return;
+                }
+
+                // 换源前先彻底释放旧源（Pause → Source=null → SetMediaPlayer(null) → MediaSource.Dispose）。
+                // 注意 CloseBackgroundVideoSource 里有一步 SetMediaPlayer(null)，
+                //   所以之后必须重新挂一次，否则元素与播放器断开、视频不再显示。
+                CloseBackgroundVideoSource();
+                CustomBackgroundVideo.SetMediaPlayer(_backgroundVideoPlayer);
+                _backgroundVideoPath = path;
 
                 _backgroundVideoPlayer.Source = Windows.Media.Core.MediaSource.CreateFromUri(new Uri(path));
                 CustomBackgroundVideo.Visibility = Visibility.Visible;
                 _backgroundVideoPlayer.Play();
+
+                MemProbe.Log("视频背景应用后");
 
                 global::CelesteMusicPlayer.StartupLog.Write("自定义背景：视频已应用 " + path);
             }

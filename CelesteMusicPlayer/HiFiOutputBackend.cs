@@ -425,6 +425,7 @@ namespace CelesteMusicPlayer
 
                 var next = OpenWaveSource(nextWavPath);
                 _seamless.PrepareNext(next);
+                MemProbe.Log("无缝预载下一首后");
                 return true;
             }
             catch
@@ -442,8 +443,11 @@ namespace CelesteMusicPlayer
         /// 192MB 覆盖 24bit/96kHz 的 5.5 分钟、24bit/44.1kHz 的 12 分钟，配合下面的内存安全阀使用。</summary>
         private const long WaveWholeFileInMemoryMaxBytes = 192L * 1024 * 1024;
 
-        /// <summary>整读内存的安全阀：可用内存低于此值时不走「整首入内存」，退回流式，
-        /// 防止重演历史上「放几首就吃掉 2~3GB」的内存暴涨（大数组都落在大对象堆、回收滞后）。
+        /// <summary>系统级安全阀：系统可用内存低于此值时不走「整首入内存」，退回流式。
+        ///
+        /// ⚠ 2026-10-07 补充：这个阀只看【系统】余量，在 16GB 机器上几乎永远满足，
+        ///   单靠它挡不住进程自己涨到 4GB。真正起作用的是
+        ///   <see cref="ProcessPrivateMemoryCapBytes"/>（进程自用量闸门），两个是并列条件。
         /// 取 1.5GB：留足两首 192MB 常驻 + ffmpeg 转码 + 常规 UI 的余量。</summary>
         private const long MinAvailableMemoryForWholeFileBytes = 1500L * 1024 * 1024;
 
@@ -479,6 +483,9 @@ namespace CelesteMusicPlayer
                 var ms = UnmanagedMemoryFileStream.Open(path);
                 StartupLog.Write(string.Format("[读源] 整读非托管内存 {0:F1}MB ← {1}",
                     size / (1024.0 * 1024.0), Path.GetFileName(path)));
+                // 2026-10-07 内存排查：整读是非托管分配，GC 完全看不见，
+                // 必须在分配点立刻报一次，才能看清「非托管」这一栏怎么涨上去的。
+                MemProbe.Log("整读PCM后");
                 return new WaveFileReader(ms);
             }
 
@@ -504,6 +511,19 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // 2026-10-07 修正：这个安全阀之前只看【系统可用内存】，在 16GB 机器上永远满足，
+                //   等于形同虚设 —— 进程自己涨到 4G 它都还在放行，整读一首接一首地叠。
+                // 现在加一道「进程自用量」闸门：不管系统还剩多少，本进程的非托管超过
+                //   ProcessPrivateMemoryCapBytes 就拒绝整读，退回流式（内存占用是常量）。
+                long priv = System.Diagnostics.Process.GetCurrentProcess().PrivateMemorySize64;
+                if (priv > ProcessPrivateMemoryCapBytes)
+                {
+                    StartupLog.Write(string.Format(
+                        "[读源] 进程非托管已 {0:F0}MB，超过上限 {1:F0}MB → 本次退回流式",
+                        priv / 1048576.0, ProcessPrivateMemoryCapBytes / 1048576.0));
+                    return false;
+                }
+
                 long available = GC.GetGCMemoryInfo().TotalAvailableMemoryBytes;
                 return available <= 0 || available >= MinAvailableMemoryForWholeFileBytes;
             }
@@ -512,6 +532,19 @@ namespace CelesteMusicPlayer
                 return true;
             }
         }
+
+        /// <summary>
+        /// 本进程非托管内存上限，超过就不再整读新歌，退回流式读盘。
+        ///
+        /// 2026-10-07：初版设 0.9GB，实测太保守 —— 触发时日志写「内存不足，安全阀退回」，
+        /// 可那会儿实际才 1.2G，而 1.2G 里的绝大部分是【没被回收的垃圾】（GC 开着
+        /// SustainedLowLatency，见 App.xaml.cs）。现在 GC 修好后内存基线降下来了，
+        /// 阈值相应放宽到 1.5GB：既能容纳「整读一份 192MB + 无缝预载下一份」，
+        ///   又留得住余量，不至于把正常的高规格曲目都逼成流式（流式会在播放中读盘，
+        ///   有可闻卡顿风险）。
+        /// 真正的第一道防线是释放修复（SeamlessWaveProvider / 视频背景），这道闸只是兜底。
+        /// </summary>
+        private const long ProcessPrivateMemoryCapBytes = 1500L * 1024 * 1024;
 
         /// <summary>最近一次失败原因。</summary>
         public string? LastError { get; private set; }
@@ -1304,16 +1337,24 @@ namespace CelesteMusicPlayer
                 LastNativeStartRc = 0; // 每次尝试归零；仅 native2 Init 失败时被写成真实 start 返回码
                 StopCore();
 
+                // 2026-10-07 内存回收：切歌瞬间是安全窗口（StopCore 已把旧 reader 全部 Dispose，
+                // 旧数据无人引用）。共享模式下 GC 是「按需回收」，不会主动把内存还给系统，
+                // 于是这里补一次 Gen1 回收，把切歌产生的垃圾立刻清掉。
+                // 正在播放时 MemProbe 内部会跳过（有 STW 断音风险）。
+                try { MemProbe.CollectAfterTrackChange(_isPlaying); }
+                catch (Exception caught) { StartupLog.WriteException("HiFiOutputBackend.CollectAfterTrackChange", caught); }
+
                 if (!File.Exists(wavPath))
                 {
                     LastError = "音频缓存文件不存在：\n" + wavPath;
                     return false;
                 }
 
-                _waveFile = OpenWaveSource(wavPath);
+            _waveFile = OpenWaveSource(wavPath);
                 _activeWavPath = wavPath;
                 _activeMode = mode;
                 _activeDeviceId = deviceIdentifier;
+                MemProbe.Log("PlayWavAsync起播分配后");
                 // 无缝源（当前+可预加载下一首）：共享/ASIO 走 NAudio wasapi/asio，独占走原生 WASAPI，
                 // 均用同一份 SeamlessWaveProvider 做同格式字节级续接 → 单输出会话 gapless。
                 _seamless = new SeamlessWaveProvider(_waveFile);
@@ -2336,6 +2377,9 @@ namespace CelesteMusicPlayer
             if (_seamless != null && _seamless.SwitchedToNext)
             {
                 StartupLog.Write($"[无缝诊断] 已无缝续接到下一首 (initiator={(_useNative?"独占native":"naudio")})");
+                // 2026-10-07 内存排查：旧 PCM 在此刻被顶替。若泄漏已修，这里应当出现
+                // 「已释放被换下的旧 reader」，且非托管内存不出现 +136MB 的跳增。
+                MemProbe.Log("无缝切换到下一首后");
                 _seamless.ResetSwitchFlag(); // 允许下一次无缝切换
                 // 同步到已无缝切入的下一首：源 reader / 时长 / 位置，保证 Position/Duration 继续正确
                 var nextReader = _seamless.Current;

@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Runtime.CompilerServices;
 using NAudio.Wave;
 
 namespace CelesteMusicPlayer
@@ -21,6 +23,8 @@ namespace CelesteMusicPlayer
         private readonly object _snap = new();
         private WaveFileReader? _current;
         private WaveFileReader? _next;
+        /// <summary>已被我们显式释放过的 reader 身份码，用来对二次 Dispose 做幂等短路。</summary>
+        private HashSet<int>? _releasedKeys;
         private bool _consumed;
         private WaveFormat? _waveFormat;
 
@@ -75,6 +79,12 @@ namespace CelesteMusicPlayer
             }
 
             ResetCrossfadeUnsafe();
+            // ⚠ 这里【不】释放被顶替的旧 _current。
+            // 本类的 current 可能同时被外部持有（HiFiOutputBackend._waveFile 会指向它，
+            // 并在别处 Dispose）；这里擅自释放会和上层抢同一个对象，埋下双重释放/时序竞态。
+            // 外部持有的引用由调用方负责释放（参见 HandleOutputPlaybackStopped 里
+            // 「_waveFile?.Dispose(); _waveFile = nextReader;」那一段）。
+            // 真正无人持有的那一份，在 ReadUnsafe 硬切与 FinishCrossfade 里已就地释放。
             DisposeNextUnsafe(); // 释放旧 next（在 _sync 内调用，安全）
         }
 
@@ -322,13 +332,23 @@ namespace CelesteMusicPlayer
                     {
                         // 走的是「读尽后硬切」（未进入淡化，例如淡化关闭或下一首预载太晚）
                         ResetCrossfadeUnsafe();
+                        WaveFileReader oldCurrent;
                         lock (_snap)
                         {
+                            oldCurrent = current;
                             _current = next;
                             _next = null;
                             SwitchedToNext = true;
                             current = next;
                         }
+                        // 2026-10-07 内存泄漏修复：旧 current 在这里就彻底没人引用了。
+                        // 上层 _waveFile 指向的是「新的 current」（也就是 next），不会替我们释放旧 reader。
+                        // 旧 reader 底下的 UnmanagedMemoryFileStream 不会走 Dispose，
+                        //   只能等终结器 —— 而 136MB 这类非托管块不构成 GC 压力，
+                        //   GC 迟迟不回收 → 一首接一首地攒，实测播放几首就到 1G+。
+                        // 必须在换引用这一刻显式释放（旧 reader 已读尽，不再有 render 读它，
+                        //   且此处已持 _sync，不会与 Read 并发）。
+                        ReleaseExpiredReader(oldCurrent);
                         continue; // 继续读下一首
                     }
 
@@ -445,23 +465,58 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>结束淡化：把下一首提升为当前曲。
-        /// 旧 current 的释放交给上层（上层按自己持有的 _waveFile 引用处理，与既有无缝逻辑一致）。</summary>
+        /// 旧 current 在此一并显式释放——原因与硬切分支相同：
+        /// 上层 _waveFile 指向的是提升后的新 current，旧 reader 无人会释放。</summary>
         private void FinishCrossfade()
         {
+            WaveFileReader? expired = null;
             lock (_snap)
             {
                 WaveFileReader? n = _next;
                 if (n != null)
                 {
+                    expired = _current;      // 记下被顶替的那一份
                     _current = n;
                     _next = null;
                     SwitchedToNext = true;
                 }
             }
 
+            ReleaseExpiredReader(expired);
+
             _xfActive = false;
             _xfFramesDone = 0;
             _xfTotalFrames = 0;
+        }
+
+        /// <summary>
+        /// 释放被换下的旧 reader。
+        ///
+        /// ⚠ 双重释放风险（2026-10-07 记录）：上层 HiFiOutputBackend._waveFile 也持有同一个 reader，
+        ///   并会在 HandleOutputPlaybackStopped 里 "_waveFile?.Dispose(); _waveFile = nextReader;"。
+        ///   若这里先 Dispose 过，上层那次就是二次 Dispose。
+        ///   NAudio WaveFileReader.Dispose 幂等、底层 UnmanagedMemoryFileStream 也有 _disposed 保护，
+        ///   实测不会崩；但仍用 _releasedKeys 记下已释放过的实例并幂等短路，不依赖任何未定义行为。
+        ///
+        /// 释放时机是安全的：此处已持 _sync，render 线程不可能同时 Read 这份 reader；
+        /// 且它已读尽，后续不会再有 Read 落到它身上。
+        /// </summary>
+        private void ReleaseExpiredReader(WaveFileReader? reader)
+        {
+            if (reader == null) return;
+            lock (_snap)
+            {
+                if (ReferenceEquals(reader, _current)) return;   // 还被当当前曲用，不能释放
+                _releasedKeys ??= new HashSet<int>();
+                if (!_releasedKeys.Add(RuntimeHelpers.GetHashCode(reader))) return;  // 已释放过 → 幂等短路
+                if (_releasedKeys.Count > 8) _releasedKeys.Clear();  // 防止无限增长（正常永远只有 1~2 个）
+            }
+            try
+            {
+                reader.Dispose();
+                StartupLog.Write("[无缝] 已释放被换下的旧 reader（此前每切一首泄漏整份 PCM）");
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("SeamlessWaveProvider.ReleaseExpiredReader", caught); }
         }
 
         #endregion
