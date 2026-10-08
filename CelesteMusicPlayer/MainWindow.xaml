@@ -8778,6 +8778,47 @@
             </Grid>
         </Border>
 
+        <!-- 启动加载动画：盖在最上层的遮罩，曲库恢复完 / 用户点一下 / 兜底超时 就撤掉。
+             故意放在 RootShell 的最后一个子元素 —— 这个 Grid 没有行/列定义，
+             后画的画在上面，所以这里一定压住全部内容（包括正在半加载的列表）。
+             想提前进去就直接点这一层，不必干等。 -->
+        <Grid
+            x:Name="StartupLoadingOverlay"
+            Visibility="Visible"
+            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+            <StackPanel
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                Spacing="14">
+                <ProgressRing
+                    x:Name="StartupLoadingRing"
+                    Width="42"
+                    Height="42"
+                    IsActive="True"
+                    HorizontalAlignment="Center" />
+                <TextBlock
+                    x:Name="StartupLoadingTitle"
+                    Text="Celeste Music Player"
+                    FontSize="16"
+                    FontWeight="SemiBold"
+                    HorizontalAlignment="Center" />
+                <TextBlock
+                    x:Name="StartupLoadingStatus"
+                    Text="正在准备…"
+                    FontSize="12"
+                    Opacity="0.7"
+                    HorizontalAlignment="Center"
+                    TextTrimming="CharacterEllipsis"
+                    MaxWidth="520" />
+                <TextBlock
+                    x:Name="StartupLoadingHint"
+                    Text="不想等？点一下这里可以先进去"
+                    FontSize="11"
+                    Opacity="0.45"
+                    HorizontalAlignment="Center"
+                    Margin="0,6,0,0" />
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>
 

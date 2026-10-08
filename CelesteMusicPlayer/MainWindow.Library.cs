@@ -111,6 +111,7 @@ namespace CelesteMusicPlayer
 
                 LoadAndAddFiles(missing, persist: false);
                 StartupLog.Write($"[library] 媒体库文件夹补入 {missing.Length} 首，库内共 {_playlist.Count} 首");
+                UpdateStartupLoadingStatus($"正在载入曲库 {_playlist.Count} 首…");
             }
             catch (Exception caught)
             {
@@ -161,6 +162,7 @@ namespace CelesteMusicPlayer
                     }
 
                     await LoadLibraryFilesAsync(paths);
+                    UpdateStartupLoadingStatus($"正在载入曲库 {_playlist.Count} 首…");
                     LibrarySessionStore.SaveFolder(folderPath, paths);
                     await RestoreLastPlayingTrackAsync();
                     ApplyStartupOverlayWindows();
@@ -180,6 +182,7 @@ namespace CelesteMusicPlayer
                 }
 
                 await LoadLibraryFilesAsync(paths);
+                UpdateStartupLoadingStatus($"正在载入曲库 {_playlist.Count} 首…");
                 await RestoreLastPlayingTrackAsync();
                 ApplyStartupOverlayWindows();
             }

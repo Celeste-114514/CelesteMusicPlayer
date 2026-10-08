@@ -779,6 +779,8 @@ namespace CelesteMusicPlayer
             HiFiOutputBackend.UiDispatcherQueue = this.DispatcherQueue;
             InitializeComponent();
             StartupLog.Write("MainWindow InitializeComponent done");
+            // 启动加载遮罩：XAML 里默认就是 Visible，这里只负责上色/挂点击/起兜底定时器
+            SetupStartupLoading();
             InitializeLevelMeter();
             InitializeCrossfadeUi();
             InitializeSrcUi();

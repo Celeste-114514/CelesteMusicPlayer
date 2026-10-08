@@ -27,18 +27,28 @@ namespace CelesteMusicPlayer
         /// <summary>恢复上次曲库 → 再播放启动带进来的文件（顺序不能反）。</summary>
         private async Task RestoreLastLibraryThenPendingFileAsync()
         {
-            await RestoreLastLibraryAsync();
-
-            string? path = PendingStartupFile;
-            PendingStartupFile = null;
-
-            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            UpdateStartupLoadingStatus("正在读取曲库…");
+            try
             {
-                return;
-            }
+                await RestoreLastLibraryAsync();
 
-            StartupLog.Write("启动带进来的外部文件: " + path);
-            PlayExternalFileAsync(path);
+                string? path = PendingStartupFile;
+                PendingStartupFile = null;
+
+                if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                {
+                    return;
+                }
+
+                StartupLog.Write("启动带进来的外部文件: " + path);
+                PlayExternalFileAsync(path);
+            }
+            finally
+            {
+                // 不管恢复成功还是中途抛了，遮罩都必须撤 —— 它只是等加载的动画，
+                // 没资格把用户关在主界面上。（撤不掉也有 25s 兜底，双保险）
+                HideStartupLoading();
+            }
         }
 
         /// <summary>
