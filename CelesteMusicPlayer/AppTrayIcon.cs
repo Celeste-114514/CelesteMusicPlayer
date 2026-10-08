@@ -1,5 +1,4 @@
 ﻿using System;
-using System.Diagnostics;
 using System.Drawing;
 using System.Windows.Input;
 using System.IO;
@@ -9,43 +8,14 @@ using Microsoft.UI.Xaml.Controls;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>系统托盘图标：显示主界面 / 退出 / 查看日志。</summary>
+    /// <summary>系统托盘图标：显示主界面 / 播放控制 / 退出 / 打开日志目录。</summary>
     internal sealed class AppTrayIcon : IDisposable
     {
-        private static string LogPathHint => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "CelesteMusicPlayer",
-            "CelesteMusicPlayer.log");
-
-        private static void OpenLogFile()
-        {
-            try
-            {
-                string path = LogPathHint;
-                if (!File.Exists(path))
-                {
-                    string dir = Path.GetDirectoryName(path) ?? ".";
-                    Directory.CreateDirectory(dir);
-                    Process.Start(new ProcessStartInfo { FileName = dir, UseShellExecute = true });
-                    return;
-                }
-                // 直接用 notepad 打开（避免关联编辑器卡住/路径含空格）
-                Process.Start(new ProcessStartInfo
-                {
-                    FileName = "notepad.exe",
-                    Arguments = "\"" + path + "\"",
-                    UseShellExecute = false
-                });
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("AppTrayIcon.OpenLogFile", caught);
-            }
-        }
         private readonly MainWindow _owner;
         private TaskbarIcon? _icon;
         private Icon? _drawingIcon;
         private bool _disposed;
+        private MenuFlyout? _flyout;
 
         /// <summary>托盘图标是否已真正注册到系统（ForceCreate 成功）。False = 右下角一定没有图标。</summary>
         public bool IsCreated => _icon != null;
@@ -61,8 +31,6 @@ namespace CelesteMusicPlayer
 
         /// <summary>检测到的新版本号（非空表示有待处理更新）。点击托盘图标 / 菜单项时据此跳到关于面板。</summary>
         private string? _pendingUpdateVersion;
-
-        private MenuFlyout? _flyout;
 
         public AppTrayIcon(MainWindow owner)
         {
@@ -147,7 +115,12 @@ namespace CelesteMusicPlayer
             {
                 ToolTipText = "CelesteMusicPlayer",
                 Icon = _drawingIcon,
-                NoLeftClickDelay = true
+                NoLeftClickDelay = true,
+                // Windows 11 风格的右键菜单：库会另开一个透明窗口，用 WinUI 原生渲染
+                // MenuFlyout —— 圆角、跟深浅色、悬停高亮，和系统右键菜单同一套观感。
+                // ⚠ 默认的 PopupMenu 是库自己画皮模拟的（方角、灰底、没有悬停态），
+                //   看着非常朴素 —— 之前就是那个。具体菜单项见 TrayMenuBuilder。
+                ContextMenuMode = H.NotifyIcon.ContextMenuMode.SecondWindow
             };
 
             // ⚠ 2026-10-08：H.NotifyIcon 注册托盘图标时带 NIF_GUID，GUID 由 exe 路径算出来
@@ -162,35 +135,7 @@ namespace CelesteMusicPlayer
                 StartupLog.Write("[托盘] 第 " + (_createAttempts + 1) + " 次尝试，改用新 GUID " + _icon.Id);
             }
 
-            _flyout = new MenuFlyout();
-            // 注意：H.NotifyIcon 默认 ContextMenuMode=PopupMenu，会把 MenuFlyout 转成
-            // Win32 菜单（TrackPopupMenuEx），点击菜单项时只执行 MenuFlyoutItem.Command，
-            // 不会触发 Click 事件（见库源码 TaskbarIcon.ContextMenu.WinRT.PopupMenu.cs）。
-            // 因此这里必须给菜单项设置 Command，Click 订阅在 PopupMenu 模式下无效。
-            var showItem = new MenuFlyoutItem { Text = "显示主界面" };
-            showItem.Command = new TrayRelayCommand(() => { StartupLog.Write("托盘命令: 显示主界面"); _owner.RestoreFromTray(); });
-            // 播放控制 + 收藏（转发 MainWindow 现成 public 方法）
-            var playPauseItem = new MenuFlyoutItem { Text = "播放 / 暂停" };
-            playPauseItem.Command = new TrayRelayCommand(() => { _owner.TogglePlayPausePublic(); });
-            var prevItem = new MenuFlyoutItem { Text = "上一首" };
-            prevItem.Command = new TrayRelayCommand(() => { _owner.PreviousPublic(); });
-            var nextItem = new MenuFlyoutItem { Text = "下一首" };
-            nextItem.Command = new TrayRelayCommand(() => { _owner.NextPublic(); });
-            var favoriteItem = new MenuFlyoutItem { Text = "添加到我喜欢" };
-            favoriteItem.Command = new TrayRelayCommand(() => { _owner.FavoriteCurrentPublic(); });
-            var openLogItem = new MenuFlyoutItem { Text = "打开日志文件" };
-            openLogItem.Command = new TrayRelayCommand(OpenLogFile);
-            var exitItem = new MenuFlyoutItem { Text = "退出播放器" };
-            exitItem.Command = new TrayRelayCommand(() => { StartupLog.Write("托盘命令: 退出播放器"); _owner.ExitFromTray(); });
-            _flyout.Items.Add(showItem);
-            _flyout.Items.Add(new MenuFlyoutSeparator());
-            _flyout.Items.Add(playPauseItem);
-            _flyout.Items.Add(prevItem);
-            _flyout.Items.Add(nextItem);
-            _flyout.Items.Add(favoriteItem);
-            _flyout.Items.Add(new MenuFlyoutSeparator());
-            _flyout.Items.Add(openLogItem);
-            _flyout.Items.Add(exitItem);
+            _flyout = TrayMenuBuilder.Build(_owner, _pendingUpdateVersion);
             _icon.ContextFlyout = _flyout;
 
             // 左键单击：有待处理更新时打开「关于」面板，否则恢复主界面
@@ -372,32 +317,27 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>在右键菜单中插入/更新「发现新版本」入口（仅当有待处理更新时，且只加一次）。</summary>
+        /// <summary>
+        /// 有待处理更新时整体重建菜单（ Builder 会自动带上「发现新版本」那条）。
+        /// 重建而不是往旧菜单里插条目 —— 插条目要自己数下标，以后菜单顺序一改就乱。
+        /// </summary>
         private void AddOrUpdateMenuItems()
         {
-            if (_flyout == null || _pendingUpdateVersion == null)
+            if (_icon == null || _pendingUpdateVersion == null)
             {
                 return;
             }
 
-            foreach (var item in _flyout.Items)
+            try
             {
-                if (item is MenuFlyoutItem existing && existing.Name == "UpdateMenuItem")
-                {
-                    return; // 已添加，避免重复
-                }
+                _flyout = TrayMenuBuilder.Build(_owner, _pendingUpdateVersion);
+                _icon.ContextFlyout = _flyout;
             }
-
-            var updateItem = new MenuFlyoutItem
+            catch (Exception caught)
             {
-                Name = "UpdateMenuItem",
-                Text = $"发现新版本 {_pendingUpdateVersion}（点击查看）"
-            };
-            updateItem.Command = new TrayRelayCommand(SettingsWindow.ShowAbout);
-
-            // 插在「显示主界面」之后：先加一条分隔线，再放更新入口
-            _flyout.Items.Insert(1, new MenuFlyoutSeparator());
-            _flyout.Items.Insert(2, updateItem);
+                // 重建失败就还用旧菜单，别让一个提示项把整个托盘菜单搞没
+                StartupLog.WriteException("AppTrayIcon.AddOrUpdateMenuItems", caught);
+            }
         }
 
         private sealed class TrayRelayCommand : ICommand
