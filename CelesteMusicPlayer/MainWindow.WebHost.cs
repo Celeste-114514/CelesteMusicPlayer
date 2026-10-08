@@ -49,7 +49,7 @@ namespace CelesteMusicPlayer
         /// 实测 226~414ms，放这里用户感知不到（程序本来就要启动）。
         /// 失败不弹窗、不阻塞启动——纯降级：详情页继续走原生版。
         /// </summary>
-        public async void PrewarmCelesteWeb()
+        public async Task PrewarmCelesteWeb()
         {
             if (_celesteWeb != null || _celesteWebInitializing) return;
             _celesteWebInitializing = true;
@@ -66,8 +66,8 @@ namespace CelesteMusicPlayer
                     return;
                 }
                 CelesteWebHostGrid.Children.Add(web);
-                CelesteWebHostGrid.Width = 0;
-                CelesteWebHostGrid.Height = 0;
+                // ⚠ 别在这里钉 Width/Height=0：第 3 步起这层是要真的显示页面的，
+                //   钉死尺寸就永远看不见了。平时靠 CelesteWebHostGrid 的 Collapsed 藏住。
 
                 // ⚠ WinUI3 走的是 WinRT 投影（Microsoft.Web.WebView2.Core.Projection），
                 //   API 表面与 net462/WinForms 完全不同：
@@ -200,6 +200,10 @@ namespace CelesteMusicPlayer
                 await cv.ExecuteScriptAsync(
                     "window.__celesteApplyTheme && window.__celesteApplyTheme(" +
                     JsonSerializer.Serialize(css) + ");");
+
+                // 深浅色也要告诉网页：CSS 变量只换了颜色值，深色下还有一套独立的
+                // 令牌（html.dark）要挂上类名才生效。网页不提供切换按钮，跟着程序走。
+                await PostCelesteWebAsync(new { kind = "theme", dark });
             }
             catch (Exception ex)
             {
@@ -245,10 +249,14 @@ namespace CelesteMusicPlayer
                 case "ready":
                     // 网页侧初始化完成：把当前主题和路由推过去
                     _ = PushCelesteThemeAndRouteAsync();
+                    // 第 3 步起：试点页就绪，顺手把专辑数据也推过去
+                    // （ready 被这个 case 截住了，不会落到 default，所以要显式调一次）
+                    HandleWebAlbumMessage(msg);
                     break;
 
                 default:
-                    StartupLog.Write($"[WebView2] 收到未处理消息 kind={msg.Kind}（阶段 1 尚未接线，属正常）");
+                    // 第 3 步起：专辑详情页试点的消息交给 MainWindow.WebAlbum.cs 处理
+                    HandleWebAlbumMessage(msg);
                     break;
             }
         }
