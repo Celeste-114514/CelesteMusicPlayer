@@ -2077,7 +2077,7 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- LGPL-3.0 署名：独占输出内核（ECHO audio-host）动态链接声明 -->
+                        <!-- 许可与第三方代码来源说明 -->
                         <Border
                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
@@ -2085,25 +2085,39 @@
                             CornerRadius="10"
                             Padding="16">
                             <StackPanel Spacing="8">
-                                <TextBlock Text="开源声明" FontSize="14" FontWeight="SemiBold" />
+                                <TextBlock Text="许可与开源声明" FontSize="14" FontWeight="SemiBold" />
                                 <TextBlock
                                     FontSize="12"
-                                    Opacity="0.8"
+                                    Opacity="0.85"
                                     TextWrapping="WrapWholeWords"
-                                    Text="本程序的「独占输出内核（ECHO 核心）」包含基于 ECHO 播放器 audio-host 模块修改的代码（采样自 2026 年 9 月的上游版本，当时依据 LGPL-3.0 许可），以独立动态库 celeste_audio_core.dll 形式分发，依据 LGPL-3.0 许可。该库可被同名文件替换；程序其余部分为 MIT 许可，不受 LGPL 传染。ECHO 上游项目现已迁移（Moekotori/ECHO），其新代码改用 AGPL-3.0 许可；本项目未使用其新代码，许可状态不变。" />
+                                    Text="本程序主体采用 GPL-3.0 许可。第三方组件各自保留原有许可，完整清单见仓库根目录 LICENSE。" />
+                                <TextBlock
+                                    FontSize="12"
+                                    Opacity="0.85"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="独占输出内核（celeste_audio_core.dll）与 DSP 处理模块（celeste_dsp_core.dll）源自 ECHO 播放器的开源代码，采样自 2026 年 9 月的上游版本（当时为 LGPL-3.0 许可），本程序按 LGPL-3.0 使用，两者均为可替换的独立动态库。" />
+                                <TextBlock
+                                    FontSize="12"
+                                    Opacity="0.85"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="ECHO 上游后来把新版本的代码改成了 AGPL-3.0。本项目没有使用他们之后新增的代码；作者与 ECHO 作者有私下联系，正在把这部分授权手续补正式。在此之前，相关二进制的分发由本项目自行披露并承担相应责任。" />
+                                <HyperlinkButton
+                                    Content="GPL-3.0 许可全文（gnu.org）↗"
+                                    FontSize="12"
+                                    NavigateUri="https://www.gnu.org/licenses/gpl-3.0.html" />
                                 <HyperlinkButton
                                     Content="LGPL-3.0 许可全文（gnu.org）↗"
                                     FontSize="12"
                                     NavigateUri="https://www.gnu.org/licenses/lgpl-3.0.html" />
                                 <HyperlinkButton
-                                    Content="ECHO 现项目（github.com/Moekotori/ECHO）↗"
+                                    Content="ECHO 项目（github.com/Moekotori/ECHO）↗"
                                     FontSize="12"
                                     NavigateUri="https://github.com/Moekotori/ECHO" />
                                 <TextBlock
                                     FontSize="12"
                                     Opacity="0.8"
                                     TextWrapping="WrapWholeWords"
-                                    Text="celeste_audio_core.dll 的对应完整源码以 LGPL-3.0 发布于本仓库 native/echo-core/ 目录；如需书面源码要约或编译帮助，请通过上方联系方式联系作者。" />
+                                    Text="上述两个动态库的完整对应源码随本仓库发布（native/echo-core/、native/dsp-core/）。需要源码、编译帮助或认为本机内容侵犯了你的权利，请通过上方联系方式联系作者。" />
                             </StackPanel>
                         </Border>
                     </StackPanel>

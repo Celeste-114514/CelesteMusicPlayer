@@ -1,4 +1,5 @@
 using System;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
 namespace CelesteMusicPlayer
@@ -18,6 +19,13 @@ namespace CelesteMusicPlayer
     /// </summary>
     internal static class TrayMenuBuilder
     {
+        /// 菜单最小宽度（像素）。嫌宽嫌窄改这一个数就行。
+        ///
+        /// 为什么非要钉宽度：SecondWindow 用一个透明窗口承载菜单，测量时拿到的
+        /// 可用宽度偏小，中文长句（比如「发现新版本 26.10.2.0（点击查看）」）尾巴
+        /// 会被截掉。给菜单项和容器都设 MinWidth，不管按哪种可用宽度测量都不会再被压窄。
+        private const double MenuMinWidth = 220;
+
         /// <summary>
         ///  Build 一份新的右键菜单。
         /// </summary>
@@ -29,6 +37,7 @@ namespace CelesteMusicPlayer
         public static MenuFlyout Build(MainWindow owner, string? pendingUpdateVersion)
         {
             var flyout = new MenuFlyout();
+            flyout.MenuFlyoutPresenterStyle = BuildPresenterStyle();
 
             flyout.Items.Add(Item("显示主界面", () => owner.RestoreFromTray()));
 
@@ -58,9 +67,21 @@ namespace CelesteMusicPlayer
         /// SecondWindow）由库决定，PopupMenu 模式下 Click 事件根本不触发，
         /// 只有 Command 一定被执行。为了切模式不翻车，这里统一用 Command。
         /// </summary>
+        private static Microsoft.UI.Xaml.Style BuildPresenterStyle()
+        {
+            var style = new Microsoft.UI.Xaml.Style(typeof(MenuFlyoutPresenter));
+            style.Setters.Add(new Microsoft.UI.Xaml.Setter(
+                FrameworkElement.MinWidthProperty, MenuMinWidth));
+            return style;
+        }
+
         private static MenuFlyoutItem Item(string text, Action action)
         {
-            var item = new MenuFlyoutItem { Text = text };
+            var item = new MenuFlyoutItem
+            {
+                Text = text,
+                MinWidth = MenuMinWidth
+            };
             item.Command = new TrayCommand(action);
             return item;
         }

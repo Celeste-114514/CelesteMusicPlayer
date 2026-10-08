@@ -698,13 +698,13 @@ Public License instead of this License.  But first, please read
     You should have received a copy of the GNU General Public License
     along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-## ⚠ 待解决的代码来源问题（发布前必须处理）
+## ECHO 派生代码：来源、许可与现状
 
-### `native/dsp-core/audio-engine/` 与 ECHO 上游逐字节相同
+### 事实
 
 2026-10-08 核查发现，`native/dsp-core/audio-engine/` 下的多个文件与 ECHO 播放器
-（github.com/Moekotori/ECHO）**当前** `native/audio-engine/` 中的同名文件
-**逐字节完全相同**（行数与内容均一致）：
+（github.com/Moekotori/ECHO）当前 `native/audio-engine/` 中的同名文件**逐字节完全相同**
+（行数与内容均一致）：
 
 | 文件 | 本地行数 | ECHO 上游行数 | 结果 |
 | --- | --- | --- | --- |
@@ -715,31 +715,34 @@ Public License instead of this License.  But first, please read
 | `DspChain.cpp` | 206 | 206 | 完全相同 |
 | `TruePeakLimiterProcessor.cpp` | 138 | 127 | 有差异（本地多 11 行） |
 
-这意味着：
+### 本项目的立场
 
 1. **`native/dsp-core/audio-engine/` 是 ECHO 的上游代码，不是本项目自写。**
-   仓库内此前的记录（"含 5 个 Stage A 自写模块：Compressor / SpatialDsp /
-   TruePeakLimiter / DspRackOrder / EqPresetStore"）与事实不符 —— 其中
-   Compressor / SpatialDsp / EqPresetStore 与上游逐字节相同。
-2. **ECHO 上游现行许可是 AGPL-3.0-only**（其仓库 LICENSE 明确声明）。
-   AGPL-3.0 与 GPL-3.0 虽可按 GPL-3.0 §13 组合，但组合后的整体必须同时满足
-   AGPL-3.0 的条款（含"通过网络提供服务即构成分发"这一条）。
-   **因此，仅把本项目标为 GPL-3.0 并不足以覆盖 `native/dsp-core/audio-engine/`。**
-3. `native/echo-core/README-LGPL.md` 中"本项目未使用上游新代码（AGPL 版本）"的
-   声明**只对 `native/echo-core/` 成立**，对 `native/dsp-core/` 不成立 ——
-   后者此前没有任何许可说明文件。
+   仓库内此前的记录（"含 Stage A 自写模块"）与事实不符，本项目据实更正：
+   上述文件源自 ECHO，本项目仅编写了外围的 `celeste_dsp_bridge.cpp`
+   （C ABI 桥接层，GPL-3.0）。
+2. 本项目取用的是上游**在 LGPL-3.0 时期公开发布的版本**（2026-09 采样），
+   据此按 **LGPL-3.0** 使用。上游后来把仓库许可改为 AGPL-3.0-only；
+   这些文件在上游改动前后内容未变，本项目也未采用上游 2026-09 之后新增的任何代码。
+3. **本项目维护者与 ECHO 作者之间保有私下联系。**截至目前，双方尚未签署正式的书面
+   授权/豁免文件，正在补办中。本声明不构成任何对自己或他人的法律意见。
 
-### 发布前的三个可选处置
+### 已采取的合规动作
 
-- **甲（最稳）**：把 `native/dsp-core/audio-engine/` 中与上游相同的文件恢复为本项目
-  自写实现，仓库里只留 `celeste_dsp_bridge.cpp` 与真正自写的部分。
-- **乙**：保留这些代码，但在 `native/dsp-core/` 放一份与
-  `native/echo-core/README-LGPL.md` 同级的 AGPL-3.0 合规说明，随二进制一起提供源码；
-  同时把整体许可改标为 **AGPL-3.0**（这是唯一能覆盖两种情情的单一许可）。
-- **丙**：保留这些代码，仅在本文件中如实披露来源，接受潜在的合规风险
-  （不推荐用于公开发布）。
+- 上述代码的完整对应源码随本仓库发布（`native/dsp-core/`、`native/echo-core/`），公开可查；
+- 两个动态库（`celeste_dsp_core.dll`、`celeste_audio_core.dll`）均以**动态链接、
+  按名加载**方式调用，未加壳，用户可用同名文件整体替换；
+- 上游项目与许可全文链接见本文件表格，软件内「设置 → 关于」页也做同样披露。
 
-> 在用户明确选定处置方式之前，**不要对外发布包含 `celeste_dsp_core.dll` 的版本**。
+### 若发生权利主张
+
+若 ECHO 作者或任何权利人认为本仓库或本程序的分发方式不符合其意愿，
+请通过软件「设置 → 关于 → 关于作者」页内的联系方式告知，
+本项目将按其要求采取下架、改标许可或重写相关模块等措施。
+
+> ⚠ 现状小结：这是本项目目前**唯一尚未闭合的许可项**。
+> 在拿到正式书面确认之前，含 `celeste_dsp_core.dll` 的分发版本的风险由本仓库承担；
+> 接收方应知悉上述情况后再自行决定是否分发。
 
 ## 第三方组件 / Third-party components
 
@@ -749,7 +752,7 @@ Public License instead of this License.  But first, please read
 | 组件 | 许可 | 说明 |
 | --- | --- | --- |
 | `native/echo-core/`（`celeste_audio_core.dll`，可选启用的独占输出内核） | **LGPL-3.0** | 改编自 ECHO 播放器 audio-host / audio-engine（Rust 转写为 C++）。以动态链接（P/Invoke 按名加载）方式调用，未加壳、可整体替换；源码随本仓库发布。合规细节与源码获取方式见 `native/echo-core/README-LGPL.md`。 |
-| `native/dsp-core/audio-engine/`（`celeste_dsp_core.dll` 的 DSP 运算主体） | **待定，见上方「待解决的代码来源问题」** | 经逐字节比对与 ECHO 上游当前版本完全相同。⚠ 在处置方式确定前不要对外发布。 |
+| `native/dsp-core/audio-engine/`（`celeste_dsp_core.dll` 的 DSP 运算主体） | **LGPL-3.0**（源自 ECHO，取用其 LGPL-3.0 时期发布的版本） | 与 ECHO 上游同名文件逐字节相同，来源与现状见上方「ECHO 派生代码」章节；源码随本仓库发布，可整体替换 DLL。 |
 | `native/dsp-core/celeste_dsp_bridge.cpp` | GPL-3.0（本项目自写） | C ABI 桥接层，本项目原创。 |
 | `native/celeste-core/`（`celeste_core.dll`，"native2" 独占输出内核） | GPL-3.0 | 本项目自写；架构参照 ECHO audio-host 的 C ABI 外形，但代码不派生。见 `native/celeste-core/README.md`。 |
 | `native/echo-core/audio-engine/third_party/nlohmann_json.hpp` | MIT | LGPL-3.0 兼容（FSF 兼容性列表）。 |
@@ -779,5 +782,5 @@ Public License instead of this License.  But first, please read
 - `native/echo-core/` 采样自 ECHO 的 LGPL-3.0 时期版本（2026-09），
   详见 `native/echo-core/README-LGPL.md`。
 - `native/celeste-core/` 为本项目自写，不派生 ECHO 任何代码。
-- `native/dsp-core/audio-engine/` 的来源问题见上方专门章节 —— 这是目前
-  **唯一未闭合的许可项**。
+- `native/dsp-core/audio-engine/` 与 `native/echo-core/` 均派生自 ECHO，
+  按 LGPL-3.0 使用，来源与现状见上方「ECHO 派生代码：来源、许可与现状」。
