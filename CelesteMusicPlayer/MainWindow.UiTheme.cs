@@ -304,7 +304,7 @@ namespace CelesteMusicPlayer
                 {
                     try
                     {
-                        await ShowErrorAsync("上次可能异常退出", "检测到上次程序未正常关闭（可能崩溃或被强制结束）。\n若反复出现，请查看设置目录下的 CelesteMusicPlayer.log 排查原因。");
+                        await ShowErrorAsync("上次可能异常退出", "检测到上次程序未正常关闭（可能崩溃或被强制结束）。\n若反复出现，请查看日志目录（%LocalAppData%\\CelesteMusicPlayer\\logs）里的文件排查原因。");
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
                 });

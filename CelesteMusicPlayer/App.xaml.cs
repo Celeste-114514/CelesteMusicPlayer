@@ -132,7 +132,9 @@ namespace CelesteMusicPlayer
             try { procVer = typeof(App).Assembly.GetName().Version?.ToString() ?? "unknown"; } catch { }
             StartupLog.Write("=======================================================");
             StartupLog.Write("=== CelesteMusicPlayer v" + procVer + " 启动 ===");
-            StartupLog.Write("=== 日志: " + StartupLog.CurrentFilePath + " ===");
+            StartupLog.Write("=== 日志目录: " + AppLog.LogsDirectory + " ===");
+            StartupLog.Write("=== 今天: " + AppLog.PathFor(LogCategory.App) + " ===");
+            StartupLog.Write("=== 过滤规则: " + AppLog.FilterDescription + " ===");
             StartupLog.Write("=== PID=" + Environment.ProcessId + "  启动时间=" + DateTimeOffset.Now.ToString("yyyy-MM-dd HH:mm:ss") + " ===");
             StartupLog.Write("=======================================================");
             StartupLog.Write("OnLaunched");
@@ -183,6 +185,12 @@ namespace CelesteMusicPlayer
             // 每次启动都同步一次，设置是关的就清掉残留 → 修复「设置里关着却仍开机自启」。
             AutoRunHelper.SyncWithSettings();
 
+            // ============================================================
+            // 启动加载动画刻意**不**另开窗口，而是盖在主窗口自己身上（见
+            // MainWindow.StartupLoading.cs）。原因：另开一个窗口看着就像另一个程序，
+            // 而且那 8000 多行 XAML 解析期间它一帧都画不出来，反而更尴尬。
+            // 主窗口 Activate 之后用户看到的是「主窗口 + 转圈遮罩」，曲库恢复完自动揭开。
+            // ============================================================
             try
             {
                 // Phase E：曲库 SQLite 迁移/初始化（首次建库时自动备份旧 JSON，窗口和任何 store 前先就绪）

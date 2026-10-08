@@ -128,7 +128,8 @@ namespace CelesteMusicPlayer
                 {
                     MessageBoxW(
                         0,
-                        "启动失败：\n" + ex.Message + "\n\n请把同目录下 CelesteMusicPlayer.log 发给开发者。",
+                        "启动失败：\n" + ex.Message + "\n\n请把日志目录里的文件发给开发者：\n"
+                        + StartupLog.LogsDirectory,
                         "CelesteMusicPlayer",
                         MbIconError);
                 }
