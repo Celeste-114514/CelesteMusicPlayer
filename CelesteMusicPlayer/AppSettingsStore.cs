@@ -267,6 +267,11 @@ namespace CelesteMusicPlayer
         /// 字符键在等宽字体里缺字形会被压成瘦条，所以默认走图形图标。</summary>
         public string GeekIconStyle { get; set; } = "Icon";
 
+        /// <summary>当前启用的 Celeste 主题名（对应配置目录 Themes\*.celeste-theme 的文件名）。
+        /// 空 = 用内置默认配色。皮肤系统的目标是「主题是数据不是代码」，这里只存一个名字，
+        /// 真正的配色在主题 JSON 里，改它不用动程序。</summary>
+        public string CelesteThemeName { get; set; } = string.Empty;
+
         public bool ShowPlaylistTitle { get; set; } = true;
         public bool ShowPlaylistArtist { get; set; } = true;
         public bool ShowPlaylistAlbum { get; set; } = true;
