@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 
 namespace CelesteMusicPlayer
@@ -12,7 +12,7 @@ namespace CelesteMusicPlayer
     ///          → 设备事件到达，C++ 回调只 memcpy 一整周期 → 转端点格式 → DAC。
     ///
     /// 许可证：DLL 内含 ECHO audio-host / audio-engine 代码，LGPL-3.0（见 native/echo-core/）。
-    /// 动态链接 + 用户可替换该 DLL，不对 Celeste（MIT）产生传染。
+    /// 动态链接 + 用户可替换该 DLL，不把 LGPL-3.0 义务传染给主程序（GPL-3.0）。
     /// </summary>
     internal static class EchoCoreAudio
     {

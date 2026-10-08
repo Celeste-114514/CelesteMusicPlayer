@@ -1,6 +1,6 @@
-# celeste-core — Celeste 自研原生音频内核（PCM / WASAPI 独占）
+﻿# celeste-core — Celeste 自研原生音频内核（PCM / WASAPI 独占）
 
-MIT 许可。全新编写，**不派生 ECHO 任何代码**（ECHO 是 LGPL-3.0，另住 `native/echo-core/`）。
+GPL-3.0 许可（与主项目一致）。全新编写，**不派生 ECHO 任何代码**（ECHO 是 LGPL-3.0，另住 `native/echo-core/`）。
 架构上参照了 ECHO audio-host 的 C ABI 外形与自研 `NativeWasapiExclusiveOut`
 （C# 版）的调度修复经验——经验不受版权约束，代码零共享。
 
@@ -63,4 +63,4 @@ cl @build_args.rsp && link @build/link_args.rsp
 
 ## 许可
 
-MIT，见文件头声明。与 LGPL 的 `native/echo-core/` 相互独立、互不派生。
+GPL-3.0，见文件头声明。与 LGPL 的 `native/echo-core/` 相互独立、互不派生。

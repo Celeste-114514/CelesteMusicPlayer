@@ -1,5 +1,5 @@
-// byte_ring.h — 单产单销字节环（Celeste 原生内核用）
-// MIT。C# feeder 是唯一 push 方，原生渲染线程是唯一 pop 方。
+﻿// byte_ring.h — 单产单销字节环（Celeste 原生内核用）
+// GPL-3.0（与 Celeste 主项目一致）。C# feeder 是唯一 push 方，原生渲染线程是唯一 pop 方。
 // 用 mutex + 条件变量而非无锁队列：4096 帧/块、最长 15.6ms 一个周期，
 // 锁竞争开销可忽略；换来实现简单、可证明正确（音频线程不抛异常、不分配）。
 #pragma once

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
@@ -7,7 +7,7 @@ using NAudio.Wave;
 namespace CelesteMusicPlayer
 {
     /// <summary>
-    /// 自研原生内核（celeste_core.dll，MIT）独占输出适配器，接口与自研
+    /// 自研原生内核（celeste_core.dll，GPL-3.0）独占输出适配器，接口与自研
     /// <see cref="NativeWasapiExclusiveOut"/>、ECHO 核心 <see cref="EchoCoreOutput"/>
     /// 完全一致（<see cref="IExclusiveOutput"/>），供设置里三选一切换。
     ///

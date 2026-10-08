@@ -1,6 +1,6 @@
-// celeste_core.h — Celeste 自研原生音频内核（PCM WASAPI 独占输出）
+﻿// celeste_core.h — Celeste 自研原生音频内核（PCM WASAPI 独占输出）
 //
-// 许可：MIT（与 Celeste 主项目一致）。本工程全新编写，
+// 许可：GPL-3.0（与 Celeste 主项目一致）。本工程全新编写，
 // 不派生 ECHO audio-host（LGPL，另目录 native/echo-core/）任何代码；
 // 架构参照物：ECHO 的 C ABI 外形 + 自研 NativeWasapiExclusiveOut 的
 // 调度修复（MMCSS CRITICAL + 1ms 定时器 + 轮询补货 + C3 护栏）。

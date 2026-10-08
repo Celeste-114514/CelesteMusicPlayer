@@ -395,7 +395,10 @@ makensis.exe installer\CelesteMusicPlayer.nsi
 
 ## 📄 许可证
 
-[MIT](LICENSE)
+本项目自有的代码采用 [GPL-3.0](LICENSE) 许可。
+
+第三方组件（`native/echo-core/` 的 LGPL-3.0 内核、TagLibSharp 等）各自保留原有许可，
+详见 [LICENSE](LICENSE) 中的「第三方组件」小节。
 
 ## 🙏 致谢
 

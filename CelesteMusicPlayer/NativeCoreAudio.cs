@@ -1,10 +1,10 @@
-using System;
+﻿using System;
 using System.Runtime.InteropServices;
 
 namespace CelesteMusicPlayer
 {
     /// <summary>
-    /// celeste_core.dll（Celeste 自研原生音频内核，MIT）的 P/Invoke 封装。
+    /// celeste_core.dll（Celeste 自研原生音频内核，GPL-3.0）的 P/Invoke 封装。
     /// 与 <see cref="EchoCoreAudio"/> 的关键差异：**本内核走整数字节直喂**——
     /// feeder 从 C# 链读出来的就是最终字节（16/24/32bit 整数或 float32），
     /// 原生渲染线程只 memcpy 进端点容器（协商保证端点容器与源布局一致），
@@ -15,7 +15,7 @@ namespace CelesteMusicPlayer
     /// MMCSS/优先级再高也躲不掉。C++ 原生渲染线程 GC 永远碰不到；
     /// C# 侧只做 feeder（读链→灌 ring），被冻住时 ring 里 1.5s 存货继续供血。
     ///
-    /// 许可证：MIT（与主项目一致）。与 LGPL 的 celeste_audio_core.dll 相互独立、互不派生。
+    /// 许可证：GPL-3.0（与主项目一致）。与 LGPL 的 celeste_audio_core.dll 相互独立、互不派生。
     /// </summary>
     internal static class NativeCoreAudio
     {

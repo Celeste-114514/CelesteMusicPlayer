@@ -1,7 +1,7 @@
-# celeste_audio_core.dll — LGPL-3.0 合规说明
+﻿# celeste_audio_core.dll — LGPL-3.0 合规说明
 
 本目录是 CelesteMusicPlayer 「独占输出内核（ECHO 核心）」的源码，构建产物为
-`celeste_audio_core.dll`，由 CelesteMusicPlayer 主程序（MIT 许可）以**动态链接 +
+`celeste_audio_core.dll`，由 CelesteMusicPlayer 主程序（GPL-3.0 许可）以**动态链接 +
 按名加载**的方式调用（C# P/Invoke，符号名固定，见 `CelesteMusicPlayer/EchoCoreAudio.cs`）。
 
 ## 代码来源与许可
@@ -17,14 +17,17 @@ ECHO 原项目（当时仓库地址 `takase1121/echo`）自述许可为 LGPL-3.0
 LGPL-3.0 继续分发。ECHO 上游现迁至 `Moekotori/ECHO`，其新代码已改为
 AGPL-3.0-only；**本项目未使用上游新代码**（AGPL 版本），许可状态不变。
 
-## 为什么 CelesteMusicPlayer（MIT）不受影响
+## 为什么 CelesteMusicPlayer（GPL-3.0）不受影响
 
 1. **动态链接**：`celeste_audio_core.dll` 是独立的 Windows 动态库，通过
    `LoadLibrary` / 按名 P/Invoke 调用，满足 LGPL-3.0 §4(d1)「以共享库机制链接」。
 2. **用户可替换**：本 DLL 未加壳、未合并、未做静态链接；用户可用兼容的替代库
    （同名文件、相同导出符号）整体替换，程序会继续尝试加载它。这满足 §6 对
    「Combined Work」动态链接形式的要求。
-3. **不传染主程序**：主程序及其余模块保持 MIT 许可，不继承 LGPL-3.0 义务。
+3. **不传染主程序**：主程序及其余模块保持 GPL-3.0 许可，不继承 LGPL-3.0 义务。
+
+> ⚠ 注意：本节只覆盖 `native/echo-core/`。同为 ECHO 派生的
+> `native/dsp-core/audio-engine/` 另有来源问题，见该目录的 `README-LICENSE.md`。
 
 ## 如何取得本 DLL 的源码（LGPL-3.0 §6 源码要约）
 
