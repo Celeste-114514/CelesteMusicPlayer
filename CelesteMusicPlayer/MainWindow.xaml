@@ -8819,6 +8819,12 @@
                     Margin="0,6,0,0" />
             </StackPanel>
         </Grid>
+
+        <!-- 常驻 WebView2 的宿主容器（皮肤系统第 2 步）。
+             零尺寸、不参与布局，只用来把 WebView2 挂进视觉树——不挂进树它不会初始化。
+             ⚠ 现在启动时不会自动创建 WebView2：第一个实例要吃掉 286MB，
+               等第 3 步试点页第一次打开时才建，建完常驻复用（第二个实例只要 62MB）。 -->
+        <Grid x:Name="CelesteWebHostGrid" Width="0" Height="0" />
     </Grid>
 </Window>
 

@@ -132,6 +132,23 @@
     <PackageReference Include="ToolGood.Words.Pinyin" Version="3.1.0" />
     <PackageReference Include="System.Drawing.Common" Version="9.0.1" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
+    <!-- WebView2（皮肤系统第 2 步）：界面用网页渲染、音频内核仍是 C#。
+         版本与本地 NuGet 缓存一致，避免离线 restore 失败。
+         运行时 DLL（Microsoft.Web.WebView2.Core.dll / WebView2Loader.dll）此前已由 WASDK 传递依赖带进产物。 -->
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
+  </ItemGroup>
+
+  <!--
+    主题令牌基线字典（皮肤系统第 2 步）。
+    Themes\CelesteTokens.xaml 是纯 ResourceDictionary，没有 x:Class；SDK 默认 glob 会把
+    *.xaml 当 XamlPage 收走，而 Page 要求 x:Class —— XamlCompiler 会静默崩（只报退出码 1、
+    零错误信息、output.json 都不生成）。所以先从 Page 里摘掉。
+    现阶段还没有任何页面引用它（令牌刚装回来，接线是后面的事），先按 None 收录，
+    等真正并入元素级 MergedDictionaries 时再改成参与 XAML 编译。
+  -->
+  <ItemGroup>
+    <Page Remove="Themes\CelesteTokens.xaml" />
+    <None Include="Themes\CelesteTokens.xaml" />
   </ItemGroup>
 
   <!--
