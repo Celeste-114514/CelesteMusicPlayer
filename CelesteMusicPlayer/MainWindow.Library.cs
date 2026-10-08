@@ -56,6 +56,12 @@ namespace CelesteMusicPlayer
             await RestoreLastLibraryCoreAsync();
             await AppendManualLibraryFilesAsync();
             await AppendMediaFolderTracksAsync();
+
+            // 启动时「恢复播放」跑在曲库补齐之前：那一刻 _playlist 还是空的，
+            // 状态栏按钮会把刚开始放的这首判成"不在音乐库"，然后就一直挂在「添加到音乐库」上
+            // （媒体库文件夹是几秒后才补进来的，补完没人重算）。
+            // 曲库定型后在这里统一重算一次，顺便覆盖手动加入 / 媒体库文件夹两条补入路径。
+            UpdateAddToLibraryButtonVisibility();
         }
 
 
@@ -332,6 +338,10 @@ namespace CelesteMusicPlayer
                 // 重扫描会清空列表按文件夹重建，手动加入音乐库的散装文件不在文件夹里，得补回来
                 await AppendManualLibraryFilesAsync();
                 await AppendMediaFolderTracksAsync();
+
+                // 重新扫描同样会清空重建 _playlist，正在放的那首的库归属要重算
+                // （否则扫完还挂着「添加到音乐库」，跟启动时那个 bug 同源）
+                UpdateAddToLibraryButtonVisibility();
 
                 NowPlayingText.Text = $"已重新扫描，共 {_playlist.Count} 首";
             }
