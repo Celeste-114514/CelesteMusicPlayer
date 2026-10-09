@@ -185,6 +185,32 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 /* 详情里曲目表首列是「音轨号」（原生 56px 列宽），比列表面板的 # 宽一档 */
 .view.cols .thead .n{width:52px;flex:0 0 52px}
 .view.cols .row .n{width:52px;flex:0 0 52px}
+
+/* ---------- 媒体库（布局照原生 FolderBrowserView：左文件夹树 + 右栏歌曲） ---------- */
+#folderwrap{display:flex;gap:20px;align-items:flex-start;min-height:0}
+#foldertree{flex:0 0 320px;width:320px;min-width:0}
+#folderdetail{flex:1;min-width:0}
+/* 左栏树行：原生 MinHeight 36 / 圆角 8；根行是半透明胶囊（原生 CapsuleBackground） */
+.fnode{display:flex;align-items:center;gap:6px;min-height:34px;padding:0 8px;border-radius:8px;
+       font-size:13px;cursor:default;user-select:none}
+.fnode:hover{background:var(--hover)}
+.fnode.sel{background:var(--sel)}
+.fnode.root{background:rgba(120,120,128,.14);font-weight:500}
+.fnode.root.sel{background:var(--sel)}
+.fnode .chev{flex:0 0 14px;text-align:center;opacity:.5;font-size:10px;line-height:1}
+.fnode .ic{flex:0 0 16px;height:16px;opacity:.55;display:grid;place-items:center}
+.fnode .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 右栏：台头（完整路径）+ 歌曲行（原生 MediaDetailsList：序号/文件名/艺术家·专辑/时长，40px） */
+.fhead{font-size:13px;font-weight:600;padding:6px 4px 10px;border-bottom:1px solid var(--div);
+       margin-bottom:4px;word-break:break-all;line-height:1.5}
+.frow{display:flex;align-items:center;gap:10px;min-height:40px;padding:0 4px;border-radius:8px;
+      font-size:13px;cursor:default;user-select:none}
+.frow:hover{background:var(--hover)}
+.frow .n{flex:0 0 30px;text-align:right;opacity:.55;font-size:12px}
+.frow .m{flex:1;min-width:0}
+.frow .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow .s{font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.frow .d{flex:0 0 auto;color:var(--text2);font-size:12px}
 /* 碟片分组头（原生 Apple Music 风格 CD{n}） */
 .disc{font-size:11.5px;font-weight:600;color:var(--text3);letter-spacing:.05em;
       padding:16px 0 6px;border-bottom:1px solid var(--div)}
@@ -290,6 +316,14 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           <div id="xtalbhead" class="sechead" style="display:none"></div>
           <div id="xtalbgrid" class="grid" style="display:none"></div>
         </div>
+        <!-- 媒体库：左栏文件夹树 + 右栏歌曲（原生 FolderBrowserView 口径） -->
+        <div id="folderwrap" style="display:none">
+          <div id="foldertree"></div>
+          <div id="folderdetail">
+            <div id="folderhead" class="fhead">选择文件夹查看歌曲</div>
+            <div id="frows"></div>
+          </div>
+        </div>
         <div id="placeholder" style="display:none"></div>
       </div>
     </main>
@@ -331,11 +365,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
               / artists（艺术家墙）/ artistcovers（头像预热补：带 i 按下标、只带 name 按名字）
               / artistdetail（艺术家详情）/ artistavatar（网络头像下载完成，更新详情大头像）
               / now（播放状态，每秒）/ theme / nav
+              / folderroots（媒体库根目录列表，空 = 没配置）
+              / folderchildren（某目录的下一层，子文件夹+音频文件）
+              / foldersongs（某目录的歌曲，行带 path）
    网页 → C#：ready / nav / album（打开专辑，id=专辑下标）
               / artist（打开艺术家，id=艺术家下标）/ artistback（详情里返回墙）
               / xtalbum（艺术家详情里打开专辑，id=该艺人专辑表下标）
               / play / pause / resume / next / prev / seek / volume / love / exit
-              / enqueue（当前列表加入播放队列）/ rating（评分面板星级过滤）  */
+              / enqueue（当前列表加入播放队列）/ rating（评分面板星级过滤）
+              / folder（展开媒体库目录，path=目录）/ folderplay（播放媒体库文件，path=文件） */
 (function(){
   /* ---------- WebView2 宿主对象就绪等待（照搬 album.html 的 whenWv 模式） ----------
      偶发竞态：脚本执行时 window.chrome.webview 可能还没注入完，直接访问抛 TypeError
@@ -403,6 +441,13 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     artistView: [],   // 筛选后的艺术家下标（元素是 artists 的下标）
     artist: null,     // 打开的艺术家详情 {name,n,dur,cover}
     artistAlbums: [], // 艺术家详情里的专辑段
+    folder: {         // 媒体库（文件夹浏览）：左树右栏， kids 缓存展开状态
+      roots: [],      //   根节点 [{name,path,isFolder,depth,kids,open,sel}]
+      songs: [],      //   右栏歌曲 [{t,sub,dur,fav,path}]
+      songsPath: '',  //   右栏当前显示的文件夹（空=还没选）
+      loading: false, //   右栏正在等 C# 枚举（大文件夹读盘慢，先显示加载中）
+      selPath: ''     //   左栏选中行（原生 SelectionMode=Single）
+    },
     artistTracks: []  // 艺术家详情的曲目（开着时 play/love 的 index 按这份）
   };
   var $ = function(id){ return document.getElementById(id); };
@@ -683,7 +728,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
    艺术家=左栏头像+中栏歌曲+右栏专辑），列表面板是单栏。 */
   function hideAllViews(){
     var ids = ['ratingbar','albmeta','artmeta','listwrap','xttrkhead','songThead','rows',
-               'albgrid','artgrid','xtalbwrap','xtalbhead','xtalbgrid','placeholder'];
+               'albgrid','artgrid','xtalbwrap','xtalbhead','xtalbgrid','placeholder','folderwrap'];
     for (var i = 0; i < ids.length; i++) $(ids[i]).style.display = 'none';
     $('view').classList.remove('cols');
     $('listwrap').classList.remove('art');
@@ -704,6 +749,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     $('songTheadN').textContent = '#';
     $('songTheadT').textContent = '标题';
     $('rows').style.display = '';
+    $('q').placeholder = '在已加载的歌曲里筛选';   // 媒体库页会换成「搜索文件名」，这里还原
     if (S.page === 'Ratings'){
       $('ratingbar').style.display = '';
       renderRatingBar();
@@ -812,6 +858,141 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     $('rows').innerHTML = html || '<div class="empty">这位艺术家还没有曲目</div>';
     paintHeader();
   }
+
+  /* ---------- 媒体库（布局/交互照原生 FolderBrowserView） ----------
+     左栏文件夹树：根=设置里的媒体库目录（显示完整路径，原生同口径），点文件夹=
+     展开一层（子项由 C# 枚举推来）+ 把该文件夹的歌曲加载到右栏；点文件=直接播。
+     右栏：台头完整路径 + 歌曲行（序号/文件名/艺术家·专辑/时长，原生 MediaDetailsList 口径）。
+     展开状态本地缓存（kids），折叠/再展开不重复麻烦 C#。 */
+  var FOLDER_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">'
+    + '<path d="M2 4.6c0-.9.7-1.6 1.6-1.6h2.6l1.4 1.8h4.8c.9 0 1.6.7 1.6 1.6v5.6c0 .9-.7 1.6-1.6 1.6H3.6c-.9 0-1.6-.7-1.6-1.6z"/></svg>';
+  var FILE_ICON = '<svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor">'
+    + '<path d="M4 2.4h4.2L12 6.2v7.4c0 .6-.5 1.1-1.1 1.1H4.9c-.6 0-1.1-.5-1.1-1.1V3.5c0-.6.5-1.1 1.1-1.1z" opacity=".85"/>'
+    + '<path d="M8.2 2.6V6.2H12" fill="none" stroke="var(--win)" stroke-width="1"/></svg>';
+  function folderBaseName(p){
+    var s = String(p || '').replace(/[\\/]+$/, '');
+    var i = Math.max(s.lastIndexOf('\\'), s.lastIndexOf('/'));
+    return i >= 0 ? s.slice(i + 1) : s;
+  }
+  function folderNodeHtml(n){
+    var chev = n.isFolder
+      ? '<span class="chev">' + (n.open ? '&#9662;' : '&#9656;') + '</span>'
+      : '<span class="chev"></span>';
+    return '<div class="fnode' + (n.depth === 0 ? ' root' : '') + (n.sel ? ' sel' : '') + '"'
+         + ' data-p="' + esc(n.path) + '" data-f="' + (n.isFolder ? 1 : 0) + '"'
+         + ' style="padding-left:' + (8 + n.depth * 16) + 'px" title="' + esc(n.path) + '">'
+         +   chev
+         +   '<span class="ic">' + (n.isFolder ? FOLDER_ICON : FILE_ICON) + '</span>'
+         +   '<span class="nm">' + esc(n.name) + '</span>'
+         + '</div>';
+  }
+  function folderTreeHtml(nodes, depth){
+    var html = '';
+    for (var i = 0; i < nodes.length; i++){
+      var n = nodes[i];
+      html += folderNodeHtml(n);
+      if (n.isFolder && n.open && n.kids && n.kids.length)
+        html += folderTreeHtml(n.kids, depth + 1);
+    }
+    return html;
+  }
+  function renderFolderTree(){
+    var host = $('foldertree');
+    var f = S.folder;
+    if (!f.roots.length){
+      // 原生 FolderBrowserEmptyHint 文案就一句「请选择文件夹」
+      host.innerHTML = '<div class="empty" style="padding:30px 8px;text-align:center">'
+        + '<div class="big">请选择文件夹</div></div>';
+      return;
+    }
+    host.innerHTML = folderTreeHtml(f.roots, 0);
+  }
+  function renderFolderDetail(){
+    var f = S.folder;
+    $('folderhead').textContent = f.songsPath || '选择文件夹查看歌曲';
+    if (!f.songsPath){ $('frows').innerHTML = ''; return; }
+    if (f.loading && !f.songs.length){
+      $('frows').innerHTML = '<div class="empty" style="padding:30px 0;text-align:center">加载中…</div>';
+      return;
+    }
+    var q = ($('q').value || '').trim().toLowerCase();
+    var html = '';
+    for (var i = 0; i < f.songs.length; i++){
+      var t = f.songs[i];
+      if (q && String(t.t || '').toLowerCase().indexOf(q) < 0) continue;
+      html += '<div class="frow" data-p="' + esc(t.path) + '">'
+           +   '<div class="n">' + (i + 1) + '</div>'
+           +   '<div class="m">'
+           +     '<div class="t">' + esc(t.t) + '</div>'
+           +     '<div class="s">' + esc(t.sub || '') + '</div>'
+           +   '</div>'
+           +   '<div class="d">' + mmss(t.dur) + '</div>'
+           + '</div>';
+    }
+    $('frows').innerHTML = html || '<div class="empty" style="padding:30px 0;text-align:center">'
+      + (q ? '没有匹配的文件' : '无歌曲') + '</div>';
+  }
+  function folderFind(nodes, path){
+    for (var i = 0; i < nodes.length; i++){
+      if (nodes[i].path === path) return nodes[i];
+      if (nodes[i].kids){
+        var hit = folderFind(nodes[i].kids, path);
+        if (hit) return hit;
+      }
+    }
+    return null;
+  }
+  function folderSelect(n){
+    var f = S.folder;
+    // 选中态只留一个（原生 SelectionMode=Single）
+    var old = folderFind(f.roots, f.selPath || '\u0000none');
+    if (old) old.sel = false;
+    n.sel = true;
+    f.selPath = n.path;
+  }
+  function showFolder(){
+    resetDetail();
+    hideAllViews();
+    $('folderwrap').style.display = '';
+    $('btnPlayAll').style.visibility = 'hidden';
+    $('q').placeholder = '搜索文件名';   // 原生 Folders 分类的搜索框口径
+    // 清掉别的页面留下的筛选词：媒体库的搜索只过滤右栏文件名，带旧词进来会全表过滤空
+    $('q').value = '';
+    renderFolderTree();
+    renderFolderDetail();
+    paintHeader();
+  }
+  /* 左栏树点击：文件夹行=选中+展开+右栏加载歌曲（原生每次点文件夹都重新加载右栏）；
+     已展开文件夹的箭头=只收起，右栏保持（原生收起箭头不动右栏）；文件=直接播 */
+  $('foldertree').addEventListener('click', function(e){
+    var el = e.target.closest('.fnode');
+    if (!el) return;
+    var path = el.getAttribute('data-p');
+    var isFolder = el.getAttribute('data-f') === '1';
+    var n = folderFind(S.folder.roots, path);
+    if (!n) return;
+    if (!isFolder){ post({kind:'folderplay', path:path}); return; }
+    if (n.open && e.target.closest('.chev')){
+      n.open = false;               // 折叠：本地就够，不麻烦 C#，右栏不动
+      renderFolderTree();
+      return;
+    }
+    folderSelect(n);
+    n.open = true;
+    renderFolderTree();
+    // 子项 + 右栏歌曲都让 C# 现枚举（大文件夹读盘期间右栏先显示加载中）
+    post({kind:'folder', path:path});
+    S.folder.songsPath = path;
+    S.folder.songs = [];
+    S.folder.loading = true;
+    renderFolderDetail();
+    paintHeader();
+  });
+  /* 右栏行点击：播放这个文件（原生双击口径，网页单击） */
+  $('frows').addEventListener('click', function(e){
+    var row = e.target.closest('.frow');
+    if (row) post({kind:'folderplay', path:row.getAttribute('data-p')});
+  });
 
   /* ---------- 艺术家墙 ---------- */
   function artCard(a){
@@ -951,6 +1132,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
         : '加载中…';
       return;
     }
+    if (S.page === 'Folders'){
+      // 媒体库：根目录数 + 当前选中文件夹名（完整路径在右栏台头，原生 MediaDetailsHeader 口径）
+      $('pgTitle').textContent = '媒体库';
+      var f = S.folder;
+      if (!f.roots.length) $('pgSub').textContent = '未配置媒体库文件夹';
+      else $('pgSub').textContent = f.roots.length + ' 个目录'
+        + (f.songsPath ? ' · ' + folderBaseName(f.songsPath) : '');
+      return;
+    }
     // 列表面板（歌曲 + 五个面板）：同一套副标题逻辑，评分面板多带当前星级
     var meta = LIST_META[S.page];
     if (!meta) return;   // 占位页不动页头（同旧版行为）
@@ -1041,6 +1231,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       if (inDetail()) return;            // 详情页不参与筛选
       if (S.page === 'Albums'){ renderAlbGrid(); paintHeader(); }
       else if (S.page === 'Artists' || S.page === 'AlbumArtists'){ renderArtWall(); paintHeader(); }
+      else if (S.page === 'Folders'){ renderFolderDetail(); }   // 媒体库：只筛右栏文件名
       else if (LIST_META[S.page]){ renderRows(); paintHeader(); }
     }, 120);
   });
@@ -1190,8 +1381,44 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
             showAlbumGrid();
           } else if ((m.id === 'Artists' || m.id === 'AlbumArtists') && m.ok !== false){
             showArtistWall();
+          } else if (m.id === 'Folders' && m.ok !== false){
+            // 媒体库：先切视图，根目录由随后的 folderroots 推来
+            showFolder();
           } else {
             renderPlaceholder(cat);
+          }
+          break;
+        case 'folderroots':
+          // 媒体库根目录（原生 RefreshFolderBrowserRoots 口径：根行显示完整路径）
+          S.folder.roots = (m.roots || []).map(function(r){
+            return {name:r.name, path:r.path, isFolder:r.isFolder !== false,
+                    depth:0, kids:[], open:false, sel:false};
+          });
+          S.folder.songsPath = '';
+          S.folder.songs = [];
+          S.folder.loading = false;
+          if (S.page === 'Folders'){ renderFolderTree(); renderFolderDetail(); paintHeader(); }
+          break;
+        case 'folderchildren':
+          // 展开一层的子项到了：挂到对应节点的 kids 下并重渲（open 点击时已置好，
+          // 这里不碰——防止「点了折叠又立刻点展开」时旧响应把树重新展开）
+          if (m.items){
+            var fn = folderFind(S.folder.roots, m.path);
+            if (fn){
+              fn.kids = m.items.map(function(c){
+                return {name:c.name, path:c.path, isFolder:c.isFolder === true,
+                        depth:fn.depth + 1, kids:[], open:false, sel:false};
+              });
+            }
+          }
+          if (S.page === 'Folders') renderFolderTree();
+          break;
+        case 'foldersongs':
+          // 右栏歌曲（后台枚举+读标签完推来）；只认当前选中的文件夹，防过期响应盖版面
+          if (m.path === S.folder.songsPath){
+            S.folder.songs = m.songs || [];
+            S.folder.loading = false;
+            if (S.page === 'Folders'){ renderFolderDetail(); paintHeader(); }
           }
           break;
         case 'chips':

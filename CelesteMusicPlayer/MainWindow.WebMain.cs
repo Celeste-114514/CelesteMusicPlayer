@@ -4,6 +4,8 @@
 // 2026-10-09 追加：我喜欢的音乐 / 评分 / 最近播放 / 播放队列 / 播放最多五个列表面板
 // （行样式与歌曲面板一致，数据来源按原生同名分类口径），侧栏去掉「流派」「年份」，
 // 其余分类入口保留（点未做的分类只显示占位，不删入口）。
+// 2026-10-09 再追加：媒体库（文件夹浏览）面板，布局/交互照原生 FolderBrowserView。
+// 网络音乐库（WebDav）用户后续要参考 ECHO 扩展其他源类型，**暂时不动**，入口保留。
 //
 // 分工铁律：**网页只负责长什么样，一件事都不做**——点播放、切分类、拖进度、
 // 收藏全都上报给 C#，由 C# 调现有的播放方法。音频链路（独占 / bit-perfect /
@@ -23,9 +25,12 @@
 //              / artists（艺术家墙）/ artistcovers（艺术家头像预热补，按名字匹配）
 //              / artistdetail（艺术家详情：albums + tracks）
 //              / artistavatar（网络头像下载完成，更新详情大头像）
+//              / folderroots（媒体库根目录）/ folderchildren（展开一层的子项）
+//              / foldersongs（右栏歌曲：文件名 + 艺术家·专辑 + 时长）
 //              / now（播放状态，每秒）/ theme / nav
 //   网页 → C#：ready / nav / album（打开专辑，id=专辑下标）
 //              / artist（打开艺术家，id=艺术家下标）/ artistback（详情里返回墙）
+//              / folder（展开文件夹，path）/ folderplay（播放媒体库里某个文件，path）
 //              / play / pause / resume / next / prev / seek / volume / love / exit
 //              / enqueue（当前列表加入播放队列）/ rating（评分面板星级过滤）
 //
@@ -317,6 +322,28 @@ namespace CelesteMusicPlayer
                         break;
                     }
 
+                case "folder":
+                    {
+                        // 媒体库：网页点开一个文件夹（原生点箭头/双击的口径——
+                        // 展开一层 + 把该文件夹的歌曲加载到右栏）
+                        string folderPath = ReadStr(msg.Payload, "path");
+                        _ = PushWebFolderChildrenAsync(folderPath);
+                        break;
+                    }
+
+                case "folderplay":
+                    {
+                        // 媒体库右栏点了一个文件：入库并直接播（原生双击文件口径，
+                        // 不整表替换队列——媒体库不是播放队列管理界面）
+                        string filePath = ReadStr(msg.Payload, "path");
+                        if (!string.IsNullOrEmpty(filePath))
+                        {
+                            PlaylistItem? track = EnsureTrackInLibrary(filePath);
+                            if (track != null) PlayPlaylistItem(track);
+                        }
+                        break;
+                    }
+
                 case "play":
                     {
                         // 与专辑试点页同一套语义（d3c0d99）：整表替换播放队列，
@@ -482,6 +509,20 @@ namespace CelesteMusicPlayer
                 await PushWebMainArtistsAsync(id);
                 return;
             }
+            if (string.Equals(id, "Folders", StringComparison.OrdinalIgnoreCase))
+            {
+                // 媒体库（文件夹浏览）：布局/交互照原生 FolderBrowserView——
+                // 左栏文件夹树（根=设置里的媒体库目录，显示完整路径），右栏选中文件夹的歌曲。
+                // 网络音乐库（WebDav）复用同一个原生界面，但用户 2026-10-09 说要参考
+                // ECHO 扩展其他源类型、暂时不动，这里只做本地磁盘模式。
+                CloseWebMainDetails();
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "nav", ["id"] = "Folders", ["ok"] = true,
+                });
+                PushWebFolderRoots();
+                return;
+            }
             // 没做的面板：告诉网页显示占位（侧栏条目保留，不删入口）
             StartupLog.Write($"[Web主界面] nav：「{id}」面板还没做，回占位页");
             CloseWebMainDetails();
@@ -498,6 +539,126 @@ namespace CelesteMusicPlayer
             _webMainArtistTracks = null;
             _webMainArtistAlbums = null;
             _openedWebArtistName = null;
+        }
+
+        /* ================= 媒体库（文件夹浏览） =================
+           口径照原生 FolderBrowserView（MainWindow.Library.cs RefreshFolderBrowserRoots /
+           FolderBrowserView_DoubleTapped / MainWindow.Playback.cs LoadMediaFolderSongs）：
+             - 根 = AppSettingsStore.LibraryWatchFolders 里存在的目录，行上显示完整路径；
+               一个都没配时退回 _browseFolderPath 单文件夹树（枚举其子项当根级行）；
+               两者都空 → 网页显示「请选择文件夹」。
+             - 展开一层：子文件夹（按名字排序、跳过隐藏/系统）+ 音频文件（按名字排序、
+               按扩展名过滤）——直接复用原私有 EnumerateFolderChildren。
+             - 右栏歌曲：后台线程递归枚举 + CreatePlaylistItemFromPath + OrderAlbumTracks
+               （Disc→Track），行显示文件名 + 艺术家·专辑 + 时长（原生 MediaDetailsList 口径）。
+             - 双击文件：EnsureTrackInLibrary + PlayPlaylistItem（原生口径，不换队列）。 */
+
+        /// <summary>推媒体库根（原生 RefreshFolderBrowserRoots 的网页版）。</summary>
+        private void PushWebFolderRoots()
+        {
+            var roots = AppSettingsStore.Load().LibraryWatchFolders?
+                .Where(p => !string.IsNullOrWhiteSpace(p) && Directory.Exists(p))
+                .ToList() ?? new List<string>();
+
+            // 没配媒体库目录：退回旧的单文件夹树（原生同口径——枚举它的子项当根级行）
+            var fallbackChildren = new List<Dictionary<string, object?>>();
+            if (roots.Count == 0
+             && !string.IsNullOrWhiteSpace(_browseFolderPath) && Directory.Exists(_browseFolderPath))
+            {
+                foreach (FolderBrowserItem child in EnumerateFolderChildren(_browseFolderPath, depth: 0))
+                {
+                    fallbackChildren.Add(new Dictionary<string, object?>
+                    {
+                        ["name"] = child.DisplayName,
+                        ["path"] = child.FullPath,
+                        ["isFolder"] = child.IsFolder,
+                    });
+                }
+            }
+
+            var items = roots.Select(r => new Dictionary<string, object?>
+            {
+                ["name"] = r,          // 根行显示完整路径（原生 DisplayName = root）
+                ["path"] = r,
+                ["isFolder"] = true,
+            }).Cast<object>().ToList();
+            items.AddRange(fallbackChildren);
+
+            _ = PostCelesteWebAsync(new Dictionary<string, object?>
+            {
+                ["kind"] = "folderroots",
+                ["roots"] = items,
+                ["empty"] = items.Count == 0,
+            });
+            StartupLog.Write($"[Web主界面] 媒体库根 {items.Count} 项已推送");
+        }
+
+        /// <summary>网页点开一个文件夹：推一层子项，并把该文件夹的歌曲推右栏
+        /// （原生点箭头/双击文件夹都是「展开 + 加载歌曲」一套）。</summary>
+        private async Task PushWebFolderChildrenAsync(string folderPath)
+        {
+            if (string.IsNullOrEmpty(folderPath) || !Directory.Exists(folderPath))
+            {
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "folderchildren", ["path"] = folderPath, ["items"] = new List<object>(),
+                });
+                return;
+            }
+
+            // 枚举一层是磁盘 I/O，挪后台线程（云盘目录下同步枚举会卡 UI）
+            List<FolderBrowserItem> children = await Task.Run(
+                () => EnumerateFolderChildren(folderPath, depth: 0));
+            var items = children.Select(c => new Dictionary<string, object?>
+            {
+                ["name"] = c.DisplayName,
+                ["path"] = c.FullPath,
+                ["isFolder"] = c.IsFolder,
+            }).Cast<object>().ToList();
+
+            await PostCelesteWebAsync(new Dictionary<string, object?>
+            {
+                ["kind"] = "folderchildren", ["path"] = folderPath, ["items"] = items,
+            });
+            await PushWebFolderSongsAsync(folderPath);
+        }
+
+        /// <summary>右栏歌曲（原生 LoadMediaFolderSongs 口径）：递归枚举 + 读标签 + 按专辑顺序排。
+        /// 大文件夹在读盘期间网页先显示「加载中…」，数据到了自动替换。</summary>
+        private async Task PushWebFolderSongsAsync(string folderPath)
+        {
+            List<PlaylistItem> songs = await Task.Run(() =>
+            {
+                var list = new List<PlaylistItem>();
+                foreach (string path in EnumerateAudioFiles(folderPath))
+                {
+                    if (!File.Exists(path)) continue;
+                    try { list.Add(CreatePlaylistItemFromPath(path)); }
+                    catch (Exception caught) { StartupLog.WriteException("WebMainFolder.Songs", caught); }
+                }
+                list = OrderAlbumTracks(list);
+                for (int i = 0; i < list.Count; i++) list[i].Index = i + 1;
+                return list;
+            });
+
+            var rows = songs.Select(t => new Dictionary<string, object?>
+            {
+                // 原生右栏行主文本是文件名（不是标题），副标题是 艺术家 · 专辑
+                ["t"] = string.IsNullOrEmpty(t.FileName) ? t.Title : t.FileName,
+                ["sub"] = t.ArtistAlbumText,
+                ["dur"] = t.Duration.TotalSeconds,
+                ["fav"] = TrackStatsStore.Get(t.FilePath)?.IsFavorite == true,
+                ["path"] = t.FilePath,
+            }).Cast<object>().ToList();
+
+            await PostCelesteWebAsync(new Dictionary<string, object?>
+            {
+                ["kind"] = "foldersongs",
+                ["path"] = folderPath,
+                ["header"] = folderPath,
+                ["songs"] = rows,
+            });
+            StartupLog.Write($"[Web主界面] 媒体库「{folderPath}」歌曲 {rows.Count} 首已推送");
         }
 
         /// <summary>从消息里读一个字符串字段（读不到返回空串）。封面诊断用。</summary>
@@ -661,6 +822,13 @@ namespace CelesteMusicPlayer
                 return _playlist.Count(t => (TrackStatsStore.Get(t.FilePath)?.PlayCount ?? 0) > 0);
             if (string.Equals(id, "Ratings", StringComparison.OrdinalIgnoreCase))
                 return _playlist.Count(t => t.Rating > 0);
+            if (string.Equals(id, "Folders", StringComparison.OrdinalIgnoreCase))
+            {
+                // 媒体库：侧栏计数 = 设置里存在的媒体库根目录数（与页面台头「N 个目录」同口径；
+                // 一个都没配时退回单文件夹浏览，计数不适用，显示 0）
+                return AppSettingsStore.Load().LibraryWatchFolders?
+                    .Count(p => !string.IsNullOrWhiteSpace(p) && Directory.Exists(p)) ?? 0;
+            }
             return 0;
         }
 
@@ -676,7 +844,8 @@ namespace CelesteMusicPlayer
                 bool ok = Array.IndexOf(WebMainListPanels, id) >= 0
                        || string.Equals(id, "Albums", StringComparison.OrdinalIgnoreCase)
                        || string.Equals(id, "Artists", StringComparison.OrdinalIgnoreCase)
-                       || string.Equals(id, "AlbumArtists", StringComparison.OrdinalIgnoreCase);
+                       || string.Equals(id, "AlbumArtists", StringComparison.OrdinalIgnoreCase)
+                       || string.Equals(id, "Folders", StringComparison.OrdinalIgnoreCase);
                 cats.Add(new Dictionary<string, object?>
                 {
                     ["id"] = id,
