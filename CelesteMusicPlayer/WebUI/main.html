@@ -147,6 +147,22 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 .acard .ar{font-size:12px;color:var(--text2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .acard:hover .nm{color:var(--accent)}
 
+/* ---------- 艺术家墙 / 艺术家详情 ---------- */
+/* 艺术家卡用圆形头像（原生 ArtistGridView 口径），跟方形专辑卡区分开 */
+.grid-art{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:22px 16px}
+.acard.art{text-align:center}
+.acard.art .av{width:100%;aspect-ratio:1;border-radius:50%;overflow:hidden;
+                background:linear-gradient(140deg,#C6C6CC,#9A9AA2);display:grid;place-items:center;
+                color:#fff;font-size:34px;font-weight:600}
+.acard.art .av img{width:100%;height:100%;object-fit:cover;display:block}
+.acard.art .nm{margin-top:10px;font-size:12.5px;text-align:center}
+.acard.art .ct{font-size:11px;color:var(--text2);margin-top:2px;font-variant-numeric:tabular-nums}
+/* 艺术家详情页头用圆形大头像 */
+.hdr .cov.round{border-radius:50%}
+/* 详情里两段的小标题 */
+.sechead{font-size:15px;font-weight:600;margin:22px 0 10px;letter-spacing:-.01em}
+.sechead .c{font-size:12px;color:var(--text2);font-weight:400;margin-left:8px}
+
 /* ---------- 底部播放条 ---------- */
 .pb{height:90px;flex:0 0 90px;border-top:1px solid var(--div2);background:var(--tb);
     display:flex;align-items:center;padding:0 20px;gap:16px}
@@ -218,13 +234,19 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
         <button class="btn pri" id="btnPlayAll">&#9654; 播放</button>
       </div>
       <div class="view" id="view">
+        <!-- 艺术家详情的「歌曲」段标题（其余视图隐藏） -->
+        <div id="xttrkhead" class="sechead" style="display:none"></div>
         <div class="thead" id="songThead">
           <div class="n">#</div><div class="m">标题</div><div class="d">时长</div><div class="fav"></div>
         </div>
         <div id="rows"></div>
-        <!-- ⚠ 必须带 class="grid"：少了它里面每张 .acard 都是整行块级元素，
-             一个封面就横跨左右（2026-10-09 用户实测）。样式在 .grid 那条规则里。 -->
+        <!-- 专辑网格（专辑页 / 艺术家墙各自的专辑段共用同一套卡片样式） -->
         <div id="albgrid" class="grid" style="display:none"></div>
+        <!-- 艺术家墙：圆形头像卡，与方形专辑卡区分 -->
+        <div id="artgrid" class="grid grid-art" style="display:none"></div>
+        <!-- 艺术家详情：专辑段（小标题 + 网格），曲目段复用 #rows -->
+        <div id="xtalbhead" class="sechead" style="display:none"></div>
+        <div id="xtalbgrid" class="grid" style="display:none"></div>
         <div id="placeholder" style="display:none"></div>
       </div>
     </main>
@@ -323,11 +345,22 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     albumView: [],   // 筛选后的专辑下标（元素是 albums 的下标）
     album: null,     // 打开的专辑详情 {name,artist,year,n,dur,cover}
     albumTracks: [], // 专辑详情的曲目（开着详情时 play/love 的 index 按这份）
-    songByAlbum: {}  // 专辑名 -> 歌曲下标数组。专辑封面按专辑粒度算一次，
+    songByAlbum: {}, // 专辑名 -> 歌曲下标数组。专辑封面按专辑粒度算一次，
                      // 同一专辑的歌共用这张图——3609 首各解一次封面要几百秒，
                      // 云盘曲库下更扛不住。专辑封面到货后靠它回填歌曲行。
+    artists: [],      // 艺术家墙（C# 推来，头像后台预热按批补）
+    artistView: [],   // 筛选后的艺术家下标（元素是 artists 的下标）
+    artist: null,     // 打开的艺术家详情 {name,n,dur,cover}
+    artistAlbums: [], // 艺术家详情里的专辑段
+    artistTracks: []  // 艺术家详情的曲目（开着时 play/love 的 index 按这份）
   };
   var $ = function(id){ return document.getElementById(id); };
+  /* 是否开着任一详情（专辑详情 / 艺术家详情）。这两个视图下 #rows 存的不是
+     歌曲快照行，歌曲分批渲染链和 songs 相关重绘都得让开——统一走这个判断，
+     别再散落着写 `!S.album`（加第三个视图时必漏）。 */
+  function inDetail(){ return !!(S.album || S.artist); }
+  /* #rows 里是不是歌曲快照行（供 append/pump 判断能不能动 #rows） */
+  function songsLive(){ return S.page === 'Songs' && !inDetail(); }
   var esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
     return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
   var mmss = function(s){ s=Math.max(0,Math.floor(s||0)); var m=Math.floor(s/60); return m+':'+('0'+(s%60)).slice(-2); };
@@ -473,7 +506,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   }
   $('view').addEventListener('scroll', function(){
     // 专辑网格/详情里 #rows 存的不是歌曲行，别把歌曲分批渲染链引进来
-    if (S.page === 'Songs' && !S.album && S.shown < S.view.length) pump();
+    if (songsLive() && S.shown < S.view.length) pump();
   });
   function markPlaying(){
     var old = $('rows').querySelector('.row.on');
@@ -533,9 +566,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     }
   }
 
-  /* ---------- 专辑详情 ---------- */
+  /* ---------- 专辑详情 / 艺术家详情的曲目行 ----------
+   两个详情共用这一套行：专辑详情读 S.albumTracks，艺术家详情读 S.artistTracks。
+   play/love 的 index 也按当前这份算（albumtracks / artistdetail 消息会带上）。 */
+  function detailList(){ return S.album ? S.albumTracks : S.artistTracks; }
   function albumRow(i){
-    var t = S.albumTracks[i];
+    var t = detailList()[i];
     if (!t) return '';
     var on = (i === S.cur);
     var loved = !!S.love[i];
@@ -545,12 +581,14 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     var chips = '';
     if (t.dsd) chips += '<span class="chip hi">DSD</span>';
     if (t.fmt) chips += '<span class="chip">' + esc(t.fmt) + '</span>';
+    // 专辑详情显示艺术家；艺术家详情显示专辑（两段信息互补）
+    var sub = S.album ? (t.artist || '') : ((t.album || '') + (t.artist ? ' · ' + esc(t.artist) : ''));
     return '<div class="row' + (on ? ' on' : '') + '" data-s="' + i + '" data-n="' + (t.n || i + 1) + '">'
          +   '<div class="n">' + (on ? '&#9834;' : (t.n || i + 1)) + '</div>'
          +   '<div class="a">' + cov + '</div>'
          +   '<div class="m">'
          +     '<div class="t">' + esc(t.title) + '</div>'
-         +     '<div class="s">' + esc(t.artist || '') + '</div>'
+         +     '<div class="s">' + sub + '</div>'
          +     (chips ? '<div class="chips">' + chips + '</div>' : '')
          +   '</div>'
          +   '<div class="d">' + mmss(t.duration) + '</div>'
@@ -558,50 +596,165 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
          +     (loved ? '&#10084;' : '&#9825;') + '</button>'
          + '</div>';
   }
-  /* 三个视图的显隐：歌曲列表 / 专辑网格 / 专辑详情（页头按钮和封面槽跟着切） */
-  function showSongs(){
-    S.album = null; S.albumTracks = []; S.love = {}; S.cur = -1;
-    $('songThead').style.display = '';
-    $('rows').style.display = '';
-    $('albgrid').style.display = 'none';
-    $('albgrid').innerHTML = '';
-    $('placeholder').style.display = 'none';
+  /* ---------- 视图切换 ----------
+   五个视图：歌曲列表 / 专辑网格 / 专辑详情 / 艺术家墙 / 艺术家详情。
+   ⚠ 铁律：**只切容器的 display，绝不改 #view 的 innerHTML**（会把 #rows/#albgrid
+   一起删掉，之后回列表 $('rows') 已是 null 直接 TypeError）。
+   新增视图时走 hideAllViews + 显式打开，别再一处一处手写显隐（漏一处就串页）。*/
+  function hideAllViews(){
+    var ids = ['xttrkhead','songThead','rows','albgrid','artgrid','xtalbgrid','xtalbhead','placeholder'];
+    for (var i = 0; i < ids.length; i++) $(ids[i]).style.display = 'none';
     $('btnBackGrid').style.display = 'none';
     $('hdrCov').style.display = 'none';
+  }
+  function resetDetail(){
+    S.album = null; S.albumTracks = [];
+    S.artist = null; S.artistAlbums = []; S.artistTracks = [];
+    S.love = {}; S.cur = -1;
+  }
+  function showSongs(){
+    resetDetail();
+    hideAllViews();
+    $('songThead').style.display = '';
+    $('rows').style.display = '';
     $('btnPlayAll').style.visibility = '';
     renderRows();
     paintHeader();
   }
   function showAlbumGrid(){
-    S.album = null; S.albumTracks = []; S.love = {}; S.cur = -1;
-    $('songThead').style.display = 'none';
-    $('rows').style.display = 'none';
-    $('rows').innerHTML = '';
+    resetDetail();
+    hideAllViews();
     $('albgrid').style.display = '';
-    $('placeholder').style.display = 'none';
-    $('btnBackGrid').style.display = 'none';
-    $('hdrCov').style.display = 'none';
     $('btnPlayAll').style.visibility = 'hidden';
     renderAlbGrid();
     paintHeader();
   }
   function showAlbumDetail(){
+    hideAllViews();
     $('songThead').style.display = '';
     $('rows').style.display = '';
-    $('albgrid').style.display = 'none';
-    $('albgrid').innerHTML = '';
-    $('placeholder').style.display = 'none';
     $('btnBackGrid').style.display = '';
+    $('btnBackGrid').innerHTML = '&#8249; 专辑';
     $('hdrCov').style.display = '';
+    $('hdrCov').className = 'cov';
     $('btnPlayAll').style.visibility = '';
     var html = '';
     for (var i = 0; i < S.albumTracks.length; i++) html += albumRow(i);
     $('rows').innerHTML = html || '<div class="empty">这张专辑里还没有曲目</div>';
     paintHeader();
   }
+  function showArtistWall(){
+    resetDetail();
+    hideAllViews();
+    $('artgrid').style.display = '';
+    $('btnPlayAll').style.visibility = 'hidden';
+    renderArtWall();
+    paintHeader();
+  }
+  function showArtistDetail(){
+    hideAllViews();
+    $('songThead').style.display = '';
+    $('rows').style.display = '';
+    $('xttrkhead').style.display = '';
+    $('xtalbhead').style.display = '';
+    $('xtalbgrid').style.display = '';
+    $('btnBackGrid').style.display = '';
+    $('btnBackGrid').innerHTML = '&#8249; 艺术家';
+    $('hdrCov').style.display = '';
+    $('hdrCov').className = 'cov round';
+    $('btnPlayAll').style.visibility = '';
+    $('xttrkhead').innerHTML = '歌曲<span class="c">' + S.artistTracks.length + ' 首</span>';
+    renderArtistAlbums();
+    var html = '';
+    for (var i = 0; i < S.artistTracks.length; i++) html += albumRow(i);
+    $('rows').innerHTML = html || '<div class="empty">这位艺术家还没有曲目</div>';
+    paintHeader();
+  }
+
+  /* ---------- 艺术家墙 ---------- */
+  function artCard(a){
+    var cov = a.cover
+      ? '<img src="' + a.cover + '" alt="" onerror="postCoverErr(this.src)">'
+      : esc((a.name || '?').slice(0, 1));
+    return '<div class="acard art" data-x="' + a.i + '" title="' + esc(a.name) + '">'
+         +   '<div class="av">' + cov + '</div>'
+         +   '<div class="nm">' + esc(a.name) + '</div>'
+         +   '<div class="ct">' + (a.n || 0) + ' 首</div>'
+         + '</div>';
+  }
+  function applyArtistsFilter(){
+    var q = ($('q').value || '').trim().toLowerCase();
+    S.artistView = [];
+    for (var i = 0; i < S.artists.length; i++){
+      var a = S.artists[i];
+      if (!q) { S.artistView.push(i); continue; }
+      if (String(a.name || '').toLowerCase().indexOf(q) >= 0) S.artistView.push(i);
+    }
+  }
+  function renderArtWall(){
+    applyArtistsFilter();
+    var host = $('artgrid');
+    if (!S.artists.length){
+      host.innerHTML = '<div class="empty"><div class="big">艺术家列表还没推过来</div>加载中…</div>';
+      return;
+    }
+    if (!S.artistView.length){
+      host.innerHTML = '<div class="empty">没有匹配的艺术家</div>';
+      return;
+    }
+    var html = '';
+    for (var k = 0; k < S.artistView.length; k++) html += artCard(S.artists[S.artistView[k]]);
+    host.innerHTML = html;
+    var els = host.querySelectorAll('.acard');
+    for (var j = 0; j < els.length; j++){
+      els[j].onclick = function(){ post({kind:'artist', id:+this.getAttribute('data-x')}); };
+    }
+  }
+  /* 艺术家详情里的专辑段：卡片复用专辑卡，点开走 album 消息（下标对应该艺���家的专辑表） */
+  function renderArtistAlbums(){
+    var host = $('xtalbgrid');
+    var head = $('xtalbhead');
+    if (!S.artistAlbums.length){
+      host.style.display = 'none';
+      head.style.display = 'none';
+      return;
+    }
+    head.style.display = '';
+    host.style.display = '';
+    head.innerHTML = '专辑<span class="c">' + S.artistAlbums.length + ' 张</span>';
+    var html = '';
+    for (var i = 0; i < S.artistAlbums.length; i++){
+      var a = S.artistAlbums[i];
+      var cov = a.cover
+        ? '<img src="' + a.cover + '" alt="" onerror="postCoverErr(this.src)">'
+        : esc((a.name || '?').slice(0, 1));
+      html += '<div class="acard" data-ax="' + i + '" title="' + esc(a.name) + '">'
+           +   '<div class="cv">' + cov + '</div>'
+           +   '<div class="nm">' + esc(a.name) + '</div>'
+           +   '<div class="ar">' + esc(a.artist || '') + (a.year ? ' · ' + a.year : '') + '</div>'
+           + '</div>';
+    }
+    host.innerHTML = html;
+    var els = host.querySelectorAll('.acard');
+    for (var j = 0; j < els.length; j++){
+      els[j].onclick = function(){ post({kind:'xtalbum', id:+this.getAttribute('data-ax')}); };
+    }
+  }
 
   /* ---------- 页头 / 播放条 ---------- */
   function paintHeader(){
+    if (S.artist){
+      // 艺术家详情：名字 + 首数 · 总时长，圆形头像槽露出
+      $('pgTitle').textContent = S.artist.name || '艺术家';
+      var asub = [];
+      asub.push(S.artistTracks.length + ' 首');
+      if (S.artist.dur) asub.push(S.artist.dur);
+      $('pgSub').textContent = asub.join(' · ');
+      $('hdrCov').innerHTML = S.artist.cover
+        ? '<img src="' + S.artist.cover + '" alt="" onerror="postCoverErr(this.src)">'
+        : esc((S.artist.name || '?').slice(0, 1));
+      return;
+    }
     if (S.album){
       // 专辑详情：专辑名 + 艺术家 · 年份 · 首数 · 总时长，封面槽露出
       $('pgTitle').textContent = S.album.name || '专辑';
@@ -623,6 +776,13 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
         : '加载中…';
       return;
     }
+    if (S.page === 'Artists' || S.page === 'AlbumArtists'){
+      $('pgTitle').textContent = (S.page === 'AlbumArtists') ? '专辑艺术家' : '艺术家';
+      $('pgSub').textContent = S.artists.length
+        ? (S.artists.length + ' 位' + ($('q').value ? ' · 筛选出 ' + S.artistView.length + ' 位' : ''))
+        : '加载中…';
+      return;
+    }
     if (S.page !== 'Songs') return;   // 占位页不动页头（同旧版行为）
     $('pgTitle').textContent = '歌曲';
     var sub2;
@@ -637,8 +797,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     $('pgSub').textContent = sub2;
   }
   function paintPlaybar(){
-    // 开着专辑详情时 S.cur 是专辑内下标，得换一张表取，不然播放条显示错人
-    var list = S.album ? S.albumTracks : S.songs;
+    // 开着详情时 S.cur 是详情内下标，得换一张表取，不然播放条显示错人
+    var list = S.album ? S.albumTracks : (S.artist ? S.artistTracks : S.songs);
     var t = (S.cur >= 0 && list[S.cur]) ? list[S.cur] : S.ext;
     $('pbTitle').textContent = t ? t.title : '未在播放';
     $('pbSub').textContent = t ? ((t.artist || '') + (t.album ? ' · ' + t.album : '')) : '';
@@ -656,24 +816,18 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   /* ---------- 占位页（未做的分类） ----------
      ⚠ 不能再像旧版那样直接改 #view 的 innerHTML——那会把 #rows/#albgrid 一起删掉，
      之后点"先去逛歌曲"回列表时 $('rows') 已经是 null，直接 TypeError。
-     现在占位页是 #view 里的一个独立容器，和三个正式视图一样只切显隐。 */
+     现在占位页是 #view 里的一个独立容器，和正式视图一样只切显隐。 */
   function renderPlaceholder(cat){
     var t = (cat && cat.t) || S.page;
-    S.album = null; S.albumTracks = []; S.love = {}; S.cur = -1;
-    $('songThead').style.display = 'none';
-    $('rows').style.display = 'none';
-    $('rows').innerHTML = '';
-    $('albgrid').style.display = 'none';
-    $('albgrid').innerHTML = '';
-    $('btnBackGrid').style.display = 'none';
-    $('hdrCov').style.display = 'none';
+    resetDetail();
+    hideAllViews();
     $('btnPlayAll').style.visibility = 'hidden';
     $('pgTitle').textContent = t;
     $('pgSub').textContent = '';
     var ph = $('placeholder');
     ph.innerHTML = '<div class="empty">'
       + '<div class="big">「' + esc(t) + '」面板还没做</div>'
-      + '这一版只做了歌曲浏览和专辑，侧栏分类都留着，以后逐个补。<br>'
+      + '侧栏分类都留着，做一个补一个。<br>'
       + '<button class="btn" id="btnBackSongs" style="margin-top:14px">先去逛歌曲</button></div>';
     ph.style.display = '';
     $('btnBackSongs').onclick = function(){ post({kind:'nav', id:'Songs'}); };
@@ -713,13 +867,18 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   $('q').addEventListener('input', function(){
     clearTimeout(qTimer);
     qTimer = setTimeout(function(){
-      if (S.album) return;               // 专辑详情不参与筛选
+      if (inDetail()) return;            // 详情页不参与筛选
       if (S.page === 'Albums'){ renderAlbGrid(); paintHeader(); }
+      else if (S.page === 'Artists' || S.page === 'AlbumArtists'){ renderArtWall(); paintHeader(); }
       else if (S.page === 'Songs'){ renderRows(); paintHeader(); }
     }, 120);
   });
-  /* 专辑详情左上角：返回专辑网格（走 nav 消息，C# 会重推专辑列表，幂等） */
-  $('btnBackGrid').addEventListener('click', function(){ post({kind:'nav', id:'Albums'}); });
+  /* 详情左上角的返回：专辑详情回专辑网格，艺术家详情回艺术家墙。
+     专辑艺术家页也归"回艺术家墙"——墙和详情用的是同一个列表（AlbumArtists 分组）。 */
+  $('btnBackGrid').addEventListener('click', function(){
+    if (S.artist) post({kind:'artistback'});
+    else post({kind:'nav', id:'Albums'});
+  });
 
   /* ---------- 收 C# 的消息 ---------- */
   whenWv(function(){
@@ -737,13 +896,13 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
             S.songs = m.songs;
             S.love = {};
             // 正在专辑网格/详情里就不动歌曲列表（自检探针补推时会把视图冲掉）
-            if (S.page === 'Songs' && !S.album) renderRows();
+            if (songsLive()) renderRows();
           } else {
             // 首包：只有分类和总数，歌曲等 data/append 一块块来
             S.songs = [];
             S.love = {};
             S.shown = 0;
-            if (S.page === 'Songs' && !S.album) $('rows').innerHTML = '';
+            if (songsLive()) $('rows').innerHTML = '';
           }
           paintHeader();
           break;
@@ -751,14 +910,14 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           if (m.songs && m.songs.length){
             S.songs = S.songs.concat(m.songs);
             // 同上：专辑详情里 #rows 存的是专辑曲目，不能把歌曲行追加进去
-            if (S.page === 'Songs' && !S.album) appendRows();
+            if (songsLive()) appendRows();
             paintHeader();
           }
           break;
         case 'albums':
           // 专辑网格数据（封面先空着，albumcovers 按批补）
           S.albums = m.items || [];
-          if (S.page === 'Albums' && !S.album) renderAlbGrid();
+          if (S.page === 'Albums' && !inDetail()) renderAlbGrid();
           paintHeader();
           break;
         case 'albumcovers':
@@ -784,6 +943,34 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           S.love = {};
           showAlbumDetail();
           break;
+        case 'artists':
+          // 艺术家墙（Artists / AlbumArtists 两个分类共用，mode 区分）
+          S.artists = m.items || [];
+          if ((S.page === 'Artists' || S.page === 'AlbumArtists') && !inDetail()) renderArtWall();
+          paintHeader();
+          break;
+        case 'artistcovers':
+          // 艺术家头像按批补：只更卡片，别动正在播的高亮
+          if (m.items){
+            for (var kc = 0; kc < m.items.length; kc++){
+              var ic = m.items[kc];
+              var ar = S.artists[ic.i];
+              if (ar) ar.cover = ic.cover || '';
+              var acard = $('artgrid').querySelector('.acard[data-x="' + ic.i + '"] .av');
+              if (acard && ar && ar.cover)
+                acard.innerHTML = '<img src="' + ar.cover + '" alt="" onerror="postCoverErr(this.src)">';
+            }
+          }
+          break;
+        case 'artistdetail':
+          // 点了一位艺术家：切到详情（专辑段 + 曲目段；play/love 的 index 按曲目）
+          S.artist = m.artist || null;
+          S.artistAlbums = m.albums || [];
+          S.artistTracks = m.tracks || [];
+          S.cur = (typeof m.cur === 'number') ? m.cur : -1;
+          S.love = {};
+          showArtistDetail();
+          break;
         case 'nav':
           S.page = m.id;
           var cat = null;
@@ -793,6 +980,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
             showSongs();
           } else if (m.id === 'Albums' && m.ok !== false){
             showAlbumGrid();
+          } else if ((m.id === 'Artists' || m.id === 'AlbumArtists') && m.ok !== false){
+            showArtistWall();
           } else {
             renderPlaceholder(cat);
           }
