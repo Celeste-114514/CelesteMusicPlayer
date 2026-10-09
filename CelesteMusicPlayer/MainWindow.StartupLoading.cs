@@ -17,10 +17,11 @@ namespace CelesteMusicPlayer
     ///   1.9s ~ 16s  窗口出来了，但曲库还在恢复 —— **这 14 秒以前是一片空列表**，
     ///              用户完全不知道程序在干嘛。遮罩就是为这段准备的。
     ///
-    /// 撤掉的三种方式，任何一个先到都算：
-    ///   ① 曲库恢复流程跑完（RestoreLastLibraryThenPendingFileAsync 收尾，见 MainWindow.ExternalFile.cs）
-    ///   ② 用户点一下遮罩 —— 14 秒不短，不想等的人不该被摁在动画前
-    ///   ③ 兜底超时（LoadingSafetyTimeoutMs）—— 万一恢复流程哪天不走了，别把人永久困住
+        /// 撤掉的三种方式，任何一个先到都算：
+        ///   ① 曲库恢复流程跑完（RestoreLastLibraryThenPendingFileAsync 收尾，见 MainWindow.ExternalFile.cs）
+        ///   ② 用户点一下遮罩 —— 14 秒不短，不想等的人不该被摁在动画前（提示文字已按
+        ///      用户要求移除，交互保留，见 SetupStartupLoading 里注释）
+        ///   ③ 兜底超时（LoadingSafetyTimeoutMs）—— 万一恢复流程哪天不走了，别把人永久困住
     /// </summary>
     public sealed partial class MainWindow
     {
@@ -48,7 +49,10 @@ namespace CelesteMusicPlayer
 
                 if (StartupLoadingOverlay != null)
                 {
-                    // 点一下就放人：不等曲库恢复完也能先进去操作
+                    // 点一下就放人：不等曲库恢复完也能先进去操作。
+                    // 2026-10-09 应用户要求去掉了"不想等？点一下这里可以先进去"的提示文字，
+                    // 交互本身留着——不显眼，但不想等的人随手一戳就能进，兜底超时之外
+                    // 的另一条路。哪天不想要了，把这两行和 Tapped 一起去掉即可。
                     StartupLoadingOverlay.Tapped += (_, _) => HideStartupLoading();
                     StartupLoadingOverlay.IsDoubleTapEnabled = false;
                 }

@@ -8826,13 +8826,6 @@
                     HorizontalAlignment="Center"
                     TextTrimming="CharacterEllipsis"
                     MaxWidth="520" />
-                <TextBlock
-                    x:Name="StartupLoadingHint"
-                    Text="不想等？点一下这里可以先进去"
-                    FontSize="11"
-                    Opacity="0.45"
-                    HorizontalAlignment="Center"
-                    Margin="0,6,0,0" />
             </StackPanel>
         </Grid>
 

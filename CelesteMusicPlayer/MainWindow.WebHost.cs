@@ -38,6 +38,9 @@ namespace CelesteMusicPlayer
         private string? _celesteWebCurrentRoute;
         private string? _celesteWebPendingRoute;
 
+        /// <summary>网页上行消息计数，只为了日志里能编号（↓#1、↓#2……）。</summary>
+        private int _celesteWebMsgSeq;
+
         /// <summary>试点层右上角的原生返回钮（见 PrewarmCelesteWeb 里创建处）。</summary>
         private Microsoft.UI.Xaml.Controls.Button? _celesteWebBackButton;
 
@@ -115,9 +118,11 @@ namespace CelesteMusicPlayer
                 }
 
                 // ---- 消息通道：网页 → C# ----
-                // ⚠ 必须用 WebMessageAsString 读。PostWebMessageAsJson 发对象时
-                //   TryGetWebMessageAsString() 读不出字符串（探针实测 50/50 失败）。
-                //   所以业务消息一律「字符串 JSON」，C# 侧自己反序列化。
+                // ⚠ 本投影（WinRT/CsWinRT）里 CoreWebView2WebMessageReceivedEventArgs
+                //   只有 TryGetWebMessageAsString() 方法和 WebMessageAsJson 属性，
+                //   **没有 WebMessageAsString 属性**（Wv2ApiDump 反射坐实）。
+                //   TryGetWebMessageAsString() 读空时用 WebMessageAsJson 兜底
+                //   （字符串消息的 JSON 形态，多一层引号转义，解出来就是原文）。
                 cv.WebMessageReceived += CelesteWebOnMessageReceived;
 
                 // ---- 故障可见性：浏览器进程死没死、导航成没成，日志里必须留痕 ----
@@ -278,13 +283,45 @@ namespace CelesteMusicPlayer
         /// <summary>网页 → C# 消息入口。具体 kind 分发留给后续页面阶段。</summary>
         private void CelesteWebOnMessageReceived(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
-            string raw;
-            try { raw = e.TryGetWebMessageAsString() ?? ""; }
+            // 无条件记账：这一行必须在任何读取和提前返回之前。
+            // 旧版把记账放在 TryGetWebMessageAsString() 之后，读空就静默 return，
+            // 结果"页面显示 0 首"时日志里什么都没有，分不清是
+            // 「消息根本没到」还是「到了但读不出来」——两种情况都得猜。
+            _celesteWebMsgSeq++;
+            string seq = _celesteWebMsgSeq.ToString();
+
+            string raw = "";
+            string via = "none";
+            try
+            {
+                raw = e.TryGetWebMessageAsString() ?? "";
+                via = "try";
+                if (raw.Length == 0)
+                {
+                    // 兜底：TryGet 读空但 WebMessageAsJson 有内容时，从 JSON 形态恢复原文
+                    var json = e.WebMessageAsJson;
+                    if (!string.IsNullOrEmpty(json))
+                    {
+                        try
+                        {
+                            var un = JsonSerializer.Deserialize<string>(json);
+                            if (!string.IsNullOrEmpty(un)) { raw = un; via = "json"; }
+                        }
+                        catch { /* 解不开就维持 raw 为空，下面照样记账 */ }
+                    }
+                }
+            }
             catch (Exception ex)
             {
                 StartupLog.WriteException("CelesteWebOnMessageReceived.read", ex);
+                StartupLog.Write($"[Web试点] ↓#{seq} 事件到达但读取失败 hr=0x{ex.HResult:X8}");
                 return;
             }
+
+            string src = "";
+            try { src = e.Source ?? ""; } catch { /* Source 读不到不致命 */ }
+            StartupLog.Write($"[Web试点] ↓#{seq} via={via} len={raw.Length} src={src} | " +
+                             (raw.Length > 96 ? raw.Substring(0, 96) + "…" : raw));
             if (string.IsNullOrWhiteSpace(raw)) return;
 
             WebInboundMessage? msg;
@@ -294,8 +331,7 @@ namespace CelesteMusicPlayer
 
             // 每条上行消息都记账：网页"点了没反应"时，先看这里有没有记录——
             // 有记录 = C# 收到了、问题在后续处理；没记录 = 消息根本没发出来。
-            string brief = raw.Length > 96 ? raw.Substring(0, 96) + "…" : raw;
-            StartupLog.Write($"[Web试点] ↑ {msg.Kind} | {brief}");
+            StartupLog.Write($"[Web试点] ↑ {msg.Kind}");
 
             try { CelesteWebHandleMessage(msg); }
             catch (Exception ex) { StartupLog.WriteException("CelesteWebHandleMessage:" + msg.Kind, ex); }

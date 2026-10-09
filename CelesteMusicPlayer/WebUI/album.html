@@ -399,6 +399,14 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   /* ---------- 就绪 ---------- */
   paint();
   post({kind:'ready'});
+  /* ready 补发：头一条可能在宿主对象刚注入、消息通道还没接稳的时候被丢掉
+     （表现为页面渲染正常但显示 0 首、C# 零上行记录）。重复的 ready 无害——
+     C# 收到就重推一次数据，幂等。补 4 发，间隔 700ms，发完即止。 */
+  var readyN = 0;
+  var readyTimer = setInterval(function(){
+    if (++readyN > 4){ clearInterval(readyTimer); return; }
+    post({kind:'ready'});
+  }, 700);
 })();
 </script>
 </body>

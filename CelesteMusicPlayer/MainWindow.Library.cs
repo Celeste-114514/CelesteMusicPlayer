@@ -115,9 +115,70 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                LoadAndAddFiles(missing, persist: false);
-                StartupLog.Write($"[library] 媒体库文件夹补入 {missing.Length} 首，库内共 {_playlist.Count} 首");
+                // 和「恢复上次会话」走同一条构建路径：后台并行取指纹 → SQLite 索引批量命中
+                // （命中直接构造条目，不打开音频文件）→ 只对未命中的做 TagLib 解析 →
+                // 列表批量插入、不逐条刷 UI → 解析结果写回索引。
+                // 以前这里走 LoadAndAddFiles 的 UI 线程逐个同步解析：3609 首要卡十几秒，
+                // 而且解析结果不写索引——下次启动原样再卡一遍（2026-10-09 用户实测反馈）。
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                PlaylistBuildResult built = await BuildPlaylistItemsAsync(missing, known,
+                    (d, t) => DispatcherQueue.TryEnqueue(() =>
+                        UpdateStartupLoadingStatus($"正在载入曲库 {System.Math.Min(d, t)}/{t}…")));
+
+                if (built.Items.Count == 0)
+                {
+                    StartupLog.Write($"[library] 媒体库文件夹 {roots.Count} 个根，扫到 {scanned.Count} 首，无一可解析");
+                    return;
+                }
+
+                // 记住当前正在播的文件，排序后要能找回下标（与 LoadAndAddFiles 同口径）
+                string? playingPath = _currentIndex >= 0 && _currentIndex < _playlist.Count
+                    ? _playlist[_currentIndex].FilePath
+                    : null;
+
+                // 大批量插入时临时解绑列表视图，避免逐条 Add 触发 ListView 反复创建/测量容器
+                bool rebounded = ReferenceEquals(PlaylistView.ItemsSource, _playlist);
+                if (rebounded)
+                {
+                    PlaylistView.ItemsSource = null;
+                }
+
+                foreach (PlaylistItem it in built.Items)
+                {
+                    _playlist.Add(it);
+                }
+
+                if (rebounded)
+                {
+                    PlaylistView.ItemsSource = _playlist;
+                }
+
+                // 收尾与 LoadAndAddFiles 一致：按当前分类刷新（播放队列分类只重编号、不重排）
+                if (_currentCategory == "Songs" || _currentCategory == "Albums"
+                    || _currentCategory == "Artists" || _currentCategory == "AlbumArtists")
+                {
+                    ApplyCategoryView();
+                }
+                else if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
+                {
+                    RenumberCollection(_userPlaylist);
+                }
+                else
+                {
+                    ApplySort(preservePlayingPath: playingPath);
+                }
+
+                NowPlayingText.Text = $"已添加 {built.Items.Count} 首，共 {_playlist.Count} 首";
+                StartupLog.Write($"[library] 媒体库文件夹补入 {built.Items.Count} 首，库内共 {_playlist.Count} 首"
+                    + $"（索引命中 {built.IndexHits} 首，实际解析 {built.Fresh.Count} 首），耗时 {sw.ElapsedMilliseconds} ms");
                 UpdateStartupLoadingStatus($"正在载入曲库 {_playlist.Count} 首…");
+
+                // 索引写回放到后台：不拖慢启动，失败也不影响播放
+                if (built.Fresh.Count > 0 || built.Missing.Count > 0)
+                {
+                    PlaylistBuildResult snapshot = built;
+                    _ = System.Threading.Tasks.Task.Run(() => PersistTrackIndex(snapshot));
+                }
             }
             catch (Exception caught)
             {

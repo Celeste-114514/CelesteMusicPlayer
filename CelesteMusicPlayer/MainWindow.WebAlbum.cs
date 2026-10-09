@@ -17,6 +17,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Linq;
+using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 
@@ -211,7 +212,28 @@ namespace CelesteMusicPlayer
                         "var b=document.getElementById('btnExit');" +
                         "return JSON.stringify({wv:wv,rows:rows,title:t?t.textContent:'?',empty:e?'yes':'no',btn:b?'yes':'no'});" +
                         "}catch(err){return 'PROBE_ERR:'+err;}})()");
-                    StartupLog.Write($"[Web试点] 页面自检 {DecodeScriptResult(raw)}");
+                    string state = DecodeScriptResult(raw);
+                    StartupLog.Write($"[Web试点] 页面自检 {state}");
+
+                    // 页面渲染正常（wv=yes）却一行数据都没有 → 不等网页的 ready 上行，
+                    // C# 主动推一次。ready 上行曾经整体丢失（页面看着正常、显示 0 首、
+                    // 日志零 ↑ 记录）；主动推与 ready 触发推是幂等的，网页收到 data
+                    // 就整表重画，不会堆重复行。推完继续探，看数据到没到。
+                    bool wvOk = false;
+                    int rows = -1;
+                    try
+                    {
+                        using var doc = JsonDocument.Parse(state);
+                        if (doc.RootElement.TryGetProperty("wv", out var w)) wvOk = w.GetString() == "yes";
+                        if (doc.RootElement.TryGetProperty("rows", out var r)) rows = r.GetInt32();
+                    }
+                    catch { /* 状态解析失败不致命，按 rows=-1 继续探 */ }
+
+                    if (wvOk && rows == 0)
+                    {
+                        StartupLog.Write("[Web试点] 页面没收到数据，主动推一次（不等 ready）");
+                        _ = PushWebAlbumDataAsync();
+                    }
 
                     string flag = Path.Combine(WebAssetRoot, "_dbg_click.txt");
                     if (File.Exists(flag))
@@ -221,7 +243,7 @@ namespace CelesteMusicPlayer
                             "if(!b)return 'no-btn';b.click();return 'clicked';}catch(e){return 'ERR:'+e;}})()");
                         StartupLog.Write($"[Web试点] 自检代点返回箭头 → {DecodeScriptResult(r2)}");
                     }
-                    return;   // 探到了就不再探
+                    if (rows > 0) return;   // 数据到了就不再探
                 }
                 catch (Exception ex)
                 {
