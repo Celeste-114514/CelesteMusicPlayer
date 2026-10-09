@@ -347,7 +347,6 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     var chips = '';
     if (t.dsd) chips += '<span class="chip hi">DSD</span>';
     else if (t.fmt && LOSSLESS[t.fmt]) chips += '<span class="chip">无损</span>';
-    if (t.hires) chips += '<span class="chip hi">Hi-Res</span>';
     if (t.fmt) chips += '<span class="chip">' + esc(t.fmt) + '</span>';
     var loved = !!S.love[si];
     return '<div class="row' + (on ? ' on' : '') + '" data-s="' + si + '">'

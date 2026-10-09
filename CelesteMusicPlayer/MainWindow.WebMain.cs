@@ -377,7 +377,12 @@ namespace CelesteMusicPlayer
                 ["cur"] = cur,
             });
 
-            // 分块推歌曲：每块 400 首，块之间让出 16ms 给渲染进程消化
+            // 分块推歌曲：每块 400 首，块之间让出 16ms 给渲染进程消化。
+            // ⚠ 块内只准碰内存属性：FormatChips 是懒加载、首次访问要开文件读
+            // （云盘曲库下一块 400 首就要几十秒，2026-10-09 用户实测卡死 90 秒
+            // 只有第一块——IsHiResFile 读 FormatChips，已去掉 Hi-Res 徽章）。
+            var sw = System.Diagnostics.Stopwatch.StartNew();
+            StartupLog.Write($"[Web主界面] 开始分块推送 {_webMainSongs.Count} 首");
             const int CHUNK = 400;
             for (int off = 0; off < _webMainSongs.Count; off += CHUNK)
             {
@@ -393,7 +398,6 @@ namespace CelesteMusicPlayer
                         ["album"] = t.Album,
                         ["duration"] = t.Duration.TotalSeconds,
                         ["dsd"] = IsDsdFile(t.FilePath),
-                        ["hires"] = IsHiResFile(t),
                         ["fmt"] = CodecOf(t.FilePath),
                     });
                 }
@@ -402,8 +406,10 @@ namespace CelesteMusicPlayer
                     ["kind"] = "data/append",
                     ["songs"] = chunk,
                 });
+                StartupLog.Write($"[Web主界面] 已推 {end} / {_webMainSongs.Count} 首（{sw.ElapsedMilliseconds} ms）");
                 await Task.Delay(16);
             }
+            StartupLog.Write($"[Web主界面] 分块推送完成，共 {_webMainSongs.Count} 首，耗时 {sw.ElapsedMilliseconds} ms");
 
             // 数据到了紧接着推一次播放状态，网页不用等下一个 tick
             await PostCelesteWebAsync(BuildWebMainNowMessage());
