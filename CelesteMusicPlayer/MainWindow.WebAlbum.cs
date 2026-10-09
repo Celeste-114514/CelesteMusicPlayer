@@ -281,7 +281,21 @@ namespace CelesteMusicPlayer
                     {
                         int i = ReadInt(msg.Payload, "index", -1);
                         var track = AlbumTrackAt(i);
-                        if (track != null) PlayPlaylistItem(track);
+                        if (track != null)
+                        {
+                            // 与原生详情页「播放」按钮同一套行为：整专替换播放队列，
+                            // 顺序就是页面顺序（碟号→音轨号→标题），从点中的那首开始。
+                            // 直接 PlayPlaylistItem 只会在旧队列里定位——队列还是整个曲库，
+                            // 这首播完接的是曲库顺序，用户看到的就是"顺序不对"。
+                            if (_albumTracks != null && _albumTracks.Count > 0)
+                            {
+                                _userPlaylist.Clear();
+                                AddSongsToUserPlaylist(_albumTracks.ToList());
+                            }
+                            StartupLog.Write(
+                                $"[Web试点] play：整专替换队列 {_albumTracks?.Count ?? 0} 首，从第 {i + 1} 首开始");
+                            PlayPlaylistItem(track);
+                        }
                         break;
                     }
 
