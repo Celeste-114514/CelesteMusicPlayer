@@ -1,7 +1,9 @@
 // 皮肤系统第 4 步：Apple 风格主界面 · 歌曲浏览 + 专辑面板（试点）
 //
-// 用户 2026-10-09 拍板：**先只做歌曲浏览面板和专辑面板**，其他分类面板暂不做，
-// 但侧栏 16 个分类全部保留（点未做的分类只显示占位，不删入口）。
+// 用户 2026-10-09 拍板：先做歌曲浏览面板、专辑面板、（专辑）艺术家页面；
+// 2026-10-09 追加：我喜欢的音乐 / 评分 / 最近播放 / 播放队列 / 播放最多五个列表面板
+// （行样式与歌曲面板一致，数据来源按原生同名分类口径），侧栏去掉「流派」「年份」，
+// 其余分类入口保留（点未做的分类只显示占位，不删入口）。
 //
 // 分工铁律：**网页只负责长什么样，一件事都不做**——点播放、切分类、拖进度、
 // 收藏全都上报给 C#，由 C# 调现有的播放方法。音频链路（独占 / bit-perfect /
@@ -14,22 +16,32 @@
 //   - 消息协议在专辑页基础上加 nav（切分类）/ album（打开专辑）/ albums / albumcovers。
 //
 // 消息协议（与 WebUI/main.html 里的 post() 一一对应，改一边必须改另一边）：
-//   C# → 网页：data（categories + songs + cur）/ data/append（歌曲分块）
+//   C# → 网页：data（categories + 当前面板列表 + cur）/ data/append（歌曲分块，
+//              每首带 fav；「最近播放」面板另带 sub 副标题）
 //              / chips（格式胶囊预热补）/ albums（专辑网格）
-//              / albumcovers（专辑封面预热补）/ albumtracks（专辑详情曲目）
-//              / artists（艺术家墙）/ artistcovers（艺术家头像预热补）
+//              / albumcovers（专辑封面预热补）/ albumtracks（专辑详情曲目，含 tech/dsd/disc）
+//              / artists（艺术家墙）/ artistcovers（艺术家头像预热补，按名字匹配）
 //              / artistdetail（艺术家详情：albums + tracks）
+//              / artistavatar（网络头像下载完成，更新详情大头像）
 //              / now（播放状态，每秒）/ theme / nav
 //   网页 → C#：ready / nav / album（打开专辑，id=专辑下标）
 //              / artist（打开艺术家，id=艺术家下标）/ artistback（详情里返回墙）
 //              / play / pause / resume / next / prev / seek / volume / love / exit
+//              / enqueue（当前列表加入播放队列）/ rating（评分面板星级过滤）
+//
+// 列表面板（2026-10-09 用户点单）：Favorites / Ratings / Recent / UserPlaylist /
+// MostPlayed 与 Songs 共用同一套行样式，数据来源按原生同名分类口径构建
+// （见 BuildWebMainList）；侧栏按用户要求去掉「流派」「年份」两项。
 
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
+using System.Text;
 using System.Text.Json;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 
@@ -83,7 +95,10 @@ namespace CelesteMusicPlayer
 
         /// <summary>
         /// 侧栏分类清单：照原生侧栏原样保留（CategoryNavPanel 13 项 + NavToolPanel 3 项），
-        /// id 与原生按钮 Tag 一致。只有 Songs / Albums 有数据（ok=true），
+        /// id 与原生按钮 Tag 一致。
+        /// 2026-10-09 用户要求：**去掉「流派」「年份」两项**（原生有，网页侧栏不要），
+        /// 其余顺序与原生一致。Songs/Albums/Artists/AlbumArtists 及五个列表面板
+        /// （Favorites/Ratings/Recent/UserPlaylist/MostPlayed）有数据（ok=true），
         /// 其余点一下只显示占位。
         /// </summary>
         private static readonly (string Id, string Label, string Group)[] WebMainCategories =
@@ -96,8 +111,6 @@ namespace CelesteMusicPlayer
             ("Ratings",       "评分",       "music"),
             ("Recent",        "最近播放",   "music"),
             ("UserPlaylist",  "播放队列",   "music"),
-            ("Genres",        "流派",       "music"),
-            ("Years",         "年份",       "music"),
             ("MostPlayed",    "播放最多",   "music"),
             ("Folders",       "媒体库",     "media"),
             ("WebDav",        "网络音乐库", "media"),
@@ -105,6 +118,24 @@ namespace CelesteMusicPlayer
             ("TagSort",       "标签排序",   "tool"),
             ("PlaylistWall",  "播放列表",   "tool"),
         };
+
+        /// <summary>列表面板：与歌曲面板同一套行样式，数据来源不同（原生同名分类口径）。
+        /// 这些分类的 nav 都走 ok=true + 推列表，网页只换页头标题/副标题。</summary>
+        private static readonly string[] WebMainListPanels =
+        {
+            "Songs", "Favorites", "Ratings", "Recent", "UserPlaylist", "MostPlayed",
+        };
+
+        /// <summary>当前列表面板推的是哪份列表（nav 上报时记下，数据推送按它构建）。</summary>
+        private string _webMainListKind = "Songs";
+
+        /// <summary>评分面板的星级过滤：-1=全部已评分（原生默认），0=未评分，1..5=对应星级。</summary>
+        private int _webMainRatingFilter = -1;
+
+        /// <summary>列表面板行的副标题覆盖（与 <see cref="_webMainSongs"/> 平行，按下标对齐）。
+        /// 目前只有「最近播放」用：原生行显示「播放于 MM-dd HH:mm · 播放 m:ss · 播完/未播完」，
+        /// 行样式与歌曲面板一致，差在这一行小字（其余面板为空 = 用 艺术家 · 专辑）。</summary>
+        private List<string> _webMainSubs = new();
 
         /// <summary>打开歌曲浏览面板。任何一步失败都静默降级：界面保持原生版，程序照常用。</summary>
         public async Task OpenWebMainAsync()
@@ -336,6 +367,29 @@ namespace CelesteMusicPlayer
                         break;
                     }
 
+                case "enqueue":
+                    {
+                        // 详情页/列表面板的「添加至播放队列」：把当前列表整份加进队列
+                        // （复用原生 AddSongsToUserPlaylist，不换当前播放）
+                        var list = WebMainActiveList;
+                        if (list.Count > 0)
+                        {
+                            AddSongsToUserPlaylist(list);
+                            StartupLog.Write($"[Web主界面] enqueue：{list.Count} 首加入播放队列");
+                        }
+                        break;
+                    }
+
+                case "rating":
+                    {
+                        // 评分面板的星级胶囊：-1=全部已评分，0=未评分，1..5=对应星级
+                        int rv = ReadInt(msg.Payload, "value", -1);
+                        _webMainRatingFilter = rv is >= -1 and <= 5 ? rv : -1;
+                        StartupLog.Write($"[Web主界面] rating 过滤 = {_webMainRatingFilter}");
+                        _ = PushWebMainDataAsync();
+                        break;
+                    }
+
                 case "love":
                     {
                         int i = ReadInt(msg.Payload, "index", -1);
@@ -354,6 +408,13 @@ namespace CelesteMusicPlayer
                                 }
                                 catch { /* 没带 on 就当"加入收藏" */ }
                                 TrackStatsStore.SetFavorite(track.FilePath, on);
+                                // 我喜欢的音乐面板：取消收藏后该行不该还在表里（原生同理，
+                                // 取消喜欢会刷新当前分类）——整表重推，行自然消失
+                                if (!on && string.Equals(_webMainListKind, "Favorites",
+                                        StringComparison.OrdinalIgnoreCase))
+                                {
+                                    _ = PushWebMainDataAsync();
+                                }
                             }
                         }
                         break;
@@ -375,21 +436,27 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 侧栏分类切换。已做的面板：Songs / Albums / Artists / AlbumArtists。
+        /// 侧栏分类切换。已做的面板：Songs / Albums / Artists / AlbumArtists 及五个
+        /// 列表面板（Favorites / Ratings / Recent / UserPlaylist / MostPlayed，
+        /// 行样式与歌曲面板一致，数据来源按原生同名分类口径）。
         /// 详情里的「← 专辑」「← 艺术家」也走这里（幂等重推）。
-        /// 别再往WebMainCategories 里加自创分类——侧栏条目照原生 MainWindow.xaml 的
-        /// CategoryNavPanel(13) + NavToolPanel(3) 原样搬，一个不多一个不少（2026-10-09 用户要求）。
+        /// 侧栏条目照原生 MainWindow.xaml 搬，**用户 2026-10-09 要求去掉流派/年份**，
+        /// 其余一个不多一个不少；要加分类先问过用户。
         /// </summary>
         private async Task HandleWebMainNavAsync(string id)
         {
             _webMainPage = id;
-            if (string.Equals(id, "Songs", StringComparison.OrdinalIgnoreCase))
+            if (Array.IndexOf(WebMainListPanels, id) >= 0)
             {
-                // 歌曲列表：关掉详情 + 重推数据（顺带刷新快照）
+                // 列表面板（歌曲 + 我喜欢的音乐/评分/最近播放/播放队列/播放最多）：
+                // 关掉详情 + 记下列表种类 + 重推数据（顺带刷新快照）
                 CloseWebMainDetails();
+                _webMainListKind = id;
+                if (string.Equals(id, "Ratings", StringComparison.OrdinalIgnoreCase))
+                    _webMainRatingFilter = -1;   // 进评分页重置回「全部已评分」（原生默认）
                 await PostCelesteWebAsync(new Dictionary<string, object?>
                 {
-                    ["kind"] = "nav", ["id"] = "Songs", ["ok"] = true,
+                    ["kind"] = "nav", ["id"] = id, ["ok"] = true,
                 });
                 await PushWebMainDataAsync();
                 return;
@@ -448,13 +515,13 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 把分类清单 + 歌曲快照推给网页。ready 和 nav 回 Songs 都走这里。
+        /// 把分类清单 + 当前列表面板的快照推给网页。ready 和 nav 都走这里。
         ///
         /// **必须分块**：3609 首打成一个大 JSON（1MB+）用 PostWebMessageAsString
         /// 一次性发，WebView2 渲染进程直接压死（2026-10-09 用户实测卡死）。
         /// 专辑试点页只推 46 首没暴露过这个问题，主界面不行。
         /// 另外 ready 补发 5 次 + 自检探针都会调本方法，用 _webMainPushing 互斥，
-        /// 推完一次就拦住后续重复调用（nav 回 Songs 要刷新时先清标志再调）。
+        /// 推完一次就拦住后续重复调用（nav 要刷新时先清标志再调）。
         /// </summary>
         private async Task PushWebMainDataAsync()
         {
@@ -470,35 +537,153 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 按 <see cref="_webMainListKind"/> 构建当前面板的列表（原生同名分类口径）：
+        ///   Songs       = 整个媒体库（_playlist）
+        ///   Favorites   = TrackStatsStore 收藏（曲库优先，文件还在就从路径建）
+        ///   Recent      = LibraryDb 播放历史流水（受「最近播放范围」设置过滤）
+        ///   UserPlaylist= 播放队列（_userPlaylist）
+        ///   MostPlayed  = 曲库里播放次数 >0 的，按次数降序
+        ///   Ratings     = 曲库里已评分的；_webMainRatingFilter≥0 时按星级过滤
+        /// </summary>
+        private List<PlaylistItem> BuildWebMainList(string kind)
+        {
+            _webMainSubs = new List<string>();   // 与返回列表平行；只有 Recent 会填
+            switch (kind)
+            {
+                case "Favorites":
+                    {
+                        var items = new List<PlaylistItem>();
+                        foreach (string path in TrackStatsStore.GetAllFavorites())
+                        {
+                            PlaylistItem? fromLib = FindLibraryItemByPath(path);
+                            if (fromLib != null) items.Add(ClonePlaylistItem(fromLib));
+                            else if (System.IO.File.Exists(path))
+                            {
+                                try { items.Add(CreatePlaylistItemFromPath(path)); }
+                                catch (Exception caught) { StartupLog.WriteException("WebMainList.Favorites", caught); }
+                            }
+                        }
+                        return items;
+                    }
+                case "Recent":
+                    {
+                        // 最近播放 = 播放历史事件流水（每次播放一条记录，含播放时间）。
+                        // 「最近播放范围」设置：0=全部；N=只显示最近 N 天。
+                        int recentRangeDays = AppSettingsStore.Load().RecentPlayedRangeDays;
+                        DateTime rangeFromUtc = recentRangeDays > 0
+                            ? DateTime.UtcNow.AddDays(-recentRangeDays)
+                            : DateTime.MinValue;
+                        var items = new List<PlaylistItem>();
+                        foreach (LibraryDb.PlaybackHistoryEntry e in LibraryDb.LoadPlaybackHistory(200))
+                        {
+                            if (e.PlayedAtUtc < rangeFromUtc) continue;
+                            if (!System.IO.File.Exists(e.FilePath)) continue;
+                            PlaylistItem? fromLib = FindLibraryItemByPath(e.FilePath);
+                            PlaylistItem? item = fromLib != null
+                                ? ClonePlaylistItem(fromLib)
+                                : null;
+                            if (item == null)
+                            {
+                                try { item = CreatePlaylistItemFromPath(e.FilePath); }
+                                catch (Exception caught) { StartupLog.WriteException("WebMainList.Recent", caught); }
+                            }
+                            if (item == null) continue;
+                            items.Add(item);
+                            // 原生最近播放行的副标题口径（MainWindow.Features.cs ApplyFavoritesOrRecentCategory）
+                            _webMainSubs.Add(RecentSubText(e));
+                        }
+                        return items;
+                    }
+                case "UserPlaylist":
+                    return _userPlaylist.ToList();
+                case "MostPlayed":
+                    return _playlist
+                        .Select(t => (Item: t, Count: TrackStatsStore.Get(t.FilePath)?.PlayCount ?? 0))
+                        .Where(x => x.Count > 0)
+                        .OrderByDescending(x => x.Count)
+                        .ThenBy(x => x.Item.Title, StringComparer.CurrentCultureIgnoreCase)
+                        .Select(x => ClonePlaylistItem(x.Item))
+                        .ToList();
+                case "Ratings":
+                    return _playlist
+                        .Where(t => _webMainRatingFilter < 0
+                            ? t.Rating > 0
+                            : t.Rating == _webMainRatingFilter)
+                        .Select(ClonePlaylistItem)
+                        .ToList();
+                default:
+                    return _playlist.ToList();
+            }
+        }
+
+        /// <summary>最近播放行的副标题（原生口径）：播放时间 + 播放时长 + 是否播完。</summary>
+        private static string RecentSubText(LibraryDb.PlaybackHistoryEntry e)
+        {
+            string timeText = e.PlayedAtUtc == DateTime.MinValue
+                ? "—"
+                : e.PlayedAtUtc.ToLocalTime().ToString("MM-dd HH:mm");
+            string durText = e.PlayedSeconds < 1
+                ? "—"
+                : e.PlayedSeconds < 60
+                    ? ((int)e.PlayedSeconds) + " 秒"
+                    : TimeSpan.FromSeconds(e.PlayedSeconds).ToString(@"m\:ss");
+            return "播放于 " + timeText + " · 播放 " + durText + " · " + (e.Completed ? "播完" : "未播完");
+        }
+
+        /// <summary>侧栏计数（原生同名分类口径）。 Songs 用当前快照数。</summary>
+        private int WebMainPanelCount(string id)
+        {
+            if (string.Equals(id, "Songs", StringComparison.OrdinalIgnoreCase))
+                return _webMainSongs.Count;
+            if (string.Equals(id, "Albums", StringComparison.OrdinalIgnoreCase))
+                return WebMainAlbumEntries().Count;
+            if (string.Equals(id, "Artists", StringComparison.OrdinalIgnoreCase)
+             || string.Equals(id, "AlbumArtists", StringComparison.OrdinalIgnoreCase))
+                return WebMainArtistGroups(
+                    string.Equals(id, "AlbumArtists", StringComparison.OrdinalIgnoreCase)).Count;
+            if (string.Equals(id, "Favorites", StringComparison.OrdinalIgnoreCase))
+                return TrackStatsStore.GetAllFavorites().Count;
+            if (string.Equals(id, "Recent", StringComparison.OrdinalIgnoreCase))
+            {
+                int recentRangeDays = AppSettingsStore.Load().RecentPlayedRangeDays;
+                DateTime rangeFromUtc = recentRangeDays > 0
+                    ? DateTime.UtcNow.AddDays(-recentRangeDays)
+                    : DateTime.MinValue;
+                int n = 0;
+                foreach (var e in LibraryDb.LoadPlaybackHistory(200))
+                    if (e.PlayedAtUtc >= rangeFromUtc) n++;
+                return n;
+            }
+            if (string.Equals(id, "UserPlaylist", StringComparison.OrdinalIgnoreCase))
+                return _userPlaylist.Count;
+            if (string.Equals(id, "MostPlayed", StringComparison.OrdinalIgnoreCase))
+                return _playlist.Count(t => (TrackStatsStore.Get(t.FilePath)?.PlayCount ?? 0) > 0);
+            if (string.Equals(id, "Ratings", StringComparison.OrdinalIgnoreCase))
+                return _playlist.Count(t => t.Rating > 0);
+            return 0;
+        }
+
         private async Task PushWebMainDataCoreAsync()
         {
             // 快照：网页的 index 与这份一一对应（play/love 都按它下标）
-            _webMainSongs = _playlist.ToList();
+            _webMainSongs = BuildWebMainList(_webMainListKind);
             _webMainGen++;   // 快照换人，后台预热循环按代际自行了断
 
             var cats = new List<object>();
             foreach (var (id, label, group) in WebMainCategories)
             {
-                bool ok = string.Equals(id, "Songs", StringComparison.OrdinalIgnoreCase)
+                bool ok = Array.IndexOf(WebMainListPanels, id) >= 0
                        || string.Equals(id, "Albums", StringComparison.OrdinalIgnoreCase)
                        || string.Equals(id, "Artists", StringComparison.OrdinalIgnoreCase)
                        || string.Equals(id, "AlbumArtists", StringComparison.OrdinalIgnoreCase);
-                int n = 0;
-                if (string.Equals(id, "Songs", StringComparison.OrdinalIgnoreCase))
-                    n = _webMainSongs.Count;
-                else if (string.Equals(id, "Albums", StringComparison.OrdinalIgnoreCase))
-                    n = WebMainAlbumEntries().Count;
-                else if (string.Equals(id, "Artists", StringComparison.OrdinalIgnoreCase)
-                      || string.Equals(id, "AlbumArtists", StringComparison.OrdinalIgnoreCase))
-                    n = WebMainArtistGroups(
-                        string.Equals(id, "AlbumArtists", StringComparison.OrdinalIgnoreCase)).Count;
                 cats.Add(new Dictionary<string, object?>
                 {
                     ["id"] = id,
                     ["t"] = label,
                     ["g"] = group,
                     ["ok"] = ok,
-                    ["n"] = n,
+                    ["n"] = WebMainPanelCount(id),
                 });
             }
 
@@ -531,7 +716,7 @@ namespace CelesteMusicPlayer
             // （云盘曲库下一块 400 首就要几十秒，2026-10-09 用户实测卡死 90 秒
             // 只有第一块——IsHiResFile 读 FormatChips，已去掉 Hi-Res 徽章）。
             var sw = System.Diagnostics.Stopwatch.StartNew();
-            StartupLog.Write($"[Web主界面] 开始分块推送 {_webMainSongs.Count} 首");
+            StartupLog.Write($"[Web主界面] 开始分块推送[{_webMainListKind}] {_webMainSongs.Count} 首");
             const int CHUNK = 400;
             for (int off = 0; off < _webMainSongs.Count; off += CHUNK)
             {
@@ -548,6 +733,12 @@ namespace CelesteMusicPlayer
                         ["duration"] = t.Duration.TotalSeconds,
                         ["dsd"] = IsDsdFile(t.FilePath),
                         ["fmt"] = CodecOf(t.FilePath),
+                        // 收藏态逐首带（我喜欢的音乐面板要显示实心红心；
+                        // TrackStatsStore.Get 走内存缓存，3609 次查表不读文件）
+                        ["fav"] = TrackStatsStore.Get(t.FilePath)?.IsFavorite == true,
+                        // 行副标题覆盖：只有「最近播放」面板有值（播放时间+时长+播完），
+                        // 其余为空 = 网页用 艺术家 · 专辑
+                        ["sub"] = i < _webMainSubs.Count ? _webMainSubs[i] : "",
                     });
                 }
                 await PostCelesteWebAsync(new Dictionary<string, object?>
@@ -779,11 +970,16 @@ namespace CelesteMusicPlayer
         /* ================= 艺术家 / 专辑艺术家 =================
            分组口径完全照原生 RefreshArtistViewAsync：按 Artist（AlbumArtists 页用
            AlbumArtist）分组、名字升序。详情页结构也照原生 OpenArtistDetailCore：
-           专辑网格 + 曲目列表两段。 */
+           专辑网格 + 曲目列表两段。
 
-        /// <summary>艺术家分组：名字 + 曲目数 + 一张代表封面路径。
-        /// 头像用该艺术家第一首的封面当代表图（原生是自定义/网络头像，网页版
-        /// 不引入网络头像这张表，只复用已有封面缓存）。</summary>
+           头像口径与原生 ResolveArtistAvatarAsync 一致（2026-10-09 用户要求
+           「和主界面保持一致，优先网络源」）：
+             ① 用户自定义头像（右键设置的本地图，ArtistAvatars/&lt;hash&gt;.png）
+             ② 网络头像（网易云/iTunes，按设置的面像来源；磁盘缓存在
+                ArtistAvatars/Web/&lt;hash&gt;.jpg，没有就后台下载后落盘）
+             ③ 兜底：该艺术家年份最晚专辑中音轨 1 的封面（原生同口径） */
+
+        /// <summary>艺术家分组：名字 + 曲目数 + 一张兜底封面路径（年份最晚专辑的音轨1）。</summary>
         private List<(string Name, int Count, string CoverPath)> WebMainArtistGroups(bool albumArtistMode)
         {
             var groups = _webMainSongs
@@ -793,8 +989,161 @@ namespace CelesteMusicPlayer
                 .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
                 .ToList();
             return groups
-                .Select(g => (Name: g.Key ?? "", Count: g.Count(), CoverPath: g.First().FilePath))
+                .Select(g =>
+                {
+                    // 兜底封面口径照原生 ResolveArtistDefaultAvatarAsync：
+                    // 年份最晚的专辑（同年按名字倒序）的 CoverSourcePath，空了退回组内第一首
+                    string fallback = g.First().FilePath;
+                    AlbumEntry? latest = BuildAlbumEntriesFromTracks(g.ToList())
+                        .OrderByDescending(a => a.Year)
+                        .ThenByDescending(a => a.Name, StringComparer.CurrentCultureIgnoreCase)
+                        .FirstOrDefault();
+                    if (latest != null && !string.IsNullOrWhiteSpace(latest.CoverSourcePath))
+                        fallback = latest.CoverSourcePath;
+                    return (Name: g.Key ?? "", Count: g.Count(), CoverPath: fallback);
+                })
                 .ToList();
+        }
+
+        /// <summary>头像文件拷贝缓存（源路径 → 虚拟域名 URL）。自定义/网络头像都存在
+        /// 本地磁盘上，拷贝进 WebAssets 才能被网页按 http://celeste.local/ 引用。</summary>
+        private readonly Dictionary<string, string> _webAvatarFileCache = new(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>把本地头像文件拷进 WebAssets/avatars 并返回 URL（按路径+修改时间去重，不重复拷）。</summary>
+        private string WebAvatarFileUrl(string sourcePath)
+        {
+            if (string.IsNullOrEmpty(sourcePath) || !File.Exists(sourcePath)) return "";
+            if (_webAvatarFileCache.TryGetValue(sourcePath, out var cached)) return cached;
+            try
+            {
+                var fi = new FileInfo(sourcePath);
+                string key = fi.FullName + "|" + fi.LastWriteTimeUtc.Ticks;
+                byte[] hash = System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(key));
+                string name = "av_" + Convert.ToHexString(hash.AsSpan(0, 8)).ToLowerInvariant();
+                string ext = fi.Extension.ToLowerInvariant();
+                if (ext is not (".png" or ".jpg" or ".jpeg")) ext = ".png";
+                name += ext;
+                string dir = Path.Combine(WebAssetRoot, "avatars");
+                Directory.CreateDirectory(dir);
+                string dst = Path.Combine(dir, name);
+                if (!File.Exists(dst)) File.Copy(sourcePath, dst, true);
+                string url = "http://celeste.local/avatars/" + name;
+                _webAvatarFileCache[sourcePath] = url;
+                return url;
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("WebAvatarFileUrl", ex);
+                return "";
+            }
+        }
+
+        /// <summary>下载中的艺术家名（防重复联网）。自定义/网络缓存命中就不下载。</summary>
+        private readonly HashSet<string> _webAvatarDownloading = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly SemaphoreSlim WebAvatarDownloadGate = new(4, 4);
+
+        /// <summary>
+        /// 解析艺术家头像 URL（原生优先级：自定义 → 网络 → 专辑封面兜底）。
+        /// 网络头像没有磁盘缓存时顺手在后台下载，不阻塞当前推送。
+        /// </summary>
+        private string WebMainArtistAvatarUrl(string artistName, bool albumArtistMode, string fallbackCoverPath)
+        {
+            if (string.IsNullOrEmpty(artistName)) return "";
+            string storeKey = ArtistAvatarStoreKey(artistName, albumArtistMode);
+
+            // ① 用户自定义头像（album artist 模式的 key 带 "aa|" 前缀，与原生一致）
+            string custom = ArtistAvatarStore.GetAvatarFilePath(storeKey);
+            if (File.Exists(custom))
+            {
+                string url = WebAvatarFileUrl(custom);
+                if (!string.IsNullOrEmpty(url)) return url;
+            }
+
+            // ② 网络头像磁盘缓存（原生按「艺术家名」存，不带 aa| 前缀）
+            string webFile = ArtistAvatarStore.GetWebAvatarFilePath(artistName.Trim());
+            if (File.Exists(webFile))
+            {
+                string url = WebAvatarFileUrl(webFile);
+                if (!string.IsNullOrEmpty(url)) return url;
+                _ = EnsureWebArtistAvatarAsync(artistName);   // 缓存文件坏了，重新拉
+                return WebMainTrackCover(fallbackCoverPath);
+            }
+
+            // ③ 都没有：先用专辑封面顶上，同时后台联网拉头像
+            _ = EnsureWebArtistAvatarAsync(artistName);
+            return WebMainTrackCover(fallbackCoverPath);
+        }
+
+        /// <summary>
+        /// 后台下载网络头像（原生 TryLoadWebArtistAvatarAsync 的网页版）：
+        /// 按设置的面像来源搜 URL → 下载 → 落盘 ArtistAvatars/Web（重启免再搜）→
+        /// 拷进 WebAssets → 推给网页（墙按名字匹配，详情按 artistavatar 消息）。
+        /// 同一艺术家只拉一次（_webAvatarDownloading 去重）；失败静默，兜底封面照用。
+        /// </summary>
+        private async Task EnsureWebArtistAvatarAsync(string artistName)
+        {
+            string key = (artistName ?? "").Trim();
+            if (string.IsNullOrEmpty(key)) return;
+            lock (_webAvatarDownloading)
+            {
+                if (!_webAvatarDownloading.Add(key)) return;   // 已在拉
+            }
+            try
+            {
+                await WebAvatarDownloadGate.WaitAsync();
+                string webFile = ArtistAvatarStore.GetWebAvatarFilePath(key);
+                if (File.Exists(webFile))
+                {
+                    PushWebArtistAvatar(key, WebAvatarFileUrl(webFile));
+                    return;
+                }
+                string? url = await OnlineMusicApi.SearchArtistAvatarUrlAsync(key);
+                if (string.IsNullOrWhiteSpace(url)) return;
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(8));
+                byte[] bytes = await HttpClients.Default.GetByteArrayAsync(url, cts.Token);
+                if (bytes.Length == 0) return;
+                await ArtistAvatarStore.SaveWebAsync(key, bytes);   // 落盘，重启免再搜
+                PushWebArtistAvatar(key, WebAvatarFileUrl(webFile));
+            }
+            catch (Exception caught)
+            {
+                // 联网失败不致命：墙/详情继续用专辑封面兜底
+                StartupLog.WriteException("EnsureWebArtistAvatar", caught);
+            }
+            finally
+            {
+                WebAvatarDownloadGate.Release();
+                lock (_webAvatarDownloading) { _webAvatarDownloading.Remove(key); }
+            }
+        }
+
+        /// <summary>头像下载完成：推给网页。墙按名字匹配（防下标张冠李戴），
+        /// 正在看的艺术家详情另收一条 artistavatar。下载在后台线程完成，
+        /// 发送切回 UI 线程（PostWebMessageAsString 线程亲和）。</summary>
+        private void PushWebArtistAvatar(string artistName, string coverUrl)
+        {
+            if (string.IsNullOrEmpty(coverUrl) || !_webMainOpen) return;
+            StartupLog.Write($"[Web主界面] 艺术家「{artistName}」网络头像已就绪");
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                if (!_webMainOpen) return;
+                _ = PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "artistcovers",
+                    ["items"] = new List<object>
+                    {
+                        new Dictionary<string, object?> { ["name"] = artistName, ["cover"] = coverUrl },
+                    },
+                });
+                if (string.Equals(_openedWebArtistName, artistName, StringComparison.OrdinalIgnoreCase))
+                {
+                    _ = PostCelesteWebAsync(new Dictionary<string, object?>
+                    {
+                        ["kind"] = "artistavatar",
+                        ["cover"] = coverUrl,
+                    });
+                }
+            });
         }
 
         /// <summary>推艺术家墙（网格）。封面先空着，artistcovers 按批补——
@@ -832,8 +1181,9 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>后台预热艺术家头像（取该艺术家第一首的封面）。算好一批推一批
-        /// （kind=artistcovers，网页按艺术家下标更新卡片）。文件读挪出 UI 线程。</summary>
+        /// <summary>后台预热艺术家头像（自定义→网络→专辑封面，原生优先级）。
+        /// 算好一批推一批（kind=artistcovers，网页按艺术家名字更新卡片）。
+        /// 网络头像的下载在EnsureWebArtistAvatarAsync 里自行补推，这里只推立即可得的。</summary>
         private async Task PrewarmWebMainArtistCoversAsync(
             List<(string Name, int Count, string CoverPath)> groups, bool albumArtistMode)
         {
@@ -856,7 +1206,9 @@ namespace CelesteMusicPlayer
                             batch.Add(new Dictionary<string, object?>
                             {
                                 ["i"] = i,
-                                ["cover"] = WebMainTrackCover(groups[i].CoverPath),
+                                ["name"] = groups[i].Name,
+                                ["cover"] = WebMainArtistAvatarUrl(
+                                    groups[i].Name, albumArtistMode, groups[i].CoverPath),
                             });
                         }
                         return batch;
@@ -931,7 +1283,7 @@ namespace CelesteMusicPlayer
                 _openedWebArtistName = g.Name;
                 _webMainAlbumTracks = null;   // 两类详情互斥
 
-                string cover = WebMainTrackCover(g.CoverPath);
+                string cover = WebMainArtistAvatarUrl(g.Name, albumArtistMode, g.CoverPath);
                 StartupLog.Write(
                     $"[Web主界面] 打开艺术家「{g.Name}」{sorted.Count} 首 / {albumEntries.Count} 张专辑");
 
@@ -978,6 +1330,7 @@ namespace CelesteMusicPlayer
                         ["dsd"] = IsDsdFile(t.FilePath),
                         ["fmt"] = CodecOf(t.FilePath),
                         ["cover"] = cover,
+                        ["fav"] = TrackStatsStore.Get(t.FilePath)?.IsFavorite == true,
                     });
                 }
 
@@ -1065,7 +1418,9 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>专辑详情推送（专辑墙点卡片、艺术家详情点专辑卡都走这里）。
-        /// 曲目查询/排序与原生 OpenAlbumDetailCore 完全一致：碟号→音轨号→标题。</summary>
+        /// 曲目查询/排序与原生 OpenAlbumDetailCore 完全一致：碟号→音轨号→标题。
+        /// 布局元素也照原生：左栏大封面 + 质量行（编码器|位深/采样率）+ DSD 提示，
+        /// 右栏音轨号|标题|时长（有碟号时按 CD 分组）。</summary>
         private async Task PushWebMainAlbumDetailAsync(AlbumEntry entry)
         {
                 List<PlaylistItem> tracks = _webMainSongs
@@ -1081,6 +1436,17 @@ namespace CelesteMusicPlayer
 
                 string cover = WebMainAlbumCover(entry);
                 StartupLog.Write($"[Web主界面] 专辑「{entry.Name}」封面 URL={(string.IsNullOrEmpty(cover) ? "(空)" : cover)}");
+
+                // 质量行 + DSD 提示（原生行3 / DsdHint 口径）：读文件，挪后台线程
+                string tech = await Task.Run(() =>
+                {
+                    string quality = BuildAlbumQualityLine(tracks);
+                    string text = string.IsNullOrWhiteSpace(quality)
+                        ? entry.TotalDurationText
+                        : quality.Replace(" · ", " | ") + " | " + entry.TotalDurationText;
+                    return text;
+                });
+                bool allDsd = tracks.All(t => IsDsdFile(t.FilePath));
 
                 int cur = -1;
                 if (!string.IsNullOrEmpty(_nowPlayingPath))
@@ -1103,6 +1469,7 @@ namespace CelesteMusicPlayer
                     list.Add(new Dictionary<string, object?>
                     {
                         ["n"] = t.Track > 0 ? (int)t.Track : i + 1,
+                        ["disc"] = t.Disc > 0 ? (int)t.Disc : 0,
                         ["title"] = t.Title,
                         ["artist"] = t.Artist,
                         ["album"] = t.Album,
@@ -1110,6 +1477,7 @@ namespace CelesteMusicPlayer
                         ["dsd"] = IsDsdFile(t.FilePath),
                         ["fmt"] = CodecOf(t.FilePath),
                         ["cover"] = cover,
+                        ["fav"] = TrackStatsStore.Get(t.FilePath)?.IsFavorite == true,
                     });
                 }
 
@@ -1124,6 +1492,8 @@ namespace CelesteMusicPlayer
                         ["n"] = tracks.Count,
                         ["dur"] = entry.TotalDurationText,
                         ["cover"] = cover,
+                        ["tech"] = tech,
+                        ["dsd"] = allDsd,
                     },
                     ["tracks"] = list,
                     ["cur"] = cur,

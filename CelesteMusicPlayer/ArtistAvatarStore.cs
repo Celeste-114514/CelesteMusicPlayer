@@ -145,6 +145,12 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>网络头像磁盘缓存路径（按艺术家名，与自定义头像的 key 不同——
+        /// 自定义头像在 album artist 模式下带 "aa|" 前缀，网络头像一律用纯艺术家名）。
+        /// 文件不一定存在；调用方先 File.Exists 再读。网页版头像解析也用这个路径。</summary>
+        public static string GetWebAvatarFilePath(string artistName)
+            => GetWebCacheFilePath(artistName ?? string.Empty);
+
         public static async Task SaveWebAsync(string artistName, byte[] imageBytes)
         {
             if (imageBytes == null || imageBytes.Length == 0)
