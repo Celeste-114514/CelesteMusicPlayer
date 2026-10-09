@@ -324,10 +324,37 @@ namespace CelesteMusicPlayer
                              (raw.Length > 96 ? raw.Substring(0, 96) + "…" : raw));
             if (string.IsNullOrWhiteSpace(raw)) return;
 
-            WebInboundMessage? msg;
-            try { msg = JsonSerializer.Deserialize<WebInboundMessage>(raw); }
-            catch { return; }   // 网页发了非法 JSON：静默丢弃，不让一个坏消息影响程序
-            if (msg == null || string.IsNullOrWhiteSpace(msg.Kind)) return;
+            WebInboundMessage? msg = null;
+            try
+            {
+                // 网页上行是**扁平结构**：{"kind":"play","index":0}——业务字段和 kind 同级，
+                // 没有 "payload" 包装层。以前用 JsonSerializer.Deserialize<WebInboundMessage>：
+                //   ① 默认区分大小写，"kind" 映射不到 Kind → 所有消息被当成空 kind
+                //      静默丢弃（日志有 ↓ 无 ↑、点击全部没反应，2026-10-09 用户实测坐实）；
+                //   ② Payload 属性永远拿不到 index/position/value/on（它们在根上，不在
+                //      "payload" 里）——就算 kind 映射上了，"播放第几首"也读不出来。
+                // 改成手动解析：kind 提出来，整个根元素克隆给 Payload 当业务字段源。
+                using var doc = JsonDocument.Parse(raw);
+                var root = doc.RootElement;
+                if (root.ValueKind == JsonValueKind.Object &&
+                    root.TryGetProperty("kind", out var kindEl) &&
+                    kindEl.ValueKind == JsonValueKind.String)
+                {
+                    string? kind = kindEl.GetString();
+                    if (!string.IsNullOrWhiteSpace(kind))
+                        msg = new WebInboundMessage { Kind = kind!, Payload = root.Clone() };
+                }
+            }
+            catch (Exception ex)
+            {
+                // 解析失败也要记账：以前这里是静默 return，"点击没反应"时日志零线索
+                StartupLog.WriteException("CelesteWebOnMessageReceived.parse", ex);
+            }
+            if (msg == null)
+            {
+                StartupLog.Write($"[Web试点] ↓#{seq} 解析不出 kind，丢弃");
+                return;
+            }
 
             // 每条上行消息都记账：网页"点了没反应"时，先看这里有没有记录——
             // 有记录 = C# 收到了、问题在后续处理；没记录 = 消息根本没发出来。
