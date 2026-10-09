@@ -58,6 +58,40 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 保证 WebView2 宿主可用，返回 false 就放弃打开（界面保持原生版）。三种情况：
+        ///   ① 好的          → 直接用
+        ///   ② 正在预热       → 轮询等它完成（双击/并发打开不再误报"没起来"）
+        ///   ③ 就绪但内核没了 → 浏览器进程死过一次后 CoreWebView2 会是 null，
+        ///      拆掉旧的重新预热，否则"关掉后再打开"永远卡在"没起来"
+        /// </summary>
+        private async Task<bool> EnsureCelesteWebHostAsync()
+        {
+            // 正在初始化：等一下再说（预热实测不到 1s，给到 8s 上限）
+            for (int i = 0; i < 80 && _celesteWebInitializing; i++)
+                await Task.Delay(100);
+            if (_celesteWebInitializing)
+                StartupLog.Write("[Web试点] 等 WebView2 预热超时，按当前状态继续");
+
+            if (_celesteWebReady && _celesteWeb?.CoreWebView2 == null)
+            {
+                StartupLog.Write("[Web试点] 宿主内核已失效，重建 WebView2");
+                CleanupCelesteWeb(_celesteWeb);
+                await PrewarmCelesteWeb();
+            }
+            else if (!_celesteWebReady && _celesteWeb == null)
+            {
+                await PrewarmCelesteWeb();
+            }
+
+            if (!_celesteWebReady || _celesteWeb?.CoreWebView2 == null)
+            {
+                StartupLog.Write("[Web试点] WebView2 没起来，试点页放弃，界面保持原样");
+                return false;
+            }
+            return true;
+        }
+
         /// <summary>打开网页试点页。任何一步失败都静默降级：界面保持原生版，程序照常用。</summary>
         public async Task OpenWebAlbumPilotAsync()
         {
@@ -66,15 +100,9 @@ namespace CelesteMusicPlayer
             {
                 DeployWebAsset("album.html");
 
-                // 第一个 WebView2 实例要吃 286MB，所以不到真正要用的时候不建
-                if (!_celesteWebReady)
-                    await PrewarmCelesteWeb();
-
-                if (!_celesteWebReady || _celesteWeb?.CoreWebView2 == null)
-                {
-                    StartupLog.Write("[Web试点] WebView2 没起来，试点页放弃，界面保持原样");
-                    return;
-                }
+                // 第一个 WebView2 实例要吃 286MB，所以不到真正要用的时候不建；
+                // 万一宿主内核已经死了（浏览器进程崩溃过就会这样），这里就地拆旧建新
+                if (!await EnsureCelesteWebHostAsync()) return;
 
                 // 封面抽一次就够，别每秒推送都去解音频文件
                 _webCoverUrl = "";
@@ -83,12 +111,23 @@ namespace CelesteMusicPlayer
 
                 CelesteWebHostGrid.Visibility = Visibility.Visible;
                 // 预热时 WebView2 是 Collapsed（免得启动时闪一下白屏），这会儿才让它现形
-                if (_celesteWeb != null) _celesteWeb.Visibility = Visibility.Visible;
+                if (_celesteWeb != null)
+                {
+                    _celesteWeb.Visibility = Visibility.Visible;
+                    // 显式要焦点：岛屿架构下网页没有焦点时，第一次点击可能只用于聚焦
+                    try { _celesteWeb.Focus(Microsoft.UI.Xaml.FocusState.Programmatic); }
+                    catch { /* 聚焦失败不致命，照常打开 */ }
+                }
+                if (_celesteWebBackButton != null) _celesteWebBackButton.Visibility = Visibility.Visible;
                 _webPilotOpen = true;
 
                 // 上面已经判过 _celesteWeb?.CoreWebView2 != null，这里编译器不知道，用 ! 说明
                 var cv = _celesteWeb!.CoreWebView2;
                 cv.Navigate("http://celeste.local/album.html");
+
+                // 页面自检：导航后探一次页面真实状态写进日志。网页"没反应"时看这一行，
+                // 能分清是页面没渲染、宿主对象没注入，还是数据/消息没到。
+                _ = ProbeWebPageStateAsync(cv);
 
                 // 深色/浅色先告知网页（网页不提供切换按钮，跟着程序走，避免出现假控件）
                 _ = PostCelesteWebAsync(new Dictionary<string, object?>
@@ -139,7 +178,64 @@ namespace CelesteMusicPlayer
             if (_webPilotTimer != null) _webPilotTimer.Tick -= WebPilotTimer_Tick;
             _webPilotTimer?.Stop();
             if (CelesteWebHostGrid != null) CelesteWebHostGrid.Visibility = Visibility.Collapsed;
+            if (_celesteWebBackButton != null) _celesteWebBackButton.Visibility = Visibility.Collapsed;
             StartupLog.Write("[Web试点] 已关闭，回到原生界面");
+        }
+
+        /// <summary>
+        /// 试点页自检：Navigate 之后隔一会儿探页面真实状态，写进日志。
+        ///   wv    = 页面里有没有 WebView2 宿主对象（没有 → 页面脚本被竞态打断）
+        ///   rows  = 曲目行渲染了几行（>0 说明专辑数据已经到达页面）
+        ///   title = 页头显示的专辑名（"专辑" = 还是默认值，数据没到）
+        ///   empty = 有没有显示"这张专辑里还没有曲目"空态
+        /// 页面加载快慢不定（虚拟域名首访要建连接），所以探 5 次、间隔递增；
+        /// 每次失败都记 HRESULT——"无文档可执行"(0x8007139F) 和浏览器进程没了
+        /// 是两回事，靠它区分。
+        /// 另外：WebAssets 目录下存在 _dbg_click.txt 时，顺手替用户点一次返回箭头，
+        /// 用来验证"网页 → C#"消息通道（正常环境没这个文件，什么都不发生）。
+        /// </summary>
+        private async Task ProbeWebPageStateAsync(Microsoft.Web.WebView2.Core.CoreWebView2 cv)
+        {
+            var delays = new[] { 1000, 1500, 2000, 2500, 3000 };
+            for (int i = 0; i < delays.Length; i++)
+            {
+                try
+                {
+                    await Task.Delay(delays[i]);
+                    var raw = await cv.ExecuteScriptAsync(
+                        "(function(){try{" +
+                        "var wv=(window.chrome&&window.chrome.webview)?'yes':'no';" +
+                        "var rows=document.querySelectorAll('.row').length;" +
+                        "var t=document.getElementById('hdrTitle');" +
+                        "var e=document.querySelector('.empty');" +
+                        "var b=document.getElementById('btnExit');" +
+                        "return JSON.stringify({wv:wv,rows:rows,title:t?t.textContent:'?',empty:e?'yes':'no',btn:b?'yes':'no'});" +
+                        "}catch(err){return 'PROBE_ERR:'+err;}})()");
+                    StartupLog.Write($"[Web试点] 页面自检 {DecodeScriptResult(raw)}");
+
+                    string flag = Path.Combine(WebAssetRoot, "_dbg_click.txt");
+                    if (File.Exists(flag))
+                    {
+                        var r2 = await cv.ExecuteScriptAsync(
+                            "(function(){try{var b=document.getElementById('btnExit');" +
+                            "if(!b)return 'no-btn';b.click();return 'clicked';}catch(e){return 'ERR:'+e;}})()");
+                        StartupLog.Write($"[Web试点] 自检代点返回箭头 → {DecodeScriptResult(r2)}");
+                    }
+                    return;   // 探到了就不再探
+                }
+                catch (Exception ex)
+                {
+                    StartupLog.Write(
+                        $"[Web试点] 页面自检第{i + 1}次失败 hr=0x{ex.HResult:X8} {ex.GetType().Name} {ex.Message}");
+                }
+            }
+        }
+
+        /// <summary>ExecuteScriptAsync 的返回值是 JSON 编码的字符串，解一层才好读。</summary>
+        private static string DecodeScriptResult(string raw)
+        {
+            try { return System.Text.Json.JsonSerializer.Deserialize<string>(raw) ?? raw; }
+            catch { return raw; }
         }
 
         /// <summary>专辑详情页上的「新版界面（试点）」按钮。</summary>

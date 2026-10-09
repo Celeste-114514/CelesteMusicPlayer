@@ -38,6 +38,9 @@ namespace CelesteMusicPlayer
         private string? _celesteWebCurrentRoute;
         private string? _celesteWebPendingRoute;
 
+        /// <summary>试点层右上角的原生返回钮（见 PrewarmCelesteWeb 里创建处）。</summary>
+        private Microsoft.UI.Xaml.Controls.Button? _celesteWebBackButton;
+
         /// <summary>网页请求的路由（消息处理里转发）。</summary>
         private WebView2? CelesteWeb => _celesteWeb;
 
@@ -53,11 +56,13 @@ namespace CelesteMusicPlayer
         {
             if (_celesteWeb != null || _celesteWebInitializing) return;
             _celesteWebInitializing = true;
+            // 声明在 try 外：catch 里拆半成品实例时要用（声明在 try 内会 CS0103）
+            WebView2? web = null;
             try
             {
                 var sw = System.Diagnostics.Stopwatch.StartNew();
 
-                var web = new WebView2 { Visibility = Visibility.Collapsed };
+                web = new WebView2 { Visibility = Visibility.Collapsed };
                 // 挂进视觉树才初始化；宿主容器是零尺寸的，不影响任何布局
                 if (CelesteWebHostGrid == null)
                 {
@@ -66,6 +71,25 @@ namespace CelesteMusicPlayer
                     return;
                 }
                 CelesteWebHostGrid.Children.Add(web);
+
+                // 试点层的原生返回钮，浮在网页右上角（网页自己的返回箭头在左上角，不打架）。
+                // WinUI3 岛屿架构下网页的输入链路比原生控件长，万一出问题，这是保证用户
+                // 随时能退回原生界面的兜底；代码里后 Add 的子弟在上层，不会网页挡掉。
+                var backBtn = new Microsoft.UI.Xaml.Controls.Button
+                {
+                    Content = "‹ 返回原界面",
+                    Visibility = Visibility.Collapsed,
+                    Margin = new Thickness(0, 12, 12, 0),
+                    Padding = new Thickness(12, 4, 12, 4),
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    FontSize = 12,
+                    CornerRadius = new CornerRadius(15),
+                };
+                backBtn.Click += (s, e) => CloseWebAlbumPilot();
+                CelesteWebHostGrid.Children.Add(backBtn);
+                _celesteWebBackButton = backBtn;
+
                 // ⚠ 别在这里钉 Width/Height=0：第 3 步起这层是要真的显示页面的，
                 //   钉死尺寸就永远看不见了。平时靠 CelesteWebHostGrid 的 Collapsed 藏住。
 
@@ -95,6 +119,13 @@ namespace CelesteMusicPlayer
                 //   TryGetWebMessageAsString() 读不出字符串（探针实测 50/50 失败）。
                 //   所以业务消息一律「字符串 JSON」，C# 侧自己反序列化。
                 cv.WebMessageReceived += CelesteWebOnMessageReceived;
+
+                // ---- 故障可见性：浏览器进程死没死、导航成没成，日志里必须留痕 ----
+                // "关掉试点后再打不开"的成因推定：浏览器进程崩溃后 CoreWebView2
+                // 会变成 null，而 ProcessFailed 一定先于它触发。用户手测后看这两行
+                // 就能分清是页面没渲染、宿主坏了、还是消息没到。
+                cv.NavigationCompleted += OnCelesteWebNavigationCompleted;
+                cv.ProcessFailed += OnCelesteWebProcessFailed;
 
                 // ---- 本地资源映射：封面等文件走虚拟域名，不用 file:// ----
                 // file:// 会有跨域和权限一堆坑；映射成 http://celeste.local/ 后同源策略正常。
@@ -137,7 +168,9 @@ namespace CelesteMusicPlayer
             {
                 // 纯降级：Web 前端不可用时，详情页继续走原生版，程序照常用
                 StartupLog.WriteException("PrewarmCelesteWeb", ex);
-                if (_celesteWeb != null) CleanupCelesteWeb(_celesteWeb);
+                // 用局部 web 而不是字段：异常发生在中途时字段还是 null，
+                // 但局部这个实例已经挂进视觉树了，必须拆掉，不然每次都漏一个
+                CleanupCelesteWeb(web);
             }
             finally
             {
@@ -147,11 +180,42 @@ namespace CelesteMusicPlayer
 
         private void CleanupCelesteWeb(WebView2? web)
         {
-            if (web?.CoreWebView2 != null) web.CoreWebView2.WebMessageReceived -= CelesteWebOnMessageReceived;
+            if (web?.CoreWebView2 != null)
+            {
+                web.CoreWebView2.WebMessageReceived -= CelesteWebOnMessageReceived;
+                web.CoreWebView2.NavigationCompleted -= OnCelesteWebNavigationCompleted;
+                web.CoreWebView2.ProcessFailed -= OnCelesteWebProcessFailed;
+            }
             if (CelesteWebHostGrid != null && web != null) CelesteWebHostGrid.Children.Remove(web);
+            if (CelesteWebHostGrid != null && _celesteWebBackButton != null)
+            {
+                CelesteWebHostGrid.Children.Remove(_celesteWebBackButton);
+                _celesteWebBackButton = null;
+            }
             web?.Close();
             _celesteWeb = null;
             _celesteWebReady = false;
+        }
+
+        /// <summary>每次导航的成败都记一行：http=0 + success=false = 页面根本没加载出来。</summary>
+        private void OnCelesteWebNavigationCompleted(
+            Microsoft.Web.WebView2.Core.CoreWebView2 sender,
+            Microsoft.Web.WebView2.Core.CoreWebView2NavigationCompletedEventArgs e)
+        {
+            StartupLog.Write(
+                $"[WebView2] 导航完成 success={e.IsSuccess} http={e.HttpStatusCode} err={e.WebErrorStatus}");
+        }
+
+        /// <summary>
+        /// 浏览器进程崩溃/无响应。ProcessFailedKind=BrowserProcessExited 之后
+        /// CoreWebView2 会变 null——"关掉后再打不开"就是这条路径，重建即可恢复。
+        /// </summary>
+        private void OnCelesteWebProcessFailed(
+            Microsoft.Web.WebView2.Core.CoreWebView2 sender,
+            Microsoft.Web.WebView2.Core.CoreWebView2ProcessFailedEventArgs e)
+        {
+            StartupLog.Write(
+                $"[WebView2] 进程失败 kind={e.ProcessFailedKind} reason={e.Reason} exit={e.ExitCode} desc={e.ProcessDescription}");
         }
 
         /// <summary>
@@ -227,6 +291,11 @@ namespace CelesteMusicPlayer
             try { msg = JsonSerializer.Deserialize<WebInboundMessage>(raw); }
             catch { return; }   // 网页发了非法 JSON：静默丢弃，不让一个坏消息影响程序
             if (msg == null || string.IsNullOrWhiteSpace(msg.Kind)) return;
+
+            // 每条上行消息都记账：网页"点了没反应"时，先看这里有没有记录——
+            // 有记录 = C# 收到了、问题在后续处理；没记录 = 消息根本没发出来。
+            string brief = raw.Length > 96 ? raw.Substring(0, 96) + "…" : raw;
+            StartupLog.Write($"[Web试点] ↑ {msg.Kind} | {brief}");
 
             try { CelesteWebHandleMessage(msg); }
             catch (Exception ex) { StartupLog.WriteException("CelesteWebHandleMessage:" + msg.Kind, ex); }

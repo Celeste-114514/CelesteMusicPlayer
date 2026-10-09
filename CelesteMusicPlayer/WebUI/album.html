@@ -211,12 +211,40 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
    C# → 网页：data / now / theme
    网页 → C#：ready / play / pause / resume / next / prev / seek / volume / love / exit   */
 (function(){
-  var post = function(msg){
-    try{
-      if (window.chrome && window.chrome.webview)
-        window.chrome.webview.postMessage(JSON.stringify(msg));
-    }catch(e){}
+  /* ---------- WebView2 宿主对象就绪等待 ----------
+     偶发竞态：页面脚本执行时 window.chrome.webview 可能还没注入完，直接访问会抛
+     TypeError，把后面整段脚本（含消息监听、就绪上报）一起带走——表现为"页面看着
+     正常，点什么都没反应"。统一走 whenWv：没就位就排队，就位后按顺序补执行。 */
+  var wvWaiters = [], wvReady = false;
+  var pumpWv = function(){
+    if (window.chrome && window.chrome.webview){
+      wvReady = true;
+      var list = wvWaiters; wvWaiters = [];
+      for (var i = 0; i < list.length; i++){ try { list[i](); } catch (e) {} }
+      return true;
+    }
+    return false;
   };
+  var whenWv = function(fn){
+    if (wvReady || pumpWv()) { try { fn(); } catch (e) {} }
+    else wvWaiters.push(fn);
+  };
+  if (!pumpWv()){
+    var wvT0 = Date.now();
+    var wvTimer = setInterval(function(){
+      if (pumpWv() || Date.now() - wvT0 > 10000) clearInterval(wvTimer);
+    }, 50);
+  }
+
+  /* ---------- 上行：网页 → C#（宿主没就位时先攒着，不丢消息） ---------- */
+  var postQueue = [];
+  var flushPost = function(){
+    while (postQueue.length && window.chrome && window.chrome.webview){
+      var m = postQueue.shift();
+      try { window.chrome.webview.postMessage(JSON.stringify(m)); } catch (e) {}
+    }
+  };
+  var post = function(msg){ postQueue.push(msg); whenWv(flushPost); };
   var applyTheme = function(css){
     var s = document.getElementById('__celeste_theme');
     if (!s){ s = document.createElement('style'); s.id='__celeste_theme'; document.head.appendChild(s); }
@@ -327,8 +355,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   }
   $('vol').addEventListener('click', volFrom);
 
-  /* ---------- 收 C# 的消息 ---------- */
-  window.chrome.webview.addEventListener('message', function(e){
+  /* ---------- 收 C# 的消息（等宿主对象就位再挂，别让竞态把监听带走） ---------- */
+  whenWv(function(){
+    window.chrome.webview.addEventListener('message', function(e){
     var m;
     try{ m = JSON.parse(e.data); }catch(err){ return; }
     if (!m || !m.kind) return;
@@ -364,6 +393,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
         if (typeof m.index === 'number'){ S.love[m.index] = !!m.on; paintRows(); }
         break;
     }
+  });
   });
 
   /* ---------- 就绪 ---------- */
