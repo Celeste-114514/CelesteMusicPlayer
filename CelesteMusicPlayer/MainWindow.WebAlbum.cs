@@ -122,7 +122,7 @@ namespace CelesteMusicPlayer
                     try { _celesteWeb.Focus(Microsoft.UI.Xaml.FocusState.Programmatic); }
                     catch { /* 聚焦失败不致命，照常打开 */ }
                 }
-                if (_celesteWebBackButton != null) _celesteWebBackButton.Visibility = Visibility.Visible;
+                if (_celesteWebBackButton != null) _celesteWebBackButton.Visibility = Visibility.Collapsed;
                 _webPilotOpen = true;
 
                 // 上面已经判过 _celesteWeb?.CoreWebView2 != null，这里编译器不知道，用 ! 说明
@@ -355,6 +355,11 @@ namespace CelesteMusicPlayer
                     CloseWebAlbumPilot();
                     break;
 
+                case "covererr":
+                    // 网页封面图 <img onerror> 上报：URL 是空的还是图裂了，日志能直接分清
+                    StartupLog.Write($"[Web试点] 封面图片加载失败 src={ReadStr(msg.Payload, "src")}");
+                    break;
+
                 default:
                     StartupLog.Write($"[Web试点] 未处理的消息 kind={msg.Kind}");
                     break;
@@ -404,6 +409,10 @@ namespace CelesteMusicPlayer
                     ? album.Year.ToString(CultureInfo.InvariantCulture) : "",
                 ["cover"] = cover,
             };
+
+            // 封面 URL 记账（空也记）：用户实测"封面没出来"时，
+            // 靠这行 + 网页 covererr 上报二分定位是没生成还是图裂
+            StartupLog.Write($"[Web试点] 专辑封面 URL={(string.IsNullOrEmpty(cover) ? "(空)" : cover)}");
 
             await PostCelesteWebAsync(new Dictionary<string, object?>
             {

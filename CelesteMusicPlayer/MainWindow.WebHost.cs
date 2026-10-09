@@ -81,6 +81,8 @@ namespace CelesteMusicPlayer
                 var backBtn = new Microsoft.UI.Xaml.Controls.Button
                 {
                     Content = "‹ 返回原界面",
+                    // 2026-10-09 用户要求：去掉右上角返回按钮，只留网页左上角的。
+                    // 按钮保留在树上（关闭逻辑还在用），但平时不显示。
                     Visibility = Visibility.Collapsed,
                     Margin = new Thickness(0, 12, 12, 0),
                     Padding = new Thickness(12, 4, 12, 4),

@@ -46,6 +46,9 @@ namespace CelesteMusicPlayer
         /// （2026-10-09 用户实测"加载巨慢最后卡死"）。</summary>
         private bool _webMainPushing;
 
+        /// <summary>格式胶囊（编码器/位深·采样率/码率）后台预热标志：同一份快照只预热一次。</summary>
+        private bool _webMainChipsWarm;
+
         /// <summary>
         /// 侧栏分类清单：照原生侧栏原样保留（CategoryNavPanel 13 项 + NavToolPanel 3 项），
         /// id 与原生按钮 Tag 一致。只有 Songs 有数据（ok=true），其余点一下只显示占位。
@@ -92,7 +95,7 @@ namespace CelesteMusicPlayer
                     try { _celesteWeb.Focus(Microsoft.UI.Xaml.FocusState.Programmatic); }
                     catch { /* 聚焦失败不致命，照常打开 */ }
                 }
-                if (_celesteWebBackButton != null) _celesteWebBackButton.Visibility = Visibility.Visible;
+                if (_celesteWebBackButton != null) _celesteWebBackButton.Visibility = Visibility.Collapsed;
                 _webMainOpen = true;
 
                 var cv = _celesteWeb!.CoreWebView2;
@@ -305,10 +308,29 @@ namespace CelesteMusicPlayer
                     CloseWebMain();
                     break;
 
+                case "covererr":
+                    // 网页封面图 <img onerror> 上报：URL 是空的还是图裂了，日志能直接分清
+                    StartupLog.Write($"[Web主界面] 封面图片加载失败 src={ReadStr(msg.Payload, "src")}");
+                    break;
+
                 default:
                     StartupLog.Write($"[Web主界面] 未处理的消息 kind={msg.Kind}");
                     break;
             }
+        }
+
+        /// <summary>从消息里读一个字符串字段（读不到返回空串）。封面诊断用。</summary>
+        private static string ReadStr(JsonElement payload, string name)
+        {
+            try
+            {
+                if (payload.ValueKind == JsonValueKind.Object &&
+                    payload.TryGetProperty(name, out var v) &&
+                    v.ValueKind == JsonValueKind.String)
+                    return v.GetString() ?? "";
+            }
+            catch { /* 读不到按空串 */ }
+            return "";
         }
 
         /// <summary>
@@ -413,6 +435,64 @@ namespace CelesteMusicPlayer
 
             // 数据到了紧接着推一次播放状态，网页不用等下一个 tick
             await PostCelesteWebAsync(BuildWebMainNowMessage());
+
+            // 格式胶囊（编码器/位深·采样率/码率）后台预热：首次访问要开文件读，
+            // 云盘曲库下同步算会把 UI 线程卡死——先出列表，胶囊陆续补。
+            _webMainChipsWarm = false;
+            _ = PrewarmWebMainChipsAsync();
+        }
+
+        /// <summary>
+        /// 后台预热格式胶囊，算好一批推一批（kind=chips，网页按歌曲下标更新行的胶囊区）。
+        /// 走静态 AudioInfoFormatter.FormatChips（内部 ConcurrentDictionary 缓存，线程安全），
+        /// 不走 PlaylistItem.FormatChips 实例属性（那个的懒缓存不是并发安全的）。
+        /// 文件读在后台线程，发送切回 UI 线程（PostWebMessageAsString 线程亲和）。
+        /// </summary>
+        private async Task PrewarmWebMainChipsAsync()
+        {
+            if (_webMainChipsWarm) return;
+            _webMainChipsWarm = true;
+            try
+            {
+                const int BATCH = 200;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                int done = 0;
+                while (done < _webMainSongs.Count)
+                {
+                    if (!_webMainOpen) break;
+                    int end = Math.Min(done + BATCH, _webMainSongs.Count);
+                    var items = new List<object>();
+                    for (int i = done; i < end; i++)
+                    {
+                        var chips = AudioInfoFormatter.FormatChips(_webMainSongs[i].FilePath);
+                        var arr = new List<string>();
+                        for (int c = 0; c < chips.Count; c++) arr.Add(chips[c]);
+                        items.Add(new Dictionary<string, object?>
+                        {
+                            ["i"] = i,
+                            ["c"] = arr,
+                        });
+                    }
+                    var payload = new Dictionary<string, object?>
+                    {
+                        ["kind"] = "chips",
+                        ["items"] = items,
+                    };
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_webMainOpen) _ = PostCelesteWebAsync(payload);
+                    });
+                    done = end;
+                    if (done % 1000 < BATCH || done >= _webMainSongs.Count)
+                        StartupLog.Write($"[Web主界面] 格式胶囊预热 {done}/{_webMainSongs.Count}（{sw.ElapsedMilliseconds} ms）");
+                    await Task.Delay(30);
+                }
+                StartupLog.Write($"[Web主界面] 格式胶囊预热完成，耗时 {sw.ElapsedMilliseconds} ms");
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("PrewarmWebMainChips", ex);
+            }
         }
 
         /// <summary>每秒推送给网页的播放状态。字段名与 main.html 的 'now' 分支对应。</summary>
@@ -461,6 +541,8 @@ namespace CelesteMusicPlayer
                         _webMainCoverCache[_nowPlayingPath] = cover;
                     }
                     if (!string.IsNullOrEmpty(cover)) msg["cover"] = cover;
+                    // 换曲记一次封面 URL（空也记）：网页图裂时靠这行 + covererr 二分定位
+                    StartupLog.Write($"[Web主界面] 播放条封面 URL={(string.IsNullOrEmpty(cover) ? "(空)" : cover)}");
 
                     // 正在播的曲子不在当前快照里（idx<0，比如从别的分类/原生界面播的）时，
                     // 网页自己的列表里找不到它——把曲目信息一起带过去，播放条才不至于空着。

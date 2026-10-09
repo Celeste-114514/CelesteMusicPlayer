@@ -268,6 +268,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     }
   };
   var post = function(msg){ postQueue.push(msg); whenWv(flushPost); };
+  /* 封面图加载失败上报：URL 是空的还是图裂了，C# 日志能直接分清 */
+  var postCoverErr = function(src){ post({kind:'covererr', src:src}); };
   var applyTheme = function(css){
     var s = document.getElementById('__celeste_theme');
     if (!s){ s = document.createElement('style'); s.id='__celeste_theme'; document.head.appendChild(s); }
@@ -336,18 +338,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 
   /* ---------- 歌曲列表（分批渲染：3609 首一次进 DOM 会卡首屏） ----------
      C# 侧也按 400 首一块推（一次性发 1MB+ 会把 WebView2 渲染进程压死），
-     所以这里 renderRows（全量重画）和 appendRows（只追加新块）分开。 */
+     所以这里 renderRows（全量重画）和 appendRows（只追加新块）分开。
+     格式胶囊（编码器/位深·采样率/码率）由 C# 后台预热算好后按 kind=chips 增量补。 */
   var BATCH = 300;
-  var LOSSLESS = {FLAC:1, APE:1, WAV:1, WV:1, TTA:1, TAK:1, AIFF:1, AIF:1};
   var pumping = false;   // 分批追加链进行中标志：防止滚动/追加把链跑重
   function songRow(si){
     var t = S.songs[si];
     if (!t) return '';
     var on = (si === S.cur);
-    var chips = '';
-    if (t.dsd) chips += '<span class="chip hi">DSD</span>';
-    else if (t.fmt && LOSSLESS[t.fmt]) chips += '<span class="chip">无损</span>';
-    if (t.fmt) chips += '<span class="chip">' + esc(t.fmt) + '</span>';
+    var chips = chipsHtml(t);
     var loved = !!S.love[si];
     return '<div class="row' + (on ? ' on' : '') + '" data-s="' + si + '">'
          +   '<div class="n">' + (on ? '&#9834;' : (si + 1)) + '</div>'
@@ -361,6 +360,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
          +   '<button class="fav' + (loved ? ' on' : '') + '" data-fav="' + si + '" title="收藏">'
          +     (loved ? '&#10084;' : '&#9825;') + '</button>'
          + '</div>';
+  }
+  /* 格式胶囊：DSD 徽章（扩展名零成本，先有）+ C# 预热补的三段
+     （编码器 / 位深·采样率 / 码率，对齐原生歌曲面板第三行）。 */
+  function chipsHtml(t){
+    var h = '';
+    if (t.dsd) h += '<span class="chip hi">DSD</span>';
+    if (t.chips) for (var k = 0; k < t.chips.length; k++)
+      h += '<span class="chip">' + esc(t.chips[k]) + '</span>';
+    return h;
   }
   function applyFilter(){
     var q = ($('q').value || '').trim().toLowerCase();
@@ -533,6 +541,32 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
             paintHeader();
           }
           break;
+        case 'chips':
+          // C# 后台预热算好的格式胶囊：按歌曲下标更新（行已渲染就改 DOM，没渲染就存着等渲染）
+          if (m.items){
+            for (var k = 0; k < m.items.length; k++){
+              var it = m.items[k];
+              var t = S.songs[it.i];
+              if (!t) continue;
+              t.chips = it.c || [];
+              var row = $('rows').querySelector('.row[data-s="' + it.i + '"]');
+              if (row){
+                var html = chipsHtml(t);
+                var box = row.querySelector('.chips');
+                if (html){
+                  if (box) box.innerHTML = html;
+                  else {
+                    box = document.createElement('div');
+                    box.className = 'chips';
+                    box.innerHTML = html;
+                    var cell = row.querySelector('.m');
+                    if (cell) cell.appendChild(box);
+                  }
+                } else if (box) { box.innerHTML = ''; }
+              }
+            }
+          }
+          break;
         case 'nav':
           S.page = m.id;
           var cat = null;
@@ -552,7 +586,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           if (typeof m.position === 'number') S.pos = m.position;
           if (typeof m.duration === 'number') S.dur = m.duration;
           if (typeof m.volume === 'number') S.vol = m.volume;
-          if (m.cover) $('pbCov').innerHTML = '<img src="' + m.cover + '" alt="">';
+          if (m.cover) $('pbCov').innerHTML = '<img src="' + m.cover + '" alt="" onerror="postCoverErr(this.src)">';
           // 换曲时 C# 带来的曲目信息：正在播的曲子不在当前列表里时，播放条靠它显示
           if (m.track) S.ext = m.track;
           // 收藏态只动正在播那一行，不整表重画（这条消息每秒来）

@@ -245,6 +245,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     }
   };
   var post = function(msg){ postQueue.push(msg); whenWv(flushPost); };
+  /* 封面图加载失败上报：URL 是空的还是图裂了，C# 日志能直接分清 */
+  var postCoverErr = function(src){ post({kind:'covererr', src:src}); };
   var applyTheme = function(css){
     var s = document.getElementById('__celeste_theme');
     if (!s){ s = document.createElement('style'); s.id='__celeste_theme'; document.head.appendChild(s); }
@@ -274,7 +276,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       if (t.hires) chips += '<span class="chip hi">Hi-Res</span>';
       if (t.fmt) chips += '<span class="chip">'+esc(t.fmt)+'</span>';
       var cov = t.cover
-        ? '<img src="'+t.cover+'" alt="">'
+        ? '<img src="'+t.cover+'" alt="" onerror="postCoverErr(this.src)">'
         : esc((t.title||'?').slice(0,1));
       html += '<div class="row'+(on?' on':'')+'" data-i="'+i+'">'
             +   '<div class="n">'+(on?'&#9834;':(t.n||i+1))+'</div>'
@@ -301,7 +303,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     if (a.year) sub.push(a.year);
     sub.push(S.tracks.length + ' 首');
     $('hdrSub').textContent = sub.join(' · ');
-    var c = a.cover ? '<img src="'+a.cover+'" alt="">' : esc((a.name||'?').slice(0,1));
+    var c = a.cover ? '<img src="'+a.cover+'" alt="" onerror="postCoverErr(this.src)">' : esc((a.name||'?').slice(0,1));
     $('hdrCov').innerHTML = c;
   }
   function paintPlaybar(){
@@ -309,7 +311,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     $('pbTitle').textContent = t ? t.title : '未在播放';
     $('pbSub').textContent = t ? ((t.artist||'') + (S.album&&S.album.name?' · '+S.album.name:'')) : '';
     $('pbCov').innerHTML = t && t.cover
-      ? '<img src="'+t.cover+'" alt="">'
+      ? '<img src="'+t.cover+'" alt="" onerror="postCoverErr(this.src)">'
       : (t ? esc((t.title||'?').slice(0,1)) : '');
     $('btnPlay').innerHTML = S.playing ? '&#10073;&#10073;' : '&#9654;';
     $('tmCur').textContent = mmss(S.pos);
