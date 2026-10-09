@@ -178,7 +178,7 @@
                 Spacing="4"
                 VerticalAlignment="Center"
                 Margin="0,0,8,0">
-                <Button
+                <Button CornerRadius="16"
                     x:Name="AudioSettingsButton"
                     Width="34"
                     Height="32"
@@ -189,7 +189,7 @@
                     ToolTipService.ToolTip="音频设置">
                     <FontIcon Glyph="&#xE91F;" FontSize="15" />
                 </Button>
-                <Button
+                <Button CornerRadius="16"
                     x:Name="SelectLocalAudioButton"
                     Width="34"
                     Height="32"
@@ -200,7 +200,7 @@
                     ToolTipService.ToolTip="选项">
                     <FontIcon Glyph="&#xE700;" FontSize="16" />
                 </Button>
-                <Button
+                <Button CornerRadius="16"
                     x:Name="RefreshCurrentPageButton"
                     Width="34"
                     Height="32"
@@ -211,7 +211,7 @@
                     ToolTipService.ToolTip="刷新当前页面">
                     <FontIcon Glyph="&#xE72C;" FontSize="15" />
                 </Button>
-                <Button
+                <Button CornerRadius="16"
                     x:Name="FullScreenButton"
                     Width="34"
                     Height="32"
@@ -229,7 +229,7 @@
                     VerticalAlignment="Center"
                     Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
                 <!-- 自绘系统按钮（无边框窗口） -->
-                <Button
+                <Button CornerRadius="16"
                     x:Name="WindowMinButton"
                     Width="34"
                     Height="32"
@@ -240,7 +240,7 @@
                     ToolTipService.ToolTip="最小化">
                     <FontIcon Glyph="&#xE921;" FontSize="15" />
                 </Button>
-                <Button
+                <Button CornerRadius="16"
                     x:Name="WindowMaxRestoreButton"
                     Width="34"
                     Height="32"
@@ -251,7 +251,7 @@
                     ToolTipService.ToolTip="最大化 / 还原">
                     <FontIcon x:Name="WindowMaxRestoreIcon" Glyph="&#xE922;" FontSize="13" />
                 </Button>
-                <Button
+                <Button CornerRadius="16"
                     x:Name="WindowCloseButton"
                     Width="34"
                     Height="32"
@@ -863,7 +863,7 @@
                             Spacing="8"
                             VerticalAlignment="Center"
                             Visibility="Collapsed">
-                            <Button
+                            <Button CornerRadius="16"
                                 x:Name="ExitMultiSelectButton"
                                 Width="36"
                                 Height="32"
@@ -929,7 +929,7 @@
                                 Text="0/0"
                                 MinWidth="36"
                                 TextAlignment="Center" />
-                            <Button
+                            <Button CornerRadius="16"
                                 x:Name="FolderSearchPrevButton"
                                 Width="28"
                                 Height="28"
@@ -940,7 +940,7 @@
                                 ToolTipService.ToolTip="上一个结果">
                                 <FontIcon Glyph="&#xE70E;" FontSize="12" />
                             </Button>
-                            <Button
+                            <Button CornerRadius="16"
                                 x:Name="FolderSearchNextButton"
                                 Width="28"
                                 Height="28"
@@ -1011,7 +1011,7 @@
                                 </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="SortOrderButton"
                             Height="32"
                             MinWidth="72"
@@ -1023,7 +1023,7 @@
                                 <TextBlock x:Name="SortOrderText" Text="升序" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="ChangeSortButton"
                             Height="32"
                             Padding="14,0"
@@ -1090,7 +1090,7 @@
                                 </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="AlbumSortOrderButton"
                             Height="32"
                             MinWidth="64"
@@ -1951,7 +1951,7 @@
                                 Margin="0,0,0,4"
                                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                                 BorderThickness="0,0,0,1">
-                                <Button
+                                <Button CornerRadius="16"
                                     x:Name="AlbumDetailBackButton"
                                     Content="← 返回专辑"
                                     HorizontalAlignment="Left"
@@ -2339,7 +2339,7 @@
                                 Margin="0,0,0,4"
                                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                                 BorderThickness="0,0,0,1">
-                                <Button
+                                <Button CornerRadius="16"
                                     x:Name="ArtistDetailBackButton"
                                     Content="← 返回艺术家"
                                     HorizontalAlignment="Left"
@@ -2488,7 +2488,7 @@
                                                     Click="AddArtistSongsToPlaylistButton_Click"
                                                     ToolTipService.ToolTip="按当前排序添加到播放队列" />
                                             </StackPanel>
-                                            <Button
+                                            <Button CornerRadius="16"
                                                 x:Name="ArtistSongSortButton"
                                                 Content="排序：标题"
                                                 HorizontalAlignment="Right"
@@ -2819,7 +2819,7 @@
                                     FontSize="20"
                                     FontWeight="SemiBold"
                                     Text="媒体库" />
-                                <Button
+                                <Button CornerRadius="16"
                                     x:Name="RefreshMediaFoldersButton"
                                     Grid.Column="1"
                                     Width="34"
@@ -3084,7 +3084,7 @@
                             <TextBlock Text="分类：" VerticalAlignment="Center" Opacity="0.7" FontSize="13" />
                             <StackPanel x:Name="TagSortFieldButtonsPanel" Orientation="Horizontal" Spacing="6" />
                             <!-- 常态化显示：直接从分类墙进入分组浏览，不藏到底部溢出条 -->
-                            <Button x:Name="TagSortGoGroupButton"
+                            <Button CornerRadius="16" x:Name="TagSortGoGroupButton"
                                     Content="分组浏览"
                                     Padding="12,4"
                                     Height="32"
@@ -3140,7 +3140,7 @@
                                                    Opacity="0.85"
                                                    FontSize="13" />
                                         <StackPanel Orientation="Horizontal" Spacing="8">
-                                            <Button x:Name="TagSortClassWallLoadMoreButton"
+                                            <Button CornerRadius="16" x:Name="TagSortClassWallLoadMoreButton"
                                                     Content="加载更多"
                                                     Padding="12,4"
                                                     Click="TagSortClassWallLoadMoreButton_Click" />
@@ -3271,7 +3271,7 @@
                                         <ToggleButton x:Name="TagSortDescButton" Content="降序"
                                                       Click="TagSortOrderClick" />
                                     </StackPanel>
-                                    <Button Content="自定义排序…" Click="TagSortCustomSortButton_Click" />
+                                    <Button CornerRadius="16" Content="自定义排序…" Click="TagSortCustomSortButton_Click" />
                                     <TextBlock x:Name="TagSortSortStatusText" Opacity="0.7" Text="" TextWrapping="WrapWholeWords" />
                                 </StackPanel>
 
@@ -3294,9 +3294,9 @@
                                             <ComboBoxItem Content="年份 / 专辑" Tag="Year,Album" />
                                             <ComboBoxItem Content="格式 / 位深采样率" Tag="Format,DepthRate" />
                                         </ComboBox>
-                                        <Button Content="自定义…" Padding="12,4" Click="TagSortGroupCustomButton_Click" />
-                                        <Button Content="全部展开" Click="TagSortGroupExpandAll_Click" />
-                                        <Button Content="全部折叠" Click="TagSortGroupCollapseAll_Click" />
+                                        <Button CornerRadius="16" Content="自定义…" Padding="12,4" Click="TagSortGroupCustomButton_Click" />
+                                        <Button CornerRadius="16" Content="全部展开" Click="TagSortGroupExpandAll_Click" />
+                                        <Button CornerRadius="16" Content="全部折叠" Click="TagSortGroupCollapseAll_Click" />
                                     </StackPanel>
                                     <Grid Grid.Row="1">
                                         <ListView
@@ -3636,7 +3636,7 @@
                                                         MaxLength="40"
                                                         VerticalContentAlignment="Center"
                                                         PlaceholderText="给这套设置起个名字，比如：夜间耳机、客厅音箱" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="DspProfileSaveButton"
                                                         Grid.Column="1"
                                                         Content="保存为方案"
@@ -3671,18 +3671,18 @@
                                                     CornerRadius="6"
                                                     SelectionChanged="DspProfileList_SelectionChanged" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="DspProfileApplyButton"
                                                         Content="应用方案"
                                                         IsEnabled="False"
                                                         Style="{StaticResource AccentButtonStyle}"
                                                         Click="DspProfileApply_Click" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="DspProfileUpdateButton"
                                                         Content="更新为当前设置"
                                                         IsEnabled="False"
                                                         Click="DspProfileUpdate_Click" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="DspProfileDeleteButton"
                                                         Content="删除方案"
                                                         IsEnabled="False"
@@ -3848,25 +3848,25 @@
                                                     TextWrapping="WrapWholeWords"
                                                     Text="0 dB = 不动电平；负值越大越安全，但整体音量会下降。开了 EQ 或卷积一般建议留 -3 ~ -6 dB。" />
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         Click="DspHeadroomPreset_Click"
                                                         Content="0 dB"
                                                         Tag="0"
                                                         MinWidth="64"
                                                         Padding="10,5" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         Click="DspHeadroomPreset_Click"
                                                         Content="-3 dB"
                                                         Tag="-3"
                                                         MinWidth="64"
                                                         Padding="10,5" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         Click="DspHeadroomPreset_Click"
                                                         Content="-6 dB"
                                                         Tag="-6"
                                                         MinWidth="64"
                                                         Padding="10,5" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         Click="DspHeadroomPreset_Click"
                                                         Content="-9 dB"
                                                         Tag="-9"
@@ -4053,7 +4053,7 @@
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="*" />
                                                     </Grid.ColumnDefinitions>
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         Grid.Column="0"
                                                         Tag="off"
                                                         HorizontalAlignment="Stretch"
@@ -4069,7 +4069,7 @@
                                                                 Text="原采样率直出，一个字节都不改" />
                                                         </StackPanel>
                                                     </Button>
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         Grid.Column="1"
                                                         Tag="integer"
                                                         HorizontalAlignment="Stretch"
@@ -4085,7 +4085,7 @@
                                                                 Text="44.1 上 88.2 这种，滤波器最省事" />
                                                         </StackPanel>
                                                     </Button>
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         Grid.Column="2"
                                                         Tag="fixed96"
                                                         HorizontalAlignment="Stretch"
@@ -4369,17 +4369,17 @@
                                                 </StackPanel>
                                                 <!-- 工具栏：撤销/重做 + A/B 对比 + 自动增益 + 频段管理 + APO 互通 -->
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="AudioFxEqUndoButton"
                                                         Content="撤销"
                                                         ToolTipService.ToolTip="撤销上一步曲线修改"
                                                         Click="AudioFxEqUndo_Click" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="AudioFxEqRedoButton"
                                                         Content="重做"
                                                         ToolTipService.ToolTip="恢复被撤销的曲线修改"
                                                         Click="AudioFxEqRedo_Click" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="AudioFxEqAbButton"
                                                         Content="A/B 对比"
                                                         ToolTipService.ToolTip="把当前曲线存为 B，之后随时改曲线，再点此按钮在 A/B 两条曲线间切换试听"
@@ -4390,25 +4390,25 @@
                                                         IsChecked="True"
                                                         ToolTipService.ToolTip="曲线后面叠加实时频谱（post-DSP，播放中生效）"
                                                         Click="AudioFxEqSpectrum_Click" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="AudioFxEqAutoGainButton"
                                                         Content="自动增益"
                                                         Click="AudioFxEqAutoGain_Click" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="AudioFxEqAddBandButton"
                                                         Content="＋ 添加段"
                                                         Click="AudioFxEqAddBand_Click" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="AudioFxEqSavePresetButton"
                                                         Content="保存预设"
                                                         ToolTipService.ToolTip="把当前曲线保存为你命名的预设"
                                                         Click="AudioFxEqSavePreset_Click" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="AudioFxEqImportApoButton"
                                                         Content="导入 APO"
                                                         ToolTipService.ToolTip="读取 Equalizer APO 的 config.txt（Preamp / Filter 行），转成当前曲线"
                                                         Click="AudioFxEqImportApo_Click" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="AudioFxEqExportApoButton"
                                                         Content="导出 APO"
                                                         ToolTipService.ToolTip="把当前曲线导出为 Equalizer APO 的 config.txt"
@@ -4548,7 +4548,7 @@
                                                         OffContent=""
                                                         VerticalAlignment="Center"
                                                         Toggled="AudioFxEqBandEnable_Toggled" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         Grid.Column="5"
                                                         Content="删除段"
                                                         VerticalAlignment="Center"
@@ -4562,21 +4562,21 @@
                                                     Visibility="Collapsed">
                                                     <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                                                         <TextBlock VerticalAlignment="Center" FontSize="11" Opacity="0.7" Text="频率" />
-                                                        <Button x:Name="AudioFxEqFreqStepDown" Content="－" Padding="8,2" Click="AudioFxEqFreqStepDown_Click" />
-                                                        <Button x:Name="AudioFxEqFreqStepUp" Content="＋" Padding="8,2" Click="AudioFxEqFreqStepUp_Click" />
+                                                        <Button CornerRadius="16" x:Name="AudioFxEqFreqStepDown" Content="－" Padding="8,2" Click="AudioFxEqFreqStepDown_Click" />
+                                                        <Button CornerRadius="16" x:Name="AudioFxEqFreqStepUp" Content="＋" Padding="8,2" Click="AudioFxEqFreqStepUp_Click" />
                                                     </StackPanel>
                                                     <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                                                         <TextBlock VerticalAlignment="Center" FontSize="11" Opacity="0.7" Text="增益" />
-                                                        <Button x:Name="AudioFxEqGainStepDown05" Content="−0.5" Padding="8,2" Click="AudioFxEqGainStepDown05_Click" />
-                                                        <Button x:Name="AudioFxEqGainStepDown01" Content="−0.1" Padding="8,2" Click="AudioFxEqGainStepDown01_Click" />
-                                                        <Button x:Name="AudioFxEqGainStepUp01" Content="+0.1" Padding="8,2" Click="AudioFxEqGainStepUp01_Click" />
-                                                        <Button x:Name="AudioFxEqGainStepUp05" Content="+0.5" Padding="8,2" Click="AudioFxEqGainStepUp05_Click" />
+                                                        <Button CornerRadius="16" x:Name="AudioFxEqGainStepDown05" Content="−0.5" Padding="8,2" Click="AudioFxEqGainStepDown05_Click" />
+                                                        <Button CornerRadius="16" x:Name="AudioFxEqGainStepDown01" Content="−0.1" Padding="8,2" Click="AudioFxEqGainStepDown01_Click" />
+                                                        <Button CornerRadius="16" x:Name="AudioFxEqGainStepUp01" Content="+0.1" Padding="8,2" Click="AudioFxEqGainStepUp01_Click" />
+                                                        <Button CornerRadius="16" x:Name="AudioFxEqGainStepUp05" Content="+0.5" Padding="8,2" Click="AudioFxEqGainStepUp05_Click" />
                                                     </StackPanel>
                                                     <StackPanel Orientation="Horizontal" Spacing="4" VerticalAlignment="Center">
                                                         <TextBlock VerticalAlignment="Center" FontSize="11" Opacity="0.7" Text="Q" />
-                                                        <Button x:Name="AudioFxEqQWide" Content="宽" Padding="8,2" Click="AudioFxEqQWide_Click" />
-                                                        <Button x:Name="AudioFxEqQNormal" Content="中" Padding="8,2" Click="AudioFxEqQNormal_Click" />
-                                                        <Button x:Name="AudioFxEqQNarrow" Content="窄" Padding="8,2" Click="AudioFxEqQNarrow_Click" />
+                                                        <Button CornerRadius="16" x:Name="AudioFxEqQWide" Content="宽" Padding="8,2" Click="AudioFxEqQWide_Click" />
+                                                        <Button CornerRadius="16" x:Name="AudioFxEqQNormal" Content="中" Padding="8,2" Click="AudioFxEqQNormal_Click" />
+                                                        <Button CornerRadius="16" x:Name="AudioFxEqQNarrow" Content="窄" Padding="8,2" Click="AudioFxEqQNarrow_Click" />
                                                     </StackPanel>
                                                 </StackPanel>
                                                 <!-- 简单模式面板 -->
@@ -4614,7 +4614,7 @@
                                                         StepFrequency="0.05"
                                                         ValueChanged="AudioFxEqSimple_ValueChanged" />
                                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                                        <Button Content="平坦" Click="AudioFxEqSimpleFlat_Click" />
+                                                        <Button CornerRadius="16" Content="平坦" Click="AudioFxEqSimpleFlat_Click" />
                                                         <TextBlock
                                                             VerticalAlignment="Center"
                                                             FontSize="11"
@@ -4624,7 +4624,7 @@
                                                 </StackPanel>
                                                 <!-- 提示 + 重置 -->
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button Content="重置 EQ" Click="AudioFxEqReset_Click" />
+                                                    <Button CornerRadius="16" Content="重置 EQ" Click="AudioFxEqReset_Click" />
                                                     <TextBlock
                                                         x:Name="AudioFxEqHintText"
                                                         VerticalAlignment="Center"
@@ -4760,7 +4760,7 @@
                                                     PlaceholderText="输入耳机品牌 / 型号，如 Sennheiser HD 600、Sony WH-1000XM5…"
                                                     VerticalContentAlignment="Center"
                                                     KeyDown="OpraSearchBox_KeyDown" />
-                                                <Button
+                                                <Button CornerRadius="16"
                                                     x:Name="OpraSearchButton"
                                                     Grid.Column="1"
                                                     Content="搜索"
@@ -4949,14 +4949,14 @@
                                                     Opacity="0.75"
                                                     TextWrapping="WrapWholeWords" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="OpraApplyButton"
                                                         Content="应用该曲线到均衡器"
                                                         HorizontalAlignment="Left"
                                                         Style="{StaticResource AccentButtonStyle}"
                                                         IsEnabled="False"
                                                         Click="OpraApplyButton_Click" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         x:Name="OpraFavoriteButton"
                                                         Content="收藏"
                                                         IsEnabled="False"
@@ -5077,7 +5077,7 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="导入测量得到的脉冲响应（IR），用真卷积做房间 / 音箱 / 耳机校正——不是 EQ 那种近似。开了输出非 bit-perfect。" />
                                                 </StackPanel>
-                                                <Button
+                                                <Button CornerRadius="16"
                                                     x:Name="OpenRoomCorrectionButton"
                                                     Grid.Column="1"
                                                     Content="打开房间校正"
@@ -5140,19 +5140,19 @@
                                                     FontWeight="SemiBold"
                                                     Text="快捷微调（trim）" />
                                                 <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         Click="DspFirTrimQuick_Click"
                                                         Content="-6 dB"
                                                         Tag="-6"
                                                         MinWidth="64"
                                                         Padding="10,5" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         Click="DspFirTrimQuick_Click"
                                                         Content="-3 dB"
                                                         Tag="-3"
                                                         MinWidth="64"
                                                         Padding="10,5" />
-                                                    <Button
+                                                    <Button CornerRadius="16"
                                                         Click="DspFirTrimQuick_Click"
                                                         Content="0 dB"
                                                         Tag="0"
@@ -5164,7 +5164,7 @@
                                                     Opacity="0.6"
                                                     TextWrapping="WrapWholeWords"
                                                     Text="卷积常把峰值顶高：先给 -6 dB 再逐步回调，是避免爆音最省事的做法。" />
-                                                <Button
+                                                <Button CornerRadius="16"
                                                     x:Name="DspFirSafeEnableButton"
                                                     HorizontalAlignment="Left"
                                                     Click="DspFirSafeEnable_Click"
@@ -5577,10 +5577,10 @@
                                                     TextWrapping="Wrap"
                                                     Text="一键铺好强度和截止，铺完照样能手动微调。" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button Content="轻微" Tag="subtle" Click="DspXfeedPreset_Click" />
-                                                    <Button Content="自然" Tag="natural" Click="DspXfeedPreset_Click" />
-                                                    <Button Content="开阔" Tag="wide" Click="DspXfeedPreset_Click" />
-                                                    <Button Content="明显" Tag="strong" Click="DspXfeedPreset_Click" />
+                                                    <Button CornerRadius="16" Content="轻微" Tag="subtle" Click="DspXfeedPreset_Click" />
+                                                    <Button CornerRadius="16" Content="自然" Tag="natural" Click="DspXfeedPreset_Click" />
+                                                    <Button CornerRadius="16" Content="开阔" Tag="wide" Click="DspXfeedPreset_Click" />
+                                                    <Button CornerRadius="16" Content="明显" Tag="strong" Click="DspXfeedPreset_Click" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
@@ -5901,7 +5901,7 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="—" />
                                                 </Grid>
-                                                <Button
+                                                <Button CornerRadius="16"
                                                     x:Name="OutMonitorResetButton"
                                                     Content="重置统计"
                                                     HorizontalAlignment="Left"
@@ -6296,15 +6296,15 @@
                                                     TextWrapping="Wrap"
                                                     Text="一键铺好七条滑杆，之后还能手动微调。" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button Content="轻度（广播感）" Tag="gentle" Click="DspCompPreset_Click" />
-                                                    <Button Content="中度（流行）" Tag="medium" Click="DspCompPreset_Click" />
-                                                    <Button Content="强压（夜间）" Tag="heavy" Click="DspCompPreset_Click" />
-                                                    <Button Content="人声" Tag="vocal" Click="DspCompPreset_Click" />
-                                                    <Button Content="乐器" Tag="drums" Click="DspCompPreset_Click" />
-                                                    <Button Content="总线" Tag="bus" Click="DspCompPreset_Click" />
+                                                    <Button CornerRadius="16" Content="轻度（广播感）" Tag="gentle" Click="DspCompPreset_Click" />
+                                                    <Button CornerRadius="16" Content="中度（流行）" Tag="medium" Click="DspCompPreset_Click" />
+                                                    <Button CornerRadius="16" Content="强压（夜间）" Tag="heavy" Click="DspCompPreset_Click" />
+                                                    <Button CornerRadius="16" Content="人声" Tag="vocal" Click="DspCompPreset_Click" />
+                                                    <Button CornerRadius="16" Content="乐器" Tag="drums" Click="DspCompPreset_Click" />
+                                                    <Button CornerRadius="16" Content="总线" Tag="bus" Click="DspCompPreset_Click" />
                                                 </StackPanel>
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button Content="恢复默认" Tag="default" Click="DspCompPreset_Click" />
+                                                    <Button CornerRadius="16" Content="恢复默认" Tag="default" Click="DspCompPreset_Click" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
@@ -6505,11 +6505,11 @@
                                                     TextWrapping="Wrap"
                                                     Text="一键铺好三个参数，铺完照样能手动微调。" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button Content="原始" Tag="flat" Click="DspFieldPreset_Click" />
-                                                    <Button Content="略加宽" Tag="wide" Click="DspFieldPreset_Click" />
-                                                    <Button Content="人声提亮" Tag="vocal" Click="DspFieldPreset_Click" />
-                                                    <Button Content="收成单声道" Tag="mono" Click="DspFieldPreset_Click" />
-                                                    <Button Content="氛围感" Tag="ambient" Click="DspFieldPreset_Click" />
+                                                    <Button CornerRadius="16" Content="原始" Tag="flat" Click="DspFieldPreset_Click" />
+                                                    <Button CornerRadius="16" Content="略加宽" Tag="wide" Click="DspFieldPreset_Click" />
+                                                    <Button CornerRadius="16" Content="人声提亮" Tag="vocal" Click="DspFieldPreset_Click" />
+                                                    <Button CornerRadius="16" Content="收成单声道" Tag="mono" Click="DspFieldPreset_Click" />
+                                                    <Button CornerRadius="16" Content="氛围感" Tag="ambient" Click="DspFieldPreset_Click" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
@@ -6696,15 +6696,15 @@
                                                     TextWrapping="Wrap"
                                                     Text="一键铺好四个系数，铺完照样能手动微调。" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button Content="直通" Tag="identity" Click="DspMatrixPreset_Click" />
-                                                    <Button Content="左右互换" Tag="swap" Click="DspMatrixPreset_Click" />
-                                                    <Button Content="合并单声道" Tag="mono" Click="DspMatrixPreset_Click" />
-                                                    <Button Content="左右差值（去唱）" Tag="karaoke" Click="DspMatrixPreset_Click" />
+                                                    <Button CornerRadius="16" Content="直通" Tag="identity" Click="DspMatrixPreset_Click" />
+                                                    <Button CornerRadius="16" Content="左右互换" Tag="swap" Click="DspMatrixPreset_Click" />
+                                                    <Button CornerRadius="16" Content="合并单声道" Tag="mono" Click="DspMatrixPreset_Click" />
+                                                    <Button CornerRadius="16" Content="左右差值（去唱）" Tag="karaoke" Click="DspMatrixPreset_Click" />
                                                 </StackPanel>
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button Content="立体声加宽" Tag="widen" Click="DspMatrixPreset_Click" />
-                                                    <Button Content="只留左声道" Tag="leftonly" Click="DspMatrixPreset_Click" />
-                                                    <Button Content="只留右声道" Tag="rightonly" Click="DspMatrixPreset_Click" />
+                                                    <Button CornerRadius="16" Content="立体声加宽" Tag="widen" Click="DspMatrixPreset_Click" />
+                                                    <Button CornerRadius="16" Content="只留左声道" Tag="leftonly" Click="DspMatrixPreset_Click" />
+                                                    <Button CornerRadius="16" Content="只留右声道" Tag="rightonly" Click="DspMatrixPreset_Click" />
                                                 </StackPanel>
                                             </StackPanel>
                                         </Border>
@@ -6837,9 +6837,9 @@
                                                     </ListView.ItemTemplate>
                                                 </ListView>
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button x:Name="DspRackUpButton" Content="上移" Click="DspRackUp_Click" />
-                                                    <Button x:Name="DspRackDownButton" Content="下移" Click="DspRackDown_Click" />
-                                                    <Button Content="恢复默认顺序" Click="DspRackReset_Click" />
+                                                    <Button CornerRadius="16" x:Name="DspRackUpButton" Content="上移" Click="DspRackUp_Click" />
+                                                    <Button CornerRadius="16" x:Name="DspRackDownButton" Content="下移" Click="DspRackDown_Click" />
+                                                    <Button CornerRadius="16" Content="恢复默认顺序" Click="DspRackReset_Click" />
                                                 </StackPanel>
                                                 <TextBlock
                                                     x:Name="DspRackHintText"
@@ -6915,7 +6915,7 @@
                     Padding="4,8"
                     Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="6">
-                        <Button x:Name="MultiSelectMoreButton" Padding="12,8" Background="Transparent" BorderThickness="0"
+                        <Button CornerRadius="16" x:Name="MultiSelectMoreButton" Padding="12,8" Background="Transparent" BorderThickness="0"
                                 ToolTipService.ToolTip="更多操作">
                             <Button.Flyout>
                                 <MenuFlyout>
@@ -6945,7 +6945,7 @@
                                 <TextBlock Text="更多" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="MultiSelectPrimaryActionButton"
                             Padding="14,8"
                             Background="Transparent"
@@ -6957,7 +6957,7 @@
                                 <TextBlock x:Name="MultiSelectPrimaryActionText" Text="添加至播放队列" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="MultiSelectAddToPlaylistButton"
                             Padding="14,8"
                             Background="Transparent"
@@ -7055,7 +7055,7 @@
                         Margin="0,0,0,4"
                         BorderThickness="0">
                         <Grid>
-                            <Button
+                            <Button CornerRadius="16"
                                 x:Name="NowPlayingCollapseButton"
                                 Width="36"
                                 Height="32"
@@ -7069,7 +7069,7 @@
                             </Button>
                             <!-- 播放页：可视化元素 + 布局切换（页内即时切换，不打断播放） -->
                             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2">
-                                <Button
+                                <Button CornerRadius="16"
                                     x:Name="NowPlayingVisualButton"
                                     Height="32"
                                     Padding="10,0"
@@ -7086,7 +7086,7 @@
                                         <MenuFlyout x:Name="NowPlayingVisualFlyout" Placement="BottomEdgeAlignedRight" />
                                     </Button.Flyout>
                                 </Button>
-                                <Button
+                                <Button CornerRadius="16"
                                     x:Name="NowPlayingLayoutButton"
                                     Height="32"
                                     Padding="10,0"
@@ -7810,13 +7810,13 @@
                                 </Grid.ColumnDefinitions>
                                 <!-- 左：三个按钮 -->
                                 <StackPanel Orientation="Horizontal" Spacing="8" Grid.Column="0" VerticalAlignment="Center">
-                                    <Button x:Name="FloatingPrevButton" Width="40" Height="40" Padding="0" Background="Transparent" BorderThickness="0" Click="PreviousButton_Click" ToolTipService.ToolTip="上一首">
+                                    <Button CornerRadius="16" x:Name="FloatingPrevButton" Width="40" Height="40" Padding="0" Background="Transparent" BorderThickness="0" Click="PreviousButton_Click" ToolTipService.ToolTip="上一首">
                                         <FontIcon Glyph="&#xE892;" FontSize="18" />
                                     </Button>
-                                    <Button x:Name="FloatingPlayPauseButton" Width="44" Height="44" Padding="0" Background="Transparent" BorderThickness="0" Click="PlayPauseButton_Click" ToolTipService.ToolTip="播放 / 暂停">
+                                    <Button CornerRadius="16" x:Name="FloatingPlayPauseButton" Width="44" Height="44" Padding="0" Background="Transparent" BorderThickness="0" Click="PlayPauseButton_Click" ToolTipService.ToolTip="播放 / 暂停">
                                         <FontIcon x:Name="FloatingPlayPauseIcon" Glyph="&#xE768;" FontSize="22" />
                                     </Button>
-                                    <Button x:Name="FloatingNextButton" Width="40" Height="40" Padding="0" Background="Transparent" BorderThickness="0" Click="NextButton_Click" ToolTipService.ToolTip="下一首">
+                                    <Button CornerRadius="16" x:Name="FloatingNextButton" Width="40" Height="40" Padding="0" Background="Transparent" BorderThickness="0" Click="NextButton_Click" ToolTipService.ToolTip="下一首">
                                         <FontIcon Glyph="&#xE893;" FontSize="18" />
                                     </Button>
                                 </StackPanel>
@@ -8041,7 +8041,7 @@
                         Orientation="Horizontal"
                         Spacing="4"
                         HorizontalAlignment="Center">
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="PlaybackOrderButton"
                             Width="40"
                             Height="40"
@@ -8072,7 +8072,7 @@
                                 </StackPanel>
                             </Grid>
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="PreviousButton"
                             Width="40"
                             Height="40"
@@ -8083,7 +8083,7 @@
                             ToolTipService.ToolTip="上一首">
                             <FontIcon Glyph="&#xE892;" FontSize="18" />
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="SeekBackButton"
                             Width="36"
                             Height="40"
@@ -8094,7 +8094,7 @@
                             ToolTipService.ToolTip="快退 5 秒">
                             <FontIcon Glyph="&#xEB9E;" FontSize="16" />
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="PlayPauseButton"
                             Width="44"
                             Height="44"
@@ -8105,7 +8105,7 @@
                             ToolTipService.ToolTip="播放 / 暂停">
                             <FontIcon x:Name="PlayPauseIcon" Glyph="&#xE768;" FontSize="22" />
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="SeekForwardButton"
                             Width="36"
                             Height="40"
@@ -8116,7 +8116,7 @@
                             ToolTipService.ToolTip="快进 5 秒">
                             <FontIcon Glyph="&#xEB9D;" FontSize="16" />
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="NextButton"
                             Width="40"
                             Height="40"
@@ -8127,7 +8127,7 @@
                             ToolTipService.ToolTip="下一首">
                             <FontIcon Glyph="&#xE893;" FontSize="18" />
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="PlaybackRateButton"
                             Width="56"
                             Height="40"
@@ -8141,7 +8141,7 @@
                                 <FontIcon Glyph="&#xE70D;" FontSize="10" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="FavoriteButton"
                             Width="40"
                             Height="40"
@@ -8152,7 +8152,7 @@
                             ToolTipService.ToolTip="我喜欢的音乐">
                             <FontIcon x:Name="FavoriteButtonIcon" Glyph="&#xEB51;" FontSize="18" />
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="ShowCurrentPlaylistButton"
                             Width="40"
                             Height="40"
@@ -8163,7 +8163,7 @@
                             ToolTipService.ToolTip="显示播放队列">
                             <FontIcon Glyph="&#xE7B3;" FontSize="18" />
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="FeaturesMoreButton"
                             Width="40"
                             Height="40"
@@ -8196,7 +8196,7 @@
                         Orientation="Horizontal"
                         Spacing="8"
                         VerticalAlignment="Center">
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="MiniPlayerButton"
                             Width="40"
                             Height="40"
@@ -8224,7 +8224,7 @@
                                 </Border>
                             </Grid>
                         </Button>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="DesktopLyricsButton"
                             Width="40"
                             Height="40"
@@ -8381,7 +8381,7 @@
                             <FontIcon Glyph="&#xE91F;" FontSize="15" />
                             <TextBlock Text="音频设置" FontSize="16" FontWeight="SemiBold" VerticalAlignment="Center" />
                         </StackPanel>
-                        <Button
+                        <Button CornerRadius="16"
                             HorizontalAlignment="Right"
                             Width="30"
                             Height="30"
@@ -8491,7 +8491,7 @@
                                 FontSize="11"
                                 Opacity="0.75"
                                 TextWrapping="Wrap" />
-                            <Button
+                            <Button CornerRadius="16"
                                 x:Name="SaveDeviceDspButton"
                                 Content="保存当前配置为当前设备"
                                 Click="SaveDeviceDspButton_Click" />
@@ -8731,7 +8731,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Button
+                            <Button CornerRadius="16"
                                 x:Name="EngineSelfTestButton"
                                 Grid.Column="0"
                                 Content="播放测试音（3 秒 1kHz）"
@@ -8794,12 +8794,12 @@
                         FontSize="12"
                         TextWrapping="Wrap" />
                     <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="DsdEngineTipSwitch"
                             Content="一键切换到原生内核"
                             FontSize="12"
                             Click="DsdEngineTipSwitch_Click" />
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="DsdEngineTipClose"
                             Content="知道了"
                             FontSize="12"

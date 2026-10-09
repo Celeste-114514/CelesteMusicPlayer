@@ -224,6 +224,7 @@ namespace CelesteMusicPlayer
         {
             if (!_webMainOpen) return;
             _webMainOpen = false;
+            CloseEmbeddedWebDsp();     // 右栏可能还开着音效处理面板，一起收掉
             CloseWebMainDetails();
             if (_webMainTimer != null) _webMainTimer.Tick -= WebMainTimer_Tick;
             _webMainTimer?.Stop();
@@ -298,11 +299,25 @@ namespace CelesteMusicPlayer
             // 页面没打开就一律不理（网页可能在关掉前又发了一条）
             if (!_webMainOpen && msg.Kind != "ready") return;
 
+            // 右栏开着音效处理面板时，DSP 那几条消息转交给 MainWindow.WebDsp.cs
+            // （面板嵌在主界面里，网页上行不经过 dsp.html，得在这里分流）
+            if (WebDspEmbedded && IsWebDspKind(msg.Kind))
+            {
+                HandleWebDspMessage(msg);
+                return;
+            }
+
             switch (msg.Kind)
             {
                 case "ready":
                     // 页面初始化完成：分类清单 + 歌曲快照一起推过去
                     _ = PushWebMainDataAsync();
+                    break;
+
+                case "lyricsreq":
+                    // 网页要当前歌词（页面打开时、换曲时各发一次）。加载完的才推，
+                    // 没加载完就静默跳过——网页继续显示上一首的，和原生同一行为。
+                    PushWebLyrics();
                     break;
 
                 case "nav":
@@ -381,10 +396,19 @@ namespace CelesteMusicPlayer
                 case "plplay":
                     {
                         // 详情行播放：整单替换队列、从该首起（原生 PlayNamedPlaylistFromTrack）
+                        // path 为空 = 从整单第一首开始（2026-10-10：墙右键「播放该播放列表」）
                         string name = ReadStr(msg.Payload, "name");
                         string filePath = ReadStr(msg.Payload, "path");
-                        if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(filePath))
-                            PlayNamedPlaylistFromTrack(name, filePath);
+                        if (string.IsNullOrEmpty(name)) break;
+                        if (string.IsNullOrEmpty(filePath))
+                        {
+                            var all = NamedPlaylistStore.LoadSongs(name);
+                            for (int pi = 0; pi < all.Count; pi++)
+                            {
+                                if (System.IO.File.Exists(all[pi])) { filePath = all[pi]; break; }
+                            }
+                        }
+                        if (!string.IsNullOrEmpty(filePath)) PlayNamedPlaylistFromTrack(name, filePath);
                         break;
                     }
 
@@ -692,6 +716,19 @@ namespace CelesteMusicPlayer
                         break;
                     }
 
+                case "enqueueone":
+                    {
+                        // 右键菜单「添加到播放队列」（2026-10-10）：只加这一首，不动当前播放
+                        int qi = ReadInt(msg.Payload, "index", -1);
+                        var list = WebMainActiveList;
+                        if (qi >= 0 && qi < list.Count)
+                        {
+                            AddSongsToUserPlaylist(new[] { list[qi] });
+                            StartupLog.Write($"[Web主界面] enqueueone：加入播放队列《{list[qi].Title}》");
+                        }
+                        break;
+                    }
+
                 case "rating":
                     {
                         // 评分面板的星级胶囊：-1=全部已评分，0=未评分，1..5=对应星级
@@ -732,6 +769,160 @@ namespace CelesteMusicPlayer
                         break;
                     }
 
+                // ---- 右键菜单：曲目动作（2026-10-10 补齐，语义照搬原生右键菜单）----
+                case "songact":
+                    {
+                        // act = openloc（打开文件位置）/ edittags（编辑标签）/ delfromlib（从媒体库删除）
+                        //   / queue（这一首加入播放队列）
+                        // 曲目可以按 index 给（列表面板 / 专辑·艺术家详情），也可以直接按 path 给
+                        // （媒体库的右栏文件行没在下标表里）。
+                        string act = ReadStr(msg.Payload, "act");
+                        string path = ReadStr(msg.Payload, "path");
+                        PlaylistItem? t = null;
+                        int i = ReadInt(msg.Payload, "index", -1);
+                        var list = WebMainActiveList;
+                        if (i >= 0 && i < list.Count)
+                        {
+                            t = list[i];
+                            if (path.Length == 0) path = t.FilePath ?? "";
+                        }
+                        if (path.Length == 0) break;
+                        if (t == null)
+                        {
+                            t = _playlist.FirstOrDefault(x =>
+                                string.Equals(x.FilePath, path, StringComparison.OrdinalIgnoreCase));
+                        }
+                        if (act == "openloc") OpenFileLocationInExplorer(path);
+                        else if (act == "edittags") TagEditorWindow.ShowBatch(new[] { path });
+                        else if (act == "delfromlib" && t != null) _ = DeleteMediaSongWithConfirmAsync(t);
+                        else if (act == "queue" && t != null) AddSongsToUserPlaylist(new[] { t });
+                        break;
+                    }
+
+                // ---- 右键菜单：专辑卡动作（原生 AlbumGridView_RightTapped 口径）----
+                case "albumact":
+                    {
+                        // act = play（播放该专辑）/ queue（添加至播放队列）/ addto（添加到命名播放列表）
+                        string act = ReadStr(msg.Payload, "act");
+                        int ai = ReadInt(msg.Payload, "id", -1);
+                        var entries = WebMainAlbumEntries();
+                        if (ai < 0 || ai >= entries.Count) break;
+                        AlbumEntry album = entries[ai];
+                        if (act == "play") PlayAlbum(album, replacePlaylist: true);
+                        else if (act == "queue") AddSongsToUserPlaylist(GetTracksForAlbum(album));
+                        else if (act == "addto") _ = ShowNamedPlaylistPickerAsync(GetTracksForAlbum(album));
+                        break;
+                    }
+
+                // ---- 右键菜单：艺术家卡动作（按艺术家名整表取曲目，与原生艺术家页口径一致）----
+                case "artistact":
+                    {
+                        string act = ReadStr(msg.Payload, "act");
+                        string nm = ReadStr(msg.Payload, "name");
+                        if (nm.Length == 0) break;
+                        var tracks = _playlist.Where(x =>
+                            string.Equals(x.Artist, nm, StringComparison.CurrentCultureIgnoreCase)).ToList();
+                        if (tracks.Count == 0) break;
+                        if (act == "play")
+                        {
+                            _userPlaylist.Clear();
+                            AddSongsToUserPlaylist(tracks);
+                            PlayPlaylistItem(tracks[0]);
+                        }
+                        else if (act == "queue") AddSongsToUserPlaylist(tracks);
+                        else if (act == "addto") _ = ShowNamedPlaylistPickerAsync(tracks);
+                        break;
+                    }
+
+                // ---- 右键菜单：播放列表内曲目动作 ----
+                case "plsongact":
+                    {
+                        // act = queue（加入播放队列）/ remove（从该播放列表移除）/ openloc
+                        string act = ReadStr(msg.Payload, "act");
+                        string name = ReadStr(msg.Payload, "name");
+                        string path = ReadStr(msg.Payload, "path");
+                        if (path.Length == 0) break;
+                        if (act == "openloc")
+                        {
+                            OpenFileLocationInExplorer(path);
+                        }
+                        else if (act == "queue")
+                        {
+                            var one = _playlist.FirstOrDefault(x =>
+                                string.Equals(x.FilePath, path, StringComparison.OrdinalIgnoreCase));
+                            if (one != null) AddSongsToUserPlaylist(new[] { one });
+                        }
+                        else if (act == "remove" && name.Length > 0)
+                        {
+                            var songs = NamedPlaylistStore.LoadSongs(name);
+                            NamedPlaylistStore.SaveSongs(name, songs.Where(s =>
+                                !string.Equals(s, path, StringComparison.OrdinalIgnoreCase)));
+                            _ = PushWebPlaylistDetailAsync(name);
+                        }
+                        break;
+                    }
+
+                // ---- 底部播放条：补齐原生那一排按钮（2026-10-10）----
+                case "order":
+                    // 播放顺序循环：与点原生按钮同一条代码路径（顺序→随机→列表循环→单曲循环→单曲播放）
+                    PlaybackOrderButton_Click(this, new RoutedEventArgs());
+                    break;
+
+                case "rate":
+                    {
+                        // 播放速度：网页直接给倍率（原生右侧那个菜单同理，最终都走 SetPlaybackRateAsync）
+                        double r = ReadDouble(msg.Payload, "v", -1);
+                        if (r >= 0.5 && r <= 2.0) _ = SetPlaybackRateAsync(r);
+                        break;
+                    }
+
+                case "favcur":
+                    // 收藏/取消收藏正在播的那首
+                    FavoriteButton_Click(this, new RoutedEventArgs());
+                    break;
+
+                case "showqueue":
+                    ShowCurrentPlaylistButton_Click(this, new RoutedEventArgs());
+                    break;
+
+                case "mini":
+                    MiniPlayerButton_Click(this, new RoutedEventArgs());
+                    break;
+
+                case "lyrics":
+                    DesktopLyricsButton_Click(this, new RoutedEventArgs());
+                    break;
+
+                case "feat":
+                    {
+                        // 「更多功能」那张菜单（原生是挂在按钮上的 flyout，网页盖着看不见，
+                        // 这里按 act 直接调菜单里对应的入口，功能一个不少）
+                        string act = ReadStr(msg.Payload, "act");
+                        switch (act)
+                        {
+                            case "onlinesearch": OnlineSearchWindow.ShowOrActivate(); break;
+                            case "lyric": _ = DownloadLyricForCurrentAsync(); break;
+                            case "batchlyric": _ = BatchDownloadLyricsAsync(); break;
+                            case "cover": _ = DownloadCoverForCurrentAsync(); break;
+                            case "dup": DuplicateFilesWindow.ShowOrActivate(this); break;
+                            case "rgscan": OpenReplayGainScan(); break;
+                            case "edittag":
+                                if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
+                                    TagEditorWindow.Show(_nowPlayingPath);
+                                break;
+                            case "editlyric":
+                                if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
+                                    LyricsEditorWindow.Show(_nowPlayingPath);
+                                break;
+                            case "openloc": OpenFileLocationInExplorer(_nowPlayingPath); break;
+                            case "sleeptimer": _ = ShowSleepTimerDialogAsync(); break;
+                            case "importm3u": ImportM3u_Click(this, new RoutedEventArgs()); break;
+                            case "exportm3u": ExportM3u_Click(this, new RoutedEventArgs()); break;
+                            case "opencue": OpenCue_Click(this, new RoutedEventArgs()); break;
+                        }
+                        break;
+                    }
+
                 case "exit":
                     CloseWebMain();
                     break;
@@ -757,6 +948,10 @@ namespace CelesteMusicPlayer
         /// </summary>
         private async Task HandleWebMainNavAsync(string id)
         {
+            // 切走音效处理页就把右栏的 DSP 面板收掉（它的每秒推流也一起停）
+            if (!string.Equals(id, "AudioFX", StringComparison.OrdinalIgnoreCase))
+                CloseEmbeddedWebDsp();
+
             _webMainPage = id;
             if (Array.IndexOf(WebMainListPanels, id) >= 0)
             {
@@ -845,15 +1040,16 @@ namespace CelesteMusicPlayer
             }
             if (string.Equals(id, "AudioFX", StringComparison.OrdinalIgnoreCase))
             {
-                // 音效处理（DSP）：网页只做入口——关主界面详情、回一个 nav ok，
-                // 然后切到 DSP 网页面板（OpenWebDspAsync 内部会关主界面层、开 dsp.html）。
-                // 所有 DSP 操作都在原生控件/handler 上落地，音频链路零改动。
+                // 音效处理（DSP）：2026-10-10 用户要求——面板只占右侧内容区，左栏分类留着。
+                // 所以不再整页切到 dsp.html，而是把 DSP 面板嵌进主界面右栏
+                // （OpenEmbeddedWebDspAsync 只推状态，不换页面、不动主界面层）。
+                // 所有 DSP 操作仍在原生控件/handler 上落地，音频链路零改动。
                 CloseWebMainDetails();
                 await PostCelesteWebAsync(new Dictionary<string, object?>
                 {
                     ["kind"] = "nav", ["id"] = "AudioFX", ["ok"] = true,
                 });
-                await OpenWebDspAsync();
+                await OpenEmbeddedWebDspAsync();
                 return;
             }
             // 没做的面板：告诉网页显示占位（侧栏条目保留，不删入口）
@@ -2552,6 +2748,9 @@ namespace CelesteMusicPlayer
                 // 正在播的文件路径：播放列表详情页靠它高亮正在播的那一行
                 // （now 的 index 按当前列表面板算，对不上播放列表的行序）
                 ["path"] = _nowPlayingPath ?? "",
+                // 播放顺序 / 倍速：底部播放条那排按钮要回显当前值（2026-10-10）
+                ["order"] = _orderResolver?.Order.ToString() ?? "",
+                ["rate"] = PlaybackRateText?.Text ?? "1.0x",
             };
 
             // 收藏态跟着正在播的那首走（网页上高亮的就是它）
@@ -2590,6 +2789,33 @@ namespace CelesteMusicPlayer
                 }
             }
             return msg;
+        }
+
+        /// <summary>
+        /// 把当前歌词推给网页主界面（正在播放页的歌词区）。_lyricLines 不是当前曲子的
+        /// （换曲后还在异步加载）就不推：网页留着上一首的歌词，等加载完 BuildLyricsUi 再推。
+        /// </summary>
+        internal void PushWebLyrics()
+        {
+            if (!_webMainOpen) return;
+            var path = _nowPlayingPath ?? "";
+            if (!string.Equals(_lyricsLoadedPath, path, StringComparison.OrdinalIgnoreCase)) return;
+            var lines = new List<object?>(_lyricLines.Count);
+            foreach (var line in _lyricLines)
+            {
+                lines.Add(new Dictionary<string, object?>
+                {
+                    ["t"] = line.Time.TotalSeconds,
+                    ["x"] = line.Text ?? "",
+                    ["tr"] = line.IsTranslation,
+                });
+            }
+            _ = PostCelesteWebAsync(new Dictionary<string, object?>
+            {
+                ["kind"] = "lyrics",
+                ["path"] = path,
+                ["lines"] = lines,
+            });
         }
 
         private static string ReadNavId(JsonElement payload)

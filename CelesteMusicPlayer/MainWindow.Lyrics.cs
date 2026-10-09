@@ -202,6 +202,9 @@ namespace CelesteMusicPlayer
             _lyricRows.Clear();
             _lyricRowFrames.Clear();
             _selectedLyricRow = -1;
+            // 所有调用点都带"当前曲目"守卫（Playback3 换曲 / Features 下载歌词），
+            // 所以这份歌词就是对应当前曲子的——记下来，网页歌词区靠它防张冠李戴。
+            _lyricsLoadedPath = _nowPlayingPath ?? "";
             LyricsPanel.Children.Clear();
 
             if (lyrics.Count == 0)
@@ -213,6 +216,7 @@ namespace CelesteMusicPlayer
                 {
                     ResetTerminalLyrics("NO LYRICS");
                 }
+                PushWebLyrics();   // 网页正在播放页同步进入空态（没开网页就不推）
                 return;
             }
 
@@ -345,6 +349,7 @@ namespace CelesteMusicPlayer
             }
             _desktopLyricsWindow?.SetLyrics(_lyricLines);
             _miniPlayerWindow?.RefreshFromOwner();
+            PushWebLyrics();   // 网页主界面的正在播放页歌词区（没开网页就不推）
         }
 
 

@@ -64,7 +64,7 @@
                 Spacing="8"
                 VerticalAlignment="Center"
                 Visibility="Collapsed">
-                <Button
+                <Button CornerRadius="16"
                     x:Name="ExitMultiSelectButton"
                     Width="36"
                     Height="32"
@@ -355,7 +355,7 @@
             Grid.Row="3"
             Padding="12,8,12,12"
             Visibility="Collapsed">
-            <Button
+            <Button CornerRadius="16"
                 x:Name="MultiSelectDeleteButton"
                 HorizontalAlignment="Right"
                 Padding="14,8"

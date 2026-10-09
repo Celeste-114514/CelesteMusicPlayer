@@ -29,7 +29,20 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
         private bool _webDspOpen;
+        /// <summary>
+        /// DSP 面板嵌在主界面网页里（左栏分类还在，面板只占右侧内容区）。
+        /// 2026-10-10 用户要求：音效处理不要把左侧分类栏占掉，只在右侧区域显示对应面板。
+        /// 与 _webDspOpen（整页 dsp.html 覆盖层）互斥：嵌入模式下不再导航到 dsp.html。
+        /// </summary>
+        private bool _webDspEmbedded;
         private DispatcherTimer? _webDspTimer;
+
+        /// <summary>DSP 面板是否嵌在主界面网页里开着。</summary>
+        internal bool WebDspEmbedded => _webDspEmbedded;
+
+        /// <summary>网页上行走 DSP 通道的 kind 集合（嵌入模式下主界面要把这些转交给本文件处理）。</summary>
+        internal static bool IsWebDspKind(string kind)
+            => kind is "dspnav" or "dsppower" or "dspset" or "dspact";
 
         /// <summary>播放条封面/曲目信息换曲才重算（与 WebMain 的 _webMainLastNowPath 同用途）。</summary>
         private string _webDspLastNowPath = "";
@@ -107,6 +120,47 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 把音效处理面板嵌进主界面网页的右侧内容区（左侧分类栏保留）。
+        /// 与 OpenWebDspAsync 的区别：不导航到 dsp.html、不隐藏主界面层，
+        /// 只是把原生 DSP 面板的读数按秒推给主界面网页，由它渲染在右栏。
+        /// </summary>
+        public async Task OpenEmbeddedWebDspAsync()
+        {
+            try
+            {
+                // 原生 DSP 面板必须就绪（网页所有读数来自原生控件；dspset 靠原生 handler 下发引擎）
+                EnsureAudioFxUiBuilt();
+                if (!_audioFxPanelReady) LoadAudioFxUiFromStore();
+
+                _webDspEmbedded = true;
+                _webDspLastNowPath = "";
+
+                // 每秒把播放状态与输出监控推给网页（与主界面自己的推流并存，互不干扰）
+                _webDspTimer ??= new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
+                _webDspTimer.Tick -= WebDspTimer_Tick;
+                _webDspTimer.Tick += WebDspTimer_Tick;
+                _webDspTimer.Start();
+
+                await PushWebDspStateAsync();
+                StartupLog.Write("[Web音效] 已在主界面右栏打开音效处理面板");
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("OpenEmbeddedWebDsp", ex);
+            }
+        }
+
+        /// <summary>离开音效处理页（切到别的分类 / 关掉主界面）时收起嵌入面板。</summary>
+        public void CloseEmbeddedWebDsp()
+        {
+            if (!_webDspEmbedded) return;
+            _webDspEmbedded = false;
+            if (_webDspTimer != null) _webDspTimer.Tick -= WebDspTimer_Tick;
+            _webDspTimer?.Stop();
+            StartupLog.Write("[Web音效] 已收起主界面右栏的音效处理面板");
+        }
+
         /// <summary>关掉音效网页面板，回到原生界面。</summary>
         public void CloseWebDsp()
         {
@@ -121,8 +175,11 @@ namespace CelesteMusicPlayer
 
         private void WebDspTimer_Tick(object? sender, object e)
         {
-            if (!_webDspOpen) return;
-            _ = PostCelesteWebAsync(BuildWebDspNowMessage());
+            // 整页覆盖（dsp.html）与嵌在主界面右栏两种形态共用这一个定时器
+            if (!_webDspOpen && !_webDspEmbedded) return;
+            // 嵌入主界面时 now 由主界面自己每秒推：两边的 track 字段口径不同
+            // （主界面是 {title,artist,album}，DSP 页是 {t,s}），混着推会把播放条打成 undefined
+            if (_webDspOpen) _ = PostCelesteWebAsync(BuildWebDspNowMessage());
             _ = PostCelesteWebAsync(BuildWebDspMonMessage());
         }
 
@@ -133,8 +190,9 @@ namespace CelesteMusicPlayer
         /// <summary>网页发过来的消息在这里落地。kind 与 dsp.html 里 post() 的那些一一对应。</summary>
         internal void HandleWebDspMessage(WebInboundMessage msg)
         {
-            // 页面没打开就一律不理（网页可能在关掉前又发了一条）
-            if (!_webDspOpen && msg.Kind != "ready") return;
+            // 页面没打开就一律不理（网页可能在关掉前又发了一条）；
+            // 嵌入主界面右栏的形态也走这条通道（_webDspEmbedded）
+            if (!_webDspOpen && !_webDspEmbedded && msg.Kind != "ready") return;
 
             switch (msg.Kind)
             {
@@ -444,6 +502,18 @@ namespace CelesteMusicPlayer
                     _ = WebDspApoAsync(false);
                     return;
 
+                // ---- 耳机校正（OPRA）----
+                    case "opranative":
+                        // OPRA 的品牌墙 / 搜索 / 曲线预览数据量大，网页不复刻；
+                        // 点一下关掉网页层、切到原生「音效处理」面板并落到 EQ 页
+                        // （耳机校正就在那一页的下半部分）。以前只切了原生视图，
+                        // 网页层还盖在屏幕上，用户看着就是"点了没反应"。
+                        // 左上角分类栏的「音效处理」可以再回到网页版。
+                        CloseWebMain();
+                        NavAudioFxButton_Click(this, new RoutedEventArgs());
+                        SelectDspPage(DspPageEqIndex);
+                        return; // 已经切走网页层了，不再走下面的统一重推
+
                 default:
                     StartupLog.Write($"[Web音效] dspact：未知动作「{a}」");
                     break;
@@ -496,6 +566,20 @@ namespace CelesteMusicPlayer
                 UpdateDspDeviceStatus();
                 RefreshAudioFxRgInfo();
                 RefreshRoomCorrectionInfo();
+                // 网页那几张可视化（声场环 / 声道电平条 / 链路条）读的是原生这些文本，
+                // 原生的这几个刷新只在对应页面可见时才跑 —— 网页嵌在主界面上时得自己补一次，
+                // 否则推过去的是上次切页时的旧值（2026-10-10）。
+                // 只写原生控件、不碰音频，链路零改动。
+                // （声场那几个读数直接按滑杆值算，不调 RedrawDspFieldRing —— 那个要先有画布尺寸，
+                //   原生面板被网页盖着时尺寸是 0，会直接 return，读到的是旧值。）
+                UpdateDspFieldReadouts(
+                    DspFieldToggle?.IsOn == true,
+                    DspFieldWidthSlider?.Value ?? 100,
+                    DspFieldCenterSlider?.Value ?? 0,
+                    DspFieldSideSlider?.Value ?? 0);
+                UpdateDspChannelBars();
+                UpdateDspSafetyChain();
+                UpdateDspCompMeters(_audioEngine?.CompressorGainReductionDb ?? 0f);
 
                 await PostCelesteWebAsync(BuildWebDspStateMessage());
             }
@@ -691,6 +775,9 @@ namespace CelesteMusicPlayer
                 ? "bit-perfect 直通（DSP 已旁路）"
                 : (IsDspActiveForBadge() ? "输出非 bit-perfect（DSP 生效）" : "输出 bit-perfect 直出");
 
+            // 各页的说明/读数文本。2026-10-10 补齐：网页要把原生的可视化元素
+            // （压缩器曲线 / GR 表 / 输入电平 / 声场环 / 声道电平条）按同一口径画出来，
+            // 这些读数是它们的数值来源。
             var texts = new Dictionary<string, object?>
             {
                 ["srcstate"] = SrcStateText?.Text ?? "",
@@ -698,6 +785,48 @@ namespace CelesteMusicPlayer
                 ["fir"] = RoomIrInfoText?.Text ?? "",
                 ["cliprisk"] = RoomClipRiskText?.Text ?? "",
                 ["mxphase"] = DspMatrixPhaseText?.Text ?? "",
+                // 压缩器：实时增益衰减（GR）与输入电平（画 GR 表 / 输入表用）
+                ["gr"] = DspCompGrText?.Text ?? "",
+                ["compin"] = DspCompInText?.Text ?? "",
+                // 声道工具：左右声道时间差提示（画 L/R 电平条用）
+                ["skew"] = DspChannelSkewText?.Text ?? "",
+                // 立体声场：中置 / 侧向读数与相关性提示（画声场环用）
+                ["fmid"] = DspFieldMidReadout?.Text ?? "",
+                ["fside"] = DspFieldSideReadout?.Text ?? "",
+                ["fcorr"] = DspFieldCorrText?.Text ?? "",
+                // 参数 EQ：提示行与光标读数
+                ["eqhint"] = AudioFxEqHintText?.Text ?? "",
+                ["eqread"] = AudioFxEqReadoutText?.Text ?? "",
+            };
+
+            // 顶部设备状态条 + 链路条（原生 DspDeviceStatusBar 口径）：
+            // 设备名 / 输出模式 / 会话格式 / 输入→余量→处理→输出 四段链路。
+            var device = new Dictionary<string, object?>
+            {
+                ["name"] = DspDeviceNameText?.Text ?? "",
+                ["mode"] = DspOutputModeText?.Text ?? "",
+                ["fmt"] = DspSessionFormatText?.Text ?? "",
+                ["perfect"] = AudioFxBitPerfectStatusText?.Text ?? "",
+                ["chain"] = new Dictionary<string, object?>
+                {
+                    ["input"] = DspChainInputText?.Text ?? "",
+                    ["headroom"] = DspChainHeadroomText?.Text ?? "",
+                    ["process"] = DspChainProcessText?.Text ?? "",
+                    ["output"] = DspChainOutputText?.Text ?? "",
+                },
+            };
+
+            // 链路条（hero）徽章：原生 UpdateDspHeroBadges 刷的那排模块状态
+            var hero = new Dictionary<string, object?>
+            {
+                ["headroom"] = DspHeroHeadroomText?.Text ?? "",
+                ["rg"] = DspHeroRgText?.Text ?? "",
+                ["src"] = DspHeroSrcText?.Text ?? "",
+                ["eq"] = DspHeroEqText?.Text ?? "",
+                ["opra"] = DspHeroOpraText?.Text ?? "",
+                ["channel"] = DspHeroChannelText?.Text ?? "",
+                ["fir"] = DspHeroFirText?.Text ?? "",
+                ["safety"] = DspHeroSafetyText?.Text ?? "",
             };
 
             return new Dictionary<string, object?>
@@ -714,10 +843,8 @@ namespace CelesteMusicPlayer
                 ["bypass"] = bypass,
                 ["perfect"] = perfect,
                 ["texts"] = texts,
-                ["device"] = new Dictionary<string, object?>
-                {
-                    ["fmt"] = DspSessionFormatText?.Text ?? "",
-                },
+                ["device"] = device,
+                ["hero"] = hero,
             };
         }
 
@@ -771,6 +898,8 @@ namespace CelesteMusicPlayer
         private Dictionary<string, object?> BuildWebDspMonMessage()
         {
             UpdateDspOutputMonitor();
+            // 压缩器 GR / 入口电平的实时读数（原生那边只在压缩器页可见时才轮询，这里补上）
+            UpdateDspCompMeters(_audioEngine?.CompressorGainReductionDb ?? 0f);
 
             bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
             string perfect = bypass
@@ -787,6 +916,17 @@ namespace CelesteMusicPlayer
                     ["over"] = OutMonitorOverloadText?.Text ?? "",
                     ["active"] = OutMonitorActiveDspText?.Text ?? "",
                     ["chain"] = OutMonitorChainText?.Text ?? "",
+                },
+                // 每秒跟着刷新的实时读数：压缩器 GR / 输入电平、声道时间差、声场中侧与相关性
+                // （网页那几张可视化的数值来源，2026-10-10）
+                ["texts"] = new Dictionary<string, object?>
+                {
+                    ["gr"] = DspCompGrText?.Text ?? "",
+                    ["compin"] = DspCompInText?.Text ?? "",
+                    ["skew"] = DspChannelSkewText?.Text ?? "",
+                    ["fmid"] = DspFieldMidReadout?.Text ?? "",
+                    ["fside"] = DspFieldSideReadout?.Text ?? "",
+                    ["fcorr"] = DspFieldCorrText?.Text ?? "",
                 },
                 ["perfect"] = perfect,
             };

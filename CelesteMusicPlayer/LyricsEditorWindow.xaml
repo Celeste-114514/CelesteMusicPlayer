@@ -52,11 +52,11 @@
             Orientation="Horizontal"
             HorizontalAlignment="Right"
             Spacing="12">
-            <Button x:Name="ShiftEarlierButton" Content="提前0.5秒" Click="ShiftEarlierButton_Click" MinWidth="100" />
-            <Button x:Name="ShiftLaterButton" Content="延后0.5秒" Click="ShiftLaterButton_Click" MinWidth="100" />
-            <Button x:Name="SaveLrcButton" Content="保存到同名.lrc" Click="SaveLrcButton_Click" MinWidth="130" />
-            <Button x:Name="EmbedButton" Content="嵌入到音频" Click="EmbedButton_Click" MinWidth="110" />
-            <Button x:Name="CloseButton" Content="关闭" Click="CloseButton_Click" MinWidth="88" />
+            <Button CornerRadius="16" x:Name="ShiftEarlierButton" Content="提前0.5秒" Click="ShiftEarlierButton_Click" MinWidth="100" />
+            <Button CornerRadius="16" x:Name="ShiftLaterButton" Content="延后0.5秒" Click="ShiftLaterButton_Click" MinWidth="100" />
+            <Button CornerRadius="16" x:Name="SaveLrcButton" Content="保存到同名.lrc" Click="SaveLrcButton_Click" MinWidth="130" />
+            <Button CornerRadius="16" x:Name="EmbedButton" Content="嵌入到音频" Click="EmbedButton_Click" MinWidth="110" />
+            <Button CornerRadius="16" x:Name="CloseButton" Content="关闭" Click="CloseButton_Click" MinWidth="88" />
         </StackPanel>
     </Grid>
 </Window>

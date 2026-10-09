@@ -74,8 +74,8 @@
             Spacing="12"
             HorizontalAlignment="Right"
             Padding="20,8,20,20">
-            <Button Content="取消" Click="CancelButton_Click" MinWidth="88" />
-            <Button
+            <Button CornerRadius="16" Content="取消" Click="CancelButton_Click" MinWidth="88" />
+            <Button CornerRadius="16"
                 x:Name="OkButton"
                 Content="确定"
                 Style="{ThemeResource AccentButtonStyle}"

@@ -53,8 +53,8 @@
 
                 <!-- 底部操作 -->
                 <StackPanel Orientation="Horizontal" Spacing="10" HorizontalAlignment="Right">
-                    <Button x:Name="CancelButton" Content="取消" Padding="18,6" Click="CancelButton_Click" />
-                    <Button x:Name="ApplyButton" Content="应用" Padding="18,6" Click="ApplyButton_Click" />
+                    <Button CornerRadius="16" x:Name="CancelButton" Content="取消" Padding="18,6" Click="CancelButton_Click" />
+                    <Button CornerRadius="16" x:Name="ApplyButton" Content="应用" Padding="18,6" Click="ApplyButton_Click" />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

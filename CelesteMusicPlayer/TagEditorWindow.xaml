@@ -62,9 +62,9 @@
                     </Border>
                     <TextBlock x:Name="CurrentCoverSizeText" FontSize="10" Opacity="0.5" TextAlignment="Center" HorizontalAlignment="Center" Text="封面尺寸" />
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Center">
-                        <Button x:Name="AddCoverButton" Content="添加/替换" Click="AddCoverButton_Click" MinWidth="76" />
-                        <Button x:Name="ClearCoverButton" Content="清除" Click="ClearCoverButton_Click" MinWidth="64" />
-                        <Button x:Name="ExtractCoverButton" Content="提取" Click="ExtractCoverButton_Click" MinWidth="64" />
+                        <Button CornerRadius="16" x:Name="AddCoverButton" Content="添加/替换" Click="AddCoverButton_Click" MinWidth="76" />
+                        <Button CornerRadius="16" x:Name="ClearCoverButton" Content="清除" Click="ClearCoverButton_Click" MinWidth="64" />
+                        <Button CornerRadius="16" x:Name="ExtractCoverButton" Content="提取" Click="ExtractCoverButton_Click" MinWidth="64" />
                     </StackPanel>
                     <TextBlock x:Name="CoverStatusText" FontSize="11" Opacity="0.6" TextWrapping="WrapWholeWords" />
 
@@ -74,7 +74,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock Text="在线搜索" FontSize="13" FontWeight="SemiBold" VerticalAlignment="Center" HorizontalAlignment="Center" />
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="SearchThisSongButton"
                             Grid.Column="1"
                             Content="搜索该歌曲"
@@ -91,7 +91,7 @@
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <ComboBox x:Name="OnlineSourceCombo" Grid.Column="0" MinWidth="120" SelectionChanged="OnlineSourceCombo_SelectionChanged" />
-                        <Button Grid.Column="1" Content="搜索" Click="OnlineSearchButton_Click" MinWidth="72" />
+                        <Button CornerRadius="16" Grid.Column="1" Content="搜索" Click="OnlineSearchButton_Click" MinWidth="72" />
                     </Grid>
                     <ListView
                         x:Name="OnlineResultList"
@@ -234,7 +234,7 @@
                             Height="180"
                             IsReadOnly="True"
                             FontSize="12" />
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="ApplyOnlineButton"
                             Content="一键应用到当前歌曲"
                             Click="ApplyOnlineButton_Click"
@@ -252,9 +252,9 @@
                     HorizontalAlignment="Right"
                     Spacing="12"
                     Margin="0,10,0,0">
-                    <Button x:Name="FillFromFileNameButton" Content="从文件名填充" Click="FillFromFileNameButton_Click" MinWidth="120" />
-                    <Button x:Name="SaveButton" Content="保存" Click="SaveButton_Click" MinWidth="88" />
-                    <Button x:Name="CancelButton" Content="取消" Click="CancelButton_Click" MinWidth="88" />
+                    <Button CornerRadius="16" x:Name="FillFromFileNameButton" Content="从文件名填充" Click="FillFromFileNameButton_Click" MinWidth="120" />
+                    <Button CornerRadius="16" x:Name="SaveButton" Content="保存" Click="SaveButton_Click" MinWidth="88" />
+                    <Button CornerRadius="16" x:Name="CancelButton" Content="取消" Click="CancelButton_Click" MinWidth="88" />
                 </StackPanel>
             </Grid>
         </Grid>

@@ -48,7 +48,7 @@
                     <ComboBox x:Name="SourceCombo" Width="150" SelectionChanged="SourceCombo_SelectionChanged" />
                     <TextBox x:Name="SearchBox" Grid.Column="1" PlaceholderText="输入艺术家名…"
                              KeyDown="SearchBox_KeyDown" VerticalContentAlignment="Center" />
-                    <Button x:Name="SearchButton" Grid.Column="2" Content="搜索"
+                    <Button CornerRadius="16" x:Name="SearchButton" Grid.Column="2" Content="搜索"
                             Style="{StaticResource AccentButtonStyle}" Click="SearchButton_Click" />
                 </Grid>
             </Border>

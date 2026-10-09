@@ -127,8 +127,8 @@
             HorizontalAlignment="Right"
             Spacing="8"
             Margin="24,12,24,20">
-            <Button x:Name="StartButton" Content="开始扫描" Style="{StaticResource AccentButtonStyle}" Click="StartButton_Click" />
-            <Button x:Name="CancelButton" Content="取消" IsEnabled="False" Click="CancelButton_Click" />
+            <Button CornerRadius="16" x:Name="StartButton" Content="开始扫描" Style="{StaticResource AccentButtonStyle}" Click="StartButton_Click" />
+            <Button CornerRadius="16" x:Name="CancelButton" Content="取消" IsEnabled="False" Click="CancelButton_Click" />
         </StackPanel>
     </Grid>
 </Window>

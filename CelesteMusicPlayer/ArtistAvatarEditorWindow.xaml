@@ -59,8 +59,8 @@
             Orientation="Horizontal"
             HorizontalAlignment="Right"
             Spacing="12">
-            <Button x:Name="CancelButton" Content="取消" Click="CancelButton_Click" MinWidth="88" />
-            <Button x:Name="ConfirmButton" Content="确认" Click="ConfirmButton_Click" MinWidth="88" />
+            <Button CornerRadius="16" x:Name="CancelButton" Content="取消" Click="CancelButton_Click" MinWidth="88" />
+            <Button CornerRadius="16" x:Name="ConfirmButton" Content="确认" Click="ConfirmButton_Click" MinWidth="88" />
         </StackPanel>
     </Grid>
 </Window>

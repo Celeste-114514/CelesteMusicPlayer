@@ -61,9 +61,9 @@
                     Orientation="Horizontal"
                     HorizontalAlignment="Right"
                     Spacing="12">
-                    <Button x:Name="ApplyButton" Content="应用" Click="ApplyButton_Click" MinWidth="88" />
-                    <Button x:Name="ResetButton" Content="重置" Click="ResetButton_Click" MinWidth="88" />
-                    <Button x:Name="CloseButton" Content="关闭" Click="CloseButton_Click" MinWidth="88" />
+                    <Button CornerRadius="16" x:Name="ApplyButton" Content="应用" Click="ApplyButton_Click" MinWidth="88" />
+                    <Button CornerRadius="16" x:Name="ResetButton" Content="重置" Click="ResetButton_Click" MinWidth="88" />
+                    <Button CornerRadius="16" x:Name="CloseButton" Content="关闭" Click="CloseButton_Click" MinWidth="88" />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

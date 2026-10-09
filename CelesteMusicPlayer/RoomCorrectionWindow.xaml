@@ -32,8 +32,8 @@
                         <TextBlock FontWeight="SemiBold">脉冲响应（IR）文件</TextBlock>
                         <TextBox x:Name="IrPathTextBox" PlaceholderText="选择 .wav 格式的脉冲响应文件…" IsReadOnly="True" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="BrowseButton" Content="浏览…" Click="BrowseButton_Click" />
-                            <Button x:Name="ClearButton" Content="清除" Click="ClearButton_Click" />
+                            <Button CornerRadius="16" x:Name="BrowseButton" Content="浏览…" Click="BrowseButton_Click" />
+                            <Button CornerRadius="16" x:Name="ClearButton" Content="清除" Click="ClearButton_Click" />
                             <TextBlock x:Name="IrInfoText" VerticalAlignment="Center" FontSize="12" Opacity="0.65" />
                         </StackPanel>
                         <TextBlock x:Name="IrLoadStatusText" FontSize="12" Opacity="0.8" TextWrapping="WrapWholeWords" />
@@ -73,8 +73,8 @@
 
         <!-- 底部动作 -->
         <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8" Margin="0,16,0,0">
-            <Button x:Name="ApplyButton" Content="应用" Style="{StaticResource AccentButtonStyle}" Click="ApplyButton_Click" />
-            <Button x:Name="CloseButton" Content="关闭" Click="CloseButton_Click" />
+            <Button CornerRadius="16" x:Name="ApplyButton" Content="应用" Style="{StaticResource AccentButtonStyle}" Click="ApplyButton_Click" />
+            <Button CornerRadius="16" x:Name="CloseButton" Content="关闭" Click="CloseButton_Click" />
         </StackPanel>
     </Grid>
 </Window>

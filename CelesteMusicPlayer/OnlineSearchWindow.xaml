@@ -48,7 +48,7 @@
                 <ComboBox x:Name="SourceCombo" Width="140" SelectionChanged="SourceCombo_SelectionChanged" />
                 <TextBox x:Name="SearchBox" Grid.Column="1" PlaceholderText="输入歌名 / 歌手 / 专辑…"
                          KeyDown="SearchBox_KeyDown" VerticalContentAlignment="Center" />
-                <Button x:Name="SearchButton" Grid.Column="2" Content="搜索"
+                <Button CornerRadius="16" x:Name="SearchButton" Grid.Column="2" Content="搜索"
                         Style="{StaticResource AccentButtonStyle}" Click="SearchButton_Click" />
             </Grid>
         </Border>
@@ -119,10 +119,10 @@
                         <TextBlock x:Name="DetailAlbum" FontSize="12" Opacity="0.55"
                                    TextTrimming="CharacterEllipsis" />
                         <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,10,0,0">
-                            <Button x:Name="WebPlayButton" Content="在网页播放" Click="WebPlayButton_Click" />
-                            <Button x:Name="DownloadLyricButton" Content="下载歌词" Click="DownloadLyric_Click" />
-                            <Button x:Name="DownloadCoverButton" Content="下载封面" Click="DownloadCover_Click" />
-                            <Button x:Name="DownloadAudioButton" Content="下载音频" Click="DownloadAudio_Click" ToolTipService.ToolTip="网易云 / QQ 在线下载（128kbps MP3；会员曲需对应平台 Cookie）" />
+                            <Button CornerRadius="16" x:Name="WebPlayButton" Content="在网页播放" Click="WebPlayButton_Click" />
+                            <Button CornerRadius="16" x:Name="DownloadLyricButton" Content="下载歌词" Click="DownloadLyric_Click" />
+                            <Button CornerRadius="16" x:Name="DownloadCoverButton" Content="下载封面" Click="DownloadCover_Click" />
+                            <Button CornerRadius="16" x:Name="DownloadAudioButton" Content="下载音频" Click="DownloadAudio_Click" ToolTipService.ToolTip="网易云 / QQ 在线下载（128kbps MP3；会员曲需对应平台 Cookie）" />
                         </StackPanel>
                     </StackPanel>
                 </Grid>

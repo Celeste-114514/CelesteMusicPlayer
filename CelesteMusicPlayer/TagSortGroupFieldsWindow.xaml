@@ -100,9 +100,9 @@
             Spacing="10"
             HorizontalAlignment="Right"
             Padding="16,10">
-            <Button Content="恢复默认" Padding="14,6" Click="ResetButton_Click" />
-            <Button x:Name="CancelButton" Content="取消" Padding="18,6" Click="CancelButton_Click" />
-            <Button x:Name="ApplyButton" Content="应用" Padding="18,6" Click="ApplyButton_Click" Style="{ThemeResource AccentButtonStyle}" />
+            <Button CornerRadius="16" Content="恢复默认" Padding="14,6" Click="ResetButton_Click" />
+            <Button CornerRadius="16" x:Name="CancelButton" Content="取消" Padding="18,6" Click="CancelButton_Click" />
+            <Button CornerRadius="16" x:Name="ApplyButton" Content="应用" Padding="18,6" Click="ApplyButton_Click" Style="{ThemeResource AccentButtonStyle}" />
         </StackPanel>
     </Grid>
 </Window>

@@ -736,6 +736,9 @@ namespace CelesteMusicPlayer
         private readonly Random _waveRandom = new();
         private int _waveformIdleSettleTicks;
         private List<LyricLine> _lyricLines = new();
+        // _lyricLines 对应哪首曲子：换曲后歌词是异步加载的，加载完成才更新。
+        // 网页正在播放页的歌词区靠它判断"这份歌词是不是当前曲子的"（见 WebMain.PushWebLyrics）。
+        private string _lyricsLoadedPath = "";
         private int _currentLyricIndex = -1;        private readonly List<TextBlock> _lyricTextBlocks = new();
         // 歌词行交互（单击选中 → 圆角白框，约 3 秒后自动恢复；双击 → 从这句开始播放）
         // 每行是一个 Grid（整行可点）里套一个 Border（选中时的圆角白框），Border 里面才是歌词 TextBlock。

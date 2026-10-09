@@ -153,7 +153,7 @@
                                     <TextBlock Text="歌词文件夹" />
                                     <TextBox x:Name="LyricFolderTextBox" PlaceholderText="留空则与歌曲同目录或默认路径" LostFocus="SettingTextBox_LostFocus" />
                                 </StackPanel>
-                                <Button x:Name="BrowseLyricFolderButton" Grid.Column="1" VerticalAlignment="Bottom" Content="浏览…" Click="BrowseLyricFolderButton_Click" MinWidth="72" />
+                                <Button CornerRadius="16" x:Name="BrowseLyricFolderButton" Grid.Column="1" VerticalAlignment="Bottom" Content="浏览…" Click="BrowseLyricFolderButton_Click" MinWidth="72" />
                             </Grid>
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
@@ -372,7 +372,7 @@
                                         x:Name="DesktopLyricPlayedColorTextBox"
                                         Width="100"
                                         LostFocus="SettingTextBox_LostFocus" />
-                                    <Button
+                                    <Button CornerRadius="16"
                                         Content="调色板"
                                         Click="PickPlayedColorButton_Click"
                                         MinWidth="72" />
@@ -400,7 +400,7 @@
                                         x:Name="DesktopLyricUnplayedColorTextBox"
                                         Width="100"
                                         LostFocus="SettingTextBox_LostFocus" />
-                                    <Button
+                                    <Button CornerRadius="16"
                                         Content="调色板"
                                         Click="PickUnplayedColorButton_Click"
                                         MinWidth="72" />
@@ -515,7 +515,7 @@
                                         Width="28" Height="28" CornerRadius="6"
                                         BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" VerticalAlignment="Center" />
                                     <TextBox x:Name="DesktopLyricOutlineColorTextBox" Width="100" LostFocus="SettingTextBox_LostFocus" />
-                                    <Button Content="调色板" Click="PickOutlineColorButton_Click" MinWidth="72" />
+                                    <Button CornerRadius="16" Content="调色板" Click="PickOutlineColorButton_Click" MinWidth="72" />
                                 </StackPanel>
                             </Grid>
 
@@ -557,7 +557,7 @@
                                         Width="28" Height="28" CornerRadius="6"
                                         BorderThickness="1" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" VerticalAlignment="Center" />
                                     <TextBox x:Name="DesktopLyricBackgroundColorTextBox" Width="100" LostFocus="SettingTextBox_LostFocus" />
-                                    <Button Content="调色板" Click="PickBackgroundColorButton_Click" MinWidth="72" />
+                                    <Button CornerRadius="16" Content="调色板" Click="PickBackgroundColorButton_Click" MinWidth="72" />
                                 </StackPanel>
                             </Grid>
                         </StackPanel>
@@ -779,7 +779,7 @@
                                 <TextBlock Text="封面文件夹" />
                                 <TextBox x:Name="CoverFolderTextBox" PlaceholderText="留空则与歌曲同目录或默认路径" LostFocus="SettingTextBox_LostFocus" />
                             </StackPanel>
-                            <Button x:Name="BrowseCoverFolderButton" Grid.Column="1" VerticalAlignment="Bottom" Content="浏览…" Click="BrowseCoverFolderButton_Click" MinWidth="72" />
+                            <Button CornerRadius="16" x:Name="BrowseCoverFolderButton" Grid.Column="1" VerticalAlignment="Bottom" Content="浏览…" Click="BrowseCoverFolderButton_Click" MinWidth="72" />
                         </Grid>
                         <Grid ColumnSpacing="16" Margin="0,0,0,12">
                             <Grid.ColumnDefinitions>
@@ -826,7 +826,7 @@
                                 <ComboBoxItem Tag="Custom" Content="自定义颜色" />
                             </ComboBox>
                         </Grid>
-                        <Button
+                        <Button CornerRadius="16"
                             x:Name="AccentColorButton"
                             Click="AccentColorButton_Click"
                             Padding="10,6"
@@ -886,8 +886,8 @@
                                 VerticalAlignment="Center"
                                 PlaceholderText="背景图片/视频路径" />
                             <StackPanel Orientation="Horizontal" Grid.Column="2" Spacing="6">
-                                <Button Content="浏览…" Click="BrowseBackgroundButton_Click" />
-                                <Button Content="清除" Click="ClearBackgroundButton_Click" />
+                                <Button CornerRadius="16" Content="浏览…" Click="BrowseBackgroundButton_Click" />
+                                <Button CornerRadius="16" Content="清除" Click="ClearBackgroundButton_Click" />
                             </StackPanel>
                         </Grid>
 
@@ -1186,15 +1186,15 @@
                         </Grid>
 
                         <TextBlock Text="系统" FontSize="15" FontWeight="SemiBold" Margin="0,8,0,0" />
-                        <Button x:Name="OpenConfigDirButton" Content="打开配置文件所在目录" Click="OpenConfigDirButton_Click" HorizontalAlignment="Left" />
+                        <Button CornerRadius="16" x:Name="OpenConfigDirButton" Content="打开配置文件所在目录" Click="OpenConfigDirButton_Click" HorizontalAlignment="Left" />
 
                         <TextBlock Text="设置备份" FontSize="15" FontWeight="SemiBold" Margin="0,8,0,0" />
                         <StackPanel Spacing="2">
                             <TextBlock Text="导出当前全部设置，方便换机/重装后恢复" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <Button x:Name="ExportSettingsButton" Content="导出设置…" Click="ExportSettingsButton_Click" MinWidth="130" />
-                            <Button x:Name="ImportSettingsButton" Content="导入设置…" Click="ImportSettingsButton_Click" MinWidth="130" />
+                            <Button CornerRadius="16" x:Name="ExportSettingsButton" Content="导出设置…" Click="ExportSettingsButton_Click" MinWidth="130" />
+                            <Button CornerRadius="16" x:Name="ImportSettingsButton" Content="导入设置…" Click="ImportSettingsButton_Click" MinWidth="130" />
                         </StackPanel>
                         <StackPanel Spacing="2">
                             <TextBlock Text="关联文件" />
@@ -1203,8 +1203,8 @@
                             <TextBlock x:Name="AssociationStatusText" FontSize="12" TextWrapping="WrapWholeWords" Margin="0,4,0,0" Visibility="Collapsed" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <Button x:Name="OpenAssociationWindowButton" Content="关联文件…" Click="OpenAssociationWindowButton_Click" MinWidth="130" />
-                            <Button x:Name="UnregisterAssociationButton" Content="取消全部关联" Click="UnregisterAssociationButton_Click" MinWidth="130" />
+                            <Button CornerRadius="16" x:Name="OpenAssociationWindowButton" Content="关联文件…" Click="OpenAssociationWindowButton_Click" MinWidth="130" />
+                            <Button CornerRadius="16" x:Name="UnregisterAssociationButton" Content="取消全部关联" Click="UnregisterAssociationButton_Click" MinWidth="130" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -1336,9 +1336,9 @@
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
                                 <TextBox x:Name="DsdCachePathBox" MinWidth="280" PlaceholderText="例如 D:\CelesteDsdCache" />
-                                <Button Content="应用" Click="DsdCacheApplyButton_Click" />
-                                <Button Content="打开" Click="DsdCacheOpenButton_Click" />
-                                <Button Content="清空缓存" Click="DsdCacheClearButton_Click" />
+                                <Button CornerRadius="16" Content="应用" Click="DsdCacheApplyButton_Click" />
+                                <Button CornerRadius="16" Content="打开" Click="DsdCacheOpenButton_Click" />
+                                <Button CornerRadius="16" Content="清空缓存" Click="DsdCacheClearButton_Click" />
                             </StackPanel>
                         </Grid>
                         <Grid ColumnSpacing="16">
@@ -1422,7 +1422,7 @@
                                         LargeChange="1024"
                                         SpinButtonPlacementMode="Inline"
                                         ValueChanged="TranscodeCacheLimitNumberBox_ValueChanged" />
-                                    <Button
+                                    <Button CornerRadius="16"
                                         x:Name="TranscodeClearCacheButton"
                                         Grid.Column="2"
                                         Content="清理缓存"
@@ -1473,8 +1473,8 @@
                         <TextBlock Text="监视文件夹" FontSize="15" FontWeight="SemiBold" Margin="0,8,0,0" />
                         <ListView x:Name="LibraryWatchFoldersListView" MinHeight="100" MaxHeight="160" SelectionMode="Single" />
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <Button x:Name="AddWatchFolderButton" Content="添加" Click="AddWatchFolderButton_Click" MinWidth="72" />
-                            <Button x:Name="RemoveWatchFolderButton" Content="删除" Click="RemoveWatchFolderButton_Click" MinWidth="72" />
+                            <Button CornerRadius="16" x:Name="AddWatchFolderButton" Content="添加" Click="AddWatchFolderButton_Click" MinWidth="72" />
+                            <Button CornerRadius="16" x:Name="RemoveWatchFolderButton" Content="删除" Click="RemoveWatchFolderButton_Click" MinWidth="72" />
                         </StackPanel>
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
@@ -1543,8 +1543,8 @@
                             </StackPanel>
                             <ComboBox x:Name="RecentPlayedRangeDaysCombo" Grid.Column="1" MinWidth="200" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
                         </Grid>
-                        <Button x:Name="ClearRecentPlayedButton" Content="清空最近播放" Click="ClearRecentPlayedButton_Click" HorizontalAlignment="Left" />
-                        <Button x:Name="OpenLogFileButton" Content="打开日志文件" Click="OpenLogFileButton_Click" HorizontalAlignment="Left" />
+                        <Button CornerRadius="16" x:Name="ClearRecentPlayedButton" Content="清空最近播放" Click="ClearRecentPlayedButton_Click" HorizontalAlignment="Left" />
+                        <Button CornerRadius="16" x:Name="OpenLogFileButton" Content="打开日志文件" Click="OpenLogFileButton_Click" HorizontalAlignment="Left" />
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
@@ -1624,8 +1624,8 @@
                             <PasswordBox x:Name="LastFmLoginPasswordBox" Grid.Column="1" />
                         </Grid>
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="LastFmSaveCredentialsButton" Content="保存凭据" Click="LastFmSaveCredentialsButton_Click" />
-                            <Button x:Name="LastFmLoginButton" Content="登录获取会话" Click="LastFmLoginButton_Click" />
+                            <Button CornerRadius="16" x:Name="LastFmSaveCredentialsButton" Content="保存凭据" Click="LastFmSaveCredentialsButton_Click" />
+                            <Button CornerRadius="16" x:Name="LastFmLoginButton" Content="登录获取会话" Click="LastFmLoginButton_Click" />
                             <TextBlock x:Name="LastFmStatusText" VerticalAlignment="Center" FontSize="12" Opacity="0.7" />
                         </StackPanel>
                         <TextBlock Text="未配置时开关无效；凭据保存在 lastfm.json" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
@@ -1730,11 +1730,11 @@
                             <TextBlock Text="扫描当前曲库中失效的文件与缺失的标签信息，可对问题项编辑音频标签" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="10">
-                            <Button x:Name="HealthScanButton" Content="立即扫描" Click="HealthScanButton_Click" MinWidth="110" />
-                            <Button x:Name="HealthRemoveMissingButton" Content="移除失效文件" Click="HealthRemoveMissingButton_Click" MinWidth="110" />
-                            <Button x:Name="HealthEditTagButton" Content="编辑音频标签…" Click="HealthEditTagButton_Click" MinWidth="130" />
-                            <Button x:Name="HealthDuplicateButton" Content="重复筛查" Click="HealthDuplicateButton_Click" MinWidth="120" />
-                            <Button x:Name="HealthRelocateButton" Content="重定位候选" Click="HealthRelocateButton_Click" MinWidth="120" />
+                            <Button CornerRadius="16" x:Name="HealthScanButton" Content="立即扫描" Click="HealthScanButton_Click" MinWidth="110" />
+                            <Button CornerRadius="16" x:Name="HealthRemoveMissingButton" Content="移除失效文件" Click="HealthRemoveMissingButton_Click" MinWidth="110" />
+                            <Button CornerRadius="16" x:Name="HealthEditTagButton" Content="编辑音频标签…" Click="HealthEditTagButton_Click" MinWidth="130" />
+                            <Button CornerRadius="16" x:Name="HealthDuplicateButton" Content="重复筛查" Click="HealthDuplicateButton_Click" MinWidth="120" />
+                            <Button CornerRadius="16" x:Name="HealthRelocateButton" Content="重定位候选" Click="HealthRelocateButton_Click" MinWidth="120" />
                         </StackPanel>
                         <TextBlock x:Name="HealthSummaryText" Text="尚未扫描" Opacity="0.75" FontSize="12" />
                         <ListView x:Name="HealthResultsList" MaxHeight="340" SelectionMode="Single">
@@ -1780,7 +1780,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="网易云" FontSize="12" VerticalAlignment="Center" />
                             <TextBox x:Name="NeCookieBox" Grid.Column="1" PlaceholderText="粘贴 网易云音乐 Cookie" />
-                            <Button x:Name="SaveNeCookieButton" Grid.Column="2" Content="保存" Click="SaveNeCookieButton_Click" MinWidth="56" />
+                            <Button CornerRadius="16" x:Name="SaveNeCookieButton" Grid.Column="2" Content="保存" Click="SaveNeCookieButton_Click" MinWidth="56" />
                         </Grid>
                         <Grid ColumnSpacing="8">
                             <Grid.ColumnDefinitions>
@@ -1790,7 +1790,7 @@
                             </Grid.ColumnDefinitions>
                             <TextBlock Text="QQ 音乐" FontSize="12" VerticalAlignment="Center" />
                             <TextBox x:Name="QqCookieBox" Grid.Column="1" PlaceholderText="粘贴 QQ 音乐 Cookie" />
-                            <Button x:Name="SaveQqCookieButton" Grid.Column="2" Content="保存" Click="SaveQqCookieButton_Click" MinWidth="56" />
+                            <Button CornerRadius="16" x:Name="SaveQqCookieButton" Grid.Column="2" Content="保存" Click="SaveQqCookieButton_Click" MinWidth="56" />
                         </Grid>
                         <TextBlock x:Name="StreamingStatusText" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords" Text="" />
                     </StackPanel>
@@ -1949,7 +1949,7 @@
                                         SmallChange="512"
                                         LargeChange="1024"
                                         SpinButtonPlacementMode="Inline" />
-                                    <Button
+                                    <Button CornerRadius="16"
                                         x:Name="WebDavClearCacheButton"
                                         Grid.Column="2"
                                         Content="清理缓存"
@@ -1967,13 +1967,13 @@
                             Text="" />
 
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button x:Name="WebDavTestButton" Content="测试连接" Click="WebDavTestButton_Click" />
-                            <Button
+                            <Button CornerRadius="16" x:Name="WebDavTestButton" Content="测试连接" Click="WebDavTestButton_Click" />
+                            <Button CornerRadius="16"
                                 x:Name="WebDavSaveButton"
                                 Content="保存并连接"
                                 Style="{ThemeResource AccentButtonStyle}"
                                 Click="WebDavSaveButton_Click" />
-                            <Button x:Name="WebDavDeleteButton" Content="删除此音乐库" Click="WebDavDeleteButton_Click" />
+                            <Button CornerRadius="16" x:Name="WebDavDeleteButton" Content="删除此音乐库" Click="WebDavDeleteButton_Click" />
                         </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
@@ -2037,8 +2037,8 @@
                                             Visibility="Collapsed" />
                                     </StackPanel>
                                     <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
-                                        <Button x:Name="AboutCheckUpdateButton" Content="检查更新" Click="AboutCheckUpdate_Click" />
-                                        <Button
+                                        <Button CornerRadius="16" x:Name="AboutCheckUpdateButton" Content="检查更新" Click="AboutCheckUpdate_Click" />
+                                        <Button CornerRadius="16"
                                             x:Name="AboutDownloadUpdateButton"
                                             Content="下载更新"
                                             Click="AboutDownloadUpdate_Click"
@@ -2132,9 +2132,9 @@
             BorderThickness="0,1,0,0"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                <Button x:Name="ResetSettingsButton" Content="重置默认" Click="ResetSettingsButton_Click" />
-                <Button x:Name="ApplySettingsButton" Content="应用" Click="ApplySettingsButton_Click" Style="{ThemeResource AccentButtonStyle}" />
-                <Button x:Name="SaveSettingsButton" Content="保存并关闭" Click="SaveSettingsButton_Click" Style="{ThemeResource AccentButtonStyle}" />
+                <Button CornerRadius="16" x:Name="ResetSettingsButton" Content="重置默认" Click="ResetSettingsButton_Click" />
+                <Button CornerRadius="16" x:Name="ApplySettingsButton" Content="应用" Click="ApplySettingsButton_Click" Style="{ThemeResource AccentButtonStyle}" />
+                <Button CornerRadius="16" x:Name="SaveSettingsButton" Content="保存并关闭" Click="SaveSettingsButton_Click" Style="{ThemeResource AccentButtonStyle}" />
             </StackPanel>
         </Border>
     </Grid>

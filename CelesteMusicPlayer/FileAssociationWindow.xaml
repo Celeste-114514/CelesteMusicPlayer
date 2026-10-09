@@ -53,7 +53,7 @@
                         TextWrapping="WrapWholeWords"
                         Visibility="Collapsed" />
                     <!-- 仅当当前版本不能做关联（调试/打包版）时出现 -->
-                    <Button
+                    <Button CornerRadius="16"
                         x:Name="PickExecutableButton"
                         Content="手动选择程序文件…"
                         HorizontalAlignment="Left"
@@ -77,9 +77,9 @@
                                 Text="按类别逐项选择；下面每一行都可以直接点文字来切换" />
                         </StackPanel>
                         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                            <Button x:Name="SelectAllButton" Content="全选" Click="SelectAllButton_Click" />
-                            <Button x:Name="SelectNoneButton" Content="全不选" Click="SelectNoneButton_Click" />
-                            <Button x:Name="SelectRecommendedButton" Content="恢复推荐" Click="SelectRecommendedButton_Click" />
+                            <Button CornerRadius="16" x:Name="SelectAllButton" Content="全选" Click="SelectAllButton_Click" />
+                            <Button CornerRadius="16" x:Name="SelectNoneButton" Content="全不选" Click="SelectNoneButton_Click" />
+                            <Button CornerRadius="16" x:Name="SelectRecommendedButton" Content="恢复推荐" Click="SelectRecommendedButton_Click" />
                         </StackPanel>
                     </Grid>
                     <TextBlock
@@ -99,7 +99,7 @@
                         Opacity="0.65"
                         TextWrapping="WrapWholeWords"
                         Text="Windows 只会对「还没设过默认程序」的格式自动采用本程序。已经设过默认程序的格式（例如你之前用「打开方式」选过别的播放器），注册后仍需到系统设置里手动改一次 —— 这是 Windows 的限制，不是注册失败。" />
-                    <Button
+                    <Button CornerRadius="16"
                         x:Name="OpenDefaultAppsButton"
                         Content="打开 Windows「默认应用」设置"
                         HorizontalAlignment="Left"
@@ -126,9 +126,9 @@
                     VerticalAlignment="Center"
                     TextWrapping="WrapWholeWords" />
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
-                    <Button x:Name="UnregisterAllButton" Content="全部取消关联" Click="UnregisterAllButton_Click" />
-                    <Button x:Name="CloseButton" Content="关闭" Click="CloseButton_Click" />
-                    <Button
+                    <Button CornerRadius="16" x:Name="UnregisterAllButton" Content="全部取消关联" Click="UnregisterAllButton_Click" />
+                    <Button CornerRadius="16" x:Name="CloseButton" Content="关闭" Click="CloseButton_Click" />
+                    <Button CornerRadius="16"
                         x:Name="ApplyButton"
                         Content="应用"
                         Style="{ThemeResource AccentButtonStyle}"

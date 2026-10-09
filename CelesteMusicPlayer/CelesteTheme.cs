@@ -444,6 +444,27 @@ namespace CelesteMusicPlayer
             {
                 var v = Resolve(theme, d.Name, dark);
                 if (v.Length == 0) continue;   // 字体为空 = 跟随系统，网页侧不声明
+
+                // ⚠ 长度/时长令牌必须带单位再写进 CSS（2026-10-10 实测踩坑）：
+                //   目录里 Radius.Medium 存的是裸数字 "8"，直接拼成 `--celeste-radius-medium:8;`
+                //   后，网页侧 `border-radius:var(--celeste-radius-medium)` 会代入 `8`，
+                //   而 border-radius 不接受无单位长度 → 该声明在计算值阶段失效 → 回落到
+                //   initial(0)。表现就是"所有圆角全部变直角"（左栏选中背景、封面全都是），
+                //   而颜色令牌正常，所以看着像"只有圆角坏了"，极难查。
+                //   XAML 侧走 ToWinUiValue 一直是好的，只有 CSS 这条路漏了单位。
+                if (d.Type == "length"
+                    && double.TryParse(v, System.Globalization.NumberStyles.Float,
+                                       System.Globalization.CultureInfo.InvariantCulture, out _))
+                {
+                    v += "px";
+                }
+                else if (d.Type == "duration"
+                    && !v.EndsWith("ms", StringComparison.OrdinalIgnoreCase)
+                    && !v.EndsWith("s", StringComparison.OrdinalIgnoreCase))
+                {
+                    v += "ms";
+                }
+
                 sb.Append(ToCssVariableName(d.Name)).Append(':').Append(v).Append(';');
             }
             sb.Append('}');
