@@ -56,6 +56,7 @@
 - **publish 真实路径 = `CelesteMusicPlayer/bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/`**。
 - **判编译成功必须查三类**：`error CS` / `error MSB` / **`error : `（Roslyn 自身崩，无编号，只查 CS 会漏）**，并核对产物时间戳。XamlCompiler 退出码 1 是确定性失败（XML 注释含 `--`、真编译错、obj 损坏态），`-1073741819`/`139` 才是环境 flake 可重试。
 - **MSB3021 = 文件锁（有实例在跑），不是代码问题** → 先杀进程。build 卡 7-8 分钟日志停在 restore = build-server 卡死 → `dotnet build-server shutdown` + `-nodeReuse:false`。
+- **本项目无 ImplicitUsings/GlobalUsings**：新 .cs 用 SemaphoreSlim/CancellationTokenSource 须显式 `using System.Threading;`，用 Encoding 须 `using System.Text;`——照抄 MainWindow.Library.cs 的 using 块最稳（2026-10-09 连踩两个 CS0246/CS0103）。
 - **⚠ 冒烟必须跑 exe 不能跑 dll**（`dotnet.exe xxx.dll` 静默死在 OnLaunched）。用户实例在跑时冒烟会被单实例挡掉（日志出现「已有实例在运行，转交命令后退出本进程」= 这次冒烟没验证到任何东西）。
 - UIA 验证脚本铁律：进 DSP 面板必须先点「音效处理」；`print(..., flush=True)` 别写进 `%` 元组括号内；判失败逻辑不许写恒真式。
 
