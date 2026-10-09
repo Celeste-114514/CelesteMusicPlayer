@@ -1,6 +1,6 @@
-// 皮肤系统第 4 步：Apple 风格主界面 · 歌曲浏览面板（试点）
+// 皮肤系统第 4 步：Apple 风格主界面 · 歌曲浏览 + 专辑面板（试点）
 //
-// 用户 2026-10-09 拍板：**先只做歌曲浏览面板**，其他分类面板暂不做，
+// 用户 2026-10-09 拍板：**先只做歌曲浏览面板和专辑面板**，其他分类面板暂不做，
 // 但侧栏 16 个分类全部保留（点未做的分类只显示占位，不删入口）。
 //
 // 分工铁律：**网页只负责长什么样，一件事都不做**——点播放、切分类、拖进度、
@@ -10,15 +10,21 @@
 // 与专辑试点页（WebAlbum.cs）的关系：
 //   - 共用同一个常驻 WebView2 宿主与覆盖层（CelesteWebHostGrid），两个页面互斥打开；
 //   - play 语义与专辑试点页一致（d3c0d99 定稿）：**整表替换播放队列 + 从点中的行开始**，
-//     这里"整表"= 推给网页的歌曲快照（不是原生曲库队列里定位单曲）；
-//   - 消息协议在专辑页基础上加一个 nav（切分类）。
+//     这里"整表"= 当前网页列表（歌曲快照或专辑详情曲目，不是原生曲库队列里定位单曲）；
+//   - 消息协议在专辑页基础上加 nav（切分类）/ album（打开专辑）/ albums / albumcovers。
 //
 // 消息协议（与 WebUI/main.html 里的 post() 一一对应，改一边必须改另一边）：
-//   C# → 网页：data（categories + songs + cur）/ now（播放状态，每秒）/ theme / nav
-//   网页 → C#：ready / nav / play / pause / resume / next / prev / seek / volume / love / exit
+//   C# → 网页：data（categories + songs + cur）/ data/append（歌曲分块）
+//              / chips（格式胶囊预热补）/ albums（专辑网格）
+//              / albumcovers（专辑封面预热补）/ albumtracks（专辑详情曲目）
+//              / now（播放状态，每秒）/ theme / nav
+//   网页 → C#：ready / nav / album（打开专辑，id=专辑下标）
+//              / play / pause / resume / next / prev / seek / volume / love / exit
 
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -35,8 +41,9 @@ namespace CelesteMusicPlayer
         /// 所以"换队列播放"也必须用这份——两边下标永远一致。</summary>
         private List<PlaylistItem> _webMainSongs = new();
 
-        /// <summary>封面文件缓存（按曲目路径）。WriteCoverFile 要解音频文件，不能每秒调。</summary>
-        private readonly Dictionary<string, string> _webMainCoverCache = new(StringComparer.OrdinalIgnoreCase);
+        /// <summary>封面文件缓存（按曲目路径）。WriteCoverFile 要解音频文件，不能每秒调。
+        /// 并发字典：后台预热线程和 UI 线程（播放条封面）会同时碰它。</summary>
+        private readonly ConcurrentDictionary<string, string> _webMainCoverCache = new(StringComparer.OrdinalIgnoreCase);
 
         /// <summary>上一次推封面/曲目信息时的播放路径。now 消息每秒都发，只有换曲才带封面。</summary>
         private string _webMainLastNowPath = "";
@@ -49,9 +56,23 @@ namespace CelesteMusicPlayer
         /// <summary>格式胶囊（编码器/位深·采样率/码率）后台预热标志：同一份快照只预热一次。</summary>
         private bool _webMainChipsWarm;
 
+        /// <summary>网页专辑详情打开时的曲目列表（play/love 的 index 按这份）。
+        /// null = 没开详情（歌曲视图或专辑网格），此时 index 按 _webMainSongs。</summary>
+        private List<PlaylistItem>? _webMainAlbumTracks;
+
+        /// <summary>网页当前停在哪个分类（nav 上报）。歌曲快照推完时如果正停在专辑页，
+        /// 顺手把专辑列表也推过去——不然用户先点专辑、歌曲后到，网格会空着。</summary>
+        private string _webMainPage = "Songs";
+
+        /// <summary>数据代际：每次重推歌曲快照/专辑列表就 +1。
+        /// 后台预热循环（格式胶囊、专辑封面）开跑时记下代际，中途发现变了立刻停——
+        /// 否则旧循环会按旧下标把数据补到新列表的行/卡片上，张冠李戴。</summary>
+        private int _webMainGen;
+
         /// <summary>
         /// 侧栏分类清单：照原生侧栏原样保留（CategoryNavPanel 13 项 + NavToolPanel 3 项），
-        /// id 与原生按钮 Tag 一致。只有 Songs 有数据（ok=true），其余点一下只显示占位。
+        /// id 与原生按钮 Tag 一致。只有 Songs / Albums 有数据（ok=true），
+        /// 其余点一下只显示占位。
         /// </summary>
         private static readonly (string Id, string Label, string Group)[] WebMainCategories =
         {
@@ -151,6 +172,7 @@ namespace CelesteMusicPlayer
         /// 主界面试点页自检：Navigate 之后隔一会儿探页面真实状态，写进日志。
         ///   wv    = 页面里有没有 WebView2 宿主对象（没有 → 页面脚本被竞态打断）
         ///   rows  = 曲目行渲染了几行（>0 说明歌曲数据已经到达页面）
+        ///   cards = 专辑卡渲染了几张（专辑网格视图下 rows 本来就是 0）
         ///   title = 页头显示的标题
         /// wv=yes 却一行都没有 → 不等网页的 ready 上行，C# 主动推一次（与专辑试点页同款兜底）。
         /// </summary>
@@ -166,28 +188,30 @@ namespace CelesteMusicPlayer
                         "(function(){try{" +
                         "var wv=(window.chrome&&window.chrome.webview)?'yes':'no';" +
                         "var rows=document.querySelectorAll('.row').length;" +
+                        "var cards=document.querySelectorAll('.acard').length;" +
                         "var t=document.getElementById('pgTitle');" +
-                        "return JSON.stringify({wv:wv,rows:rows,title:t?t.textContent:'?'});" +
+                        "return JSON.stringify({wv:wv,rows:rows,cards:cards,title:t?t.textContent:'?'});" +
                         "}catch(err){return 'PROBE_ERR:'+err;}})()");
                     string state = DecodeScriptResult(raw);
                     StartupLog.Write($"[Web主界面] 页面自检 {state}");
 
                     bool wvOk = false;
-                    int rows = -1;
+                    int rows = -1, cards = -1;
                     try
                     {
                         using var doc = JsonDocument.Parse(state);
                         if (doc.RootElement.TryGetProperty("wv", out var w)) wvOk = w.GetString() == "yes";
                         if (doc.RootElement.TryGetProperty("rows", out var r)) rows = r.GetInt32();
+                        if (doc.RootElement.TryGetProperty("cards", out var c)) cards = c.GetInt32();
                     }
                     catch { /* 状态解析失败不致命，按 rows=-1 继续探 */ }
 
-                    if (wvOk && rows == 0)
+                    if (wvOk && rows == 0 && cards == 0)
                     {
                         StartupLog.Write("[Web主界面] 页面没收到数据，主动推一次（不等 ready）");
                         _ = PushWebMainDataAsync();
                     }
-                    if (rows > 0) return;   // 数据到了就不再探
+                    if (rows > 0 || cards > 0) return;   // 数据到了就不再探
                 }
                 catch (Exception ex)
                 {
@@ -213,14 +237,26 @@ namespace CelesteMusicPlayer
                 case "nav":
                     {
                         string id = ReadNavId(msg.Payload);
+                        _webMainPage = id;
                         if (string.Equals(id, "Songs", StringComparison.OrdinalIgnoreCase))
                         {
                             // 已做的面板：切回去 + 重推数据（顺带刷新快照）
+                            _webMainAlbumTracks = null;
                             _ = PostCelesteWebAsync(new Dictionary<string, object?>
                             {
                                 ["kind"] = "nav", ["id"] = "Songs", ["ok"] = true,
                             });
                             _ = PushWebMainDataAsync();
+                        }
+                        else if (string.Equals(id, "Albums", StringComparison.OrdinalIgnoreCase))
+                        {
+                            // 专辑面板：网格视图（详情里点"← 专辑"也走这条，幂等刷新）
+                            _webMainAlbumTracks = null;
+                            _ = PostCelesteWebAsync(new Dictionary<string, object?>
+                            {
+                                ["kind"] = "nav", ["id"] = "Albums", ["ok"] = true,
+                            });
+                            _ = PushWebMainAlbumsAsync();
                         }
                         else
                         {
@@ -234,19 +270,29 @@ namespace CelesteMusicPlayer
                         break;
                     }
 
+                case "album":
+                    {
+                        // 网页点了一张专辑卡：推专辑详情（曲目查询/排序与原生详情页一致）
+                        int ai = ReadInt(msg.Payload, "id", -1);
+                        _ = OpenWebMainAlbumAsync(ai);
+                        break;
+                    }
+
                 case "play":
                     {
                         // 与专辑试点页同一套语义（d3c0d99）：整表替换播放队列，
                         // 从点中的那一行开始。直接 PlayPlaylistItem 只会在旧队列里
                         // 定位——队列还是原来的，这首播完接的是旧队列的顺序。
+                        // "整表"取当前网页列表：开着专辑详情就是这张专辑，否则是歌曲快照。
                         int i = ReadInt(msg.Payload, "index", -1);
-                        if (i >= 0 && i < _webMainSongs.Count)
+                        var list = WebMainActiveList;
+                        if (i >= 0 && i < list.Count)
                         {
-                            var track = _webMainSongs[i];
+                            var track = list[i];
                             _userPlaylist.Clear();
-                            AddSongsToUserPlaylist(_webMainSongs);
+                            AddSongsToUserPlaylist(list);
                             StartupLog.Write(
-                                $"[Web主界面] play：整表替换队列 {_webMainSongs.Count} 首，从第 {i + 1} 首开始");
+                                $"[Web主界面] play：{(_webMainAlbumTracks != null ? "整专" : "整表")}替换队列 {list.Count} 首，从第 {i + 1} 首开始");
                             PlayPlaylistItem(track);
                         }
                         break;
@@ -285,9 +331,10 @@ namespace CelesteMusicPlayer
                 case "love":
                     {
                         int i = ReadInt(msg.Payload, "index", -1);
-                        if (i >= 0 && i < _webMainSongs.Count)
+                        var list = WebMainActiveList;
+                        if (i >= 0 && i < list.Count)
                         {
-                            var track = _webMainSongs[i];
+                            var track = list[i];
                             if (!string.IsNullOrEmpty(track.FilePath))
                             {
                                 bool on = true;
@@ -360,18 +407,25 @@ namespace CelesteMusicPlayer
         {
             // 快照：网页的 index 与这份一一对应（play/love 都按它下标）
             _webMainSongs = _playlist.ToList();
+            _webMainGen++;   // 快照换人，后台预热循环按代际自行了断
 
             var cats = new List<object>();
             foreach (var (id, label, group) in WebMainCategories)
             {
+                bool ok = string.Equals(id, "Songs", StringComparison.OrdinalIgnoreCase)
+                       || string.Equals(id, "Albums", StringComparison.OrdinalIgnoreCase);
+                int n = 0;
+                if (string.Equals(id, "Songs", StringComparison.OrdinalIgnoreCase))
+                    n = _webMainSongs.Count;
+                else if (string.Equals(id, "Albums", StringComparison.OrdinalIgnoreCase))
+                    n = WebMainAlbumEntries().Count;
                 cats.Add(new Dictionary<string, object?>
                 {
                     ["id"] = id,
                     ["t"] = label,
                     ["g"] = group,
-                    ["ok"] = string.Equals(id, "Songs", StringComparison.OrdinalIgnoreCase),
-                    ["n"] = string.Equals(id, "Songs", StringComparison.OrdinalIgnoreCase)
-                        ? _webMainSongs.Count : 0,
+                    ["ok"] = ok,
+                    ["n"] = n,
                 });
             }
 
@@ -440,6 +494,11 @@ namespace CelesteMusicPlayer
             // 云盘曲库下同步算会把 UI 线程卡死——先出列表，胶囊陆续补。
             _webMainChipsWarm = false;
             _ = PrewarmWebMainChipsAsync();
+
+            // 用户先点了专辑、歌曲才推完：顺着把专辑列表补过去（不然网格空着）。
+            // 放在胶囊预热之后——PrewarmWebMainAlbumsAsync 不 bump 代际，不会杀了它。
+            if (string.Equals(_webMainPage, "Albums", StringComparison.OrdinalIgnoreCase))
+                _ = PushWebMainAlbumsAsync();
         }
 
         /// <summary>
@@ -452,6 +511,7 @@ namespace CelesteMusicPlayer
         {
             if (_webMainChipsWarm) return;
             _webMainChipsWarm = true;
+            int gen = _webMainGen;   // 快照换了就停：旧下标补到新列表上会张冠李戴
             try
             {
                 const int BATCH = 200;
@@ -459,20 +519,27 @@ namespace CelesteMusicPlayer
                 int done = 0;
                 while (done < _webMainSongs.Count)
                 {
-                    if (!_webMainOpen) break;
+                    if (!_webMainOpen || gen != _webMainGen) break;
                     int end = Math.Min(done + BATCH, _webMainSongs.Count);
-                    var items = new List<object>();
-                    for (int i = done; i < end; i++)
+                    int from = done;
+                    // FormatChips 首次访问要开文件读，必须挪出 UI 线程
+                    // （async 方法同步段跑在调用方线程上，不包 Task.Run 第一批就卡界面）
+                    var items = await Task.Run(() =>
                     {
-                        var chips = AudioInfoFormatter.FormatChips(_webMainSongs[i].FilePath);
-                        var arr = new List<string>();
-                        for (int c = 0; c < chips.Count; c++) arr.Add(chips[c]);
-                        items.Add(new Dictionary<string, object?>
+                        var batch = new List<object>();
+                        for (int i = from; i < end; i++)
                         {
-                            ["i"] = i,
-                            ["c"] = arr,
-                        });
-                    }
+                            var chips = AudioInfoFormatter.FormatChips(_webMainSongs[i].FilePath);
+                            var arr = new List<string>();
+                            for (int c = 0; c < chips.Count; c++) arr.Add(chips[c]);
+                            batch.Add(new Dictionary<string, object?>
+                            {
+                                ["i"] = i,
+                                ["c"] = arr,
+                            });
+                        }
+                        return batch;
+                    });
                     var payload = new Dictionary<string, object?>
                     {
                         ["kind"] = "chips",
@@ -495,15 +562,233 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>当前网页列表：开着专辑详情就用专辑曲目，否则用歌曲快照。
+        /// 网页 play/love 的 index 和 C# 的 now 下标都按这份算，两边永远一致。</summary>
+        private List<PlaylistItem> WebMainActiveList => _webMainAlbumTracks ?? _webMainSongs;
+
+        /// <summary>
+        /// 按原生专辑面板同一套口径分组（BuildAlbumEntriesFromTracks：按专辑名分组，
+        /// 封面优先碟1轨1那首），再按专辑名排序（原生默认排序就是按标题）。
+        /// 纯内存运算，不开文件——分组 3609 首只要几十毫秒。
+        /// </summary>
+        private List<AlbumEntry> WebMainAlbumEntries()
+        {
+            var entries = BuildAlbumEntriesFromTracks(_webMainSongs);
+            entries.Sort((a, b) =>
+                string.Compare(a.Name, b.Name, StringComparison.CurrentCultureIgnoreCase));
+            return entries;
+        }
+
+        /// <summary>把专辑列表推给网页（网格用）。封面不走同步——78 张专辑每张都要解
+        /// 一个音频文件，云盘曲库下会把界面卡住；先出列表，封面后台预热按批补。</summary>
+        private async Task PushWebMainAlbumsAsync()
+        {
+            if (!_celesteWebReady) return;
+            try
+            {
+                var entries = WebMainAlbumEntries();
+                // 注意：这里不 bump _webMainGen——歌曲推完时会顺着补推专辑（见
+                // PushWebMainDataCoreAsync 末尾），bump 会把刚起步的格式胶囊预热杀掉。
+                // 旧封面循环的收尾交给"歌曲快照重推"时的代际递增。
+
+                var items = new List<object>();
+                for (int i = 0; i < entries.Count; i++)
+                {
+                    var e = entries[i];
+                    items.Add(new Dictionary<string, object?>
+                    {
+                        ["i"] = i,
+                        ["name"] = e.Name,
+                        ["artist"] = e.Artist,
+                        ["year"] = e.Year > 0 ? e.Year.ToString(CultureInfo.InvariantCulture) : "",
+                        ["n"] = e.TrackCount,
+                    });
+                }
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "albums",
+                    ["items"] = items,
+                    ["total"] = entries.Count,
+                });
+                StartupLog.Write($"[Web主界面] 专辑列表 {entries.Count} 张已推送");
+                _ = PrewarmWebMainAlbumsAsync(entries);
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("PushWebMainAlbums", ex);
+            }
+        }
+
+        /// <summary>
+        /// 后台预热专辑封面，算好一批推一批（kind=albumcovers，网页按专辑下标更新卡片）。
+        /// WriteCoverFile 要解音频文件（云盘曲库下每首几百毫秒），必须走后台线程；
+        /// 发送切回 UI 线程（PostWebMessageAsString 线程亲和）。
+        /// 每次推专辑列表都会重来一遍：网页收到 albums 会把卡片封面清空。
+        /// 代际不相符就停——旧下标补到新列表上会张冠李戴。
+        /// </summary>
+        private async Task PrewarmWebMainAlbumsAsync(List<AlbumEntry> entries)
+        {
+            int gen = _webMainGen;
+            try
+            {
+                const int BATCH = 10;
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                int done = 0;
+                while (done < entries.Count)
+                {
+                    if (!_webMainOpen || gen != _webMainGen) break;
+                    int end = Math.Min(done + BATCH, entries.Count);
+                    int from = done;
+                    // 解封面是文件读，必须挪出 UI 线程（否则第一批就把界面卡住）
+                    var items = await Task.Run(() =>
+                    {
+                        var batch = new List<object>();
+                        for (int i = from; i < end; i++)
+                        {
+                            batch.Add(new Dictionary<string, object?>
+                            {
+                                ["i"] = i,
+                                ["cover"] = WebMainAlbumCover(entries[i]),
+                            });
+                        }
+                        return batch;
+                    });
+                    var payload = new Dictionary<string, object?>
+                    {
+                        ["kind"] = "albumcovers",
+                        ["items"] = items,
+                    };
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_webMainOpen) _ = PostCelesteWebAsync(payload);
+                    });
+                    done = end;
+                    await Task.Delay(30);
+                }
+                StartupLog.Write($"[Web主界面] 专辑封面预热 {done}/{entries.Count}（{sw.ElapsedMilliseconds} ms）");
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("PrewarmWebMainAlbums", ex);
+            }
+        }
+
+        /// <summary>专辑封面 URL：优先 AlbumEntry.CoverSourcePath（原生同一口径：
+        /// 碟1轨1那首），空了退回专辑内第一首。缓存按曲目路径，重复打开不解第二次。</summary>
+        private string WebMainAlbumCover(AlbumEntry entry)
+        {
+            string first = WebMainAlbumFirstPath(entry.Name);
+            foreach (var path in new[] { entry.CoverSourcePath, first })
+            {
+                if (string.IsNullOrEmpty(path)) continue;
+                if (!_webMainCoverCache.TryGetValue(path, out var cover))
+                {
+                    cover = WriteCoverFile(path);
+                    _webMainCoverCache[path] = cover;
+                }
+                if (!string.IsNullOrEmpty(cover)) return cover;
+            }
+            return "";
+        }
+
+        private string WebMainAlbumFirstPath(string albumName)
+        {
+            return _webMainSongs.FirstOrDefault(t =>
+                string.Equals(t.Album, albumName, StringComparison.CurrentCultureIgnoreCase))
+                ?.FilePath ?? "";
+        }
+
+        /// <summary>
+        /// 网页点了一张专辑：把专辑信息和曲目推过去（网页切到详情视图）。
+        /// 曲目查询/排序与原生 OpenAlbumDetailCore 完全一致：碟号→音轨号→标题。
+        /// </summary>
+        private async Task OpenWebMainAlbumAsync(int albumIndex)
+        {
+            if (!_celesteWebReady || albumIndex < 0) return;
+            try
+            {
+                var entries = WebMainAlbumEntries();
+                if (albumIndex >= entries.Count) return;
+                var entry = entries[albumIndex];
+
+                List<PlaylistItem> tracks = _webMainSongs
+                    .Where(t => string.Equals(t.Album, entry.Name, StringComparison.CurrentCultureIgnoreCase))
+                    .OrderBy(t => t.Disc == 0 ? uint.MaxValue : t.Disc)
+                    .ThenBy(t => t.Track == 0 ? uint.MaxValue : t.Track)
+                    .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
+                    .ToList();
+                if (tracks.Count == 0) return;
+
+                _webMainAlbumTracks = tracks;
+
+                string cover = WebMainAlbumCover(entry);
+                StartupLog.Write($"[Web主界面] 专辑「{entry.Name}」封面 URL={(string.IsNullOrEmpty(cover) ? "(空)" : cover)}");
+
+                int cur = -1;
+                if (!string.IsNullOrEmpty(_nowPlayingPath))
+                {
+                    for (int i = 0; i < tracks.Count; i++)
+                    {
+                        if (string.Equals(tracks[i].FilePath, _nowPlayingPath,
+                                StringComparison.OrdinalIgnoreCase))
+                        {
+                            cur = i;
+                            break;
+                        }
+                    }
+                }
+
+                var list = new List<object>();
+                for (int i = 0; i < tracks.Count; i++)
+                {
+                    var t = tracks[i];
+                    list.Add(new Dictionary<string, object?>
+                    {
+                        ["n"] = t.Track > 0 ? (int)t.Track : i + 1,
+                        ["title"] = t.Title,
+                        ["artist"] = t.Artist,
+                        ["album"] = t.Album,
+                        ["duration"] = t.Duration.TotalSeconds,
+                        ["dsd"] = IsDsdFile(t.FilePath),
+                        ["fmt"] = CodecOf(t.FilePath),
+                        ["cover"] = cover,
+                    });
+                }
+
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "albumtracks",
+                    ["album"] = new Dictionary<string, object?>
+                    {
+                        ["name"] = entry.Name,
+                        ["artist"] = entry.Artist,
+                        ["year"] = entry.Year > 0 ? entry.Year.ToString(CultureInfo.InvariantCulture) : "",
+                        ["n"] = tracks.Count,
+                        ["dur"] = entry.TotalDurationText,
+                        ["cover"] = cover,
+                    },
+                    ["tracks"] = list,
+                    ["cur"] = cur,
+                });
+                StartupLog.Write($"[Web主界面] 打开专辑「{entry.Name}」{tracks.Count} 首");
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("OpenWebMainAlbum", ex);
+            }
+        }
+
         /// <summary>每秒推送给网页的播放状态。字段名与 main.html 的 'now' 分支对应。</summary>
         private Dictionary<string, object?> BuildWebMainNowMessage()
         {
+            // 开着专辑详情时下标按专辑曲目算，不然网页高亮不到正在播的那一行
+            var list = WebMainActiveList;
             int idx = -1;
             if (!string.IsNullOrEmpty(_nowPlayingPath))
             {
-                for (int i = 0; i < _webMainSongs.Count; i++)
+                for (int i = 0; i < list.Count; i++)
                 {
-                    if (string.Equals(_webMainSongs[i].FilePath, _nowPlayingPath,
+                    if (string.Equals(list[i].FilePath, _nowPlayingPath,
                             StringComparison.OrdinalIgnoreCase))
                     {
                         idx = i;
