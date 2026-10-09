@@ -135,11 +135,13 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           color:var(--text);font-family:var(--font);font-size:12.5px;padding:0 14px 0 8px;cursor:pointer;
           display:inline-flex;align-items:center;gap:4px;flex:0 0 auto}
 .backgrid:hover{background:var(--hover)}
-.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:22px 18px;padding:6px 0 24px}
+/* 专辑网格：minmax(150px) 而不是 170/178 —— 用户实测"封面太大"，
+   150px 一行能排8 张，接近 Apple Music 专辑页的密度。 */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:20px 16px;padding:6px 0 24px}
 .acard{cursor:pointer;min-width:0}
 .acard .cv{width:100%;aspect-ratio:1;border-radius:var(--r-card);overflow:hidden;
           background:linear-gradient(140deg,#C6C6CC,#9A9AA2);display:grid;place-items:center;
-          color:#fff;font-size:32px;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08)}
+          color:#fff;font-size:28px;font-weight:600;box-shadow:0 1px 3px rgba(0,0,0,.08)}
 .acard .cv img{width:100%;height:100%;object-fit:cover;display:block}
 .acard .nm{font-size:13px;font-weight:600;margin-top:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .acard .ar{font-size:12px;color:var(--text2);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -220,7 +222,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           <div class="n">#</div><div class="m">标题</div><div class="d">时长</div><div class="fav"></div>
         </div>
         <div id="rows"></div>
-        <div id="albgrid" style="display:none"></div>
+        <!-- ⚠ 必须带 class="grid"：少了它里面每张 .acard 都是整行块级元素，
+             一个封面就横跨左右（2026-10-09 用户实测）。样式在 .grid 那条规则里。 -->
+        <div id="albgrid" class="grid" style="display:none"></div>
         <div id="placeholder" style="display:none"></div>
       </div>
     </main>
@@ -318,7 +322,10 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     albums: [],      // 专辑网格（C# 推来，封面后台预热按批补）
     albumView: [],   // 筛选后的专辑下标（元素是 albums 的下标）
     album: null,     // 打开的专辑详情 {name,artist,year,n,dur,cover}
-    albumTracks: []  // 专辑详情的曲目（开着详情时 play/love 的 index 按这份）
+    albumTracks: [], // 专辑详情的曲目（开着详情时 play/love 的 index 按这份）
+    songByAlbum: {}  // 专辑名 -> 歌曲下标数组。专辑封面按专辑粒度算一次，
+                     // 同一专辑的歌共用这张图——3609 首各解一次封面要几百秒，
+                     // 云盘曲库下更扛不住。专辑封面到货后靠它回填歌曲行。
   };
   var $ = function(id){ return document.getElementById(id); };
   var esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
@@ -380,7 +387,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     var loved = !!S.love[si];
     return '<div class="row' + (on ? ' on' : '') + '" data-s="' + si + '" data-n="' + (si + 1) + '">'
          +   '<div class="n">' + (on ? '&#9834;' : (si + 1)) + '</div>'
-         +   '<div class="a">' + esc((t.title || '?').slice(0, 1)) + '</div>'
+         +   '<div class="a">' + (t.cover
+              ? '<img src="' + t.cover + '" alt="" onerror="postCoverErr(this.src)">'
+              : esc((t.title || '?').slice(0, 1))) + '</div>'
          +   '<div class="m">'
          +     '<div class="t">' + esc(t.title) + '</div>'
          +     '<div class="s">' + esc(t.artist || '') + (t.album ? ' · ' + esc(t.album) : '') + '</div>'
@@ -403,11 +412,33 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   function applyFilter(){
     var q = ($('q').value || '').trim().toLowerCase();
     S.view = [];
+    S.songByAlbum = {};
     for (var i = 0; i < S.songs.length; i++){
       var t = S.songs[i];
+      if (t.album){
+        var key = t.album.toLowerCase();
+        var arr = S.songByAlbum[key];
+        if (!arr) S.songByAlbum[key] = arr = [];
+        arr.push(i);
+      }
       if (!q) { S.view.push(i); continue; }
       var hay = (t.title + ' ' + (t.artist || '') + ' ' + (t.album || '')).toLowerCase();
       if (hay.indexOf(q) >= 0) S.view.push(i);
+    }
+  }
+  /* 专辑封面到货后回填该专辑下所有歌曲行的封面槽。
+     歌曲快照本身不带封面（逐首解封面 3609 首读不动），封面按专辑粒度算一次共用。
+     行可能还没渲染（分批渲染中）——只更新已渲染的，没渲染的等 songRow 时读 t.cover。 */
+  function fillSongCovers(albumName, cover){
+    var arr = S.songByAlbum[String(albumName || '').toLowerCase()];
+    if (!arr) return;
+    for (var j = 0; j < arr.length; j++){
+      var si = arr[j];
+      var t = S.songs[si];
+      if (!t) continue;
+      t.cover = cover;
+      var slot = $('rows').querySelector('.row[data-s="' + si + '"] .a');
+      if (slot) slot.innerHTML = '<img src="' + cover + '" alt="" onerror="postCoverErr(this.src)">';
     }
   }
   function pump(){
@@ -731,16 +762,17 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           paintHeader();
           break;
         case 'albumcovers':
-          // C# 后台预热算好的专辑封面：按专辑下标更新卡片的封面槽
+          // C# 后台预热算好的专辑封面：按专辑下标更新专辑网格卡片，
+          // 同时按专辑名回填该专辑下所有歌曲行的封面（歌曲快照不带封面）
           if (m.items){
             for (var k = 0; k < m.items.length; k++){
               var it = m.items[k];
               var a = S.albums[it.i];
-              if (!a) continue;
-              a.cover = it.cover || '';
+              if (a) a.cover = it.cover || '';
               var card = $('albgrid').querySelector('.acard[data-a="' + it.i + '"] .cv');
-              if (card && a.cover)
+              if (card && a && a.cover)
                 card.innerHTML = '<img src="' + a.cover + '" alt="" onerror="postCoverErr(this.src)">';
+              if (it.album && it.cover) fillSongCovers(it.album, it.cover);
             }
           }
           break;

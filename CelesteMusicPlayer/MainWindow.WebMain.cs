@@ -495,10 +495,11 @@ namespace CelesteMusicPlayer
             _webMainChipsWarm = false;
             _ = PrewarmWebMainChipsAsync();
 
-            // 用户先点了专辑、歌曲才推完：顺着把专辑列表补过去（不然网格空着）。
-            // 放在胶囊预热之后——PrewarmWebMainAlbumsAsync 不 bump 代际，不会杀了它。
-            if (string.Equals(_webMainPage, "Albums", StringComparison.OrdinalIgnoreCase))
-                _ = PushWebMainAlbumsAsync();
+            // 专辑列表 + 封面预热：**不分当前停在哪个页面都要跑**——
+            // 歌曲列表每行的封面就是靠专辑封面回填的（不逐首解封面），
+            // 只在 Albums 页推的话，停在 Songs 页就永远只有首字符（2026-10-09 用户实测）。
+            // 网页收到 albums 时只在 Albums 页才画网格，这里推了也不影响。
+            _ = PushWebMainAlbumsAsync();
         }
 
         /// <summary>
@@ -648,6 +649,9 @@ namespace CelesteMusicPlayer
                             batch.Add(new Dictionary<string, object?>
                             {
                                 ["i"] = i,
+                                // 专辑名一起带上：网页按专辑名把封面回填给该专辑下的
+                                // 所有歌曲行（歌曲快照不逐首解封面，3609 首读不动）。
+                                ["album"] = entries[i].Name,
                                 ["cover"] = WebMainAlbumCover(entries[i]),
                             });
                         }
