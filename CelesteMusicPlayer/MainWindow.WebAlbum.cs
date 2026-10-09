@@ -101,6 +101,9 @@ namespace CelesteMusicPlayer
             {
                 DeployWebAsset("album.html");
 
+                // 两个网页覆盖层互斥：开专辑试点先关主界面（反之亦然，见 WebMain.cs）
+                if (_webMainOpen) CloseWebMain();
+
                 // 第一个 WebView2 实例要吃 286MB，所以不到真正要用的时候不建；
                 // 万一宿主内核已经死了（浏览器进程崩溃过就会这样），这里就地拆旧建新
                 if (!await EnsureCelesteWebHostAsync()) return;

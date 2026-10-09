@@ -86,6 +86,8 @@
     <!-- 皮肤系统第 3 步：网页试点的页面文件。
          运行时会被复制到 LocalAppData\CelesteMusicPlayer\WebAssets 供 WebView2 用 -->
     <Content Include="WebUI\album.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- 皮肤系统第 4 步：Apple 风格主界面 · 歌曲浏览面板（试点，先只做这一个面板） -->
+    <Content Include="WebUI\main.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

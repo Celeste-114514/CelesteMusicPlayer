@@ -89,7 +89,11 @@ namespace CelesteMusicPlayer
                     FontSize = 12,
                     CornerRadius = new CornerRadius(15),
                 };
-                backBtn.Click += (s, e) => CloseWebAlbumPilot();
+                backBtn.Click += (s, e) =>
+                {
+                    // 两个网页页面互斥：主界面开着就关主界面，否则关专辑试点
+                    if (_webMainOpen) CloseWebMain(); else CloseWebAlbumPilot();
+                };
                 CelesteWebHostGrid.Children.Add(backBtn);
                 _celesteWebBackButton = backBtn;
 
@@ -383,12 +387,14 @@ namespace CelesteMusicPlayer
                     _ = PushCelesteThemeAndRouteAsync();
                     // 第 3 步起：试点页就绪，顺手把专辑数据也推过去
                     // （ready 被这个 case 截住了，不会落到 default，所以要显式调一次）
-                    HandleWebAlbumMessage(msg);
+                    // 第 4 步起：主界面的歌曲浏览面板开着时推它的数据（两个页面互斥）
+                    if (_webMainOpen) HandleWebMainMessage(msg); else HandleWebAlbumMessage(msg);
                     break;
 
                 default:
                     // 第 3 步起：专辑详情页试点的消息交给 MainWindow.WebAlbum.cs 处理
-                    HandleWebAlbumMessage(msg);
+                    // 第 4 步起：主界面歌曲浏览面板的消息交给 MainWindow.WebMain.cs 处理
+                    if (_webMainOpen) HandleWebMainMessage(msg); else HandleWebAlbumMessage(msg);
                     break;
             }
         }

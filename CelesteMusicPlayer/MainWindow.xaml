@@ -962,6 +962,21 @@
                         Spacing="8"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center">
+                        <!-- 皮肤系统第 4 步：Apple 风格主界面 · 歌曲浏览面板（试点）。
+                             只在歌曲分类显示；点了才第一次创建 WebView2，不点就永远不占那 286MB。 -->
+                        <Button
+                            x:Name="WebMainPilotButton"
+                            Height="32"
+                            Padding="14,0"
+                            CornerRadius="16"
+                            BorderThickness="0"
+                            Click="WebMainPilotButton_Click"
+                            ToolTipService.ToolTip="换成网页画的 Apple 风格界面浏览歌曲（试点，随时能退出来）">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE774;" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="新版界面（试点）" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Button
                             x:Name="PlayAllLibrarySongsButton"
                             Height="32"
