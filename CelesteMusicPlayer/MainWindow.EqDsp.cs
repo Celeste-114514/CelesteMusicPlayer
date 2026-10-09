@@ -1222,6 +1222,12 @@ namespace CelesteMusicPlayer
 
         private void AudioFxEqBandDelete_Click(object sender, RoutedEventArgs e)
         {
+            DeleteAudioFxEqBandCore();
+        }
+
+        /// <summary>删除选中频段核心（网页「音效处理」页直接调）。</summary>
+        internal void DeleteAudioFxEqBandCore()
+        {
             if (_audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count) return;
             PushEqUndoSnapshot();
             _audioFxEq.Bands.RemoveAt(_audioFxEqSelected);
@@ -1235,6 +1241,12 @@ namespace CelesteMusicPlayer
 
 
         private void AudioFxEqAddBand_Click(object sender, RoutedEventArgs e)
+        {
+            AddAudioFxEqBandCore();
+        }
+
+        /// <summary>添加频段核心（网页「音效处理」页直接调）。</summary>
+        internal void AddAudioFxEqBandCore()
         {
             double freq = 1000;
             if (_audioFxEqSelected >= 0 && _audioFxEqSelected < _audioFxEq.Bands.Count)
@@ -1289,6 +1301,12 @@ namespace CelesteMusicPlayer
 
 
         private void AudioFxEqSimpleFlat_Click(object sender, RoutedEventArgs e)
+        {
+            FlatAudioFxEqSimpleCore();
+        }
+
+        /// <summary>简单模式恢复平坦核心（网页「音效处理」页直接调）。</summary>
+        internal void FlatAudioFxEqSimpleCore()
         {
             _audioFxLoading = true;
             try
@@ -1414,11 +1432,19 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            string name = (nameBox.Text ?? string.Empty).Trim();
+            _ = await SaveAudioFxEqPresetCoreAsync(nameBox.Text ?? string.Empty);
+        }
+
+        /// <summary>保存 EQ 预设核心（网页「音效处理」页直接调，name 由网页输入框给）。
+        /// 返回给调用方一句结果消息（空名 = 没保存）。</summary>
+        internal async Task<string> SaveAudioFxEqPresetCoreAsync(string rawName)
+        {
+            string name = (rawName ?? string.Empty).Trim();
             if (string.IsNullOrWhiteSpace(name))
             {
-                NowPlayingText.Text = "预设名称不能为空，未保存";
-                return;
+                const string bad = "预设名称不能为空，未保存";
+                NowPlayingText.Text = bad;
+                return bad;
             }
 
             var toSave = _audioFxEq.Clone();
@@ -1429,11 +1455,19 @@ namespace CelesteMusicPlayer
             // 刷新下拉并在列表中选择刚保存的预设
             RefreshAudioFxUserPresetItems();
             SelectAudioFxEqPreset(newId);
-            NowPlayingText.Text = "EQ 预设已保存：" + toSave.PresetName;
+            string msg = "EQ 预设已保存：" + toSave.PresetName;
+            NowPlayingText.Text = msg;
+            return msg;
         }
 
 
         private void AudioFxEqAutoGain_Click(object sender, RoutedEventArgs e)
+        {
+            AutoGainAudioFxEqCore();
+        }
+
+        /// <summary>自动增益核心（网页「音效处理」页直接调）。返回结果消息。</summary>
+        internal string AutoGainAudioFxEqCore()
         {
             PushEqUndoSnapshot();
             // 估算峰值叠加增益：所有 band 在任一频率的最大正贡献 + headroom
@@ -1453,7 +1487,9 @@ namespace CelesteMusicPlayer
             _audioFxEq.PreampDb = Math.Clamp(preampDb, -24, 24);
             RefreshAudioFxEqBandEditor();
             ApplyDspToEngine();
-            NowPlayingText.Text = "自动增益：preamp = " + FormatHelper.FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
+            string msg = "自动增益：preamp = " + FormatHelper.FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
+            NowPlayingText.Text = msg;
+            return msg;
         }
 
 
@@ -1527,7 +1563,13 @@ namespace CelesteMusicPlayer
 
         private void AudioFxEqUndo_Click(object sender, RoutedEventArgs e)
         {
-            if (_eqUndoStack.Count == 0) return;
+            UndoAudioFxEqCore();
+        }
+
+        /// <summary>撤销 EQ 修改核心（网页「音效处理」页直接调）。返回结果消息。</summary>
+        internal string UndoAudioFxEqCore()
+        {
+            if (_eqUndoStack.Count == 0) return "没有可撤销的 EQ 修改";
             EqCurveState target = _eqUndoStack[^1];
             _eqUndoStack.RemoveAt(_eqUndoStack.Count - 1);
             _eqRedoStack.Add(_audioFxEq.Clone());
@@ -1535,20 +1577,30 @@ namespace CelesteMusicPlayer
             _eqAbPreviewing = false;
             _eqAbLive = null;
             SetAudioFxEqFromSnapshot(target);
-            NowPlayingText.Text = "已撤销 EQ 修改（还可撤销 " + _eqUndoStack.Count + " 步）";
+            string msg = "已撤销 EQ 修改（还可撤销 " + _eqUndoStack.Count + " 步）";
+            NowPlayingText.Text = msg;
+            return msg;
         }
 
 
         private void AudioFxEqRedo_Click(object sender, RoutedEventArgs e)
         {
-            if (_eqRedoStack.Count == 0) return;
+            RedoAudioFxEqCore();
+        }
+
+        /// <summary>重做 EQ 修改核心（网页「音效处理」页直接调）。返回结果消息。</summary>
+        internal string RedoAudioFxEqCore()
+        {
+            if (_eqRedoStack.Count == 0) return "没有可重做的 EQ 修改";
             EqCurveState target = _eqRedoStack[^1];
             _eqRedoStack.RemoveAt(_eqRedoStack.Count - 1);
             _eqUndoStack.Add(_audioFxEq.Clone());
             _eqAbPreviewing = false;
             _eqAbLive = null;
             SetAudioFxEqFromSnapshot(target);
-            NowPlayingText.Text = "已重做 EQ 修改";
+            const string msg = "已重做 EQ 修改";
+            NowPlayingText.Text = msg;
+            return msg;
         }
 
 
@@ -1583,6 +1635,12 @@ namespace CelesteMusicPlayer
         /// <summary>A/B 对比：首次点击把当前曲线存为参考 A；再点在 A / 现场 B 间切换试听；Shift+点击取消。</summary>
         private void AudioFxEqAb_Click(object sender, RoutedEventArgs e)
         {
+            ToggleAudioFxEqAbCore();
+        }
+
+        /// <summary>A/B 对比核心（网页「音效处理」页直接调；网页点击不含 Shift，走普通分支）。返回结果消息。</summary>
+        internal string ToggleAudioFxEqAbCore()
+        {
             if (_eqAbSnapshot != null && IsShiftDown())
             {
                 _eqAbSnapshot = null;
@@ -1590,28 +1648,31 @@ namespace CelesteMusicPlayer
                 _eqAbShowingA = false;
                 _eqAbPreviewing = false;
                 AudioFxEqAbButton.Content = "A/B 对比";
-                NowPlayingText.Text = "A/B 对比已取消";
+                const string cancel = "A/B 对比已取消";
+                NowPlayingText.Text = cancel;
                 ApplyDspToEngine();
-                return;
+                return cancel;
             }
 
             if (_eqAbSnapshot == null)
             {
                 _eqAbSnapshot = _audioFxEq.Clone();
                 AudioFxEqAbButton.Content = "试听 A（参考）";
-                NowPlayingText.Text = "已把当前曲线存为参考 A；继续随意调整，再点本按钮在 A / 调整后 B 间切换试听（Shift+点击取消）";
-                return;
+                const string saved = "已把当前曲线存为参考 A；继续随意调整，再点本按钮在 A / 调整后 B 间切换试听";
+                NowPlayingText.Text = saved;
+                return saved;
             }
 
             _eqAbShowingA = !_eqAbShowingA;
             EqCurveState target;
+            string msg;
             if (_eqAbShowingA)
             {
                 _eqAbPreviewing = true;
                 _eqAbLive = _audioFxEq.Clone();      // 暂存现场 B
                 target = _eqAbSnapshot.Clone();
                 AudioFxEqAbButton.Content = "回到 B（调整后）";
-                NowPlayingText.Text = "A/B 对比：正在试听参考曲线 A（此刻改曲线只作用于 A）";
+                msg = "A/B 对比：正在试听参考曲线 A（此刻改曲线只作用于 A）";
             }
             else
             {
@@ -1620,10 +1681,12 @@ namespace CelesteMusicPlayer
                 target = _eqAbLive ?? _audioFxEq.Clone();
                 _eqAbLive = null;
                 AudioFxEqAbButton.Content = "试听 A（参考）";
-                NowPlayingText.Text = "A/B 对比：已回到你的曲线 B";
+                msg = "A/B 对比：已回到你的曲线 B";
             }
 
             SetAudioFxEqFromSnapshot(target);
+            NowPlayingText.Text = msg;
+            return msg;
         }
 
 
@@ -1741,6 +1804,12 @@ namespace CelesteMusicPlayer
 
         private void AudioFxEqSpectrum_Click(object sender, RoutedEventArgs e)
         {
+            ToggleAudioFxEqSpectrumCore();
+        }
+
+        /// <summary>实时频谱背景开关核心（网页「音效处理」页直接调）。返回结果消息。</summary>
+        internal string ToggleAudioFxEqSpectrumCore()
+        {
             // ToggleButton（不是 ToggleSwitch）：选中属性是 IsChecked
             _eqSpectrumOn = AudioFxEqSpectrumToggle == null || AudioFxEqSpectrumToggle.IsChecked == true;
             if (_eqSpectrumOn && _dspPageIndex == DspPageEqIndex)
@@ -1753,6 +1822,7 @@ namespace CelesteMusicPlayer
             }
 
             RedrawAudioFxEqCurve();
+            return _eqSpectrumOn ? "实时频谱背景：开" : "实时频谱背景：关";
         }
 
 

@@ -580,6 +580,12 @@ namespace CelesteMusicPlayer
         /// <summary>先把 trim 降到 -6 dB 再启用卷积，避免一开就爆音（对齐 ECHO enableFirSafely）。</summary>
         private void DspFirSafeEnable_Click(object sender, RoutedEventArgs e)
         {
+            FirSafeEnableCore();
+        }
+
+        /// <summary>安全启用卷积核心（网页「音效处理」页直接调）。</summary>
+        internal void FirSafeEnableCore()
+        {
             RoomCorrectionState st = RoomCorrectionStore.Load();
             if (string.IsNullOrWhiteSpace(st.IrPath))
             {
@@ -792,6 +798,12 @@ namespace CelesteMusicPlayer
         // ---------- 输出安全监控 ----------
 
         private void OutMonitorReset_Click(object sender, RoutedEventArgs e)
+        {
+            ResetOutputMonitorCore();
+        }
+
+        /// <summary>重置输出统计核心（网页「音效处理」页直接调）。</summary>
+        internal void ResetOutputMonitorCore()
         {
             _audioEngine?.ResetOutputStats();
             UpdateDspOutputMonitor();

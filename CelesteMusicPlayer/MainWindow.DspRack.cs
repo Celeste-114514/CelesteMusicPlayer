@@ -714,6 +714,12 @@ namespace CelesteMusicPlayer
 
         private void DspRackReset_Click(object sender, RoutedEventArgs e)
         {
+            ResetDspRackOrderCore();
+        }
+
+        /// <summary>恢复默认机架顺序核心（网页「音效处理」页直接调）。</summary>
+        internal void ResetDspRackOrderCore()
+        {
             // 直接恢复 ECHO 默认顺序并下发；CommitDspRackOrder 内部会 load→save→重绘
             _dspRackOrderDraft = DefaultDspRackOrder();
             CommitDspRackOrder();

@@ -477,9 +477,15 @@ namespace CelesteMusicPlayer
         /// <summary>「保存为方案」：把当前整套设置存成新方案；同名则覆盖更新。</summary>
         private void DspProfileSave_Click(object sender, RoutedEventArgs e)
         {
+            SaveDspProfileCore(DspProfileNameBox?.Text ?? string.Empty);
+        }
+
+        /// <summary>保存方案核心（网页「音效处理」页直接调，name 由调用方给）。</summary>
+        internal void SaveDspProfileCore(string rawName)
+        {
             try
             {
-                string name = (DspProfileNameBox?.Text ?? string.Empty).Trim();
+                string name = (rawName ?? string.Empty).Trim();
                 if (name.Length == 0)
                 {
                     name = NextDspProfileName();
@@ -541,6 +547,12 @@ namespace CelesteMusicPlayer
         /// <summary>「应用方案」：整套切到选中方案。</summary>
         private void DspProfileApply_Click(object sender, RoutedEventArgs e)
         {
+            ApplySelectedDspProfileCore();
+        }
+
+        /// <summary>应用选中方案核心（网页「音效处理」页直接调）。</summary>
+        internal void ApplySelectedDspProfileCore()
+        {
             DspProfile? row = SelectedDspProfile();
             if (row == null)
             {
@@ -552,6 +564,12 @@ namespace CelesteMusicPlayer
 
         /// <summary>「更新为当前设置」：把选中方案的内容换成当前设置（名字与创建时间保留）。</summary>
         private void DspProfileUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            UpdateSelectedDspProfileCore();
+        }
+
+        /// <summary>更新选中方案为当前设置核心（网页「音效处理」页直接调）。</summary>
+        internal void UpdateSelectedDspProfileCore()
         {
             try
             {
@@ -603,6 +621,12 @@ namespace CelesteMusicPlayer
 
         /// <summary>「删除方案」：只删快照，不动当前各模块设置（声音不会因此改变）。</summary>
         private void DspProfileDelete_Click(object sender, RoutedEventArgs e)
+        {
+            DeleteSelectedDspProfileCore();
+        }
+
+        /// <summary>删除选中方案核心（网页「音效处理」页直接调）。</summary>
+        internal void DeleteSelectedDspProfileCore()
         {
             try
             {

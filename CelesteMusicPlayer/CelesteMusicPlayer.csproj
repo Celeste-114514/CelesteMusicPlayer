@@ -88,6 +88,8 @@
     <Content Include="WebUI\album.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- 皮肤系统第 4 步：Apple 风格主界面 · 歌曲浏览面板（试点，先只做这一个面板） -->
     <Content Include="WebUI\main.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- 皮肤系统第 5 步：音效处理（DSP）网页面板，主界面侧栏「音效处理」进入 -->
+    <Content Include="WebUI\dsp.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

@@ -1,0 +1,1068 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Celeste · 音效处理</title>
+<style>
+/* 颜色读 Celeste 令牌（--celeste-*），第二栏是 Apple 风格兜底值——主题没注入时界面依然完整。
+   尺寸照主界面：窗口 1592×906、顶栏 44、播放条 90；左导航 228（原生 DspNavPanel 口径）。
+   分工铁律：网页只长样子不做事——所有拨动上报意图，C# 写原生控件（音频链路零改动）。 */
+:root{
+  --bg:      var(--celeste-app-background,      #C9C9CE);
+  --win:     var(--celeste-card-background,     #FFFFFF);
+  --sb:      var(--celeste-panel-background,    #F5F5F8);
+  --tb:      var(--celeste-panel-background,    #F1F1F6);
+  --div:     var(--celeste-divider,             #EFEFF2);
+  --div2:    var(--celeste-card-stroke,         #E5E5EA);
+  --text:    var(--celeste-text-primary,        #1C1C1F);
+  --text2:   var(--celeste-text-secondary,      #6E6E73);
+  --text3:   var(--celeste-text-disabled,       #86868B);
+  --card:    var(--celeste-overlay-background,  #FFFFFF);
+  --hover:   var(--celeste-card-background-hover,#F4F4F7);
+  --pill:    var(--celeste-input-background,    #E7E7EC);
+  --pillbr:  var(--celeste-input-stroke,        #D6D6DC);
+  --accent:  var(--celeste-accent-solid,        #FA243C);
+  --accentx:  var(--celeste-accent-text,         #FFFFFF);
+  --sel:     var(--celeste-selection-background,#FDECF0);
+  --ok:      #3B6D11;
+  --amber:   #B26A00;
+  --r-win:   10px;
+  --r-card:  var(--celeste-radius-cover, 6px);
+  --r-ctrl:  var(--celeste-radius-control, 15px);
+  --r-nav:   var(--celeste-radius-medium, 8px);
+  --sbw:    228px;
+  --font: var(--celeste-font-family-ui, -apple-system,"SF Pro Text","Segoe UI Variable Text","Segoe UI","Microsoft YaHei UI","PingFang SC",sans-serif);
+  --mono: var(--celeste-font-family-mono, ui-monospace,Consolas,monospace);
+}
+html.dark{
+  --bg:#0F0F10; --win:#1E1E1E; --sb:#191919; --tb:#232323; --div:#2E2E2E; --div2:#343434;
+  --text:#F5F5F7; --text2:#98989D; --text3:#8E8E93; --card:#252525;
+  --accent:#FF3B4E; --sel:#3A2028; --hover:#2C2C2C; --pill:#2E2E2E; --pillbr:#3A3A3A;
+  --ok:#7FB85A; --amber:#E0A44A;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{background:var(--bg);font-family:var(--font);-webkit-font-smoothing:antialiased;overflow:hidden}
+.win{position:fixed;inset:0;background:var(--win);display:flex;flex-direction:column;overflow:hidden}
+
+/* ---------- 顶栏 ---------- */
+.tb{height:44px;flex:0 0 44px;background:var(--tb);border-bottom:1px solid var(--div2);
+    display:flex;align-items:center;padding:0 14px;gap:12px}
+.back{height:26px;border:1px solid var(--pillbr);background:transparent;border-radius:var(--r-ctrl);
+      color:var(--text);font-family:var(--font);font-size:12.5px;padding:0 12px 0 8px;cursor:pointer;
+      display:inline-flex;align-items:center;gap:4px}
+.back:hover{background:var(--hover)}
+.tbt{font-size:13px;font-weight:600;letter-spacing:-.01em}
+.spacer{flex:1}
+.bpst{font-size:11.5px;color:var(--text2);font-variant-numeric:tabular-nums;max-width:300px;
+      white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bpst.warn{color:var(--amber)}
+
+/* ---------- 主体：左导航 + 右内容 ---------- */
+.body{flex:1;display:flex;min-height:0}
+.dnav{width:var(--sbw);flex:0 0 var(--sbw);background:var(--sb);padding:10px 10px 0;
+      overflow-y:auto;display:flex;flex-direction:column}
+.dnav .grp{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.06em;padding:12px 8px 5px}
+.dnav .ni{height:32px;border-radius:var(--r-nav);display:flex;align-items:center;gap:9px;
+          padding:0 9px;cursor:pointer;color:var(--text);font-size:13px;margin-bottom:1px;user-select:none}
+.dnav .ni:hover{background:var(--hover)}
+.dnav .ni.on{background:var(--sel);color:var(--accent);font-weight:600}
+.dnav .dot{width:7px;height:7px;flex:0 0 7px;border-radius:50%;background:#B4B2A9}
+.dnav .ni.on .dot{background:var(--accent)}
+.dnav .dot.live{background:var(--ok)}
+.dmain{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win);position:relative}
+.dmsg{flex:0 0 auto;font-size:12.5px;color:#b3261e;background:rgba(179,38,30,.08);
+      border-bottom:1px solid var(--div);padding:8px 28px}
+.pg{display:none;flex:1;overflow-y:auto;padding:0 28px 24px}
+.pg.on{display:block}
+
+/* ---------- 页头（标题 + 电源开关） ---------- */
+.pgh{display:flex;align-items:flex-start;gap:12px;padding:20px 0 4px}
+.pgh h2{font-size:20px;font-weight:700;letter-spacing:-.02em}
+.pgh .sub{font-size:12px;color:var(--text2);margin-top:4px;line-height:1.6;max-width:640px}
+.pgh .pwr{margin-left:auto;display:flex;align-items:center;gap:10px;flex:0 0 auto;padding-top:2px}
+.pgh .hint{font-size:11px;color:var(--amber);max-width:220px;text-align:right;line-height:1.4}
+.pgh .hint:empty{display:none}
+
+/* ---------- 控件行 ---------- */
+.crow{display:flex;align-items:center;gap:12px;min-height:38px;padding:5px 0;
+       border-bottom:1px solid var(--div)}
+.crow:last-child{border-bottom:0}
+.crow .cl{font-size:12.5px;color:var(--text);flex:0 0 150px}
+.crow .cl2{font-size:12.5px;color:var(--text2);flex:0 0 auto}
+.crow .val{font-size:12px;color:var(--text2);flex:0 0 86px;text-align:right;
+           font-variant-numeric:tabular-nums;font-family:var(--mono)}
+.crow input[type=range]{flex:1;min-width:120px;accent-color:var(--accent);height:22px}
+.crow select{height:26px;border:1px solid var(--pillbr);background:var(--pill);color:var(--text);
+             border-radius:6px;font-family:var(--font);font-size:12.5px;padding:0 8px;min-width:150px}
+.crow select:disabled{opacity:.5}
+.crow .note{font-size:11.5px;color:var(--text2);line-height:1.6}
+.crow.wrap{flex-wrap:wrap}
+
+/* 开关（照原生 ToggleSwitch 的胶囊比例） */
+.cwt{display:inline-flex;align-items:center;gap:8px;cursor:pointer;user-select:none}
+.cwt input{display:none}
+.cwt .sw{width:38px;height:22px;border-radius:11px;background:var(--pill);border:1px solid var(--pillbr);
+         position:relative;transition:background .15s;flex:0 0 38px}
+.cwt .sw::after{content:"";position:absolute;width:14px;height:14px;border-radius:50%;
+                background:#fff;top:3px;left:3px;transition:left .15s;box-shadow:0 1px 2px rgba(0,0,0,.25)}
+.cwt input:checked + .sw{background:var(--accent);border-color:transparent}
+.cwt input:checked + .sw::after{left:20px}
+.cwt input:disabled + .sw{opacity:.45}
+.cwt .cl{font-size:12.5px;color:var(--text)}
+.cwt.bp .cl{font-size:12px;color:var(--text2)}
+
+/* ---------- 按钮 ---------- */
+.btn{height:28px;border-radius:var(--r-ctrl);border:1px solid var(--div2);background:transparent;
+     color:var(--text);font-family:var(--font);font-size:12px;padding:0 12px;cursor:pointer;
+     display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.btn:hover{background:var(--hover)}
+.btn:disabled{opacity:.45;cursor:default}
+.btn:disabled:hover{background:transparent}
+.btn.pri{background:var(--accent);border-color:transparent;color:var(--accentx);font-weight:600}
+.btn.pri:hover{filter:brightness(.94)}
+.btn.warn{color:#b3261e;border-color:rgba(179,38,30,.4)}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;padding:12px 0 4px}
+
+/* ---------- 卡片 / 分区 ---------- */
+.card{background:var(--card);border:1px solid var(--div2);border-radius:var(--r-win);
+      padding:14px 16px;margin-top:14px}
+.card .ct{font-size:13px;font-weight:600;margin-bottom:8px}
+.card .note{font-size:12px;color:var(--text2);line-height:1.7}
+.card.dim{opacity:.85}
+
+/* ---------- EQ 页 ---------- */
+.strip{display:flex;gap:6px;flex-wrap:wrap;padding:12px 0 2px}
+.pill{font-size:11px;color:var(--text2);background:var(--pill);border:1px solid var(--pillbr);
+      border-radius:5px;padding:2px 8px;letter-spacing:.02em;white-space:nowrap}
+.pill.hi{color:var(--accent);background:var(--sel);border-color:transparent}
+.pill.ok{color:var(--ok);border-color:rgba(59,109,17,.35)}
+.pill.amber{color:var(--amber);border-color:rgba(178,106,0,.35)}
+.bands{display:flex;gap:6px;flex-wrap:wrap;padding:12px 0 6px}
+.bchip{min-width:34px;height:28px;border-radius:8px;border:1px solid var(--pillbr);background:var(--pill);
+       color:var(--text);font-family:var(--font);font-size:12px;cursor:pointer;padding:0 8px;
+       display:inline-flex;align-items:center;justify-content:center;gap:5px;font-variant-numeric:tabular-nums}
+.bchip:hover{background:var(--hover)}
+.bchip.on{background:var(--sel);border-color:transparent;color:var(--accent);font-weight:600}
+.bchip .bd{width:6px;height:6px;border-radius:50%;background:var(--text3);flex:0 0 6px}
+.bchip.on .bd{background:var(--accent)}
+.bchip .bd.off{background:transparent;border:1px solid var(--text3)}
+.radios{display:inline-flex;gap:14px}
+.radios label{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;cursor:pointer;color:var(--text)}
+.radios input{accent-color:var(--accent)}
+
+/* ---------- 方案页 ---------- */
+.pfsave{display:flex;gap:8px;align-items:center;padding:10px 0 4px}
+.pfsave input{flex:1;max-width:280px;height:28px;border:1px solid var(--pillbr);background:var(--pill);
+              border-radius:6px;font-family:var(--font);font-size:12.5px;color:var(--text);padding:0 10px;outline:0}
+.pfstat{font-size:12px;color:var(--text2);padding:8px 0;line-height:1.6}
+.pflist{border:1px solid var(--div2);border-radius:var(--r-win);overflow:hidden;margin-top:6px}
+.pfrow{display:flex;align-items:center;gap:10px;min-height:38px;padding:0 12px;font-size:12.5px;
+       cursor:pointer;border-bottom:1px solid var(--div)}
+.pfrow:last-child{border-bottom:0}
+.pfrow:hover{background:var(--hover)}
+.pfrow.on{background:var(--sel)}
+.pfrow .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pfrow .st{font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums;flex:0 0 auto}
+.pfrow.on .nm{color:var(--accent);font-weight:600}
+.pfrow .cur{font-size:10.5px;color:var(--accent);flex:0 0 auto}
+
+/* ---------- 机架页 ---------- */
+.rkrow{display:flex;align-items:center;gap:12px;min-height:44px;padding:0 12px;
+       border-bottom:1px solid var(--div);cursor:pointer;font-size:12.5px}
+.rkrow:last-child{border-bottom:0}
+.rkrow:hover{background:var(--hover)}
+.rkrow.on{background:var(--sel)}
+.rkrow .slot{flex:0 0 26px;font-size:11px;color:var(--text3);font-variant-numeric:tabular-nums}
+.rkrow .nm{flex:0 0 130px;font-weight:600}
+.rkrow .stt{flex:0 0 92px;font-size:11.5px}
+.rkrow .hint{flex:1;min-width:0;font-size:11.5px;color:var(--text2);overflow:hidden;
+             text-overflow:ellipsis;white-space:nowrap}
+.rkrow.on .nm{color:var(--accent)}
+
+/* ---------- 监控页 ---------- */
+.mongrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;padding:14px 0 4px}
+.mon{background:var(--card);border:1px solid var(--div2);border-radius:var(--r-win);padding:12px 14px}
+.mon .k{font-size:11px;color:var(--text3);letter-spacing:.04em}
+.mon .v{font-size:17px;font-weight:600;margin-top:6px;font-variant-numeric:tabular-nums;
+        font-family:var(--mono);letter-spacing:-.01em}
+.mon .v.sm{font-size:13px;font-family:var(--font);font-weight:500;line-height:1.5}
+.mon .v.warn{color:var(--amber)}
+.mon .v.ok{color:var(--ok)}
+
+/* ---------- 播放条（与主界面同款） ---------- */
+.pb{height:90px;flex:0 0 90px;background:var(--tb);border-top:1px solid var(--div2);
+    display:flex;align-items:center;padding:0 18px;gap:18px}
+.pbleft{display:flex;align-items:center;gap:12px;flex:0 0 300px;min-width:0}
+.pb .cov{width:56px;height:56px;flex:0 0 56px;border-radius:var(--r-card);overflow:hidden;
+         background:linear-gradient(140deg,#C6C6CC,#9A9AA2);display:grid;place-items:center;
+         color:#fff;font-size:20px;font-weight:600}
+.pb .cov img{width:100%;height:100%;object-fit:cover;display:block}
+.pbmeta{min-width:0}
+.pb .t{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pb .s{font-size:11.5px;color:var(--text2);margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pbmid{flex:1;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:0}
+.ctrls{display:flex;align-items:center;gap:18px}
+.ctrls .c{width:34px;height:34px;border:0;background:transparent;color:var(--text);font-size:16px;
+          cursor:pointer;border-radius:50%;display:grid;place-items:center;font-family:var(--font)}
+.ctrls .c:hover{background:var(--hover)}
+.ctrls .c.big{width:42px;height:42px;font-size:19px}
+.prog{display:flex;align-items:center;gap:10px;width:100%;max-width:560px}
+.prog .tm{font-size:10.5px;color:var(--text3);font-variant-numeric:tabular-nums;flex:0 0 34px;
+          font-family:var(--mono)}
+.prog .tm.r{text-align:right}
+.prog .track{flex:1;height:4px;border-radius:2px;background:var(--pill);position:relative;cursor:pointer}
+.prog .fill{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:var(--accent);width:0}
+.prog .knob{position:absolute;top:50%;width:10px;height:10px;border-radius:50%;background:#fff;
+            box-shadow:0 1px 3px rgba(0,0,0,.3);transform:translate(-50%,-50%);left:0}
+.pbright{flex:0 0 130px;display:flex;justify-content:flex-end}
+.vol{width:100px;height:4px;border-radius:2px;background:var(--pill);position:relative;cursor:pointer}
+.vol .fill{position:absolute;left:0;top:0;bottom:0;border-radius:2px;background:var(--text2);width:70%}
+.vol .knob{position:absolute;top:50%;width:10px;height:10px;border-radius:50%;background:#fff;
+           box-shadow:0 1px 3px rgba(0,0,0,.3);transform:translate(-50%,-50%);left:70%}
+</style>
+</head>
+<body>
+<div class="win">
+  <div class="tb">
+    <button class="back" id="btnBack">&#8249; 返回</button>
+    <span class="tbt">音效处理</span>
+    <div class="spacer"></div>
+    <label class="cwt bp"><input type="checkbox" id="c_bypass"><span class="sw"></span><span class="cl">DSP 总旁路</span></label>
+    <span class="bpst" id="bpStatus">读取中&#8230;</span>
+  </div>
+
+  <div class="body">
+    <nav class="dnav" id="dnav"></nav>
+    <main class="dmain">
+      <div class="dmsg" id="dmsg" style="display:none"></div>
+
+      <section class="pg" id="pg_0">
+        <div class="pgh" id="ph_0"></div>
+        <div class="pfstat" id="pfStatus"></div>
+        <div class="pfsave">
+          <input id="pfName" placeholder="起个名字，例如「客厅耳机」" maxlength="40">
+          <button class="btn pri" id="btnPfSave">保存为方案</button>
+        </div>
+        <div class="note" id="pfSaveHint" style="font-size:11.5px;color:var(--text2);padding-bottom:6px"></div>
+        <div class="pflist" id="pfList"></div>
+        <div class="btnrow">
+          <button class="btn pri" id="btnPfApply">应用选中方案</button>
+          <button class="btn" id="btnPfUpdate">更新为当前设置</button>
+          <button class="btn warn" id="btnPfDelete">删除</button>
+        </div>
+        <div class="card"><div class="ct">方案里存什么</div>
+          <div class="note">整套 DSP 快照：EQ 曲线与预增益、压缩器、声道/Crossfeed、声场、矩阵、SRC 目标率、输入余量、ReplayGain、房间校正开关与 trim。应用 = 各模块整体切到快照那刻的值；删方案只删快照，不动当前声音。</div>
+        </div>
+      </section>
+
+      <section class="pg" id="pg_1">
+        <div class="pgh" id="ph_1"></div>
+        <div class="note" style="font-size:12px;color:var(--text2);padding:10px 0 4px;line-height:1.7">
+          机架顺序 = 声音流过 8 个内核模块的先后。改完立即下发，下次开播生效。</div>
+        <div id="rkList"></div>
+        <div class="btnrow">
+          <button class="btn" id="btnRkUp">&#8250; 上移</button>
+          <button class="btn" id="btnRkDown">&#8249; 下移</button>
+          <button class="btn" id="btnRkReset">恢复默认顺序</button>
+        </div>
+        <div class="card"><div class="ct">选中行说明</div><div class="note" id="rkHint">点选任意一行查看它的作用说明。</div></div>
+      </section>
+
+      <section class="pg" id="pg_2"><div class="pgh" id="ph_2"></div><div id="rows_2"></div>
+        <div class="card"><div class="ct">余量和限幅的分工</div>
+          <div class="note">余量 = 先把整体电平压低一点再进后续处理，给 EQ/压缩留出头顶空间；限幅只待命，真接近满刻度才拦。两者都不碰已直出的字节流，只作用于 DSP 链开启时的处理过程。</div>
+        </div>
+      </section>
+
+      <section class="pg" id="pg_3"><div class="pgh" id="ph_3"></div><div id="rows_3"></div>
+        <div class="note" id="rgInfo" style="font-size:12px;color:var(--text2);padding:10px 0;line-height:1.7"></div>
+      </section>
+
+      <section class="pg" id="pg_4"><div class="pgh" id="ph_4"></div><div id="rows_4"></div>
+        <div class="note" id="srcState" style="font-size:12px;color:var(--text2);padding:10px 0;line-height:1.7"></div>
+        <div class="card dim"><div class="ct">升频什么时候生效</div>
+          <div class="note">SRC 改变输出格式，播放中修改只保存，下次开播才挂进链路（原生同款口径）。独占输出下由 HiFiOutputBackend 构建重采样链。</div>
+        </div>
+      </section>
+
+      <section class="pg" id="pg_5">
+        <div class="pgh" id="ph_5"></div>
+        <div class="strip" id="eqStrip"></div>
+        <div class="crow wrap">
+          <span class="cl">模式</span>
+          <div class="radios" id="eqMode">
+            <label><input type="radio" name="eqmode" value="0" checked>专业</label>
+            <label><input type="radio" name="eqmode" value="1">简单</label>
+          </div>
+          <span class="cl2" style="margin-left:18px">预设</span>
+          <select id="c_eqpreset" class="csel"></select>
+        </div>
+        <div id="rows_5"></div>
+        <div id="eqPro">
+          <div class="bands" id="eqBands"></div>
+          <div id="eqBandBox">
+            <div class="crow"><span class="cl">频率</span>
+              <input type="range" id="c_eqbandfreq" min="4.32" max="14.29" step="0.01">
+              <span class="val" id="v_eqbandfreq">1.00 kHz</span></div>
+            <div class="crow"><span class="cl">增益</span>
+              <input type="range" id="c_eqbandgain" min="-24" max="24" step="0.5">
+              <span class="val" id="v_eqbandgain">0.0 dB</span></div>
+            <div class="crow"><span class="cl">Q（带宽）</span>
+              <input type="range" id="c_eqbandq" min="0.1" max="24" step="0.1">
+              <span class="val" id="v_eqbandq">1.00</span></div>
+            <div class="crow"><span class="cl">滤波器类型</span>
+              <select id="c_eqbandtype" class="csel">
+                <option value="Peaking">峰值 (Peak)</option>
+                <option value="LowShelf">低架 (Low Shelf)</option>
+                <option value="HighShelf">高架 (High Shelf)</option>
+                <option value="LowPass">低通 (Low Pass)</option>
+                <option value="HighPass">高通 (High Pass)</option>
+                <option value="Notch">切除 (Notch)</option>
+              </select>
+              <label class="cwt" style="margin-left:16px"><input type="checkbox" id="c_eqbandon"><span class="sw"></span><span class="cl">启用本段</span></label>
+            </div>
+            <div class="btnrow">
+              <button class="btn" id="btnEqAddBand">＋ 添加频段</button>
+              <button class="btn warn" id="btnEqDelBand">删除本段</button>
+            </div>
+          </div>
+        </div>
+        <div id="eqSimple" style="display:none">
+          <div class="btnrow"><button class="btn" id="btnEqFlat">恢复平坦</button></div>
+        </div>
+        <div class="btnrow">
+          <button class="btn" id="btnEqUndo">撤销</button>
+          <button class="btn" id="btnEqRedo">重做</button>
+          <button class="btn" id="btnEqAb">A/B 对比</button>
+          <button class="btn" id="btnEqAutoGain">自动增益</button>
+          <button class="btn" id="btnEqSpectrum">实时频谱</button>
+          <button class="btn" id="btnEqSavePreset">保存为预设</button>
+          <button class="btn" id="btnEqImportApo">导入 APO</button>
+          <button class="btn" id="btnEqExportApo">导出 APO</button>
+        </div>
+        <div class="card dim"><div class="ct">耳机校正（OPRA）</div>
+          <div class="note">品牌墙 / 搜索 / 曲线预览与应用还在原生面板里，这一步先在网页上看开关状态；接通后这里会补上同一套入口。开关见本页右上角「耳机校正」。</div>
+        </div>
+      </section>
+
+      <section class="pg" id="pg_6"><div class="pgh" id="ph_6"></div><div id="rows_6"></div>
+        <div class="card"><div class="ct">压缩器在链上的位置</div>
+          <div class="note">阈值以下不动声音；超过阈值的部分按压缩比压低，启动/释放控制反应快慢，补偿增益补回被压掉的电平。干湿混合在线性域做，100% = 全处理。</div>
+        </div>
+      </section>
+
+      <section class="pg" id="pg_7">
+        <div class="pgh" id="ph_7"></div>
+        <div class="note" style="font-size:12px;color:var(--text2);padding:10px 0 2px;line-height:1.7">声道工具</div>
+        <div id="rows_7a"></div>
+        <div class="note" style="font-size:12px;color:var(--text2);padding:14px 0 2px;line-height:1.7">耳机 Crossfeed（父开关关着时不会下发到内核）</div>
+        <div id="rows_7b"></div>
+      </section>
+
+      <section class="pg" id="pg_8"><div class="pgh" id="ph_8"></div><div id="rows_8"></div>
+        <div class="card"><div class="ct">声场三旋钮</div>
+          <div class="note">宽度改变中/侧向的比例，中心和侧向电平在 M/S 域微调。100% = 不改变原始声场。</div>
+        </div>
+      </section>
+
+      <section class="pg" id="pg_9"><div class="pgh" id="ph_9"></div><div id="rows_9"></div>
+        <div class="note" id="mxPhase" style="font-size:12px;color:var(--text2);padding:10px 0;line-height:1.7"></div>
+      </section>
+
+      <section class="pg" id="pg_10">
+        <div class="pgh" id="ph_10"></div>
+        <div class="note" id="firStatus" style="font-size:12px;color:var(--text2);padding:10px 0;line-height:1.7"></div>
+        <div class="btnrow"><button class="btn" id="btnOpenRoom">打开房间校正窗口（导入 IR）</button></div>
+        <div id="rows_10"></div>
+        <div class="btnrow"><button class="btn" id="btnFirSafe">安全启用卷积（按当前 trim 试算）</button></div>
+        <div class="note" id="firClip" style="font-size:12px;color:var(--text2);padding:6px 0;line-height:1.7"></div>
+      </section>
+
+      <section class="pg" id="pg_11">
+        <div class="pgh" id="ph_11"></div>
+        <div class="mongrid">
+          <div class="mon"><div class="k">输出峰值</div><div class="v" id="monPeak">&#8212;</div></div>
+          <div class="mon"><div class="k">削波计数</div><div class="v" id="monClip">0 次</div></div>
+          <div class="mon"><div class="k">满刻度状态</div><div class="v" id="monOver">正常</div></div>
+          <div class="mon"><div class="k">活跃 DSP</div><div class="v sm" id="monActive">无</div></div>
+          <div class="mon"><div class="k">采样率链路</div><div class="v sm" id="monChain">未升频</div></div>
+        </div>
+        <div class="btnrow"><button class="btn" id="btnMonReset">重置统计</button></div>
+        <div class="card"><div class="ct">读数从哪来</div>
+          <div class="note">全部来自引擎侧真实统计，每秒刷新。削波计数只在真正削过时增长；活跃 DSP 按信号链顺序列出正在参与处理的模块。</div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="pb">
+    <div class="pbleft">
+      <div class="cov" id="pbCov"></div>
+      <div class="pbmeta">
+        <div class="t" id="pbTitle">未在播放</div>
+        <div class="s" id="pbSub"></div>
+      </div>
+    </div>
+    <div class="pbmid">
+      <div class="ctrls">
+        <button class="c" id="btnPrev" title="上一首">&#9198;</button>
+        <button class="c big" id="btnPlay" title="播放/暂停">&#9654;</button>
+        <button class="c" id="btnNext" title="下一首">&#9197;</button>
+      </div>
+      <div class="prog">
+        <div class="tm" id="tmCur">0:00</div>
+        <div class="track" id="track"><div class="fill" id="trackFill"></div><div class="knob" id="trackKnob"></div></div>
+        <div class="tm r" id="tmDur">0:00</div>
+      </div>
+    </div>
+    <div class="pbright">
+      <div class="vol" id="vol"><div class="fill" id="volFill"></div><div class="knob" id="volKnob"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ================= 通信 =================
+   分工铁律：网页只长样子不做事——所有拨动上报意图，C# 写原生控件值（音频链路零改动）。
+   C# → 网页：dspstate（全量：导航 12 项/6 组 + 11 个电源开关 + 各模块控件值 + 方案/机架/监控）
+              / dspmon（每秒：峰值/削波/活跃 DSP/链路）
+              / now（播放状态，每秒）/ theme / dspmsg（一句操作结果）
+   网页 → C#：ready / dspnav（切模块页，i=导航下标）/ dsppower（拨电源开关，k=键 on=布尔）
+              / dspset（写控件值，c=控件键 v=数值或布尔或下标）/ dspact（按钮动作，a=动作名）
+              / play / pause / resume / next / prev / seek / volume / exit（返回主界面）/ covererr */
+(function(){
+  /* ---------- WebView2 宿主对象就绪等待（照 album.html 的 whenWv 模式） ---------- */
+  var wvWaiters = [], wvReady = false;
+  var pumpWv = function(){
+    if (window.chrome && window.chrome.webview){
+      wvReady = true;
+      var list = wvWaiters; wvWaiters = [];
+      for (var i = 0; i < list.length; i++){ try { list[i](); } catch (e) {} }
+      return true;
+    }
+    return false;
+  };
+  var whenWv = function(fn){
+    if (wvReady || pumpWv()) { try { fn(); } catch (e) {} }
+    else wvWaiters.push(fn);
+  };
+  if (!pumpWv()){
+    var wvT0 = Date.now();
+    var wvTimer = setInterval(function(){
+      if (pumpWv() || Date.now() - wvT0 > 10000) clearInterval(wvTimer);
+    }, 50);
+  }
+
+  /* ---------- 上行：网页 → C# ---------- */
+  var postQueue = [];
+  var flushPost = function(){
+    while (postQueue.length && window.chrome && window.chrome.webview){
+      var m = postQueue.shift();
+      try { window.chrome.webview.postMessage(JSON.stringify(m)); } catch (e) {}
+    }
+  };
+  var post = function(msg){ postQueue.push(msg); whenWv(flushPost); };
+  var postCoverErr = function(src){ post({kind:'covererr', src:src}); };
+  var applyTheme = function(css){
+    var s = document.getElementById('__celeste_theme');
+    if (!s){ s = document.createElement('style'); s.id = '__celeste_theme'; document.head.appendChild(s); }
+    s.textContent = css;
+  };
+  window.__celesteApplyTheme = applyTheme;
+
+  var $ = function(id){ return document.getElementById(id); };
+
+  /* ---------- 控件元数据表（与原生 XAML 的 Minimum/Maximum/StepFrequency 一致） ----------
+     pg=落在哪个模块页；t=开关；sel=下拉选项；fmt=读数格式。 */
+  var CTRLS = {
+    headroom:    {pg:2, label:'输入余量',      min:-12, max:0,    step:0.5, fmt:'db'},
+    limiter:     {pg:2, label:'安全限幅（待命）', t:1},
+    rgmode:      {pg:3, label:'响度模式',      sel:['关闭','单曲 (Track)','专辑 (Album)']},
+    rgpreamp:    {pg:3, label:'额外增益',      min:-12, max:12,   step:0.5, fmt:'db'},
+    rgclip:      {pg:3, label:'防削波',        t:1},
+    srcrate:     {pg:4, label:'目标采样率',    sel:['关闭（原采样率）','44.1 kHz','48 kHz','88.2 kHz','96 kHz','176.4 kHz','192 kHz']},
+    srcquality:  {pg:4, label:'质量档位',      sel:['低延迟（省 CPU）','均衡（推荐）','透明（最高质量）']},
+    srcdither:   {pg:4, label:'量化抖动',      sel:['关闭','TPDF 抖动','高通 TPDF','NS-5 噪声整形']},
+    eqpreamp:    {pg:5, label:'预增益 (preamp)', min:-24, max:24, step:0.5, fmt:'db'},
+    eqbass:      {pg:5, label:'低音',          min:0, max:1, step:0.05, fmt:'pct', simple:1},
+    eqvocal:     {pg:5, label:'人声',          min:0, max:1, step:0.05, fmt:'pct', simple:1},
+    eqair:       {pg:5, label:'空气',          min:0, max:1, step:0.05, fmt:'pct', simple:1},
+    eqwarm:      {pg:5, label:'温暖',          min:0, max:1, step:0.05, fmt:'pct', simple:1},
+    compthreshold:{pg:6, label:'阈值',         min:-60, max:0,    step:0.5, fmt:'db'},
+    compratio:   {pg:6, label:'压缩比',        min:1, max:20,     step:0.1, fmt:'x'},
+    compattack:  {pg:6, label:'启动时间',      min:0.1, max:200,  step:0.1, fmt:'ms'},
+    comprelease: {pg:6, label:'释放时间',      min:5, max:2000,   step:5,   fmt:'ms'},
+    compknee:    {pg:6, label:'膝盖（软拐点）', min:0, max:24,     step:0.5, fmt:'db'},
+    compmakeup:  {pg:6, label:'补偿增益',      min:-12, max:24,   step:0.5, fmt:'db'},
+    compmix:     {pg:6, label:'干湿混合',      min:0, max:100,    step:1,   fmt:'pc1'},
+    comppeak:    {pg:6, label:'峰值模式',      t:1},
+    chbalance:   {pg:7, label:'声道平衡',      min:-1, max:1,     step:0.05, fmt:'bal'},
+    chlgain:     {pg:7, label:'左声道增益',    min:-12, max:12,   step:1,   fmt:'db'},
+    chrgain:     {pg:7, label:'右声道增益',    min:-12, max:12,   step:1,   fmt:'db'},
+    chldelay:    {pg:7, label:'左声道延迟',    min:0, max:10,     step:0.5, fmt:'ms'},
+    chrdelay:    {pg:7, label:'右声道延迟',    min:0, max:10,     step:0.5, fmt:'ms'},
+    chmono:      {pg:7, label:'单声道模式',    sel:['关闭（立体声）','只用左声道','只用右声道','左右求和']},
+    chswap:      {pg:7, label:'交换左右声道',  t:1},
+    chinvertl:   {pg:7, label:'反转左声道相位', t:1},
+    chinvertr:   {pg:7, label:'反转右声道相位', t:1},
+    xfeedlevel:  {pg:7, label:'Crossfeed 强度',   min:0, max:100, step:5,  fmt:'pc1', xf:1},
+    xfeedcutoff: {pg:7, label:'Crossfeed 截止频率', min:100, max:4000, step:50, fmt:'hz', xf:1},
+    fieldwidth:  {pg:8, label:'声场宽度',      min:0, max:200,    step:1,   fmt:'pc1'},
+    fieldcenter: {pg:8, label:'中心电平',      min:-18, max:18,   step:0.5, fmt:'db'},
+    fieldside:   {pg:8, label:'侧向电平',      min:-18, max:18,   step:0.5, fmt:'db'},
+    mll:         {pg:9, label:'左 &#8592; 左',  min:-2, max:2, step:0.05, fmt:'x'},
+    mrl:         {pg:9, label:'右 &#8592; 左',  min:-2, max:2, step:0.05, fmt:'x'},
+    mlr:         {pg:9, label:'左 &#8594; 右',  min:-2, max:2, step:0.05, fmt:'x'},
+    mrr:         {pg:9, label:'右 &#8594; 右',  min:-2, max:2, step:0.05, fmt:'x'},
+    roomtrim:    {pg:10, label:'电平修正 (trim)', min:-24, max:6, step:0.5, fmt:'db'}
+  };
+  /* 页头电源开关：k=键（C# 按 DspPowerEntries 顺序对应），pg=落在哪个页 */
+  var PWR = [
+    {k:'headroom', pg:2,  t:'输入余量'},
+    {k:'rg',       pg:3,  t:'响度 &#183; ReplayGain'},
+    {k:'src',      pg:4,  t:'SRC / 升频'},
+    {k:'eq',       pg:5,  t:'参数 EQ'},
+    {k:'opra',     pg:5,  t:'耳机校正'},
+    {k:'comp',     pg:6,  t:'动态压缩器'},
+    {k:'channel',  pg:7,  t:'声道工具'},
+    {k:'xfeed',    pg:7,  t:'耳机 Crossfeed'},
+    {k:'field',    pg:8,  t:'立体声场'},
+    {k:'matrix',   pg:9,  t:'声道矩阵'},
+    {k:'fir',      pg:10, t:'FIR / 房间校正'}
+  ];
+  var NAV_GROUPS = [
+    {t:'听音方案', g:''}, {t:'DSP 机架编排', g:''},
+    {t:'输入余量', g:'输入'}, {t:'响度 &#183; ReplayGain', g:'输入'},
+    {t:'SRC / 升频', g:'采样率'},
+    {t:'参数 EQ', g:'塑形'}, {t:'动态压缩器', g:'塑形'},
+    {t:'声道工具', g:'声道'}, {t:'立体声场', g:'声道'}, {t:'声道矩阵', g:'声道'},
+    {t:'FIR / 房间校正', g:'空间'},
+    {t:'输出安全', g:'输出安全'}
+  ];
+  var BAND_TYPES = ['Peaking','LowShelf','HighShelf','LowPass','HighPass','Notch'];
+  var BAND_TYPE_LABELS = {'Peaking':'峰值 (Peak)','LowShelf':'低架 (Low Shelf)','HighShelf':'高架 (High Shelf)',
+                          'LowPass':'低通 (Low Pass)','HighPass':'高通 (High Pass)','Notch':'切除 (Notch)'};
+
+  /* ---------- 状态 ---------- */
+  var S = {
+    page: 0,
+    nav: [],          // [{t,g,dot}]（dot=正在参与处理）
+    power: {},        // k -> {on,dis,hint}
+    ctrl: {},         // 控件键 -> 值
+    eq: null,         // {mode,presets,preset,bands,sel,simple,strip,opra}
+    profiles: null,   // {status,hint,savehint,sel,rows}
+    rack: null,       // {sel,hint,rows}
+    mon: null,        // {peak,clip,over,active,chain}
+    bypass: false,
+    playing: false, pos: 0, dur: 0, vol: 0.7
+  };
+
+  /* ---------- 读数格式 ---------- */
+  function fmtVal(key, v){
+    var m = CTRLS[key];
+    if (!m) return String(v);
+    switch (m.fmt){
+      case 'db':  return (v > 0 ? '+' : '') + Number(v).toFixed(1) + ' dB';
+      case 'pct': return Math.round(v * 100) + ' %';
+    case 'pc1': return Math.round(v) + ' %';   // 量程本身就是百分数（0..100/0..200），不再 ×100
+      case 'x':   return Number(v).toFixed(2);
+      case 'ms':  return (v < 10 ? Number(v).toFixed(1) : Math.round(v)) + ' ms';
+      case 'hz':  return v >= 1000 ? (v / 1000).toFixed(2) + ' kHz' : Math.round(v) + ' Hz';
+      case 'bal': {
+        if (Math.abs(v) < 0.005) return '居中';
+        return (v < 0 ? '偏左 ' : '偏右 ') + Math.round(Math.abs(v) * 100) + ' %';
+      }
+      default:    return String(v);
+    }
+  }
+  function fmtHz(log2v){
+    var hz = Math.pow(2, log2v);
+    return hz >= 1000 ? (hz / 1000).toFixed(2) + ' kHz' : Math.round(hz) + ' Hz';
+  }
+  function fmtTime(sec){
+    sec = Math.max(0, Math.floor(sec || 0));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+  }
+
+  /* ---------- 生成控件行 ---------- */
+  function buildRows(){
+    for (var key in CTRLS){
+      var m = CTRLS[key];
+      var host = $('rows_' + m.pg + (m.xf ? 'b' : (m.pg === 7 && !m.xf && key.indexOf('ch') === 0 ? 'a' : '')));
+      if (!host) continue;
+      var row = document.createElement('div');
+      row.className = 'crow';
+      row.setAttribute('data-ctrl', key);
+      var lab = document.createElement('span');
+      lab.className = 'cl';
+      lab.textContent = m.label;
+      row.appendChild(lab);
+      if (m.t){
+        var lb = document.createElement('label');
+        lb.className = 'cwt';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.id = 'c_' + key;
+        var sw = document.createElement('span'); sw.className = 'sw';
+        lb.appendChild(cb); lb.appendChild(sw);
+        row.appendChild(lb);
+        cb.addEventListener('change', function(){
+          post({kind:'dspset', c:this.id.slice(2), v:this.checked});
+        });
+      } else if (m.sel){
+        var se = document.createElement('select');
+        se.id = 'c_' + key;
+        for (var i = 0; i < m.sel.length; i++){
+          var op = document.createElement('option');
+          op.value = String(i); op.textContent = m.sel[i];
+          se.appendChild(op);
+        }
+        row.appendChild(se);
+        var nt = document.createElement('span');
+        nt.className = 'note'; nt.id = 'n_' + key;
+        row.appendChild(nt);
+        se.addEventListener('change', function(){
+          post({kind:'dspset', c:this.id.slice(2), v:parseInt(this.value, 10)});
+        });
+      } else {
+        var rg = document.createElement('input');
+        rg.type = 'range'; rg.id = 'c_' + key;
+        rg.min = m.min; rg.max = m.max; rg.step = m.step;
+        var vv = document.createElement('span');
+        vv.className = 'val'; vv.id = 'v_' + key;
+        row.appendChild(rg); row.appendChild(vv);
+        rg.addEventListener('input', function(){
+          var k = this.id.slice(2);
+          $('v_' + k).textContent = fmtVal(k, parseFloat(this.value));
+        });
+        rg.addEventListener('change', function(){
+          post({kind:'dspset', c:this.id.slice(2), v:parseFloat(this.value)});
+        });
+      }
+      host.appendChild(row);
+    }
+  }
+
+  /* ---------- 页头（标题 + 电源开关） ---------- */
+  function buildPageHeads(){
+    for (var i = 0; i < NAV_GROUPS.length; i++){
+      var host = $('ph_' + i);
+      if (!host) continue;
+      var t = document.createElement('h2');
+      t.innerHTML = NAV_GROUPS[i].t;
+      host.appendChild(t);
+      var pwr = document.createElement('div');
+      pwr.className = 'pwr';
+      for (var j = 0; j < PWR.length; j++){
+        if (PWR[j].pg !== i) continue;
+        var hint = document.createElement('span');
+        hint.className = 'hint'; hint.id = 'pwh_' + PWR[j].k;
+        var lb = document.createElement('label');
+        lb.className = 'cwt';
+        var cb = document.createElement('input');
+        cb.type = 'checkbox'; cb.id = 'pw_' + PWR[j].k;
+        var sw = document.createElement('span'); sw.className = 'sw';
+        var cl = document.createElement('span'); cl.className = 'cl'; cl.innerHTML = PWR[j].t;
+        lb.appendChild(cb); lb.appendChild(sw); lb.appendChild(cl);
+        (function(k){
+          cb.addEventListener('change', function(){
+            post({kind:'dsppower', k:k, on:this.checked});
+          });
+        })(PWR[j].k);
+        pwr.appendChild(hint); pwr.appendChild(lb);
+      }
+      if (pwr.childNodes.length) host.appendChild(pwr);
+    }
+  }
+
+  /* ---------- 左导航 ---------- */
+  function buildNav(){
+    var host = $('dnav');
+    host.innerHTML = '';
+    var lastG = null;
+    for (var i = 0; i < NAV_GROUPS.length; i++){
+      var g = NAV_GROUPS[i].g;
+      if (g && g !== lastG){
+        lastG = g;
+        var gh = document.createElement('div');
+        gh.className = 'grp'; gh.textContent = g;
+        host.appendChild(gh);
+      }
+      var ni = document.createElement('div');
+      ni.className = 'ni'; ni.id = 'ni_' + i;
+      ni.innerHTML = '<span class="dot" id="nd_' + i + '"></span><span>' + NAV_GROUPS[i].t + '</span>';
+      (function(idx){
+        ni.addEventListener('click', function(){ post({kind:'dspnav', i:idx}); });
+      })(i);
+      host.appendChild(ni);
+    }
+  }
+
+  /* ---------- 应用状态 ---------- */
+  function applyState(){
+    // 导航
+    for (var i = 0; i < NAV_GROUPS.length; i++){
+      var ni = $('ni_' + i);
+      if (ni) ni.className = 'ni' + (i === S.page ? ' on' : '');
+      var nd = $('nd_' + i);
+      if (nd && S.nav[i]) nd.className = 'dot' + (S.nav[i].dot && i !== S.page ? ' live' : '');
+    }
+    // 页
+    for (var p = 0; p < NAV_GROUPS.length; p++){
+      var sec = $('pg_' + p);
+      if (sec) sec.className = 'pg' + (p === S.page ? ' on' : '');
+    }
+    // 电源开关
+    for (var j = 0; j < PWR.length; j++){
+      var k = PWR[j].k, st = S.power[k];
+      var cb = $('pw_' + k);
+      if (!cb) continue;
+      if (st){
+        cb.checked = !!st.on;
+        cb.disabled = !!st.dis;
+        var hint = $('pwh_' + k);
+        if (hint) hint.textContent = st.hint || '';
+      }
+    }
+    // 旁路 + bit-perfect
+    var bp = $('c_bypass');
+    if (bp) bp.checked = !!S.bypass;
+    var bps = $('bpStatus');
+    if (bps && S.perfect){
+      bps.textContent = S.perfect;
+      bps.className = 'bpst' + (S.perfect.indexOf('非 bit-perfect') >= 0 ? ' warn' : '');
+    }
+    // 普通控件
+    for (var key in CTRLS){
+      var v = S.ctrl[key];
+      if (v === undefined || v === null) continue;
+      var el = $('c_' + key);
+      if (!el) continue;
+      if (CTRLS[key].t) el.checked = !!v;
+      else if (CTRLS[key].sel) el.value = String(v);
+      else {
+        el.value = v;
+        $('v_' + key).textContent = fmtVal(key, parseFloat(v));
+      }
+    }
+    applyEq();
+    applyProfiles();
+    applyRack();
+    applyMon();
+  }
+
+  /* ---------- EQ 页 ---------- */
+  function applyEq(){
+    var e = S.eq;
+    if (!e) return;
+    // 模式
+    var rd = document.querySelector('#eqMode input[value="' + (e.mode || 0) + '"]');
+    if (rd) rd.checked = true;
+    $('eqPro').style.display = (e.mode === 1) ? 'none' : '';
+    $('eqSimple').style.display = (e.mode === 1) ? '' : 'none';
+    // 预设下拉
+    var se = $('c_eqpreset');
+    if (e.presets){
+      se.innerHTML = '';
+      for (var i = 0; i < e.presets.length; i++){
+        var op = document.createElement('option');
+        op.value = String(i); op.textContent = e.presets[i].t;
+        se.appendChild(op);
+      }
+    }
+    if (typeof e.preset === 'number') se.value = String(e.preset);
+    // 快捷状态条
+    var strip = $('eqStrip');
+    strip.innerHTML = '';
+    // 快捷状态条（C# 推的就是原生 pill 控件全文，这里不再拼前缀）
+    var pills = [
+      {t:e.strip.status || '', c: (e.strip.status || '').indexOf('生效') >= 0 ? 'hi' : ''},
+      // 口径与 C# BuildWebDspStateMessage 三态对应：含「非 bit-perfect」= 琥珀，其余（直通/直出）= 绿
+      {t:e.strip.perfect || '', c: (e.strip.perfect || '').indexOf('非 bit-perfect') >= 0 ? 'amber' : 'ok'},
+      {t:e.strip.preamp || ''},
+      {t:e.strip.headroom || ''},
+      {t:e.strip.preset || ''}
+    ];
+    for (var pi = 0; pi < pills.length; pi++){
+      var sp = document.createElement('span');
+      sp.className = 'pill ' + (pills[pi].c || '');
+      sp.textContent = pills[pi].t;
+      strip.appendChild(sp);
+    }
+    // 频段 chips
+    var bands = $('eqBands');
+    bands.innerHTML = '';
+    for (var b = 0; b < e.bands.length; b++){
+      var bd = e.bands[b];
+      var chip = document.createElement('button');
+      chip.className = 'bchip' + (b === e.sel ? ' on' : '');
+      chip.innerHTML = '<span class="bd' + (bd.on ? '' : ' off') + '"></span>' + (b + 1);
+      (function(idx){
+        chip.addEventListener('click', function(){ post({kind:'dspset', c:'eqbandsel', v:idx}); });
+      })(b);
+      bands.appendChild(chip);
+    }
+    // 选中频段编辑器
+    var box = $('eqBandBox');
+    if (e.sel >= 0 && e.sel < e.bands.length){
+      box.style.display = '';
+      var bd2 = e.bands[e.sel];
+      var fs = $('c_eqbandfreq');
+      fs.value = Math.log2(bd2.f);
+      $('v_eqbandfreq').textContent = fmtHz(parseFloat(fs.value));
+      var gs = $('c_eqbandgain');
+      gs.value = bd2.g;
+      $('v_eqbandgain').textContent = fmtVal('eqpreamp', parseFloat(gs.value));
+      var qs = $('c_eqbandq');
+      qs.value = bd2.q;
+      $('v_eqbandq').textContent = Number(bd2.q).toFixed(2);
+      $('c_eqbandtype').value = bd2.ty;
+      $('c_eqbandon').checked = !!bd2.on;
+    } else {
+      box.style.display = 'none';
+    }
+    // 简单模式
+    if (e.simple){
+      $('c_eqbass').value = e.simple.bass;  $('v_eqbass').textContent  = fmtVal('eqbass', e.simple.bass);
+      $('c_eqvocal').value = e.simple.vocal; $('v_eqvocal').textContent = fmtVal('eqvocal', e.simple.vocal);
+      $('c_eqair').value = e.simple.air;    $('v_eqair').textContent    = fmtVal('eqair', e.simple.air);
+      $('c_eqwarm').value = e.simple.warm;  $('v_eqwarm').textContent  = fmtVal('eqwarm', e.simple.warm);
+    }
+  }
+
+  /* ---------- 方案页 ---------- */
+  function applyProfiles(){
+    var p = S.profiles;
+    if (!p) return;
+    $('pfStatus').textContent = p.status || '';
+    $('pfSaveHint').textContent = p.savehint || '';
+    var host = $('pfList');
+    host.innerHTML = '';
+    for (var i = 0; i < p.rows.length; i++){
+      var r = p.rows[i];
+      var row = document.createElement('div');
+      row.className = 'pfrow' + (i === p.sel ? ' on' : '');
+      row.innerHTML = '<span class="nm"></span><span class="st"></span>' + (r.on ? '<span class="cur">当前</span>' : '');
+      row.querySelector('.nm').textContent = r.name;
+      row.querySelector('.st').textContent = r.stamp || '';
+      (function(idx){
+        row.addEventListener('click', function(){ post({kind:'dspact', a:'pfsel', i:idx}); });
+      })(i);
+      host.appendChild(row);
+    }
+    var has = p.sel >= 0 && p.sel < p.rows.length;
+    $('btnPfApply').disabled = !has;
+    $('btnPfUpdate').disabled = !has;
+    $('btnPfDelete').disabled = !has;
+  }
+
+  /* ---------- 机架页 ---------- */
+  function applyRack(){
+    var r = S.rack;
+    if (!r) return;
+    var host = $('rkList');
+    host.innerHTML = '';
+    for (var i = 0; i < r.rows.length; i++){
+      var row = r.rows[i];
+      var div = document.createElement('div');
+      div.className = 'rkrow' + (i === r.sel ? ' on' : '');
+      div.innerHTML = '<span class="slot"></span><span class="nm"></span><span class="stt"></span><span class="hint"></span>';
+      div.querySelector('.slot').textContent = row.slot;
+      div.querySelector('.nm').textContent = row.n;
+      var st = div.querySelector('.stt');
+      st.textContent = row.st;
+      st.style.color = row.on ? 'var(--ok)' : 'var(--text3)';
+      div.querySelector('.hint').textContent = row.hint || '';
+      (function(idx){
+        div.addEventListener('click', function(){ post({kind:'dspact', a:'rksel', i:idx}); });
+      })(i);
+      host.appendChild(div);
+    }
+    $('rkHint').textContent = r.hint || '';
+    $('btnRkUp').disabled = !(r.sel > 0);
+    $('btnRkDown').disabled = !(r.sel >= 0 && r.sel < r.rows.length - 1);
+  }
+
+  /* ---------- 监控页 ---------- */
+  function applyMon(){
+    var m = S.mon;
+    if (!m) return;
+    $('monPeak').textContent = m.peak || '';
+    $('monClip').textContent = m.clip || '';
+    var ov = $('monOver');
+    ov.textContent = m.over || '';
+    ov.className = 'v' + (m.over === '正常' ? ' ok' : (m.over ? ' warn' : ''));
+    $('monActive').textContent = m.active || '';
+    $('monChain').textContent = m.chain || '';
+  }
+
+  /* ---------- 播放条 ---------- */
+  function paintPlaybar(){
+    $('btnPlay').innerHTML = S.playing ? '&#10073;&#10073;' : '&#9654;';
+    var fr = S.dur > 0 ? Math.min(1, S.pos / S.dur) : 0;
+    $('trackFill').style.width = (fr * 100) + '%';
+    $('trackKnob').style.left = (fr * 100) + '%';
+    $('tmCur').textContent = fmtTime(S.pos);
+    $('tmDur').textContent = fmtTime(S.dur);
+    $('volFill').style.width = (S.vol * 100) + '%';
+    $('volKnob').style.left = (S.vol * 100) + '%';
+  }
+  function bindDrag(el, onDone){
+    var move = function(ev){
+      var r = el.getBoundingClientRect();
+      var x = (ev.touches ? ev.touches[0].clientX : ev.clientX) - r.left;
+      return Math.max(0, Math.min(1, x / r.width));
+    };
+    var act = function(ev){
+      var ratio = move(ev);
+      onDone(ratio);
+      var up = function(){ el.removeEventListener('pointermove', act); window.removeEventListener('pointerup', up); };
+      el.addEventListener('pointermove', act);
+      window.addEventListener('pointerup', up);
+    };
+    el.addEventListener('pointerdown', act);
+  }
+
+  /* ---------- 交互绑定 ---------- */
+  function bindUi(){
+    $('btnBack').addEventListener('click', function(){ post({kind:'exit'}); });
+    $('c_bypass').addEventListener('change', function(){
+      post({kind:'dspact', a:'bypass', on:this.checked});
+    });
+    // EQ 模式 / 预设
+    var modeRadios = document.querySelectorAll('#eqMode input');
+    for (var i = 0; i < modeRadios.length; i++){
+      modeRadios[i].addEventListener('change', function(){
+        post({kind:'dspset', c:'eqmode', v:parseInt(this.value, 10)});
+      });
+    }
+    $('c_eqpreset').addEventListener('change', function(){
+      post({kind:'dspset', c:'eqpreset', v:parseInt(this.value, 10)});
+    });
+    // EQ 频段编辑器
+    $('c_eqbandfreq').addEventListener('input', function(){ $('v_eqbandfreq').textContent = fmtHz(parseFloat(this.value)); });
+    $('c_eqbandfreq').addEventListener('change', function(){ post({kind:'dspset', c:'eqbandfreq', v:parseFloat(this.value)}); });
+    $('c_eqbandgain').addEventListener('input', function(){ $('v_eqbandgain').textContent = fmtVal('eqpreamp', parseFloat(this.value)); });
+    $('c_eqbandgain').addEventListener('change', function(){ post({kind:'dspset', c:'eqbandgain', v:parseFloat(this.value)}); });
+    $('c_eqbandq').addEventListener('input', function(){ $('v_eqbandq').textContent = Number(this.value).toFixed(2); });
+    $('c_eqbandq').addEventListener('change', function(){ post({kind:'dspset', c:'eqbandq', v:parseFloat(this.value)}); });
+    $('c_eqbandtype').addEventListener('change', function(){ post({kind:'dspset', c:'eqbandtype', v:this.value}); });
+    $('c_eqbandon').addEventListener('change', function(){ post({kind:'dspset', c:'eqbandon', v:this.checked}); });
+    $('btnEqAddBand').addEventListener('click', function(){ post({kind:'dspact', a:'eqaddband'}); });
+    $('btnEqDelBand').addEventListener('click', function(){ post({kind:'dspact', a:'eqdelband'}); });
+    $('btnEqFlat').addEventListener('click', function(){ post({kind:'dspact', a:'eqflat'}); });
+    $('btnEqUndo').addEventListener('click', function(){ post({kind:'dspact', a:'equndo'}); });
+    $('btnEqRedo').addEventListener('click', function(){ post({kind:'dspact', a:'eqredo'}); });
+    $('btnEqAb').addEventListener('click', function(){ post({kind:'dspact', a:'eqab'}); });
+    $('btnEqAutoGain').addEventListener('click', function(){ post({kind:'dspact', a:'eqautogain'}); });
+    $('btnEqSpectrum').addEventListener('click', function(){ post({kind:'dspact', a:'eqspectrum'}); });
+    $('btnEqSavePreset').addEventListener('click', function(){ post({kind:'dspact', a:'eqsavepreset'}); });
+    $('btnEqImportApo').addEventListener('click', function(){ post({kind:'dspact', a:'eqimportapo'}); });
+    $('btnEqExportApo').addEventListener('click', function(){ post({kind:'dspact', a:'eqexportapo'}); });
+    // 方案
+    $('btnPfSave').addEventListener('click', function(){
+      post({kind:'dspact', a:'pfsave', name:$('pfName').value});
+      $('pfName').value = '';
+    });
+    $('btnPfApply').addEventListener('click', function(){ post({kind:'dspact', a:'pfapply'}); });
+    $('btnPfUpdate').addEventListener('click', function(){ post({kind:'dspact', a:'pfupdate'}); });
+    $('btnPfDelete').addEventListener('click', function(){ post({kind:'dspact', a:'pfdelete'}); });
+    // 机架
+    $('btnRkUp').addEventListener('click', function(){ post({kind:'dspact', a:'rkup'}); });
+    $('btnRkDown').addEventListener('click', function(){ post({kind:'dspact', a:'rkdown'}); });
+    $('btnRkReset').addEventListener('click', function(){ post({kind:'dspact', a:'rkreset'}); });
+    // FIR
+    $('btnOpenRoom').addEventListener('click', function(){ post({kind:'dspact', a:'openroom'}); });
+    $('btnFirSafe').addEventListener('click', function(){ post({kind:'dspact', a:'firsafe'}); });
+    // 监控
+    $('btnMonReset').addEventListener('click', function(){ post({kind:'dspact', a:'monreset'}); });
+    // 播放条
+    $('btnPlay').addEventListener('click', function(){ post({kind:'pause'}); });
+    $('btnNext').addEventListener('click', function(){ post({kind:'next'}); });
+    $('btnPrev').addEventListener('click', function(){ post({kind:'prev'}); });
+    bindDrag($('track'), function(r){ post({kind:'seek', position:r * S.dur}); });
+    bindDrag($('vol'), function(r){ S.vol = r; paintPlaybar(); post({kind:'volume', value:r}); });
+  }
+
+  /* ---------- 消息 ---------- */
+  whenWv(function(){
+    window.chrome.webview.addEventListener('message', function(e){
+      var m;
+      try { m = JSON.parse(e.data); } catch (err) { return; }
+      if (!m || typeof m !== 'object') return;
+      switch (m.kind){
+        case 'dspstate':
+          S.page = typeof m.page === 'number' ? m.page : 0;
+          S.nav = m.nav || [];
+          S.power = m.power || {};
+          S.ctrl = m.ctrl || {};
+          S.eq = m.eq || null;
+          S.profiles = m.profiles || null;
+          S.rack = m.rack || null;
+          S.mon = m.mon || null;
+          S.bypass = !!m.bypass;
+          S.perfect = m.perfect || '';
+          if (m.texts){
+            if ($('srcState')) $('srcState').textContent = m.texts.srcstate || '';
+            if ($('rgInfo')) $('rgInfo').textContent = m.texts.rg || '';
+            if ($('firStatus')) $('firStatus').textContent = m.texts.fir || '';
+            if ($('firClip')) $('firClip').textContent = m.texts.cliprisk || '';
+            if ($('mxPhase')) $('mxPhase').textContent = m.texts.mxphase || '';
+          }
+          if (m.device && $('bpStatus') && !S.perfect){
+            $('bpStatus').textContent = m.device.fmt || '';
+          }
+          applyState();
+          break;
+        case 'dspmon':
+          S.mon = m.mon || null;
+          applyMon();
+          if (m.perfect && $('bpStatus')){
+            $('bpStatus').textContent = m.perfect;
+            $('bpStatus').className = 'bpst' + (m.perfect.indexOf('非 bit-perfect') >= 0 ? ' warn' : '');
+          }
+          break;
+        case 'dspmsg':
+          var dm = $('dmsg');
+          dm.textContent = m.text || '';
+          dm.style.display = m.text ? '' : 'none';
+          break;
+        case 'now':
+          S.playing = !!m.playing;
+          if (typeof m.position === 'number') S.pos = m.position;
+          if (typeof m.duration === 'number') S.dur = m.duration;
+          if (typeof m.volume === 'number') S.vol = m.volume;
+          if (m.cover) $('pbCov').innerHTML = '<img src="' + m.cover + '" alt="" onerror="postCoverErr(this.src)">';
+          if (m.track){
+            $('pbTitle').textContent = m.track.t || '未在播放';
+            $('pbSub').textContent = m.track.s || '';
+          }
+          paintPlaybar();
+          break;
+        case 'theme':
+          if (m.css) applyTheme(m.css);
+          document.documentElement.className = m.dark ? 'dark' : '';
+          break;
+      }
+    });
+  });
+
+  /* ---------- 就绪 ---------- */
+  buildNav();
+  buildPageHeads();
+  buildRows();
+  bindUi();
+  paintPlaybar();
+  post({kind:'ready'});
+  /* ready 补发：头一条可能在宿主对象刚注入、消息通道还没接稳时被丢（重复无害，幂等） */
+  var readyN = 0;
+  var readyTimer = setInterval(function(){
+    if (++readyN > 4){ clearInterval(readyTimer); return; }
+    post({kind:'ready'});
+  }, 700);
+})();
+</script>
+</body>
+</html>

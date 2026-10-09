@@ -157,8 +157,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 .sechead{font-size:15px;font-weight:600;margin:22px 0 10px;letter-spacing:-.01em}
 .sechead .c{font-size:12px;color:var(--text2);font-weight:400;margin-left:8px}
 
-/* ---------- 详情页分栏（布局照原生：专辑详情=左栏信息+右栏曲目；
-   艺术家详情=左栏头像+中栏歌曲+右栏专辑） ---------- */
+/* ---------- 详情页分栏（布局照原生：专辑详情=左栏信息+右栏曲目） ---------- */
 .view.cols{display:flex;gap:24px;align-items:flex-start}
 .view.cols > div{min-width:0}
 .dmeta{flex:0 0 300px;width:300px}
@@ -178,7 +177,17 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 #artmeta .bigcov img{width:100%;height:100%;object-fit:cover;display:block}
 #artmeta .acts{margin-top:18px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}
 #listwrap{flex:1;min-width:0}
-.view.cols #listwrap.art{flex:0 0 430px;width:430px}
+/* 艺术家详情（2026-10-09 用户拍板改版）：歌手信息在左上，歌曲列表在其下方（左栏），
+   右侧是该艺术家的专辑墙。歌曲列表与专辑墙各带独立滚轮，互不牵连；
+   两栏的表头都吸顶（原生同款：滚下去也知道在看哪列）。 */
+.view.cols.art{display:grid;grid-template-columns:300px minmax(0,1fr);
+               grid-template-rows:auto minmax(0,1fr);gap:0 24px;height:100%;overflow:hidden;
+               align-items:stretch}
+.view.cols.art #artmeta{grid-column:1;grid-row:1;width:auto;flex:none}
+.view.cols.art #listwrap{grid-column:1;grid-row:2;min-height:0;overflow-y:auto;padding-right:6px}
+.view.cols.art #xtalbwrap{grid-column:2;grid-row:1/span 2;min-height:0;overflow-y:auto}
+.view.cols.art #songThead{position:sticky;top:0;z-index:2;background:var(--win)}
+.view.cols.art #xtalbhead{position:sticky;top:0;z-index:2;background:var(--win);margin-top:0;padding-top:2px}
 #xtalbwrap{flex:1;min-width:0}
 /* 艺术家详情的专辑段：卡片 132px（原生 ArtistAlbumGridView 口径） */
 #xtalbwrap .grid{grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:22px 12px}
@@ -241,6 +250,38 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 #tspTop .tstitle{font-size:15px;font-weight:600;min-width:0;overflow:hidden;
                  text-overflow:ellipsis;white-space:nowrap;flex:1}
 #tspTop .tstitle .tstsub{font-size:12px;color:var(--text2);font-weight:400;margin-left:8px}
+/* ---------- 播放列表（命名单卡片墙 + 单详情，原生 PlaylistWallBorder 口径） ---------- */
+#plwall{display:flex;flex-direction:column;min-height:0;gap:14px}
+#plwbar{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+#plwbar .plwsum{font-size:12.5px;color:var(--text2)}
+#plwbar #btnPlNew{margin-left:auto}
+#pldetail{display:flex;flex-direction:column;min-height:0;gap:12px;flex:1}
+#pldTop .placts{display:flex;gap:6px;flex:0 0 auto;margin-left:auto}
+#plmsg{flex:0 0 auto;font-size:12.5px;color:#b3261e;background:rgba(179,38,30,.08);
+       border:1px solid rgba(179,38,30,.25);border-radius:8px;padding:8px 12px}
+/* 详情曲目行（原生 PlaylistDetailListView 口径：序号/标题/艺术家·专辑/时长） */
+.plrow{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 4px;border-radius:8px;
+       font-size:13px;cursor:default;user-select:none}
+.plrow:hover{background:var(--hover)}
+.plrow .n{flex:0 0 30px;text-align:right;opacity:.55;font-size:12px}
+.plrow .m{flex:1;min-width:0}
+.plrow .t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plrow .s{font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.plrow .d{flex:0 0 auto;color:var(--text2);font-size:12px}
+.plrow .fav{flex:0 0 26px;text-align:center;font-size:13px;color:var(--text2)}
+.plrow .fav.on{color:var(--accent)}
+/* 正在播的那行：序号位换红 ♪（与歌曲行 .row.on 同一套） */
+.plrow.on{background:var(--sel)}
+.plrow.on:hover{background:var(--sel)}
+.plrow.on .n{color:var(--accent);font-size:14px}
+.plrow.on .t{color:var(--accent)}
+/* 重命名输入框（原地编辑，不用系统弹窗） */
+#plname input{height:30px;border-radius:var(--r-ctrl);border:1px solid var(--div2);
+              background:var(--win);color:var(--text);font-family:var(--font);font-size:13px;
+              padding:0 10px;width:200px;margin-right:6px}
+#plname .btn{height:30px;margin-right:4px}
+/* 删除待确认态（原生删除是菜单直删，网页加一道确认防误触） */
+.btn.warn{color:#b3261e;border-color:rgba(179,38,30,.4)}
 #tsmodes{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}
 #tsmodes .caps{height:28px;border-radius:14px;font-size:12px;padding:0 13px}
 /* 曲目视角：# 48px 固定列 + 可见配置列（原生 TagSortColumnHeaderGrid 口径，
@@ -427,6 +468,28 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
             </div>
           </div>
         </div>
+        <!-- 播放列表：命名单卡片墙 + 单详情（原生 PlaylistWallBorder / ShowPlaylistDetail 口径） -->
+        <div id="plwall" style="display:none">
+          <div id="plwbar">
+            <span class="plwsum" id="plwsum"></span>
+            <button class="btn pri" id="btnPlNew">＋ 新建播放列表</button>
+          </div>
+          <div id="plgrid" class="grid"></div>
+        </div>
+        <div id="pldetail" style="display:none">
+          <div id="pldTop">
+            <button class="tsback" id="plback">&#8249; 播放列表</button>
+            <div class="tstitle" id="plname"></div>
+            <div class="placts">
+              <button class="btn" id="btnPlRename">重命名</button>
+              <button class="btn" id="btnPlQueue">添加至播放队列</button>
+              <button class="btn" id="btnPlDel">删除</button>
+              <button class="btn pri" id="btnPlPlay">&#9654; 播放</button>
+            </div>
+          </div>
+          <div id="plmsg" style="display:none"></div>
+          <div id="plrows"></div>
+        </div>
         <div id="placeholder" style="display:none"></div>
       </div>
     </main>
@@ -468,7 +531,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
               / artists（艺术家墙）/ artistcovers（头像预热补：带 i 按下标、只带 name 按名字）
               / artistdetail（艺术家详情）/ artistavatar（网络头像下载完成，更新详情大头像）
               / now（播放状态，每秒）/ theme / nav
-              / folderroots（媒体库根目录列表，空 = 没配置）
+              / folderroots（媒体库根目录列表，空 = 没配置；wd=true=网络音乐库，带 lib 库名）
               / folderchildren（某目录的下一层，子文件夹+音频文件）
               / foldersongs（某目录的歌曲，行带 path）
               / tagsortcats（标签排序分类墙：fields 字段钮 + cards 分类卡 + total/shown/advice）
@@ -557,12 +620,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     artistView: [],   // 筛选后的艺术家下标（元素是 artists 的下标）
     artist: null,     // 打开的艺术家详情 {name,n,dur,cover}
     artistAlbums: [], // 艺术家详情里的专辑段
-    folder: {         // 媒体库（文件夹浏览）：左树右栏， kids 缓存展开状态
+    folder: {         // 媒体库（文件夹浏览）/ 网络音乐库（WebDav）共用：左树右栏
       roots: [],      //   根节点 [{name,path,isFolder,depth,kids,open,sel}]
       songs: [],      //   右栏歌曲 [{t,sub,dur,fav,path}]
       songsPath: '',  //   右栏当前显示的文件夹（空=还没选）
       loading: false, //   右栏正在等 C# 枚举（大文件夹读盘慢，先显示加载中）
-      selPath: ''     //   左栏选中行（原生 SelectionMode=Single）
+      selPath: '',    //   左栏选中行（原生 SelectionMode=Single）
+      wd: false,      //   true=网络音乐库（WebDav）模式：消息带 wd、行点击走下载播放
+      lib: '',        //   WebDav 库名（设置里填的显示名，页头副标题用）
+      err: ''         //   网络库读取失败时的一句人话（原生 ShowWebDavStatus 口径）
     },
     tagsort: {        // 标签排序（原生 TagSortBorder 口径）：墙 + 钻取面板
       mode: 'Wall',   //   Wall=分类墙；Songs/Albums/Artists/Sort/GroupBy=面板视角
@@ -578,6 +644,11 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       gsel: ''        //   分组预设下拉当前值（防 select 的 change 事件把用户选择冲掉）
     },
     artistTracks: []  // 艺术家详情的曲目（开着时 play/love 的 index 按这份）
+    , plwall: [],     // 播放列表墙卡片 [{name,n,cover}]（cover 后台预热按批补）
+    plLoading: true,  // 墙上数据正在等 C# 推（首进/返回时显示加载中，区别于真的空）
+    pl: null,         // 打开的播放列表名（null=在墙上）
+    plSongs: [],      // 播放列表详情的曲目 [{t,sub,dur,fav,path}]
+    plCurPath: ''     // 正在播的曲目路径（now 消息带来，详情页高亮用）
   };
   var $ = function(id){ return document.getElementById(id); };
   /* 是否开着任一详情（专辑详情 / 艺术家详情）。这两个视图下 #rows 存的不是
@@ -671,6 +742,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     var sub = t.sub
       ? esc(t.sub)
       : esc(t.artist || '') + (t.album ? ' · ' + esc(t.album) : '');
+    // 播放最多面板：副标题尾巴带播放次数（原生不显示，用户 2026-10-09 要求补）
+    if (t.plays) sub += ' · 播放 ' + t.plays + ' 次';
     return '<div class="row' + (on ? ' on' : '') + '" data-s="' + si + '" data-n="' + (si + 1) + '">'
          +   '<div class="n">' + (on ? '&#9834;' : (si + 1)) + '</div>'
          +   '<div class="a">' + (t.cover
@@ -876,9 +949,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   function hideAllViews(){
     var ids = ['ratingbar','albmeta','artmeta','listwrap','xttrkhead','songThead','rows',
                'albgrid','artgrid','xtalbwrap','xtalbhead','xtalbgrid','placeholder',
-               'folderwrap','tagsortwrap'];
+               'folderwrap','tagsortwrap','plwall','pldetail'];
     for (var i = 0; i < ids.length; i++) $(ids[i]).style.display = 'none';
-    $('view').classList.remove('cols');
+    $('view').classList.remove('cols','art');
     $('listwrap').classList.remove('art');
     $('btnBackGrid').style.display = 'none';
   }
@@ -892,6 +965,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     S.album = null; S.albumTracks = [];
     S.artist = null; S.artistAlbums = []; S.artistTracks = [];
     S.love = {}; S.cur = -1;
+    S.pl = null; S.plSongs = []; S.plCurPath = '';
   }
   /* 列表面板（歌曲 + 我喜欢的音乐/评分/最近播放/播放队列/播放最多）：
      同一套行样式，只换页头与空文案；评分面板多一行星级胶囊。 */
@@ -984,16 +1058,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     renderArtWall();
     paintHeader();
   }
-  /* 艺术家详情：左栏圆形大头像 + 添加至播放队列（原生左栏口径），中栏歌曲段
-     （原生 430px：歌曲标题|专辑|时长），右栏该艺术家的专辑网格（132px 卡片）。
-     名字/首数·总时长和播放按钮在页头。 */
+  /* 艺术家详情（2026-10-09 用户拍板改版）：左上=圆形大头像+添加至播放队列（原生左栏口径），
+     歌曲列表紧贴其下方（左栏，独立滚轮、表头吸顶）；右侧=该艺术家的专辑网格
+     （132px 卡片，独立滚轮、段头吸顶）。名字/首数·总时长和播放按钮在页头。 */
   function showArtistDetail(){
     hideAllViews();
     setSearchVisible(true);
-    $('view').classList.add('cols');
+    $('view').classList.add('cols','art');
     $('artmeta').style.display = '';
     $('listwrap').style.display = '';
-    $('listwrap').classList.add('art');
     $('songThead').style.display = '';
     $('songTheadN').textContent = '#';
     $('songTheadT').textContent = '歌曲标题';
@@ -1059,17 +1132,29 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     var host = $('foldertree');
     var f = S.folder;
     if (!f.roots.length){
-      // 原生 FolderBrowserEmptyHint 文案就一句「请选择文件夹」
+      // 媒体库空态就一句「请选择文件夹」（原生 FolderBrowserEmptyHint 口径）；
+      // 网络音乐库的空态文案由 C# 给（没配置 / 连不上 / 根目录空，原生 ShowWebDavTreeMessage）
+      var txt = f.wd ? (f.emptyText || '正在连接…') : '请选择文件夹';
       host.innerHTML = '<div class="empty" style="padding:30px 8px;text-align:center">'
-        + '<div class="big">请选择文件夹</div></div>';
+        + '<div class="big">' + esc(txt) + '</div></div>';
       return;
     }
     host.innerHTML = folderTreeHtml(f.roots, 0);
   }
   function renderFolderDetail(){
     var f = S.folder;
-    $('folderhead').textContent = f.songsPath || '选择文件夹查看歌曲';
-    if (!f.songsPath){ $('frows').innerHTML = ''; return; }
+    $('folderhead').textContent = f.songsPath || (f.wd ? (f.lib || '网络音乐库') : '选择文件夹查看歌曲');
+    if (!f.songsPath){
+      // 网络库连上但还没选文件夹：台头给库名 + 操作提示（原生 MediaDetailsHeader 口径）
+      $('frows').innerHTML = f.wd && !f.err
+        ? '<div class="empty" style="padding:30px 0;text-align:center">双击文件夹查看歌曲</div>'
+        : '';
+      return;
+    }
+    if (f.err){
+      $('frows').innerHTML = '<div class="empty" style="padding:30px 0;text-align:center">' + esc(f.err) + '</div>';
+      return;
+    }
     if (f.loading && !f.songs.length){
       $('frows').innerHTML = '<div class="empty" style="padding:30px 0;text-align:center">加载中…</div>';
       return;
@@ -1123,7 +1208,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     paintHeader();
   }
   /* 左栏树点击：文件夹行=选中+展开+右栏加载歌曲（原生每次点文件夹都重新加载右栏）；
-     已展开文件夹的箭头=只收起，右栏保持（原生收起箭头不动右栏）；文件=直接播 */
+     已展开文件夹的箭头=只收起，右栏保持（原生收起箭头不动右栏）；文件=直接播。
+     wd=true（网络音乐库）时所有上报都带 wd 标志，C# 走 WebDavClient 分支。 */
   $('foldertree').addEventListener('click', function(e){
     var el = e.target.closest('.fnode');
     if (!el) return;
@@ -1131,7 +1217,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     var isFolder = el.getAttribute('data-f') === '1';
     var n = folderFind(S.folder.roots, path);
     if (!n) return;
-    if (!isFolder){ post({kind:'folderplay', path:path}); return; }
+    var wd = S.folder.wd ? {wd:true} : {};
+    if (!isFolder){ post({kind:'folderplay', path:path, wd:!!S.folder.wd}); return; }
     if (n.open && e.target.closest('.chev')){
       n.open = false;               // 折叠：本地就够，不麻烦 C#，右栏不动
       renderFolderTree();
@@ -1140,8 +1227,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     folderSelect(n);
     n.open = true;
     renderFolderTree();
-    // 子项 + 右栏歌曲都让 C# 现枚举（大文件夹读盘期间右栏先显示加载中）
-    post({kind:'folder', path:path});
+    // 子项 + 右栏歌曲都让 C# 现枚举（大文件夹/网络目录慢，右栏先显示加载中）
+    post(Object.assign({kind:'folder', path:path}, wd));
     S.folder.songsPath = path;
     S.folder.songs = [];
     S.folder.loading = true;
@@ -1434,6 +1521,165 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     paintHeader();
   }
 
+  /* ---------- 播放列表（命名单卡片墙 + 单详情，原生 PlaylistWallBorder 口径） ----------
+     墙=命名单卡片（封面/名字/首数），点卡进详情；详情=单内有序曲目，
+     行点击=整单替换队列从该首播（原生 PlayNamedPlaylistFromTrack）。
+     ⚠ WebView2 默认禁用 alert/confirm/prompt（AreDefaultScriptDialogsEnabled=false），
+     删除/重命名都走页内两级交互，不碰系统弹窗。 */
+  function plCover(c, cls){
+    var cv = c.cover
+      ? '<img src="' + c.cover + '" alt="" onerror="postCoverErr(this.src)">'
+      : esc((c.name || '?').slice(0, 1));
+    return '<div class="' + cls + '">' + cv + '</div>';
+  }
+  function showPlaylistWall(){
+    resetDetail();
+    hideAllViews();
+    setSearchVisible(false);          // 原生播放列表墙没有搜索框
+    $('q').value = '';
+    $('plwall').style.display = '';
+    $('btnPlayAll').style.visibility = 'hidden';
+    renderPlWall();
+    paintHeader();
+  }
+  function renderPlWall(){
+    var host = $('plgrid');
+    $('plwsum').textContent = (!S.plLoading && S.plwall.length) ? S.plwall.length + ' 个播放列表' : '';
+    if (!S.plwall.length){
+      host.innerHTML = S.plLoading
+        ? '<div class="empty"><div class="big">加载中…</div></div>'
+        : '<div class="empty"><div class="big">还没有创建播放列表</div>'
+        + '点右上角「新建播放列表」创建一个</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < S.plwall.length; i++){
+      var c = S.plwall[i];
+      html += '<div class="acard" data-i="' + i + '" title="' + esc(c.name) + '">'
+           +   plCover(c, 'cv')
+           +   '<div class="nm">' + esc(c.name) + '</div>'
+           +   '<div class="ar">' + (c.n || 0) + ' 首</div>'
+           + '</div>';
+    }
+    host.innerHTML = html;
+    var els = host.querySelectorAll('.acard');
+    for (var j = 0; j < els.length; j++){
+      els[j].onclick = function(){
+        post({kind:'plopen', name:S.plwall[+this.getAttribute('data-i')].name});
+      };
+    }
+  }
+  function showPlaylistDetail(){
+    hideAllViews();
+    setSearchVisible(false);
+    $('pldetail').style.display = '';
+    $('btnPlayAll').style.visibility = 'hidden';
+    renderPlDetailTop();
+    renderPlRows();
+    markPlPlaying();
+    paintHeader();
+  }
+  function renderPlDetailTop(){
+    $('plname').textContent = S.pl || '';
+    $('plmsg').style.display = 'none';
+    $('btnPlDel').textContent = '删除';
+    $('btnPlDel').classList.remove('warn');
+  }
+  function renderPlRows(){
+    var host = $('plrows');
+    if (!S.plSongs.length){
+      host.innerHTML = '<div class="empty" style="padding:30px 0;text-align:center">'
+        + '这个播放列表还是空的</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < S.plSongs.length; i++){
+      var t = S.plSongs[i];
+      html += '<div class="plrow" data-p="' + esc(t.path) + '" data-n="' + (i + 1) + '">'
+           +   '<div class="n">' + (i + 1) + '</div>'
+           +   '<div class="m"><div class="t">' + esc(t.t) + '</div>'
+           +     '<div class="s">' + esc(t.sub || '') + '</div></div>'
+           +   '<div class="d">' + mmss(t.dur) + '</div>'
+           +   '<div class="fav' + (t.fav ? ' on' : '') + '">' + (t.fav ? '&#10084;' : '&#9825;') + '</div>'
+           + '</div>';
+    }
+    host.innerHTML = html;
+  }
+  /* 详情行点击：整单替换队列、从该首播（原生 PlayNamedPlaylistFromTrack） */
+  $('plrows').addEventListener('click', function(e){
+    var row = e.target.closest('.plrow');
+    if (row && S.pl) post({kind:'plplay', name:S.pl, path:row.getAttribute('data-p')});
+  });
+  /* 正在播的那行：now 消息带 path，按路径高亮（now.index 按列表面板算，对不上单内行序） */
+  function markPlPlaying(){
+    if (S.page !== 'PlaylistWall' || !S.pl) return;
+    var rows = $('plrows').querySelectorAll('.plrow');
+    var hit = null;
+    for (var i = 0; i < rows.length; i++){
+      if (rows[i].getAttribute('data-p') === S.plCurPath){ hit = rows[i]; break; }
+    }
+    var old = $('plrows').querySelector('.plrow.on');
+    if (old && old !== hit){
+      old.classList.remove('on');
+      var on = old.querySelector('.n');
+      if (on) on.innerHTML = old.getAttribute('data-n');
+    }
+    if (hit){
+      hit.classList.add('on');
+      var n = hit.querySelector('.n');
+      if (n) n.innerHTML = '&#9834;';
+    }
+  }
+  /* 详情顶栏按钮（墙头新建钮在 #plwbar，见下） */
+  $('btnPlNew').onclick = function(){ post({kind:'plnew'}); };
+  $('plback').onclick = function(){ post({kind:'nav', id:'PlaylistWall'}); };
+  $('btnPlPlay').onclick = function(){
+    if (S.pl && S.plSongs.length) post({kind:'plplay', name:S.pl, path:S.plSongs[0].path});
+  };
+  $('btnPlQueue').onclick = function(){ if (S.pl) post({kind:'plqueue', name:S.pl}); };
+  /* 删除：两级确认（第一下进入待确认态，按钮变红字；再点真删，3 秒不点自动收起） */
+  var plDelArmed = false, plDelTimer = 0;
+  $('btnPlDel').onclick = function(){
+    if (!S.pl) return;
+    if (!plDelArmed){
+      plDelArmed = true;
+      $('btnPlDel').textContent = '确定删除？';
+      $('btnPlDel').classList.add('warn');
+      plDelTimer = setTimeout(function(){
+        plDelArmed = false;
+        $('btnPlDel').textContent = '删除';
+        $('btnPlDel').classList.remove('warn');
+      }, 3000);
+      return;
+    }
+    clearTimeout(plDelTimer);
+    plDelArmed = false;
+    post({kind:'pldel', name:S.pl});
+  };
+  /* 重命名：标题原地变输入框（原生 RenamePlaylistFromWallAsync 口径，
+     失败时 C# 推 plmsg 显示在顶栏下方，输入框不收） */
+  $('btnPlRename').onclick = function(){
+    if (!S.pl || $('plname').querySelector('input')) return;
+    var old = S.pl;
+    $('plname').innerHTML = '<input id="plnameInput" type="text" maxlength="60"'
+      + ' value="' + esc(old) + '">'
+      + '<button class="btn pri" id="plnameOk">确定</button>'
+      + '<button class="btn" id="plnameCancel">取消</button>';
+    var inp = $('plnameInput');
+    inp.focus(); inp.select();
+    var done = function(ok){
+      var v = ok ? (inp.value || '').trim() : '';
+      renderPlDetailTop();
+      if (ok && v && v !== old) post({kind:'plrename', name:old, newName:v});
+    };
+    $('plnameOk').onclick = function(){ done(true); };
+    $('plnameCancel').onclick = function(){ done(false); };
+    inp.onkeydown = function(e){
+      if (e.key === 'Enter') done(true);
+      else if (e.key === 'Escape') done(false);
+    };
+  };
+
   /* ---------- 艺术家墙 ---------- */
   function artCard(a){
     var cov = a.cover
@@ -1570,6 +1816,25 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       $('pgSub').textContent = S.artists.length
         ? (S.artists.length + ' 位' + ($('q').value ? ' · 筛选出 ' + S.artistView.length + ' 位' : ''))
         : '加载中…';
+      return;
+    }
+    if (S.page === 'WebDav'){
+      // 网络音乐库：标题「网络音乐库」，副标题=库名（设置里填的显示名；
+      // 原生 MediaLibraryTreeTitle / MediaDetailsHeader 同口径）
+      $('pgTitle').textContent = '网络音乐库';
+      $('pgSub').textContent = S.folder.lib || 'WebDAV';
+      return;
+    }
+    if (S.page === 'PlaylistWall'){
+      // 播放列表：墙上=单数；详情=单名 + 首数（原生 PlaylistDetailNameText/CountText 口径）
+      if (S.pl){
+        $('pgTitle').textContent = S.pl;
+        $('pgSub').textContent = S.plSongs.length + ' 首';
+      } else {
+        $('pgTitle').textContent = '播放列表';
+        $('pgSub').textContent = (!S.plLoading && S.plwall.length)
+          ? S.plwall.length + ' 个' : '加载中…';
+      }
       return;
     }
     if (S.page === 'TagSort'){
@@ -1852,7 +2117,14 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           } else if (m.id === 'Folders' && m.ok !== false){
             // 媒体库：先切视图，根目录由随后的 folderroots 推来
             showFolder();
-          } else if (m.id === 'TagSort' && m.ok !== false){
+        } else if (m.id === 'WebDav' && m.ok !== false){
+          // 网络音乐库：复用媒体库那套视图，wd 标志由随后的 folderroots 带上
+          showFolder();
+        } else if (m.id === 'PlaylistWall' && m.ok !== false){
+          // 播放列表：先切视图（墙/详情按 S.pl），数据由随后的 plwall / pldetail 推来
+          S.plLoading = true;
+          showPlaylistWall();
+        } else if (m.id === 'TagSort' && m.ok !== false){
             // 标签排序：先切视图（墙/面板按 S.tagsort.mode），数据由随后的
             // tagsortcats / tagsortpanel 推来
             showTagSort();
@@ -1861,15 +2133,20 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           }
           break;
         case 'folderroots':
-          // 媒体库根目录（原生 RefreshFolderBrowserRoots 口径：根行显示完整路径）
+          // 媒体库/网络音乐库根目录（原生 RefreshFolderBrowserRoots 口径：根行显示完整路径）。
+          // wd=true = 网络音乐库：后续点击都带 wd 标志，C# 走 WebDavClient 分支
+          S.folder.wd = m.wd === true;
+          S.folder.lib = m.lib || '';
+          S.folder.err = '';
           S.folder.roots = (m.roots || []).map(function(r){
             return {name:r.name, path:r.path, isFolder:r.isFolder !== false,
                     depth:0, kids:[], open:false, sel:false};
           });
+          S.folder.emptyText = m.emptyText || '';
           S.folder.songsPath = '';
           S.folder.songs = [];
           S.folder.loading = false;
-          if (S.page === 'Folders'){ renderFolderTree(); renderFolderDetail(); paintHeader(); }
+          if (S.page === 'Folders' || S.page === 'WebDav'){ renderFolderTree(); renderFolderDetail(); paintHeader(); }
           break;
         case 'folderchildren':
           // 展开一层的子项到了：挂到对应节点的 kids 下并重渲（open 点击时已置好，
@@ -1883,15 +2160,59 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
               });
             }
           }
-          if (S.page === 'Folders') renderFolderTree();
+          if (S.page === 'Folders' || S.page === 'WebDav') renderFolderTree();
           break;
         case 'foldersongs':
           // 右栏歌曲（后台枚举+读标签完推来）；只认当前选中的文件夹，防过期响应盖版面
           if (m.path === S.folder.songsPath){
             S.folder.songs = m.songs || [];
             S.folder.loading = false;
-            if (S.page === 'Folders'){ renderFolderDetail(); paintHeader(); }
+            S.folder.err = m.error || '';
+            if (S.page === 'Folders' || S.page === 'WebDav'){ renderFolderDetail(); paintHeader(); }
           }
+          break;
+        case 'plwall':
+          // 播放列表墙（原生 ApplyPlaylistWallCategory 口径：内建「我喜欢的音乐」不过墙）。
+          // back=true = 删除后回墙（原生删完单也是回墙）
+          S.plLoading = false;
+          S.plwall = (m.items || []).map(function(c){
+            return {name:c.name, n:c.n, cover:''};
+          });
+          if (S.page === 'PlaylistWall'){
+            if (m.back){ S.pl = null; showPlaylistWall(); }
+            else if (!S.pl){ renderPlWall(); paintHeader(); }
+          }
+          break;
+        case 'plcovers':
+          // 卡片封面按批补：按下标回填（plwall 重推时网页会清空，旧响应自然落空）
+          if (m.items){
+            for (var pi = 0; pi < m.items.length; pi++){
+              var pit = m.items[pi];
+              var pc = S.plwall[pit.i];
+              if (pc) pc.cover = pit.cover || '';
+              var card = $('plgrid').querySelector('.acard[data-i="' + pit.i + '"] .cv');
+              if (card && pc && pc.cover)
+                card.innerHTML = '<img src="' + pc.cover + '" alt="" onerror="postCoverErr(this.src)">';
+            }
+          }
+          break;
+        case 'pldetail':
+          // 播放列表详情（点卡/新建成功/删完回墙前的重推都走它）：单内有序曲目
+          S.pl = m.name || null;
+          S.plSongs = m.songs || [];
+          if (S.page === 'PlaylistWall') showPlaylistDetail();
+          break;
+        case 'plmsg':
+          // 删除/重命名/新建失败的一句人话（显示在详情顶栏下方）
+          if (m.text){
+            $('plmsg').textContent = m.text;
+            $('plmsg').style.display = '';
+          }
+          break;
+        case 'plrenamed':
+          // 重命名成功：详情标题换新名字（C# 已落库，墙上数据下次进墙自动是新的）
+          if (S.pl && m.old === S.pl) S.pl = m.name;
+          if (S.page === 'PlaylistWall' && S.pl) renderPlDetailTop();
           break;
         case 'tagsortcats':
           // 标签排序分类墙：字段钮 + 分类卡 + total/shown/advice（切字段/返回/加载更多都走它）
@@ -1966,6 +2287,11 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           // 无条件 markPlaying：data 首包会预设 S.cur，分块推完时 now 带来的 index
           // 可能和预设值相同——用 !== 判断就永远不高亮正在播的那行
           if (typeof m.index === 'number') S.cur = m.index;
+          // 播放列表详情按路径高亮（now.index 按当前列表面板算，对不上单内行序）
+          if (typeof m.path === 'string' && m.path !== S.plCurPath){
+            S.plCurPath = m.path;
+            markPlPlaying();
+          }
           S.playing = !!m.playing;
           if (typeof m.position === 'number') S.pos = m.position;
           if (typeof m.duration === 'number') S.dur = m.duration;

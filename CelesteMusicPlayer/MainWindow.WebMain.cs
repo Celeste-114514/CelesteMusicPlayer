@@ -5,12 +5,14 @@
 // （行样式与歌曲面板一致，数据来源按原生同名分类口径），侧栏去掉「流派」「年份」，
 // 其余分类入口保留（点未做的分类只显示占位，不删入口）。
 // 2026-10-09 再追加：媒体库（文件夹浏览）面板，布局/交互照原生 FolderBrowserView。
-// 网络音乐库（WebDav）用户后续要参考 ECHO 扩展其他源类型，**暂时不动**，入口保留。
 // 2026-10-09 三追加：标签排序（TagSort）面板——分类字段按钮组 + 分类卡墙 +
 // 钻取面板（曲目/专辑/艺术家/排序方式/分组浏览五个视角），口径照原生
 // TagSortBorder（MainWindow.Library.cs 标签排序板块 + MainWindow.Playback.cs
 // 分类墙/分组）。列配置/自定义排序/自定义分组/分类字段配置四个弹窗直接复用
 // 原生窗口（网页只发意图，C# 开窗、回调里重推）。
+// 2026-10-09 四追加：网络音乐库（WebDav）——界面复用媒体库那套（左树右栏），
+// 数据源换 WebDavClient；没配 WebDAV 时侧栏条目不显示（用户明确要求）。
+// 2026-10-09 五追加：播放列表墙 + 命名单详情（口径照原生 PlaylistWall）。
 //
 // 分工铁律：**网页只负责长什么样，一件事都不做**——点播放、切分类、拖进度、
 // 收藏全都上报给 C#，由 C# 调现有的播放方法。音频链路（独占 / bit-perfect /
@@ -48,6 +50,9 @@
 //              / tagsortgroup（分组预设切换，tag）/ tagsortcustom（开原生配置窗，what）
 //              / tagsortsort（排序方式预设，preset）/ tagsortorder（排序升/降序，asc）
 //              / tagsortmore（分类墙加载更多）
+//              / plopen（打开播放列表详情，name）/ plplay（详情行播放，name+path）
+//              / plqueue（整单加入播放队列，name）/ pldel（删除播放列表，name）
+//              / plrename（重命名，name+newName）/ plnew（新建播放列表）
 //              / play / pause / resume / next / prev / seek / volume / love / exit
 //              / enqueue（当前列表加入播放队列）/ rating（评分面板星级过滤）
 //
@@ -341,23 +346,77 @@ namespace CelesteMusicPlayer
 
                 case "folder":
                     {
-                        // 媒体库：网页点开一个文件夹（原生点箭头/双击的口径——
-                        // 展开一层 + 把该文件夹的歌曲加载到右栏）
+                        // 媒体库/网络音乐库：网页点开一个文件夹（原生点箭头/双击的口径——
+                        // 展开一层 + 把该文件夹的歌曲加载到右栏）。wd=true 走 WebDAV 分支。
                         string folderPath = ReadStr(msg.Payload, "path");
-                        _ = PushWebFolderChildrenAsync(folderPath);
+                        bool wd = ReadBool(msg.Payload, "wd");
+                        if (wd) _ = PushWebDavChildrenAsync(folderPath);
+                        else _ = PushWebFolderChildrenAsync(folderPath);
                         break;
                     }
 
                 case "folderplay":
                     {
-                        // 媒体库右栏点了一个文件：入库并直接播（原生双击文件口径，
-                        // 不整表替换队列——媒体库不是播放队列管理界面）
+                        // 媒体库/网络音乐库点了一个文件：入库并直接播（原生双击文件口径，
+                        // 不整表替换队列）。wd=true 走 WebDAV 分支（先下缓存再播）。
                         string filePath = ReadStr(msg.Payload, "path");
-                        if (!string.IsNullOrEmpty(filePath))
+                        bool wd = ReadBool(msg.Payload, "wd");
+                        if (wd) _ = PlayWebDavFileAsync(filePath);
+                        else if (!string.IsNullOrEmpty(filePath))
                         {
                             PlaylistItem? track = EnsureTrackInLibrary(filePath);
                             if (track != null) PlayPlaylistItem(track);
                         }
+                        break;
+                    }
+
+                case "plopen":
+                    {
+                        // 播放列表墙点卡：推该单详情（原生 ShowPlaylistDetail 口径）
+                        string name = ReadStr(msg.Payload, "name");
+                        if (!string.IsNullOrEmpty(name)) _ = PushWebPlaylistDetailAsync(name);
+                        break;
+                    }
+
+                case "plplay":
+                    {
+                        // 详情行播放：整单替换队列、从该首起（原生 PlayNamedPlaylistFromTrack）
+                        string name = ReadStr(msg.Payload, "name");
+                        string filePath = ReadStr(msg.Payload, "path");
+                        if (!string.IsNullOrEmpty(name) && !string.IsNullOrEmpty(filePath))
+                            PlayNamedPlaylistFromTrack(name, filePath);
+                        break;
+                    }
+
+                case "plqueue":
+                    {
+                        // 详情「添加至播放队列」：整单追加到当前队列（原生 AddNamedPlaylistToQueue）
+                        string name = ReadStr(msg.Payload, "name");
+                        if (!string.IsNullOrEmpty(name)) AddNamedPlaylistToQueue(name);
+                        break;
+                    }
+
+                case "pldel":
+                    {
+                        // 详情/墙删除播放列表（原生墙右键删除口径）
+                        string name = ReadStr(msg.Payload, "name");
+                        if (!string.IsNullOrEmpty(name)) _ = DeleteWebPlaylistAsync(name);
+                        break;
+                    }
+
+                case "plrename":
+                    {
+                        // 详情重命名（原生 RenamePlaylistFromWallAsync 口径，失败推 plmsg）
+                        string name = ReadStr(msg.Payload, "name");
+                        string newName = ReadStr(msg.Payload, "newName");
+                        if (!string.IsNullOrEmpty(name)) _ = RenameWebPlaylistAsync(name, newName);
+                        break;
+                    }
+
+                case "plnew":
+                    {
+                        // 墙头「新建播放列表」（原生 CreatePlaylistWallButton_Click 口径）
+                        _ = CreateWebPlaylistAsync();
                         break;
                     }
 
@@ -739,14 +798,25 @@ namespace CelesteMusicPlayer
             {
                 // 媒体库（文件夹浏览）：布局/交互照原生 FolderBrowserView——
                 // 左栏文件夹树（根=设置里的媒体库目录，显示完整路径），右栏选中文件夹的歌曲。
-                // 网络音乐库（WebDav）复用同一个原生界面，但用户 2026-10-09 说要参考
-                // ECHO 扩展其他源类型、暂时不动，这里只做本地磁盘模式。
                 CloseWebMainDetails();
                 await PostCelesteWebAsync(new Dictionary<string, object?>
                 {
                     ["kind"] = "nav", ["id"] = "Folders", ["ok"] = true,
                 });
                 PushWebFolderRoots();
+                return;
+            }
+            if (string.Equals(id, "WebDav", StringComparison.OrdinalIgnoreCase))
+            {
+                // 网络音乐库（WebDav）：复用媒体库那套界面（原生同口径——SetFolderBrowserMode
+                // 只换台头/藏「添加文件夹」），数据源换成 WebDavClient。没配 WebDAV 时
+                // 侧栏条目根本不显示（cats 推送时过滤），走到这里只可能是配置被删掉的边角。
+                CloseWebMainDetails();
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "nav", ["id"] = "WebDav", ["ok"] = true,
+                });
+                _ = PushWebDavRootsAsync();
                 return;
             }
             if (string.Equals(id, "TagSort", StringComparison.OrdinalIgnoreCase))
@@ -759,6 +829,31 @@ namespace CelesteMusicPlayer
                     ["kind"] = "nav", ["id"] = "TagSort", ["ok"] = true,
                 });
                 EnterWebTagSortAsync();
+                return;
+            }
+            if (string.Equals(id, "PlaylistWall", StringComparison.OrdinalIgnoreCase))
+            {
+                // 播放列表墙：命名单卡片（原生 PlaylistWallBorder 口径，内建「我喜欢的音乐」
+                // 不显示——侧栏有专门入口）。点卡进详情，详情里播/入队/改名/删除。
+                CloseWebMainDetails();
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "nav", ["id"] = "PlaylistWall", ["ok"] = true,
+                });
+                await PushWebPlaylistWallAsync();
+                return;
+            }
+            if (string.Equals(id, "AudioFX", StringComparison.OrdinalIgnoreCase))
+            {
+                // 音效处理（DSP）：网页只做入口——关主界面详情、回一个 nav ok，
+                // 然后切到 DSP 网页面板（OpenWebDspAsync 内部会关主界面层、开 dsp.html）。
+                // 所有 DSP 操作都在原生控件/handler 上落地，音频链路零改动。
+                CloseWebMainDetails();
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "nav", ["id"] = "AudioFX", ["ok"] = true,
+                });
+                await OpenWebDspAsync();
                 return;
             }
             // 没做的面板：告诉网页显示占位（侧栏条目保留，不删入口）
@@ -899,6 +994,473 @@ namespace CelesteMusicPlayer
             StartupLog.Write($"[Web主界面] 媒体库「{folderPath}」歌曲 {rows.Count} 首已推送");
         }
 
+        /* ================= 网络音乐库（WebDav） =================
+           口径照原生 MainWindow.WebDav.cs：界面复用媒体库那套（左树右栏），
+           数据源换 WebDavClient（PROPFIND 列目录），播放先下缓存再走普通链路
+           （bit-perfect 铁律不动：下载到本地缓存，字节流与本地文件完全一致）。
+           网页消息与媒体库共用（folderroots/folderchildren/foldersongs），
+           靠 wd=true 区分分支；侧栏条目没配 WebDAV 时不显示（cats 推送时过滤）。 */
+
+        /// <summary>推网络音乐库根（原生 RefreshWebDavBrowserRoots 的网页版）。</summary>
+        private async Task PushWebDavRootsAsync()
+        {
+            WebDavLocation? loc = GetWebDavLocation();
+            if (loc == null)
+            {
+                // 配置被删掉的边角：给一句原生同款提示，别让网页干转
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "folderroots", ["wd"] = true, ["roots"] = new List<object>(),
+                    ["empty"] = true,
+                    ["emptyText"] = "还没配置网络音乐库。到「选项设置 → WebDAV」里填上地址，保存后这里就有内容了。",
+                    ["lib"] = "",
+                });
+                return;
+            }
+
+            try
+            {
+                IReadOnlyList<WebDavEntry> entries = await Task.Run(async () =>
+                {
+                    using WebDavClient client = loc.CreateClient();
+                    return await client.ListAsync(string.Empty);
+                });
+
+                var items = entries.Select(e =>
+                {
+                    FolderBrowserItem it = ToFolderBrowserItem(e, 0, string.Empty);
+                    return new Dictionary<string, object?>
+                    {
+                        ["name"] = it.DisplayName,
+                        ["path"] = it.FullPath,
+                        ["isFolder"] = it.IsFolder,
+                    };
+                }).Cast<object>().ToList();
+
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "folderroots", ["wd"] = true, ["roots"] = items,
+                    ["empty"] = items.Count == 0,
+                    ["emptyText"] = items.Count == 0 ? "服务器根目录下没有内容。" : "",
+                    ["lib"] = loc.LibraryName,
+                });
+                StartupLog.Write($"[Web主界面] 网络音乐库根 {items.Count} 项已推送（{loc.LibraryName}）");
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("WebMainDav.Roots", caught);
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "folderroots", ["wd"] = true, ["roots"] = new List<object>(),
+                    ["empty"] = true,
+                    ["emptyText"] = "连不上网络音乐库：" + DescribeWebDavFailure(caught),
+                    ["lib"] = loc.LibraryName,
+                });
+            }
+        }
+
+        /// <summary>网页点开一个网络文件夹：推一层子项 + 该文件夹的歌曲（原生
+        /// ToggleWebDavFolderExpandAsync + LoadWebDavFolderSongs 的网页版）。</summary>
+        private async Task PushWebDavChildrenAsync(string folderPath)
+        {
+            WebDavLocation? loc = GetWebDavLocation();
+            if (loc == null || string.IsNullOrEmpty(folderPath))
+            {
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "folderchildren", ["wd"] = true, ["path"] = folderPath,
+                    ["items"] = new List<object>(),
+                });
+                return;
+            }
+
+            try
+            {
+                IReadOnlyList<WebDavEntry> entries = await Task.Run(async () =>
+                {
+                    using WebDavClient client = loc.CreateClient();
+                    return await client.ListAsync(folderPath);
+                });
+
+                var items = entries.Select(e =>
+                {
+                    FolderBrowserItem it = ToFolderBrowserItem(e, 0, folderPath);
+                    return new Dictionary<string, object?>
+                    {
+                        ["name"] = it.DisplayName,
+                        ["path"] = it.FullPath,
+                        ["isFolder"] = it.IsFolder,
+                    };
+                }).Cast<object>().ToList();
+
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "folderchildren", ["wd"] = true, ["path"] = folderPath,
+                    ["items"] = items,
+                });
+                await PushWebDavSongsAsync(loc, folderPath);
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("WebMainDav.Children", caught);
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "folderchildren", ["wd"] = true, ["path"] = folderPath,
+                    ["items"] = new List<object>(),
+                });
+            }
+        }
+
+        /// <summary>网络文件夹的歌曲（原生 LoadWebDavFolderSongs 口径）：只列音频文件，
+        /// 已缓存的读本地标签（时长是真的），没缓存的只给文件名+大小。</summary>
+        private async Task PushWebDavSongsAsync(WebDavLocation loc, string folderPath)
+        {
+            List<PlaylistItem> songs;
+            try
+            {
+                songs = await Task.Run(() =>
+                {
+                    using WebDavClient client = loc.CreateClient();
+                    IReadOnlyList<WebDavEntry> entries = client.ListAsync(folderPath).GetAwaiter().GetResult();
+                    var list = new List<PlaylistItem>();
+                    foreach (WebDavEntry e in entries)
+                    {
+                        if (e.IsFolder) continue;
+                        if (!AudioExtensions.Contains(Path.GetExtension(e.Name), StringComparer.OrdinalIgnoreCase)) continue;
+                        string rel = CombineRemotePath(folderPath, e.RelativePath);
+                        list.Add(CreateRemotePlaylistItem(loc, new WebDavEntry
+                        {
+                            Name = e.Name,
+                            RelativePath = rel,
+                            IsFolder = false,
+                            Size = e.Size,
+                            ModifiedUtc = e.ModifiedUtc
+                        }, folderPath));
+                    }
+                    return list;
+                });
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("WebMainDav.Songs", caught);
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "foldersongs", ["wd"] = true, ["path"] = folderPath,
+                    ["header"] = folderPath, ["songs"] = new List<object>(),
+                    ["error"] = "读取失败：" + DescribeWebDavFailure(caught),
+                });
+                return;
+            }
+
+            for (int i = 0; i < songs.Count; i++) songs[i].Index = i + 1;
+
+            var rows = songs.Select(t => new Dictionary<string, object?>
+            {
+                // 主文本：有标签用标题，没缓存过只有文件名（原生同口径）
+                ["t"] = string.IsNullOrEmpty(t.FileName) ? t.Title : t.FileName,
+                ["sub"] = string.IsNullOrEmpty(t.RemoteHint) ? t.ArtistAlbumText : t.RemoteHint,
+                ["dur"] = t.Duration.TotalSeconds,
+                ["path"] = t.RemotePath,
+            }).Cast<object>().ToList();
+
+            await PostCelesteWebAsync(new Dictionary<string,object?>
+            {
+                ["kind"] = "foldersongs", ["wd"] = true, ["path"] = folderPath,
+                ["header"] = folderPath, ["songs"] = rows,
+            });
+            StartupLog.Write($"[Web主界面] 网络音乐库「{folderPath}」歌曲 {rows.Count} 首已推送");
+        }
+
+        /// <summary>播放网络曲目（原生 PlayWebDavItemAsync 口径）：先下载到缓存再播。</summary>
+        private async Task PlayWebDavFileAsync(string remotePath)
+        {
+            if (string.IsNullOrEmpty(remotePath)) return;
+            WebDavLocation? loc = GetWebDavLocation();
+            if (loc == null) return;
+
+            string name = Path.GetFileName(remotePath);
+            var item = CreateRemotePlaylistItem(loc, new WebDavEntry
+            {
+                Name = name,
+                RelativePath = remotePath,
+                IsFolder = false,
+                Size = 0
+            }, GetRemoteParent(remotePath));
+            await PlayWebDavItemAsync(item);
+        }
+
+        /* ================= 播放列表（命名单墙 + 详情） =================
+           口径照原生 PlaylistWallBorder / ShowPlaylistDetail：
+           - 墙 = 命名单卡片（PlaylistLibraryService.Refresh + Items），内建
+             「我喜欢的音乐」过滤（侧栏有专门入口）；原生空单也出卡片，这里同口径。
+           - 详情 = 该单有序曲目（NamedPlaylistStore.LoadSongs，行序即单内顺序），
+             行播放 = PlayNamedPlaylistFromTrack（整单替换队列、从该首起）。
+           - 封面：首曲封面优先（WriteCoverFile，与专辑封面同一缓存），歌曲全无封面
+             时回落用户自定义封面（PlaylistLibraryService.CustomCoverPath →
+             WebAvatarFileUrl 落 WebAssets）。解封面要开文件读，后台分批预热，
+             算好推 plcovers，网页按下标回填卡片。 */
+
+        /// <summary>推播放列表墙（原生 ApplyPlaylistWallCategory 的网页版）。
+        /// backToWall=true 给删除后用：网页收到就回墙（原生删完单也是回墙）。</summary>
+        private async Task PushWebPlaylistWallAsync(bool backToWall = false)
+        {
+            List<(string Name, int Count)> rows;
+            try
+            {
+                // Refresh/LoadSongs 走 SQLite，挪后台线程（云盘/大盘库下 UI 线程会卡）
+                rows = await Task.Run(() =>
+                {
+                    PlaylistLibraryService.Refresh();
+                    var list = new List<(string, int)>();
+                    foreach (var p in PlaylistLibraryService.Items)
+                    {
+                        if (string.Equals(p.Name, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
+                            continue;
+                        list.Add((p.Name, NamedPlaylistStore.LoadSongs(p.Name).Count));
+                    }
+                    return list;
+                });
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("WebMainPlaylist.Wall", ex);
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "plwall", ["items"] = new List<object>(), ["empty"] = true,
+                });
+                return;
+            }
+
+            var items = rows.Select(r => new Dictionary<string, object?>
+            {
+                ["name"] = r.Name,
+                ["n"] = r.Count,
+                ["cover"] = "",   // 封面后台预热按批补（plcovers）
+            }).Cast<object>().ToList();
+
+            await PostCelesteWebAsync(new Dictionary<string, object?>
+            {
+                ["kind"] = "plwall",
+                ["items"] = items,
+                ["empty"] = items.Count == 0,
+                ["back"] = backToWall,
+            });
+            StartupLog.Write($"[Web主界面] 播放列表墙 {items.Count} 个已推送");
+            _ = PrewarmWebPlaylistCoversAsync(rows.Select(r => r.Name).ToList());
+        }
+
+        /// <summary>后台预热播放列表封面，算好一批推一批（kind=plcovers，网页按下标回填）。
+        /// 代际不相符就停——旧下标补到新墙上会张冠李戴。</summary>
+        private async Task PrewarmWebPlaylistCoversAsync(List<string> names)
+        {
+            int gen = _webMainGen;
+            try
+            {
+                const int BATCH = 5;
+                int done = 0;
+                while (done < names.Count)
+                {
+                    if (!_webMainOpen || gen != _webMainGen) break;
+                    int end = Math.Min(done + BATCH, names.Count);
+                    int from = done;
+                    // 解封面是文件读，必须挪出 UI 线程（不包 Task.Run 第一批就卡界面）
+                    var items = await Task.Run(() =>
+                    {
+                        var batch = new List<object>();
+                        for (int i = from; i < end; i++)
+                        {
+                            batch.Add(new Dictionary<string, object?>
+                            {
+                                ["i"] = i,
+                                ["cover"] = WebPlaylistCover(names[i]),
+                            });
+                        }
+                        return batch;
+                    });
+                    var payload = new Dictionary<string, object?>
+                    {
+                        ["kind"] = "plcovers",
+                        ["items"] = items,
+                    };
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_webMainOpen) _ = PostCelesteWebAsync(payload);
+                    });
+                    done = end;
+                    await Task.Delay(30);
+                }
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("PrewarmWebPlaylistCovers", ex);
+            }
+        }
+
+        /// <summary>播放列表封面 URL：首曲封面优先，全无回落用户自定义封面
+        /// （原生 LoadPlaylistWallCoverAsync 口径）。</summary>
+        private string WebPlaylistCover(string name)
+        {
+            try
+            {
+                foreach (string path in NamedPlaylistStore.LoadSongs(name))
+                {
+                    if (!System.IO.File.Exists(path)) continue;
+                    if (!_webMainCoverCache.TryGetValue(path, out var cover))
+                    {
+                        cover = WriteCoverFile(path);
+                        _webMainCoverCache[path] = cover;
+                    }
+                    if (!string.IsNullOrEmpty(cover)) return cover;
+                }
+                string? custom = PlaylistLibraryService.CustomCoverPath(name);
+                if (!string.IsNullOrEmpty(custom)) return WebAvatarFileUrl(custom);
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("WebPlaylistCover", caught);
+            }
+            return "";
+        }
+
+        /// <summary>推播放列表详情（原生 ShowPlaylistDetail / FillPlaylistDetailItems 口径）：
+        /// 单内有序曲目，行显示 标题 + 艺术家·专辑 + 时长 + 收藏心。</summary>
+        private async Task PushWebPlaylistDetailAsync(string name)
+        {
+            if (string.IsNullOrEmpty(name)) return;
+            List<PlaylistItem> songs;
+            try
+            {
+                songs = await Task.Run(() =>
+                {
+                    var list = new List<PlaylistItem>();
+                    foreach (string path in NamedPlaylistStore.LoadSongs(name))
+                    {
+                        if (!System.IO.File.Exists(path)) continue;
+                        try { list.Add(CreatePlaylistItemFromPath(path)); }
+                        catch (Exception caught) { StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+                    }
+                    return list;
+                });
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("WebMainPlaylist.Detail", ex);
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "pldetail", ["name"] = name, ["songs"] = new List<object>(),
+                });
+                return;
+            }
+
+            var rows = songs.Select(t => new Dictionary<string, object?>
+            {
+                ["t"] = string.IsNullOrEmpty(t.Title) ? System.IO.Path.GetFileName(t.FilePath) : t.Title,
+                ["sub"] = t.ArtistAlbumText,
+                ["dur"] = t.Duration.TotalSeconds,
+                ["fav"] = TrackStatsStore.Get(t.FilePath)?.IsFavorite == true,
+                ["path"] = t.FilePath,
+            }).Cast<object>().ToList();
+
+            await PostCelesteWebAsync(new Dictionary<string, object?>
+            {
+                ["kind"] = "pldetail",
+                ["name"] = name,
+                ["songs"] = rows,
+            });
+            StartupLog.Write($"[Web主界面] 播放列表「{name}」{rows.Count} 首已推送");
+        }
+
+        /// <summary>删除播放列表（原生墙右键删除口径：删单 + 清自定义封面 + 刷新墙）。</summary>
+        private async Task DeleteWebPlaylistAsync(string name)
+        {
+            if (string.Equals(name, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
+                return;
+            try
+            {
+                await Task.Run(() =>
+                {
+                    NamedPlaylistStore.Delete(name);
+                    PlaylistLibraryService.ClearCustomCover(name);
+                    PlaylistLibraryService.Refresh();
+                });
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("WebMainPlaylist.Delete", ex);
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "plmsg", ["text"] = "删除失败：" + ex.Message,
+                });
+                return;
+            }
+            await PushWebPlaylistWallAsync(backToWall: true);
+        }
+
+        /// <summary>重命名播放列表（原生 RenamePlaylistFromWallAsync 口径）。
+        /// 失败（重名等）推 plmsg，网页在改名框旁显示。</summary>
+        private async Task RenameWebPlaylistAsync(string oldName, string newName)
+        {
+            if (string.Equals(oldName, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
+                return;
+            newName = (newName ?? string.Empty).Trim();
+            if (newName.Length == 0 || string.Equals(newName, oldName, StringComparison.Ordinal)) return;
+            try
+            {
+                await Task.Run(() =>
+                {
+                    NamedPlaylistStore.Rename(oldName, newName);
+                    PlaylistLibraryService.Refresh();
+                });
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("WebMainPlaylist.Rename", ex);
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "plmsg", ["text"] = "重命名失败：这个名字可能已被占用",
+                });
+                return;
+            }
+            await PostCelesteWebAsync(new Dictionary<string, object?>
+            {
+                ["kind"] = "plrenamed", ["old"] = oldName, ["name"] = newName,
+            });
+        }
+
+        /// <summary>新建播放列表（原生 CreatePlaylistWallButton_Click 口径：默认名去重），
+        /// 建完直接进详情（空单）。</summary>
+        private async Task CreateWebPlaylistAsync()
+        {
+            string name;
+            try
+            {
+                name = await Task.Run(() =>
+                {
+                    string candidate = "新建播放列表";
+                    int n = 2;
+                    var existing = NamedPlaylistStore.List();
+                    while (existing.Contains(candidate, StringComparer.OrdinalIgnoreCase))
+                    {
+                        candidate = "新建播放列表 (" + n + ")";
+                        n++;
+                    }
+                    NamedPlaylistStore.Create(candidate);
+                    PlaylistLibraryService.Refresh();
+                    return candidate;
+                });
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("WebMainPlaylist.Create", ex);
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "plmsg", ["text"] = "新建失败：" + ex.Message,
+                });
+                return;
+            }
+            await PushWebPlaylistDetailAsync(name);
+        }
+
         /// <summary>从消息里读一个字符串字段（读不到返回空串）。封面诊断用。</summary>
         private static string ReadStr(JsonElement payload, string name)
         {
@@ -911,6 +1473,20 @@ namespace CelesteMusicPlayer
             }
             catch { /* 读不到按空串 */ }
             return "";
+        }
+
+        /// <summary>从消息里读一个布尔字段（读不到/不是布尔都按 false）。</summary>
+        private static bool ReadBool(JsonElement payload, string name)
+        {
+            try
+            {
+                if (payload.ValueKind == JsonValueKind.Object &&
+                    payload.TryGetProperty(name, out var v) &&
+                    (v.ValueKind == JsonValueKind.True || v.ValueKind == JsonValueKind.False))
+                    return v.GetBoolean();
+            }
+            catch { /* 读不到按 false */ }
+            return false;
         }
 
         /// <summary>
@@ -1076,6 +1652,15 @@ namespace CelesteMusicPlayer
                     .GroupBy(p => TagSortFieldVal(p, f), StringComparer.CurrentCultureIgnoreCase)
                     .Count();
             }
+            if (string.Equals(id, "PlaylistWall", StringComparison.OrdinalIgnoreCase))
+            {
+                // 播放列表：侧栏计数 = 命名单数（内建「我喜欢的音乐」不计，与墙同口径）
+                int n = 0;
+                foreach (string name in NamedPlaylistStore.List())
+                    if (!string.Equals(name, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
+                        n++;
+                return n;
+            }
             return 0;
         }
 
@@ -1088,12 +1673,22 @@ namespace CelesteMusicPlayer
             var cats = new List<object>();
             foreach (var (id, label, group) in WebMainCategories)
             {
+                // 网络音乐库：没配 WebDAV 时侧栏不显示这一项（原生 ApplyWebDavNavEntry
+                // 同口径——SetNavEntryVisibility(NavWebDavButton, loc.IsConfigured)）。
+                // 用户 2026-10-09 明确要求：设置了再显示。
+                if (string.Equals(id, "WebDav", StringComparison.OrdinalIgnoreCase)
+                 && GetWebDavLocation() == null)
+                {
+                    continue;
+                }
                 bool ok = Array.IndexOf(WebMainListPanels, id) >= 0
                        || string.Equals(id, "Albums", StringComparison.OrdinalIgnoreCase)
                        || string.Equals(id, "Artists", StringComparison.OrdinalIgnoreCase)
                        || string.Equals(id, "AlbumArtists", StringComparison.OrdinalIgnoreCase)
                        || string.Equals(id, "Folders", StringComparison.OrdinalIgnoreCase)
-                       || string.Equals(id, "TagSort", StringComparison.OrdinalIgnoreCase);
+                       || string.Equals(id, "WebDav", StringComparison.OrdinalIgnoreCase)
+                       || string.Equals(id, "TagSort", StringComparison.OrdinalIgnoreCase)
+                       || string.Equals(id, "PlaylistWall", StringComparison.OrdinalIgnoreCase);
                 cats.Add(new Dictionary<string, object?>
                 {
                     ["id"] = id,
@@ -1153,6 +1748,11 @@ namespace CelesteMusicPlayer
                         // 收藏态逐首带（我喜欢的音乐面板要显示实心红心；
                         // TrackStatsStore.Get 走内存缓存，3609 次查表不读文件）
                         ["fav"] = TrackStatsStore.Get(t.FilePath)?.IsFavorite == true,
+                        // 播放次数：只有「播放最多」面板用（原生不显示，用户 2026-10-09
+                        // 要求补上；TrackStatsStore.Get 内存查表，零文件 I/O）
+                        ["plays"] = string.Equals(_webMainListKind, "MostPlayed", StringComparison.OrdinalIgnoreCase)
+                            ? TrackStatsStore.Get(t.FilePath)?.PlayCount ?? 0
+                            : 0,
                         // 行副标题覆盖：只有「最近播放」面板有值（播放时间+时长+播完），
                         // 其余为空 = 网页用 艺术家 · 专辑
                         ["sub"] = i < _webMainSubs.Count ? _webMainSubs[i] : "",
@@ -1949,6 +2549,9 @@ namespace CelesteMusicPlayer
                 ["position"] = EnginePositionValue.TotalSeconds,
                 ["duration"] = EngineDurationValue.TotalSeconds,
                 ["volume"] = (VolumeSlider?.Value ?? 0) / 100.0,
+                // 正在播的文件路径：播放列表详情页靠它高亮正在播的那一行
+                // （now 的 index 按当前列表面板算，对不上播放列表的行序）
+                ["path"] = _nowPlayingPath ?? "",
             };
 
             // 收藏态跟着正在播的那首走（网页上高亮的就是它）

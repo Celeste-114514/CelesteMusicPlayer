@@ -505,6 +505,12 @@ namespace CelesteMusicPlayer
         /// <summary>打开房间校正（卷积 FIR）独立窗口。</summary>
         private void OpenRoomCorrectionButton_Click(object sender, RoutedEventArgs e)
         {
+            OpenRoomCorrectionCore();
+        }
+
+        /// <summary>打开房间校正窗口核心（网页「音效处理」页直接调）。</summary>
+        internal void OpenRoomCorrectionCore()
+        {
             RoomCorrectionWindow.OpenOrActivate();
         }
 
