@@ -214,6 +214,88 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 /* 碟片分组头（原生 Apple Music 风格 CD{n}） */
 .disc{font-size:11.5px;font-weight:600;color:var(--text3);letter-spacing:.05em;
       padding:16px 0 6px;border-bottom:1px solid var(--div)}
+/* ---------- 标签排序（布局照原生 TagSortBorder：字段钮 + 分类卡墙 / 钻取面板） ---------- */
+#tagsortwrap{display:flex;flex-direction:column;min-height:0;gap:14px}
+/* 顶栏：分类字段胶囊组 + ＋配置 + 分组浏览（原生 TagSortFieldButtonsPanel，墙和面板都在） */
+#tsbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:0 0 auto}
+#tsbar .tsl{font-size:12.5px;color:var(--text2);margin-right:2px}
+#tsbar .caps{height:28px;border-radius:14px;font-size:12px;padding:0 13px}
+/* ＋ 和分组浏览是小方块/胶囊钮（原生 plus 32×32 / 换字段按钮同款胶囊） */
+#tsbar .tssq{width:28px;height:28px;border-radius:14px;border:1px solid var(--pillbr);
+             background:var(--pill);color:var(--text2);font-family:var(--font);font-size:14px;
+             line-height:1;cursor:pointer;display:grid;place-items:center;padding:0}
+#tsbar .tssq:hover{background:var(--hover)}
+#tsbar .tsgo{margin-left:auto}
+/* 分类墙溢出条（原生 TagSortClassWallOverflowBar） */
+#tsmore{flex:0 0 auto;font-size:12px;color:var(--text2);line-height:1.7;
+        background:var(--pill);border:1px solid var(--pillbr);border-radius:10px;padding:10px 14px}
+#tsmore .tsmbtn{margin-top:8px}
+/* 钻取面板：顶行（返回 + 标题 + 播放）+ 视角胶囊 + 内容区 */
+#tspanel{display:flex;flex-direction:column;min-height:0;gap:12px;flex:1}
+#tspTop{display:flex;align-items:center;gap:10px;flex:0 0 auto}
+#tspTop .tsback{height:30px;border-radius:var(--r-ctrl);border:1px solid var(--div2);
+                background:transparent;color:var(--text);font-family:var(--font);font-size:12.5px;
+                padding:0 12px 0 8px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;
+                flex:0 0 auto}
+#tspTop .tsback:hover{background:var(--hover)}
+#tspTop .tstitle{font-size:15px;font-weight:600;min-width:0;overflow:hidden;
+                 text-overflow:ellipsis;white-space:nowrap;flex:1}
+#tspTop .tstitle .tstsub{font-size:12px;color:var(--text2);font-weight:400;margin-left:8px}
+#tsmodes{display:flex;gap:6px;flex-wrap:wrap;flex:0 0 auto}
+#tsmodes .caps{height:28px;border-radius:14px;font-size:12px;padding:0 13px}
+/* 曲目视角：# 48px 固定列 + 可见配置列（原生 TagSortColumnHeaderGrid 口径，
+   列宽按 C# 推来的权重 w 用 flex-grow 分，天然对齐） */
+#tssongs{min-width:0}
+#tssongs .tshead{display:flex;align-items:center;gap:10px;padding:0 4px 8px;
+                 border-bottom:1px solid var(--div);font-size:11.5px;color:var(--text3);
+                 font-weight:600;user-select:none}
+#tssongs .tshead .tsn{flex:0 0 48px;text-align:center}
+#tssongs .tshead .tsc{cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#tssongs .tshead .tsc:hover{color:var(--text)}
+#tssongs .tshead .tsc.on{color:var(--accent)}
+.tsrow{display:flex;align-items:center;gap:10px;min-height:44px;padding:0 4px;
+       border-radius:8px;font-size:13px;cursor:default;user-select:none}
+.tsrow:hover{background:var(--hover)}
+.tsrow.on{background:var(--sel)}
+.tsrow.on:hover{background:var(--sel);filter:brightness(.985)}
+.tsrow .tsn{flex:0 0 48px;text-align:center;font-size:12px;color:var(--text3);
+            font-variant-numeric:tabular-nums}
+.tsrow.on .tsn{color:var(--accent)}
+.tsrow .tsc{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* 排序方式视角（原生 TagSortSortPanel） */
+#tssort{max-width:560px;display:flex;flex-direction:column;gap:12px;align-items:flex-start}
+#tssort .tsdesc{font-size:12.5px;color:var(--text2)}
+#tssort .tsrow2{display:flex;gap:6px;flex-wrap:wrap}
+#tssort .tsstatus{font-size:12px;color:var(--text2);line-height:1.7}
+/* 分组视角（原生 TagSortGroupPanel）：工具行 + 组头/歌曲行 */
+#tsgbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;flex:0 0 auto}
+#tsgbar select{height:28px;border-radius:14px;border:1px solid var(--pillbr);background:var(--pill);
+               color:var(--text);font-family:var(--font);font-size:12px;padding:0 8px;cursor:pointer}
+#tsgbar .tsbtn{height:28px;border-radius:14px;border:1px solid var(--pillbr);background:var(--pill);
+               color:var(--text2);font-family:var(--font);font-size:12px;padding:0 12px;cursor:pointer}
+#tsgbar .tsbtn:hover{background:var(--hover)}
+#tsgrows{min-width:0}
+/* 组头：缩进 Depth×22（原生 TagSortGroupIndentStep）+ 浅底胶囊 + chevron + 值 + N 首 */
+.tgh{display:flex;align-items:center;gap:8px;min-height:36px;border-radius:10px;
+     background:rgba(120,120,128,.14);font-size:13px;cursor:default;user-select:none;
+     padding-right:8px}
+.tgh:hover{filter:brightness(.97)}
+.tgh .chev{flex:0 0 16px;text-align:center;opacity:.55;font-size:10px;line-height:1}
+.tgh .gv{font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tgh .gl{font-size:11px;color:var(--text2);flex:0 0 auto}
+.tgh .gn{font-size:11px;color:var(--text2);flex:0 0 auto;font-variant-numeric:tabular-nums}
+.tgh .gplay{flex:0 0 auto;margin-left:auto;width:26px;height:26px;border:0;border-radius:13px;
+            background:transparent;color:var(--text2);cursor:pointer;font-size:11px;
+            display:grid;place-items:center;padding:0;font-family:var(--font)}
+.tgh .gplay:hover{background:var(--hover);color:var(--accent)}
+/* 组内歌曲行：缩进 (Depth+1)×22 + 标题 + 艺术家 + 时长（原生口径） */
+.tgr{display:flex;align-items:center;gap:10px;min-height:38px;border-radius:8px;
+     font-size:13px;cursor:default;user-select:none;padding:0 8px 0 0}
+.tgr:hover{background:var(--hover)}
+.tgr .gt{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tgr .ga{flex:0 1 40%;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+         font-size:12px;color:var(--text2)}
+.tgr .gd{flex:0 0 auto;font-size:12px;color:var(--text2);font-variant-numeric:tabular-nums}
 /* 评分面板的星级胶囊行（原生 RatingFilterPanel 口径：未评分 + ★1..★5） */
 #ratingbar{display:flex;gap:6px;flex-wrap:wrap;padding:2px 0 14px}
 .caps{height:28px;border-radius:14px;border:1px solid var(--pillbr);background:var(--pill);
@@ -270,7 +352,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   <div class="tb">
     <button class="back" id="btnExit">&#8249; 返回原界面</button>
     <div class="tbmid">Apple 风格 · 歌曲浏览（试点）</div>
-    <div class="search">
+    <div class="search" id="qwrap">
       <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="7" cy="7" r="4.4"/><path d="M10.5 10.5L14 14"/></svg>
       <input id="q" placeholder="在已加载的歌曲里筛选">
     </div>
@@ -324,6 +406,27 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
             <div id="frows"></div>
           </div>
         </div>
+        <!-- 标签排序：分类卡墙（#tsbar+#tsgrid+#tsmore）/ 钻取面板（#tspanel，原生 TagSortBorder 口径） -->
+        <div id="tagsortwrap" style="display:none">
+          <div id="tsbar"></div>
+          <div id="tsgrid" class="grid" style="display:none"></div>
+          <div id="tsmore" style="display:none"></div>
+          <div id="tspanel" style="display:none">
+            <div id="tspTop">
+              <button class="tsback" id="tsback">&#8249; 返回</button>
+              <div class="tstitle" id="tstitle"></div>
+              <button class="btn pri" id="tspPlay">&#9654; 播放</button>
+            </div>
+            <div id="tsmodes"></div>
+            <div id="tssongs" style="display:none"></div>
+            <div id="tscards" class="grid" style="display:none"></div>
+            <div id="tssort" style="display:none"></div>
+            <div id="tsgroupv" style="display:none">
+              <div id="tsgbar"></div>
+              <div id="tsgrows"></div>
+            </div>
+          </div>
+        </div>
         <div id="placeholder" style="display:none"></div>
       </div>
     </main>
@@ -368,12 +471,25 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
               / folderroots（媒体库根目录列表，空 = 没配置）
               / folderchildren（某目录的下一层，子文件夹+音频文件）
               / foldersongs（某目录的歌曲，行带 path）
+              / tagsortcats（标签排序分类墙：fields 字段钮 + cards 分类卡 + total/shown/advice）
+              / tagsortpanel（标签排序面板：mode/title/fields + 当前视角的
+                 cols+songs（曲目）/ grid（专辑·艺术家）/ sort（排序方式）/ group（分组浏览））
+              / tagsortcovers（标签排序卡片封面按批补，ctx=wall/grid，items:[{i,cover}]）
    网页 → C#：ready / nav / album（打开专辑，id=专辑下标）
               / artist（打开艺术家，id=艺术家下标）/ artistback（详情里返回墙）
               / xtalbum（艺术家详情里打开专辑，id=该艺人专辑表下标）
               / play / pause / resume / next / prev / seek / volume / love / exit
               / enqueue（当前列表加入播放队列）/ rating（评分面板星级过滤）
-              / folder（展开媒体库目录，path=目录）/ folderplay（播放媒体库文件，path=文件） */
+              / folder（展开媒体库目录，path=目录）/ folderplay（播放媒体库文件，path=文件）
+              / tagsortfield（切分类字段，key）/ tagsortopen（点分类卡，name）
+              / tagsortdrill（专辑/艺术家卡钻取，name+sub）/ tagsortmode（切视角，mode）
+              / tagsortback（面板返回分类墙）/ tagsortcol（列头点击排序，key）
+              / tagsortplay（播放当前列表）/ tagsortsong（播分类曲目，index）
+              / tagsortgroupplay（播整组，path）/ tagsortgroupsong（播组内歌曲，path+group+file）
+              / tagsorttoggle（组头展开折叠，path）/ tagsortexpand（全部展开/折叠，on）
+              / tagsortgroup（分组预设切换，tag）/ tagsortcustom（开原生配置窗，what）
+              / tagsortsort（排序方式预设，preset）/ tagsortorder（排序升/降序，asc）
+              / tagsortmore（分类墙加载更多） */
 (function(){
   /* ---------- WebView2 宿主对象就绪等待（照搬 album.html 的 whenWv 模式） ----------
      偶发竞态：脚本执行时 window.chrome.webview 可能还没注入完，直接访问抛 TypeError
@@ -447,6 +563,19 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       songsPath: '',  //   右栏当前显示的文件夹（空=还没选）
       loading: false, //   右栏正在等 C# 枚举（大文件夹读盘慢，先显示加载中）
       selPath: ''     //   左栏选中行（原生 SelectionMode=Single）
+    },
+    tagsort: {        // 标签排序（原生 TagSortBorder 口径）：墙 + 钻取面板
+      mode: 'Wall',   //   Wall=分类墙；Songs/Albums/Artists/Sort/GroupBy=面板视角
+      title: '',      //   面板标题（「字段标签：值」）
+      fields: [],     //   字段钮 [{key,label,on}]
+      cards: [],      //   分类卡 [{name,n,cover}]
+      total: 0, shown: 0, advice: '',
+      cols: [],       //   曲目视角列 [{key,label,w,on,asc}]
+      songs: [],      //   曲目视角行 [{n,cells}]（index 与 tagsortsong 对齐）
+      grid: [],       //   专辑/艺术家视角卡 [{name,n,sub,cover}]
+      sort: null,     //   排序视角 {presets:[{label,on}],asc,status}
+      group: null,    //   分组视角 {presets:[{tag,label,on}],rows:[...]}
+      gsel: ''        //   分组预设下拉当前值（防 select 的 change 事件把用户选择冲掉）
     },
     artistTracks: []  // 艺术家详情的曲目（开着时 play/love 的 index 按这份）
   };
@@ -647,6 +776,24 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       if (n) n.innerHTML = '&#9834;';
     }
   }
+  /* 标签排序曲目视角的高亮（#rows 那套不动它——C# 的 now.index 在 Songs 视角
+     按分类曲目算，别的视角按歌曲快照算，两张表各亮各的） */
+  function markTsPlaying(){
+    if (S.page !== 'TagSort' || S.tagsort.mode !== 'Songs') return;
+    var old = $('tssongs').querySelector('.tsrow.on');
+    if (old){
+      old.classList.remove('on');
+      var on = old.querySelector('.tsn');
+      if (on) on.innerHTML = old.getAttribute('data-n') || (+old.getAttribute('data-i') + 1);
+    }
+    if (S.cur < 0) return;
+    var el = $('tssongs').querySelector('.tsrow[data-i="' + S.cur + '"]');
+    if (el){
+      el.classList.add('on');
+      var n = el.querySelector('.tsn');
+      if (n) n.innerHTML = '&#9834;';
+    }
+  }
 
   /* ---------- 专辑网格 ---------- */
   function albumCard(a){
@@ -728,11 +875,18 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
    艺术家=左栏头像+中栏歌曲+右栏专辑），列表面板是单栏。 */
   function hideAllViews(){
     var ids = ['ratingbar','albmeta','artmeta','listwrap','xttrkhead','songThead','rows',
-               'albgrid','artgrid','xtalbwrap','xtalbhead','xtalbgrid','placeholder','folderwrap'];
+               'albgrid','artgrid','xtalbwrap','xtalbhead','xtalbgrid','placeholder',
+               'folderwrap','tagsortwrap'];
     for (var i = 0; i < ids.length; i++) $(ids[i]).style.display = 'none';
     $('view').classList.remove('cols');
     $('listwrap').classList.remove('art');
     $('btnBackGrid').style.display = 'none';
+  }
+  /* 搜索框显隐：原生只有歌曲/专辑/艺术家/媒体库等页有搜索（UpdateLibrarySearchUi），
+     标签排序页没有——进页藏起来，别的页再显出来（showTagSort 传 false）。 */
+  function setSearchVisible(on){
+    $('qwrap').style.display = on ? '' : 'none';
+    if (!on) $('q').value = '';
   }
   function resetDetail(){
     S.album = null; S.albumTracks = [];
@@ -744,6 +898,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   function showList(){
     resetDetail();
     hideAllViews();
+    setSearchVisible(true);
     $('listwrap').style.display = '';
     $('songThead').style.display = '';
     $('songTheadN').textContent = '#';
@@ -761,6 +916,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   function showAlbumGrid(){
     resetDetail();
     hideAllViews();
+    setSearchVisible(true);
     $('albgrid').style.display = '';
     $('btnPlayAll').style.visibility = 'hidden';
     renderAlbGrid();
@@ -771,6 +927,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
      专辑名/艺术家·年份·首数·总时长和播放按钮在页头（网页壳的统一 chrome）。 */
   function showAlbumDetail(){
     hideAllViews();
+    setSearchVisible(true);
     $('view').classList.add('cols');
     $('albmeta').style.display = '';
     $('listwrap').style.display = '';
@@ -821,6 +978,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   function showArtistWall(){
     resetDetail();
     hideAllViews();
+    setSearchVisible(true);
     $('artgrid').style.display = '';
     $('btnPlayAll').style.visibility = 'hidden';
     renderArtWall();
@@ -831,6 +989,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
      名字/首数·总时长和播放按钮在页头。 */
   function showArtistDetail(){
     hideAllViews();
+    setSearchVisible(true);
     $('view').classList.add('cols');
     $('artmeta').style.display = '';
     $('listwrap').style.display = '';
@@ -953,6 +1112,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   function showFolder(){
     resetDetail();
     hideAllViews();
+    setSearchVisible(true);
     $('folderwrap').style.display = '';
     $('btnPlayAll').style.visibility = 'hidden';
     $('q').placeholder = '搜索文件名';   // 原生 Folders 分类的搜索框口径
@@ -993,6 +1153,286 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     var row = e.target.closest('.frow');
     if (row) post({kind:'folderplay', path:row.getAttribute('data-p')});
   });
+
+  /* ---------- 标签排序（原生 TagSortBorder 口径） ----------
+     墙：字段钮组 + 分类卡（点卡进面板）+ 溢出加载更多；
+     面板：曲目（可配置列+列头排序）/ 专辑 / 艺术家 / 排序方式 / 分组浏览五个视角。
+     播放语义照原生：曲目行=不换队列（tagsortsong），面板播放全部/整组=换队列，
+     组内歌曲=播该末级分组全部从该首开始。配置类弹窗（字段/排序/分组）走原生窗口。 */
+  var TS_MODES = [
+    { id: 'Songs',   t: '曲目' },
+    { id: 'Albums',  t: '专辑' },
+    { id: 'Artists', t: '艺术家' },
+    { id: 'Sort',    t: '排序方式' },
+    { id: 'GroupBy', t: '分组浏览' }
+  ];
+  function tsCover(c, cls){
+    var cv = c.cover
+      ? '<img src="' + c.cover + '" alt="" onerror="postCoverErr(this.src)">'
+      : esc((c.name || '?').slice(0, 1));
+    return '<div class="' + cls + '">' + cv + '</div>';
+  }
+  /* 字段钮组（墙和面板顶栏都有；＋ 开原生字段配置窗，右侧「分组浏览」从墙上进分组） */
+  function renderTagSortBar(){
+    var t = S.tagsort;
+    var html = '<span class="tsl">分类：</span>';
+    for (var i = 0; i < t.fields.length; i++){
+      var f = t.fields[i];
+      html += '<button class="caps' + (f.on ? ' on' : '') + '" data-k="' + esc(f.key) + '">'
+           +  esc(f.label) + '</button>';
+    }
+    html += '<button class="tssq" id="tsplus" title="配置分类字段">＋</button>'
+         +  '<button class="caps tsgo" id="tsgroupbtn">分组浏览</button>';
+    $('tsbar').innerHTML = html;
+    var els = $('tsbar').querySelectorAll('.caps[data-k]');
+    for (var j = 0; j < els.length; j++){
+      els[j].onclick = function(){ post({kind:'tagsortfield', key:this.getAttribute('data-k')}); };
+    }
+    $('tsplus').onclick = function(){ post({kind:'tagsortcustom', what:'fields'}); };
+    $('tsgroupbtn').onclick = function(){ post({kind:'tagsortmode', mode:'GroupBy'}); };
+  }
+  function renderTagSortWall(){
+    var t = S.tagsort;
+    renderTagSortBar();
+    $('tspanel').style.display = 'none';
+    $('tsmore').style.display = 'none';
+    $('tsgrid').style.display = '';
+    $('btnPlayAll').style.visibility = 'hidden';   // 墙上没有播放全部（原生同）
+    var host = $('tsgrid');
+    if (!t.cards.length){
+      host.innerHTML = '<div class="empty"><div class="big">'
+        + (t.total > 0 ? '分类加载中…' : '曲库里还没有歌曲') + '</div></div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < t.cards.length; i++){
+      var c = t.cards[i];
+      html += '<div class="acard" data-i="' + i + '" title="' + esc(c.name) + '">'
+           +   tsCover(c, 'cv')
+           +   '<div class="nm">' + esc(c.name) + '</div>'
+           +   '<div class="ar">' + (c.n || 0) + ' 首</div>'
+           + '</div>';
+    }
+    host.innerHTML = html;
+    var els = host.querySelectorAll('.acard');
+    for (var j = 0; j < els.length; j++){
+      els[j].onclick = function(){
+        post({kind:'tagsortopen', name:S.tagsort.cards[+this.getAttribute('data-i')].name});
+      };
+    }
+    // 溢出条（原生 UpdateClassWallOverflowBar 口径：基数过高给换字段建议）
+    if (t.total > t.shown){
+      var left = t.total - t.shown;
+      $('tsmore').innerHTML = '<div>' + esc(t.advice || '') + '</div>'
+        + '<button class="btn tsmbtn" id="tsmorebtn">'
+        + (t.shown + 200 <= t.total ? '再加载 ' + Math.min(200, left) + ' 个' : '加载全部剩余')
+        + '</button>';
+      $('tsmore').style.display = '';
+      $('tsmorebtn').onclick = function(){ post({kind:'tagsortmore'}); };
+    }
+  }
+  function renderTagSortPanel(){
+    var t = S.tagsort;
+    renderTagSortBar();
+    $('tsgrid').style.display = 'none';
+    $('tsmore').style.display = 'none';
+    $('tspanel').style.display = '';
+    $('btnPlayAll').style.visibility = '';
+    // 顶行：返回 + 标题 + 播放当前列表
+    $('tstitle').textContent = t.title || '';
+    $('tspPlay').onclick = function(){ post({kind:'tagsortplay'}); };
+    $('tsback').onclick = function(){ post({kind:'tagsortback'}); };
+    // 视角胶囊（原生 TagSortViewModeButton 五选项）
+    var mh = '';
+    for (var i = 0; i < TS_MODES.length; i++){
+      var m = TS_MODES[i];
+      mh += '<button class="caps' + (t.mode === m.id ? ' on' : '') + '" data-m="' + m.id + '">'
+         +  esc(m.t) + '</button>';
+    }
+    $('tsmodes').innerHTML = mh;
+    var els = $('tsmodes').querySelectorAll('.caps');
+    for (var j = 0; j < els.length; j++){
+      els[j].onclick = function(){ post({kind:'tagsortmode', mode:this.getAttribute('data-m')}); };
+    }
+    // 内容区只显当前视角
+    $('tssongs').style.display = 'none';
+    $('tscards').style.display = 'none';
+    $('tssort').style.display = 'none';
+    $('tsgroupv').style.display = 'none';
+    if (t.mode === 'Songs') renderTsSongs();
+    else if (t.mode === 'Albums' || t.mode === 'Artists') renderTsCards();
+    else if (t.mode === 'Sort') renderTsSort();
+    else if (t.mode === 'GroupBy') renderTsGroup();
+  }
+  /* 曲目视角：# 48px 固定列 + 可见配置列（列宽按权重 flex 分，列头点击排序） */
+  function renderTsSongs(){
+    var t = S.tagsort;
+    $('tssongs').style.display = '';
+    var head = '<div class="tshead"><div class="tsn">#</div>';
+    for (var i = 0; i < t.cols.length; i++){
+      var c = t.cols[i];
+      head += '<div class="tsc' + (c.on ? ' on' : '') + '" data-k="' + esc(c.key) + '"'
+           +  ' style="flex:' + (c.w || 1) + ' 1 0" title="点击排序">' + esc(c.label)
+           +  (c.on ? (c.asc ? ' ↑' : ' ↓') : '') + '</div>';
+    }
+    head += '</div>';
+    var rows = '';
+    if (!t.songs.length) rows = '<div class="empty">这个分类下没有歌曲</div>';
+    for (var j = 0; j < t.songs.length; j++){
+      var s = t.songs[j];
+      var cells = '';
+      for (var k = 0; k < t.cols.length; k++){
+        var cc = t.cols[k];
+        var v = (s.cells || [])[k];
+        cells += '<div class="tsc" style="flex:' + (cc.w || 1) + ' 1 0">'
+              +  esc(v == null ? '' : v) + '</div>';
+      }
+      rows += '<div class="tsrow' + (j === S.cur ? ' on' : '') + '" data-i="' + j + '"'
+           +   ' data-n="' + (s.n || j + 1) + '">'
+           +   '<div class="tsn">' + (j === S.cur ? '&#9834;' : (s.n || j + 1)) + '</div>'
+           +   cells
+           + '</div>';
+    }
+    $('tssongs').innerHTML = head + rows;
+    var hs = $('tssongs').querySelectorAll('.tshead .tsc[data-k]');
+    for (var a = 0; a < hs.length; a++){
+      hs[a].onclick = function(){ post({kind:'tagsortcol', key:this.getAttribute('data-k')}); };
+    }
+    var rs = $('tssongs').querySelectorAll('.tsrow');
+    for (var b = 0; b < rs.length; b++){
+      rs[b].onclick = function(){ post({kind:'tagsortsong', index:+this.getAttribute('data-i')}); };
+    }
+  }
+  /* 专辑/艺术家视角：对当前分类曲目分组出卡，点卡钻取到曲目 */
+  function renderTsCards(){
+    var t = S.tagsort;
+    $('tscards').style.display = '';
+    var host = $('tscards');
+    if (!t.grid.length){
+      host.innerHTML = '<div class="empty">这个分类下没有歌曲</div>';
+      return;
+    }
+    var html = '';
+    for (var i = 0; i < t.grid.length; i++){
+      var c = t.grid[i];
+      html += '<div class="acard" data-i="' + i + '" title="' + esc(c.name) + '">'
+           +   tsCover(c, 'cv')
+           +   '<div class="nm">' + esc(c.name) + '</div>'
+           +   '<div class="ar">' + (c.n || 0) + ' 首</div>'
+           + '</div>';
+    }
+    host.innerHTML = html;
+    var els = host.querySelectorAll('.acard');
+    for (var j = 0; j < els.length; j++){
+      els[j].onclick = function(){
+        var g = S.tagsort.grid[+this.getAttribute('data-i')];
+        post({kind:'tagsortdrill', name:g.name, sub:g.sub});
+      };
+    }
+  }
+  /* 排序方式视角：6 预设 + 升/降序 + 自定义排序… + 当前依据（原生 TagSortSortPanel） */
+  function renderTsSort(){
+    var t = S.tagsort;
+    var s = t.sort || {presets:[], asc:true, status:''};
+    $('tssort').style.display = '';
+    var html = '<div class="tsdesc">排序方式（用于排序曲库/主面板歌曲顺序）</div>'
+             + '<div class="tsrow2" id="tspresets">';
+    for (var i = 0; i < s.presets.length; i++){
+      var p = s.presets[i];
+      html += '<button class="caps' + (p.on ? ' on' : '') + '" data-p="' + esc(p.label) + '">'
+           +  esc(p.label) + '</button>';
+    }
+    html += '</div><div class="tsrow2">'
+         +  '<button class="caps' + (s.asc ? ' on' : '') + '" id="tsasc">升序</button>'
+         +  '<button class="caps' + (!s.asc ? ' on' : '') + '" id="tsdesc2">降序</button>'
+         +  '<button class="tsbtn" id="tscustom">自定义排序…</button>'
+         + '</div>'
+         + '<div class="tsstatus">' + esc(s.status) + '</div>';
+    $('tssort').innerHTML = html;
+    var els = $('tspresets').querySelectorAll('.caps');
+    for (var j = 0; j < els.length; j++){
+      els[j].onclick = function(){ post({kind:'tagsortsort', preset:this.getAttribute('data-p')}); };
+    }
+    $('tsasc').onclick = function(){ if (!s.asc) post({kind:'tagsortorder', asc:true}); };
+    $('tsdesc2').onclick = function(){ if (s.asc) post({kind:'tagsortorder', asc:false}); };
+    $('tscustom').onclick = function(){ post({kind:'tagsortcustom', what:'sort'}); };
+  }
+  /* 分组视角：预设下拉 + 自定义… + 全部展开/折叠 + 组头/歌曲行（原生 TagSortGroupPanel） */
+  function renderTsGroup(){
+    var t = S.tagsort;
+    var g = t.group || {presets:[], rows:[]};
+    $('tsgroupv').style.display = '';
+    var sel = '<select id="tsgsel">';
+    for (var i = 0; i < g.presets.length; i++){
+      var p = g.presets[i];
+      sel += '<option value="' + esc(p.tag) + '"' + (p.on ? ' selected' : '') + '>'
+          +  esc(p.label) + '</option>';
+    }
+    sel += '</select>';
+    $('tsgbar').innerHTML = sel
+      + '<button class="tsbtn" id="tsgcustom">自定义…</button>'
+      + '<button class="tsbtn" id="tsgexp">全部展开</button>'
+      + '<button class="tsbtn" id="tsgcol">全部折叠</button>';
+    $('tsgsel').onchange = function(){ post({kind:'tagsortgroup', tag:this.value}); };
+    $('tsgcustom').onclick = function(){ post({kind:'tagsortcustom', what:'group'}); };
+    $('tsgexp').onclick = function(){ post({kind:'tagsortexpand', on:true}); };
+    $('tsgcol').onclick = function(){ post({kind:'tagsortexpand', on:false}); };
+    var rows = '';
+    if (!g.rows.length) rows = '<div class="empty">没有可分组的内容</div>';
+    for (var j = 0; j < g.rows.length; j++){
+      var r = g.rows[j];
+      // 缩进：组头 Depth×22、歌曲 (Depth+1)×22（原生 TagSortGroupIndentStep）
+      var pad = 'padding-left:' + ((r.depth || 0) * 22) + 'px';
+      if (r.h){
+        rows += '<div class="tgh" data-path="' + esc(r.path) + '" style="' + pad + '">'
+             +   '<div class="chev">' + (r.open ? '▾' : '▸') + '</div>'
+             +   '<div class="gv">' + esc(r.value) + '</div>'
+             +   '<div class="gl">' + esc(r.label) + '</div>'
+             +   '<div class="gn">' + (r.n || 0) + ' 首</div>'
+             +   '<button class="gplay" title="播放整组">&#9654;</button>'
+             + '</div>';
+      } else {
+        rows += '<div class="tgr" data-path="' + esc(r.path) + '"'
+             +   ' data-file="' + esc(r.file) + '" data-group="' + esc(r.group) + '"'
+             +   ' style="' + pad + '">'
+             +   '<div class="gt">' + esc(r.title) + '</div>'
+             +   '<div class="ga">' + esc(r.artist) + '</div>'
+             +   '<div class="gd">' + esc(r.dur) + '</div>'
+             + '</div>';
+      }
+    }
+    $('tsgrows').innerHTML = rows;
+    var hs = $('tsgrows').querySelectorAll('.tgh');
+    for (var a = 0; a < hs.length; a++){
+      hs[a].onclick = function(e){
+        // 行尾播放钮只播整组，不触发展折（原生 chevron/行点击分开的口径）
+        if (e.target.closest('.gplay')){
+          post({kind:'tagsortgroupplay', path:this.getAttribute('data-path')});
+          return;
+        }
+        post({kind:'tagsorttoggle', path:this.getAttribute('data-path')});
+      };
+    }
+    var ss = $('tsgrows').querySelectorAll('.tgr');
+    for (var b = 0; b < ss.length; b++){
+      ss[b].onclick = function(){
+        post({kind:'tagsortgroupsong',
+              path:this.getAttribute('data-path'),
+              group:this.getAttribute('data-group'),
+              file:this.getAttribute('data-file')});
+      };
+    }
+  }
+  function showTagSort(){
+    resetDetail();
+    hideAllViews();
+    $('tagsortwrap').style.display = '';
+    setSearchVisible(false);          // 原生标签排序页没有搜索框
+    $('q').value = '';
+    if (S.tagsort.mode === 'Wall') renderTagSortWall();
+    else renderTagSortPanel();
+    paintHeader();
+  }
 
   /* ---------- 艺术家墙 ---------- */
   function artCard(a){
@@ -1132,6 +1572,33 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
         : '加载中…';
       return;
     }
+    if (S.page === 'TagSort'){
+      // 标签排序：墙显示当前字段 + 分类数；面板显示标题 + 当前视角的内容数
+      var t2 = S.tagsort;
+      if (t2.mode === 'Wall'){
+        var fl = '';
+        for (var fi = 0; fi < t2.fields.length; fi++) if (t2.fields[fi].on) fl = t2.fields[fi].label;
+        $('pgTitle').textContent = '标签排序';
+        // 分类卡到了就报分类数；一条都没推来过且总数为 0 = 空曲库（照墙上的空态文案）
+        $('pgSub').textContent = t2.cards.length
+          ? ((fl ? '按「' + fl + '」分类 · ' : '') + t2.total + ' 个分类')
+          : (t2.total > 0 ? '加载中…' : '曲库里还没有歌曲');
+        return;
+      }
+      $('pgTitle').textContent = t2.title || '标签排序';
+      var tsub = '';
+      if (t2.mode === 'Songs') tsub = t2.songs.length + ' 首';
+      else if (t2.mode === 'Albums') tsub = t2.grid.length + ' 张专辑';
+      else if (t2.mode === 'Artists') tsub = t2.grid.length + ' 位艺术家';
+      else if (t2.mode === 'GroupBy'){
+        var gn = 0;
+        var rows2 = (t2.group && t2.group.rows) || [];
+        for (var gi = 0; gi < rows2.length; gi++) if (!rows2[gi].h) gn++;
+        tsub = gn + ' 首';
+      }
+      $('pgSub').textContent = tsub;
+      return;
+    }
     if (S.page === 'Folders'){
       // 媒体库：根目录数 + 当前选中文件夹名（完整路径在右栏台头，原生 MediaDetailsHeader 口径）
       $('pgTitle').textContent = '媒体库';
@@ -1182,6 +1649,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     var t = (cat && cat.t) || S.page;
     resetDetail();
     hideAllViews();
+    setSearchVisible(true);
     $('btnPlayAll').style.visibility = 'hidden';
     $('pgTitle').textContent = t;
     $('pgSub').textContent = '';
@@ -1384,6 +1852,10 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           } else if (m.id === 'Folders' && m.ok !== false){
             // 媒体库：先切视图，根目录由随后的 folderroots 推来
             showFolder();
+          } else if (m.id === 'TagSort' && m.ok !== false){
+            // 标签排序：先切视图（墙/面板按 S.tagsort.mode），数据由随后的
+            // tagsortcats / tagsortpanel 推来
+            showTagSort();
           } else {
             renderPlaceholder(cat);
           }
@@ -1419,6 +1891,47 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
             S.folder.songs = m.songs || [];
             S.folder.loading = false;
             if (S.page === 'Folders'){ renderFolderDetail(); paintHeader(); }
+          }
+          break;
+        case 'tagsortcats':
+          // 标签排序分类墙：字段钮 + 分类卡 + total/shown/advice（切字段/返回/加载更多都走它）
+          S.tagsort.mode = 'Wall';
+          S.tagsort.fields = m.fields || [];
+          S.tagsort.cards = (m.cards || []).map(function(c){
+            return {name:c.name, n:c.n, cover:''};
+          });
+          S.tagsort.total = m.total || 0;
+          S.tagsort.shown = m.shown || 0;
+          S.tagsort.advice = m.advice || '';
+          if (S.page === 'TagSort'){ renderTagSortWall(); paintHeader(); }
+          break;
+        case 'tagsortpanel':
+          // 钻取面板（mode/title/fields + 当前视角那一段）。不在标签排序页就只存状态
+          S.tagsort.mode = m.mode || 'Songs';
+          S.tagsort.title = m.title || '';
+          if (m.fields) S.tagsort.fields = m.fields;
+          S.tagsort.cols = m.cols || [];
+          S.tagsort.songs = m.songs || [];
+          S.tagsort.grid = (m.grid || []).map(function(c){
+            return {name:c.name, n:c.n, sub:c.sub, cover:''};
+          });
+          S.tagsort.sort = m.sort || null;
+          S.tagsort.group = m.group || null;
+          if (S.page === 'TagSort'){ renderTagSortPanel(); paintHeader(); }
+          break;
+        case 'tagsortcovers':
+          // 卡片封面按批补：ctx=wall 补分类墙、grid 补面板专辑/艺术家卡（按下标）
+          if (m.items){
+            var tsc = (m.ctx === 'grid') ? $('tscards') : $('tsgrid');
+            for (var ti = 0; ti < m.items.length; ti++){
+              var tsi = m.items[ti];
+              var tlist = (m.ctx === 'grid') ? S.tagsort.grid : S.tagsort.cards;
+              var tc = tlist[tsi.i];
+              if (tc) tc.cover = tsi.cover || '';
+              var card = tsc.querySelector('.acard[data-i="' + tsi.i + '"] .cv');
+              if (card && tc && tc.cover)
+                card.innerHTML = '<img src="' + tc.cover + '" alt="" onerror="postCoverErr(this.src)">';
+            }
           }
           break;
         case 'chips':
@@ -1470,6 +1983,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
             }
           }
           markPlaying();
+          markTsPlaying();
           paintPlaybar();
           break;
         case 'theme':

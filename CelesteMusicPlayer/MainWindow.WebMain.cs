@@ -6,6 +6,11 @@
 // 其余分类入口保留（点未做的分类只显示占位，不删入口）。
 // 2026-10-09 再追加：媒体库（文件夹浏览）面板，布局/交互照原生 FolderBrowserView。
 // 网络音乐库（WebDav）用户后续要参考 ECHO 扩展其他源类型，**暂时不动**，入口保留。
+// 2026-10-09 三追加：标签排序（TagSort）面板——分类字段按钮组 + 分类卡墙 +
+// 钻取面板（曲目/专辑/艺术家/排序方式/分组浏览五个视角），口径照原生
+// TagSortBorder（MainWindow.Library.cs 标签排序板块 + MainWindow.Playback.cs
+// 分类墙/分组）。列配置/自定义排序/自定义分组/分类字段配置四个弹窗直接复用
+// 原生窗口（网页只发意图，C# 开窗、回调里重推）。
 //
 // 分工铁律：**网页只负责长什么样，一件事都不做**——点播放、切分类、拖进度、
 // 收藏全都上报给 C#，由 C# 调现有的播放方法。音频链路（独占 / bit-perfect /
@@ -27,10 +32,22 @@
 //              / artistavatar（网络头像下载完成，更新详情大头像）
 //              / folderroots（媒体库根目录）/ folderchildren（展开一层的子项）
 //              / foldersongs（右栏歌曲：文件名 + 艺术家·专辑 + 时长）
+//              / tagsortcats（标签排序：字段按钮组 + 分类卡 + total/shown）
+//              / tagsortpanel（标签排序面板：mode/title/cols/songs/grid/sort/group）
+//              / tagsortcovers（标签排序卡片封面按批补，items:[{i,cover}]）
 //              / now（播放状态，每秒）/ theme / nav
 //   网页 → C#：ready / nav / album（打开专辑，id=专辑下标）
 //              / artist（打开艺术家，id=艺术家下标）/ artistback（详情里返回墙）
 //              / folder（展开文件夹，path）/ folderplay（播放媒体库里某个文件，path）
+//              / tagsortfield（切分类字段，key）/ tagsortopen（点分类卡，name）
+//              / tagsortdrill（专辑/艺术家卡钻取，name+sub）/ tagsortmode（切视角，mode）
+//              / tagsortback（回分类墙）/ tagsortcol（列头点击排序，key）
+//              / tagsortplay（播放当前列表）/ tagsortsong（播分类曲目，index）
+//              / tagsortgroupplay（播整组，path）/ tagsortgroupsong（播组内歌曲，path+group+file）
+//              / tagsorttoggle（组头展开折叠，path）/ tagsortexpand（全部展开/折叠，on）
+//              / tagsortgroup（分组预设切换，tag）/ tagsortcustom（开原生配置窗，what）
+//              / tagsortsort（排序方式预设，preset）/ tagsortorder（排序升/降序，asc）
+//              / tagsortmore（分类墙加载更多）
 //              / play / pause / resume / next / prev / seek / volume / love / exit
 //              / enqueue（当前列表加入播放队列）/ rating（评分面板星级过滤）
 //
@@ -344,6 +361,215 @@ namespace CelesteMusicPlayer
                         break;
                     }
 
+                case "tagsortfield":
+                    {
+                        // 标签排序：切分类字段（原生 TagSortFieldBoundButton_Click 口径：
+                        // 换字段即回分类墙重算分组）
+                        string key = ReadStr(msg.Payload, "key");
+                        if (!string.IsNullOrEmpty(key) && _tagSortCategoryFields.Contains(key))
+                        {
+                            _webTagSortField = key;
+                            _tagSortClassField = key;
+                            _webTagSortValue = "";
+                            _webTagSortTitle = "";
+                            _webTagSortMode = "Wall";
+                            _ = PushWebTagSortWallAsync();
+                        }
+                        break;
+                    }
+
+                case "tagsortopen":
+                    {
+                        // 点分类卡：进入该分类的曲目面板（原生 TagSortClassGridView_ItemClick）
+                        string name = ReadStr(msg.Payload, "name");
+                        if (!string.IsNullOrEmpty(name)) _ = OpenWebTagSortCategoryAsync(name);
+                        break;
+                    }
+
+                case "tagsortdrill":
+                    {
+                        // 专辑/艺术家视角点卡：在当前分类曲目里再按子值过滤
+                        // （原生 TagSortPanelGridView_ItemClick 口径）
+                        string name = ReadStr(msg.Payload, "name");
+                        string sub = ReadStr(msg.Payload, "sub");
+                        if (!string.IsNullOrEmpty(name)) _ = OpenWebTagSortDrillAsync(name, sub);
+                        break;
+                    }
+
+                case "tagsortmode":
+                    {
+                        // 视角切换：Songs / Albums / Artists / Sort / GroupBy
+                        // （原生 TagSortViewModeItem_Click 口径）
+                        string mode = ReadStr(msg.Payload, "mode");
+                        if (mode is "Songs" or "Albums" or "Artists" or "Sort" or "GroupBy")
+                        {
+                            // 分类墙上的「分组浏览」按钮（原生 TagSortClassWallSwitchToGroupButton_Click）：
+                            // 从墙上进分组时分组字段与当前分类字段一致（所见即所得）；
+                            // 已进分类后再切分组不动字段序列（原生同样只在那一个入口重置）
+                            if (string.Equals(mode, "GroupBy", StringComparison.Ordinal)
+                                && string.Equals(_webTagSortMode, "Wall", StringComparison.Ordinal))
+                            {
+                                EnterWebTagSortGroupMode();
+                            }
+                            _webTagSortMode = mode;
+                            _ = PushWebTagSortPanelAsync();
+                        }
+                        break;
+                    }
+
+                case "tagsortback":
+                    {
+                        // 面板左上角返回：回分类墙（原生 TagSortPanelBackButton_Click）
+                        _webTagSortValue = "";
+                        _webTagSortTitle = "";
+                        _webTagSortMode = "Wall";
+                        _ = PushWebTagSortWallAsync();
+                        break;
+                    }
+
+                case "tagsortcol":
+                    {
+                        // 列头点击排序（原生 TagSortColumnHeader_Click：同列切升降序，新列升序）
+                        string key = ReadStr(msg.Payload, "key");
+                        ApplyWebTagSortColumnSort(key);
+                        break;
+                    }
+
+                case "tagsortplay":
+                    {
+                        // 播放当前列表（原生 TagSortPanelPlayAllButton_Click：分组视角播整库，
+                        // 其余视角播当前分类曲目；都是整表替换队列从第一首）
+                        PlayWebTagSortPanel();
+                        break;
+                    }
+
+                case "tagsortsong":
+                    {
+                        // 曲目行播放。原生 Songs 视角双击 = PlayPlaylistItem（不换队列，
+                        // 播完接用户当前队列）——照原生口径，不与网页其它面板的整表替换混
+                        int i = ReadInt(msg.Payload, "index", -1);
+                        if (i >= 0 && i < _webTagSortSongs.Count)
+                        {
+                            PlayPlaylistItem(_webTagSortSongs[i]);
+                        }
+                        break;
+                    }
+
+                case "tagsortgroupplay":
+                    {
+                        // 分组视角组头播放钮：整组替换队列从第一首（原生 PlayTagSortGroup）
+                        string path = ReadStr(msg.Payload, "path");
+                        PlayWebTagSortGroupNode(path);
+                        break;
+                    }
+
+                case "tagsortgroupsong":
+                    {
+                        // 分组视角歌曲行：播所在末级分组全部、从该首开始
+                        // （原生 TagSortGroupListView_DoubleTapped 歌曲口径）
+                        string path = ReadStr(msg.Payload, "path");
+                        string group = ReadStr(msg.Payload, "group");
+                        string file = ReadStr(msg.Payload, "file");
+                        PlayWebTagSortGroupSong(path, group, file);
+                        break;
+                    }
+
+                case "tagsorttoggle":
+                    {
+                        // 组头展开/折叠（原生 ToggleTagSortNode）
+                        string path = ReadStr(msg.Payload, "path");
+                        if (!string.IsNullOrEmpty(path))
+                        {
+                            if (!_webTagSortOpen.Add(path)) _webTagSortOpen.Remove(path);
+                            _ = PushWebTagSortPanelAsync();
+                        }
+                        break;
+                    }
+
+                case "tagsortexpand":
+                    {
+                        // 全部展开 / 全部折叠（原生 TagSortGroupExpandAll/CollapseAll）
+                        bool on = false;
+                        try
+                        {
+                            if (msg.Payload.ValueKind == JsonValueKind.Object &&
+                                msg.Payload.TryGetProperty("on", out var ev))
+                                on = ev.GetBoolean();
+                        }
+                        catch { /* 没带 on 按折叠 */ }
+                        if (on) foreach (var p in _webTagSortAllPaths) _webTagSortOpen.Add(p);
+                        else _webTagSortOpen.Clear();
+                        _ = PushWebTagSortPanelAsync();
+                        break;
+                    }
+
+                case "tagsortgroup":
+                    {
+                        // 分组预设切换（原生 TagSortGroupPresetCombo_SelectionChanged：
+                        // "__custom__" = 已保存的自定义快照，其余 = 字段序列）
+                        string tag = ReadStr(msg.Payload, "tag");
+                        if (!string.IsNullOrEmpty(tag)) ApplyWebTagSortGroupPreset(tag);
+                        break;
+                    }
+
+                case "tagsortsort":
+                    {
+                        // 排序方式视角：点预设（原生 TagSortPresetCombo_SelectionChanged 口径：
+                        // 中文标签 → 字段链 → 应用到整个曲库）
+                        string preset = ReadStr(msg.Payload, "preset");
+                        if (!string.IsNullOrEmpty(preset))
+                        {
+                            var fields = PresetToFields(preset);
+                            if (fields.Count > 0)
+                            {
+                                _tagSortCustom = fields;
+                                _tagSortPreset = preset;
+                                ApplyTagSortToLibrary();
+                                _ = PushWebTagSortPanelAsync();
+                            }
+                        }
+                        break;
+                    }
+
+                case "tagsortorder":
+                    {
+                        // 排序方式视角：升/降序（原生 TagSortOrderClick 口径：切方向即重排）
+                        bool asc = true;
+                        try
+                        {
+                            if (msg.Payload.ValueKind == JsonValueKind.Object &&
+                                msg.Payload.TryGetProperty("asc", out var ov))
+                                asc = ov.GetBoolean();
+                        }
+                        catch { /* 没带 asc 按升序 */ }
+                        _tagSortAscending = asc;
+                        ApplyTagSortToLibrary();
+                        _ = PushWebTagSortPanelAsync();
+                        break;
+                    }
+
+                case "tagsortcustom":
+                    {
+                        // 开原生配置窗（分工铁律：配置 UI 直接用原生窗口，网页只发意图）
+                        string what = ReadStr(msg.Payload, "what");
+                        if (what == "fields") OpenWebTagSortFieldConfig();
+                        else if (what == "group") OpenWebTagSortGroupCustom();
+                        else if (what == "sort") OpenWebTagSortSortCustom();
+                        break;
+                    }
+
+                case "tagsortmore":
+                    {
+                        // 分类墙加载更多（原生 TagSortClassWallLoadMoreButton_Click）
+                        if (_webTagSortShown < _webTagSortWallAll.Count)
+                        {
+                            _webTagSortShown = Math.Min(
+                                _webTagSortShown + WebTagSortWallStep, _webTagSortWallAll.Count);
+                            _ = PushWebTagSortWallAsync(reslice: true);
+                        }
+                        break;
+                    }
+
                 case "play":
                     {
                         // 与专辑试点页同一套语义（d3c0d99）：整表替换播放队列，
@@ -521,6 +747,18 @@ namespace CelesteMusicPlayer
                     ["kind"] = "nav", ["id"] = "Folders", ["ok"] = true,
                 });
                 PushWebFolderRoots();
+                return;
+            }
+            if (string.Equals(id, "TagSort", StringComparison.OrdinalIgnoreCase))
+            {
+                // 标签排序：分类字段按钮组 + 分类卡墙 + 钻取面板（曲目/专辑/艺术家/
+                // 排序方式/分组浏览），口径照原生 TagSortBorder。
+                CloseWebMainDetails();
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "nav", ["id"] = "TagSort", ["ok"] = true,
+                });
+                EnterWebTagSortAsync();
                 return;
             }
             // 没做的面板：告诉网页显示占位（侧栏条目保留，不删入口）
@@ -829,6 +1067,15 @@ namespace CelesteMusicPlayer
                 return AppSettingsStore.Load().LibraryWatchFolders?
                     .Count(p => !string.IsNullOrWhiteSpace(p) && Directory.Exists(p)) ?? 0;
             }
+            if (string.Equals(id, "TagSort", StringComparison.OrdinalIgnoreCase))
+            {
+                // 标签排序：侧栏计数 = 当前分类字段下的分类数（与分类墙卡片总数同口径）
+                string f = string.IsNullOrEmpty(_webTagSortField) ? _tagSortClassField : _webTagSortField;
+                if (string.IsNullOrEmpty(f)) return 0;
+                return _playlist
+                    .GroupBy(p => TagSortFieldVal(p, f), StringComparer.CurrentCultureIgnoreCase)
+                    .Count();
+            }
             return 0;
         }
 
@@ -845,7 +1092,8 @@ namespace CelesteMusicPlayer
                        || string.Equals(id, "Albums", StringComparison.OrdinalIgnoreCase)
                        || string.Equals(id, "Artists", StringComparison.OrdinalIgnoreCase)
                        || string.Equals(id, "AlbumArtists", StringComparison.OrdinalIgnoreCase)
-                       || string.Equals(id, "Folders", StringComparison.OrdinalIgnoreCase);
+                       || string.Equals(id, "Folders", StringComparison.OrdinalIgnoreCase)
+                       || string.Equals(id, "TagSort", StringComparison.OrdinalIgnoreCase);
                 cats.Add(new Dictionary<string, object?>
                 {
                     ["id"] = id,
@@ -999,7 +1247,9 @@ namespace CelesteMusicPlayer
         /// <summary>当前网页列表：开着专辑详情就用专辑曲目，开着艺术家详情就用艺术家曲目，
         /// 否则用歌曲快照。网页 play/love 的 index 和 C# 的 now 下标都按这份算，两边永远一致。</summary>
         private List<PlaylistItem> WebMainActiveList
-            => _webMainAlbumTracks ?? _webMainArtistTracks ?? _webMainSongs;
+            => _webMainAlbumTracks ?? _webMainArtistTracks
+            ?? (_webTagSortMode is "Songs" && _webTagSortSongs.Count > 0
+                ? _webTagSortSongs : _webMainSongs);
 
         /// <summary>
         /// 按原生专辑面板同一套口径分组（BuildAlbumEntriesFromTracks：按专辑名分组，
@@ -1750,6 +2000,636 @@ namespace CelesteMusicPlayer
             }
             catch { /* 读不到按空串处理，调用方会走"没做"分支 */ }
             return "";
+        }
+
+        /* ================= 标签排序（TagSort） =================
+         * 口径照原生 TagSortBorder（MainWindow.Library.cs 标签排序板块 +
+         * MainWindow.Playback.cs 分类墙/分组）：
+         *   - 分类墙：按当前分类字段分组整库，组按 key 排序；初始 200 张，溢出提示 + 加载更多；
+         *   - 钻取面板：曲目（可配置列 + 列头排序）/ 专辑 / 艺术家 / 排序方式 / 分组浏览；
+         *   - 播放语义：曲目行 = PlayPlaylistItem（不换队列，原生同款）；面板播放全部 /
+         *     整组播放 = 替换队列从第一首；组内歌曲 = 播该末级分组全部从该首开始；
+         *   - 列配置/分类字段/自定义排序/自定义分组四个弹窗直接复用原生窗口
+         *     （分工铁律：配置 UI 用原生，网页只发意图）。
+         * 状态全部放本文件私有字段，不动原生 TagSort 的 UI 控件；仅排序/分组
+         * 应用时照原生口径写 _tagSortCustom/_tagSortGroupFields 等并落设置。 */
+
+        /// <summary>分类墙每次加载更多加的卡片数（与原生 TagSortClassWallLoadMoreStep 一致）。</summary>
+        private const int WebTagSortWallStep = 200;
+
+        private string _webTagSortField = "";          // 网页当前分类字段（空=跟原生 _tagSortClassField）
+        private string _webTagSortValue = "";          // 当前进入的分类值（空=停在分类墙）
+        private string _webTagSortMode = "Wall";       // Wall / Songs / Albums / Artists / Sort / GroupBy
+        private string _webTagSortTitle = "";          // 面板标题（「字段标签：值」）
+        private List<PlaylistItem> _webTagSortSongs = new();  // 当前分类曲目（= 原生 _tagSortClassSongs）
+        private List<TagSortCategoryEntry> _webTagSortWallAll = new(); // 全部分组（已排序）
+        private int _webTagSortShown;                  // 当前已显示卡片数
+        private readonly HashSet<string> _webTagSortOpen = new(StringComparer.Ordinal);   // 展开的组路径
+        private readonly List<string> _webTagSortAllPaths = new();                        // 全部组路径（全部展开用）
+        private List<TagSortGroupHeader> _webTagSortGroupTree = new();                    // 分组树（原生 BuildGroupTree 构建）
+
+        /// <summary>排序方式预设（中文标签必须与 PresetToFields 的键一致）。</summary>
+        private static readonly string[] WebTagSortSortPresets =
+        {
+            "专辑", "专辑艺术家 / 专辑", "专辑艺术家 / 年份 / 专辑",
+            "艺术家 / 专辑", "流派 / 专辑", "年份 / 专辑",
+        };
+
+        /// <summary>分组浏览预设（Tag 与原生 TagSortGroupPresetCombo 项一致）。</summary>
+        private static readonly (string Tag, string Label)[] WebTagSortGroupPresetList =
+        {
+            ("__custom__", "自定义（已保存）"),
+            ("Artist,Album", "艺术家 / 专辑"),
+            ("Artist,Album,Year", "艺术家 / 专辑 / 年份"),
+            ("Artist,Album,Title", "艺术家 / 专辑 / 标题"),
+            ("Album,Year", "专辑 / 年份"),
+            ("Genre,Artist", "流派 / 艺术家"),
+            ("Year,Album", "年份 / 专辑"),
+            ("Format,DepthRate", "格式 / 位深采样率"),
+        };
+
+        /// <summary>当前分类字段：网页显式选过就用网页的，否则跟原生。</summary>
+        private string CurrentWebTagSortField()
+            => string.IsNullOrEmpty(_webTagSortField) ? _tagSortClassField : _webTagSortField;
+
+        /// <summary>进入标签排序页：读配置 → 回分类墙（原生 BreakoutTagSortView 口径）。</summary>
+        private async Task EnterWebTagSortAsync()
+        {
+            LoadTagSortConfig();
+            _webTagSortField = "";
+            _webTagSortValue = "";
+            _webTagSortTitle = "";
+            _webTagSortMode = "Wall";
+            _webTagSortSongs = new List<PlaylistItem>();
+            await PushWebTagSortWallAsync();
+            StartupLog.Write($"[Web主界面] 进入标签排序：字段 {CurrentWebTagSortField()}，{_webTagSortWallAll.Count} 个分类");
+        }
+
+        /// <summary>推分类墙（字段按钮组 + 分类卡 + total/shown）。reslice=只换可见数量不重算分组。</summary>
+        private async Task PushWebTagSortWallAsync(bool reslice = false)
+        {
+            if (!_celesteWebReady) return;
+            try
+            {
+                string f = CurrentWebTagSortField();
+                if (!reslice)
+                {
+                    // 分组口径与原生 ShowTagSortClassWall 完全一致（CurrentCultureIgnoreCase + 按 key 排序）
+                    _webTagSortWallAll = _playlist
+                        .GroupBy(p => TagSortFieldVal(p, f), StringComparer.CurrentCultureIgnoreCase)
+                        .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+                        .Select(g => new TagSortCategoryEntry
+                        {
+                            Name = g.Key,
+                            Count = g.Count(),
+                            FirstFilePath = g.First().FilePath,
+                        })
+                        .ToList();
+                    _webTagSortShown = 0;
+                }
+
+                int total = _webTagSortWallAll.Count;
+                int show = Math.Min(_webTagSortShown > 0 ? _webTagSortShown : WebTagSortWallStep, total);
+                var slice = _webTagSortWallAll.Take(show).ToList();
+
+                var cards = new List<object>();
+                foreach (var c in slice)
+                    cards.Add(new Dictionary<string, object?> { ["name"] = c.Name, ["n"] = c.Count });
+
+                // 溢出提示照原生 UpdateClassWallOverflowBar：高基数字段给换字段建议
+                string advice = "";
+                if (total > show)
+                {
+                    advice = TagSortFields.Find(f)?.Cardinality == TagSortFields.Cardinality.High
+                        ? "当前分类字段基数过高（每首曲目几乎都不同）。建议改用低基数字段（如流派/年份/格式），或使用「分组浏览」按字段分组查看。"
+                        : "分类数量较多，仅显示部分卡片以避免内存占用过高。";
+                }
+
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "tagsortcats",
+                    ["field"] = f,
+                    ["fields"] = WebTagSortFieldButtons(),
+                    ["cards"] = cards,
+                    ["total"] = total,
+                    ["shown"] = show,
+                    ["advice"] = advice,
+                });
+                _ = LoadWebTagSortCoversAsync(slice, "wall");
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("PushWebTagSortWall", ex);
+            }
+        }
+
+        /// <summary>推钻取面板（按当前视角带 cols/songs/grid/sort/group 中对应的一段）。</summary>
+        private async Task PushWebTagSortPanelAsync()
+        {
+            if (!_celesteWebReady) return;
+            try
+            {
+                var msg = new Dictionary<string, object?>
+                {
+                    ["kind"] = "tagsortpanel",
+                    ["mode"] = _webTagSortMode,
+                    ["title"] = _webTagSortTitle,
+                    ["fields"] = WebTagSortFieldButtons(),
+                };
+
+                if (string.Equals(_webTagSortMode, "Songs", StringComparison.Ordinal))
+                {
+                    // 排序后回写 _webTagSortSongs：网页行下标与 tagsortsong 的 index 才能对上
+                    // （原生按 DataContext 对象播放，网页只有下标）
+                    var ordered = SortTagSortPanelSongs(_webTagSortSongs.ToList());
+                    _webTagSortSongs = ordered;
+
+                    var visible = _tagSortColumns.Where(c => c.Visible).ToList();
+                    var cols = new List<object>();
+                    foreach (var c in visible)
+                    {
+                        cols.Add(new Dictionary<string, object?>
+                        {
+                            ["key"] = c.Key,
+                            ["label"] = TagSortFields.Find(c.Key)?.Label ?? c.Key,
+                            ["w"] = c.Weight,
+                            ["on"] = string.Equals(_tagSortPanelSongSortField, c.Key, StringComparison.Ordinal),
+                            ["asc"] = _tagSortPanelSongSortAsc,
+                        });
+                    }
+                    var rows = new List<object>();
+                    for (int i = 0; i < _webTagSortSongs.Count; i++)
+                    {
+                        var s = _webTagSortSongs[i];
+                        var cells = new List<object>();
+                        foreach (var c in visible) cells.Add(TagSortFields.ColumnText(s, c.Key));
+                        rows.Add(new Dictionary<string, object?>
+                        {
+                            ["n"] = i + 1,
+                            ["cells"] = cells,
+                        });
+                    }
+                    msg["cols"] = cols;
+                    msg["songs"] = rows;
+                }
+                else if (_webTagSortMode is "Albums" or "Artists")
+                {
+                    // 对当前分类曲目再分组出卡（原生 ApplyTagSortPanelMode 口径：
+                    // 空专辑名归"未知"，未 trim——与原生逐字一致）
+                    string sub = _webTagSortMode == "Artists" ? "Artist" : "Album";
+                    var cards = _webTagSortSongs
+                        .GroupBy(p => string.IsNullOrWhiteSpace(sub == "Artist" ? p.Artist : p.Album)
+                            ? "未知" : (sub == "Artist" ? p.Artist : p.Album),
+                            StringComparer.CurrentCultureIgnoreCase)
+                        .OrderBy(g => g.Key, StringComparer.CurrentCultureIgnoreCase)
+                        .Select(g => new TagSortCategoryEntry
+                        {
+                            Name = g.Key,
+                            Count = g.Count(),
+                            FirstFilePath = g.First().FilePath,
+                            Sub = sub,
+                        })
+                        .ToList();
+                    var items = new List<object>();
+                    foreach (var c in cards)
+                        items.Add(new Dictionary<string, object?>
+                        {
+                            ["name"] = c.Name, ["n"] = c.Count, ["sub"] = sub,
+                        });
+                    msg["grid"] = items;
+                    _ = LoadWebTagSortCoversAsync(cards, "grid");
+                }
+                else if (string.Equals(_webTagSortMode, "Sort", StringComparison.Ordinal))
+                {
+                    var presets = new List<object>();
+                    foreach (var label in WebTagSortSortPresets)
+                    {
+                        presets.Add(new Dictionary<string, object?>
+                        {
+                            ["label"] = label,
+                            ["on"] = string.Equals(_tagSortPreset, label, StringComparison.Ordinal),
+                        });
+                    }
+                    msg["sort"] = new Dictionary<string, object?>
+                    {
+                        ["presets"] = presets,
+                        ["asc"] = _tagSortAscending,
+                        ["status"] = WebTagSortStatusText(),
+                    };
+                }
+                else if (string.Equals(_webTagSortMode, "GroupBy", StringComparison.Ordinal))
+                {
+                    var rows = new List<object>();
+                    if (_tagSortGroupFields != null && _tagSortGroupFields.Count > 0)
+                        AppendWebTagSortGroupRows(rows, _webTagSortGroupTree, "");
+                    msg["group"] = new Dictionary<string, object?>
+                    {
+                        ["presets"] = WebTagSortGroupPresets(),
+                        ["rows"] = rows,
+                    };
+                }
+
+                await PostCelesteWebAsync(msg);
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("PushWebTagSortPanel", ex);
+            }
+        }
+
+        /// <summary>分类字段按钮组（原生 TagSortFieldButtonsPanel：当前字段高亮，末尾 ＋ 走配置窗）。</summary>
+        private List<object> WebTagSortFieldButtons()
+        {
+            var list = new List<object>();
+            string cur = CurrentWebTagSortField();
+            foreach (var key in _tagSortCategoryFields)
+            {
+                var def = TagSortFields.Find(key);
+                if (def == null) continue;
+                list.Add(new Dictionary<string, object?>
+                {
+                    ["key"] = key,
+                    ["label"] = def.Label,
+                    ["on"] = string.Equals(key, cur, StringComparison.Ordinal),
+                });
+            }
+            return list;
+        }
+
+        /// <summary>分组预设列表 + 当前激活项（口径照原生 SyncTagSortGroupFieldCombo：命中预设否则高亮自定义）。</summary>
+        private List<object> WebTagSortGroupPresets()
+        {
+            string current = string.Join(",", _tagSortGroupFields);
+            bool custom = true;
+            var list = new List<object>();
+            foreach (var (tag, label) in WebTagSortGroupPresetList)
+            {
+                bool on;
+                if (string.Equals(tag, "__custom__", StringComparison.Ordinal))
+                {
+                    on = custom;   // 占位，循环结束后统一按"没命中任何预设"回填
+                }
+                else
+                {
+                    on = string.Equals(tag, current, StringComparison.Ordinal);
+                    if (on) custom = false;
+                }
+                list.Add(new Dictionary<string, object?> { ["tag"] = tag, ["label"] = label, ["on"] = on });
+            }
+            if (custom)
+            {
+                foreach (var d in list)
+                {
+                    if (d is Dictionary<string, object?> m &&
+                        string.Equals(m["tag"] as string, "__custom__", StringComparison.Ordinal))
+                        m["on"] = true;
+                }
+            }
+            return list;
+        }
+
+        /// <summary>「当前排序依据：」状态文本（与原生 WriteTagSortStatus 逐字一致）。</summary>
+        private string WebTagSortStatusText()
+        {
+            string desc = _tagSortPreset;
+            var tags = _tagSortCustom.Count == 0 ? new List<(string field, bool asc)>() : _tagSortCustom;
+            if (tags.Count > 0)
+            {
+                desc += "（" + string.Join(" → ", tags.Select(t => TagSortFieldLabel(t.field) + (t.asc ? "↑" : "↓"))) + "）";
+            }
+            return "当前排序依据：" + desc;
+        }
+
+        /// <summary>点分类卡：进入该分类的曲目面板（原生 TagSortClassGridView_ItemClick + ShowTagSortPanel）。</summary>
+        private async Task OpenWebTagSortCategoryAsync(string name)
+        {
+            string f = CurrentWebTagSortField();
+            // 与分类墙分组同一比对规则（CurrentCultureIgnoreCase），原生同款注释：
+            // 用 Ordinal 会在 "The Beatles"/"the beatles" 这类大小写不一致时漏曲目
+            var songs = _playlist
+                .Where(p => string.Equals(TagSortFieldVal(p, f), name, StringComparison.CurrentCultureIgnoreCase))
+                .ToList();
+            _webTagSortValue = name;
+            _webTagSortTitle = (TagSortFields.Find(f)?.Label ?? f) + "：" + name;
+            _webTagSortMode = "Songs";
+            _webTagSortSongs = songs;
+            await PushWebTagSortPanelAsync();
+        }
+
+        /// <summary>专辑/艺术家视角点卡：在当前分类曲目里再按子值过滤（原生 TagSortPanelGridView_ItemClick）。
+        /// 原生标题在艺术家分支漏了值名（"艺术家："），网页两种都带上值名。</summary>
+        private async Task OpenWebTagSortDrillAsync(string name, string sub)
+        {
+            string field = string.Equals(sub, "Artist", StringComparison.Ordinal) ? "Artist" : "Album";
+            var filtered = _webTagSortSongs
+                .Where(p => string.Equals(field == "Artist" ? (p.Artist ?? "") : (p.Album ?? ""), name, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            _webTagSortSongs = filtered;
+            _webTagSortMode = "Songs";
+            _webTagSortTitle = (field == "Artist" ? "艺术家：" : "专辑：") + name;
+            await PushWebTagSortPanelAsync();
+        }
+
+        /// <summary>列头点击排序（原生 TagSortColumnHeader_Click：同列切升降序，新列升序）。</summary>
+        private void ApplyWebTagSortColumnSort(string key)
+        {
+            if (string.IsNullOrEmpty(key)) return;
+            if (string.Equals(_tagSortPanelSongSortField, key, StringComparison.Ordinal))
+            {
+                _tagSortPanelSongSortAsc = !_tagSortPanelSongSortAsc;
+            }
+            else
+            {
+                _tagSortPanelSongSortField = key;
+                _tagSortPanelSongSortAsc = true;
+            }
+            if (string.Equals(_webTagSortMode, "Songs", StringComparison.Ordinal))
+                _ = PushWebTagSortPanelAsync();
+        }
+
+        /// <summary>播放当前列表（原生 TagSortPanelPlayAllButton_Click：分组视角播整库，其余播当前分类曲目）。</summary>
+        private void PlayWebTagSortPanel()
+        {
+            if (string.Equals(_webTagSortMode, "GroupBy", StringComparison.Ordinal))
+            {
+                if (_playlist.Count == 0) return;
+                _userPlaylist.Clear();
+                AddSongsToUserPlaylist(_playlist.ToList());
+                PlayUserPlaylistAt(0);
+            }
+            else
+            {
+                if (_webTagSortSongs.Count == 0) return;
+                _userPlaylist.Clear();
+                AddSongsToUserPlaylist(_webTagSortSongs.ToList());
+                PlayUserPlaylistAt(0);
+            }
+        }
+
+        /// <summary>分类墙「分组浏览」入口（原生 TagSortClassWallSwitchToGroupButton_Click：
+        /// 分组字段与当前分类字段保持一致，所见即所得）。</summary>
+        private void EnterWebTagSortGroupMode()
+        {
+            _tagSortGroupFields = new List<string> { CurrentWebTagSortField() };
+            _webTagSortTitle = "分组浏览";
+            RebuildWebTagSortGroupTree();
+        }
+
+        /// <summary>重建分组树（原生 BuildGroupTree 口径：OrdinalIgnoreCase 分组 + 按 key 文化排序），
+        /// 并按高基数默认折叠初始化展开集。</summary>
+        private void RebuildWebTagSortGroupTree()
+        {
+            _webTagSortGroupTree = new List<TagSortGroupHeader>();
+            if (_tagSortGroupFields == null || _tagSortGroupFields.Count == 0) return;
+            _webTagSortGroupTree = BuildGroupTree(_playlist.ToList(), 0, _tagSortGroupFields);
+            _webTagSortOpen.Clear();
+            _webTagSortAllPaths.Clear();
+            CollectWebTagSortGroupDefaults(_webTagSortGroupTree, "");
+        }
+
+        /// <summary>收集全部组路径；高基数字段所在层级默认折叠（原生 autoCollapse 口径）。</summary>
+        private void CollectWebTagSortGroupDefaults(List<TagSortGroupHeader> nodes, string prefix)
+        {
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                var n = nodes[i];
+                string path = prefix.Length == 0
+                    ? i.ToString(CultureInfo.InvariantCulture)
+                    : prefix + "." + i.ToString(CultureInfo.InvariantCulture);
+                _webTagSortAllPaths.Add(path);
+                bool autoCollapse = TagSortFields.Find(n.Field)?.Cardinality == TagSortFields.Cardinality.High;
+                if (!autoCollapse) _webTagSortOpen.Add(path);
+                if (n.Children != null) CollectWebTagSortGroupDefaults(n.Children, path);
+            }
+        }
+
+        /// <summary>按展开集扁平化分组树为网页行（组头 + 展开层级内的歌曲行，缩进 depth 由网页渲染）。</summary>
+        private void AppendWebTagSortGroupRows(List<object> rows, List<TagSortGroupHeader> nodes, string prefix)
+        {
+            string lastField = _tagSortGroupFields is { Count: > 0 } ? _tagSortGroupFields[^1] : "";
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                var n = nodes[i];
+                string path = prefix.Length == 0
+                    ? i.ToString(CultureInfo.InvariantCulture)
+                    : prefix + "." + i.ToString(CultureInfo.InvariantCulture);
+                bool open = _webTagSortOpen.Contains(path);
+                rows.Add(new Dictionary<string, object?>
+                {
+                    ["h"] = 1,
+                    ["path"] = path,
+                    ["value"] = n.Value,
+                    ["label"] = n.FieldLabel,
+                    ["n"] = n.Count,
+                    ["depth"] = n.Depth,
+                    ["open"] = open,
+                });
+                if (!open) continue;
+                if (n.Children != null)
+                {
+                    AppendWebTagSortGroupRows(rows, n.Children, path);
+                }
+                else if (n.Songs != null)
+                {
+                    foreach (var s in n.Songs)
+                    {
+                        rows.Add(new Dictionary<string, object?>
+                        {
+                            ["h"] = 0,
+                            ["path"] = path,
+                            // 末级分组字段值：组内歌曲双击按它在整库里过滤（原生同款）
+                            ["group"] = lastField.Length > 0 ? TagSortFieldVal(s, lastField) : "",
+                            ["depth"] = n.Depth + 1,
+                            ["title"] = TagSortFields.ColumnText(s, "Title"),
+                            ["artist"] = TagSortFields.ColumnText(s, "Artist"),
+                            ["dur"] = TagSortFields.ColumnText(s, "Duration"),
+                            ["file"] = s.FilePath,
+                        });
+                    }
+                }
+            }
+        }
+
+        /// <summary>按路径（"0/1/2" 点分）找分组节点。</summary>
+        private TagSortGroupHeader? FindWebTagSortGroupNode(string path)
+        {
+            if (string.IsNullOrEmpty(path)) return null;
+            List<TagSortGroupHeader> nodes = _webTagSortGroupTree;
+            TagSortGroupHeader? found = null;
+            foreach (string part in path.Split('.'))
+            {
+                if (!int.TryParse(part, out int idx) || idx < 0 || idx >= nodes.Count) return null;
+                found = nodes[idx];
+                nodes = found.Children ?? new List<TagSortGroupHeader>();
+            }
+            return found;
+        }
+
+        /// <summary>组头播放：整组替换队列从第一首（原生 PlayTagSortGroup，递归收集节点下全部歌曲）。</summary>
+        private void PlayWebTagSortGroupNode(string path)
+        {
+            var node = FindWebTagSortGroupNode(path);
+            if (node == null) return;
+            var songs = CollectNodeSongs(node);
+            if (songs.Count == 0) return;
+            _userPlaylist.Clear();
+            AddSongsToUserPlaylist(songs);
+            PlayUserPlaylistAt(0);
+        }
+
+        /// <summary>组内歌曲：播所在末级分组全部、从该首开始（原生 TagSortGroupListView_DoubleTapped 歌曲口径）。
+        /// path 只为协议对齐/排障，实际按 group（末级字段值）+ file 定位。</summary>
+        private void PlayWebTagSortGroupSong(string path, string group, string file)
+        {
+            if (_tagSortGroupFields == null || _tagSortGroupFields.Count == 0) return;
+            string lastField = _tagSortGroupFields[^1];
+            var playlist = _playlist
+                .Where(p => string.Equals(TagSortFieldVal(p, lastField), group, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            if (playlist.Count == 0) return;
+            int startIdx = playlist.FindIndex(p => string.Equals(p.FilePath, file, StringComparison.OrdinalIgnoreCase));
+            if (startIdx < 0) startIdx = 0;
+            _userPlaylist.Clear();
+            AddSongsToUserPlaylist(playlist);
+            PlayUserPlaylistAt(startIdx);
+        }
+
+        /// <summary>分组预设切换（原生 TagSortGroupPresetCombo_SelectionChanged：__custom__ 回已保存快照）。</summary>
+        private void ApplyWebTagSortGroupPreset(string tag)
+        {
+            if (string.Equals(tag, "__custom__", StringComparison.Ordinal))
+            {
+                _tagSortGroupFields = _tagSortGroupCustom.ToList();
+                _tagSortGroupActivePreset = "__custom__";
+            }
+            else
+            {
+                var fields = tag.Split(',').ToList();
+                if (fields.Count == 0) return;
+                _tagSortGroupFields = fields;
+                _tagSortGroupActivePreset = tag;
+            }
+            RebuildWebTagSortGroupTree();
+            AppSettingsStore.Update(s =>
+            {
+                s.TagSortGroupFields = _tagSortGroupCustom;
+                s.TagSortGroupActivePreset = _tagSortGroupActivePreset;
+            });
+            _ = PushWebTagSortPanelAsync();
+        }
+
+        /// <summary>＋配置分类字段：复用原生 TagSortFieldConfigWindow，回调里同步原生字段 + 落设置 + 重推墙。</summary>
+        private void OpenWebTagSortFieldConfig()
+        {
+            var win = new TagSortFieldConfigWindow(_tagSortCategoryFields);
+            win.FieldsConfirmed += fields =>
+            {
+                _tagSortCategoryFields = fields;
+                if (!fields.Contains(_tagSortClassField))
+                    _tagSortClassField = fields.FirstOrDefault() ?? "Artist";
+                _webTagSortField = "";
+                AppSettingsStore.Update(s => s.TagSortCategoryFields = fields.ToList());
+                // 字段组换了就回分类墙（原生 BuildTagSortFieldButtons + ShowTagSortClassWall 口径）
+                _webTagSortValue = "";
+                _webTagSortTitle = "";
+                _webTagSortMode = "Wall";
+                _webTagSortSongs = new List<PlaylistItem>();
+                _ = PushWebTagSortWallAsync();
+            };
+            win.Activate();
+        }
+
+        /// <summary>分组「自定义…」：复用原生 TagSortGroupFieldsWindow。</summary>
+        private void OpenWebTagSortGroupCustom()
+        {
+            var win = new TagSortGroupFieldsWindow(_tagSortGroupCustom);
+            win.FieldsConfirmed += fields =>
+            {
+                _tagSortGroupFields = fields;
+                _tagSortGroupCustom = fields.ToList();
+                _tagSortGroupActivePreset = "__custom__";
+                RebuildWebTagSortGroupTree();
+                AppSettingsStore.Update(s =>
+                {
+                    s.TagSortGroupFields = _tagSortGroupCustom;
+                    s.TagSortGroupActivePreset = _tagSortGroupActivePreset;
+                });
+                _ = PushWebTagSortPanelAsync();
+            };
+            win.Activate();
+        }
+
+        /// <summary>排序「自定义排序…」：复用原生 CustomSortOrderWindow（确认即应用到整个曲库）。</summary>
+        private void OpenWebTagSortSortCustom()
+        {
+            var win = new CustomSortOrderWindow(_tagSortCustom, _tagSortAscending);
+            win.SortConfirmed += (fields, asc) =>
+            {
+                _tagSortCustom = fields;
+                _tagSortAscending = asc;
+                _tagSortPreset = "自定义";
+                ApplyTagSortToLibrary();
+                _ = PushWebTagSortPanelAsync();
+            };
+            win.Activate();
+        }
+
+        /// <summary>
+        /// 分类墙/面板卡片封面按批补（kind=tagsortcovers，网页按下标回填）。
+        /// WriteCoverFile 要解音频文件（云盘曲库下每首几百毫秒），必须走后台线程；
+        /// 发送切回 UI 线程（PostCelesteWebAsync 线程亲和）。ctx=wall/grid 防串台。
+        /// </summary>
+        private async Task LoadWebTagSortCoversAsync(List<TagSortCategoryEntry> slice, string ctx)
+        {
+            try
+            {
+                const int batchSize = 8;
+                const int batchDelayMs = 30;
+                for (int i = 0; i < slice.Count; i += batchSize)
+                {
+                    if (!_webMainOpen) break;
+                    int from = i;
+                    int end = Math.Min(i + batchSize, slice.Count);
+                    var items = await Task.Run(() =>
+                    {
+                        var batch = new List<object>();
+                        for (int j = from; j < end; j++)
+                        {
+                            string cover = "";
+                            string path = slice[j].FirstFilePath;
+                            if (!string.IsNullOrEmpty(path))
+                            {
+                                if (!_webMainCoverCache.TryGetValue(path, out cover))
+                                {
+                                    cover = WriteCoverFile(path);
+                                    _webMainCoverCache[path] = cover;
+                                }
+                            }
+                            batch.Add(new Dictionary<string, object?>
+                            {
+                                ["i"] = j,
+                                ["cover"] = cover ?? "",
+                            });
+                        }
+                        return batch;
+                    });
+                    var payload = new Dictionary<string, object?>
+                    {
+                        ["kind"] = "tagsortcovers",
+                        ["ctx"] = ctx,
+                        ["items"] = items,
+                    };
+                    DispatcherQueue.TryEnqueue(() =>
+                    {
+                        if (_webMainOpen) _ = PostCelesteWebAsync(payload);
+                    });
+                    await Task.Delay(batchDelayMs);
+                }
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("LoadWebTagSortCovers", ex);
+            }
         }
 
         /// <summary>歌曲库工具栏里的「新版界面（试点）」按钮。</summary>
