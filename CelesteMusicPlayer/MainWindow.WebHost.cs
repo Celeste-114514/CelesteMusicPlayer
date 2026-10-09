@@ -404,7 +404,10 @@ namespace CelesteMusicPlayer
             var theme = LoadCelesteActiveTheme();
             if (theme != null)
             {
-                bool dark = Application.Current.RequestedTheme == ApplicationTheme.Dark;
+                // 2026-10-09 用户拍板：网页暂不跟随系统深浅色，默认浅色。
+                // （Application.Current.RequestedTheme 在本程序里恒为 Light，
+                //  实测"不随系统动"——等主题设置页做完再接真跟随。）
+                bool dark = false;
                 await ApplyCelesteThemeToWebAsync(theme, dark);
             }
             if (_celesteWebCurrentRoute != null)

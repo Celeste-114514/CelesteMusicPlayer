@@ -41,6 +41,11 @@ namespace CelesteMusicPlayer
         /// <summary>上一次推封面/曲目信息时的播放路径。now 消息每秒都发，只有换曲才带封面。</summary>
         private string _webMainLastNowPath = "";
 
+        /// <summary>歌曲快照正在分块推送时为 true。网页 ready 会补发 5 次，
+        /// 不互mutex就会把 3609 首反复全量推，直接压死 WebView2 渲染进程
+        /// （2026-10-09 用户实测"加载巨慢最后卡死"）。</summary>
+        private bool _webMainPushing;
+
         /// <summary>
         /// 侧栏分类清单：照原生侧栏原样保留（CategoryNavPanel 13 项 + NavToolPanel 3 项），
         /// id 与原生按钮 Tag 一致。只有 Songs 有数据（ok=true），其余点一下只显示占位。
@@ -97,10 +102,12 @@ namespace CelesteMusicPlayer
                 _ = ProbeWebMainStateAsync(cv);
 
                 // 深浅色先告知网页（网页不提供切换按钮，跟着程序走）
+                // 2026-10-09 用户拍板：暂不跟随系统，默认浅色（WinUI 的 RequestedTheme
+                // 在本程序里恒为 Light，"跟随系统"要等主题设置页做完再做）
                 _ = PostCelesteWebAsync(new Dictionary<string, object?>
                 {
                     ["kind"] = "theme",
-                    ["dark"] = IsDarkUiNow(),
+                    ["dark"] = false,
                 });
 
                 // 每秒把播放状态推给网页（位置、时长、播放中、音量、收藏）
@@ -304,11 +311,31 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>把分类清单 + 歌曲快照推给网页。ready 和 nav 回 Songs 都走这里。</summary>
+        /// <summary>
+        /// 把分类清单 + 歌曲快照推给网页。ready 和 nav 回 Songs 都走这里。
+        ///
+        /// **必须分块**：3609 首打成一个大 JSON（1MB+）用 PostWebMessageAsString
+        /// 一次性发，WebView2 渲染进程直接压死（2026-10-09 用户实测卡死）。
+        /// 专辑试点页只推 46 首没暴露过这个问题，主界面不行。
+        /// 另外 ready 补发 5 次 + 自检探针都会调本方法，用 _webMainPushing 互斥，
+        /// 推完一次就拦住后续重复调用（nav 回 Songs 要刷新时先清标志再调）。
+        /// </summary>
         private async Task PushWebMainDataAsync()
         {
-            if (!_celesteWebReady) return;
+            if (!_celesteWebReady || _webMainPushing) return;
+            _webMainPushing = true;
+            try
+            {
+                await PushWebMainDataCoreAsync();
+            }
+            finally
+            {
+                _webMainPushing = false;
+            }
+        }
 
+        private async Task PushWebMainDataCoreAsync()
+        {
             // 快照：网页的 index 与这份一一对应（play/love 都按它下标）
             _webMainSongs = _playlist.ToList();
 
@@ -326,22 +353,6 @@ namespace CelesteMusicPlayer
                 });
             }
 
-            var songs = new List<object>();
-            for (int i = 0; i < _webMainSongs.Count; i++)
-            {
-                var t = _webMainSongs[i];
-                songs.Add(new Dictionary<string, object?>
-                {
-                    ["title"] = t.Title,
-                    ["artist"] = t.Artist,
-                    ["album"] = t.Album,
-                    ["duration"] = t.Duration.TotalSeconds,
-                    ["dsd"] = IsDsdFile(t.FilePath),
-                    ["hires"] = IsHiResFile(t),
-                    ["fmt"] = CodecOf(t.FilePath),
-                });
-            }
-
             int cur = -1;
             if (!string.IsNullOrEmpty(_nowPlayingPath))
             {
@@ -356,13 +367,43 @@ namespace CelesteMusicPlayer
                 }
             }
 
+            // 首包：分类 + 总数（歌曲先空着，网页先建侧栏、显示"加载中 x/total"）
             await PostCelesteWebAsync(new Dictionary<string, object?>
             {
                 ["kind"] = "data",
                 ["categories"] = cats,
-                ["songs"] = songs,
+                ["songs"] = new List<object>(),
+                ["total"] = _webMainSongs.Count,
                 ["cur"] = cur,
             });
+
+            // 分块推歌曲：每块 400 首，块之间让出 16ms 给渲染进程消化
+            const int CHUNK = 400;
+            for (int off = 0; off < _webMainSongs.Count; off += CHUNK)
+            {
+                int end = Math.Min(off + CHUNK, _webMainSongs.Count);
+                var chunk = new List<object>();
+                for (int i = off; i < end; i++)
+                {
+                    var t = _webMainSongs[i];
+                    chunk.Add(new Dictionary<string, object?>
+                    {
+                        ["title"] = t.Title,
+                        ["artist"] = t.Artist,
+                        ["album"] = t.Album,
+                        ["duration"] = t.Duration.TotalSeconds,
+                        ["dsd"] = IsDsdFile(t.FilePath),
+                        ["hires"] = IsHiResFile(t),
+                        ["fmt"] = CodecOf(t.FilePath),
+                    });
+                }
+                await PostCelesteWebAsync(new Dictionary<string, object?>
+                {
+                    ["kind"] = "data/append",
+                    ["songs"] = chunk,
+                });
+                await Task.Delay(16);
+            }
 
             // 数据到了紧接着推一次播放状态，网页不用等下一个 tick
             await PostCelesteWebAsync(BuildWebMainNowMessage());

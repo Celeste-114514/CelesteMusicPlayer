@@ -279,6 +279,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   var S = {
     cats: [],        // 全部分类（各个分类都保留，只有 Songs 有数据）
     songs: [],       // C# 推来的歌曲快照（play 的 index 按这个下标）
+    total: 0,        // C# 告知的歌曲总数（分块推送时显示加载进度）
     view: [],        // 当前显示的（筛选后的）下标，元素是 songs 的下标
     cur: -1,         // 正在播放在 songs 里的下标
     playing: false, pos: 0, dur: 0, vol: 0.7,
@@ -333,9 +334,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     }
   }
 
-  /* ---------- 歌曲列表（分批渲染：3609 首一次进 DOM 会卡首屏） ---------- */
+  /* ---------- 歌曲列表（分批渲染：3609 首一次进 DOM 会卡首屏） ----------
+     C# 侧也按 400 首一块推（一次性发 1MB+ 会把 WebView2 渲染进程压死），
+     所以这里 renderRows（全量重画）和 appendRows（只追加新块）分开。 */
   var BATCH = 300;
   var LOSSLESS = {FLAC:1, APE:1, WAV:1, WV:1, TTA:1, TAK:1, AIFF:1, AIF:1};
+  var pumping = false;   // 分批追加链进行中标志：防止滚动/追加把链跑重
   function songRow(si){
     var t = S.songs[si];
     if (!t) return '';
@@ -369,14 +373,17 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       if (hay.indexOf(q) >= 0) S.view.push(i);
     }
   }
-  function appendBatch(){
+  function pump(){
+    if (pumping) return;   // 链在跑就别插队，scroll/append 来了都等下一批
+    pumping = true;
     var host = $('rows');
     var end = Math.min(S.shown + BATCH, S.view.length);
     var html = '';
     for (var i = S.shown; i < end; i++) html += songRow(S.view[i]);
     if (html) host.insertAdjacentHTML('beforeend', html);
     S.shown = end;
-    if (S.shown < S.view.length) setTimeout(appendBatch, 0);
+    if (S.shown < S.view.length) setTimeout(function(){ pumping = false; pump(); }, 0);
+    else pumping = false;
   }
   function renderRows(){
     applyFilter();
@@ -384,13 +391,20 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     host.innerHTML = '';
     S.shown = 0;
     if (!S.view.length){
-      host.innerHTML = '<div class="empty">' + (S.songs.length ? '没有匹配的歌曲' : '歌曲列表还没推过来') + '</div>';
+      host.innerHTML = '<div class="empty">'
+        + (S.songs.length ? '没有匹配的歌曲'
+           : (S.total > 0 ? '加载中…' : '歌曲列表还没推过来')) + '</div>';
       return;
     }
-    appendBatch();
+    pump();
+  }
+  /* C# 分块推来新歌时只追加，不清屏（清屏会把已渲染的行全删重来，越推越卡） */
+  function appendRows(){
+    applyFilter();
+    if (S.shown < S.view.length) pump();
   }
   $('view').addEventListener('scroll', function(){
-    if (S.shown < S.view.length) appendBatch();
+    if (S.shown < S.view.length) pump();
   });
   function markPlaying(){
     var old = $('rows').querySelector('.row.on');
@@ -412,9 +426,16 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   function paintHeader(){
     if (S.page === 'Songs'){
       $('pgTitle').textContent = '歌曲';
-      $('pgSub').textContent = S.songs.length
-        ? S.songs.length + ' 首' + ($('q').value ? ' · 筛选出 ' + S.view.length + ' 首' : '')
-        : '加载中…';
+      var sub;
+      if (S.songs.length && S.total > S.songs.length)
+        sub = '加载中… ' + S.songs.length + ' / ' + S.total;
+      else if (S.songs.length)
+        sub = S.songs.length + ' 首' + ($('q').value ? ' · 筛选出 ' + S.view.length + ' 首' : '');
+      else if (S.total > 0)
+        sub = '加载中… 0 / ' + S.total;
+      else
+        sub = '加载中…';
+      $('pgSub').textContent = sub;
     }
   }
   function paintPlaybar(){
@@ -490,13 +511,28 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       switch (m.kind){
         case 'data':
           if (m.categories) { S.cats = m.categories; renderNav(); }
-          if (m.songs){
+          if (typeof m.total === 'number') S.total = m.total;
+          if (typeof m.cur === 'number') S.cur = m.cur;
+          if (m.songs && m.songs.length){
+            // 带歌曲的 data = 全量快照（首包之后不会再走这里）
             S.songs = m.songs;
             S.love = {};
-            if (typeof m.cur === 'number') S.cur = m.cur;
             renderRows();
+          } else {
+            // 首包：只有分类和总数，歌曲等 data/append 一块块来
+            S.songs = [];
+            S.love = {};
+            S.shown = 0;
+            $('rows').innerHTML = '';
           }
           paintHeader();
+          break;
+        case 'data/append':
+          if (m.songs && m.songs.length){
+            S.songs = S.songs.concat(m.songs);
+            appendRows();
+            paintHeader();
+          }
           break;
         case 'nav':
           S.page = m.id;
@@ -510,9 +546,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           }
           break;
         case 'now':
-          if (typeof m.index === 'number' && m.index !== S.cur){
-            S.cur = m.index; markPlaying();
-          }
+          // 无条件 markPlaying：data 首包会预设 S.cur，分块推完时 now 带来的 index
+          // 可能和预设值相同——用 !== 判断就永远不高亮正在播的那行
+          if (typeof m.index === 'number') S.cur = m.index;
           S.playing = !!m.playing;
           if (typeof m.position === 'number') S.pos = m.position;
           if (typeof m.duration === 'number') S.dur = m.duration;
@@ -529,6 +565,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
               fb.innerHTML = m.love ? '&#10084;' : '&#9825;';
             }
           }
+          markPlaying();
           paintPlaybar();
           break;
         case 'theme':
