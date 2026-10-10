@@ -52,6 +52,8 @@ namespace CelesteMusicPlayer
 
                 // 数据库就绪才铺品牌墙（厂商与型号数都来自这个库）
                 BuildOpraVendorWall();
+                // 网页版 OPRA 页可能正停在「正在下载…」上：好了立刻推最新状态过去
+                WebOpraPushDbIfOnPage();
             }
             catch (Exception ex)
             {
@@ -59,6 +61,9 @@ namespace CelesteMusicPlayer
                 {
                     OpraStatusText.Text = "加载 OPRA 数据库失败：" + ex.Message;
                 }
+
+                // 失败了也推一次：网页上别一直显示「正在下载」
+                WebOpraPushDbIfOnPage();
             }
         }
 

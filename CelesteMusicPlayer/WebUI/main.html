@@ -119,7 +119,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 .row.on .t{color:var(--accent)}
 .row .s{font-size:12px;color:var(--text2);white-space:nowrap;overflow:hidden;
         text-overflow:ellipsis;margin-top:2px}
-.chips{display:flex;gap:5px;margin-top:4px}
+/* 第三行格式胶囊：高度写死 19px（无头实测本机胶囊自然高 18px，留 1px 余量防裁切）。
+   行高 62px 写死 + align-items:center，而胶囊是 C# 后台算好按 kind=chips 一波波补的
+   （200 首一波，3609 首就是十几波）——不预留空间的话每补一波 .m 就长高一截、
+   整块文字被居中顶上去 11px，用户看着就是列表"一跳一跳"（2026-10-10 反馈）。
+   渲染时永远带上这个 div（空也占位），实测补数据前后位移 0.00px。 */
+.chips{display:flex;gap:5px;margin-top:4px;height:19px;align-items:center;overflow:hidden}
 .chip{font-size:10.5px;color:var(--text2);background:var(--pill);border:1px solid var(--pillbr);
       border-radius:4px;padding:1px 5px;letter-spacing:.02em}
 .chip.hi{color:var(--accent);background:var(--sel);border-color:transparent}
@@ -380,15 +385,13 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
    原来是一整页 dsp.html 盖满窗口（连左栏一起吃掉）。现在是主界面里的一个视图：
    左 220px 是 DSP 信号链导航，右边是对应模块的内容，左栏分类照旧在最外面。 */
 #dspview{display:flex;flex-direction:column;height:100%;min-height:0}
-#dspbar{display:flex;align-items:center;gap:12px;flex:0 0 auto;padding:2px 0 12px}
-#dspbar .dbt{font-size:13px;font-weight:600}
-#dspbar .bpst{font-size:11.5px;color:var(--text2);font-variant-numeric:tabular-nums;
-              max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#dspbar .bpst.warn{color:var(--amber)}
+.bpst{font-size:11.5px;color:var(--text2);font-variant-numeric:tabular-nums;
+      max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.bpst.warn{color:var(--amber)}
 .dbody{flex:1;min-height:0;display:flex;gap:12px}
-.dnav{width:220px;flex:0 0 220px;background:var(--sb);border-radius:var(--r-win);padding:10px 10px 0;
+.dnav{width:220px;flex:0 0 220px;background:var(--sb);border-radius:var(--r-win);padding:6px 10px 0;
       overflow-y:auto;display:flex;flex-direction:column}
-.dnav .grp{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.06em;padding:12px 8px 5px}
+.dnav .grp{font-size:11px;font-weight:600;color:var(--text3);letter-spacing:.06em;padding:8px 8px 4px}
 .dnav .ni{height:32px;border-radius:var(--r-nav);display:flex;align-items:center;gap:9px;
           padding:0 9px;cursor:pointer;color:var(--text);font-size:13px;margin-bottom:1px;user-select:none}
 .dnav .ni:hover{background:var(--hover)}
@@ -401,7 +404,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       border:1px solid rgba(179,38,30,.25);border-radius:8px;padding:8px 12px;margin-bottom:10px}
 .dpg{display:none;flex:1;min-height:0;overflow-y:auto}
 .dpg.on{display:block}
-.dpgh{display:flex;align-items:flex-start;gap:12px;padding:2px 0 8px}
+.dpgh{display:flex;align-items:flex-start;gap:12px;padding:0 0 6px}
 .dpgh h2{font-size:20px;font-weight:700;letter-spacing:-.02em}
 .dpgh .sub{font-size:12px;color:var(--text2);margin-top:4px;line-height:1.6;max-width:640px}
 .dpgh .pwr{margin-left:auto;display:flex;align-items:center;gap:10px;flex:0 0 auto;padding-top:2px}
@@ -460,6 +463,30 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 .eqlegend{display:flex;align-items:center;gap:16px;flex-wrap:wrap;padding:2px 14px 10px;
           font-size:11.5px;color:var(--text2)}
 .eqlegend b{font-weight:600;color:var(--text);font-variant-numeric:tabular-nums}
+/* 耳机校正（OPRA）页：搜索框 / 品牌芯片 / 列表行 */
+.ctext{height:30px;border:1px solid var(--pillbr);background:var(--pill);color:var(--text);
+       border-radius:var(--r-ctrl);font-family:var(--font);font-size:12.5px;padding:0 10px;
+       outline:0;box-sizing:border-box}
+.ctext:focus{border-color:var(--accent)}
+.opraChip{height:26px;border-radius:13px;border:1px solid var(--pillbr);background:var(--pill);
+          color:var(--text2);font-family:var(--font);font-size:11.5px;padding:0 11px;cursor:pointer;
+          display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.opraChip:hover{background:var(--hover)}
+.opraChip .n{color:var(--text3);font-variant-numeric:tabular-nums}
+.opraRow{display:flex;align-items:center;gap:10px;padding:9px 12px;margin-top:8px;
+         border:1px solid var(--div2);border-radius:var(--r-ctrl);background:var(--card);cursor:pointer}
+.opraRow:hover{background:var(--hover)}
+.opraRow.on{border-color:var(--accent);background:var(--sel)}
+.opraRow .tx{min-width:0;flex:1}
+.opraRow .nm{font-size:13px;font-weight:600;color:var(--text)}
+.opraRow .sb{font-size:11.5px;color:var(--text3);margin-top:2px}
+.opraRow .rt{margin-left:auto;font-size:11.5px;color:var(--text3);white-space:nowrap;
+             font-variant-numeric:tabular-nums;text-align:right;line-height:1.5}
+.opraRow .bdg{font-size:10px;border-radius:5px;padding:1px 6px;border:1px solid var(--pillbr);
+              color:var(--text2);background:var(--pill);white-space:nowrap}
+.opraRow .bdg.com{color:var(--ok);border-color:rgba(59,109,17,.35)}
+.opraRow .bdg.fav{color:var(--amber);border-color:rgba(178,106,0,.35)}
+#d_opraCanvas{display:block;width:100%;height:240px}
 .bands{display:flex;gap:6px;flex-wrap:wrap;padding:12px 0 6px}
 .bchip{min-width:34px;height:30px;border-radius:15px;border:1px solid var(--pillbr);background:var(--pill);
        color:var(--text);font-family:var(--font);font-size:12px;cursor:pointer;padding:0 12px;
@@ -588,15 +615,17 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
             color:var(--text);font-size:15px;display:grid;place-items:center}
 .npCollapse:hover{background:var(--hover)}
 .npTop .t{font-size:12.5px;color:var(--text3);letter-spacing:.02em}
-.npBody{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(300px,1.15fr) minmax(260px,360px);
-        gap:36px;padding:10px 56px 30px;align-items:center}
+.npBody{flex:1;min-height:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(400px,1.05fr);
+        gap:48px;padding:8px 56px 22px;align-items:stretch}
+/* 右列：上面歌曲信息（自然高），下面歌词把剩下的高度全占满（2026-10-10 用户要求的两列布局） */
+.npRight{min-width:0;min-height:0;display:flex;flex-direction:column}
 .npArt{display:flex;align-items:center;justify-content:center;min-width:0}
 .npArt .cv{width:100%;max-width:430px;aspect-ratio:1;border-radius:var(--r-cover-lg);overflow:hidden;
            background:linear-gradient(140deg,#C6C6CC,#9A9AA2);display:grid;place-items:center;
            color:#fff;font-size:96px;font-weight:600;
            box-shadow:0 26px 60px rgba(0,0,0,.20),0 4px 14px rgba(0,0,0,.10)}
 .npArt .cv img{width:100%;height:100%;object-fit:cover;display:block;border-radius:inherit}
-.npInfo{min-width:0;display:flex;flex-direction:column;gap:18px}
+.npInfo{min-width:0;flex:0 0 auto;display:flex;flex-direction:column;gap:16px}
 .npTitle{font-size:30px;font-weight:700;letter-spacing:-.025em;line-height:1.2;
          overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .npArtist{font-size:17px;color:var(--accent);font-weight:600}
@@ -627,7 +656,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 /* ---------- 正在播放页 · 歌词区（原生 LyricsPanel 口径） ----------
    自动滚中心；用户手动滚停 3s 恢复吸附、撤选中；单击选中、双击从这句开始播。
    滚动条照原生 Hidden：能滚，一根都不显示。上下渐隐是给"滚到头了"的提示。 */
-.npLyr{align-self:stretch;min-width:0;max-height:540px;display:flex;flex-direction:column}
+.npLyr{min-width:0;flex:1;min-height:0;display:flex;flex-direction:column;margin-top:20px}
 .npLyrIn{flex:1;min-height:120px;overflow-y:auto;padding:38px 4px;scrollbar-width:none;
          -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 44px,#000 calc(100% - 44px),transparent 100%);
          mask-image:linear-gradient(180deg,transparent 0,#000 44px,#000 calc(100% - 44px),transparent 100%)}
@@ -644,13 +673,17 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 .npLyrEmpty{align-self:center;margin:auto;font-size:13px;color:var(--text3);text-align:center;line-height:1.7}
 
 /* ---------- DSP：设备状态条 + 链路条（原生 DspDeviceStatusBar 口径） ---------- */
-#dspview{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;padding-top:2px}
-#dspbar{padding:0 0 6px;min-height:26px;display:flex;align-items:center;gap:12px}
+#dspview{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;padding-top:0}
 /* 2026-10-10 用户反馈"上方一大堆处理链路的文字"：原来顶上三行（设备卡 + 链路 pill 排
    + 八个模块徽章排）全砍紧凑——模块徽章整排删除（各模块页内都有自己的状态，这里重复），
-   设备信息改成一行小字，链路保留四个 pill（信号走向一眼能看，值短）。 */
-#d_dstatus{display:flex;flex-direction:column;gap:5px;padding:0 0 8px}
-.ddev{display:flex;align-items:center;gap:5px 14px;flex-wrap:wrap;font-size:11.5px;color:var(--text3)}
+   设备信息改成一行小字，链路保留四个 pill（信号走向一眼能看，值短）。
+   2026-10-10 第二轮"上面空隙还是很大"：原 #dspbar 整行（只有右边一个总旁路开关、
+   左边全空）砍掉，开关挪进 .dtop 设备行右端；gap 5→3、pad-bottom 8→5。 */
+#d_dstatus{display:flex;flex-direction:column;gap:3px;padding:0 0 5px}
+.dtop{display:flex;align-items:center;gap:14px;min-width:0}
+.dtop .cwt{flex:0 0 auto}
+.ddev{display:flex;align-items:center;gap:5px 14px;flex-wrap:wrap;font-size:11.5px;color:var(--text3);
+      flex:1;min-width:0}
 .ddev .kv{display:flex;align-items:center;gap:5px;min-width:0}
 .ddev .v{color:var(--text2);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px}
 .dchain{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
@@ -789,15 +822,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
         <!-- 音效处理（DSP）：嵌在右侧内容区，左栏分类栏保留。
              左 220px 是按信号链排的模块导航，右边是对应模块的内容。 -->
         <div id="dspview" style="display:none">
-          <div id="dspbar">
-            <!-- 标题交给页头（#pgTitle），这里只放总旁路开关 + bit-perfect 状态 -->
-            <div class="spacer"></div>
-            <label class="cwt bp"><input type="checkbox" id="d_c_bypass"><span class="sw"></span><span class="cl">DSP 总旁路</span></label>
-            <span class="bpst" id="d_bpStatus">读取中&#8230;</span>
-          </div>
-          <!-- 设备状态条 + 链路条 + 模块徽章（照搬原生 DspDeviceStatusBar / UpdateDspHeroBadges） -->
+          <!-- 设备状态条 + 总旁路 + 链路条（照搬原生 DspDeviceStatusBar / UpdateDspHeroBadges）。
+               2026-10-10 用户反馈"上面空隙还是很大"：原 #dspbar 整整一行（min-height 26px）
+               只有右边一个总旁路开关、左边全是空的——整行砍掉，开关挪到设备行右端。 -->
           <div id="d_dstatus">
-            <div class="ddev" id="d_dev"></div>
+            <div class="dtop">
+              <div class="ddev" id="d_dev"></div>
+              <label class="cwt bp"><input type="checkbox" id="d_c_bypass"><span class="sw"></span><span class="cl">DSP 总旁路</span></label>
+              <span class="bpst" id="d_bpStatus">读取中&#8230;</span>
+            </div>
             <div class="dchain" id="d_chain"></div>
           </div>
           <div class="dbody">
@@ -918,18 +951,54 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
                   <button class="dbtn" id="d_btnEqImportApo">导入 APO</button>
                   <button class="dbtn" id="d_btnEqExportApo">导出 APO</button>
                 </div>
-                <div class="dcard"><div class="ct">耳机校正（OPRA）</div>
-                  <div class="note" id="d_opraState" style="margin-bottom:10px">读取中&#8230;</div>
-                  <div class="dbtnrow">
-                    <button class="dbtn pri" id="d_btnOpraNative">打开耳机校正面板（品牌墙 / 搜索 / 曲线预览）</button>
+              </section>
+
+              <section class="dpg" id="d_pg_6">
+                <div class="dpgh" id="d_ph_6"></div>
+                <div class="note" id="d_opraDbState" style="font-size:12px;color:var(--text2);padding:8px 0 2px;line-height:1.7">正在读取 OPRA 数据库&#8230;</div>
+                <div class="crow wrap">
+                  <span class="cl">型号</span>
+                  <input type="text" id="d_opraQ" class="ctext" placeholder="耳机型号 / 品牌，如 HD650、IE 300" style="flex:1;min-width:200px">
+                  <button class="dbtn pri" id="d_btnOpraSearch">搜索</button>
+                </div>
+                <div class="dbtnrow" id="d_opraVendors"></div>
+                <div class="note" id="d_opraSearchState" style="font-size:12px;color:var(--text2);padding:4px 0 0;line-height:1.7"></div>
+                <div id="d_opraProducts"></div>
+                <div class="dcard" id="d_opraDetail" style="display:none">
+                  <div class="ct" id="d_opraDetailTitle"></div>
+                  <div class="note" id="d_opraDetailSub" style="margin-bottom:6px"></div>
+                  <div class="crow wrap">
+                    <span class="cl">来源筛选</span>
+                    <select id="d_opraFilter" class="csel">
+                      <option value="all">全部曲线</option>
+                      <option value="community">仅社区测量 (AutoEq)</option>
+                      <option value="opra">仅 OPRA 库曲线</option>
+                    </select>
                   </div>
-                  <div class="vs" style="color:var(--text3);font-size:11px;line-height:1.6">
-                    品牌墙、搜索、曲线预览与应用都在原生面板里（数据量大），这里点一下直接切到原生那一页；
-                    回网页走左侧分类栏的「音效处理」即可。上面的 EQ 曲线已经包含耳机校正的响应。</div>
+                  <div id="d_opraEqs"></div>
+                  <div class="dbtnrow">
+                    <button class="dbtn pri" id="d_btnOpraApply" disabled>应用到 EQ</button>
+                    <button class="dbtn" id="d_btnOpraFav" disabled>收藏</button>
+                  </div>
+                  <div class="note" id="d_opraEqState"></div>
+                </div>
+                <div class="eqwrap" id="d_opraPreviewWrap" style="display:none">
+                  <canvas id="d_opraCanvas"></canvas>
+                  <div class="eqlegend">
+                    <span>实线 = 含预增益的实际响应 &#183; 虚线 = 曲线形状</span>
+                    <span id="d_opraPrevInfo"></span>
+                  </div>
+                </div>
+                <div class="dcard">
+                  <div class="ct">最近用过 / 收藏</div>
+                  <div id="d_opraRecent"></div>
+                  <div class="note" style="color:var(--text3);font-size:11px;line-height:1.6;margin-top:8px">
+                    曲线数据来自 Roon 的 OPRA 开源数据库（opra.roonlabs.net），第一次用要联网下载，之后走本地缓存。
+                    应用后曲线会进「参数 EQ」，可以在那一页继续手动微调；开启 EQ 后输出不再是 bit-perfect。</div>
                 </div>
               </section>
 
-              <section class="dpg" id="d_pg_6"><div class="dpgh" id="d_ph_6"></div>
+              <section class="dpg" id="d_pg_7"><div class="dpgh" id="d_ph_7"></div>
                 <!-- 压缩器可视化（照搬原生 DspCompCurveCanvas / DspCompGrCanvas / DspCompInMeterCanvas 三件套） -->
                 <div class="dvizRow">
                   <div class="dviz"><div class="vt">压缩曲线 &nbsp;<span style="font-weight:400;color:var(--text3);font-size:11px">输入电平 &#8594; 输出电平</span></div>
@@ -948,14 +1017,14 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
                   </div>
                   <div class="vs">读数来自内核侧真实统计，每秒刷新。GR 条越长表示压得越多；输入电平逼近 0 dBFS 时变黄/红。</div>
                 </div>
-                <div id="d_rows_6"></div>
+                <div id="d_rows_7"></div>
                 <div class="dcard"><div class="ct">压缩器在链上的位置</div>
                   <div class="note">阈值以下不动声音；超过阈值的部分按压缩比压低，启动/释放控制反应快慢，补偿增益补回被压掉的电平。干湿混合在线性域做，100% = 全处理。</div>
                 </div>
               </section>
 
-              <section class="dpg" id="d_pg_7">
-                <div class="dpgh" id="d_ph_7"></div>
+              <section class="dpg" id="d_pg_8">
+                <div class="dpgh" id="d_ph_8"></div>
                 <div class="note" style="font-size:12px;color:var(--text2);padding:10px 0 2px;line-height:1.7">声道工具</div>
                 <!-- 左右声道电平条（照搬原生 DspChannelLeftBar / DspChannelRightBar + SkewText） -->
                 <div class="dviz"><div class="vt">左右声道电平</div>
@@ -965,12 +1034,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
                     <div class="meter"><div class="f" id="d_chR"></div></div></div>
                   <div class="vs" id="d_chSkew">&#8212;</div>
                 </div>
-                <div id="d_rows_7a"></div>
+                <div id="d_rows_8a"></div>
                 <div class="note" style="font-size:12px;color:var(--text2);padding:14px 0 2px;line-height:1.7">耳机 Crossfeed（父开关关着时不会下发到内核）</div>
-                <div id="d_rows_7b"></div>
+                <div id="d_rows_8b"></div>
               </section>
 
-              <section class="dpg" id="d_pg_8"><div class="dpgh" id="d_ph_8"></div>
+              <section class="dpg" id="d_pg_9"><div class="dpgh" id="d_ph_9"></div>
                 <!-- 声场环（照搬原生 DspFieldRingCanvas + Mid/Side 读数 + 相关性提示） -->
                 <div class="dvizRow">
                   <div class="dviz" style="flex:0 0 300px;min-width:280px"><div class="vt">声场分布</div>
@@ -984,35 +1053,35 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
                     <div class="vs" id="d_fieldCorr" style="margin-top:10px">&#8212;</div>
                   </div>
                 </div>
-                <div id="d_rows_8"></div>
+                <div id="d_rows_9"></div>
                 <div class="dcard"><div class="ct">声场三旋钮</div>
                   <div class="note">宽度改变中/侧向的比例，中心和侧向电平在 M/S 域微调。100% = 不改变原始声场。</div>
                 </div>
               </section>
 
-              <section class="dpg" id="d_pg_9"><div class="dpgh" id="d_ph_9"></div>
+              <section class="dpg" id="d_pg_10"><div class="dpgh" id="d_ph_10"></div>
                 <!-- 声道矩阵流向图（照搬原生 DspMatrixFlowCanvas：线宽 ∝ 系数绝对值） -->
                 <div class="dviz"><div class="vt">矩阵流向</div>
                   <canvas class="viz" id="d_matrixFlow" height="180"></canvas>
                   <div class="vs">线越粗 = 该路增益越大；虚线 = 反相（负系数）。对角线为主通路（L→L / R→R）。</div>
                 </div>
-                <div id="d_rows_9"></div>
-                <div class="note" id="d_mxPhase" style="font-size:12px;color:var(--text2);padding:10px 0;line-height:1.7"></div>
-              </section>
-
-              <section class="dpg" id="d_pg_10">
-                <div class="dpgh" id="d_ph_10"></div>
-                <div class="note" id="d_firStatus" style="font-size:12px;color:var(--text2);padding:10px 0;line-height:1.7"></div>
-                <div class="dbtnrow"><button class="dbtn" id="d_btnOpenRoom">打开房间校正窗口（导入 IR）</button></div>
                 <div id="d_rows_10"></div>
-                <div class="dbtnrow"><button class="dbtn" id="d_btnFirSafe">安全启用卷积（按当前 trim 试算）</button></div>
-                <div class="note" id="d_firClip" style="font-size:12px;color:var(--text2);padding:6px 0;line-height:1.7"></div>
+                <div class="note" id="d_mxPhase" style="font-size:12px;color:var(--text2);padding:10px 0;line-height:1.7"></div>
               </section>
 
               <section class="dpg" id="d_pg_11">
                 <div class="dpgh" id="d_ph_11"></div>
-                <!-- 输出安全：安全限幅开关（原生 DspPageSafety 口径） -->
+                <div class="note" id="d_firStatus" style="font-size:12px;color:var(--text2);padding:10px 0;line-height:1.7"></div>
+                <div class="dbtnrow"><button class="dbtn" id="d_btnOpenRoom">打开房间校正窗口（导入 IR）</button></div>
                 <div id="d_rows_11"></div>
+                <div class="dbtnrow"><button class="dbtn" id="d_btnFirSafe">安全启用卷积（按当前 trim 试算）</button></div>
+                <div class="note" id="d_firClip" style="font-size:12px;color:var(--text2);padding:6px 0;line-height:1.7"></div>
+              </section>
+
+              <section class="dpg" id="d_pg_12">
+                <div class="dpgh" id="d_ph_12"></div>
+                <!-- 输出安全：安全限幅开关（原生 DspPageSafety 口径） -->
+                <div id="d_rows_12"></div>
                 <div class="note" style="font-size:12px;color:var(--text2);padding:6px 0 2px;line-height:1.7">输出监控</div>
                 <div class="mongrid">
                   <div class="mon"><div class="k">输出峰值</div><div class="v" id="d_monPeak">&#8212;</div></div>
@@ -1080,35 +1149,37 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   </div>
   <div class="npBody">
     <div class="npArt"><div class="cv" id="npCov"></div></div>
-    <div class="npInfo">
-      <div>
-        <div class="npTitle" id="npTitle">未在播放</div>
-        <div class="npArtist" id="npArtist" style="margin-top:8px"></div>
-        <div class="npAlbum" id="npAlbum" style="margin-top:4px"></div>
-      </div>
-      <div class="npMeta" id="npMeta"></div>
-      <div class="npBar">
-        <div class="tm" id="npCur">0:00</div>
-        <div class="npTrack" id="npTrack"><div class="fill" id="npFill"></div><div class="knob" id="npKnob"></div></div>
-        <div class="tm r" id="npDur">0:00</div>
-      </div>
-      <div class="npCtrls">
-        <button class="c sm" id="npOrder" title="播放顺序（顺序 / 随机 / 列表循环 / 单曲循环 / 单曲）"><i class="ico" data-ico="Sequential"></i></button>
-        <button class="c" id="npPrev" title="上一首"><i class="ico" data-ico="prev"></i></button>
-        <button class="c play" id="npPlay" title="播放 / 暂停"><i class="ico" data-ico="play"></i></button>
-        <button class="c" id="npNext" title="下一首"><i class="ico" data-ico="next"></i></button>
-        <button class="c sm" id="npFav" title="我喜欢的音乐"><i class="ico" data-ico="heartO"></i></button>
-        <span class="spacer"></span>
-        <div class="npVol">
-          <span style="font-size:12px;color:var(--text3)">音量</span>
-          <div class="vol" id="npVol"><div class="fill" id="npVolFill"></div><div class="knob" id="npVolKnob"></div></div>
+    <div class="npRight">
+      <div class="npInfo">
+        <div>
+          <div class="npTitle" id="npTitle">未在播放</div>
+          <div class="npArtist" id="npArtist" style="margin-top:8px"></div>
+          <div class="npAlbum" id="npAlbum" style="margin-top:4px"></div>
+        </div>
+        <div class="npMeta" id="npMeta"></div>
+        <div class="npBar">
+          <div class="tm" id="npCur">0:00</div>
+          <div class="npTrack" id="npTrack"><div class="fill" id="npFill"></div><div class="knob" id="npKnob"></div></div>
+          <div class="tm r" id="npDur">0:00</div>
+        </div>
+        <div class="npCtrls">
+          <button class="c sm" id="npOrder" title="播放顺序（顺序 / 随机 / 列表循环 / 单曲循环 / 单曲）"><i class="ico" data-ico="Sequential"></i></button>
+          <button class="c" id="npPrev" title="上一首"><i class="ico" data-ico="prev"></i></button>
+          <button class="c play" id="npPlay" title="播放 / 暂停"><i class="ico" data-ico="play"></i></button>
+          <button class="c" id="npNext" title="下一首"><i class="ico" data-ico="next"></i></button>
+          <button class="c sm" id="npFav" title="我喜欢的音乐"><i class="ico" data-ico="heartO"></i></button>
+          <span class="spacer"></span>
+          <div class="npVol">
+            <span style="font-size:12px;color:var(--text3)">音量</span>
+            <div class="vol" id="npVol"><div class="fill" id="npVolFill"></div><div class="knob" id="npVolKnob"></div></div>
+          </div>
         </div>
       </div>
-    </div>
-    <!-- 歌词区（原生 LyricsPanel 口径：自动滚中心、单击选中、双击从这句开始播） -->
-    <div class="npLyr">
-      <div class="npLyrIn" id="npLyrIn"></div>
-      <div class="npLyrEmpty" id="npLyrEmpty" style="display:none">该音频没有歌词</div>
+      <!-- 歌词区（原生 LyricsPanel 口径：自动滚中心、单击选中、双击从这句开始播） -->
+      <div class="npLyr">
+        <div class="npLyrIn" id="npLyrIn"></div>
+        <div class="npLyrEmpty" id="npLyrEmpty" style="display:none">该音频没有歌词</div>
+      </div>
     </div>
   </div>
 </div>
@@ -1407,7 +1478,10 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
          +   '<div class="m">'
          +     '<div class="t">' + esc(t.title) + '</div>'
          +     '<div class="s">' + sub + '</div>'
-         +     (chips ? '<div class="chips">' + chips + '</div>' : '')
+         // 第三行胶囊**永远渲染**（没有也占位）：C# 的 kind=chips 是后台算好一波波补的，
+         // 事后往行里插 div 会把整块文字顶上去（行是 align-items:center，实测 -11px）——
+         // 预留后空行满行同高，补数据零位移
+         +     '<div class="chips">' + chips + '</div>'
          +   '</div>'
          +   '<div class="d">' + mmss(t.duration) + '</div>'
          +   '<button class="fav' + (loved ? ' on' : '') + '" data-fav="' + si + '" title="收藏">'
@@ -2927,7 +3001,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     headroom:{pg:2,label:'输入余量',min:-12,max:0,step:0.5,fmt:'db'},
     // 安全限幅归「输出安全」页（原生 DspPageSafety 口径；2026-10-10 从「输入余量」页挪过来，
     // 这样导航里那一项不再是空页）
-    limiter:{pg:11,label:'安全限幅（待命）',t:1},
+    // ⚠ 2026-10-10 网页导航在「参数 EQ」后插入「耳机校正」页（下标 6），后面所有页 pg +1
+    limiter:{pg:12,label:'安全限幅（待命）',t:1},
     rgmode:{pg:3,label:'响度模式',sel:['关闭','单曲 (Track)','专辑 (Album)']},
     rgpreamp:{pg:3,label:'额外增益',min:-12,max:12,step:0.5,fmt:'db'},
     rgclip:{pg:3,label:'防削波',t:1},
@@ -2939,45 +3014,46 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     eqvocal:{pg:5,label:'人声',min:0,max:1,step:0.05,fmt:'pct',simple:1},
     eqair:{pg:5,label:'空气',min:0,max:1,step:0.05,fmt:'pct',simple:1},
     eqwarm:{pg:5,label:'温暖',min:0,max:1,step:0.05,fmt:'pct',simple:1},
-    compthreshold:{pg:6,label:'阈值',min:-60,max:0,step:0.5,fmt:'db'},
-    compratio:{pg:6,label:'压缩比',min:1,max:20,step:0.1,fmt:'x'},
-    compattack:{pg:6,label:'启动时间',min:0.1,max:200,step:0.1,fmt:'ms'},
-    comprelease:{pg:6,label:'释放时间',min:5,max:2000,step:5,fmt:'ms'},
-    compknee:{pg:6,label:'膝盖（软拐点）',min:0,max:24,step:0.5,fmt:'db'},
-    compmakeup:{pg:6,label:'补偿增益',min:-12,max:24,step:0.5,fmt:'db'},
-    compmix:{pg:6,label:'干湿混合',min:0,max:100,step:1,fmt:'pc1'},
-    comppeak:{pg:6,label:'峰值模式',t:1},
-    chbalance:{pg:7,label:'声道平衡',min:-1,max:1,step:0.05,fmt:'bal'},
-    chlgain:{pg:7,label:'左声道增益',min:-12,max:12,step:1,fmt:'db'},
-    chrgain:{pg:7,label:'右声道增益',min:-12,max:12,step:1,fmt:'db'},
-    chldelay:{pg:7,label:'左声道延迟',min:0,max:10,step:0.5,fmt:'ms'},
-    chrdelay:{pg:7,label:'右声道延迟',min:0,max:10,step:0.5,fmt:'ms'},
-    chmono:{pg:7,label:'单声道模式',sel:['关闭（立体声）','只用左声道','只用右声道','左右求和']},
-    chswap:{pg:7,label:'交换左右声道',t:1},
-    chinvertl:{pg:7,label:'反转左声道相位',t:1},
-    chinvertr:{pg:7,label:'反转右声道相位',t:1},
-    xfeedlevel:{pg:7,label:'Crossfeed 强度',min:0,max:100,step:5,fmt:'pc1',xf:1},
-    xfeedcutoff:{pg:7,label:'Crossfeed 截止频率',min:100,max:4000,step:50,fmt:'hz',xf:1},
-    fieldwidth:{pg:8,label:'声场宽度',min:0,max:200,step:1,fmt:'pc1'},
-    fieldcenter:{pg:8,label:'中心电平',min:-18,max:18,step:0.5,fmt:'db'},
-    fieldside:{pg:8,label:'侧向电平',min:-18,max:18,step:0.5,fmt:'db'},
-    mll:{pg:9,label:'左 &#8592; 左',min:-2,max:2,step:0.05,fmt:'x'},
-    mrl:{pg:9,label:'右 &#8592; 左',min:-2,max:2,step:0.05,fmt:'x'},
-    mlr:{pg:9,label:'左 &#8594; 右',min:-2,max:2,step:0.05,fmt:'x'},
-    mrr:{pg:9,label:'右 &#8594; 右',min:-2,max:2,step:0.05,fmt:'x'},
-    roomtrim:{pg:10,label:'电平修正 (trim)',min:-24,max:6,step:0.5,fmt:'db'}
+    compthreshold:{pg:7,label:'阈值',min:-60,max:0,step:0.5,fmt:'db'},
+    compratio:{pg:7,label:'压缩比',min:1,max:20,step:0.1,fmt:'x'},
+    compattack:{pg:7,label:'启动时间',min:0.1,max:200,step:0.1,fmt:'ms'},
+    comprelease:{pg:7,label:'释放时间',min:5,max:2000,step:5,fmt:'ms'},
+    compknee:{pg:7,label:'膝盖（软拐点）',min:0,max:24,step:0.5,fmt:'db'},
+    compmakeup:{pg:7,label:'补偿增益',min:-12,max:24,step:0.5,fmt:'db'},
+    compmix:{pg:7,label:'干湿混合',min:0,max:100,step:1,fmt:'pc1'},
+    comppeak:{pg:7,label:'峰值模式',t:1},
+    chbalance:{pg:8,label:'声道平衡',min:-1,max:1,step:0.05,fmt:'bal'},
+    chlgain:{pg:8,label:'左声道增益',min:-12,max:12,step:1,fmt:'db'},
+    chrgain:{pg:8,label:'右声道增益',min:-12,max:12,step:1,fmt:'db'},
+    chldelay:{pg:8,label:'左声道延迟',min:0,max:10,step:0.5,fmt:'ms'},
+    chrdelay:{pg:8,label:'右声道延迟',min:0,max:10,step:0.5,fmt:'ms'},
+    chmono:{pg:8,label:'单声道模式',sel:['关闭（立体声）','只用左声道','只用右声道','左右求和']},
+    chswap:{pg:8,label:'交换左右声道',t:1},
+    chinvertl:{pg:8,label:'反转左声道相位',t:1},
+    chinvertr:{pg:8,label:'反转右声道相位',t:1},
+    xfeedlevel:{pg:8,label:'Crossfeed 强度',min:0,max:100,step:5,fmt:'pc1',xf:1},
+    xfeedcutoff:{pg:8,label:'Crossfeed 截止频率',min:100,max:4000,step:50,fmt:'hz',xf:1},
+    fieldwidth:{pg:9,label:'声场宽度',min:0,max:200,step:1,fmt:'pc1'},
+    fieldcenter:{pg:9,label:'中心电平',min:-18,max:18,step:0.5,fmt:'db'},
+    fieldside:{pg:9,label:'侧向电平',min:-18,max:18,step:0.5,fmt:'db'},
+    mll:{pg:10,label:'左 &#8592; 左',min:-2,max:2,step:0.05,fmt:'x'},
+    mrl:{pg:10,label:'右 &#8592; 左',min:-2,max:2,step:0.05,fmt:'x'},
+    mlr:{pg:10,label:'左 &#8594; 右',min:-2,max:2,step:0.05,fmt:'x'},
+    mrr:{pg:10,label:'右 &#8594; 右',min:-2,max:2,step:0.05,fmt:'x'},
+    roomtrim:{pg:11,label:'电平修正 (trim)',min:-24,max:6,step:0.5,fmt:'db'}
   };
   var DPWR = [
     {k:'headroom',pg:2,t:'输入余量'}, {k:'rg',pg:3,t:'响度 &#183; ReplayGain'},
-    {k:'src',pg:4,t:'SRC / 升频'}, {k:'eq',pg:5,t:'参数 EQ'}, {k:'opra',pg:5,t:'耳机校正'},
-    {k:'comp',pg:6,t:'动态压缩器'}, {k:'channel',pg:7,t:'声道工具'},
-    {k:'xfeed',pg:7,t:'耳机 Crossfeed'}, {k:'field',pg:8,t:'立体声场'},
-    {k:'matrix',pg:9,t:'声道矩阵'}, {k:'fir',pg:10,t:'FIR / 房间校正'}
+    {k:'src',pg:4,t:'SRC / 升频'}, {k:'eq',pg:5,t:'参数 EQ'}, {k:'opra',pg:6,t:'耳机校正'},
+    {k:'comp',pg:7,t:'动态压缩器'}, {k:'channel',pg:8,t:'声道工具'},
+    {k:'xfeed',pg:8,t:'耳机 Crossfeed'}, {k:'field',pg:9,t:'立体声场'},
+    {k:'matrix',pg:10,t:'声道矩阵'}, {k:'fir',pg:11,t:'FIR / 房间校正'}
   ];
   var DNAV = [
     {t:'听音方案',g:''}, {t:'DSP 机架编排',g:''},
     {t:'输入余量',g:'输入'}, {t:'响度 &#183; ReplayGain',g:'输入'},
-    {t:'SRC / 升频',g:'采样率'}, {t:'参数 EQ',g:'塑形'}, {t:'动态压缩器',g:'塑形'},
+    {t:'SRC / 升频',g:'采样率'}, {t:'参数 EQ',g:'塑形'}, {t:'耳机校正',g:'塑形'},
+    {t:'动态压缩器',g:'塑形'},
     {t:'声道工具',g:'声道'}, {t:'立体声场',g:'声道'}, {t:'声道矩阵',g:'声道'},
     {t:'FIR / 房间校正',g:'空间'}, {t:'输出安全',g:'输出安全'}
   ];
@@ -3005,7 +3081,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   function dBuildRows(){
     for (var key in DCTRLS){
       var m = DCTRLS[key];
-      var host = $('d_rows_' + m.pg + (m.xf ? 'b' : (m.pg === 7 && !m.xf && key.indexOf('ch') === 0 ? 'a' : '')));
+      var host = $('d_rows_' + m.pg + (m.xf ? 'b' : (m.pg === 8 && !m.xf && key.indexOf('ch') === 0 ? 'a' : '')));
       if (!host) continue;
       var row = document.createElement('div');
       row.className = 'crow';
@@ -3143,6 +3219,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     dApplyRack();
     dApplyMon();
     dDrawViz();
+    opraNeedDb();
   }
   function dApplyEq(){
     var e = D.eq;
@@ -3498,13 +3575,6 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     if (fm) fm.textContent = D.texts.fmid || '—';
     if (fsv) fsv.textContent = D.texts.fside || '—';
     if (fco) fco.textContent = D.texts.fcorr || '—';
-    var op = $('d_opraState');
-    if (op){
-      var e = D.eq || {};
-      op.textContent = e.opra
-        ? '当前 EQ 曲线来自耳机校正（OPRA），已在链上生效。'
-        : '当前没有应用耳机校正曲线。开关见本页右上角「耳机校正」。';
-    }
   }
   function dDrawViz(){
     compDraw(); compGrDraw(); compInDraw();
@@ -3521,7 +3591,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     $('pgTitle').textContent = '音效处理';
     $('pgSub').textContent = D.bypass ? 'DSP 已总旁路（声音直出）' : '';
     // 画布要等布局出尺寸才画得出来（display 刚从 none 变过来）
-    requestAnimationFrame(function(){ eqDraw(); dDrawViz(); });
+    requestAnimationFrame(function(){ eqDraw(); dDrawViz(); opraDraw(); });
   }
   function dBindUi(){
     $('d_c_bypass').addEventListener('change', function(){ post({kind:'dspact', a:'bypass', on:this.checked}); });
@@ -3550,8 +3620,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       ['d_btnEqAutoGain','eqautogain'], ['d_btnEqSpectrum','eqspectrum'],
       ['d_btnEqSavePreset','eqsavepreset'], ['d_btnEqImportApo','eqimportapo'], ['d_btnEqExportApo','eqexportapo'],
       ['d_btnRkUp','rkup'], ['d_btnRkDown','rkdown'], ['d_btnRkReset','rkreset'],
-      ['d_btnOpenRoom','openroom'], ['d_btnFirSafe','firsafe'], ['d_btnMonReset','monreset'],
-      ['d_btnOpraNative','opranative']
+      ['d_btnOpenRoom','openroom'], ['d_btnFirSafe','firsafe'], ['d_btnMonReset','monreset']
     ];
     for (var b = 0; b < ba.length; b++){
       (function(id, act){
@@ -3559,6 +3628,16 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
         if (el) el.addEventListener('click', function(){ post({kind:'dspact', a:act}); });
       })(ba[b][0], ba[b][1]);
     }
+    // 耳机校正（OPRA）页：搜索 / 应用 / 收藏 / 来源筛选（2026-10-10 整合进网页，不再跳原生）
+    $('d_btnOpraSearch').addEventListener('click', function(){ opraSearch(); });
+    $('d_opraQ').addEventListener('keydown', function(ev){
+      if (ev.key === 'Enter'){ ev.preventDefault(); opraSearch(); }
+    });
+    $('d_btnOpraApply').addEventListener('click', function(){ post({kind:'dspact', a:'opraapply'}); });
+    $('d_btnOpraFav').addEventListener('click', function(){ post({kind:'dspact', a:'oprafav'}); });
+    $('d_opraFilter').addEventListener('change', function(){
+      post({kind:'dspact', a:'oprafilter', v:this.value});
+    });
     $('d_btnPfSave').addEventListener('click', function(){
       post({kind:'dspact', a:'pfsave', name:$('d_pfName').value});
       $('d_pfName').value = '';
@@ -3771,6 +3850,248 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
         ctx.strokeStyle = dark ? 'rgba(255,255,255,.85)' : '#ffffff';
         ctx.lineWidth = 1.5; ctx.stroke();
       }
+    }
+  }
+
+  /* ---------- 耳机校正（OPRA）页 ----------
+     2026-10-10 用户要求：耳机校正整合进网页 DSP 页，别再跳原生界面。
+     分工照旧：网页只长样子 + 报意图（搜索/选型号/选曲线/应用/收藏/筛选全走 dspact），
+     数据由 C# 推 opradb / opraresults / opraeqs / opracurve / oprastatus。
+     预览口径照原生 RedrawOpraPreview：实线 = 含预增益的实际响应，虚线 = 曲线形状。 */
+  var OPRA = { db:null, results:null, detail:null, curve:null, asked:false };
+  function opraPre(v){ return (v >= 0 ? '+' : '') + Number(v).toFixed(1) + ' dB'; }
+  function opraSearch(){
+    var q = ($('d_opraQ').value || '').trim();
+    if (!q){
+      var st0 = $('d_opraSearchState');
+      if (st0) st0.textContent = '先输入耳机型号或品牌关键词。';
+      return;
+    }
+    post({kind:'dspact', a:'oprasearch', q:q});
+  }
+  /* 停在 OPRA 页且手里没数据时，向 C# 要一次数据库状态（品牌/最近/是否已应用） */
+  function opraNeedDb(){
+    if (D.page !== 6){ OPRA.asked = false; return; }
+    if (OPRA.db || OPRA.asked) return;
+    OPRA.asked = true;
+    post({kind:'dspact', a:'opraenter'});
+  }
+  function opraDbRender(){
+    var d = OPRA.db; if (!d) return;
+    var st = $('d_opraDbState');
+    if (st) st.textContent = d.status || '';
+    var vh = $('d_opraVendors');
+    if (vh){
+      vh.innerHTML = '';
+      var vs = d.vendors || [];
+      for (var i = 0; i < vs.length; i++){
+        (function(v){
+          var b = document.createElement('button');
+          b.className = 'opraChip';
+          b.innerHTML = esc(v.name) + ' <span class="n">' + (v.count || 0) + '</span>';
+          b.addEventListener('click', function(){
+            $('d_opraQ').value = v.name;
+            post({kind:'dspact', a:'oprasearch', q:v.name});
+          });
+          vh.appendChild(b);
+        })(vs[i]);
+      }
+    }
+    opraRecentRender();
+  }
+  function opraRecentRender(){
+    var host = $('d_opraRecent'); if (!host) return;
+    var d = OPRA.db;
+    var rows = (d && d.recent) || [];
+    host.innerHTML = '';
+    if (!rows.length){
+      host.innerHTML = '<div class="note" style="color:var(--text3);font-size:11.5px">还没有记录。搜一个型号、应用一条曲线，之后就会出现在这里。</div>';
+      return;
+    }
+    for (var i = 0; i < rows.length; i++){
+      (function(r){
+        var div = document.createElement('div');
+        div.className = 'opraRow';
+        div.innerHTML = '<div class="tx"><div class="nm">' + esc(r.mark || '') + ' ' + esc(r.name || '') + '</div>'
+          + '<div class="sb">' + esc(r.vendor || '') + ' · ' + esc(r.author || '') + '</div></div>'
+          + '<div class="rt">' + (r.bandCount || 0) + ' 段<br>预增益 ' + opraPre(r.preampDb) + '</div>';
+        div.addEventListener('click', function(){
+          // 带上型号名：这一轮搜索结果里没有它时，C# 按名字再搜一次（口径同原生历史项点击）
+          post({kind:'dspact', a:'opraproduct', id:r.productId, name:r.name});
+        });
+        host.appendChild(div);
+      })(rows[i]);
+    }
+  }
+  function opraResultsRender(){
+    var r = OPRA.results; if (!r) return;
+    // 新的一轮搜索：上一轮的型号详情和曲线预览全部作废
+    OPRA.detail = null; OPRA.curve = null;
+    var cd = $('d_opraDetail'); if (cd) cd.style.display = 'none';
+    var pw = $('d_opraPreviewWrap'); if (pw) pw.style.display = 'none';
+    var st = $('d_opraSearchState');
+    if (st) st.textContent = r.status || '';
+    var host = $('d_opraProducts'); if (!host) return;
+    host.innerHTML = '';
+    var ps = r.products || [];
+    for (var i = 0; i < ps.length; i++){
+      (function(p){
+        var div = document.createElement('div');
+        div.className = 'opraRow';
+        div.innerHTML = '<div class="tx"><div class="nm">' + esc(p.name) + '</div>'
+          + '<div class="sb">' + esc(p.vendor) + (p.subtype ? ' · ' + esc(p.subtype) : '') + '</div></div>'
+          + '<div class="rt">' + (p.eqCount || 0) + ' 条曲线</div>';
+        div.addEventListener('click', function(){
+          post({kind:'dspact', a:'opraproduct', id:p.id});
+        });
+        host.appendChild(div);
+      })(ps[i]);
+    }
+  }
+  function opraDetailRender(){
+    var d = OPRA.detail; if (!d) return;
+    var card = $('d_opraDetail');
+    if (card) card.style.display = '';
+    var p = d.product || {};
+    var t = $('d_opraDetailTitle'); if (t) t.textContent = p.name || '';
+    var sub = $('d_opraDetailSub');
+    if (sub) sub.textContent = (p.vendor || '') + (p.subtype ? ' · ' + p.subtype : '')
+      + '（' + (p.eqCount || 0) + ' 条曲线）';
+    var fsel = $('d_opraFilter');
+    if (fsel) fsel.value = d.filter || 'all';
+    var st = $('d_opraEqState');
+    if (st) st.textContent = d.status || '';
+    var host = $('d_opraEqs'); if (!host) return;
+    host.innerHTML = '';
+    var eqs = d.eqs || [];
+    for (var i = 0; i < eqs.length; i++){
+      (function(e){
+        var div = document.createElement('div');
+        div.className = 'opraRow' + (d.sel === e.eqId ? ' on' : '');
+        div.innerHTML = '<div class="tx"><div class="nm">' + esc(e.author) + '</div>'
+          + '<div class="sb">' + (e.bandCount || 0) + ' 段 · 预增益 ' + opraPre(e.preampDb) + '</div></div>'
+          + '<div class="rt">' + (e.community ? '<span class="bdg com">社区测量</span>' : '')
+          + (e.fav ? ' <span class="bdg fav">★ 已收藏</span>' : '') + '</div>';
+        div.addEventListener('click', function(){
+          post({kind:'dspact', a:'opraseleq', id:e.eqId});
+        });
+        host.appendChild(div);
+      })(eqs[i]);
+    }
+    if (!eqs.length && st) st.textContent = d.status || '这个来源筛选下没有曲线，换个筛选看看。';
+  }
+  function opraCurveRender(){
+    var c = OPRA.curve; if (!c) return;
+    var w = $('d_opraPreviewWrap');
+    if (w) w.style.display = '';
+    var info = $('d_opraPrevInfo');
+    if (info){
+      info.textContent = (c.community ? '社区测量' : 'OPRA 库') + ' · ' + (c.bandCount || 0)
+        + ' 段 · 预增益 ' + opraPre(c.preampDb);
+    }
+    var ap = $('d_btnOpraApply'); if (ap) ap.disabled = false;
+    var fav = $('d_btnOpraFav');
+    if (fav){ fav.disabled = false; fav.textContent = c.fav ? '已收藏' : '收藏'; }
+    opraDraw();
+  }
+  function opraSumAt(f){
+    var c = OPRA.curve;
+    if (!c || !c.bands) return 0;
+    var g = 0;
+    for (var i = 0; i < c.bands.length; i++) if (c.bands[i].on) g += eqApprox(f, c.bands[i]);
+    return g;
+  }
+  /* 预览画布：网格口径与 EQ 曲线一致（复用 eqApprox / EQ_TICKS），实线含预增益、虚线不含 */
+  function opraDraw(){
+    var cv = $('d_opraCanvas');
+    if (!cv || !OPRA.curve || !OPRA.curve.bands || !OPRA.curve.bands.length) return;
+    var w = cv.clientWidth || 0, h = cv.clientHeight || 0;
+    if (!w || !h) return;               // 面板还藏着，等 showDsp 的 rAF 再来一次
+    var dpr = window.devicePixelRatio || 1;
+    cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+    var ctx = cv.getContext('2d');
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, w, h);
+    var padL = 44, padT = 12, padB = 26, padR = 8;
+    var plotW = Math.max(10, w - padL - padR), plotH = Math.max(10, h - padT - padB);
+    var mx = 6;
+    for (var i = 0; i < OPRA.curve.bands.length; i++){
+      var b = OPRA.curve.bands[i];
+      if (b.on && Math.abs(b.g) > mx) mx = Math.abs(b.g);
+    }
+    mx = Math.ceil(mx / 3) * 3;
+    var midY = padT + plotH / 2, gainPerH = plotH / (2 * mx);
+    var logMin = l2(EQ_FMIN), logMax = l2(EQ_FMAX);
+    var X = function(f){ return padL + (l2(Math.max(EQ_FMIN, Math.min(EQ_FMAX, f))) - logMin) / (logMax - logMin) * plotW; };
+    var Y = function(g){ return midY - g * gainPerH; };
+    var dark = document.documentElement.className === 'dark';
+    var grid = dark ? 'rgba(255,255,255,.10)' : 'rgba(0,0,0,.12)';
+    var gridStrong = dark ? 'rgba(255,255,255,.25)' : 'rgba(0,0,0,.29)';
+    var label = dark ? 'rgba(255,255,255,.69)' : 'rgba(30,30,30,.59)';
+    ctx.font = '10px ' + (getComputedStyle(document.body).fontFamily || 'sans-serif');
+    ctx.textBaseline = 'middle';
+    var lines = Math.round(2 * mx / 3);
+    for (var li = -lines; li <= lines; li++){
+      var g = li * 3, gy = Y(g), zero = (li === 0);
+      ctx.strokeStyle = zero ? gridStrong : grid;
+      ctx.lineWidth = zero ? 1.4 : 1;
+      ctx.beginPath(); ctx.moveTo(padL, gy); ctx.lineTo(padL + plotW, gy); ctx.stroke();
+      ctx.fillStyle = label; ctx.textAlign = 'right';
+      ctx.fillText((g > 0 ? '+' : '') + g.toFixed(0), padL - 8, gy);
+    }
+    for (var ti = 0; ti < EQ_TICKS.length; ti++){
+      var f = EQ_TICKS[ti], gx = X(f);
+      ctx.strokeStyle = grid; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(gx, padT); ctx.lineTo(gx, padT + plotH); ctx.stroke();
+      ctx.fillStyle = label; ctx.textAlign = 'center';
+      ctx.fillText(f >= 1000 ? (f / 1000).toFixed(0) + 'k' : String(f), gx, padT + plotH + 11);
+    }
+    ctx.strokeStyle = gridStrong; ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(padL, padT + plotH); ctx.lineTo(padL + plotW, padT + plotH); ctx.stroke();
+    var samples = Math.max(120, Math.round(plotW / 3));
+    var shape = [], real = [];
+    var pre = OPRA.curve.preampDb || 0;
+    for (var s2 = 0; s2 <= samples; s2++){
+      var ff = EQ_FMIN * Math.pow(EQ_FMAX / EQ_FMIN, s2 / samples);
+      var gv = opraSumAt(ff);
+      shape.push([X(ff), Math.max(padT, Math.min(padT + plotH, Y(gv)))]);
+      real.push([X(ff), Math.max(padT, Math.min(padT + plotH, Y(gv + pre)))]);
+    }
+    function poly(pts, fill){
+      ctx.beginPath();
+      ctx.moveTo(pts[0][0], pts[0][1]);
+      for (var q = 1; q < pts.length; q++) ctx.lineTo(pts[q][0], pts[q][1]);
+      if (fill){
+        var fg = ctx.createLinearGradient(0, padT, 0, padT + plotH);
+        fg.addColorStop(0, dark ? 'rgba(46,113,104,.18)' : 'rgba(15,118,110,.16)');
+        fg.addColorStop(1, dark ? 'rgba(46,113,104,.02)' : 'rgba(15,118,110,.02)');
+        ctx.lineTo(pts[pts.length - 1][0], padT + plotH);
+        ctx.lineTo(pts[0][0], padT + plotH);
+        ctx.closePath(); ctx.fillStyle = fg; ctx.fill();
+        return;
+      }
+      ctx.stroke();
+    }
+    poly(real, true);
+    poly(shape, false);
+    ctx.setLineDash([5, 4]);
+    ctx.strokeStyle = dark ? 'rgba(255,255,255,.45)' : 'rgba(30,30,30,.4)';
+    ctx.lineWidth = 1.2; ctx.stroke();
+    ctx.setLineDash([]);
+    var sg = ctx.createLinearGradient(padL, 0, padL + plotW, 0);
+    sg.addColorStop(0, dark ? '#264a63' : '#1d4ed8');
+    sg.addColorStop(0.55, dark ? '#2e7168' : '#0f766e');
+    sg.addColorStop(1, dark ? '#8a6235' : '#b45309');
+    poly(real, false);
+    ctx.strokeStyle = sg; ctx.lineWidth = 2; ctx.stroke();
+    // 频段位置画小圆点，和 EQ 曲线页一个读法
+    var accentC = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#FA243C';
+    for (var bi = 0; bi < OPRA.curve.bands.length; bi++){
+      var bd = OPRA.curve.bands[bi];
+      if (!bd.on) continue;
+      ctx.beginPath();
+      ctx.arc(X(bd.f), Math.max(padT, Math.min(padT + plotH, Y(bd.g + pre))), 4, 0, Math.PI * 2);
+      ctx.fillStyle = accentC; ctx.fill();
     }
   }
 
@@ -4398,6 +4719,31 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
             $('d_bpStatus').textContent = m.perfect;
             $('d_bpStatus').className = 'bpst' + (m.perfect.indexOf('非 bit-perfect') >= 0 ? ' warn' : '');
           }
+          break;
+        case 'opradb':
+          // 耳机校正：数据库状态 + 热门品牌 + 最近/收藏 + 是否已应用
+          OPRA.db = m;
+          opraDbRender();
+          break;
+        case 'opraresults':
+          // 搜索结果（型号列表）
+          OPRA.results = m;
+          opraResultsRender();
+          break;
+        case 'opraeqs':
+          // 选中型号的曲线列表（含来源筛选结果与当前选中项）
+          OPRA.detail = m;
+          opraDetailRender();
+          break;
+        case 'opracurve':
+          // 选中曲线的预览（频段 + 预增益），网页自己画
+          OPRA.curve = m;
+          opraCurveRender();
+          break;
+        case 'oprastatus':
+          // 操作结果回执（应用成功/失败、搜索失败…）
+          var os1 = $('d_opraEqState');
+          if (os1) os1.textContent = m.text || '';
           break;
         case 'dspmsg':
           var dm2 = $('d_dmsg');
