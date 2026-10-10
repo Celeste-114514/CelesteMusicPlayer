@@ -657,6 +657,8 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
    自动滚中心；用户手动滚停 3s 恢复吸附、撤选中；单击选中、双击从这句开始播。
    滚动条照原生 Hidden：能滚，一根都不显示。上下渐隐是给"滚到头了"的提示。 */
 .npLyr{min-width:0;flex:1;min-height:0;display:flex;flex-direction:column;margin-top:20px}
+/* 进度条 + 控制条：歌词把剩余高度吃满后，这排贴在右列底部 */
+.npBottom{flex:0 0 auto;display:flex;flex-direction:column;gap:14px;margin-top:18px}
 .npLyrIn{flex:1;min-height:120px;overflow-y:auto;padding:38px 4px;scrollbar-width:none;
          -webkit-mask-image:linear-gradient(180deg,transparent 0,#000 44px,#000 calc(100% - 44px),transparent 100%);
          mask-image:linear-gradient(180deg,transparent 0,#000 44px,#000 calc(100% - 44px),transparent 100%)}
@@ -674,24 +676,22 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 
 /* ---------- DSP：设备状态条 + 链路条（原生 DspDeviceStatusBar 口径） ---------- */
 #dspview{display:flex;flex-direction:column;width:100%;height:100%;min-height:0;padding-top:0}
-/* 2026-10-10 用户反馈"上方一大堆处理链路的文字"：原来顶上三行（设备卡 + 链路 pill 排
-   + 八个模块徽章排）全砍紧凑——模块徽章整排删除（各模块页内都有自己的状态，这里重复），
-   设备信息改成一行小字，链路保留四个 pill（信号走向一眼能看，值短）。
-   2026-10-10 第二轮"上面空隙还是很大"：原 #dspbar 整行（只有右边一个总旁路开关、
-   左边全空）砍掉，开关挪进 .dtop 设备行右端；gap 5→3、pad-bottom 8→5。 */
-#d_dstatus{display:flex;flex-direction:column;gap:3px;padding:0 0 5px}
-.dtop{display:flex;align-items:center;gap:14px;min-width:0}
-.dtop .cwt{flex:0 0 auto}
-.ddev{display:flex;align-items:center;gap:5px 14px;flex-wrap:wrap;font-size:11.5px;color:var(--text3);
-      flex:1;min-width:0}
-.ddev .kv{display:flex;align-items:center;gap:5px;min-width:0}
-.ddev .v{color:var(--text2);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:230px}
-.dchain{display:flex;align-items:center;gap:6px;flex-wrap:wrap}
+/* 2026-10-10 三轮压缩（用户两次反馈顶部空隙/"大字下方空了一条"）：
+   ① 模块徽章整排删除；② #dspbar 整行砍掉（只有右侧一个开关、左边全空）；
+   ③ 设备行 .dtop 整行砍掉——设备名·模式·格式挪进页头副标题（副标题空着就是
+      "大字下方空了一条"的根因），总旁路开关 + bit-perfect 状态挪到链路行右端。
+   顶栈 = 页头 98px（标题 + 设备副标题）+ 链路行 ~26px。 */
+#d_dstatus{display:flex;align-items:center;gap:12px;padding:0 0 5px}
+#d_dstatus .cwt{flex:0 0 auto}
+#d_dstatus .bpst{flex:0 0 auto;white-space:nowrap}
+.dchain{display:flex;align-items:center;gap:6px;flex-wrap:wrap;flex:1;min-width:0}
 .dchain .n{font-size:11px;padding:2px 8px;border-radius:6px;background:var(--pill);
            border:1px solid var(--pillbr);color:var(--text2);white-space:nowrap}
 .dchain .n.on{background:var(--sel);border-color:transparent;color:var(--accent);font-weight:600}
 .dchain .ar{color:var(--text3);font-size:10px}
 
+/* EQ 页内「耳机校正」分段标题（2026-10-10 耳机校正并入 EQ 页下半，照原生同款布局） */
+.dsechead{font-size:12.5px;font-weight:600;color:var(--text2);padding:18px 0 4px;letter-spacing:.02em}
 /* 可视化容器：曲线 / 环 / 流向图 / 电平条 统一一块白底卡 */
 .dviz{background:var(--card);border:1px solid var(--div2);border-radius:var(--r-win);
       padding:12px 14px;margin:10px 0}
@@ -822,16 +822,16 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
         <!-- 音效处理（DSP）：嵌在右侧内容区，左栏分类栏保留。
              左 220px 是按信号链排的模块导航，右边是对应模块的内容。 -->
         <div id="dspview" style="display:none">
-          <!-- 设备状态条 + 总旁路 + 链路条（照搬原生 DspDeviceStatusBar / UpdateDspHeroBadges）。
-               2026-10-10 用户反馈"上面空隙还是很大"：原 #dspbar 整整一行（min-height 26px）
-               只有右边一个总旁路开关、左边全是空的——整行砍掉，开关挪到设备行右端。 -->
+          <!-- 顶部只剩一条链路行（2026-10-10 三轮压缩，用户两次反馈顶部空隙）：
+               ① #dspbar 整行砍掉——整整一行只有右侧一个总旁路开关、左边全空；
+               ② 设备行 .dtop 整行砍掉——设备名·模式·格式挪进页头副标题
+                 （"音效处理几个大字下方空了一条"的根因就是副标题空着，别的页都有字填着），
+                 总旁路开关和 bit-perfect 状态挪到链路行右端。
+               现在顶栈 = 页头 98px（标题 + 设备副标题）+ 链路行 ~26px。 -->
           <div id="d_dstatus">
-            <div class="dtop">
-              <div class="ddev" id="d_dev"></div>
-              <label class="cwt bp"><input type="checkbox" id="d_c_bypass"><span class="sw"></span><span class="cl">DSP 总旁路</span></label>
-              <span class="bpst" id="d_bpStatus">读取中&#8230;</span>
-            </div>
             <div class="dchain" id="d_chain"></div>
+            <label class="cwt bp"><input type="checkbox" id="d_c_bypass"><span class="sw"></span><span class="cl">DSP 总旁路</span></label>
+            <span class="bpst" id="d_bpStatus">读取中&#8230;</span>
           </div>
           <div class="dbody">
             <nav class="dnav" id="d_dnav"></nav>
@@ -951,10 +951,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
                   <button class="dbtn" id="d_btnEqImportApo">导入 APO</button>
                   <button class="dbtn" id="d_btnEqExportApo">导出 APO</button>
                 </div>
-              </section>
-
-              <section class="dpg" id="d_pg_6">
-                <div class="dpgh" id="d_ph_6"></div>
+                <div class="dsechead">耳机校正（OPRA）</div>
                 <div class="note" id="d_opraDbState" style="font-size:12px;color:var(--text2);padding:8px 0 2px;line-height:1.7">正在读取 OPRA 数据库&#8230;</div>
                 <div class="crow wrap">
                   <span class="cl">型号</span>
@@ -976,29 +973,31 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
                     </select>
                   </div>
                   <div id="d_opraEqs"></div>
+                  <div class="eqwrap" id="d_opraPreviewWrap" style="display:none">
+                    <canvas id="d_opraCanvas"></canvas>
+                    <div class="eqlegend">
+                      <span>实线 = 含预增益的实际响应 &#183; 虚线 = 曲线形状</span>
+                      <span id="d_opraPrevInfo"></span>
+                    </div>
+                  </div>
                   <div class="dbtnrow">
                     <button class="dbtn pri" id="d_btnOpraApply" disabled>应用到 EQ</button>
                     <button class="dbtn" id="d_btnOpraFav" disabled>收藏</button>
                   </div>
                   <div class="note" id="d_opraEqState"></div>
                 </div>
-                <div class="eqwrap" id="d_opraPreviewWrap" style="display:none">
-                  <canvas id="d_opraCanvas"></canvas>
-                  <div class="eqlegend">
-                    <span>实线 = 含预增益的实际响应 &#183; 虚线 = 曲线形状</span>
-                    <span id="d_opraPrevInfo"></span>
-                  </div>
-                </div>
                 <div class="dcard">
                   <div class="ct">最近用过 / 收藏</div>
                   <div id="d_opraRecent"></div>
                   <div class="note" style="color:var(--text3);font-size:11px;line-height:1.6;margin-top:8px">
                     曲线数据来自 Roon 的 OPRA 开源数据库（opra.roonlabs.net），第一次用要联网下载，之后走本地缓存。
-                    应用后曲线会进「参数 EQ」，可以在那一页继续手动微调；开启 EQ 后输出不再是 bit-perfect。</div>
+                    应用后曲线会进上面的 EQ 频段，可以接着手动微调；开启 EQ 后输出不再是 bit-perfect。</div>
                 </div>
+
               </section>
 
-              <section class="dpg" id="d_pg_7"><div class="dpgh" id="d_ph_7"></div>
+
+              <section class="dpg" id="d_pg_6"><div class="dpgh" id="d_ph_6"></div>
                 <!-- 压缩器可视化（照搬原生 DspCompCurveCanvas / DspCompGrCanvas / DspCompInMeterCanvas 三件套） -->
                 <div class="dvizRow">
                   <div class="dviz"><div class="vt">压缩曲线 &nbsp;<span style="font-weight:400;color:var(--text3);font-size:11px">输入电平 &#8594; 输出电平</span></div>
@@ -1017,14 +1016,14 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
                   </div>
                   <div class="vs">读数来自内核侧真实统计，每秒刷新。GR 条越长表示压得越多；输入电平逼近 0 dBFS 时变黄/红。</div>
                 </div>
-                <div id="d_rows_7"></div>
+                <div id="d_rows_6"></div>
                 <div class="dcard"><div class="ct">压缩器在链上的位置</div>
                   <div class="note">阈值以下不动声音；超过阈值的部分按压缩比压低，启动/释放控制反应快慢，补偿增益补回被压掉的电平。干湿混合在线性域做，100% = 全处理。</div>
                 </div>
               </section>
 
-              <section class="dpg" id="d_pg_8">
-                <div class="dpgh" id="d_ph_8"></div>
+              <section class="dpg" id="d_pg_7">
+                <div class="dpgh" id="d_ph_7"></div>
                 <div class="note" style="font-size:12px;color:var(--text2);padding:10px 0 2px;line-height:1.7">声道工具</div>
                 <!-- 左右声道电平条（照搬原生 DspChannelLeftBar / DspChannelRightBar + SkewText） -->
                 <div class="dviz"><div class="vt">左右声道电平</div>
@@ -1034,12 +1033,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
                     <div class="meter"><div class="f" id="d_chR"></div></div></div>
                   <div class="vs" id="d_chSkew">&#8212;</div>
                 </div>
-                <div id="d_rows_8a"></div>
+                <div id="d_rows_7a"></div>
                 <div class="note" style="font-size:12px;color:var(--text2);padding:14px 0 2px;line-height:1.7">耳机 Crossfeed（父开关关着时不会下发到内核）</div>
-                <div id="d_rows_8b"></div>
+                <div id="d_rows_7b"></div>
               </section>
 
-              <section class="dpg" id="d_pg_9"><div class="dpgh" id="d_ph_9"></div>
+              <section class="dpg" id="d_pg_8"><div class="dpgh" id="d_ph_8"></div>
                 <!-- 声场环（照搬原生 DspFieldRingCanvas + Mid/Side 读数 + 相关性提示） -->
                 <div class="dvizRow">
                   <div class="dviz" style="flex:0 0 300px;min-width:280px"><div class="vt">声场分布</div>
@@ -1053,35 +1052,35 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
                     <div class="vs" id="d_fieldCorr" style="margin-top:10px">&#8212;</div>
                   </div>
                 </div>
-                <div id="d_rows_9"></div>
+                <div id="d_rows_8"></div>
                 <div class="dcard"><div class="ct">声场三旋钮</div>
                   <div class="note">宽度改变中/侧向的比例，中心和侧向电平在 M/S 域微调。100% = 不改变原始声场。</div>
                 </div>
               </section>
 
-              <section class="dpg" id="d_pg_10"><div class="dpgh" id="d_ph_10"></div>
+              <section class="dpg" id="d_pg_9"><div class="dpgh" id="d_ph_9"></div>
                 <!-- 声道矩阵流向图（照搬原生 DspMatrixFlowCanvas：线宽 ∝ 系数绝对值） -->
                 <div class="dviz"><div class="vt">矩阵流向</div>
                   <canvas class="viz" id="d_matrixFlow" height="180"></canvas>
                   <div class="vs">线越粗 = 该路增益越大；虚线 = 反相（负系数）。对角线为主通路（L→L / R→R）。</div>
                 </div>
-                <div id="d_rows_10"></div>
+                <div id="d_rows_9"></div>
                 <div class="note" id="d_mxPhase" style="font-size:12px;color:var(--text2);padding:10px 0;line-height:1.7"></div>
               </section>
 
-              <section class="dpg" id="d_pg_11">
-                <div class="dpgh" id="d_ph_11"></div>
+              <section class="dpg" id="d_pg_10">
+                <div class="dpgh" id="d_ph_10"></div>
                 <div class="note" id="d_firStatus" style="font-size:12px;color:var(--text2);padding:10px 0;line-height:1.7"></div>
                 <div class="dbtnrow"><button class="dbtn" id="d_btnOpenRoom">打开房间校正窗口（导入 IR）</button></div>
-                <div id="d_rows_11"></div>
+                <div id="d_rows_10"></div>
                 <div class="dbtnrow"><button class="dbtn" id="d_btnFirSafe">安全启用卷积（按当前 trim 试算）</button></div>
                 <div class="note" id="d_firClip" style="font-size:12px;color:var(--text2);padding:6px 0;line-height:1.7"></div>
               </section>
 
-              <section class="dpg" id="d_pg_12">
-                <div class="dpgh" id="d_ph_12"></div>
+              <section class="dpg" id="d_pg_11">
+                <div class="dpgh" id="d_ph_11"></div>
                 <!-- 输出安全：安全限幅开关（原生 DspPageSafety 口径） -->
-                <div id="d_rows_12"></div>
+                <div id="d_rows_11"></div>
                 <div class="note" style="font-size:12px;color:var(--text2);padding:6px 0 2px;line-height:1.7">输出监控</div>
                 <div class="mongrid">
                   <div class="mon"><div class="k">输出峰值</div><div class="v" id="d_monPeak">&#8212;</div></div>
@@ -1157,6 +1156,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           <div class="npAlbum" id="npAlbum" style="margin-top:4px"></div>
         </div>
         <div class="npMeta" id="npMeta"></div>
+      </div>
+      <!-- 歌词区（原生 LyricsPanel 口径：自动滚中心、单击选中、双击从这句开始播） -->
+      <div class="npLyr">
+        <div class="npLyrIn" id="npLyrIn"></div>
+        <div class="npLyrEmpty" id="npLyrEmpty" style="display:none">该音频没有歌词</div>
+      </div>
+      <!-- 进度条 + 控制条：2026-10-10 用户要求挪到歌词下方
+           （原在信息块里，歌词被挤成右边一小条） -->
+      <div class="npBottom">
         <div class="npBar">
           <div class="tm" id="npCur">0:00</div>
           <div class="npTrack" id="npTrack"><div class="fill" id="npFill"></div><div class="knob" id="npKnob"></div></div>
@@ -1174,11 +1182,6 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
             <div class="vol" id="npVol"><div class="fill" id="npVolFill"></div><div class="knob" id="npVolKnob"></div></div>
           </div>
         </div>
-      </div>
-      <!-- 歌词区（原生 LyricsPanel 口径：自动滚中心、单击选中、双击从这句开始播） -->
-      <div class="npLyr">
-        <div class="npLyrIn" id="npLyrIn"></div>
-        <div class="npLyrEmpty" id="npLyrEmpty" style="display:none">该音频没有歌词</div>
       </div>
     </div>
   </div>
@@ -1664,7 +1667,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
          +   '<div class="m">'
          +     '<div class="t">' + esc(t.title) + '</div>'
          +     '<div class="s">' + sub + '</div>'
-         +     (chips ? '<div class="chips">' + chips + '</div>' : '')
+         +     '<div class="chips">' + chips + '</div>'
          +   '</div>'
          +   '<div class="d">' + mmss(t.duration) + '</div>'
          +   '<button class="fav' + (loved ? ' on' : '') + '" data-fav="' + i + '" title="收藏">'
@@ -3001,8 +3004,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     headroom:{pg:2,label:'输入余量',min:-12,max:0,step:0.5,fmt:'db'},
     // 安全限幅归「输出安全」页（原生 DspPageSafety 口径；2026-10-10 从「输入余量」页挪过来，
     // 这样导航里那一项不再是空页）
-    // ⚠ 2026-10-10 网页导航在「参数 EQ」后插入「耳机校正」页（下标 6），后面所有页 pg +1
-    limiter:{pg:12,label:'安全限幅（待命）',t:1},
+    // ⚠ 2026-10-10 耳机校正已并入「参数 EQ」页下半（d_pg_5 内 dsechead 分段），
+    // 不再是独立页——这里所有 pg 即最终页号，后面页从 6 起排
+    limiter:{pg:11,label:'安全限幅（待命）',t:1},
     rgmode:{pg:3,label:'响度模式',sel:['关闭','单曲 (Track)','专辑 (Album)']},
     rgpreamp:{pg:3,label:'额外增益',min:-12,max:12,step:0.5,fmt:'db'},
     rgclip:{pg:3,label:'防削波',t:1},
@@ -3014,45 +3018,45 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     eqvocal:{pg:5,label:'人声',min:0,max:1,step:0.05,fmt:'pct',simple:1},
     eqair:{pg:5,label:'空气',min:0,max:1,step:0.05,fmt:'pct',simple:1},
     eqwarm:{pg:5,label:'温暖',min:0,max:1,step:0.05,fmt:'pct',simple:1},
-    compthreshold:{pg:7,label:'阈值',min:-60,max:0,step:0.5,fmt:'db'},
-    compratio:{pg:7,label:'压缩比',min:1,max:20,step:0.1,fmt:'x'},
-    compattack:{pg:7,label:'启动时间',min:0.1,max:200,step:0.1,fmt:'ms'},
-    comprelease:{pg:7,label:'释放时间',min:5,max:2000,step:5,fmt:'ms'},
-    compknee:{pg:7,label:'膝盖（软拐点）',min:0,max:24,step:0.5,fmt:'db'},
-    compmakeup:{pg:7,label:'补偿增益',min:-12,max:24,step:0.5,fmt:'db'},
-    compmix:{pg:7,label:'干湿混合',min:0,max:100,step:1,fmt:'pc1'},
-    comppeak:{pg:7,label:'峰值模式',t:1},
-    chbalance:{pg:8,label:'声道平衡',min:-1,max:1,step:0.05,fmt:'bal'},
-    chlgain:{pg:8,label:'左声道增益',min:-12,max:12,step:1,fmt:'db'},
-    chrgain:{pg:8,label:'右声道增益',min:-12,max:12,step:1,fmt:'db'},
-    chldelay:{pg:8,label:'左声道延迟',min:0,max:10,step:0.5,fmt:'ms'},
-    chrdelay:{pg:8,label:'右声道延迟',min:0,max:10,step:0.5,fmt:'ms'},
-    chmono:{pg:8,label:'单声道模式',sel:['关闭（立体声）','只用左声道','只用右声道','左右求和']},
-    chswap:{pg:8,label:'交换左右声道',t:1},
-    chinvertl:{pg:8,label:'反转左声道相位',t:1},
-    chinvertr:{pg:8,label:'反转右声道相位',t:1},
-    xfeedlevel:{pg:8,label:'Crossfeed 强度',min:0,max:100,step:5,fmt:'pc1',xf:1},
-    xfeedcutoff:{pg:8,label:'Crossfeed 截止频率',min:100,max:4000,step:50,fmt:'hz',xf:1},
-    fieldwidth:{pg:9,label:'声场宽度',min:0,max:200,step:1,fmt:'pc1'},
-    fieldcenter:{pg:9,label:'中心电平',min:-18,max:18,step:0.5,fmt:'db'},
-    fieldside:{pg:9,label:'侧向电平',min:-18,max:18,step:0.5,fmt:'db'},
-    mll:{pg:10,label:'左 &#8592; 左',min:-2,max:2,step:0.05,fmt:'x'},
-    mrl:{pg:10,label:'右 &#8592; 左',min:-2,max:2,step:0.05,fmt:'x'},
-    mlr:{pg:10,label:'左 &#8594; 右',min:-2,max:2,step:0.05,fmt:'x'},
-    mrr:{pg:10,label:'右 &#8594; 右',min:-2,max:2,step:0.05,fmt:'x'},
-    roomtrim:{pg:11,label:'电平修正 (trim)',min:-24,max:6,step:0.5,fmt:'db'}
+    compthreshold:{pg:6,label:'阈值',min:-60,max:0,step:0.5,fmt:'db'},
+    compratio:{pg:6,label:'压缩比',min:1,max:20,step:0.1,fmt:'x'},
+    compattack:{pg:6,label:'启动时间',min:0.1,max:200,step:0.1,fmt:'ms'},
+    comprelease:{pg:6,label:'释放时间',min:5,max:2000,step:5,fmt:'ms'},
+    compknee:{pg:6,label:'膝盖（软拐点）',min:0,max:24,step:0.5,fmt:'db'},
+    compmakeup:{pg:6,label:'补偿增益',min:-12,max:24,step:0.5,fmt:'db'},
+    compmix:{pg:6,label:'干湿混合',min:0,max:100,step:1,fmt:'pc1'},
+    comppeak:{pg:6,label:'峰值模式',t:1},
+    chbalance:{pg:7,label:'声道平衡',min:-1,max:1,step:0.05,fmt:'bal'},
+    chlgain:{pg:7,label:'左声道增益',min:-12,max:12,step:1,fmt:'db'},
+    chrgain:{pg:7,label:'右声道增益',min:-12,max:12,step:1,fmt:'db'},
+    chldelay:{pg:7,label:'左声道延迟',min:0,max:10,step:0.5,fmt:'ms'},
+    chrdelay:{pg:7,label:'右声道延迟',min:0,max:10,step:0.5,fmt:'ms'},
+    chmono:{pg:7,label:'单声道模式',sel:['关闭（立体声）','只用左声道','只用右声道','左右求和']},
+    chswap:{pg:7,label:'交换左右声道',t:1},
+    chinvertl:{pg:7,label:'反转左声道相位',t:1},
+    chinvertr:{pg:7,label:'反转右声道相位',t:1},
+    xfeedlevel:{pg:7,label:'Crossfeed 强度',min:0,max:100,step:5,fmt:'pc1',xf:1},
+    xfeedcutoff:{pg:7,label:'Crossfeed 截止频率',min:100,max:4000,step:50,fmt:'hz',xf:1},
+    fieldwidth:{pg:8,label:'声场宽度',min:0,max:200,step:1,fmt:'pc1'},
+    fieldcenter:{pg:8,label:'中心电平',min:-18,max:18,step:0.5,fmt:'db'},
+    fieldside:{pg:8,label:'侧向电平',min:-18,max:18,step:0.5,fmt:'db'},
+    mll:{pg:9,label:'左 &#8592; 左',min:-2,max:2,step:0.05,fmt:'x'},
+    mrl:{pg:9,label:'右 &#8592; 左',min:-2,max:2,step:0.05,fmt:'x'},
+    mlr:{pg:9,label:'左 &#8594; 右',min:-2,max:2,step:0.05,fmt:'x'},
+    mrr:{pg:9,label:'右 &#8594; 右',min:-2,max:2,step:0.05,fmt:'x'},
+    roomtrim:{pg:10,label:'电平修正 (trim)',min:-24,max:6,step:0.5,fmt:'db'}
   };
   var DPWR = [
     {k:'headroom',pg:2,t:'输入余量'}, {k:'rg',pg:3,t:'响度 &#183; ReplayGain'},
-    {k:'src',pg:4,t:'SRC / 升频'}, {k:'eq',pg:5,t:'参数 EQ'}, {k:'opra',pg:6,t:'耳机校正'},
-    {k:'comp',pg:7,t:'动态压缩器'}, {k:'channel',pg:8,t:'声道工具'},
-    {k:'xfeed',pg:8,t:'耳机 Crossfeed'}, {k:'field',pg:9,t:'立体声场'},
-    {k:'matrix',pg:10,t:'声道矩阵'}, {k:'fir',pg:11,t:'FIR / 房间校正'}
+    {k:'src',pg:4,t:'SRC / 升频'}, {k:'eq',pg:5,t:'参数 EQ'}, {k:'opra',pg:5,t:'耳机校正'},
+    {k:'comp',pg:6,t:'动态压缩器'}, {k:'channel',pg:7,t:'声道工具'},
+    {k:'xfeed',pg:7,t:'耳机 Crossfeed'}, {k:'field',pg:8,t:'立体声场'},
+    {k:'matrix',pg:9,t:'声道矩阵'}, {k:'fir',pg:10,t:'FIR / 房间校正'}
   ];
   var DNAV = [
     {t:'听音方案',g:''}, {t:'DSP 机架编排',g:''},
     {t:'输入余量',g:'输入'}, {t:'响度 &#183; ReplayGain',g:'输入'},
-    {t:'SRC / 升频',g:'采样率'}, {t:'参数 EQ',g:'塑形'}, {t:'耳机校正',g:'塑形'},
+    {t:'SRC / 升频',g:'采样率'}, {t:'参数 EQ',g:'塑形'},
     {t:'动态压缩器',g:'塑形'},
     {t:'声道工具',g:'声道'}, {t:'立体声场',g:'声道'}, {t:'声道矩阵',g:'声道'},
     {t:'FIR / 房间校正',g:'空间'}, {t:'输出安全',g:'输出安全'}
@@ -3081,7 +3085,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   function dBuildRows(){
     for (var key in DCTRLS){
       var m = DCTRLS[key];
-      var host = $('d_rows_' + m.pg + (m.xf ? 'b' : (m.pg === 8 && !m.xf && key.indexOf('ch') === 0 ? 'a' : '')));
+      var host = $('d_rows_' + m.pg + (m.xf ? 'b' : (m.pg === 7 && !m.xf && key.indexOf('ch') === 0 ? 'a' : '')));
       if (!host) continue;
       var row = document.createElement('div');
       row.className = 'crow';
@@ -3549,13 +3553,6 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   function dApplyDevice(){
     var dev = D.device || {};
     var ch = dev.chain || {};
-    var host = $('d_dev');
-    if (host){
-      function kv(k, v){ return '<span class="kv"><span class="k">' + k + '</span><span class="v">'
-        + esc(v || '—') + '</span></span>'; }
-      host.innerHTML = kv('设备', dev.name) + kv('模式', dev.mode)
-        + kv('格式', dev.fmt) + kv('状态', dev.perfect);
-    }
     var chost = $('d_chain');
     if (chost){
       var segs = [
@@ -3581,6 +3578,19 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     chMeterDraw(); fieldDraw(); matrixDraw();
     dApplyDevice();
   }
+  /* 页头副标题 = 设备名 · 模式 · 格式（2026-10-10：副标题空着就是用户说的
+     "音效处理几个大字下方空了一条"——别的页这一行都有字，就 DSP 页是空的）。
+     旁路时旁路说明优先，设备信息跟在后头。 */
+  function dPaintSub(){
+    var sub = D.bypass ? 'DSP 已总旁路（声音直出）' : '';
+    var dev = D.device || {};
+    var parts = [];
+    if (dev.name) parts.push(dev.name);
+    if (dev.mode) parts.push(dev.mode);
+    if (dev.fmt) parts.push(dev.fmt);
+    if (parts.length) sub = sub ? sub + ' · ' + parts.join(' · ') : parts.join(' · ');
+    $('pgSub').textContent = sub || '读取中…';
+  }
   function showDsp(){
     resetDetail();
     hideAllViews();
@@ -3589,7 +3599,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     $('dspview').style.display = '';
     $('btnPlayAll').style.visibility = 'hidden';
     $('pgTitle').textContent = '音效处理';
-    $('pgSub').textContent = D.bypass ? 'DSP 已总旁路（声音直出）' : '';
+    dPaintSub();
     // 画布要等布局出尺寸才画得出来（display 刚从 none 变过来）
     requestAnimationFrame(function(){ eqDraw(); dDrawViz(); opraDraw(); });
   }
@@ -3869,9 +3879,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     }
     post({kind:'dspact', a:'oprasearch', q:q});
   }
-  /* 停在 OPRA 页且手里没数据时，向 C# 要一次数据库状态（品牌/最近/是否已应用） */
+  /* 停在 EQ 页（耳机校正已并入该页下半）且手里没数据时，向 C# 要一次数据库状态 */
   function opraNeedDb(){
-    if (D.page !== 6){ OPRA.asked = false; return; }
+    if (D.page !== 5){ OPRA.asked = false; return; }
     if (OPRA.db || OPRA.asked) return;
     OPRA.asked = true;
     post({kind:'dspact', a:'opraenter'});
@@ -3973,7 +3983,10 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           + '<div class="rt">' + (e.community ? '<span class="bdg com">社区测量</span>' : '')
           + (e.fav ? ' <span class="bdg fav">★ 已收藏</span>' : '') + '</div>';
         div.addEventListener('click', function(){
+          // 点曲线即应用（2026-10-10 用户："点击某条曲线也应用不了"）：
+          // 先选中（拿频段+预览）再立刻应用，上面的 EQ 曲线当场画出效果
           post({kind:'dspact', a:'opraseleq', id:e.eqId});
+          post({kind:'dspact', a:'opraapply'});
         });
         host.appendChild(div);
       })(eqs[i]);
@@ -4703,8 +4716,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           if (m.device && $('d_bpStatus') && !D.perfect) $('d_bpStatus').textContent = m.device.fmt || '';
           dApplyState();
           if (S.page === 'AudioFX'){
-            $('pgSub').textContent = D.bypass ? 'DSP 已总旁路（声音直出）' : '';
-            requestAnimationFrame(eqDraw);
+            dPaintSub();
+            // 耳机校正并入 EQ 页后预览画布也在这页：顺手一起重画（无曲线时 opraDraw 直接返回）
+            requestAnimationFrame(function(){ eqDraw(); opraDraw(); });
           }
           break;
         case 'dspmon':

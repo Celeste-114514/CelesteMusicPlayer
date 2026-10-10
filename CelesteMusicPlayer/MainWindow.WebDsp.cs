@@ -212,14 +212,16 @@ namespace CelesteMusicPlayer
 
                 case "dspnav":
                     {
-                        // 切模块页。网页导航比原生多一项「耳机校正」（下标 6），先映射回原生下标；
-                        // 同时记住网页下标——不回记的话状态回推会把网页弹回「参数 EQ」页。
+                        // 切模块页。耳机校正已并入网页「参数 EQ」页下半（2026-10-10），
+                        // 网页导航与原生逐项同序（都 12 项），页码恒等，直接选。
+                        // 记住网页下标——不回记的话状态回推会把网页弹回别页。
                         int i = ReadJsonInt(msg.Payload, "i", -1);
                         if (i >= 0)
                         {
                             _webDspPage = i;
-                            SelectDspPage(WebDspToNativePage(i));
-                            if (i == WebDspOpraPageIndex) WebOpraPushDb();
+                            SelectDspPage(i);
+                            // 耳机校正在 EQ 页（DspPageEqIndex）下半：进这一页就把库状态推过去
+                            if (i == DspPageEqIndex) WebOpraPushDb();
                             _ = PushWebDspStateAsync();
                         }
                         break;
@@ -579,20 +581,14 @@ namespace CelesteMusicPlayer
 
         // ─────────────────────────────────────────────────────────────
         // 网页页码 ↔ 原生页码
-        // 网页导航 13 项、原生 12 项：网页在「参数 EQ」后多一个「耳机校正」页
-        // （2026-10-10 用户要求整合进网页 DSP 页；原生仍把它并 EQ 页里，不单列）。
-        //   网页 0..5  → 原生 0..5（原样）
-        //   网页 6     → 原生 EQ 页（DspPageEqIndex）
-        //   网页 7..12 → 原生 6..11（各减 1）
+        // 2026-10-10 耳机校正并入网页「参数 EQ」页下半后，网页导航 13→12 项、
+        // 与原生 BuildDspNav 逐项同序 → 映射退化为恒等（保留方法名，少改调用点）。
+        // 耳机校正的内容随 EQ 页（DspPageEqIndex）走，见 WebOpraPushDbIfOnPage。
         // ─────────────────────────────────────────────────────────────
-        private const int WebDspOpraPageIndex = 6;
 
-        private int WebDspToNativePage(int web)
-            => web < WebDspOpraPageIndex ? web
-            : (web == WebDspOpraPageIndex ? DspPageEqIndex : web - 1);
+        private int WebDspToNativePage(int web) => web;
 
-        private static int WebDspFromNativePage(int native)
-            => native < WebDspOpraPageIndex ? native : native + 1;
+        private static int WebDspFromNativePage(int native) => native;
 
         // ─────────────────────────────────────────────────────────────
         // 耳机校正（OPRA）→ 网页
@@ -616,11 +612,11 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>网页正停在 OPRA 页时推最新库状态（OPRA 数据库下载完成时调用）。</summary>
+        /// <summary>网页正停在 OPRA 内容所在页（EQ 页下半）时推最新库状态（OPRA 数据库下载完成时调用）。</summary>
         private void WebOpraPushDbIfOnPage()
         {
             if (!_webDspOpen && !_webDspEmbedded) return;
-            if (_webDspPage != WebDspOpraPageIndex) return;
+            if (_webDspPage != DspPageEqIndex) return;
             try
             {
                 _ = PostCelesteWebAsync(BuildWebOpraDbMessage());
@@ -806,7 +802,9 @@ namespace CelesteMusicPlayer
             if (eq == null) return;
 
             _opraSelectedEq = eq;
-            WebOpraPushEqs("已选中：下面看曲线形状，确认后点「应用到 EQ」。");
+            // 网页点曲线 = 选中 + 立刻应用（2026-10-10 用户反馈"点击某条曲线也应用不了"），
+            // 这句只是选中瞬间的过渡态，紧接着 WebOpraApply 的回执会盖掉它
+            WebOpraPushEqs("已选中，正在应用到 EQ…");
             WebOpraPushCurve();
         }
 
@@ -1031,22 +1029,13 @@ namespace CelesteMusicPlayer
             bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
 
             // 导航：标题/组/圆点（圆点 = 该模块正在参与处理，口径同原生左侧小圆点）。
-            // ⚠ 网页导航比原生多一项「耳机校正」（下标 6）：原生把它并「参数 EQ」页里，
-            //   网页给它独占一页（2026-10-10 用户要求整合进网页）。所以推导航时要在
-            //   这个位置插一条合成项，否则网页第 6 页之后全部错位一格。
+            // 网页导航与原生逐项同序（耳机校正 2026-10-10 并入「参数 EQ」页下半，网页 13→12 项），
+            // 直接按原生条目推，不再插合成项。OPRA 的应用态由 EQ 页圆点带出——
+            // DspModuleActive 的 eq = EQ 生效且有频段，应用曲线后自然点亮。
             bool[] active = DspModuleActive();
             var nav = new List<object>();
             for (int i = 0; i < _dspNavEntries.Count; i++)
             {
-                if (i == WebDspOpraPageIndex)
-                {
-                    nav.Add(new Dictionary<string, object?>
-                    {
-                        ["t"] = "耳机校正",
-                        ["g"] = "塑形",
-                        ["dot"] = _opraApplied,
-                    });
-                }
                 DspNavEntry e = _dspNavEntries[i];
                 nav.Add(new Dictionary<string, object?>
                 {
@@ -1281,8 +1270,8 @@ namespace CelesteMusicPlayer
             return new Dictionary<string, object?>
             {
                 ["kind"] = "dspstate",
-                // 网页页码（含多出来的「耳机校正」页）。用户点过就以网页下标为准，
-                // 没点过（首次打开）才按原生下标换算——原生 EQ 页在网页有两个落点。
+                // 网页页码（与原生恒等：耳机校正并入 EQ 页后两边导航同序）。
+                // 用户点过就以网页下标为准，没点过（首次打开）才按原生下标换算。
                 ["page"] = _webDspPage >= 0 ? _webDspPage : WebDspFromNativePage(_dspPageIndex < 0 ? 0 : _dspPageIndex),
                 ["nav"] = nav,
                 ["power"] = power,
