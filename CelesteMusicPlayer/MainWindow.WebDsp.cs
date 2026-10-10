@@ -540,7 +540,8 @@ namespace CelesteMusicPlayer
                     WebOpraFavorite();
                     return;
                 case "oprafilter":
-                    WebOpraFilter(ReadJsonStr(payload, "v", "all"));
+                    // 网页来源徽章点击（原生 OpraSourceBadge_Tapped：点一下只看这类，再点看全部）
+                    WebOpraFilter();
                     return;
 
                 default:
@@ -631,10 +632,13 @@ namespace CelesteMusicPlayer
         {
             // 原生那个状态文本是最全的口径（下载中/已就绪/失败原因都在里面）；
             // 它还没刷字（从没进过原生 EQ 页）时给网页一个进行中的说法，别显示空白。
+            // 没开始加载时用原生初始文案（OpraStatusText 的 XAML 初值）。
             string status = OpraStatusText?.Text ?? "";
             if (string.IsNullOrEmpty(status))
             {
-                status = _opraDbLoadStarted ? "正在下载 OPRA 数据库…" : "尚未加载 OPRA 数据库";
+                status = _opraDbLoadStarted
+                    ? "正在下载 OPRA 数据库…"
+                    : "打开本页时自动加载 OPRA 数据库（联网查询，离线时用上次缓存）。";
             }
 
             var vendors = new List<object>();
@@ -702,7 +706,8 @@ namespace CelesteMusicPlayer
         {
             if (string.IsNullOrWhiteSpace(q))
             {
-                WebOpraPushResults(q, "先输入耳机型号或品牌关键词。", new List<OpraSearchResult>());
+                // 原生 OpraStatusText 同款文案（空关键词提示）
+                WebOpraPushResults(q, "请输入耳机型号 / 品牌关键词", new List<OpraSearchResult>());
                 return;
             }
 
@@ -721,9 +726,10 @@ namespace CelesteMusicPlayer
 
                 List<OpraSearchResult> results = await _opra.SearchAsync(q, 24, ct: ct);
                 _opraResults = results;
+                // 文案照原生 OpraSearchStatusText
                 WebOpraPushResults(q, results.Count == 0
                     ? "未找到匹配的耳机（换个品牌/型号试试）"
-                    : $"找到 {results.Count} 款（点一行选曲线）", results);
+                    : $"找到 {results.Count} 款（点击选曲线）", results);
             }
             catch (OperationCanceledException)
             {
@@ -791,10 +797,13 @@ namespace CelesteMusicPlayer
             _opraSelectedProduct = product;
             _opraEqs = _opra.GetEqsForProduct(product.ProductId);
             _opraSelectedEq = null;
-            WebOpraPushEqs($"已选「{product.Name}」，在下面选一条曲线。");
+            // 原生 OpraResultList_ItemClick 同款文案
+            WebOpraPushEqs(_opraEqs.Count == 0 ? "该型号暂无可用曲线" : "选择一条曲线后点击「应用」");
         }
 
-        /// <summary>选中一条曲线：刷新列表选中态 + 推预览频段（网页自己画曲线）。</summary>
+        /// <summary>选中一条曲线：刷新列表选中态 + 推预览频段（网页自己画曲线）。
+        /// 原生 OpraEqList_ItemClick 只做「选中即预览」，应用要另外点按钮——
+        /// 2026-10-10 用户反馈后改回原生流程（试点页只换外观，功能不变）。</summary>
         private void WebOpraSelectEq(string eqId)
         {
             OpraProductEqSummary? eq = _opraEqs.FirstOrDefault(
@@ -802,9 +811,8 @@ namespace CelesteMusicPlayer
             if (eq == null) return;
 
             _opraSelectedEq = eq;
-            // 网页点曲线 = 选中 + 立刻应用（2026-10-10 用户反馈"点击某条曲线也应用不了"），
-            // 这句只是选中瞬间的过渡态，紧接着 WebOpraApply 的回执会盖掉它
-            WebOpraPushEqs("已选中，正在应用到 EQ…");
+            // 空 status = 不动状态文字（原生选中曲线不写 OpraEqStatusText）
+            WebOpraPushEqs("");
             WebOpraPushCurve();
         }
 
@@ -817,6 +825,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            WebOpraToast("正在解析并应用…");
             try
             {
                 OpraCorrection? corr = _opra.BuildCorrection(_opraSelectedEq.EqId);
@@ -828,9 +837,10 @@ namespace CelesteMusicPlayer
 
                 ApplyOpraCurve(corr.Curve);
                 NoteOpraApplied(corr);
+                // 文案照原生 OpraApplyButton_Click（OpraEqStatusText 同口径）
                 WebOpraToast($"已应用：{corr.ProductVendorAndName()}"
                     + $"（{corr.ImportedBandCount} 段 + {corr.Curve.PreampDb:0.##} dB）"
-                    + "　开启 EQ 后输出非 bit-perfect，可在「参数 EQ」页继续微调。");
+                    + "　提示：可在「参数 EQ」页查看/微调，开启 EQ 后输出非 bit-perfect。");
 
                 // 曲线进了 EQ：全量状态里的 eq.opra / 导航圆点 / 电源开关都要跟着变
                 UpdateDspNavIndicators();
@@ -859,8 +869,11 @@ namespace CelesteMusicPlayer
                     _opraSelectedEq.BandCount,
                     _opraSelectedEq.PreampDb);
 
-                bool nowFavorite = OpraHistoryStore.ToggleFavorite(item);
-                WebOpraPushEqs(nowFavorite ? "已加入收藏。" : "已取消收藏。");
+                // 原生 OpraFavoriteButton_Click 只改按钮文字 + 刷最近列表，不写状态行；
+                // 网页这边推 eqs（行徽章）+ curve（收藏按钮文字）+ db（最近用过）三处刷新
+                OpraHistoryStore.ToggleFavorite(item);
+                WebOpraPushEqs("");
+                WebOpraPushCurve();
                 WebOpraPushDb();
             }
             catch (Exception ex)
@@ -869,21 +882,28 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>来源筛选：all / community（AutoEq 社区测量）/ opra（OPRA 库自带）。</summary>
-        private void WebOpraFilter(string v)
+        /// <summary>来源徽章点击：在「只看这一类 / 看全部」之间切换（原生 OpraSourceBadge_Tapped 同口径）。
+        /// 徽章只在选中过曲线后可见，所以 _opraSelectedEq 不会是 null。 </summary>
+        private void WebOpraFilter()
         {
-            _opraSourceFilter = v switch
-            {
-                "community" => "community",
-                "opra" => "opra",
-                _ => null,
-            };
+            if (_opraSelectedEq == null) return;
 
-            WebOpraPushEqs(_opraSourceFilter == null
-                ? "显示这个型号的全部曲线。"
-                : (_opraSourceFilter == "community"
-                    ? "只看社区测量（AutoEq）的曲线。"
-                    : "只看 OPRA 库自带的曲线。"));
+            string thisSource = IsCommunityAuthor(_opraSelectedEq.Author) ? "community" : "opra";
+            _opraSourceFilter = _opraSourceFilter == thisSource ? null : thisSource;
+
+            // 原生 ApplyOpraEqFilter：只在筛空时写状态文字，非空时保持原样
+            List<OpraProductEqSummary> shown = _opraEqs;
+            if (_opraSourceFilter != null)
+            {
+                bool wantCommunity = _opraSourceFilter == "community";
+                shown = _opraEqs.Where(x => IsCommunityAuthor(x.Author) == wantCommunity).ToList();
+            }
+
+            WebOpraPushEqs(shown.Count == 0
+                ? (_opraSourceFilter == "community"
+                    ? "该型号没有社区测量的曲线，再点一次来源徽章可看全部。"
+                    : "该型号没有 OPRA 库自有曲线，再点一次来源徽章可看全部。")
+                : "");
         }
 
         /// <summary>推当前型号的曲线列表（含来源筛选结果、选中项、收藏/社区徽章）。</summary>

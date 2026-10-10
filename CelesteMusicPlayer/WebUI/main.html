@@ -486,6 +486,14 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
               color:var(--text2);background:var(--pill);white-space:nowrap}
 .opraRow .bdg.com{color:var(--ok);border-color:rgba(59,109,17,.35)}
 .opraRow .bdg.fav{color:var(--amber);border-color:rgba(178,106,0,.35)}
+/* OPRA 徽章行（原生 OpraAutoEqBadge / OpraSampleBadge 同款）：AutoEQ 标记 + 来源徽章 */
+.obdgs{display:flex;gap:6px;align-items:center;padding:2px 0 4px;flex-wrap:wrap}
+.obdg{font-size:10px;border-radius:10px;padding:2px 9px;white-space:nowrap;line-height:1.6}
+.obdg.auto{background:var(--sel);color:var(--accent);font-weight:600}
+.obdg.src{background:var(--pill);color:var(--text2);border:1px solid var(--pillbr);cursor:pointer;user-select:none}
+.obdg.src:hover{background:var(--hover)}
+.obdg.src.on{border-color:var(--accent);color:var(--accent);opacity:1}
+.dsubhead{font-size:12.5px;font-weight:600;color:var(--text);padding:12px 0 4px}
 #d_opraCanvas{display:block;width:100%;height:240px}
 .bands{display:flex;gap:6px;flex-wrap:wrap;padding:12px 0 6px}
 .bchip{min-width:34px;height:30px;border-radius:15px;border:1px solid var(--pillbr);background:var(--pill);
@@ -959,20 +967,22 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
                   <button class="dbtn pri" id="d_btnOpraSearch">搜索</button>
                 </div>
                 <div class="dbtnrow" id="d_opraVendors"></div>
+                <div class="note" id="d_opraVendorNote" style="font-size:11px;color:var(--text3);padding:4px 0 0;line-height:1.6"></div>
                 <div class="note" id="d_opraSearchState" style="font-size:12px;color:var(--text2);padding:4px 0 0;line-height:1.7"></div>
                 <div id="d_opraProducts"></div>
                 <div class="dcard" id="d_opraDetail" style="display:none">
                   <div class="ct" id="d_opraDetailTitle"></div>
                   <div class="note" id="d_opraDetailSub" style="margin-bottom:6px"></div>
-                  <div class="crow wrap">
-                    <span class="cl">来源筛选</span>
-                    <select id="d_opraFilter" class="csel">
-                      <option value="all">全部曲线</option>
-                      <option value="community">仅社区测量 (AutoEq)</option>
-                      <option value="opra">仅 OPRA 库曲线</option>
-                    </select>
+                  <!-- 徽章行照原生 OpraAutoEqBadge / OpraSampleBadge：AutoEQ 标记 +
+                       来源徽章（点一下只看这类，再点看全部） -->
+                  <div class="obdgs" id="d_opraBadges" style="display:none">
+                    <span class="obdg auto" id="d_opraAutoEq">AutoEQ</span>
+                    <span class="obdg src" id="d_opraSrcBadge" title="点一下只看这一类来源的曲线，再点回到全部"></span>
                   </div>
+                  <div class="dsubhead">选择校正曲线</div>
                   <div id="d_opraEqs"></div>
+                  <div class="note" id="d_opraEqDetail" style="font-size:12px;color:var(--text2);line-height:1.7;padding:2px 0 2px"></div>
+                  <div class="dsubhead">这条曲线长什么样</div>
                   <div class="eqwrap" id="d_opraPreviewWrap" style="display:none">
                     <canvas id="d_opraCanvas"></canvas>
                     <div class="eqlegend">
@@ -980,18 +990,21 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
                       <span id="d_opraPrevInfo"></span>
                     </div>
                   </div>
+                  <div class="note" id="d_opraPreviewNote" style="font-size:11.5px;color:var(--text3);line-height:1.6">在上面选一条曲线，这里就画出它把哪些频率抬起来、哪些压下去。</div>
+                  <div class="note" id="d_opraEqState" style="font-size:12px;color:var(--text2);line-height:1.7"></div>
                   <div class="dbtnrow">
-                    <button class="dbtn pri" id="d_btnOpraApply" disabled>应用到 EQ</button>
+                    <button class="dbtn pri" id="d_btnOpraApply" disabled>应用该曲线到均衡器</button>
                     <button class="dbtn" id="d_btnOpraFav" disabled>收藏</button>
                   </div>
-                  <div class="note" id="d_opraEqState"></div>
                 </div>
                 <div class="dcard">
                   <div class="ct">最近用过 / 收藏</div>
                   <div id="d_opraRecent"></div>
-                  <div class="note" style="color:var(--text3);font-size:11px;line-height:1.6;margin-top:8px">
-                    曲线数据来自 Roon 的 OPRA 开源数据库（opra.roonlabs.net），第一次用要联网下载，之后走本地缓存。
-                    应用后曲线会进上面的 EQ 频段，可以接着手动微调；开启 EQ 后输出不再是 bit-perfect。</div>
+                  <div class="note" style="color:var(--text3);font-size:11px;line-height:1.6;margin-top:8px">点任意一条直接打开；★ 是收藏，🕘 是最近用过。</div>
+                </div>
+                <div class="dcard dim"><div class="ct">工作原理</div>
+                  <div class="note">校正和 EQ 是同一条链路：应用校正后，上面的 EQ 面板显示的就是这条曲线，你手动改 EQ 会盖掉校正结果。</div>
+                  <div class="note" style="margin-top:6px">数据源：opra.roonlabs.net（联网查询，离线时用上次缓存）。</div>
                 </div>
 
               </section>
@@ -1299,6 +1312,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     songByAlbum: {}, // 专辑名 -> 歌曲下标数组。专辑封面按专辑粒度算一次，
                      // 同一专辑的歌共用这张图——3609 首各解一次封面要几百秒，
                      // 云盘曲库下更扛不住。专辑封面到货后靠它回填歌曲行。
+    coverByAlbum: {}, // 专辑名（小写） -> 封面 URL。**跨快照存活**：C# 全量重推时
+                     // S.songs 整个换对象（新对象不带 cover），行重渲染时按专辑名
+                     // 从这里把封面找回来，不然封面条会跳回首字符（2026-10-10 用户实测）。
     artists: [],      // 艺术家墙（C# 推来，头像后台预热按批补）
     artistView: [],   // 筛选后的艺术家下标（元素是 artists 的下标）
     artist: null,     // 打开的艺术家详情 {name,n,dur,cover}
@@ -1473,10 +1489,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       : esc(t.artist || '') + (t.album ? ' · ' + esc(t.album) : '');
     // 播放最多面板：副标题尾巴带播放次数（原生不显示，用户 2026-10-09 要求补）
     if (t.plays) sub += ' · 播放 ' + t.plays + ' 次';
+    // 封面：快照自带的优先，空了按专辑名查跨重推缓存（S.songs 被整对象替换过）
+    var cov = t.cover || (t.album ? S.coverByAlbum[t.album.toLowerCase()] : '') || '';
     return '<div class="row' + (on ? ' on' : '') + '" data-s="' + si + '" data-n="' + (si + 1) + '">'
          +   '<div class="n">' + (on ? '&#9834;' : (si + 1)) + '</div>'
-         +   '<div class="a">' + (t.cover
-              ? '<img src="' + t.cover + '" alt="" onerror="postCoverErr(this.src)">'
+         +   '<div class="a"' + (cov ? ' data-src="' + cov + '"' : '') + '>' + (cov
+              ? '<img src="' + cov + '" alt="" onerror="postCoverErr(this.src)">'
               : esc((t.title || '?').slice(0, 1))) + '</div>'
          +   '<div class="m">'
          +     '<div class="t">' + esc(t.title) + '</div>'
@@ -1521,8 +1539,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
      歌曲快照本身不带封面（逐首解封面 3609 首读不动），封面按专辑粒度算一次共用。
      行可能还没渲染（分批渲染中）——只更新已渲染的，没渲染的等 songRow 时读 t.cover。 */
   function fillSongCovers(albumName, cover){
+    var key = String(albumName || '').toLowerCase();
+    // 先写跨重推缓存再判断页面状态：专辑详情里 #rows 不是歌曲行（按歌曲下标去撞会错位），
+    // 但缓存照写——从详情返回歌曲列表时 songRow 还要靠它把封面画出来
+    if (key && cover) S.coverByAlbum[key] = cover;
     if (inDetail()) return;   // 详情里 #rows 不是歌曲行，别按歌曲下标去撞
-    var arr = S.songByAlbum[String(albumName || '').toLowerCase()];
+    var arr = S.songByAlbum[key];
     if (!arr) return;
     for (var j = 0; j < arr.length; j++){
       var si = arr[j];
@@ -1530,7 +1552,12 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       if (!t) continue;
       t.cover = cover;
       var slot = $('rows').querySelector('.row[data-s="' + si + '"] .a');
-      if (slot) slot.innerHTML = '<img src="' + cover + '" alt="" onerror="postCoverErr(this.src)">';
+      // data-src 守卫（同 npCov 范本）：同一张图重复回填不重建 img，
+      // 不然后台每批封面到货都会把行里的图闪掉一次
+      if (slot && slot.getAttribute('data-src') !== cover){
+        slot.setAttribute('data-src', cover);
+        slot.innerHTML = '<img src="' + cover + '" alt="" onerror="postCoverErr(this.src)">';
+      }
     }
   }
   function pump(){
@@ -1602,8 +1629,10 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
 
   /* ---------- 专辑网格 ---------- */
   function albumCard(a){
-    var cov = a.cover
-      ? '<img src="' + a.cover + '" alt="" onerror="postCoverErr(this.src)">'
+    // 封面同样走跨重推缓存：S.albums 被整列表替换后新对象不带 cover
+    var url = a.cover || S.coverByAlbum[(a.name || '').toLowerCase()] || '';
+    var cov = url
+      ? '<img src="' + url + '" alt="" onerror="postCoverErr(this.src)">'
       : esc((a.name || '?').slice(0, 1));
     return '<div class="acard" data-a="' + a.i + '">'
          +   '<div class="cv">' + cov + '</div>'
@@ -3645,8 +3674,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     });
     $('d_btnOpraApply').addEventListener('click', function(){ post({kind:'dspact', a:'opraapply'}); });
     $('d_btnOpraFav').addEventListener('click', function(){ post({kind:'dspact', a:'oprafav'}); });
-    $('d_opraFilter').addEventListener('change', function(){
-      post({kind:'dspact', a:'oprafilter', v:this.value});
+    // 来源徽章 = 筛选开关（原生 OpraSourceBadge_Tapped：点一下只看这类，再点看全部）
+    $('d_opraSrcBadge').addEventListener('click', function(){
+      post({kind:'dspact', a:'oprafilter'});
     });
     $('d_btnPfSave').addEventListener('click', function(){
       post({kind:'dspact', a:'pfsave', name:$('d_pfName').value});
@@ -3907,6 +3937,13 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
         })(vs[i]);
       }
     }
+    // 品牌墙说明照原生 OpraVendorWallNote：有库报个数，没库让用户等一下
+    var vn = $('d_opraVendorNote');
+    if (vn){
+      vn.textContent = (d.vendors && d.vendors.length)
+        ? '共 ' + d.vendors.length + ' 个热门品牌（括号里是该品牌收录的型号数）。点一下直接搜。'
+        : 'OPRA 数据库还没加载好，先等一下（或检查网络）。';
+    }
     opraRecentRender();
   }
   function opraRecentRender(){
@@ -3935,10 +3972,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   }
   function opraResultsRender(){
     var r = OPRA.results; if (!r) return;
-    // 新的一轮搜索：上一轮的型号详情和曲线预览全部作废
+    // 新的一轮搜索：上一轮的型号详情、曲线预览、徽章、选中态全部作废
+    // （原生 ClearOpraDetail + ClearOpraPreview 同口径）
     OPRA.detail = null; OPRA.curve = null;
     var cd = $('d_opraDetail'); if (cd) cd.style.display = 'none';
     var pw = $('d_opraPreviewWrap'); if (pw) pw.style.display = 'none';
+    var ed = $('d_opraEqDetail'); if (ed) ed.innerHTML = '';
+    var bg = $('d_opraBadges'); if (bg) bg.style.display = 'none';
+    var ap = $('d_btnOpraApply'); if (ap) ap.disabled = true;
+    var fv = $('d_btnOpraFav'); if (fv){ fv.disabled = true; fv.textContent = '收藏'; }
     var st = $('d_opraSearchState');
     if (st) st.textContent = r.status || '';
     var host = $('d_opraProducts'); if (!host) return;
@@ -3958,6 +4000,31 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       })(ps[i]);
     }
   }
+  /* 徽章行照原生 UpdateOpraSourceBadge / UpdateOpraPreview：
+     AutoEQ 徽章只在选中曲线命中社区测量时显示；来源徽章选了型号就显示，
+     文案随筛选态在「点此只看这类 / 已筛选（点此看全部）」之间变，
+     主动筛选时加一圈强调边框（原生 DspAccentColor 同款「点了有效果」）。 */
+  function opraBadgeRender(){
+    var d = OPRA.detail;
+    var bg = $('d_opraBadges');
+    if (!bg || !d) return;
+    var sel = d.sel || '';
+    var eq = null;
+    var list = d.eqs || [];
+    for (var i = 0; i < list.length; i++) if (list[i].eqId === sel) eq = list[i];
+    var community = eq ? !!eq.community : !!(OPRA.curve && OPRA.curve.community);
+    var auto = $('d_opraAutoEq');
+    if (auto) auto.style.display = (sel && community) ? '' : 'none';
+    var src = $('d_opraSrcBadge');
+    if (src){
+      var filter = d.filter || 'all';
+      var active = (filter !== 'all') && (filter === (community ? 'community' : 'opra'));
+      src.textContent = (community ? '社区测量' : 'OPRA 库')
+        + (active ? ' · 已筛选（点此看全部）' : ' · 点此只看这类');
+      if (src.classList) src.classList.toggle('on', !!active);
+    }
+    bg.style.display = '';
+  }
   function opraDetailRender(){
     var d = OPRA.detail; if (!d) return;
     var card = $('d_opraDetail');
@@ -3967,10 +4034,18 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
     var sub = $('d_opraDetailSub');
     if (sub) sub.textContent = (p.vendor || '') + (p.subtype ? ' · ' + p.subtype : '')
       + '（' + (p.eqCount || 0) + ' 条曲线）';
-    var fsel = $('d_opraFilter');
-    if (fsel) fsel.value = d.filter || 'all';
+    // 状态文字：C# 推了才盖（原生选中曲线不写 OpraEqStatusText，
+    // 产品态/应用回执/筛空提示才会写——空串时保持现状）
     var st = $('d_opraEqState');
-    if (st) st.textContent = d.status || '';
+    if (st && d.status) st.textContent = d.status;
+    // 没选中曲线（刚选型号）：预览/详情文字/徽章/按钮全部回到初始态
+    if (!d.sel){
+      var pw0 = $('d_opraPreviewWrap'); if (pw0) pw0.style.display = 'none';
+      var ed0 = $('d_opraEqDetail'); if (ed0) ed0.innerHTML = '';
+      var ap0 = $('d_btnOpraApply'); if (ap0) ap0.disabled = true;
+      var fv0 = $('d_btnOpraFav'); if (fv0){ fv0.disabled = true; fv0.textContent = '收藏'; }
+    }
+    opraBadgeRender();
     var host = $('d_opraEqs'); if (!host) return;
     host.innerHTML = '';
     var eqs = d.eqs || [];
@@ -3983,15 +4058,18 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           + '<div class="rt">' + (e.community ? '<span class="bdg com">社区测量</span>' : '')
           + (e.fav ? ' <span class="bdg fav">★ 已收藏</span>' : '') + '</div>';
         div.addEventListener('click', function(){
-          // 点曲线即应用（2026-10-10 用户："点击某条曲线也应用不了"）：
-          // 先选中（拿频段+预览）再立刻应用，上面的 EQ 曲线当场画出效果
+          // 点曲线 = 只选中（原生 OpraEqList_ItemClick：选中即预览，
+          // 应用要另外点「应用该曲线到均衡器」——2026-10-10 用户反馈后改回原生流程）
           post({kind:'dspact', a:'opraseleq', id:e.eqId});
-          post({kind:'dspact', a:'opraapply'});
         });
         host.appendChild(div);
       })(eqs[i]);
     }
-    if (!eqs.length && st) st.textContent = d.status || '这个来源筛选下没有曲线，换个筛选看看。';
+    if (!eqs.length && st && !d.status){
+      st.textContent = (d.filter && d.filter !== 'all')
+        ? '该来源筛选下没有曲线，再点一次来源徽章可看全部。'
+        : '这个型号没有可用曲线。';
+    }
   }
   function opraCurveRender(){
     var c = OPRA.curve; if (!c) return;
@@ -4002,6 +4080,13 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       info.textContent = (c.community ? '社区测量' : 'OPRA 库') + ' · ' + (c.bandCount || 0)
         + ' 段 · 预增益 ' + opraPre(c.preampDb);
     }
+    // 曲线详情文字照原生 OpraEqDetailText：作者 / 滤波段数 / 预增益
+    var ed = $('d_opraEqDetail');
+    if (ed){
+      ed.innerHTML = '作者：' + esc(c.author || '') + '<br>滤波段数：' + (c.bandCount || 0)
+        + '<br>预增益：' + opraPre(c.preampDb);
+    }
+    opraBadgeRender();
     var ap = $('d_btnOpraApply'); if (ap) ap.disabled = false;
     var fav = $('d_btnOpraFav');
     if (fav){ fav.disabled = false; fav.textContent = c.fav ? '已收藏' : '收藏'; }
@@ -4345,6 +4430,11 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
       if (!m || !m.kind) return;
       switch (m.kind){
         case 'data':
+          // 数据开始到场：ready 补发到此为止。再补发就是全量重推——
+          // S.songs 整个换对象，行重建丢封面/胶囊，等 albumcovers 回填时界面跳
+          // （2026-10-10 用户实测「封面在正常封面和字符之间一跳一跳」）。
+          // 首条 ready 真丢了也有 C# 侧页面自检兜底（rows=0 时主动推）。
+          if (readyTimer){ clearInterval(readyTimer); readyTimer = null; }
           if (m.categories) { S.cats = m.categories; renderNav(); }
           if (typeof m.total === 'number') S.total = m.total;
           if (typeof m.cur === 'number') S.cur = m.cur;
@@ -4383,11 +4473,15 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
           if (m.items){
             for (var k = 0; k < m.items.length; k++){
               var it = m.items[k];
+              // 跨重推缓存照写（S.albums 整替换、S.songs 整替换都靠它把封面找回来）
+              if (it.album && it.cover) S.coverByAlbum[it.album.toLowerCase()] = it.cover;
               var a = S.albums[it.i];
               if (a) a.cover = it.cover || '';
               var card = $('albgrid').querySelector('.acard[data-a="' + it.i + '"] .cv');
-              if (card && a && a.cover)
+              if (card && a && a.cover && card.getAttribute('data-src') !== a.cover){
+                card.setAttribute('data-src', a.cover);
                 card.innerHTML = '<img src="' + a.cover + '" alt="" onerror="postCoverErr(this.src)">';
+              }
               if (it.album && it.cover) fillSongCovers(it.album, it.cover);
             }
           }
@@ -4791,7 +4885,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   post({kind:'ready'});
   /* 页面打开时可能已经有歌在播：跟 C# 要一次当前歌词（换曲时的 lyricsreq 覆盖不了这个场景） */
   post({kind:'lyricsreq'});
-  /* ready 补发：头一条可能在宿主对象刚注入、消息通道还没接稳时被丢（重复无害，幂等） */
+  /* ready 补发：头一条可能在宿主对象刚注入、消息通道还没接稳时被丢（重复无害）。
+     ⚠ 不是无限补发：data 消息一到就 clearInterval 停表（见收消息处的 case 'data'）——
+     每次 ready 都触发 C# 全量重推，行重建会把封面/胶囊抖掉再回填，界面一跳一跳。 */
   var readyN = 0;
   var readyTimer = setInterval(function(){
     if (++readyN > 4){ clearInterval(readyTimer); return; }
