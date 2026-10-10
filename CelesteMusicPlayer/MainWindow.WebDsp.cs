@@ -81,7 +81,7 @@ namespace CelesteMusicPlayer
             if (_webDspOpen) return;
             try
             {
-                // 三个网页覆盖层互斥：开 DSP 先关主界面与专辑试点
+                // 三个网页覆盖层互斥：开 DSP 先关主界面与 Apple 风格专辑页
                 if (_webMainOpen) CloseWebMain();
                 if (_webPilotOpen) CloseWebAlbumPilot();
 
@@ -803,7 +803,7 @@ namespace CelesteMusicPlayer
 
         /// <summary>选中一条曲线：刷新列表选中态 + 推预览频段（网页自己画曲线）。
         /// 原生 OpraEqList_ItemClick 只做「选中即预览」，应用要另外点按钮——
-        /// 2026-10-10 用户反馈后改回原生流程（试点页只换外观，功能不变）。</summary>
+        /// 2026-10-10 用户反馈后改回原生流程（Apple 风格页只换外观，功能不变）。</summary>
         private void WebOpraSelectEq(string eqId)
         {
             OpraProductEqSummary? eq = _opraEqs.FirstOrDefault(

@@ -1,4 +1,4 @@
-// 皮肤系统第 4 步：Apple 风格主界面 · 歌曲浏览 + 专辑面板（试点）
+// 皮肤系统第 4 步：Apple 风格主界面 · 歌曲浏览 + 专辑面板
 //
 // 用户 2026-10-09 拍板：先做歌曲浏览面板、专辑面板、（专辑）艺术家页面；
 // 2026-10-09 追加：我喜欢的音乐 / 评分 / 最近播放 / 播放队列 / 播放最多五个列表面板
@@ -18,9 +18,9 @@
 // 收藏全都上报给 C#，由 C# 调现有的播放方法。音频链路（独占 / bit-perfect /
 // DSD / DSP）一行不用碰。
 //
-// 与专辑试点页（WebAlbum.cs）的关系：
+// 与 Apple 风格专辑页（WebAlbum.cs）的关系：
 //   - 共用同一个常驻 WebView2 宿主与覆盖层（CelesteWebHostGrid），两个页面互斥打开；
-//   - play 语义与专辑试点页一致（d3c0d99 定稿）：**整表替换播放队列 + 从点中的行开始**，
+//   - play 语义与 Apple 风格专辑页一致（d3c0d99 定稿）：**整表替换播放队列 + 从点中的行开始**，
 //     这里"整表"= 当前网页列表（歌曲快照或专辑详情曲目，不是原生曲库队列里定位单曲）；
 //   - 消息协议在专辑页基础上加 nav（切分类）/ album（打开专辑）/ albums / albumcovers。
 //
@@ -172,7 +172,7 @@ namespace CelesteMusicPlayer
             {
                 DeployWebAsset("main.html");
 
-                // 两个网页覆盖层互斥：开主界面先关专辑试点（反之亦然）
+                // 两个网页覆盖层互斥：开主界面先关 Apple 风格专辑页（反之亦然）
                 if (_webPilotOpen) CloseWebAlbumPilot();
 
                 if (!await EnsureCelesteWebHostAsync()) return;
@@ -219,7 +219,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>关掉主界面试点，回到原生界面。</summary>
+        /// <summary>关掉主界面 Apple 风格页，回到原生界面。</summary>
         public void CloseWebMain()
         {
             if (!_webMainOpen) return;
@@ -241,12 +241,12 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 主界面试点页自检：Navigate 之后隔一会儿探页面真实状态，写进日志。
+        /// 主界面 Apple 风格页自检：Navigate 之后隔一会儿探页面真实状态，写进日志。
         ///   wv    = 页面里有没有 WebView2 宿主对象（没有 → 页面脚本被竞态打断）
         ///   rows  = 曲目行渲染了几行（>0 说明歌曲数据已经到达页面）
         ///   cards = 专辑卡渲染了几张（专辑网格视图下 rows 本来就是 0）
         ///   title = 页头显示的标题
-        /// wv=yes 却一行都没有 → 不等网页的 ready 上行，C# 主动推一次（与专辑试点页同款兜底）。
+        /// wv=yes 却一行都没有 → 不等网页的 ready 上行，C# 主动推一次（与 Apple 风格专辑页同款兜底）。
         /// </summary>
         private async Task ProbeWebMainStateAsync(Microsoft.Web.WebView2.Core.CoreWebView2 cv)
         {
@@ -655,7 +655,7 @@ namespace CelesteMusicPlayer
 
                 case "play":
                     {
-                        // 与专辑试点页同一套语义（d3c0d99）：整表替换播放队列，
+                        // 与 Apple 风格专辑页同一套语义（d3c0d99）：整表替换播放队列，
                         // 从点中的那一行开始。直接 PlayPlaylistItem 只会在旧队列里
                         // 定位——队列还是原来的，这首播完接的是旧队列的顺序。
                         // "整表"取当前网页列表：开着专辑详情就是这张专辑，否则是歌曲快照。
@@ -1690,7 +1690,7 @@ namespace CelesteMusicPlayer
         ///
         /// **必须分块**：3609 首打成一个大 JSON（1MB+）用 PostWebMessageAsString
         /// 一次性发，WebView2 渲染进程直接压死（2026-10-09 用户实测卡死）。
-        /// 专辑试点页只推 46 首没暴露过这个问题，主界面不行。
+        /// Apple 风格专辑页只推 46 首没暴露过这个问题，主界面不行。
         /// 另外 ready 补发 5 次 + 自检探针都会调本方法，用 _webMainPushing 互斥，
         /// 推完一次就拦住后续重复调用（nav 要刷新时先清标志再调）。
         /// </summary>
@@ -3461,7 +3461,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>歌曲库工具栏里的「新版界面（试点）」按钮。</summary>
+        /// <summary>歌曲库工具栏里的「Apple 风格界面」按钮。</summary>
         private void WebMainPilotButton_Click(object sender, RoutedEventArgs e)
             => _ = OpenWebMainAsync();
     }

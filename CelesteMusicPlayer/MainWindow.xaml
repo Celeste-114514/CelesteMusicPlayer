@@ -962,7 +962,7 @@
                         Spacing="8"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center">
-                        <!-- 皮肤系统第 4 步：Apple 风格主界面 · 歌曲浏览面板（试点）。
+                        <!-- 皮肤系统第 4 步：Apple 风格主界面 · 歌曲浏览面板。
                              只在歌曲分类显示；点了才第一次创建 WebView2，不点就永远不占那 286MB。 -->
                         <Button
                             x:Name="WebMainPilotButton"
@@ -971,10 +971,10 @@
                             CornerRadius="16"
                             BorderThickness="0"
                             Click="WebMainPilotButton_Click"
-                            ToolTipService.ToolTip="换成网页画的 Apple 风格界面浏览歌曲（试点，随时能退出来）">
+                            ToolTipService.ToolTip="切换到 Apple 风格界面浏览歌曲（随时可返回旧版）">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon Glyph="&#xE774;" FontSize="14" VerticalAlignment="Center" />
-                                <TextBlock Text="新版界面（试点）" VerticalAlignment="Center" />
+                                <TextBlock Text="Apple 风格界面" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                         <Button
@@ -2037,7 +2037,7 @@
                                                     <TextBlock Text="添加到播放列表" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </Button>
-                                            <!-- 皮肤系统第 3 步：网页版专辑详情（试点）。
+                                            <!-- 皮肤系统第 3 步：网页版专辑详情。
                                                  点了才第一次创建 WebView2，不点就永远不占那 286MB。 -->
                                             <Button
                                                 x:Name="AlbumDetailWebPilotButton"
@@ -2047,10 +2047,10 @@
                                                 BorderThickness="0"
                                                 HorizontalAlignment="Center"
                                                 Click="AlbumDetailWebPilotButton_Click"
-                                                ToolTipService.ToolTip="换成网页画的 Apple 风格界面看这张专辑（试点，随时能退出来）">
+                                                ToolTipService.ToolTip="切换到 Apple 风格界面看这张专辑（随时可返回旧版）">
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <FontIcon Glyph="&#xE774;" FontSize="15" />
-                                                    <TextBlock Text="新版界面（试点）" VerticalAlignment="Center" />
+                                                    <TextBlock Text="Apple 风格界面" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </Button>
                                         </StackPanel>
@@ -8844,11 +8844,11 @@
             </StackPanel>
         </Grid>
 
-        <!-- 网页试点层（皮肤系统第 3 步）。
+        <!-- Apple 风格层（皮肤系统第 3 步）。
              盖住主内容区和底部播放条，但**保留上面的原生标题栏**——
              窗口拖动、最小化、最大化、关闭仍然归系统管，网页不接管窗口。
              平时 Collapsed、WebView2 也还没创建，对现有界面零影响；
-             关掉试点就 Visible→Collapsed，原样回到原生界面。
+             关掉 Apple 风格界面就 Visible→Collapsed，原样回到原生界面。
              ⚠ 必须放在主 Grid 里而不是根 Grid：根 Grid 里会连标题栏一起盖掉。 -->
         <Grid
             x:Name="CelesteWebHostGrid"

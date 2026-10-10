@@ -41,7 +41,7 @@ namespace CelesteMusicPlayer
         /// <summary>网页上行消息计数，只为了日志里能编号（↓#1、↓#2……）。</summary>
         private int _celesteWebMsgSeq;
 
-        /// <summary>试点层右上角的原生返回钮（见 PrewarmCelesteWeb 里创建处）。</summary>
+        /// <summary>Apple 风格层右上角的原生返回钮（见 PrewarmCelesteWeb 里创建处）。</summary>
         private Microsoft.UI.Xaml.Controls.Button? _celesteWebBackButton;
 
         /// <summary>网页请求的路由（消息处理里转发）。</summary>
@@ -75,7 +75,7 @@ namespace CelesteMusicPlayer
                 }
                 CelesteWebHostGrid.Children.Add(web);
 
-                // 试点层的原生返回钮，浮在网页右上角（网页自己的返回箭头在左上角，不打架）。
+                // Apple 风格层的原生返回钮，浮在网页右上角（网页自己的返回箭头在左上角，不打架）。
                 // WinUI3 岛屿架构下网页的输入链路比原生控件长，万一出问题，这是保证用户
                 // 随时能退回原生界面的兜底；代码里后 Add 的子弟在上层，不会网页挡掉。
                 var backBtn = new Microsoft.UI.Xaml.Controls.Button
@@ -94,7 +94,7 @@ namespace CelesteMusicPlayer
                 backBtn.Click += (s, e) =>
                 {
                     // 三个网页页面互斥：DSP 页开着就关它回主界面（与网页左上「‹ 返回」同语义），
-                    // 否则主界面开着就关主界面，再否则关专辑试点
+                    // 否则主界面开着就关主界面，再否则关 Apple 风格专辑页
                     if (_webDspOpen) { CloseWebDsp(); _ = OpenWebMainAsync(); }
                     else if (_webMainOpen) CloseWebMain();
                     else CloseWebAlbumPilot();
@@ -135,7 +135,7 @@ namespace CelesteMusicPlayer
                 cv.WebMessageReceived += CelesteWebOnMessageReceived;
 
                 // ---- 故障可见性：浏览器进程死没死、导航成没成，日志里必须留痕 ----
-                // "关掉试点后再打不开"的成因推定：浏览器进程崩溃后 CoreWebView2
+                // "关掉 Apple 风格界面后再打不开"的成因推定：浏览器进程崩溃后 CoreWebView2
                 // 会变成 null，而 ProcessFailed 一定先于它触发。用户手测后看这两行
                 // 就能分清是页面没渲染、宿主坏了、还是消息没到。
                 cv.NavigationCompleted += OnCelesteWebNavigationCompleted;
@@ -323,13 +323,13 @@ namespace CelesteMusicPlayer
             catch (Exception ex)
             {
                 StartupLog.WriteException("CelesteWebOnMessageReceived.read", ex);
-                StartupLog.Write($"[Web试点] ↓#{seq} 事件到达但读取失败 hr=0x{ex.HResult:X8}");
+                StartupLog.Write($"[Apple试点] ↓#{seq} 事件到达但读取失败 hr=0x{ex.HResult:X8}");
                 return;
             }
 
             string src = "";
             try { src = e.Source ?? ""; } catch { /* Source 读不到不致命 */ }
-            StartupLog.Write($"[Web试点] ↓#{seq} via={via} len={raw.Length} src={src} | " +
+            StartupLog.Write($"[Apple试点] ↓#{seq} via={via} len={raw.Length} src={src} | " +
                              (raw.Length > 96 ? raw.Substring(0, 96) + "…" : raw));
             if (string.IsNullOrWhiteSpace(raw)) return;
 
@@ -361,13 +361,13 @@ namespace CelesteMusicPlayer
             }
             if (msg == null)
             {
-                StartupLog.Write($"[Web试点] ↓#{seq} 解析不出 kind，丢弃");
+                StartupLog.Write($"[Apple试点] ↓#{seq} 解析不出 kind，丢弃");
                 return;
             }
 
             // 每条上行消息都记账：网页"点了没反应"时，先看这里有没有记录——
             // 有记录 = C# 收到了、问题在后续处理；没记录 = 消息根本没发出来。
-            StartupLog.Write($"[Web试点] ↑ {msg.Kind}");
+            StartupLog.Write($"[Apple试点] ↑ {msg.Kind}");
 
             try { CelesteWebHandleMessage(msg); }
             catch (Exception ex) { StartupLog.WriteException("CelesteWebHandleMessage:" + msg.Kind, ex); }
@@ -390,7 +390,7 @@ namespace CelesteMusicPlayer
                 case "ready":
                     // 网页侧初始化完成：把当前主题和路由推过去
                     _ = PushCelesteThemeAndRouteAsync();
-                    // 第 3 步起：试点页就绪，顺手把专辑数据也推过去
+                    // 第 3 步起：Apple 风格页就绪，顺手把专辑数据也推过去
                     // （ready 被这个 case 截住了，不会落到 default，所以要显式调一次）
                     // 第 4 步起：主界面的歌曲浏览面板开着时推它的数据（三个页面互斥）
                     // 第 5 步起：音效处理（DSP）页的消息交给 MainWindow.WebDsp.cs 处理
@@ -400,7 +400,7 @@ namespace CelesteMusicPlayer
                     break;
 
                 default:
-                    // 第 3 步起：专辑详情页试点的消息交给 MainWindow.WebAlbum.cs 处理
+                    // 第 3 步起：专辑详情页 Apple 风格界面的消息交给 MainWindow.WebAlbum.cs 处理
                     // 第 4 步起：主界面歌曲浏览面板的消息交给 MainWindow.WebMain.cs 处理
                     // 第 5 步起：音效处理（DSP）页的消息交给 MainWindow.WebDsp.cs 处理
                     if (_webMainOpen) HandleWebMainMessage(msg);

@@ -1,12 +1,12 @@
-// 皮肤系统第 3 步：专辑详情页的网页试点（Apple 风格）
+// 皮肤系统第 3 步：专辑详情页的 Apple 风格界面
 //
 // 分工铁律：**网页只负责长什么样，一件事都不做**——点播放、拖进度、切歌全都上报给 C#，
 // 由 C# 调现有的播放方法。这样音频链路（独占 / bit-perfect / DSD / DSP）一行不用碰。
 //
-// 试点层盖住主内容区和底部播放条，但**保留上面的原生标题栏**：
+// Apple 风格层盖住主内容区和底部播放条，但**保留上面的原生标题栏**：
 // 窗口拖动、最小化、最大化、关闭仍然归系统管，网页不接管窗口（省掉一整套 P/Invoke）。
 // 平时这一层是 Collapsed、WebView2 也压根没创建，对现有界面零影响；
-// 关掉试点只是 Visible→Collapsed，原样回到原生界面。
+// 关掉 Apple 风格界面只是 Visible→Collapsed，原样回到原生界面。
 //
 // 消息协议（与 WebUI/album.html 里的 post() 一一对应，改一边必须改另一边）：
 //   C# → 网页：data（专辑+曲目）、now（播放状态，每秒）、theme（深浅色）
@@ -28,7 +28,7 @@ namespace CelesteMusicPlayer
         private bool _webPilotOpen;
         private DispatcherTimer? _webPilotTimer;
 
-        /// <summary>专辑封面的虚拟域名地址，打开试点时算一次，推送时直接复用。</summary>
+        /// <summary>专辑封面的虚拟域名地址，打开 Apple 风格界面时算一次，推送时直接复用。</summary>
         private string _webCoverUrl = "";
 
         /// <summary>网页资源目录。虚拟域名 celeste.local 就指向这里。</summary>
@@ -47,7 +47,7 @@ namespace CelesteMusicPlayer
                 string src = Path.Combine(AppContext.BaseDirectory, "WebUI", fileName);
                 if (!File.Exists(src))
                 {
-                    StartupLog.Write($"[Web试点] 网页文件不在：{src}");
+                    StartupLog.Write($"[Apple试点] 网页文件不在：{src}");
                     return;
                 }
                 Directory.CreateDirectory(WebAssetRoot);
@@ -72,11 +72,11 @@ namespace CelesteMusicPlayer
             for (int i = 0; i < 80 && _celesteWebInitializing; i++)
                 await Task.Delay(100);
             if (_celesteWebInitializing)
-                StartupLog.Write("[Web试点] 等 WebView2 预热超时，按当前状态继续");
+                StartupLog.Write("[Apple试点] 等 WebView2 预热超时，按当前状态继续");
 
             if (_celesteWebReady && _celesteWeb?.CoreWebView2 == null)
             {
-                StartupLog.Write("[Web试点] 宿主内核已失效，重建 WebView2");
+                StartupLog.Write("[Apple试点] 宿主内核已失效，重建 WebView2");
                 CleanupCelesteWeb(_celesteWeb);
                 await PrewarmCelesteWeb();
             }
@@ -87,13 +87,13 @@ namespace CelesteMusicPlayer
 
             if (!_celesteWebReady || _celesteWeb?.CoreWebView2 == null)
             {
-                StartupLog.Write("[Web试点] WebView2 没起来，试点页放弃，界面保持原样");
+                StartupLog.Write("[Apple试点] WebView2 没起来，Apple 风格页放弃，界面保持原样");
                 return false;
             }
             return true;
         }
 
-        /// <summary>打开网页试点页。任何一步失败都静默降级：界面保持原生版，程序照常用。</summary>
+        /// <summary>打开 Apple 风格页。任何一步失败都静默降级：界面保持原生版，程序照常用。</summary>
         public async Task OpenWebAlbumPilotAsync()
         {
             if (_webPilotOpen) return;
@@ -101,7 +101,7 @@ namespace CelesteMusicPlayer
             {
                 DeployWebAsset("album.html");
 
-                // 两个网页覆盖层互斥：开专辑试点先关主界面（反之亦然，见 WebMain.cs）
+                // 两个网页覆盖层互斥：开 Apple 风格专辑页先关主界面（反之亦然，见 WebMain.cs）
                 if (_webMainOpen) CloseWebMain();
 
                 // 第一个 WebView2 实例要吃 286MB，所以不到真正要用的时候不建；
@@ -146,7 +146,7 @@ namespace CelesteMusicPlayer
                 _webPilotTimer.Tick += WebPilotTimer_Tick;
                 _webPilotTimer.Start();
 
-                StartupLog.Write("[Web试点] 已打开网页版专辑详情");
+                StartupLog.Write("[Apple试点] 已打开网页版专辑详情");
             }
             catch (Exception ex)
             {
@@ -174,7 +174,7 @@ namespace CelesteMusicPlayer
             return false;
         }
 
-        /// <summary>关掉试点，回到原生界面。</summary>
+        /// <summary>关掉 Apple 风格界面，回到原生界面。</summary>
         public void CloseWebAlbumPilot()
         {
             if (!_webPilotOpen) return;
@@ -183,11 +183,11 @@ namespace CelesteMusicPlayer
             _webPilotTimer?.Stop();
             if (CelesteWebHostGrid != null) CelesteWebHostGrid.Visibility = Visibility.Collapsed;
             if (_celesteWebBackButton != null) _celesteWebBackButton.Visibility = Visibility.Collapsed;
-            StartupLog.Write("[Web试点] 已关闭，回到原生界面");
+            StartupLog.Write("[Apple试点] 已关闭，回到原生界面");
         }
 
         /// <summary>
-        /// 试点页自检：Navigate 之后隔一会儿探页面真实状态，写进日志。
+        /// Apple 风格页自检：Navigate 之后隔一会儿探页面真实状态，写进日志。
         ///   wv    = 页面里有没有 WebView2 宿主对象（没有 → 页面脚本被竞态打断）
         ///   rows  = 曲目行渲染了几行（>0 说明专辑数据已经到达页面）
         ///   title = 页头显示的专辑名（"专辑" = 还是默认值，数据没到）
@@ -216,7 +216,7 @@ namespace CelesteMusicPlayer
                         "return JSON.stringify({wv:wv,rows:rows,title:t?t.textContent:'?',empty:e?'yes':'no',btn:b?'yes':'no'});" +
                         "}catch(err){return 'PROBE_ERR:'+err;}})()");
                     string state = DecodeScriptResult(raw);
-                    StartupLog.Write($"[Web试点] 页面自检 {state}");
+                    StartupLog.Write($"[Apple试点] 页面自检 {state}");
 
                     // 页面渲染正常（wv=yes）却一行数据都没有 → 不等网页的 ready 上行，
                     // C# 主动推一次。ready 上行曾经整体丢失（页面看着正常、显示 0 首、
@@ -234,7 +234,7 @@ namespace CelesteMusicPlayer
 
                     if (wvOk && rows == 0)
                     {
-                        StartupLog.Write("[Web试点] 页面没收到数据，主动推一次（不等 ready）");
+                        StartupLog.Write("[Apple试点] 页面没收到数据，主动推一次（不等 ready）");
                         _ = PushWebAlbumDataAsync();
                     }
 
@@ -244,14 +244,14 @@ namespace CelesteMusicPlayer
                         var r2 = await cv.ExecuteScriptAsync(
                             "(function(){try{var b=document.getElementById('btnExit');" +
                             "if(!b)return 'no-btn';b.click();return 'clicked';}catch(e){return 'ERR:'+e;}})()");
-                        StartupLog.Write($"[Web试点] 自检代点返回箭头 → {DecodeScriptResult(r2)}");
+                        StartupLog.Write($"[Apple试点] 自检代点返回箭头 → {DecodeScriptResult(r2)}");
                     }
                     if (rows > 0) return;   // 数据到了就不再探
                 }
                 catch (Exception ex)
                 {
                     StartupLog.Write(
-                        $"[Web试点] 页面自检第{i + 1}次失败 hr=0x{ex.HResult:X8} {ex.GetType().Name} {ex.Message}");
+                        $"[Apple试点] 页面自检第{i + 1}次失败 hr=0x{ex.HResult:X8} {ex.GetType().Name} {ex.Message}");
                 }
             }
         }
@@ -263,14 +263,14 @@ namespace CelesteMusicPlayer
             catch { return raw; }
         }
 
-        /// <summary>专辑详情页上的「新版界面（试点）」按钮。</summary>
+        /// <summary>专辑详情页上的「Apple 风格界面」按钮。</summary>
         private void AlbumDetailWebPilotButton_Click(object sender, RoutedEventArgs e)
             => _ = OpenWebAlbumPilotAsync();
 
         /// <summary>网页发过来的消息在这里落地。kind 与 album.html 里 post() 的那些一一对应。</summary>
         internal void HandleWebAlbumMessage(WebInboundMessage msg)
         {
-            // 试点没打开就一律不理（网页可能在关掉前又发了一条）
+            // Apple 风格界面没打开就一律不理（网页可能在关掉前又发了一条）
             if (!_webPilotOpen && msg.Kind != "ready") return;
 
             switch (msg.Kind)
@@ -296,7 +296,7 @@ namespace CelesteMusicPlayer
                                 AddSongsToUserPlaylist(_albumTracks.ToList());
                             }
                             StartupLog.Write(
-                                $"[Web试点] play：整专替换队列 {_albumTracks?.Count ?? 0} 首，从第 {i + 1} 首开始");
+                                $"[Apple试点] play：整专替换队列 {_albumTracks?.Count ?? 0} 首，从第 {i + 1} 首开始");
                             PlayPlaylistItem(track);
                         }
                         break;
@@ -357,11 +357,11 @@ namespace CelesteMusicPlayer
 
                 case "covererr":
                     // 网页封面图 <img onerror> 上报：URL 是空的还是图裂了，日志能直接分清
-                    StartupLog.Write($"[Web试点] 封面图片加载失败 src={ReadStr(msg.Payload, "src")}");
+                    StartupLog.Write($"[Apple试点] 封面图片加载失败 src={ReadStr(msg.Payload, "src")}");
                     break;
 
                 default:
-                    StartupLog.Write($"[Web试点] 未处理的消息 kind={msg.Kind}");
+                    StartupLog.Write($"[Apple试点] 未处理的消息 kind={msg.Kind}");
                     break;
             }
         }
@@ -412,7 +412,7 @@ namespace CelesteMusicPlayer
 
             // 封面 URL 记账（空也记）：用户实测"封面没出来"时，
             // 靠这行 + 网页 covererr 上报二分定位是没生成还是图裂
-            StartupLog.Write($"[Web试点] 专辑封面 URL={(string.IsNullOrEmpty(cover) ? "(空)" : cover)}");
+            StartupLog.Write($"[Apple试点] 专辑封面 URL={(string.IsNullOrEmpty(cover) ? "(空)" : cover)}");
 
             await PostCelesteWebAsync(new Dictionary<string, object?>
             {
