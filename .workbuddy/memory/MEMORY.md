@@ -24,6 +24,8 @@
 - **⚠「CSS 写了≠生效」**——新样式类必须真挂 DOM，用 `_webcheck/` harness 验；注入 JS 别用 Python repr。**本模型读不了 PNG**→几何验收一律 `--dump-dom` 写文本再 grep。**headless Edge 画不出 fixed 覆盖层**→用独立小页验。
 - **视图切换铁律**：独立容器只切 display，禁改 `#view` innerHTML；**必须 `#view.scrollTop=0`**（漏了=切歌页从第 301 行开始，BATCH=300）。
 - **⚠ 后台分批回填必须预留占位高度**：chips 每波回填把行文字顶高 11px→用户看"一跳一跳"。修法：第三行 div 永远渲染+`.chips{height:19px}` 写死。**通用规则：事后插入 DOM 撑高的回填，首渲染占好坑。**
+- **⚠ 全量重推防抖三件套（封面闪烁根因）**：ready 补发每次触发 C# `PushWebMainDataAsync`（`_webMainPushing` 只挡并发挡不住串行）→ `S.songs` 整对象替换→行重建丢封面→albumcovers 回填=封面字符之间跳。修法：① `case 'data'` 一到就 `clearInterval(readyTimer)` 停补发（首条丢了有 C# 页面自检兜底）；② `S.coverByAlbum`（专辑名小写→URL）跨重推存活，songRow/albumCard 回退查它；③ 回填加 `data-src` 守卫（同 URL 不重建 img，照 npCov 范本）。**探针量几何前确认元素非 display:none（矩形全 0）**。
+- **OPRA 网页通道照搬原生铁律（用户第四次强调「试点页只换外观功能不变」）**：点曲线行=仅选中+预览（`opraseleq`），应用必须点「应用该曲线到均衡器」按钮；来源筛选=徽章点击 toggle（AutoEQ 徽章+来源徽章「点此只看这类/已筛选」）；C# `WebOpraPushEqs("")` 空 status=不动状态文字（原生选中曲线不写 OpraEqStatusText）；筛空才写提示（原生 ApplyOpraEqFilter 口径）。
 - DSP 顶部空隙治法：量每行实际高度、砍空载行（#dspbar 开关并入 .dtop，栈高 119→84px），**光调 padding 治标**；副标题必须恒非空（「读取中…」兜底）。
 - **原生 DSP 读数按页可见才轮询**→PushWebDspStateAsync 先自调 UpdateDspFieldReadouts/ChannelBars/SafetyChain/CompMeters 再读文本（**别调 RedrawDspFieldRing，收起时 ActualWidth=0 直接 return**）。
 - **调原生 Click handler 两类**：纯动作可直接 `XxxButton_Click(this, new RoutedEventArgs())`；**弹 MenuFlyout 型不能照搬**（flyout 弹在网页底下）→换底层 core 方法或网页自绘菜单。
@@ -51,4 +53,8 @@
 - **⚠ 冒烟必须跑 exe 不能跑 dll**；用户实例在跑时冒烟被单实例挡掉（日志「已有实例在运行」=没验证到任何东西）。UIA 验证：进 DSP 面板必须先点「音效处理」；判失败逻辑不许写恒真式。
 - **沙箱进程自身 Low IL**：新文件带 Low Mandatory Label，apphost dlopen hostfxr 必挂（0x80070005/秒退 0x80008082 日志零行）。正解：①`dotnet publish -c Release -r win-x64 -p:Platform=x64 -p:CelesteSelfContainedDistribute=true`；②`python _fix_runlatest_il.py <目录>`。漏 -p:CelesteSelfContainedDistribute=true → exe 报 You must install .NET。
 - **鼠标注入被挡**：UIA 能读控件树/Invoke，Click 无效。窗口类名 `WinUIDesktopWin32WindowClass`。单实例 taskkill 后立刻 Popen 会秒退，需 poll() 后二次拉起。
+- **UIA 走树三坑（2026-10-10 实测定论）**：① uiautomation 库 `ControlTypeName` 返回值**带后缀**——判等写 `"Button"` 永远不中，要 `in ("Button","ButtonControl")`；② WinUI 图标按钮自身 AutomationName 常为空、可访问名在**子级 TextControl** 里（「Apple 风格界面」pill：Button name='' + 子 Text 带文案）→ 按钮「有效名」=自身 Name+全部子孙 TextControl 拼接后再匹配；③ 从桌面根 searchDepth=20 搜不到深树里的按钮，必须从 `WindowControl(ClassName="WinUIDesktopWin32WindowClass", searchDepth=3)` 起栈式 `GetChildren()` 逐层下探。
+- **「有没有活实例」权威判据 = tasklist 进程在不在**：`.running` 被 taskkill 杀过的实例会留下陈旧文件（文件在≠活着）；日志 mtime 不能当判据（空闲实例不写日志）；app 日志「启动」行时间会把上次测试残骸当活实例（误报过两轮）。Git Bash 里 `tasklist /FI` 的 /FI 被 MSYS 吞成路径 → 必须 `MSYS_NO_PATHCONV=1` 前缀。
+- **混合改动拆两个 commit 的安全手法**（改名+守卫混在同文件时）：临时 revert B 类改动 → add+commit A → 原样重新 apply B → **sha256 比对恢复后与 revert 前逐一一致** → commit B。字节一致 = 之前构建交付的产物依然对应当前 HEAD，不必重新构建。
+- **入口命名拍板（2026-10-10，提交 4bbaf2e）**：Apple 试点入口用户可见字样=「Apple 风格界面」（两个 pill 按钮 Text/ToolTip、album.html title、日志前缀 `[Apple试点]`）；「新版界面」一名预留给将要**平行新建**的 Windows 风试点页（照现有消息协议新建 HTML+入口，Apple 三页一行不动）。⚠ XAML 字面量不进 dll、进 `CelesteMusicPlayer.pri`——二进制验证扫 .pri。
 - Edge 无头：`"/c/Program Files (x86)/Microsoft/Edge/Application/msedge.exe" --headless=new --disable-gpu --hide-scrollbars --window-size=1660,980 --virtual-time-budget=3000 --screenshot=<abs.png> "file:///..."`，中文路径 URL 编码。沙箱 Python 隔离环境 `C:\Users\MSI\.workbuddy\binaries\python\envs\default`。
