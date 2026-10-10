@@ -30,6 +30,8 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
         private bool _webDspOpen;
+        // 打开中标志：同 OpenWebMainAsync——预热 await 之后才置 _webDspOpen，连点会双开。
+        private bool _webDspOpening;
         /// <summary>
         /// DSP 面板嵌在主界面网页里（左栏分类还在，面板只占右侧内容区）。
         /// 2026-10-10 用户要求：音效处理不要把左侧分类栏占掉，只在右侧区域显示对应面板。
@@ -78,7 +80,8 @@ namespace CelesteMusicPlayer
         /// <summary>打开音效处理网页面板。任何一步失败都静默降级：界面保持原生版，程序照常用。</summary>
         public async Task OpenWebDspAsync()
         {
-            if (_webDspOpen) return;
+            if (_webDspOpen || _webDspOpening) return;
+            _webDspOpening = true;
             try
             {
                 // 三个网页覆盖层互斥：开 DSP 先关主界面与 Apple 风格专辑页
@@ -126,6 +129,10 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.WriteException("OpenWebDsp", ex);
                 CloseWebDsp();
+            }
+            finally
+            {
+                _webDspOpening = false;
             }
         }
 

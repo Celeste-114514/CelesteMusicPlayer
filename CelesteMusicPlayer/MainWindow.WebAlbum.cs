@@ -26,6 +26,8 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
         private bool _webPilotOpen;
+        // 打开中标志：同 OpenWebMainAsync——预热 await 之后才置 _webPilotOpen，连点会双开。
+        private bool _webPilotOpening;
         private DispatcherTimer? _webPilotTimer;
 
         /// <summary>专辑封面的虚拟域名地址，打开 Apple 风格界面时算一次，推送时直接复用。</summary>
@@ -96,7 +98,8 @@ namespace CelesteMusicPlayer
         /// <summary>打开 Apple 风格页。任何一步失败都静默降级：界面保持原生版，程序照常用。</summary>
         public async Task OpenWebAlbumPilotAsync()
         {
-            if (_webPilotOpen) return;
+            if (_webPilotOpen || _webPilotOpening) return;
+            _webPilotOpening = true;
             try
             {
                 DeployWebAsset("album.html");
@@ -152,6 +155,10 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.WriteException("OpenWebAlbumPilot", ex);
                 CloseWebAlbumPilot();
+            }
+            finally
+            {
+                _webPilotOpening = false;
             }
         }
 

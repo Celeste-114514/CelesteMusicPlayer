@@ -77,6 +77,9 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
         private bool _webMainOpen;
+        // 打开中标志：EnsureCelesteWebHostAsync 预热要等 ~1.6s，_webMainOpen 的置位在它之后，
+        // 连点会双双穿过守卫 → 双导航 + 双自检循环（2026-10-10 冒烟实锤）。入口先挡这道，finally 收尾。
+        private bool _webMainOpening;
         private DispatcherTimer? _webMainTimer;
 
         /// <summary>推给网页的歌曲快照。网页 play 消息里的 index 按这份的下标，
@@ -167,7 +170,8 @@ namespace CelesteMusicPlayer
         /// <summary>打开歌曲浏览面板。任何一步失败都静默降级：界面保持原生版，程序照常用。</summary>
         public async Task OpenWebMainAsync()
         {
-            if (_webMainOpen) return;
+            if (_webMainOpen || _webMainOpening) return;
+            _webMainOpening = true;
             try
             {
                 DeployWebAsset("main.html");
@@ -216,6 +220,10 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.WriteException("OpenWebMain", ex);
                 CloseWebMain();
+            }
+            finally
+            {
+                _webMainOpening = false;
             }
         }
 
