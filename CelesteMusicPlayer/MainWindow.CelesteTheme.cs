@@ -65,6 +65,19 @@ namespace CelesteMusicPlayer
                 }
                 catch (Exception ex) { StartupLog.WriteException("ApplyCelesteThemeAsync.geek", ex); }
 
+                // ---- 4) 令牌测试皮肤：主题文件就是它的全部配色来源 ----
+                // 先让取色缓存失效（里面存的是旧主题对象），再重建系统刷子覆盖字典。
+                // 只动颜色不重跑 ApplyUiStyleMode——模式没变，没必要整树重排。
+                try
+                {
+                    if (IsTokenSkinActive())
+                    {
+                        InvalidateTokenColorCache();
+                        RefreshTokenSkinIfActive();
+                    }
+                }
+                catch (Exception ex) { StartupLog.WriteException("ApplyCelesteThemeAsync.tokenSkin", ex); }
+
                 await Task.CompletedTask;
             }
             catch (Exception ex)
@@ -118,7 +131,9 @@ namespace CelesteMusicPlayer
         /// 当前生效主题：优先用户选定的主题文件，否则用内置默认。
         /// ⚠ MainWindow.WebHost.cs 里原本也有一份，装回时已删除，别再拷回来（CS0111 重复定义）。
         /// </summary>
-        private CelesteThemeFile? LoadCelesteActiveTheme()
+        // internal：令牌测试皮肤（MainWindow.TokenSkin.cs）的静态取色缓存也要用——
+        // 它在静态上下文里跑，拿不到实例私有成员。
+        internal CelesteThemeFile? LoadCelesteActiveTheme()
         {
             string? name = null;
             try { name = AppSettingsStore.Load().CelesteThemeName; }
@@ -134,7 +149,8 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 当前是不是深色模式。极客皮肤强制深色——它的磷光配色只有深色一套。
         /// </summary>
-        private bool ResolveIsDark()
+        // internal：同上，令牌皮肤静态解析深浅用。
+        internal bool ResolveIsDark()
         {
             try
             {

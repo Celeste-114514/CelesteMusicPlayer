@@ -108,15 +108,19 @@ namespace CelesteMusicPlayer
                     // ContentPresenter.Foreground 动画成白色（动画优先级高于任何本地值），
                     // 所以光设置 container.Foreground 压不住 —— 必须给行内每个 TextBlock
                     // 显式设值（ApplyForegroundToDescendants），显式值优先于继承。
-                    var rowForeground = new SolidColorBrush(darkRow
-                        ? Windows.UI.Color.FromArgb(255, 255, 255, 255)
-                        : Windows.UI.Color.FromArgb(255, 0, 0, 0));
+                    // 令牌测试皮肤：行文字=令牌 Text.Primary——选中底换成令牌色后不一定是深底，
+                    // 不能沿用经典"深色主题白字/浅色主题黑字"的写法。取色失败回落经典灰阶。
+                    var rowForeground = new SolidColorBrush(TokenSkinCached
+                        ? ResolveTokenSkinColor(CelesteTokenCatalog.TextPrimary)
+                          ?? (darkRow ? Windows.UI.Color.FromArgb(255, 255, 255, 255)
+                                      : Windows.UI.Color.FromArgb(255, 0, 0, 0))
+                        : darkRow ? Windows.UI.Color.FromArgb(255, 255, 255, 255)
+                                  : Windows.UI.Color.FromArgb(255, 0, 0, 0));
                     container.Foreground = rowForeground;
                     if (selected)
                     {
-                        chrome.Background = new SolidColorBrush(darkRow
-                            ? Windows.UI.Color.FromArgb(58, 255, 255, 255)
-                            : Windows.UI.Color.FromArgb(40, 128, 128, 128));
+                        // 选中底色走统一入口（令牌皮肤=Selection.Background，经典/极客=原半透明灰）
+                        chrome.Background = new SolidColorBrush(ResolveClassicRowSelectionColor(container));
                         chrome.BorderBrush = accent;
                         ApplyForegroundToDescendants(chrome, rowForeground);
                     }
@@ -146,9 +150,8 @@ namespace CelesteMusicPlayer
                 if (IsOpaqueUiStyleActive())
                 {
                     bool darkRow = container.ActualTheme == ElementTheme.Dark;
-                    container.Background = new SolidColorBrush(darkRow
-                        ? Windows.UI.Color.FromArgb(58, 255, 255, 255)
-                        : Windows.UI.Color.FromArgb(40, 128, 128, 128));
+                    // 选中底色走统一入口（令牌皮肤=Selection.Background，经典/极客=原半透明灰）
+                    container.Background = new SolidColorBrush(ResolveClassicRowSelectionColor(container));
                     container.BorderThickness = new Thickness(3, 0, 0, 0);
                     container.BorderBrush = accent;
                 }
