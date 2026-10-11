@@ -627,7 +627,14 @@
                             </StackPanel>
                             <ToggleSwitch x:Name="NavEmojiSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
                         </Grid>
-                        <Grid ColumnSpacing="16">
+                        <!-- 【毛玻璃开关 · 2026-10-11 起临时下架】用户拍板：经典皮肤下的毛玻璃（亚克力）
+                             效果保留，但令牌化过程中背景效果是重要一环——在「测试皮肤」把背景/亚克力接进
+                             令牌之前，先不让人随手开闭关，免得和主题文件效果互相打脸。
+                             实现方式=整组 Collapsed（不是删元素）：x:Name 字段还在，cs 三处引用
+                             （加载 SetToggle / 保存 ?.IsOn / SettingToggle_Toggled 的 ReferenceEquals）
+                             原样生效，EnableFrostedGlass 设置值继续读写、效果不变。
+                             恢复方法：把下面这行 Grid 的 Visibility="Collapsed" 删掉即可。 -->
+                        <Grid ColumnSpacing="16" Visibility="Collapsed">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
