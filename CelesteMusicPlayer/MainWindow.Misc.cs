@@ -502,16 +502,29 @@ namespace CelesteMusicPlayer
             UpdateDspDeviceStatus();
         }
 
-        /// <summary>打开房间校正（卷积 FIR）独立窗口。</summary>
-        private void OpenRoomCorrectionButton_Click(object sender, RoutedEventArgs e)
-        {
-            OpenRoomCorrectionCore();
-        }
-
-        /// <summary>打开房间校正窗口核心（网页「音效处理」页直接调）。</summary>
+        /// <summary>
+        /// 打开房间校正：2026-10-12 阶段 2 起不再弹独立窗口 —— IR 导入已内嵌到
+        /// 音效处理的「FIR / 房间校正」页，这里直接跳过去并选中该页。
+        /// （网页「音效处理」页也走这里。）
+        /// </summary>
         internal void OpenRoomCorrectionCore()
         {
-            RoomCorrectionWindow.OpenOrActivate();
+            GoToDspPage(DspPageFirIndex);
+        }
+
+        /// <summary>切到音效处理面板并定位到指定 DSP 子页（阶段 2 起 RG 扫描 / 房间校正都走这条）。</summary>
+        private void GoToDspPage(int pageIndex)
+        {
+            ExitMultiSelectMode();
+            CommitLibraryNavigation(() =>
+            {
+                _currentCategory = "AudioFX";
+                ApplyCategoryView();
+            });
+            if (pageIndex >= 0)
+            {
+                SelectDspPage(pageIndex);
+            }
         }
 
 

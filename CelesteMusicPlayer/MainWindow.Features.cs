@@ -1880,29 +1880,14 @@ namespace CelesteMusicPlayer
             NowPlayingText.Text = message;
         }
 
-        /// <summary>打开 ReplayGain 扫描窗口：按范围（整库 / 当前播放列表 / 选中曲目）提供待扫描曲目。</summary>
+        /// <summary>
+        /// 打开 ReplayGain 扫描：2026-10-12 阶段 2 起不再弹独立窗口 ——
+        /// 扫描功能已内嵌到音效处理的「响度 · ReplayGain」页，这里直接跳过去。
+        /// 待扫描曲目由范围决定（整库 / 当前播放列表 / 选中曲目），见 BuildRgScanInputs。
+        /// </summary>
         private void OpenReplayGainScan()
         {
-            var win = new ReplayGainScanWindow(this, scope =>
-            {
-                if (scope == ReplayGainScanScope.Library)
-                {
-                    return LibraryDb.GetAllTracksForScan();
-                }
-
-                if (scope == ReplayGainScanScope.Playlist)
-                {
-                    return _playlist
-                        .Select(p => new RgScanInput { FilePath = p.FilePath, Album = p.Album, AlbumArtist = p.AlbumArtist })
-                        .ToList();
-                }
-
-                // Selection：仅对列表里多选的曲目扫描
-                return GetSelectedMultiSelectSongs()
-                    .Select(p => new RgScanInput { FilePath = p.FilePath, Album = p.Album, AlbumArtist = p.AlbumArtist })
-                    .ToList();
-            });
-            win.Activate();
+            GoToDspPage(DspPageRgIndex);
         }
 
 

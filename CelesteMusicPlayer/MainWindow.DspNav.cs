@@ -22,6 +22,8 @@ namespace CelesteMusicPlayer
         // 在导航中间插入新模块后必然错位；改为按 Page 引用从已构建的元数据表反查，
         // 增删页面/调整顺序都不需要再同步这里（导航未构建时返回 -1，调用处均能容忍）。
         private int DspPageSafetyIndex => FindDspPageIndex(DspPageSafety);
+        // ReplayGain 页（2026-10-12 阶段 2：批量扫描并入本页，需要一个能跳转过去的索引）
+        private int DspPageRgIndex => FindDspPageIndex(DspPageRg);
         private int DspPageFirIndex => FindDspPageIndex(DspPageFir);
         private int DspPageChannelIndex => FindDspPageIndex(DspPageChannel);
         private int DspPageEqIndex => FindDspPageIndex(DspPageEq);
@@ -320,6 +322,8 @@ namespace CelesteMusicPlayer
 
             if (idx == DspPageFirIndex)
             {
+                // 房间校正的 IR 导入已内嵌到本页（2026-10-12 阶段 2）：切进来把已保存的设置填进去
+                LoadRoomCorrectionIntoPanel();
                 RefreshRoomCorrectionInfo();
             }
 
@@ -765,7 +769,7 @@ namespace CelesteMusicPlayer
             RoomCorrectionState st = RoomCorrectionStore.Load();
             if (!st.Enabled || string.IsNullOrWhiteSpace(st.IrPath))
             {
-                RoomIrInfoText.Text = "未导入 IR：点上方卡片的「打开房间校正」导入脉冲响应 WAV。";
+                RoomIrInfoText.Text = "未导入 IR：在上面「脉冲响应（IR）文件」卡片里点「浏览…」选一个 .wav。";
                 if (RoomClipRiskText != null)
                 {
                     RoomClipRiskText.Text = "削波风险：—";
