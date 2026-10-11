@@ -34,6 +34,10 @@
 - 上行通道：songact/albumact/artistact/plsongact/order/rate/favcur/showqueue/mini/lyrics/feat。正在播放页 `#npPage` 点播放条封面进；`now.path` 变先清 S.nowCover。布局：左封面+右列（信息→歌词 flex:1→npBottom 进度条+控制条）。
 - 设计规格 `outputs/Apple风格界面-2026-10-09.html`：窗口 1592×906；顶栏 44；侧栏 228；行高 62；页头 98；播放条 90；强调 `#FA243C`。
 
+## 皮肤系统·平行换肤页（批次 1 = winmain.html，2026-10-11 提交 c411a34）
+- **平行页方案**：换肤=整页拷贝改 CSS（winmain：Segoe UI Variable Text/Fluent Icons/五处毛玻璃+Mica/4px 圆角/10px 开关/4px 轨），**DOM 与消息协议零改动**→C# 不复制推送逻辑，与 Apple 页共用 `_webMainOpen` 主开关；`_webWinOpen` 只记当前页；两入口互斥；`CloseWebMain()` 统一出口必须一并复位 `_webWinOpen`（漏了=再点入口被守卫挡掉，按钮失灵）。
+- `_webcheck` harness 页面维度：`WB_PAGE=<页>` 环境变量；产物后缀规则 **main/dsp 不加、平行页加 `_<页>`**（两套产物共存互不覆盖，老断言零改动）；dsp 场景只在 main 套跑且单独强制无后缀。字体可用性探针用 `document.fonts.check`（`window.fonts` 是 undefined）。np 歌词高亮：取最后一条 t<=pos 的原文行（场景 t=i*12、pos=65 → index 10=第 6 句）。
+
 ## WinUI3 铁律
 - **秒崩 0xC000027B**：XAML 带初值+事件绑定→事件在 InitializeComponent 就地触发，handler 写后续控件 x:Name（未解析=null）→NRE。**新面板 ValueChanged/Toggled 必须加「面板就绪」守卫**（照 _audioFxPanelReady/_dspRackReady）。
 - **FontFamily 绝不能赋 null**（WinRT 转 "Unknown"→COMException，赋值点当场中断、UI 空白日志干净）→回落 `ClearValue(...)`。Brush 可以 null。
@@ -52,6 +56,8 @@
 - **本项目无 ImplicitUsings**：新 .cs 用 SemaphoreSlim/CancellationTokenSource 须显式 `using System.Threading;`，Encoding 须 `using System.Text;`——照抄 MainWindow.Library.cs 的 using 块。
 - **⚠ 冒烟必须跑 exe 不能跑 dll**；用户实例在跑时冒烟被单实例挡掉（日志「已有实例在运行」=没验证到任何东西）。UIA 验证：进 DSP 面板必须先点「音效处理」；判失败逻辑不许写恒真式。
 - **沙箱进程自身 Low IL**：新文件带 Low Mandatory Label，apphost dlopen hostfxr 必挂（0x80070005/秒退 0x80008082 日志零行）。正解：①`dotnet publish -c Release -r win-x64 -p:Platform=x64 -p:CelesteSelfContainedDistribute=true`；②`python _fix_runlatest_il.py <目录>`。漏 -p:CelesteSelfContainedDistribute=true → exe 报 You must install .NET。
+- **IL 标签认知反转（2026-10-11）**：本机 **EnableLUA=0（UAC 关）→ explorer 跑 High IL**，给文件打显式 Medium 反而被 UIPI 挡掉 Shell_NotifyIcon（托盘图标必丢）→**「无标签」才是正确状态**；`_fix_runlatest_il.py` 已改逻辑只在确实是 Low 时才补 Medium。且本次沙箱写出的 791 个产物文件全部无 Low 标签（与 2026-09-30「沙箱产物必中招」旧结论不同）→ **判 IL 以 icacls 实查为准，别信旧结论**。
+- **裸 `python` 在后台 shell 跑脚本会段错误**（805ms 即崩，无任何输出）→ 用 `/c/Users/MSI/.workbuddy/binaries/python/envs/default/Scripts/python.exe`（带 uiautomation）或 `versions/3.13.12/python.exe`。
 - **鼠标注入被挡**：UIA 能读控件树/Invoke，Click 无效。窗口类名 `WinUIDesktopWin32WindowClass`。单实例 taskkill 后立刻 Popen 会秒退，需 poll() 后二次拉起。
 - **UIA 走树三坑（2026-10-10 实测定论）**：① uiautomation 库 `ControlTypeName` 返回值**带后缀**——判等写 `"Button"` 永远不中，要 `in ("Button","ButtonControl")`；② WinUI 图标按钮自身 AutomationName 常为空、可访问名在**子级 TextControl** 里（「Apple 风格界面」pill：Button name='' + 子 Text 带文案）→ 按钮「有效名」=自身 Name+全部子孙 TextControl 拼接后再匹配；③ 从桌面根 searchDepth=20 搜不到深树里的按钮，必须从 `WindowControl(ClassName="WinUIDesktopWin32WindowClass", searchDepth=3)` 起栈式 `GetChildren()` 逐层下探。
 - **「有没有活实例」权威判据 = tasklist 进程在不在**：`.running` 被 taskkill 杀过的实例会留下陈旧文件（文件在≠活着）；日志 mtime 不能当判据（空闲实例不写日志）；app 日志「启动」行时间会把上次测试残骸当活实例（误报过两轮）。Git Bash 里 `tasklist /FI` 的 /FI 被 MSYS 吞成路径 → 必须 `MSYS_NO_PATHCONV=1` 前缀。
