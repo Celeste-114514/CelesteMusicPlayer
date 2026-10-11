@@ -53,6 +53,9 @@ namespace CelesteMusicPlayer
             try
             {
                 InitializePlayerAndTimers();
+                // 主题系统合闸（皮肤系统第 3 步）：启动时把设置里选的主题文件应用到界面。
+                // 内部有「同名不重复应用」守卫，设置页后续变更再调也无额外开销。
+                ReloadThemeFromSettings();
                 // 任务栏缩略图按钮：必须在 Loaded 后注册，任务栏按钮就绪时才生效。
                 // 立即调一次 Add()（首次准备 + 第一次尝试 AddButtons），
                 // 然后启动一个短间隔 pump timer 让 ITaskbarThumbnailButtons.Pump() 推动延迟重试，

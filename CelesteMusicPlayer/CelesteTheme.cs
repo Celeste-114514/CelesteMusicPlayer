@@ -399,6 +399,10 @@ namespace CelesteMusicPlayer
             return t;
         }
 
+        /// <summary>序列化主题文件（与 Save 用同一套 JSON 选项，保证导出/分享的格式一致）。</summary>
+        public static string Serialize(CelesteThemeFile theme)
+            => JsonSerializer.Serialize(theme, JsonOpts);
+
         // ---------------- 跨渲染层映射 ----------------
 
         /// <summary>Celeste.Panel.Background → --celeste-panel-background</summary>

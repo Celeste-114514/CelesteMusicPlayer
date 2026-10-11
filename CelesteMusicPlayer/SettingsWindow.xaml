@@ -622,6 +622,27 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="主题文件" />
+                                <TextBlock Text="测试皮肤与网页版页面的配色来源（.celeste-theme，纯数据文件）。选「内置默认」= 程序原生配色；主题文件可以分享，用下面几个按钮管理" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ComboBox
+                                x:Name="ThemeFileCombo"
+                                Grid.Column="1"
+                                Width="220"
+                                SelectionChanged="ThemeFileCombo_SelectionChanged" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button Content="另存为…" x:Name="ThemeFileSaveAsButton" Click="ThemeFileSaveAsButton_Click" />
+                            <Button Content="导入…" x:Name="ThemeFileImportButton" Click="ThemeFileImportButton_Click" />
+                            <Button Content="导出…" x:Name="ThemeFileExportButton" Click="ThemeFileExportButton_Click" />
+                            <Button Content="打开目录" x:Name="ThemeFileOpenDirButton" Click="ThemeFileOpenDirButton_Click" />
+                        </StackPanel>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="启用 emoji 分类图标" />
                                 <TextBlock Text="开启：侧栏分类用彩色 emoji 图标；关闭：用纯色图形图标（与背景图式同一套）。极客皮肤不受此开关影响，终端风保持单色" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                             </StackPanel>

@@ -48,13 +48,11 @@ namespace CelesteMusicPlayer
 
             // ThemeDictionaries 是 WinUI 切深浅色的机制：系统主题一变，
             // 所有 {ThemeResource Celeste.*} 引用自动重新求值，无需重建字典。
-            dict.ThemeDictionaries["Default"] = BuildMode(theme, dark: false);
-            dict.ThemeDictionaries["HighContrast"] = BuildMode(theme, dark: true);
-            if (dark)
-            {
-                // 兜底：系统深色时用深色组当默认值（ThemeDictionaries 的 Default 键对应浅色）
-                dict.ThemeDictionaries["Light"] = BuildMode(theme, dark: false);
-            }
+            // ⚠ 键名必须是 "Light" / "Dark" / "HighContrast"——WinUI 只认这三个。
+            //   曾写成 "Default"/"HighContrast"，浅色模式下查不到 "Light" 键、
+            //   整本字典直接落空（当时无引用所以没暴露，令牌化时必须用对的键）。
+            dict.ThemeDictionaries["Light"] = BuildMode(theme, dark: false);
+            dict.ThemeDictionaries["Dark"] = BuildMode(theme, dark: true);
             return dict;
         }
 

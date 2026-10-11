@@ -551,6 +551,7 @@ namespace CelesteMusicPlayer
 
                 // 外观
                 SelectComboByTag(UiStyleModeCombo, s.UiStyleMode);
+                PopulateThemeFileCombo(s.CelesteThemeName);
                 SetToggle(FrostedGlassSwitch, s.EnableFrostedGlass);
                 SetToggle(NavEmojiSwitch, s.NavEmojiIcons);
                 SelectComboByTag(GeekPhosphorCombo, s.GeekPhosphorColor);
@@ -1374,6 +1375,7 @@ namespace CelesteMusicPlayer
             s.OpenMiniPlayerOnStartup = OpenMiniPlayerSwitch?.IsOn ?? s.OpenMiniPlayerOnStartup;
 
             s.UiStyleMode = GetComboTagString(UiStyleModeCombo, "ClassicSystem");
+            s.CelesteThemeName = GetComboTagString(ThemeFileCombo, "");
             s.EnableFrostedGlass = FrostedGlassSwitch?.IsOn ?? s.EnableFrostedGlass;
             s.NavEmojiIcons = NavEmojiSwitch?.IsOn ?? s.NavEmojiIcons;
             // 磷光色：预设存名字；选了「自定义」就存 "Custom:#RRGGBB"（取色器当前值）
@@ -2545,6 +2547,143 @@ namespace CelesteMusicPlayer
             UpdateAccentColorButton();
             PersistAllFromUi();
         }
+
+        // ---------------- 主题文件（.celeste-theme） ----------------
+
+        /// <summary>填主题文件下拉：「内置默认」+ Themes 目录下的所有 .celeste-theme。</summary>
+        private void PopulateThemeFileCombo(string? selected)
+        {
+            if (ThemeFileCombo == null)
+            {
+                return;
+            }
+
+            ThemeFileCombo.Items.Clear();
+            ThemeFileCombo.Items.Add(new ComboBoxItem { Content = "内置默认", Tag = "" });
+            foreach (string name in CelesteThemeStore.ListThemes())
+            {
+                ThemeFileCombo.Items.Add(new ComboBoxItem { Content = name, Tag = name });
+            }
+
+            SelectComboByTag(ThemeFileCombo, selected ?? "");
+        }
+
+        private void ThemeFileCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_loadingUi)
+            {
+                return;
+            }
+
+            // 先落盘（CelesteThemeName 随 PersistAllFromUi 写掉），再让主窗口应用
+            PersistAllFromUi();
+            MainWindow.Instance?.ReloadThemeFromSettings();
+        }
+
+        private async void ThemeFileSaveAsButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var box = new TextBox { PlaceholderText = "主题名，如：暖橙深夜" };
+                var dialog = new ContentDialog
+                {
+                    Title = "另存为主题文件",
+                    Content = box,
+                    PrimaryButtonText = "保存",
+                    CloseButtonText = "取消",
+                    DefaultButton = ContentDialogButton.Primary,
+                    XamlRoot = Content.XamlRoot
+                };
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                {
+                    return;
+                }
+
+                string name = box.Text?.Trim() ?? string.Empty;
+                if (name.Length == 0)
+                {
+                    await ShowInfoDialogAsync("另存为主题文件", "主题名不能为空。");
+                    return;
+                }
+
+                if (!MainWindow.SaveCurrentThemeAs(name, out string? error))
+                {
+                    await ShowInfoDialogAsync("另存为主题文件", "保存失败：" + (error ?? "未知错误"));
+                    return;
+                }
+
+                PopulateThemeFileCombo(name);
+                PersistAllFromUi();
+                MainWindow.Instance?.ReloadThemeFromSettings();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.ThemeFileSaveAs", caught);
+            }
+        }
+
+        private async void ThemeFileImportButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                var picker = new FileOpenPicker();
+                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                picker.FileTypeFilter.Add(".celeste-theme");
+                picker.FileTypeFilter.Add(".json");
+                picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+                var file = await picker.PickSingleFileAsync();
+                if (file == null)
+                {
+                    return;
+                }
+
+                if (!MainWindow.ImportThemeFile(file.Path, out string? savedName, out string? error))
+                {
+                    await ShowInfoDialogAsync("导入主题", "导入失败：" + (error ?? "未知错误"));
+                    return;
+                }
+
+                PopulateThemeFileCombo(savedName);
+                PersistAllFromUi();
+                MainWindow.Instance?.ReloadThemeFromSettings();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.ThemeFileImport", caught);
+            }
+        }
+
+        private async void ThemeFileExportButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string current = GetComboTagString(ThemeFileCombo, "");
+                var picker = new FileSavePicker();
+                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                picker.FileTypeChoices.Add("Celeste 主题文件", new[] { ".celeste-theme" });
+                picker.SuggestedFileName = (string.IsNullOrWhiteSpace(current) ? "celeste-theme" : current) + ".celeste-theme";
+                picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
+                var file = await picker.PickSaveFileAsync();
+                if (file == null)
+                {
+                    return;
+                }
+
+                if (!MainWindow.ExportThemeFile(current, file.Path, out string? error))
+                {
+                    await ShowInfoDialogAsync("导出主题", "导出失败：" + (error ?? "未知错误"));
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("SettingsWindow.ThemeFileExport", caught);
+            }
+        }
+
+        private void ThemeFileOpenDirButton_Click(object sender, RoutedEventArgs e)
+            => MainWindow.OpenThemesDirectory();
 
         /// <summary>播放页布局切换：立即持久化；主窗口订阅 AppSettingsStore.Changed 后会实时套用。</summary>
         private void NowPlayingLayoutCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
