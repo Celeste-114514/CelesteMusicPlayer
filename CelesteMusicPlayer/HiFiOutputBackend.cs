@@ -1296,7 +1296,7 @@ namespace CelesteMusicPlayer
                 _asioFeeder.BufferedBytes));
         }
 
-        /// <summary>是否使用 ECHO 核心独占输出（设置项 ExclusiveEngine="echo"）。默认 self=自研，可随时回退。</summary>
+        /// <summary>是否使用 ECHO 核心独占输出（设置项 ExclusiveEngine="echo"）。默认 native2=自研原生内核，可随时回退。</summary>
         private static bool UseEchoCore()
         {
             try
@@ -1309,9 +1309,10 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>是否使用自研原生内核独占输出（设置项 ExclusiveEngine="native2"，celeste_core.dll）。
+        /// <summary>是否使用自研原生内核独占输出（设置项 ExclusiveEngine="native2"，celeste_core.dll，默认项）。
         /// C++ 原生渲染线程 + feeder 整数字节直喂（DSP 全关时端到端 bit-perfect）。
-        /// 任一环境失败（DLL 缺失等）Init 返回 false，由上层按现有路径回退自研。</summary>
+        /// 任一环境失败（DLL 缺失等）Init 返回 false，由上层按现有路径回退自研托管渲染线程
+        /// （2026-10-11 起自研只是兜底路径，不再是用户可选内核）。</summary>
         private static bool UseNativeCore()
         {
             try
@@ -1422,9 +1423,11 @@ namespace CelesteMusicPlayer
                             return false;
                         }
 
-                        // A/B 开关（设置项 ExclusiveEngine）：默认 self=自研托管渲染线程；
-                        // echo=ECHO 核心、native2=自研原生内核（celeste_core.dll，C++ 原生渲染线程，
-                        // .NET GC 冻不到 → 治卡顿试验田；native2 的 feeder 走整数字节直喂，DSP 全关时端到端 bit-perfect）。
+                        // A/B 开关（设置项 ExclusiveEngine）：默认 native2=自研原生内核（C++ 原生渲染线程，
+                        // .NET GC 冻不到 → 治卡顿；feeder 走整数字节直喂，DSP 全关时端到端 bit-perfect）；
+                        // echo=ECHO 核心（同为 C++ 原生渲染线程的实验项，不支持 DSD/DoP）。
+                        // 2026-10-11 起自研（self）选项删除：设置读取失败时两边判定都落 false，
+                        // 落到最后的 NativeWasapiExclusiveOut 托管路径兜底，不影响正常使用。
                         // 任选其一失败都可一键切回，互不影响（两边 Init 前都只做本地协商）。
                         IExclusiveOutput nat = UseNativeCore() ? new NativeCoreOutput()
                             : UseEchoCore() ? new EchoCoreOutput()

@@ -42,7 +42,7 @@ namespace CelesteMusicPlayer
                 }
                 else if (string.Equals(mode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase))
                 {
-                    modeText = "输出模式：WASAPI 独占 · " + EngineDisplayName(s.ExclusiveEngine ?? "self");
+                    modeText = "输出模式：WASAPI 独占 · " + EngineDisplayName(s.ExclusiveEngine ?? "native2");
                 }
                 else
                 {

@@ -2702,7 +2702,8 @@ namespace CelesteMusicPlayer
             card.Background = active ? activeBg : null;
         }
 
-        /// <summary>独占输出内核卡片点击：self=自研（默认），echo=ECHO 核心，native2=自研原生内核（C++ 原生渲染线程 + 整数字节直喂）。</summary>
+        /// <summary>独占输出内核卡片点击：native2=自研原生内核（默认），echo=ECHO 核心。
+        /// 2026-10-11 起原 self（C# 托管渲染线程）选项删除，存量设置读 Load 时已归一到 native2。</summary>
         private void ExclusiveEngineCard_Click(object sender, RoutedEventArgs e)
         {
             if (_audioCombosLoading)
@@ -2721,12 +2722,12 @@ namespace CelesteMusicPlayer
             RefreshAudioSettingsPanel();
         }
 
-        /// <summary>内核标识 → 面板显示名（三处共用：点击日志 / 自检状态 / 高亮）。</summary>
+        /// <summary>内核标识 → 面板显示名（三处共用：点击日志 / 自检状态 / 高亮）。
+        /// 2026-10-11 起自研（self）选项删除，native2 是默认；echo 仍是实验项。</summary>
         private static string EngineDisplayName(string engine) => engine switch
         {
             "echo" => "ECHO 核心（实验）",
-            "native2" => "原生内核（实验）",
-            _ => "自研",
+            _ => "原生内核",
         };
 
         /// <summary>内核自检：内存生成 3 秒 1kHz 正弦测试音（48k/16bit/立体声），走完整播放链路试听，
@@ -2735,7 +2736,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                string engine = AppSettingsStore.Load().ExclusiveEngine ?? "self";
+                string engine = AppSettingsStore.Load().ExclusiveEngine ?? "native2";
                 string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "celeste_selftest_1khz_3s.wav");
                 new SineWaveSource().WriteWav(path);
                 PlayExternalFileAsync(path);
@@ -2755,7 +2756,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>内核三张卡片：选中的用主题色高亮。</summary>
+        /// <summary>内核两张卡片：选中的用主题色高亮（只剩 echo / native2 二选一）。</summary>
         private void UpdateEngineCardHighlight(string engine)
         {
             Windows.UI.Color accent = ResolveAccentColor();
@@ -2764,16 +2765,14 @@ namespace CelesteMusicPlayer
             var normalBorder = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(60, 120, 120, 120));
 
             bool echo = string.Equals(engine, "echo", StringComparison.OrdinalIgnoreCase);
-            bool native2 = string.Equals(engine, "native2", StringComparison.OrdinalIgnoreCase);
-            SetModeCard(EngineSelfCard, !echo && !native2, activeBorder, activeBg, normalBorder);
             SetModeCard(EngineEchoCard, echo, activeBorder, activeBg, normalBorder);
-            SetModeCard(EngineNative2Card, native2, activeBorder, activeBg, normalBorder);
+            SetModeCard(EngineNative2Card, !echo, activeBorder, activeBg, normalBorder);
         }
 
         // ---------- DSD×ECHO 内核提醒卡（2026-09-24 用户定案） ----------
         // 背景：echo 内核不负责 DSD/DoP（EchoCoreOutput.Init 显式拒绝 requireExact），
-        // 用户在 echo 下播 DSF 时左上角弹提醒，建议切 native2（DSD 整轨预加载后三内核里
-        // 只有 native2/self 可用；native2 实测绿灯不卡）。自带一键切换 + 15s 自动收起。
+        // 用户在 echo 下播 DSF 时左上角弹提醒，建议切 native2（2026-10-11 起自研选项删除，
+        // DSD 只剩 native2 一条路；native2 实测绿灯不卡）。自带一键切换 + 15s 自动收起。
         private Microsoft.UI.Dispatching.DispatcherQueueTimer? _dsdEngineTipTimer;
 
         /// <summary>播 DSD(DSF) 且当前独占内核为 echo 时，左上角显示切换提醒（每次起播重置 15s 计时）。</summary>

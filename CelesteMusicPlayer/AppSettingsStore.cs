@@ -120,10 +120,13 @@ namespace CelesteMusicPlayer
         /// 共享（系统混音）与独占（原生 WASAPI 事件驱动）均生效，改动后下次开播生效；默认 100ms。</summary>
         public int OutputBufferMs { get; set; } = 100;
 
-        /// <summary>独占输出内核 A/B 开关："self"=自研（默认，C# 托管渲染线程，全功能 bit-perfect 直通）；
-        /// "echo"=ECHO 核心（C++ 原生渲染线程只 memcpy 环形缓冲，.NET GC 冻不到它——卡顿试验田，
-        /// 暂不支持 DSD/DoP：选了 echo 播 DSD 也自动回退自研）。改动后下次开播生效。</summary>
-        public string ExclusiveEngine { get; set; } = "self";
+        /// <summary>独占输出内核："native2"=自研原生内核（默认，C++ 原生渲染线程 + 整数字节直喂，
+        /// DSP 全关时端到端 bit-perfect；DSD 走预载容器，实测最稳）；"echo"=ECHO 核心（C++ 原生渲染线程
+        /// 只 memcpy 环形缓冲，.NET GC 冻不到它——卡顿试验田，暂不支持 DSD/DoP：选了 echo 播 DSD
+        /// 也自动回退原生内核）。
+        /// 2026-10-11 起原 "self"（C# 托管渲染线程）选项删除：存量配置里的 "self"/空值/无法识别的值
+        /// 在 Normalize 里一律归一到 "native2"；代码里的自研路径仅剩设置读取失败时的兜底。改动后下次开播生效。</summary>
+        public string ExclusiveEngine { get; set; } = "native2";
 
         public bool LyricFuzzyMatch { get; set; } = true;
 
@@ -639,6 +642,11 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             // 歌词对齐：早期有「自动」（实际按居中处理，名不副实），该选项已删；
             // 存量配置里的旧值一律归一到居中，左/右之外同理。
             s.LyricAlign = s.LyricAlign is "Left" or "Right" ? s.LyricAlign : "Center";
+
+            // 独占输出内核：2026-10-11 起「自研（self）」选项删除、native2 设为默认。
+            // 存量配置里的 "self"/空值/无法识别的值一律归一到 native2（老用户的机器下次启动即用新默认）；
+            // "echo" 保留。自研代码路径仅剩设置读取失败时的兜底，不再是可选内核。
+            s.ExclusiveEngine = s.ExclusiveEngine is "echo" or "native2" ? s.ExclusiveEngine : "native2";
 
             if (string.IsNullOrWhiteSpace(s.DesktopLyricPlayedColor))
             {

@@ -616,7 +616,11 @@
                                 <ComboBoxItem Content="极客（终端风：近黑 + 等宽字 + 技术读数）" Tag="Geek" />
                             </ComboBox>
                         </Grid>
-                        <Grid ColumnSpacing="16">
+                        <!-- 【主题文件入口 · 2026-10-11 起随测试皮肤一起临时下架】用户拍板：测试皮肤本次发布剔除、
+                             代码保留继续制作。此区是测试皮肤的配色来源入口，随 WIP 一起临时隐藏。
+                             实现方式=Collapsed（不是删元素）：x:Name 字段还在，cs 加载/保存/事件原样生效；
+                             选「内置默认」时启动应用主题无可见变化。恢复=删掉本区两处 Visibility="Collapsed"。 -->
+                        <Grid ColumnSpacing="16" Visibility="Collapsed">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
@@ -631,7 +635,7 @@
                                 Width="220"
                                 SelectionChanged="ThemeFileCombo_SelectionChanged" />
                         </Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
+                        <StackPanel Orientation="Horizontal" Spacing="8" Visibility="Collapsed">
                             <Button Content="另存为…" x:Name="ThemeFileSaveAsButton" Click="ThemeFileSaveAsButton_Click" />
                             <Button Content="导入…" x:Name="ThemeFileImportButton" Click="ThemeFileImportButton_Click" />
                             <Button Content="导出…" x:Name="ThemeFileExportButton" Click="ThemeFileExportButton_Click" />
