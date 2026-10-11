@@ -970,6 +970,8 @@ namespace CelesteMusicPlayer
                     Content = def.Label,
                 };
                 b.Click += TagSortFieldBoundButton_Click;
+                // 阶段 1-b：拖动改顺序 + 右键（前移/后移/删除），不再靠弹窗配置
+                ConfigureCategoryFieldButton(b, key);
                 TagSortFieldButtonsPanel.Children.Add(b);
             }
 
@@ -984,10 +986,13 @@ namespace CelesteMusicPlayer
                 VerticalContentAlignment = VerticalAlignment.Center,
                 Content = "＋",
             };
-            Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(plus, "配置分类字段");
-            plus.Click += TagSortFieldConfigButton_Click;
+            Microsoft.UI.Xaml.Controls.ToolTipService.SetToolTip(plus, "添加分类字段");
+            // 阶段 1-b：「＋」就地下拉添加，不再打开独立窗口
+            plus.Click += (_, _) => ShowCategoryFieldAddMenu(plus);
             TagSortFieldButtonsPanel.Children.Add(plus);
 
+            // 面板整体作为拖放目标（只挂一次）
+            EnsureCategoryFieldDropWired();
             ApplyTagSortFieldButtons();
         }
 

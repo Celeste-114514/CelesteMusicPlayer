@@ -1425,6 +1425,8 @@ namespace CelesteMusicPlayer
             AddNavItem(items, NavAudioFxButton, NavAudioFxIndicator, true, "♫");
             AddNavItem(items, NavTagSortButton, NavTagSortIndicator, true, "↕");
             AddNavItem(items, UserPlaylistNavButton, UserPlaylistNavIndicator, true, "▦");
+            // 「设置」（2026-10-12 阶段 0）：工具区最下，点进去是主区里的设置面板
+            AddNavItem(items, NavSettingsButton, NavSettingsIndicator, true, "⚙");
 
             // 自检：条目里的「字形 / emoji / 文字」是靠遍历按钮内容抓的，抓漏了会静默退化
             // （经典界面下 emoji 不显示、图标还是老的单色字形）。这里留一行日志便于核对。

@@ -1971,6 +1971,8 @@ namespace CelesteMusicPlayer
                 // 模块 C：分组浏览
                 // 把字段下拉同步到当前字段（首次进入时）
                 SyncTagSortGroupFieldCombo();
+                // 内联字段条（阶段 1）：取代原「自定义…」弹窗，胶囊按当前字段序列重排一次
+                RebuildGroupFieldStrip();
                 RebuildTagSortGroupRows();
                 TagSortGroupPanel.Visibility = Visibility.Visible;
             }

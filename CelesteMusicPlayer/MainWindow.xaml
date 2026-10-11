@@ -809,6 +809,28 @@
                         </Button>
                         <Border x:Name="UserPlaylistNavIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
                     </Grid>
+                    <!-- 「设置」钉在工具区最下（2026-10-12 用户要求）：与音效处理 / 标签排序 / 歌单墙 同一组，
+                         点进去是主区里的设置面板（不再是独立窗口）。阶段 3 才填真实设置项。 -->
+                    <Grid Margin="0,0,0,3">
+                        <Button
+                            x:Name="NavSettingsButton"
+                            Tag="Settings"
+                            Padding="8,6"
+                            FontSize="14"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="8"
+                            Click="NavSettingsButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE713;" FontSize="16" VerticalAlignment="Center" />
+                                <TextBlock Tag="NavEmoji" Text="⚙️" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                <TextBlock Tag="NavLabel" Text="设置" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="NavSettingsIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                    </Grid>
                     <!-- 极客模式的曲库统计块：吸在侧栏最底（TRK 曲目 / ALB 专辑 / ART 艺术家），只读不点 -->
                     <TextBlock
                         x:Name="GeekLibStats"
@@ -3300,6 +3322,8 @@
                                 <!-- 分组浏览（模块 C）：列表内多级分组，组头折叠/展开 -->
                                 <Grid x:Name="TagSortGroupPanel" Visibility="Collapsed" RowSpacing="6">
                                     <Grid.RowDefinitions>
+                                        <!-- 0=预设下拉行，1=内联字段条（阶段 1 新增），2=分组列表 -->
+                                        <RowDefinition Height="Auto" />
                                         <RowDefinition Height="Auto" />
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
@@ -3316,11 +3340,75 @@
                                             <ComboBoxItem Content="年份 / 专辑" Tag="Year,Album" />
                                             <ComboBoxItem Content="格式 / 位深采样率" Tag="Format,DepthRate" />
                                         </ComboBox>
-                                        <Button CornerRadius="16" Content="自定义…" Padding="12,4" Click="TagSortGroupCustomButton_Click" />
                                         <Button CornerRadius="16" Content="全部展开" Click="TagSortGroupExpandAll_Click" />
                                         <Button CornerRadius="16" Content="全部折叠" Click="TagSortGroupCollapseAll_Click" />
                                     </StackPanel>
-                                    <Grid Grid.Row="1">
+
+                                    <!-- 内联分组字段条（2026-10-12 阶段 1）：取代原「自定义…」弹窗。
+                                         字段横排成胶囊，直接左右拖动就能调层级顺序；右键=前移/后移/删除；
+                                         最右「＋」从未添加的字段里挑一个加进来。改动即时生效并落盘，
+                                         与原来弹窗确认后的行为完全一致（见 MainWindow.TagSortStrip.cs）。 -->
+                                    <Grid Grid.Row="1" ColumnSpacing="8" Margin="0,2,0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <ListView
+                                            x:Name="TagSortGroupFieldStrip"
+                                            Grid.Column="0"
+                                            Height="40"
+                                            SelectionMode="Single"
+                                            CanDragItems="True"
+                                            CanReorderItems="True"
+                                            AllowDrop="True"
+                                            Padding="0"
+                                            DragItemsCompleted="TagSortGroupFieldStrip_DragItemsCompleted"
+                                            RightTapped="TagSortGroupFieldStrip_RightTapped"
+                                            ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                            ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                                            ScrollViewer.HorizontalScrollMode="Enabled"
+                                            ScrollViewer.VerticalScrollMode="Disabled">
+                                            <ListView.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <StackPanel Orientation="Horizontal" Spacing="6" />
+                                                </ItemsPanelTemplate>
+                                            </ListView.ItemsPanel>
+                                            <ListView.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border
+                                                        Padding="12,4,12,4"
+                                                        CornerRadius="14"
+                                                        BorderThickness="1"
+                                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                                                        <TextBlock Text="{Binding Name}" FontSize="13" VerticalAlignment="Center" />
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ListView.ItemTemplate>
+                                            <ListView.ItemContainerStyle>
+                                                <Style TargetType="ListViewItem">
+                                                    <Setter Property="MinWidth" Value="0" />
+                                                    <Setter Property="MinHeight" Value="0" />
+                                                    <Setter Property="Padding" Value="0" />
+                                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                                    <Setter Property="VerticalContentAlignment" Value="Center" />
+                                                </Style>
+                                            </ListView.ItemContainerStyle>
+                                        </ListView>
+                                        <Button
+                                            x:Name="TagSortGroupFieldAddButton"
+                                            Grid.Column="1"
+                                            Width="36"
+                                            Height="36"
+                                            Padding="0"
+                                            CornerRadius="18"
+                                            Content="＋"
+                                            FontSize="16"
+                                            ToolTipService.ToolTip="添加分组字段"
+                                            Click="TagSortGroupFieldAddButton_Click" />
+                                    </Grid>
+
+                                    <Grid Grid.Row="2">
                                         <ListView
                                             x:Name="TagSortGroupListView"
                                             Grid.Row="0"
@@ -3413,6 +3501,75 @@
                                     </Grid>
                                 </Grid>
                             </Grid>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <!-- 设置面板（2026-10-12 阶段 0 骨架）：二级窗口「选项设置」并入主 UI 的落地容器。
+                     版式完全对齐音效处理面板（左 220 分类导航 + 右内容），导航项由
+                     MainWindow.ShellPages.cs 用通用子页框架动态生成，加分类只改那里一行。
+                     现在是占位分类（能看见进度，不是空白页），阶段 3 才搬入真实设置项。
+                     回退方式：把左侧「设置」导航项与这里的 Visibility 一起改回 Collapsed。 -->
+                <Border
+                    x:Name="SettingsBorder"
+                    Grid.Row="1"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="4,4"
+                    Visibility="Collapsed">
+                    <Grid ColumnSpacing="12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="220" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <Grid Grid.Column="0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="*" />
+                            </Grid.RowDefinitions>
+                            <Grid Grid.Row="0" Margin="10,0,6,8">
+                                <TextBlock
+                                    VerticalAlignment="Center"
+                                    FontSize="12"
+                                    Opacity="0.6"
+                                    Text="设置分类" />
+                            </Grid>
+                            <ScrollViewer
+                                Grid.Row="1"
+                                VerticalScrollBarVisibility="Auto"
+                                HorizontalScrollBarVisibility="Disabled">
+                                <!-- 分类项由 MainWindow.ShellPages.cs 动态生成，占位容器勿删 -->
+                                <StackPanel x:Name="SettingsNavPanel" Spacing="2" />
+                            </ScrollViewer>
+                        </Grid>
+
+                        <!-- 右：分类内容。每个分类一个 StackPanel，默认折叠，由 ShellPageHost 切换 -->
+                        <Grid Grid.Column="1">
+                            <StackPanel x:Name="SettingsPageGeneral" Spacing="8" Padding="8,4,8,8">
+                                <TextBlock Text="常规" FontSize="16" FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="原「选项设置」窗口里的常规类设置，会在阶段 3 逐个搬到这一页。"
+                                    FontSize="13"
+                                    Opacity="0.65"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <StackPanel x:Name="SettingsPageAppearance" Spacing="8" Padding="8,4,8,8" Visibility="Collapsed">
+                                <TextBlock Text="外观" FontSize="16" FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="界面风格、主题文件、皮肤相关的设置，会在阶段 3 搬到这一页（届时调皮肤能当场看到主界面变化）。"
+                                    FontSize="13"
+                                    Opacity="0.65"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <StackPanel x:Name="SettingsPageFileAssoc" Spacing="8" Padding="8,4,8,8" Visibility="Collapsed">
+                                <TextBlock Text="文件关联" FontSize="16" FontWeight="SemiBold" />
+                                <TextBlock
+                                    Text="原「文件关联」窗口整体并入这一页：接管哪些音频格式由这里勾选。"
+                                    FontSize="13"
+                                    Opacity="0.65"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
                         </Grid>
                     </Grid>
                 </Border>

@@ -664,6 +664,7 @@ namespace CelesteMusicPlayer
             PlaylistDetailBorder.Visibility = Visibility.Collapsed;
             TagSortBorder.Visibility = Visibility.Collapsed;
             AudioFxBorder.Visibility = Visibility.Collapsed;
+            SettingsBorder.Visibility = Visibility.Collapsed;
             RatingFilterPanel.Visibility = Visibility.Collapsed;
 
             switch (_currentCategory)
@@ -904,6 +905,24 @@ namespace CelesteMusicPlayer
                     EnsureAudioFxUiBuilt();
                     LoadAudioFxUiFromStore();
                     UpdateDspBitPerfectUi();
+                    break;
+
+                case "Settings":
+                    // 设置面板（2026-10-12 阶段 0 骨架）：版式与音效处理一致，分类导航由通用子页框架生成
+                    LibraryPaneTitle.Text = "设置";
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Collapsed;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    TagSortBorder.Visibility = Visibility.Collapsed;
+                    SettingsBorder.Visibility = Visibility.Visible;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    EnsureSettingsUiBuilt();
                     break;
             }
 
