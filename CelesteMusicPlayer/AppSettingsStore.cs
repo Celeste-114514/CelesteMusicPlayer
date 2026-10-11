@@ -254,7 +254,8 @@ namespace CelesteMusicPlayer
 
         public string ThemePreset { get; set; } = string.Empty;
 
-        /// <summary>主程序界面风格：Scene = 背景图式（图景）；ClassicSystem / ClassicLight / ClassicDark = 经典界面；Geek = 极客终端风。
+        /// <summary>主程序界面风格：Scene = 背景图式（图景）；ClassicSystem / ClassicLight / ClassicDark = 经典界面；Geek = 极客终端风；
+        /// Token = 令牌测试皮肤（皮肤系统阶段 1，行为同经典、颜色全部来自主题文件令牌，供和经典并排对比）。
         /// 默认 ClassicSystem（经典 · 跟随系统）：经典界面下毛玻璃开关同样生效，可在「亚克力背板」与「纯色底」之间切换。</summary>
         public string UiStyleMode { get; set; } = "ClassicSystem";
 
@@ -791,7 +792,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         // 早先图景用空字符串表示，老用户存档里的空值会把新默认顶掉 —— 改了默认值本机也看不到，
         // 表现就是"默认皮肤还是图景"。现在空/未设置一律归到默认「经典 · 跟随系统」。
         UiStyleMode = s.UiStyleMode?.Trim() is { Length: > 0 } uiStyle
-                      && uiStyle is "Scene" or "ClassicSystem" or "ClassicLight" or "ClassicDark" or "Geek"
+                      && uiStyle is "Scene" or "ClassicSystem" or "ClassicLight" or "ClassicDark" or "Geek" or "Token"
             ? uiStyle
             : "ClassicSystem",
         // 侧栏 emoji 图标开关：老存档没有这个字段，反序列化即 false（纯色图标），符合当前默认

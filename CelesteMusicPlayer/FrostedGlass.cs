@@ -29,6 +29,15 @@ namespace CelesteMusicPlayer
         public static bool BackdropEnabled { get; set; } = true;
 
         /// <summary>
+        /// 令牌测试皮肤的取色钩子（由 MainWindow.TokenSkin 在激活时挂上、退出时摘掉）。
+        /// 返回 null = 用经典硬编码色。三类：面板不透明底 / 窗口根底 / 标题栏按钮前景。
+        /// 经典/图景/极客模式下这三个钩子恒为 null，既有代码路径一行不变。
+        /// </summary>
+        public static Func<Color?>? TokenPanelColor { get; set; }
+        public static Func<Color?>? TokenRootColor { get; set; }
+        public static Func<Color?>? TokenTitleBarForeground { get; set; }
+
+        /// <summary>
         /// 经典界面是否浅色。
         /// 注意：MainWindow.ApplyUiStyleMode 存进来的是归一化后的 "Light" / "Dark"
         ///（不是 "ClassicLight"），这里把两种写法都认，避免模式串对不上导致浅色模式被当成深色。
@@ -142,11 +151,15 @@ namespace CelesteMusicPlayer
                 // 否则不透明底会把背板盖死，开关看起来就"没用"。
                 if (ClassicMode != null && !BackdropEnabled)
                 {
-                    panel.Background = new SolidColorBrush(ClassicMode == "Geek"
+                    // 令牌测试皮肤：窗口根底色问令牌要（App.Background），盖掉经典灰阶
+                    Color rootColor = ClassicMode == "Geek"
                         ? Color.FromArgb(255, 11, 15, 11)          // 极客：与主窗口 RootShell 同一款近黑
-                        : ClassicIsLight
-                            ? Color.FromArgb(255, 243, 243, 243)
-                            : Color.FromArgb(255, 32, 32, 32));
+                        : TokenRootColor?.Invoke() is Color tokenRoot
+                            ? tokenRoot
+                            : ClassicIsLight
+                                ? Color.FromArgb(255, 243, 243, 243)
+                                : Color.FromArgb(255, 32, 32, 32);
+                    panel.Background = new SolidColorBrush(rootColor);
                     PaintedRoots.AddOrUpdate(panel, panel);
                 }
                 else if (PaintedRoots.TryGetValue(panel, out _))
@@ -185,22 +198,45 @@ namespace CelesteMusicPlayer
                 {
                     bar.ButtonHoverBackgroundColor = Color.FromArgb(24, 0, 0, 0);
                     bar.ButtonPressedBackgroundColor = Color.FromArgb(40, 0, 0, 0);
-                    bar.ButtonForegroundColor = Color.FromArgb(255, 28, 28, 28);
-                    bar.ButtonInactiveForegroundColor = Color.FromArgb(255, 132, 132, 132);
-                    bar.ButtonHoverForegroundColor = Color.FromArgb(255, 0, 0, 0);
-                    bar.ButtonPressedForegroundColor = Color.FromArgb(255, 0, 0, 0);
                 }
                 else
                 {
                     bar.ButtonHoverBackgroundColor = Color.FromArgb(36, 255, 255, 255);
                     bar.ButtonPressedBackgroundColor = Color.FromArgb(60, 255, 255, 255);
-                    bar.ButtonForegroundColor = Color.FromArgb(255, 220, 220, 220);
-                    bar.ButtonInactiveForegroundColor = Color.FromArgb(255, 140, 140, 140);
-                    bar.ButtonHoverForegroundColor = Color.FromArgb(255, 255, 255, 255);
-                    bar.ButtonPressedForegroundColor = Color.FromArgb(255, 255, 255, 255);
                 }
+
+                // 按钮文字色：令牌测试皮肤跟随 Text.Primary / Text.Secondary；否则经典灰阶
+                ApplyTitleBarForeground(bar);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("FrostedGlass.cs", caught); }
+        }
+
+        /// <summary>标题栏按钮文字色。令牌皮肤激活时用令牌前景，否则按明暗给经典灰阶。</summary>
+        private static void ApplyTitleBarForeground(Microsoft.UI.Windowing.AppWindowTitleBar bar)
+        {
+            if (TokenTitleBarForeground?.Invoke() is Color tokenFg)
+            {
+                bar.ButtonForegroundColor = tokenFg;
+                bar.ButtonInactiveForegroundColor = Color.FromArgb(140, tokenFg.R, tokenFg.G, tokenFg.B);
+                bar.ButtonHoverForegroundColor = tokenFg;
+                bar.ButtonPressedForegroundColor = tokenFg;
+                return;
+            }
+
+            if (ClassicIsLight)
+            {
+                bar.ButtonForegroundColor = Color.FromArgb(255, 28, 28, 28);
+                bar.ButtonInactiveForegroundColor = Color.FromArgb(255, 132, 132, 132);
+                bar.ButtonHoverForegroundColor = Color.FromArgb(255, 0, 0, 0);
+                bar.ButtonPressedForegroundColor = Color.FromArgb(255, 0, 0, 0);
+            }
+            else
+            {
+                bar.ButtonForegroundColor = Color.FromArgb(255, 220, 220, 220);
+                bar.ButtonInactiveForegroundColor = Color.FromArgb(255, 140, 140, 140);
+                bar.ButtonHoverForegroundColor = Color.FromArgb(255, 255, 255, 255);
+                bar.ButtonPressedForegroundColor = Color.FromArgb(255, 255, 255, 255);
+            }
         }
 
         /// <summary>
@@ -218,6 +254,12 @@ namespace CelesteMusicPlayer
                 {
                     // 极客界面：近黑面板，比主底(#0B0F0B)亮一档带层次，微绿调呼应终端
                     return new SolidColorBrush(Color.FromArgb(255, 22, 27, 22));
+                }
+
+                // 令牌测试皮肤：面板底色问令牌要（Panel.Background），盖掉经典白/炭灰
+                if (TokenPanelColor?.Invoke() is Color tokenPanel)
+                {
+                    return new SolidColorBrush(tokenPanel);
                 }
 
                 return new SolidColorBrush(
