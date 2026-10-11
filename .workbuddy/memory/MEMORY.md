@@ -37,6 +37,7 @@
 ## 皮肤系统·平行换肤页（批次 1 = winmain.html，2026-10-11 提交 c411a34）
 - **平行页方案**：换肤=整页拷贝改 CSS（winmain：Segoe UI Variable Text/Fluent Icons/五处毛玻璃+Mica/4px 圆角/10px 开关/4px 轨），**DOM 与消息协议零改动**→C# 不复制推送逻辑，与 Apple 页共用 `_webMainOpen` 主开关；`_webWinOpen` 只记当前页；两入口互斥；`CloseWebMain()` 统一出口必须一并复位 `_webWinOpen`（漏了=再点入口被守卫挡掉，按钮失灵）。
 - **⚠ 2026-10-11 起皮肤入口整体隐藏**（提交 781ace8，用户要求新版本不含皮肤系统）：MainWindow.xaml 三个 pill 入口整段注释（代码一行没删，注释内写明恢复法）；csproj 4 个 WebUI Content 行整块注释。**恢复皮肤系统要同时动两处**（XAML 三段 + csproj Content），去掉注释标记即可。
+- **外观设置「启用 emoji 分类图标」开关**（2026-10-11 提交 b1b6f01）：字段 `AppSettingsState.NavEmojiIcons`（默认 false=纯色 Fluent 字形，与图景同套不涂类别彩色；true=彩色 emoji）。经典（浅色/深色/跟随系统）与图景都按开关走；**极客不读此开关**（`emojiOn = settings.NavEmojiIcons && !IsGeekUiStyleActive()`）。Toggled → ApplySettingsLive 当场刷新。播放队列三处（侧栏/播放状态栏/迷你播放器）RedEye(E7B3)→List(EA37)。
 - `_webcheck` harness 页面维度：`WB_PAGE=<页>` 环境变量；产物后缀规则 **main/dsp 不加、平行页加 `_<页>`**（两套产物共存互不覆盖，老断言零改动）；dsp 场景只在 main 套跑且单独强制无后缀。字体可用性探针用 `document.fonts.check`（`window.fonts` 是 undefined）。np 歌词高亮：取最后一条 t<=pos 的原文行（场景 t=i*12、pos=65 → index 10=第 6 句）。
 
 ## WinUI3 铁律
@@ -63,6 +64,7 @@
 - **鼠标注入被挡**：UIA 能读控件树/Invoke，Click 无效。窗口类名 `WinUIDesktopWin32WindowClass`。单实例 taskkill 后立刻 Popen 会秒退，需 poll() 后二次拉起。
 - **UIA 走树三坑（2026-10-10 实测定论）**：① uiautomation 库 `ControlTypeName` 返回值**带后缀**——判等写 `"Button"` 永远不中，要 `in ("Button","ButtonControl")`；② WinUI 图标按钮自身 AutomationName 常为空、可访问名在**子级 TextControl** 里（「Apple 风格界面」pill：Button name='' + 子 Text 带文案）→ 按钮「有效名」=自身 Name+全部子孙 TextControl 拼接后再匹配；③ 从桌面根 searchDepth=20 搜不到深树里的按钮，必须从 `WindowControl(ClassName="WinUIDesktopWin32WindowClass", searchDepth=3)` 起栈式 `GetChildren()` 逐层下探。
 - **「有没有活实例」权威判据 = tasklist 进程在不在**：`.running` 被 taskkill 杀过的实例会留下陈旧文件（文件在≠活着）；日志 mtime 不能当判据（空闲实例不写日志）；app 日志「启动」行时间会把上次测试残骸当活实例（误报过两轮）。Git Bash 里 `tasklist /FI` 的 /FI 被 MSYS 吞成路径 → 必须 `MSYS_NO_PATHCONV=1` 前缀。
+- **UIA 显隐验证两坑（2026-10-11 实测）**：① **Collapsed 元素不在 UIA 树里**——「找不到某文本」恰是隐藏的通过信号，判定显隐要「全局扫 TextControl + IsOffscreen」，别按「元素应在树里」写断言；② 侧栏 16 个分类 UIA 只能稳定采到 13 个（流派/年份/网络音乐库在滚动区外采不到）→ 验证策略用全局扫描别逐按钮比对。**换 Segoe MDL2 字形前先解析 segmdl2.ttf 的 cmap(format 4) 验证 codepoint 存在**，免得出豆腐块（EA37=List 已验证；E7B3=RedEye）。
 - **混合改动拆两个 commit 的安全手法**（改名+守卫混在同文件时）：临时 revert B 类改动 → add+commit A → 原样重新 apply B → **sha256 比对恢复后与 revert 前逐一一致** → commit B。字节一致 = 之前构建交付的产物依然对应当前 HEAD，不必重新构建。
 - **入口命名拍板（2026-10-10，提交 4bbaf2e）**：Apple 试点入口用户可见字样=「Apple 风格界面」（两个 pill 按钮 Text/ToolTip、album.html title、日志前缀 `[Apple试点]`）；「新版界面」一名预留给将要**平行新建**的 Windows 风试点页（照现有消息协议新建 HTML+入口，Apple 三页一行不动）。⚠ XAML 字面量不进 dll、进 `CelesteMusicPlayer.pri`——二进制验证扫 .pri。
 - **⚠ publish 快照信任铁律（2026-10-11 事故）**：① fd publish（`-o dist\publish-fd`）会顺手覆盖 `bin\...\win-x64\publish` 里的 exe/dll/pri——**fd/sc 两种 publish 不能假定共用中间目录后输出还干净**；② 快照复制保留文件 mtime，`dist/publish-sc` 曾是 26.10.2.0 旧货却顶着 16:07 的当天时间戳。**任何 publish 快照进打包/交付前必须冒烟验标题版本号，mtime/md5 都证明不了「是不是这一版」**。重出 sc：`_build_release_sc.py`（Roslyn 0xC0000005 flake 重试即过）。
