@@ -2051,7 +2051,8 @@ namespace CelesteMusicPlayer
             string field = fields[level];
             bool isLast = level == fields.Count - 1;
             string fieldLabel = TagSortFields.Find(field)?.Label ?? field;
-            bool autoCollapse = TagSortFields.Find(field)?.Cardinality == TagSortFields.Cardinality.High;
+            // 2026-10-12 用户要求：进分组浏览默认全部折叠（原来只有高基数字段那层折叠，
+            // 低基数字段层是展开的，一进去就铺满整屏）。「全部展开」按钮照旧可用。
 
             var groups = items
                 .GroupBy(p => TagSortFields.Value(p, field), StringComparer.OrdinalIgnoreCase)
@@ -2069,7 +2070,7 @@ namespace CelesteMusicPlayer
                     Depth = level,
                     Indent = level * TagSortGroupIndentStep,
                     Count = g.Count(),
-                    IsExpanded = !autoCollapse,
+                    IsExpanded = false,
                 };
                 if (isLast)
                 {

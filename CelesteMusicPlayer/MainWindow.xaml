@@ -601,26 +601,6 @@
                         </Grid>
                         <Grid Margin="0,0,0,3">
                             <Button
-                                x:Name="NavPlaylistWallButton"
-                                Tag="UserPlaylist"
-                                Padding="8,6"
-                                FontSize="14"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                CornerRadius="8"
-                                Click="NavPlaylistWallButton_Click">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon Glyph="&#xEA37;" FontSize="14" VerticalAlignment="Center" />
-                                    <TextBlock Tag="NavEmoji" Text="📋" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
-                                    <TextBlock Tag="NavLabel" Text="播放队列" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            <Border x:Name="NavPlaylistWallIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
-                        </Grid>
-                        <Grid Margin="0,0,0,3">
-                            <Button
                                 x:Name="NavGenreButton"
                                 Tag="Genres"
                                 Padding="8,6"
@@ -699,6 +679,57 @@
                             </Button>
                             <Border x:Name="NavFoldersIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
                         </Grid>
+                        <!-- 播放列表（歌单墙）：2026-10-12 用户要求从底部工具组上移到「媒体库」正下方 -->
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="UserPlaylistNavButton"
+                                Tag="PlaylistWall"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="UserPlaylistNavButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Path
+                                        x:Name="UserPlaylistNavIcon"
+                                        Width="16"
+                                        Height="16"
+                                        VerticalAlignment="Center"
+                                        Stretch="Uniform"
+                                        Fill="Transparent"
+                                        Stroke="{ThemeResource TextFillColorPrimaryBrush}"
+                                        StrokeThickness="1.4"
+                                        Data="M3,3 L7,3 L7,7 L3,7 Z M9,3 L13,3 L13,7 L9,7 Z M3,9 L7,9 L7,13 L3,13 Z M9,9 L13,9 L13,13 L9,13 Z" />
+                                    <TextBlock Tag="NavEmoji" Text="📃" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="播放列表" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="UserPlaylistNavIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <!-- 播放队列：2026-10-12 用户要求紧跟在「播放列表」下方 -->
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavPlaylistWallButton"
+                                Tag="UserPlaylist"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="NavPlaylistWallButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon Glyph="&#xEA37;" FontSize="14" VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="📋" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="播放队列" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavPlaylistWallIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
                         <!-- 网络音乐库（WebDAV）：在「选项设置 → WebDAV」里配好之后才显示，
                              文字用设置里填的显示名（没填就用网址主机名）；在那里删掉配置后整个条目隐藏。
                              ⚠️ 隐藏必须连外层 Grid 一起（见 SetNavEntryVisibility 的注释），只藏 Button 会留 16px 空白。 -->
@@ -721,6 +752,32 @@
                                 </StackPanel>
                             </Button>
                             <Border x:Name="NavWebDavIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                        </Grid>
+                        <!-- 标签排序：2026-10-12 用户要求移到分割线正上方（分类组最后一项），
+                             不再与音效处理/设置挤在底部工具组里 -->
+                        <Grid Margin="0,0,0,3">
+                            <Button
+                                x:Name="NavTagSortButton"
+                                Tag="TagSort"
+                                Padding="8,6"
+                                FontSize="14"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                CornerRadius="8"
+                                Click="NavTagSortButton_Click">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <FontIcon
+                                        x:Name="NavTagSortIcon"
+                                        Glyph="&#xE8CB;"
+                                        FontSize="16"
+                                        VerticalAlignment="Center" />
+                                    <TextBlock Tag="NavEmoji" Text="🏷️" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                    <TextBlock Tag="NavLabel" Text="标签排序" VerticalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Border x:Name="NavTagSortIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
                         </Grid>
                     </StackPanel>
                 </ScrollViewer>
@@ -756,61 +813,10 @@
                         </Button>
                         <Border x:Name="NavAudioFxIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
                     </Grid>
-                    <Grid Margin="0,0,0,3">
-                        <Button
-                            x:Name="NavTagSortButton"
-                            Tag="TagSort"
-                            Padding="8,6"
-                            FontSize="14"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Left"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            CornerRadius="8"
-                            Click="NavTagSortButton_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <FontIcon
-                                    x:Name="NavTagSortIcon"
-                                    Glyph="&#xE8CB;"
-                                    FontSize="16"
-                                    VerticalAlignment="Center" />
-                                <TextBlock Tag="NavEmoji" Text="🏷️" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
-                                <TextBlock Tag="NavLabel" Text="标签排序" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Border x:Name="NavTagSortIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
-                    </Grid>
-                    <Grid Margin="0,0,0,3">
-                        <Button
-                            x:Name="UserPlaylistNavButton"
-                            Tag="PlaylistWall"
-                            Padding="8,6"
-                            FontSize="14"
-                            HorizontalAlignment="Stretch"
-                            HorizontalContentAlignment="Left"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            CornerRadius="8"
-                            Click="UserPlaylistNavButton_Click">
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Path
-                                    x:Name="UserPlaylistNavIcon"
-                                    Width="16"
-                                    Height="16"
-                                    VerticalAlignment="Center"
-                                    Stretch="Uniform"
-                                    Fill="Transparent"
-                                    Stroke="{ThemeResource TextFillColorPrimaryBrush}"
-                                    StrokeThickness="1.4"
-                                    Data="M3,3 L7,3 L7,7 L3,7 Z M9,3 L13,3 L13,7 L9,7 Z M3,9 L7,9 L7,13 L3,13 Z M9,9 L13,9 L13,13 L9,13 Z" />
-                                <TextBlock Tag="NavEmoji" Text="📃" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
-                                <TextBlock Tag="NavLabel" Text="播放列表" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Border x:Name="UserPlaylistNavIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
-                    </Grid>
-                    <!-- 「设置」钉在工具区最下（2026-10-12 用户要求）：与音效处理 / 标签排序 / 歌单墙 同一组，
-                         点进去是主区里的设置面板（不再是独立窗口）。阶段 3 才填真实设置项。 -->
+                    <!-- 「设置」钉在工具区最下（2026-10-12 用户要求）：与音效处理同一组，
+                         点进去是主区里的设置面板（不再是独立窗口）。阶段 3 才填真实设置项。
+                         ⚠️ 标签排序 / 播放列表 / 播放队列 同日已移到分割线上方的分类组里，
+                         所以这里只剩「音效处理 + 设置」两项（别再往回加）。 -->
                     <Grid Margin="0,0,0,3">
                         <Button
                             x:Name="NavSettingsButton"
@@ -3212,8 +3218,9 @@
                                             <MenuFlyoutItem Text="艺术家" Tag="Artists" Click="TagSortViewModeItem_Click" />
                                             <MenuFlyoutSeparator />
                                             <MenuFlyoutItem Text="排序方式" Tag="Sort" Click="TagSortViewModeItem_Click" />
-                                            <MenuFlyoutSeparator />
-                                            <MenuFlyoutItem Text="分组浏览（按字段分组列表）" Tag="GroupBy" Click="TagSortViewModeItem_Click" />
+                                            <!-- 「分组浏览（按字段分组列表）」2026-10-12 用户要求摘掉：它与分类墙顶部常驻的
+                                                 「分组浏览」按钮是同一功能，两处入口看着像两套东西。
+                                                 GroupBy 分支代码保留（顶部按钮仍在用），要恢复就补回这两行。 -->
                                         </MenuFlyout>
                                     </Button.Flyout>
                                 </Button>
@@ -5242,27 +5249,73 @@
                                             BorderThickness="1"
                                             CornerRadius="8"
                                             Padding="12,8">
-                                            <Grid ColumnSpacing="12">
-                                                <Grid.ColumnDefinitions>
-                                                    <ColumnDefinition Width="*" />
-                                                    <ColumnDefinition Width="Auto" />
-                                                </Grid.ColumnDefinitions>
-                                                <StackPanel Spacing="2" VerticalAlignment="Center">
-                                                    <TextBlock Text="🏠 房间校正（卷积 FIR）" FontWeight="SemiBold" />
+                                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                                <TextBlock Text="🏠 房间校正（卷积 FIR）" FontWeight="SemiBold" />
+                                                <TextBlock
+                                                    x:Name="RoomCorrectionStatusText"
+                                                    FontSize="11"
+                                                    Opacity="0.65"
+                                                    TextWrapping="WrapWholeWords"
+                                                    Text="导入测量得到的脉冲响应（IR），用真卷积做房间 / 音箱 / 耳机校正——不是 EQ 那种近似。开了输出非 bit-perfect。" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- 脉冲响应（IR）导入：2026-10-12 阶段 2 —— 原来要点「打开房间校正」弹独立窗口，
+                                             现在就地选文件 / 开关 / 应用。下面的「IR 信息与微调」只管 trim。 -->
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="14,12">
+                                            <StackPanel Spacing="10">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="脉冲响应（IR）文件" FontSize="15" FontWeight="SemiBold" />
                                                     <TextBlock
-                                                        x:Name="RoomCorrectionStatusText"
-                                                        FontSize="11"
-                                                        Opacity="0.65"
+                                                        FontSize="12"
+                                                        Opacity="0.6"
                                                         TextWrapping="WrapWholeWords"
-                                                        Text="导入测量得到的脉冲响应（IR），用真卷积做房间 / 音箱 / 耳机校正——不是 EQ 那种近似。开了输出非 bit-perfect。" />
+                                                        Text="选一个 .wav 脉冲响应（比如 REW 测量导出的），点「应用」即刻生效。支持 16/24/32-bit 整数或 Float 的 PCM WAV。" />
                                                 </StackPanel>
-                                                <Button CornerRadius="16"
-                                                    x:Name="OpenRoomCorrectionButton"
-                                                    Grid.Column="1"
-                                                    Content="打开房间校正"
-                                                    VerticalAlignment="Center"
-                                                    Click="OpenRoomCorrectionButton_Click" />
-                                            </Grid>
+                                                <TextBox x:Name="RoomIrPathBox" PlaceholderText="尚未选择 IR 文件…" IsReadOnly="True" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button
+                                                        x:Name="RoomIrBrowseButton"
+                                                        CornerRadius="16"
+                                                        Content="浏览…"
+                                                        Click="RoomIrBrowseButton_Click" />
+                                                    <Button
+                                                        x:Name="RoomIrClearButton"
+                                                        CornerRadius="16"
+                                                        Content="清除"
+                                                        Click="RoomIrClearButton_Click" />
+                                                </StackPanel>
+                                                <TextBlock x:Name="RoomIrLoadStatusText" FontSize="12" Opacity="0.8" TextWrapping="WrapWholeWords" />
+                                                <ToggleSwitch
+                                                    x:Name="RoomIrEnabledToggle"
+                                                    Header="启用卷积处理"
+                                                    OnContent="已启用"
+                                                    OffContent="已关闭"
+                                                    Toggled="RoomIrEnabledToggle_Toggled" />
+                                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                                    <TextBlock Text="输出增益" VerticalAlignment="Center" />
+                                                    <Slider
+                                                        x:Name="RoomIrGainSlider"
+                                                        Width="200"
+                                                        Minimum="-12"
+                                                        Maximum="12"
+                                                        StepFrequency="0.5"
+                                                        ValueChanged="RoomIrGainSlider_ValueChanged" />
+                                                    <TextBlock x:Name="RoomIrGainValueText" VerticalAlignment="Center" Width="60" Text="0.0 dB" />
+                                                </StackPanel>
+                                                <Button
+                                                    x:Name="RoomIrApplyButton"
+                                                    CornerRadius="16"
+                                                    HorizontalAlignment="Left"
+                                                    Content="应用"
+                                                    Style="{StaticResource AccentButtonStyle}"
+                                                    Click="RoomIrApplyButton_Click" />
+                                            </StackPanel>
                                         </Border>
                                         <Border
                                             Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
@@ -5900,6 +5953,56 @@
                                                     Opacity="0.6"
                                                     TextWrapping="WrapWholeWords"
                                                     Text="防削波开启后，遇到增益会把峰值推过 0 dBFS 的曲目会自动压回，不会破音。" />
+                                            </StackPanel>
+                                        </Border>
+
+                                        <!-- 批量扫描（写标签）：2026-10-12 阶段 2 —— 原来是独立窗口，
+                                             现在就地做，扫完直接写回标签。仅写标签，不动音频数据。 -->
+                                        <Border
+                                            Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
+                                            CornerRadius="10"
+                                            Padding="14,12">
+                                            <StackPanel Spacing="10">
+                                                <StackPanel Spacing="2">
+                                                    <TextBlock Text="批量扫描（计算并写入 ReplayGain 标签）" FontSize="15" FontWeight="SemiBold" />
+                                                    <TextBlock
+                                                        FontSize="12"
+                                                        Opacity="0.6"
+                                                        TextWrapping="WrapWholeWords"
+                                                        Text="按 ReplayGain 2.0 / EBU R128 算出每首曲目的增益与峰值，写回标签。只写标签，不改动音频数据；不勾「写入标签」就是先预览。" />
+                                                </StackPanel>
+                                                <RadioButtons x:Name="RgScanScopeRadio">
+                                                    <RadioButton x:Name="RgScanScopeLibrary" Content="整库" Tag="Library" IsChecked="True" />
+                                                    <RadioButton x:Name="RgScanScopePlaylist" Content="当前播放列表" Tag="Playlist" />
+                                                    <RadioButton x:Name="RgScanScopeSelection" Content="选中曲目" Tag="Selection" />
+                                                </RadioButtons>
+                                                <CheckBox x:Name="RgScanWriteTagsBox" Content="写入标签（不勾则仅预览计算结果）" IsChecked="True" />
+                                                <ProgressBar x:Name="RgScanProgressBar" Minimum="0" Maximum="1" Value="0" />
+                                                <TextBlock x:Name="RgScanStatusText" FontSize="12" Opacity="0.75" Text="就绪" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <Button
+                                                        x:Name="RgScanStartButton"
+                                                        CornerRadius="16"
+                                                        Content="开始扫描"
+                                                        Style="{StaticResource AccentButtonStyle}"
+                                                        Click="RgScanStartButton_Click" />
+                                                    <Button
+                                                        x:Name="RgScanCancelButton"
+                                                        CornerRadius="16"
+                                                        Content="取消"
+                                                        IsEnabled="False"
+                                                        Click="RgScanCancelButton_Click" />
+                                                </StackPanel>
+                                                <TextBox
+                                                    x:Name="RgScanLogBox"
+                                                    IsReadOnly="True"
+                                                    AcceptsReturn="True"
+                                                    TextWrapping="Wrap"
+                                                    FontFamily="Consolas"
+                                                    Height="160"
+                                                    ScrollViewer.VerticalScrollBarVisibility="Auto" />
                                             </StackPanel>
                                         </Border>
                                     </StackPanel>

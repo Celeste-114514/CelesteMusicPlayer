@@ -1416,15 +1416,17 @@ namespace CelesteMusicPlayer
             AddNavItem(items, NavFavoritesButton, NavFavoritesIndicator, false, "♥");
             AddNavItem(items, NavRatingsButton, NavRatingsIndicator, false, "★");
             AddNavItem(items, NavRecentButton, NavRecentIndicator, false, "↺");
-            AddNavItem(items, NavPlaylistWallButton, NavPlaylistWallIndicator, false, "≡");
             AddNavItem(items, NavGenreButton, NavGenreIndicator, false, "※");
             AddNavItem(items, NavYearButton, NavYearIndicator, false, "▒");
             AddNavItem(items, NavMostPlayedButton, NavMostPlayedIndicator, false, "▲");
             AddNavItem(items, NavFoldersButton, NavFoldersIndicator, false, "▤");
+            // 2026-10-12 用户要求：播放列表 / 播放队列 上移到分割线上方（媒体库之下），
+            // 标签排序挪到分类组最末（紧贴分割线）。IsTool 只作标注，动到哪组就跟着改。
+            AddNavItem(items, UserPlaylistNavButton, UserPlaylistNavIndicator, false, "▦");
+            AddNavItem(items, NavPlaylistWallButton, NavPlaylistWallIndicator, false, "≡");
             AddNavItem(items, NavWebDavButton, NavWebDavIndicator, false, "☁");
+            AddNavItem(items, NavTagSortButton, NavTagSortIndicator, false, "↕");
             AddNavItem(items, NavAudioFxButton, NavAudioFxIndicator, true, "♫");
-            AddNavItem(items, NavTagSortButton, NavTagSortIndicator, true, "↕");
-            AddNavItem(items, UserPlaylistNavButton, UserPlaylistNavIndicator, true, "▦");
             // 「设置」（2026-10-12 阶段 0）：工具区最下，点进去是主区里的设置面板
             AddNavItem(items, NavSettingsButton, NavSettingsIndicator, true, "⚙");
 

@@ -1144,8 +1144,11 @@ namespace CelesteMusicPlayer
             var hideItem = new MenuFlyoutItem { Text = "隐藏此列", Tag = ("hide", field) };
             hideItem.Click += TagSortColumnMenuAction;
 
-            var chooseItem = new MenuFlyoutItem { Text = "选择列…", Tag = ("choose", field) };
-            chooseItem.Click += TagSortColumnMenuAction;
+            // 「选择列…」（独立列配置窗口 TagSortColumnConfigWindow）2026-10-12 用户要求摘掉。
+            // 但它原本是唯一能把隐藏列加回来的入口，直接删会留下死路（列藏了就加不回来），
+            // 所以换成「恢复默认列」兜底。要恢复原窗口就把这行换回 choose + OpenTagSortColumnConfigWindow。
+            var resetItem = new MenuFlyoutItem { Text = "恢复默认列", Tag = ("reset", field) };
+            resetItem.Click += TagSortColumnMenuAction;
 
             menu.Items.Add(sortItem);
             menu.Items.Add(new MenuFlyoutSeparator());
@@ -1156,7 +1159,7 @@ namespace CelesteMusicPlayer
             menu.Items.Add(rightItem);
             menu.Items.Add(hideItem);
             menu.Items.Add(new MenuFlyoutSeparator());
-            menu.Items.Add(chooseItem);
+            menu.Items.Add(resetItem);
 
             menu.ShowAt(b, e.GetPosition(b));
         }
@@ -1195,8 +1198,8 @@ namespace CelesteMusicPlayer
                 case "hide":
                     HideVisibleTagSortColumn(field);
                     break;
-                case "choose":
-                    OpenTagSortColumnConfigWindow();
+                case "reset":
+                    ResetTagSortColumns();
                     break;
             }
         }
@@ -1226,7 +1229,7 @@ namespace CelesteMusicPlayer
             var visible = _tagSortColumns.Where(c => c.Visible).ToList();
             if (visible.Count <= 1)
             {
-                NowPlayingText.Text = "至少保留一列；如需调整请在「选择列…」里恢复";
+                NowPlayingText.Text = "至少保留一列；被隐藏的列可在列头右键选「恢复默认列」找回";
                 return;
             }
             var spec = _tagSortColumns.FirstOrDefault(c => c.Key == key);
@@ -1239,7 +1242,20 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>打开列配置窗口（选择列…）。</summary>
+        /// <summary>把列恢复成默认（2026-10-12：「选择列…」窗口摘掉后的兜底出口，
+        /// 否则列被隐藏后没有任何入口能加回来）。</summary>
+        private void ResetTagSortColumns()
+        {
+            _tagSortColumns = TagSortFields.DefaultColumns();
+            _tagSortColumnVersion++;
+            SaveTagSortConfig();
+            RebuildTagSortColumnHeaders();
+            ReapplyTagSortPanelSongs();
+        }
+
+
+        /// <summary>打开列配置窗口（选择列…）。
+        /// ⚠️ 2026-10-12 起无入口（列头右键的「选择列…」已换成「恢复默认列」），窗口代码留着备用。</summary>
         private void OpenTagSortColumnConfigWindow()
         {
             var win = new TagSortColumnConfigWindow(_tagSortColumns);
