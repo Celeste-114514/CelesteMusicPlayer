@@ -26,6 +26,10 @@ namespace CelesteMusicPlayer
         /// 会被截掉。给菜单项和容器都设 MinWidth，不管按哪种可用宽度测量都不会再被压窄。
         private const double MenuMinWidth = 220;
 
+        /// 「发现新版本 x.y.z（点击查看）」这条单独用的最小宽度：比通用宽度宽，
+        /// 免得长版本号把「（点击查看）」挤出菜单（测量只认 MinWidth，理由见 Separator()）。
+        private const double UpdateItemMinWidth = 300;
+
         /// <summary>
         ///  Build 一份新的右键菜单。
         /// </summary>
@@ -43,23 +47,45 @@ namespace CelesteMusicPlayer
 
             if (!string.IsNullOrEmpty(pendingUpdateVersion))
             {
-                flyout.Items.Add(new MenuFlyoutSeparator());
+                flyout.Items.Add(Separator());
+                // 这条最长（版本号+中文尾巴）。冷测量只认 MinWidth（见 Separator() 注释），
+                // 220px 装不下「发现新版本 26.10.3.0（点击查看）」→ 单独放宽，不然尾巴被裁。
                 flyout.Items.Add(Item(
                     "发现新版本 " + pendingUpdateVersion + "（点击查看）",
-                    SettingsWindow.ShowAbout));
+                    SettingsWindow.ShowAbout,
+                    UpdateItemMinWidth));
             }
 
-            flyout.Items.Add(new MenuFlyoutSeparator());
+            flyout.Items.Add(Separator());
             flyout.Items.Add(Item("播放 / 暂停", () => owner.TogglePlayPausePublic()));
             flyout.Items.Add(Item("上一首", () => owner.PreviousPublic()));
             flyout.Items.Add(Item("下一首", () => owner.NextPublic()));
             flyout.Items.Add(Item("添加到我喜欢", () => owner.FavoriteCurrentPublic()));
 
-            flyout.Items.Add(new MenuFlyoutSeparator());
+            flyout.Items.Add(Separator());
             flyout.Items.Add(Item("打开日志文件夹", OpenLogsFolder));
             flyout.Items.Add(Item("退出播放器", () => owner.ExitFromTray()));
 
             return flyout;
+        }
+
+        /// <summary>
+        /// 菜单分隔线。⚠ 必须显式钉 <see cref="FrameworkElement.Height"/> = 3：
+        ///
+        /// H.NotifyIcon 2.3.0 的 SecondWindow 模式在弹菜单前会调 MeasureFlyout
+        /// 「冷测量」每一项 —— 那一刻菜单项还没套上控件模板，MenuFlyoutItem 靠库
+        /// 钉死的 Height=32 能测出高度，而 separator 什么都没钉，实测 DesiredSize=(0,0)。
+        /// 窗口高度就是按这个 Σ 算的：round(scale × (4 + Σ) + 4)。
+        /// 但 separator 真正渲染时占 3px（WinUI 默认模板：1px 线 + 上下 Padding 各 1px）。
+        /// 两条分隔线 → 测量少算 6px → 窗口比内容矮 → ScrollViewer 弹出竖向滚动条。
+        /// 钉成 3px 后「测量=渲染」，滚动条消失。（上游 master 至今没修这个。）
+        /// </summary>
+        private static MenuFlyoutSeparator Separator()
+        {
+            return new MenuFlyoutSeparator
+            {
+                Height = 3
+            };
         }
 
         /// <summary>
@@ -75,12 +101,12 @@ namespace CelesteMusicPlayer
             return style;
         }
 
-        private static MenuFlyoutItem Item(string text, Action action)
+        private static MenuFlyoutItem Item(string text, Action action, double minWidth = MenuMinWidth)
         {
             var item = new MenuFlyoutItem
             {
                 Text = text,
-                MinWidth = MenuMinWidth
+                MinWidth = minWidth
             };
             item.Command = new TrayCommand(action);
             return item;
