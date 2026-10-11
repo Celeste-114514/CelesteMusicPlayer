@@ -80,7 +80,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                Windows.UI.Color accent = ThemeColorService.CurrentAccent;
+                Windows.UI.Color accent = MainWindow.ResolveAccentColorStatic();
                 var accentBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(accent);
                 Windows.UI.Color pressed = Windows.UI.Color.FromArgb(255, (byte)(accent.R * 0.7), (byte)(accent.G * 0.7), (byte)(accent.B * 0.7));
                 Windows.UI.Color disabled = Windows.UI.Color.FromArgb(255, (byte)(accent.R * 0.3), (byte)(accent.G * 0.3), (byte)(accent.B * 0.3));
@@ -110,22 +110,23 @@ namespace CelesteMusicPlayer
             return Color.FromArgb(255, (byte)(value >> 16), (byte)(value >> 8), (byte)value);
         }
 
-        /// <summary>主题色偏深用白字，偏浅用黑字。</summary>
+        /// <summary>
+        /// 圆底 / 胶囊 / 强调色按钮上的前景色（图标与文字）。
+        /// 2026-10-12 用户拍板：**不要**按背景深浅自动切黑/白（早先是 luminance &lt; 140 判黑白）——
+        /// 同一套界面里一会儿黑一会儿白显得脏，一律用白色；可读性交给主题文件自己的强调色把关。
+        /// 等皮肤设置上线，这一项会通过 <see cref="OverrideContrastForeground"/> 开放给用户改。
+        /// </summary>
         public static Brush ResolveContrastingForeground(Brush background)
         {
-            Color color = Colors.DodgerBlue;
-            if (background is SolidColorBrush solid)
-            {
-                color = solid.Color;
-            }
-            else if (Application.Current.Resources.TryGetValue("SystemAccentColor", out object? colorObj)
-                && colorObj is Color accent)
-            {
-                color = accent;
-            }
-
-            double luminance = (0.299 * color.R) + (0.587 * color.G) + (0.114 * color.B);
-            return new SolidColorBrush(luminance < 140 ? Colors.White : Colors.Black);
+            return OverrideContrastForeground ?? DefaultContrastForegroundBrush;
         }
+
+        /// <summary>
+        /// 前景色的皮肤级覆盖入口（目前恒 null = 走默认白）。
+        /// 未来 SET 皮肤设置/主题文件给它赋值即可整体切换按钮字颜色，调用点一行都不用动。
+        /// </summary>
+        public static Brush? OverrideContrastForeground { get; set; }
+
+        private static readonly SolidColorBrush DefaultContrastForegroundBrush = new(Colors.White);
     }
 }

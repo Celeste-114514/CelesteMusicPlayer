@@ -192,7 +192,9 @@ namespace CelesteMusicPlayer
                     // 缓存波形主题色(信息卡频谱用)
                     try
                     {
-                        _waveAccentColor = ThemeColorService.CurrentAccent;
+                        // 缓存波形主题色(信息卡频谱用)。走 ResolveAccentColor 而不是直接读 CurrentAccent，
+                        // 否则令牌测试皮肤下频谱不跟主题文件的强调色走（同音量条的老毛病）。
+                        _waveAccentColor = ResolveAccentColor();
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
@@ -2200,7 +2202,8 @@ namespace CelesteMusicPlayer
             // 关闭对话框按钮用当前主题色(ContentDialog 局部资源)
             try
             {
-                Windows.UI.Color closeAccent = ThemeColorService.CurrentAccent;
+                // 走统一的强调色入口，令牌测试皮肤下也会跟着主题文件走
+                Windows.UI.Color closeAccent = ResolveAccentColor();
                 var closeBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(closeAccent);
                 dialog.Resources["AccentButtonBackground"] = closeBrush;
                 dialog.Resources["AccentButtonBackgroundPointerOver"] = closeBrush;
@@ -2355,6 +2358,14 @@ namespace CelesteMusicPlayer
 
             return Color.FromArgb(255, 0, 120, 212);
         }
+
+        /// <summary>
+        /// 静态版的 ResolveAccentColor：给没有窗口实例的上下文（ColorHelper 的弹窗强调、
+        /// 启动遮罩配色）用。语义完全一致（令牌测试皮肤下=主题文件 Accent.Solid），
+        /// 窗口还没建起来时回落系统默认蓝，不会把配色涂崩。
+        /// </summary>
+        internal static Color ResolveAccentColorStatic()
+            => Instance?.ResolveAccentColor() ?? Color.FromArgb(255, 0, 120, 212);
 
 
         /// <summary>

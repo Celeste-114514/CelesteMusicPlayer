@@ -164,9 +164,10 @@ namespace CelesteMusicPlayer
             }
             catch { /* 读设置失败就用默认色，不影响动画 */ }
 
+            // 走统一的强调色入口（令牌测试皮肤=主题文件 Accent.Solid），别直接读 CurrentAccent
             try
             {
-                return ThemeColorService.CurrentAccent;
+                return MainWindow.ResolveAccentColorStatic();
             }
             catch
             {

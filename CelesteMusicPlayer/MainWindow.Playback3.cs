@@ -1433,7 +1433,12 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            Color accent = ThemeColorService.CurrentAccent;
+            // 走统一的强调色入口（极客=磷光色 / 令牌皮肤=主题文件 Accent.Solid / 其余=设置里的强调色）。
+            // 早先这里直接读 ThemeColorService.CurrentAccent，绕过了那一层，所以令牌皮肤下音量条
+            // 不跟着主题走（用户实测"音量条颜色没变"）。
+            Color accent = ResolveAccentBrush() is SolidColorBrush accentSolid
+                ? accentSolid.Color
+                : ThemeColorService.CurrentAccent;
             double ratio = VolumeSlider.Maximum > 0 ? VolumeSlider.Value / VolumeSlider.Maximum : 0;
             ratio = Math.Clamp(ratio, 0, 1);
 
