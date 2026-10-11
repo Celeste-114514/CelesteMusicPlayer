@@ -962,8 +962,10 @@
                         Spacing="8"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center">
-                        <!-- 皮肤系统第 4 步：Apple 风格主界面 · 歌曲浏览面板。
-                             只在歌曲分类显示；点了才第一次创建 WebView2，不点就永远不占那 286MB。 -->
+                        <!-- 【皮肤系统入口 · 2026-10-11 起临时隐藏】用户要求新版本不含皮肤系统，
+                             这里整段注释掉、代码一行没删。以后要恢复：去掉本段首尾两行注释标记即可。
+                             原说明：皮肤系统第 4 步，Apple 风格主界面 · 歌曲浏览面板。
+                             只在歌曲分类显示；点了才第一次创建 WebView2，不点就永远不占那 286MB。
                         <Button
                             x:Name="WebMainPilotButton"
                             Height="32"
@@ -977,8 +979,10 @@
                                 <TextBlock Text="Apple 风格界面" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <!-- 批次 1：Windows 风（Fluent）新版主界面。与「Apple 风格界面」互斥，
-                             点谁开谁；winmain.html 是 main.html 的平行换肤页，协议零改动。 -->
+                        【隐藏结束】 -->
+                        <!-- 【皮肤系统入口 · 2026-10-11 起临时隐藏】恢复方法同上：去掉首尾两行注释标记。
+                             原说明：批次 1，Windows 风（Fluent）新版主界面。与「Apple 风格界面」互斥，
+                             点谁开谁；winmain.html 是 main.html 的平行换肤页，协议零改动。
                         <Button
                             x:Name="WebWinMainButton"
                             Height="32"
@@ -992,6 +996,7 @@
                                 <TextBlock Text="新版界面" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
+                        【隐藏结束】 -->
                         <Button
                             x:Name="PlayAllLibrarySongsButton"
                             Height="32"
@@ -2052,8 +2057,9 @@
                                                     <TextBlock Text="添加到播放列表" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </Button>
-                                            <!-- 皮肤系统第 3 步：网页版专辑详情。
-                                                 点了才第一次创建 WebView2，不点就永远不占那 286MB。 -->
+                                            <!-- 【皮肤系统入口 · 2026-10-11 起临时隐藏】恢复方法同上：去掉首尾两行注释标记。
+                                                 原说明：皮肤系统第 3 步，网页版专辑详情。
+                                                 点了才第一次创建 WebView2，不点就永远不占那 286MB。
                                             <Button
                                                 x:Name="AlbumDetailWebPilotButton"
                                                 Height="36"
@@ -2068,6 +2074,7 @@
                                                     <TextBlock Text="Apple 风格界面" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </Button>
+                                            【隐藏结束】 -->
                                         </StackPanel>
                                     </Grid>
 
