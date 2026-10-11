@@ -86,6 +86,109 @@ namespace CelesteMusicPlayer
             };
         }
 
+        /// <summary>
+        /// 艺术家概览（简介）。2026-10-12 艺术家详情页改版用。
+        /// 目前只接了网易云一路 —— 用户明确说「后续再加别的平台的设置」，
+        /// 所以这里留好 source 参数，将来加平台只改这个 switch 和下面的私有方法。
+        /// 拿不到就返回 null（调用方显示「暂无该艺术家的概览」），不抛异常。
+        /// </summary>
+        public static async Task<string?> GetArtistOverviewAsync(
+            string source,
+            string artistName,
+            CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(artistName))
+            {
+                return null;
+            }
+
+            return source switch
+            {
+                "QQ" => null, // 暂未接入
+                _ => await GetNetEaseArtistBriefAsync(artistName, cancellationToken).ConfigureAwait(false)
+            };
+        }
+
+        /// <summary>
+        /// 网易云歌手简介：先按名字搜到歌手 id，再取该歌手的 briefDesc。
+        /// ⚠️ 用的是老的公开 API（与搜索同一批），不保证长期可用 —— 失败一律返回 null，
+        /// 界面上只是「暂无概览」，不影响其它功能。
+        /// </summary>
+        private static async Task<string?> GetNetEaseArtistBriefAsync(
+            string artistName,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                IReadOnlyList<OnlineSongResult> hits =
+                    await SearchNetEaseArtistsAsync(artistName, cancellationToken).ConfigureAwait(false);
+                string? id = null;
+                foreach (OnlineSongResult h in hits)
+                {
+                    if (!string.IsNullOrWhiteSpace(h.SongId))
+                    {
+                        id = h.SongId;
+                        break;
+                    }
+                }
+
+                if (string.IsNullOrEmpty(id))
+                {
+                    return null;
+                }
+
+                string url = "https://music.163.com/api/artist/head/info/get?id=" + Uri.EscapeDataString(id);
+                using HttpResponseMessage response = await Http.GetAsync(url, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return null;
+                }
+
+                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                // 两种返回形态都兼容：{ artist:{briefDesc} } 与 { data:{ artist:{briefDesc} } }
+                if (TryFindBriefDesc(doc.RootElement, out string? brief) && !string.IsNullOrWhiteSpace(brief))
+                {
+                    return brief.Trim();
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
+
+            return null;
+        }
+
+        /// <summary>在 JSON 树里递归找 briefDesc 字段（容错：不同接口返回层级不一样）。</summary>
+        private static bool TryFindBriefDesc(JsonElement node, out string? brief)
+        {
+            brief = null;
+            if (node.ValueKind != JsonValueKind.Object)
+            {
+                return false;
+            }
+
+            if (node.TryGetProperty("briefDesc", out JsonElement direct))
+            {
+                brief = direct.GetString();
+                return true;
+            }
+
+            foreach (JsonProperty property in node.EnumerateObject())
+            {
+                if (property.Value.ValueKind != JsonValueKind.Object)
+                {
+                    continue;
+                }
+
+                if (TryFindBriefDesc(property.Value, out string? found) && !string.IsNullOrWhiteSpace(found))
+                {
+                    brief = found;
+                    return true;
+                }
+            }
+
+            return false;
+        }
+
         /// <summary>网易云 type=100 歌手搜索：返回多个歌手的真实头像 picUrl（含别名）。</summary>
         private static async Task<IReadOnlyList<OnlineSongResult>> SearchNetEaseArtistsAsync(
             string query,

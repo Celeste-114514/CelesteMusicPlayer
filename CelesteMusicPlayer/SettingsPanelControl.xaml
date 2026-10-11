@@ -15,13 +15,40 @@
          业务逻辑一行没改，出问题可以逐段对回 SettingsWindow.xaml。 -->
     <Grid>
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
+        <!-- 设置总页面的搜索框（2026-10-12 用户要求从子页面内容区挪到最上方）：
+             横跨左侧分类与右侧内容，位置固定在设置页顶部，切哪个分类它都不动。 -->
+        <Grid
+            Grid.Row="0"
+            Margin="16,10,24,8"
+            MaxWidth="900"
+            ColumnSpacing="12">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <AutoSuggestBox
+                x:Name="SettingsSearchBox"
+                PlaceholderText="搜索设置项，例如：主题色、DSD、歌词、缓存"
+                QueryIcon="Find"
+                TextChanged="SettingsSearchBox_TextChanged"
+                QuerySubmitted="SettingsSearchBox_QuerySubmitted"
+                SuggestionChosen="SettingsSearchBox_SuggestionChosen" />
+            <TextBlock
+                x:Name="SettingsSearchHint"
+                Grid.Column="1"
+                VerticalAlignment="Center"
+                FontSize="12"
+                Opacity="0.7" />
+        </Grid>
+
         <NavigationView
             x:Name="SettingsNav"
-            Grid.Row="0"
+            Grid.Row="1"
             IsBackButtonVisible="Collapsed"
             IsSettingsVisible="False"
             PaneDisplayMode="Left"
@@ -65,37 +92,8 @@
             </NavigationView.MenuItems>
 
             <Grid Padding="0,0,8,0">
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="*" />
-                </Grid.RowDefinitions>
-
-                <!-- 顶部搜索框：跨所有分类搜索设置项 -->
-                <Grid
-                    Grid.Row="0"
-                    Margin="20,10,24,0"
-                    MaxWidth="680"
-                    ColumnSpacing="12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="Auto" />
-                    </Grid.ColumnDefinitions>
-                    <AutoSuggestBox
-                        x:Name="SettingsSearchBox"
-                        PlaceholderText="搜索设置项，例如：主题色、DSD、歌词、缓存"
-                        QueryIcon="Find"
-                        TextChanged="SettingsSearchBox_TextChanged"
-                        QuerySubmitted="SettingsSearchBox_QuerySubmitted"
-                        SuggestionChosen="SettingsSearchBox_SuggestionChosen" />
-                    <TextBlock
-                        x:Name="SettingsSearchHint"
-                        Grid.Column="1"
-                        VerticalAlignment="Center"
-                        FontSize="12"
-                        Opacity="0.7" />
-                </Grid>
-
-                <Grid Grid.Row="1">
+                <!-- 各分类的内容区（搜索框已移到总页面顶部，这里只放分类内容） -->
+                <Grid>
                 <!-- 歌词设置 -->
                 <!-- 文件关联（2026-10-12 阶段 3）：原独立窗口并入这里。
                      内容是 FileAssociationPanelControl，首次切到本分类时才创建（构造要读注册表，
@@ -2170,7 +2168,7 @@
         </NavigationView>
 
         <Border
-            Grid.Row="1"
+            Grid.Row="2"
             Padding="16,10"
             BorderThickness="0,1,0,0"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">

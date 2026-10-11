@@ -9,12 +9,34 @@
 - 可视化铁律：先读内核源码再写（压缩=CompressorProcessor.cpp:160-175 逐行复刻；M/S=sideDb+20log10(width/100)；Crossfeed=one-pole；SRC 标「示意图·非实测」）。
 
 ## WinUI3 铁律
+- **新增界面模式/枚举值的落地三连（2026-10-12 血坑）**：① 设置白名单（`AppSettingsStore.Normalize` 的 `is "Scene" or "Classic*"` 链）② UI 选择项（`SettingsWindow.xaml` 的 `ComboBoxItem Tag`）③ 应用分支（`ApplyUiStyleMode`）。**缺任何一项都是"静默不生效"**——TokenSkin 写了 241 行却因为白名单没放行，读回来被归一成 ClassicSystem，`IsTokenSkinActive` 恒 false，表面上"代码全对但不工作"。
+- **取色只认一个入口（2026-10-12 血坑）**：强调色有两套实现——`ThemeColorService.CurrentAccent`（直通系统强调色）与 `ResolveAccentBrush()`/`ResolveAccentColor()`（带极客/令牌皮肤分支）。**新 UI 元素必须走 resolver 那套**，抄近道用 CurrentAccent 的结果就是「别处都跟主题变了，就这一块不变」（用户实测报的音量条即此）。静态上下文用 `MainWindow.ResolveAccentColorStatic()`（2026-10-12 新增）。
+- **按钮/圆底前景色恒白**（2026-10-12 用户拍板）：`ColorHelper.ResolveContrastingForeground` 不再按背景亮度切黑/白，一律白色；未来皮肤设置的开关落在 `ColorHelper.OverrideContrastForeground`（非 null 优先）。
+- **二级窗口并入主 UI 的落地模式（2026-10-12 定）**：底座 = `MainWindow.ShellPages.cs` 的 `ShellPageHost`
+  （左子导航+右内容+强调条+徽章，视觉对齐 DspNav）。**强调色必须外部注入**（传 `() => DspAccentBrush()`），
+  框架自己绝不读资源。并入三步：① 功能先内联到主界面（弹窗→内联字段条）② 确认无问题再摘旧窗口入口
+  ③ 最后才删窗口代码。**音效处理的 `DspNav` 是专用实现，暂不迁移**（等新框架站稳）。
+- **二级窗口并入主 UI 的标准手法（2026-10-12 阶段 3 定型）**：「机械搬运」不重写业务——脚本读原窗口文件按锚点切块，
+  只做 6 项必需替换（Window→UserControl / 删标题栏与 AppWindow 系列 / Activated→Loaded + Closed→Unloaded /
+  ApplyBackdropFromSettings 清空 / 「保存并关闭」→「保存」+ 删 Close() / 窗口静态方法留空实现兼容旧调用点）。
+  ⚠ 搬运前先 `grep -rln "partial class X"` 列全分部文件（SettingsWindow 有 3 个），**只有一处能写 `: UserControl`**，
+  其余必须去掉基类。旧窗口代码保留、只摘入口（可一行接回）。产物：SettingsPanelControl / FileAssociationPanelControl。
+- **设置面板加一个分类 = 4 处**：导航项 + 内容 ScrollViewer + `ShowPanel` 一行 + `_searchPanels` 一行。
+- **XAML+cs 必须同 commit**：XAML 事件 handler 与 cs 方法强耦合，拆两个 commit 会让 revert 任一半编译不过
+  （2026-10-12 实测）。各阶段归属靠 XAML 注释标注。
+- **XamlCompiler 原生崩 exit 1/0xC0000005 别重试，直接二分**（2026-10-12 实证）：两类诱因——
+  ① `Border` 塞多个子元素（Canvas+Path+Ellipse+Rectangle 叠加层）不报错直接崩，**多元素叠加一律 Grid**
+  （原 ArtistAvatarEditorWindow 的 CropViewport 本就是 Grid）；② `ItemsWrapGrid` 属性名是
+  `MaximumRowsOrColumns`，写错也崩。固定排查：ET.parse 验良构 → 查 BOM → `_build_check.py`
+  （Release/win-x64；Debug 不重编 XAML 会假过）。另：Bash 直调 `dotnet publish` 输出会被吞
+  （0 字节、秒退 exit 0、产物不更新），dotnet 长命令走 python subprocess（_build_check.py 同款 env）。
 - 秒崩 0xC000027B：XAML 带初值+事件绑定→InitializeComponent 就地触发→handler 写后续 x:Name（null）→NRE。**新面板 ValueChanged/Toggled 必加「面板就绪」守卫**。临时下架带 x:Name 控件用 Collapsed，禁注释（=CS0103）。
 - FontFamily 禁赋 null（COMException）→ClearValue。托盘分隔线钉 `new MenuFlyoutSeparator{Height=3}`（H.NotifyIcon 冷测量 DesiredSize=(0,0) 实占 3px，不钉弹滚动条，上游未修）。启动期判定类 UI 必须曲库定型后重算。
 
 ## 皮肤 / WebUI
 - **皮肤入口 2026-10-11 起整体隐藏**（用户要求新版本不含）：MainWindow.xaml 三个 pill + csproj 4 个 Content 行都注释；SettingsWindow.xaml「主题文件」区两处 Collapsed（95005a9，恢复=删两处 Visibility）。**恢复必须三处一起去**。TokenSkin WIP 未提交（MainWindow.TokenSkin.cs + FrostedGlass/CelesteTheme/Misc/Playback3/UiTheme 5 文件，与 native2 改动文件不重叠；备份 /tmp/CelesteTokSkin_WIP_20261011，TEMP 重启即失）。
 - 极客：色源唯一 GeekPhosphorColor；严禁改全局资源（必崩）→元素级副本；跨模式共用的每秒定时器是头号陷阱；文字当图标禁用等宽字体→GeekGlyphFont+17。播放队列三处图标 RedEye(E7B3)→List(EA37) 已改（b1b6f01，进 26.10.11 包）。
+- 皮肤系统的阶段 1「令牌测试皮肤」已合闸（2026-10-12，commit 086b566 + 49a2ff6）：设置→外观→界面风格「测试皮肤」+ 主题文件「演示暖橙」，Classic*/Token 互切热生效不用重启。验证口径、演示主题文件、没跑实机冒烟的原因见 2026-10-12.md。
 - WebUI 路线 B：网页只长样子不做事，音频链路零改动。铁律：点行播放=整表替换队列；消息手动 JsonDocument.Parse 提 kind（默认区分大小写会静默全丢）；CSS 写了≠生效（_webcheck 验，几何 --dump-dom 禁读 PNG）；视图切换只切 display 且必须 scrollTop=0；后台回填先占坑；重推防抖三件套（clearInterval(readyTimer)、coverByAlbum 跨推存活、data-src 守卫）。
 
 ## 工程约定

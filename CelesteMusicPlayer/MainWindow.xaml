@@ -753,32 +753,9 @@
                             </Button>
                             <Border x:Name="NavWebDavIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
                         </Grid>
-                        <!-- 标签排序：2026-10-12 用户要求移到分割线正上方（分类组最后一项），
-                             不再与音效处理/设置挤在底部工具组里 -->
-                        <Grid Margin="0,0,0,3">
-                            <Button
-                                x:Name="NavTagSortButton"
-                                Tag="TagSort"
-                                Padding="8,6"
-                                FontSize="14"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Background="Transparent"
-                                BorderThickness="0"
-                                CornerRadius="8"
-                                Click="NavTagSortButton_Click">
-                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <FontIcon
-                                        x:Name="NavTagSortIcon"
-                                        Glyph="&#xE8CB;"
-                                        FontSize="16"
-                                        VerticalAlignment="Center" />
-                                    <TextBlock Tag="NavEmoji" Text="🏷️" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
-                                    <TextBlock Tag="NavLabel" Text="标签排序" VerticalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            <Border x:Name="NavTagSortIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
-                        </Grid>
+                        <!-- ⚠️ 「标签排序」不在这里（2026-10-12 二次调整）：它现在贴在下方分割线的
+                             正上方（NavToolPanel 里第一条），与分割线下的「音效处理」上下对称。
+                             放在这个可滚动列表里会随分类条目一起滚动，贴不住分割线。 -->
                     </StackPanel>
                 </ScrollViewer>
 
@@ -787,6 +764,35 @@
                     x:Name="NavToolPanel"
                     Grid.Row="2"
                     Margin="0,2,0,0">
+                    <!-- 标签排序（2026-10-12 二次调整）：钉在分割线的正上方并紧贴分割线，
+                         与分割线下方的「音效处理」上下对称 —— 两者底/上留白都是 3px（Margin 0,0,0,3
+                         对 分割线 Margin 10,0,10,3）。
+                         ⚠️ 必须放在 NavToolPanel 里（分割线之上），不能放回上方 ScrollViewer：
+                         那里会随分类条目滚动，贴不住分割线。 -->
+                    <Grid Margin="0,0,0,3">
+                        <Button
+                            x:Name="NavTagSortButton"
+                            Tag="TagSort"
+                            Padding="8,6"
+                            FontSize="14"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="8"
+                            Click="NavTagSortButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon
+                                    x:Name="NavTagSortIcon"
+                                    Glyph="&#xE8CB;"
+                                    FontSize="16"
+                                    VerticalAlignment="Center" />
+                                <TextBlock Tag="NavEmoji" Text="🏷️" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                <TextBlock Tag="NavLabel" Text="标签排序" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="NavTagSortIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                    </Grid>
                     <Border
                         x:Name="LibraryNavInnerDivider"
                         Height="1"
@@ -2396,110 +2402,153 @@
                                     Click="ArtistDetailBackButton_Click" />
                             </Border>
 
-                            <!-- 内容区：左栏(头像+歌曲)常显占满，右栏(专辑墙)独立滚动 -->
+                            <!-- 内容区（2026-10-12 改版）：
+                                 左栏 = 矩形头像（立体阴影）+ 艺术家名 + 简介概览；
+                                 右栏 = 歌曲列表 / 专辑墙 / 头像 三个页签切换（点哪个显示哪个）。
+                                 旧布局是「左头像 + 左歌曲列表 ｜ 右专辑墙」，歌曲列表被钉在 430px 宽的窄栏里，
+                                 艺术家名右边的两个播放按钮又和歌曲列表里的重复，所以整个重排。 -->
                             <Grid Grid.Row="1" RowSpacing="16" Padding="0,8,20,12">
                                 <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
                                     <RowDefinition Height="*" />
-                                    <RowDefinition Height="Auto" />
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="272" />
                                     <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="*" MinWidth="280" />
+                                    <ColumnDefinition Width="*" MinWidth="420" />
                                 </Grid.ColumnDefinitions>
 
                                 <!-- 左右分隔竖线（作为中间独立列，留空隙分隔两栏，不穿内容） -->
                                 <Border
                                     Grid.Row="0"
-                                    Grid.RowSpan="3"
                                     Grid.Column="1"
                                     Width="1"
-                                    Margin="50,0,16,0"
+                                    Margin="12,0,16,0"
                                     HorizontalAlignment="Left"
                                     Background="{ThemeResource DividerStrokeColorDefaultBrush}"
                                     IsHitTestVisible="False" />
 
-                                <!-- 圆形头像 + 名字 + 播放艺术家（左列） -->
-                                <Grid Grid.Row="0" Grid.Column="0" ColumnSpacing="16">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
+                                <!-- 左栏：矩形头像 → 艺术家名 → 概览（自上而下） -->
+                                <Grid Grid.Row="0" Grid.Column="0" RowSpacing="10">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
 
-                                    <Grid
-                                        Width="160"
-                                        Height="160"
+                                    <!-- 矩形头像：立体阴影由代码里挂 ThemeShadow（见 ApplyArtistDetailAvatarShadow），
+                                         外层留 18px 边距是给阴影腾地方，不然会被裁掉。
+                                         右键 = 头像菜单（在线搜图 / 本地选择 / 恢复默认）。 -->
+                                    <Border
+                                        x:Name="ArtistDetailAvatarFrame"
+                                        Grid.Row="0"
+                                        Width="248"
+                                        Height="248"
+                                        Margin="12,12,12,4"
+                                        CornerRadius="10"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1"
                                         RightTapped="ArtistDetailAvatar_RightTapped">
-                                        <Ellipse
-                                            Fill="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                            Stroke="{ThemeResource CardStrokeColorDefaultBrush}"
-                                            StrokeThickness="1" />
-                                        <FontIcon
-                                            x:Name="ArtistDetailAvatarPlaceholder"
-                                            Glyph="&#xE77B;"
-                                            FontSize="56"
-                                            HorizontalAlignment="Center"
-                                            VerticalAlignment="Center"
-                                            Opacity="0.4" />
-                                        <Ellipse x:Name="ArtistDetailAvatarEllipse">
-                                            <Ellipse.Fill>
-                                                <ImageBrush
-                                                    x:Name="ArtistDetailAvatarBrush"
-                                                    Stretch="UniformToFill" />
-                                            </Ellipse.Fill>
-                                        </Ellipse>
-                                    </Grid>
+                                        <Grid>
+                                            <FontIcon
+                                                x:Name="ArtistDetailAvatarPlaceholder"
+                                                Glyph="&#xE77B;"
+                                                FontSize="72"
+                                                HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                Opacity="0.4" />
+                                            <!-- 头像图：铺满矩形（不再裁成圆形） -->
+                                            <Border CornerRadius="9">
+                                                <Border.Background>
+                                                    <ImageBrush
+                                                        x:Name="ArtistDetailAvatarBrush"
+                                                        Stretch="UniformToFill" />
+                                                </Border.Background>
+                                            </Border>
+                                        </Grid>
+                                    </Border>
 
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="12" MaxWidth="270">
+                                    <!-- 艺术家名（头像正下方） -->
+                                    <TextBlock
+                                        x:Name="ArtistDetailNameText"
+                                        Grid.Row="1"
+                                        Margin="12,0,12,0"
+                                        FontSize="22"
+                                        FontWeight="SemiBold"
+                                        TextWrapping="WrapWholeWords"
+                                        MaxLines="3"
+                                        TextTrimming="CharacterEllipsis" />
+
+                                    <!-- 概览来源（在线简介来自哪个平台；设置里可换） -->
+                                    <TextBlock
+                                        x:Name="ArtistDetailOverviewSourceText"
+                                        Grid.Row="2"
+                                        Margin="12,2,12,0"
+                                        FontSize="12"
+                                        Opacity="0.65"
+                                        Text="艺术家概览" />
+
+                                    <!-- 艺术家概览（在线简介，异步加载） -->
+                                    <ScrollViewer
+                                        Grid.Row="3"
+                                        Margin="12,4,12,0"
+                                        VerticalScrollBarVisibility="Auto">
                                         <TextBlock
-                                            x:Name="ArtistDetailNameText"
-                                            FontSize="28"
-                                            FontWeight="SemiBold"
+                                            x:Name="ArtistDetailOverviewText"
+                                            FontSize="13"
+                                            Opacity="0.85"
                                             TextWrapping="WrapWholeWords"
-                                            MaxLines="4"
-                                            TextTrimming="CharacterEllipsis" />
-                                        <StackPanel Orientation="Vertical" Spacing="10">
-                                            <Button
-                                                x:Name="PlayArtistWorksButton"
-                                                Height="32"
-                                                Padding="14,0"
-                                                CornerRadius="16"
-                                                BorderThickness="0"
-                                                HorizontalAlignment="Left"
-                                                Click="PlayArtistWorksButton_Click"
-                                                ToolTipService.ToolTip="用该艺术家全部作品替换播放列表并开始播放">
-                                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <FontIcon Glyph="&#xE768;" FontSize="14" />
-                                                    <TextBlock Text="播放该艺术家的作品" VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </Button>
-                                            <Button
-                                                x:Name="AddArtistWorksToPlaylistButton"
-                                                Height="32"
-                                                Padding="14,0"
-                                                CornerRadius="16"
-                                                BorderThickness="0"
-                                                HorizontalAlignment="Left"
-                                                Click="AddArtistWorksToPlaylistButton_Click"
-                                                ToolTipService.ToolTip="将该艺术家全部作品添加到播放队列">
-                                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <FontIcon Glyph="&#xE710;" FontSize="14" />
-                                                    <TextBlock Text="添加该艺术家的作品至播放队列" VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </Button>
-                                        </StackPanel>
-                                    </StackPanel>
+                                            Text="加载中…" />
+                                    </ScrollViewer>
                                 </Grid>
 
-                                <!-- 歌曲列表：与右侧信息卡相同毛玻璃（无阴影） -->
-                                <Border
+                                <!-- 右栏：页签切换条 + 内容三选一 -->
+                                <Grid Grid.Row="0" Grid.Column="2" RowSpacing="8">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                    </Grid.RowDefinitions>
+
+                                    <StackPanel
+                                        Grid.Row="0"
+                                        Orientation="Horizontal"
+                                        Spacing="8">
+                                        <Button
+                                            x:Name="ArtistDetailTabSongsButton"
+                                            Height="32"
+                                            Padding="14,0"
+                                            CornerRadius="16"
+                                            BorderThickness="0"
+                                            Content="歌曲列表"
+                                            Click="ArtistDetailTabSongsButton_Click" />
+                                        <Button
+                                            x:Name="ArtistDetailTabAlbumsButton"
+                                            Height="32"
+                                            Padding="14,0"
+                                            CornerRadius="16"
+                                            BorderThickness="0"
+                                            Content="专辑墙"
+                                            Click="ArtistDetailTabAlbumsButton_Click" />
+                                        <!-- 「头像」页签：只有从头像右键菜单进入时才出现，
+                                             里面是在线搜图 + 裁剪（不再弹独立窗口）。 -->
+                                        <Button
+                                            x:Name="ArtistDetailTabAvatarButton"
+                                            Height="32"
+                                            Padding="14,0"
+                                            CornerRadius="16"
+                                            BorderThickness="0"
+                                            Content="头像"
+                                            Visibility="Collapsed"
+                                            Click="ArtistDetailTabAvatarButton_Click" />
+                                    </StackPanel>
+
+                                    <Grid Grid.Row="1">
+
+                                    <!-- 歌曲列表：与右侧信息卡相同毛玻璃（无阴影） -->
+                                    <Border
                                     x:Name="ArtistSongsFrostPanel"
-                                    Grid.Row="1"
-                                    Grid.Column="0"
-                                    Width="430"
                                     Margin="0,0,12,-30"
-                                    MaxWidth="430"
                                     MinHeight="0"
                                     Padding="0"
                                     CornerRadius="0"
@@ -2660,7 +2709,8 @@
                                 </Border>
 
                                 <!-- 该艺术家的专辑（右栏，顶对齐、随窗口自适应） -->
-                                <Grid Grid.Row="0" Grid.Column="2" Grid.RowSpan="2" VerticalAlignment="Top" RowSpacing="8">
+                                <!-- 专辑墙（右栏页签之一）：随窗口自适应，铺满右栏剩下的高度 -->
+                                <Grid x:Name="ArtistAlbumPanel" VerticalAlignment="Stretch" RowSpacing="8">
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto" />
                                         <!-- 极客列头行：Child 由 GeekTables 填/清；整面板随艺术家详情显隐 -->
@@ -2827,6 +2877,15 @@
                                             </DataTemplate>
                                         </GridView.ItemTemplate>
                                     </GridView>
+                                </Grid>
+
+                                <!-- 头像页签的内容：在线搜图 + 裁剪。
+                                     原来是两个独立窗口（ArtistAvatarSearchWindow / ArtistAvatarEditorWindow），
+                                     2026-10-12 起并入详情页右侧这块区域，不再弹窗。
+                                     实际控件 = ArtistAvatarEditPanelControl，首次进入时由代码创建塞进来。 -->
+                                <Grid x:Name="ArtistAvatarPanel" Visibility="Collapsed" />
+
+                                    </Grid>
                                 </Grid>
                             </Grid>
                         </Grid>

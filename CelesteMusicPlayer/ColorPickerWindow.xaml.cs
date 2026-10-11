@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Globalization;
 using Microsoft.UI;
 using Microsoft.UI.Windowing;
@@ -68,6 +69,9 @@ namespace CelesteMusicPlayer
                 }
             };
         }
+
+        /// <summary>预设色块清单（就地取色浮层 InlineColorPicker 也用这一套，两处保持一致）。</summary>
+        internal static IReadOnlyList<string> GetPresetHexes() => PresetHexes;
 
         public static void Show(string title, string initialHex, Action<string> onPicked)
         {

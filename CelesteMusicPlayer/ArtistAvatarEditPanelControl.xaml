@@ -1,0 +1,147 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CelesteMusicPlayer.ArtistAvatarEditPanelControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:CelesteMusicPlayer"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!-- 艺术家头像面板（2026-10-12）：在线搜图 + 裁剪，塞在艺术家详情页右侧的
+         「歌曲列表 / 专辑墙 / 头像」页签区里，取代原来两个独立窗口。
+         逻辑照搬 ArtistAvatarSearchWindow / ArtistAvatarEditorWindow，
+         只把「窗口」语义换成「面板」：没有标题栏、不能自己关，
+         关闭由宿主（艺术家详情页的页签）决定。
+         裁剪框有圆形 / 矩形两种：圆形对应艺术家墙（圆形头像），
+         矩形对应详情页这张矩形头像 —— 保存下来的都是同一块方形区域，
+         各显示处再按自己的形状裁切，所以两种框只是构图参考，不会存两份图。
+
+         ⚠️⚠️ 2026-10-12 血坑记录（XamlCompiler 不报错、直接原生崩 exit 1 / 0xC0000005）：
+         ① CropViewport 必须是 Grid 不能是 Border：Border 只允许一个子元素，
+             这里要同时放 图 + 圆形蒙版 + 圆形描边 + 矩形描边，写 Border 必崩。
+             原 ArtistAvatarEditorWindow 就是 Grid，照抄它的结构即可。
+         ② ItemsWrapGrid 的属性名是 MaximumRowsOrColumns，没有 MaximumRowsOrCollections。 -->
+    <Grid RowSpacing="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <!-- 搜索行 -->
+        <Grid Grid.Row="0" ColumnSpacing="8">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <ComboBox x:Name="SourceCombo" Width="150" SelectionChanged="SourceCombo_SelectionChanged" />
+            <TextBox x:Name="SearchBox" Grid.Column="1" PlaceholderText="输入艺术家名…"
+                     KeyDown="SearchBox_KeyDown" VerticalContentAlignment="Center" />
+            <Button CornerRadius="16" x:Name="SearchButton" Grid.Column="2" Content="搜索"
+                    Style="{ThemeResource AccentButtonStyle}" Click="SearchButton_Click" />
+            <Button CornerRadius="16" x:Name="CloseButton" Grid.Column="3" Content="关闭"
+                    Click="CloseButton_Click" />
+        </Grid>
+
+        <TextBlock x:Name="StatusText" Grid.Row="1" FontSize="12" Opacity="0.7"
+                   TextWrapping="WrapWholeWords" />
+
+        <Grid Grid.Row="2">
+            <!-- ① 搜索结果 -->
+            <ScrollViewer x:Name="ResultScroll" VerticalScrollBarVisibility="Auto">
+                <GridView x:Name="ResultGrid" SelectionMode="Single"
+                          IsItemClickEnabled="True" ItemClick="ResultGrid_ItemClick">
+                    <GridView.ItemTemplate>
+                        <DataTemplate x:DataType="local:ArtistAvatarSearchItem">
+                            <StackPanel Width="150" Spacing="6">
+                                <Border Width="150" Height="150" CornerRadius="10"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1">
+                                    <Image Source="{x:Bind Cover}" Stretch="UniformToFill" />
+                                </Border>
+                                <TextBlock Text="{x:Bind Name}" FontSize="12" HorizontalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" MaxLines="1" />
+                                <TextBlock Text="{x:Bind Platform}" FontSize="11" Opacity="0.7"
+                                           HorizontalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </GridView.ItemTemplate>
+                    <GridView.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <ItemsWrapGrid Orientation="Horizontal" MaximumRowsOrColumns="4" />
+                        </ItemsPanelTemplate>
+                    </GridView.ItemsPanel>
+                </GridView>
+            </ScrollViewer>
+
+            <!-- ② 裁剪区 -->
+            <Grid x:Name="CropArea" Visibility="Collapsed">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                    <TextBlock Text="裁切框：" VerticalAlignment="Center" FontSize="12" Opacity="0.7" />
+                    <ToggleButton x:Name="ShapeCircleButton" Content="圆形" IsChecked="True" Click="ShapeButton_Click" />
+                    <ToggleButton x:Name="ShapeRectButton" Content="矩形" Click="ShapeButton_Click" />
+                    <TextBlock Text="缩放" VerticalAlignment="Center" FontSize="12" Opacity="0.7" Margin="12,0,0,0" />
+                    <Slider x:Name="ZoomSlider" Width="150" Minimum="0.5" Maximum="8"
+                            StepFrequency="0.05" Value="1" ValueChanged="ZoomSlider_ValueChanged" />
+                </StackPanel>
+
+                <!-- 拖动图片可平移，滚轮 / 滑杆可缩放。
+                     CropViewport 用 Grid（原编辑器窗口同款）：要同时叠 图 + 圆形蒙版 + 两个描边框 -->
+                <Grid
+                    x:Name="CropViewport"
+                    Grid.Row="1"
+                    Width="280"
+                    Height="280"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    Background="{ThemeResource LayerFillColorDefaultBrush}"
+                    PointerPressed="CropViewport_PointerPressed"
+                    PointerMoved="CropViewport_PointerMoved"
+                    PointerReleased="CropViewport_PointerReleased"
+                    PointerCaptureLost="CropViewport_PointerCaptureLost"
+                    PointerWheelChanged="CropViewport_PointerWheelChanged">
+                    <!-- 用 Canvas + 显式宽高摆图，避免 Image 在固定格子里只露出中间一块 -->
+                    <Canvas x:Name="ImageCanvas" Width="280" Height="280">
+                        <Image x:Name="EditImage" Stretch="Fill" IsHitTestVisible="False" />
+                    </Canvas>
+
+                    <!-- 圆形蒙版（挖空中间圆） -->
+                    <Path x:Name="MaskPath"
+                          Fill="{ThemeResource LayerFillColorDefaultBrush}"
+                          IsHitTestVisible="False"
+                          Data="M0,0 H280 V280 H0 Z M140,0 A140,140 0 1 0 140,280 A140,140 0 1 0 140,0 Z" />
+
+                    <!-- 圆形取景框 -->
+                    <Ellipse x:Name="RingEllipse"
+                             Stroke="{ThemeResource ControlStrokeColorDefaultBrush}"
+                             StrokeThickness="2"
+                             IsHitTestVisible="False" />
+
+                    <!-- 矩形取景框：整个视口就是方形结果，这条边框只是告诉你边界在哪 -->
+                    <Rectangle x:Name="RingRect"
+                               Stroke="{ThemeResource ControlStrokeColorDefaultBrush}"
+                               StrokeThickness="2"
+                               IsHitTestVisible="False" />
+                </Grid>
+
+                <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right"
+                             Spacing="8" Margin="0,10,0,0">
+                    <Button CornerRadius="16" Content="重新选图" Click="BackToResultsButton_Click" />
+                    <Button CornerRadius="16" Content="取消" Click="CropCancelButton_Click" />
+                    <Button CornerRadius="16" x:Name="CropConfirmButton" Content="确认"
+                            Style="{ThemeResource AccentButtonStyle}" Click="CropConfirmButton_Click" />
+                </StackPanel>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>

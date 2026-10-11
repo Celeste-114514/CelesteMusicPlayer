@@ -69,6 +69,14 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
+                // 2026-10-12 改版：详情页开着就把裁剪框放进右栏内嵌面板（不再弹独立编辑窗口）；
+                // 从艺术家墙右键进来（详情页没开）才回落到旧窗口。
+                if (ArtistDetailPanel != null && ArtistDetailPanel.Visibility == Visibility.Visible)
+                {
+                    OpenArtistAvatarPanel(artist, file.Path);
+                    return;
+                }
+
                 var editor = new ArtistAvatarEditorWindow(
                     ArtistAvatarStoreKey(artist.Name, _artistDetailUsesAlbumArtist
                         || string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal)),
@@ -182,6 +190,18 @@ namespace CelesteMusicPlayer
             ArtistDetailAvatarBrush.ImageSource = artist.AvatarImage;
             ArtistDetailAvatarPlaceholder.Visibility =
                 artist.AvatarImage == null ? Visibility.Visible : Visibility.Collapsed;
+
+            // 2026-10-12 改版：矩形头像挂立体阴影；右栏页签回到「歌曲列表」；
+            // 「头像」页签保持隐藏（只有从头像右键菜单进来才出现）。
+            ApplyArtistDetailAvatarShadow();
+            ApplyArtistDetailTab("Songs");
+            if (ArtistDetailTabAvatarButton != null)
+            {
+                ArtistDetailTabAvatarButton.Visibility = Visibility.Collapsed;
+            }
+
+            // 左栏头像下方的在线概览（网易云），异步拉，拉不到就显示「暂无」
+            _ = RefreshArtistOverviewAsync(artist.Name);
 
             // 若头像未加载(如从超链接/播放面板进入用的是缓存或新建条目)，异步补齐后再应用，确保头像显示
             if (artist.AvatarImage == null)

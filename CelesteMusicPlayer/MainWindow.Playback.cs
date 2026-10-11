@@ -1819,6 +1819,12 @@ namespace CelesteMusicPlayer
             TagSortPanel.Visibility = Visibility.Collapsed;
             TagSortClassScroll.Visibility = Visibility.Visible;
 
+            // 回到分类墙，顶部「分组浏览」按钮恢复显示（在分组浏览里它是隐藏的，见 ApplyTagSortPanelMode）
+            if (TagSortGoGroupButton != null)
+            {
+                TagSortGoGroupButton.Visibility = Visibility.Visible;
+            }
+
             // 1. 算全部分组（排序后存到 _tagSortClassWallAll）
             _tagSortClassWallAll = _playlist
                 .GroupBy(p => TagSortFieldVal(p, _tagSortClassField), StringComparer.CurrentCultureIgnoreCase)
@@ -1925,6 +1931,17 @@ namespace CelesteMusicPlayer
             {
                 "Albums" => "专辑", "Artists" => "艺术家", "Sort" => "排序方式", "GroupBy" => "分组浏览", _ => "曲目"
             };
+
+            // 2026-10-12 用户要求：已经在「分组浏览」里时，分类墙顶部那条「分组浏览」按钮藏掉。
+            // 它跟当前视图是同一个东西，留着就是两个「分组浏览」并排（一个按钮 + 一个视角名），
+            // 看着像两套功能。回到分类墙时由 ShowTagSortClassWall 恢复显示。
+            if (TagSortGoGroupButton != null)
+            {
+                TagSortGoGroupButton.Visibility =
+                    string.Equals(_tagSortPanelMode, "GroupBy", StringComparison.Ordinal)
+                        ? Visibility.Collapsed
+                        : Visibility.Visible;
+            }
 
             if (_tagSortPanelMode == "Albums")
             {

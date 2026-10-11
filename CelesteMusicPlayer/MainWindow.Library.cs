@@ -1144,9 +1144,31 @@ namespace CelesteMusicPlayer
             var hideItem = new MenuFlyoutItem { Text = "隐藏此列", Tag = ("hide", field) };
             hideItem.Click += TagSortColumnMenuAction;
 
-            // 「选择列…」（独立列配置窗口 TagSortColumnConfigWindow）2026-10-12 用户要求摘掉。
-            // 但它原本是唯一能把隐藏列加回来的入口，直接删会留下死路（列藏了就加不回来），
-            // 所以换成「恢复默认列」兜底。要恢复原窗口就把这行换回 choose + OpenTagSortColumnConfigWindow。
+            // 「添加列…」二级菜单（2026-10-12）：鼠标移到这一项上会自动展开，列出当前没显示的
+            // 所有列头字段，点哪个就把它加回列表末尾。它取代了原来的「选择列…」独立窗口
+            // （那个窗口已无入口），这样「隐藏此列」之后随时有对等的加回路径，不会留死路。
+            var addSubItem = new MenuFlyoutSubItem { Text = "添加列…" };
+            addSubItem.Icon = new FontIcon { Glyph = "\uE710" };
+            var hiddenKeys = new HashSet<string>(
+                _tagSortColumns.Where(c => !c.Visible).Select(c => c.Key),
+                StringComparer.Ordinal);
+            foreach (TagSortFields.FieldDef def in TagSortFields.All)
+            {
+                if (!hiddenKeys.Contains(def.Key))
+                {
+                    continue;
+                }
+
+                var addOne = new MenuFlyoutItem { Text = def.Label, Tag = ("add", def.Key) };
+                addOne.Click += TagSortColumnMenuAction;
+                addSubItem.Items.Add(addOne);
+            }
+
+            if (addSubItem.Items.Count == 0)
+            {
+                addSubItem.Items.Add(new MenuFlyoutItem { Text = "（所有字段都已显示）", IsEnabled = false });
+            }
+
             var resetItem = new MenuFlyoutItem { Text = "恢复默认列", Tag = ("reset", field) };
             resetItem.Click += TagSortColumnMenuAction;
 
@@ -1159,6 +1181,7 @@ namespace CelesteMusicPlayer
             menu.Items.Add(rightItem);
             menu.Items.Add(hideItem);
             menu.Items.Add(new MenuFlyoutSeparator());
+            menu.Items.Add(addSubItem);
             menu.Items.Add(resetItem);
 
             menu.ShowAt(b, e.GetPosition(b));
@@ -1198,6 +1221,9 @@ namespace CelesteMusicPlayer
                 case "hide":
                     HideVisibleTagSortColumn(field);
                     break;
+                case "add":
+                    ShowHiddenTagSortColumn(field);
+                    break;
                 case "reset":
                     ResetTagSortColumns();
                     break;
@@ -1235,6 +1261,37 @@ namespace CelesteMusicPlayer
             var spec = _tagSortColumns.FirstOrDefault(c => c.Key == key);
             if (spec == null) return;
             spec.Visible = false;
+            _tagSortColumnVersion++;
+            SaveTagSortConfig();
+            RebuildTagSortColumnHeaders();
+            ReapplyTagSortPanelSongs();
+        }
+
+
+        /// <summary>
+        /// 把一列加回显示（列头右键「添加列…」的落点）。新加的列排在可见列末尾，
+        /// 内部顺序仍保持「可见在前、隐藏在后」，与 MoveVisibleTagSortColumn 同一口径。
+        /// </summary>
+        private void ShowHiddenTagSortColumn(string key)
+        {
+            ListColumnSpec spec = _tagSortColumns.FirstOrDefault(c => c.Key == key);
+            if (spec == null)
+            {
+                // 老配置里没有这个字段（或后来新增的字段）：补一条默认权重再显示
+                spec = new ListColumnSpec { Key = key, Weight = 2, Visible = false };
+                _tagSortColumns.Add(spec);
+            }
+
+            if (spec.Visible)
+            {
+                return;
+            }
+
+            spec.Visible = true;
+            _tagSortColumns.Remove(spec);
+            int lastVisible = _tagSortColumns.FindLastIndex(c => c.Visible);
+            _tagSortColumns.Insert(lastVisible + 1, spec);
+
             _tagSortColumnVersion++;
             SaveTagSortConfig();
             RebuildTagSortColumnHeaders();
@@ -3254,6 +3311,15 @@ namespace CelesteMusicPlayer
             }
 
             ArtistEntry captured = artist;
+
+            // 2026-10-12 改版：详情页开着就走右栏内嵌面板（不再弹独立搜索窗口）；
+            // 从艺术家墙右键进来（详情页没开）才回落到旧窗口。
+            if (ArtistDetailPanel != null && ArtistDetailPanel.Visibility == Visibility.Visible)
+            {
+                OpenArtistAvatarPanel(captured);
+                return;
+            }
+
             bool albumArtistMode = _artistDetailUsesAlbumArtist
                 || string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal);
             string storeKey = ArtistAvatarStoreKey(captured.Name, albumArtistMode);

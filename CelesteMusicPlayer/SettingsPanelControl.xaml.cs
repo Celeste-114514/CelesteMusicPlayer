@@ -2187,21 +2187,98 @@ namespace CelesteMusicPlayer
         {
             if (_loadingUi) return;
 
-            // 选「自定义…」时展开调色板；首次切入用当前生效的磷光色做起点，不突兀
-            if (GeekPhosphorPickerPanel != null && GeekPhosphorPicker != null)
+            // 2026-10-12 用户要求：选「自定义…」时在下拉框旁就地展开取色浮层，
+            // 不再往列表里插一行（会把后面的选项全顶下去），也不再弹独立窗口。
+            // 浮层是盖在设置页上的，别处的文字不动。
+            if (GeekPhosphorPickerPanel != null)
             {
-                bool isCustom = GetComboTagString(GeekPhosphorCombo, "Amber") == "Custom";
-                GeekPhosphorPickerPanel.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
-                if (isCustom && !_geekPhosphorPickerInitialized)
-                {
-                    Windows.UI.Color current = MainWindow.GeekPhosphorColor();
-                    GeekPhosphorPicker.Color = Windows.UI.Color.FromArgb(255, current.R, current.G, current.B);
-                    _geekPhosphorPickerInitialized = true;
-                }
+                GeekPhosphorPickerPanel.Visibility = Visibility.Collapsed;
+            }
+
+            if (GetComboTagString(GeekPhosphorCombo, "Amber") == "Custom")
+            {
+                // 落盘 / 重启提示都交给浮层的「确定」「取消」回调，这里先不打扰用户
+                OpenGeekPhosphorPicker();
+                return;
             }
 
             PersistAllFromUi();
             NotifyGeekPhosphorChanged();
+        }
+
+
+        /// <summary>
+        /// 极客磷光色取「自定义…」时的就地取色浮层。
+        /// 实时跟随由 onLive 驱动（抖动 120ms，避免每拖一下整界面重染一遍）；
+        /// 重启提示只在点「确定」之后才弹 —— 浮层还开着的时候弹 ContentDialog 会抢 XamlRoot。
+        /// </summary>
+        private void OpenGeekPhosphorPicker()
+        {
+            if (GeekPhosphorCombo == null || GeekPhosphorPicker == null)
+            {
+                return;
+            }
+
+            if (!_geekPhosphorPickerInitialized)
+            {
+                Windows.UI.Color current = MainWindow.GeekPhosphorColor();
+                GeekPhosphorPicker.Color = Windows.UI.Color.FromArgb(255, current.R, current.G, current.B);
+                _geekPhosphorPickerInitialized = true;
+            }
+
+            Windows.UI.Color start = GeekPhosphorPicker.Color;
+            string originalHex = $"#{start.R:X2}{start.G:X2}{start.B:X2}";
+
+            InlineColorPicker.Show(GeekPhosphorCombo, "自定义磷光色", originalHex,
+                onLive: hex =>
+                {
+                    WriteGeekPhosphorHex(hex);
+                    ScheduleGeekPhosphorLiveApply();
+                },
+                onCommit: hex =>
+                {
+                    WriteGeekPhosphorHex(hex);
+                    PersistAllFromUi();
+                    // 等浮层完全收起再问重启
+                    DispatcherQueue.TryEnqueue(() => NotifyGeekPhosphorChanged());
+                },
+                onCancel: _ =>
+                {
+                    WriteGeekPhosphorHex(originalHex);
+                    PersistAllFromUi();
+                });
+        }
+
+
+        /// <summary>把十六进制写进（已隐藏的）内联取色器 —— PersistAllFromUi 就是从它读当前自定义色的。</summary>
+        private void WriteGeekPhosphorHex(string hex)
+        {
+            if (GeekPhosphorPicker == null) return;
+            if (!ColorPickerWindow.TryParseHex(hex, out Windows.UI.Color c)) return;
+            GeekPhosphorPicker.Color = Windows.UI.Color.FromArgb(255, c.R, c.G, c.B);
+        }
+
+
+        /// <summary>
+        /// 拖动取色过程中的实时重染：抖动 120ms 落盘一次。
+        /// ⚠️ 这里**不**调 NotifyGeekPhosphorChanged —— 那会弹「是否重启」对话框，
+        /// 浮层还开着时弹 ContentDialog 会抢焦点 / 抢 XamlRoot。重启提示留给「确定」。
+        /// </summary>
+        private void ScheduleGeekPhosphorLiveApply()
+        {
+            _geekPhosphorPickerDebounce?.Stop();
+            if (_geekPhosphorPickerDebounce == null)
+            {
+                _geekPhosphorPickerDebounce = DispatcherQueue.CreateTimer();
+                _geekPhosphorPickerDebounce.Interval = TimeSpan.FromMilliseconds(120);
+                _geekPhosphorPickerDebounce.Tick += (_, _) =>
+                {
+                    _geekPhosphorPickerDebounce?.Stop();
+                    PersistAllFromUi();
+                };
+            }
+
+            _geekPhosphorPickerDebounce.Start();
         }
 
         /// <summary>
@@ -2286,7 +2363,14 @@ namespace CelesteMusicPlayer
         {
             bool isCustom = stored != null
                 && (stored.StartsWith("Custom:", StringComparison.OrdinalIgnoreCase) || stored.StartsWith("#"));
-            GeekPhosphorPickerPanel.Visibility = isCustom ? Visibility.Visible : Visibility.Collapsed;
+            // 2026-10-12：取色器改成「点自定义就地浮层展开」（InlineColorPicker），
+            // 这块内联面板不再显示 —— 它一展开就把后面的选项全顶下去。
+            // GeekPhosphorPicker 本体保留：它现在是「当前自定义色」的存放位（PersistAllFromUi 读它）。
+            if (GeekPhosphorPickerPanel != null)
+            {
+                GeekPhosphorPickerPanel.Visibility = Visibility.Collapsed;
+            }
+
             if (isCustom && GeekPhosphorPicker != null)
             {
                 string hex = stored.StartsWith("Custom:", StringComparison.OrdinalIgnoreCase)
@@ -2790,16 +2874,20 @@ namespace CelesteMusicPlayer
             try
             {
                 string current = string.IsNullOrWhiteSpace(_accentHex) ? "#0078D4" : _accentHex;
-                ColorPickerWindow.Show("自定义主题色", current, hex =>
-                {
-                    DispatcherQueue.TryEnqueue(() =>
+                // 2026-10-12：就地浮层取色（不再弹独立窗口），浮层盖在设置页上，不会把别的选项推走
+                FrameworkElement anchor = sender as FrameworkElement ?? AccentColorButton;
+                InlineColorPicker.Show(anchor, "自定义主题色", current,
+                    onLive: null,
+                    onCommit: hex =>
                     {
-                        _accentHex = hex;
-                        SelectComboByTag(ThemePresetCombo, "");
-                        UpdateAccentColorButton();
-                        PersistAllFromUi();
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            _accentHex = hex;
+                            SelectComboByTag(ThemePresetCombo, "");
+                            UpdateAccentColorButton();
+                            PersistAllFromUi();
+                        });
                     });
-                });
             }
             catch (Exception ex)
             {
@@ -2812,19 +2900,21 @@ namespace CelesteMusicPlayer
             try
             {
                 string current = DesktopLyricPlayedColorTextBox?.Text ?? "#40B4FF";
-                ColorPickerWindow.Show("已播放颜色", current, hex =>
-                {
-                    DispatcherQueue.TryEnqueue(() =>
+                InlineColorPicker.Show(sender as FrameworkElement, "已播放颜色", current,
+                    onLive: null,
+                    onCommit: hex =>
                     {
-                        if (DesktopLyricPlayedColorTextBox != null)
+                        DispatcherQueue.TryEnqueue(() =>
                         {
-                            DesktopLyricPlayedColorTextBox.Text = hex;
-                        }
+                            if (DesktopLyricPlayedColorTextBox != null)
+                            {
+                                DesktopLyricPlayedColorTextBox.Text = hex;
+                            }
 
-                        UpdateColorSwatches();
-                        PersistAllFromUi();
+                            UpdateColorSwatches();
+                            PersistAllFromUi();
+                        });
                     });
-                });
             }
             catch (Exception ex)
             {
@@ -2837,19 +2927,21 @@ namespace CelesteMusicPlayer
             try
             {
                 string current = DesktopLyricUnplayedColorTextBox?.Text ?? "#F5F5F5";
-                ColorPickerWindow.Show("未播放颜色", current, hex =>
-                {
-                    DispatcherQueue.TryEnqueue(() =>
+                InlineColorPicker.Show(sender as FrameworkElement, "未播放颜色", current,
+                    onLive: null,
+                    onCommit: hex =>
                     {
-                        if (DesktopLyricUnplayedColorTextBox != null)
+                        DispatcherQueue.TryEnqueue(() =>
                         {
-                            DesktopLyricUnplayedColorTextBox.Text = hex;
-                        }
+                            if (DesktopLyricUnplayedColorTextBox != null)
+                            {
+                                DesktopLyricUnplayedColorTextBox.Text = hex;
+                            }
 
-                        UpdateColorSwatches();
-                        PersistAllFromUi();
+                            UpdateColorSwatches();
+                            PersistAllFromUi();
+                        });
                     });
-                });
             }
             catch (Exception ex)
             {
@@ -2892,19 +2984,21 @@ namespace CelesteMusicPlayer
             try
             {
                 string current = DesktopLyricOutlineColorTextBox?.Text ?? "#000000";
-                ColorPickerWindow.Show("描边颜色", current, hex =>
-                {
-                    DispatcherQueue.TryEnqueue(() =>
+                InlineColorPicker.Show(sender as FrameworkElement, "描边颜色", current,
+                    onLive: null,
+                    onCommit: hex =>
                     {
-                        if (DesktopLyricOutlineColorTextBox != null)
+                        DispatcherQueue.TryEnqueue(() =>
                         {
-                            DesktopLyricOutlineColorTextBox.Text = hex;
-                        }
+                            if (DesktopLyricOutlineColorTextBox != null)
+                            {
+                                DesktopLyricOutlineColorTextBox.Text = hex;
+                            }
 
-                        UpdateColorSwatches();
-                        PersistAllFromUi();
+                            UpdateColorSwatches();
+                            PersistAllFromUi();
+                        });
                     });
-                });
             }
             catch (Exception ex)
             {
@@ -2917,19 +3011,21 @@ namespace CelesteMusicPlayer
             try
             {
                 string current = DesktopLyricBackgroundColorTextBox?.Text ?? "#66000000";
-                ColorPickerWindow.Show("背景条颜色", current, hex =>
-                {
-                    DispatcherQueue.TryEnqueue(() =>
+                InlineColorPicker.Show(sender as FrameworkElement, "背景条颜色", current,
+                    onLive: null,
+                    onCommit: hex =>
                     {
-                        if (DesktopLyricBackgroundColorTextBox != null)
+                        DispatcherQueue.TryEnqueue(() =>
                         {
-                            DesktopLyricBackgroundColorTextBox.Text = hex;
-                        }
+                            if (DesktopLyricBackgroundColorTextBox != null)
+                            {
+                                DesktopLyricBackgroundColorTextBox.Text = hex;
+                            }
 
-                        UpdateColorSwatches();
-                        PersistAllFromUi();
+                            UpdateColorSwatches();
+                            PersistAllFromUi();
+                        });
                     });
-                });
             }
             catch (Exception ex)
             {

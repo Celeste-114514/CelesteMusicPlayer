@@ -901,18 +901,9 @@ namespace CelesteMusicPlayer
                 new CornerRadius(16),
                 ResolveCapsuleFillBrush(),
                 foreground: null);
-            ApplyCapsuleToControl(
-                PlayArtistWorksButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
-            ApplyCapsuleToControl(
-                AddArtistWorksToPlaylistButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
+            // PlayArtistWorksButton / AddArtistWorksToPlaylistButton 两个按钮
+            // 2026-10-12 按用户要求从左栏删除（与歌曲列表里的播放/添加按钮重复），
+            // 这里连同它们的 capsule 样式调用一起去掉，Click 处理方法保留备用。
             ApplyCapsuleToControl(
                 PlayArtistSongsButton,
                 32,
