@@ -1051,7 +1051,9 @@ namespace CelesteMusicPlayer
                         continue;
                     }
 
-                    if (classic)
+                    // 纯色图标模式（设置里关掉 emoji）下经典模式也保持字形跟随文字单色，
+                    // 不再涂类别彩色——那就是图景界面的观感。emoji 开启时才上类别彩色。
+                    if (classic && AppSettingsStore.Load().NavEmojiIcons)
                     {
                         icon.Foreground = new SolidColorBrush(color);
                     }
@@ -1437,16 +1439,21 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 经典界面用彩色 emoji 图标替换原来的单色字形（用户要求"像 emoji 那样的图标"，
-        /// 而不是"原有图标加个颜色"）；背景图式界面维持原样。
+        /// 侧栏分类图标显隐（2026-10-11 用户要求改为设置开关「启用 emoji 分类图标」）：
+        /// 开 = 彩色 emoji；关 = 纯色 Fluent 字形（与背景图式同一套，字形跟随文字单色）。
+        /// 经典（浅色/深色/跟随系统）与背景图式都按开关走；**极客皮肤不读这个开关** ——
+        /// 终端风保持单色，字符键 / 白色图形图标由「极客按键图标」单独决定。
         /// </summary>
         private void ApplyNavIconStyle(bool classic)
         {
             try
             {
+                AppSettingsState settings = AppSettingsStore.Load();
+                bool emojiOn = settings.NavEmojiIcons && !IsGeekUiStyleActive();
+
                 foreach (NavItemRef item in NavItems)
                 {
-                    bool useEmoji = classic && item.Emoji != null;
+                    bool useEmoji = emojiOn && item.Emoji != null;
                     if (item.Glyph != null)
                     {
                         item.Glyph.Visibility = useEmoji ? Visibility.Collapsed : Visibility.Visible;

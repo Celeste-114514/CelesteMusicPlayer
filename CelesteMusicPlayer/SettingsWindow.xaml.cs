@@ -552,6 +552,7 @@ namespace CelesteMusicPlayer
                 // 外观
                 SelectComboByTag(UiStyleModeCombo, s.UiStyleMode);
                 SetToggle(FrostedGlassSwitch, s.EnableFrostedGlass);
+                SetToggle(NavEmojiSwitch, s.NavEmojiIcons);
                 SelectComboByTag(GeekPhosphorCombo, s.GeekPhosphorColor);
                 ApplyGeekPhosphorCustomState(s.GeekPhosphorColor);
                 // 记住加载时的磷光色：之后只有真的改了才提示重启，别一打开就弹
@@ -1374,6 +1375,7 @@ namespace CelesteMusicPlayer
 
             s.UiStyleMode = GetComboTagString(UiStyleModeCombo, "ClassicSystem");
             s.EnableFrostedGlass = FrostedGlassSwitch?.IsOn ?? s.EnableFrostedGlass;
+            s.NavEmojiIcons = NavEmojiSwitch?.IsOn ?? s.NavEmojiIcons;
             // 磷光色：预设存名字；选了「自定义」就存 "Custom:#RRGGBB"（取色器当前值）
             string phosphorTag = GetComboTagString(GeekPhosphorCombo, "Amber");
             s.GeekPhosphorColor = phosphorTag == "Custom" && GeekPhosphorPicker != null
@@ -2139,6 +2141,12 @@ namespace CelesteMusicPlayer
             else if (ReferenceEquals(sender, GeekCrtSwitch))
             {
                 // CRT 扫描线开关：切完当场叠上 / 撤掉那一层，不用重启
+                MainWindow.Instance?.ApplySettingsLive(AppSettingsStore.Load());
+            }
+            else if (ReferenceEquals(sender, NavEmojiSwitch))
+            {
+                // 侧栏分类图标开关：经典 / 图景模式当场切换 emoji 与纯色字形，不用重启；
+                // 极客皮肤不读这个开关（终端风保持单色）
                 MainWindow.Instance?.ApplySettingsLive(AppSettingsStore.Load());
             }
         }

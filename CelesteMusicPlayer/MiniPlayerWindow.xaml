@@ -204,7 +204,7 @@
                                     BorderThickness="0"
                                     Click="QueueButton_Click"
                                     ToolTipService.ToolTip="播放队列">
-                                    <FontIcon Glyph="&#xE7B3;" FontSize="15" />
+                                    <FontIcon Glyph="&#xEA37;" FontSize="15" />
                                 </Button>
 
                                 <Button

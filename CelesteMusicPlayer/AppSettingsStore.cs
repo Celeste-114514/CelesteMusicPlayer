@@ -255,6 +255,11 @@ namespace CelesteMusicPlayer
         /// 默认 ClassicSystem（经典 · 跟随系统）：经典界面下毛玻璃开关同样生效，可在「亚克力背板」与「纯色底」之间切换。</summary>
         public string UiStyleMode { get; set; } = "ClassicSystem";
 
+        /// <summary>侧栏分类图标是否用彩色 emoji（默认 false = 纯色图形图标，与背景图式同一套）。
+        /// 开启后经典（浅色/深色/跟随系统）与背景图式都显示 emoji；极客皮肤不受此开关影响
+        /// （终端风保持单色，字符键/白色图形图标由「极客按键图标」单独决定）。</summary>
+        public bool NavEmojiIcons { get; set; } = false;
+
         /// <summary>极客模式的磷光色（界面里唯一的彩色）：Amber = 琥珀（默认，老式 CRT）、Green = 荧光绿、Cyan = 青。</summary>
         public string GeekPhosphorColor { get; set; } = "Amber";
 
@@ -781,6 +786,8 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                       && uiStyle is "Scene" or "ClassicSystem" or "ClassicLight" or "ClassicDark" or "Geek"
             ? uiStyle
             : "ClassicSystem",
+        // 侧栏 emoji 图标开关：老存档没有这个字段，反序列化即 false（纯色图标），符合当前默认
+        NavEmojiIcons = s.NavEmojiIcons,
         // 磷光色：三个预设名，或 "Custom:#RRGGBB"（设置里的调色板）。未知值回退琥珀。
         GeekPhosphorColor = s.GeekPhosphorColor?.Trim() is { Length: > 0 } phosphor
                             && (phosphor is "Amber" or "Green" or "Cyan"

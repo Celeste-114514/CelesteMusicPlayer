@@ -622,6 +622,17 @@
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="启用 emoji 分类图标" />
+                                <TextBlock Text="开启：侧栏分类用彩色 emoji 图标；关闭：用纯色图形图标（与背景图式同一套）。极客皮肤不受此开关影响，终端风保持单色" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="NavEmojiSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="毛玻璃背景" />
                                 <TextBlock Text="主窗口、迷你播放器与设置页使用亚克力透明效果" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                             </StackPanel>
