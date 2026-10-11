@@ -3512,73 +3512,17 @@
                     </Grid>
                 </Border>
 
-                <!-- 设置面板（2026-10-12 阶段 0 骨架）：二级窗口「选项设置」并入主 UI 的落地容器。
-                     版式完全对齐音效处理面板（左 220 分类导航 + 右内容），导航项由
-                     MainWindow.ShellPages.cs 用通用子页框架动态生成，加分类只改那里一行。
-                     现在是占位分类（能看见进度，不是空白页），阶段 3 才搬入真实设置项。
+                <!-- 设置面板（2026-10-12 阶段 3）：二级窗口「选项设置」已经并入这里。
+                     内容 = SettingsPanelControl（由 SettingsWindow 整块搬来，自带 9 个分类导航），
+                     首次进入时在 MainWindow.ShellPages.cs 里创建并塞进 SettingsPanelHost。
                      回退方式：把左侧「设置」导航项与这里的 Visibility 一起改回 Collapsed。 -->
                 <Border
                     x:Name="SettingsBorder"
                     Grid.Row="1"
                     Background="Transparent"
                     BorderThickness="0"
-                    Padding="4,4"
                     Visibility="Collapsed">
-                    <Grid ColumnSpacing="12">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="220" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <Grid Grid.Column="0">
-                            <Grid.RowDefinitions>
-                                <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
-                            </Grid.RowDefinitions>
-                            <Grid Grid.Row="0" Margin="10,0,6,8">
-                                <TextBlock
-                                    VerticalAlignment="Center"
-                                    FontSize="12"
-                                    Opacity="0.6"
-                                    Text="设置分类" />
-                            </Grid>
-                            <ScrollViewer
-                                Grid.Row="1"
-                                VerticalScrollBarVisibility="Auto"
-                                HorizontalScrollBarVisibility="Disabled">
-                                <!-- 分类项由 MainWindow.ShellPages.cs 动态生成，占位容器勿删 -->
-                                <StackPanel x:Name="SettingsNavPanel" Spacing="2" />
-                            </ScrollViewer>
-                        </Grid>
-
-                        <!-- 右：分类内容。每个分类一个 StackPanel，默认折叠，由 ShellPageHost 切换 -->
-                        <Grid Grid.Column="1">
-                            <StackPanel x:Name="SettingsPageGeneral" Spacing="8" Padding="8,4,8,8">
-                                <TextBlock Text="常规" FontSize="16" FontWeight="SemiBold" />
-                                <TextBlock
-                                    Text="原「选项设置」窗口里的常规类设置，会在阶段 3 逐个搬到这一页。"
-                                    FontSize="13"
-                                    Opacity="0.65"
-                                    TextWrapping="WrapWholeWords" />
-                            </StackPanel>
-                            <StackPanel x:Name="SettingsPageAppearance" Spacing="8" Padding="8,4,8,8" Visibility="Collapsed">
-                                <TextBlock Text="外观" FontSize="16" FontWeight="SemiBold" />
-                                <TextBlock
-                                    Text="界面风格、主题文件、皮肤相关的设置，会在阶段 3 搬到这一页（届时调皮肤能当场看到主界面变化）。"
-                                    FontSize="13"
-                                    Opacity="0.65"
-                                    TextWrapping="WrapWholeWords" />
-                            </StackPanel>
-                            <StackPanel x:Name="SettingsPageFileAssoc" Spacing="8" Padding="8,4,8,8" Visibility="Collapsed">
-                                <TextBlock Text="文件关联" FontSize="16" FontWeight="SemiBold" />
-                                <TextBlock
-                                    Text="原「文件关联」窗口整体并入这一页：接管哪些音频格式由这里勾选。"
-                                    FontSize="13"
-                                    Opacity="0.65"
-                                    TextWrapping="WrapWholeWords" />
-                            </StackPanel>
-                        </Grid>
-                    </Grid>
+                    <Grid x:Name="SettingsPanelHost" />
                 </Border>
 
                 <!-- 音效处理 DSP 面板：EQ / 声道平衡 / 安全限幅 -->

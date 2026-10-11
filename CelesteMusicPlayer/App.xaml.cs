@@ -249,13 +249,13 @@ namespace CelesteMusicPlayer
                     Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
                 if (queue == null)
                 {
-                    FileAssociationWindow.ShowOrActivate();
+                    FileAssociationPanelControl.ShowOrActivate();
                     return;
                 }
 
                 if (!queue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                 {
-                    try { FileAssociationWindow.ShowOrActivate(); }
+                    try { FileAssociationPanelControl.ShowOrActivate(); }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("App.FirstRunAssociation", caught); }
                 }))
                 {

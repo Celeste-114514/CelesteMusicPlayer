@@ -2323,7 +2323,7 @@ namespace CelesteMusicPlayer
 
             try
             {
-                SettingsWindow.CloseIfOpen();
+                SettingsPanelControl.CloseIfOpen();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 

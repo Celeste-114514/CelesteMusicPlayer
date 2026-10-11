@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -52,7 +52,7 @@ namespace CelesteMusicPlayer
                 // 220px 装不下「发现新版本 26.10.3.0（点击查看）」→ 单独放宽，不然尾巴被裁。
                 flyout.Items.Add(Item(
                     "发现新版本 " + pendingUpdateVersion + "（点击查看）",
-                    SettingsWindow.ShowAbout,
+                    SettingsPanelControl.ShowAbout,
                     UpdateItemMinWidth));
             }
 

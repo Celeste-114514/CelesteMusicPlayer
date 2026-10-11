@@ -296,7 +296,8 @@ namespace CelesteMusicPlayer
     /// </summary>
     public sealed partial class MainWindow
     {
-        private ShellPageHost? _settingsHost;
+        /// <summary>并入主 UI 的「选项设置」面板（阶段 3）。延迟创建：第一次点「设置」才造，不拖慢启动。</summary>
+        private SettingsPanelControl? _settingsPanel;
         private bool _settingsUiBuilt;
 
         private void EnsureSettingsUiBuilt()
@@ -310,12 +311,8 @@ namespace CelesteMusicPlayer
 
             try
             {
-                // 强调色走面板统一入口（极客返回磷光，否则回落系统/主题色）
-                _settingsHost = new ShellPageHost(SettingsNavPanel, () => DspAccentBrush());
-                _settingsHost.Register("常规", "基础", SettingsPageGeneral);
-                _settingsHost.Register("外观", "基础", SettingsPageAppearance);
-                _settingsHost.Register("文件关联", "高级", SettingsPageFileAssoc);
-                _settingsHost.Build();
+                _settingsPanel = new SettingsPanelControl();
+                SettingsPanelHost.Children.Add(_settingsPanel);
             }
             catch (Exception ex)
             {
@@ -323,16 +320,37 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>主题 / 皮肤切换后让设置面板的强调条跟上（与音效处理同一套取色入口）。</summary>
+        /// <summary>
+        /// 主题 / 皮肤切换后让设置面板跟上。面板内部是 NavigationView（走系统刷子），
+        /// 不需要像音效处理那样手动重刷强调条，这里保留方法是为了不改旧调用点。
+        /// 等将来把面板换成 ShellPageHost 那套时，这里再改成真的重刷。
+        /// </summary>
         internal void ReapplySettingsAccent()
+        {
+        }
+
+        /// <summary>
+        /// 从任何地方跳到主界面的「设置」面板：托盘菜单、桌面歌词工具栏、播放页右键菜单都走这里。
+        /// 原来这些入口是弹独立设置窗口（SettingsWindow.ShowOrActivate），阶段 3 起改成切面板。
+        /// </summary>
+        internal void GoToSettingsPanel()
         {
             try
             {
-                _settingsHost?.ReapplyAccent();
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    ExitMultiSelectMode();
+                    CommitLibraryNavigation(() =>
+                    {
+                        _currentCategory = "Settings";
+                        ApplyCategoryView();
+                    });
+                    NowPlayingText.Text = "设置";
+                });
             }
             catch (Exception ex)
             {
-                StartupLog.WriteException("ReapplySettingsAccent", ex);
+                StartupLog.WriteException("GoToSettingsPanel", ex);
             }
         }
 

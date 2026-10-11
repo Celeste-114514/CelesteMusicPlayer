@@ -1469,7 +1469,7 @@ namespace CelesteMusicPlayer
                     Redraw();
                     break;
                 case ToolbarBtn.Settings:
-                    SettingsWindow.ShowOrActivate();
+                    SettingsPanelControl.ShowOrActivate();
                     break;
                 case ToolbarBtn.Lock:
                     SetLocked(!_locked);

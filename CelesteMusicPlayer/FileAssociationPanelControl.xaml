@@ -1,0 +1,124 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<UserControl
+    x:Class="CelesteMusicPlayer.FileAssociationPanelControl"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d">
+
+    <!-- 「文件关联」从独立窗口并入「选项设置」面板（2026-10-12 阶段 3）。
+         内容逐字来自 FileAssociationWindow.xaml，改动只有三处：
+         ① 去掉窗口标题栏  ② Grid.Row 依次上移一行  ③ 去掉「关闭」按钮（面板不能自己关） -->
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <ScrollViewer
+            Grid.Row="0"
+            VerticalScrollBarVisibility="Auto"
+            Padding="20,12,24,24">
+            <!-- 与设置窗口同一套排版：外层 Spacing=20、内容列 680 居中 -->
+            <StackPanel Spacing="20" MaxWidth="680">
+
+                <!-- 说明 + 当前状态 -->
+                <StackPanel Spacing="10">
+                    <TextBlock Text="音频格式关联" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock
+                        FontSize="12"
+                        Opacity="0.65"
+                        TextWrapping="WrapWholeWords"
+                        Text="打开下方你希望交给 Celeste Music Player 的格式；没打开的格式不会被改动。" />
+                    <!-- 当前版本能否做关联 / 关联指到了哪个程序：由 RefreshStatus() 填 -->
+                    <TextBlock
+                        x:Name="StatusText"
+                        FontSize="12"
+                        TextWrapping="WrapWholeWords"
+                        Visibility="Collapsed" />
+                    <!-- 仅当当前版本不能做关联（调试/打包版）时出现 -->
+                    <Button CornerRadius="16"
+                        x:Name="PickExecutableButton"
+                        Content="手动选择程序文件…"
+                        HorizontalAlignment="Left"
+                        Visibility="Collapsed"
+                        Click="PickExecutableButton_Click" />
+                </StackPanel>
+
+                <!-- 选择要关联的格式：标题在左、快捷按钮在右（与设置窗口的行结构一致） -->
+                <StackPanel Spacing="10">
+                    <Grid ColumnSpacing="16">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Spacing="2" VerticalAlignment="Center">
+                            <TextBlock Text="选择要关联的格式" FontSize="15" FontWeight="SemiBold" />
+                            <TextBlock
+                                FontSize="12"
+                                Opacity="0.65"
+                                TextWrapping="WrapWholeWords"
+                                Text="按类别逐项选择；下面每一行都可以直接点文字来切换" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                            <Button CornerRadius="16" x:Name="SelectAllButton" Content="全选" Click="SelectAllButton_Click" />
+                            <Button CornerRadius="16" x:Name="SelectNoneButton" Content="全不选" Click="SelectNoneButton_Click" />
+                            <Button CornerRadius="16" x:Name="SelectRecommendedButton" Content="恢复推荐" Click="SelectRecommendedButton_Click" />
+                        </StackPanel>
+                    </Grid>
+                    <TextBlock
+                        x:Name="SelectionSummaryText"
+                        FontSize="12"
+                        Opacity="0.65" />
+                </StackPanel>
+
+                <!-- 各分组的开关行由 BuildGroups() 生成 -->
+                <StackPanel x:Name="GroupHost" Spacing="20" />
+
+                <!-- Windows 系统设置说明 -->
+                <StackPanel Spacing="10">
+                    <TextBlock Text="Windows 默认应用" FontSize="15" FontWeight="SemiBold" />
+                    <TextBlock
+                        FontSize="12"
+                        Opacity="0.65"
+                        TextWrapping="WrapWholeWords"
+                        Text="Windows 只会对「还没设过默认程序」的格式自动采用本程序。已经设过默认程序的格式（例如你之前用「打开方式」选过别的播放器），注册后仍需到系统设置里手动改一次 —— 这是 Windows 的限制，不是注册失败。" />
+                    <Button CornerRadius="16"
+                        x:Name="OpenDefaultAppsButton"
+                        Content="打开 Windows「默认应用」设置"
+                        HorizontalAlignment="Left"
+                        Click="OpenDefaultAppsButton_Click" />
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+
+        <Border
+            Grid.Row="1"
+            Padding="16,10"
+            BorderThickness="0,1,0,0"
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+            <Grid ColumnSpacing="16">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    x:Name="AppliedHintText"
+                    FontSize="12"
+                    Opacity="0.65"
+                    VerticalAlignment="Center"
+                    TextWrapping="WrapWholeWords" />
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                    <Button CornerRadius="16" x:Name="UnregisterAllButton" Content="全部取消关联" Click="UnregisterAllButton_Click" />
+                    <Button CornerRadius="16"
+                        x:Name="ApplyButton"
+                        Content="应用"
+                        Style="{ThemeResource AccentButtonStyle}"
+                        Click="ApplyButton_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+    </Grid>
+</UserControl>

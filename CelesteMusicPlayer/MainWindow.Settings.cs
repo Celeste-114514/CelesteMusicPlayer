@@ -120,7 +120,7 @@ namespace CelesteMusicPlayer
                 ApplyNowPlayingLayout();
                 _miniPlayerWindow?.SetAlwaysOnTop(settings.MiniPlayerAlwaysOnTop);
                 _miniPlayerWindow?.ApplyBackdropPreference(settings.EnableFrostedGlass);
-                SettingsWindow.ApplyBackdropIfOpen();
+                SettingsPanelControl.ApplyBackdropIfOpen();
                 ApplyExtendedSettingsLive(settings);
             });
         }

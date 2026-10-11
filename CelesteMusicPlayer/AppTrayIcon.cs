@@ -309,7 +309,7 @@ namespace CelesteMusicPlayer
         {
             if (_pendingUpdateVersion != null)
             {
-                SettingsWindow.ShowAbout();
+                SettingsPanelControl.ShowAbout();
             }
             else
             {

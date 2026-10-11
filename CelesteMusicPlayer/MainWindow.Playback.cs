@@ -1607,12 +1607,12 @@ namespace CelesteMusicPlayer
 
             var mediaLibItem = new MenuFlyoutItem { Text = "媒体库" };
             mediaLibItem.Icon = new FontIcon { Glyph = "\uE838" }; // MusicLibrary
-            mediaLibItem.Click += (_, _) => SettingsWindow.ShowMediaLibrary();
+            mediaLibItem.Click += (_, _) => SettingsPanelControl.ShowMediaLibrary();
             flyout.Items.Add(mediaLibItem);
 
             var settingsItem = new MenuFlyoutItem { Text = "选项设置" };
             settingsItem.Icon = new FontIcon { Glyph = "\uE713" };
-            settingsItem.Click += (_, _) => SettingsWindow.ShowOrActivate();
+            settingsItem.Click += (_, _) => SettingsPanelControl.ShowOrActivate();
             flyout.Items.Add(settingsItem);
 
             flyout.ShowAt(SelectLocalAudioButton, new FlyoutShowOptions
