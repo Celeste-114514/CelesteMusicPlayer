@@ -170,13 +170,17 @@ namespace CelesteMusicPlayer
         /// <summary>打开歌曲浏览面板。任何一步失败都静默降级：界面保持原生版，程序照常用。</summary>
         public async Task OpenWebMainAsync()
         {
-            if (_webMainOpen || _webMainOpening) return;
+            // Windows 风页开着时放行——点这个按钮的意思就是"切回 Apple 风"（走下面的互斥关闭）；
+            // Apple 风自己开着就直接返回，别重复开。两种页面共用 _webMainOpening 闸门，连点不会双导航。
+            if (_webMainOpen && !_webWinOpen) return;
+            if (_webMainOpening) return;
             _webMainOpening = true;
             try
             {
                 DeployWebAsset("main.html");
 
-                // 两个网页覆盖层互斥：开主界面先关 Apple 风格专辑页（反之亦然）
+                // 网页覆盖层互斥：开 Apple 风主界面先关 Windows 风页、再关 Apple 风格专辑页
+                if (_webWinOpen) CloseWebMain();
                 if (_webPilotOpen) CloseWebAlbumPilot();
 
                 if (!await EnsureCelesteWebHostAsync()) return;
@@ -232,6 +236,10 @@ namespace CelesteMusicPlayer
         {
             if (!_webMainOpen) return;
             _webMainOpen = false;
+            // 两种主界面页共用这个出口：Windows 风（winmain.html）开着时这里一并复位，
+            // 否则"关掉新版界面"只撤了主开关，_webWinOpen 还挂着——再点新版界面入口会被
+            // "已经是 Windows 风页"的守卫挡掉，表现为按钮失灵（2026-10-11 修）。
+            _webWinOpen = false;
             CloseEmbeddedWebDsp();     // 右栏可能还开着音效处理面板，一起收掉
             CloseWebMainDetails();
             if (_webMainTimer != null) _webMainTimer.Tick -= WebMainTimer_Tick;

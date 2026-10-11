@@ -54,15 +54,26 @@ setTimeout(function(){
       var l = document.querySelector('#npLyrIn .ll');
       return l ? l.getBoundingClientRect().height : 0;
     })(),
-    /* 图标是否真的换成了 SVG（data-cur 记录当前图标名；静态占位图标查 svg 在不在） */
-    svgIn: function(ids){
+    /* 图标元素类型：main 是内联 SVG，winmain（Fluent 字形）是 <i class=ico> 里的 .gi。
+       data-cur 记录当前图标名；两页都查，断言按页面分流 */
+    svgIn: (function(){
+      var ids = ['btnPlay','btnOrder','btnFav','btnPrev','btnSeekBack','btnSeekFwd','btnNext',
+                 'btnQueue','btnMore','btnMini','btnLyrics','npClose','npPlay','npOrder',
+                 'npPrev','npNext','npFav'];
       var out = {};
       for (var i = 0; i < ids.length; i++)
         out[ids[i]] = !!document.getElementById(ids[i]).querySelector('svg');
       return out;
-    }(['btnPlay','btnOrder','btnFav','btnPrev','btnSeekBack','btnSeekFwd','btnNext',
-       'btnQueue','btnMore','btnMini','btnLyrics','npClose','npPlay','npOrder',
-       'npPrev','npNext','npFav']),
+    })(),
+    giIn: (function(){
+      var ids = ['btnPlay','btnOrder','btnFav','btnPrev','btnSeekBack','btnSeekFwd','btnNext',
+                 'btnQueue','btnMore','btnMini','btnLyrics','npClose','npPlay','npOrder',
+                 'npPrev','npNext','npFav'];
+      var out = {};
+      for (var i = 0; i < ids.length; i++)
+        out[ids[i]] = !!document.getElementById(ids[i]).querySelector('.gi');
+      return out;
+    })(),
     icoPlayPause: document.getElementById('btnPlay').getAttribute('data-cur'),
     icoPlayPauseNp: document.getElementById('npPlay').getAttribute('data-cur'),
     icoOrder: document.getElementById('btnOrder').getAttribute('data-cur'),

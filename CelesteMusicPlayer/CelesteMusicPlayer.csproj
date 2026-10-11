@@ -90,6 +90,9 @@
     <Content Include="WebUI\main.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <!-- 皮肤系统第 5 步：音效处理（DSP）网页面板，主界面侧栏「音效处理」进入 -->
     <Content Include="WebUI\dsp.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- 批次 1：Windows 风（Fluent）新版主界面。main.html 的平行换肤页，
+         工具栏「新版界面」按钮进入，与 Apple 风格界面互斥 -->
+    <Content Include="WebUI\winmain.html" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>

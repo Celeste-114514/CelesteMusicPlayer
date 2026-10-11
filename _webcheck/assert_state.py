@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""从 dump-dom 产物里抠出 __state 快照，按场景断言关键状态。"""
+"""从 dump-dom 产物里抠出 __state 快照，按场景断言关键状态。
+   页面维度：WB_PAGE=winmain 时读 dom_<场景>_winmain.html（skin/np 块按页面分流）。"""
 import io
 import json
 import os
@@ -7,16 +8,22 @@ import re
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# 页面维度：WB_PAGE=winmain 时读 dom_<场景>_winmain.html（与 main 产物共存）。
+# 没跑过的场景（文件不存在）对应代码块整体跳过，不影响另一套页面。
+PAGE = os.environ.get('WB_PAGE') or 'main'
+SFX = '' if PAGE == 'main' else '_' + PAGE
 
 def state(name):
-    p = os.path.join(HERE, 'dom_%s.html' % name)
+    p = os.path.join(HERE, 'dom_%s%s.html' % (name, SFX))
+    if not os.path.exists(p):
+        return None, '%s 不存在（该页面未跑此场景，跳过）' % os.path.basename(p)
     with io.open(p, encoding='utf-8') as f:
         dom = f.read()
     # 源码里也有 /*STATE*/ 字面量（common.js 被内联进页面），运行时生成的
     # __statedump 元素追加在 body 末尾——取最后一次匹配
     ms = re.findall(r'/\*STATE\*/(.*?)/\*END\*/', dom, re.S)
     if not ms:
-        return None, 'dom_%s.html 里没有 __state（页面脚本可能没跑起来）' % name
+        return None, 'dom_%s%s.html 里没有 __state（页面脚本可能没跑起来）' % (name, SFX)
     return json.loads(ms[-1]), None
 
 fails = []
@@ -588,6 +595,80 @@ if st:
     vm = [p for p in posted if p.get('kind') == 'volume']
     check('dsp', len(vm) == 1 and abs(vm[0].get('value', 0) - 0.3) < 0.02,
           '拖音量到 30%% = %r' % (vm[0].get('value') if vm else None))
+
+print('== np（正在播放页：进页/歌词高亮/图标切换/seek；winmain 图标走 Fluent 字形）')
+st, err = state('np')
+if st:
+    np = st['np']
+    check('np', not st['errors'], '无脚本错误: %r' % st['errors'])
+    check('np', 'on' in (np['npOn'] or '').split(), '进了正在播放页（#npPage=%r）' % np['npOn'])
+    check('np', np['lyrCount'] == 16, '歌词行 = %s（8 句 × 原文+译文）' % np['lyrCount'])
+    check('np', np['lyrTrCount'] == 8, '译文行 = %s' % np['lyrTrCount'])
+    # 当前位置 65s：歌词 t=i*12，最后一句 t≤65 的原文行是第 6 句（t=60，index 10）；
+    # 第 7 句 t=72 还没到；翻译行不高亮
+    check('np', np['lyrCurIdx'] == '10', '当前高亮行 = %r（期望 10=第 6 句原文）' % np['lyrCurIdx'])
+    check('np', (np['lyrCurText'] or '').startswith('第 6 句'), '高亮行文案 = %r' % np['lyrCurText'])
+    check('np', np['lyrSelIdx'] == '6', '单击第 7 行只选中不发 seek（sel=%r）' % np['lyrSelIdx'])
+    sk = [p for p in np['seekPosted'] if isinstance(p, dict)]
+    check('np', len(sk) == 1 and abs(sk[0].get('position', 0) - 24) < 0.6,
+          '双击第 5 行发 seek 24 = %r' % np['seekPosted'])
+    check('np', np['lyricsReqPosted'] >= 1, '页面打开时报过 lyricsreq（%s 次）' % np['lyricsReqPosted'])
+    check('np', np['icoPlayPause'] == 'play' and np['icoPlayPauseNp'] == 'play',
+          '暂停态播放钮 = %r/%r' % (np['icoPlayPause'], np['icoPlayPauseNp']))
+    check('np', np['icoOrder'] == 'Random' and np['icoOrderNp'] == 'Random',
+          '随机顺序图标 = %r/%r' % (np['icoOrder'], np['icoOrderNp']))
+    check('np', np['icoFav'] == 'heartF' and np['icoFavNp'] == 'heartF',
+          '收藏态图标 = %r/%r' % (np['icoFav'], np['icoFavNp']))
+    check('np', np['rateText'] == '1.5x', '倍速读数 = %r' % np['rateText'])
+    if PAGE == 'winmain':
+        check('np', all(np['giIn'].values()) and not any(np['svgIn'].values()),
+              '播放条/np 图标全部换成 Fluent 字形（无 SVG 残留）')
+    else:
+        check('np', all(np['svgIn'].values()), '播放条/np 图标都是 SVG（Apple 风基线）')
+    check('np', np['navOnRadius'] is not None and float((np['navOnRadius'] or '0').replace('px', '') or 0) <= 8,
+          '导航选中项圆角 ≤8px（%r）' % np['navOnRadius'])
+    check('np', np['rowCoverRadius'] == '12px', '行封面圆角 12px（%r）' % np['rowCoverRadius'])
+
+print('== skin（Windows 风皮肤：字体/字形/圆角/过渡/毛玻璃；main 作对照基线）')
+st, err = state('skin')
+if st:
+    sk = st['skin']
+    check('skin', not st['errors'], '无脚本错误: %r' % st['errors'])
+    # ---- 两页共同的布局铁规（几何规格，换肤不动） ----
+    check('skin', sk['rowH'] == '62px', '行高 62px（%r）' % sk['rowH'])
+    check('skin', sk['tbH'] == '44px' and sk['hdrH'] == '98px' and sk['pbH'] == '90px',
+          '顶栏/页头/播放条 = %r/%r/%r' % (sk['tbH'], sk['hdrH'], sk['pbH']))
+    check('skin', sk['cssLongDur'] == [], '无超 300ms 的字面过渡: %r' % sk['cssLongDur'])
+    check('skin', all(d is not None and d <= 300 for d in [sk['rowDur'], sk['btnDur'], sk['navDur']]),
+          '行/按钮/导航过渡 ≤300ms = %r/%r/%r ms' % (sk['rowDur'], sk['btnDur'], sk['navDur']))
+    if PAGE == 'winmain':
+        check('skin', sk['cssOutlineZero'] is False, '样式表无 outline:0 残留')
+        check('skin', sk['cssOddRadius'] == [], '无 5/7/9/11/13px 级怪圆角: %r' % sk['cssOddRadius'])
+        check('skin', sk['bodyFont'] == 'Segoe UI Variable Text',
+              '正文字体栈首位显式 Segoe UI Variable Text（%r）' % sk['bodyFont'])
+        check('skin', sk['giCount'] >= 20, 'Fluent 字形图标 ≥20 个（当前 %s）' % sk['giCount'])
+        check('skin', sk['navGiCount'] >= 10, '导航项全是字形图标（%s 个）' % sk['navGiCount'])
+        check('skin', sk['giFont'] == 'Segoe Fluent Icons', '字形字体 = %r' % sk['giFont'])
+        check('skin', sk['giFontStyle'] == 'normal', '字形不斜体（%r）' % sk['giFontStyle'])
+        check('skin', sk['giFontAvail'] is True, '本机装有 Segoe Fluent Icons（document.fonts 在位）')
+        check('skin', sk['searchGi'] is True and sk['favGiOn'] is True, '搜索放大镜/收藏心用字形')
+        for k in ['tbBackdrop', 'sbBackdrop', 'pbBackdrop', 'theadBackdrop', 'npBackdrop']:
+            check('skin', sk[k] not in (None, '', 'none'), '%s 有毛玻璃 = %r' % (k, sk[k]))
+        check('skin', 'radial-gradient' in (sk['winBgImage'] or ''), 'Mica 底（双层 radial-gradient）')
+        radii = [sk['navRadius'], sk['btnRadius'], sk['searchRadius'],
+                 sk['backRadius'], sk['npCollapseRadius']]
+        check('skin', all(r is not None and r <= 8 for r in radii),
+              '控件圆角 ≤8px = nav %r / btn %r / search %r / back %r / npCollapse %r' % tuple(radii))
+        check('skin', sk['swRadius'] == 10, '开关胶囊保持 10px（WinUI ToggleSwitch）= %r' % sk['swRadius'])
+        check('skin', sk['trackH'] == '4px' and sk['knobW'] == '20px',
+              '滑块轨 4px / 钮 20px = %r/%r' % (sk['trackH'], sk['knobW']))
+        check('skin', '新版界面' in (sk['title'] or '') and '新版界面' in (sk['tbmid'] or ''),
+              '入口字样「新版界面」= %r / %r' % (sk['title'], sk['tbmid']))
+    else:
+        check('skin', sk['giCount'] == 0, 'Apple 风主页没有 Fluent 字形（当前 %s）' % sk['giCount'])
+        check('skin', sk['bodyFont'] == '-apple-system',
+              '主页字体栈首位仍是 -apple-system（%r）' % sk['bodyFont'])
+        check('skin', sk['tbBackdrop'] in (None, '', 'none'), '主页顶栏无毛玻璃（对照基线）')
 
 print()
 if fails:

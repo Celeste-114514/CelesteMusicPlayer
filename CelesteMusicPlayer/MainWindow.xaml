@@ -977,6 +977,21 @@
                                 <TextBlock Text="Apple 风格界面" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
+                        <!-- 批次 1：Windows 风（Fluent）新版主界面。与「Apple 风格界面」互斥，
+                             点谁开谁；winmain.html 是 main.html 的平行换肤页，协议零改动。 -->
+                        <Button
+                            x:Name="WebWinMainButton"
+                            Height="32"
+                            Padding="14,0"
+                            CornerRadius="16"
+                            BorderThickness="0"
+                            Click="WebWinMainButton_Click"
+                            ToolTipService.ToolTip="切换到 Windows 风格（Fluent）界面浏览歌曲（随时可返回旧版）">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <FontIcon Glyph="&#xE8A9;" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Text="新版界面" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <Button
                             x:Name="PlayAllLibrarySongsButton"
                             Height="32"
