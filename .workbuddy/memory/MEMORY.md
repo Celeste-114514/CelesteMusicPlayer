@@ -47,12 +47,28 @@
 - **令牌皮肤会覆写全局文字刷子（2026-10-12 用户实测坑）**：TokenSkin.cs 的 TokenBrushMap 把 `TextFillColorPrimaryBrush`/`TextFillColorSecondaryBrush` 全局覆写成令牌色（为深色皮肤设计）——浅色主题下任何读这两个资源的 UI 文字都会变色/看不见。**新增文字色元素要么按 RequestedTheme 给固定色，要么确认令牌色在两个主题下都可读**；别默认「ThemeResource 会自动适配」。
 - **艺术家详情页右栏结构（2026-10-12 第三轮定稿）**：页签只有「歌曲/专辑」两个（方案B 文字页签+下划线，ApplyTabChrome 按 RequestedTheme 给固定黑/白）；**头像不是页签**，是按需打开的面板（`_artistAvatarOpen` + `CloseArtistAvatarPanel()` 幂等，右键进入时页签条整条隐藏、面板「← 返回」收回）。
 - **publish 连崩先查嵌套三元（2026-10-12 新血坑）**：二元嵌套三元 `a ? (b ? x : y) : (b ? z : w)` 会触发 Roslyn NullableWalker 深递归，`dotnet publish` 偶发原生崩 0xC0000005 连崩不止（`dotnet build`/_build_check 反而不崩，疑似编译线程池栈更小）。拆成局部变量即过。别再对 publish 连崩一味重试。
-- **二级窗口现状（2026-10-12 盘点）**：仍活跃=迷你播放器/标签编辑/歌词编辑/重复文件/在线搜索 5 个；已不可达（代码在、入口全摘）=当前播放列表/播放队列/均衡器（EQ 已入 DSP 机架）/房间校正/RG 扫描/设置/文件关联/头像两窗/取色器（主 UI 已用 InlineColorPicker）/CustomSortOrder（纯死代码）。下次要清理窗口代码时按这个清单来。
+- **二级窗口现状（2026-10-13 再盘点）**：仍活跃=迷你播放器/标签编辑/歌词编辑/重复文件 4 个（在线搜索窗已于 27ec416 整体删除）；已不可达（代码在、入口全摘）=当前播放列表/播放队列/均衡器（EQ 已入 DSP 机架）/房间校正/RG 扫描/设置/文件关联/头像两窗/取色器（主 UI 已用 InlineColorPicker）/CustomSortOrder（纯死代码）。下次要清理窗口代码时按这个清单来。
+
+- ⚠ **删代码别按行号整段删**（2026-10-13 血坑）：想删的多个方法之间往往夹着别的方法
+  （本例删 347–608 误伤了 `ClearDetail()` 与 `WebPlayButton_Click()`）。用**方法签名定位**逐段删，
+  删完立刻 `_build_check.py` 验证到 BUILD_OK。XamlCompiler 崩时先 ET.parse 验 XAML 良构，
+  再考虑移走 `obj/<平台>`+`bin/<平台>`（备份必须放仓库外）全量重建。
+
+## 合规整改（2026-10-13 进行中）
+- 用户拍板：在线功能**只留 MusicBrainz 系**（MusicBrainz + Cover Art Archive + Last.fm）。
+  网易云/QQ/酷狗/iTunes（含 `music.apple.com` 网页抓取）全部删除。
+- 接入门槛（已核实）：MusicBrainz/CAA/LRClib/Wikidata **零门槛**（MB 限时速 1 req/s + 强制 User-Agent）；
+  Discogs/Last.fm/fanart.tv 需**本人注册拿 key**（免费）；AcoustID 商业用途需付费，仓库公开慎用。
+- 歌词换 **LRClib**（`lrclib.net/api`，免费无 key），艺术家简介换 **Wikidata**。
+- 进度：阶段 0（删音频直链下载）9c40183 → 阶段 1/2（删网易云/QQ/酷狗源）f058aeb 等 → 阶段 3（歌词改 LRClib）1328c77 → 阶段 4（在线搜索窗整体下架 + 设置页改「在线服务」）27ec416。⚠ 27ec416 只 `git rm` 了窗口文件没摘引用，`MainWindow.Features.cs`×2 + `MainWindow.WebMain.cs`×1 三处 `OnlineSearchWindow` 悬挂引用让该提交编译不过（工作树修改即修复，收尾提交补上）。
+- ⚠ **`git rm` 删文件与摘引用必须同一个提交**（2026-10-13 27ec416 实证）：只删文件不摘引用=那个提交自身编译不过，revert 它也回不到干净状态。
+- **阶段 5a（标签板块骨架）已完成**（2026-10-13，构建 BUILD_OK + UIA 冒烟 10/10）：主界面导航新增「🏷️ 标签」（`NavTagEditButton`，Tag="TagEdit"），`TagEditBorder` 内挂 `TagPanelControl`（新增 `TagPanelControl.xaml`/`.cs`，`ShellPageHost` 四子页：快速编辑/批量工具/排序编号/在线补全，后三个是占位）。右栏文件表格复用 `PlaylistItem` 行模型；添加文件/文件夹走 WinRT 选取器（`WindowNative.GetWindowHandle(this)`+`InitializeWithWindow`），后台每批 50 异步加载带去重；左栏选中预览=封面+路径+9 个只读标签框（`TagEditorService`）。accent 经 `() => DspAccentBrush()` 外部注入，主题切换 `ReapplyTagPanelAccent()`。**编辑/保存/改动前快照回滚是阶段 6**；旧 `TagEditorWindow` 入口重定向+删窗也在阶段 6（入口清单：MainWindow.Misc.cs:1384、Features.cs:1626/3373、Library2.cs:1154、Settings.cs:196、WebMain.cs:586/701、SettingsPanelControl.xaml.cs:3913、SettingsWindow.xaml.cs:3709）。
 
 ## 工程约定
 - 用户不懂编程：大白话结论先行，禁营销腔。bit-perfect 铁律。推送：不 rebase/force-push、不 git add -A；commit 独立可回退；构建过才推。安装包只在用户说「发新版」时打；日常交付=dist\run-latest\。
 - **版本号=日期命名**：v26.10.3 实际 10-11 发布却编成 26.10.3.0（应 26.10.11），三处皆错。**发版前必须 git log <上tag>..HEAD 逐条过完再写日志**（26.10.3 只写 2 条实际 15 个提交，被用户抓包）。
 - 同一文件并行 Edit 会丢：串行，改完 Grep 复核再构建。源码偶发被清零（前 4096 字节 NUL>0.5 判坏，从 git HEAD 恢复）；会话被打断先全仓扫 NUL。
+- **工作树未跟踪文件盘点（2026-10-13，588 项约 6.4 G，用户已听过清单、未授权删除）**：`.gitignore` 只盖 bin/obj/publish/*.log，所以各阶段现场全裸奔。**动不得**：`dist/run-latest`（在用的日常交付）、`native/echo-core/build/`（csproj 直接引用其 DLL，删了构建断）、`_backup_tagsort_pre_revert/`（标签排序 revert 备份）、`.workbuddy/`。**可清**：`_wv2_cachebak`/`_binbak_*`/`_objbak_*`/`_th_cachebak`/`_bin_verify`/`_syncheck`/`_iobj`（10 月初构建调试备份约 1.3 G）、`111/`（误存 QQ 截图）、`.reasonix/`（旧 AI 残留）、`@AutomationLog.txt`、`_xc*.txt`、根目录约 200 个 `_*.py/_*.sh` 调试脚本与截图、`commit_msg_*.txt`。**待定**：`tools/`（EqRegression 805 M 音频样本等诊断工具）、`_webcheck/`（WebUI 验证快照 124 html+76 png）、`output/outputs/`。`dist/` 里除 run-latest 外约 2.4 G 过期发布副本也可清。删除前必须列清单获用户确认。
 
 ## 构建与发布（详见 celeste-build-verify skill）
 - dotnet 必带 env 前缀补 APPDATA/SystemRoot 等。判成功三类全零：error CS/error MSB/error :（Roslyn 崩）+产物时间戳。**Roslyn 崩后的下次 XamlCompiler exit 1 是中间态污染，重试即过**（2026-10-11 三连实证）。本项目无 ImplicitUsings：新 .cs 用 SemaphoreSlim 须显式 using System.Threading;——照抄 MainWindow.Library.cs。
