@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -348,6 +349,8 @@ namespace CelesteMusicPlayer
                 // 宿主窗口句柄必须从 MainWindow 传（UserControl 自己取会抛 CCW cast 异常，
                 // 2026-10-13 用户实测）；_mainWindowHwnd 在 ctor 里已缓存，Zero 时面板内会提示。
                 _tagPanel = new TagPanelControl(() => DspAccentBrush(), _mainWindowHwnd);
+                // 标签写盘后刷新曲库元数据（取代旧 TagEditorWindow.TagsSaved）
+                _tagPanel.TagsSaved += OnTagsSaved;
                 TagPanelHost.Children.Add(_tagPanel);
             }
             catch (Exception ex)
@@ -378,6 +381,34 @@ namespace CelesteMusicPlayer
                 ApplyCategoryView();
             });
             NowPlayingText.Text = "标签";
+        }
+
+        /// <summary>
+        /// 从任何地方跳到主界面的「标签」板块并打开指定文件：右键菜单、播放页、设置健康检查、
+        /// WebUI 的 edittags 命令原来都是弹独立 TagEditorWindow（阶段 6 收尾后已删），现在统一走这里。
+        /// 文件不在标签列表里的会先加进来（后台读标签），再全部选中并停在「快速编辑」子页。
+        /// </summary>
+        internal void OpenTagEditForFiles(IEnumerable<string>? paths)
+        {
+            try
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    ExitMultiSelectMode();
+                    CommitLibraryNavigation(() =>
+                    {
+                        _currentCategory = "TagEdit";
+                        ApplyCategoryView();
+                    });
+                    NowPlayingText.Text = "标签";
+                    EnsureTagEditUiBuilt();
+                    _tagPanel?.RevealFiles(paths?.Where(p => !string.IsNullOrWhiteSpace(p)).ToList());
+                });
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("OpenTagEditForFiles", ex);
+            }
         }
 
         /// <summary>

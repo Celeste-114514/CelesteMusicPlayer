@@ -16,6 +16,21 @@
          取色铁律：ShellPageHost 的强调色由外部注入（构造函数传 DspAccentBrush），
          界面里其它颜色一律 ThemeResource，不自己读系统强调色。 -->
 
+    <UserControl.Resources>
+        <!-- 表格可编辑单元格（mp3tag 式：长得像文字，点一下就能改）。
+             无边框透明底；编辑长字段时 GotFocus 里临时开换行「展开」，失焦收回。 -->
+        <Style x:Key="TagCellBox" TargetType="TextBox">
+            <Setter Property="BorderThickness" Value="0" />
+            <Setter Property="Background" Value="Transparent" />
+            <Setter Property="Padding" Value="0" />
+            <Setter Property="MinHeight" Value="0" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="TextWrapping" Value="NoWrap" />
+            <Setter Property="FontSize" Value="12" />
+            <Setter Property="Opacity" Value="0.75" />
+        </Style>
+    </UserControl.Resources>
+
     <Grid ColumnSpacing="12">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="400" />
@@ -53,8 +68,24 @@
                                 FontSize="12"
                                 Opacity="0.75"
                                 TextWrapping="WrapWholeWords"
-                                Text="从右侧文件列表选中文件即可在这里编辑标签。保存前会自动备份原标签，任何一步失败都会把已改的文件整体还原；多选时只填想改的字段，留空的不动。" />
+                                Text="从右侧文件列表选中文件即可在这里编辑标签。也可以直接在右侧表格里单击单元格修改（回车或点别处即保存）。保存前会自动备份原标签，任何一步失败都会把已改的文件整体还原；多选时只填想改的字段，留空的不动。" />
                         </Border>
+
+                        <!-- 保存 / 还原（2026-10-13 用户要求移到顶部：不用滚到最底就能保存） -->
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="QuickSaveButton" Grid.Column="0" Content="保存" Click="QuickSaveButton_Click" />
+                            <Button x:Name="QuickRevertButton" Grid.Column="1" Content="还原" Click="QuickRevertButton_Click" />
+                        </Grid>
+                        <TextBlock
+                            x:Name="QuickEditModeHint"
+                            FontSize="12"
+                            Opacity="0.6"
+                            TextWrapping="WrapWholeWords"
+                            Text="「还原」= 放弃还没保存的改动，恢复成磁盘上的当前值。" />
 
                         <!-- 当前文件：封面（放大到 240，约旧版 4~5 倍）+ 标题 + 路径 -->
                         <Grid x:Name="QuickEditFileCard">
@@ -103,22 +134,6 @@
                         <TextBox x:Name="QuickGenreBox" Header="流派" />
                         <TextBox x:Name="QuickCommentBox" Header="注释" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" />
                         <TextBox x:Name="QuickLyricsBox" Header="歌词" AcceptsReturn="True" TextWrapping="Wrap" Height="150" />
-
-                        <!-- 保存 / 还原 -->
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Button x:Name="QuickSaveButton" Grid.Column="0" Content="保存" Click="QuickSaveButton_Click" />
-                            <Button x:Name="QuickRevertButton" Grid.Column="1" Content="还原" Click="QuickRevertButton_Click" />
-                        </Grid>
-                        <TextBlock
-                            x:Name="QuickEditModeHint"
-                            FontSize="12"
-                            Opacity="0.6"
-                            TextWrapping="WrapWholeWords"
-                            Text="「还原」= 放弃还没保存的改动，恢复成磁盘上的当前值。" />
                     </StackPanel>
                 </ScrollViewer>
 
@@ -260,14 +275,17 @@
                     <TextBlock Grid.Column="10" FontSize="11" FontWeight="SemiBold" Opacity="0.6" VerticalAlignment="Center" Text="位深" />
                     <TextBlock Grid.Column="11" FontSize="11" FontWeight="SemiBold" Opacity="0.6" VerticalAlignment="Center" Text="采样率" />
                     <TextBlock Grid.Column="12" FontSize="11" FontWeight="SemiBold" Opacity="0.6" VerticalAlignment="Center" Text="码率" />
-                    <TextBlock Grid.Column="13" FontSize="11" FontWeight="SemiBold" Opacity="0.6" VerticalAlignment="Center" Text="大小" />
+                    <TextBlock Grid.Column="13" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,10,0" VerticalAlignment="Center" TextAlignment="Right" Text="大小" />
                 </Grid>
             </Grid>
 
             <!-- 文件表格（多选；虚拟化由 ItemsStackPanel 默认行为保留，勿外包 ScrollViewer）。
                  列太多时内容宽于视口 → 横向滚动条出现在列表底部，表头由代码同步位移；
                  列边界可拖拽调宽：表头每根列边界有 1px 可见竖线 + 悬停高亮把手，
-                 行内同样画淡竖线，拖拽时「线右侧一起动、左侧不动」。 -->
+                 行内同样画淡竖线，拖拽时「线右侧一起动、左侧不动」。
+                 可编辑列（标题/艺术家/专辑/年份/曲目/流派）是常驻文本框：单击即改，
+                 回车或点别处提交并写盘；长字段编辑时自动换行展开。
+                 不可编辑列（#/时长/文件名/格式/位深/采样率/码率/大小）保持只读文字。 -->
             <ListView
                 x:Name="TagFileListView"
                 Grid.Row="2"
@@ -306,20 +324,24 @@
                                 <ColumnDefinition Width="76" />
                                 <ColumnDefinition Width="*" MinWidth="0" />
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" FontSize="12" Opacity="0.6" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind IndexLabel}" />
-                            <TextBlock Grid.Column="1" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Title}" />
-                            <TextBlock Grid.Column="2" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Artist}" />
-                            <TextBlock Grid.Column="3" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Album}" />
-                            <TextBlock Grid.Column="4" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind YearText}" />
-                            <TextBlock Grid.Column="5" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind TrackText}" />
-                            <TextBlock Grid.Column="6" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Genre}" />
+                            <!-- 序号列：OneWay + 行模型 INPC，Renumber 后可见行实时更新（旧实现 OneTime，序号永远停在 0） -->
+                            <TextBlock Grid.Column="0" FontSize="12" Opacity="0.6" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind IndexLabel, Mode=OneWay}" />
+                            <!-- 可编辑列：单击即改（GotFocus 里同步选中行；回车/失焦提交写盘） -->
+                            <TextBox Grid.Column="1" Style="{StaticResource TagCellBox}" FontSize="13" Opacity="1" Text="{x:Bind Title}" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
+                            <TextBox Grid.Column="2" Style="{StaticResource TagCellBox}" Text="{x:Bind Artist}" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
+                            <TextBox Grid.Column="3" Style="{StaticResource TagCellBox}" Text="{x:Bind Album}" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
+                            <TextBox Grid.Column="4" Style="{StaticResource TagCellBox}" TextAlignment="Right" Text="{x:Bind YearText}" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
+                            <TextBox Grid.Column="5" Style="{StaticResource TagCellBox}" TextAlignment="Right" Text="{x:Bind TrackText}" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
+                            <TextBox Grid.Column="6" Style="{StaticResource TagCellBox}" Text="{x:Bind Genre}" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
+                            <!-- 只读列：时长 / 文件名 / 文件派生规格 -->
                             <TextBlock Grid.Column="7" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind DurationText}" />
                             <TextBlock Grid.Column="8" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind FileName}" />
                             <TextBlock Grid.Column="9" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind FormatName}" />
                             <TextBlock Grid.Column="10" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind BitDepthText}" />
                             <TextBlock Grid.Column="11" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind SampleRateText}" />
                             <TextBlock Grid.Column="12" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind BitrateText}" />
-                            <TextBlock Grid.Column="13" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind FileSizeText}" />
+                            <!-- 末列右边距：文字不再贴着表格右边界/竖线（2026-10-13 用户实测反馈） -->
+                            <TextBlock Grid.Column="13" FontSize="12" Opacity="0.75" VerticalAlignment="Center" Margin="0,0,10,0" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind FileSizeText}" />
                             <!-- 列间竖线：贴在每列右边界（与表头把手同一根线），不挡命中测试 -->
                             <Rectangle Grid.Column="0" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
                             <Rectangle Grid.Column="1" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />

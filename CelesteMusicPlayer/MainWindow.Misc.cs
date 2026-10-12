@@ -1398,7 +1398,7 @@ namespace CelesteMusicPlayer
 
                 var edit = new MenuFlyoutItem { Text = "编辑标签" };
                 edit.Icon = new FontIcon { Glyph = "\uE8D2" };
-                edit.Click += (_, _) => TagEditorWindow.ShowBatch(new[] { songRef.FilePath });
+                edit.Click += (_, _) => OpenTagEditForFiles(new[] { songRef.FilePath });
                 flyout.Items.Add(edit);
 
                 var del = new MenuFlyoutItem { Text = "从媒体库中删除" };

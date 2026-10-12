@@ -3706,7 +3706,9 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            TagEditorWindow.ShowBatch(paths);
+            // 旧 TagEditorWindow 已删（阶段 6 收尾）；本窗口已是死代码（入口全摘），
+            // 这里只保持可编译：真走到也跳主界面标签板块
+            MainWindow.Instance?.OpenTagEditForFiles(paths);
         }
 
         private sealed class HealthIssueRow

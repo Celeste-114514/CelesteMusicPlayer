@@ -1,8 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -68,6 +70,37 @@ namespace CelesteMusicPlayer
 
         /// <summary>单选模式加载时的原值（「还原」与「没有改动」判断用）。</summary>
         private TagEditModel? _quickEditLoaded;
+
+        /// <summary>
+        /// 标签写盘成功事件（每个路径触发一次）。主窗口订阅它来刷新曲库元数据——
+        /// 取代旧 TagEditorWindow.TagsSaved（阶段 6 收尾后旧窗口已删）。
+        /// </summary>
+        public event Action<string>? TagsSaved;
+
+        // =====================================================================
+        // 表格单元格内联编辑（2026-10-13 用户实测要求：单击单元格直接改）
+        //
+        // 口径（对齐 mp3tag 习惯）：可编辑列是常驻文本框，单击即改；回车或点别处
+        // 提交并立即写盘（读全量→改一个字段→写，失败把这一格退回原值）。
+        // 长字段（标题/艺术家/专辑/流派）编辑时临时开换行「展开」，失焦收回单行。
+        // Esc = 放弃这一格的改动。不可编辑列（#/时长/文件名/格式/位深/采样率/码率/大小）
+        // 保持只读文字。
+        // =====================================================================
+
+        /// <summary>正在编辑的单元格所属行（提交时以 box.DataContext 为准，这里只作辅助）。</summary>
+        private TagFileItem? _cellItem;
+
+        /// <summary>正在编辑的列号（1..6；-1 = 没有）。</summary>
+        private int _cellCol = -1;
+
+        /// <summary>这一格获焦时的原文字（「没动不写盘」与 Esc 恢复用）。</summary>
+        private string _cellOriginal = string.Empty;
+
+        /// <summary>Esc 取消标记：置位后随后的 LostFocus 只收回不提交。</summary>
+        private bool _cellCancelled;
+
+        /// <summary>单元格写盘串行闸：避免两个格子的提交并发写同一个文件。</summary>
+        private readonly SemaphoreSlim _cellSaveGate = new(1, 1);
 
         public TagPanelControl(Func<Brush>? accentProvider = null, nint hostHwnd = default)
         {
@@ -231,6 +264,7 @@ namespace CelesteMusicPlayer
             TagListEmptyHint.Visibility = Visibility.Collapsed;
 
             // 逐批读：每批 50 个，读一批报一批进度（大文件夹不会假死一片）
+            System.Diagnostics.Stopwatch readSw = System.Diagnostics.Stopwatch.StartNew();
             const int BatchSize = 50;
             int done = 0;
             int added = 0;
@@ -252,11 +286,12 @@ namespace CelesteMusicPlayer
                 TagStatusText.Text = $"正在读取标签 {done}/{fresh.Length}…";
             }
 
+            readSw.Stop();
             int failed = fresh.Length - added;
             Renumber();
             RefreshCountUi();
             global::CelesteMusicPlayer.StartupLog.Write(
-                $"TagPanel: {source} 新增 {added} 个，跳过重复 {skipped} 个，读取失败 {failed} 个");
+                $"TagPanel: {source} 新增 {added} 个，跳过重复 {skipped} 个，读取失败 {failed} 个，读标签耗时 {readSw.ElapsedMilliseconds}ms");
 
             if (added == 0)
             {
@@ -539,6 +574,12 @@ namespace CelesteMusicPlayer
                 global::CelesteMusicPlayer.StartupLog.Write(
                     $"TagPanel: 已保存 {targets.Count} 个文件（{(batch ? "批量" : "单选")}）");
 
+                // 通知主窗口刷新曲库元数据（取代旧 TagEditorWindow.TagsSaved）
+                foreach (TagFileItem item in targets)
+                {
+                    TagsSaved?.Invoke(item.FilePath);
+                }
+
                 // 写成功了：刷新受影响的行（行模型换新实例，OneTime 绑定重新求值）
                 await RefreshSavedRowsAsync(targets);
 
@@ -623,6 +664,9 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
+
+            // 换进来的新实例序号是 0，重排一次（行模型 INPC，可见行实时更新）
+            Renumber();
         }
 
         private void ShowQuickEditBatchCard(int count)
@@ -703,13 +747,251 @@ namespace CelesteMusicPlayer
         }
 
         // =====================================================================
+        // 表格单元格内联编辑（事件入口）
+        // =====================================================================
+
+        /// <summary>单元格获焦：同步选中所在行（TextBox 会吞掉 ListViewItem 的选中点击），记录原值，长字段展开换行。</summary>
+        private void TagCellBox_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is not TextBox box || box.DataContext is not TagFileItem item)
+            {
+                return;
+            }
+
+            // 点单元格也要选中所在行；多选时收敛到这一行（编辑本来就是单文件动作）
+            try
+            {
+                if (!TagFileListView.SelectedItems.Contains(item))
+                {
+                    TagFileListView.SelectedItem = item;
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.TagCellBox_GotFocus", caught);
+            }
+
+            int col = Grid.GetColumn(box);
+            _cellItem = item;
+            _cellCol = col;
+            _cellOriginal = box.Text ?? string.Empty;
+            _cellCancelled = false;
+
+            // 长字段编辑时「展开」：临时开换行，行高随内容长高，失焦收回单行
+            if (col is 1 or 2 or 3 or 6)
+            {
+                box.TextWrapping = TextWrapping.Wrap;
+            }
+        }
+
+        /// <summary>单元格失焦：收回单行 + 提交写盘（Esc 取消过就只收回）。</summary>
+        private async void TagCellBox_LostFocus(object sender, RoutedEventArgs e)
+        {
+            if (sender is not TextBox box)
+            {
+                return;
+            }
+
+            int col = Grid.GetColumn(box);
+            if (col is 1 or 2 or 3 or 6)
+            {
+                box.TextWrapping = TextWrapping.NoWrap;
+            }
+
+            if (_cellCancelled)
+            {
+                _cellCancelled = false;
+                return;
+            }
+
+            await CommitCellEditAsync(box);
+        }
+
+        /// <summary>回车 = 提交（焦点交还列表，随后的失焦负责落盘）；Esc = 放弃这一格。</summary>
+        private void TagCellBox_KeyDown(object sender, KeyRoutedEventArgs e)
+        {
+            if (sender is not TextBox box)
+            {
+                return;
+            }
+
+            if (e.Key == Windows.System.VirtualKey.Enter)
+            {
+                e.Handled = true;
+                // 焦点移走会触发 LostFocus → 自动提交；这里只负责挪焦点
+                TagFileListView.Focus(FocusState.Programmatic);
+            }
+            else if (e.Key == Windows.System.VirtualKey.Escape)
+            {
+                e.Handled = true;
+                _cellCancelled = true;
+                box.Text = _cellOriginal;
+                TagFileListView.Focus(FocusState.Programmatic);
+            }
+        }
+
+        /// <summary>
+        /// 单元格提交：把这一格的新值写进文件。安全口径与左侧「保存」一致——
+        /// 先读全量原标签做快照，只改这一个字段再写；写失败这一格退回原值
+        /// （磁盘上的原标签没动过，不需要回滚写盘）。没动过的一个字节都不写。
+        /// </summary>
+        private async Task CommitCellEditAsync(TextBox box)
+        {
+            if (box.DataContext is not TagFileItem item)
+            {
+                return;
+            }
+
+            int col = Grid.GetColumn(box);
+            if (col is < 1 or > 6)
+            {
+                return;
+            }
+
+            string path = item.FilePath;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                return;
+            }
+
+            string newText = (box.Text ?? string.Empty).Trim();
+            string original = _cellOriginal;
+
+            // 文字没动 → 不写盘
+            if (string.Equals(newText, original, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            string fieldName = col switch
+            {
+                1 => "标题",
+                2 => "艺术家",
+                3 => "专辑",
+                4 => "年份",
+                5 => "曲目号",
+                _ => "流派"
+            };
+
+            // 数字列先校验（失败只退回这一格，不碰文件）
+            if (col == 4 && newText.Length > 0 && !uint.TryParse(newText, out _))
+            {
+                box.Text = original;
+                TagStatusText.Text = "年份要填数字（比如 2024），也可以留空；已恢复原值。";
+                return;
+            }
+
+            if (col == 5 && newText.Length > 0 && !uint.TryParse(newText, out _))
+            {
+                box.Text = original;
+                TagStatusText.Text = "曲目号要填数字（比如 3），也可以留空；已恢复原值。";
+                return;
+            }
+
+            await _cellSaveGate.WaitAsync();
+            try
+            {
+                TagStatusText.Text = $"正在保存{fieldName}…";
+
+                bool ok = await Task.Run(() =>
+                {
+                    TagEditModel before = TagEditorService.ReadTag(path);
+                    TagEditModel toWrite = new()
+                    {
+                        Title = before.Title,
+                        Artist = before.Artist,
+                        Album = before.Album,
+                        AlbumArtist = before.AlbumArtist,
+                        Year = before.Year,
+                        Track = before.Track,
+                        Genre = before.Genre,
+                        Comment = before.Comment,
+                        Lyrics = before.Lyrics
+                    };
+
+                    switch (col)
+                    {
+                        case 1: toWrite.Title = newText; break;
+                        case 2: toWrite.Artist = newText; break;
+                        case 3: toWrite.Album = newText; break;
+                        case 4: toWrite.Year = newText.Length == 0 ? 0 : uint.Parse(newText); break;
+                        case 5: toWrite.Track = newText.Length == 0 ? 0 : uint.Parse(newText); break;
+                        default: toWrite.Genre = newText; break;
+                    }
+
+                    return TagEditorService.SaveTag(path, toWrite);
+                });
+
+                if (!ok)
+                {
+                    box.Text = original;
+                    TagStatusText.Text = $"{fieldName}保存失败；已恢复原值，详情见日志。";
+                    return;
+                }
+
+                global::CelesteMusicPlayer.StartupLog.Write($"TagPanel: 单元格保存 {fieldName} → {path}");
+                TagsSaved?.Invoke(path);
+
+                // 刷新行（换实例，OneTime 绑定重新求值）；顺带刷新左栏预览（若正在看这个文件）
+                await RefreshSavedRowsAsync(new List<TagFileItem> { item });
+
+                TagStatusText.Text = $"已保存{fieldName}。";
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.CommitCellEdit", caught);
+                box.Text = original;
+                TagStatusText.Text = $"{fieldName}保存失败：" + caught.Message;
+            }
+            finally
+            {
+                _cellSaveGate.Release();
+            }
+        }
+
+        /// <summary>
+        /// 把指定文件招进标签板块：不在列表里的先加（读标签在后台线程），
+        /// 全部选中并确保停在「快速编辑」子页。旧 TagEditorWindow 的各处入口
+        /// （右键菜单 / 播放页 / 设置 / WebUI 命令）阶段 6 收尾后统一走这里。
+        /// </summary>
+        public async void RevealFiles(IReadOnlyList<string>? paths)
+        {
+            List<string> wanted = (paths ?? Array.Empty<string>())
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (wanted.Count == 0)
+            {
+                return;
+            }
+
+            // 确保停在「快速编辑」子页（注册顺序 0）
+            _subNav.Select(0);
+
+            await AddFilesAsync(wanted, "跳转编辑");
+
+            HashSet<string> want = new(wanted, StringComparer.OrdinalIgnoreCase);
+            TagFileListView.SelectedItems.Clear();
+            foreach (TagFileItem item in _files)
+            {
+                if (want.Contains(item.FilePath))
+                {
+                    TagFileListView.SelectedItems.Add(item);
+                }
+            }
+        }
+
+        // =====================================================================
         // 内部工具
         // =====================================================================
 
         /// <summary>
         /// 由一个音频文件路径建一行。字段语义与主曲库的 CreatePlaylistItemFromPath 严格一致
         /// （同样的缺省值：未知艺术家 / 未知专辑 / 未知流派），不碰评分统计。
-        /// 只打开一次 TagLib：标签 + 时长一趟拿完。
+        /// 性能口径（2026-10-13 用户实测「几秒才 50 首」后重做）：
+        /// **整个文件只开一次 TagLib**——标签、时长、采样率/位深/码率全部从同一个 File.Properties 拿；
+        /// 不起 ffmpeg 子进程（编码器名表格用不到；只有 TagLib 什么都没读到的格式才回退完整探测）。
+        /// 旧实现每个文件要开两遍 TagLib + mp3/m4a/ogg 再各起一个 ffmpeg，50 个文件就是上百次进程创建。
         /// </summary>
         private static TagFileItem? BuildEntry(string path)
         {
@@ -722,6 +1004,9 @@ namespace CelesteMusicPlayer
             uint year = 0;
             string genre = "未知流派";
             TimeSpan duration = TimeSpan.Zero;
+            int rate = 0;
+            int bits = 0;
+            int kbps = 0;
 
             try
             {
@@ -770,6 +1055,9 @@ namespace CelesteMusicPlayer
                 }
 
                 duration = tagFile.Properties.Duration;
+
+                // 派生列直接吃刚打开的 Properties：零额外 I/O、零子进程
+                AudioInfoFormatter.TryGetFactsFast(tagFile, path, out rate, out bits, out kbps);
             }
             catch (Exception caught)
             {
@@ -790,19 +1078,16 @@ namespace CelesteMusicPlayer
                 FilePath = path
             };
 
-            // 文件派生列（格式 / 位深 / 采样率 / 码率 / 大小）：本方法就在后台线程里跑，
-            // AudioInfoFormatter 自带按路径缓存；任何一项读不到就留 "-"，不影响整行。
+            // 文件派生列（格式 / 位深 / 采样率 / 码率 / 大小）：格式走扩展名，规格走上面那一趟
+            // TagLib 读取（TryGetFactsFast 内部对 DSD 等 TagLib 读不了的格式会回退完整探测）。
             try
             {
                 string ext = System.IO.Path.GetExtension(path);
                 item.FormatName = ext.Length > 1 ? ext.Substring(1).ToUpperInvariant() : "-";
 
-                if (AudioInfoFormatter.TryGetFacts(path, out int rate, out int bits, out int kbps, out _))
-                {
-                    item.BitDepthText = bits > 0 ? bits + "bit" : "-";
-                    item.SampleRateText = rate > 0 ? FormatSampleRate(rate) : "-";
-                    item.BitrateText = kbps > 0 ? kbps + "kbps" : "-";
-                }
+                item.BitDepthText = bits > 0 ? bits + "bit" : "-";
+                item.SampleRateText = rate > 0 ? FormatSampleRate(rate) : "-";
+                item.BitrateText = kbps > 0 ? kbps + "kbps" : "-";
 
                 try
                 {
@@ -1276,8 +1561,35 @@ namespace CelesteMusicPlayer
     /// 这些列是文件属性不是标签，只读展示；阶段 8 按列排序时就是排这些字段。
     /// 值在 BuildEntry 的后台线程里一次填好（走 AudioInfoFormatter 缓存），界面线程不做文件 I/O。
     /// </summary>
-    public sealed class TagFileItem : PlaylistItem
+    public sealed class TagFileItem : PlaylistItem, INotifyPropertyChanged
     {
+        private int _index;
+
+        /// <summary>
+        /// 行序号（1 起）。override 基类属性是为了赋值时通知界面：行模板的序号列是
+        /// x:Bind OneWay，只有行模型实现 INPC 并为 Index/IndexLabel 发通知，Renumber
+        /// 重排后可见行的序号才会变（旧实现 OneTime 绑定在行实现时就求值，序号永远
+        /// 停在 0——2026-10-13 用户实测「# 号下方全是 0」）。
+        /// </summary>
+        public override int Index
+        {
+            get => _index;
+            set
+            {
+                int v = value < 0 ? 0 : value;
+                if (_index == v)
+                {
+                    return;
+                }
+
+                _index = v;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Index)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IndexLabel)));
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+
         /// <summary>扩展名大写（MP3 / FLAC / DSF…）；读不到显示 -。</summary>
         public string FormatName { get; set; } = "-";
 

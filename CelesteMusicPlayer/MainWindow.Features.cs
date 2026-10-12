@@ -59,7 +59,8 @@ namespace CelesteMusicPlayer
             _featuresInitialized = true;
 
             EqualizerWindow.Applied += OnEqualizerApplied;
-            TagEditorWindow.TagsSaved += OnTagsSaved;
+            // TagEditorWindow.TagsSaved 订阅已随旧窗口删除移除：标签板块的 TagsSaved
+            // 在 EnsureTagEditUiBuilt 里边创建面板边订阅（面板是延迟创建的）。
 
             ConfigureSmtcFromSettings();
             ApplyPlaybackRateFromSettings();
@@ -153,7 +154,12 @@ namespace CelesteMusicPlayer
             try
             {
                 EqualizerWindow.Applied -= OnEqualizerApplied;
-                TagEditorWindow.TagsSaved -= OnTagsSaved;
+                // 标签面板的 TagsSaved 退订：面板可能还没创建（_tagPanel 为 null 时无从退起，
+                // 随窗口一起销毁，无需处理）。
+                if (_tagPanel != null)
+                {
+                    _tagPanel.TagsSaved -= OnTagsSaved;
+                }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
@@ -1623,7 +1629,7 @@ namespace CelesteMusicPlayer
             {
                 if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
                 {
-                    TagEditorWindow.Show(_nowPlayingPath);
+                    OpenTagEditForFiles(new[] { _nowPlayingPath });
                 }
             };
             flyout.Items.Add(editTag);
@@ -3370,7 +3376,7 @@ namespace CelesteMusicPlayer
             flyout.Items.Add(new MenuFlyoutSeparator());
 
             var tag = new MenuFlyoutItem { Text = "编辑标签…" };
-            tag.Click += (_, _) => TagEditorWindow.Show(song.FilePath);
+            tag.Click += (_, _) => OpenTagEditForFiles(new[] { song.FilePath });
             flyout.Items.Add(tag);
 
             var lyric = new MenuFlyoutItem { Text = "编辑歌词…" };

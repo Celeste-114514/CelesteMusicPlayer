@@ -583,7 +583,7 @@ namespace CelesteMusicPlayer
                                 string.Equals(x.FilePath, path, StringComparison.OrdinalIgnoreCase));
                         }
                         if (act == "openloc") OpenFileLocationInExplorer(path);
-                        else if (act == "edittags") TagEditorWindow.ShowBatch(new[] { path });
+                        else if (act == "edittags") OpenTagEditForFiles(new[] { path });
                         else if (act == "delfromlib" && t != null) _ = DeleteMediaSongWithConfirmAsync(t);
                         else if (act == "queue" && t != null) AddSongsToUserPlaylist(new[] { t });
                         break;
@@ -698,7 +698,7 @@ namespace CelesteMusicPlayer
                             case "rgscan": OpenReplayGainScan(); break;
                             case "edittag":
                                 if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
-                                    TagEditorWindow.Show(_nowPlayingPath);
+                                    OpenTagEditForFiles(new[] { _nowPlayingPath });
                                 break;
                             case "editlyric":
                                 if (!string.IsNullOrWhiteSpace(_nowPlayingPath))

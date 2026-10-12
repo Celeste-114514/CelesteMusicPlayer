@@ -1151,7 +1151,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            TagEditorWindow.ShowBatch(items.Select(i => i.FilePath).ToList());
+            OpenTagEditForFiles(items.Select(i => i.FilePath).ToList());
         }
 
 

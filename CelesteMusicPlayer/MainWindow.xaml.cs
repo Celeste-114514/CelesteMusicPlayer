@@ -59,7 +59,8 @@ namespace CelesteMusicPlayer
     // 主曲库及其它调用方行为完全不变。
     public class PlaylistItem
     {
-        public int Index { get; set; }
+        /// <summary>行序号（0 = 未编号）。virtual 是为了标签板块的 TagFileItem 能在赋值时通知界面重排。</summary>
+        public virtual int Index { get; set; }
 
         /// <summary>行首序号文本：极客界面下补零成 003 式（等宽字下对齐成一张数据表），其它界面原样数字。</summary>
         public string IndexLabel => MainWindow.GeekUiStyleCached

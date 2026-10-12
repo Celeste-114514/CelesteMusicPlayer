@@ -198,6 +198,43 @@ namespace CelesteMusicPlayer
     }
 
     /// <summary>
+    /// 表格用快速事实（采样率 / 位深 / 码率）：直接吃调用方已经打开的 TagLib.File.Properties，
+    /// **不重复开文件、不起 ffmpeg 子进程**——标签板块建行时与读标签共用同一个 File，零额外 I/O。
+    /// 这是「几秒才 50 首」的修复关键：旧路径每个文件要开两遍 TagLib，mp3/m4a/ogg 还要再起
+    /// 一个 ffmpeg 进程，50 个文件就是上百次进程创建。
+    ///
+    /// 保底规则（与旧行为对齐，不回归已知问题）：
+    ///  · TagLib 给出「采样率不可信」（缺失或 1Hz 脏值）且码率/位深也拿不到 → 回退完整探测
+    ///    （可能起 ffmpeg）：DSD（dsf/dff）和「192kHz 显示成 1Hz」的个别 ALAC 都靠这条兜底；
+    ///  · 拿不到位深（mp3/aac 等有损）就留 0，调用方显示 "-"——**不按容器猜位深**
+    ///    （项目铁律：宁可空着也不虚标；WMA Lossless / DTS-HD 这类有损容器里同样能装 24bit）。
+    /// 本方法不写 InfoCache（快速结果缺编码器名，别污染完整探测的缓存）。
+    /// </summary>
+    public static bool TryGetFactsFast(TagLib.File? file, string path, out int sampleRate, out int bitDepth, out int kbps)
+    {
+        sampleRate = 0;
+        bitDepth = 0;
+        kbps = 0;
+
+        if (file?.Properties is { } props)
+        {
+            // 采样率只认「可能为真」的值：TagLib 对少数 ALAC/m4a 会返回 1 这种绝无可能的脏值
+            sampleRate = IsPlausibleSampleRate(props.AudioSampleRate) ? props.AudioSampleRate : 0;
+            bitDepth = props.BitsPerSample;
+            kbps = props.AudioBitrate;
+        }
+
+        bool nothingUsable = sampleRate <= 0 && kbps <= 0 && bitDepth <= 0;
+        if (nothingUsable)
+        {
+            // TagLib 什么都没读到（DSD 等）：回退完整探测（含 ffmpeg）保底
+            return TryGetFacts(path, out sampleRate, out bitDepth, out kbps, out _);
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// 编码器 + 位深/采样率质量行，如 "MPEG-4 ALAC · 16bit/44.1kHz"、"Free Lossless Audio Codec · 24bit/96kHz"、"DSD128 · 2.82MHz"。
         /// 编码器按真实音频编码器（ffmpeg 探测，m4a 能区分 AAC / ALAC）显示规范名；读取失败返回空串。
         /// </summary>
