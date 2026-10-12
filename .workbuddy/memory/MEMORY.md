@@ -12,6 +12,9 @@
 - **新增界面模式/枚举值的落地三连（2026-10-12 血坑）**：① 设置白名单（`AppSettingsStore.Normalize` 的 `is "Scene" or "Classic*"` 链）② UI 选择项（`SettingsWindow.xaml` 的 `ComboBoxItem Tag`）③ 应用分支（`ApplyUiStyleMode`）。**缺任何一项都是"静默不生效"**——TokenSkin 写了 241 行却因为白名单没放行，读回来被归一成 ClassicSystem，`IsTokenSkinActive` 恒 false，表面上"代码全对但不工作"。
 - **取色只认一个入口（2026-10-12 血坑）**：强调色有两套实现——`ThemeColorService.CurrentAccent`（直通系统强调色）与 `ResolveAccentBrush()`/`ResolveAccentColor()`（带极客/令牌皮肤分支）。**新 UI 元素必须走 resolver 那套**，抄近道用 CurrentAccent 的结果就是「别处都跟主题变了，就这一块不变」（用户实测报的音量条即此）。静态上下文用 `MainWindow.ResolveAccentColorStatic()`（2026-10-12 新增）。
 - **按钮/圆底前景色恒白**（2026-10-12 用户拍板）：`ColorHelper.ResolveContrastingForeground` 不再按背景亮度切黑/白，一律白色；未来皮肤设置的开关落在 `ColorHelper.OverrideContrastForeground`（非 null 优先）。
+- **主题判断必须从元素树解析，禁读 App 级 RequestedTheme**（2026-10-12 用户实测踩坑）：外壳实际主题是 `UiTheme.ApplyUiStyleMode` 在 Content 根上显式设置的（经典浅色=ElementTheme.Light），`Application.Current.RequestedTheme` 只是 App 级默认值，两者会不一致（经典浅色下页签字被赋成白色、悬停反而变黑）。正确姿势=`MainWindow.ArtistDetail.cs` 的 `IsLightThemeFor(元素)`：沿视觉树向上找第一个显式 Light/Dark 的祖先，全 Default 才回落 App 级。
+- **网易云老 API 已被风控，艺术家概览走酷狗**（2026-10-12 实测定位）：`music.163.com/api/search/get`+`artist/head/info/get` 对程序化访问返回 `{"code":-462}`（滑块验证页，HTTP 200 无 artists=解析出 0 命中）；UA 带「CelesteMusicPlayer/1.0」标识必被拦、标准浏览器 UA 能过但连发后 IP 被标记（curl 也概率性中招）。QQ 搜索可用但简介接口已废弃（no supply）；iTunes/维基本机不可达。**可用源=酷狗 mobilecdn**（`api/v3/search/singer`→singerid→`api/v3/singer/info`→`data.profile`，中文简介无风控，Referer 要发 kugou.com）。HttpClient UA 已换标准浏览器 UA（WAF 甄别 UA 自定义 token）；概览链路=酷狗优先+网易云兜底（0 命中退避 1.2s 重试）。
+- **⚠️ obj/bin 备份禁止留在项目目录里**（2026-10-12 新血坑）：csproj 无显式 Compile 配置，SDK 默认 glob `**/*.cs` 会把 `_bak_obj_x64/.../MainWindow.g.i.cs` 一起编译 → 满屏假 CS0102/CS0111，还伴随 XamlCompiler/Roslyn 原生崩（中间态污染）。「移走 obj 重编」的备份一律放仓库外。
 - **二级窗口并入主 UI 的落地模式（2026-10-12 定）**：底座 = `MainWindow.ShellPages.cs` 的 `ShellPageHost`
   （左子导航+右内容+强调条+徽章，视觉对齐 DspNav）。**强调色必须外部注入**（传 `() => DspAccentBrush()`），
   框架自己绝不读资源。并入三步：① 功能先内联到主界面（弹窗→内联字段条）② 确认无问题再摘旧窗口入口
