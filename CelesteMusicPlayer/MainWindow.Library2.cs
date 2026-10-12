@@ -1206,7 +1206,7 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 左侧导航高亮。经典界面：所有条目统一成「半透明灰圆角底 + 左侧一根直竖条（主题色）」，
         /// 左对齐、切换时竖条淡入（观感对齐设置页）。
-        /// 背景图式界面：分类与工具（音效 / 标签排序 / 播放列表）同款 —— 透明底、选中填主题色、左对齐；
+        /// 背景图式界面：分类与工具（音效 / 播放列表）同款 —— 透明底、选中填主题色、左对齐；
         /// 工具按钮原来那圈胶囊背景已按用户要求去掉。
         /// </summary>
         private void UpdateLibraryNavHighlight()
@@ -1308,7 +1308,7 @@ namespace CelesteMusicPlayer
         /// <summary>某个 tag 是不是当前分类（流派/年份各有"分类页"和"分类下的歌曲列表"两种取值）。</summary>
         /// <summary>
         /// 清掉历史版本给"胶囊按钮"设过的固定高度。
-        /// 音效 / 标签排序 / 播放列表这 3 个按钮早先是胶囊样式（Height=40、CornerRadius=20），
+        /// 音效 / 播放列表这 2 个按钮早先是胶囊样式（Height=40、CornerRadius=20），
         /// 现在与分类同款；不清干净的话，切过一次界面风格之后旧值会残留，看着就跟别的不一样高。
         /// </summary>
         private static void ResetNavCapsuleChrome(Button button)

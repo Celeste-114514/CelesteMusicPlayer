@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -632,7 +632,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>从指定列表进入多选（标签排序面板曲目）。</summary>
+        /// <summary>从指定列表进入多选。</summary>
         private void EnterMultiSelectModeFrom(ListView list)
         {
             if (list == null) return;
@@ -675,7 +675,6 @@ namespace CelesteMusicPlayer
             // 列表墙/命中单详情默认隐藏：仅其它分类内按需显 Visible，避免切到其它页面残留盖层
             PlaylistWallBorder.Visibility = Visibility.Collapsed;
             PlaylistDetailBorder.Visibility = Visibility.Collapsed;
-            TagSortBorder.Visibility = Visibility.Collapsed;
             AudioFxBorder.Visibility = Visibility.Collapsed;
             SettingsBorder.Visibility = Visibility.Collapsed;
             RatingFilterPanel.Visibility = Visibility.Collapsed;
@@ -840,21 +839,6 @@ namespace CelesteMusicPlayer
                     ApplyMostPlayedCategory();
                     break;
 
-                case "TagSort":
-                    LibraryPaneTitle.Text = "标签排序";
-                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
-                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
-                    SongSortPanel.Visibility = Visibility.Collapsed;
-                    AlbumSortPanel.Visibility = Visibility.Collapsed;
-                    PlaylistListBorder.Visibility = Visibility.Collapsed;
-                    AlbumListBorder.Visibility = Visibility.Collapsed;
-                    ArtistListBorder.Visibility = Visibility.Collapsed;
-                    FolderListBorder.Visibility = Visibility.Collapsed;
-                    CloseAlbumDetailUi();
-                    CloseArtistDetailUi();
-                    BreakoutTagSortView();
-                    break;
-
                 case "Genres":
                 case "Years":
                     LibraryPaneTitle.Text = _currentCategory == "Genres" ? "流派" : "年份";
@@ -911,7 +895,6 @@ namespace CelesteMusicPlayer
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Collapsed;
                     FolderListBorder.Visibility = Visibility.Collapsed;
-                    TagSortBorder.Visibility = Visibility.Collapsed;
                     AudioFxBorder.Visibility = Visibility.Visible;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
@@ -931,7 +914,6 @@ namespace CelesteMusicPlayer
                     AlbumListBorder.Visibility = Visibility.Collapsed;
                     ArtistListBorder.Visibility = Visibility.Collapsed;
                     FolderListBorder.Visibility = Visibility.Collapsed;
-                    TagSortBorder.Visibility = Visibility.Collapsed;
                     SettingsBorder.Visibility = Visibility.Visible;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();

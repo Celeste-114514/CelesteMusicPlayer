@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -418,18 +418,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         /// <summary>首次运行是否已经弹过「文件关联」选择窗口。只弹一次，用户关掉就记住，不再打扰。</summary>
         public bool FileAssociationPromptShown { get; set; }
 
-        // —— 标签排序面板（模块 A 列定制 + 模块 B 分类字段）——
-        /// <summary>曲目列表列配置；空 = 用默认列（标题/艺术家/专辑/时长）。</summary>
-        public List<ListColumnSpec> TagSortColumns { get; set; } = new();
-
-        /// <summary>分类字段 key 列表（按顺序显示在分类按钮组）；空 = 默认 5 个（艺术家/专辑艺术家/专辑/流派/年份）。</summary>
-        public List<string> TagSortCategoryFields { get; set; } = new();
-
-        /// <summary>分组浏览（模块 C）的自定义多字段序列（自上而下嵌套）；空 = 默认 艺术家/专辑。作为“自定义”下拉项的快照独立保存，切到预设也不会被覆盖。</summary>
-        public List<string> TagSortGroupFields { get; set; } = new();
-
-        /// <summary>分组浏览当前激活的是哪一项：预设的字段列表 Tag（如 "Artist,Album"）或 "__custom__"（用 TagSortGroupFields 快照）；空 = 默认（自定义快照）。用于重启后恢复上次激活状态。</summary>
-        public string? TagSortGroupActivePreset { get; set; }
     }
 
     public static class AppSettingsStore
@@ -437,7 +425,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         /// <summary>「启动后进入」可选分类白名单（值与左侧导航按钮 Tag 一致）：
         /// 播放队列 UserPlaylist / 歌曲 Songs / 专辑 Albums / 艺术家 Artists / 专辑艺术家 AlbumArtists /
         /// 我喜欢的音乐 Favorites / 评分 Ratings / 最近播放 Recent / 播放列表 PlaylistWall。
-        /// 有意不含：播放最多 MostPlayed / 媒体库 Folders / 音效处理 AudioFX / 标签排序 TagSort /
+        /// 有意不含：播放最多 MostPlayed / 媒体库 Folders / 音效处理 AudioFX /
         /// 流派 Genres / 年份 Years / 网络音乐库 WebDav。
         /// 放在 AppSettingsStore（而非 AppSettingsState）是因为引用方统一写 AppSettingsStore.xxx；
         /// Normalize 内部的裸名引用也在本类内可直接解析。</summary>
@@ -872,12 +860,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             WebDavCacheDir = s.WebDavCacheDir,
             WebDavCacheLimitMb = s.WebDavCacheLimitMb,
             CustomHotkeys = s.CustomHotkeys.ToDictionary(kv => kv.Key, kv => kv.Value, StringComparer.OrdinalIgnoreCase),
-            // 标签排序面板（模块 A/B/C）：Clone 必须原样拷贝，否则 Load() 返回克隆里这些字段恒为默认，
-            // 导致分类字段配置、列配置、自定义分组、上次激活项在重启后丢失（此前自定义分组记忆功能因此失效）。
-            TagSortColumns = s.TagSortColumns.Select(c => new ListColumnSpec { Key = c.Key, Weight = c.Weight, Visible = c.Visible }).ToList(),
-            TagSortCategoryFields = s.TagSortCategoryFields.ToList(),
-            TagSortGroupFields = s.TagSortGroupFields.ToList(),
-            TagSortGroupActivePreset = s.TagSortGroupActivePreset,
             // 主窗口置顶此前漏拷：保存写进了文件，但 Load() 返回的克隆里恒为 false，
             // 表现是「勾了置顶、重启后自己取消」，与设置是否保存成功无关。
             AlwaysOnTop = s.AlwaysOnTop,

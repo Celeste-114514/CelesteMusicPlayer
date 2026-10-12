@@ -822,7 +822,7 @@ namespace CelesteMusicPlayer
     /// 状态色在生成行时按当前皮肤算好（极客=磷光，经典=主题 accent），
     /// 皮肤切换时整表重建即可换色（ApplyGeekDsp 收尾调用）。
     /// 顶层类而非 MainWindow 嵌套类——XAML x:Bind 的 x:DataType 只可靠解析顶层类型，
-    /// 与项目里 PlaylistItem / AlbumEntry / TagSortCategoryEntry 等行模型的既有做法一致。
+    /// 与项目里 PlaylistItem / AlbumEntry 等行模型的既有做法一致。
     /// </summary>
     public sealed class DspRackRow
     {

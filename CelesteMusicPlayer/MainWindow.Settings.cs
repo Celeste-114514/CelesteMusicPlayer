@@ -215,7 +215,6 @@ namespace CelesteMusicPlayer
             bool isUserPlaylist = _multiSelectTargetList == PlaylistView
                 && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal);
             bool isNamedPlaylistDetail = _multiSelectTargetList == PlaylistDetailListView;
-            bool isTagSortSongs = _multiSelectTargetList == TagSortPanelSongListView;
             bool isDetailSongList = _multiSelectTargetList == AlbumTrackListView
                 || _multiSelectTargetList == ArtistTrackListView;
             if (isUserPlaylist)
@@ -230,13 +229,6 @@ namespace CelesteMusicPlayer
                 MultiSelectPrimaryActionIcon.Glyph = "\uE74D"; // Delete
                 MultiSelectPrimaryActionText.Text = "从播放队列中删除";
                 ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲从当前命名单移除");
-            }
-            else if (isTagSortSongs)
-            {
-                // 标签排序面板曲目多选 → 添加到播放队列
-                MultiSelectPrimaryActionIcon.Glyph = "\uE710";
-                MultiSelectPrimaryActionText.Text = "添加至播放队列";
-                ToolTipService.SetToolTip(MultiSelectPrimaryActionButton, "将选中歌曲按顺序加入播放队列");
             }
             else if (isDetailSongList)
             {

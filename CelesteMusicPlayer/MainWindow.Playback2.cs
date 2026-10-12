@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -1432,7 +1432,7 @@ namespace CelesteMusicPlayer
             LibraryPaneTitle.Visibility = Visibility.Collapsed;
             SongSortPanel.Visibility = Visibility.Collapsed;
             MultiSelectTitlePanel.Visibility = Visibility.Visible;
-            MultiSelectTitleText.Text = target == TagSortGroupListView ? "选择歌曲或组" : "选择歌曲";
+            MultiSelectTitleText.Text = "选择歌曲";
             MultiSelectActionBar.Visibility = Visibility.Visible;
             ConfigureMultiSelectPrimaryAction();
             UpdateSelectAllMultiSelectButtonState();
@@ -1471,12 +1471,6 @@ namespace CelesteMusicPlayer
             if (target == AlbumTrackListView)
             {
                 return _albumTracks;
-            }
-
-            // 分组浏览：行是组头 + 歌曲混排，「全选」计数只算歌曲行（组头不是歌曲）
-            if (target == TagSortGroupListView)
-            {
-                return _tagSortGroupFlatRows.OfType<PlaylistItem>().ToList();
             }
 
             return GetActiveSongCollection();
@@ -1534,7 +1528,6 @@ namespace CelesteMusicPlayer
             bool isUserPlaylist = _multiSelectTargetList == PlaylistView
                 && string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal);
             bool isNamedPlaylistDetail = _multiSelectTargetList == PlaylistDetailListView;
-            bool isTagSortSongs = _multiSelectTargetList == TagSortPanelSongListView;
             bool isDetailSongList = _multiSelectTargetList == AlbumTrackListView
                 || _multiSelectTargetList == ArtistTrackListView;
             if (isUserPlaylist)
@@ -1554,7 +1547,7 @@ namespace CelesteMusicPlayer
             }
             else
             {
-                // 含标签排序面板曲目：添加到播放队列
+                // 其它视图多选：添加到播放队列
                 AddSongsToUserPlaylist(selected);
             }
 
@@ -1581,15 +1574,6 @@ namespace CelesteMusicPlayer
             if (_multiSelectAlbumGrid != null)
             {
                 GridView grid = _multiSelectAlbumGrid;
-                // 标签排序分类墙/面板专辑/艺术家网格：选中项是 TagSortCategoryEntry，按各自字段聚合其曲目
-                if (ReferenceEquals(grid, TagSortPanelGridView) || ReferenceEquals(grid, TagSortClassGridView))
-                {
-                    var cat = grid.SelectedItems.OfType<TagSortCategoryEntry>().ToList();
-                    var songs = new List<PlaylistItem>();
-                    foreach (var c in cat) songs.AddRange(CollectTagSortCategorySongs(c));
-                    return songs;
-                }
-
                 var selectedAlbums = grid.SelectedItems.OfType<AlbumEntry>().ToList();
                 List<AlbumEntry> ordered = GetAlbumCollectionForGrid(grid)
                     .Where(a => selectedAlbums.Contains(a))
@@ -1607,29 +1591,6 @@ namespace CelesteMusicPlayer
             }
 
             ListView target = _multiSelectTargetList ?? PlaylistView;
-
-            // 分组浏览多选：勾中的组头展开为整组歌曲，勾中的歌曲行取自身；
-            // 同一首歌可能被组和行重复勾中，按文件路径去重（保持勾选顺序）。
-            if (ReferenceEquals(target, TagSortGroupListView))
-            {
-                var groupSongs = new List<PlaylistItem>();
-                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-                foreach (var item in TagSortGroupListView.SelectedItems)
-                {
-                    if (item is TagSortGroupHeader header)
-                    {
-                        foreach (var s in CollectNodeSongs(header))
-                        {
-                            if (seen.Add(s.FilePath)) groupSongs.Add(s);
-                        }
-                    }
-                    else if (item is PlaylistItem song && seen.Add(song.FilePath))
-                    {
-                        groupSongs.Add(song);
-                    }
-                }
-                return groupSongs;
-            }
 
             return target.SelectedItems.OfType<PlaylistItem>().ToList();
         }

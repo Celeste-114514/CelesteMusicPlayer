@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -119,8 +119,7 @@ namespace CelesteMusicPlayer
 
         /// <summary>歌曲面板第三行的格式胶囊：格式 / 位深·采样率 / 比特率（如 ["FLAC","16bit/44kHz","1411kbps"]）。
         /// 懒计算 + AudioInfoFormatter 按路径缓存，避免启动/建条目时同步解析。
-        /// 极客界面下包一层方括号（[FLAC] [16bit/44kHz]…），配合等宽字读起来像终端元数据行；
-        /// 排序用的取下标逻辑（TagSortFields）不受影响 —— 每段前缀一致，相对顺序不变。</summary>
+        /// 极客界面下包一层方括号（[FLAC] [16bit/44kHz]…），配合等宽字读起来像终端元数据行。</summary>
         private IReadOnlyList<string>? _formatChips;
         private IReadOnlyList<string>? _geekFormatChips;
         public IReadOnlyList<string> FormatChips
@@ -209,26 +208,6 @@ namespace CelesteMusicPlayer
     public sealed class AlbumDiscGroup : System.Collections.ObjectModel.ObservableCollection<PlaylistItem>
     {
         public string Key { get; set; } = string.Empty;
-    }
-
-    /// <summary>标签排序分类墙卡片：一个分类（某字段值），封面取该分类第一首曲目封面。</summary>
-    public sealed class TagSortCategoryEntry : INotifyPropertyChanged
-    {
-        private BitmapImage? _cover;
-        public string Name { get; set; } = string.Empty;
-        public int Count { get; set; }
-        public string FirstFilePath { get; set; } = string.Empty;
-        /// <summary>面板内网格的额外语义（如 "Album"/"Artist"），用于指定该网格项的钻取字段。</summary>
-        public string Sub { get; set; } = string.Empty;
-
-        public BitmapImage? Cover
-        {
-            get => _cover;
-            set { _cover = value; PropertyChanged?.Invoke(this, new(nameof(Cover))); }
-        }
-
-        public string CountText => Count + " 首";
-        public event PropertyChangedEventHandler? PropertyChanged;
     }
 
     /// <summary>专辑浏览项：唯一专辑名 + 封面（优先取音轨 1 的内嵌图）</summary>
@@ -663,38 +642,6 @@ namespace CelesteMusicPlayer
         private bool _artistDetailUsesAlbumArtist;
         /// <summary>专辑详情是否从艺术家详情进入（返回时回到艺术家页）</summary>
         private bool _albumOpenedFromArtist;
-
-        // 标签排序板块状态：分类字段、当前分类值、面板视角、面板内已选(专辑/艺术家)、自定义排序配置
-        private string _tagSortClassField = "Artist";
-        private string _tagSortClassValue = string.Empty;   // 当进入某个分类（如某艺术家）时的值
-        private string _tagSortPanelMode = "Songs";          // Songs / Albums / Artists / Sort
-        private readonly ObservableCollection<PlaylistItem> _tagSortClassSongs = new(); // 当前分类下的曲目
-        private string _tagSortPreset = "Artist / Album";    // 当前排序方式预设或自定义
-        private bool _tagSortAscending = true;
-        private List<(string field, bool asc)> _tagSortCustom = new(); // 自定义排序（最多 5 级）
-
-        // 模块 A：曲目列表列配置（列定制）
-        private List<ListColumnSpec> _tagSortColumns = new(); // 加载自 AppSettings，空=默认
-        private int _tagSortColumnVersion = 1;                // 列配置变更时 ++，驱动行模板重建
-        private string _tagSortPanelSongSortField = string.Empty; // 面板列表列头排序字段（空=保持进入时的原顺序）
-        private bool _tagSortPanelSongSortAsc = true;         // 面板列表列头排序方向
-
-        // 模块 B：分类字段配置
-        private List<string> _tagSortCategoryFields = new();  // 加载自 AppSettings，空=默认5个
-
-        // 分类墙加载保护：全部分组缓存 + 当前可见数（高基数字段不会一次性渲染所有卡片）
-        private const int TagSortClassWallInitialMax = 200;   // 初始可见上限（再多就触发"加载更多"）
-        private const int TagSortClassWallLoadMoreStep = 200; // 每次"加载更多"再加 200
-        private List<TagSortCategoryEntry> _tagSortClassWallAll = new(); // 全部分组（已排序）
-        private int _tagSortClassWallShown = 0;                            // 当前已显示数量
-
-        // 模块 C：分组浏览（列表内多级分组、组头折叠）
-        private List<string> _tagSortGroupFields = new() { "Artist", "Album" }; // 当前激活的分组字段序列（多级嵌套顺序）
-        private List<string> _tagSortGroupCustom = new() { "Artist", "Album" }; // 自定义分组快照（下拉“自定义”项返回此配置，独立于当前激活项）
-        private string? _tagSortGroupActivePreset;                             // 当前激活项标记：某预设的字段列表 Tag（如 "Artist,Album"）或 "__custom__"；空=默认
-        private ObservableCollection<object> _tagSortGroupFlatRows = new();    // 扁平化：组头(TagSortGroupHeader) + 歌曲(PlaylistItem) 混排
-        private List<TagSortGroupHeader> _tagSortGroupTree = new();            // 多级分组树（roots）
-        private Dictionary<PlaylistItem, int> _tagSortSongIndent = new();      // 歌曲行缩进像素（按所属末级节点深度计算）
 
         // ---------- 左侧分类（Songs / Albums / Artists / Folders / UserPlaylist）----------
         private string _currentCategory = "Songs";

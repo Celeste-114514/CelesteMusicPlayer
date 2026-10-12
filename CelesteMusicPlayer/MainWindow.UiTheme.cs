@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -1116,15 +1116,12 @@ namespace CelesteMusicPlayer
                     (NavMostPlayedButton, Windows.UI.Color.FromArgb(255, 202, 80, 16)), // 最常播放
                     (NavFoldersButton, Windows.UI.Color.FromArgb(255, 116, 77, 169)),   // 文件夹
                     (NavAudioFxButton, Windows.UI.Color.FromArgb(255, 0, 153, 188)),    // 音效
-                    (NavTagSortButton, Windows.UI.Color.FromArgb(255, 107, 105, 214)),  // 标签排序
                     (UserPlaylistNavButton, Windows.UI.Color.FromArgb(255, 152, 111, 11)), // 自建歌单
                 };
 
                 foreach ((Microsoft.UI.Xaml.Controls.Button button, Windows.UI.Color color) in items)
                 {
-                    Microsoft.UI.Xaml.Controls.FontIcon? icon = NavTagSortButton != null && ReferenceEquals(button, NavTagSortButton) && NavTagSortIcon != null
-                        ? NavTagSortIcon
-                        : FindFirstFontIcon(button);
+                    Microsoft.UI.Xaml.Controls.FontIcon? icon = FindFirstFontIcon(button);
                     if (icon == null)
                     {
                         continue;
@@ -1393,7 +1390,7 @@ namespace CelesteMusicPlayer
             public FrameworkElement? Glyph;   // 背景图式用的单色图标（FontIcon / Path）
             public FrameworkElement? Emoji;   // 经典模式用的彩色 emoji
             public TextBlock? Label;
-            public bool IsTool;               // 音效处理 / 标签排序 / 播放列表
+            public bool IsTool;               // 音效处理 / 播放列表
 
             // 极客界面不用 Fluent 字形（它就是"塑料感"的来源）：换成等宽符号 + 磷光单色
             public string GeekSymbol = string.Empty;
@@ -1420,12 +1417,11 @@ namespace CelesteMusicPlayer
             AddNavItem(items, NavYearButton, NavYearIndicator, false, "▒");
             AddNavItem(items, NavMostPlayedButton, NavMostPlayedIndicator, false, "▲");
             AddNavItem(items, NavFoldersButton, NavFoldersIndicator, false, "▤");
-            // 2026-10-12 用户要求：播放列表 / 播放队列 上移到分割线上方（媒体库之下），
-            // 标签排序挪到分类组最末（紧贴分割线）。IsTool 只作标注，动到哪组就跟着改。
+            // 2026-10-12 用户要求：播放列表 / 播放队列 上移到分割线上方（媒体库之下）。
+            // IsTool 只作标注，动到哪组就跟着改。
             AddNavItem(items, UserPlaylistNavButton, UserPlaylistNavIndicator, false, "▦");
             AddNavItem(items, NavPlaylistWallButton, NavPlaylistWallIndicator, false, "≡");
             AddNavItem(items, NavWebDavButton, NavWebDavIndicator, false, "☁");
-            AddNavItem(items, NavTagSortButton, NavTagSortIndicator, false, "↕");
             AddNavItem(items, NavAudioFxButton, NavAudioFxIndicator, true, "♫");
             // 「设置」（2026-10-12 阶段 0）：工具区最下，点进去是主区里的设置面板
             AddNavItem(items, NavSettingsButton, NavSettingsIndicator, true, "⚙");
