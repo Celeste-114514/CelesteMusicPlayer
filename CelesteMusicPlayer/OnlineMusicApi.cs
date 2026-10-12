@@ -25,7 +25,7 @@ namespace CelesteMusicPlayer
     /// </summary>
     public static class OnlineMusicApi
     {
-        private static readonly HttpClient Http = CreateClient();
+        internal static readonly HttpClient Http = CreateClient();
         private const string NetEaseReferer = "https://music.163.com/";
         private const string QqReferer = "https://y.qq.com/portal/player.html";
 
@@ -329,8 +329,12 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>统一 UA。</summary>
-        private const string CelesteUserAgent =
+        /// <summary>
+        /// 所有对外请求统一使用的 User-Agent。
+        /// MusicBrainz 官方强制要求格式为「应用名/版本 (联系方式)」，
+        /// 用默认 UA（python-requests / Go-http-client 之类）会被直接拒绝。
+        /// </summary>
+        public const string CelesteUserAgent =
             "CelesteMusicPlayer/1.0 (https://github.com/Celeste-114514/CelesteMusicPlayer)";
 
         /// <summary>

@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Text;
+using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
@@ -480,9 +482,10 @@ namespace CelesteMusicPlayer
             {
                 AppSettingsState s = AppSettingsStore.Load();
 
-                // 平台 Cookie
-                if (NeCookieBox != null) NeCookieBox.Text = s.NetEaseCookie;
-                if (QqCookieBox != null) QqCookieBox.Text = s.QqCookie;
+                // 在线服务凭证（2026-10-13 起只保留开放 / 官方平台）
+                if (LastFmKeyBox != null) LastFmKeyBox.Text = s.LastFmApiKey;
+                if (DiscogsTokenBox != null) DiscogsTokenBox.Text = s.DiscogsToken;
+                if (FanartTvKeyBox != null) FanartTvKeyBox.Text = s.FanartTvApiKey;
 
                 // 歌词
                 SelectComboByTag(LyricSourcePriorityCombo, s.LyricSourcePriority);
@@ -1678,7 +1681,7 @@ namespace CelesteMusicPlayer
             PanelWebDav.Visibility = tag == "WebDAV" ? Visibility.Visible : Visibility.Collapsed;
             PanelHotkeys.Visibility = tag == "Hotkeys" ? Visibility.Visible : Visibility.Collapsed;
             PanelLibraryHealth.Visibility = tag == "LibraryHealth" ? Visibility.Visible : Visibility.Collapsed;
-            PanelStreaming.Visibility = tag == "Streaming" ? Visibility.Visible : Visibility.Collapsed;
+            PanelOnlineServices.Visibility = tag == "OnlineServices" ? Visibility.Visible : Visibility.Collapsed;
             PanelFileAssoc.Visibility = tag == "FileAssoc" ? Visibility.Visible : Visibility.Collapsed;
             PanelAbout.Visibility = tag == "About" ? Visibility.Visible : Visibility.Collapsed;
             if (tag == "FileAssoc")
@@ -1766,7 +1769,7 @@ namespace CelesteMusicPlayer
             _searchPanels.Add((PanelWebDav, "WebDAV", "WebDAV"));
             _searchPanels.Add((PanelHotkeys, "Hotkeys", "全局快捷键"));
             _searchPanels.Add((PanelLibraryHealth, "LibraryHealth", "曲库健康"));
-            _searchPanels.Add((PanelStreaming, "Streaming", "流媒体"));
+            _searchPanels.Add((PanelOnlineServices, "OnlineServices", "在线服务"));
             _searchPanels.Add((PanelFileAssoc, "FileAssoc", "文件关联"));
             _searchPanels.Add((PanelAbout, "About", "关于"));
 
@@ -2133,16 +2136,102 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void SaveNeCookieButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>把三个在线服务凭证一起落盘（仅本机，不随软件分发）。</summary>
+        private void SaveOnlineServiceKeys_Click(object sender, RoutedEventArgs e)
         {
-            AppSettingsStore.Update(x => x.NetEaseCookie = NeCookieBox?.Text?.Trim() ?? "");
-            StreamingStatusText.Text = "网易云 Cookie 已保存（本地）。";
+            AppSettingsStore.Update(x =>
+            {
+                x.LastFmApiKey = LastFmKeyBox?.Text?.Trim() ?? "";
+                x.DiscogsToken = DiscogsTokenBox?.Text?.Trim() ?? "";
+                x.FanartTvApiKey = FanartTvKeyBox?.Text?.Trim() ?? "";
+            });
+
+            OnlineServicesStatusText.Text =
+                "已保存到本机（" + DateTimeOffset.Now.ToString("HH:mm:ss") + "）。";
         }
 
-        private void SaveQqCookieButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>逐个探测各平台是否可达，结果直接列在面板上。</summary>
+        private async void TestOnlineServices_Click(object sender, RoutedEventArgs e)
         {
-            AppSettingsStore.Update(x => x.QqCookie = QqCookieBox?.Text?.Trim() ?? "");
-            StreamingStatusText.Text = "QQ Cookie 已保存（本地）。";
+            (string Label, string Url, string? Auth)[] targets =
+            {
+                ("MusicBrainz", "https://musicbrainz.org/ws/2/artist/?query=radiohead&fmt=json&limit=1", null),
+                ("Cover Art Archive", "https://coverartarchive.org/release/978c7ed1-a854-4ef2-bd4e-e7c1317be854/front-250", null),
+                ("LRClib", "https://lrclib.net/api/search?q=hello", null),
+                ("iTunes", "https://itunes.apple.com/search?term=radiohead&media=music&entity=song&limit=1", null),
+            };
+
+            OnlineServicesStatusText.Text = "正在检测…";
+
+            var lines = new List<string>();
+            foreach ((string label, string url, string? auth) in targets)
+            {
+                lines.Add(await ProbeAsync(label, url, auth).ConfigureAwait(true));
+            }
+
+            OnlineServicesStatusText.Text = string.Join(Environment.NewLine, lines);
+        }
+
+        /// <summary>Last.fm：用当前 key 查一次 artist.getInfo，验证 key 是否有效。</summary>
+        private async void TestLastFmButton_Click(object sender, RoutedEventArgs e)
+        {
+            string key = LastFmKeyBox?.Text?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(key))
+            {
+                OnlineServicesStatusText.Text = "Last.fm：还没填 API key。";
+                return;
+            }
+
+            string url = "https://ws.audioscrobbler.com/2.0/?method=artist.getinfo&artist=Radiohead"
+                + "&api_key=" + Uri.EscapeDataString(key) + "&format=json";
+            OnlineServicesStatusText.Text = await ProbeAsync("Last.fm", url, null).ConfigureAwait(true);
+        }
+
+        /// <summary>Discogs：用当前 token 查一次 database/search，验证 token 是否有效。</summary>
+        private async void TestDiscogsButton_Click(object sender, RoutedEventArgs e)
+        {
+            string token = DiscogsTokenBox?.Text?.Trim() ?? "";
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                OnlineServicesStatusText.Text = "Discogs：还没填 token。";
+                return;
+            }
+
+            string url = "https://api.discogs.com/database/search?q=radiohead&type=artist&per_page=1";
+            OnlineServicesStatusText.Text =
+                await ProbeAsync("Discogs", url, "Discogs token=" + token).ConfigureAwait(true);
+        }
+
+        /// <summary>fanart.tv：可选源，只提示状态，不做实际调用。</summary>
+        private void TestFanartTvButton_Click(object sender, RoutedEventArgs e)
+        {
+            OnlineServicesStatusText.Text = string.IsNullOrWhiteSpace(FanartTvKeyBox?.Text)
+                ? "fanart.tv：可选，没填就不启用。"
+                : "fanart.tv：已填 key，取高清图时会自动带上。";
+        }
+
+        /// <summary>探测单个平台可达性。404 也算可达（说明域名通、只是资源不存在）。</summary>
+        private static async Task<string> ProbeAsync(
+            string label, string url, string? authHeader = null)
+        {
+            try
+            {
+                using var req = new HttpRequestMessage(HttpMethod.Get, url);
+                req.Headers.TryAddWithoutValidation("User-Agent", OnlineMusicApi.CelesteUserAgent);
+                if (!string.IsNullOrWhiteSpace(authHeader))
+                {
+                    req.Headers.TryAddWithoutValidation("Authorization", authHeader);
+                }
+
+                using HttpResponseMessage resp = await OnlineMusicApi.Http.SendAsync(req).ConfigureAwait(false);
+                int code = (int)resp.StatusCode;
+                bool ok = resp.IsSuccessStatusCode || code == 404 || code == 400;
+                return ok ? label + "：可达（" + code + "）" : label + "：异常（" + code + "）";
+            }
+            catch (Exception ex)
+            {
+                return label + "：连不上（" + ex.GetType().Name + "）— 若处于受限网络可能需要代理";
+            }
         }
 
         private void SettingCheck_Changed(object sender, RoutedEventArgs e)
