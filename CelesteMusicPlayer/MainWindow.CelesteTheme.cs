@@ -68,6 +68,9 @@ namespace CelesteMusicPlayer
                 // 设置面板的强调条也跟着重刷（阶段 0 新增的板块，走同一个取色入口）
                 ReapplySettingsAccent();
 
+                // 标签板块的子导航强调条同样重刷（阶段 5a 新增，走同一个取色入口）
+                ReapplyTagPanelAccent();
+
                 // ---- 4) 令牌测试皮肤：主题文件就是它的全部配色来源 ----
                 // 先让取色缓存失效（里面存的是旧主题对象），再重建系统刷子覆盖字典。
                 // 只动颜色不重跑 ApplyUiStyleMode——模式没变，没必要整树重排。

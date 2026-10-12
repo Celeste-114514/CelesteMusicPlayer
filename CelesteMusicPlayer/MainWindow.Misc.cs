@@ -919,6 +919,23 @@ namespace CelesteMusicPlayer
                     CloseArtistDetailUi();
                     EnsureSettingsUiBuilt();
                     break;
+
+                case "TagEdit":
+                    // 标签板块（2026-10-13 阶段 5a）：左标签面板 + 右文件列表，子页导航在面板内部
+                    LibraryPaneTitle.Text = "标签";
+                    LibraryPaneTitle.Visibility = Visibility.Collapsed;
+                    MultiSelectTitlePanel.Visibility = Visibility.Collapsed;
+                    SongSortPanel.Visibility = Visibility.Collapsed;
+                    AlbumSortPanel.Visibility = Visibility.Collapsed;
+                    PlaylistListBorder.Visibility = Visibility.Collapsed;
+                    AlbumListBorder.Visibility = Visibility.Collapsed;
+                    ArtistListBorder.Visibility = Visibility.Collapsed;
+                    FolderListBorder.Visibility = Visibility.Collapsed;
+                    TagEditBorder.Visibility = Visibility.Visible;
+                    CloseAlbumDetailUi();
+                    CloseArtistDetailUi();
+                    EnsureTagEditUiBuilt();
+                    break;
             }
 
             // 仅「播放队列」分类支持拖拽重排（其它列表保持排序语义不变）

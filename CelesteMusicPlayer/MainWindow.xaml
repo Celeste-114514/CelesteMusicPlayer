@@ -771,6 +771,30 @@
                         Margin="10,0,10,3"
                         Visibility="Collapsed"
                         Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                    <!-- 「标签」板块（2026-10-13 阶段 5a）：mp3tag 式左标签面板 + 右文件列表，
+                         与音效处理 / 设置同组（工具区）。图标与旧「编辑标签」窗口同一个字形 (E8D2)。
+                         ⚠️ 这不是 2026-10-12 删掉的「标签排序」——那个是按标签浏览曲库，
+                         这个是在文件列表上改标签；别把两者混在一起。 -->
+                    <Grid Margin="0,0,0,3">
+                        <Button
+                            x:Name="NavTagEditButton"
+                            Tag="TagEdit"
+                            Padding="8,6"
+                            FontSize="14"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            CornerRadius="8"
+                            Click="NavTagEditButton_Click">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon Glyph="&#xE8D2;" FontSize="14" VerticalAlignment="Center" />
+                                <TextBlock Tag="NavEmoji" Text="🏷️" FontFamily="Segoe UI Emoji" FontSize="14" VerticalAlignment="Center" Visibility="Collapsed" />
+                                <TextBlock Tag="NavLabel" Text="标签" VerticalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
+                        <Border x:Name="NavTagEditIndicator" Width="3" Height="16" CornerRadius="1.5" HorizontalAlignment="Left" VerticalAlignment="Center" Margin="2,0,0,0" Background="Transparent" Opacity="0" IsHitTestVisible="False" />
+                    </Grid>
                     <Grid Margin="0,0,0,3">
                         <Button
                             x:Name="NavAudioFxButton"
@@ -3206,6 +3230,20 @@
                     BorderThickness="0"
                     Visibility="Collapsed">
                     <Grid x:Name="SettingsPanelHost" />
+                </Border>
+
+                <!-- 标签板块（2026-10-13 阶段 5a）：内容 = TagPanelControl
+                     （mp3tag 式左标签面板 + 右文件列表，自带 4 个子页导航），
+                     首次进入时在 MainWindow.ShellPages.cs 里创建并塞进 TagPanelHost。
+                     回退方式：把左侧「标签」导航项与这里的 Visibility 一起改回 Collapsed。 -->
+                <Border
+                    x:Name="TagEditBorder"
+                    Grid.Row="1"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Padding="4,4"
+                    Visibility="Collapsed">
+                    <Grid x:Name="TagPanelHost" />
                 </Border>
 
                 <!-- 音效处理 DSP 面板：EQ / 声道平衡 / 安全限幅 -->

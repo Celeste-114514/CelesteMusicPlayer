@@ -329,6 +329,55 @@ namespace CelesteMusicPlayer
         {
         }
 
+        /// <summary>并入主 UI 的「标签」板块（2026-10-13 阶段 5a）。延迟创建：第一次点「标签」才造。</summary>
+        private TagPanelControl? _tagPanel;
+        private bool _tagUiBuilt;
+
+        private void EnsureTagEditUiBuilt()
+        {
+            if (_tagUiBuilt)
+            {
+                return;
+            }
+
+            _tagUiBuilt = true;
+
+            try
+            {
+                // 强调色外部注入（取色只认一个入口铁律）：与音效处理共用 DspAccentBrush
+                _tagPanel = new TagPanelControl(() => DspAccentBrush());
+                TagPanelHost.Children.Add(_tagPanel);
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("EnsureTagEditUiBuilt", ex);
+            }
+        }
+
+        /// <summary>主题 / 皮肤切换后重刷标签板块子导航的强调条。</summary>
+        internal void ReapplyTagPanelAccent()
+        {
+            try
+            {
+                _tagPanel?.ReapplyAccent();
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("ReapplyTagPanelAccent", ex);
+            }
+        }
+
+        private void NavTagEditButton_Click(object sender, RoutedEventArgs e)
+        {
+            ExitMultiSelectMode();
+            CommitLibraryNavigation(() =>
+            {
+                _currentCategory = "TagEdit";
+                ApplyCategoryView();
+            });
+            NowPlayingText.Text = "标签";
+        }
+
         /// <summary>
         /// 从任何地方跳到主界面的「设置」面板：托盘菜单、桌面歌词工具栏、播放页右键菜单都走这里。
         /// 原来这些入口是弹独立设置窗口（SettingsWindow.ShowOrActivate），阶段 3 起改成切面板。

@@ -1422,6 +1422,8 @@ namespace CelesteMusicPlayer
             AddNavItem(items, UserPlaylistNavButton, UserPlaylistNavIndicator, false, "▦");
             AddNavItem(items, NavPlaylistWallButton, NavPlaylistWallIndicator, false, "≡");
             AddNavItem(items, NavWebDavButton, NavWebDavIndicator, false, "☁");
+            // 「标签」（2026-10-13 阶段 5a）：工具区最上一格，与音效处理 / 设置同组
+            AddNavItem(items, NavTagEditButton, NavTagEditIndicator, true, "✎");
             AddNavItem(items, NavAudioFxButton, NavAudioFxIndicator, true, "♫");
             // 「设置」（2026-10-12 阶段 0）：工具区最下，点进去是主区里的设置面板
             AddNavItem(items, NavSettingsButton, NavSettingsIndicator, true, "⚙");
