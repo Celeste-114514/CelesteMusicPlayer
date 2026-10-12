@@ -55,7 +55,9 @@ namespace CelesteMusicPlayer
     /// <summary>
     /// 播放列表一行：标题、艺术家、专辑、年份、时长 + 本地路径。
     /// </summary>
-    public sealed class PlaylistItem
+    // 非密封：标签板块的 TagFileItem（文件表格行 + 格式/大小等文件派生列）从本类派生。
+    // 主曲库及其它调用方行为完全不变。
+    public class PlaylistItem
     {
         public int Index { get; set; }
 

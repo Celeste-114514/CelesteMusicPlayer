@@ -6,8 +6,10 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Input;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 
@@ -37,9 +39,16 @@ namespace CelesteMusicPlayer
             ".mp2", ".amr", ".au", ".mod", ".s3m", ".xm"
         };
 
-        private readonly ObservableCollection<PlaylistItem> _files = new();
+        private readonly ObservableCollection<TagFileItem> _files = new();
         private readonly ShellPageHost _subNav;
         private readonly Func<Brush>? _accentProvider;
+
+        /// <summary>
+        /// 宿主窗口句柄（由 MainWindow 构造时传入，WinRT 选取器 InitializeWithWindow 用）。
+        /// ⚠ 不能在本类里调 WindowNative.GetWindowHandle(this)：UserControl 没实现 IWindowNative，
+        /// 会抛 "Failed to create a CCW … the specified cast is not valid"（2026-10-13 用户实测）。
+        /// </summary>
+        private readonly nint _hostHwnd;
 
         /// <summary>面板就绪标记：Loaded 之后才允许响应选择变化（防初始化期 NRE）。</summary>
         private bool _panelReady;
@@ -47,9 +56,10 @@ namespace CelesteMusicPlayer
         /// <summary>预览加载代数：快速切换选择时只认最后一次，避免旧文件的标签覆盖新文件的。</summary>
         private int _previewGeneration;
 
-        public TagPanelControl(Func<Brush>? accentProvider = null)
+        public TagPanelControl(Func<Brush>? accentProvider = null, nint hostHwnd = default)
         {
             _accentProvider = accentProvider;
+            _hostHwnd = hostHwnd;
             InitializeComponent();
 
             TagFileListView.ItemsSource = _files;
@@ -79,11 +89,6 @@ namespace CelesteMusicPlayer
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ReapplyAccent", caught); }
         }
 
-        private void TagPanelControl_Loaded(object sender, RoutedEventArgs e)
-        {
-            _panelReady = true;
-        }
-
         private void TagPanelControl_Unloaded(object sender, RoutedEventArgs e)
         {
             _panelReady = false;
@@ -98,8 +103,12 @@ namespace CelesteMusicPlayer
             try
             {
                 FileOpenPicker picker = new();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                if (_hostHwnd == IntPtr.Zero)
+                {
+                    TagStatusText.Text = "窗口句柄缺失，无法打开选取器。";
+                    return;
+                }
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, _hostHwnd);
 
                 picker.ViewMode = PickerViewMode.List;
                 picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
@@ -128,8 +137,12 @@ namespace CelesteMusicPlayer
             try
             {
                 FolderPicker picker = new();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                if (_hostHwnd == IntPtr.Zero)
+                {
+                    TagStatusText.Text = "窗口句柄缺失，无法打开选取器。";
+                    return;
+                }
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, _hostHwnd);
 
                 picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
                 // FolderPicker 至少要加一个过滤器，常用 "*"
@@ -185,9 +198,9 @@ namespace CelesteMusicPlayer
             for (int i = 0; i < fresh.Length; i += BatchSize)
             {
                 string[] batch = fresh.Skip(i).Take(BatchSize).ToArray();
-                PlaylistItem?[] entries = await Task.Run(() => batch.Select(BuildEntry).ToArray());
+                TagFileItem?[] entries = await Task.Run(() => batch.Select(BuildEntry).ToArray());
 
-                foreach (PlaylistItem? entry in entries)
+                foreach (TagFileItem? entry in entries)
                 {
                     if (entry != null)
                     {
@@ -206,14 +219,14 @@ namespace CelesteMusicPlayer
 
         private void RemoveSelectedButton_Click(object sender, RoutedEventArgs e)
         {
-            List<PlaylistItem> selected = TagFileListView.SelectedItems.Cast<PlaylistItem>().ToList();
+            List<TagFileItem> selected = TagFileListView.SelectedItems.Cast<TagFileItem>().ToList();
             if (selected.Count == 0)
             {
                 TagStatusText.Text = "先在上方列表里选中要移除的文件（可多选）。";
                 return;
             }
 
-            foreach (PlaylistItem item in selected)
+            foreach (TagFileItem item in selected)
             {
                 _files.Remove(item);
             }
@@ -248,7 +261,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            List<PlaylistItem> selected = TagFileListView.SelectedItems.Cast<PlaylistItem>().ToList();
+            List<TagFileItem> selected = TagFileListView.SelectedItems.Cast<TagFileItem>().ToList();
             RefreshCountUi();
 
             if (selected.Count == 0)
@@ -402,7 +415,7 @@ namespace CelesteMusicPlayer
         /// （同样的缺省值：未知艺术家 / 未知专辑 / 未知流派），不碰评分统计。
         /// 只打开一次 TagLib：标签 + 时长一趟拿完。
         /// </summary>
-        private static PlaylistItem? BuildEntry(string path)
+        private static TagFileItem? BuildEntry(string path)
         {
             string fileName = System.IO.Path.GetFileNameWithoutExtension(path);
             string title = fileName;
@@ -468,7 +481,7 @@ namespace CelesteMusicPlayer
                 return null;
             }
 
-            return new PlaylistItem
+            TagFileItem item = new()
             {
                 Title = title,
                 Artist = artist,
@@ -480,6 +493,64 @@ namespace CelesteMusicPlayer
                 Duration = duration,
                 FilePath = path
             };
+
+            // 文件派生列（格式 / 位深 / 采样率 / 码率 / 大小）：本方法就在后台线程里跑，
+            // AudioInfoFormatter 自带按路径缓存；任何一项读不到就留 "-"，不影响整行。
+            try
+            {
+                string ext = System.IO.Path.GetExtension(path);
+                item.FormatName = ext.Length > 1 ? ext.Substring(1).ToUpperInvariant() : "-";
+
+                if (AudioInfoFormatter.TryGetFacts(path, out int rate, out int bits, out int kbps, out _))
+                {
+                    item.BitDepthText = bits > 0 ? bits + "bit" : "-";
+                    item.SampleRateText = rate > 0 ? FormatSampleRate(rate) : "-";
+                    item.BitrateText = kbps > 0 ? kbps + "kbps" : "-";
+                }
+
+                try
+                {
+                    long len = new FileInfo(path).Length;
+                    if (len > 0)
+                    {
+                        item.FileSizeText = FormatFileSize(len);
+                    }
+                }
+                catch
+                {
+                    // 文件被独占/无权限时大小列留 "-"
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.BuildEntry.facts", caught);
+            }
+
+            return item;
+        }
+
+        /// <summary>44100 → 44.1kHz；48000 → 48kHz；2822400 → 2.82MHz。</summary>
+        private static string FormatSampleRate(int rate)
+        {
+            if (rate >= 1_000_000)
+            {
+                return (rate / 1_000_000.0).ToString("0.##", System.Globalization.CultureInfo.InvariantCulture) + "MHz";
+            }
+            return (rate / 1000.0).ToString("0.#", System.Globalization.CultureInfo.InvariantCulture) + "kHz";
+        }
+
+        /// <summary>字节数 → B / KB / MB。</summary>
+        private static string FormatFileSize(long bytes)
+        {
+            if (bytes < 1024)
+            {
+                return bytes + " B";
+            }
+            if (bytes < 1024 * 1024)
+            {
+                return (bytes / 1024.0).ToString("0", System.Globalization.CultureInfo.InvariantCulture) + " KB";
+            }
+            return (bytes / (1024.0 * 1024.0)).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB";
         }
 
         /// <summary>递归枚举文件夹里的音频文件；内部缓存目录（DSD DoP / 转码 / WebDAV 缓存）一律跳过。</summary>
@@ -550,6 +621,363 @@ namespace CelesteMusicPlayer
             else if (total > 0 && string.IsNullOrEmpty(TagStatusText.Text))
             {
                 TagStatusText.Text = $"共 {total} 个文件。";
+            }
+        }
+
+        // =====================================================================
+        // 文件表格：列宽（表头拖拽）与表头横向滚动同步
+        //
+        // 布局约定（改列数/默认宽必须三处同步）：
+        //   ① XAML 表头 TagListHeaderGrid 的 ColumnDefinitions
+        //   ② XAML 行模板 Grid 的 ColumnDefinitions
+        //   ③ 下面的 ColDefaultWidths / ColMinWidths
+        // 运行期以 ③ 为唯一真相：Loaded 时按 ③ 刷一遍表头和所有可见行，
+        // 之后拖拽只改 ③ + 同步刷（行模板 Loaded 时也会按 ③ 盖章，新行不会错位）。
+        // =====================================================================
+
+        /// <summary>总列数（与 XAML 两处 ColumnDefinitions 严格一致）。</summary>
+        private const int ColCount = 14;
+
+        /// <summary>「标题」列：唯一星号列，自动吸收剩余宽度；拖它的把手改的是 MinWidth。</summary>
+        private const int StarCol = 1;
+
+        private const double ColSpacing = 8;
+        private const double RowPaddingX = 10;
+
+        private static readonly double[] ColDefaultWidths =
+            { 36, 100, 130, 130, 52, 44, 84, 60, 150, 64, 52, 76, 68, 76 };
+
+        private static readonly double[] ColMinWidths =
+            { 28, 100, 60, 60, 36, 32, 48, 44, 80, 44, 36, 48, 48, 48 };
+
+        private readonly double[] _colWidths = (double[])ColDefaultWidths.Clone();
+        private double _starMinWidth = ColDefaultWidths[StarCol];
+        private double _gridMinWidth;
+        private double _listViewportW;
+        private double _lastViewportW = -1;
+        private ScrollViewer? _listScroller;
+        private TranslateTransform? _headerSlide;
+
+        // 拖拽状态（_dragCol < 0 表示没在拖）
+        private int _dragCol = -1;
+        private double _dragStartX;
+        private double _dragStartW;
+
+        private void TagPanelControl_Loaded(object sender, RoutedEventArgs e)
+        {
+            _panelReady = true;
+            try
+            {
+                SetupTableScrolling();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.Loaded.table", caught);
+            }
+        }
+
+        /// <summary>表格增强初始化：横向滚动同步、表头裁剪、列宽把手。Loaded 后调用一次。</summary>
+        private void SetupTableScrolling()
+        {
+            // 1) ListView 内部 ScrollViewer：横向滚动时把表头往左同等位移
+            //    （表头在 ListView 外面，不会自己跟着滚）
+            _listScroller = FindDescendant<ScrollViewer>(TagFileListView);
+            if (_listScroller != null)
+            {
+                _listViewportW = _listScroller.ViewportWidth;
+                _lastViewportW = _listViewportW;
+                _listScroller.ViewChanged += ListScroller_ViewChanged;
+            }
+
+            // 2) 表头位移变换 + 裁剪：列太多内容宽于视口时不裁会溢出到右列外
+            _headerSlide = new TranslateTransform();
+            TagListHeaderGrid.RenderTransform = _headerSlide;
+            UpdateHeaderClip();
+
+            // 3) 表头列边界生成拖拽把手（6px 透明热区，代码生成免得 XAML 写 14 遍）
+            BuildColumnGrips();
+
+            TagHeaderHost.SizeChanged += TagHeaderHost_SizeChanged;
+            TagFileListView.SizeChanged += TagFileListView_SizeChanged;
+
+            ApplyColumnWidths();
+        }
+
+        private void ListScroller_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
+        {
+            try
+            {
+                if (_headerSlide != null && _listScroller != null)
+                {
+                    _headerSlide.X = -_listScroller.HorizontalOffset;
+                }
+
+                // 竖滚动条出现/消失会改变视口宽 → 行宽阈值跟着变
+                double vw = _listScroller?.ViewportWidth ?? 0;
+                if (vw > 0 && Math.Abs(vw - _lastViewportW) > 0.5)
+                {
+                    _lastViewportW = vw;
+                    _listViewportW = vw;
+                    ApplyColumnWidths();
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ViewChanged", caught);
+            }
+        }
+
+        private void UpdateHeaderClip()
+        {
+            double w = TagHeaderHost.ActualWidth;
+            double h = TagHeaderHost.ActualHeight;
+            if (w <= 0 || h <= 0)
+            {
+                return;
+            }
+            TagListHeaderGrid.Clip = new RectangleGeometry
+            {
+                Rect = new global::Windows.Foundation.Rect(0, 0, w, h)
+            };
+        }
+
+        private void BuildColumnGrips()
+        {
+            for (int i = 0; i < ColCount; i++)
+            {
+                ColumnResizeGrip grip = new();
+                Grid.SetColumn(grip, i);
+                grip.PointerPressed += ColumnGrip_PointerPressed;
+                grip.PointerMoved += ColumnGrip_PointerMoved;
+                grip.PointerReleased += ColumnGrip_PointerReleased;
+                grip.PointerCanceled += ColumnGrip_PointerReleased;
+                TagListHeaderGrid.Children.Add(grip);
+            }
+        }
+
+        private void ColumnGrip_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is not ColumnResizeGrip grip)
+            {
+                return;
+            }
+
+            int col = Grid.GetColumn(grip);
+            _dragCol = col;
+            _dragStartX = e.GetCurrentPoint(TagListHeaderGrid).Position.X;
+            _dragStartW = col == StarCol ? _starMinWidth : _colWidths[col];
+            grip.CapturePointer(e.Pointer);
+            e.Handled = true;
+        }
+
+        private void ColumnGrip_PointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            if (_dragCol < 0 || sender is not ColumnResizeGrip grip)
+            {
+                return;
+            }
+
+            double x = e.GetCurrentPoint(TagListHeaderGrid).Position.X;
+            SetColumnWidth(_dragCol, _dragStartW + (x - _dragStartX));
+            e.Handled = true;
+        }
+
+        private void ColumnGrip_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is not ColumnResizeGrip grip)
+            {
+                return;
+            }
+
+            try
+            {
+                grip.ReleasePointerCapture(e.Pointer);
+            }
+            catch
+            {
+                // 指针已经丢了就算了
+            }
+            _dragCol = -1;
+            e.Handled = true;
+        }
+
+        private void SetColumnWidth(int col, double width)
+        {
+            if (width < ColMinWidths[col])
+            {
+                width = ColMinWidths[col];
+            }
+
+            if (col == StarCol)
+            {
+                _starMinWidth = width;
+            }
+            else
+            {
+                _colWidths[col] = width;
+            }
+
+            ApplyColumnWidths();
+        }
+
+        /// <summary>按当前列宽刷新表头 + 所有已实现（可见）的行。</summary>
+        private void ApplyColumnWidths()
+        {
+            double fixedSum = 0;
+            for (int i = 0; i < ColCount; i++)
+            {
+                fixedSum += i == StarCol ? _starMinWidth : _colWidths[i];
+            }
+            _gridMinWidth = fixedSum + ColSpacing * (ColCount - 1) + RowPaddingX * 2;
+
+            ApplyWidthsToGrid(TagListHeaderGrid, TagHeaderHost.ActualWidth);
+
+            foreach (TagFileItem item in _files)
+            {
+                if (TagFileListView.ContainerFromItem(item) is ListViewItem container)
+                {
+                    Grid? row = FindRowGrid(container);
+                    if (row != null)
+                    {
+                        ApplyWidthsToGrid(row, _listViewportW);
+                    }
+                }
+            }
+        }
+
+        private void ApplyWidthsToGrid(Grid grid, double viewportW)
+        {
+            ColumnDefinitionCollection cols = grid.ColumnDefinitions;
+            for (int i = 0; i < cols.Count && i < ColCount; i++)
+            {
+                if (i == StarCol)
+                {
+                    cols[i].MinWidth = _starMinWidth;
+                }
+                else
+                {
+                    cols[i].Width = new GridLength(_colWidths[i]);
+                }
+            }
+
+            grid.MinWidth = _gridMinWidth;
+            // 视口比总宽窄 → 内容按总宽渲染（超出部分靠裁剪/横向滚动）；
+            // 否则交回自动拉伸（星号列填满剩余空间）。NaN = 清除显式宽度。
+            grid.Width = viewportW > 0 && viewportW < _gridMinWidth ? _gridMinWidth : double.NaN;
+        }
+
+        /// <summary>行模板 Grid 实现（新行/回收行）时按当前列宽盖章，防止用回 XAML 默认值错位。</summary>
+        private void TagFileRow_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is Grid row)
+            {
+                ApplyWidthsToGrid(row, _listViewportW);
+            }
+        }
+
+        private void TagHeaderHost_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateHeaderClip();
+            ApplyColumnWidths();
+        }
+
+        private void TagFileListView_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            double vw = _listScroller?.ViewportWidth ?? 0;
+            if (vw > 0 && Math.Abs(vw - _lastViewportW) > 0.5)
+            {
+                _lastViewportW = vw;
+                _listViewportW = vw;
+            }
+            ApplyColumnWidths();
+        }
+
+        /// <summary>行容器里找行模板 Grid：靠列数匹配（ListViewItem 内部模板的 Grid 没这么多列）。</summary>
+        private static Grid? FindRowGrid(ListViewItem container)
+        {
+            return FindDescendantWhere<Grid>(container, g => g.ColumnDefinitions.Count == ColCount);
+        }
+
+        private static T? FindDescendant<T>(DependencyObject root) where T : class
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is T match)
+                {
+                    return match;
+                }
+                T? found = FindDescendant<T>(child);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+
+        private static T? FindDescendantWhere<T>(DependencyObject root, Func<T, bool> predicate) where T : class
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is T match && predicate(match))
+                {
+                    return match;
+                }
+                T? found = FindDescendantWhere<T>(child, predicate);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// 标签板块文件表格行模型：PlaylistItem + 文件派生列（格式 / 位深 / 采样率 / 码率 / 大小）。
+    /// 这些列是文件属性不是标签，只读展示；阶段 8 按列排序时就是排这些字段。
+    /// 值在 BuildEntry 的后台线程里一次填好（走 AudioInfoFormatter 缓存），界面线程不做文件 I/O。
+    /// </summary>
+    public sealed class TagFileItem : PlaylistItem
+    {
+        /// <summary>扩展名大写（MP3 / FLAC / DSF…）；读不到显示 -。</summary>
+        public string FormatName { get; set; } = "-";
+
+        /// <summary>位深（16bit / 24bit）；压缩格式可能没有。</summary>
+        public string BitDepthText { get; set; } = "-";
+
+        /// <summary>采样率（44.1kHz / 96kHz / 2.82MHz）。</summary>
+        public string SampleRateText { get; set; } = "-";
+
+        /// <summary>码率（1411kbps / 320kbps）。</summary>
+        public string BitrateText { get; set; } = "-";
+
+        /// <summary>文件大小（4.2 MB / 812 KB / 340 B）。</summary>
+        public string FileSizeText { get; set; } = "-";
+    }
+
+    /// <summary>表头列宽拖拽把手：6px 透明热区 + 东西向光标（ProtectedCursor 只有子类能设）。</summary>
+    internal sealed class ColumnResizeGrip : Grid
+    {
+        public ColumnResizeGrip()
+        {
+            Width = 6;
+            HorizontalAlignment = HorizontalAlignment.Right;
+            VerticalAlignment = VerticalAlignment.Stretch;
+            // 透明但可命中（null Background 不参与命中测试）
+            Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(0, 0, 0, 0));
+            try
+            {
+                ProtectedCursor = Microsoft.UI.Input.InputSystemCursor.Create(
+                    Microsoft.UI.Input.InputSystemCursorShape.SizeWestEast);
+            }
+            catch
+            {
+                // 老系统没有该光标形状就算了，不影响拖拽
             }
         }
     }

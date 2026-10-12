@@ -187,8 +187,18 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>
-        /// 编码器 + 位深/采样率质量行，如 "MPEG-4 ALAC · 16bit/44.1kHz"、"Free Lossless Audio Codec · 24bit/96kHz"、"DSD128 · 2.82MHz"。
+    /// <summary>
+    /// 原始音频参数（采样率 / 位深 / 码率 / 声道）薄封装；缓存未命中或读取失败返回 false。
+    /// 标签板块文件表格要分列显示（且将来按数值排序），用这个；展示用仍推荐 FormatChips / Format。
+    /// 线程安全：内部走同一把并发缓存，后台线程可调用。
+    /// </summary>
+    public static bool TryGetFacts(string path, out int sampleRate, out int bitDepth, out int kbps, out int channels)
+    {
+        return TryGetPartsCached(path, out sampleRate, out bitDepth, out kbps, out channels, out _);
+    }
+
+    /// <summary>
+    /// 编码器 + 位深/采样率质量行，如 "MPEG-4 ALAC · 16bit/44.1kHz"、"Free Lossless Audio Codec · 24bit/96kHz"、"DSD128 · 2.82MHz"。
         /// 编码器按真实音频编码器（ffmpeg 探测，m4a 能区分 AAC / ALAC）显示规范名；读取失败返回空串。
         /// </summary>
         public static string FormatQualityLine(string path)

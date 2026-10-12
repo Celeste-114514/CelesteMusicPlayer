@@ -344,8 +344,10 @@ namespace CelesteMusicPlayer
 
             try
             {
-                // 强调色外部注入（取色只认一个入口铁律）：与音效处理共用 DspAccentBrush
-                _tagPanel = new TagPanelControl(() => DspAccentBrush());
+                // 强调色外部注入（取色只认一个入口铁律）：与音效处理共用 DspAccentBrush。
+                // 宿主窗口句柄必须从 MainWindow 传（UserControl 自己取会抛 CCW cast 异常，
+                // 2026-10-13 用户实测）；_mainWindowHwnd 在 ctor 里已缓存，Zero 时面板内会提示。
+                _tagPanel = new TagPanelControl(() => DspAccentBrush(), _mainWindowHwnd);
                 TagPanelHost.Children.Add(_tagPanel);
             }
             catch (Exception ex)
