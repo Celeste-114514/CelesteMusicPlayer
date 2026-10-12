@@ -1585,11 +1585,8 @@ namespace CelesteMusicPlayer
 
             // 「查找歌曲…」已按用户要求移除（老版本遗留功能，窗口一并删除）。
 
-            var onlineSearch = new MenuFlyoutItem { Text = "在线搜索…" };
-            onlineSearch.Click += (_, _) => OnlineSearchWindow.ShowOrActivate();
-            flyout.Items.Add(onlineSearch);
-
-            flyout.Items.Add(new MenuFlyoutSeparator());
+            // 「在线搜索…」已按用户要求整体下架（窗口文件删除，
+            // 在线补全能力待标签板块的「在线补全」子页重建）。
 
             var downloadLyric = new MenuFlyoutItem { Text = "下载当前歌词" };
             downloadLyric.Click += (_, _) => _ = DownloadLyricForCurrentAsync();
@@ -3396,12 +3393,7 @@ namespace CelesteMusicPlayer
             };
             flyout.Items.Add(dlCover);
 
-            var onlineSearch = new MenuFlyoutItem { Text = "在线搜索…" };
-            onlineSearch.Icon = new FontIcon { Glyph = "" };
-            onlineSearch.Click += (_, _) => OnlineSearchWindow.ShowOrActivate(song.Title);
-            flyout.Items.Add(onlineSearch);
-
-
+            // 「在线搜索…」入口已下架（与 FeaturesMoreButton_Click 同步）。
         }
 
         private void AppendHamburgerFeatureItems(MenuFlyout flyout)

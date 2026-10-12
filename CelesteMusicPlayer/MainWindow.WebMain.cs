@@ -690,7 +690,7 @@ namespace CelesteMusicPlayer
                         string act = ReadStr(msg.Payload, "act");
                         switch (act)
                         {
-                            case "onlinesearch": OnlineSearchWindow.ShowOrActivate(); break;
+                            // 「onlinesearch」入口已随 OnlineSearchWindow 一并下架。
                             case "lyric": _ = DownloadLyricForCurrentAsync(); break;
                             case "batchlyric": _ = BatchDownloadLyricsAsync(); break;
                             case "cover": _ = DownloadCoverForCurrentAsync(); break;
