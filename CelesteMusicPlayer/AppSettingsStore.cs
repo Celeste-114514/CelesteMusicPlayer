@@ -360,6 +360,21 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
 
         /// <summary>流媒体插件服务地址（WSL，如 http://172.20.55.125:21010）；空=未配置。</summary>
         public string StreamingServiceUrl { get; set; } = string.Empty;
+
+        // —— 在线服务 API 凭证（2026-10-13 合规整改后新增）——
+        // 这些 key 绑定用户自己的平台账号，必须由用户本人申请后填入，不随软件分发。
+        // 代码里只保留空默认值，避免把任何人的凭据写进公开仓库。
+        /// <summary>Last.fm API key（在 https://www.last.fm/api/account/create 申请）。</summary>
+        public string LastFmApiKey { get; set; } = string.Empty;
+
+        /// <summary>Last.fm shared secret。仅 scrobble 认证需要，属敏感信息，切勿外传。</summary>
+        public string LastFmSharedSecret { get; set; } = string.Empty;
+
+        /// <summary>Discogs personal access token（在 https://www.discogs.com/settings/developers 生成）。</summary>
+        public string DiscogsToken { get; set; } = string.Empty;
+
+        /// <summary>fanart.tv API key（在 https://fanart.tv/get-an-api-key/ 生成，可选）。</summary>
+        public string FanartTvApiKey { get; set; } = string.Empty;
         /// <summary>各平台登录 Cookie（播放器内输入，本地明文存储）。空=未登录。</summary>
         public string NetEaseCookie { get; set; } = string.Empty;
         public string QqCookie { get; set; } = string.Empty;
@@ -846,6 +861,10 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             OnlineSearchDefaultSource = s.OnlineSearchDefaultSource,
             ArtistAvatarSource = s.ArtistAvatarSource,
             StreamingServiceUrl = s.StreamingServiceUrl,
+            LastFmApiKey = s.LastFmApiKey,
+            LastFmSharedSecret = s.LastFmSharedSecret,
+            DiscogsToken = s.DiscogsToken,
+            FanartTvApiKey = s.FanartTvApiKey,
             NetEaseCookie = s.NetEaseCookie,
             QqCookie = s.QqCookie,
             AppleMusicCookie = s.AppleMusicCookie,
