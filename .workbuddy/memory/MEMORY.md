@@ -39,7 +39,12 @@
 - **设备记忆 DSP 配置档（③）= 活着**：2026-08-30 62d948d，插上设备自动套用该设备存过的 DSP 配置；设置开关 `DeviceDspMemoryToggle`，接线在 MainWindow.Features.cs（2915/3192/3214）。八个星期前的事，用户自己不记得，别当成"待办"。
 - 极客：色源唯一 GeekPhosphorColor；严禁改全局资源（必崩）→元素级副本；跨模式共用的每秒定时器是头号陷阱；文字当图标禁用等宽字体→GeekGlyphFont+17。播放队列三处图标 RedEye(E7B3)→List(EA37) 已改（b1b6f01，进 26.10.11 包）。
 - 皮肤系统的阶段 1「令牌测试皮肤」已合闸（2026-10-12，commit 086b566 + 49a2ff6）：设置→外观→界面风格「测试皮肤」+ 主题文件「演示暖橙」，Classic*/Token 互切热生效不用重启。验证口径、演示主题文件、没跑实机冒烟的原因见 2026-10-12.md。
-- WebUI 路线 B：网页只长样子不做事，音频链路零改动。铁律：点行播放=整表替换队列；消息手动 JsonDocument.Parse 提 kind（默认区分大小写会静默全丢）；CSS 写了≠生效（_webcheck 验，几何 --dump-dom 禁读 PNG）；视图切换只切 display 且必须 scrollTop=0；后台回填先占坑；重推防抖三件套（clearInterval(readyTimer)、coverByAlbum 跨推存活、data-src 守卫）。
+- WebUI 路线 B：网页只长样子不做事，音频链路零改动。铁律：点行播放=整表替换队列；消息手动 JsonDocument.Parse 提 kind（默认区分大小写会静默全丢）；CSS 写了≠生效（_webcheck 验，几何 --dump-dom 禁读 PNG）；视图切换只切 display 且必须 scrollTop=0；后台回填先占坑；重推防抖三件套（clearInterval(readyTimer)、coverByAlbum 跨推存活、data-src 守卫）。⚠ **winmain.html 有两套图标表**（SVG path 版 + Segoe 字形版如 `TagSort:'\uE8CB'`），main.html 只有 SVG 那套——增删导航图标两文件都要改、winmain 要改两处。
+- **标签排序 2026-10-12 整体删除**（d0d7ab6，用户「一直不满意」待重构；25 文件 5788 行，含 10 个专属文件）。侧栏留了墓碑注释，代码全在 git 历史里，**恢复=revert d0d7ab6**。别再把它当现存功能汇报。
+- **令牌皮肤会覆写全局文字刷子（2026-10-12 用户实测坑）**：TokenSkin.cs 的 TokenBrushMap 把 `TextFillColorPrimaryBrush`/`TextFillColorSecondaryBrush` 全局覆写成令牌色（为深色皮肤设计）——浅色主题下任何读这两个资源的 UI 文字都会变色/看不见。**新增文字色元素要么按 RequestedTheme 给固定色，要么确认令牌色在两个主题下都可读**；别默认「ThemeResource 会自动适配」。
+- **艺术家详情页右栏结构（2026-10-12 第三轮定稿）**：页签只有「歌曲/专辑」两个（方案B 文字页签+下划线，ApplyTabChrome 按 RequestedTheme 给固定黑/白）；**头像不是页签**，是按需打开的面板（`_artistAvatarOpen` + `CloseArtistAvatarPanel()` 幂等，右键进入时页签条整条隐藏、面板「← 返回」收回）。
+- **publish 连崩先查嵌套三元（2026-10-12 新血坑）**：二元嵌套三元 `a ? (b ? x : y) : (b ? z : w)` 会触发 Roslyn NullableWalker 深递归，`dotnet publish` 偶发原生崩 0xC0000005 连崩不止（`dotnet build`/_build_check 反而不崩，疑似编译线程池栈更小）。拆成局部变量即过。别再对 publish 连崩一味重试。
+- **二级窗口现状（2026-10-12 盘点）**：仍活跃=迷你播放器/标签编辑/歌词编辑/重复文件/在线搜索 5 个；已不可达（代码在、入口全摘）=当前播放列表/播放队列/均衡器（EQ 已入 DSP 机架）/房间校正/RG 扫描/设置/文件关联/头像两窗/取色器（主 UI 已用 InlineColorPicker）/CustomSortOrder（纯死代码）。下次要清理窗口代码时按这个清单来。
 
 ## 工程约定
 - 用户不懂编程：大白话结论先行，禁营销腔。bit-perfect 铁律。推送：不 rebase/force-push、不 git add -A；commit 独立可回退；构建过才推。安装包只在用户说「发新版」时打；日常交付=dist\run-latest\。
