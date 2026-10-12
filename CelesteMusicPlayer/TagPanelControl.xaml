@@ -140,27 +140,172 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- ══════════ 页 2：批量工具（阶段 7 接入，占位） ══════════ -->
-                <Grid x:Name="BatchToolsPanel">
-                    <StackPanel
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Spacing="8"
-                        MaxWidth="300">
-                        <FontIcon Glyph="&#xE8D2;" FontSize="36" Opacity="0.35" HorizontalAlignment="Center" />
+                <!-- ══════════ 页 2：批量工具（阶段 7） ══════════
+                     六个功能区 + 统一状态条。所有操作的共同安全底线：
+                     改动前快照 → 逐个执行 → 任何一步失败就把已改的文件整体还原，
+                     绝不留在半改状态。作用范围 = 右侧列表选中项；一个都没选 = 整个列表。 -->
+                <ScrollViewer
+                    x:Name="BatchToolsPanel"
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="0,0,4,0">
+                    <StackPanel Spacing="10">
+                        <!-- 作用范围提示 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10,8">
+                            <TextBlock
+                                FontSize="12"
+                                Opacity="0.75"
+                                TextWrapping="WrapWholeWords"
+                                Text="作用范围 = 右侧文件列表里选中的文件；一个都没选时作用于整个列表。每个工具执行前都会自动备份原标签，任何一步失败都会把已改的文件整体还原。" />
+                        </Border>
+
+                        <!-- ① 文件名 → 标签 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="① 文件名 → 标签" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="按「艺术家 - 标题」解析文件名（也认「标题 - 艺术家」）。默认只填当前为空的标题/艺术家，已有内容不动；勾选下面的框才会覆盖。" />
+                                <CheckBox x:Name="BatchFileNameOverwriteCheck" Content="同时覆盖已有的标题/艺术家" />
+                                <Button x:Name="BatchFileNameFillButton" Content="从文件名填充" HorizontalAlignment="Left" Click="BatchFileNameFillButton_Click" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ② 标签 → 文件名（重命名） -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="② 标签 → 文件名（重命名）" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="用标签重命名文件。目标文件名已被占用、或标题为空时，跳过该文件（不改）。扩展名保持原样。" />
+                                <ComboBox x:Name="BatchRenamePatternCombo" HorizontalAlignment="Stretch">
+                                    <ComboBoxItem Content="艺术家 - 标题" Tag="ArtistTitle" IsSelected="True" />
+                                    <ComboBoxItem Content="曲目. 艺术家 - 标题" Tag="TrackArtistTitle" />
+                                    <ComboBoxItem Content="标题" Tag="Title" />
+                                </ComboBox>
+                                <Button x:Name="BatchRenameButton" Content="重命名所选文件" HorizontalAlignment="Left" Click="BatchRenameButton_Click" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ③ 文本替换 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="③ 文本替换" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="在选中文件的指定字段里查找并替换文字。勾选正则后按正则表达式匹配（替换串里可用 $1 引用捕获组）。" />
+                                <ComboBox x:Name="BatchReplaceFieldCombo" HorizontalAlignment="Stretch">
+                                    <ComboBoxItem Content="标题" Tag="Title" IsSelected="True" />
+                                    <ComboBoxItem Content="艺术家" Tag="Artist" />
+                                    <ComboBoxItem Content="专辑" Tag="Album" />
+                                    <ComboBoxItem Content="专辑艺术家" Tag="AlbumArtist" />
+                                    <ComboBoxItem Content="流派" Tag="Genre" />
+                                    <ComboBoxItem Content="注释" Tag="Comment" />
+                                </ComboBox>
+                                <TextBox x:Name="BatchReplaceFindBox" Header="查找" PlaceholderText="要替换掉的文字" />
+                                <TextBox x:Name="BatchReplaceWithBox" Header="替换为" PlaceholderText="留空 = 删除查到的文字" />
+                                <CheckBox x:Name="BatchReplaceRegexCheck" Content="用正则表达式" />
+                                <Button x:Name="BatchReplaceButton" Content="替换" HorizontalAlignment="Left" Click="BatchReplaceButton_Click" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ④ 大小写 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="④ 大小写整理" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="把选中文件指定字段统一成一种大小写风格，治「全大写 / 全小写」的杂乱命名。" />
+                                <ComboBox x:Name="BatchCaseFieldCombo" HorizontalAlignment="Stretch">
+                                    <ComboBoxItem Content="标题" Tag="Title" IsSelected="True" />
+                                    <ComboBoxItem Content="艺术家" Tag="Artist" />
+                                    <ComboBoxItem Content="专辑" Tag="Album" />
+                                    <ComboBoxItem Content="专辑艺术家" Tag="AlbumArtist" />
+                                    <ComboBoxItem Content="流派" Tag="Genre" />
+                                    <ComboBoxItem Content="注释" Tag="Comment" />
+                                </ComboBox>
+                                <ComboBox x:Name="BatchCaseModeCombo" HorizontalAlignment="Stretch">
+                                    <ComboBoxItem Content="每词首字母大写（Hello World）" Tag="Title" IsSelected="True" />
+                                    <ComboBoxItem Content="全大写（HELLO WORLD）" Tag="Upper" />
+                                    <ComboBoxItem Content="全小写（hello world）" Tag="Lower" />
+                                </ComboBox>
+                                <Button x:Name="BatchCaseButton" Content="整理大小写" HorizontalAlignment="Left" Click="BatchCaseButton_Click" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ⑤ 自动编号 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="⑤ 自动编号（曲目号）" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="按列表从上到下的顺序写曲目号：第一个文件 = 起始值，之后每个加一步长。文件格式里曲目号只能存纯数字，补零位数在这里不生效（存不进文件）。" />
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="BatchNumberStartBox" Grid.Column="0" Header="起始值" Text="1" />
+                                    <TextBox x:Name="BatchNumberStepBox" Grid.Column="1" Header="步长" Text="1" />
+                                </Grid>
+                                <Button x:Name="BatchNumberButton" Content="写入曲目号" HorizontalAlignment="Left" Click="BatchNumberButton_Click" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ⑥ 移除标签 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="⑥ 移除标签" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="清空文字标签 = 标题/艺术家/专辑/年份/曲目/流派/注释/歌词全部清空，内嵌封面保留。两个操作执行前都会备份，失败整体还原。" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="BatchClearTagsButton" Content="清空文字标签（留封面）" Click="BatchClearTagsButton_Click" />
+                                    <Button x:Name="BatchRemoveCoverButton" Content="移除内嵌封面" Click="BatchRemoveCoverButton_Click" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 批量工具自己的状态条（右侧底部那条同时也在用） -->
                         <TextBlock
-                            Text="批量工具"
-                            FontSize="15"
-                            FontWeight="SemiBold"
-                            HorizontalAlignment="Center" />
-                        <TextBlock
-                            Text="文件名 ↔ 标签互相填充、正则替换、大小写、自动编号、复制粘贴、移除标签 —— 下一阶段开放。"
+                            x:Name="BatchStatusText"
                             FontSize="12"
-                            Opacity="0.6"
-                            TextWrapping="WrapWholeWords"
-                            TextAlignment="Center" />
+                            Opacity="0.7"
+                            TextWrapping="WrapWholeWords" />
                     </StackPanel>
-                </Grid>
+                </ScrollViewer>
 
                 <!-- ══════════ 页 3：排序编号（阶段 8 接入，占位） ══════════ -->
                 <Grid x:Name="SortNumberPanel">

@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
@@ -632,6 +633,735 @@ namespace CelesteMusicPlayer
                 && a.Lyrics == b.Lyrics;
         }
 
+        // =====================================================================
+        // 阶段 7：批量工具（统一快照 → 逐个写 → 失败整体回滚）
+        // =====================================================================
+
+        /// <summary>批量工具的作用范围：右侧列表选中项；一个都没选 = 整个列表。</summary>
+        private (List<TagFileItem> Targets, bool WholeList) BatchTargets()
+        {
+            List<TagFileItem> selected = TagFileListView.SelectedItems.Cast<TagFileItem>().ToList();
+            if (selected.Count > 0)
+            {
+                return (selected, false);
+            }
+
+            return (_files.ToList(), true);
+        }
+
+        private static string BatchScopeText(bool wholeList, int count)
+        {
+            return wholeList ? $"（整个列表 {count} 个）" : $"（所选 {count} 个）";
+        }
+
+        /// <summary>
+        /// 批量工具统一执行器：先读每个目标文件的**磁盘真值**做快照，再逐个执行
+        /// transform；返回 null = 跳过，与快照完全一样 = 没动不写盘。任何一个写失败，
+        /// 已写成功的文件全部用快照写回原标签，绝不留在半改状态。
+        /// </summary>
+        private async Task<(List<string> Written, int Skipped, List<string> Failures)> RunBatchWithRollbackAsync(
+            List<TagFileItem> targets,
+            Func<string, TagEditModel, TagEditModel?> transform,
+            string opName)
+        {
+            List<(string Path, TagEditModel Before)> snapshots = new();
+            List<string> failures = new();
+            List<string> written = new();
+            int skipped = 0;
+
+            await Task.Run(() =>
+            {
+                foreach (TagFileItem item in targets)
+                {
+                    string path = item.FilePath;
+                    if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    TagEditModel before = TagEditorService.ReadTagRaw(path);
+                    snapshots.Add((path, before));
+
+                    TagEditModel? toWrite = transform(path, before);
+                    if (toWrite == null || ModelsEqual(toWrite, before))
+                    {
+                        skipped++;
+                        continue;
+                    }
+
+                    if (TagEditorService.SaveTag(path, toWrite))
+                    {
+                        written.Add(path);
+                    }
+                    else
+                    {
+                        failures.Add(path);
+                    }
+                }
+            });
+
+            if (failures.Count > 0)
+            {
+                int rolledBack = 0;
+                await Task.Run(() =>
+                {
+                    foreach ((string path, TagEditModel before) in snapshots)
+                    {
+                        if (!written.Contains(path, StringComparer.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        if (TagEditorService.SaveTag(path, before))
+                        {
+                            rolledBack++;
+                        }
+                    }
+                });
+
+                global::CelesteMusicPlayer.StartupLog.Write(
+                    $"TagPanel: 批量[{opName}]失败整体回滚：目标 {targets.Count}，失败 {failures.Count}，已还原 {rolledBack}");
+                return (written, skipped, failures);
+            }
+
+            global::CelesteMusicPlayer.StartupLog.Write(
+                $"TagPanel: 批量[{opName}]完成：写 {written.Count}，跳过 {skipped}，目标 {targets.Count}");
+            return (written, skipped, failures);
+        }
+
+        /// <summary>批量工具收尾：通知主窗口刷新元数据、重建受影响的行、汇报结果。</summary>
+        private async Task FinishBatchAsync(
+            List<TagFileItem> targets, List<string> written, int skipped, List<string> failures, bool wholeList)
+        {
+            if (failures.Count > 0)
+            {
+                BatchStatusText.Text = $"{failures.Count} 个文件处理失败；已改成功的文件已整体还原到改动前的标签。详情见日志。";
+                return;
+            }
+
+            if (written.Count == 0)
+            {
+                BatchStatusText.Text = skipped > 0
+                    ? $"没有需要改的文件{BatchScopeText(wholeList, targets.Count)}（全部已是目标状态，或不满足条件被跳过）。"
+                    : "没有可处理的文件。";
+                return;
+            }
+
+            foreach (string path in written)
+            {
+                TagsSaved?.Invoke(path);
+            }
+
+            List<TagFileItem> touched = targets
+                .Where(t => written.Contains(t.FilePath, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+            await RefreshSavedRowsAsync(touched);
+
+            BatchStatusText.Text = skipped > 0
+                ? $"完成{BatchScopeText(wholeList, targets.Count)}：改了 {written.Count} 个文件，跳过 {skipped} 个。"
+                : $"完成{BatchScopeText(wholeList, targets.Count)}：改了 {written.Count} 个文件。";
+        }
+
+        /// <summary>① 文件名 → 标签：按「艺术家 - 标题」解析；默认只填空，勾选后才覆盖。</summary>
+        private async void BatchFileNameFillButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                (List<TagFileItem> targets, bool wholeList) = BatchTargets();
+                if (targets.Count == 0)
+                {
+                    BatchStatusText.Text = "列表是空的，先点右侧「添加文件…」或「添加文件夹…」把歌曲加进来。";
+                    return;
+                }
+
+                bool overwrite = BatchFileNameOverwriteCheck.IsChecked == true;
+                BatchStatusText.Text = "正在从文件名填充标签…";
+
+                (List<string> written, int skipped, List<string> failures) = await RunBatchWithRollbackAsync(
+                    targets,
+                    (path, before) =>
+                    {
+                        TagEditModel parsed = TagEditorService.TryParseTagsFromFileName(System.IO.Path.GetFileName(path));
+                        TagEditModel toWrite = CloneModel(before);
+                        bool changed = false;
+
+                        if (!string.IsNullOrWhiteSpace(parsed.Title)
+                            && (overwrite || string.IsNullOrWhiteSpace(toWrite.Title))
+                            && !string.Equals(toWrite.Title, parsed.Title, StringComparison.Ordinal))
+                        {
+                            toWrite.Title = parsed.Title;
+                            changed = true;
+                        }
+
+                        if (!string.IsNullOrWhiteSpace(parsed.Artist)
+                            && (overwrite || string.IsNullOrWhiteSpace(toWrite.Artist))
+                            && !string.Equals(toWrite.Artist, parsed.Artist, StringComparison.Ordinal))
+                        {
+                            toWrite.Artist = parsed.Artist;
+                            changed = true;
+                        }
+
+                        return changed ? toWrite : null;
+                    },
+                    "文件名→标签");
+
+                await FinishBatchAsync(targets, written, skipped, failures, wholeList);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.BatchFileNameFillButton_Click", caught);
+                BatchStatusText.Text = "填充失败：" + caught.Message;
+            }
+        }
+
+        /// <summary>② 标签 → 文件名：先算好全部新名字（不碰文件），冲突/空标题跳过，逐个改名，失败整体改回。</summary>
+        private async void BatchRenameButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                (List<TagFileItem> targets, bool wholeList) = BatchTargets();
+                if (targets.Count == 0)
+                {
+                    BatchStatusText.Text = "列表是空的，先点右侧「添加文件…」或「添加文件夹…」把歌曲加进来。";
+                    return;
+                }
+
+                string pattern = (BatchRenamePatternCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "ArtistTitle";
+                BatchStatusText.Text = "正在重命名…";
+
+                // 第一阶段：只读标签算新名字，此阶段不碰任何文件
+                List<(TagFileItem Item, string NewPath)> plan = new();
+                int skipped = 0;
+                await Task.Run(() =>
+                {
+                    foreach (TagFileItem item in targets)
+                    {
+                        string oldPath = item.FilePath;
+                        if (string.IsNullOrWhiteSpace(oldPath) || !File.Exists(oldPath))
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        TagEditModel tag = TagEditorService.ReadTagRaw(oldPath);
+                        string? newName = BuildBatchFileName(pattern, tag, oldPath);
+                        if (newName == null)
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        string dir = System.IO.Path.GetDirectoryName(oldPath) ?? string.Empty;
+                        string newPath = System.IO.Path.Combine(dir, newName);
+                        if (string.Equals(newPath, oldPath, StringComparison.OrdinalIgnoreCase))
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        // 目标名已被磁盘上现有文件占用 → 跳过（不覆盖别人的文件）
+                        if (File.Exists(newPath))
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        // 同一批里两个文件算出同一个新名字 → 后者跳过
+                        if (plan.Any(p => string.Equals(p.NewPath, newPath, StringComparison.OrdinalIgnoreCase)))
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        plan.Add((item, newPath));
+                    }
+                });
+
+                if (plan.Count == 0)
+                {
+                    BatchStatusText.Text = skipped > 0
+                        ? $"没有可重命名的文件{BatchScopeText(wholeList, targets.Count)}：标题为空、目标名已被占用，或名字本来就没变。"
+                        : "没有可重命名的文件。";
+                    return;
+                }
+
+                // 第二阶段：逐个改名；任何一步失败，已改名的全部改回
+                List<(string OldPath, string NewPath)> renamed = new();
+                List<string> failures = new();
+                await Task.Run(() =>
+                {
+                    foreach ((TagFileItem item, string newPath) in plan)
+                    {
+                        try
+                        {
+                            File.Move(item.FilePath, newPath);
+                            renamed.Add((item.FilePath, newPath));
+                        }
+                        catch (Exception caught)
+                        {
+                            global::CelesteMusicPlayer.StartupLog.WriteException("TagPanel.BatchRename", caught);
+                            failures.Add(item.FilePath);
+                        }
+                    }
+                });
+
+                if (failures.Count > 0)
+                {
+                    int rolledBack = 0;
+                    await Task.Run(() =>
+                    {
+                        foreach ((string oldPath, string newPath) in renamed)
+                        {
+                            try
+                            {
+                                File.Move(newPath, oldPath);
+                                rolledBack++;
+                            }
+                            catch (Exception caught)
+                            {
+                                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanel.BatchRename.Rollback", caught);
+                            }
+                        }
+                    });
+
+                    global::CelesteMusicPlayer.StartupLog.Write(
+                        $"TagPanel: 批量[标签→文件名]失败整体回滚：计划 {plan.Count}，失败 {failures.Count}，已改回 {rolledBack}");
+                    BatchStatusText.Text = $"{failures.Count} 个文件重命名失败；已改名的 {rolledBack} 个已改回原文件名。详情见日志。";
+                    return;
+                }
+
+                // 第三阶段：行模型换成新路径（FileName 列才会变）+ 通知主窗口
+                foreach ((TagFileItem item, string newPath) in plan)
+                {
+                    item.FilePath = newPath;
+                    TagsSaved?.Invoke(newPath);
+                }
+
+                await RefreshSavedRowsAsync(plan.Select(p => p.Item).ToList());
+
+                BatchStatusText.Text = skipped > 0
+                    ? $"完成{BatchScopeText(wholeList, targets.Count)}：重命名 {plan.Count} 个文件，跳过 {skipped} 个（标题为空 / 目标名已被占用 / 名字没变）。"
+                    : $"完成{BatchScopeText(wholeList, targets.Count)}：重命名 {plan.Count} 个文件。";
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.BatchRenameButton_Click", caught);
+                BatchStatusText.Text = "重命名失败：" + caught.Message;
+            }
+        }
+
+        /// <summary>按模式从标签拼新文件名（不含目录）。拼不出来返回 null（标题为空）。</summary>
+        private static string? BuildBatchFileName(string pattern, TagEditModel tag, string oldPath)
+        {
+            string ext = System.IO.Path.GetExtension(oldPath);
+            string title = (tag.Title ?? string.Empty).Trim();
+            string artist = (tag.Artist ?? string.Empty).Trim();
+            string albumArtist = (tag.AlbumArtist ?? string.Empty).Trim();
+
+            // 艺术家为空时用专辑艺术家顶班，避免文件名只剩「- 标题」
+            if (artist.Length == 0)
+            {
+                artist = albumArtist;
+            }
+
+            string artistTitle = string.Join(" - ", new[] { artist, title }.Where(s => s.Length > 0));
+            string baseName = pattern switch
+            {
+                "Title" => title,
+                "TrackArtistTitle" => (tag.Track > 0 ? tag.Track + ". " : string.Empty) + artistTitle,
+                _ => artistTitle
+            };
+
+            baseName = baseName.Trim();
+            if (baseName.Length == 0)
+            {
+                return null;
+            }
+
+            // 文件系统不接受的字符换成下划线；首尾空格和点去掉（Windows 会静默剥掉尾点）
+            char[] invalid = System.IO.Path.GetInvalidFileNameChars();
+            string safe = new string(baseName
+                .Select(c => Array.IndexOf(invalid, c) >= 0 ? '_' : c)
+                .ToArray())
+                .Trim().TrimEnd('.');
+            if (safe.Length == 0)
+            {
+                return null;
+            }
+
+            return safe + ext;
+        }
+
+        /// <summary>③ 文本替换：指定字段里查找替换（可正则，替换串支持 $1 捕获组）。</summary>
+        private async void BatchReplaceButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                (List<TagFileItem> targets, bool wholeList) = BatchTargets();
+                if (targets.Count == 0)
+                {
+                    BatchStatusText.Text = "列表是空的，先点右侧「添加文件…」或「添加文件夹…」把歌曲加进来。";
+                    return;
+                }
+
+                string field = (BatchReplaceFieldCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "Title";
+                string find = BatchReplaceFindBox.Text ?? string.Empty;
+                if (find.Length == 0)
+                {
+                    BatchStatusText.Text = "先填「查找」里的文字。";
+                    return;
+                }
+
+                string with = BatchReplaceWithBox.Text ?? string.Empty;
+                bool useRegex = BatchReplaceRegexCheck.IsChecked == true;
+
+                Regex? rx = null;
+                if (useRegex)
+                {
+                    try
+                    {
+                        rx = new Regex(find);
+                    }
+                    catch (ArgumentException caught)
+                    {
+                        BatchStatusText.Text = "正则写法不对：" + caught.Message;
+                        return;
+                    }
+                }
+
+                BatchStatusText.Text = "正在替换…";
+
+                (List<string> written, int skipped, List<string> failures) = await RunBatchWithRollbackAsync(
+                    targets,
+                    (path, before) =>
+                    {
+                        string original = GetTagField(before, field);
+                        string updated = rx != null ? rx.Replace(original, with) : original.Replace(find, with);
+                        if (string.Equals(updated, original, StringComparison.Ordinal))
+                        {
+                            return null;
+                        }
+
+                        TagEditModel toWrite = CloneModel(before);
+                        SetTagField(toWrite, field, updated);
+                        return toWrite;
+                    },
+                    "文本替换");
+
+                await FinishBatchAsync(targets, written, skipped, failures, wholeList);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.BatchReplaceButton_Click", caught);
+                BatchStatusText.Text = "替换失败：" + caught.Message;
+            }
+        }
+
+        /// <summary>④ 大小写整理：每词首字母大写 / 全大写 / 全小写。</summary>
+        private async void BatchCaseButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                (List<TagFileItem> targets, bool wholeList) = BatchTargets();
+                if (targets.Count == 0)
+                {
+                    BatchStatusText.Text = "列表是空的，先点右侧「添加文件…」或「添加文件夹…」把歌曲加进来。";
+                    return;
+                }
+
+                string field = (BatchCaseFieldCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "Title";
+                string mode = (BatchCaseModeCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? "Title";
+                BatchStatusText.Text = "正在整理大小写…";
+
+                (List<string> written, int skipped, List<string> failures) = await RunBatchWithRollbackAsync(
+                    targets,
+                    (path, before) =>
+                    {
+                        string original = GetTagField(before, field);
+                        string updated = ApplyCaseMode(original, mode);
+                        if (string.Equals(updated, original, StringComparison.Ordinal))
+                        {
+                            return null;
+                        }
+
+                        TagEditModel toWrite = CloneModel(before);
+                        SetTagField(toWrite, field, updated);
+                        return toWrite;
+                    },
+                    "大小写整理");
+
+                await FinishBatchAsync(targets, written, skipped, failures, wholeList);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.BatchCaseButton_Click", caught);
+                BatchStatusText.Text = "大小写整理失败：" + caught.Message;
+            }
+        }
+
+        /// <summary>⑤ 自动编号：按列表顺序写曲目号（起始值起，每个加步长）。</summary>
+        private async void BatchNumberButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                (List<TagFileItem> targets, bool wholeList) = BatchTargets();
+                if (targets.Count == 0)
+                {
+                    BatchStatusText.Text = "列表是空的，先点右侧「添加文件…」或「添加文件夹…」把歌曲加进来。";
+                    return;
+                }
+
+                string startText = (BatchNumberStartBox.Text ?? string.Empty).Trim();
+                string stepText = (BatchNumberStepBox.Text ?? string.Empty).Trim();
+                if (!uint.TryParse(startText, out uint start))
+                {
+                    BatchStatusText.Text = "起始值要填数字（比如 1）。";
+                    return;
+                }
+
+                if (!uint.TryParse(stepText, out uint step) || step == 0)
+                {
+                    BatchStatusText.Text = "步长要填大于 0 的数字（比如 1）。";
+                    return;
+                }
+
+                BatchStatusText.Text = "正在写入曲目号…";
+
+                int position = 0;
+                (List<string> written, int skipped, List<string> failures) = await RunBatchWithRollbackAsync(
+                    targets,
+                    (path, before) =>
+                    {
+                        ulong value = (ulong)start + (ulong)position * step;
+                        uint track = value > uint.MaxValue ? uint.MaxValue : (uint)value;
+                        position++;
+                        if (before.Track == track)
+                        {
+                            return null;
+                        }
+
+                        TagEditModel toWrite = CloneModel(before);
+                        toWrite.Track = track;
+                        return toWrite;
+                    },
+                    "自动编号");
+
+                await FinishBatchAsync(targets, written, skipped, failures, wholeList);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.BatchNumberButton_Click", caught);
+                BatchStatusText.Text = "编号失败：" + caught.Message;
+            }
+        }
+
+        /// <summary>⑥a 清空文字标签：标题/艺术家/专辑/年份/曲目/流派/注释/歌词全部清空，内嵌封面保留。</summary>
+        private async void BatchClearTagsButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                (List<TagFileItem> targets, bool wholeList) = BatchTargets();
+                if (targets.Count == 0)
+                {
+                    BatchStatusText.Text = "列表是空的，先点右侧「添加文件…」或「添加文件夹…」把歌曲加进来。";
+                    return;
+                }
+
+                BatchStatusText.Text = "正在清空文字标签…";
+
+                (List<string> written, int skipped, List<string> failures) = await RunBatchWithRollbackAsync(
+                    targets,
+                    (path, before) => new TagEditModel(),
+                    "清空文字标签");
+
+                await FinishBatchAsync(targets, written, skipped, failures, wholeList);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.BatchClearTagsButton_Click", caught);
+                BatchStatusText.Text = "清空失败：" + caught.Message;
+            }
+        }
+
+        /// <summary>⑥b 移除内嵌封面：快照封面字节，失败整体还原（SaveTag 不碰封面，要单独备份）。</summary>
+        private async void BatchRemoveCoverButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                (List<TagFileItem> targets, bool wholeList) = BatchTargets();
+                if (targets.Count == 0)
+                {
+                    BatchStatusText.Text = "列表是空的，先点右侧「添加文件…」或「添加文件夹…」把歌曲加进来。";
+                    return;
+                }
+
+                BatchStatusText.Text = "正在移除内嵌封面…";
+
+                List<(string Path, byte[] Cover)> snapshots = new();
+                List<string> written = new();
+                List<string> failures = new();
+                int skipped = 0;
+
+                await Task.Run(() =>
+                {
+                    foreach (TagFileItem item in targets)
+                    {
+                        string path = item.FilePath;
+                        if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        byte[]? cover = TagEditorService.ReadCoverBytes(path);
+                        if (cover == null || cover.Length == 0)
+                        {
+                            skipped++;
+                            continue;
+                        }
+
+                        snapshots.Add((path, cover));
+                        if (TagEditorService.ClearCover(path))
+                        {
+                            written.Add(path);
+                        }
+                        else
+                        {
+                            failures.Add(path);
+                        }
+                    }
+                });
+
+                if (failures.Count > 0)
+                {
+                    int rolledBack = 0;
+                    await Task.Run(() =>
+                    {
+                        foreach ((string path, byte[] cover) in snapshots)
+                        {
+                            if (!written.Contains(path, StringComparer.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            if (TagEditorService.SetCoverBytes(path, cover))
+                            {
+                                rolledBack++;
+                            }
+                        }
+                    });
+
+                    global::CelesteMusicPlayer.StartupLog.Write(
+                        $"TagPanel: 批量[移除封面]失败整体回滚：目标 {targets.Count}，失败 {failures.Count}，已还原 {rolledBack}");
+                    BatchStatusText.Text = $"{failures.Count} 个文件移除封面失败；已移除的 {rolledBack} 个已还原封面。详情见日志。";
+                    return;
+                }
+
+                if (written.Count == 0)
+                {
+                    BatchStatusText.Text = "没有带内嵌封面的文件。";
+                    return;
+                }
+
+                foreach (string path in written)
+                {
+                    TagsSaved?.Invoke(path);
+                }
+
+                List<TagFileItem> touched = targets
+                    .Where(t => written.Contains(t.FilePath, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+                await RefreshSavedRowsAsync(touched);
+
+                BatchStatusText.Text = skipped > 0
+                    ? $"完成{BatchScopeText(wholeList, targets.Count)}：移除了 {written.Count} 个文件的封面，跳过 {skipped} 个（本来就没有封面）。"
+                    : $"完成{BatchScopeText(wholeList, targets.Count)}：移除了 {written.Count} 个文件的封面。";
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.BatchRemoveCoverButton_Click", caught);
+                BatchStatusText.Text = "移除封面失败：" + caught.Message;
+            }
+        }
+
+        /// <summary>浅拷贝标签模型（transform 在副本上改，快照保持干净）。</summary>
+        private static TagEditModel CloneModel(TagEditModel m)
+        {
+            return new TagEditModel
+            {
+                Title = m.Title,
+                Artist = m.Artist,
+                Album = m.Album,
+                AlbumArtist = m.AlbumArtist,
+                Year = m.Year,
+                Track = m.Track,
+                Genre = m.Genre,
+                Comment = m.Comment,
+                Lyrics = m.Lyrics
+            };
+        }
+
+        /// <summary>批量工具字段选择（ComboBoxItem.Tag）→ 读模型字段。</summary>
+        private static string GetTagField(TagEditModel m, string field)
+        {
+            return field switch
+            {
+                "Artist" => m.Artist,
+                "Album" => m.Album,
+                "AlbumArtist" => m.AlbumArtist,
+                "Genre" => m.Genre,
+                "Comment" => m.Comment,
+                _ => m.Title
+            };
+        }
+
+        /// <summary>批量工具字段选择（ComboBoxItem.Tag）→ 写模型字段。</summary>
+        private static void SetTagField(TagEditModel m, string field, string value)
+        {
+            switch (field)
+            {
+                case "Artist": m.Artist = value; break;
+                case "Album": m.Album = value; break;
+                case "AlbumArtist": m.AlbumArtist = value; break;
+                case "Genre": m.Genre = value; break;
+                case "Comment": m.Comment = value; break;
+                default: m.Title = value; break;
+            }
+        }
+
+        /// <summary>大小写整理：每词首字母大写 / 全大写 / 全小写。</summary>
+        private static string ApplyCaseMode(string text, string mode)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return text;
+            }
+
+            return mode switch
+            {
+                "Upper" => text.ToUpperInvariant(),
+                "Lower" => text.ToLowerInvariant(),
+                _ => CapitalizeWords(text)
+            };
+        }
+
+        private static string CapitalizeWords(string text)
+        {
+            string[] words = text.Split(' ');
+            for (int i = 0; i < words.Length; i++)
+            {
+                if (words[i].Length == 0)
+                {
+                    continue;
+                }
+
+                words[i] = char.ToUpperInvariant(words[i][0]) + words[i][1..].ToLowerInvariant();
+            }
+
+            return string.Join(" ", words);
+        }
+
         /// <summary>
         /// 保存成功后刷新行：BuildEntry 重读磁盘生成新行模型替换旧实例
         /// （x:Bind 默认 OneTime，不换实例行上的文字不会变），并尽量恢复原选中。
@@ -831,6 +1561,13 @@ namespace CelesteMusicPlayer
             _cellCol = col;
             _cellOriginal = box.Text ?? string.Empty;
             _cellCancelled = false;
+
+            // 已进入编辑：清掉武装状态，避免残留的「再击同一格又触发一次 Focus」
+            _armedItem = null;
+            _armedCol = -1;
+
+            // 进编辑全选原文：直接打字即替换，和 mp3tag / 资源管理器重命名一致
+            box.SelectAll();
 
             // 长字段编辑时「展开」：临时开换行，行高随内容长高，失焦收回单行
             if (col is 1 or 2 or 3 or 6)

@@ -241,6 +241,39 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 读磁盘上的真实标签（**不做文件名兜底**）。批量工具的快照/回滚和
+        /// 「只填空」判断必须用真值——ReadTag 在标题+艺术家都空时会用文件名
+        /// 解析结果补上，那对编辑面板是方便，对批量工具会把「没改动」误判成
+        /// 「已改过」从而整个跳过。读取失败返回全空模型（调用方按无标签处理）。
+        /// </summary>
+        public static TagEditModel ReadTagRaw(string path)
+        {
+            var model = new TagEditModel();
+            if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+            {
+                return model;
+            }
+
+            try
+            {
+                using TagLib.File file = TagLib.File.Create(path);
+                TagLib.Tag tag = file.Tag;
+                model.Title = tag.Title ?? string.Empty;
+                model.Artist = tag.FirstPerformer ?? string.Empty;
+                model.Album = tag.Album ?? string.Empty;
+                model.AlbumArtist = tag.FirstAlbumArtist ?? string.Empty;
+                model.Year = tag.Year;
+                model.Track = tag.Track;
+                model.Genre = tag.FirstGenre ?? string.Empty;
+                model.Comment = tag.Comment ?? string.Empty;
+                model.Lyrics = tag.Lyrics ?? string.Empty;
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorService.cs", caught); }
+
+            return model;
+        }
+
         public static TagEditModel TryParseTagsFromFileName(string fileName)
         {
             var model = new TagEditModel();
