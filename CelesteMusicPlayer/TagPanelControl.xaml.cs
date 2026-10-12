@@ -80,8 +80,10 @@ namespace CelesteMusicPlayer
         // =====================================================================
         // 表格单元格内联编辑（2026-10-13 用户实测要求：单击单元格直接改）
         //
-        // 口径（对齐 mp3tag 习惯）：可编辑列是常驻文本框，单击即改；回车或点别处
-        // 提交并立即写盘（读全量→改一个字段→写，失败把这一格退回原值）。
+        // 口径（对齐 mp3tag 习惯）：可编辑列是常驻文本框，**两击编辑**——
+        // 第一次单击只选中所在行（TextBox 的 AllowFocusOnInteraction=False 挡住
+        // 自动聚焦），第二次单击同一格才真正进编辑；回车或点别处提交并立即写盘
+        // （读全量→改一个字段→写，失败把这一格退回原值）。
         // 长字段（标题/艺术家/专辑/流派）编辑时临时开换行「展开」，失焦收回单行。
         // Esc = 放弃这一格的改动。不可编辑列（#/时长/文件名/格式/位深/采样率/码率/大小）
         // 保持只读文字。
@@ -98,6 +100,12 @@ namespace CelesteMusicPlayer
 
         /// <summary>Esc 取消标记：置位后随后的 LostFocus 只收回不提交。</summary>
         private bool _cellCancelled;
+
+        /// <summary>「武装」状态：已被单击过一次、等待第二次单击的格子（行 + 列号）。</summary>
+        private TagFileItem? _armedItem;
+
+        /// <summary>武装格子的列号（-1 = 没有）。</summary>
+        private int _armedCol = -1;
 
         /// <summary>单元格写盘串行闸：避免两个格子的提交并发写同一个文件。</summary>
         private readonly SemaphoreSlim _cellSaveGate = new(1, 1);
@@ -750,7 +758,54 @@ namespace CelesteMusicPlayer
         // 表格单元格内联编辑（事件入口）
         // =====================================================================
 
-        /// <summary>单元格获焦：同步选中所在行（TextBox 会吞掉 ListViewItem 的选中点击），记录原值，长字段展开换行。</summary>
+        /// <summary>
+        /// 单元格按下（mp3tag 式两击编辑的入口）：
+        /// 第一次单击——只选中所在行，不进编辑（e.Handled=true 挡掉 ListViewItem
+        /// 的默认行为之前先手动同步选中，保证视觉反馈和单击行首一样）；
+        /// 第二次单击同一格——放行，交给 Focus() 进编辑（GotFocus 随后接管）。
+        /// 点到别的格子 / 别处 → 武装状态作废，重新从「首击选中」开始。
+        /// </summary>
+        private void TagCellBox_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            if (sender is not TextBox box || box.DataContext is not TagFileItem item)
+            {
+                return;
+            }
+
+            int col = Grid.GetColumn(box);
+            if (col is < 1 or > 6)
+            {
+                return;
+            }
+
+            if (_armedItem == item && _armedCol == col)
+            {
+                // 第二次单击同一格：放行，进编辑
+                _armedItem = null;
+                _armedCol = -1;
+                box.Focus(FocusState.Pointer);
+                return;
+            }
+
+            // 第一次单击（或换了格子）：只选中行，不进编辑
+            e.Handled = true;
+            _armedItem = item;
+            _armedCol = col;
+
+            try
+            {
+                if (!TagFileListView.SelectedItems.Contains(item))
+                {
+                    TagFileListView.SelectedItem = item;
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.TagCellBox_PointerPressed", caught);
+            }
+        }
+
+        /// <summary>单元格获焦（= 已进入编辑）：同步选中所在行，记录原值，全选文字，长字段展开换行。</summary>
         private void TagCellBox_GotFocus(object sender, RoutedEventArgs e)
         {
             if (sender is not TextBox box || box.DataContext is not TagFileItem item)
@@ -801,10 +856,16 @@ namespace CelesteMusicPlayer
             if (_cellCancelled)
             {
                 _cellCancelled = false;
+                _armedItem = null;
+                _armedCol = -1;
                 return;
             }
 
             await CommitCellEditAsync(box);
+
+            // 编辑结束：武装状态作废（再改要重新两击）
+            _armedItem = null;
+            _armedCol = -1;
         }
 
         /// <summary>回车 = 提交（焦点交还列表，随后的失焦负责落盘）；Esc = 放弃这一格。</summary>
@@ -818,6 +879,8 @@ namespace CelesteMusicPlayer
             if (e.Key == Windows.System.VirtualKey.Enter)
             {
                 e.Handled = true;
+                _armedItem = null;
+                _armedCol = -1;
                 // 焦点移走会触发 LostFocus → 自动提交；这里只负责挪焦点
                 TagFileListView.Focus(FocusState.Programmatic);
             }
@@ -825,6 +888,8 @@ namespace CelesteMusicPlayer
             {
                 e.Handled = true;
                 _cellCancelled = true;
+                _armedItem = null;
+                _armedCol = -1;
                 box.Text = _cellOriginal;
                 TagFileListView.Focus(FocusState.Programmatic);
             }
