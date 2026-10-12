@@ -53,6 +53,18 @@
   （本例删 347–608 误伤了 `ClearDetail()` 与 `WebPlayButton_Click()`）。用**方法签名定位**逐段删，
   删完立刻 `_build_check.py` 验证到 BUILD_OK。XamlCompiler 崩时先 ET.parse 验 XAML 良构，
   再考虑移走 `obj/<平台>`+`bin/<平台>`（备份必须放仓库外）全量重建。
+- ⚠ **UserControl 里拿宿主窗口句柄只能由宿主注入**（2026-10-13 用户实测坑）：在
+  UserControl 里调 `WindowNative.GetWindowHandle(this)` 会抛 "Failed to create a CCW …
+  the specified cast is not valid"——UserControl 没实现 IWindowNative，只有 Window 实现了。
+  正确姿势：宿主（MainWindow，ctor 里已缓存 `_mainWindowHwnd`）把句柄传进 UserControl
+  构造函数，选取器 `InitializeWithWindow.Initialize(picker, hwnd)` 用它。
+- **标签板块文件表格（2026-10-13 定稿）**：14 列（# 标题* 艺术家 专辑 年份 曲目 流派 时长
+  文件名 格式 位深 采样率 码率 大小），行模型 `TagFileItem : PlaylistItem`（为此解除
+  PlaylistItem sealed；文件派生列在 BuildEntry 后台线程填，走 `AudioInfoFormatter.TryGetFacts`）。
+  横向滚动=ListView Auto + 行 MinWidth=1246；表头在 ListView 外，靠内部 ScrollViewer
+  ViewChanged 位移 + RectangleGeometry 裁剪同步；列边界 6px 把手（ColumnResizeGrip）
+  拖拽调宽，**列数/默认宽三处同步**：XAML 表头、XAML 行模板、cs 里 ColDefaultWidths/ColMinWidths，
+  运行期以 cs 数组为唯一真相。星号列（标题）把手改 MinWidth 保持吸收剩余宽度。
 
 ## 合规整改（2026-10-13 进行中）
 - 用户拍板：在线功能**只留 MusicBrainz 系**（MusicBrainz + Cover Art Archive + Last.fm）。
