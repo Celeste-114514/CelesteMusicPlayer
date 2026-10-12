@@ -69,32 +69,15 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                // 2026-10-12 改版：详情页开着就把裁剪框放进右栏内嵌面板（不再弹独立编辑窗口）；
-                // 从艺术家墙右键进来（详情页没开）才回落到旧窗口。
-                if (ArtistDetailPanel != null && ArtistDetailPanel.Visibility == Visibility.Visible)
+                // 2026-10-12 改版（用户实测反馈）：一律走详情页右栏内嵌裁剪面板，不再弹独立编辑窗口。
+                // 详情页没开就先打开该艺术家的详情页，再带着本地图片路径落头像页签。
+                // 旧的 ArtistAvatarEditorWindow 窗口类保留作代码兜底，但入口全部摘掉。
+                if (ArtistDetailPanel == null || ArtistDetailPanel.Visibility != Visibility.Visible)
                 {
-                    OpenArtistAvatarPanel(artist, file.Path);
-                    return;
+                    OpenArtistDetail(artist);
                 }
 
-                var editor = new ArtistAvatarEditorWindow(
-                    ArtistAvatarStoreKey(artist.Name, _artistDetailUsesAlbumArtist
-                        || string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal)),
-                    file.Path);
-                _artistAvatarEditorWindow = editor;
-                editor.Closed += (_, _) =>
-                {
-                    if (ReferenceEquals(_artistAvatarEditorWindow, editor))
-                    {
-                        _artistAvatarEditorWindow = null;
-                    }
-                };
-                editor.AvatarConfirmed += image =>
-                {
-                    artist.AvatarImage = image;
-                    ApplyArtistAvatarToDetailIfOpen(artist, image);
-                };
-                editor.Activate();
+                OpenArtistAvatarPanel(artist, file.Path);
             }
             catch (Exception ex)
             {

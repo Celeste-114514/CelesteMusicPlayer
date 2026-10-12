@@ -89,13 +89,16 @@ namespace CelesteMusicPlayer
                 ArtistAvatarPanel.Visibility = (!songs && !albums) ? Visibility.Visible : Visibility.Collapsed;
             }
 
-            // 选中态：当前页签用强调色底，其余保持透明（跟别处胶囊按钮同一套观感）
-            ApplyTabChrome(ArtistDetailTabSongsButton, songs);
-            ApplyTabChrome(ArtistDetailTabAlbumsButton, albums);
-            ApplyTabChrome(ArtistDetailTabAvatarButton, !songs && !albums);
+            // 选中态（2026-10-12 方案B 文字页签）：当前页签文字提亮 + 底部强调色指示条，
+            // 其余页签用次级文字色、指示条收起。早前按钮形态把未选中 Background/Foreground 赋 null，
+            // 回落到默认按钮 chrome 后未选中的字跟背景同色看不见（用户实测反馈）。
+            ApplyTabChrome(ArtistDetailTabSongsButton, ArtistDetailTabSongsUnderline, songs);
+            ApplyTabChrome(ArtistDetailTabAlbumsButton, ArtistDetailTabAlbumsUnderline, albums);
+            ApplyTabChrome(ArtistDetailTabAvatarButton, ArtistDetailTabAvatarUnderline, !songs && !albums);
         }
 
-        private void ApplyTabChrome(Button? button, bool active)
+        /// <summary>页签外观：透明底文字选项卡。强调色一律走 DspAccentBrush()（带极客/令牌皮肤分支）。</summary>
+        private void ApplyTabChrome(Button? button, Border? underline, bool active)
         {
             if (button == null)
             {
@@ -104,12 +107,20 @@ namespace CelesteMusicPlayer
 
             try
             {
-                button.Background = active
-                    ? (Brush)Application.Current.Resources["AccentFillColorDefaultBrush"]
-                    : null;
+                // 显式给主题文字色，不赋 null：赋 null 会回落到默认按钮样式，
+                // 深色主题/令牌皮肤下出现「字和背景同色」。
                 button.Foreground = active
-                    ? (Brush)Application.Current.Resources["TextOnAccentFillColorPrimaryBrush"]
-                    : null;
+                    ? (Brush)Application.Current.Resources["TextFillColorPrimaryBrush"]
+                    : (Brush)Application.Current.Resources["TextFillColorSecondaryBrush"];
+
+                if (underline != null)
+                {
+                    underline.Visibility = active ? Visibility.Visible : Visibility.Collapsed;
+                    if (active)
+                    {
+                        underline.Background = DspAccentBrush();
+                    }
+                }
             }
             catch (Exception caught)
             {

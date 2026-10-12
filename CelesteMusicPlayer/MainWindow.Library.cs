@@ -3314,24 +3314,16 @@ namespace CelesteMusicPlayer
 
             ArtistEntry captured = artist;
 
-            // 2026-10-12 改版：详情页开着就走右栏内嵌面板（不再弹独立搜索窗口）；
-            // 从艺术家墙右键进来（详情页没开）才回落到旧窗口。
-            if (ArtistDetailPanel != null && ArtistDetailPanel.Visibility == Visibility.Visible)
+            // 2026-10-12 改版（用户实测反馈）：一律走艺术家详情页右栏内嵌面板，不再弹独立窗口。
+            // 从艺术家墙右键进来时详情页没开——先把该艺术家的详情页打开，再落头像页签，
+            // 用户要的就是「直接进入详情页然后显示头像面板」。
+            // 旧的 ArtistAvatarSearchWindow 窗口类保留作代码兜底，但入口全部摘掉。
+            if (ArtistDetailPanel == null || ArtistDetailPanel.Visibility != Visibility.Visible)
             {
-                OpenArtistAvatarPanel(captured);
-                return;
+                OpenArtistDetail(captured);
             }
 
-            bool albumArtistMode = _artistDetailUsesAlbumArtist
-                || string.Equals(_currentCategory, "AlbumArtists", StringComparison.Ordinal);
-            string storeKey = ArtistAvatarStoreKey(captured.Name, albumArtistMode);
-
-            var window = ArtistAvatarSearchWindow.OpenForArtist(captured.Name, storeKey);
-            window.AvatarConfirmed += image =>
-            {
-                captured.AvatarImage = image;
-                ApplyArtistAvatarToDetailIfOpen(captured, image);
-            };
+            OpenArtistAvatarPanel(captured);
         }
     }
 }

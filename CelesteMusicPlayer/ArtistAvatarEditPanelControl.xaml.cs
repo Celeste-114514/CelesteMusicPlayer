@@ -46,6 +46,12 @@ namespace CelesteMusicPlayer
         private double _offsetY;
         private bool _updatingZoomUi;
 
+        /// <summary>面板就绪标记：InitializeComponent 解析 XAML 时滑杆的初值（Minimum=0.5 ≠ 默认 0）
+        /// 会就地触发 ValueChanged，此时 CropViewport / EditImage 这些后面的 x:Name 还没连上，
+        /// 直接刷新布局就是空引用——被 XAML 解析器包成「RangeBase.Minimum 赋值失败」弹出来
+        /// （2026-10-12 用户实测）。构造跑完才置 true，与 DSP 机架的 _dspRackReady 同一套路。</summary>
+        private bool _panelReady;
+
         /// <summary>头像已保存（返回新头像，宿主持此刷新详情页与艺术家墙）。</summary>
         public event Action<BitmapImage>? AvatarConfirmed;
 
@@ -67,6 +73,8 @@ namespace CelesteMusicPlayer
             {
                 Rect = new Rect(0, 0, ViewSize, ViewSize)
             };
+
+            _panelReady = true;
         }
 
         /// <summary>
@@ -344,6 +352,12 @@ namespace CelesteMusicPlayer
 
         private void ApplyImageLayout()
         {
+            // 双保险：万一有别的路径在面板就绪前摸到这里（EditImage 还没连上），直接退出去
+            if (EditImage == null || _imagePixelWidth <= 0 || _imagePixelHeight <= 0)
+            {
+                return;
+            }
+
             double scale = CurrentScale;
             double dispW = _imagePixelWidth * scale;
             double dispH = _imagePixelHeight * scale;
@@ -416,7 +430,9 @@ namespace CelesteMusicPlayer
 
         private void ZoomSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
-            if (_updatingZoomUi)
+            // 面板还没构造完（XAML 解析期初值就地触发）时什么都不做：
+            // 此刻 EditImage 等后续 x:Name 仍是 null，写布局直接空引用崩整个面板。
+            if (!_panelReady || _updatingZoomUi)
             {
                 return;
             }

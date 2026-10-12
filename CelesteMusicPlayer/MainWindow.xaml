@@ -2515,43 +2515,63 @@
                                         <RowDefinition Height="*" />
                                     </Grid.RowDefinitions>
 
+                                    <!-- 右栏页签（2026-10-12 方案B：文字选项卡，不用按钮外形）：
+                                         透明底、无描边、无胶囊；选中项文字提亮 + 底部强调色指示条，
+                                         未选中项用次级文字色。早前按钮形态有两个毛病（用户实测）：
+                                         未选中字的颜色跟背景一样看不见；两种状态用按钮切也不合适。
+                                         外观对齐 WinUI 原生选项卡：文字 + 下划线。 -->
                                     <StackPanel
                                         Grid.Row="0"
                                         Orientation="Horizontal"
-                                        Spacing="8">
+                                        Spacing="4">
                                         <Button
                                             x:Name="ArtistDetailTabSongsButton"
-                                            Height="32"
-                                            Padding="14,0"
-                                            CornerRadius="16"
-                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                            BorderThickness="1"
-                                            Content="歌曲列表"
-                                            Click="ArtistDetailTabSongsButton_Click" />
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Padding="12,4,12,6"
+                                            Click="ArtistDetailTabSongsButton_Click">
+                                            <StackPanel>
+                                                <TextBlock FontSize="14" Text="歌曲" />
+                                                <Border
+                                                    x:Name="ArtistDetailTabSongsUnderline"
+                                                    Height="2"
+                                                    Margin="0,5,0,0"
+                                                    CornerRadius="1" />
+                                            </StackPanel>
+                                        </Button>
                                         <Button
                                             x:Name="ArtistDetailTabAlbumsButton"
-                                            Height="32"
-                                            Padding="14,0"
-                                            CornerRadius="16"
-                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                            BorderThickness="1"
-                                            Content="专辑墙"
-                                            Click="ArtistDetailTabAlbumsButton_Click" />
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Padding="12,4,12,6"
+                                            Click="ArtistDetailTabAlbumsButton_Click">
+                                            <StackPanel>
+                                                <TextBlock FontSize="14" Text="专辑" />
+                                                <Border
+                                                    x:Name="ArtistDetailTabAlbumsUnderline"
+                                                    Height="2"
+                                                    Margin="0,5,0,0"
+                                                    CornerRadius="1" />
+                                            </StackPanel>
+                                        </Button>
                                         <!-- 「头像」页签：只有从头像右键菜单进入时才出现，
                                              里面是在线搜图 + 裁剪（不再弹独立窗口）。 -->
                                         <Button
                                             x:Name="ArtistDetailTabAvatarButton"
-                                            Height="32"
-                                            Padding="14,0"
-                                            CornerRadius="16"
-                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                                            BorderThickness="1"
-                                            Content="头像"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Padding="12,4,12,6"
                                             Visibility="Collapsed"
-                                            Click="ArtistDetailTabAvatarButton_Click" />
+                                            Click="ArtistDetailTabAvatarButton_Click">
+                                            <StackPanel>
+                                                <TextBlock FontSize="14" Text="头像" />
+                                                <Border
+                                                    x:Name="ArtistDetailTabAvatarUnderline"
+                                                    Height="2"
+                                                    Margin="0,5,0,0"
+                                                    CornerRadius="1" />
+                                            </StackPanel>
+                                        </Button>
                                     </StackPanel>
 
                                     <Grid Grid.Row="1">
