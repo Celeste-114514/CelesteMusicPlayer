@@ -34,7 +34,9 @@
 - FontFamily 禁赋 null（COMException）→ClearValue。托盘分隔线钉 `new MenuFlyoutSeparator{Height=3}`（H.NotifyIcon 冷测量 DesiredSize=(0,0) 实占 3px，不钉弹滚动条，上游未修）。启动期判定类 UI 必须曲库定型后重算。
 
 ## 皮肤 / WebUI
-- **皮肤入口 2026-10-11 起整体隐藏**（用户要求新版本不含）：MainWindow.xaml 三个 pill + csproj 4 个 Content 行都注释；SettingsWindow.xaml「主题文件」区两处 Collapsed（95005a9，恢复=删两处 Visibility）。**恢复必须三处一起去**。TokenSkin WIP 未提交（MainWindow.TokenSkin.cs + FrostedGlass/CelesteTheme/Misc/Playback3/UiTheme 5 文件，与 native2 改动文件不重叠；备份 /tmp/CelesteTokSkin_WIP_20261011，TEMP 重启即失）。
+- **皮肤入口隐藏的范围（2026-10-12 澄清，别再以讹传讹）**：2026-10-11 起隐藏的只是**主界面上的皮肤快捷 pill**（MainWindow.xaml 三处注释，95005a9 同批）；**设置→外观→「界面风格→测试皮肤」+「主题文件」入口自 2026-10-12 阶段 1（086b566/49a2ff6）起是活的**，用户实测可选。早前"皮肤入口整体隐藏"的说法只对主界面快捷入口成立，设置里的路一直通——对外汇报时不许再说"整体隐藏"。
+- **智能播放列表（④）= 已作废**：2026-08-30 22:45 提交（8c96f92 Auto-DJ 规则生成），**当天 23:50 按用户确认移除（6250df5）**，代码不存在。云记忆里"代码已完成未验证"是 8-30 旧状态，作废。
+- **设备记忆 DSP 配置档（③）= 活着**：2026-08-30 62d948d，插上设备自动套用该设备存过的 DSP 配置；设置开关 `DeviceDspMemoryToggle`，接线在 MainWindow.Features.cs（2915/3192/3214）。八个星期前的事，用户自己不记得，别当成"待办"。
 - 极客：色源唯一 GeekPhosphorColor；严禁改全局资源（必崩）→元素级副本；跨模式共用的每秒定时器是头号陷阱；文字当图标禁用等宽字体→GeekGlyphFont+17。播放队列三处图标 RedEye(E7B3)→List(EA37) 已改（b1b6f01，进 26.10.11 包）。
 - 皮肤系统的阶段 1「令牌测试皮肤」已合闸（2026-10-12，commit 086b566 + 49a2ff6）：设置→外观→界面风格「测试皮肤」+ 主题文件「演示暖橙」，Classic*/Token 互切热生效不用重启。验证口径、演示主题文件、没跑实机冒烟的原因见 2026-10-12.md。
 - WebUI 路线 B：网页只长样子不做事，音频链路零改动。铁律：点行播放=整表替换队列；消息手动 JsonDocument.Parse 提 kind（默认区分大小写会静默全丢）；CSS 写了≠生效（_webcheck 验，几何 --dump-dom 禁读 PNG）；视图切换只切 display 且必须 scrollTop=0；后台回填先占坑；重推防抖三件套（clearInterval(readyTimer)、coverByAlbum 跨推存活、data-src 守卫）。
