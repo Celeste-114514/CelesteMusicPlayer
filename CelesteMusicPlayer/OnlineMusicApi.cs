@@ -729,18 +729,23 @@ namespace CelesteMusicPlayer
         // 歌词
         // =====================================================================
 
+        /// <summary>
+        /// 取歌词。2026-10-13 合规整改后统一走 LRClib（开放歌词库，免注册免 key）。
+        /// source 参数保留仅为兼容旧调用点，不再用于区分平台。
+        /// LRClib 无翻译歌词，includeTranslation 当前无对应能力，保留参数不改变行为。
+        /// </summary>
         public static async Task<string> GetLyricAsync(
             string source,
             OnlineSongResult song,
             bool includeTranslation,
             CancellationToken cancellationToken = default)
         {
-            return source switch
-            {
-                // 2026-10-13 合规整改：网易云 / QQ / 酷狗的歌词接口全部移除。
-                // 阶段 3 起歌词改由 LRClib 提供（见 GetLyricFromLrclibAsync）。
-                _ => string.Empty
-            };
+            return await GetLyricFromLrclibAsync(
+                song.Artist,
+                song.Name,
+                song.Album,
+                null,
+                cancellationToken).ConfigureAwait(false);
         }
 
         // =====================================================================
