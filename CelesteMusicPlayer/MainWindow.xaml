@@ -2492,8 +2492,12 @@
                                          透明底、无描边、无胶囊；选中项文字提亮 + 底部强调色指示条，
                                          未选中项用次级文字色。早前按钮形态有两个毛病（用户实测）：
                                          未选中字的颜色跟背景一样看不见；两种状态用按钮切也不合适。
-                                         外观对齐 WinUI 原生选项卡：文字 + 下划线。 -->
+                                         外观对齐 WinUI 原生选项卡：文字 + 下划线。
+                                         ⚠️ 2026-10-12 第二轮实测：「头像」不再作为第三个页签与歌曲/专辑并列 ——
+                                         头像搜索编辑是按需打开的面板（右键菜单进入），打开时本条页签带整条隐藏、
+                                         右栏只露面版 + 面板自己的「← 返回」按钮，返回后回到歌曲页签。 -->
                                     <StackPanel
+                                        x:Name="ArtistDetailTabStrip"
                                         Grid.Row="0"
                                         Orientation="Horizontal"
                                         Spacing="4">
@@ -2522,24 +2526,6 @@
                                                 <TextBlock FontSize="14" Text="专辑" />
                                                 <Border
                                                     x:Name="ArtistDetailTabAlbumsUnderline"
-                                                    Height="2"
-                                                    Margin="0,5,0,0"
-                                                    CornerRadius="1" />
-                                            </StackPanel>
-                                        </Button>
-                                        <!-- 「头像」页签：只有从头像右键菜单进入时才出现，
-                                             里面是在线搜图 + 裁剪（不再弹独立窗口）。 -->
-                                        <Button
-                                            x:Name="ArtistDetailTabAvatarButton"
-                                            Background="Transparent"
-                                            BorderThickness="0"
-                                            Padding="12,4,12,6"
-                                            Visibility="Collapsed"
-                                            Click="ArtistDetailTabAvatarButton_Click">
-                                            <StackPanel>
-                                                <TextBlock FontSize="14" Text="头像" />
-                                                <Border
-                                                    x:Name="ArtistDetailTabAvatarUnderline"
                                                     Height="2"
                                                     Margin="0,5,0,0"
                                                     CornerRadius="1" />

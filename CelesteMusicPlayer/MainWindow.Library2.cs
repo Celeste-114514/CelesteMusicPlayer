@@ -174,14 +174,10 @@ namespace CelesteMusicPlayer
             ArtistDetailAvatarPlaceholder.Visibility =
                 artist.AvatarImage == null ? Visibility.Visible : Visibility.Collapsed;
 
-            // 2026-10-12 改版：矩形头像挂立体阴影；右栏页签回到「歌曲列表」；
-            // 「头像」页签保持隐藏（只有从头像右键菜单进来才出现）。
+            // 2026-10-12 改版：矩形头像挂立体阴影；右栏页签回到「歌曲列表」。
+            // 头像面板按需打开（不与歌曲/专辑并列），这里确保它是关着的、页签条可见。
             ApplyArtistDetailAvatarShadow();
-            ApplyArtistDetailTab("Songs");
-            if (ArtistDetailTabAvatarButton != null)
-            {
-                ArtistDetailTabAvatarButton.Visibility = Visibility.Collapsed;
-            }
+            CloseArtistAvatarPanel();
 
             // 左栏头像下方的在线概览（网易云），异步拉，拉不到就显示「暂无」
             _ = RefreshArtistOverviewAsync(artist.Name);

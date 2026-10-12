@@ -8,11 +8,13 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <!-- 艺术家头像面板（2026-10-12）：在线搜图 + 裁剪，塞在艺术家详情页右侧的
-         「歌曲列表 / 专辑墙 / 头像」页签区里，取代原来两个独立窗口。
-         逻辑照搬 ArtistAvatarSearchWindow / ArtistAvatarEditorWindow，
-         只把「窗口」语义换成「面板」：没有标题栏、不能自己关，
-         关闭由宿主（艺术家详情页的页签）决定。
+    <!-- 艺术家头像面板（2026-10-12）：在线搜图 + 裁剪，塞在艺术家详情页右栏，
+         取代原来两个独立窗口（ArtistAvatarSearchWindow / ArtistAvatarEditorWindow）。
+         逻辑照搬那两个窗口，只把「窗口」语义换成「面板」：没有标题栏、不能自己关，
+         关闭由宿主（艺术家详情页）决定。
+         2026-10-12 第二轮实测改：头像不再与歌曲/专辑并列成第三个页签，
+         改成按需打开 —— 从头像右键菜单进入时右栏页签条整条隐藏、只露面版，
+         面板自己的「← 返回」按钮（CloseButton）负责关。
          裁剪框有圆形 / 矩形两种：圆形对应艺术家墙（圆形头像），
          矩形对应详情页这张矩形头像 —— 保存下来的都是同一块方形区域，
          各显示处再按自己的形状裁切，所以两种框只是构图参考，不会存两份图。
@@ -42,7 +44,7 @@
                      KeyDown="SearchBox_KeyDown" VerticalContentAlignment="Center" />
             <Button CornerRadius="16" x:Name="SearchButton" Grid.Column="2" Content="搜索"
                     Style="{ThemeResource AccentButtonStyle}" Click="SearchButton_Click" />
-            <Button CornerRadius="16" x:Name="CloseButton" Grid.Column="3" Content="关闭"
+            <Button CornerRadius="16" x:Name="CloseButton" Grid.Column="3" Content="← 返回"
                     Click="CloseButton_Click" />
         </Grid>
 

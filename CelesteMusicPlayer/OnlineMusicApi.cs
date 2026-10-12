@@ -132,6 +132,9 @@ namespace CelesteMusicPlayer
                     }
                 }
 
+                AppLog.Info("net", "netease-brief: 搜索歌手 name=" + artistName
+                    + " hits=" + hits.Count.ToString() + " 选中id=" + (id ?? "无"));
+
                 if (string.IsNullOrEmpty(id))
                 {
                     return null;
@@ -139,6 +142,8 @@ namespace CelesteMusicPlayer
 
                 string url = "https://music.163.com/api/artist/head/info/get?id=" + Uri.EscapeDataString(id);
                 using HttpResponseMessage response = await Http.GetAsync(url, cancellationToken).ConfigureAwait(false);
+                AppLog.Info("net", "netease-brief: head/info id=" + id
+                    + " http=" + ((int)response.StatusCode).ToString());
                 if (!response.IsSuccessStatusCode)
                 {
                     return null;
@@ -149,10 +154,18 @@ namespace CelesteMusicPlayer
                 // 两种返回形态都兼容：{ artist:{briefDesc} } 与 { data:{ artist:{briefDesc} } }
                 if (TryFindBriefDesc(doc.RootElement, out string? brief) && !string.IsNullOrWhiteSpace(brief))
                 {
+                    AppLog.Info("net", "netease-brief: 命中 id=" + id
+                        + " briefLen=" + brief.Length.ToString());
                     return brief.Trim();
                 }
+
+                AppLog.Info("net", "netease-brief: head/info 里没有 briefDesc id=" + id);
             }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
+            catch (Exception caught)
+            {
+                AppLog.Error("net", "netease-brief: 异常 name=" + artistName, caught);
+                global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught);
+            }
 
             return null;
         }
