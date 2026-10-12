@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -297,8 +297,6 @@ namespace CelesteMusicPlayer
         private void ApplyStartupPlaybackSettings()
         {
             AppSettingsState settings = AppSettingsStore.Load();
-            // 流媒体插件服务地址（WSL），供在线歌词/搜索调用
-            StreamingServiceClient.ServiceBaseUrl = settings.StreamingServiceUrl;
             _applyingSettingsVolume = true;
             try
             {

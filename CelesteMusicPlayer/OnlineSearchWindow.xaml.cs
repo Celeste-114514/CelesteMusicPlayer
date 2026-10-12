@@ -355,30 +355,6 @@ namespace CelesteMusicPlayer
             CoverSizeText.Text = "封面尺寸";
         }
 
-        private void WebPlayButton_Click(object sender, RoutedEventArgs e)
-        {
-            if (_selected == null)
-            {
-                return;
-            }
-
-            string url = _selected.Source switch
-            {
-                "QQ" => $"https://y.qq.com/n/ryqq/songDetail/{_selected.SongId}",
-                "iTunes" => $"https://music.apple.com/cn/search?term={Uri.EscapeDataString(_selected.Name + " " + _selected.Artist)}",
-                "MusicBrainz" => $"https://musicbrainz.org/release/{_selected.SongId}",
-                _ => $"https://music.163.com/#/song?id={_selected.SongId}"
-            };
-            try
-            {
-                Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-            }
-            catch
-            {
-                StatusText.Text = "无法打开浏览器";
-            }
-        }
-
         private async void DownloadLyric_Click(object sender, RoutedEventArgs e)
         {
             if (_selected == null)
@@ -425,7 +401,7 @@ namespace CelesteMusicPlayer
             }
             catch
             {
-                StatusText.Text = "下载歌词失败。" + StreamingServiceClient.CookieReminderHint(_selected?.Source ?? "");
+                StatusText.Text = "下载歌词失败。";
             }
             finally
             {

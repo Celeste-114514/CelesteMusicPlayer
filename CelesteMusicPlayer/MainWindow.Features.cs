@@ -2077,41 +2077,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // 1) 若配置了流媒体插件服务（WSL），优先取 Apple Music 真歌词
-            if (!string.IsNullOrEmpty(StreamingServiceClient.ServiceBaseUrl))
-            {
-                try
-                {
-                    var sRes = await StreamingServiceClient.SearchAsync("applemusic", item.Title, 1);
-                    if (sRes is { Count: > 0 })
-                    {
-                        StreamingServiceClient.LyricResult? ly = await StreamingServiceClient.GetLyricAsync("applemusic", sRes[0].Id);
-                        if (ly is { Ok: true })
-                        {
-                            IReadOnlyList<LyricLine>? built = ly.Timestamped;
-                            if ((built == null || built.Count == 0) && !string.IsNullOrWhiteSpace(ly.Plain))
-                            {
-                                built = LyricsLoader.ParseLrc(ly.Plain);
-                            }
-
-                            if (built is { Count: > 0 })
-                            {
-                                string lrc = LyricsToLrc(built);
-                                string lrcPath = System.IO.Path.ChangeExtension(item.FilePath, ".lrc");
-                                try { System.IO.File.WriteAllText(lrcPath, lrc); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-                                NowPlayingText.Text = "已从 Apple Music 获取歌词";
-                                if (string.Equals(_nowPlayingPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
-                                {
-                                    BuildLyricsUi(built.ToList());
-                                }
-                                return;
-                            }
-                        }
-                    }
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-            }
-
             NowPlayingText.Text = "正在下载歌词…";
             string? path = await OnlineMusicApi.SearchAndDownloadLyricAsync(item.Title, item.Artist, item.FilePath);
             if (path == null)
