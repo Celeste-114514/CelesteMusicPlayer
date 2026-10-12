@@ -1920,6 +1920,34 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>
+        /// 2026-10-12 用户要求「把现有的面板简化，分组浏览的功能直接作为标签排序面板」：
+        /// 从侧栏进标签排序不再先落分类墙，直接进入分组浏览。
+        /// 与 TagSortClassWallSwitchToGroupButton_Click 的区别：不覆盖 _tagSortGroupFields，
+        /// 保留用户配置/预设的分组字段序列（从设置里读回来的那份）。
+        /// </summary>
+        private void EnterTagSortGroupMode()
+        {
+            if (TagSortClassScroll != null)
+            {
+                TagSortClassScroll.Visibility = Visibility.Collapsed;
+            }
+
+            if (TagSortPanel != null)
+            {
+                TagSortPanel.Visibility = Visibility.Visible;
+            }
+
+            if (TagSortPanelTitle != null)
+            {
+                TagSortPanelTitle.Text = "分组浏览";
+            }
+
+            _tagSortPanelMode = "GroupBy";
+            ApplyTagSortPanelMode();
+        }
+
+
         /// <summary>按当前面板视角（Songs/Albums/Artists/Sort）渲染内容区。</summary>
         private void ApplyTagSortPanelMode()
         {
@@ -2297,6 +2325,13 @@ namespace CelesteMusicPlayer
                     queue.Icon = new FontIcon { Glyph = "\uE710" };
                     queue.Click += (_, _) => AddSongsToUserPlaylist(groupSongs.ToList());
                     menu.Items.Add(queue);
+
+                    // 整组加入播放列表（弹命名列表选择器；2026-10-12 用户要求，
+                    // 与上面的「加入播放队列」是两个功能：队列是马上要播的，列表是长期收藏）
+                    var named = new MenuFlyoutItem { Text = "整组加入播放列表" };
+                    named.Icon = new FontIcon { Glyph = "\uEA37" };
+                    named.Click += (_, _) => _ = ShowNamedPlaylistPickerAsync(groupSongs.ToList());
+                    menu.Items.Add(named);
                 }
 
                 menu.ShowAt(TagSortGroupListView, e.GetPosition(TagSortGroupListView));

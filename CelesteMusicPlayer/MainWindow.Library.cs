@@ -913,7 +913,9 @@ namespace CelesteMusicPlayer
             BuildTagSortFieldButtons();
             RebuildTagSortColumnHeaders();
             TagSortBorder.Visibility = Visibility.Visible;
-            ShowTagSortClassWall();
+            // 2026-10-12 用户要求简化：进标签排序直接就是分组浏览（不再先落分类墙）。
+            // 分类墙保留为次级页：分组里点「← 返回」可回去，也可以从顶部按钮再进分组。
+            EnterTagSortGroupMode();
         }
 
 

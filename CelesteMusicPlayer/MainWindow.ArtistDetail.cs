@@ -183,6 +183,8 @@ namespace CelesteMusicPlayer
             catch (Exception caught)
             {
                 StartupLog.WriteException("MainWindow.ArtistDetail.cs.OpenArtistAvatarPanel", caught);
+                // 不能静默：面板没打开成功时用户会以为菜单坏了（2026-10-12 实测反馈）
+                _ = ShowErrorAsync("头像面板打开失败", caught.Message);
             }
         }
 

@@ -2204,6 +2204,17 @@ namespace CelesteMusicPlayer
                 return TagSortPanelSongListView;
             }
 
+            // 标签排序板块：分组浏览（GroupBy）时多选针对分组列表（组头 + 歌曲混排）。
+            // 2026-10-12 修复：此前这里没有分组分支，右键组 →「多选」解析不到目标列表直接 return，
+            // 表现为「多选状态不生效」。
+            if (string.Equals(_currentCategory, "TagSort", StringComparison.Ordinal)
+                && string.Equals(_tagSortPanelMode, "GroupBy", StringComparison.Ordinal)
+                && TagSortGroupPanel != null
+                && TagSortGroupPanel.Visibility == Visibility.Visible)
+            {
+                return TagSortGroupListView;
+            }
+
             return null;
         }
 

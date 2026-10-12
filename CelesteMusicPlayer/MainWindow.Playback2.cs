@@ -284,6 +284,16 @@ namespace CelesteMusicPlayer
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {
                 ApplySongListItemSelectionChrome(ArtistTrackListView, container, song);
+                if (args.InRecycleQueue)
+                {
+                    return;
+                }
+
+                // 行模板刚实现时（Phase 0）触发小封面异步加载（2026-10-12：详情页歌曲列表也要显示封面）
+                if (args.Phase == 0)
+                {
+                    LoadRowCoverAsync(ArtistTrackListView, container, song);
+                }
             }
         }
 
@@ -1422,7 +1432,7 @@ namespace CelesteMusicPlayer
             LibraryPaneTitle.Visibility = Visibility.Collapsed;
             SongSortPanel.Visibility = Visibility.Collapsed;
             MultiSelectTitlePanel.Visibility = Visibility.Visible;
-            MultiSelectTitleText.Text = "选择歌曲";
+            MultiSelectTitleText.Text = target == TagSortGroupListView ? "选择歌曲或组" : "选择歌曲";
             MultiSelectActionBar.Visibility = Visibility.Visible;
             ConfigureMultiSelectPrimaryAction();
             UpdateSelectAllMultiSelectButtonState();
@@ -1461,6 +1471,12 @@ namespace CelesteMusicPlayer
             if (target == AlbumTrackListView)
             {
                 return _albumTracks;
+            }
+
+            // 分组浏览：行是组头 + 歌曲混排，「全选」计数只算歌曲行（组头不是歌曲）
+            if (target == TagSortGroupListView)
+            {
+                return _tagSortGroupFlatRows.OfType<PlaylistItem>().ToList();
             }
 
             return GetActiveSongCollection();
@@ -1591,6 +1607,30 @@ namespace CelesteMusicPlayer
             }
 
             ListView target = _multiSelectTargetList ?? PlaylistView;
+
+            // 分组浏览多选：勾中的组头展开为整组歌曲，勾中的歌曲行取自身；
+            // 同一首歌可能被组和行重复勾中，按文件路径去重（保持勾选顺序）。
+            if (ReferenceEquals(target, TagSortGroupListView))
+            {
+                var groupSongs = new List<PlaylistItem>();
+                var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var item in TagSortGroupListView.SelectedItems)
+                {
+                    if (item is TagSortGroupHeader header)
+                    {
+                        foreach (var s in CollectNodeSongs(header))
+                        {
+                            if (seen.Add(s.FilePath)) groupSongs.Add(s);
+                        }
+                    }
+                    else if (item is PlaylistItem song && seen.Add(song.FilePath))
+                    {
+                        groupSongs.Add(song);
+                    }
+                }
+                return groupSongs;
+            }
+
             return target.SelectedItems.OfType<PlaylistItem>().ToList();
         }
 

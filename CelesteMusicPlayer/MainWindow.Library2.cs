@@ -361,6 +361,14 @@ namespace CelesteMusicPlayer
             List<AlbumEntry> entries = BuildAlbumEntriesFromTracks(tracks);
             entries = ApplyArtistAlbumSort(entries);
 
+            // 专辑墙空态提示（2026-10-12：切到「专辑墙」页签看到白板会以为页面坏了）
+            if (ArtistAlbumEmptyText != null)
+            {
+                ArtistAlbumEmptyText.Visibility = entries.Count == 0
+                    ? Visibility.Visible
+                    : Visibility.Collapsed;
+            }
+
             foreach (AlbumEntry entry in entries)
             {
                 _artistAlbums.Add(entry);

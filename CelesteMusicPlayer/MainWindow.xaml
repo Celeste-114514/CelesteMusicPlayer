@@ -2412,7 +2412,7 @@
                                     <RowDefinition Height="*" />
                                 </Grid.RowDefinitions>
                                 <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="272" />
+                                    <ColumnDefinition Width="320" />
                                     <ColumnDefinition Width="Auto" />
                                     <ColumnDefinition Width="*" MinWidth="420" />
                                 </Grid.ColumnDefinitions>
@@ -2442,8 +2442,8 @@
                                     <Border
                                         x:Name="ArtistDetailAvatarFrame"
                                         Grid.Row="0"
-                                        Width="248"
-                                        Height="248"
+                                        Width="296"
+                                        Height="296"
                                         Margin="12,12,12,4"
                                         CornerRadius="10"
                                         Background="{ThemeResource SubtleFillColorSecondaryBrush}"
@@ -2469,11 +2469,13 @@
                                         </Grid>
                                     </Border>
 
-                                    <!-- 艺术家名（头像正下方） -->
+                                    <!-- 艺术家名（头像正下方，水平居中） -->
                                     <TextBlock
                                         x:Name="ArtistDetailNameText"
                                         Grid.Row="1"
-                                        Margin="12,0,12,0"
+                                        Margin="8,0,8,0"
+                                        HorizontalAlignment="Center"
+                                        TextAlignment="Center"
                                         FontSize="22"
                                         FontWeight="SemiBold"
                                         TextWrapping="WrapWholeWords"
@@ -2484,7 +2486,9 @@
                                     <TextBlock
                                         x:Name="ArtistDetailOverviewSourceText"
                                         Grid.Row="2"
-                                        Margin="12,2,12,0"
+                                        Margin="8,2,8,0"
+                                        HorizontalAlignment="Center"
+                                        TextAlignment="Center"
                                         FontSize="12"
                                         Opacity="0.65"
                                         Text="艺术家概览" />
@@ -2492,10 +2496,11 @@
                                     <!-- 艺术家概览（在线简介，异步加载） -->
                                     <ScrollViewer
                                         Grid.Row="3"
-                                        Margin="12,4,12,0"
+                                        Margin="8,4,8,0"
                                         VerticalScrollBarVisibility="Auto">
                                         <TextBlock
                                             x:Name="ArtistDetailOverviewText"
+                                            TextAlignment="Center"
                                             FontSize="13"
                                             Opacity="0.85"
                                             TextWrapping="WrapWholeWords"
@@ -2519,7 +2524,9 @@
                                             Height="32"
                                             Padding="14,0"
                                             CornerRadius="16"
-                                            BorderThickness="0"
+                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
                                             Content="歌曲列表"
                                             Click="ArtistDetailTabSongsButton_Click" />
                                         <Button
@@ -2527,7 +2534,9 @@
                                             Height="32"
                                             Padding="14,0"
                                             CornerRadius="16"
-                                            BorderThickness="0"
+                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
                                             Content="专辑墙"
                                             Click="ArtistDetailTabAlbumsButton_Click" />
                                         <!-- 「头像」页签：只有从头像右键菜单进入时才出现，
@@ -2537,7 +2546,9 @@
                                             Height="32"
                                             Padding="14,0"
                                             CornerRadius="16"
-                                            BorderThickness="0"
+                                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                            BorderThickness="1"
                                             Content="头像"
                                             Visibility="Collapsed"
                                             Click="ArtistDetailTabAvatarButton_Click" />
@@ -2621,14 +2632,15 @@
                                             <ListView.Header>
                                                 <Grid Padding="12,8,24,8" ColumnSpacing="12" Background="Transparent">
                                                     <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="52" />
                                                         <ColumnDefinition Width="*" />
                                                         <ColumnDefinition Width="1.2*" />
                                                         <ColumnDefinition Width="72" />
                                                     </Grid.ColumnDefinitions>
-                                                    <TextBlock Grid.Column="0" FontWeight="SemiBold" Opacity="0.7" Text="歌曲标题" />
-                                                    <TextBlock Grid.Column="1" FontWeight="SemiBold" Opacity="0.7" Text="专辑" />
+                                                    <TextBlock Grid.Column="1" FontWeight="SemiBold" Opacity="0.7" Text="歌曲标题" />
+                                                    <TextBlock Grid.Column="2" FontWeight="SemiBold" Opacity="0.7" Text="专辑" />
                                                     <TextBlock
-                                                        Grid.Column="2"
+                                                        Grid.Column="3"
                                                         FontWeight="SemiBold"
                                                         Opacity="0.7"
                                                         HorizontalAlignment="Right"
@@ -2676,25 +2688,43 @@
                                                         Background="Transparent" PointerEntered="SongRow_PointerEntered" PointerExited="SongRow_PointerExited">
                                                         <Grid ColumnSpacing="12" VerticalAlignment="Center">
                                                             <Grid.ColumnDefinitions>
+                                                                <ColumnDefinition Width="52" />
                                                                 <ColumnDefinition Width="*" />
                                                                 <ColumnDefinition Width="1.2*" />
                                                                 <ColumnDefinition Width="72" />
                                                             </Grid.ColumnDefinitions>
-                                                            <TextBlock
+                                                            <!-- 行首小封面（40×40）：由 LoadRowCoverAsync 异步填充，与主曲目列表同一套缓存 -->
+                                                            <Border
+                                                                x:Name="RowCoverBorder"
+                                                                Tag="RowCover"
                                                                 Grid.Column="0"
+                                                                Width="40"
+                                                                Height="40"
+                                                                CornerRadius="6"
+                                                                VerticalAlignment="Center"
+                                                                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                                                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                                                BorderThickness="1">
+                                                                <Grid>
+                                                                    <FontIcon Glyph="&#xE958;" FontSize="20" Foreground="{ThemeResource TextFillColorSecondaryBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" Opacity="0.5" />
+                                                                    <Image x:Name="RowCoverImage" Stretch="Uniform" />
+                                                                </Grid>
+                                                            </Border>
+                                                            <TextBlock
+                                                                Grid.Column="1"
                                                                 VerticalAlignment="Center"
                                                                 TextTrimming="CharacterEllipsis"
                                                                 Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                                                 Text="{x:Bind Title}" />
                                                             <TextBlock
-                                                                Grid.Column="1"
+                                                                Grid.Column="2"
                                                                 VerticalAlignment="Center"
                                                                 Opacity="0.85"
                                                                 TextTrimming="CharacterEllipsis"
                                                                 Foreground="{ThemeResource TextFillColorPrimaryBrush}"
                                                                 Text="{x:Bind Album}" />
                                                             <TextBlock
-                                                                Grid.Column="2"
+                                                                Grid.Column="3"
                                                                 VerticalAlignment="Center"
                                                                 HorizontalAlignment="Right"
                                                                 Opacity="0.7"
@@ -2877,6 +2907,18 @@
                                             </DataTemplate>
                                         </GridView.ItemTemplate>
                                     </GridView>
+
+                                    <!-- 专辑墙空态：该艺术家暂时没有专辑数据时给一句可见提示，
+                                         避免用户以为切过去的页面是坏的/没加载 -->
+                                    <TextBlock
+                                        x:Name="ArtistAlbumEmptyText"
+                                        Grid.Row="2"
+                                        Margin="0,24,0,0"
+                                        HorizontalAlignment="Center"
+                                        VerticalAlignment="Top"
+                                        Opacity="0.65"
+                                        Text="该艺术家的专辑还没有加载出来"
+                                        Visibility="Collapsed" />
                                 </Grid>
 
                                 <!-- 头像页签的内容：在线搜图 + 裁剪。
@@ -3277,9 +3319,10 @@
                                             <MenuFlyoutItem Text="艺术家" Tag="Artists" Click="TagSortViewModeItem_Click" />
                                             <MenuFlyoutSeparator />
                                             <MenuFlyoutItem Text="排序方式" Tag="Sort" Click="TagSortViewModeItem_Click" />
-                                            <!-- 「分组浏览（按字段分组列表）」2026-10-12 用户要求摘掉：它与分类墙顶部常驻的
-                                                 「分组浏览」按钮是同一功能，两处入口看着像两套东西。
-                                                 GroupBy 分支代码保留（顶部按钮仍在用），要恢复就补回这两行。 -->
+                                            <!-- 「分组浏览」2026-10-12 恢复：用户要求把分组浏览作为标签排序的主面板
+                                                 （进标签排序直接就是它），这里需要能从别的视角切回来。
+                                                 早前摘掉是因为它与分类墙顶部常驻按钮重复；现在主视图就是分组，不再是重复入口。 -->
+                                            <MenuFlyoutItem Text="分组浏览" Tag="GroupBy" Click="TagSortViewModeItem_Click" />
                                         </MenuFlyout>
                                     </Button.Flyout>
                                 </Button>
