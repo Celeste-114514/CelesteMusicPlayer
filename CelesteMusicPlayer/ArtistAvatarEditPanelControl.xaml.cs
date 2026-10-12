@@ -17,11 +17,12 @@ using Windows.Storage.Streams;
 namespace CelesteMusicPlayer
 {
     /// <summary>
-    /// 艺术家头像面板（2026-10-12）：在线搜图 + 裁剪，塞在艺术家详情页右侧的
-    /// 「歌曲列表 / 专辑墙 / 头像」页签区里，取代原来两个独立窗口。
+    /// 艺术家头像面板（2026-10-12）：在线搜图 + 裁剪，塞在艺术家详情页右栏，
+    /// 按需打开（不再与歌曲/专辑并列成页签，2026-10-12 第二轮用户要求），
+    /// 取代原来两个独立窗口。
     ///
     /// 逻辑照搬 ArtistAvatarSearchWindow / ArtistAvatarEditorWindow，
-    /// 只把「窗口」语义换成「面板」：不 Activate、不 Close，关闭交给宿主页签。
+    /// 只把「窗口」语义换成「面板」：不 Activate、不 Close，关闭交给宿主的「← 返回」。
     /// </summary>
     public sealed partial class ArtistAvatarEditPanelControl : UserControl
     {
@@ -238,7 +239,7 @@ namespace CelesteMusicPlayer
         {
             ResultScroll.Visibility = Visibility.Collapsed;
             CropArea.Visibility = Visibility.Visible;
-            ApplyShape();
+            ShowShapeGuides();
         }
 
         private void BackToResultsButton_Click(object sender, RoutedEventArgs e) => ShowResults();
@@ -251,23 +252,17 @@ namespace CelesteMusicPlayer
 
         private void CloseButton_Click(object sender, RoutedEventArgs e) => CloseRequested?.Invoke();
 
-        private void ShapeButton_Click(object sender, RoutedEventArgs e) => ApplyShape();
-
-        private void ApplyShape()
+        /// <summary>
+        /// 裁剪框指引：圆形蒙版 + 圆形描边 + 矩形描边同时显示。
+        /// 2026-10-12 用户要求去掉圆形/矩形的选择按钮 —— 两个框都只是构图参考：
+        /// 保存下来的始终是方形区域，艺术家墙显示时自己裁成圆、详情页显示时就是矩形，
+        /// 所以两种框不需要二选一，摆在一起看就行。
+        /// </summary>
+        private void ShowShapeGuides()
         {
-            bool circle = ShapeCircleButton.IsChecked == true;
-            if (circle)
-            {
-                ShapeRectButton.IsChecked = false;
-            }
-            else
-            {
-                ShapeCircleButton.IsChecked = false;
-            }
-
-            MaskPath.Visibility = circle ? Visibility.Visible : Visibility.Collapsed;
-            RingEllipse.Visibility = circle ? Visibility.Visible : Visibility.Collapsed;
-            RingRect.Visibility = circle ? Visibility.Collapsed : Visibility.Visible;
+            MaskPath.Visibility = Visibility.Visible;
+            RingEllipse.Visibility = Visibility.Visible;
+            RingRect.Visibility = Visibility.Visible;
         }
 
         private async Task LoadSourceImageAsync(string path)
@@ -473,7 +468,7 @@ namespace CelesteMusicPlayer
                 await rtb.RenderAsync(CropViewport);
                 IBuffer buffer = await rtb.GetPixelsAsync();
 
-                ApplyShape();
+                ShowShapeGuides();
 
                 string key = string.IsNullOrWhiteSpace(_storeKey) ? _artistName : _storeKey;
                 await ArtistAvatarStore.SavePngAsync(key, buffer.ToArray(), (uint)rtb.PixelWidth, (uint)rtb.PixelHeight);

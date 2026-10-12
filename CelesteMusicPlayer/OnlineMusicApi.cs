@@ -35,8 +35,12 @@ namespace CelesteMusicPlayer
             {
                 Timeout = TimeSpan.FromSeconds(15)
             };
+            // ⚠️ UA 里不要带应用名（如 "CelesteMusicPlayer/1.0"）：网易云的老公开接口
+            // （music.163.com/api/*）对带自定义标识的 UA 上风控，返回 {"code":-462}
+            // 滑块验证页（HTTP 200 但没有 artists 字段），解析出来就是 0 命中 ——
+            // 2026-10-12 实测：换标准浏览器 UA 后立刻恢复， curl 带同样的应用 UA 也被拦。
             client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) CelesteMusicPlayer/1.0");
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", NetEaseReferer);
             return client;
         }
@@ -87,9 +91,12 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 艺术家概览（简介）。2026-10-12 艺术家详情页改版用。
-        /// 目前只接了网易云一路 —— 用户明确说「后续再加别的平台的设置」，
-        /// 所以这里留好 source 参数，将来加平台只改这个 switch 和下面的私有方法。
+        /// 艺术家概览（简介）。2026-10-12 第二轮改版起酷狗优先、网易云兜底：
+        /// 网易云的老公开接口（search/get + artist/head/info）对程序化访问上了风控，
+        /// 间歇性返回 {"code":-462}（滑块验证页，HTTP 200 但没有 artists），
+        /// .NET / curl 都无法稳定绕过（实测连 curl 都被概率性拦）。
+        /// 酷狗 mobilecdn 的歌手接口没有风控、国内直连稳定，且简介是中文。
+        /// source 参数预留（用户说过后续再加别的平台的设置），当前两种都走同一条链路。
         /// 拿不到就返回 null（调用方显示「暂无该艺术家的概览」），不抛异常。
         /// </summary>
         public static async Task<string?> GetArtistOverviewAsync(
@@ -102,11 +109,104 @@ namespace CelesteMusicPlayer
                 return null;
             }
 
-            return source switch
+            string? brief = await GetKugouArtistBriefAsync(artistName, cancellationToken).ConfigureAwait(false);
+            if (!string.IsNullOrWhiteSpace(brief))
             {
-                "QQ" => null, // 暂未接入
-                _ => await GetNetEaseArtistBriefAsync(artistName, cancellationToken).ConfigureAwait(false)
-            };
+                return brief;
+            }
+
+            AppLog.Info("net", "artist-overview: 酷狗无简介，回退网易云 name=" + artistName);
+            return await GetNetEaseArtistBriefAsync(artistName, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <summary>
+        /// 酷狗歌手简介：先按名字搜歌手拿 singerid，再取 info 里的 profile。
+        /// mobilecdn 这套接口没有风控、国内直连稳定（2026-10-12 实测，椎名林檎 /
+        /// 周杰伦都能拿到中文简介）。酷狗对 Referer 敏感，单独发自己的 Referer。
+        /// </summary>
+        private static async Task<string?> GetKugouArtistBriefAsync(
+            string artistName,
+            CancellationToken cancellationToken)
+        {
+            try
+            {
+                string searchUrl = "http://mobilecdn.kugou.com/api/v3/search/singer?keyword="
+                    + Uri.EscapeDataString(artistName.Trim()) + "&page=1&pagesize=5";
+                using var searchRequest = new HttpRequestMessage(HttpMethod.Get, searchUrl);
+                searchRequest.Headers.TryAddWithoutValidation("Referer", "http://www.kugou.com/");
+                using HttpResponseMessage searchResponse =
+                    await Http.SendAsync(searchRequest, cancellationToken).ConfigureAwait(false);
+                if (!searchResponse.IsSuccessStatusCode)
+                {
+                    AppLog.Info("net", "kugou-brief: 歌手搜索 http="
+                        + ((int)searchResponse.StatusCode).ToString());
+                    return null;
+                }
+
+                string searchJson = await searchResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                string? singerId = null;
+                string? singerName = null;
+                using (JsonDocument doc = JsonDocument.Parse(searchJson))
+                {
+                    if (doc.RootElement.TryGetProperty("data", out JsonElement data)
+                        && data.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (JsonElement s in data.EnumerateArray())
+                        {
+                            singerId = s.TryGetProperty("singerid", out JsonElement idEl)
+                                ? idEl.ToString()
+                                : null;
+                            singerName = s.TryGetProperty("singername", out JsonElement nEl)
+                                ? nEl.GetString()
+                                : null;
+                            if (!string.IsNullOrEmpty(singerId))
+                            {
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                AppLog.Info("net", "kugou-brief: 搜索歌手 name=" + artistName
+                    + " 选中=" + (singerName ?? "无") + " id=" + (singerId ?? "无"));
+
+                if (string.IsNullOrEmpty(singerId))
+                {
+                    return null;
+                }
+
+                string infoUrl = "http://mobilecdn.kugou.com/api/v3/singer/info?singerid="
+                    + Uri.EscapeDataString(singerId) + "&with_res=true";
+                using var infoRequest = new HttpRequestMessage(HttpMethod.Get, infoUrl);
+                infoRequest.Headers.TryAddWithoutValidation("Referer", "http://www.kugou.com/");
+                using HttpResponseMessage infoResponse =
+                    await Http.SendAsync(infoRequest, cancellationToken).ConfigureAwait(false);
+                if (!infoResponse.IsSuccessStatusCode)
+                {
+                    AppLog.Info("net", "kugou-brief: info http="
+                        + ((int)infoResponse.StatusCode).ToString());
+                    return null;
+                }
+
+                string infoJson = await infoResponse.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument infoDoc = JsonDocument.Parse(infoJson);
+                if (infoDoc.RootElement.TryGetProperty("data", out JsonElement singer)
+                    && singer.TryGetProperty("profile", out JsonElement profileEl))
+                {
+                    string? profile = profileEl.GetString();
+                    if (!string.IsNullOrWhiteSpace(profile))
+                    {
+                        AppLog.Info("net", "kugou-brief: 命中 id=" + singerId
+                            + " profileLen=" + profile.Trim().Length.ToString());
+                        return profile.Trim();
+                    }
+                }
+
+                AppLog.Info("net", "kugou-brief: 无 profile id=" + singerId);
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("OnlineMusicApi.cs", caught); }
+
+            return null;
         }
 
         /// <summary>
@@ -122,6 +222,24 @@ namespace CelesteMusicPlayer
             {
                 IReadOnlyList<OnlineSongResult> hits =
                     await SearchNetEaseArtistsAsync(artistName, cancellationToken).ConfigureAwait(false);
+
+                if (hits.Count == 0)
+                {
+                    // 网易云对程序化访问是概率性风控：命中时就返回 {"code":-462} 验证页
+                    // （HTTP 200、无 artists），解析出来就是 0 个歌手。退避 1.2s 再试一次，
+                    // 多数情况第二发就过（2026-10-12 实测，curl 同 IP 也被间歇性拦）。
+                    AppLog.Info("net", "netease-brief: 首轮 0 命中，1.2s 后重试 name=" + artistName);
+                    try
+                    {
+                        await Task.Delay(1200, cancellationToken).ConfigureAwait(false);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                    }
+
+                    hits = await SearchNetEaseArtistsAsync(artistName, cancellationToken).ConfigureAwait(false);
+                }
+
                 string? id = null;
                 foreach (OnlineSongResult h in hits)
                 {

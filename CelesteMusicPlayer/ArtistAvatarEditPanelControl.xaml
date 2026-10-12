@@ -18,6 +18,8 @@
          裁剪框有圆形 / 矩形两种：圆形对应艺术家墙（圆形头像），
          矩形对应详情页这张矩形头像 —— 保存下来的都是同一块方形区域，
          各显示处再按自己的形状裁切，所以两种框只是构图参考，不会存两份图。
+         2026-10-12 第三轮用户要求：两个框不再二选一，同时显示（ShowShapeGuides），
+         选择按钮已删。
 
          ⚠️⚠️ 2026-10-12 血坑记录（XamlCompiler 不报错、直接原生崩 exit 1 / 0xC0000005）：
          ① CropViewport 必须是 Grid 不能是 Border：Border 只允许一个子元素，
@@ -88,11 +90,10 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
+                <!-- 缩放（2026-10-12 用户要求：去掉圆形/矩形选择按钮，
+                     两个取景框同时显示在裁剪框里作构图参考，见 ShowShapeGuides） -->
                 <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
-                    <TextBlock Text="裁切框：" VerticalAlignment="Center" FontSize="12" Opacity="0.7" />
-                    <ToggleButton x:Name="ShapeCircleButton" Content="圆形" IsChecked="True" Click="ShapeButton_Click" />
-                    <ToggleButton x:Name="ShapeRectButton" Content="矩形" Click="ShapeButton_Click" />
-                    <TextBlock Text="缩放" VerticalAlignment="Center" FontSize="12" Opacity="0.7" Margin="12,0,0,0" />
+                    <TextBlock Text="缩放" VerticalAlignment="Center" FontSize="12" Opacity="0.7" />
                     <Slider x:Name="ZoomSlider" Width="150" Minimum="0.5" Maximum="8"
                             StepFrequency="0.05" Value="1" ValueChanged="ZoomSlider_ValueChanged" />
                 </StackPanel>

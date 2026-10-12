@@ -118,12 +118,16 @@ namespace CelesteMusicPlayer
                 // 文字色不读 TextFillColorPrimaryBrush / TextFillColorSecondaryBrush：
                 // 令牌皮肤会把这两个全局刷子覆写成令牌色（为深色皮肤设计），
                 // 浅色主题下页签字就不是黑的了（2026-10-12 用户实测）。
-                // 这里按当前主题直接给固定色：浅色 = 黑 / 60% 黑，深色 = 白 / 60% 白，
+                // 主题也不能读 Application.Current.RequestedTheme：外壳（MainWindow 的
+                // Content 根）会按「界面风格」显式设置 RequestedTheme
+                // （见 UiTheme.ApplyUiStyleMode），App 级主题与元素实际主题可能不一致 ——
+                // 经典浅色下页签字被赋成白色、鼠标悬停反而变黑，根因就是这个（用户实测）。
+                // 按当前主题直接给固定色：浅色 = 黑 / 60% 黑，深色 = 白 / 60% 白，
                 // 任何皮肤下都保证可读；「选中提亮、未选中次级」的语义不变。
                 // ⚠️ 别把这几个 Color 写成嵌套三元：Roslyn NullableWalker 分析
                 // 二元嵌套条件表达式时会深递归，偶发原生崩 0xC0000005（2026-10-12 实测，
                 // publish 连崩 4 次，拆开就过）。
-                bool light = Application.Current.RequestedTheme == ApplicationTheme.Light;
+                bool light = IsLightThemeFor(button);
                 byte alpha = active ? (byte)255 : (byte)153;
                 Color textColor = light
                     ? Color.FromArgb(alpha, 0, 0, 0)
@@ -143,6 +147,30 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.WriteException("MainWindow.ArtistDetail.cs.ApplyTabChrome", caught);
             }
+        }
+
+        /// <summary>
+        /// 判断元素当前实际处于浅色还是深色主题。
+        /// 不能直接读 Application.Current.RequestedTheme：外壳（MainWindow 的 Content 根）
+        /// 会按「界面风格」显式设置 RequestedTheme（UiTheme.ApplyUiStyleMode），
+        /// App 级主题与元素实际主题可能不一致 —— 经典浅色下页签字被赋成白色就是这个原因
+        /// （2026-10-12 用户实测）。从自身往上找第一个显式指定了 Light/Dark 的祖先；
+        /// 一路都是 Default（跟随系统）时才回落到 App 级主题。
+        /// </summary>
+        private static bool IsLightThemeFor(FrameworkElement element)
+        {
+            DependencyObject? current = element;
+            while (current != null)
+            {
+                if (current is FrameworkElement fe && fe.RequestedTheme != ElementTheme.Default)
+                {
+                    return fe.RequestedTheme == ElementTheme.Light;
+                }
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return Application.Current.RequestedTheme == ApplicationTheme.Light;
         }
 
         // ── 头像页签：在线搜图 + 裁剪 ───────────────────────────────
@@ -280,7 +308,8 @@ namespace CelesteMusicPlayer
 
                 if (ArtistDetailOverviewSourceText != null)
                 {
-                    ArtistDetailOverviewSourceText.Text = "艺术家概览 · 网易云音乐";
+                    // 2026-10-12 第二轮起酷狗优先（网易云老接口被间歇风控），兜底网易云
+                    ArtistDetailOverviewSourceText.Text = "艺术家概览 · 酷狗音乐";
                 }
 
                 // 与当前打开的艺术家不一致（用户已经切走）就不再往界面上写
