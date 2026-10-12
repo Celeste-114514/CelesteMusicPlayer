@@ -76,11 +76,15 @@ namespace CelesteMusicPlayer
             return model;
         }
 
-        public static void SaveTag(string path, TagEditModel model)
+        /// <summary>
+        /// 写标签。返回 false = 没写（路径/模型为空，或写盘抛异常，异常已进日志）。
+        /// 标签板块的快照整体回滚靠这个返回值判断成败；旧窗口调用方忽略返回值即可。
+        /// </summary>
+        public static bool SaveTag(string path, TagEditModel model)
         {
             if (string.IsNullOrWhiteSpace(path) || model == null)
             {
-                return;
+                return false;
             }
 
             try
@@ -112,8 +116,9 @@ namespace CelesteMusicPlayer
                 }
 
                 file.Save();
+                return true;
             }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorService.cs", caught); }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorService.cs", caught); return false; }
         }
 
         public static void SaveEmbeddedLyrics(string path, string lyrics)

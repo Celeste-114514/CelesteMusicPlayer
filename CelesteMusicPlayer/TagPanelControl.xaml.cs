@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Xaml.Shapes;
 using Microsoft.UI.Input;
 using Windows.Storage;
 using Windows.Storage.Pickers;
@@ -53,14 +54,28 @@ namespace CelesteMusicPlayer
         /// <summary>面板就绪标记：Loaded 之后才允许响应选择变化（防初始化期 NRE）。</summary>
         private bool _panelReady;
 
+        /// <summary>空提示区的默认引导语（XAML 初值，ctor 里收下来；失败原因临时替换它）。</summary>
+        private string _emptyHintDefault = string.Empty;
+
         /// <summary>预览加载代数：快速切换选择时只认最后一次，避免旧文件的标签覆盖新文件的。</summary>
         private int _previewGeneration;
+
+        /// <summary>当前选中的行（单选编辑 / 多选批量填写都按它来）。</summary>
+        private List<TagFileItem> _quickEditSelection = new();
+
+        /// <summary>单选模式正在编辑的文件路径；多选 / 未选时为 null。</summary>
+        private string? _quickEditPath;
+
+        /// <summary>单选模式加载时的原值（「还原」与「没有改动」判断用）。</summary>
+        private TagEditModel? _quickEditLoaded;
 
         public TagPanelControl(Func<Brush>? accentProvider = null, nint hostHwnd = default)
         {
             _accentProvider = accentProvider;
             _hostHwnd = hostHwnd;
             InitializeComponent();
+
+            _emptyHintDefault = TagListEmptyHint.Text;
 
             TagFileListView.ItemsSource = _files;
 
@@ -120,10 +135,10 @@ namespace CelesteMusicPlayer
                 IReadOnlyList<StorageFile> files = await picker.PickMultipleFilesAsync();
                 if (files == null || files.Count == 0)
                 {
-                    return;
+                    return; // 用户取消
                 }
 
-                await AddFilesAsync(files.Select(f => f.Path));
+                await AddFilesAsync(files.Select(f => f.Path), "文件选取器");
             }
             catch (Exception caught)
             {
@@ -149,20 +164,35 @@ namespace CelesteMusicPlayer
                 picker.FileTypeFilter.Add("*");
 
                 StorageFolder? folder = await picker.PickSingleFolderAsync();
-                if (folder == null || string.IsNullOrWhiteSpace(folder.Path))
+                if (folder == null)
                 {
+                    return; // 用户取消
+                }
+
+                if (string.IsNullOrWhiteSpace(folder.Path))
+                {
+                    // 特殊 shell 位置（库文件夹等）解析不出磁盘路径：明说，别静默
+                    global::CelesteMusicPlayer.StartupLog.Write("TagPanel: 添加文件夹返回了空路径");
+                    ShowEmptyHint("没能解析刚才所选文件夹的位置，请换一个普通磁盘文件夹再试。");
+                    TagStatusText.Text = "所选文件夹无法解析出路径。";
                     return;
                 }
 
                 TagStatusText.Text = "正在扫描文件夹…";
+                System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
                 string[] paths = await Task.Run(() => EnumerateAudioFiles(folder.Path).ToArray());
+                sw.Stop();
+                global::CelesteMusicPlayer.StartupLog.Write(
+                    $"TagPanel: 扫描文件夹 {folder.Path} → {paths.Length} 个音频（{sw.ElapsedMilliseconds}ms）");
+
                 if (paths.Length == 0)
                 {
+                    ShowEmptyHint("这个文件夹（含里面的子文件夹）里没有找到支持的音频文件。换个文件夹试试。");
                     TagStatusText.Text = "该文件夹（含子文件夹）里没有支持的音频文件。";
                     return;
                 }
 
-                await AddFilesAsync(paths);
+                await AddFilesAsync(paths, $"文件夹 {folder.Path}");
             }
             catch (Exception caught)
             {
@@ -172,7 +202,7 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>把一批路径加进列表（自动去重；读标签在后台线程做，不卡界面）。</summary>
-        private async Task AddFilesAsync(IEnumerable<string> paths)
+        private async Task AddFilesAsync(IEnumerable<string> paths, string source = "文件")
         {
             string[] candidates = paths
                 .Where(p => !string.IsNullOrWhiteSpace(p))
@@ -187,14 +217,23 @@ namespace CelesteMusicPlayer
                 TagStatusText.Text = skipped > 0
                     ? $"选中的文件都已在列表中（跳过 {skipped} 个）。"
                     : "没有可添加的文件。";
+                if (_files.Count == 0)
+                {
+                    ShowEmptyHint(skipped > 0
+                        ? "选中的文件都已经在列表里了，没有新文件可加。"
+                        : "没有选中可添加的文件。");
+                }
                 return;
             }
 
             TagStatusText.Text = $"正在读取标签 0/{fresh.Length}…";
+            // 导入一开始就收起空提示：文件正在来的路上，别让用户对着「列表还是空的」干等
+            TagListEmptyHint.Visibility = Visibility.Collapsed;
 
             // 逐批读：每批 50 个，读一批报一批进度（大文件夹不会假死一片）
             const int BatchSize = 50;
             int done = 0;
+            int added = 0;
             for (int i = 0; i < fresh.Length; i += BatchSize)
             {
                 string[] batch = fresh.Skip(i).Take(BatchSize).ToArray();
@@ -205,6 +244,7 @@ namespace CelesteMusicPlayer
                     if (entry != null)
                     {
                         _files.Add(entry);
+                        added++;
                     }
                 }
 
@@ -212,9 +252,25 @@ namespace CelesteMusicPlayer
                 TagStatusText.Text = $"正在读取标签 {done}/{fresh.Length}…";
             }
 
+            int failed = fresh.Length - added;
             Renumber();
             RefreshCountUi();
-            TagStatusText.Text = $"已添加 {fresh.Length} 个文件" + (skipped > 0 ? $"（跳过重复 {skipped} 个）" : string.Empty) + "。";
+            global::CelesteMusicPlayer.StartupLog.Write(
+                $"TagPanel: {source} 新增 {added} 个，跳过重复 {skipped} 个，读取失败 {failed} 个");
+
+            if (added == 0)
+            {
+                // 全部读取失败：提示区说清楚，别只留一行小字
+                ShowEmptyHint($"选中的 {fresh.Length} 个文件都没能读出标签（详情见日志），一个都没加进来。");
+                TagStatusText.Text = "标签读取失败，详见日志。";
+                return;
+            }
+
+            ResetEmptyHint();
+            TagStatusText.Text = $"已添加 {added} 个文件"
+                + (skipped > 0 ? $"（跳过重复 {skipped} 个）" : string.Empty)
+                + (failed > 0 ? $"（{failed} 个读取失败）" : string.Empty)
+                + "。";
         }
 
         private void RemoveSelectedButton_Click(object sender, RoutedEventArgs e)
@@ -233,6 +289,11 @@ namespace CelesteMusicPlayer
 
             Renumber();
             RefreshCountUi();
+            if (_files.Count == 0)
+            {
+                ResetEmptyHint();
+            }
+
             TagStatusText.Text = $"已移除 {selected.Count} 个文件（只是移出本列表，不动硬盘上的文件）。";
         }
 
@@ -246,12 +307,13 @@ namespace CelesteMusicPlayer
             int count = _files.Count;
             _files.Clear();
             RefreshCountUi();
+            ResetEmptyHint();
             ClearQuickEditPreview();
             TagStatusText.Text = $"已清空 {count} 个文件（只是移出本列表，不动硬盘上的文件）。";
         }
 
         // =====================================================================
-        // 快速编辑页：选中文件的只读标签预览
+        // 快速编辑页：选中文件的标签编辑（阶段 6：可编辑 + 保存 + 快照整体回滚）
         // =====================================================================
 
         private async void TagFileListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -262,6 +324,7 @@ namespace CelesteMusicPlayer
             }
 
             List<TagFileItem> selected = TagFileListView.SelectedItems.Cast<TagFileItem>().ToList();
+            _quickEditSelection = selected;
             RefreshCountUi();
 
             if (selected.Count == 0)
@@ -272,8 +335,10 @@ namespace CelesteMusicPlayer
 
             if (selected.Count > 1)
             {
-                // 多选：本阶段只提示，批量填写是阶段 6/7 的事
+                // 多选：批量填写模式（只填想改的字段，留空的不动）
                 _previewGeneration++;
+                _quickEditPath = null;
+                _quickEditLoaded = null;
                 ShowQuickEditBatchCard(selected.Count);
                 return;
             }
@@ -309,16 +374,27 @@ namespace CelesteMusicPlayer
 
             if (loaded == null)
             {
+                _quickEditPath = null;
+                _quickEditLoaded = null;
                 QuickEditTitle.Text = "标签读取失败";
                 return;
             }
 
+            _quickEditPath = path;
+            _quickEditLoaded = loaded.Value.Tag;
             ApplyQuickEditPreview(path, loaded.Value.Tag, loaded.Value.Cover);
         }
 
         private void ApplyQuickEditPreview(string path, TagEditModel model, byte[]? cover)
         {
             QuickEditFileCard.Visibility = Visibility.Visible;
+            ApplyQuickEditFields(path, model);
+            ApplyCoverToImage(cover);
+        }
+
+        /// <summary>只填字段框（不动封面）——「还原」和落盘后刷新预览都用它。</summary>
+        private void ApplyQuickEditFields(string path, TagEditModel model)
+        {
             QuickEditTitle.Text = string.IsNullOrWhiteSpace(model.Title) ? System.IO.Path.GetFileName(path) : model.Title;
             QuickEditPath.Text = path;
 
@@ -332,7 +408,221 @@ namespace CelesteMusicPlayer
             QuickCommentBox.Text = model.Comment;
             QuickLyricsBox.Text = model.Lyrics;
 
-            ApplyCoverToImage(cover);
+            QuickEditModeHint.Text = _quickEditSelection.Count > 1
+                ? $"多选模式：填好的字段会写入全部 {_quickEditSelection.Count} 个文件，留空的字段保持原值。想把某个字段清空，请单选该文件后编辑。"
+                : "「还原」= 放弃还没保存的改动，恢复成磁盘上的当前值。";
+        }
+
+        // =====================================================================
+        // 阶段 6：保存 / 还原 / 改动前快照整体回滚
+        // =====================================================================
+
+        /// <summary>「还原」：放弃还没保存的改动。单选=恢复成加载时的值；多选=清空（留空即不动）。</summary>
+        private void QuickRevertButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_quickEditLoaded != null && _quickEditSelection.Count == 1)
+            {
+                // 只还原字段，不碰封面（封面要重看得重新选一次文件）
+                ApplyQuickEditFields(_quickEditPath ?? string.Empty, _quickEditLoaded);
+                TagStatusText.Text = "已还原成磁盘上的当前值（封面未动）。";
+                return;
+            }
+
+            if (_quickEditSelection.Count > 1)
+            {
+                ShowQuickEditBatchCard(_quickEditSelection.Count);
+                TagStatusText.Text = "已清空批量填写框（留空的字段不会被修改）。";
+                return;
+            }
+
+            TagStatusText.Text = "还没有选中文件。";
+        }
+
+        /// <summary>
+        /// 「保存」：把字段写进选中的文件。安全底线 = 改动前快照 + 失败整体回滚：
+        /// 先读每个目标文件的原标签存起来，再逐个写；任何一个写失败，
+        /// 已经把成功写过的文件全部用快照写回原标签，绝不留在半改状态。
+        /// </summary>
+        private async void QuickSaveButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                if (_quickEditSelection.Count == 0)
+                {
+                    TagStatusText.Text = "先在右侧文件列表里选中要保存的文件。";
+                    return;
+                }
+
+                string yearText = (QuickYearBox.Text ?? string.Empty).Trim();
+                string trackText = (QuickTrackBox.Text ?? string.Empty).Trim();
+                if (yearText.Length > 0 && !uint.TryParse(yearText, out _))
+                {
+                    TagStatusText.Text = "年份要填数字（比如 2024），也可以留空。";
+                    return;
+                }
+
+                if (trackText.Length > 0 && !uint.TryParse(trackText, out _))
+                {
+                    TagStatusText.Text = "曲目号要填数字（比如 3），也可以留空。";
+                    return;
+                }
+
+                bool batch = _quickEditSelection.Count > 1;
+                TagEditModel template = new()
+                {
+                    Title = QuickTitleBox.Text ?? string.Empty,
+                    Artist = QuickArtistBox.Text ?? string.Empty,
+                    Album = QuickAlbumBox.Text ?? string.Empty,
+                    AlbumArtist = QuickAlbumArtistBox.Text ?? string.Empty,
+                    Year = yearText.Length > 0 ? uint.Parse(yearText) : 0,
+                    Track = trackText.Length > 0 ? uint.Parse(trackText) : 0,
+                    Genre = QuickGenreBox.Text ?? string.Empty,
+                    Comment = QuickCommentBox.Text ?? string.Empty,
+                    Lyrics = QuickLyricsBox.Text ?? string.Empty
+                };
+
+                // 单选且一个字段都没动 → 不写盘
+                if (!batch && _quickEditLoaded != null && ModelsEqual(template, _quickEditLoaded))
+                {
+                    TagStatusText.Text = "没有改动，不需要保存。";
+                    return;
+                }
+
+                List<TagFileItem> targets = _quickEditSelection.ToList();
+                TagStatusText.Text = batch
+                    ? $"正在保存到 {targets.Count} 个文件…"
+                    : "正在保存…";
+
+                // 改动前快照（每个文件读一遍原标签）→ 逐个写 → 有失败整体回滚
+                List<(string Path, TagEditModel Before)> snapshots = new();
+                List<string> failures = new();
+                await Task.Run(() =>
+                {
+                    foreach (TagFileItem item in targets)
+                    {
+                        TagEditModel before = TagEditorService.ReadTag(item.FilePath);
+                        snapshots.Add((item.FilePath, before));
+
+                        TagEditModel toWrite = batch ? MergeForBatch(template, before) : template;
+                        if (!TagEditorService.SaveTag(item.FilePath, toWrite))
+                        {
+                            failures.Add(item.FilePath);
+                        }
+                    }
+                });
+
+                if (failures.Count > 0)
+                {
+                    int rolledBack = 0;
+                    await Task.Run(() =>
+                    {
+                        foreach ((string path, TagEditModel before) in snapshots)
+                        {
+                            if (failures.Contains(path, StringComparer.OrdinalIgnoreCase))
+                            {
+                                continue;
+                            }
+
+                            if (TagEditorService.SaveTag(path, before))
+                            {
+                                rolledBack++;
+                            }
+                        }
+                    });
+
+                    global::CelesteMusicPlayer.StartupLog.Write(
+                        $"TagPanel: 保存失败整体回滚：目标 {targets.Count}，失败 {failures.Count}，已还原 {rolledBack}");
+                    TagStatusText.Text = $"{failures.Count} 个文件保存失败；已写成功的 {rolledBack} 个已还原到改动前的标签。详情见日志。";
+                    return;
+                }
+
+                global::CelesteMusicPlayer.StartupLog.Write(
+                    $"TagPanel: 已保存 {targets.Count} 个文件（{(batch ? "批量" : "单选")}）");
+
+                // 写成功了：刷新受影响的行（行模型换新实例，OneTime 绑定重新求值）
+                await RefreshSavedRowsAsync(targets);
+
+                TagStatusText.Text = batch
+                    ? $"已保存到 {targets.Count} 个文件。"
+                    : "已保存。";
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.QuickSaveButton_Click", caught);
+                TagStatusText.Text = "保存失败：" + caught.Message;
+            }
+        }
+
+        /// <summary>批量模式合并：模板里留空的字段保持原值（想清空字段请单选该文件编辑）。</summary>
+        private static TagEditModel MergeForBatch(TagEditModel template, TagEditModel before)
+        {
+            return new TagEditModel
+            {
+                Title = string.IsNullOrEmpty(template.Title) ? before.Title : template.Title,
+                Artist = string.IsNullOrEmpty(template.Artist) ? before.Artist : template.Artist,
+                Album = string.IsNullOrEmpty(template.Album) ? before.Album : template.Album,
+                AlbumArtist = string.IsNullOrEmpty(template.AlbumArtist) ? before.AlbumArtist : template.AlbumArtist,
+                Year = template.Year != 0 ? template.Year : before.Year,
+                Track = template.Track != 0 ? template.Track : before.Track,
+                Genre = string.IsNullOrEmpty(template.Genre) ? before.Genre : template.Genre,
+                Comment = string.IsNullOrEmpty(template.Comment) ? before.Comment : template.Comment,
+                Lyrics = string.IsNullOrEmpty(template.Lyrics) ? before.Lyrics : template.Lyrics
+            };
+        }
+
+        private static bool ModelsEqual(TagEditModel a, TagEditModel b)
+        {
+            return a.Title == b.Title
+                && a.Artist == b.Artist
+                && a.Album == b.Album
+                && a.AlbumArtist == b.AlbumArtist
+                && a.Year == b.Year
+                && a.Track == b.Track
+                && a.Genre == b.Genre
+                && a.Comment == b.Comment
+                && a.Lyrics == b.Lyrics;
+        }
+
+        /// <summary>
+        /// 保存成功后刷新行：BuildEntry 重读磁盘生成新行模型替换旧实例
+        /// （x:Bind 默认 OneTime，不换实例行上的文字不会变），并尽量恢复原选中。
+        /// </summary>
+        private async Task RefreshSavedRowsAsync(List<TagFileItem> saved)
+        {
+            HashSet<string> selectedPaths = new(
+                TagFileListView.SelectedItems.Cast<TagFileItem>().Select(i => i.FilePath),
+                StringComparer.OrdinalIgnoreCase);
+
+            (TagFileItem Old, TagFileItem? New)[] rebuilt = await Task.Run(() => saved
+                .Select(i => (i, BuildEntry(i.FilePath)))
+                .ToArray());
+
+            foreach ((TagFileItem old, TagFileItem? neo) in rebuilt)
+            {
+                if (neo == null)
+                {
+                    continue;
+                }
+
+                int idx = _files.IndexOf(old);
+                if (idx >= 0)
+                {
+                    _files[idx] = neo;
+                }
+            }
+
+            // 恢复选中（单选时顺带让预览重读磁盘，确认落盘结果）
+            if (selectedPaths.Count > 0)
+            {
+                TagFileListView.SelectedItems.Clear();
+                foreach (TagFileItem item in _files)
+                {
+                    if (selectedPaths.Contains(item.FilePath))
+                    {
+                        TagFileListView.SelectedItems.Add(item);
+                    }
+                }
+            }
         }
 
         private void ShowQuickEditBatchCard(int count)
@@ -353,11 +643,16 @@ namespace CelesteMusicPlayer
             QuickLyricsBox.Text = string.Empty;
 
             QuickEditTitle.Text = $"已选 {count} 个文件";
-            QuickEditPath.Text = "批量填写字段在下一阶段开放";
+            QuickEditPath.Text = "批量填写：只填想改的字段，留空的不动";
+            QuickEditModeHint.Text = $"多选模式：填好的字段会写入全部 {count} 个文件，留空的字段保持原值。想把某个字段清空，请单选该文件后编辑。";
         }
 
         private void ClearQuickEditPreview()
         {
+            _quickEditPath = null;
+            _quickEditLoaded = null;
+            _quickEditSelection = new List<TagFileItem>();
+
             // 卡片保持可见：空状态下也要让人看出「这里是显示选中文件标签的地方」
             QuickEditFileCard.Visibility = Visibility.Visible;
             QuickEditCover.Source = null;
@@ -375,6 +670,7 @@ namespace CelesteMusicPlayer
 
             QuickEditTitle.Text = "未选择文件";
             QuickEditPath.Text = "从右侧文件列表选中一个文件";
+            QuickEditModeHint.Text = "「还原」= 放弃还没保存的改动，恢复成磁盘上的当前值。";
         }
 
         private void ApplyCoverToImage(byte[]? bytes)
@@ -606,12 +902,27 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>空提示区换成一条具体原因（导入失败 / 扫描为空时调用，列表空着才看得见）。</summary>
+        private void ShowEmptyHint(string reason)
+        {
+            TagListEmptyHint.Text = reason;
+            TagListEmptyHint.Visibility = Visibility.Visible;
+        }
+
+        /// <summary>空提示区恢复默认引导语。</summary>
+        private void ResetEmptyHint()
+        {
+            TagListEmptyHint.Text = _emptyHintDefault;
+        }
+
         private void RefreshCountUi()
         {
             int total = _files.Count;
             int selected = TagFileListView?.SelectedItems.Count ?? 0;
 
             FileCountText.Text = total > 0 ? $"共 {total} 个文件" : "0 个文件";
+            // 只切显隐，不改文字：文字由 ShowEmptyHint / ResetEmptyHint 管
+            // （失败原因要在列表空时一直显示，不能被这里冲掉）
             TagListEmptyHint.Visibility = total == 0 ? Visibility.Visible : Visibility.Collapsed;
 
             if (selected > 0)
@@ -633,13 +944,18 @@ namespace CelesteMusicPlayer
         //   ③ 下面的 ColDefaultWidths / ColMinWidths
         // 运行期以 ③ 为唯一真相：Loaded 时按 ③ 刷一遍表头和所有可见行，
         // 之后拖拽只改 ③ + 同步刷（行模板 Loaded 时也会按 ③ 盖章，新行不会错位）。
+        //
+        // 拖拽语义（2026-10-13 用户实测定稿）：竖线右侧的区域一起跟着动、左侧不动。
+        // 实现 = 14 个真实列全部定宽 + 末尾 1 个不可见星号填充列（FillerCol）吸收
+        // 「视口比内容宽」时的剩余宽度。星号列若混在真实列中间（旧设计放在标题列），
+        // 它会把被拖列的变化量吞掉，出现「往左拖、字往右去」的怪事。
         // =====================================================================
 
         /// <summary>总列数（与 XAML 两处 ColumnDefinitions 严格一致）。</summary>
-        private const int ColCount = 14;
+        private const int ColCount = 15;
 
-        /// <summary>「标题」列：唯一星号列，自动吸收剩余宽度；拖它的把手改的是 MinWidth。</summary>
-        private const int StarCol = 1;
+        /// <summary>末尾填充列下标（不可见、不拖拽，只负责吸收剩余宽度）。</summary>
+        private const int FillerCol = 14;
 
         private const double ColSpacing = 8;
         private const double RowPaddingX = 10;
@@ -651,12 +967,14 @@ namespace CelesteMusicPlayer
             { 28, 100, 60, 60, 36, 32, 48, 44, 80, 44, 36, 48, 48, 48 };
 
         private readonly double[] _colWidths = (double[])ColDefaultWidths.Clone();
-        private double _starMinWidth = ColDefaultWidths[StarCol];
         private double _gridMinWidth;
         private double _listViewportW;
         private double _lastViewportW = -1;
         private ScrollViewer? _listScroller;
         private TranslateTransform? _headerSlide;
+
+        /// <summary>上次应用列宽时是否处于「内容宽于视口」（溢出滚动）状态。只有状态翻转才需要全量重刷。</summary>
+        private bool _overflowState;
 
         // 拖拽状态（_dragCol < 0 表示没在拖）
         private int _dragCol = -1;
@@ -694,7 +1012,7 @@ namespace CelesteMusicPlayer
             TagListHeaderGrid.RenderTransform = _headerSlide;
             UpdateHeaderClip();
 
-            // 3) 表头列边界生成拖拽把手（6px 透明热区，代码生成免得 XAML 写 14 遍）
+            // 3) 表头列边界生成拖拽把手（6px 热区 + 1px 可见竖线，代码生成免得 XAML 写 14 遍）
             BuildColumnGrips();
 
             TagHeaderHost.SizeChanged += TagHeaderHost_SizeChanged;
@@ -712,13 +1030,13 @@ namespace CelesteMusicPlayer
                     _headerSlide.X = -_listScroller.HorizontalOffset;
                 }
 
-                // 竖滚动条出现/消失会改变视口宽 → 行宽阈值跟着变
+                // 竖滚动条出现/消失会改变视口宽 → 行宽阈值跟着变（只有溢出状态翻转才全量重刷）
                 double vw = _listScroller?.ViewportWidth ?? 0;
                 if (vw > 0 && Math.Abs(vw - _lastViewportW) > 0.5)
                 {
                     _lastViewportW = vw;
                     _listViewportW = vw;
-                    ApplyColumnWidths();
+                    RefreshOverflowState();
                 }
             }
             catch (Exception caught)
@@ -743,9 +1061,9 @@ namespace CelesteMusicPlayer
 
         private void BuildColumnGrips()
         {
-            for (int i = 0; i < ColCount; i++)
+            for (int i = 0; i < FillerCol; i++)
             {
-                ColumnResizeGrip grip = new();
+                ColumnResizeGrip grip = new(_accentProvider);
                 Grid.SetColumn(grip, i);
                 grip.PointerPressed += ColumnGrip_PointerPressed;
                 grip.PointerMoved += ColumnGrip_PointerMoved;
@@ -765,8 +1083,9 @@ namespace CelesteMusicPlayer
             int col = Grid.GetColumn(grip);
             _dragCol = col;
             _dragStartX = e.GetCurrentPoint(TagListHeaderGrid).Position.X;
-            _dragStartW = col == StarCol ? _starMinWidth : _colWidths[col];
+            _dragStartW = _colWidths[col];
             grip.CapturePointer(e.Pointer);
+            grip.SetDragging(true);
             e.Handled = true;
         }
 
@@ -797,26 +1116,29 @@ namespace CelesteMusicPlayer
             {
                 // 指针已经丢了就算了
             }
+            grip.SetDragging(false);
             _dragCol = -1;
             e.Handled = true;
         }
 
         private void SetColumnWidth(int col, double width)
         {
+            if (col < 0 || col >= FillerCol)
+            {
+                return;
+            }
+
             if (width < ColMinWidths[col])
             {
                 width = ColMinWidths[col];
             }
 
-            if (col == StarCol)
+            if (Math.Abs(_colWidths[col] - width) < 0.5)
             {
-                _starMinWidth = width;
-            }
-            else
-            {
-                _colWidths[col] = width;
+                return;
             }
 
+            _colWidths[col] = width;
             ApplyColumnWidths();
         }
 
@@ -824,13 +1146,15 @@ namespace CelesteMusicPlayer
         private void ApplyColumnWidths()
         {
             double fixedSum = 0;
-            for (int i = 0; i < ColCount; i++)
+            for (int i = 0; i < FillerCol; i++)
             {
-                fixedSum += i == StarCol ? _starMinWidth : _colWidths[i];
+                fixedSum += _colWidths[i];
             }
             _gridMinWidth = fixedSum + ColSpacing * (ColCount - 1) + RowPaddingX * 2;
 
-            ApplyWidthsToGrid(TagListHeaderGrid, TagHeaderHost.ActualWidth);
+            // 表头与行用同一个参照视口（列表的内部视口，含竖滚动条占位），
+            // 否则竖滚动条出现时表头会比行宽一点，列就对不齐
+            ApplyWidthsToGrid(TagListHeaderGrid, _listViewportW);
 
             foreach (TagFileItem item in _files)
             {
@@ -843,26 +1167,36 @@ namespace CelesteMusicPlayer
                     }
                 }
             }
+
+            _overflowState = _listViewportW > 0 && _listViewportW < _gridMinWidth;
+        }
+
+        /// <summary>
+        /// 视口宽变化后调用。只有「溢出/不溢出」状态翻转才全量重刷：
+        /// 不溢出时末尾星号填充列自动吸收剩余宽度，行会自己拉伸；
+        /// 每个 tick 都逐行设宽正是拖窗口卡顿的根源（2026-10-13 用户实测）。
+        /// </summary>
+        private void RefreshOverflowState()
+        {
+            bool overflow = _listViewportW > 0 && _listViewportW < _gridMinWidth;
+            if (overflow != _overflowState)
+            {
+                ApplyColumnWidths();
+            }
         }
 
         private void ApplyWidthsToGrid(Grid grid, double viewportW)
         {
             ColumnDefinitionCollection cols = grid.ColumnDefinitions;
-            for (int i = 0; i < cols.Count && i < ColCount; i++)
+            for (int i = 0; i < cols.Count && i < FillerCol; i++)
             {
-                if (i == StarCol)
-                {
-                    cols[i].MinWidth = _starMinWidth;
-                }
-                else
-                {
-                    cols[i].Width = new GridLength(_colWidths[i]);
-                }
+                cols[i].Width = new GridLength(_colWidths[i]);
             }
 
+            // 末尾填充列不碰（XAML 里就是 *，自动吸收剩余宽度）
             grid.MinWidth = _gridMinWidth;
             // 视口比总宽窄 → 内容按总宽渲染（超出部分靠裁剪/横向滚动）；
-            // 否则交回自动拉伸（星号列填满剩余空间）。NaN = 清除显式宽度。
+            // 否则交回自动拉伸（填充列填满剩余空间）。NaN = 清除显式宽度。
             grid.Width = viewportW > 0 && viewportW < _gridMinWidth ? _gridMinWidth : double.NaN;
         }
 
@@ -878,7 +1212,7 @@ namespace CelesteMusicPlayer
         private void TagHeaderHost_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             UpdateHeaderClip();
-            ApplyColumnWidths();
+            RefreshOverflowState();
         }
 
         private void TagFileListView_SizeChanged(object sender, SizeChangedEventArgs e)
@@ -889,7 +1223,7 @@ namespace CelesteMusicPlayer
                 _lastViewportW = vw;
                 _listViewportW = vw;
             }
-            ApplyColumnWidths();
+            RefreshOverflowState();
         }
 
         /// <summary>行容器里找行模板 Grid：靠列数匹配（ListViewItem 内部模板的 Grid 没这么多列）。</summary>
@@ -960,16 +1294,43 @@ namespace CelesteMusicPlayer
         public string FileSizeText { get; set; } = "-";
     }
 
-    /// <summary>表头列宽拖拽把手：6px 透明热区 + 东西向光标（ProtectedCursor 只有子类能设）。</summary>
+    /// <summary>
+    /// 表头列宽拖拽把手：6px 热区 + 1px 可见竖线（贴在列边界上，与行内淡竖线同一根线）。
+    /// 悬停 / 拖拽中竖线加粗并染强调色（外部注入，遵守取色铁律）。
+    /// 拖拽语义：改的是本列（竖线左边）的宽，右侧所有列整体跟随平移，左侧不动。
+    /// </summary>
     internal sealed class ColumnResizeGrip : Grid
     {
-        public ColumnResizeGrip()
+        private readonly Rectangle _line;
+        private readonly SolidColorBrush _normalBrush;
+        private readonly Func<Brush>? _accentProvider;
+        private bool _hover;
+        private bool _drag;
+
+        public ColumnResizeGrip(Func<Brush>? accentProvider = null)
         {
+            _accentProvider = accentProvider;
             Width = 6;
             HorizontalAlignment = HorizontalAlignment.Right;
             VerticalAlignment = VerticalAlignment.Stretch;
             // 透明但可命中（null Background 不参与命中测试）
             Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(0, 0, 0, 0));
+
+            _normalBrush = new SolidColorBrush(global::Windows.UI.Color.FromArgb(0x66, 0x80, 0x80, 0x80));
+            _line = new Rectangle
+            {
+                Width = 1,
+                HorizontalAlignment = HorizontalAlignment.Right,
+                VerticalAlignment = VerticalAlignment.Stretch,
+                IsHitTestVisible = false,
+                Fill = _normalBrush
+            };
+            Children.Add(_line);
+
+            PointerEntered += (s, e) => { _hover = true; RefreshVisual(); };
+            PointerExited += (s, e) => { _hover = false; RefreshVisual(); };
+            PointerCanceled += (s, e) => { _hover = false; RefreshVisual(); };
+
             try
             {
                 ProtectedCursor = Microsoft.UI.Input.InputSystemCursor.Create(
@@ -979,6 +1340,34 @@ namespace CelesteMusicPlayer
             {
                 // 老系统没有该光标形状就算了，不影响拖拽
             }
+        }
+
+        /// <summary>拖拽开始/结束：期间指针被把手捕获，PointerExited 不一定可靠，显式压住高亮。</summary>
+        internal void SetDragging(bool dragging)
+        {
+            _drag = dragging;
+            RefreshVisual();
+        }
+
+        private void RefreshVisual()
+        {
+            bool hot = _hover || _drag;
+            _line.Width = hot ? 2 : 1;
+
+            Brush? accent = null;
+            if (hot)
+            {
+                try
+                {
+                    accent = _accentProvider?.Invoke();
+                }
+                catch
+                {
+                    // 取色失败退回灰色加粗，别让把手失效
+                }
+            }
+
+            _line.Fill = accent ?? _normalBrush;
         }
     }
 }

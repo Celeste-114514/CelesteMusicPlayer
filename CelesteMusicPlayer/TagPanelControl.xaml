@@ -11,7 +11,7 @@
     <!-- 标签板块（2026-10-13 阶段 5a 骨架）：mp3tag 式「左标签面板 + 右文件列表」。
          左列：横向子导航（ShellPageHost 生成，4 页）+ 当前子页面板；
          右列：工具条 + 列表头 + 文件表格 + 状态条。
-         快速编辑本阶段只做只读预览；编辑 / 保存 / 撤销快照是阶段 6，
+         快速编辑页：字段可编辑 + 保存 + 改动前快照整体回滚（阶段 6 落地）；
          批量工具 / 排序编号 / 在线补全分别在阶段 7 / 8 与后续在线阶段接入。
          取色铁律：ShellPageHost 的强调色由外部注入（构造函数传 DspAccentBrush），
          界面里其它颜色一律 ThemeResource，不自己读系统强调色。 -->
@@ -39,7 +39,7 @@
             <!-- 子页面板容器：4 个面板全部常驻，显隐由 ShellPageHost 统一管 -->
             <Grid x:Name="TagSubPageHost" Grid.Row="1">
 
-                <!-- ══════════ 页 1：快速编辑（本阶段只读预览） ══════════ -->
+                <!-- ══════════ 页 1：快速编辑（可编辑 + 保存 + 快照回滚） ══════════ -->
                 <ScrollViewer
                     x:Name="QuickEditPanel"
                     VerticalScrollBarVisibility="Auto"
@@ -53,19 +53,19 @@
                                 FontSize="12"
                                 Opacity="0.75"
                                 TextWrapping="WrapWholeWords"
-                                Text="从右侧文件列表选中一个文件即可在这里预览它的标签。修改、保存和撤销快照在下一阶段开放。" />
+                                Text="从右侧文件列表选中文件即可在这里编辑标签。保存前会自动备份原标签，任何一步失败都会把已改的文件整体还原；多选时只填想改的字段，留空的不动。" />
                         </Border>
 
-                        <!-- 当前文件：封面 + 标题 + 路径 -->
-                        <Grid x:Name="QuickEditFileCard" ColumnSpacing="10">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="Auto" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
+                        <!-- 当前文件：封面（放大到 240，约旧版 4~5 倍）+ 标题 + 路径 -->
+                        <Grid x:Name="QuickEditFileCard">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto" />
+                                <RowDefinition Height="Auto" />
+                            </Grid.RowDefinitions>
                             <Border
-                                Width="56"
-                                Height="56"
-                                CornerRadius="8"
+                                Width="240"
+                                Height="240"
+                                CornerRadius="12"
                                 Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1">
@@ -74,35 +74,51 @@
                                     <FontIcon
                                         x:Name="QuickEditNoCoverIcon"
                                         Glyph="&#xE8B9;"
-                                        FontSize="24"
+                                        FontSize="96"
                                         Opacity="0.35"
                                         HorizontalAlignment="Center"
                                         VerticalAlignment="Center"
                                         Visibility="Collapsed" />
                                 </Grid>
                             </Border>
-                            <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                            <StackPanel Grid.Row="1" Spacing="2" Margin="0,8,0,0">
                                 <TextBlock x:Name="QuickEditTitle" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
                                 <TextBlock x:Name="QuickEditPath" FontSize="11" Opacity="0.55" TextTrimming="CharacterEllipsis" />
                             </StackPanel>
                         </Grid>
 
-                        <!-- 只读字段（阶段 6 换成可编辑 + 保存 + 撤销快照） -->
-                        <TextBox x:Name="QuickTitleBox" Header="标题" IsReadOnly="True" />
-                        <TextBox x:Name="QuickArtistBox" Header="艺术家" IsReadOnly="True" />
-                        <TextBox x:Name="QuickAlbumBox" Header="专辑" IsReadOnly="True" />
-                        <TextBox x:Name="QuickAlbumArtistBox" Header="专辑艺术家" IsReadOnly="True" />
+                        <!-- 可编辑字段（阶段 6：保存前快照，失败整体还原） -->
+                        <TextBox x:Name="QuickTitleBox" Header="标题" />
+                        <TextBox x:Name="QuickArtistBox" Header="艺术家" />
+                        <TextBox x:Name="QuickAlbumBox" Header="专辑" />
+                        <TextBox x:Name="QuickAlbumArtistBox" Header="专辑艺术家" />
                         <Grid ColumnSpacing="10">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <TextBox x:Name="QuickYearBox" Header="年份" Grid.Column="0" IsReadOnly="True" />
-                            <TextBox x:Name="QuickTrackBox" Header="曲目号" Grid.Column="1" IsReadOnly="True" />
+                            <TextBox x:Name="QuickYearBox" Header="年份" Grid.Column="0" />
+                            <TextBox x:Name="QuickTrackBox" Header="曲目号" Grid.Column="1" />
                         </Grid>
-                        <TextBox x:Name="QuickGenreBox" Header="流派" IsReadOnly="True" />
-                        <TextBox x:Name="QuickCommentBox" Header="注释" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" IsReadOnly="True" />
-                        <TextBox x:Name="QuickLyricsBox" Header="歌词" AcceptsReturn="True" TextWrapping="Wrap" Height="150" IsReadOnly="True" />
+                        <TextBox x:Name="QuickGenreBox" Header="流派" />
+                        <TextBox x:Name="QuickCommentBox" Header="注释" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" />
+                        <TextBox x:Name="QuickLyricsBox" Header="歌词" AcceptsReturn="True" TextWrapping="Wrap" Height="150" />
+
+                        <!-- 保存 / 还原 -->
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button x:Name="QuickSaveButton" Grid.Column="0" Content="保存" Click="QuickSaveButton_Click" />
+                            <Button x:Name="QuickRevertButton" Grid.Column="1" Content="还原" Click="QuickRevertButton_Click" />
+                        </Grid>
+                        <TextBlock
+                            x:Name="QuickEditModeHint"
+                            FontSize="12"
+                            Opacity="0.6"
+                            TextWrapping="WrapWholeWords"
+                            Text="「还原」= 放弃还没保存的改动，恢复成磁盘上的当前值。" />
                     </StackPanel>
                 </ScrollViewer>
 
@@ -208,12 +224,15 @@
 
             <!-- 列表头：列宽与行模板严格一致（默认值两边同步；运行期拖拽在代码里同步）。
                  外层 TagHeaderHost 负责裁剪：列太多内容宽于视口时，表头靠代码位移 +
-                 Clip 跟随列表的横向滚动（表头在 ListView 外面，不会自己滚） -->
+                 Clip 跟随列表的横向滚动（表头在 ListView 外面，不会自己滚）。
+                 15 列 = 14 个真实列（全部定宽）+ 末尾 1 个不可见星号填充列：
+                 星号列吸收视口剩余宽度，真实列永不被挤压 → 拖任一边界都是
+                 「线右侧一起动、左侧不动」，不会出现被星号列吞掉宽度的怪事。 -->
             <Grid x:Name="TagHeaderHost" Grid.Row="1" Margin="0,0,0,4">
                 <Grid x:Name="TagListHeaderGrid" Padding="10,0" ColumnSpacing="8" VerticalAlignment="Center">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="36" />
-                        <ColumnDefinition Width="*" MinWidth="100" />
+                        <ColumnDefinition Width="100" />
                         <ColumnDefinition Width="130" />
                         <ColumnDefinition Width="130" />
                         <ColumnDefinition Width="52" />
@@ -226,6 +245,7 @@
                         <ColumnDefinition Width="76" />
                         <ColumnDefinition Width="68" />
                         <ColumnDefinition Width="76" />
+                        <ColumnDefinition Width="*" MinWidth="0" />
                     </Grid.ColumnDefinitions>
                     <TextBlock Grid.Column="0" FontSize="11" FontWeight="SemiBold" Opacity="0.6" VerticalAlignment="Center" Text="#" />
                     <TextBlock Grid.Column="1" FontSize="11" FontWeight="SemiBold" Opacity="0.6" VerticalAlignment="Center" Text="标题" />
@@ -246,7 +266,8 @@
 
             <!-- 文件表格（多选；虚拟化由 ItemsStackPanel 默认行为保留，勿外包 ScrollViewer）。
                  列太多时内容宽于视口 → 横向滚动条出现在列表底部，表头由代码同步位移；
-                 列边界可拖拽调宽（表头右侧 6px 透明把手，代码生成）。 -->
+                 列边界可拖拽调宽：表头每根列边界有 1px 可见竖线 + 悬停高亮把手，
+                 行内同样画淡竖线，拖拽时「线右侧一起动、左侧不动」。 -->
             <ListView
                 x:Name="TagFileListView"
                 Grid.Row="2"
@@ -267,10 +288,10 @@
                 </ListView.ItemContainerStyle>
                 <ListView.ItemTemplate>
                     <DataTemplate x:DataType="local:TagFileItem">
-                        <Grid Padding="10,0" ColumnSpacing="8" VerticalAlignment="Center" MinWidth="1246" Loaded="TagFileRow_Loaded">
+                        <Grid Padding="10,0" ColumnSpacing="8" VerticalAlignment="Center" MinWidth="1254" Loaded="TagFileRow_Loaded">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="36" />
-                                <ColumnDefinition Width="*" MinWidth="100" />
+                                <ColumnDefinition Width="100" />
                                 <ColumnDefinition Width="130" />
                                 <ColumnDefinition Width="130" />
                                 <ColumnDefinition Width="52" />
@@ -283,21 +304,37 @@
                                 <ColumnDefinition Width="76" />
                                 <ColumnDefinition Width="68" />
                                 <ColumnDefinition Width="76" />
+                                <ColumnDefinition Width="*" MinWidth="0" />
                             </Grid.ColumnDefinitions>
                             <TextBlock Grid.Column="0" FontSize="12" Opacity="0.6" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind IndexLabel}" />
                             <TextBlock Grid.Column="1" FontSize="13" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Title}" />
                             <TextBlock Grid.Column="2" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Artist}" />
                             <TextBlock Grid.Column="3" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Album}" />
-                            <TextBlock Grid.Column="4" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind YearText}" />
-                            <TextBlock Grid.Column="5" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind TrackText}" />
+                            <TextBlock Grid.Column="4" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind YearText}" />
+                            <TextBlock Grid.Column="5" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind TrackText}" />
                             <TextBlock Grid.Column="6" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Genre}" />
-                            <TextBlock Grid.Column="7" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind DurationText}" />
+                            <TextBlock Grid.Column="7" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind DurationText}" />
                             <TextBlock Grid.Column="8" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind FileName}" />
-                            <TextBlock Grid.Column="9" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind FormatName}" />
-                            <TextBlock Grid.Column="10" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind BitDepthText}" />
-                            <TextBlock Grid.Column="11" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind SampleRateText}" />
-                            <TextBlock Grid.Column="12" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind BitrateText}" />
-                            <TextBlock Grid.Column="13" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind FileSizeText}" />
+                            <TextBlock Grid.Column="9" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind FormatName}" />
+                            <TextBlock Grid.Column="10" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind BitDepthText}" />
+                            <TextBlock Grid.Column="11" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind SampleRateText}" />
+                            <TextBlock Grid.Column="12" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind BitrateText}" />
+                            <TextBlock Grid.Column="13" FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind FileSizeText}" />
+                            <!-- 列间竖线：贴在每列右边界（与表头把手同一根线），不挡命中测试 -->
+                            <Rectangle Grid.Column="0" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="1" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="2" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="3" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="4" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="5" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="6" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="7" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="8" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="9" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="10" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="11" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="12" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
+                            <Rectangle Grid.Column="13" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
                         </Grid>
                     </DataTemplate>
                 </ListView.ItemTemplate>
