@@ -36,15 +36,18 @@
 - **标签排序 2026-10-12 整体删除**（d0d7ab6，用户「一直不满意」待重构）。侧栏留了墓碑注释，代码全在 git 历史里，**恢复=revert d0d7ab6**。别再把它当现存功能汇报。
 - **令牌皮肤会覆写全局文字刷子**（2026-10-12 用户实测坑）：TokenSkin.cs 的 TokenBrushMap 把 `TextFillColorPrimaryBrush`/`TextFillColorSecondaryBrush` 全局覆写成令牌色（为深色皮肤设计）——浅色主题下任何读这两个资源的 UI 文字都会变色/看不见。新增文字色元素要么按 RequestedTheme 给固定色，要么确认令牌色在两主题下都可读。
 - **艺术家详情页右栏结构**（2026-10-12 第三轮定稿）：页签只有「歌曲/专辑」两个（ApplyTabChrome 按 RequestedTheme 给固定黑/白）；**头像不是页签**，是按需打开的面板（`_artistAvatarOpen` + `CloseArtistAvatarPanel()` 幂等）。
-- **二级窗口现状**（2026-10-13 再盘点）：仍活跃=迷你播放器/标签编辑/歌词编辑/重复文件 4 个（在线搜索窗已于 27ec416 删除）；已不可达（代码在、入口全摘）=当前播放列表/播放队列/均衡器/房间校正/RG 扫描/设置/文件关联/头像两窗/取色器/CustomSortOrder。清理窗口代码时按这个清单来。
+- **二级窗口现状**（2026-10-13 再盘点，a85a373 后又删标签编辑窗）：仍活跃=迷你播放器/歌词编辑/重复文件 3 个（**TagEditorWindow 已于 a85a373 删除，七处入口全切主界面「标签」板块**）；已不可达（代码在、入口全摘）=当前播放列表/播放队列/均衡器/房间校正/RG 扫描/设置/文件关联/头像两窗/取色器/CustomSortOrder。清理窗口代码时按这个清单来。
 
 ## 合规整改（2026-10-13 进行中）
 - 用户拍板：在线功能**只留 MusicBrainz 系**（MusicBrainz + Cover Art Archive + Last.fm）。网易云/QQ/酷狗/iTunes 全部删除。
 - 接入门槛：MusicBrainz/CAA/LRClib/Wikidata **零门槛**（MB 限速 1 req/s + 强制 UA）；Discogs/Last.fm/fanart.tv 需本人注册拿 key；AcoustID 商业用途需付费。
 - 歌词换 **LRClib**（`lrclib.net/api`，免费无 key），艺术家简介换 **Wikidata**。
-- 进度：阶段 0（删音频直链下载）9c40183 → 阶段 1/2（删网易云/QQ/酷狗源）f058aeb 等 → 阶段 3（歌词改 LRClib）1328c77 → 阶段 4（在线搜索窗整体下架）27ec416 → 阶段 5a（标签板块骨架，BUILD_OK）→ **阶段 6 部分完成**（516acc1：快速编辑可编辑化+保存+改动前快照整体回滚；**旧 TagEditorWindow 入口切换+删窗未做**）。
+- 进度：阶段 0（删音频直链下载）9c40183 → 阶段 1/2（删网易云/QQ/酷狗源）f058aeb 等 → 阶段 3（歌词改 LRClib）1328c77 → 阶段 4（在线搜索窗整体下架）27ec416 → 阶段 5a（标签板块骨架）→ **阶段 6 已完成**（516acc1 编辑/保存/快照回滚 + a85a373 五项实测反馈修复 + 旧 TagEditorWindow 入口全切主界面板块并删窗）。**下一阶段=阶段 7 批量工具**（文件名↔标签/替换/正则/大小写/编号/裁剪/复制粘贴/移除标签）。
 - ⚠ **`git rm` 删文件与摘引用必须同一个提交**（2026-10-13 27ec416 实证）：只删文件不摘引用=那个提交自身编译不过，revert 它也回不到干净状态。
 - **标签板块文件表格（2026-10-13 定稿）**：**15 列 = 14 个真实列全定宽 + 末尾不可见星号填充列（FillerCol=14）专吸剩余宽度**（星号列混在真实列里会把被拖列的变化量吞掉，用户报「往左拖字往右去」即此）。列：# 标题* 艺术家 专辑 年份 曲目 流派 时长 文件名 格式 位深 采样率 码率 大小。行模型 `TagFileItem : PlaylistItem`（为此解除 PlaylistItem sealed；文件派生列在 BuildEntry 后台线程填，走 `AudioInfoFormatter.TryGetFacts`）。横向滚动=ListView Auto + 行 MinWidth=1254；表头在 ListView 外，靠内部 ScrollViewer ViewChanged 位移 + RectangleGeometry 裁剪同步；列边界 6px 把手（ColumnResizeGrip）拖拽调宽——**把手在列 i 右边界，拖拽改列 i 宽 → 线右侧整体跟随、左侧不动**；**列数/默认宽三处同步**：XAML 表头、XAML 行模板、cs 里 ColDefaultWidths/ColMinWidths，运行期以 cs 数组为唯一真相。
+- **读标签提速（2026-10-13 a85a373，用户实测「几秒才 50 首」）**：旧 BuildEntry 每个文件开两遍 TagLib（读标签一遍 + TryGetFacts 一遍），且 mp3/m4a/ogg 还要再各起一个 ffmpeg 子进程。修法：新增 `AudioInfoFormatter.TryGetFactsFast(TagLib.File, path, ...)`——直接吃已打开文件的 Properties，不重复开文件、不起 ffmpeg；仅 TagLib 什么都读不到（采样率不可信且码率/位深全无）才回退完整探测（保 DSD 和「1Hz 脏值」）。快速结果**不写 InfoCache**（缺编码器名，别污染完整探测缓存）。
+- **表格单元格内联编辑（2026-10-13 a85a373，用户要求「单击某个标签就能编辑」）**：可编辑列（标题/艺术家/专辑/年份/曲目/流派）是常驻无边框 TextBox（mp3tag 式）；GotFocus 里同步选中所在行（TextBox 会吞掉 ListViewItem 的选中点击）+ 长字段临时开换行「展开」；回车/失焦提交=读全量→改一个字段→写盘（失败这一格退回原值）；Esc 取消。提交后换实例刷行 + Renumber + 发 `TagsSaved` 事件。
+- **# 列显示 0 的根因（2026-10-13 修复）**：x:Bind 默认 OneTime，行实现时 Renumber 还没跑 → 序号缓存成 0。修法：`PlaylistItem.Index` 改 virtual、`TagFileItem` override + INPC 发 Index/IndexLabel 通知，行模板序号列改 `Mode=OneWay`。⚠ 教训：**shadow（new）属性救不了基类计算属性**——IndexLabel 在基类里读的是基类字段，必须 virtual/override。
 - **SizeChanged 卡顿根因**（2026-10-13 修）：每 tick 无条件 `ApplyColumnWidths()` 逐行设宽→invalidate measure；改为只在「溢出/不溢出」状态翻转时全量重刷（`RefreshOverflowState()`）。
 - **x:Bind 默认 OneTime**：保存后行文字不换实例不刷新 → 用 `ObservableCollection` 索引器替换行模型（`_files[idx] = neo`）+ 恢复选中。
 - **快照整体回滚**（阶段六）：保存前逐文件 `ReadTag` 存原值 → 逐个写 → 任一失败则把已成功的用快照写回；`TagEditorService.SaveTag` 已改返回 bool 供成败判断。
