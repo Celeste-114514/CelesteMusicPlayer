@@ -104,6 +104,14 @@ namespace CelesteMusicPlayer
         /// <summary>Esc 取消标记：置位后随后的 LostFocus 只收回不提交。</summary>
         private bool _cellCancelled;
 
+        /// <summary>
+        /// 本行这一击的 press 是否由我们全权处理（选中/进编辑都在 press 侧做完）。
+        /// release 侧据此挡掉 ListViewItem 的默认选择逻辑，防止把刚选中的行又翻回去
+        /// （2026-10-13 用户实测「点格子选不中」的稳健修法：不依赖默认行为，
+        /// 也不给默认行为留翻台机会）。
+        /// </summary>
+        private bool _cellPressHandled;
+
         /// <summary>单元格写盘串行闸：避免两个格子的提交并发写同一个文件。</summary>
         private readonly SemaphoreSlim _cellSaveGate = new(1, 1);
 
@@ -138,6 +146,8 @@ namespace CelesteMusicPlayer
             try
             {
                 _subNav.ReapplyAccent();
+                // 选中底色是强调色：主题/皮肤切换后按新强调色重刷已实现行
+                RefreshTagRowsChrome();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ReapplyAccent", caught); }
         }
@@ -295,6 +305,8 @@ namespace CelesteMusicPlayer
             int failed = fresh.Length - added;
             Renumber();
             RefreshCountUi();
+            // 文件数变了 → 竖滚动条可能出现/消失（视口宽变，表头要跟），选中底色按新集合重画
+            RefreshTableAfterFilesChanged();
             global::CelesteMusicPlayer.StartupLog.Write(
                 $"TagPanel: {source} 新增 {added} 个，跳过重复 {skipped} 个，读取失败 {failed} 个，读标签耗时 {readSw.ElapsedMilliseconds}ms");
 
@@ -329,6 +341,7 @@ namespace CelesteMusicPlayer
 
             Renumber();
             RefreshCountUi();
+            RefreshTableAfterFilesChanged();
             if (_files.Count == 0)
             {
                 ResetEmptyHint();
@@ -347,6 +360,7 @@ namespace CelesteMusicPlayer
             int count = _files.Count;
             _files.Clear();
             RefreshCountUi();
+            RefreshTableAfterFilesChanged();
             ResetEmptyHint();
             ClearQuickEditPreview();
             TagStatusText.Text = $"已清空 {count} 个文件（只是移出本列表，不动硬盘上的文件）。";
@@ -362,6 +376,9 @@ namespace CelesteMusicPlayer
             {
                 return;
             }
+
+            // 选中底色（圆角强调色）跟着选中态走
+            RefreshTagRowsChrome();
 
             List<TagFileItem> selected = TagFileListView.SelectedItems.Cast<TagFileItem>().ToList();
             _quickEditSelection = selected;
@@ -1401,6 +1418,8 @@ namespace CelesteMusicPlayer
 
             // 换进来的新实例序号是 0，重排一次（行模型 INPC，可见行实时更新）
             Renumber();
+            // 行实例整体换过：列宽盖章 + 选中底色都要按新实例重来
+            RefreshTableAfterFilesChanged();
         }
 
         private void ShowQuickEditBatchCard(int count)
@@ -1486,13 +1505,22 @@ namespace CelesteMusicPlayer
 
         /// <summary>
         /// 单元格按下（mp3tag 式编辑入口，2026-10-13 用户实测后定稿）：
-        /// 行未选中（或多选状态）→ 本击只选中整行，不进编辑（e.Handled=true
-        /// 挡掉 ListViewItem 默认行为之前先手动同步选中，保证视觉反馈和单击行首一样）；
-        /// 行已是「唯一选中项」→ 本击放行，交给 Focus() 进编辑（GotFocus 随后接管）。
-        /// 即：单击某首歌选中整行，再单击这个被选中行的某个标签即可编辑。
+        /// Ctrl/Shift 多选手势原样放行（手动改选中会破坏区间选择/增减选择）；
+        /// 行未选中（或多选状态）→ 本击只选中整行，不进编辑；
+        /// 行已是「唯一选中项」→ 本击放行，进编辑（GotFocus 随后接管）。
+        /// 即：单击某首歌任意位置选中整行，再单击这个被选中行的某个标签即可编辑。
+        ///
+        /// 两个 2026-10-13 用户实测的坑，都在这里堵：
+        ///  ① FocusState 必须用 Programmatic——AllowFocusOnInteraction=False 会拒掉
+        ///     Pointer 焦点请求，表现就是「选中后点格子没进编辑」；
+        ///  ② 选中不依赖 ListViewItem 默认行为：press 侧显式 SelectedItem，release 侧
+        ///     （TagCellBox_PointerReleased）挡掉默认逻辑，避免不同 WinUI 版本上
+        ///     「选中又被翻回去」。
         /// </summary>
         private void TagCellBox_PointerPressed(object sender, PointerRoutedEventArgs e)
         {
+            _cellPressHandled = false; // 默认不拦 release
+
             if (sender is not TextBox box || box.DataContext is not TagFileItem item)
             {
                 return;
@@ -1504,16 +1532,27 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 多选手势（Ctrl 增减 / Shift 区间）完全交给 ListViewItem 默认逻辑
+            var mods = e.KeyModifiers;
+            if (mods.HasFlag(Windows.System.VirtualKeyModifiers.Control)
+                || mods.HasFlag(Windows.System.VirtualKeyModifiers.Shift))
+            {
+                return;
+            }
+
             // 行已是唯一选中项 → 这一击就进编辑（不用再点一次别处）
             if (ReferenceEquals(TagFileListView.SelectedItem, item)
                 && TagFileListView.SelectedItems.Count == 1)
             {
-                box.Focus(FocusState.Pointer);
+                box.Focus(FocusState.Programmatic);
+                e.Handled = true;
+                _cellPressHandled = true;
                 return;
             }
 
             // 否则只选中整行，不进编辑
             e.Handled = true;
+            _cellPressHandled = true;
 
             try
             {
@@ -1522,6 +1561,23 @@ namespace CelesteMusicPlayer
             catch (Exception caught)
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.TagCellBox_PointerPressed", caught);
+            }
+
+            // 诊断日志：下一轮若还有异常，凭这一行就能看出 press 有没有进来、选中成功没有
+            global::CelesteMusicPlayer.StartupLog.Write(
+                $"TagPanel: cell press col={col} path={item.FilePath} selCount={TagFileListView.SelectedItems.Count}");
+        }
+
+        /// <summary>
+        /// 单元格释放：press 被我们处理过（选中/进编辑都在 press 侧做完了）→ 挡掉这一击的
+        /// release，防止 ListViewItem 在 release 侧再做一次选择切换，把刚选中的行翻回未选中。
+        /// </summary>
+        private void TagCellBox_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            if (_cellPressHandled)
+            {
+                _cellPressHandled = false;
+                e.Handled = true;
             }
         }
 
@@ -2106,10 +2162,31 @@ namespace CelesteMusicPlayer
             // 3) 表头列边界生成拖拽把手（6px 热区 + 1px 可见竖线，代码生成免得 XAML 写 14 遍）
             BuildColumnGrips();
 
+            // 4) 选中外观：杀掉 ListViewItem 默认方角选中层，改由行内 TagRowChrome 画圆角强调色
+            ApplyTagSelectionResources();
+
             TagHeaderHost.SizeChanged += TagHeaderHost_SizeChanged;
             TagFileListView.SizeChanged += TagFileListView_SizeChanged;
+            // 布局变化时核对视口宽：文件增删会让竖滚动条出现/消失，ViewChanged / SizeChanged
+            // 都不一定触发，表头显式宽会一直用旧值 → 右边缘与行错开（2026-10-13 用户实测）
+            TagFileListView.LayoutUpdated += TagFileListView_LayoutUpdated;
 
             ApplyColumnWidths();
+        }
+
+        /// <summary>
+        /// 列表布局变化（竖滚动条出现/消失、行实现/回收…）时核对视口宽：
+        /// 只有真变了才刷（同值跳过），不会每个布局 pass 都重排。
+        /// </summary>
+        private void TagFileListView_LayoutUpdated(object sender, object e)
+        {
+            double vw = _listScroller?.ViewportWidth ?? 0;
+            if (vw > 0 && Math.Abs(vw - _listViewportW) > 0.5)
+            {
+                _listViewportW = vw;
+                _lastViewportW = vw;
+                RefreshOverflowState();
+            }
         }
 
         private void ListScroller_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
@@ -2404,12 +2481,171 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>行模板 Grid 实现（新行/回收行）时按当前列宽盖章，防止用回 XAML 默认值错位。</summary>
+        /// <summary>
+        /// 选中外观（2026-10-13 用户实测「选中背景就是一个矩形，一点不好看」后重做）：
+        /// 默认 ListViewItem 的 Selected 视觉态是方角纯色矩形（样式里的 CornerRadius 默认模板
+        /// 根本不读）。修法=把 ListViewItemBackgroundSelected* 系列资源覆盖成透明杀掉默认层，
+        /// 选中底色改由行模板里的 TagRowChrome 圆角 Border 画（强调色底 + 对比前景色），
+        /// 与主列表 SongRowChrome 同口径。
+        /// </summary>
+        private void ApplyTagSelectionResources()
+        {
+            TagFileListView.Resources["ListViewItemBackgroundSelected"] = TagTransparentBrush;
+            TagFileListView.Resources["ListViewItemBackgroundSelectedPointerOver"] = TagTransparentBrush;
+            TagFileListView.Resources["ListViewItemBackgroundSelectedPressed"] = TagTransparentBrush;
+            TagFileListView.Resources["ListViewItemBackgroundSelectedDisabled"] = TagTransparentBrush;
+            // 关掉多选勾（本列表 SelectionMode=Extended 本来不显示，双保险）
+            TagFileListView.Resources["ListViewItemSelectionCheckMarkVisualEnabled"] = false;
+        }
+
+        private static readonly Brush TagTransparentBrush =
+            new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
+
+        private static readonly Brush TagFallbackAccentBrush =
+            new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 120, 212));
+
+        /// <summary>刷新所有已实现（可见）行的选中底色。只遍历 ItemsPanel.Children，不做全量 ContainerFromItem。</summary>
+        private void RefreshTagRowsChrome()
+        {
+            if (!_panelReady)
+            {
+                return;
+            }
+
+            _itemsPanel ??= VisualTreeWalker.FindItemsPanel(TagFileListView);
+            if (_itemsPanel == null)
+            {
+                return;
+            }
+
+            foreach (UIElement child in _itemsPanel.Children)
+            {
+                if (child is ListViewItem container)
+                {
+                    ApplyTagRowChrome(container);
+                }
+            }
+        }
+
+        /// <summary>单行选中底色：选中=强调色圆角底 + 对比前景；未选中=透明底 + 收回前景。</summary>
+        private void ApplyTagRowChrome(ListViewItem container)
+        {
+            Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "TagRowChrome");
+            if (chrome == null)
+            {
+                return;
+            }
+
+            // 容器本身保持透明，避免默认模板再画一层
+            container.Background = TagTransparentBrush;
+            container.BorderThickness = new Thickness(0);
+
+            if (container.IsSelected)
+            {
+                Brush accent = ResolveTagAccentBrush();
+                chrome.Background = accent;
+                chrome.BorderThickness = new Thickness(0);
+                // 默认 Selected 视觉态会把 ContentPresenter.Foreground 动画成白色（动画优先级
+                // 高于本地值），必须给行内每个 TextBlock/TextBox 显式设值才压得住。
+                // chrome 是内容层的兄弟（垫在底下），遍历范围取它的父节点（外层 Grid）。
+                DependencyObject scope = chrome.Parent ?? (DependencyObject)chrome;
+                ApplyTagRowForeground(scope, ColorHelper.ResolveContrastingForeground(accent));
+            }
+            else
+            {
+                chrome.Background = TagTransparentBrush;
+                chrome.BorderThickness = new Thickness(0);
+                DependencyObject scope = chrome.Parent ?? (DependencyObject)chrome;
+                ClearTagRowForeground(scope);
+            }
+        }
+
+        private Brush ResolveTagAccentBrush()
+        {
+            try
+            {
+                Brush? accent = _accentProvider?.Invoke();
+                if (accent != null)
+                {
+                    return accent;
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ResolveTagAccentBrush", caught);
+            }
+            return TagFallbackAccentBrush;
+        }
+
+        private static void ApplyTagRowForeground(DependencyObject root, Brush foreground)
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is TextBlock tb)
+                {
+                    tb.Foreground = foreground;
+                }
+                else if (child is Control control)
+                {
+                    control.Foreground = foreground;
+                }
+
+                ApplyTagRowForeground(child, foreground);
+            }
+        }
+
+        private static void ClearTagRowForeground(DependencyObject root)
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is TextBlock tb)
+                {
+                    tb.ClearValue(TextBlock.ForegroundProperty);
+                }
+                else if (child is Control control)
+                {
+                    control.ClearValue(Control.ForegroundProperty);
+                }
+
+                ClearTagRowForeground(child);
+            }
+        }
+
+        /// <summary>
+        /// 文件集合变动后：竖滚动条可能随出现/消失（视口宽变了，表头显式宽要跟着刷），
+        /// 已实现行的选中底色也按新集合重画一次。
+        /// </summary>
+        private void RefreshTableAfterFilesChanged()
+        {
+            RefreshOverflowState();
+            RefreshTagRowsChrome();
+        }
+
+        /// <summary>
+        /// 行模板实现（新行/回收行）时按当前列宽盖章，防止用回 XAML 默认值错位；
+        /// 顺带按当前选中态画这一行的选中底色（滚动新实现的行也要有选中外观）。
+        /// sender 是外层 Grid（DataTemplate 根），内容层是带 15 列定义的内层 Grid。
+        /// </summary>
         private void TagFileRow_Loaded(object sender, RoutedEventArgs e)
         {
-            if (sender is Grid row)
+            if (sender is not Grid outer)
             {
-                ApplyWidthsToGrid(row, _listViewportW, header: false);
+                return;
+            }
+
+            Grid? row = FindDescendantWhere<Grid>(outer, g => g.ColumnDefinitions.Count == ColCount);
+            if (row != null)
+            {
+                ApplyWidthsToGrid(row, GetRowExtentWidth(), header: false);
+            }
+
+            if (VisualTreeWalker.FindAncestorListViewItem(outer) is ListViewItem container)
+            {
+                ApplyTagRowChrome(container);
             }
         }
 
