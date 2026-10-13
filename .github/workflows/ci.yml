@@ -44,6 +44,12 @@ jobs:
         # 任意不变量被破坏即判失败，红标提醒。
         run: dotnet test tools/EqRegression/EqRegression.csproj -c Debug -p:Platform=x64
 
+      - name: Run tag editing regression tests
+        # 自动验证：100 个多格式毒样本的 round-trip、显式脏标记口径（不标脏=不写盘）、
+        # 快照回滚。HintPath 引用主程序 Release 产物，故必须排在 Build main 之后、
+        # 用 Release 配置跑（与本地 dotnet test tools/TagEditTests -c Release 一致）。
+        run: dotnet test tools/TagEditTests/TagEditTests.csproj -c Release -p:Platform=x64
+
       - name: 安装 NSIS（打包安装包需要）
         # windows-latest 镜像不自带 NSIS（曾误以为自带，实测报"找不到 makensis.exe"）。
         # 运行器预装 Chocolatey，choco 装的 nsis 会进 PATH 并在 Program Files (x86)\NSIS 落地，
