@@ -2,10 +2,6 @@
 
 一个基于 **WinUI 3 / .NET 9** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和 [ECHO-NEXT](https://github.com/moekotori/ECHO) 设计开发。代码全部由 AI 生成。
 
-## 🙏 一些作者的碎碎念
-
-这个播放器源于我自己的一个执念：想把专辑按时间顺序排列，试了一圈播放器都没找到顺手又好看的，索性自己动手。开发全程由 AI 协作完成，断断续续打磨了很久，希望各位用得舒服、用得开心。
-
 联系我 [t.me/celesteabsolomb](https://t.me/celesteabsolomb)
 
 支持我 https://afdian.com/a/celeste_114514
