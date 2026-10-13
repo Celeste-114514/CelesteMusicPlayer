@@ -2029,11 +2029,24 @@ namespace CelesteMusicPlayer
             { 28, 100, 60, 60, 36, 32, 48, 44, 80, 44, 36, 48, 48, 48 };
 
         private readonly double[] _colWidths = (double[])ColDefaultWidths.Clone();
-        private double _gridMinWidth;
+
+        /// <summary>默认列宽下的内容总宽（含列间距与行内边距）：_gridMinWidth 的初值，
+        /// 防止首次测量完成前（视口宽还是 0）被当成 0 污染行模板 MinWidth。</summary>
+        private static readonly double DefaultGridMinWidth =
+            ColDefaultWidths.Sum() + ColSpacing * (ColCount - 1) + RowPaddingX * 2;
+
+        private double _gridMinWidth = DefaultGridMinWidth;
         private double _listViewportW;
         private double _lastViewportW = -1;
         private ScrollViewer? _listScroller;
         private TranslateTransform? _headerSlide;
+
+        /// <summary>
+        /// 已实现行容器的父面板（ItemsPanel）。拖拽列宽时只遍历它的 Children——
+        /// 按 _files 全量 ContainerFromItem 每个 PointerMoved 都跑一遍，文件上千时
+        /// O(n²) 就是「拖动列头卡」的根源（2026-10-13 用户实测）。
+        /// </summary>
+        private Panel? _itemsPanel;
 
         /// <summary>上次应用列宽时是否处于「内容宽于视口」（溢出滚动）状态。只有状态翻转才需要全量重刷。</summary>
         private bool _overflowState;
@@ -2069,7 +2082,12 @@ namespace CelesteMusicPlayer
                 _listScroller.ViewChanged += ListScroller_ViewChanged;
             }
 
-            // 2) 表头位移变换 + 裁剪：列太多内容宽于视口时不裁会溢出到右列外
+            // 已实现行容器面板：拖拽列宽只遍历它（见 _itemsPanel 注释）
+            _itemsPanel = VisualTreeWalker.FindItemsPanel(TagFileListView);
+
+            // 2) 表头位移变换 + 裁剪：列太多内容宽于视口时不裁会溢出到右列外。
+            //    Clip 挂在 TagHeaderHost（不动的外壳）上——挂在 TagListHeaderGrid 上会
+            //    跟着它的 RenderTransform 一起平移，横滚时左段反而裁不住（2026-10-13 修）。
             _headerSlide = new TranslateTransform();
             TagListHeaderGrid.RenderTransform = _headerSlide;
             UpdateHeaderClip();
@@ -2092,7 +2110,8 @@ namespace CelesteMusicPlayer
                     _headerSlide.X = -_listScroller.HorizontalOffset;
                 }
 
-                // 竖滚动条出现/消失会改变视口宽 → 行宽阈值跟着变（只有溢出状态翻转才全量重刷）
+                // 竖滚动条出现/消失会改变视口宽 → 行宽阈值跟着变（只有溢出状态翻转才全量重刷），
+                // 表头显式宽在 RefreshOverflowState 里每次都会跟（行靠 NaN 自动拉伸，表头不会）
                 double vw = _listScroller?.ViewportWidth ?? 0;
                 if (vw > 0 && Math.Abs(vw - _lastViewportW) > 0.5)
                 {
@@ -2115,7 +2134,10 @@ namespace CelesteMusicPlayer
             {
                 return;
             }
-            TagListHeaderGrid.Clip = new RectangleGeometry
+            // Clip 必须挂在不动的 TagHeaderHost 上：挂在 TagListHeaderGrid 上时，
+            // Clip 在元素本地坐标空间，会随 _headerSlide 平移一起动，横滚时表头
+            // 左段裁不住、会溢出到左面板上方（2026-10-13 修）。
+            TagHeaderHost.Clip = new RectangleGeometry
             {
                 Rect = new global::Windows.Foundation.Rect(0, 0, w, h)
             };
@@ -2216,16 +2238,23 @@ namespace CelesteMusicPlayer
 
             // 表头与行用同一个参照视口（列表的内部视口，含竖滚动条占位），
             // 否则竖滚动条出现时表头会比行宽一点，列就对不齐
-            ApplyWidthsToGrid(TagListHeaderGrid, _listViewportW);
+            ApplyWidthsToGrid(TagListHeaderGrid, _listViewportW, header: true);
 
-            foreach (TagFileItem item in _files)
+            // 只遍历已实现（可见）行容器：ItemsPanel.Children 就是已实现集合。
+            // 旧实现按 _files 全量 ContainerFromItem，每个 PointerMoved 跑一遍，
+            // 文件上千时 O(n²)——正是「拖动列头左右宽度会卡」的根源（2026-10-13 用户实测）。
+            _itemsPanel ??= VisualTreeWalker.FindItemsPanel(TagFileListView);
+            if (_itemsPanel != null)
             {
-                if (TagFileListView.ContainerFromItem(item) is ListViewItem container)
+                foreach (UIElement child in _itemsPanel.Children)
                 {
-                    Grid? row = FindRowGrid(container);
-                    if (row != null)
+                    if (child is ListViewItem container)
                     {
-                        ApplyWidthsToGrid(row, _listViewportW);
+                        Grid? row = FindRowGrid(container);
+                        if (row != null)
+                        {
+                            ApplyWidthsToGrid(row, _listViewportW, header: false);
+                        }
                     }
                 }
             }
@@ -2237,6 +2266,7 @@ namespace CelesteMusicPlayer
         /// 视口宽变化后调用。只有「溢出/不溢出」状态翻转才全量重刷：
         /// 不溢出时末尾星号填充列自动吸收剩余宽度，行会自己拉伸；
         /// 每个 tick 都逐行设宽正是拖窗口卡顿的根源（2026-10-13 用户实测）。
+        /// 表头是例外——它在 ListView 外面不会自动拉伸，显式宽每次都要跟。
         /// </summary>
         private void RefreshOverflowState()
         {
@@ -2245,21 +2275,55 @@ namespace CelesteMusicPlayer
             {
                 ApplyColumnWidths();
             }
+            else
+            {
+                RefreshHeaderWidth();
+            }
         }
 
-        private void ApplyWidthsToGrid(Grid grid, double viewportW)
+        /// <summary>表头显式宽跟随列表视口（行靠 NaN 自动拉伸；表头在 ListView 外面，不设就永远是宿主全宽）。</summary>
+        private void RefreshHeaderWidth()
+            => ApplyWidthsToGrid(TagListHeaderGrid, _listViewportW, header: true);
+
+        private void ApplyWidthsToGrid(Grid grid, double viewportW, bool header)
         {
             ColumnDefinitionCollection cols = grid.ColumnDefinitions;
             for (int i = 0; i < cols.Count && i < FillerCol; i++)
             {
-                cols[i].Width = new GridLength(_colWidths[i]);
+                // 同值跳过：拖拽时每帧只有一列在变，没必要把 14 列全设一遍
+                double w = _colWidths[i];
+                ColumnDefinition cd = cols[i];
+                if (!cd.Width.IsAbsolute || Math.Abs(cd.Width.Value - w) >= 0.01)
+                {
+                    cd.Width = new GridLength(w);
+                }
             }
 
             // 末尾填充列不碰（XAML 里就是 *，自动吸收剩余宽度）
-            grid.MinWidth = _gridMinWidth;
+            if (Math.Abs(grid.MinWidth - _gridMinWidth) >= 0.01)
+            {
+                grid.MinWidth = _gridMinWidth;
+            }
+
             // 视口比总宽窄 → 内容按总宽渲染（超出部分靠裁剪/横向滚动）；
-            // 否则交回自动拉伸（填充列填满剩余空间）。NaN = 清除显式宽度。
-            grid.Width = viewportW > 0 && viewportW < _gridMinWidth ? _gridMinWidth : double.NaN;
+            // 表头不溢出时显式取「列表视口宽」——与行同一個参照，竖滚动条占位两边
+            // 一致，列边界才对得齐（NaN=清除显式宽会让表头拉成宿主全宽，2026-10-13 修）。
+            // 行不溢出时保持 NaN 自动拉伸即可，无需显式宽。
+            double desired = double.NaN;
+            if (viewportW > 0 && viewportW < _gridMinWidth)
+            {
+                desired = _gridMinWidth;
+            }
+            else if (header && viewportW > 0)
+            {
+                desired = viewportW;
+            }
+
+            // NaN.Equals(NaN)=true，同值（含 NaN）不重复设，免得每帧无效重排
+            if (!grid.Width.Equals(desired))
+            {
+                grid.Width = desired;
+            }
         }
 
         /// <summary>行模板 Grid 实现（新行/回收行）时按当前列宽盖章，防止用回 XAML 默认值错位。</summary>
@@ -2267,7 +2331,7 @@ namespace CelesteMusicPlayer
         {
             if (sender is Grid row)
             {
-                ApplyWidthsToGrid(row, _listViewportW);
+                ApplyWidthsToGrid(row, _listViewportW, header: false);
             }
         }
 

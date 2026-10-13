@@ -2427,12 +2427,22 @@ namespace CelesteMusicPlayer
 
         /// <summary>
         /// 列表宽度变化时，重刷已实现行的宽度，使行内容始终铺满（选中矩形铺满整行、字段对齐）。
+        /// 只更新宽度——不走全量 RefreshRealizedSongListSelectionChrome：那个每行要重算
+        /// 画刷、遍历全部后代设前景，窗口缩放每个 tick 都跑一遍就是「调整大小卡」的根源
+        /// （2026-10-13 用户实测）。选中态变化才需要全量刷。
         /// </summary>
         private void SongListView_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             if (sender is ListView list && list.ActualWidth > 0)
             {
-                RefreshRealizedSongListSelectionChrome(list);
+                foreach (ListViewItem container in EnumerateRealizedListViewItems(list))
+                {
+                    Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "SongRowChrome");
+                    if (chrome != null)
+                    {
+                        chrome.Width = list.ActualWidth;
+                    }
+                }
             }
         }
     }
