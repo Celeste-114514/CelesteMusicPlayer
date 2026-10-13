@@ -12,7 +12,7 @@
 - 取色只认 resolver 那套（ResolveAccentBrush/Color）；CurrentAccent 是直通系统的另一套，抄近道会「别处都变就这块不变」。静态上下文用 MainWindow.ResolveAccentColorStatic()。按钮前景恒白（用户拍板）。
 - 主题判断必须沿元素树找显式 Light/Dark 祖先，禁读 App 级 RequestedTheme。
 - XAML+cs 必须同 commit（拆开 revert 任一半编译不过）。
-- XamlCompiler 崩 0xC0000005 别重试直接二分：ET.parse 验良构→查 BOM→_build_check.py（Release/win-x64）。诱因：Border 塞多子元素（叠加一律 Grid）、ItemsWrapGrid 属性名写错。dotnet 长命令走 python subprocess。
+- XamlCompiler 崩 0xC0000005 别重试直接二分：ET.parse 验良构→查 BOM→_build_check.py（Release/win-x64）。诱因：Border 塞多子元素（叠加一律 Grid）、ItemsWrapGrid 属性名写错。偶发单次 MSB3073/XamlCompiler 抽风重试即过（2026-10-13 实测），连续崩才走二分。dotnet 长命令走 python subprocess。
 - 秒崩 0xC000027B：XAML 带初值+事件绑定→InitializeComponent 就地触发→写后续 x:Name（null）→NRE。新面板 ValueChanged/Toggled 必加「面板就绪」守卫；临时下架带 x:Name 控件用 Collapsed 禁注释（=CS0103）。
 - obj/bin 备份禁止留项目目录（SDK glob 会把备份 .g.i.cs 编进去→假 CS0102+原生崩），备份放仓库外。
 - publish 连崩先查嵌套三元（Roslyn NullableWalker 深递归），拆局部变量即过。
@@ -32,7 +32,9 @@
 - 二级窗口：仍活跃=迷你播放器/歌词编辑/重复文件；TagEditorWindow 已删（七处入口全切主界面）；已不可达（代码在入口全摘）=当前播放列表/播放队列/均衡器/房间校正/RG 扫描/设置/文件关联/头像两窗/取色器/CustomSortOrder。
 - 文件表格定稿：15 列=14 真实列全定宽+末尾星号填充列（专吸剩余宽度；混在真实列里会吞被拖列变化量）。列：# 标题* 艺术家 专辑 年份 曲目 流派 时长 文件名 格式 位深 采样率 码率 大小。行模型 TagFileItem:PlaylistItem。表头在 ListView 外，ViewChanged 位移+RectangleGeometry 裁剪同步；列边界 6px 把手拖拽=改本列宽右侧跟随。列数/默认宽三处同步（XAML 表头、行模板、cs 数组），运行期以 cs 数组为唯一真相。
 - 读标签提速（a85a373）：BuildEntry 单次开 TagLib 一趟拿标签+时长+TryGetFactsFast（吃已开文件 Properties，零额外 I/O 零 ffmpeg）；仅 TagLib 全读不到才回退完整探测（保 DSD 与 1Hz 脏值）。副作用=mp3/aac 位深列显示「-」（已披露）。
-- 单元格编辑=mp3tag 式两击（51790bc）：AllowFocusOnInteraction=False + PointerPressed 管「武装」——首击只选中（e.Handled+手动 SelectedItem），再击同一格 Focus 进编辑；GotFocus 里 SelectAll。提交=读全量→改一字段→写盘，失败这格退回原值；回车提交/Esc 取消。
+- 单元格编辑=mp3tag 语义（46bb28a 定稿，旧「同一格两击」已废）：单击行=选中整行；该行是**唯一选中项**时单击可编辑列=Focus 进编辑（GotFocus 里 SelectAll）；未选中/多选时首击只收敛选中到该行。AllowFocusOnInteraction=False + PointerPressed 按选中状态决定放行。提交=读全量→改一字段→写盘，失败这格退回原值；回车提交/Esc 取消。
+- 表头/行对齐根因（1eb95c4）：表头 Width=NaN 会拉伸到宿主全宽、行拉伸到 ListView 内部视口，竖滚动条占位≈16px 让两区域右边缘错开。修法=非溢出时表头显式 Width=_listViewportW（与行同参照），溢出时两者同为 _gridMinWidth，行保持 NaN 自动拉伸；表头显式宽在视口变化时也要刷（SizeChanged/ViewChanged→RefreshOverflowState）。⚠ Clip 挂带 RenderTransform 的元素上会随平移一起动（横滚时表头左段裁不住、溢出到左面板）——必须挂不动的 TagHeaderHost。
+- 拖拽/缩放卡顿根因（1eb95c4）：标签面板 ApplyColumnWidths 原来按 _files 全量 ContainerFromItem、拖拽每个 PointerMoved 跑一遍，文件上千时 O(n²)→改遍历 ItemsPanel.Children 已实现容器+列宽同值跳过；主窗口 SongListView_SizeChanged 原来走全量 chrome 刷新（每行重算画刷+遍历后代设前景）→改只更新已实现行铺满宽，选中态变化才全量刷。
 - ⚠ 用户说「文字贴列边界竖线」≠「末列贴表格边缘」——先对齐语义再动手。误加 10px 末列 margin 被回退，正解=全列文字右留 6px。
 - # 列全 0 根因：x:Bind 默认 OneTime，行实现时 Renumber 还没跑。修法=Index 改 virtual+TagFileItem override+INPC 通知+Mode=OneWay。⚠ shadow(new) 救不了基类计算属性。保存后刷行=ObservableCollection 索引器换实例+恢复选中+Renumber。
 - 阶段六快照回滚：保存前逐文件 ReadTag 存原值→逐个写→任一失败把已成功的写回；SaveTag 返 bool。
