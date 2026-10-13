@@ -203,11 +203,14 @@ namespace CelesteMusicPlayer
     /// 这是「几秒才 50 首」的修复关键：旧路径每个文件要开两遍 TagLib，mp3/m4a/ogg 还要再起
     /// 一个 ffmpeg 进程，50 个文件就是上百次进程创建。
     ///
-    /// 保底规则（与旧行为对齐，不回归已知问题）：
-    ///  · TagLib 给出「采样率不可信」（缺失或 1Hz 脏值）且码率/位深也拿不到 → 回退完整探测
-    ///    （可能起 ffmpeg）：DSD（dsf/dff）和「192kHz 显示成 1Hz」的个别 ALAC 都靠这条兜底；
-    ///  · 拿不到位深（mp3/aac 等有损）就留 0，调用方显示 "-"——**不按容器猜位深**
-    ///    （项目铁律：宁可空着也不虚标；WMA Lossless / DTS-HD 这类有损容器里同样能装 24bit）。
+    /// 保底规则（2026-10-13 用户实测「位深和码率也没读出来」后放宽，旧规则=三项全 0 才回退，
+    /// 会让 TagLib「只读到采样率」的容器永远显示 "-"）：
+    ///  · 码率缺失（任何容器都该有）→ 回退完整探测（含 ffmpeg）；
+    ///  · 位深缺失且是无损/PCM 容器（WAV/FLAC/AIFF/APE/DSD…）→ 同样回退；
+    ///    mp3/aac/ogg 等有损格式位深本来就是 0，显示 "-" 是正确行为，不起 ffmpeg 浪费；
+    ///  · 采样率不可信（缺失或 1Hz 脏值）且码率/位深也拿不到 → 回退完整探测
+    ///    （DSD 和「192kHz 显示成 1Hz」的个别 ALAC 靠这条兜底）；
+    ///  · 探测值只做「有就补、没有保留」的合并：不清空 TagLib 已读到的值，不按容器猜。
     /// 本方法不写 InfoCache（快速结果缺编码器名，别污染完整探测的缓存）。
     /// </summary>
     public static bool TryGetFactsFast(TagLib.File? file, string path, out int sampleRate, out int bitDepth, out int kbps)
@@ -224,14 +227,64 @@ namespace CelesteMusicPlayer
             kbps = props.AudioBitrate;
         }
 
-        bool nothingUsable = sampleRate <= 0 && kbps <= 0 && bitDepth <= 0;
-        if (nothingUsable)
+        // 缺口判定：码率任何容器都该补；位深只对无损/PCM 容器补（有损容器位深为 0 是正确显示）
+        string ext = (Path.GetExtension(path)?.TrimStart('.').Trim() ?? string.Empty).ToLowerInvariant();
+        bool kbpsGap = kbps <= 0;
+        bool bitsGap = bitDepth <= 0 && IsLosslessContainer(ext);
+
+        if (kbpsGap || bitsGap)
         {
-            // TagLib 什么都没读到（DSD 等）：回退完整探测（含 ffmpeg）保底
-            return TryGetFacts(path, out sampleRate, out bitDepth, out kbps, out _);
+            // TagLib 部分读到也回退完整探测（含 ffmpeg）
+            if (TryGetFacts(path, out int pRate, out int pBits, out int pKbps, out _))
+            {
+                // 合并：探测到了就用探测值，探测不到保留 TagLib 已读到的（不猜、不清空）
+                if (pRate > 0 && IsPlausibleSampleRate(pRate))
+                {
+                    sampleRate = pRate;
+                }
+                if (pBits > 0)
+                {
+                    bitDepth = pBits;
+                }
+                if (pKbps > 0)
+                {
+                    kbps = pKbps;
+                }
+            }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// 位深「本该有」的容器：PCM / 无损编码。有损容器（mp3/aac/ogg/opus…）位深为 0 是正常现象，
+    /// 不值得为它们起 ffmpeg。m4a 不在列：AAC/ALAC 二义且 AAC 位深本来就是 0
+    /// （ALAC 的位深 TagLib 自己能读到；真读不到时码率缺口也会把整条探测带起来）。
+    /// </summary>
+    private static bool IsLosslessContainer(string ext)
+    {
+        switch (ext)
+        {
+            case "wav":
+            case "aif":
+            case "aiff":
+            case "flac":
+            case "alac":
+            case "ape":
+            case "wv":
+            case "tta":
+            case "tak":
+            case "mpc":
+            case "dsf":
+            case "dff":
+            case "au":
+            case "caf":
+            case "w64":
+            case "wma": // WMA Lossless 有位深；有损 WMA 最多少探一次，不会虚标
+                return true;
+            default:
+                return false;
+        }
     }
 
     /// <summary>
