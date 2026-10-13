@@ -15,6 +15,8 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
 using Microsoft.UI.Input;
 using Microsoft.UI.Dispatching;
+using CommunityToolkit.WinUI.UI.Controls;
+using CommunityToolkit.WinUI.UI.Controls.Primitives;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 
@@ -80,37 +82,25 @@ namespace CelesteMusicPlayer
         public event Action<string>? TagsSaved;
 
         // =====================================================================
-        // 表格单元格内联编辑（2026-10-13 用户实测定稿：mp3tag 那套逻辑）
+        // 表格单元格内联编辑（2026-10-13 第四轮换 DataGrid 后重写）
         //
-        // 口径：单击某首歌 = 选中整行；行已是唯一选中项时，再单击这个行的
-        // 某个可编辑格 = 进编辑（TextBox 的 AllowFocusOnInteraction=False
-        // 挡住自动聚焦，由 TagCellBox_PointerPressed 按选中状态决定放行还是只选中）；
-        // 回车或点别处提交并立即写盘（读全量→改一个字段→写，失败把这一格退回原值）。
-        // 多选状态或行未选中时，第一击只收敛选中到这一行，不进编辑。
-        // 长字段（标题/艺术家/专辑/流派）编辑时临时开换行「展开」，失焦收回单行。
-        // Esc = 放弃这一格的改动。不可编辑列（#/时长/文件名/格式/位深/采样率/码率/大小）
-        // 保持只读文字。
+        // 口径（mp3tag 语义，2026-10-13 用户实测定稿）：单击某行 = 选中整行；
+        // 再击这一行的某个可编辑格 = 进编辑（DataGrid 原生二击手势，不用自己
+        // 拦指针事件）；回车 / 点别处提交并立即写盘，Esc 放弃这一格。
+        //
+        // 提交流转（关键设计）：编辑框是 OneWay 绑定，只负责显示初值，绝不把
+        // 半成品回写到行模型——落盘值在 CellEditEnding 里从 EditingElement 直读，
+        // 暂存进 _gridEditPending，再由 CellEditEnded 异步走「读全量 → 改一个
+        // 字段 → 只标这一个字段脏 → 写盘」。这样既不受绑定回写时序影响，Esc
+        // 取消也不会污染行模型；校验失败 / 写盘失败时行显示天然还是原值，
+        // 不需要手动把格子改回去。
         // =====================================================================
 
-        /// <summary>正在编辑的单元格所属行（提交时以 box.DataContext 为准，这里只作辅助）。</summary>
-        private TagFileItem? _cellItem;
-
-        /// <summary>正在编辑的列号（1..6；-1 = 没有）。</summary>
-        private int _cellCol = -1;
-
-        /// <summary>这一格获焦时的原文字（「没动不写盘」与 Esc 恢复用）。</summary>
-        private string _cellOriginal = string.Empty;
-
-        /// <summary>Esc 取消标记：置位后随后的 LostFocus 只收回不提交。</summary>
-        private bool _cellCancelled;
-
         /// <summary>
-        /// 本行这一击的 press 是否由我们全权处理（选中/进编辑都在 press 侧做完）。
-        /// release 侧据此挡掉 ListViewItem 的默认选择逻辑，防止把刚选中的行又翻回去
-        /// （2026-10-13 用户实测「点格子选不中」的稳健修法：不依赖默认行为，
-        /// 也不给默认行为留翻台机会）。
+        /// 待提交的单元格编辑（行 + 字段 + 编辑框里的最终文字）。
+        /// CellEditEnding 同步盖章，CellEditEnded 取出后清空并异步落盘。
         /// </summary>
-        private bool _cellPressHandled;
+        private (TagFileItem Item, TagField Field, string Text)? _gridEditPending;
 
         /// <summary>单元格写盘串行闸：避免两个格子的提交并发写同一个文件。</summary>
         private readonly SemaphoreSlim _cellSaveGate = new(1, 1);
@@ -123,7 +113,7 @@ namespace CelesteMusicPlayer
 
             _emptyHintDefault = TagListEmptyHint.Text;
 
-            TagFileListView.ItemsSource = _files;
+            // ItemsSource 由 XAML 的 {x:Bind _files, Mode=OneWay} 接管（旧代码在这里手赋）
 
             // 4 个子页全部登记给 ShellPageHost（显隐由它统一管；组名为空 = 不渲染组标题）
             _subNav = new ShellPageHost(TagSubNavPanel, () => _accentProvider?.Invoke() ?? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 120, 212)));
@@ -146,8 +136,8 @@ namespace CelesteMusicPlayer
             try
             {
                 _subNav.ReapplyAccent();
-                // 选中底色是强调色：主题/皮肤切换后按新强调色重刷已实现行
-                RefreshTagRowsChrome();
+                // 选中底色是强调色：主题/皮肤切换后按新强调色重刷资源与已实现行
+                SetupDataGridChrome();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ReapplyAccent", caught); }
         }
@@ -306,7 +296,7 @@ namespace CelesteMusicPlayer
             Renumber();
             RefreshCountUi();
             // 文件数变了 → 竖滚动条可能出现/消失（视口宽变，表头要跟），选中底色按新集合重画
-            RefreshTableAfterFilesChanged();
+            RefreshGridRowsChrome();
             global::CelesteMusicPlayer.StartupLog.Write(
                 $"TagPanel: {source} 新增 {added} 个，跳过重复 {skipped} 个，读取失败 {failed} 个，读标签耗时 {readSw.ElapsedMilliseconds}ms");
 
@@ -327,7 +317,7 @@ namespace CelesteMusicPlayer
 
         private void RemoveSelectedButton_Click(object sender, RoutedEventArgs e)
         {
-            List<TagFileItem> selected = TagFileListView.SelectedItems.Cast<TagFileItem>().ToList();
+            List<TagFileItem> selected = TagFileGrid.SelectedItems.Cast<TagFileItem>().ToList();
             if (selected.Count == 0)
             {
                 TagStatusText.Text = "先在上方列表里选中要移除的文件（可多选）。";
@@ -341,7 +331,7 @@ namespace CelesteMusicPlayer
 
             Renumber();
             RefreshCountUi();
-            RefreshTableAfterFilesChanged();
+            RefreshGridRowsChrome();
             if (_files.Count == 0)
             {
                 ResetEmptyHint();
@@ -360,7 +350,7 @@ namespace CelesteMusicPlayer
             int count = _files.Count;
             _files.Clear();
             RefreshCountUi();
-            RefreshTableAfterFilesChanged();
+            RefreshGridRowsChrome();
             ResetEmptyHint();
             ClearQuickEditPreview();
             TagStatusText.Text = $"已清空 {count} 个文件（只是移出本列表，不动硬盘上的文件）。";
@@ -370,7 +360,7 @@ namespace CelesteMusicPlayer
         // 快速编辑页：选中文件的标签编辑（阶段 6：可编辑 + 保存 + 快照整体回滚）
         // =====================================================================
 
-        private async void TagFileListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async void TagFileGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!_panelReady)
             {
@@ -378,9 +368,9 @@ namespace CelesteMusicPlayer
             }
 
             // 选中底色（圆角强调色）跟着选中态走
-            RefreshTagRowsChrome();
+            RefreshGridRowsChrome();
 
-            List<TagFileItem> selected = TagFileListView.SelectedItems.Cast<TagFileItem>().ToList();
+            List<TagFileItem> selected = TagFileGrid.SelectedItems.Cast<TagFileItem>().ToList();
             _quickEditSelection = selected;
             RefreshCountUi();
 
@@ -732,7 +722,7 @@ namespace CelesteMusicPlayer
         /// <summary>批量工具的作用范围：右侧列表选中项；一个都没选 = 整个列表。</summary>
         private (List<TagFileItem> Targets, bool WholeList) BatchTargets()
         {
-            List<TagFileItem> selected = TagFileListView.SelectedItems.Cast<TagFileItem>().ToList();
+            List<TagFileItem> selected = TagFileGrid.SelectedItems.Cast<TagFileItem>().ToList();
             if (selected.Count > 0)
             {
                 return (selected, false);
@@ -1468,7 +1458,7 @@ namespace CelesteMusicPlayer
         private async Task RefreshSavedRowsAsync(List<TagFileItem> saved)
         {
             HashSet<string> selectedPaths = new(
-                TagFileListView.SelectedItems.Cast<TagFileItem>().Select(i => i.FilePath),
+                TagFileGrid.SelectedItems.Cast<TagFileItem>().Select(i => i.FilePath),
                 StringComparer.OrdinalIgnoreCase);
 
             (TagFileItem Old, TagFileItem? New)[] rebuilt = await Task.Run(() => saved
@@ -1492,12 +1482,12 @@ namespace CelesteMusicPlayer
             // 恢复选中（单选时顺带让预览重读磁盘，确认落盘结果）
             if (selectedPaths.Count > 0)
             {
-                TagFileListView.SelectedItems.Clear();
+                TagFileGrid.SelectedItems.Clear();
                 foreach (TagFileItem item in _files)
                 {
                     if (selectedPaths.Contains(item.FilePath))
                     {
-                        TagFileListView.SelectedItems.Add(item);
+                        TagFileGrid.SelectedItems.Add(item);
                     }
                 }
             }
@@ -1505,7 +1495,7 @@ namespace CelesteMusicPlayer
             // 换进来的新实例序号是 0，重排一次（行模型 INPC，可见行实时更新）
             Renumber();
             // 行实例整体换过：列宽盖章 + 选中底色都要按新实例重来
-            RefreshTableAfterFilesChanged();
+            RefreshGridRowsChrome();
         }
 
         private void ShowQuickEditBatchCard(int count)
@@ -1586,225 +1576,108 @@ namespace CelesteMusicPlayer
         }
 
         // =====================================================================
-        // 表格单元格内联编辑（事件入口）
+        // 表格单元格内联编辑（DataGrid 事件入口）
         // =====================================================================
 
-        /// <summary>
-        /// 单元格按下（mp3tag 式编辑入口，2026-10-13 用户实测后定稿）：
-        /// Ctrl/Shift 多选手势原样放行（手动改选中会破坏区间选择/增减选择）；
-        /// 行未选中（或多选状态）→ 本击只选中整行，不进编辑；
-        /// 行已是「唯一选中项」→ 本击放行，进编辑（GotFocus 随后接管）。
-        /// 即：单击某首歌任意位置选中整行，再单击这个被选中行的某个标签即可编辑。
-        ///
-        /// 两个 2026-10-13 用户实测的坑，都在这里堵：
-        ///  ① FocusState 必须用 Programmatic——AllowFocusOnInteraction=False 会拒掉
-        ///     Pointer 焦点请求，表现就是「选中后点格子没进编辑」；
-        ///  ② 选中不依赖 ListViewItem 默认行为：press 侧显式 SelectedItem，release 侧
-        ///     （TagCellBox_PointerReleased）挡掉默认逻辑，避免不同 WinUI 版本上
-        ///     「选中又被翻回去」。
+        /// 单元格获焦（= 已进入编辑）：全选原文，直接打字即替换（和 mp3tag /
+        /// 资源管理器重命名一致）；顺带保证所在行是选中项（F2 / 直接打字
+        /// 进入编辑时行可能没选中）。
         /// </summary>
-        private void TagCellBox_PointerPressed(object sender, PointerRoutedEventArgs e)
+        private void TagCellEditBox_GotFocus(object sender, RoutedEventArgs e)
         {
-            _cellPressHandled = false; // 默认不拦 release
-
-            if (sender is not TextBox box || box.DataContext is not TagFileItem item)
+            if (sender is not TextBox box || !_panelReady)
             {
                 return;
             }
-
-            int col = Grid.GetColumn(box);
-            if (col is < 1 or > 6)
-            {
-                return;
-            }
-
-            // 多选手势（Ctrl 增减 / Shift 区间）完全交给 ListViewItem 默认逻辑
-            var mods = e.KeyModifiers;
-            if (mods.HasFlag(Windows.System.VirtualKeyModifiers.Control)
-                || mods.HasFlag(Windows.System.VirtualKeyModifiers.Shift))
-            {
-                return;
-            }
-
-            // 行已是唯一选中项 → 这一击就进编辑（不用再点一次别处）
-            if (ReferenceEquals(TagFileListView.SelectedItem, item)
-                && TagFileListView.SelectedItems.Count == 1)
-            {
-                box.Focus(FocusState.Programmatic);
-                e.Handled = true;
-                _cellPressHandled = true;
-                return;
-            }
-
-            // 否则只选中整行，不进编辑
-            e.Handled = true;
-            _cellPressHandled = true;
 
             try
             {
-                TagFileListView.SelectedItem = item;
-            }
-            catch (Exception caught)
-            {
-                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.TagCellBox_PointerPressed", caught);
-            }
-
-            // 诊断日志：下一轮若还有异常，凭这一行就能看出 press 有没有进来、选中成功没有
-            global::CelesteMusicPlayer.StartupLog.Write(
-                $"TagPanel: cell press col={col} path={item.FilePath} selCount={TagFileListView.SelectedItems.Count}");
-        }
-
-        /// <summary>
-        /// 单元格释放：press 被我们处理过（选中/进编辑都在 press 侧做完了）→ 挡掉这一击的
-        /// release，防止 ListViewItem 在 release 侧再做一次选择切换，把刚选中的行翻回未选中。
-        /// </summary>
-        private void TagCellBox_PointerReleased(object sender, PointerRoutedEventArgs e)
-        {
-            if (_cellPressHandled)
-            {
-                _cellPressHandled = false;
-                e.Handled = true;
-            }
-        }
-
-        /// <summary>单元格获焦（= 已进入编辑）：同步选中所在行，记录原值，全选文字，长字段展开换行。</summary>
-        private void TagCellBox_GotFocus(object sender, RoutedEventArgs e)
-        {
-            if (sender is not TextBox box || box.DataContext is not TagFileItem item)
-            {
-                return;
-            }
-
-            // 点单元格也要选中所在行；多选时收敛到这一行（编辑本来就是单文件动作）
-            try
-            {
-                if (!TagFileListView.SelectedItems.Contains(item))
+                if (FindAncestor<DataGridRow>(box) is DataGridRow row
+                    && row.DataContext is TagFileItem item
+                    && !TagFileGrid.SelectedItems.Contains(item))
                 {
-                    TagFileListView.SelectedItem = item;
+                    TagFileGrid.SelectedItem = item;
                 }
             }
             catch (Exception caught)
             {
-                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.TagCellBox_GotFocus", caught);
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.TagCellEditBox_GotFocus", caught);
             }
 
-            int col = Grid.GetColumn(box);
-            _cellItem = item;
-            _cellCol = col;
-            _cellOriginal = box.Text ?? string.Empty;
-            _cellCancelled = false;
-
-            // 进编辑全选原文：直接打字即替换，和 mp3tag / 资源管理器重命名一致
             box.SelectAll();
-
-            // 长字段编辑时「展开」：临时开换行，行高随内容长高，失焦收回单行
-            if (col is 1 or 2 or 3 or 6)
-            {
-                box.TextWrapping = TextWrapping.Wrap;
-            }
         }
 
-        /// <summary>单元格失焦：收回单行 + 提交写盘（Esc 取消过就只收回）。</summary>
-        private async void TagCellBox_LostFocus(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// 编辑即将结束：提交（Commit）时把编辑框里的最终文字 + 行 + 字段盖章暂存；
+        /// 取消（Cancel，Esc）时清空暂存——行模型是 OneWay 绑定、从没被写过，
+        /// 显示天然还是原值，不用手动恢复。真正的「读全量 → 改一个字段 →
+        /// 只标这一个字段脏 → 写盘」在 CellEditEnded 里异步做。
+        /// </summary>
+        private void TagFileGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
         {
-            if (sender is not TextBox box)
+            _gridEditPending = null;
+
+            if (e.EditAction != DataGridEditAction.Commit)
             {
                 return;
             }
 
-            int col = Grid.GetColumn(box);
-            if (col is 1 or 2 or 3 or 6)
+            if (e.Row?.DataContext is not TagFileItem item)
             {
-                box.TextWrapping = TextWrapping.NoWrap;
-            }
-
-            if (_cellCancelled)
-            {
-                _cellCancelled = false;
                 return;
             }
 
-            await CommitCellEditAsync(box);
+            if (FieldFromColumnTag(e.Column?.Tag) is not TagField field)
+            {
+                return;
+            }
+
+            if (e.EditingElement is not TextBox box)
+            {
+                return;
+            }
+
+            _gridEditPending = (item, field, box.Text ?? string.Empty);
         }
 
-        /// <summary>回车 = 提交（焦点交还列表，随后的失焦负责落盘）；Esc = 放弃这一格。</summary>
-        private void TagCellBox_KeyDown(object sender, KeyRoutedEventArgs e)
+        /// <summary>编辑结束：取出暂存值异步落盘（串行闸内排队；失败只在状态条说明原因）。</summary>
+        private async void TagFileGrid_CellEditEnded(object sender, DataGridCellEditEndedEventArgs e)
         {
-            if (sender is not TextBox box)
+            (TagFileItem Item, TagField Field, string Text)? pending = _gridEditPending;
+            _gridEditPending = null;
+
+            if (pending is null || !_panelReady)
             {
                 return;
             }
 
-            if (e.Key == Windows.System.VirtualKey.Enter)
-            {
-                e.Handled = true;
-                // 焦点移走会触发 LostFocus → 自动提交；这里只负责挪焦点
-                TagFileListView.Focus(FocusState.Programmatic);
-            }
-            else if (e.Key == Windows.System.VirtualKey.Escape)
-            {
-                e.Handled = true;
-                _cellCancelled = true;
-                box.Text = _cellOriginal;
-                TagFileListView.Focus(FocusState.Programmatic);
-            }
+            await CommitCellEditAsync(pending.Value.Item, pending.Value.Field, pending.Value.Text);
         }
 
         /// <summary>
         /// 单元格提交：把这一格的新值写进文件。安全口径与左侧「保存」一致——
-        /// 先读全量原标签做快照，只改这一个字段再写；写失败这一格退回原值
-        /// （磁盘上的原标签没动过，不需要回滚写盘）。没动过的一个字节都不写。
+        /// 先读全量原标签做底稿，只改这一个字段、只标这一个字段脏再写；
+        /// 和磁盘现值相同的（没动过）一个字节都不写。写失败 / 校验失败不动
+        /// 文件，行显示天然还是原值（OneWay 绑定没被污染），只在状态条说明原因。
         /// </summary>
-        private async Task CommitCellEditAsync(TextBox box)
+        private async Task CommitCellEditAsync(TagFileItem item, TagField field, string rawText)
         {
-            if (box.DataContext is not TagFileItem item)
-            {
-                return;
-            }
-
-            int col = Grid.GetColumn(box);
-            if (col is < 1 or > 6)
-            {
-                return;
-            }
-
             string path = item.FilePath;
             if (string.IsNullOrWhiteSpace(path))
             {
                 return;
             }
 
-            string newText = (box.Text ?? string.Empty).Trim();
-            string original = _cellOriginal;
+            string fieldName = FieldDisplayName(field);
+            string newText = rawText.Trim();
 
-            // 文字没动 → 不写盘
-            if (string.Equals(newText, original, StringComparison.Ordinal))
+            // 数字列先校验（失败不碰文件）
+            if (field is TagField.Year or TagField.Track
+                && newText.Length > 0 && !uint.TryParse(newText, out _))
             {
-                return;
-            }
-
-            string fieldName = col switch
-            {
-                1 => "标题",
-                2 => "艺术家",
-                3 => "专辑",
-                4 => "年份",
-                5 => "曲目号",
-                _ => "流派"
-            };
-
-            // 数字列先校验（失败只退回这一格，不碰文件）
-            if (col == 4 && newText.Length > 0 && !uint.TryParse(newText, out _))
-            {
-                box.Text = original;
-                TagStatusText.Text = "年份要填数字（比如 2024），也可以留空；已恢复原值。";
-                return;
-            }
-
-            if (col == 5 && newText.Length > 0 && !uint.TryParse(newText, out _))
-            {
-                box.Text = original;
-                TagStatusText.Text = "曲目号要填数字（比如 3），也可以留空；已恢复原值。";
+                TagStatusText.Text = field == TagField.Year
+                    ? "年份要填数字（比如 2024），也可以留空；已恢复原值。"
+                    : "曲目号要填数字（比如 3），也可以留空；已恢复原值。";
                 return;
             }
 
@@ -1813,39 +1686,40 @@ namespace CelesteMusicPlayer
             {
                 TagStatusText.Text = $"正在保存{fieldName}…";
 
-                bool ok = await Task.Run(() =>
+                // 0 = 没动不写；1 = 写成功；-1 = 写失败
+                int outcome = await Task.Run(() =>
                 {
                     // 新后端契约：读全量 → 改一个字段 → 只标记这一个字段为脏。
                     // 多值字段（艺术家/流派）走数组 round-trip，不再压扁。
                     TagEditModel before = TagEditorService.ReadTag(path);
                     TagEditModel toWrite = CloneModel(before);
 
-                    TagField field;
-                    switch (col)
+                    // 和磁盘现值相同 → 没动，不写盘
+                    if (string.Equals(newText, ReadModelFieldText(toWrite, field), StringComparison.Ordinal))
                     {
-                        case 1: toWrite.Title = newText; field = TagField.Title; break;
-                        case 2: toWrite.Artist = newText; field = TagField.Performers; break;
-                        case 3: toWrite.Album = newText; field = TagField.Album; break;
-                        case 4: toWrite.Year = newText.Length == 0 ? 0 : uint.Parse(newText); field = TagField.Year; break;
-                        case 5: toWrite.Track = newText.Length == 0 ? 0 : uint.Parse(newText); field = TagField.Track; break;
-                        default: toWrite.Genre = newText; field = TagField.Genres; break;
+                        return 0;
                     }
 
+                    ApplyModelField(toWrite, field, newText);
                     toWrite.MarkDirty(field);
-                    return TagEditorService.SaveTag(path, toWrite);
+                    return TagEditorService.SaveTag(path, toWrite) ? 1 : -1;
                 });
 
-                if (!ok)
+                if (outcome == 0)
                 {
-                    box.Text = original;
-                    TagStatusText.Text = $"{fieldName}保存失败；已恢复原值，详情见日志。";
+                    return;
+                }
+
+                if (outcome < 0)
+                {
+                    TagStatusText.Text = $"{fieldName}保存失败；原值未动，详情见日志。";
                     return;
                 }
 
                 global::CelesteMusicPlayer.StartupLog.Write($"TagPanel: 单元格保存 {fieldName} → {path}");
                 TagsSaved?.Invoke(path);
 
-                // 刷新行（换实例，OneTime 绑定重新求值）；顺带刷新左栏预览（若正在看这个文件）
+                // 刷新行（换实例，绑定重新求值）；顺带刷新左栏预览（若正在看这个文件）
                 await RefreshSavedRowsAsync(new List<TagFileItem> { item });
 
                 TagStatusText.Text = $"已保存{fieldName}。";
@@ -1853,13 +1727,77 @@ namespace CelesteMusicPlayer
             catch (Exception caught)
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.CommitCellEdit", caught);
-                box.Text = original;
                 TagStatusText.Text = $"{fieldName}保存失败：" + caught.Message;
             }
             finally
             {
                 _cellSaveGate.Release();
             }
+        }
+
+        /// <summary>列 Tag（XAML 里盖章的字符串）→ 标签字段；只读列返回 null。</summary>
+        private static TagField? FieldFromColumnTag(object? tag) => tag switch
+        {
+            "Title" => TagField.Title,
+            "Artist" => TagField.Performers,
+            "Album" => TagField.Album,
+            "Year" => TagField.Year,
+            "Track" => TagField.Track,
+            "Genre" => TagField.Genres,
+            _ => null
+        };
+
+        /// <summary>字段的人话名字（状态条提示用）。</summary>
+        private static string FieldDisplayName(TagField field) => field switch
+        {
+            TagField.Title => "标题",
+            TagField.Performers => "艺术家",
+            TagField.Album => "专辑",
+            TagField.Year => "年份",
+            TagField.Track => "曲目号",
+            TagField.Genres => "流派",
+            _ => "标签"
+        };
+
+        /// <summary>读模型字段的显示文字（与表格显示口径一致："; " 连接、0 = 空）。</summary>
+        private static string ReadModelFieldText(TagEditModel m, TagField field) => field switch
+        {
+            TagField.Title => m.Title ?? string.Empty,
+            TagField.Performers => TagEditModel.Join(m.Performers),
+            TagField.Album => m.Album ?? string.Empty,
+            TagField.Year => m.Year == 0 ? string.Empty : m.Year.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            TagField.Track => m.Track == 0 ? string.Empty : m.Track.ToString(System.Globalization.CultureInfo.InvariantCulture),
+            TagField.Genres => TagEditModel.Join(m.Genres),
+            _ => string.Empty
+        };
+
+        /// <summary>把这一格的文字写进模型（多值字段走 Artist/Genre 兼容视图，";" 拆分）。</summary>
+        private static void ApplyModelField(TagEditModel m, TagField field, string text)
+        {
+            switch (field)
+            {
+                case TagField.Title: m.Title = text; break;
+                case TagField.Performers: m.Artist = text; break;
+                case TagField.Album: m.Album = text; break;
+                case TagField.Year: m.Year = text.Length == 0 ? 0 : uint.Parse(text); break;
+                case TagField.Track: m.Track = text.Length == 0 ? 0 : uint.Parse(text); break;
+                case TagField.Genres: m.Genre = text; break;
+            }
+        }
+
+        /// <summary>沿视觉树往上找指定类型的祖先（格内编辑框 → 所在行用）。</summary>
+        private static T? FindAncestor<T>(DependencyObject root) where T : class
+        {
+            DependencyObject? current = root;
+            while (current != null)
+            {
+                if (current is T match)
+                {
+                    return match;
+                }
+                current = VisualTreeHelper.GetParent(current);
+            }
+            return null;
         }
 
         /// <summary>
@@ -1884,12 +1822,12 @@ namespace CelesteMusicPlayer
             await AddFilesAsync(wanted, "跳转编辑");
 
             HashSet<string> want = new(wanted, StringComparer.OrdinalIgnoreCase);
-            TagFileListView.SelectedItems.Clear();
+            TagFileGrid.SelectedItems.Clear();
             foreach (TagFileItem item in _files)
             {
                 if (want.Contains(item.FilePath))
                 {
-                    TagFileListView.SelectedItems.Add(item);
+                    TagFileGrid.SelectedItems.Add(item);
                 }
             }
         }
@@ -1990,6 +1928,10 @@ namespace CelesteMusicPlayer
                 Duration = duration,
                 FilePath = path
             };
+
+            // 格内编辑代理初值（未知留空，不显示 "-"）
+            item.YearEdit = year > 0 ? year.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
+            item.TrackEdit = track > 0 ? track.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
 
             // 文件派生列（格式 / 位深 / 采样率 / 码率 / 大小）：格式走扩展名，规格走上面那一趟
             // TagLib 读取（TryGetFactsFast 内部对 DSD 等 TagLib 读不了的格式会回退完整探测）。
@@ -2116,7 +2058,7 @@ namespace CelesteMusicPlayer
         private void RefreshCountUi()
         {
             int total = _files.Count;
-            int selected = TagFileListView?.SelectedItems.Count ?? 0;
+            int selected = TagFileGrid?.SelectedItems.Count ?? 0;
 
             FileCountText.Text = total > 0 ? $"共 {total} 个文件" : "0 个文件";
             // 只切显隐，不改文字：文字由 ShowEmptyHint / ResetEmptyHint 管
@@ -2134,80 +2076,22 @@ namespace CelesteMusicPlayer
         }
 
         // =====================================================================
-        // 文件表格：列宽（表头拖拽）与表头横向滚动同步
+        // 文件表格：DataGrid 外观（2026-10-13 第四轮换 DataGrid）
         //
-        // 布局约定（改列数/默认宽必须三处同步）：
-        //   ① XAML 表头 TagListHeaderGrid 的 ColumnDefinitions
-        //   ② XAML 行模板 Grid 的 ColumnDefinitions
-        //   ③ 下面的 ColDefaultWidths / ColMinWidths
-        // 运行期以 ③ 为唯一真相：Loaded 时按 ③ 刷一遍表头和所有可见行，
-        // 之后拖拽只改 ③ + 同步刷（行模板 Loaded 时也会按 ③ 盖章，新行不会错位）。
-        //
-        // 拖拽语义（2026-10-13 用户实测定稿）：竖线右侧的区域一起跟着动、左侧不动。
-        // 实现 = 14 个真实列全部定宽 + 末尾 1 个不可见星号填充列（FillerCol）吸收
-        // 「视口比内容宽」时的剩余宽度。星号列若混在真实列中间（旧设计放在标题列），
-        // 它会把被拖列的变化量吞掉，出现「往左拖、字往右去」的怪事。
+        // 旧自绘表格的三处同步（XAML 表头 + 行模板 + cs 数组）、表头位移裁剪、
+        // 列边界把手、拖拽帧合并……整块删除：列宽 / 列头 / 横向滚动 / 行选中
+        // 全部是 DataGrid 原生能力，列宽只在 XAML 一处定义。这里只剩三件事：
+        //   ① 选中底色染成注入的强调色（覆盖 DataGridRowSelected* 主题资源）；
+        //   ② 已实现行的选中前景（LoadingRow / UnloadingRow / 选择变化时刷）；
+        //   ③ 面板就绪守卫（_panelReady，Loaded 之后才响应）。
         // =====================================================================
-
-        /// <summary>总列数（与 XAML 两处 ColumnDefinitions 严格一致）。</summary>
-        private const int ColCount = 15;
-
-        /// <summary>末尾填充列下标（不可见、不拖拽，只负责吸收剩余宽度）。</summary>
-        private const int FillerCol = 14;
-
-        private const double ColSpacing = 8;
-        private const double RowPaddingX = 10;
-
-        private static readonly double[] ColDefaultWidths =
-            { 36, 100, 130, 130, 52, 44, 84, 60, 150, 64, 52, 76, 68, 76 };
-
-        private static readonly double[] ColMinWidths =
-            { 28, 100, 60, 60, 36, 32, 48, 44, 80, 44, 36, 48, 48, 48 };
-
-        private readonly double[] _colWidths = (double[])ColDefaultWidths.Clone();
-
-        /// <summary>默认列宽下的内容总宽（含列间距与行内边距）：_gridMinWidth 的初值，
-        /// 防止首次测量完成前（视口宽还是 0）被当成 0 污染行模板 MinWidth。</summary>
-        private static readonly double DefaultGridMinWidth =
-            ColDefaultWidths.Sum() + ColSpacing * (ColCount - 1) + RowPaddingX * 2;
-
-        private double _gridMinWidth = DefaultGridMinWidth;
-        private double _listViewportW;
-        private double _lastViewportW = -1;
-        private ScrollViewer? _listScroller;
-        private TranslateTransform? _headerSlide;
-
-        /// <summary>
-        /// 已实现行容器的父面板（ItemsPanel）。拖拽列宽时只遍历它的 Children——
-        /// 按 _files 全量 ContainerFromItem 每个 PointerMoved 都跑一遍，文件上千时
-        /// O(n²) 就是「拖动列头卡」的根源（2026-10-13 用户实测）。
-        /// </summary>
-        private Panel? _itemsPanel;
-
-        /// <summary>上次应用列宽时是否处于「内容宽于视口」（溢出滚动）状态。只有状态翻转才需要全量重刷。</summary>
-        private bool _overflowState;
-
-        // 拖拽状态（_dragCol < 0 表示没在拖）
-        private int _dragCol = -1;
-        private double _dragStartX;
-        private double _dragStartW;
-
-        /// <summary>
-        /// 拖拽列宽的帧合并：高回报率鼠标一个显示帧内会灌入多个 PointerMoved，每个都同步改列宽
-        /// = 每个都触发表头+已实现行全量重排，UI 线程打满就是「拖动列头卡」的残余根因
-        /// （2026-10-13 用户实测，O(n²) 修掉之后仍然卡）。改成每 ~16ms 应用一次最新值，
-        /// 指针释放时立即结算，不留拖尾。
-        /// </summary>
-        private DispatcherQueueTimer? _dragApplyTimer;
-        private int _pendingDragCol = -1;
-        private double _pendingDragWidth;
 
         private void TagPanelControl_Loaded(object sender, RoutedEventArgs e)
         {
             _panelReady = true;
             try
             {
-                SetupTableScrolling();
+                SetupDataGridChrome();
             }
             catch (Exception caught)
             {
@@ -2215,430 +2099,33 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>表格增强初始化：横向滚动同步、表头裁剪、列宽把手。Loaded 后调用一次。</summary>
-        private void SetupTableScrolling()
-        {
-            // 1) ListView 内部 ScrollViewer：横向滚动时把表头往左同等位移
-            //    （表头在 ListView 外面，不会自己跟着滚）
-            _listScroller = FindDescendant<ScrollViewer>(TagFileListView);
-            if (_listScroller != null)
-            {
-                _listViewportW = _listScroller.ViewportWidth;
-                _lastViewportW = _listViewportW;
-                _listScroller.ViewChanged += ListScroller_ViewChanged;
-            }
-
-            // 已实现行容器面板：拖拽列宽只遍历它（见 _itemsPanel 注释）
-            _itemsPanel = VisualTreeWalker.FindItemsPanel(TagFileListView);
-
-            // 2) 表头位移变换 + 裁剪：列太多内容宽于视口时不裁会溢出到右列外。
-            //    Clip 挂在 TagHeaderHost（不动的外壳）上——挂在 TagListHeaderGrid 上会
-            //    跟着它的 RenderTransform 一起平移，横滚时左段反而裁不住（2026-10-13 修）。
-            _headerSlide = new TranslateTransform();
-            TagListHeaderGrid.RenderTransform = _headerSlide;
-            UpdateHeaderClip();
-
-            // 3) 表头列边界生成拖拽把手（6px 热区 + 1px 可见竖线，代码生成免得 XAML 写 14 遍）
-            BuildColumnGrips();
-
-            // 4) 选中外观：杀掉 ListViewItem 默认方角选中层，改由行内 TagRowChrome 画圆角强调色
-            ApplyTagSelectionResources();
-
-            TagHeaderHost.SizeChanged += TagHeaderHost_SizeChanged;
-            TagFileListView.SizeChanged += TagFileListView_SizeChanged;
-            // 布局变化时核对视口宽：文件增删会让竖滚动条出现/消失，ViewChanged / SizeChanged
-            // 都不一定触发，表头显式宽会一直用旧值 → 右边缘与行错开（2026-10-13 用户实测）
-            TagFileListView.LayoutUpdated += TagFileListView_LayoutUpdated;
-
-            ApplyColumnWidths();
-        }
-
         /// <summary>
-        /// 列表布局变化（竖滚动条出现/消失、行实现/回收…）时核对视口宽：
-        /// 只有真变了才刷（同值跳过），不会每个布局 pass 都重排。
+        /// DataGrid 外观初始化：选中底色染成注入的强调色。DataGrid 的选中色是
+        /// 「Color + Opacity」成对的主题资源（行模板动画里二者相乘），四组状态
+        /// （选中 / 悬停选中 / 失焦选中 / 失焦悬停选中）都要覆盖——只改 Color
+        /// 会被默认 Opacity 冲淡。Loaded 后调一次；主题 / 皮肤切换时由
+        /// ReapplyAccent 再调（强调色可能变了）。
         /// </summary>
-        private void TagFileListView_LayoutUpdated(object sender, object e)
+        private void SetupDataGridChrome()
         {
-            double vw = _listScroller?.ViewportWidth ?? 0;
-            if (vw > 0 && Math.Abs(vw - _listViewportW) > 0.5)
-            {
-                _listViewportW = vw;
-                _lastViewportW = vw;
-                RefreshOverflowState();
-            }
+            Windows.UI.Color accentColor = ResolveTagAccentColor();
+
+            TagFileGrid.Resources["DataGridRowSelectedBackgroundColor"] = accentColor;
+            TagFileGrid.Resources["DataGridRowSelectedBackgroundOpacity"] = 1.0;
+            TagFileGrid.Resources["DataGridRowSelectedHoveredBackgroundColor"] = accentColor;
+            TagFileGrid.Resources["DataGridRowSelectedHoveredBackgroundOpacity"] = 1.0;
+            TagFileGrid.Resources["DataGridRowSelectedUnfocusedBackgroundColor"] = accentColor;
+            TagFileGrid.Resources["DataGridRowSelectedUnfocusedBackgroundOpacity"] = 1.0;
+            TagFileGrid.Resources["DataGridRowSelectedHoveredUnfocusedBackgroundColor"] = accentColor;
+            TagFileGrid.Resources["DataGridRowSelectedHoveredUnfocusedBackgroundOpacity"] = 1.0;
+
+            RefreshGridRowsChrome();
         }
-
-        private void ListScroller_ViewChanged(object? sender, ScrollViewerViewChangedEventArgs e)
-        {
-            try
-            {
-                if (_headerSlide != null && _listScroller != null)
-                {
-                    _headerSlide.X = -_listScroller.HorizontalOffset;
-                }
-
-                // 竖滚动条出现/消失会改变视口宽 → 行宽阈值跟着变（只有溢出状态翻转才全量重刷），
-                // 表头显式宽在 RefreshOverflowState 里每次都会跟（行靠 NaN 自动拉伸，表头不会）
-                double vw = _listScroller?.ViewportWidth ?? 0;
-                if (vw > 0 && Math.Abs(vw - _lastViewportW) > 0.5)
-                {
-                    _lastViewportW = vw;
-                    _listViewportW = vw;
-                    RefreshOverflowState();
-                }
-            }
-            catch (Exception caught)
-            {
-                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ViewChanged", caught);
-            }
-        }
-
-        private void UpdateHeaderClip()
-        {
-            double w = TagHeaderHost.ActualWidth;
-            double h = TagHeaderHost.ActualHeight;
-            if (w <= 0 || h <= 0)
-            {
-                return;
-            }
-            // Clip 必须挂在不动的 TagHeaderHost 上：挂在 TagListHeaderGrid 上时，
-            // Clip 在元素本地坐标空间，会随 _headerSlide 平移一起动，横滚时表头
-            // 左段裁不住、会溢出到左面板上方（2026-10-13 修）。
-            TagHeaderHost.Clip = new RectangleGeometry
-            {
-                Rect = new global::Windows.Foundation.Rect(0, 0, w, h)
-            };
-        }
-
-        private void BuildColumnGrips()
-        {
-            for (int i = 0; i < FillerCol; i++)
-            {
-                ColumnResizeGrip grip = new(_accentProvider);
-                Grid.SetColumn(grip, i);
-                grip.PointerPressed += ColumnGrip_PointerPressed;
-                grip.PointerMoved += ColumnGrip_PointerMoved;
-                grip.PointerReleased += ColumnGrip_PointerReleased;
-                grip.PointerCanceled += ColumnGrip_PointerReleased;
-                TagListHeaderGrid.Children.Add(grip);
-            }
-        }
-
-        private void ColumnGrip_PointerPressed(object sender, PointerRoutedEventArgs e)
-        {
-            if (sender is not ColumnResizeGrip grip)
-            {
-                return;
-            }
-
-            int col = Grid.GetColumn(grip);
-            _dragCol = col;
-            _dragStartX = e.GetCurrentPoint(TagListHeaderGrid).Position.X;
-            _dragStartW = _colWidths[col];
-            grip.CapturePointer(e.Pointer);
-            grip.SetDragging(true);
-            e.Handled = true;
-        }
-
-        private void ColumnGrip_PointerMoved(object sender, PointerRoutedEventArgs e)
-        {
-            if (_dragCol < 0 || sender is not ColumnResizeGrip grip)
-            {
-                return;
-            }
-
-            double x = e.GetCurrentPoint(TagListHeaderGrid).Position.X;
-            double w = _dragStartW + (x - _dragStartX);
-            if (w < ColMinWidths[_dragCol])
-            {
-                w = ColMinWidths[_dragCol];
-            }
-
-            // 只记最新值，实际应用交给 ~16ms 定时器（一个显示帧一次，见 _dragApplyTimer 注释）
-            _pendingDragCol = _dragCol;
-            _pendingDragWidth = w;
-            ScheduleDragApply();
-            e.Handled = true;
-        }
-
-        private void ColumnGrip_PointerReleased(object sender, PointerRoutedEventArgs e)
-        {
-            if (sender is not ColumnResizeGrip grip)
-            {
-                return;
-            }
-
-            // 松手前把最后的位置立即结算掉，再停表：别让列宽停在半路上
-            FlushPendingDragWidth();
-            _dragApplyTimer?.Stop();
-
-            try
-            {
-                grip.ReleasePointerCapture(e.Pointer);
-            }
-            catch
-            {
-                // 指针已经丢了就算了
-            }
-            grip.SetDragging(false);
-            _dragCol = -1;
-            e.Handled = true;
-        }
-
-        /// <summary>（重）启拖拽应用定时器：每个显示帧最多应用一次列宽。</summary>
-        private void ScheduleDragApply()
-        {
-            if (_dragApplyTimer == null)
-            {
-                _dragApplyTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
-                _dragApplyTimer.Interval = TimeSpan.FromMilliseconds(16);
-                _dragApplyTimer.Tick += DragApplyTimer_Tick;
-            }
-            _dragApplyTimer.Stop();
-            _dragApplyTimer.Start();
-        }
-
-        private void DragApplyTimer_Tick(DispatcherQueueTimer sender, object e)
-        {
-            sender.Stop();
-            FlushPendingDragWidth();
-        }
-
-        private void FlushPendingDragWidth()
-        {
-            if (_pendingDragCol < 0)
-            {
-                return;
-            }
-
-            int col = _pendingDragCol;
-            double w = _pendingDragWidth;
-            _pendingDragCol = -1;
-            SetColumnWidth(col, w);
-        }
-
-        private void SetColumnWidth(int col, double width)
-        {
-            if (col < 0 || col >= FillerCol)
-            {
-                return;
-            }
-
-            if (width < ColMinWidths[col])
-            {
-                width = ColMinWidths[col];
-            }
-
-            if (Math.Abs(_colWidths[col] - width) < 0.5)
-            {
-                return;
-            }
-
-            _colWidths[col] = width;
-            ApplyColumnWidths();
-        }
-
-        /// <summary>按当前列宽刷新表头 + 所有已实现（可见）的行。</summary>
-        private void ApplyColumnWidths()
-        {
-            // 视口宽每次现读：竖滚动条随文件增删出现/消失时不依赖 ViewChanged 通知
-            double vw = _listScroller?.ViewportWidth ?? 0;
-            if (vw > 0)
-            {
-                _listViewportW = vw;
-                _lastViewportW = vw;
-            }
-
-            double fixedSum = 0;
-            for (int i = 0; i < FillerCol; i++)
-            {
-                fixedSum += _colWidths[i];
-            }
-            _gridMinWidth = fixedSum + ColSpacing * (ColCount - 1) + RowPaddingX * 2;
-
-            // 表头与行用同一个参照：行的实际渲染宽度（ItemsPanel 宽度，行的直接父容器）。
-            // 竖滚动条占位它自动跟着变，与行右边缘永远一致；面板未就绪时退回视口宽。
-            double rowExtent = GetRowExtentWidth();
-            ApplyWidthsToGrid(TagListHeaderGrid, rowExtent, header: true);
-
-            // 只遍历已实现（可见）行容器：ItemsPanel.Children 就是已实现集合。
-            // 旧实现按 _files 全量 ContainerFromItem，每个 PointerMoved 跑一遍，
-            // 文件上千时 O(n²)——正是「拖动列头左右宽度会卡」的根源（2026-10-13 用户实测）。
-            _itemsPanel ??= VisualTreeWalker.FindItemsPanel(TagFileListView);
-            if (_itemsPanel != null)
-            {
-                foreach (UIElement child in _itemsPanel.Children)
-                {
-                    if (child is ListViewItem container)
-                    {
-                        Grid? row = FindRowGrid(container);
-                        if (row != null)
-                        {
-                            ApplyWidthsToGrid(row, rowExtent, header: false);
-                        }
-                    }
-                }
-            }
-
-            _overflowState = _listViewportW > 0 && _listViewportW < _gridMinWidth;
-        }
-
-        /// <summary>
-        /// 行的实际渲染宽度：优先取 ItemsPanel（行的直接父容器）宽度——竖滚动条出现/消失时
-        /// 它自动跟着变，表头用它就不会和行右边缘错开；面板还没实现时退回 ScrollViewer 视口宽。
-        /// </summary>
-        private double GetRowExtentWidth()
-        {
-            if (_itemsPanel != null && _itemsPanel.ActualWidth > 0)
-            {
-                return _itemsPanel.ActualWidth;
-            }
-            return _listViewportW;
-        }
-
-        /// <summary>
-        /// 视口宽变化后调用。只有「溢出/不溢出」状态翻转才全量重刷：
-        /// 不溢出时末尾星号填充列自动吸收剩余宽度，行会自己拉伸；
-        /// 每个 tick 都逐行设宽正是拖窗口卡顿的根源（2026-10-13 用户实测）。
-        /// 表头是例外——它在 ListView 外面不会自动拉伸，显式宽每次都要跟。
-        /// </summary>
-        private void RefreshOverflowState()
-        {
-            bool overflow = _listViewportW > 0 && _listViewportW < _gridMinWidth;
-            if (overflow != _overflowState)
-            {
-                ApplyColumnWidths();
-            }
-            else
-            {
-                RefreshHeaderWidth();
-            }
-        }
-
-        /// <summary>表头显式宽跟随行的实际渲染宽度（行靠 NaN 自动拉伸；表头在 ListView 外面，不设就永远是宿主全宽）。</summary>
-        private void RefreshHeaderWidth()
-            => ApplyWidthsToGrid(TagListHeaderGrid, GetRowExtentWidth(), header: true);
-
-        private void ApplyWidthsToGrid(Grid grid, double viewportW, bool header)
-        {
-            ColumnDefinitionCollection cols = grid.ColumnDefinitions;
-            for (int i = 0; i < cols.Count && i < FillerCol; i++)
-            {
-                // 同值跳过：拖拽时每帧只有一列在变，没必要把 14 列全设一遍
-                double w = _colWidths[i];
-                ColumnDefinition cd = cols[i];
-                if (!cd.Width.IsAbsolute || Math.Abs(cd.Width.Value - w) >= 0.01)
-                {
-                    cd.Width = new GridLength(w);
-                }
-            }
-
-            // 末尾填充列不碰（XAML 里就是 *，自动吸收剩余宽度）
-            if (Math.Abs(grid.MinWidth - _gridMinWidth) >= 0.01)
-            {
-                grid.MinWidth = _gridMinWidth;
-            }
-
-            // 视口比总宽窄 → 内容按总宽渲染（超出部分靠裁剪/横向滚动）；
-            // 表头不溢出时显式取「列表视口宽」——与行同一個参照，竖滚动条占位两边
-            // 一致，列边界才对得齐（NaN=清除显式宽会让表头拉成宿主全宽，2026-10-13 修）。
-            // 行不溢出时保持 NaN 自动拉伸即可，无需显式宽。
-            double desired = double.NaN;
-            if (viewportW > 0 && viewportW < _gridMinWidth)
-            {
-                desired = _gridMinWidth;
-            }
-            else if (header && viewportW > 0)
-            {
-                desired = viewportW;
-            }
-
-            // NaN.Equals(NaN)=true，同值（含 NaN）不重复设，免得每帧无效重排
-            if (!grid.Width.Equals(desired))
-            {
-                grid.Width = desired;
-            }
-        }
-
-        /// <summary>
-        /// 选中外观（2026-10-13 用户实测「选中背景就是一个矩形，一点不好看」后重做）：
-        /// 默认 ListViewItem 的 Selected 视觉态是方角纯色矩形（样式里的 CornerRadius 默认模板
-        /// 根本不读）。修法=把 ListViewItemBackgroundSelected* 系列资源覆盖成透明杀掉默认层，
-        /// 选中底色改由行模板里的 TagRowChrome 圆角 Border 画（强调色底 + 对比前景色），
-        /// 与主列表 SongRowChrome 同口径。
-        /// </summary>
-        private void ApplyTagSelectionResources()
-        {
-            TagFileListView.Resources["ListViewItemBackgroundSelected"] = TagTransparentBrush;
-            TagFileListView.Resources["ListViewItemBackgroundSelectedPointerOver"] = TagTransparentBrush;
-            TagFileListView.Resources["ListViewItemBackgroundSelectedPressed"] = TagTransparentBrush;
-            TagFileListView.Resources["ListViewItemBackgroundSelectedDisabled"] = TagTransparentBrush;
-            // 关掉多选勾（本列表 SelectionMode=Extended 本来不显示，双保险）
-            TagFileListView.Resources["ListViewItemSelectionCheckMarkVisualEnabled"] = false;
-        }
-
-        private static readonly Brush TagTransparentBrush =
-            new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
 
         private static readonly Brush TagFallbackAccentBrush =
             new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 120, 212));
 
-        /// <summary>刷新所有已实现（可见）行的选中底色。只遍历 ItemsPanel.Children，不做全量 ContainerFromItem。</summary>
-        private void RefreshTagRowsChrome()
-        {
-            if (!_panelReady)
-            {
-                return;
-            }
-
-            _itemsPanel ??= VisualTreeWalker.FindItemsPanel(TagFileListView);
-            if (_itemsPanel == null)
-            {
-                return;
-            }
-
-            foreach (UIElement child in _itemsPanel.Children)
-            {
-                if (child is ListViewItem container)
-                {
-                    ApplyTagRowChrome(container);
-                }
-            }
-        }
-
-        /// <summary>单行选中底色：选中=强调色圆角底 + 对比前景；未选中=透明底 + 收回前景。</summary>
-        private void ApplyTagRowChrome(ListViewItem container)
-        {
-            Border? chrome = VisualTreeWalker.FindTaggedBorder(container, "TagRowChrome");
-            if (chrome == null)
-            {
-                return;
-            }
-
-            // 容器本身保持透明，避免默认模板再画一层
-            container.Background = TagTransparentBrush;
-            container.BorderThickness = new Thickness(0);
-
-            if (container.IsSelected)
-            {
-                Brush accent = ResolveTagAccentBrush();
-                chrome.Background = accent;
-                chrome.BorderThickness = new Thickness(0);
-                // 默认 Selected 视觉态会把 ContentPresenter.Foreground 动画成白色（动画优先级
-                // 高于本地值），必须给行内每个 TextBlock/TextBox 显式设值才压得住。
-                // chrome 是内容层的兄弟（垫在底下），遍历范围取它的父节点（外层 Grid）。
-                DependencyObject scope = chrome.Parent ?? (DependencyObject)chrome;
-                ApplyTagRowForeground(scope, ColorHelper.ResolveContrastingForeground(accent));
-            }
-            else
-            {
-                chrome.Background = TagTransparentBrush;
-                chrome.BorderThickness = new Thickness(0);
-                DependencyObject scope = chrome.Parent ?? (DependencyObject)chrome;
-                ClearTagRowForeground(scope);
-            }
-        }
-
+        /// <summary>取注入的强调色刷（拿不到 / 抛异常时退回默认蓝）。</summary>
         private Brush ResolveTagAccentBrush()
         {
             try
@@ -2656,6 +2143,10 @@ namespace CelesteMusicPlayer
             return TagFallbackAccentBrush;
         }
 
+        /// <summary>
+        /// 给一棵子树里的文字统一上前景色。选中态要把行内每个 TextBlock/TextBox
+        /// 都显式设值——有些默认样式自带前景，单靠属性继承压不住（本地值 > 样式）。
+        /// </summary>
         private static void ApplyTagRowForeground(DependencyObject root, Brush foreground)
         {
             int count = VisualTreeHelper.GetChildrenCount(root);
@@ -2675,6 +2166,7 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>收回上面的本地值（恢复主题继承）。</summary>
         private static void ClearTagRowForeground(DependencyObject root)
         {
             int count = VisualTreeHelper.GetChildrenCount(root);
@@ -2694,61 +2186,79 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>
-        /// 文件集合变动后：竖滚动条可能随出现/消失（视口宽变了，表头显式宽要跟着刷），
-        /// 已实现行的选中底色也按新集合重画一次。
-        /// </summary>
-        private void RefreshTableAfterFilesChanged()
+        /// <summary>注入强调色取纯色值（取不到 / 不是纯色刷退回默认蓝）。</summary>
+        private Windows.UI.Color ResolveTagAccentColor()
         {
-            RefreshOverflowState();
-            RefreshTagRowsChrome();
+            try
+            {
+                if (ResolveTagAccentBrush() is SolidColorBrush solid)
+                {
+                    return solid.Color;
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ResolveTagAccentColor", caught);
+            }
+            return Windows.UI.Color.FromArgb(255, 0, 120, 212);
+        }
+
+        /// <summary>行实现（新行 / 回收行复用）时按当前选中态盖章选中外观。</summary>
+        private void TagFileGrid_LoadingRow(object sender, DataGridRowEventArgs e)
+        {
+            ApplyGridRowChrome(e.Row);
+        }
+
+        /// <summary>行被回收（滚出视口 / 复用时）收回前景，防止残留到下一条数据。</summary>
+        private void TagFileGrid_UnloadingRow(object sender, DataGridRowEventArgs e)
+        {
+            e.Row.ClearValue(Control.ForegroundProperty);
+            ClearTagRowForeground(e.Row);
         }
 
         /// <summary>
-        /// 行模板实现（新行/回收行）时按当前列宽盖章，防止用回 XAML 默认值错位；
-        /// 顺带按当前选中态画这一行的选中底色（滚动新实现的行也要有选中外观）。
-        /// sender 是外层 Grid（DataTemplate 根），内容层是带 15 列定义的内层 Grid。
+        /// 选中外观（承接 2026-10-13 用户实测「选中背景就是一个矩形，一点不好看」）：
+        /// DataGrid 行模板的选中态只动画 BackgroundRectangle（没有前景动画），
+        /// 所以底色靠覆盖主题资源染强调色；前景设行属性 + 逐元素本地值双保险
+        /// （单靠继承会被自带前景的默认样式盖掉，逐元素本地值压得住）。
         /// </summary>
-        private void TagFileRow_Loaded(object sender, RoutedEventArgs e)
+        private void ApplyGridRowChrome(DataGridRow row)
         {
-            if (sender is not Grid outer)
+            // ⚠ WinUI 版 DataGridRow 没有 IsSelected 属性（WPF 版有）——选中态
+            // 只能问表格的 SelectedItems（行被回收复用时就靠这个拿当前数据项）。
+            if (TagFileGrid.SelectedItems.Contains(row.DataContext))
+            {
+                Brush foreground = ColorHelper.ResolveContrastingForeground(ResolveTagAccentBrush());
+                row.Foreground = foreground;
+                ApplyTagRowForeground(row, foreground);
+            }
+            else
+            {
+                row.ClearValue(Control.ForegroundProperty);
+                ClearTagRowForeground(row);
+            }
+        }
+
+        /// <summary>刷新所有已实现（可见）行的选中外观。只遍历行呈送器子节点，不做全量。</summary>
+        private void RefreshGridRowsChrome()
+        {
+            if (!_panelReady)
             {
                 return;
             }
 
-            Grid? row = FindDescendantWhere<Grid>(outer, g => g.ColumnDefinitions.Count == ColCount);
-            if (row != null)
+            if (FindDescendant<DataGridRowsPresenter>(TagFileGrid) is not DataGridRowsPresenter presenter)
             {
-                ApplyWidthsToGrid(row, GetRowExtentWidth(), header: false);
+                return;
             }
 
-            if (VisualTreeWalker.FindAncestorListViewItem(outer) is ListViewItem container)
+            foreach (UIElement child in presenter.Children)
             {
-                ApplyTagRowChrome(container);
+                if (child is DataGridRow row)
+                {
+                    ApplyGridRowChrome(row);
+                }
             }
-        }
-
-        private void TagHeaderHost_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            UpdateHeaderClip();
-            RefreshOverflowState();
-        }
-
-        private void TagFileListView_SizeChanged(object sender, SizeChangedEventArgs e)
-        {
-            double vw = _listScroller?.ViewportWidth ?? 0;
-            if (vw > 0 && Math.Abs(vw - _lastViewportW) > 0.5)
-            {
-                _lastViewportW = vw;
-                _listViewportW = vw;
-            }
-            RefreshOverflowState();
-        }
-
-        /// <summary>行容器里找行模板 Grid：靠列数匹配（ListViewItem 内部模板的 Grid 没这么多列）。</summary>
-        private static Grid? FindRowGrid(ListViewItem container)
-        {
-            return FindDescendantWhere<Grid>(container, g => g.ColumnDefinitions.Count == ColCount);
         }
 
         private static T? FindDescendant<T>(DependencyObject root) where T : class
@@ -2762,25 +2272,6 @@ namespace CelesteMusicPlayer
                     return match;
                 }
                 T? found = FindDescendant<T>(child);
-                if (found != null)
-                {
-                    return found;
-                }
-            }
-            return null;
-        }
-
-        private static T? FindDescendantWhere<T>(DependencyObject root, Func<T, bool> predicate) where T : class
-        {
-            int count = VisualTreeHelper.GetChildrenCount(root);
-            for (int i = 0; i < count; i++)
-            {
-                DependencyObject child = VisualTreeHelper.GetChild(root, i);
-                if (child is T match && predicate(match))
-                {
-                    return match;
-                }
-                T? found = FindDescendantWhere<T>(child, predicate);
                 if (found != null)
                 {
                     return found;
@@ -2838,82 +2329,14 @@ namespace CelesteMusicPlayer
 
         /// <summary>文件大小（4.2 MB / 812 KB / 340 B）。</summary>
         public string FileSizeText { get; set; } = "-";
-    }
 
-    /// <summary>
-    /// 表头列宽拖拽把手：6px 热区 + 1px 可见竖线（贴在列边界上，与行内淡竖线同一根线）。
-    /// 悬停 / 拖拽中竖线加粗并染强调色（外部注入，遵守取色铁律）。
-    /// 拖拽语义：改的是本列（竖线左边）的宽，右侧所有列整体跟随平移，左侧不动。
-    /// </summary>
-    internal sealed class ColumnResizeGrip : Grid
-    {
-        private readonly Rectangle _line;
-        private readonly SolidColorBrush _normalBrush;
-        private readonly Func<Brush>? _accentProvider;
-        private bool _hover;
-        private bool _drag;
+        /// <summary>
+        /// 格内编辑代理：年份 / 曲目号编辑框的显示值。YearText/TrackText 未知时
+        /// 显示 "-"，编辑框里不能是 "-"，所以单列这两个代理；BuildEntry 按真实值
+        /// 填，保存后整行换实例重填。OneWay 绑定只读不写，不走属性通知。
+        /// </summary>
+        public string YearEdit { get; set; } = string.Empty;
 
-        public ColumnResizeGrip(Func<Brush>? accentProvider = null)
-        {
-            _accentProvider = accentProvider;
-            Width = 6;
-            HorizontalAlignment = HorizontalAlignment.Right;
-            VerticalAlignment = VerticalAlignment.Stretch;
-            // 透明但可命中（null Background 不参与命中测试）
-            Background = new SolidColorBrush(global::Windows.UI.Color.FromArgb(0, 0, 0, 0));
-
-            _normalBrush = new SolidColorBrush(global::Windows.UI.Color.FromArgb(0x66, 0x80, 0x80, 0x80));
-            _line = new Rectangle
-            {
-                Width = 1,
-                HorizontalAlignment = HorizontalAlignment.Right,
-                VerticalAlignment = VerticalAlignment.Stretch,
-                IsHitTestVisible = false,
-                Fill = _normalBrush
-            };
-            Children.Add(_line);
-
-            PointerEntered += (s, e) => { _hover = true; RefreshVisual(); };
-            PointerExited += (s, e) => { _hover = false; RefreshVisual(); };
-            PointerCanceled += (s, e) => { _hover = false; RefreshVisual(); };
-
-            try
-            {
-                ProtectedCursor = Microsoft.UI.Input.InputSystemCursor.Create(
-                    Microsoft.UI.Input.InputSystemCursorShape.SizeWestEast);
-            }
-            catch
-            {
-                // 老系统没有该光标形状就算了，不影响拖拽
-            }
-        }
-
-        /// <summary>拖拽开始/结束：期间指针被把手捕获，PointerExited 不一定可靠，显式压住高亮。</summary>
-        internal void SetDragging(bool dragging)
-        {
-            _drag = dragging;
-            RefreshVisual();
-        }
-
-        private void RefreshVisual()
-        {
-            bool hot = _hover || _drag;
-            _line.Width = hot ? 2 : 1;
-
-            Brush? accent = null;
-            if (hot)
-            {
-                try
-                {
-                    accent = _accentProvider?.Invoke();
-                }
-                catch
-                {
-                    // 取色失败退回灰色加粗，别让把手失效
-                }
-            }
-
-            _line.Fill = accent ?? _normalBrush;
-        }
+        public string TrackEdit { get; set; } = string.Empty;
     }
 }

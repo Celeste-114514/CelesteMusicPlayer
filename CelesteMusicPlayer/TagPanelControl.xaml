@@ -6,6 +6,8 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:local="using:CelesteMusicPlayer"
+    xmlns:dg="using:CommunityToolkit.WinUI.UI.Controls"
+    xmlns:dgprim="using:CommunityToolkit.WinUI.UI.Controls.Primitives"
     mc:Ignorable="d">
 
     <!-- 标签板块（2026-10-13 阶段 5a 骨架）：mp3tag 式「左标签面板 + 右文件列表」。
@@ -17,22 +19,24 @@
          界面里其它颜色一律 ThemeResource，不自己读系统强调色。 -->
 
     <UserControl.Resources>
-        <!-- 表格可编辑单元格（mp3tag 式单击语义）：长得像文字。行未选中时单击只选中整行；
-             行已是唯一选中项时再单击这一格才进编辑。AllowFocusOnInteraction=False 让点击不自动
-             聚焦，何时进编辑完全由代码决定（TagCellBox_PointerPressed 按选中状态放行，
-             放行时用 FocusState.Programmatic——Pointer 焦点请求会被该属性拒掉）；
-             press 被我们处理后 release 侧也会挡掉，防止 ListViewItem 把选中的行又翻回去。
-             无边框透明底；编辑长字段时 GotFocus 里临时开换行「展开」，失焦收回。 -->
-        <Style x:Key="TagCellBox" TargetType="TextBox">
-            <Setter Property="BorderThickness" Value="0" />
-            <Setter Property="Background" Value="Transparent" />
-            <Setter Property="Padding" Value="0" />
-            <Setter Property="MinHeight" Value="0" />
-            <Setter Property="VerticalAlignment" Value="Center" />
-            <Setter Property="TextWrapping" Value="NoWrap" />
+        <!-- 文件表格（2026-10-13 第四轮换 DataGrid）：原生列宽/拖拽/格内编辑，
+             替掉四轮反馈 bug 不断的自绘 15 列表格。列宽只在这一处定义
+             （旧自绘表格要 XAML 表头+行模板+cs 数组三处同步的时代结束）。
+             单元格内边距沿用旧口径：左 10px、右 6px（全列文字右留 6px，
+             不贴列边界竖线——2026-10-13 用户实测反馈定稿）；
+             表头沿用旧的小号半透明样式；列间竖线用 DataGrid 原生网格线。 -->
+        <SolidColorBrush x:Key="TagGridLineBrush" Color="#40808080" />
+        <Style x:Key="TagGridCellStyle" TargetType="dg:DataGridCell">
+            <Setter Property="Padding" Value="10,0,6,0" />
             <Setter Property="FontSize" Value="12" />
-            <Setter Property="Opacity" Value="0.75" />
-            <Setter Property="AllowFocusOnInteraction" Value="False" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
+        </Style>
+        <Style x:Key="TagGridHeaderStyle" TargetType="dgprim:DataGridColumnHeader">
+            <Setter Property="FontSize" Value="11" />
+            <Setter Property="FontWeight" Value="SemiBold" />
+            <Setter Property="Padding" Value="10,0,6,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Left" />
+            <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
     </UserControl.Resources>
 
@@ -387,148 +391,194 @@
                     Text="0 个文件" />
             </Grid>
 
-            <!-- 列表头：列宽与行模板严格一致（默认值两边同步；运行期拖拽在代码里同步）。
-                 外层 TagHeaderHost 负责裁剪：列太多内容宽于视口时，表头靠代码位移 +
-                 Clip 跟随列表的横向滚动（表头在 ListView 外面，不会自己滚）。
-                 15 列 = 14 个真实列（全部定宽）+ 末尾 1 个不可见星号填充列：
-                 星号列吸收视口剩余宽度，真实列永不被挤压 → 拖任一边界都是
-                 「线右侧一起动、左侧不动」，不会出现被星号列吞掉宽度的怪事。 -->
-            <Grid x:Name="TagHeaderHost" Grid.Row="1" Margin="0,0,0,4">
-                <Grid x:Name="TagListHeaderGrid" Padding="10,0" ColumnSpacing="8" VerticalAlignment="Center">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="36" />
-                        <ColumnDefinition Width="100" />
-                        <ColumnDefinition Width="130" />
-                        <ColumnDefinition Width="130" />
-                        <ColumnDefinition Width="52" />
-                        <ColumnDefinition Width="44" />
-                        <ColumnDefinition Width="84" />
-                        <ColumnDefinition Width="60" />
-                        <ColumnDefinition Width="150" />
-                        <ColumnDefinition Width="64" />
-                        <ColumnDefinition Width="52" />
-                        <ColumnDefinition Width="76" />
-                        <ColumnDefinition Width="68" />
-                        <ColumnDefinition Width="76" />
-                        <ColumnDefinition Width="*" MinWidth="0" />
-                    </Grid.ColumnDefinitions>
-                    <!-- 每列文字右留 6px：不贴列边界竖线（2026-10-13 用户实测反馈，
-                         此前只给末列加 10px 是误读，已回退为全列统一 6px） -->
-                    <TextBlock Grid.Column="0" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="#" />
-                    <TextBlock Grid.Column="1" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="标题" />
-                    <TextBlock Grid.Column="2" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="艺术家" />
-                    <TextBlock Grid.Column="3" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="专辑" />
-                    <TextBlock Grid.Column="4" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="年份" />
-                    <TextBlock Grid.Column="5" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="曲目" />
-                    <TextBlock Grid.Column="6" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="流派" />
-                    <TextBlock Grid.Column="7" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="时长" />
-                    <TextBlock Grid.Column="8" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="文件名" />
-                    <TextBlock Grid.Column="9" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="格式" />
-                    <TextBlock Grid.Column="10" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="位深" />
-                    <TextBlock Grid.Column="11" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="采样率" />
-                    <TextBlock Grid.Column="12" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" Text="码率" />
-                    <TextBlock Grid.Column="13" FontSize="11" FontWeight="SemiBold" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" TextAlignment="Right" Text="大小" />
-                </Grid>
-            </Grid>
-
-            <!-- 文件表格（多选；虚拟化由 ItemsStackPanel 默认行为保留，勿外包 ScrollViewer）。
-                 列太多时内容宽于视口 → 横向滚动条出现在列表底部，表头由代码同步位移；
-                 列边界可拖拽调宽：表头每根列边界有 1px 可见竖线 + 悬停高亮把手，
-                 行内同样画淡竖线，拖拽时「线右侧一起动、左侧不动」。
-                 可编辑列（标题/艺术家/专辑/年份/曲目/流派）是常驻文本框：mp3tag 逻辑
-                 （单击行选中整行、再单击已选中行的某个可编辑格进编辑），回车或点别处
-                 提交并写盘；长字段编辑时自动换行展开。
-                 不可编辑列（#/时长/文件名/格式/位深/采样率/码率/大小）保持只读文字。 -->
-            <ListView
-                x:Name="TagFileListView"
+            <!-- 文件表格（2026-10-13 第四轮换 DataGrid）：列宽 / 列头 / 横向滚动 / 行选中
+                 全部用原生能力，四轮反馈 bug 不断的自绘表头 + 拖拽把手整块删除。
+                 列宽只在这一处定义（旧自绘表格要 XAML 表头 + 行模板 + cs 数组三处同步）。
+                 单元格内边距沿用旧口径：左 10px、右 6px（全列文字右留 6px，不贴列
+                 边界竖线——2026-10-13 用户实测反馈定稿）；列间竖线用原生网格线。
+                 格内编辑 = mp3tag 口径：单击行选中整行，再击可编辑格进编辑，回车 /
+                 点别处提交并立即写盘，Esc 放弃。可编辑列（标题/艺术家/专辑/年份/曲目/
+                 流派）显示态 TextBlock、编辑态无边框 TextBox；编辑框 OneWay 绑定只负责
+                 显示初值，落盘值在 CellEditEnding 里从编辑框直读（不依赖绑定回写时序，
+                 Esc 取消也不会把半成品写进行模型）。末尾星号列吸收剩余宽度，真实列
+                 永不被挤压。 -->
+            <dg:DataGrid
+                x:Name="TagFileGrid"
                 Grid.Row="2"
+                ItemsSource="{x:Bind _files, Mode=OneWay}"
+                AutoGenerateColumns="False"
                 SelectionMode="Extended"
-                SelectionChanged="TagFileListView_SelectionChanged"
-                HorizontalContentAlignment="Stretch"
-                ScrollViewer.HorizontalScrollMode="Enabled"
-                ScrollViewer.HorizontalScrollBarVisibility="Auto">
-                <ListView.ItemContainerStyle>
-                    <Style TargetType="ListViewItem">
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch" />
-                        <!-- 内容铺满整行（默认是 Top）：不设时行内容带会贴在 34px 行的顶部，
-                             单元格文字看着就是「靠紧上边界」——2026-10-13 用户实测 CHAOS 顶格。
-                             铺满后各单元格自带 VerticalAlignment=Center 自行上下居中，
-                             列间竖线也贯穿行高；选中圆角矩形（TagRowChrome）同样铺满整行。 -->
-                        <Setter Property="VerticalContentAlignment" Value="Stretch" />
-                        <Setter Property="Padding" Value="0" />
-                        <Setter Property="MinHeight" Value="34" />
-                        <Setter Property="CornerRadius" Value="6" />
-                        <Setter Property="Margin" Value="0,1" />
-                        <Setter Property="BorderThickness" Value="0" />
-                    </Style>
-                </ListView.ItemContainerStyle>
-                <ListView.ItemTemplate>
-                    <DataTemplate x:DataType="local:TagFileItem">
-                        <!-- 外层 Grid 铺满整行：选中底色 TagRowChrome（圆角 Border，不吃命中测试）
-                             画在内容层下面，与主列表 SongRowChrome 同口径——默认的选中视觉态
-                             是个方角纯色矩形（2026-10-13 用户实测「一点不好看」），已在代码里
-                             把 ListViewItemBackgroundSelected* 资源覆盖为透明杀掉，改由它画。
-                             内层 15 列 Grid 管内容：Stretch 后各单元格自行垂直居中。 -->
-                        <Grid Loaded="TagFileRow_Loaded">
-                            <Border Tag="TagRowChrome" CornerRadius="6" Background="Transparent" IsHitTestVisible="False" />
-                            <Grid Padding="10,0" ColumnSpacing="8" VerticalAlignment="Stretch" MinWidth="1254">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="36" />
-                                    <ColumnDefinition Width="100" />
-                                    <ColumnDefinition Width="130" />
-                                    <ColumnDefinition Width="130" />
-                                    <ColumnDefinition Width="52" />
-                                    <ColumnDefinition Width="44" />
-                                    <ColumnDefinition Width="84" />
-                                    <ColumnDefinition Width="60" />
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="64" />
-                                    <ColumnDefinition Width="52" />
-                                    <ColumnDefinition Width="76" />
-                                    <ColumnDefinition Width="68" />
-                                    <ColumnDefinition Width="76" />
-                                    <ColumnDefinition Width="*" MinWidth="0" />
-                                </Grid.ColumnDefinitions>
-                                <!-- 序号列：OneWay + 行模型 INPC，Renumber 后可见行实时更新（旧实现 OneTime，序号永远停在 0） -->
-                                <TextBlock Grid.Column="0" FontSize="12" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind IndexLabel, Mode=OneWay}" />
-                                <!-- 可编辑列：mp3tag 逻辑——单击行只选中整行，行已是唯一选中项时
-                                     再单击某个可编辑格才进编辑（AllowFocusOnInteraction=False
-                                     + TagCellBox_PointerPressed 按选中状态放行）；
-                                     回车或点别处提交并写盘；长字段编辑时自动换行展开 -->
-                                <TextBox Grid.Column="1" Style="{StaticResource TagCellBox}" FontSize="13" Opacity="1" Margin="0,0,6,0" Text="{x:Bind Title}" PointerPressed="TagCellBox_PointerPressed" PointerReleased="TagCellBox_PointerReleased" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
-                                <TextBox Grid.Column="2" Style="{StaticResource TagCellBox}" Margin="0,0,6,0" Text="{x:Bind Artist}" PointerPressed="TagCellBox_PointerPressed" PointerReleased="TagCellBox_PointerReleased" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
-                                <TextBox Grid.Column="3" Style="{StaticResource TagCellBox}" Margin="0,0,6,0" Text="{x:Bind Album}" PointerPressed="TagCellBox_PointerPressed" PointerReleased="TagCellBox_PointerReleased" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
-                                <TextBox Grid.Column="4" Style="{StaticResource TagCellBox}" Margin="0,0,6,0" TextAlignment="Right" Text="{x:Bind YearText}" PointerPressed="TagCellBox_PointerPressed" PointerReleased="TagCellBox_PointerReleased" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
-                                <TextBox Grid.Column="5" Style="{StaticResource TagCellBox}" Margin="0,0,6,0" TextAlignment="Right" Text="{x:Bind TrackText}" PointerPressed="TagCellBox_PointerPressed" PointerReleased="TagCellBox_PointerReleased" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
-                                <TextBox Grid.Column="6" Style="{StaticResource TagCellBox}" Margin="0,0,6,0" Text="{x:Bind Genre}" PointerPressed="TagCellBox_PointerPressed" PointerReleased="TagCellBox_PointerReleased" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
-                                <!-- 只读列：时长 / 文件名 / 文件派生规格（右留 6px，不贴列边界竖线） -->
-                                <TextBlock Grid.Column="7" FontSize="12" Opacity="0.75" Margin="0,0,6,0" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind DurationText}" />
-                                <TextBlock Grid.Column="8" FontSize="12" Opacity="0.75" Margin="0,0,6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind FileName}" />
-                                <TextBlock Grid.Column="9" FontSize="12" Opacity="0.75" Margin="0,0,6,0" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind FormatName}" />
-                                <TextBlock Grid.Column="10" FontSize="12" Opacity="0.75" Margin="0,0,6,0" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind BitDepthText}" />
-                                <TextBlock Grid.Column="11" FontSize="12" Opacity="0.75" Margin="0,0,6,0" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind SampleRateText}" />
-                                <TextBlock Grid.Column="12" FontSize="12" Opacity="0.75" Margin="0,0,6,0" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind BitrateText}" />
-                                <TextBlock Grid.Column="13" FontSize="12" Opacity="0.75" Margin="0,0,6,0" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind FileSizeText}" />
-                                <!-- 列间竖线：贴在每列右边界（与表头把手同一根线），不挡命中测试 -->
-                                <Rectangle Grid.Column="0" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="1" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="2" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="3" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="4" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="5" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="6" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="7" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="8" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="9" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="10" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="11" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="12" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                                <Rectangle Grid.Column="13" Width="1" HorizontalAlignment="Right" VerticalAlignment="Stretch" Opacity="0.25" IsHitTestVisible="False" Fill="{ThemeResource TextFillColorTertiaryBrush}" />
-                            </Grid>
-                        </Grid>
-                    </DataTemplate>
-                </ListView.ItemTemplate>
-            </ListView>
+                RowHeight="34"
+                ColumnHeaderHeight="32"
+                HeadersVisibility="Column"
+                GridLinesVisibility="Vertical"
+                VerticalGridLinesBrush="{StaticResource TagGridLineBrush}"
+                HorizontalScrollBarVisibility="Auto"
+                CanUserSortColumns="False"
+                CanUserReorderColumns="False"
+                CellStyle="{StaticResource TagGridCellStyle}"
+                ColumnHeaderStyle="{StaticResource TagGridHeaderStyle}"
+                SelectionChanged="TagFileGrid_SelectionChanged"
+                CellEditEnding="TagFileGrid_CellEditEnding"
+                CellEditEnded="TagFileGrid_CellEditEnded"
+                LoadingRow="TagFileGrid_LoadingRow"
+                UnloadingRow="TagFileGrid_UnloadingRow">
+                <dg:DataGrid.Columns>
+                    <!-- # 序号列（只读；行模型 INPC，Renumber 后可见行实时更新） -->
+                    <dg:DataGridTemplateColumn Tag="Index" Header="#" Width="36" MinWidth="28">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" Opacity="0.6" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind IndexLabel, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <!-- 可编辑列：显示态 TextBlock + 编辑态无边框 TextBox（回车 / 点别处提交即写盘） -->
+                    <dg:DataGridTemplateColumn Tag="Title" Header="标题" Width="100" MinWidth="100">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Title, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                        <dg:DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBox FontSize="12" BorderThickness="0" Background="Transparent" Padding="0" VerticalAlignment="Stretch" VerticalContentAlignment="Center" Text="{x:Bind Title, Mode=OneWay}" GotFocus="TagCellEditBox_GotFocus" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellEditingTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="Artist" Header="艺术家" Width="130" MinWidth="60">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Artist, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                        <dg:DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBox FontSize="12" BorderThickness="0" Background="Transparent" Padding="0" VerticalAlignment="Stretch" VerticalContentAlignment="Center" Text="{x:Bind Artist, Mode=OneWay}" GotFocus="TagCellEditBox_GotFocus" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellEditingTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="Album" Header="专辑" Width="130" MinWidth="60">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Album, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                        <dg:DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBox FontSize="12" BorderThickness="0" Background="Transparent" Padding="0" VerticalAlignment="Stretch" VerticalContentAlignment="Center" Text="{x:Bind Album, Mode=OneWay}" GotFocus="TagCellEditBox_GotFocus" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellEditingTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="Year" Header="年份" Width="52" MinWidth="36">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind YearText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                        <dg:DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBox FontSize="12" BorderThickness="0" Background="Transparent" Padding="0" VerticalAlignment="Stretch" VerticalContentAlignment="Center" TextAlignment="Right" Text="{x:Bind YearEdit, Mode=OneWay}" GotFocus="TagCellEditBox_GotFocus" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellEditingTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="Track" Header="曲目" Width="44" MinWidth="32">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind TrackText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                        <dg:DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBox FontSize="12" BorderThickness="0" Background="Transparent" Padding="0" VerticalAlignment="Stretch" VerticalContentAlignment="Center" TextAlignment="Right" Text="{x:Bind TrackEdit, Mode=OneWay}" GotFocus="TagCellEditBox_GotFocus" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellEditingTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="Genre" Header="流派" Width="84" MinWidth="48">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind Genre, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                        <dg:DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBox FontSize="12" BorderThickness="0" Background="Transparent" Padding="0" VerticalAlignment="Stretch" VerticalContentAlignment="Center" Text="{x:Bind Genre, Mode=OneWay}" GotFocus="TagCellEditBox_GotFocus" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellEditingTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <!-- 只读列：时长 / 文件名 / 文件派生规格（右留 6px，不贴列边界竖线） -->
+                    <dg:DataGridTemplateColumn Tag="Duration" Header="时长" Width="60" MinWidth="44">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind DurationText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="FileName" Header="文件名" Width="150" MinWidth="80">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind FileName, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="Format" Header="格式" Width="64" MinWidth="44">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind FormatName, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="BitDepth" Header="位深" Width="52" MinWidth="36">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind BitDepthText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="SampleRate" Header="采样率" Width="76" MinWidth="48">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind SampleRateText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="Bitrate" Header="码率" Width="68" MinWidth="48">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind BitrateText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="FileSize" Header="大小" Width="76" MinWidth="48">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind FileSizeText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <!-- 末尾星号填充列：吸收视口剩余宽度，真实列永不被挤压（不可见、不可拖宽） -->
+                    <dg:DataGridTemplateColumn Tag="Filler" Width="*" MinWidth="0" CanUserResize="False">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <Grid />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+                </dg:DataGrid.Columns>
+            </dg:DataGrid>
 
             <!-- 空列表提示（叠在表格上方，不挡操作） -->
             <TextBlock

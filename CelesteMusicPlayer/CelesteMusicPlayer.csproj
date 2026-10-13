@@ -146,6 +146,10 @@
     <PackageReference Include="ToolGood.Words.Pinyin" Version="3.1.0" />
     <PackageReference Include="System.Drawing.Common" Version="9.0.1" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
+    <!-- 标签板块文件表格（2026-10-13 第四轮定稿换 DataGrid）：原生列宽/排序/格内编辑，
+         替掉四轮反馈 bug 不断的自绘 15 列表格。7.1.2 是唯一稳定版（7.1.1 仅 preview），
+         草稿工程实测与 WinAppSDK 1.8.251106002 / net9.0 组合可构建可运行。 -->
+    <PackageReference Include="CommunityToolkit.WinUI.UI.Controls.DataGrid" Version="7.1.2" />
     <!-- WebView2（皮肤系统第 2 步）：界面用网页渲染、音频内核仍是 C#。
          版本与本地 NuGet 缓存一致，避免离线 restore 失败。
          运行时 DLL（Microsoft.Web.WebView2.Core.dll / WebView2Loader.dll）此前已由 WASDK 传递依赖带进产物。 -->
