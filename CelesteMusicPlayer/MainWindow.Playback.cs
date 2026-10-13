@@ -268,7 +268,7 @@ namespace CelesteMusicPlayer
             }
 
             NowPlayingPane.SizeChanged += (_, _) => UpdateNowPlayingCardLayout();
-            MainContentGrid.SizeChanged += (_, _) => FitColumnsToAvailableWidth();
+            MainContentGrid.SizeChanged += (_, _) => ScheduleFitColumns();
             AppWindow.Changed += (_, args) =>
             {
                 if (args.DidSizeChange || args.DidPresenterChange)
@@ -276,7 +276,7 @@ namespace CelesteMusicPlayer
                     DispatcherQueue.TryEnqueue(() =>
                     {
                         EnforceMinimumWindowSize();
-                        FitColumnsToAvailableWidth();
+                        ScheduleFitColumns();
                         UpdateNowPlayingCardLayout();
                     });
                 }

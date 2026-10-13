@@ -135,6 +135,33 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>
+        /// 列宽适配的帧合并：窗口缩放时 SizeChanged / AppWindow.Changed 每个 tick 都灌进来，
+        /// 每次都改 5 根列宽 = 每次都触发整个播放列表（表头 + 已实现行）重排，
+        /// 就是「主UI改变大小卡」的根源（2026-10-13 用户实测，O(n²) 修掉之后仍然卡）。
+        /// 统一走 ~16ms 定时器：一个显示帧只应用一次，最终尺寸不变。
+        /// </summary>
+        private DispatcherQueueTimer? _fitColumnsTimer;
+
+        private void ScheduleFitColumns()
+        {
+            if (_fitColumnsTimer == null)
+            {
+                _fitColumnsTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
+                _fitColumnsTimer.Interval = TimeSpan.FromMilliseconds(16);
+                _fitColumnsTimer.Tick += FitColumnsTimer_Tick;
+            }
+            _fitColumnsTimer.Stop();
+            _fitColumnsTimer.Start();
+        }
+
+        private void FitColumnsTimer_Tick(DispatcherQueueTimer sender, object e)
+        {
+            sender.Stop();
+            FitColumnsToAvailableWidth();
+        }
+
+
         // =====================================================================
         // 播放列表列：可拖分割线
         // =====================================================================

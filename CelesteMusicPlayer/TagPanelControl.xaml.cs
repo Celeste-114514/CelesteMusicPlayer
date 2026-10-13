@@ -14,6 +14,7 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Microsoft.UI.Xaml.Shapes;
 using Microsoft.UI.Input;
+using Microsoft.UI.Dispatching;
 using Windows.Storage;
 using Windows.Storage.Pickers;
 
@@ -2056,6 +2057,16 @@ namespace CelesteMusicPlayer
         private double _dragStartX;
         private double _dragStartW;
 
+        /// <summary>
+        /// 拖拽列宽的帧合并：高回报率鼠标一个显示帧内会灌入多个 PointerMoved，每个都同步改列宽
+        /// = 每个都触发表头+已实现行全量重排，UI 线程打满就是「拖动列头卡」的残余根因
+        /// （2026-10-13 用户实测，O(n²) 修掉之后仍然卡）。改成每 ~16ms 应用一次最新值，
+        /// 指针释放时立即结算，不留拖尾。
+        /// </summary>
+        private DispatcherQueueTimer? _dragApplyTimer;
+        private int _pendingDragCol = -1;
+        private double _pendingDragWidth;
+
         private void TagPanelControl_Loaded(object sender, RoutedEventArgs e)
         {
             _panelReady = true;
@@ -2181,7 +2192,16 @@ namespace CelesteMusicPlayer
             }
 
             double x = e.GetCurrentPoint(TagListHeaderGrid).Position.X;
-            SetColumnWidth(_dragCol, _dragStartW + (x - _dragStartX));
+            double w = _dragStartW + (x - _dragStartX);
+            if (w < ColMinWidths[_dragCol])
+            {
+                w = ColMinWidths[_dragCol];
+            }
+
+            // 只记最新值，实际应用交给 ~16ms 定时器（一个显示帧一次，见 _dragApplyTimer 注释）
+            _pendingDragCol = _dragCol;
+            _pendingDragWidth = w;
+            ScheduleDragApply();
             e.Handled = true;
         }
 
@@ -2191,6 +2211,10 @@ namespace CelesteMusicPlayer
             {
                 return;
             }
+
+            // 松手前把最后的位置立即结算掉，再停表：别让列宽停在半路上
+            FlushPendingDragWidth();
+            _dragApplyTimer?.Stop();
 
             try
             {
@@ -2203,6 +2227,38 @@ namespace CelesteMusicPlayer
             grip.SetDragging(false);
             _dragCol = -1;
             e.Handled = true;
+        }
+
+        /// <summary>（重）启拖拽应用定时器：每个显示帧最多应用一次列宽。</summary>
+        private void ScheduleDragApply()
+        {
+            if (_dragApplyTimer == null)
+            {
+                _dragApplyTimer = DispatcherQueue.GetForCurrentThread().CreateTimer();
+                _dragApplyTimer.Interval = TimeSpan.FromMilliseconds(16);
+                _dragApplyTimer.Tick += DragApplyTimer_Tick;
+            }
+            _dragApplyTimer.Stop();
+            _dragApplyTimer.Start();
+        }
+
+        private void DragApplyTimer_Tick(DispatcherQueueTimer sender, object e)
+        {
+            sender.Stop();
+            FlushPendingDragWidth();
+        }
+
+        private void FlushPendingDragWidth()
+        {
+            if (_pendingDragCol < 0)
+            {
+                return;
+            }
+
+            int col = _pendingDragCol;
+            double w = _pendingDragWidth;
+            _pendingDragCol = -1;
+            SetColumnWidth(col, w);
         }
 
         private void SetColumnWidth(int col, double width)

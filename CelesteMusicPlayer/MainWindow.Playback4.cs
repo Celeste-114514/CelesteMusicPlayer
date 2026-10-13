@@ -420,7 +420,8 @@ namespace CelesteMusicPlayer
         // 主区域：播放列表 / 右侧 可拖分割线
         // =====================================================================
 
-        /// <summary>播放列表区域尺寸变化：保证各列完整可见且不过度拉宽。</summary>
+        /// <summary>播放列表区域尺寸变化：保证各列完整可见且不过度拉宽。
+        /// 走帧合并（ScheduleFitColumns）：缩放时每个 tick 都全量改列宽就是「改变大小卡」的根源。</summary>
         private void PlaylistListBorder_SizeChanged(object sender, SizeChangedEventArgs e)
         {
             if (e.NewSize.Width <= 0 || e.NewSize.Height <= 0)
@@ -428,7 +429,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            FitColumnsToAvailableWidth();
+            ScheduleFitColumns();
         }
 
 
