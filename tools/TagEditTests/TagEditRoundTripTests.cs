@@ -28,6 +28,7 @@ public class TagEditRoundTripTests
             TagEditModel before = TagEditorService.ReadTagRaw(path);
             Assert.Equal("谷冈音符; 星野铃", before.Artist);
 
+            before.MarkAllDirty(); // 强制走写盘路径，验证多值写出后不丢
             Assert.True(TagEditorService.SaveTag(path, before), $"{ext}: SaveTag 返回 false");
 
             TagEditModel after = TagEditorService.ReadTagRaw(path);
@@ -46,6 +47,7 @@ public class TagEditRoundTripTests
             TagEditModel before = TagEditorService.ReadTagRaw(path);
             Assert.Equal("摇滚; 电子", before.Genre);
 
+            before.MarkAllDirty(); // 强制走写盘路径，验证多值写出后不丢
             Assert.True(TagEditorService.SaveTag(path, before), $"{ext}: SaveTag 返回 false");
 
             TagEditModel after = TagEditorService.ReadTagRaw(path);
@@ -98,6 +100,7 @@ public class TagEditRoundTripTests
         byte[] bytesBefore = File.ReadAllBytes(path);
 
         var model = new TagEditModel { Title = "改不动的标题" };
+        model.MarkDirty(TagField.Title); // 新后端契约：只写标记过的字段
         bool ok = TagEditorService.SaveTag(path, model);
 
         Assert.False(ok);
@@ -126,6 +129,7 @@ public class TagEditRoundTripTests
 
         TagEditModel model = TagEditorService.ReadTagRaw(path);
         model.Title = "改标题不动未知帧";
+        model.MarkDirty(TagField.Title);
         Assert.True(TagEditorService.SaveTag(path, model));
 
         Assert.True(HasFrame(path, "TXYZ"), "保存后未知帧丢了");
@@ -138,6 +142,7 @@ public class TagEditRoundTripTests
         string path = await Fixtures.CopyForTestAsync(file);
 
         TagEditModel model = TagEditorService.ReadTagRaw(path);
+        model.MarkAllDirty();
         Assert.True(TagEditorService.SaveTag(path, model));
 
         TagEditModel after = TagEditorService.ReadTagRaw(path);
@@ -156,6 +161,7 @@ public class TagEditRoundTripTests
         Assert.Contains("🎵", title);
         Assert.Contains("عبد", before.Artist);
 
+        before.MarkAllDirty();
         Assert.True(TagEditorService.SaveTag(path, before));
 
         TagEditModel after = TagEditorService.ReadTagRaw(path);
@@ -174,6 +180,7 @@ public class TagEditRoundTripTests
             TagEditModel before = TagEditorService.ReadTagRaw(path);
             Assert.Contains("日本語一行目", before.Lyrics);
 
+            before.MarkAllDirty();
             Assert.True(TagEditorService.SaveTag(path, before), $"{ext}: SaveTag 返回 false");
 
             TagEditModel after = TagEditorService.ReadTagRaw(path);
@@ -192,9 +199,100 @@ public class TagEditRoundTripTests
 
         TagEditModel model = TagEditorService.ReadTagRaw(path);
         model.Comment = "评论被改";
+        model.MarkDirty(TagField.Comment);
         Assert.True(TagEditorService.SaveTag(path, model));
 
         Assert.True(CountCommentFrames(path) >= 2, "保存后评论帧少了");
+    }
+
+    // ---------- 新后端契约（Kid3 模型）锁定 ----------
+
+    [Fact]
+    public void SplitJoinUsesSemicolonSeparator()
+    {
+        string[] parts = TagEditModel.Split("甲; 乙;丙 ");
+        Assert.Equal(new[] { "甲", "乙", "丙" }, parts);
+        Assert.Equal("甲; 乙; 丙", TagEditModel.Join(parts));
+        Assert.Empty(TagEditModel.Split("  "));
+        Assert.Empty(TagEditModel.Split(null));
+        Assert.Equal(string.Empty, TagEditModel.Join(null));
+    }
+
+    [Fact]
+    public async Task SettingThreePerformersWritesThreeValues()
+    {
+        string file = await Fixtures.FileNameForAsync(".mp3", 5);
+        string path = await Fixtures.CopyForTestAsync(file);
+
+        var model = new TagEditModel
+        {
+            Title = "三值艺术家",
+            Performers = new[] { "甲", "乙", "丙" },
+        };
+        model.MarkDirty(TagField.Title);
+        model.MarkDirty(TagField.Performers);
+        Assert.True(TagEditorService.SaveTag(path, model));
+
+        TagEditModel after = TagEditorService.ReadTagRaw(path);
+        Assert.Equal(new[] { "甲", "乙", "丙" }, after.Performers);
+        Assert.Equal("甲; 乙; 丙", after.Artist);
+    }
+
+    [Fact]
+    public async Task OnlyDirtyFieldIsWrittenOthersUntouched()
+    {
+        // 格内编辑核心路径：只改一个字段，多值字段必须原样保留
+        string file = await Fixtures.FileNameForAsync(".mp3", 1);
+        string path = await Fixtures.CopyForTestAsync(file);
+
+        TagEditModel model = TagEditorService.ReadTagRaw(path);
+        model.Title = "只改标题";
+        model.MarkDirty(TagField.Title);
+        Assert.True(TagEditorService.SaveTag(path, model));
+
+        TagEditModel after = TagEditorService.ReadTagRaw(path);
+        Assert.Equal("只改标题", after.Title);
+        Assert.Equal(new[] { "谷冈音符", "星野铃" }, after.Performers);
+        Assert.Equal(new[] { "摇滚", "电子" }, after.Genres);
+    }
+
+    [Fact]
+    public async Task ClearingPerformersRemovesValues()
+    {
+        string file = await Fixtures.FileNameForAsync(".flac", 1);
+        string path = await Fixtures.CopyForTestAsync(file);
+
+        TagEditModel model = TagEditorService.ReadTagRaw(path);
+        model.Performers = Array.Empty<string>();
+        model.MarkDirty(TagField.Performers);
+        Assert.True(TagEditorService.SaveTag(path, model));
+
+        TagEditModel after = TagEditorService.ReadTagRaw(path);
+        Assert.Empty(after.Performers);
+        Assert.Equal(string.Empty, after.Artist);
+    }
+
+    [Fact]
+    public async Task DiscTrackTotalsSurviveWrite()
+    {
+        // P8：碟片/曲目总数（2/3、5/10）写出后不能退化成 0
+        string file = await Fixtures.FileNameForAsync(".mp3", 8);
+        string path = await Fixtures.CopyForTestAsync(file);
+
+        TagEditModel model = TagEditorService.ReadTagRaw(path);
+        Assert.Equal(2u, model.Disc);
+        Assert.Equal(3u, model.DiscCount);
+        Assert.Equal(5u, model.Track);
+        Assert.Equal(10u, model.TrackCount);
+
+        model.MarkAllDirty();
+        Assert.True(TagEditorService.SaveTag(path, model));
+
+        TagEditModel after = TagEditorService.ReadTagRaw(path);
+        Assert.Equal(2u, after.Disc);
+        Assert.Equal(3u, after.DiscCount);
+        Assert.Equal(5u, after.Track);
+        Assert.Equal(10u, after.TrackCount);
     }
 
     private static bool HasFrame(string path, string frameId)
