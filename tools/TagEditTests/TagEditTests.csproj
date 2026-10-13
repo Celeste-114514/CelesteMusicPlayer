@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <!-- 测试工程是普通库，由 dotnet test 驱动；只消费主程序集的公开标签编辑 API，不引入 WinAppSDK 打包工具链。 -->
+    <OutputType>Library</OutputType>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Platforms>x64</Platforms>
+    <RollForward>Major</RollForward>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- 与主程序同版本：测试里直接开 TagLib 检查帧级细节（未知帧/评论帧/封面 MIME） -->
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- 主程序集已编译产物（Release/net9.0）。标签编辑 API 是 public，不需要 InternalsVisibleTo。 -->
+    <Reference Include="CelesteMusicPlayer">
+      <HintPath>..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\CelesteMusicPlayer.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <!-- 同一套 fixtures 生成逻辑：手动跑用 tools/TagFixtures，测试里生成到临时目录。 -->
+  <ItemGroup>
+    <ProjectReference Include="..\TagFixtures\TagFixtures.csproj" />
+  </ItemGroup>
+
+  <!-- 与 EqRegression 同理：加载主程序集可能触发 WinAppSDK 模块初始化，把原生运行库
+       拷到测试输出目录旁（本地/CI 都需要，主程序 Release 自包含产物里取）。 -->
+  <Target Name="CopyWinAppSdkRuntime" AfterTargets="Build">
+    <ItemGroup>
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.WindowsAppRuntime.*" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.Windows.SDK.NET.dll" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\e_sqlite3.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_Wasdk)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

@@ -66,3 +66,6 @@ native/dsp-core/build/*.obj
 native/dsp-core/build/*.exp
 native/dsp-core/build/*.lib
 native/dsp-core/build/*.log
+
+# ===== 标签编辑测试样本（_tagfixtures/，由 tools/TagFixtures 生成器随时可重建，不入库）=====
+_tagfixtures/
