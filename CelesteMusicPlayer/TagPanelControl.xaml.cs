@@ -2285,6 +2285,14 @@ namespace CelesteMusicPlayer
         /// <summary>按当前列宽刷新表头 + 所有已实现（可见）的行。</summary>
         private void ApplyColumnWidths()
         {
+            // 视口宽每次现读：竖滚动条随文件增删出现/消失时不依赖 ViewChanged 通知
+            double vw = _listScroller?.ViewportWidth ?? 0;
+            if (vw > 0)
+            {
+                _listViewportW = vw;
+                _lastViewportW = vw;
+            }
+
             double fixedSum = 0;
             for (int i = 0; i < FillerCol; i++)
             {
@@ -2292,9 +2300,10 @@ namespace CelesteMusicPlayer
             }
             _gridMinWidth = fixedSum + ColSpacing * (ColCount - 1) + RowPaddingX * 2;
 
-            // 表头与行用同一个参照视口（列表的内部视口，含竖滚动条占位），
-            // 否则竖滚动条出现时表头会比行宽一点，列就对不齐
-            ApplyWidthsToGrid(TagListHeaderGrid, _listViewportW, header: true);
+            // 表头与行用同一个参照：行的实际渲染宽度（ItemsPanel 宽度，行的直接父容器）。
+            // 竖滚动条占位它自动跟着变，与行右边缘永远一致；面板未就绪时退回视口宽。
+            double rowExtent = GetRowExtentWidth();
+            ApplyWidthsToGrid(TagListHeaderGrid, rowExtent, header: true);
 
             // 只遍历已实现（可见）行容器：ItemsPanel.Children 就是已实现集合。
             // 旧实现按 _files 全量 ContainerFromItem，每个 PointerMoved 跑一遍，
@@ -2309,13 +2318,26 @@ namespace CelesteMusicPlayer
                         Grid? row = FindRowGrid(container);
                         if (row != null)
                         {
-                            ApplyWidthsToGrid(row, _listViewportW, header: false);
+                            ApplyWidthsToGrid(row, rowExtent, header: false);
                         }
                     }
                 }
             }
 
             _overflowState = _listViewportW > 0 && _listViewportW < _gridMinWidth;
+        }
+
+        /// <summary>
+        /// 行的实际渲染宽度：优先取 ItemsPanel（行的直接父容器）宽度——竖滚动条出现/消失时
+        /// 它自动跟着变，表头用它就不会和行右边缘错开；面板还没实现时退回 ScrollViewer 视口宽。
+        /// </summary>
+        private double GetRowExtentWidth()
+        {
+            if (_itemsPanel != null && _itemsPanel.ActualWidth > 0)
+            {
+                return _itemsPanel.ActualWidth;
+            }
+            return _listViewportW;
         }
 
         /// <summary>
@@ -2337,9 +2359,9 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>表头显式宽跟随列表视口（行靠 NaN 自动拉伸；表头在 ListView 外面，不设就永远是宿主全宽）。</summary>
+        /// <summary>表头显式宽跟随行的实际渲染宽度（行靠 NaN 自动拉伸；表头在 ListView 外面，不设就永远是宿主全宽）。</summary>
         private void RefreshHeaderWidth()
-            => ApplyWidthsToGrid(TagListHeaderGrid, _listViewportW, header: true);
+            => ApplyWidthsToGrid(TagListHeaderGrid, GetRowExtentWidth(), header: true);
 
         private void ApplyWidthsToGrid(Grid grid, double viewportW, bool header)
         {
