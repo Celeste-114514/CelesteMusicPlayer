@@ -560,7 +560,9 @@ namespace CelesteMusicPlayer
                         TagEditModel before = TagEditorService.ReadTag(item.FilePath);
                         snapshots.Add((item.FilePath, before));
 
-                        TagEditModel toWrite = batch ? MergeForBatch(template, before) : template;
+                        // 新后端契约：模型自带脏标记，只写标记过的字段。
+                        // 批量=只填空（模板留空的字段保持原值）；单选=表单 9 字段整体覆盖（留空=清空）。
+                        TagEditModel toWrite = batch ? MergeForBatch(template, before) : ApplyFormToModel(template, before);
                         if (!TagEditorService.SaveTag(item.FilePath, toWrite))
                         {
                             failures.Add(item.FilePath);
@@ -580,6 +582,7 @@ namespace CelesteMusicPlayer
                                 continue;
                             }
 
+                            before.MarkAllDirty(); // 回滚=整份快照写回
                             if (TagEditorService.SaveTag(path, before))
                             {
                                 rolledBack++;
@@ -616,32 +619,108 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 单选保存：以磁盘真值为底（保住作曲者/碟片总数等表单不编辑的字段），
+        /// 覆盖表单 9 个字段（留空=清空），只标记这 9 个字段为脏。
+        /// </summary>
+        private static TagEditModel ApplyFormToModel(TagEditModel template, TagEditModel before)
+        {
+            TagEditModel m = CloneModel(before);
+            m.Title = template.Title;
+            m.Artist = template.Artist;
+            m.Album = template.Album;
+            m.AlbumArtist = template.AlbumArtist;
+            m.Year = template.Year;
+            m.Track = template.Track;
+            m.Genre = template.Genre;
+            m.Comment = template.Comment;
+            m.Lyrics = template.Lyrics;
+            m.MarkDirty(TagField.Title);
+            m.MarkDirty(TagField.Performers);
+            m.MarkDirty(TagField.Album);
+            m.MarkDirty(TagField.AlbumArtists);
+            m.MarkDirty(TagField.Year);
+            m.MarkDirty(TagField.Track);
+            m.MarkDirty(TagField.Genres);
+            m.MarkDirty(TagField.Comment);
+            m.MarkDirty(TagField.Lyrics);
+            return m;
+        }
+
         /// <summary>批量模式合并：模板里留空的字段保持原值（想清空字段请单选该文件编辑）。</summary>
         private static TagEditModel MergeForBatch(TagEditModel template, TagEditModel before)
         {
-            return new TagEditModel
+            TagEditModel m = CloneModel(before);
+            if (!string.IsNullOrEmpty(template.Title))
             {
-                Title = string.IsNullOrEmpty(template.Title) ? before.Title : template.Title,
-                Artist = string.IsNullOrEmpty(template.Artist) ? before.Artist : template.Artist,
-                Album = string.IsNullOrEmpty(template.Album) ? before.Album : template.Album,
-                AlbumArtist = string.IsNullOrEmpty(template.AlbumArtist) ? before.AlbumArtist : template.AlbumArtist,
-                Year = template.Year != 0 ? template.Year : before.Year,
-                Track = template.Track != 0 ? template.Track : before.Track,
-                Genre = string.IsNullOrEmpty(template.Genre) ? before.Genre : template.Genre,
-                Comment = string.IsNullOrEmpty(template.Comment) ? before.Comment : template.Comment,
-                Lyrics = string.IsNullOrEmpty(template.Lyrics) ? before.Lyrics : template.Lyrics
-            };
+                m.Title = template.Title;
+                m.MarkDirty(TagField.Title);
+            }
+
+            if (!string.IsNullOrEmpty(template.Artist))
+            {
+                m.Artist = template.Artist;
+                m.MarkDirty(TagField.Performers);
+            }
+
+            if (!string.IsNullOrEmpty(template.Album))
+            {
+                m.Album = template.Album;
+                m.MarkDirty(TagField.Album);
+            }
+
+            if (!string.IsNullOrEmpty(template.AlbumArtist))
+            {
+                m.AlbumArtist = template.AlbumArtist;
+                m.MarkDirty(TagField.AlbumArtists);
+            }
+
+            if (template.Year != 0)
+            {
+                m.Year = template.Year;
+                m.MarkDirty(TagField.Year);
+            }
+
+            if (template.Track != 0)
+            {
+                m.Track = template.Track;
+                m.MarkDirty(TagField.Track);
+            }
+
+            if (!string.IsNullOrEmpty(template.Genre))
+            {
+                m.Genre = template.Genre;
+                m.MarkDirty(TagField.Genres);
+            }
+
+            if (!string.IsNullOrEmpty(template.Comment))
+            {
+                m.Comment = template.Comment;
+                m.MarkDirty(TagField.Comment);
+            }
+
+            if (!string.IsNullOrEmpty(template.Lyrics))
+            {
+                m.Lyrics = template.Lyrics;
+                m.MarkDirty(TagField.Lyrics);
+            }
+
+            return m;
         }
 
         private static bool ModelsEqual(TagEditModel a, TagEditModel b)
         {
             return a.Title == b.Title
-                && a.Artist == b.Artist
+                && a.Performers.SequenceEqual(b.Performers)
                 && a.Album == b.Album
-                && a.AlbumArtist == b.AlbumArtist
+                && a.AlbumArtists.SequenceEqual(b.AlbumArtists)
                 && a.Year == b.Year
                 && a.Track == b.Track
-                && a.Genre == b.Genre
+                && a.TrackCount == b.TrackCount
+                && a.Disc == b.Disc
+                && a.DiscCount == b.DiscCount
+                && a.Genres.SequenceEqual(b.Genres)
+                && a.Composers.SequenceEqual(b.Composers)
                 && a.Comment == b.Comment
                 && a.Lyrics == b.Lyrics;
         }
@@ -703,6 +782,8 @@ namespace CelesteMusicPlayer
                         continue;
                     }
 
+                    // 新后端契约：transform 改过的模型标全脏再存（等同旧版「写全量」语义）
+                    toWrite.MarkAllDirty();
                     if (TagEditorService.SaveTag(path, toWrite))
                     {
                         written.Add(path);
@@ -726,6 +807,7 @@ namespace CelesteMusicPlayer
                             continue;
                         }
 
+                        before.MarkAllDirty(); // 回滚=整份快照写回
                         if (TagEditorService.SaveTag(path, before))
                         {
                             rolledBack++;
@@ -1298,18 +1380,22 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>浅拷贝标签模型（transform 在副本上改，快照保持干净）。</summary>
+        /// <summary>深拷贝标签模型（transform 在副本上改，快照保持干净；多值字段拷数组副本）。</summary>
         private static TagEditModel CloneModel(TagEditModel m)
         {
             return new TagEditModel
             {
                 Title = m.Title,
-                Artist = m.Artist,
+                Performers = m.Performers.ToArray(),
                 Album = m.Album,
-                AlbumArtist = m.AlbumArtist,
+                AlbumArtists = m.AlbumArtists.ToArray(),
                 Year = m.Year,
                 Track = m.Track,
-                Genre = m.Genre,
+                TrackCount = m.TrackCount,
+                Disc = m.Disc,
+                DiscCount = m.DiscCount,
+                Genres = m.Genres.ToArray(),
+                Composers = m.Composers.ToArray(),
                 Comment = m.Comment,
                 Lyrics = m.Lyrics
             };
@@ -1729,30 +1815,23 @@ namespace CelesteMusicPlayer
 
                 bool ok = await Task.Run(() =>
                 {
+                    // 新后端契约：读全量 → 改一个字段 → 只标记这一个字段为脏。
+                    // 多值字段（艺术家/流派）走数组 round-trip，不再压扁。
                     TagEditModel before = TagEditorService.ReadTag(path);
-                    TagEditModel toWrite = new()
-                    {
-                        Title = before.Title,
-                        Artist = before.Artist,
-                        Album = before.Album,
-                        AlbumArtist = before.AlbumArtist,
-                        Year = before.Year,
-                        Track = before.Track,
-                        Genre = before.Genre,
-                        Comment = before.Comment,
-                        Lyrics = before.Lyrics
-                    };
+                    TagEditModel toWrite = CloneModel(before);
 
+                    TagField field;
                     switch (col)
                     {
-                        case 1: toWrite.Title = newText; break;
-                        case 2: toWrite.Artist = newText; break;
-                        case 3: toWrite.Album = newText; break;
-                        case 4: toWrite.Year = newText.Length == 0 ? 0 : uint.Parse(newText); break;
-                        case 5: toWrite.Track = newText.Length == 0 ? 0 : uint.Parse(newText); break;
-                        default: toWrite.Genre = newText; break;
+                        case 1: toWrite.Title = newText; field = TagField.Title; break;
+                        case 2: toWrite.Artist = newText; field = TagField.Performers; break;
+                        case 3: toWrite.Album = newText; field = TagField.Album; break;
+                        case 4: toWrite.Year = newText.Length == 0 ? 0 : uint.Parse(newText); field = TagField.Year; break;
+                        case 5: toWrite.Track = newText.Length == 0 ? 0 : uint.Parse(newText); field = TagField.Track; break;
+                        default: toWrite.Genre = newText; field = TagField.Genres; break;
                     }
 
+                    toWrite.MarkDirty(field);
                     return TagEditorService.SaveTag(path, toWrite);
                 });
 
