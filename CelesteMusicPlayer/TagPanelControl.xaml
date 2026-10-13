@@ -433,9 +433,9 @@
                  列太多时内容宽于视口 → 横向滚动条出现在列表底部，表头由代码同步位移；
                  列边界可拖拽调宽：表头每根列边界有 1px 可见竖线 + 悬停高亮把手，
                  行内同样画淡竖线，拖拽时「线右侧一起动、左侧不动」。
-                 可编辑列（标题/艺术家/专辑/年份/曲目/流派）是常驻文本框：mp3tag 式
-                 两击编辑（首击选中行、再击同一格进编辑），回车或点别处提交并写盘；
-                 长字段编辑时自动换行展开。
+                 可编辑列（标题/艺术家/专辑/年份/曲目/流派）是常驻文本框：mp3tag 逻辑
+                 （单击行选中整行、再单击已选中行的某个可编辑格进编辑），回车或点别处
+                 提交并写盘；长字段编辑时自动换行展开。
                  不可编辑列（#/时长/文件名/格式/位深/采样率/码率/大小）保持只读文字。 -->
             <ListView
                 x:Name="TagFileListView"
@@ -477,8 +477,9 @@
                             </Grid.ColumnDefinitions>
                             <!-- 序号列：OneWay + 行模型 INPC，Renumber 后可见行实时更新（旧实现 OneTime，序号永远停在 0） -->
                             <TextBlock Grid.Column="0" FontSize="12" Opacity="0.6" Margin="0,0,6,0" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind IndexLabel, Mode=OneWay}" />
-                            <!-- 可编辑列：mp3tag 式两击编辑——第一次单击只选中行，第二次单击同一格才进编辑
-                                 （AllowFocusOnInteraction=False + TagCellBox_PointerPressed 武装/放行）；
+                            <!-- 可编辑列：mp3tag 逻辑——单击行只选中整行，行已是唯一选中项时
+                                 再单击某个可编辑格才进编辑（AllowFocusOnInteraction=False
+                                 + TagCellBox_PointerPressed 按选中状态放行）；
                                  回车或点别处提交并写盘；长字段编辑时自动换行展开 -->
                             <TextBox Grid.Column="1" Style="{StaticResource TagCellBox}" FontSize="13" Opacity="1" Margin="0,0,6,0" Text="{x:Bind Title}" PointerPressed="TagCellBox_PointerPressed" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
                             <TextBox Grid.Column="2" Style="{StaticResource TagCellBox}" Margin="0,0,6,0" Text="{x:Bind Artist}" PointerPressed="TagCellBox_PointerPressed" GotFocus="TagCellBox_GotFocus" LostFocus="TagCellBox_LostFocus" KeyDown="TagCellBox_KeyDown" />
