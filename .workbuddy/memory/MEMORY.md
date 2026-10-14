@@ -42,6 +42,7 @@
 - # 列全 0 根因：x:Bind 默认 OneTime，行实现时 Renumber 还没跑。修法=Index 改 virtual+TagFileItem override+INPC 通知+Mode=OneWay。⚠ shadow(new) 救不了基类计算属性。保存后刷行=ObservableCollection 索引器换实例+恢复选中+Renumber。
 - 阶段六快照回滚：保存前逐文件 ReadTag 存原值→逐个写→任一失败把已成功的写回；SaveTag 返 bool。
 - 阶段七批量工具（89e579f）：六工具=文件名→标签（默认只填空）/标签→文件名重命名（先算名不碰文件、冲突跳过、失败整体改回）/文本替换（可正则）/大小写/自动编号（起始+步长写曲目号，格式存不了前导零故无位数）/清空文字标签（留封面）/移除内嵌封面。统一执行器 RunBatchWithRollbackAsync；作用范围=选中项，没选=整个列表。⚠ ReadTag 带文件名兜底，批量工具取真值必须用 ReadTagRaw（本次新增），否则「只填空」被误判没改动整个跳过。
+- **歌词下载页（5091163，子导航第 5 页）**：后端 OnlineLyricDownload.cs（QQ+LRClib 双源、加权匹配移植 MusicPlayer2、四种写入口径=外挂.lrc/标签纯文本/标签带时间戳/两者）；QQ 请求必须带 Referer: https://y.qq.com/ + SemaphoreSlim 串行闸 1.1s；网易云 -462 死、Apple Music 需 JWT+cookie 按用户拍板不做。⚠ TagPanelControl.xaml.cs 里禁裸 `Path.`（与 Microsoft.UI.Xaml.Shapes.Path 歧义 CS0104），一律 `System.IO.Path.`。Lyrics 与 UNSYNCEDLYRICS 在 MP3 同帧（USLT），带时间轴的是 SYLT（只读）；ECHO 按 LRC 解析字段内容是兼容潜规则非标准。
 
 ## toolkit DataGrid 列头（2026-10-14 实测，别再踩）
 - ⚠ **DataGridColumnHeader 默认模板不绑定 ContentTemplate**：只在 Style 里设 `ContentTemplate` 完全无效，Header 对象被当文本渲染（只显示 ToString()）。后果=挂在自定义模板上的点击手势**一次都不触发**（"点列头没反应"就是这么来的）。想改列头长相必须**整个换 ControlTemplate**，在模板里的 ContentPresenter 上显式写 `ContentTemplate="{StaticResource ...}"`。
