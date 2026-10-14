@@ -1015,7 +1015,10 @@
                                 <ComboBoxItem Tag="Comfortable" Content="舒适" />
                             </ComboBox>
                         </Grid>
-                        <Grid ColumnSpacing="16" Margin="0,12,0,0">
+                        <!-- 波形进度条开关已下架（2026-10-15 用户定稿：只保留波形进度条）。
+                             用 Collapsed 隐藏而不是注释：注释会让 x:Name 字段消失，
+                             cs 里的引用直接编译报错；隐藏后设置值照旧读写，将来要恢复只改一个属性。 -->
+                        <Grid ColumnSpacing="16" Margin="0,12,0,0" Visibility="Collapsed">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />

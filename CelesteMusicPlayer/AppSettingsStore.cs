@@ -245,8 +245,10 @@ namespace CelesteMusicPlayer
         public bool FollowSystemAccent { get; set; } = true;
         public string AccentSource { get; set; } = "System"; // System / Custom
         public string CustomAccentColor { get; set; } = "#0078D4";
-        /// <summary>波形进度条开关：开=歌曲波形进度条，关=默认细条。早期有 4 种样式（渐变/波形/Spotify/Apple 线），已收敛。</summary>
-        public bool WaveformProgress { get; set; }
+        /// <summary>波形进度条开关：开=歌曲波形进度条，关=默认细条。早期有 4 种样式（渐变/波形/Spotify/Apple 线），已收敛。
+        /// 2026-10-15 起恒为开（用户定稿只保留波形进度条，设置里的开关已下架）；默认改为 true，
+        /// 老配置里的 false 在 MainWindow 读取处被强制成 true，不再生效。</summary>
+        public bool WaveformProgress { get; set; } = true;
         public string CustomBackgroundPath { get; set; } = string.Empty;
 
         /// <summary>

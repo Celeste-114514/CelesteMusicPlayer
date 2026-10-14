@@ -573,7 +573,8 @@ namespace CelesteMusicPlayer
                 BackgroundPathTextBox.Text = s.CustomBackgroundPath;
                 SelectBackgroundPresetRadio(s.BackgroundPreset);
                 SetToggle(BackgroundPresetMotionSwitch, s.BackgroundPresetMotion);
-                WaveformProgressSwitch.IsOn = s.WaveformProgress;
+                // 波形进度条恒开（开关已下架）：不再读旧配置里的 false
+                WaveformProgressSwitch.IsOn = true;
                 // 波形已播配色：渐变 / 纯色；白度只在纯色下有意义（渐变时置灰）
                 SelectComboByTag(WaveColorModeCombo, s.WaveColorMode == "Solid" ? "Solid" : "Gradient");
                 if (WaveSolidWhitenessSlider != null)
@@ -1387,7 +1388,7 @@ namespace CelesteMusicPlayer
             s.CoverFolder = CoverFolderTextBox?.Text?.Trim() ?? string.Empty;
             s.AccentSource = GetComboTagString(AccentSourceCombo, "System");
             s.CustomAccentColor = string.IsNullOrWhiteSpace(_accentHex) ? "#0078D4" : _accentHex;
-            s.WaveformProgress = WaveformProgressSwitch.IsOn;
+            s.WaveformProgress = true; // 恒用波形进度条（开关已下架，忽略隐藏控件的值）
             s.WaveColorMode = GetComboTagString(WaveColorModeCombo, "Gradient") == "Solid" ? "Solid" : "Gradient";
             if (WaveSolidWhitenessSlider != null)
             {

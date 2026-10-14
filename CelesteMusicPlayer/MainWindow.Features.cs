@@ -12,6 +12,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Media;
 using Windows.Media.Playback;
+using Windows.ApplicationModel.DataTransfer;
 using Windows.Storage.Pickers;
 using Windows.System;
 
@@ -450,7 +451,8 @@ namespace CelesteMusicPlayer
             try
             {
                 bool wasWaveform = _waveformProgress;
-                _waveformProgress = settings.WaveformProgress;
+                // 恒用波形进度条（2026-10-15 定稿）：设置里的开关已下架，这里不再读旧配置里的 false
+                _waveformProgress = true;
                 RedrawProgressStyle();
                 if (_waveformProgress && !wasWaveform)
                 {
@@ -1599,15 +1601,18 @@ namespace CelesteMusicPlayer
 
             // 「重复文件检测…」已按用户要求移除：曲库健康里已有重复文件检测。
 
-            var rgScan = new MenuFlyoutItem { Text = "ReplayGain 扫描…" };
-            rgScan.Click += (_, _) => OpenReplayGainScan();
-            flyout.Items.Add(rgScan);
+            // 用户定稿的五项（2026-10-15）：只留与「正在播放这首歌」直接相关的动作
+            var addToPlaylist = new MenuFlyoutItem { Text = "加入歌单…" };
+            addToPlaylist.Click += async (_, _) =>
+            {
+                if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
+                {
+                    await AddPathsToNamedPlaylistAsync(new[] { _nowPlayingPath });
+                }
+            };
+            flyout.Items.Add(addToPlaylist);
 
-            var downloadCover = new MenuFlyoutItem { Text = "下载当前封面" };
-            downloadCover.Click += (_, _) => _ = DownloadCoverForCurrentAsync();
-            flyout.Items.Add(downloadCover);
-
-            var editTag = new MenuFlyoutItem { Text = "标签编辑" };
+            var editTag = new MenuFlyoutItem { Text = "编辑标签" };
             editTag.Click += (_, _) =>
             {
                 if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
@@ -1617,35 +1622,47 @@ namespace CelesteMusicPlayer
             };
             flyout.Items.Add(editTag);
 
-            var openInExplorer = new MenuFlyoutItem { Text = "在资源管理器中打开该歌曲" };
-            openInExplorer.Click += (_, _) => OpenFileLocationInExplorer(_nowPlayingPath);
-            flyout.Items.Add(openInExplorer);
+            var locateAlbum = new MenuFlyoutItem { Text = "定位到专辑" };
+            locateAlbum.Click += NowPlayingAlbumLinkButton_Click;
+            flyout.Items.Add(locateAlbum);
+
+            var showInFolder = new MenuFlyoutItem { Text = "在文件夹中显示" };
+            showInFolder.Click += (_, _) => OpenFileLocationInExplorer(_nowPlayingPath);
+            flyout.Items.Add(showInFolder);
+
+            var copyTitleArtist = new MenuFlyoutItem { Text = "复制歌名与艺术家" };
+            copyTitleArtist.Click += (_, _) => CopyNowPlayingTitleArtist();
+            flyout.Items.Add(copyTitleArtist);
 
             flyout.Items.Add(new MenuFlyoutSeparator());
 
-
+            // 暂留：这几项目前别处没有入口，先收进「更多工具」子菜单，
+            // 等右上角选项设置（D1）与右下角音频设置面板（C4）落地后逐个搬走。
+            // 「ReplayGain 扫描…」已移除：音效处理面板里已有入口；
+            // 「下载当前封面」已移除：标签板块「在线标签」页已有入口。
+            var moreTools = new MenuFlyoutSubItem { Text = "更多工具" };
 
             var sleepTimer = new MenuFlyoutItem { Text = "睡眠定时器…" };
             sleepTimer.Click += async (_, _) => await ShowSleepTimerDialogAsync();
-            flyout.Items.Add(sleepTimer);
-
-            flyout.Items.Add(new MenuFlyoutSeparator());
+            moreTools.Items.Add(sleepTimer);
 
             var importM3u = new MenuFlyoutItem { Text = "导入 M3U 播放列表…" };
             importM3u.Click += ImportM3u_Click;
-            flyout.Items.Add(importM3u);
+            moreTools.Items.Add(importM3u);
 
             var exportM3u = new MenuFlyoutItem { Text = "导出当前列表为 M3U…" };
             exportM3u.Click += ExportM3u_Click;
-            flyout.Items.Add(exportM3u);
+            moreTools.Items.Add(exportM3u);
 
             var openCue = new MenuFlyoutItem { Text = "打开 CUE…" };
             openCue.Click += OpenCue_Click;
-            flyout.Items.Add(openCue);
+            moreTools.Items.Add(openCue);
 
             var convert = new MenuFlyoutItem { Text = "转换当前曲目格式…" };
             convert.Click += ConvertCurrent_Click;
-            flyout.Items.Add(convert);
+            moreTools.Items.Add(convert);
+
+            flyout.Items.Add(moreTools);
 
             if (sender is FrameworkElement fe)
             {
@@ -1653,6 +1670,26 @@ namespace CelesteMusicPlayer
             }
         }
 
+
+        /// <summary>复制「歌名 - 艺术家」到剪贴板（播放状态栏更多菜单）。</summary>
+        private void CopyNowPlayingTitleArtist()
+        {
+            string title = NowPlayingTitleText?.Text?.Trim() ?? "";
+            string artist = NowPlayingArtistText?.Text?.Trim() ?? "";
+            if (title.Length == 0 && artist.Length == 0)
+            {
+                return;
+            }
+
+            string text = artist.Length == 0 ? title : title + " - " + artist;
+            var data = new DataPackage();
+            data.SetText(text);
+            Clipboard.SetContent(data);
+            if (NowPlayingText != null)
+            {
+                NowPlayingText.Text = "已复制歌名与艺术家";
+            }
+        }
 
         private async Task ShowSleepTimerDialogAsync()
         {
