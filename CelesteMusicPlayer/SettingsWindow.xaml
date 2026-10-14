@@ -1291,6 +1291,7 @@
                             </StackPanel>
                             <ToggleSwitch x:Name="EnableSmtcSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
                         </Grid>
+                        <TextBlock Text="音频输出（高级设置）" FontSize="15" FontWeight="SemiBold" Margin="0,6,0,0" />
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="*" />
