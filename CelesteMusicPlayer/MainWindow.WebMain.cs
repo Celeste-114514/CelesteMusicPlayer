@@ -1951,7 +1951,7 @@ namespace CelesteMusicPlayer
            头像口径与原生 ResolveArtistAvatarAsync 一致（2026-10-09 用户要求
            「和主界面保持一致，优先网络源」）：
              ① 用户自定义头像（右键设置的本地图，ArtistAvatars/&lt;hash&gt;.png）
-             ② 网络头像（网易云/iTunes，按设置的面像来源；磁盘缓存在
+             ② 网络头像（iTunes；磁盘缓存在
                 ArtistAvatars/Web/&lt;hash&gt;.jpg，没有就后台下载后落盘）
              ③ 兜底：该艺术家年份最晚专辑中音轨 1 的封面（原生同口径） */
 

@@ -64,8 +64,6 @@ namespace CelesteMusicPlayer
             InitializeComponent();
 
             SourceCombo.Items.Add("全部平台");
-            SourceCombo.Items.Add("网易云音乐");
-            SourceCombo.Items.Add("QQ音乐");
             SourceCombo.Items.Add("Apple Music");
             SourceCombo.Items.Add("MusicBrainz");
             SourceCombo.SelectedIndex = 0;
@@ -110,10 +108,8 @@ namespace CelesteMusicPlayer
             string previous = _source;
             _source = SourceCombo.SelectedIndex switch
             {
-                1 => "NetEase",
-                2 => "QQ",
-                3 => "iTunes",
-                4 => "MusicBrainz",
+                1 => "iTunes",
+                2 => "MusicBrainz",
                 _ => "All"
             };
 
@@ -154,7 +150,7 @@ namespace CelesteMusicPlayer
 
                 _hits.Clear();
                 var sources = _source == "All"
-                    ? new[] { "NetEase", "QQ", "iTunes", "MusicBrainz" }
+                    ? new[] { "iTunes", "MusicBrainz" }
                     : new[] { _source };
 
                 var all = new List<OnlineSongResult>();

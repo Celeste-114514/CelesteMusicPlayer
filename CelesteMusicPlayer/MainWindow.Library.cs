@@ -2191,7 +2191,7 @@ namespace CelesteMusicPlayer
 
         private async Task<BitmapImage?> ResolveArtistDefaultAvatarAsync(string artistName, bool useAlbumArtist)
         {
-            // 默认优先使用网络头像（网易云），失败再回退本地专辑封面
+            // 默认优先使用网络头像（iTunes），失败再回退本地专辑封面
             BitmapImage? web = await TryLoadWebArtistAvatarAsync(artistName);
             if (web != null)
             {

@@ -108,26 +108,11 @@ namespace CelesteMusicPlayer
             ("Glyph", "字符键（♪ ≡ ↻ ⤢）")
         };
 
-        private static readonly (string Id, string Label)[] LyricServiceOptions =
-        {
-            ("NetEase", "网易云音乐"),
-            ("QQ", "QQ音乐"),
-        };
-
-        /// <summary>在线搜索默认平台（含 iTunes/MusicBrainz；歌词源不含它们，因均不提供歌词/下载）。</summary>
+        /// <summary>在线搜索默认平台（合规整改后只保留 iTunes / MusicBrainz 两个开放源）。</summary>
         private static readonly (string Id, string Label)[] OnlineSearchSourceOptions =
         {
-            ("NetEase", "网易云音乐"),
-            ("QQ", "QQ音乐"),
             ("iTunes", "Apple Music"),
             ("MusicBrainz", "MusicBrainz（封面）"),
-        };
-
-        /// <summary>艺术家头像来源平台（NetEase 默认真实歌手头像；iTunes 精确区分艺人，用其专辑封面作头像）。</summary>
-        private static readonly (string Id, string Label)[] ArtistAvatarSourceOptions =
-        {
-            ("NetEase", "网易云（真实歌手头像）"),
-            ("iTunes", "iTunes（精确艺人，专辑封面）"),
         };
 
         private static readonly (int Days, string Label)[] RecentRangeOptions =
@@ -427,9 +412,7 @@ namespace CelesteMusicPlayer
             FillCombo(LyricAlignCombo, LyricAlignOptions);
             FillCombo(LyricSourcePriorityCombo, LyricSourcePriorityOptions);
             FillCombo(GeekIconStyleCombo, GeekIconStyleOptions);
-            FillCombo(LyricDownloadServiceCombo, LyricServiceOptions);
             FillCombo(OnlineSearchSourceCombo, OnlineSearchSourceOptions);
-            FillCombo(ArtistAvatarSourceCombo, ArtistAvatarSourceOptions);
             OutputModeCombo.Items.Clear();
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 共享（系统混音）", Tag = "Shared" });
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 独占（HiFi）", Tag = "WasapiExclusive" });
@@ -600,9 +583,7 @@ namespace CelesteMusicPlayer
                 SetToggle(GlobalMouseWheelVolumeSwitch, s.GlobalMouseWheelVolume);
                 SetToggle(AutoDownloadLyricsSwitch, s.AutoDownloadLyrics);
                 SetToggle(AutoDownloadCoverSwitch, s.AutoDownloadCover);
-                SelectComboByTag(LyricDownloadServiceCombo, s.LyricDownloadService);
                 SelectComboByTag(OnlineSearchSourceCombo, s.OnlineSearchDefaultSource);
-                SelectComboByTag(ArtistAvatarSourceCombo, string.IsNullOrWhiteSpace(s.ArtistAvatarSource) ? "NetEase" : s.ArtistAvatarSource);
                 SetToggle(AlwaysOnTopSwitch, s.AlwaysOnTop);
                 SetToggle(SaveLyricToSongFolderSwitch, s.SaveLyricToSongFolder);
                 SetToggle(SaveCoverToSongFolderSwitch, s.SaveCoverToSongFolder);
@@ -1420,9 +1401,7 @@ namespace CelesteMusicPlayer
             s.GlobalMouseWheelVolume = GlobalMouseWheelVolumeSwitch?.IsOn ?? s.GlobalMouseWheelVolume;
             s.AutoDownloadLyrics = AutoDownloadLyricsSwitch?.IsOn ?? s.AutoDownloadLyrics;
             s.AutoDownloadCover = AutoDownloadCoverSwitch?.IsOn ?? s.AutoDownloadCover;
-            s.LyricDownloadService = GetComboTagString(LyricDownloadServiceCombo, "NetEase");
-            s.OnlineSearchDefaultSource = GetComboTagString(OnlineSearchSourceCombo, "NetEase");
-            s.ArtistAvatarSource = GetComboTagString(ArtistAvatarSourceCombo, "NetEase");
+            s.OnlineSearchDefaultSource = GetComboTagString(OnlineSearchSourceCombo, "MusicBrainz");
             s.AlwaysOnTop = AlwaysOnTopSwitch?.IsOn ?? s.AlwaysOnTop;
             s.SaveLyricToSongFolder = SaveLyricToSongFolderSwitch?.IsOn ?? s.SaveLyricToSongFolder;
             s.SaveCoverToSongFolder = SaveCoverToSongFolderSwitch?.IsOn ?? s.SaveCoverToSongFolder;

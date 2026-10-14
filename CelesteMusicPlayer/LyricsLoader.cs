@@ -331,7 +331,7 @@ namespace CelesteMusicPlayer
                     continue;
                 }
 
-                // 逐字内联时间戳："歌<00:12.40>词<00:12.50>文"（网易云逐字歌词格式）
+                // 逐字内联时间戳："歌<00:12.40>词<00:12.50>文"（增强型 LRC 逐字格式）
                 (string plainText, IReadOnlyList<TimeSpan>? charTimes) = SplitCharTimes(text);
                 if (string.IsNullOrWhiteSpace(plainText))
                 {

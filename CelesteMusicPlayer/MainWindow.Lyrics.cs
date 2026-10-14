@@ -387,7 +387,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        // ---- 歌词行选中（网易云式：选中 → 右侧时间 + 左侧播放按钮）----
+        // ---- 歌词行选中（经典式：选中 → 右侧时间 + 左侧播放按钮）----
 
         /// <summary>选中某一行：给它套上圆角白框，并把上一行的白框撤掉。</summary>
         private void SelectLyricRow(int index)

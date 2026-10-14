@@ -10,7 +10,7 @@ using System.Threading.Tasks;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>歌曲搜索结果：Source 为 NetEase / QQ / iTunes。</summary>
+    /// <summary>歌曲搜索结果：Source 为 iTunes / MusicBrainz。</summary>
     public sealed record OnlineSongResult(
         string Source,
         string SongId,
@@ -20,14 +20,13 @@ namespace CelesteMusicPlayer
         string CoverUrl);
 
     /// <summary>
-    /// 在线歌词 / 封面下载。按设置 LyricDownloadService 选择来源：
-    /// NetEase（网易云）、QQ（QQ音乐）、Kugou（酷狗音乐）。
+    /// 在线歌词 / 封面 / 元数据下载。2026-10-13 合规整改后只保留开放/官方接口：
+    /// iTunes Search API（官方）、MusicBrainz（开放）、Last.fm / Discogs / fanart.tv（需用户自填 key）。
+    /// 网易云 / QQ / 酷狗等逆向非官方接口已全部移除。
     /// </summary>
     public static class OnlineMusicApi
     {
         internal static readonly HttpClient Http = CreateClient();
-        private const string NetEaseReferer = "https://music.163.com/";
-        private const string QqReferer = "https://y.qq.com/portal/player.html";
 
         private static HttpClient CreateClient()
         {
@@ -35,13 +34,8 @@ namespace CelesteMusicPlayer
             {
                 Timeout = TimeSpan.FromSeconds(15)
             };
-            // ⚠️ UA 里不要带应用名（如 "CelesteMusicPlayer/1.0"）：网易云的老公开接口
-            // （music.163.com/api/*）对带自定义标识的 UA 上风控，返回 {"code":-462}
-            // 滑块验证页（HTTP 200 但没有 artists 字段），解析出来就是 0 命中 ——
-            // 2026-10-12 实测：换标准浏览器 UA 后立刻恢复， curl 带同样的应用 UA 也被拦。
             client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-            client.DefaultRequestHeaders.TryAddWithoutValidation("Referer", NetEaseReferer);
             return client;
         }
 
@@ -51,7 +45,7 @@ namespace CelesteMusicPlayer
         /// </summary>
         private static string ResolveSource()
         {
-            string s = AppSettingsStore.Load().LyricDownloadService;
+            string s = AppSettingsStore.Load().OnlineSearchDefaultSource;
             return string.Equals(s, "iTunes", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(s, "MusicBrainz", StringComparison.OrdinalIgnoreCase)
                 ? s
@@ -102,7 +96,6 @@ namespace CelesteMusicPlayer
         /// 拿不到就返回 null（调用方显示「暂无该艺术家的概览」），不抛异常。
         /// </summary>
         public static async Task<string?> GetArtistOverviewAsync(
-            string source,
             string artistName,
             CancellationToken cancellationToken = default)
         {
@@ -534,7 +527,7 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// MusicBrainz 艺术家搜索：/ws/2/artist 返回艺术家实体，但头像不在 MusicBrainz 内
         /// （头像通常在 fanart.tv/Wikipedia，需额外 key 或不稳定）。故本平台头像留空，
-        /// 由头像窗口在展示时对「无头像」结果降级/过滤。歌手搜索主力仍是网易云/QQ/iTunes。
+        /// 由头像窗口在展示时对「无头像」结果降级/过滤。歌手头像主力源是 iTunes。
         /// </summary>
         private static async Task<IReadOnlyList<OnlineSongResult>> SearchMusicBrainzArtistsAsync(
             string query,

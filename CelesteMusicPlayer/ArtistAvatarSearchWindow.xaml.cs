@@ -37,10 +37,9 @@ namespace CelesteMusicPlayer
             Name = song.Name ?? string.Empty;
             Platform = song.Source switch
             {
-                "QQ" => "QQ音乐",
                 "iTunes" => "Apple Music",
                 "MusicBrainz" => "MusicBrainz",
-                _ => "网易云"
+                _ => song.Source
             };
             if (!string.IsNullOrWhiteSpace(song.CoverUrl))
             {
@@ -54,7 +53,7 @@ namespace CelesteMusicPlayer
     }
 
     /// <summary>
-    /// 艺术家头像在线搜索窗口：按歌手名聚合各平台（网易云 / QQ / Apple Music / MusicBrainz）
+    /// 艺术家头像在线搜索窗口：按歌手名聚合开放平台（Apple Music / MusicBrainz）
     /// 搜索结果的封面作为头像候选，供用户点选；选定后进入头像裁切编辑器确认。
     /// </summary>
     public sealed partial class ArtistAvatarSearchWindow : Window
@@ -98,8 +97,6 @@ namespace CelesteMusicPlayer
             ApplyBackdropFromSettings();
 
             SourceCombo.Items.Add("全部平台");
-            SourceCombo.Items.Add("网易云音乐");
-            SourceCombo.Items.Add("QQ音乐");
             SourceCombo.Items.Add("Apple Music");
             SourceCombo.Items.Add("MusicBrainz");
             SourceCombo.SelectedIndex = 0;
@@ -163,10 +160,8 @@ namespace CelesteMusicPlayer
             string previous = _source;
             _source = SourceCombo.SelectedIndex switch
             {
-                1 => "NetEase",
-                2 => "QQ",
-                3 => "iTunes",
-                4 => "MusicBrainz",
+                1 => "iTunes",
+                2 => "MusicBrainz",
                 _ => "All"
             };
 
@@ -179,10 +174,9 @@ namespace CelesteMusicPlayer
 
         private static string DisplayPlatform(string source) => source switch
         {
-            "QQ" => "QQ音乐",
             "iTunes" => "Apple Music",
             "MusicBrainz" => "MusicBrainz",
-            _ => "网易云"
+            _ => source
         };
 
         private void SearchBox_KeyDown(object sender, KeyRoutedEventArgs e)
@@ -216,7 +210,7 @@ namespace CelesteMusicPlayer
 
                 _hits.Clear();
                 var sources = _source == "All"
-                    ? new[] { "NetEase", "QQ", "iTunes", "MusicBrainz" }
+                    ? new[] { "iTunes", "MusicBrainz" }
                     : new[] { _source };
 
                 var all = new List<OnlineSongResult>();

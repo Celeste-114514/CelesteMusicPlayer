@@ -71,9 +71,6 @@ namespace CelesteMusicPlayer
 
         public bool AutoDownloadCover { get; set; }
 
-        /// <summary>NetEase / QQ</summary>
-        public string LyricDownloadService { get; set; } = "NetEase";
-
         /// <summary>歌词下载页（标签面板）来源："LRClib"（默认，免 key 零门槛）/
         /// "QQ"（QQ 音乐，客户端老接口，非官方无 SLA，2026-10-14 实测可用）。</summary>
         public string LyricPageSource { get; set; } = "LRClib";
@@ -369,11 +366,8 @@ namespace CelesteMusicPlayer
         /// <summary>自定义全局热键：HotkeyAction 枚举名 → "Ctrl+Alt+P" 形式；为空表示使用默认。</summary>
 public Dictionary<string, string> CustomHotkeys { get; set; } = new();
 
-        /// <summary>艺术家头像来源（右键头像 → 从网络获取时使用的平台）："NetEase"（默认，真实歌手头像）或 "iTunes"（精确区分艺人，用其专辑封面作头像）。</summary>
-        public string ArtistAvatarSource { get; set; } = "NetEase";
-
-        /// <summary>在线搜索窗口默认平台。</summary>
-        public string OnlineSearchDefaultSource { get; set; } = "NetEase";
+        /// <summary>在线搜索窗口默认平台（合规整改后只保留 iTunes / MusicBrainz 两个开放源）。</summary>
+        public string OnlineSearchDefaultSource { get; set; } = "MusicBrainz";
 
         /// <summary>流媒体插件服务地址（WSL，如 http://172.20.55.125:21010）；空=未配置。</summary>
         public string StreamingServiceUrl { get; set; } = string.Empty;
@@ -399,10 +393,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
 
         /// <summary>fanart.tv API key（在 https://fanart.tv/get-an-api-key/ 生成，可选）。</summary>
         public string FanartTvApiKey { get; set; } = string.Empty;
-        /// <summary>各平台登录 Cookie（播放器内输入，本地明文存储）。空=未登录。</summary>
-        public string NetEaseCookie { get; set; } = string.Empty;
-        public string QqCookie { get; set; } = string.Empty;
-        public string AppleMusicCookie { get; set; } = string.Empty;
 
         // —— 网络音乐库（WebDAV：PikPak / 群晖 / 坚果云 等）——
         /// <summary>WebDAV 服务器地址；空=未配置。</summary>
@@ -500,10 +490,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                         AppSettingsState? loaded = JsonSerializer.Deserialize<AppSettingsState>(raw);
                         StartupLog.Write("Load 读文件 path=" + path + " 解析成功=" + (loaded != null) + " OutputMode=" + (loaded?.OutputMode ?? "(null)"));
                         _cache = Normalize(loaded ?? new AppSettingsState());
-                        // 解密磁盘上的 Cookie（DPAPI）；旧版明文无前缀则原样保留，下次保存自动加密迁移。
-                        _cache.NetEaseCookie = SecretProtector.Unprotect(_cache.NetEaseCookie);
-                        _cache.QqCookie = SecretProtector.Unprotect(_cache.QqCookie);
-                        _cache.AppleMusicCookie = SecretProtector.Unprotect(_cache.AppleMusicCookie);
+                        // 解密磁盘上的 WebDAV 密码（DPAPI）；旧版明文无前缀则原样保留，下次保存自动加密迁移。
                         _cache.WebDavPassword = SecretProtector.Unprotect(_cache.WebDavPassword);
                     }
                     else
@@ -563,19 +550,12 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         {
             try
             {
-                // 落盘前加密 Cookie（DPAPI 当前用户作用域）；内存对象保持明文不变。
-                string ne = state.NetEaseCookie, qq = state.QqCookie, ap = state.AppleMusicCookie;
+                // 落盘前加密 WebDAV 密码（DPAPI 当前用户作用域）；内存对象保持明文不变。
                 string wd = state.WebDavPassword;
-                state.NetEaseCookie = SecretProtector.Protect(ne);
-                state.QqCookie = SecretProtector.Protect(qq);
-                state.AppleMusicCookie = SecretProtector.Protect(ap);
                 state.WebDavPassword = SecretProtector.Protect(wd);
                 string json = JsonSerializer.Serialize(state, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(GetFilePath(), json);
                 // 还原明文，保持内存态与缓存一致（下次读取仍是明文）。
-                state.NetEaseCookie = ne;
-                state.QqCookie = qq;
-                state.AppleMusicCookie = ap;
                 state.WebDavPassword = wd;
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
@@ -634,21 +614,17 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             s.LastFmLeastSeconds = Math.Clamp(s.LastFmLeastSeconds, 1, 600);
             s.LyricFolder ??= string.Empty;
             s.CoverFolder ??= string.Empty;
-            s.LyricDownloadService = s.LyricDownloadService switch
-            {
-                "QQ" => s.LyricDownloadService,
-                _ => "NetEase"
-            };
             // 歌词下载页（标签板块）：来源白名单 + 写入口径白名单，非法值回退默认
             s.LyricPageSource = s.LyricPageSource is "LRClib" or "QQ" ? s.LyricPageSource : "LRClib";
             s.LyricBatchPageSource = s.LyricBatchPageSource is "LRClib" or "QQ" ? s.LyricBatchPageSource : "LRClib";
             s.LyricPageWriteTarget = s.LyricPageWriteTarget is "Sidecar" or "TagPlain" or "TagTimestamped" or "Both"
                 ? s.LyricPageWriteTarget
                 : "Sidecar";
+            // 在线搜索默认平台：合规整改后只保留 iTunes / MusicBrainz，非法值回退 MusicBrainz
             s.OnlineSearchDefaultSource = s.OnlineSearchDefaultSource switch
             {
-                "QQ" or "iTunes" or "MusicBrainz" => s.OnlineSearchDefaultSource,
-                _ => "NetEase"
+                "iTunes" or "MusicBrainz" => s.OnlineSearchDefaultSource,
+                _ => "MusicBrainz"
             };
             // 网络音乐库（WebDAV）：代理模式白名单 + 端口兜底，避免配置文件被手改坏后无法连接。
             s.WebDavProxyMode = s.WebDavProxyMode switch
@@ -760,7 +736,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             GlobalMouseWheelVolume = s.GlobalMouseWheelVolume,
             AutoDownloadLyrics = s.AutoDownloadLyrics,
             AutoDownloadCover = s.AutoDownloadCover,
-            LyricDownloadService = s.LyricDownloadService,
             LyricPageSource = s.LyricPageSource,
             LyricBatchPageSource = s.LyricBatchPageSource,
             LyricPageWriteTarget = s.LyricPageWriteTarget,
@@ -893,7 +868,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             OutputBufferMs = s.OutputBufferMs,
             ExclusiveEngine = s.ExclusiveEngine,
             OnlineSearchDefaultSource = s.OnlineSearchDefaultSource,
-            ArtistAvatarSource = s.ArtistAvatarSource,
             StreamingServiceUrl = s.StreamingServiceUrl,
             LastFmApiKey = s.LastFmApiKey,
             LastFmSharedSecret = s.LastFmSharedSecret,
@@ -901,9 +875,6 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DiscogsConsumerKey = s.DiscogsConsumerKey,
             DiscogsConsumerSecret = s.DiscogsConsumerSecret,
             FanartTvApiKey = s.FanartTvApiKey,
-            NetEaseCookie = s.NetEaseCookie,
-            QqCookie = s.QqCookie,
-            AppleMusicCookie = s.AppleMusicCookie,
             // 网络音乐库（WebDAV）：同样必须随 Clone 拷贝，否则「填好地址密码、重启后全空」。
             WebDavUrl = s.WebDavUrl,
             WebDavDisplayName = s.WebDavDisplayName,

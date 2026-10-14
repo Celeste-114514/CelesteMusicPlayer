@@ -105,26 +105,11 @@ namespace CelesteMusicPlayer
             ("Glyph", "字符键（♪ ≡ ↻ ⤢）")
         };
 
-        private static readonly (string Id, string Label)[] LyricServiceOptions =
-        {
-            ("NetEase", "网易云音乐"),
-            ("QQ", "QQ音乐"),
-        };
-
-        /// <summary>在线搜索默认平台（含 iTunes/MusicBrainz；歌词源不含它们，因均不提供歌词/下载）。</summary>
+        /// <summary>在线搜索默认平台（合规整改后只保留 iTunes / MusicBrainz 两个开放源）。</summary>
         private static readonly (string Id, string Label)[] OnlineSearchSourceOptions =
         {
-            ("NetEase", "网易云音乐"),
-            ("QQ", "QQ音乐"),
             ("iTunes", "Apple Music"),
             ("MusicBrainz", "MusicBrainz（封面）"),
-        };
-
-        /// <summary>艺术家头像来源平台（NetEase 默认真实歌手头像；iTunes 精确区分艺人，用其专辑封面作头像）。</summary>
-        private static readonly (string Id, string Label)[] ArtistAvatarSourceOptions =
-        {
-            ("NetEase", "网易云（真实歌手头像）"),
-            ("iTunes", "iTunes（精确艺人，专辑封面）"),
         };
 
         private static readonly (int Days, string Label)[] RecentRangeOptions =
@@ -440,9 +425,7 @@ namespace CelesteMusicPlayer
             FillCombo(LyricAlignCombo, LyricAlignOptions);
             FillCombo(LyricSourcePriorityCombo, LyricSourcePriorityOptions);
             FillCombo(GeekIconStyleCombo, GeekIconStyleOptions);
-            FillCombo(LyricDownloadServiceCombo, LyricServiceOptions);
             FillCombo(OnlineSearchSourceCombo, OnlineSearchSourceOptions);
-            FillCombo(ArtistAvatarSourceCombo, ArtistAvatarSourceOptions);
             OutputModeCombo.Items.Clear();
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 共享（系统混音）", Tag = "Shared" });
             OutputModeCombo.Items.Add(new ComboBoxItem { Content = "WASAPI 独占（HiFi）", Tag = "WasapiExclusive" });
@@ -494,10 +477,6 @@ namespace CelesteMusicPlayer
             try
             {
                 AppSettingsState s = AppSettingsStore.Load();
-
-                // 平台 Cookie
-                if (NeCookieBox != null) NeCookieBox.Text = s.NetEaseCookie;
-                if (QqCookieBox != null) QqCookieBox.Text = s.QqCookie;
 
                 // 歌词
                 SelectComboByTag(LyricSourcePriorityCombo, s.LyricSourcePriority);
@@ -611,9 +590,7 @@ namespace CelesteMusicPlayer
                 SetToggle(GlobalMouseWheelVolumeSwitch, s.GlobalMouseWheelVolume);
                 SetToggle(AutoDownloadLyricsSwitch, s.AutoDownloadLyrics);
                 SetToggle(AutoDownloadCoverSwitch, s.AutoDownloadCover);
-                SelectComboByTag(LyricDownloadServiceCombo, s.LyricDownloadService);
                 SelectComboByTag(OnlineSearchSourceCombo, s.OnlineSearchDefaultSource);
-                SelectComboByTag(ArtistAvatarSourceCombo, string.IsNullOrWhiteSpace(s.ArtistAvatarSource) ? "NetEase" : s.ArtistAvatarSource);
                 SetToggle(AlwaysOnTopSwitch, s.AlwaysOnTop);
                 SetToggle(SaveLyricToSongFolderSwitch, s.SaveLyricToSongFolder);
                 SetToggle(SaveCoverToSongFolderSwitch, s.SaveCoverToSongFolder);
@@ -1431,9 +1408,7 @@ namespace CelesteMusicPlayer
             s.GlobalMouseWheelVolume = GlobalMouseWheelVolumeSwitch?.IsOn ?? s.GlobalMouseWheelVolume;
             s.AutoDownloadLyrics = AutoDownloadLyricsSwitch?.IsOn ?? s.AutoDownloadLyrics;
             s.AutoDownloadCover = AutoDownloadCoverSwitch?.IsOn ?? s.AutoDownloadCover;
-            s.LyricDownloadService = GetComboTagString(LyricDownloadServiceCombo, "NetEase");
-            s.OnlineSearchDefaultSource = GetComboTagString(OnlineSearchSourceCombo, "NetEase");
-            s.ArtistAvatarSource = GetComboTagString(ArtistAvatarSourceCombo, "NetEase");
+            s.OnlineSearchDefaultSource = GetComboTagString(OnlineSearchSourceCombo, "MusicBrainz");
             s.AlwaysOnTop = AlwaysOnTopSwitch?.IsOn ?? s.AlwaysOnTop;
             s.SaveLyricToSongFolder = SaveLyricToSongFolderSwitch?.IsOn ?? s.SaveLyricToSongFolder;
             s.SaveCoverToSongFolder = SaveCoverToSongFolderSwitch?.IsOn ?? s.SaveCoverToSongFolder;
@@ -1693,7 +1668,6 @@ namespace CelesteMusicPlayer
             PanelWebDav.Visibility = tag == "WebDAV" ? Visibility.Visible : Visibility.Collapsed;
             PanelHotkeys.Visibility = tag == "Hotkeys" ? Visibility.Visible : Visibility.Collapsed;
             PanelLibraryHealth.Visibility = tag == "LibraryHealth" ? Visibility.Visible : Visibility.Collapsed;
-            PanelStreaming.Visibility = tag == "Streaming" ? Visibility.Visible : Visibility.Collapsed;
             PanelAbout.Visibility = tag == "About" ? Visibility.Visible : Visibility.Collapsed;
             // 进入关于面板时，把启动自动检查到的新版本状态直接显示出来（不用等用户手动点「检查更新」）
             if (tag == "About")
@@ -1737,7 +1711,6 @@ namespace CelesteMusicPlayer
             _searchPanels.Add((PanelWebDav, "WebDAV", "WebDAV"));
             _searchPanels.Add((PanelHotkeys, "Hotkeys", "全局快捷键"));
             _searchPanels.Add((PanelLibraryHealth, "LibraryHealth", "曲库健康"));
-            _searchPanels.Add((PanelStreaming, "Streaming", "流媒体"));
             _searchPanels.Add((PanelAbout, "About", "关于"));
 
             foreach (NavigationViewItem item in SettingsNav.MenuItems.OfType<NavigationViewItem>())
@@ -2101,18 +2074,6 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.WriteException("SettingsWindow.searchBringIntoView", caught);
             }
-        }
-
-        private void SaveNeCookieButton_Click(object sender, RoutedEventArgs e)
-        {
-            AppSettingsStore.Update(x => x.NetEaseCookie = NeCookieBox?.Text?.Trim() ?? "");
-            StreamingStatusText.Text = "网易云 Cookie 已保存（本地）。";
-        }
-
-        private void SaveQqCookieButton_Click(object sender, RoutedEventArgs e)
-        {
-            AppSettingsStore.Update(x => x.QqCookie = QqCookieBox?.Text?.Trim() ?? "");
-            StreamingStatusText.Text = "QQ Cookie 已保存（本地）。";
         }
 
         private void SettingCheck_Changed(object sender, RoutedEventArgs e)

@@ -64,9 +64,6 @@
                 <NavigationViewItem Content="曲库健康" Tag="LibraryHealth">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE7B8;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
-                <NavigationViewItem Content="流媒体" Tag="Streaming">
-                    <NavigationViewItem.Icon><FontIcon Glyph="&#xE8FE;" /></NavigationViewItem.Icon>
-                </NavigationViewItem>
                 <NavigationViewItem Content="关于" Tag="About">
                     <NavigationViewItem.Icon><FontIcon Glyph="&#xE946;" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
@@ -1169,31 +1166,10 @@
                                 <ColumnDefinition Width="Auto" MinWidth="180" />
                             </Grid.ColumnDefinitions>
                             <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="歌词下载服务" />
-                            </StackPanel>
-                            <ComboBox x:Name="LyricDownloadServiceCombo" Grid.Column="1" MinWidth="180" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" MinWidth="180" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2" VerticalAlignment="Center">
                                 <TextBlock Text="在线搜索默认平台" />
                                 <TextBlock Text="打开在线搜索窗口时默认选中的平台" FontSize="12" Opacity="0.65" />
                             </StackPanel>
                             <ComboBox x:Name="OnlineSearchSourceCombo" Grid.Column="1" MinWidth="180" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" MinWidth="180" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="艺术家头像来源" />
-                                <TextBlock Text="从网络获取艺术家头像时用的平台；iTunes 对同名/关联台艺人区分更精确（用其专辑封面作头像）" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
-                            </StackPanel>
-                            <ComboBox x:Name="ArtistAvatarSourceCombo" Grid.Column="1" MinWidth="180" HorizontalAlignment="Stretch" SelectionChanged="SettingCombo_SelectionChanged" />
                         </Grid>
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>
@@ -1798,45 +1774,6 @@
                             FontSize="12"
                             Opacity="0.55"
                             TextWrapping="WrapWholeWords" />
-                    </StackPanel>
-                </ScrollViewer>
-
-                <!-- 流媒体 -->
-                <ScrollViewer
-                    x:Name="PanelStreaming"
-                    Visibility="Collapsed"
-                    VerticalScrollBarVisibility="Auto"
-                    Padding="20,12,24,24">
-                    <StackPanel Spacing="12" MaxWidth="680">
-                        <TextBlock Text="流媒体平台账号" FontSize="17" FontWeight="SemiBold" />
-                        <TextBlock Text="登录后可加载对应平台的在线歌词，并启用该平台的在线音频下载。平台 Cookie 仅保存在本机，失效时播放器会提醒你更新。" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
-
-                        <TextBlock Text="登录（播放器内 Cookie）" FontSize="14" FontWeight="SemiBold" Margin="0,8,0,0" />
-                        <StackPanel Spacing="4">
-                            <TextBlock Text="用浏览器登录对应平台官网 → 按 F12 打开开发者工具 →「Application / 应用」→「Cookies」→ 复制登录后的 Cookie 值（如 NetEase 的 MUSIC_U、QQ 的 qqmusic_key），粘贴到下方并在本页保存即可。" FontSize="12" Opacity="0.7" TextWrapping="WrapWholeWords" />
-                            <TextBlock Text="提示：Cookie 含你的登录凭证，请勿将它发给他人。" FontSize="11" Opacity="0.5" TextWrapping="WrapWholeWords" />
-                        </StackPanel>
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="96" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="网易云" FontSize="12" VerticalAlignment="Center" />
-                            <TextBox x:Name="NeCookieBox" Grid.Column="1" PlaceholderText="粘贴 网易云音乐 Cookie" />
-                            <Button CornerRadius="16" x:Name="SaveNeCookieButton" Grid.Column="2" Content="保存" Click="SaveNeCookieButton_Click" MinWidth="56" />
-                        </Grid>
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="96" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="QQ 音乐" FontSize="12" VerticalAlignment="Center" />
-                            <TextBox x:Name="QqCookieBox" Grid.Column="1" PlaceholderText="粘贴 QQ 音乐 Cookie" />
-                            <Button CornerRadius="16" x:Name="SaveQqCookieButton" Grid.Column="2" Content="保存" Click="SaveQqCookieButton_Click" MinWidth="56" />
-                        </Grid>
-                        <TextBlock x:Name="StreamingStatusText" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords" Text="" />
                     </StackPanel>
                 </ScrollViewer>
 

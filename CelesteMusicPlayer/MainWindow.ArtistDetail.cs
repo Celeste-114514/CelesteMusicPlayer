@@ -287,8 +287,8 @@ namespace CelesteMusicPlayer
         // ── 艺术家概览（在线简介） ──────────────────────────────────
         /// <summary>
         /// 拉艺术家概览并显示在左栏头像下方。
-        /// 目前只有网易云一路（用户要求「后续再加别的平台的设置」），
-        /// 平台分支写在 OnlineMusicApi.GetArtistOverviewAsync 里，以后加平台改那一处即可。
+        /// 2026-10-13 合规整改后走三层兜底（Last.fm bio → MusicBrainz 注释 → Discogs 简介），
+        /// 全部为开放/官方接口，平台调度在 OnlineMusicApi.GetArtistOverviewAsync 里。
         /// </summary>
         internal async Task RefreshArtistOverviewAsync(string artistName)
         {
@@ -308,8 +308,8 @@ namespace CelesteMusicPlayer
 
                 if (ArtistDetailOverviewSourceText != null)
                 {
-                    // 2026-10-12 第二轮起酷狗优先（网易云老接口被间歇风控），兜底网易云
-                    ArtistDetailOverviewSourceText.Text = "艺术家概览 · 酷狗音乐";
+                    // 实际来源为 Last.fm / MusicBrainz / Discogs 三层兜底（见 GetArtistOverviewAsync）
+                    ArtistDetailOverviewSourceText.Text = "艺术家概览 · Last.fm / MusicBrainz / Discogs";
                 }
 
                 // 与当前打开的艺术家不一致（用户已经切走）就不再往界面上写
@@ -337,7 +337,7 @@ namespace CelesteMusicPlayer
                 string? brief;
                 try
                 {
-                    brief = await OnlineMusicApi.GetArtistOverviewAsync("NetEase", artistName, CancellationToken.None);
+                    brief = await OnlineMusicApi.GetArtistOverviewAsync(artistName, CancellationToken.None);
                 }
                 finally
                 {
