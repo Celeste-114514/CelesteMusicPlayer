@@ -2783,8 +2783,12 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
+            // CUE 分轨：按 [起点, 起点+时长] 区间转码 —— 引擎看到的就是"这一轨的完整流"，
+            // 进度 / 播完切换 / 拖动 seek / SMTC 全部天然按轨口径，无需上层做时间换算。
+            double cueStart = item.StartTimeSeconds > 0 ? item.StartTimeSeconds : 0;
+            double cueLength = cueStart > 0 ? Math.Max(0, item.Duration.TotalSeconds) : 0;
             bool ok = await _audioEngine.PlayFileWithFfmpegAsync(item.FilePath, s =>
-                DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }));
+                DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }), cueStart, cueLength);
             if (ok)
             {
                 _isEnginePaused = false;
@@ -2956,6 +2960,15 @@ namespace CelesteMusicPlayer
                 if (next == null || string.IsNullOrWhiteSpace(next.FilePath) || !System.IO.File.Exists(next.FilePath))
                 {
                     StartupLog.Write("预加载: 无下一首 or 文件不存在 next=" + (next?.Title ?? "<null>"));
+                    _seamlessPreloaded = null;
+                    return;
+                }
+
+                // CUE 分轨不参与无缝预加载：同文件多轨的"下一首"要靠区间转码重新起播，
+                // 无缝续接会从当前位置直接续播整文件（等于跳过轨边界），且无缝换轨事件
+                // 不携带分轨信息，UI 会整轨错位。分轨一律走 Stop→PlayNext 常规路径。
+                if (current.StartTimeSeconds > 0 || next.StartTimeSeconds > 0)
+                {
                     _seamlessPreloaded = null;
                     return;
                 }

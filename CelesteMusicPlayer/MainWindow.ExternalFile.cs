@@ -63,6 +63,24 @@ namespace CelesteMusicPlayer
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
 
+            // .cue 不是音频文件（文件关联里注册了它）：双击进来按分轨表解析播放，
+            // 不走下面的「临时播放单文件」逻辑（那会把 .cue 当音频送进引擎然后失败）。
+            if (string.Equals(Path.GetExtension(path), ".cue", StringComparison.OrdinalIgnoreCase))
+            {
+                DispatcherQueue.TryEnqueue(async () =>
+                {
+                    try
+                    {
+                        await PlayCueFileAsync(path);
+                    }
+                    catch (Exception ex)
+                    {
+                        global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ExternalFile.cs", ex);
+                    }
+                });
+                return;
+            }
+
             DispatcherQueue.TryEnqueue(async () =>
             {
                 try

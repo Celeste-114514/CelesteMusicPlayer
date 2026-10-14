@@ -1636,27 +1636,9 @@ namespace CelesteMusicPlayer
 
             flyout.Items.Add(new MenuFlyoutSeparator());
 
-            // 暂留：这几项目前别处没有入口，先收进「更多工具」子菜单，
-            // 等右上角选项设置（D1）与右下角音频设置面板（C4）落地后逐个搬走。
-            // 「ReplayGain 扫描…」已移除：音效处理面板里已有入口；
-            // 「下载当前封面」已移除：标签板块「在线标签」页已有入口。
-            var moreTools = new MenuFlyoutSubItem { Text = "更多工具" };
-
-
-            var importM3u = new MenuFlyoutItem { Text = "导入 M3U 播放列表…" };
-            importM3u.Click += ImportM3u_Click;
-            moreTools.Items.Add(importM3u);
-
-            var exportM3u = new MenuFlyoutItem { Text = "导出当前列表为 M3U…" };
-            exportM3u.Click += ExportM3u_Click;
-            moreTools.Items.Add(exportM3u);
-
-            var openCue = new MenuFlyoutItem { Text = "打开 CUE…" };
-            openCue.Click += OpenCue_Click;
-            moreTools.Items.Add(openCue);
-
-
-            flyout.Items.Add(moreTools);
+            // 2026-10-15（用户定案）：原「更多工具」子菜单里的「导入 M3U… / 导出当前列表为 M3U… /
+            // 打开 CUE…」已挪到播放列表墙页眉（导入选歌单、不入媒体库；导出选歌单在卡片右键）。
+            // WebUI 的同名入口不受影响（仍走 ImportM3u_Click / ExportM3u_Click）。
 
             if (sender is FrameworkElement fe)
             {
@@ -1851,6 +1833,12 @@ namespace CelesteMusicPlayer
             return index >= 0 ? _playlist[index] : null;
         }
 
+        /// <summary>
+        /// 导入 M3U/M3U8 播放列表（入口：播放列表墙页眉；2026-10-15 从播放页更多菜单挪来）。
+        /// 语义（用户定案）：弹选择器存进某个命名单 —— 不往媒体库塞歌；
+        /// 不在音乐库的文件照常进歌单（命名单只存路径，与标签面板「排序编号」同口径），
+        /// 摘要里单独提示「有几首不在音乐库」。
+        /// </summary>
         private async void ImportM3u_Click(object sender, RoutedEventArgs e)
         {
             try
@@ -1866,21 +1854,23 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                List<string> paths = M3uPlaylistIO.Parse(file.Path, existingOnly: true);
-                if (paths.Count == 0)
+                // existingOnly:false：丢不丢自己算，摘要要报「几首不在音乐库」
+                List<string> all = M3uPlaylistIO.Parse(file.Path, existingOnly: false)
+                    .Where(p => !string.IsNullOrWhiteSpace(p))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (all.Count == 0)
                 {
-                    await ShowErrorAsync("导入 M3U", "未找到有效音频路径。");
+                    await ShowErrorAsync("导入 M3U", "未找到任何条目。");
                     return;
                 }
 
-                await AddFilesToLibraryAsync(paths);
-                List<PlaylistItem> items = paths
-                    .Select(FindLibraryItemByPath)
-                    .Where(i => i != null)
-                    .Cast<PlaylistItem>()
-                    .ToList();
-                AddSongsToUserPlaylist(items);
-                NowPlayingText.Text = $"已导入 M3U：{items.Count} 首";
+                int notInLibrary = all.Count(p => FindLibraryIndex(p) < 0);
+
+                await AddPathsToNamedPlaylistAsync(all);
+                NowPlayingText.Text = notInLibrary > 0
+                    ? $"已导入 M3U：{all.Count} 首进入歌单（其中 {notInLibrary} 首不在音乐库，仅存于歌单）"
+                    : $"已导入 M3U：{all.Count} 首进入歌单";
             }
             catch (Exception ex)
             {
@@ -1930,51 +1920,60 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                List<CueTrack> tracks = CueSheetParser.LoadCue(file.Path);
-                if (tracks.Count == 0)
-                {
-                    await ShowErrorAsync("打开 CUE", "未能解析曲目。");
-                    return;
-                }
-
-                var cueItems = new List<PlaylistItem>();
-                foreach (CueTrack cueTrack in tracks)
-                {
-                    if (string.IsNullOrWhiteSpace(cueTrack.FilePath) || !System.IO.File.Exists(cueTrack.FilePath))
-                    {
-                        continue;
-                    }
-
-                    PlaylistItem cueItem = CreatePlaylistItemFromPath(cueTrack.FilePath);
-                    if (!string.IsNullOrWhiteSpace(cueTrack.Title))
-                    {
-                        cueItem.Title = cueTrack.Title;
-                    }
-
-                    if (!string.IsNullOrWhiteSpace(cueTrack.Artist))
-                    {
-                        cueItem.Artist = cueTrack.Artist;
-                        cueItem.AlbumArtist = cueTrack.Artist;
-                    }
-
-                    cueItem.StartTimeSeconds = cueTrack.StartTime.TotalSeconds;
-                    cueItems.Add(cueItem);
-                }
-
-                if (cueItems.Count == 0)
-                {
-                    await ShowErrorAsync("打开 CUE", "CUE 引用的音频文件不存在。");
-                    return;
-                }
-
-                AddSongsToUserPlaylist(cueItems);
-                NowPlayingText.Text = $"已从 CUE 导入 {cueItems.Count} 轨";
-                PlayPlaylistItem(cueItems[0]);
+                await PlayCueFileAsync(file.Path);
             }
             catch (Exception ex)
             {
                 await ShowErrorAsync("打开 CUE 失败", ex.Message);
             }
+        }
+
+        /// <summary>
+        /// 解析 .cue 分轨表并播放（手动「打开 CUE…」与双击 .cue 文件关联共用）。
+        /// 分轨条目带 StartTimeSeconds，由引擎按区间转码播出（见 PlayExtendedWithEngineAsync）。
+        /// </summary>
+        private async Task PlayCueFileAsync(string cuePath)
+        {
+            List<CueTrack> tracks = CueSheetParser.LoadCue(cuePath);
+            if (tracks.Count == 0)
+            {
+                await ShowErrorAsync("打开 CUE", "未能解析曲目。");
+                return;
+            }
+
+            var cueItems = new List<PlaylistItem>();
+            foreach (CueTrack cueTrack in tracks)
+            {
+                if (string.IsNullOrWhiteSpace(cueTrack.FilePath) || !System.IO.File.Exists(cueTrack.FilePath))
+                {
+                    continue;
+                }
+
+                PlaylistItem cueItem = CreatePlaylistItemFromPath(cueTrack.FilePath);
+                if (!string.IsNullOrWhiteSpace(cueTrack.Title))
+                {
+                    cueItem.Title = cueTrack.Title;
+                }
+
+                if (!string.IsNullOrWhiteSpace(cueTrack.Artist))
+                {
+                    cueItem.Artist = cueTrack.Artist;
+                    cueItem.AlbumArtist = cueTrack.Artist;
+                }
+
+                cueItem.StartTimeSeconds = cueTrack.StartTime.TotalSeconds;
+                cueItems.Add(cueItem);
+            }
+
+            if (cueItems.Count == 0)
+            {
+                await ShowErrorAsync("打开 CUE", "CUE 引用的音频文件不存在。");
+                return;
+            }
+
+            AddSongsToUserPlaylist(cueItems);
+            NowPlayingText.Text = $"已从 CUE 导入 {cueItems.Count} 轨";
+            PlayPlaylistItem(cueItems[0]);
         }
 
         private async void ConvertCurrent_Click(object sender, RoutedEventArgs e)
@@ -3319,7 +3318,11 @@ namespace CelesteMusicPlayer
 
                 try
                 {
-                    _playlist.Add(CreatePlaylistItemFromPath(path));
+                    // CUE 分轨展开：有同名 .cue 的文件按轨加入（设置关闭时原样返回单条）
+                    foreach (PlaylistItem track in CueTrackExpansion.Expand(new List<PlaylistItem> { CreatePlaylistItemFromPath(path) }))
+                    {
+                        _playlist.Add(track);
+                    }
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
             }
@@ -3327,7 +3330,8 @@ namespace CelesteMusicPlayer
             if (_playlist.Count != before)
             {
                 RenumberCollection(_playlist);
-                LibrarySessionStore.SaveFiles(_playlist.Select(i => i.FilePath));
+                // Distinct：CUE 分轨展开后同一文件对应多条，会话里按文件去重（恢复时再展开）
+                LibrarySessionStore.SaveFiles(_playlist.Select(i => i.FilePath).Distinct(StringComparer.OrdinalIgnoreCase));
             }
         }
 

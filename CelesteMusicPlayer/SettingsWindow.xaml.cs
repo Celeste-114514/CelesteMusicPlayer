@@ -620,6 +620,7 @@ namespace CelesteMusicPlayer
 
                 // 媒体库
                 SetToggle(AutoUpdateLibrarySwitch, s.AutoUpdateLibrary);
+                SetToggle(AutoApplyCueOnScanSwitch, s.AutoApplyCueOnScan);
                 _watchFolders = s.LibraryWatchFolders?.ToList() ?? new List<string>();
                 RefreshWatchFoldersList();
                 SetToggle(DisableDeleteFromDiskSwitch, s.DisableDeleteFromDisk);
@@ -1466,6 +1467,7 @@ namespace CelesteMusicPlayer
             }
 
             s.AutoUpdateLibrary = AutoUpdateLibrarySwitch?.IsOn ?? s.AutoUpdateLibrary;
+            s.AutoApplyCueOnScan = AutoApplyCueOnScanSwitch?.IsOn ?? s.AutoApplyCueOnScan;
             s.LibraryWatchFolders = (_watchFolders ?? new List<string>()).ToList();
             s.DisableDeleteFromDisk = DisableDeleteFromDiskSwitch?.IsOn ?? s.DisableDeleteFromDisk;
             s.RemoveMissingOnUpdate = RemoveMissingOnUpdateSwitch?.IsOn ?? s.RemoveMissingOnUpdate;

@@ -171,6 +171,9 @@ namespace CelesteMusicPlayer
         /// <summary>CUE 分轨起始秒；0 表示整曲。</summary>
         public double StartTimeSeconds { get; set; }
 
+        /// <summary>浅拷贝（CUE 分轨展开用：同一文件派生出多轨，除分轨字段外沿用文件级元数据）。</summary>
+        public PlaylistItem Clone() => (PlaylistItem)MemberwiseClone();
+
         public string DisplayName => Title;
 
         /// <summary>

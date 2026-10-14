@@ -399,7 +399,9 @@ namespace CelesteMusicPlayer
         private void PlayPlaylistItem(PlaylistItem track)
         {
             // 若已在该播放队列中：保持原顺序，仅定位到它播放（不再把它移到最前）。
-            int existing = FindUserPlaylistIndex(track.FilePath);
+            // CUE 分轨：同一文件有多轨，按「路径+起点」精确匹配，否则点第 3 轨会播第 1 轨。
+            bool byStart = track.StartTimeSeconds > 0;
+            int existing = FindUserPlaylistIndex(track.FilePath, track.StartTimeSeconds, byStart);
             if (existing >= 0)
             {
                 PlayUserPlaylistAt(existing);
@@ -408,7 +410,7 @@ namespace CelesteMusicPlayer
 
             // 不在播放队列：加入队列（按现有 InsertPlaylistAtBegin 设置决定位置，通常放最前）再播放。
             AddSongsToUserPlaylist(new[] { track });
-            int userIndex = FindUserPlaylistIndex(track.FilePath);
+            int userIndex = FindUserPlaylistIndex(track.FilePath, track.StartTimeSeconds, byStart);
             if (userIndex >= 0)
             {
                 PlayUserPlaylistAt(userIndex);
@@ -429,10 +431,23 @@ namespace CelesteMusicPlayer
 
 
         private int FindUserPlaylistIndex(string filePath)
+            => FindUserPlaylistIndex(filePath, 0, matchStart: false);
+
+        /// <summary>
+        /// 按路径（+分轨起点）找播放队列下标。
+        /// matchStart 为 true 时要求 CUE 分轨起点也匹配 —— 同一文件的多轨路径相同，
+        /// 只按路径找会永远命中第一轨（点第 3 轨却播第 1 轨）。
+        /// </summary>
+        private int FindUserPlaylistIndex(string filePath, double wantStart, bool matchStart)
         {
             for (int i = 0; i < _userPlaylist.Count; i++)
             {
-                if (string.Equals(_userPlaylist[i].FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(_userPlaylist[i].FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                if (!matchStart || Math.Abs(_userPlaylist[i].StartTimeSeconds - wantStart) < 0.5)
                 {
                     return i;
                 }
@@ -1969,7 +1984,8 @@ namespace CelesteMusicPlayer
         {
             List<PlaylistItem> incoming = songs
                 .Where(s => !string.IsNullOrWhiteSpace(s.FilePath))
-                .GroupBy(s => s.FilePath, StringComparer.OrdinalIgnoreCase)
+                // 分组键带 CUE 分轨起点：同一文件的多轨路径相同，只按路径去重会折叠成一条
+                .GroupBy(s => s.FilePath + "\u0001" + s.StartTimeSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), StringComparer.OrdinalIgnoreCase)
                 .Select(g => g.First())
                 .ToList();
             if (incoming.Count == 0)

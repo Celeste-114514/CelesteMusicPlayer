@@ -1495,6 +1495,17 @@
                             </StackPanel>
                             <ToggleSwitch x:Name="AutoUpdateLibrarySwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
                         </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="扫描时自动应用 CUE" />
+                                <TextBlock Text="整轨音频（如 FLAC/APE + 同名 .cue）按分轨显示与播放；只影响曲库视图，不改写文件" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                            <ToggleSwitch x:Name="AutoApplyCueOnScanSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                        </Grid>
                         <TextBlock Text="监视文件夹" FontSize="15" FontWeight="SemiBold" Margin="0,8,0,0" />
                         <ListView x:Name="LibraryWatchFoldersListView" MinHeight="100" MaxHeight="160" SelectionMode="Single" />
                         <StackPanel Orientation="Horizontal" Spacing="12">

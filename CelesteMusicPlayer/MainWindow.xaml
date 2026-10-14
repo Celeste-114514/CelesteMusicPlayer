@@ -1183,6 +1183,7 @@
                                 <ColumnDefinition Width="*" MinWidth="0" />
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
                             <TextBlock
                                 Grid.Column="0"
@@ -1197,9 +1198,28 @@
                                 CornerRadius="8"
                                 Content="新建播放列表"
                                 Click="CreatePlaylistWallButton_Click" />
+                            <StackPanel
+                                Grid.Column="2"
+                                Orientation="Horizontal"
+                                Spacing="8">
+                                <Button
+                                    x:Name="ImportM3uWallButton"
+                                    Height="32"
+                                    Padding="12,0"
+                                    CornerRadius="8"
+                                    Content="导入 M3U…"
+                                    Click="ImportM3uWallButton_Click" />
+                                <Button
+                                    x:Name="OpenCueWallButton"
+                                    Height="32"
+                                    Padding="12,0"
+                                    CornerRadius="8"
+                                    Content="打开 CUE…"
+                                    Click="OpenCueWallButton_Click" />
+                            </StackPanel>
                             <Button
                                 x:Name="ExportPlaylistsButton"
-                                Grid.Column="2"
+                                Grid.Column="3"
                                 Height="32"
                                 Padding="12,0"
                                 CornerRadius="8"

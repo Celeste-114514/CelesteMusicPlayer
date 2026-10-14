@@ -129,6 +129,9 @@ namespace CelesteMusicPlayer
 
         private float[]? _waveformData;
         private string? _waveformPath;
+        /// <summary>波形守卫键（CUE 分轨用）：同一文件的多轨波形不同，路径相同，
+        /// 用 "路径#起点" 区分，避免切轨后旧回调把上一轨的波形写进来。</summary>
+        private string? _waveformRangeKey;
         private bool _waveformProgress;
         // 主题波形强调色（ResolveAccentColor 的缓存，避免频繁解析）
         private static Color _waveAccentColor = Color.FromArgb(255, 0, 120, 212);
@@ -1522,8 +1525,10 @@ namespace CelesteMusicPlayer
             try
             {
                 _audioEngine ??= new AudioPlaybackEngine();
+                // CUE 分轨：按当前轨的区间重新转码（resumeAt  seek 都换算到新倍率即可，全是轨内时间）
+                (double cueStart, double cueLength) = CurrentCueRange();
                 bool ok = await _audioEngine.PlayFileWithFfmpegAsync(path, s =>
-                    DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }));
+                    DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }), cueStart, cueLength);
                 if (!ok)
                 {
                     NowPlayingText.Text = "变速加载失败，请重试或切回 1x：" + (_audioEngine.LastError ?? "未知原因");
@@ -2477,6 +2482,14 @@ namespace CelesteMusicPlayer
             ApplyPlaylistWallCategory();
         }
 
+
+        /// <summary>播放列表墙页眉「导入 M3U…」：选文件 → 弹选择器存进命名单（不入媒体库）。</summary>
+        private void ImportM3uWallButton_Click(object sender, RoutedEventArgs e)
+            => ImportM3u_Click(sender, e);
+
+        /// <summary>播放列表墙页眉「打开 CUE…」：选 .cue → 解析分轨，进当前队列并播放。</summary>
+        private void OpenCueWallButton_Click(object sender, RoutedEventArgs e)
+            => OpenCue_Click(sender, e);
 
         /// <summary>导出全部播放列表为 m3u8：每命中单写一个 .m3u8 到用户选择目录。</summary>
         private async void ExportPlaylistsButton_Click(object sender, RoutedEventArgs e)

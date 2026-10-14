@@ -299,8 +299,12 @@ namespace CelesteMusicPlayer
                 try
                 {
                     PlaylistItem item = CreatePlaylistItemFromPath(path);
-                    _playlist.Add(item);
-                    added++;
+                    // CUE 分轨展开：有同名 .cue 的文件按轨加入（设置关闭时原样返回单条）
+                    foreach (PlaylistItem track in CueTrackExpansion.Expand(new List<PlaylistItem> { item }))
+                    {
+                        _playlist.Add(track);
+                        added++;
+                    }
                 }
                 catch (Exception ex)
                 {
@@ -1769,6 +1773,33 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>
+        /// 当前播放条目的 CUE 分轨区间（文件时间）。非分轨返回 (0, 0)。
+        /// 用于变速重载等"按路径重起"的路径：必须带上区间，否则会把整轨从头播。
+        /// </summary>
+        private (double Start, double Length) CurrentCueRange()
+        {
+            PlaylistItem? item = null;
+            if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
+                && string.Equals(_userPlaylist[_userPlaylistIndex].FilePath, _nowPlayingPath, StringComparison.OrdinalIgnoreCase))
+            {
+                item = _userPlaylist[_userPlaylistIndex];
+            }
+            else if (_currentIndex >= 0 && _currentIndex < _playlist.Count
+                && string.Equals(_playlist[_currentIndex].FilePath, _nowPlayingPath, StringComparison.OrdinalIgnoreCase))
+            {
+                item = _playlist[_currentIndex];
+            }
+
+            if (item == null || item.StartTimeSeconds <= 0)
+            {
+                return (0, 0);
+            }
+
+            return (item.StartTimeSeconds, Math.Max(0, item.Duration.TotalSeconds));
+        }
+
+
         private void SortOrderButton_Click(object sender, RoutedEventArgs e)
         {
             _sortAscending = !_sortAscending;
@@ -2463,26 +2494,40 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>异步加载当前歌曲波形(供波形进度条)，完成后重绘。</summary>
-        private async void LoadWaveformForCurrentAsync(string path)
+        private async void LoadWaveformForCurrentAsync(string path, double startSeconds = 0, double lengthSeconds = 0)
         {
             try
             {
 
             _waveformPath = path;
 
+            // CUE 分轨：没显式带区间时按当前播放条目补（同一文件的多轨要各自的波形）
+            if (startSeconds <= 0 && _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
+                && string.Equals(_userPlaylist[_userPlaylistIndex].FilePath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                startSeconds = _userPlaylist[_userPlaylistIndex].StartTimeSeconds;
+                lengthSeconds = startSeconds > 0 ? _userPlaylist[_userPlaylistIndex].Duration.TotalSeconds : 0;
+            }
+
+            // 守卫键带区间：同文件切轨时路径相同，靠起点区分
+            string rangeKey = startSeconds > 0
+                ? path + "#t=" + startSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture)
+                : path;
+            _waveformRangeKey = rangeKey;
+
             // 错峰（2026-09-21）：起播那一瞬间会同时跑两个满负荷的 ffmpeg —— 一个整轨转码、
             // 一个整轨解波形。两个一起抢 CPU，独占渲染线程就饿着 → 每首歌开头最容易顿。
             // 波形不是立刻要看的东西，让转码先跑 900ms 再开工。
             await System.Threading.Tasks.Task.Delay(900);
-            if (!string.Equals(_waveformPath, path, StringComparison.OrdinalIgnoreCase))
+            if (!string.Equals(_waveformRangeKey, rangeKey, StringComparison.OrdinalIgnoreCase))
             {
-                return; // 已切歌
+                return; // 已切歌/切轨
             }
 
-            float[] wave = await WaveformDataProvider.GetWaveformAsync(path, 180);
-            if (!string.Equals(_waveformPath, path, StringComparison.OrdinalIgnoreCase))
+            float[] wave = await WaveformDataProvider.GetWaveformAsync(path, 180, startSeconds, lengthSeconds);
+            if (!string.Equals(_waveformRangeKey, rangeKey, StringComparison.OrdinalIgnoreCase))
             {
-                return; // 已切歌
+                return; // 已切歌/切轨
             }
 
             _waveformData = wave;

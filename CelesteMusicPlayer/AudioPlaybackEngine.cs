@@ -247,12 +247,12 @@ namespace CelesteMusicPlayer
         /// 串行入口：播放请求（用户连点/自动切歌/无缝预加载竞态）一律排队，绝不并发起链——
         /// 2026-09-23 15:50 事故：并发请求互相顶掉 WASAPI 独占会话 + 抢 fallback.wav 文件，
         /// 表现为"失败风暴+进度条回跳"。</summary>
-        public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null)
+        public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null, double startSeconds = 0, double lengthSeconds = 0)
         {
             await _playGate.WaitAsync().ConfigureAwait(false);
             try
             {
-                return await PlayFileWithFfmpegCoreAsync(path, status).ConfigureAwait(false);
+                return await PlayFileWithFfmpegCoreAsync(path, status, startSeconds, lengthSeconds).ConfigureAwait(false);
             }
             finally
             {
@@ -260,7 +260,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private async Task<bool> PlayFileWithFfmpegCoreAsync(string path, Action<string>? status = null)
+        private async Task<bool> PlayFileWithFfmpegCoreAsync(string path, Action<string>? status = null, double startSeconds = 0, double lengthSeconds = 0)
         {
             // DSD（DSF/DFF）输出策略（ECHO 方案）：
             //   - 设置「DSD 输出模式 = DoP 直出」且当前为 WASAPI 独占 / ASIO 时，走 DoP 原生直出
@@ -285,7 +285,9 @@ namespace CelesteMusicPlayer
             // 这里绝不能用 requireExact=true：native2 原生内核会直接拒绝起播
             // （实测报"暂不支持 DSD/DoP 精确直出"），反而落回卡顿的旧链路。
             // 失败一律回落旧链路（DoP 实时装箱 → PCM 转码），保证永远能出声。
-            if (preferDop && DsdPreloadService.Enabled && IsDsdFile(path)
+            // 分轨（startSeconds > 0）不走 DoP 整轨直读：区间由转码层 -ss/-t 保证，
+            // 整轨 DoP 路径会把整个文件原样播出，与分轨语义冲突。
+            if (preferDop && startSeconds <= 0 && DsdPreloadService.Enabled && IsDsdFile(path)
                 && _outputMode == HiFiOutputBackend.OutputMode.WasapiExclusive)
             {
                 string? dopWav = await EnsureDsdDopWavAsync(path, status).ConfigureAwait(false);
@@ -305,7 +307,7 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            if (preferDop && _outputMode != HiFiOutputBackend.OutputMode.WasapiShared && IsDsdFile(path))
+            if (preferDop && startSeconds <= 0 && _outputMode != HiFiOutputBackend.OutputMode.WasapiShared && IsDsdFile(path))
             {
                 bool dopOk = await TryPlayDsdPreloadAsync(path, status).ConfigureAwait(false);
                 if (dopOk)
@@ -319,7 +321,7 @@ namespace CelesteMusicPlayer
                 status?.Invoke("DoP 直出不可用，转 PCM…");
             }
 
-            string? targetWav = await _decoder.TranscodeToWavAsync(path, _outputMode, _devicePreference, status).ConfigureAwait(false);
+            string? targetWav = await _decoder.TranscodeToWavAsync(path, _outputMode, _devicePreference, status, startSeconds, lengthSeconds).ConfigureAwait(false);
             if (string.IsNullOrEmpty(targetWav))
             {
                 // 失败原因已由后端经 FailureHandler 设置到 LastError 并触发 Failed 事件
@@ -764,9 +766,9 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>确保曲目已转码为缓存 WAV，返回缓存路径（供无缝预加载复用；失败返回 null）。</summary>
-        public async Task<string?> EnsureCachedWavAsync(string path, Action<string>? status = null)
+        public async Task<string?> EnsureCachedWavAsync(string path, Action<string>? status = null, double startSeconds = 0, double lengthSeconds = 0)
         {
-            return await _decoder.EnsureCachedWavAsync(path, _outputMode, _devicePreference, status).ConfigureAwait(false);
+            return await _decoder.EnsureCachedWavAsync(path, _outputMode, _devicePreference, status, startSeconds, lengthSeconds).ConfigureAwait(false);
         }
 
         /// <summary>设备主音量标量 0..1；未知返回 -1。</summary>

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 
 namespace CelesteMusicPlayer
@@ -132,6 +133,47 @@ namespace CelesteMusicPlayer
             }
 
             return tracks;
+        }
+
+        /// <summary>
+        /// 取音频文件同目录同名 .cue（"album.flac" → "album.cue"），解析后只保留
+        /// 引用该音频的轨，按开始时间排序。这是主流抓轨工具（EAC / CUERipper / foobar）
+        /// 的标准命名，覆盖绝大多数情况。
+        /// 没有 .cue、解析失败、或引用轨不足 2 条时返回 null（调用方按整曲处理）。
+        /// </summary>
+        public static List<CueTrack>? LoadCueForAudio(string audioPath)
+        {
+            if (string.IsNullOrWhiteSpace(audioPath))
+            {
+                return null;
+            }
+
+            try
+            {
+                string cuePath = Path.ChangeExtension(audioPath, ".cue");
+                if (!File.Exists(cuePath))
+                {
+                    return null;
+                }
+
+                List<CueTrack> all = LoadCue(cuePath);
+                if (all.Count < 2)
+                {
+                    return null; // 只有一轨的 cue 没有拆分意义
+                }
+
+                var mine = all
+                    .Where(t => !string.IsNullOrWhiteSpace(t.FilePath)
+                        && string.Equals(t.FilePath, audioPath, StringComparison.OrdinalIgnoreCase))
+                    .OrderBy(t => t.StartTime)
+                    .ToList();
+
+                return mine.Count >= 2 ? mine : null;
+            }
+            catch
+            {
+                return null;
+            }
         }
 
         private static void FinalizeTrack(CueTrack track, string? audioFile, string? sheetPerformer, string? sheetTitle)

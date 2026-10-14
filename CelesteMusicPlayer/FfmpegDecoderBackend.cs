@@ -23,11 +23,13 @@ namespace CelesteMusicPlayer
         /// <summary>该后端能否解码此扩展名（false 时上层应回退到其他后端或提示）。</summary>
         bool CanDecode(string path);
 
-        /// <summary>把文件转码为缓存 WAV，返回缓存路径；失败返回 null（原因经 FailureHandler 上报）。</summary>
-        Task<string?> TranscodeToWavAsync(string inputPath, HiFiOutputBackend.OutputMode outputMode, string? devicePreference, Action<string>? status);
+        /// <summary>把文件转码为缓存 WAV，返回缓存路径；失败返回 null（原因经 FailureHandler 上报）。
+        /// startSeconds/lengthSeconds > 0 时只转码该区间（CUE 分轨用：ffmpeg -ss/-t，采样级精确）。</summary>
+        Task<string?> TranscodeToWavAsync(string inputPath, HiFiOutputBackend.OutputMode outputMode, string? devicePreference, Action<string>? status, double startSeconds = 0, double lengthSeconds = 0);
 
-        /// <summary>确保已转码为缓存 WAV（供无缝预加载复用）；失败返回 null。</summary>
-        Task<string?> EnsureCachedWavAsync(string inputPath, HiFiOutputBackend.OutputMode outputMode, string? devicePreference, Action<string>? status);
+        /// <summary>确保已转码为缓存 WAV（供无缝预加载复用）；失败返回 null。
+        /// startSeconds/lengthSeconds > 0 时只转码该区间（CUE 分轨用）。</summary>
+        Task<string?> EnsureCachedWavAsync(string inputPath, HiFiOutputBackend.OutputMode outputMode, string? devicePreference, Action<string>? status, double startSeconds = 0, double lengthSeconds = 0);
 
         /// <summary>用后端探测源文件真实音轨时长（秒）；失败返回 TimeSpan.Zero。</summary>
         Task<TimeSpan> ProbeSourceDurationAsync(string path);
@@ -152,7 +154,7 @@ namespace CelesteMusicPlayer
                 ".opus" or ".mp2" or ".amr" or ".au" or ".cda" or ".mod" or ".s3m" or ".xm";
         }
 
-        public async Task<string?> TranscodeToWavAsync(string path, HiFiOutputBackend.OutputMode outputMode, string? devicePreference, Action<string>? status)
+        public async Task<string?> TranscodeToWavAsync(string path, HiFiOutputBackend.OutputMode outputMode, string? devicePreference, Action<string>? status, double startSeconds = 0, double lengthSeconds = 0)
         {
             string? ffmpeg = AudioPlaybackEngine.FindFfmpeg();
             if (string.IsNullOrWhiteSpace(ffmpeg))
@@ -170,6 +172,8 @@ namespace CelesteMusicPlayer
             string cacheDir = GetCacheDir();
             string partial = Path.Combine(cacheDir, Guid.NewGuid().ToString("N") + ".partial.wav");
             string transcodeArgs = await BuildTranscodeArgsAsync(path, partial, outputMode, devicePreference);
+            // CUE 分轨区间注入（无区间时原样返回）；缓存键含参数指纹，自动按轨分开缓存
+            transcodeArgs = InjectRangeOptions(transcodeArgs, startSeconds, lengthSeconds);
             string key = GetCacheKey(path, transcodeArgs);
             string cachedWav = Path.Combine(cacheDir, key + ".wav");
             string targetWav;
@@ -271,7 +275,7 @@ namespace CelesteMusicPlayer
             return targetWav;
         }
 
-        public async Task<string?> EnsureCachedWavAsync(string path, HiFiOutputBackend.OutputMode outputMode, string? devicePreference, Action<string>? status)
+        public async Task<string?> EnsureCachedWavAsync(string path, HiFiOutputBackend.OutputMode outputMode, string? devicePreference, Action<string>? status, double startSeconds = 0, double lengthSeconds = 0)
         {
             try
             {
@@ -283,6 +287,8 @@ namespace CelesteMusicPlayer
                 string cacheDir = GetCacheDir();
                 string partial = Path.Combine(cacheDir, Guid.NewGuid().ToString("N") + ".partial.wav");
                 string transcodeArgs = await BuildTranscodeArgsAsync(path, partial, outputMode, devicePreference);
+                // CUE 分轨区间注入（无区间时原样返回）；缓存键含参数指纹，自动按轨分开缓存
+                transcodeArgs = InjectRangeOptions(transcodeArgs, startSeconds, lengthSeconds);
                 string key = GetCacheKey(path, transcodeArgs);
                 string cachedWav = Path.Combine(cacheDir, key + ".wav");
                 if (File.Exists(cachedWav))
@@ -766,6 +772,44 @@ namespace CelesteMusicPlayer
         {
             string baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             return Path.Combine(baseDir, "CelesteMusicPlayer", "TranscodeCache");
+        }
+
+        /// <summary>
+        /// 把 CUE 分轨区间注入 ffmpeg 转码参数：-ss 放在 -i 前（输入定位，音频采样级精确）、
+        /// -t 放在输出文件名前（限制输出时长）。start/length ≤ 0 时原样返回。
+        /// 参数形如：-y -i "src" -vn -c:a ... "dst"（dst 恒为最后一个引号参数）。
+        /// 注入后参数指纹变 → GetCacheKey 自动分开缓存，同一文件的不同轨互不覆盖。
+        /// </summary>
+        private static string InjectRangeOptions(string args, double startSeconds, double lengthSeconds)
+        {
+            if (string.IsNullOrEmpty(args) || (startSeconds <= 0 && lengthSeconds <= 0))
+            {
+                return args;
+            }
+
+            string result = args;
+            if (startSeconds > 0)
+            {
+                int i = result.IndexOf("-i ", StringComparison.Ordinal);
+                if (i >= 0)
+                {
+                    result = result.Insert(i,
+                        "-ss " + startSeconds.ToString("0.###", CultureInfo.InvariantCulture) + " ");
+                }
+            }
+
+            if (lengthSeconds > 0)
+            {
+                int closeQuote = result.LastIndexOf('"');
+                int openQuote = closeQuote > 0 ? result.LastIndexOf('"', closeQuote - 1) : -1;
+                if (openQuote >= 0)
+                {
+                    result = result.Insert(openQuote,
+                        "-t " + lengthSeconds.ToString("0.###", CultureInfo.InvariantCulture) + " ");
+                }
+            }
+
+            return result;
         }
 
         /// <summary>缓存键：源路径哈希 + 最后修改时间 + 转码参数指纹（参数变化时自动失效，如位深/采样率调整）。</summary>

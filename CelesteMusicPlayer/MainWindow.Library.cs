@@ -142,7 +142,7 @@ namespace CelesteMusicPlayer
                     PlaylistView.ItemsSource = null;
                 }
 
-                foreach (PlaylistItem it in built.Items)
+                foreach (PlaylistItem it in CueTrackExpansion.Expand(built.Items))
                 {
                     _playlist.Add(it);
                 }
@@ -475,6 +475,9 @@ namespace CelesteMusicPlayer
                     }
                 });
 
+                // CUE 分轨展开（设置关时原样返回）：一个整轨文件 → N 轨
+                built = CueTrackExpansion.Expand(built);
+
                 DispatcherQueue.TryEnqueue(() => NowPlayingText.Text = $"扫描完成，共 {built.Count} 首");
                 foreach (PlaylistItem item in built)
                 {
@@ -501,7 +504,8 @@ namespace CelesteMusicPlayer
 
             if (persist)
             {
-                LibrarySessionStore.SaveFiles(_playlist.Select(i => i.FilePath));
+                // Distinct：CUE 分轨展开后同一文件对应多条，会话里按文件去重（恢复时再展开）
+                LibrarySessionStore.SaveFiles(_playlist.Select(i => i.FilePath).Distinct(StringComparer.OrdinalIgnoreCase));
             }
         }
 
@@ -703,6 +707,8 @@ namespace CelesteMusicPlayer
             }
 
             _playlist.Clear();
+            // CUE 分轨展开（设置关时原样返回）；Fresh 写索引用的是文件级元数据，不受影响
+            built.Items = CueTrackExpansion.Expand(built.Items);
             foreach (PlaylistItem it in built.Items)
             {
                 _playlist.Add(it);

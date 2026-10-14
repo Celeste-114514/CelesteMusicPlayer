@@ -320,6 +320,12 @@ namespace CelesteMusicPlayer
         // —— 音乐库 ——
         public bool AutoUpdateLibrary { get; set; }
 
+        /// <summary>
+        /// 扫描音乐库时自动套用同目录同名 .cue，把整轨音频展开为分轨（默认开）。
+        /// 只影响内存里的曲库视图与播放口径，不改数据库结构、不生成虚拟文件。
+        /// </summary>
+        public bool AutoApplyCueOnScan { get; set; } = true;
+
         public List<string> LibraryWatchFolders { get; set; } = new();
 
         /// <summary>
@@ -833,6 +839,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             ShowTaskbarProgress = s.ShowTaskbarProgress,
             ContinueWhenSwitchPlaylist = s.ContinueWhenSwitchPlaylist,
             AutoUpdateLibrary = s.AutoUpdateLibrary,
+            AutoApplyCueOnScan = s.AutoApplyCueOnScan,
             LibraryWatchFolders = s.LibraryWatchFolders.ToList(),
             // 老版本的设置文件里没有这个字段，反序列化后可能是 null，必须兜住
             ManualLibraryFiles = s.ManualLibraryFiles?.ToList() ?? new List<string>(),

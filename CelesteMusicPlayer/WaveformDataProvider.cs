@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
@@ -10,6 +11,7 @@ namespace CelesteMusicPlayer
     /// <summary>
     /// 歌曲波形数据提供器：用内置 ffmpeg 解码音频，抽取低采样率峰值，
     /// 供「波形进度条」样式绘制。结果按路径缓存（上限 30 首）。
+    /// startSeconds/lengthSeconds &gt; 0 时只解码该区间（CUE 分轨：波形与轨边界对齐）。
     /// </summary>
     internal static class WaveformDataProvider
     {
@@ -17,14 +19,15 @@ namespace CelesteMusicPlayer
         private static readonly SemaphoreSlim Gate = new(1, 1);
         private const int MaxCacheEntries = 30;
 
-        public static async Task<float[]> GetWaveformAsync(string path, int bucketCount, CancellationToken ct = default)
+        public static async Task<float[]> GetWaveformAsync(string path, int bucketCount, double startSeconds = 0, double lengthSeconds = 0, CancellationToken ct = default)
         {
             if (string.IsNullOrWhiteSpace(path))
             {
                 return Array.Empty<float>();
             }
 
-            if (Cache.TryGetValue(path, out float[]? hit) && hit.Length == bucketCount)
+            string key = WaveKey(path, startSeconds, lengthSeconds);
+            if (Cache.TryGetValue(key, out float[]? hit) && hit.Length == bucketCount)
             {
                 return hit;
             }
@@ -32,15 +35,15 @@ namespace CelesteMusicPlayer
             await Gate.WaitAsync(ct).ConfigureAwait(false);
             try
             {
-                if (Cache.TryGetValue(path, out hit) && hit.Length == bucketCount)
+                if (Cache.TryGetValue(key, out hit) && hit.Length == bucketCount)
                 {
                     return hit;
                 }
 
-                float[] result = await DecodeAsync(path, bucketCount, ct).ConfigureAwait(false);
+                float[] result = await DecodeAsync(path, bucketCount, startSeconds, lengthSeconds, ct).ConfigureAwait(false);
                 if (result.Length > 0)
                 {
-                    Cache[path] = result;
+                    Cache[key] = result;
                     if (Cache.Count > MaxCacheEntries)
                     {
                         using Dictionary<string, float[]>.Enumerator e = Cache.GetEnumerator();
@@ -59,7 +62,19 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private static async Task<float[]> DecodeAsync(string path, int bucketCount, CancellationToken ct)
+        /// <summary>缓存键：整曲用路径；分轨加区间后缀（同一文件的不同轨各一份）。</summary>
+        private static string WaveKey(string path, double startSeconds, double lengthSeconds)
+        {
+            if (startSeconds <= 0 && lengthSeconds <= 0)
+            {
+                return path;
+            }
+
+            return path + "#t=" + startSeconds.ToString("0.###", CultureInfo.InvariantCulture)
+                + "-" + lengthSeconds.ToString("0.###", CultureInfo.InvariantCulture);
+        }
+
+        private static async Task<float[]> DecodeAsync(string path, int bucketCount, double startSeconds, double lengthSeconds, CancellationToken ct)
         {
             string? ffmpeg = AudioPlaybackEngine.FindFfmpeg();
             if (string.IsNullOrWhiteSpace(ffmpeg) || !File.Exists(path))
@@ -67,13 +82,21 @@ namespace CelesteMusicPlayer
                 return Array.Empty<float>();
             }
 
+            // CUE 分轨：-ss 在 -i 前（输入定位）、-t 限制输出时长；无区间时是两个空串
+            string rangeIn = startSeconds > 0
+                ? "-ss " + startSeconds.ToString("0.###", CultureInfo.InvariantCulture) + " "
+                : string.Empty;
+            string rangeOut = lengthSeconds > 0
+                ? "-t " + lengthSeconds.ToString("0.###", CultureInfo.InvariantCulture) + " "
+                : string.Empty;
+
             var psi = new ProcessStartInfo(ffmpeg)
             {
                 UseShellExecute = false,
                 CreateNoWindow = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
-                Arguments = string.Format("-i \"{0}\" -f s16le -ac 1 -ar 8000 -acodec pcm_s16le pipe:1", path)
+                Arguments = string.Format(rangeIn + "-i \"{0}\" " + rangeOut + "-f s16le -ac 1 -ar 8000 -acodec pcm_s16le pipe:1", path)
             };
 
             try
