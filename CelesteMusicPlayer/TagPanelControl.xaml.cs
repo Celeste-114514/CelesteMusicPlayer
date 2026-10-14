@@ -164,15 +164,21 @@ namespace CelesteMusicPlayer
             _subNav.Register("批量工具", string.Empty, BatchToolsPanel);
             _subNav.Register("排序编号", string.Empty, SortNumberPanel);
             _subNav.Register("在线补全", string.Empty, OnlineFillPanel);
+            _subNav.Register("歌词下载", string.Empty, LyricDownloadPanel);
             _subNav.Build();
 
             // 切到「排序编号」子页时刷新当前排序状态与作用范围
-            // （排序规则可能在「排序…」弹窗里刚改过，页面里的展示不能是旧的）
+            // （排序规则可能在「排序…」弹窗里刚改过，页面里的展示不能是旧的）；
+            // 切到「歌词下载」时刷新当前文件、预填搜索框、恢复上次的写入口径。
             _subNav.PageEnter += page =>
             {
                 if (ReferenceEquals(page.Page, SortNumberPanel))
                 {
                     RefreshSortNumberUi();
+                }
+                else if (ReferenceEquals(page.Page, LyricDownloadPanel))
+                {
+                    RefreshLyricPageUi();
                 }
             };
 
@@ -4219,6 +4225,337 @@ namespace CelesteMusicPlayer
                 }
             }
             return null;
+        }
+
+        // =====================================================================
+        // 页 5：歌词下载（2026-10-14，对标 MusicPlayer2 的歌词下载对话框）
+        // 流程：当前文件（右侧选中行）→ 搜索 → 候选列表 → 自动选最佳匹配 →
+        //       预览 → 写 .lrc / 写歌词标签（口径用户自选）。
+        // 来源：LRClib（免 key 主力）+ QQ 音乐（客户端老接口，非官方，限速 1 次/秒）。
+        // =====================================================================
+
+        /// <summary>歌词页当前作用的文件路径（右侧列表选中项的第一个；没选 = null）。</summary>
+        private string? _lyricTargetPath;
+
+        /// <summary>一次搜索的候选结果（LyricResultList 的 ItemsSource）。</summary>
+        private readonly List<LyricCandidate> _lyricCandidates = new();
+
+        /// <summary>歌词正文缓存：key = Source|SongId|翻译开关。选中/下载时按需拉一次，不重复请求。</summary>
+        private readonly Dictionary<string, string> _lyricTextCache = new(StringComparer.Ordinal);
+
+        /// <summary>护栏：代码改选中项/下拉选项时不当成用户操作（避免自我触发 SelectionChanged）。</summary>
+        private bool _lyricUiGuard;
+
+        /// <summary>切进「歌词下载」子页时刷新当前文件、预填搜索框、恢复上次的口径。</summary>
+        private void RefreshLyricPageUi()
+        {
+            _lyricUiGuard = true;
+            try
+            {
+                AppSettingsState s = AppSettingsStore.Load();
+
+                LyricSourceCombo.SelectedIndex = string.Equals(s.LyricPageSource, OnlineLyricDownload.SourceQQ, StringComparison.OrdinalIgnoreCase)
+                    ? 1
+                    : 0;
+
+                TagFileItem? current = TagFileGrid.SelectedItems.Cast<TagFileItem>().FirstOrDefault();
+                _lyricTargetPath = current?.FilePath;
+                if (current == null || string.IsNullOrEmpty(current.FilePath))
+                {
+                    LyricCurrentFileText.Text = "还没选文件——先去右边文件列表点一首歌（单击即选中整行），这里会按它的标签自动填好搜索框。";
+                    LyricTitleBox.Text = string.Empty;
+                    LyricArtistBox.Text = string.Empty;
+                }
+                else
+                {
+                    string name = System.IO.Path.GetFileName(current.FilePath);
+                    string title = string.IsNullOrWhiteSpace(current.Title)
+                        ? System.IO.Path.GetFileNameWithoutExtension(current.FilePath)
+                        : current.Title;
+                    string artist = string.IsNullOrWhiteSpace(current.Artist) || current.Artist == "未知艺术家"
+                        ? string.Empty
+                        : current.Artist;
+                    LyricCurrentFileText.Text = $"{name}    标题：{title}    艺术家：{(artist.Length == 0 ? "（没写）" : artist)}";
+                    LyricTitleBox.Text = title;
+                    LyricArtistBox.Text = artist;
+                }
+
+                LyricTargetSidecar.IsChecked = string.Equals(s.LyricPageWriteTarget, "Sidecar", StringComparison.OrdinalIgnoreCase);
+                LyricTargetTagPlain.IsChecked = string.Equals(s.LyricPageWriteTarget, "TagPlain", StringComparison.OrdinalIgnoreCase);
+                LyricTargetTagTs.IsChecked = string.Equals(s.LyricPageWriteTarget, "TagTimestamped", StringComparison.OrdinalIgnoreCase);
+                LyricTargetBoth.IsChecked = string.Equals(s.LyricPageWriteTarget, "Both", StringComparison.OrdinalIgnoreCase);
+                if (LyricTargetSidecar.IsChecked != true && LyricTargetTagPlain.IsChecked != true
+                    && LyricTargetTagTs.IsChecked != true && LyricTargetBoth.IsChecked != true)
+                {
+                    LyricTargetSidecar.IsChecked = true;
+                }
+
+                // 保存位置：歌词文件夹没配过时只能选歌曲目录（设置→歌词里配 LyricFolder）
+                bool hasLyricFolder = !string.IsNullOrWhiteSpace(s.LyricFolder);
+                LyricSaveLyricFolder.IsEnabled = hasLyricFolder;
+                if (s.SaveLyricToSongFolder || !hasLyricFolder)
+                {
+                    LyricSaveSongFolder.IsChecked = true;
+                }
+                else
+                {
+                    LyricSaveLyricFolder.IsChecked = true;
+                }
+
+                LyricTranslateCheck.IsChecked = s.LyricPageIncludeTranslation;
+            }
+            finally
+            {
+                _lyricUiGuard = false;
+            }
+        }
+
+        private void SetLyricPageStatus(string text)
+        {
+            LyricPageStatusText.Text = text;
+        }
+
+        private async void LyricSearchButton_Click(object sender, RoutedEventArgs e)
+        {
+            await SearchLyricsAsync().ConfigureAwait(true);
+        }
+
+        private async Task SearchLyricsAsync()
+        {
+            string title = LyricTitleBox.Text?.Trim() ?? string.Empty;
+            string artist = LyricArtistBox.Text?.Trim() ?? string.Empty;
+            string keyword = (artist + " " + title).Trim();
+            if (keyword.Length == 0)
+            {
+                SetLyricPageStatus("标题和艺术家都空着——先在上面填一个（只填标题也能搜）。");
+                return;
+            }
+
+            string source = (LyricSourceCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? OnlineLyricDownload.SourceLrclib;
+
+            SetLyricPageStatus($"正在用 {(source == OnlineLyricDownload.SourceQQ ? "QQ 音乐" : "LRClib")} 搜索「{keyword}」…");
+            LyricSearchButton.IsEnabled = false;
+            try
+            {
+                IReadOnlyList<LyricCandidate> hits =
+                    await OnlineLyricDownload.SearchAsync(source, keyword).ConfigureAwait(true);
+
+                _lyricCandidates.Clear();
+                _lyricCandidates.AddRange(hits);
+                for (int i = 0; i < _lyricCandidates.Count; i++)
+                {
+                    _lyricCandidates[i].Index = i + 1;
+                }
+
+                _lyricTextCache.Clear();
+                _lyricUiGuard = true;
+                LyricResultList.ItemsSource = null;
+                LyricResultList.ItemsSource = _lyricCandidates;
+                LyricResultList.SelectedIndex = -1;
+                _lyricUiGuard = false;
+                LyricPreviewBox.Text = string.Empty;
+
+                if (_lyricCandidates.Count == 0)
+                {
+                    SetLyricPageStatus("一个候选都没有。换个关键词试试，或在左上角换另一个来源（LRClib / QQ 音乐）。");
+                    return;
+                }
+
+                // 自动选最佳匹配（加权相似度：标题 0.4 + 艺术家 0.4 + 专辑 0.3 + 文件名 0.6 + 列表顺序 0.05）
+                TagFileItem? current = TagFileGrid.SelectedItems.Cast<TagFileItem>().FirstOrDefault();
+                string fileName = current != null ? System.IO.Path.GetFileNameWithoutExtension(current.FilePath) : string.Empty;
+                string album = current != null && current.Album != "未知专辑" ? current.Album : string.Empty;
+                int best = OnlineLyricDownload.PickBestMatch(_lyricCandidates, title, artist, album, fileName);
+
+                _lyricUiGuard = true;
+                LyricResultList.SelectedIndex = best >= 0 ? best : -1;
+                _lyricUiGuard = false;
+                if (best >= 0)
+                {
+                    LyricResultList.ScrollIntoView(_lyricCandidates[best]);
+                }
+
+                SetLyricPageStatus(best >= 0
+                    ? $"找到 {_lyricCandidates.Count} 个候选，已自动选中第 {best + 1} 个（算出来最相似的一个）。点别的行可以改选。"
+                    : $"找到 {_lyricCandidates.Count} 个候选，但没有足够相似的——需要你手动点一个（看标题/艺术家/时长对不上的就换）。");
+            }
+            finally
+            {
+                LyricSearchButton.IsEnabled = true;
+            }
+        }
+
+        private async void LyricResultList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_lyricUiGuard)
+            {
+                return;
+            }
+
+            await ShowLyricPreviewAsync().ConfigureAwait(true);
+        }
+
+        private async Task ShowLyricPreviewAsync()
+        {
+            if (LyricResultList.SelectedItem is not LyricCandidate candidate)
+            {
+                LyricPreviewBox.Text = string.Empty;
+                return;
+            }
+
+            bool wantTrans = LyricTranslateCheck.IsChecked == true;
+            string key = candidate.Source + "|" + candidate.SongId + "|" + wantTrans;
+            if (_lyricTextCache.TryGetValue(key, out string? cached))
+            {
+                LyricPreviewBox.Text = cached;
+                SetLyricPageStatus(cached.Length == 0
+                    ? "这个候选没有歌词，换一个试试。"
+                    : $"已显示歌词（{cached.Length} 字）。确认无误就点下面「下载并保存」。");
+                return;
+            }
+
+            SetLyricPageStatus("正在取歌词…");
+            string lyric = await OnlineLyricDownload.FetchLyricAsync(candidate, wantTrans).ConfigureAwait(true);
+            _lyricTextCache[key] = lyric;
+
+            // 拉取期间用户可能又点了别的行：只给还处于选中状态的那个候选显示
+            if (LyricResultList.SelectedItem is LyricCandidate still && ReferenceEquals(still, candidate))
+            {
+                LyricPreviewBox.Text = lyric;
+                SetLyricPageStatus(lyric.Length == 0
+                    ? "这个候选没有歌词，换一个试试。"
+                    : $"已显示歌词（{lyric.Length} 字）。确认无误就点下面「下载并保存」。");
+            }
+        }
+
+        private async void LyricDownloadButton_Click(object sender, RoutedEventArgs e)
+        {
+            await DownloadLyricAsync().ConfigureAwait(true);
+        }
+
+        private async Task DownloadLyricAsync()
+        {
+            if (string.IsNullOrEmpty(_lyricTargetPath) || !File.Exists(_lyricTargetPath))
+            {
+                SetLyricPageStatus("还没有选中文件——先去右边文件列表点一首歌。");
+                return;
+            }
+
+            if (LyricResultList.SelectedItem is not LyricCandidate candidate)
+            {
+                SetLyricPageStatus("先在上面的搜索结果里点一个候选。");
+                return;
+            }
+
+            AppSettingsState s = AppSettingsStore.Load();
+            bool wantTrans = LyricTranslateCheck.IsChecked == true;
+
+            string key = candidate.Source + "|" + candidate.SongId + "|" + wantTrans;
+            if (!_lyricTextCache.TryGetValue(key, out string? lyric) || string.IsNullOrEmpty(lyric))
+            {
+                SetLyricPageStatus("正在取歌词…");
+                lyric = await OnlineLyricDownload.FetchLyricAsync(candidate, wantTrans).ConfigureAwait(true);
+                _lyricTextCache[key] = lyric;
+            }
+
+            if (string.IsNullOrWhiteSpace(lyric))
+            {
+                SetLyricPageStatus("这个候选没有歌词，换一个试试。");
+                return;
+            }
+
+            // 写入口径以界面上勾的为准，同时记住选择（下次进来自动带上）
+            LyricWriteTarget target = LyricTargetTagPlain.IsChecked == true ? LyricWriteTarget.TagPlain
+                : LyricTargetTagTs.IsChecked == true ? LyricWriteTarget.TagTimestamped
+                : LyricTargetBoth.IsChecked == true ? LyricWriteTarget.Both
+                : LyricWriteTarget.Sidecar;
+            string targetName = target switch
+            {
+                LyricWriteTarget.TagPlain => "TagPlain",
+                LyricWriteTarget.TagTimestamped => "TagTimestamped",
+                LyricWriteTarget.Both => "Both",
+                _ => "Sidecar"
+            };
+
+            bool saveToSongFolder = LyricSaveSongFolder.IsChecked == true;
+            string lyricFolder = s.LyricFolder ?? string.Empty;
+            if (!saveToSongFolder && string.IsNullOrWhiteSpace(lyricFolder))
+            {
+                SetLyricPageStatus("选了「歌词文件夹」但设置里还没配——去 设置→歌词 配一个文件夹，或改选「歌曲所在目录」。");
+                return;
+            }
+
+            if (!string.Equals(s.LyricPageWriteTarget, targetName, StringComparison.OrdinalIgnoreCase)
+                || s.LyricPageIncludeTranslation != wantTrans
+                || s.SaveLyricToSongFolder != saveToSongFolder)
+            {
+                s.LyricPageWriteTarget = targetName;
+                s.LyricPageIncludeTranslation = wantTrans;
+                s.SaveLyricToSongFolder = saveToSongFolder;
+                AppSettingsStore.Save(s);
+            }
+
+            LyricDownloadButton.IsEnabled = false;
+            try
+            {
+                (bool ok, string message) = await OnlineLyricDownload.WriteLyricAsync(
+                    _lyricTargetPath, lyric, target, saveToSongFolder, lyricFolder).ConfigureAwait(true);
+                SetLyricPageStatus(message);
+
+                if (ok && target is not LyricWriteTarget.Sidecar)
+                {
+                    // 标签真写过：通知主窗口刷新元数据 + 重建这一行（歌词列才会显示刚写进去的内容）
+                    TagsSaved?.Invoke(_lyricTargetPath);
+                    TagFileItem? row = TagFileGrid.SelectedItems.Cast<TagFileItem>()
+                        .FirstOrDefault(i => string.Equals(i.FilePath, _lyricTargetPath, StringComparison.OrdinalIgnoreCase));
+                    if (row != null)
+                    {
+                        await RefreshSavedRowsAsync(new List<TagFileItem> { row }).ConfigureAwait(true);
+                    }
+                }
+            }
+            finally
+            {
+                LyricDownloadButton.IsEnabled = true;
+            }
+        }
+
+        private void LyricOnlineViewButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (LyricResultList.SelectedItem is not LyricCandidate candidate || string.IsNullOrEmpty(candidate.OnlineUrl))
+            {
+                SetLyricPageStatus("这个来源没有能打开的在线页面（LRClib 是接口库，没有单曲网页；QQ 音乐才可以）。");
+                return;
+            }
+
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(candidate.OnlineUrl)
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.LyricOnlineViewButton_Click", caught);
+                SetLyricPageStatus("打不开浏览器：" + caught.Message);
+            }
+        }
+
+        private void LyricSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_lyricUiGuard)
+            {
+                return;
+            }
+
+            string source = (LyricSourceCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? OnlineLyricDownload.SourceLrclib;
+            AppSettingsState s = AppSettingsStore.Load();
+            if (!string.Equals(s.LyricPageSource, source, StringComparison.OrdinalIgnoreCase))
+            {
+                s.LyricPageSource = source;
+                AppSettingsStore.Save(s);
+            }
         }
     }
 

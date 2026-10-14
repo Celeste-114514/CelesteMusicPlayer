@@ -568,6 +568,234 @@
                             TextAlignment="Center" />
                     </StackPanel>
                 </Grid>
+
+                <!-- ══════════ 页 5：歌词下载（对标 MusicPlayer2 的歌词下载对话框） ══════════
+                     流程：当前文件 → 搜索 → 候选列表（自动选最佳匹配）→ 预览 → 写 .lrc / 写歌词标签。
+                     写入口径用户自选（2026-10-14 拍板）：Lyrics 与 UNSYNCEDLYRICS 其实是
+                     同一个纯文本字段的不同叫法（ID3v2=USLT、Vorbis=UNSYNCEDLYRICS、MP4=©lyr），
+                     区别只在于要不要把 [mm:ss.xx] 时间戳一起写进去；外挂 .lrc 则带完整时间轴。 -->
+                <ScrollViewer
+                    x:Name="LyricDownloadPanel"
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="0,0,4,0">
+                    <StackPanel Spacing="10">
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10,8">
+                            <TextBlock
+                                FontSize="12"
+                                Opacity="0.75"
+                                TextWrapping="WrapWholeWords"
+                                Text="给右侧选中的那首歌在线找歌词：先搜索，再从候选里挑一个（进来时会按标题/歌手/专辑自动选中最像的一个），预览确认后保存。可以存成同名 .lrc 文件，也可以写进音频文件自带的歌词字段。" />
+                        </Border>
+
+                        <!-- ① 当前文件 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="① 当前文件" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    x:Name="LyricCurrentFileText"
+                                    FontSize="12"
+                                    Opacity="0.75"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ② 搜索 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="② 搜索" FontSize="13" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox
+                                        x:Name="LyricSourceCombo"
+                                        Grid.Column="0"
+                                        MinWidth="118"
+                                        SelectionChanged="LyricSourceCombo_SelectionChanged">
+                                        <ComboBoxItem Content="LRClib（免 key）" Tag="LRClib" />
+                                        <ComboBoxItem Content="QQ 音乐（非官方）" Tag="QQ" />
+                                    </ComboBox>
+                                    <TextBox x:Name="LyricTitleBox" Grid.Column="1" Header="标题" />
+                                    <TextBox x:Name="LyricArtistBox" Grid.Column="2" Header="艺术家" />
+                                    <Button x:Name="LyricSearchButton" Grid.Column="3" Content="搜索" Click="LyricSearchButton_Click" />
+                                </Grid>
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="搜索关键词 = 艺术家 + 标题（两个框都可以改）。LRClib 是开放歌词库，免注册免 key；QQ 音乐走的是客户端老接口，不是官方渠道，随时可能失效——介意的话就用 LRClib。" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ③ 搜索结果 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="③ 搜索结果" FontSize="13" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="8" Padding="2,0,2,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="22" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="0.9*" />
+                                        <ColumnDefinition Width="0.9*" />
+                                        <ColumnDefinition Width="42" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="#" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="1" Text="标题" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="2" Text="艺术家" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="3" Text="专辑" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="4" Text="时长" FontSize="11" Opacity="0.55" />
+                                </Grid>
+                                <ListView
+                                    x:Name="LyricResultList"
+                                    MaxHeight="230"
+                                    SelectionChanged="LyricResultList_SelectionChanged"
+                                    SelectionMode="Single">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="local:LyricCandidate">
+                                            <Grid Padding="2,5" ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="22" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="0.9*" />
+                                                    <ColumnDefinition Width="0.9*" />
+                                                    <ColumnDefinition Width="42" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    Grid.Column="0"
+                                                    Text="{x:Bind Index}"
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    Text="{x:Bind Title}"
+                                                    FontSize="12"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="2"
+                                                    Text="{x:Bind Artist}"
+                                                    FontSize="11"
+                                                    Opacity="0.75"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="3"
+                                                    Text="{x:Bind Album}"
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="4"
+                                                    Text="{x:Bind DurationText}"
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    VerticalAlignment="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="进来时会按「标题/歌手/专辑/文件名」加权算一遍，自动选中最像的一条；点别的行可以改选。一个都不像时不会自动选，需要你手动挑。" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ④ 预览与保存 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="④ 预览与保存" FontSize="13" FontWeight="SemiBold" />
+                                <TextBox
+                                    x:Name="LyricPreviewBox"
+                                    Height="170"
+                                    AcceptsReturn="True"
+                                    IsReadOnly="True"
+                                    FontFamily="Consolas"
+                                    FontSize="12"
+                                    TextWrapping="NoWrap"
+                                    PlaceholderText="选中上面的搜索结果后，这里显示歌词正文"
+                                    ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                    ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                                <CheckBox
+                                    x:Name="LyricTranslateCheck"
+                                    Content="包含翻译（QQ 源有译文时附在正文后面）" />
+                                <TextBlock
+                                    FontSize="12"
+                                    Text="写入口径（自己选）：" />
+                                <StackPanel Spacing="2">
+                                    <RadioButton
+                                        x:Name="LyricTargetSidecar"
+                                        GroupName="LyricWriteTarget"
+                                        Tag="Sidecar"
+                                        Content="外挂 .lrc 文件（带时间轴，所有播放器都认）" />
+                                    <RadioButton
+                                        x:Name="LyricTargetTagPlain"
+                                        GroupName="LyricWriteTarget"
+                                        Tag="TagPlain"
+                                        Content="写进音频的歌词字段，纯文本（剥掉时间戳）" />
+                                    <RadioButton
+                                        x:Name="LyricTargetTagTs"
+                                        GroupName="LyricWriteTarget"
+                                        Tag="TagTimestamped"
+                                        Content="写进音频的歌词字段，保留时间戳（ECHO 这类播放器能跟着滚）" />
+                                    <RadioButton
+                                        x:Name="LyricTargetBoth"
+                                        GroupName="LyricWriteTarget"
+                                        Tag="Both"
+                                        Content="两头都写：外挂 .lrc + 歌词字段纯文本" />
+                                </StackPanel>
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="歌词字段（Lyrics / UNSYNCEDLYRICS）在 MP3 里是 USLT、FLAC 里是 UNSYNCEDLYRICS、M4A 里是 ©lyr，本来就是纯文本字段；把带时间戳的 LRC 写进去是 ECHO 认的写法，别播放器可能把 [00:12.34] 当正文显示。要时间轴优先选外挂 .lrc。" />
+                                <TextBlock FontSize="12" Text="外挂 .lrc 保存位置：" />
+                                <StackPanel Orientation="Horizontal" Spacing="16">
+                                    <RadioButton
+                                        x:Name="LyricSaveSongFolder"
+                                        GroupName="LyricSaveLoc"
+                                        Content="歌曲所在目录（同名 .lrc）" />
+                                    <RadioButton
+                                        x:Name="LyricSaveLyricFolder"
+                                        GroupName="LyricSaveLoc"
+                                        Content="歌词文件夹（设置→歌词里配的那个）" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="LyricDownloadButton" Content="下载并保存" Click="LyricDownloadButton_Click" />
+                                    <Button x:Name="LyricOnlineViewButton" Content="在线查看" Click="LyricOnlineViewButton_Click" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 状态条：每条成败原因都写在这里，绝不静默失败 -->
+                        <TextBlock
+                            x:Name="LyricPageStatusText"
+                            FontSize="12"
+                            Opacity="0.7"
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </ScrollViewer>
             </Grid>
         </Grid>
 

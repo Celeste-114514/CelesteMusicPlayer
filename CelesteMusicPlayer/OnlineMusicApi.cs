@@ -341,7 +341,7 @@ namespace CelesteMusicPlayer
         /// 从 LRClib 取歌词。LRClib 是开放歌词库，免注册免 key，仅要求请求自报身份。
         /// 优先带时间轴的 syncedLyrics，没有则退回 plainLyrics。
         /// </summary>
-        private static async Task<string> GetLyricFromLrclibAsync(
+        internal static async Task<string> GetLyricFromLrclibAsync(
             string? artist, string? title, string? album, double? durationSeconds,
             CancellationToken cancellationToken)
         {
