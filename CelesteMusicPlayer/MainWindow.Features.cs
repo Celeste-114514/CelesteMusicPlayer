@@ -1642,9 +1642,6 @@ namespace CelesteMusicPlayer
             // 「下载当前封面」已移除：标签板块「在线标签」页已有入口。
             var moreTools = new MenuFlyoutSubItem { Text = "更多工具" };
 
-            var sleepTimer = new MenuFlyoutItem { Text = "睡眠定时器…" };
-            sleepTimer.Click += async (_, _) => await ShowSleepTimerDialogAsync();
-            moreTools.Items.Add(sleepTimer);
 
             var importM3u = new MenuFlyoutItem { Text = "导入 M3U 播放列表…" };
             importM3u.Click += ImportM3u_Click;
@@ -1658,9 +1655,6 @@ namespace CelesteMusicPlayer
             openCue.Click += OpenCue_Click;
             moreTools.Items.Add(openCue);
 
-            var convert = new MenuFlyoutItem { Text = "转换当前曲目格式…" };
-            convert.Click += ConvertCurrent_Click;
-            moreTools.Items.Add(convert);
 
             flyout.Items.Add(moreTools);
 
@@ -1690,6 +1684,24 @@ namespace CelesteMusicPlayer
                 NowPlayingText.Text = "已复制歌名与艺术家";
             }
         }
+
+        /// <summary>播放条「音频设置」面板弹出时刷新一次（输出模式高亮、设备列表、ASIO 提示等）。
+        /// 这些控件原先在右上角面板里，现已搬进本面板，刷新的还是同一批控件。</summary>
+        private void AudioSettingsFlyout_Opened(object sender, object e)
+        {
+            try
+            {
+                RefreshAudioSettingsPanel();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.AudioSettingsFlyout_Opened", caught);
+            }
+        }
+
+        /// <summary>面板里的「睡眠定时器…」：弹原来的定时设置对话框。</summary>
+        private async void SleepTimerButton_Click(object sender, RoutedEventArgs e)
+            => await ShowSleepTimerDialogAsync();
 
         private async Task ShowSleepTimerDialogAsync()
         {

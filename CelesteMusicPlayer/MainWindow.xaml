@@ -8089,20 +8089,6 @@
                             <FontIcon Glyph="&#xE893;" FontSize="18" />
                         </Button>
                         <Button CornerRadius="16"
-                            x:Name="PlaybackRateButton"
-                            Width="56"
-                            Height="40"
-                            Padding="0"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Click="PlaybackRateButton_Click"
-                            ToolTipService.ToolTip="播放速度">
-                            <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock x:Name="PlaybackRateText" Text="1.0x" FontSize="13" VerticalAlignment="Center" />
-                                <FontIcon Glyph="&#xE70D;" FontSize="10" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        <Button CornerRadius="16"
                             x:Name="FavoriteButton"
                             Width="40"
                             Height="40"
@@ -8229,6 +8215,126 @@
                             VerticalAlignment="Center"
                             Visibility="Collapsed"
                             ToolTipService.ToolTip="实时电平（post-DSP）：细线=峰值，粗条=RMS；绿色正常，橙黄接近 0dBFS，红色满刻度" />
+                        <!-- 音频设置（2026-10-15）：分两块——音频输出（模式与设备）、
+                             播放设置（音量 / 播放速度 / AB 循环点 / 睡眠定时）。
+                             来源：播放条上的音量条与速度按钮、右上角面板里的输出模式与设备，
+                             全部收进这里；右上角那个面板改留给「信号路径」（诊断 / 链路 / 事件）。 -->
+                        <Button
+                            x:Name="TransportAudioSettingsButton"
+                            CornerRadius="16"
+                            Width="40"
+                            Height="40"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            ToolTipService.ToolTip="音频设置（输出 / 播放 / 定时）">
+                            <FontIcon Glyph="&#xE713;" FontSize="18" />
+                            <Button.Flyout>
+                                <Flyout Placement="Top" Opened="AudioSettingsFlyout_Opened">
+                                    <ScrollViewer MaxHeight="460" Width="330" Padding="2">
+                                        <StackPanel Spacing="14">
+                                            <!-- 音频输出：模式与设备 -->
+                                            <StackPanel Spacing="8">
+                                                <TextBlock Text="音频输出" FontSize="14" FontWeight="SemiBold" />
+                    <StackPanel Spacing="8" Margin="0,12,0,0">
+                        <TextBlock Text="输出模式" FontSize="14" FontWeight="SemiBold" />
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Button
+                                x:Name="ModeSharedCard"
+                                Grid.Column="0"
+                                Height="52"
+                                Padding="0"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                Click="AudioModeCard_Click"
+                                Tag="Shared"
+                                HorizontalAlignment="Stretch"
+                                ToolTipService.ToolTip="WASAPI 共享（系统混音）">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="共享" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="系统混音" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="ModeExclusiveCard"
+                                Grid.Column="1"
+                                Height="52"
+                                Padding="0"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                Click="AudioModeCard_Click"
+                                Tag="WasapiExclusive"
+                                HorizontalAlignment="Stretch"
+                                ToolTipService.ToolTip="WASAPI 独占（HiFi，bit-perfect）">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="独占" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="HiFi" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                            <Button
+                                x:Name="ModeAsioCard"
+                                Grid.Column="2"
+                                Height="52"
+                                Padding="0"
+                                CornerRadius="8"
+                                BorderThickness="1"
+                                Click="AudioModeCard_Click"
+                                Tag="Asio"
+                                HorizontalAlignment="Stretch"
+                                ToolTipService.ToolTip="ASIO（专有声卡驱动）">
+                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                    <TextBlock Text="ASIO" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                    <TextBlock Text="专有声卡" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                                </StackPanel>
+                            </Button>
+                        </Grid>
+                        <ComboBox x:Name="AudioOutputDeviceCombo" HorizontalAlignment="Stretch" SelectionChanged="AudioOutputDeviceCombo_SelectionChanged" PlaceholderText="输出设备" />
+                        <!-- ASIO 卡顿排查提醒：2026-09-24 KA13 实测定案——驱动缓冲 5.8ms + USB 电源管理=几秒一次卡；
+                             选中 ASIO 模式时常显（RefreshAudioSettingsPanel 控制显隐） -->
+                        <TextBlock x:Name="AsioBufferTipText"
+                                   FontSize="11"
+                                   Opacity="0.75"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="0,6,0,0"
+                                   Text="ASIO 播放卡顿（几秒一次、不规律）先查两处：① 打开耳放/声卡的控制面板（如「FiiO USB Audio Control Panel」，开始菜单搜品牌名），把 ASIO Buffer Size 调到 10ms 以上；② 控制面板→电源选项→更改计划设置→更改高级电源设置，关闭「USB 选择性暂停」和「PCI Express 链接状态电源管理」并重启。本播放器已内置 4 秒备货缓冲，若仍卡，基本就是这两项。" />
+                        <!-- 热插拔提示：设备拔插时短暂显示，10 秒后自动收起 -->
+                        <TextBlock x:Name="AudioDeviceHotplugText"
+                                   FontSize="11"
+                                   Opacity="0.75"
+                                   TextWrapping="Wrap"
+                                   Visibility="Collapsed"
+                                   Margin="0,4,0,0" />
+                        <!-- 按设备记忆 DSP 配置档 -->
+                        <StackPanel Spacing="6" Margin="0,10,0,0">
+                            <ToggleSwitch
+                                x:Name="DeviceDspMemoryToggle"
+                                Header="按设备记忆 DSP 配置"
+                                OffContent="关"
+                                OnContent="开"
+                                Toggled="DeviceDspMemoryToggle_Toggled" />
+                            <TextBlock
+                                x:Name="DeviceDspHint"
+                                FontSize="11"
+                                Opacity="0.75"
+                                TextWrapping="Wrap" />
+                            <Button CornerRadius="16"
+                                x:Name="SaveDeviceDspButton"
+                                Content="保存当前配置为当前设备"
+                                Click="SaveDeviceDspButton_Click" />
+                        </StackPanel>
+                    </StackPanel>
+                                            </StackPanel>
+                                            <Rectangle Height="1" Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
+                                            <!-- 播放设置：音量 / 速度 / AB / 定时 -->
+                                            <StackPanel Spacing="10">
+                                                <TextBlock Text="播放设置" FontSize="14" FontWeight="SemiBold" />
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon
                             x:Name="VolumeIcon"
                             Glyph="&#xE767;"
@@ -8261,6 +8367,44 @@
                                 IsHitTestVisible="False"
                                 Visibility="Collapsed" />
                         </Grid>
+                                                </StackPanel>
+                                                <Button CornerRadius="16"
+                                                x:Name="PlaybackRateButton"
+                                                Width="56"
+                                                Height="40"
+                                                Padding="0"
+                                                Background="Transparent"
+                                                BorderThickness="0"
+                                                Click="PlaybackRateButton_Click"
+                                                ToolTipService.ToolTip="播放速度">
+                                                <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                                <TextBlock x:Name="PlaybackRateText" Text="1.0x" FontSize="13" VerticalAlignment="Center" />
+                                                <FontIcon Glyph="&#xE70D;" FontSize="10" VerticalAlignment="Center" />
+                                                </StackPanel>
+                                                </Button>
+                                                <StackPanel Spacing="2">
+                                                    <Button
+                                                        x:Name="AbLoopPlaceholderButton"
+                                                        Content="AB 循环点"
+                                                        HorizontalAlignment="Stretch"
+                                                        IsEnabled="False" />
+                                                    <TextBlock
+                                                        FontSize="11"
+                                                        Opacity="0.7"
+                                                        TextWrapping="WrapWholeWords"
+                                                        Text="尚未实现：设定 A / B 两点后只在区间内循环播放。已列入待办。" />
+                                                </StackPanel>
+                                                <Button
+                                                    x:Name="SleepTimerButton"
+                                                    Content="睡眠定时器…"
+                                                    HorizontalAlignment="Stretch"
+                                                    Click="SleepTimerButton_Click" />
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </ScrollViewer>
+                                </Flyout>
+                            </Button.Flyout>
+                        </Button>
                     </StackPanel>
                 </Grid>
                 <!-- 极客模式命令行状态条：时间 / 输出格式 / 状态灯，全是引擎真数据 -->
@@ -8367,99 +8511,6 @@
                         <StackPanel>
 
                     <!-- 输出模式 -->
-                    <StackPanel Spacing="8" Margin="0,12,0,0">
-                        <TextBlock Text="输出模式" FontSize="14" FontWeight="SemiBold" />
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Button
-                                x:Name="ModeSharedCard"
-                                Grid.Column="0"
-                                Height="52"
-                                Padding="0"
-                                CornerRadius="8"
-                                BorderThickness="1"
-                                Click="AudioModeCard_Click"
-                                Tag="Shared"
-                                HorizontalAlignment="Stretch"
-                                ToolTipService.ToolTip="WASAPI 共享（系统混音）">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="共享" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                    <TextBlock Text="系统混音" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            <Button
-                                x:Name="ModeExclusiveCard"
-                                Grid.Column="1"
-                                Height="52"
-                                Padding="0"
-                                CornerRadius="8"
-                                BorderThickness="1"
-                                Click="AudioModeCard_Click"
-                                Tag="WasapiExclusive"
-                                HorizontalAlignment="Stretch"
-                                ToolTipService.ToolTip="WASAPI 独占（HiFi，bit-perfect）">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="独占" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                    <TextBlock Text="HiFi" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            <Button
-                                x:Name="ModeAsioCard"
-                                Grid.Column="2"
-                                Height="52"
-                                Padding="0"
-                                CornerRadius="8"
-                                BorderThickness="1"
-                                Click="AudioModeCard_Click"
-                                Tag="Asio"
-                                HorizontalAlignment="Stretch"
-                                ToolTipService.ToolTip="ASIO（专有声卡驱动）">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="ASIO" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                    <TextBlock Text="专有声卡" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                        </Grid>
-                        <ComboBox x:Name="AudioOutputDeviceCombo" HorizontalAlignment="Stretch" SelectionChanged="AudioOutputDeviceCombo_SelectionChanged" PlaceholderText="输出设备" />
-                        <!-- ASIO 卡顿排查提醒：2026-09-24 KA13 实测定案——驱动缓冲 5.8ms + USB 电源管理=几秒一次卡；
-                             选中 ASIO 模式时常显（RefreshAudioSettingsPanel 控制显隐） -->
-                        <TextBlock x:Name="AsioBufferTipText"
-                                   FontSize="11"
-                                   Opacity="0.75"
-                                   TextWrapping="Wrap"
-                                   Visibility="Collapsed"
-                                   Margin="0,6,0,0"
-                                   Text="ASIO 播放卡顿（几秒一次、不规律）先查两处：① 打开耳放/声卡的控制面板（如「FiiO USB Audio Control Panel」，开始菜单搜品牌名），把 ASIO Buffer Size 调到 10ms 以上；② 控制面板→电源选项→更改计划设置→更改高级电源设置，关闭「USB 选择性暂停」和「PCI Express 链接状态电源管理」并重启。本播放器已内置 4 秒备货缓冲，若仍卡，基本就是这两项。" />
-                        <!-- 热插拔提示：设备拔插时短暂显示，10 秒后自动收起 -->
-                        <TextBlock x:Name="AudioDeviceHotplugText"
-                                   FontSize="11"
-                                   Opacity="0.75"
-                                   TextWrapping="Wrap"
-                                   Visibility="Collapsed"
-                                   Margin="0,4,0,0" />
-                        <!-- 按设备记忆 DSP 配置档 -->
-                        <StackPanel Spacing="6" Margin="0,10,0,0">
-                            <ToggleSwitch
-                                x:Name="DeviceDspMemoryToggle"
-                                Header="按设备记忆 DSP 配置"
-                                OffContent="关"
-                                OnContent="开"
-                                Toggled="DeviceDspMemoryToggle_Toggled" />
-                            <TextBlock
-                                x:Name="DeviceDspHint"
-                                FontSize="11"
-                                Opacity="0.75"
-                                TextWrapping="Wrap" />
-                            <Button CornerRadius="16"
-                                x:Name="SaveDeviceDspButton"
-                                Content="保存当前配置为当前设备"
-                                Click="SaveDeviceDspButton_Click" />
-                        </StackPanel>
-                    </StackPanel>
 
                     <!-- 链路状态（可视化：源 → DSP → 输出） -->
                     <StackPanel Spacing="8" Margin="0,16,0,0">
