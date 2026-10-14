@@ -78,6 +78,9 @@ namespace CelesteMusicPlayer
         /// "QQ"（QQ 音乐，客户端老接口，非官方无 SLA，2026-10-14 实测可用）。</summary>
         public string LyricPageSource { get; set; } = "LRClib";
 
+        /// <summary>批量下载歌词页（标签面板）来源：同 LyricPageSource 的口径（"LRClib" / "QQ"）。</summary>
+        public string LyricBatchPageSource { get; set; } = "LRClib";
+
         /// <summary>歌词下载页写入口径："Sidecar"（默认，外挂 .lrc 带时间轴）/
         /// "TagPlain"（歌词标签纯文本）/ "TagTimestamped"（歌词标签保留时间戳，
         /// 兼容 ECHO 类按 LRC 解析字段的播放器）/ "Both"（.lrc + 标签纯文本）。</summary>
@@ -629,6 +632,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             };
             // 歌词下载页（标签板块）：来源白名单 + 写入口径白名单，非法值回退默认
             s.LyricPageSource = s.LyricPageSource is "LRClib" or "QQ" ? s.LyricPageSource : "LRClib";
+            s.LyricBatchPageSource = s.LyricBatchPageSource is "LRClib" or "QQ" ? s.LyricBatchPageSource : "LRClib";
             s.LyricPageWriteTarget = s.LyricPageWriteTarget is "Sidecar" or "TagPlain" or "TagTimestamped" or "Both"
                 ? s.LyricPageWriteTarget
                 : "Sidecar";
@@ -749,6 +753,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             AutoDownloadCover = s.AutoDownloadCover,
             LyricDownloadService = s.LyricDownloadService,
             LyricPageSource = s.LyricPageSource,
+            LyricBatchPageSource = s.LyricBatchPageSource,
             LyricPageWriteTarget = s.LyricPageWriteTarget,
             LyricPageIncludeTranslation = s.LyricPageIncludeTranslation,
             SaveLyricToSongFolder = s.SaveLyricToSongFolder,

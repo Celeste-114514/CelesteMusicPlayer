@@ -691,18 +691,14 @@ namespace CelesteMusicPlayer
                         switch (act)
                         {
                             // 「onlinesearch」入口已随 OnlineSearchWindow 一并下架。
-                            case "lyric": _ = DownloadLyricForCurrentAsync(); break;
-                            case "batchlyric": _ = BatchDownloadLyricsAsync(); break;
+                            // 「lyric / batchlyric / editlyric」已随主窗口歌词功能一并移除
+                            // （歌词相关统一收敛到标签板块的歌词编辑 / 批量下载歌词子页）。
                             case "cover": _ = DownloadCoverForCurrentAsync(); break;
                             case "dup": DuplicateFilesWindow.ShowOrActivate(this); break;
                             case "rgscan": OpenReplayGainScan(); break;
                             case "edittag":
                                 if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
                                     OpenTagEditForFiles(new[] { _nowPlayingPath });
-                                break;
-                            case "editlyric":
-                                if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
-                                    LyricsEditorWindow.Show(_nowPlayingPath);
                                 break;
                             case "openloc": OpenFileLocationInExplorer(_nowPlayingPath); break;
                             case "sleeptimer": _ = ShowSleepTimerDialogAsync(); break;

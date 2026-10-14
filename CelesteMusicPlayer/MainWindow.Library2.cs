@@ -701,26 +701,6 @@ namespace CelesteMusicPlayer
         /// <summary>专辑墙右键附加操作（音乐库专辑墙 / 艺术家详情专辑共用）。</summary>
         private void AppendAlbumContextItems(MenuFlyout flyout, AlbumEntry album, bool fromArtist)
         {
-            var dlLyric = new MenuFlyoutItem { Text = "批量下载歌词" };
-            dlLyric.Icon = new FontIcon { Glyph = "" };
-            dlLyric.Click += async (_, _) =>
-            {
-                var tracks = GetTracksForAlbum(album);
-                int ok = 0;
-                for (int i = 0; i < tracks.Count; i++)
-                {
-                    PlaylistItem song = tracks[i];
-                    NowPlayingText.Text = $"正在批量下载歌词 ({i + 1}/{tracks.Count})…";
-                    string? path = await OnlineMusicApi.SearchAndDownloadLyricAsync(song.Title, song.Artist, song.FilePath);
-                    if (path != null)
-                    {
-                        ok++;
-                    }
-                }
-
-                NowPlayingText.Text = $"歌词下载完成：{ok}/{tracks.Count}";
-            };
-            flyout.Items.Add(dlLyric);
 
             var dlCover = new MenuFlyoutItem { Text = "批量下载封面" };
             dlCover.Icon = new FontIcon { Glyph = "" };

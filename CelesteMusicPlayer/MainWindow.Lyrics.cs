@@ -43,35 +43,6 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
 
-        private async void MultiSelectDownloadLyricButton_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-
-            var selected = GetSelectedMultiSelectSongs();
-            if (selected.Count == 0)
-            {
-                return;
-            }
-
-            int ok = 0;
-            for (int i = 0; i < selected.Count; i++)
-            {
-                PlaylistItem song = selected[i];
-                NowPlayingText.Text = $"正在下载歌词 ({i + 1}/{selected.Count})…";
-                string? path = await OnlineMusicApi.SearchAndDownloadLyricAsync(song.Title, song.Artist, song.FilePath);
-                if (path != null)
-                {
-                    ok++;
-                }
-            }
-
-            NowPlayingText.Text = $"歌词下载完成：{ok}/{selected.Count}";
-        
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }}
-
-
         internal string GetCurrentLyricTextPublic()
         {
             if (_currentLyricIndex >= 0 && _currentLyricIndex < _lyricLines.Count)

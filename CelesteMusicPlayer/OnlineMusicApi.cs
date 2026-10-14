@@ -1380,8 +1380,8 @@ namespace CelesteMusicPlayer
         private static readonly SemaphoreSlim MusicBrainzGate = new(1, 1);
         private static long _musicBrainzNextFreeTick;
 
-        /// <summary>带限速的 MusicBrainz GET。串行排队 + 最小 1.1 秒间隔。</summary>
-        private static async Task<HttpResponseMessage> MusicBrainzGetAsync(
+        /// <summary>带限速的 MusicBrainz GET。串行排队 + 最小 1.1 秒间隔。internal：在线标签页也走这把闸。</summary>
+        internal static async Task<HttpResponseMessage> MusicBrainzGetAsync(
             string url,
             CancellationToken cancellationToken)
         {

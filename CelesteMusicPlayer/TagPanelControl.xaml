@@ -11,10 +11,11 @@
     mc:Ignorable="d">
 
     <!-- 标签板块（2026-10-13 阶段 5a 骨架）：mp3tag 式「左标签面板 + 右文件列表」。
-         左列：横向子导航（ShellPageHost 生成，4 页）+ 当前子页面板；
+         左列：横向子导航（ShellPageHost 生成，6 页）+ 当前子页面板；
          右列：工具条 + 列表头 + 文件表格 + 状态条。
          快速编辑页：字段可编辑 + 保存 + 改动前快照整体回滚（阶段 6 落地）；
-         批量工具 / 排序编号 / 在线补全分别在阶段 7 / 8 与后续在线阶段接入。
+         批量工具（阶段 7）/ 排序编号 / 在线标签（MusicBrainz+iTunes+CAA+LRClib）/
+         歌词编辑（原「歌词下载」）/ 批量下载歌词（从歌词编辑页拆出，独立成页）。
          取色铁律：ShellPageHost 的强调色由外部注入（构造函数传 DspAccentBrush），
          界面里其它颜色一律 ThemeResource，不自己读系统强调色。 -->
 
@@ -122,7 +123,7 @@
 
     <Grid ColumnSpacing="12">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="520" />
+            <ColumnDefinition Width="550" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -133,14 +134,14 @@
                 <RowDefinition Height="*" />
             </Grid.RowDefinitions>
 
-            <!-- 横向子导航：4 个页签由 ShellPageHost 动态生成（占位容器，勿删） -->
+            <!-- 横向子导航：6 个页签由 ShellPageHost 动态生成（占位容器，勿删） -->
             <StackPanel
                 x:Name="TagSubNavPanel"
                 Orientation="Horizontal"
                 Spacing="2"
                 Margin="0,0,0,6" />
 
-            <!-- 子页面板容器：4 个面板全部常驻，显隐由 ShellPageHost 统一管 -->
+            <!-- 子页面板容器：6 个面板全部常驻，显隐由 ShellPageHost 统一管 -->
             <Grid x:Name="TagSubPageHost" Grid.Row="1">
 
                 <!-- ══════════ 页 1：快速编辑（可编辑 + 保存 + 快照回滚） ══════════ -->
@@ -547,29 +548,232 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- ══════════ 页 4：在线标签（后续阶段接入，占位） ══════════ -->
-                <Grid x:Name="OnlineFillPanel">
-                    <StackPanel
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Spacing="8"
-                        MaxWidth="300">
-                        <FontIcon Glyph="&#xE774;" FontSize="36" Opacity="0.35" HorizontalAlignment="Center" />
-                        <TextBlock
-                            Text="在线标签"
-                            FontSize="15"
-                            FontWeight="SemiBold"
-                            HorizontalAlignment="Center" />
-                        <TextBlock
-                            Text="从 MusicBrainz / iTunes / Cover Art Archive / LRClib 搜索并补全标签、封面与歌词；匹配结果先预览、确认后才写入。"
-                            FontSize="12"
-                            Opacity="0.6"
-                            TextWrapping="WrapWholeWords"
-                            TextAlignment="Center" />
-                    </StackPanel>
-                </Grid>
+                <!-- ══════════ 页 4：在线标签（MusicBrainz + iTunes + Cover Art Archive + LRClib） ══════════
+                     搜索 → 点结果看详情（封面/字段/歌词预览）→ 勾要写的字段 → 写入所选文件。
+                     写入前快照、失败整体回滚（与快速编辑页同一套安全底线）。 -->
+                <ScrollViewer
+                    x:Name="OnlineTagPanel"
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="0,0,4,0">
+                    <StackPanel Spacing="10">
+                        <!-- ① 当前文件 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="① 当前文件" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    x:Name="OnlineTagFileText"
+                                    FontSize="12"
+                                    Opacity="0.75"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
 
-                <!-- ══════════ 页 5：歌词下载 ══════════ -->
+                        <!-- ② 搜索 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="② 搜索" FontSize="13" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="OnlineTagTitleBox" Grid.Column="0" Header="标题" />
+                                    <TextBox x:Name="OnlineTagArtistBox" Grid.Column="1" Header="艺术家" />
+                                </Grid>
+                                <TextBox x:Name="OnlineTagAlbumBox" Header="专辑（可留空）" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <ComboBox
+                                        x:Name="OnlineTagSourceCombo"
+                                        Grid.Column="0"
+                                        HorizontalAlignment="Stretch">
+                                        <ComboBoxItem Content="MusicBrainz + iTunes" Tag="Both" IsSelected="True" />
+                                        <ComboBoxItem Content="MusicBrainz" Tag="MusicBrainz" />
+                                        <ComboBoxItem Content="iTunes" Tag="iTunes" />
+                                    </ComboBox>
+                                    <Button x:Name="OnlineTagSearchButton" Grid.Column="1" Content="搜索" Click="OnlineTagSearchButton_Click" />
+                                </Grid>
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="MusicBrainz 官方限速每秒 1 次；iTunes 免 key。封面：MusicBrainz 走 Cover Art Archive，iTunes 走 Apple  artwork。歌词只有 LRClib（免 key），选中结果后自动取。" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ③ 搜索结果 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="③ 搜索结果" FontSize="13" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="8" Padding="2,0,2,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="22" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="0.9*" />
+                                        <ColumnDefinition Width="0.9*" />
+                                        <ColumnDefinition Width="44" />
+                                        <ColumnDefinition Width="62" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="#" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="1" Text="标题" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="2" Text="艺术家" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="3" Text="专辑" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="4" Text="年份" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="5" Text="来源" FontSize="11" Opacity="0.55" />
+                                </Grid>
+                                <ListView
+                                    x:Name="OnlineTagResultList"
+                                    MaxHeight="230"
+                                    SelectionMode="Single"
+                                    SelectionChanged="OnlineTagResultList_SelectionChanged">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="local:OnlineTagCandidate">
+                                            <Grid Padding="2,5" ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="22" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="0.9*" />
+                                                    <ColumnDefinition Width="0.9*" />
+                                                    <ColumnDefinition Width="44" />
+                                                    <ColumnDefinition Width="62" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    Grid.Column="0"
+                                                    Text="{x:Bind Index}"
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    Text="{x:Bind Title}"
+                                                    FontSize="12"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="2"
+                                                    Text="{x:Bind Artist}"
+                                                    FontSize="11"
+                                                    Opacity="0.75"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="3"
+                                                    Text="{x:Bind Album}"
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="4"
+                                                    Text="{x:Bind YearText}"
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="5"
+                                                    Text="{x:Bind SourceLabel}"
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    VerticalAlignment="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ④ 结果详情 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="④ 结果详情（点上面的结果加载）" FontSize="13" FontWeight="SemiBold" />
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Border
+                                        Width="120"
+                                        Height="120"
+                                        CornerRadius="8"
+                                        Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                                        BorderThickness="1">
+                                        <Image x:Name="OnlineTagCoverImage" Stretch="UniformToFill" />
+                                    </Border>
+                                    <StackPanel Grid.Column="1" Spacing="4">
+                                        <TextBlock
+                                            x:Name="OnlineTagDetailText"
+                                            FontSize="12"
+                                            Opacity="0.8"
+                                            TextWrapping="WrapWholeWords" />
+                                        <TextBlock
+                                            x:Name="OnlineTagLyricText"
+                                            FontSize="11"
+                                            Opacity="0.65"
+                                            MaxHeight="80"
+                                            TextTrimming="CharacterEllipsis"
+                                            TextWrapping="WrapWholeWords" />
+                                    </StackPanel>
+                                </Grid>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ⑤ 写入所选文件 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="⑤ 写入所选文件" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    x:Name="OnlineTagScopeText"
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords" />
+                                <TextBlock FontSize="12" Text="勾选要写入的字段（没勾的不动）：" />
+                                <StackPanel Spacing="2">
+                                    <CheckBox x:Name="OnlineTagFieldTitle" Content="标题" />
+                                    <CheckBox x:Name="OnlineTagFieldArtist" Content="艺术家" />
+                                    <CheckBox x:Name="OnlineTagFieldAlbum" Content="专辑" />
+                                    <CheckBox x:Name="OnlineTagFieldAlbumArtist" Content="专辑艺术家" />
+                                    <CheckBox x:Name="OnlineTagFieldYear" Content="年份" />
+                                    <CheckBox x:Name="OnlineTagFieldTrack" Content="曲目号 / 曲目总数" />
+                                    <CheckBox x:Name="OnlineTagFieldDisc" Content="碟片号 / 碟片总数" />
+                                    <CheckBox x:Name="OnlineTagFieldGenre" Content="流派" />
+                                    <CheckBox x:Name="OnlineTagFieldCover" Content="封面（内嵌进文件）" />
+                                    <CheckBox x:Name="OnlineTagFieldLyrics" Content="歌词（LRClib，写进歌词字段）" />
+                                </StackPanel>
+                                <Button x:Name="OnlineTagWriteButton" Content="写入所选文件" HorizontalAlignment="Left" Click="OnlineTagWriteButton_Click" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- 状态条：每条成败原因都写在这里，绝不静默失败 -->
+                        <TextBlock
+                            x:Name="OnlineTagStatusText"
+                            FontSize="12"
+                            Opacity="0.7"
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- ══════════ 页 5：歌词编辑（原「歌词下载」改名） ══════════
+                     单首精修：搜索 → 预览 → 选写入口径（外挂 .lrc / 歌词字段纯文本 /
+                     歌词字段带时间戳 / 两头都写）。批量下载在下一个子页。 -->
                 <ScrollViewer
                     x:Name="LyricDownloadPanel"
                     VerticalScrollBarVisibility="Auto"
@@ -763,18 +967,50 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- ⑤ 批量下载 -->
+                        <!-- 状态条：每条成败原因都写在这里，绝不静默失败 -->
+                        <TextBlock
+                            x:Name="LyricPageStatusText"
+                            FontSize="12"
+                            Opacity="0.7"
+                            TextWrapping="WrapWholeWords" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- ══════════ 页 6：批量下载歌词（从歌词编辑页拆出，独立成页） ══════════
+                     逐首：算 .lrc 路径 → 跳过已有 → 拼关键词 → 搜索 → 加权选最佳 →
+                     下载 → 写外挂 .lrc（只写外挂；想写进歌词字段用「歌词编辑」页）。 -->
+                <ScrollViewer
+                    x:Name="LyricBatchPanel"
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="0,0,4,0">
+                    <StackPanel Spacing="10">
+                        <!-- ① 下载设置 -->
                         <Border
                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                             CornerRadius="8"
                             Padding="10">
                             <StackPanel Spacing="8">
-                                <TextBlock Text="⑤ 批量下载" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock Text="① 下载设置" FontSize="13" FontWeight="SemiBold" />
                                 <TextBlock
                                     x:Name="LyricBatchScopeText"
                                     FontSize="11"
                                     Opacity="0.6"
                                     TextWrapping="WrapWholeWords" />
+                                <Grid ColumnSpacing="8">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="来源：" FontSize="12" VerticalAlignment="Center" />
+                                    <ComboBox
+                                        x:Name="LyricBatchSourceCombo"
+                                        Grid.Column="1"
+                                        HorizontalAlignment="Stretch"
+                                        SelectionChanged="LyricBatchSourceCombo_SelectionChanged">
+                                        <ComboBoxItem Content="LRClib（免 key）" Tag="LRClib" />
+                                        <ComboBoxItem Content="QQ 音乐（非官方）" Tag="QQ" />
+                                    </ComboBox>
+                                </Grid>
                                 <StackPanel Orientation="Horizontal" Spacing="16">
                                     <CheckBox x:Name="LyricBatchSkipExistCheck" Content="跳过已有 .lrc 的曲目" />
                                     <CheckBox x:Name="LyricBatchTranslateCheck" Content="带翻译" />
@@ -790,11 +1026,26 @@
                                         GroupName="LyricBatchSaveLoc"
                                         Content="歌词文件夹" />
                                 </StackPanel>
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="逐首下载并写成同名 .lrc（外挂文件）。想写进音频文件里的歌词字段，用「歌词编辑」页。QQ 音乐走客户端老接口，非官方渠道，随时可能失效。" />
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <Button x:Name="LyricBatchStartButton" Content="开始批量下载" Click="LyricBatchStartButton_Click" />
                                     <Button x:Name="LyricBatchStopButton" Content="停止" Click="LyricBatchStopButton_Click" IsEnabled="False" />
                                 </StackPanel>
                                 <ProgressBar x:Name="LyricBatchProgressBar" Maximum="100" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ② 逐首状态 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="② 逐首状态" FontSize="13" FontWeight="SemiBold" />
                                 <Grid ColumnSpacing="8" Padding="2,0,2,4">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="22" />
@@ -807,7 +1058,7 @@
                                     <TextBlock Grid.Column="2" Text="艺术家" FontSize="11" Opacity="0.55" />
                                     <TextBlock Grid.Column="3" Text="状态" FontSize="11" Opacity="0.55" />
                                 </Grid>
-                                <ListView x:Name="LyricBatchList" MaxHeight="220">
+                                <ListView x:Name="LyricBatchList" MaxHeight="260">
                                     <ListView.ItemTemplate>
                                         <DataTemplate x:DataType="local:LyricBatchItem">
                                             <Grid Padding="2,4" ColumnSpacing="8">
@@ -850,9 +1101,9 @@
                             </StackPanel>
                         </Border>
 
-                        <!-- 状态条：每条成败原因都写在这里，绝不静默失败 -->
+                        <!-- 状态条：汇总与失败原因 -->
                         <TextBlock
-                            x:Name="LyricPageStatusText"
+                            x:Name="LyricBatchStatusText"
                             FontSize="12"
                             Opacity="0.7"
                             TextWrapping="WrapWholeWords" />

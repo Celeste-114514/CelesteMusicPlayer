@@ -1591,16 +1591,11 @@ namespace CelesteMusicPlayer
 
             // 「查找歌曲…」已按用户要求移除（老版本遗留功能，窗口一并删除）。
 
-            // 「在线搜索…」已按用户要求整体下架（窗口文件删除，
-            // 在线标签能力待标签板块的「在线标签」子页重建）。
+            // 「在线搜索…」已按用户要求整体下架（窗口文件删除；
+            // 在线标签能力已由标签板块的「在线标签」子页承接（MusicBrainz+iTunes+CAA+LRClib）。
 
-            var downloadLyric = new MenuFlyoutItem { Text = "下载当前歌词" };
-            downloadLyric.Click += (_, _) => _ = DownloadLyricForCurrentAsync();
-            flyout.Items.Add(downloadLyric);
-
-            var batchLyric = new MenuFlyoutItem { Text = "批量下载歌词…" };
-            batchLyric.Click += async (_, _) => await BatchDownloadLyricsAsync();
-            flyout.Items.Add(batchLyric);
+            // 「下载当前歌词 / 批量下载歌词 / 编辑歌词」已按用户要求移除：
+            // 歌词相关功能统一收敛到标签板块（歌词编辑 / 批量下载歌词两个子页）。
 
             var dupCheck = new MenuFlyoutItem { Text = "重复文件检测…" };
             dupCheck.Click += (_, _) => DuplicateFilesWindow.ShowOrActivate(this);
@@ -1613,16 +1608,6 @@ namespace CelesteMusicPlayer
             var downloadCover = new MenuFlyoutItem { Text = "下载当前封面" };
             downloadCover.Click += (_, _) => _ = DownloadCoverForCurrentAsync();
             flyout.Items.Add(downloadCover);
-
-            var editLyric = new MenuFlyoutItem { Text = "编辑歌词…" };
-            editLyric.Click += (_, _) =>
-            {
-                if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
-                {
-                    LyricsEditorWindow.Show(_nowPlayingPath);
-                }
-            };
-            flyout.Items.Add(editLyric);
 
             var editTag = new MenuFlyoutItem { Text = "编辑标签…" };
             editTag.Click += (_, _) =>
@@ -1668,87 +1653,6 @@ namespace CelesteMusicPlayer
             {
                 flyout.ShowAt(fe);
             }
-        }
-
-
-        /// <summary>批量下载歌词（对齐 MusicPlayer2）：可选范围并跳过已有歌词。</summary>
-        private async Task BatchDownloadLyricsAsync()
-        {
-            var radio = new RadioButtons();
-            radio.Items.Add("媒体库所有歌曲");
-            radio.Items.Add("当前播放列表");
-            radio.Items.Add("我喜欢的音乐");
-            radio.SelectedIndex = 0;
-
-            var skipBox = new CheckBox
-            {
-                Content = "跳过已有歌词的歌曲",
-                IsChecked = true,
-                Margin = new Thickness(0, 12, 0, 0)
-            };
-
-            var panel = new StackPanel { Spacing = 8, MinWidth = 340 };
-            panel.Children.Add(new TextBlock { Text = "选择下载范围", FontWeight = FontWeights.SemiBold });
-            panel.Children.Add(radio);
-            panel.Children.Add(skipBox);
-
-            var dialog = new ContentDialog
-            {
-                Title = "批量下载歌词",
-                Content = panel,
-                PrimaryButtonText = "开始",
-                CloseButtonText = "取消",
-                DefaultButton = ContentDialogButton.Primary,
-                XamlRoot = Content.XamlRoot
-            };
-
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary)
-            {
-                return;
-            }
-
-            List<PlaylistItem> songs;
-            switch (radio.SelectedIndex)
-            {
-                case 1:
-                    songs = _userPlaylist.ToList();
-                    break;
-                case 2:
-                    songs = _playlist.Where(t => TrackStatsStore.Get(t.FilePath)?.IsFavorite ?? false).ToList();
-                    break;
-                default:
-                    songs = _playlist.ToList();
-                    break;
-            }
-
-            if (songs.Count == 0)
-            {
-                NowPlayingText.Text = "没有可下载的歌曲";
-                return;
-            }
-
-            bool skipExisting = skipBox.IsChecked == true;
-            int ok = 0;
-            int skip = 0;
-            for (int i = 0; i < songs.Count; i++)
-            {
-                PlaylistItem song = songs[i];
-                string lrcPath = Path.ChangeExtension(song.FilePath, ".lrc");
-                if (skipExisting && System.IO.File.Exists(lrcPath))
-                {
-                    skip++;
-                    continue;
-                }
-
-                NowPlayingText.Text = $"正在批量下载歌词 ({i + 1}/{songs.Count})…";
-                string? path = await OnlineMusicApi.SearchAndDownloadLyricAsync(song.Title, song.Artist, song.FilePath);
-                if (path != null)
-                {
-                    ok++;
-                }
-            }
-
-            NowPlayingText.Text = $"批量下载完成：成功 {ok}，跳过 {skip}，共 {songs.Count} 首";
         }
 
 
@@ -2062,50 +1966,6 @@ namespace CelesteMusicPlayer
             {
                 await ShowErrorAsync("格式转换失败", ex.Message);
             }
-        }
-
-        private async Task DownloadLyricForCurrentAsync()
-        {
-            if (string.IsNullOrWhiteSpace(_nowPlayingPath))
-            {
-                return;
-            }
-
-            PlaylistItem? item = FindLibraryItemByPath(_nowPlayingPath)
-                ?? (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
-                    ? _userPlaylist[_userPlaylistIndex]
-                    : null);
-            if (item == null)
-            {
-                return;
-            }
-
-            NowPlayingText.Text = "正在下载歌词…";
-            string? path = await OnlineMusicApi.SearchAndDownloadLyricAsync(item.Title, item.Artist, item.FilePath);
-            if (path == null)
-            {
-                NowPlayingText.Text = "未找到可下载的歌词";
-                return;
-            }
-
-            List<LyricLine> lyrics = await Task.Run(() => LyricsLoader.LoadForAudio(item.FilePath));
-            if (string.Equals(_nowPlayingPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
-            {
-                BuildLyricsUi(lyrics);
-            }
-
-            NowPlayingText.Text = "歌词已下载：" + Path.GetFileName(path);
-        }
-
-        private static string LyricsToLrc(IEnumerable<LyricLine> lines)
-        {
-            var sb = new System.Text.StringBuilder();
-            foreach (LyricLine l in lines)
-            {
-                TimeSpan t = l.Time < TimeSpan.Zero ? TimeSpan.Zero : l.Time;
-                sb.Append('[').Append(t.ToString(@"mm\:ss\.ff")).Append(']').AppendLine(l.Text);
-            }
-            return sb.ToString();
         }
 
         private async Task DownloadCoverForCurrentAsync()
@@ -3379,17 +3239,7 @@ namespace CelesteMusicPlayer
             tag.Click += (_, _) => OpenTagEditForFiles(new[] { song.FilePath });
             flyout.Items.Add(tag);
 
-            var lyric = new MenuFlyoutItem { Text = "编辑歌词…" };
-            lyric.Click += (_, _) => LyricsEditorWindow.Show(song.FilePath);
-            flyout.Items.Add(lyric);
-
-            var dlLyric = new MenuFlyoutItem { Text = "下载歌词" };
-            dlLyric.Click += async (_, _) =>
-            {
-                string? path = await OnlineMusicApi.SearchAndDownloadLyricAsync(song.Title, song.Artist, song.FilePath);
-                NowPlayingText.Text = path != null ? "歌词已下载" : "未找到歌词";
-            };
-            flyout.Items.Add(dlLyric);
+            // 「编辑歌词… / 下载歌词」已按用户要求移除：歌词功能统一收敛到标签板块。
 
             var dlCover = new MenuFlyoutItem { Text = "下载封面" };
             dlCover.Click += async (_, _) =>

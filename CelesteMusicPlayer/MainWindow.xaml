@@ -6869,9 +6869,7 @@
                                     <MenuFlyoutItem Text="添加到我喜欢" Click="MultiSelectFavoriteButton_Click">
                                         <MenuFlyoutItem.Icon><FontIcon Glyph="&#xEB51;" /></MenuFlyoutItem.Icon>
                                     </MenuFlyoutItem>
-                                    <MenuFlyoutItem Text="下载歌词" Click="MultiSelectDownloadLyricButton_Click">
-                                        <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE896;" /></MenuFlyoutItem.Icon>
-                                    </MenuFlyoutItem>
+                                    <!-- 「下载歌词」已移除：歌词功能统一收敛到标签板块 -->
                                     <MenuFlyoutItem Text="下载封面" Click="MultiSelectDownloadCoverButton_Click">
                                         <MenuFlyoutItem.Icon><FontIcon Glyph="&#xE91B;" /></MenuFlyoutItem.Icon>
                                     </MenuFlyoutItem>

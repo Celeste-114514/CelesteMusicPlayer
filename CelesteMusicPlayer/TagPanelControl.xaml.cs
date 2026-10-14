@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.RegularExpressions;
@@ -27,11 +28,9 @@ namespace CelesteMusicPlayer
     /// <summary>
     /// 「标签」板块（2026-10-13 阶段 5a 骨架）：mp3tag 式左标签面板 + 右文件列表。
     ///
-    /// 本阶段范围（刻意做小、可独立验证）：
-    ///   ✓ 主导航「标签」进入；左列子页（快速编辑 / 批量工具 / 排序编号 / 在线标签 / 歌词下载）可切换；
-    ///   ✓ 右列文件表格：添加文件 / 添加文件夹 / 移除所选 / 清空，多选，列与主曲库同语义；
-    ///   ✓ 快速编辑页 = 选中文件的只读标签预览（含封面缩略图）。
-    /// 下一阶段（阶段 6）才接：字段编辑、保存、改前快照整体回滚。
+    /// 子页（6 个，ShellPageHost 管显隐）：快速编辑 / 批量工具 / 排序编号 /
+    /// 在线标签（MusicBrainz+iTunes+CAA+LRClib）/ 歌词编辑（原「歌词下载」）/
+    /// 批量下载歌词（从歌词编辑页拆出）。
     ///
     /// 复用既有件：ShellPageHost（子页导航）、TagEditorService（读写标签）、
     /// PlaylistItem（行模型，字段语义与主曲库严格一致）。
@@ -158,27 +157,37 @@ namespace CelesteMusicPlayer
 
             // ItemsSource 由 XAML 的 {x:Bind _files, Mode=OneWay} 接管（旧代码在这里手赋）
 
-            // 4 个子页全部登记给 ShellPageHost（显隐由它统一管；组名为空 = 不渲染组标题）
+            // 6 个子页全部登记给 ShellPageHost（显隐由它统一管；组名为空 = 不渲染组标题）
             _subNav = new ShellPageHost(TagSubNavPanel, () => _accentProvider?.Invoke() ?? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 120, 212)));
             _subNav.Register("快速编辑", string.Empty, QuickEditPanel);
             _subNav.Register("批量工具", string.Empty, BatchToolsPanel);
             _subNav.Register("排序编号", string.Empty, SortNumberPanel);
-            _subNav.Register("在线标签", string.Empty, OnlineFillPanel);
-            _subNav.Register("歌词下载", string.Empty, LyricDownloadPanel);
+            _subNav.Register("在线标签", string.Empty, OnlineTagPanel);
+            _subNav.Register("歌词编辑", string.Empty, LyricDownloadPanel);
+            _subNav.Register("批量下载歌词", string.Empty, LyricBatchPanel);
             _subNav.Build();
 
             // 切到「排序编号」子页时刷新当前排序状态与作用范围
             // （排序规则可能在「排序…」弹窗里刚改过，页面里的展示不能是旧的）；
-            // 切到「歌词下载」时刷新当前文件、预填搜索框、恢复上次的写入口径。
+            // 切到「在线标签」刷新当前文件与作用范围；切到「歌词编辑」刷新当前文件、
+            // 预填搜索框、恢复上次的写入口径；切到「批量下载歌词」刷新作用范围与选项。
             _subNav.PageEnter += page =>
             {
                 if (ReferenceEquals(page.Page, SortNumberPanel))
                 {
                     RefreshSortNumberUi();
                 }
+                else if (ReferenceEquals(page.Page, OnlineTagPanel))
+                {
+                    RefreshOnlineTagPageUi();
+                }
                 else if (ReferenceEquals(page.Page, LyricDownloadPanel))
                 {
-                    RefreshLyricPageUi();
+                    RefreshLyricEditPageUi();
+                }
+                else if (ReferenceEquals(page.Page, LyricBatchPanel))
+                {
+                    RefreshLyricBatchPageUi();
                 }
             };
 
@@ -4243,7 +4252,7 @@ namespace CelesteMusicPlayer
 
         private bool _lyricUiGuard;
 
-        private void RefreshLyricPageUi()
+        private void RefreshLyricEditPageUi()
         {
             _lyricUiGuard = true;
             try
@@ -4297,8 +4306,29 @@ namespace CelesteMusicPlayer
                     LyricSaveLyricFolder.IsChecked = true;
                 }
 
+                LyricTranslateCheck.IsChecked = s.LyricPageIncludeTranslation;
+            }
+            finally
+            {
+                _lyricUiGuard = false;
+            }
+        }
+
+        private void RefreshLyricBatchPageUi()
+        {
+            _lyricUiGuard = true;
+            try
+            {
+                AppSettingsState s = AppSettingsStore.Load();
+
+                LyricBatchSourceCombo.SelectedIndex = string.Equals(s.LyricBatchPageSource, OnlineLyricDownload.SourceQQ, StringComparison.OrdinalIgnoreCase)
+                    ? 1
+                    : 0;
+
                 LyricBatchSkipExistCheck.IsChecked = true;
                 LyricBatchTranslateCheck.IsChecked = s.LyricPageIncludeTranslation;
+
+                bool hasLyricFolder = !string.IsNullOrWhiteSpace(s.LyricFolder);
                 LyricBatchSaveLyricFolder.IsEnabled = hasLyricFolder;
                 if (s.SaveLyricToSongFolder || !hasLyricFolder)
                 {
@@ -4309,7 +4339,6 @@ namespace CelesteMusicPlayer
                     LyricBatchSaveLyricFolder.IsChecked = true;
                 }
 
-                LyricTranslateCheck.IsChecked = s.LyricPageIncludeTranslation;
                 UpdateLyricBatchScopeText();
             }
             finally
@@ -4321,6 +4350,11 @@ namespace CelesteMusicPlayer
         private void SetLyricPageStatus(string text)
         {
             LyricPageStatusText.Text = text;
+        }
+
+        private void SetLyricBatchStatus(string text)
+        {
+            LyricBatchStatusText.Text = text;
         }
 
         private async void LyricSearchButton_Click(object sender, RoutedEventArgs e)
@@ -4365,7 +4399,7 @@ namespace CelesteMusicPlayer
 
                 if (_lyricCandidates.Count == 0)
                 {
-                    SetLyricPageStatus("一个候选都没有。换个关键词试试，或在左上角换另一个来源（LRClib / QQ 音乐）。");
+                    SetLyricPageStatus("一个候选都没有。换个关键词试试，或在上面换另一个来源（LRClib / QQ 音乐）。");
                     return;
                 }
 
@@ -4578,7 +4612,23 @@ namespace CelesteMusicPlayer
         private void LyricBatchStopButton_Click(object sender, RoutedEventArgs e)
         {
             _lyricBatchCts?.Cancel();
-            SetLyricPageStatus("正在停止……当前这首结束后就停。");
+            SetLyricBatchStatus("正在停止……当前这首结束后就停。");
+        }
+
+        private void LyricBatchSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_lyricUiGuard)
+            {
+                return;
+            }
+
+            string source = (LyricBatchSourceCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? OnlineLyricDownload.SourceLrclib;
+            AppSettingsState s = AppSettingsStore.Load();
+            if (!string.Equals(s.LyricBatchPageSource, source, StringComparison.OrdinalIgnoreCase))
+            {
+                s.LyricBatchPageSource = source;
+                AppSettingsStore.Save(s);
+            }
         }
 
         private async Task RunLyricBatchAsync()
@@ -4586,7 +4636,7 @@ namespace CelesteMusicPlayer
             (List<TagFileItem> targets, _) = BatchTargets();
             if (targets.Count == 0)
             {
-                SetLyricPageStatus("列表是空的——先在右边添加文件。");
+                SetLyricBatchStatus("列表是空的——先在右边添加文件。");
                 return;
             }
 
@@ -4595,11 +4645,11 @@ namespace CelesteMusicPlayer
             string lyricFolder = s.LyricFolder ?? string.Empty;
             if (!saveToSongFolder && string.IsNullOrWhiteSpace(lyricFolder))
             {
-                SetLyricPageStatus("选了「歌词文件夹」但设置里还没配——去 设置→歌词 配一个文件夹，或改选「歌曲所在目录」。");
+                SetLyricBatchStatus("选了「歌词文件夹」但设置里还没配——去 设置→歌词 配一个文件夹，或改选「歌曲所在目录」。");
                 return;
             }
 
-            string source = (LyricSourceCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? OnlineLyricDownload.SourceLrclib;
+            string source = (LyricBatchSourceCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? OnlineLyricDownload.SourceLrclib;
 
             List<LyricBatchSong> songs = new();
             foreach (TagFileItem item in targets)
@@ -4655,7 +4705,7 @@ namespace CelesteMusicPlayer
 
                 LyricBatchProgressBar.Value = 100;
                 int processed = summary.Saved + summary.Skipped + summary.NoLyric + summary.NoMatch + summary.Failed;
-                SetLyricPageStatus(summary.Canceled
+                SetLyricBatchStatus(summary.Canceled
                     ? $"已停止。已处理 {processed}/{summary.Total}：保存 {summary.Saved}，跳过 {summary.Skipped}，没歌词 {summary.NoLyric}，没匹配 {summary.NoMatch}，失败 {summary.Failed}。"
                     : $"批量完成，共 {summary.Total} 首：保存 {summary.Saved}，跳过 {summary.Skipped}，没歌词 {summary.NoLyric}，没匹配 {summary.NoMatch}，失败 {summary.Failed}（失败原因见日志）。");
             }
@@ -4666,6 +4716,513 @@ namespace CelesteMusicPlayer
                 LyricBatchStartButton.IsEnabled = true;
                 LyricBatchStopButton.IsEnabled = false;
             }
+        }
+
+        // =====================================================================
+        // 页 4：在线标签（MusicBrainz + iTunes + Cover Art Archive + LRClib）
+        // 搜索 → 点结果看详情（封面/字段/歌词预览）→ 勾要写的字段 → 写入所选文件。
+        // 写入前快照、失败整体回滚（与快速编辑页同一套安全底线）。
+        // =====================================================================
+
+        private readonly List<OnlineTagCandidate> _onlineTagCandidates = new();
+
+        private readonly Dictionary<string, string> _onlineTagLyricCache = new(StringComparer.Ordinal);
+
+        private byte[]? _onlineTagCoverBytes;
+
+        private bool _onlineTagGuard;
+
+        private void RefreshOnlineTagPageUi()
+        {
+            TagFileItem? current = TagFileGrid.SelectedItems.Cast<TagFileItem>().FirstOrDefault();
+            if (current == null || string.IsNullOrEmpty(current.FilePath))
+            {
+                OnlineTagFileText.Text = "还没选文件——先去右边文件列表点一首歌（单击即选中整行），搜索框会按它的标签自动填好。";
+                OnlineTagTitleBox.Text = string.Empty;
+                OnlineTagArtistBox.Text = string.Empty;
+                OnlineTagAlbumBox.Text = string.Empty;
+            }
+            else
+            {
+                string name = System.IO.Path.GetFileName(current.FilePath);
+                string title = string.IsNullOrWhiteSpace(current.Title)
+                    ? System.IO.Path.GetFileNameWithoutExtension(current.FilePath)
+                    : current.Title;
+                string artist = string.IsNullOrWhiteSpace(current.Artist) || current.Artist == "未知艺术家"
+                    ? string.Empty
+                    : current.Artist;
+                string album = string.IsNullOrWhiteSpace(current.Album) || current.Album == "未知专辑"
+                    ? string.Empty
+                    : current.Album;
+                OnlineTagFileText.Text = $"{name}    标题：{title}    艺术家：{(artist.Length == 0 ? "（没写）" : artist)}";
+                OnlineTagTitleBox.Text = title;
+                OnlineTagArtistBox.Text = artist;
+                OnlineTagAlbumBox.Text = album;
+            }
+
+            UpdateOnlineTagScopeText();
+        }
+
+        private void UpdateOnlineTagScopeText()
+        {
+            (List<TagFileItem> targets, bool wholeList) = BatchTargets();
+            OnlineTagScopeText.Text = wholeList
+                ? $"作用范围：整个列表（{targets.Count} 个）。在右侧选中文件就是只写选中的。"
+                : $"作用范围：当前选中的 {targets.Count} 个。";
+        }
+
+        private void SetOnlineTagStatus(string text)
+        {
+            OnlineTagStatusText.Text = text;
+        }
+
+        private async void OnlineTagSearchButton_Click(object sender, RoutedEventArgs e)
+        {
+            await SearchOnlineTagsAsync().ConfigureAwait(true);
+        }
+
+        private async Task SearchOnlineTagsAsync()
+        {
+            string title = (OnlineTagTitleBox.Text ?? string.Empty).Trim();
+            string artist = (OnlineTagArtistBox.Text ?? string.Empty).Trim();
+            string album = (OnlineTagAlbumBox.Text ?? string.Empty).Trim();
+            if (title.Length == 0 && artist.Length == 0 && album.Length == 0)
+            {
+                SetOnlineTagStatus("标题、艺术家、专辑至少填一个。");
+                return;
+            }
+
+            string source = (OnlineTagSourceCombo.SelectedItem as ComboBoxItem)?.Tag as string ?? OnlineTagFill.SourceBoth;
+
+            SetOnlineTagStatus("正在搜索…");
+            OnlineTagSearchButton.IsEnabled = false;
+            try
+            {
+                IReadOnlyList<OnlineTagCandidate> hits =
+                    await OnlineTagFill.SearchAsync(source, title, artist, album).ConfigureAwait(true);
+
+                _onlineTagCandidates.Clear();
+                _onlineTagCandidates.AddRange(hits);
+                _onlineTagLyricCache.Clear();
+                _onlineTagCoverBytes = null;
+
+                _onlineTagGuard = true;
+                OnlineTagResultList.ItemsSource = null;
+                OnlineTagResultList.ItemsSource = _onlineTagCandidates;
+                OnlineTagResultList.SelectedIndex = -1;
+                _onlineTagGuard = false;
+
+                OnlineTagCoverImage.Source = null;
+                OnlineTagDetailText.Text = string.Empty;
+                OnlineTagLyricText.Text = string.Empty;
+
+                if (_onlineTagCandidates.Count == 0)
+                {
+                    SetOnlineTagStatus("一个结果都没有。换个关键词试试，或在上面的来源里只选一边（MusicBrainz / iTunes）。");
+                    return;
+                }
+
+                int best = OnlineTagFill.PickBestMatch(_onlineTagCandidates, title, artist, album, string.Empty);
+
+                _onlineTagGuard = true;
+                OnlineTagResultList.SelectedIndex = best >= 0 ? best : -1;
+                _onlineTagGuard = false;
+
+                if (best >= 0)
+                {
+                    OnlineTagResultList.ScrollIntoView(_onlineTagCandidates[best]);
+                    await ShowOnlineTagDetailAsync().ConfigureAwait(true);
+                }
+                else
+                {
+                    SetOnlineTagStatus($"找到 {_onlineTagCandidates.Count} 个结果，但没有足够相似的——需要你手动点一个（看标题/艺术家/专辑对不上的就换）。");
+                }
+            }
+            finally
+            {
+                OnlineTagSearchButton.IsEnabled = true;
+            }
+        }
+
+        private async void OnlineTagResultList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_onlineTagGuard)
+            {
+                return;
+            }
+
+            await ShowOnlineTagDetailAsync().ConfigureAwait(true);
+        }
+
+        private async Task ShowOnlineTagDetailAsync()
+        {
+            if (OnlineTagResultList.SelectedItem is not OnlineTagCandidate candidate)
+            {
+                OnlineTagCoverImage.Source = null;
+                OnlineTagDetailText.Text = string.Empty;
+                OnlineTagLyricText.Text = string.Empty;
+                return;
+            }
+
+            TagFileItem? current = TagFileGrid.SelectedItems.Cast<TagFileItem>().FirstOrDefault();
+            string localTitle = current != null
+                ? (string.IsNullOrWhiteSpace(current.Title)
+                    ? System.IO.Path.GetFileNameWithoutExtension(current.FilePath)
+                    : current.Title)
+                : string.Empty;
+
+            SetOnlineTagStatus("正在加载详情…");
+            OnlineTagDetailText.Text = BuildOnlineTagDetailText(candidate);
+            OnlineTagLyricText.Text = string.Empty;
+            OnlineTagCoverImage.Source = null;
+            _onlineTagCoverBytes = null;
+
+            OnlineTagCandidate? loaded = await OnlineTagFill
+                .LoadMusicBrainzDetailAsync(candidate, localTitle).ConfigureAwait(true);
+            if (loaded == null || !ReferenceEquals(OnlineTagResultList.SelectedItem, candidate))
+            {
+                return;
+            }
+
+            OnlineTagDetailText.Text = BuildOnlineTagDetailText(candidate);
+
+            if (!string.IsNullOrWhiteSpace(candidate.CoverUrl))
+            {
+                byte[]? cover = await OnlineTagFill.DownloadCoverBytesAsync(candidate.CoverUrl).ConfigureAwait(true);
+                if (cover is { Length: > 0 } && ReferenceEquals(OnlineTagResultList.SelectedItem, candidate))
+                {
+                    _onlineTagCoverBytes = cover;
+                    ApplyCoverToOnlineTagImage(cover);
+                }
+            }
+
+            string lyricKey = candidate.Source + "|" + candidate.Id;
+            if (!_onlineTagLyricCache.TryGetValue(lyricKey, out string? lyric))
+            {
+                double duration = current?.Duration.TotalSeconds ?? 0;
+                lyric = await OnlineTagFill.FetchLyricAsync(
+                    candidate.Artist, candidate.Title, candidate.Album, duration).ConfigureAwait(true);
+                _onlineTagLyricCache[lyricKey] = lyric;
+            }
+
+            if (ReferenceEquals(OnlineTagResultList.SelectedItem, candidate))
+            {
+                OnlineTagLyricText.Text = lyric.Length == 0
+                    ? "（LRClib 没找到这首歌的歌词）"
+                    : lyric;
+            }
+
+            ApplyOnlineTagFieldDefaults(candidate, lyric);
+            SetOnlineTagStatus("详情已加载。在下面勾要写入的字段，然后点「写入所选文件」。");
+        }
+
+        private static string BuildOnlineTagDetailText(OnlineTagCandidate c)
+        {
+            string TrackText()
+            {
+                string no = c.Track == 0 ? "-" : c.Track.ToString(CultureInfo.InvariantCulture);
+                return c.TrackCount > 0 ? $"{no}/{c.TrackCount}" : no;
+            }
+
+            string DiscText()
+            {
+                string no = c.Disc == 0 ? "-" : c.Disc.ToString(CultureInfo.InvariantCulture);
+                return c.DiscCount > 0 ? $"{no}/{c.DiscCount}" : no;
+            }
+
+            return string.Join('\n', new[]
+            {
+                $"标题：{c.Title}",
+                $"艺术家：{(c.Artist.Length == 0 ? "-" : c.Artist)}",
+                $"专辑：{(c.Album.Length == 0 ? "-" : c.Album)}",
+                $"专辑艺术家：{(c.AlbumArtist.Length == 0 ? "-" : c.AlbumArtist)}",
+                $"年份：{c.YearText}",
+                $"曲目：{TrackText()}",
+                $"碟片：{DiscText()}",
+                $"流派：{(c.Genre.Length == 0 ? "-" : c.Genre)}",
+                $"时长：{c.DurationText}",
+                $"来源：{c.SourceLabel}"
+            });
+        }
+
+        private void ApplyCoverToOnlineTagImage(byte[] bytes)
+        {
+            try
+            {
+                BitmapImage bmp = new();
+                using MemoryStream ms = new(bytes);
+                using var stream = ms.AsRandomAccessStream();
+                bmp.SetSource(stream);
+                OnlineTagCoverImage.Source = bmp;
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ApplyCoverToOnlineTagImage", caught);
+                OnlineTagCoverImage.Source = null;
+            }
+        }
+
+        private void ApplyOnlineTagFieldDefaults(OnlineTagCandidate c, string lyric)
+        {
+            OnlineTagFieldTitle.IsChecked = c.Title.Length > 0;
+            OnlineTagFieldArtist.IsChecked = c.Artist.Length > 0;
+            OnlineTagFieldAlbum.IsChecked = c.Album.Length > 0;
+            OnlineTagFieldAlbumArtist.IsChecked = c.AlbumArtist.Length > 0;
+            OnlineTagFieldYear.IsChecked = c.Year != 0;
+            OnlineTagFieldTrack.IsChecked = c.Track != 0 || c.TrackCount != 0;
+            OnlineTagFieldDisc.IsChecked = c.Disc != 0 || c.DiscCount != 0;
+            OnlineTagFieldGenre.IsChecked = c.Genre.Length > 0;
+            OnlineTagFieldCover.IsChecked = !string.IsNullOrWhiteSpace(c.CoverUrl);
+            OnlineTagFieldLyrics.IsChecked = lyric.Length > 0;
+        }
+
+        private async void OnlineTagWriteButton_Click(object sender, RoutedEventArgs e)
+        {
+            await WriteOnlineTagAsync().ConfigureAwait(true);
+        }
+
+        private async Task WriteOnlineTagAsync()
+        {
+            if (OnlineTagResultList.SelectedItem is not OnlineTagCandidate candidate)
+            {
+                SetOnlineTagStatus("先在上面点一个搜索结果。");
+                return;
+            }
+
+            (List<TagFileItem> targets, bool wholeList) = BatchTargets();
+            if (targets.Count == 0)
+            {
+                SetOnlineTagStatus("列表是空的——先在右边添加文件。");
+                return;
+            }
+
+            bool wantTitle = OnlineTagFieldTitle.IsChecked == true;
+            bool wantArtist = OnlineTagFieldArtist.IsChecked == true;
+            bool wantAlbum = OnlineTagFieldAlbum.IsChecked == true;
+            bool wantAlbumArtist = OnlineTagFieldAlbumArtist.IsChecked == true;
+            bool wantYear = OnlineTagFieldYear.IsChecked == true;
+            bool wantTrack = OnlineTagFieldTrack.IsChecked == true;
+            bool wantDisc = OnlineTagFieldDisc.IsChecked == true;
+            bool wantGenre = OnlineTagFieldGenre.IsChecked == true;
+            bool wantCover = OnlineTagFieldCover.IsChecked == true;
+            bool wantLyrics = OnlineTagFieldLyrics.IsChecked == true;
+            if (!wantTitle && !wantArtist && !wantAlbum && !wantAlbumArtist && !wantYear
+                && !wantTrack && !wantDisc && !wantGenre && !wantCover && !wantLyrics)
+            {
+                SetOnlineTagStatus("一个字段都没勾——先勾要写入的字段。");
+                return;
+            }
+
+            string lyric = string.Empty;
+            if (wantLyrics)
+            {
+                string lyricKey = candidate.Source + "|" + candidate.Id;
+                if (!_onlineTagLyricCache.TryGetValue(lyricKey, out lyric))
+                {
+                    TagFileItem? current = TagFileGrid.SelectedItems.Cast<TagFileItem>().FirstOrDefault();
+                    double duration = current?.Duration.TotalSeconds ?? 0;
+                    lyric = await OnlineTagFill.FetchLyricAsync(
+                        candidate.Artist, candidate.Title, candidate.Album, duration).ConfigureAwait(true);
+                    _onlineTagLyricCache[lyricKey] = lyric;
+                }
+
+                if (lyric.Length == 0)
+                {
+                    SetOnlineTagStatus("LRClib 没找到这首歌的歌词——把「歌词」的勾去掉，或换一个搜索结果。");
+                    return;
+                }
+            }
+
+            byte[]? coverBytes = null;
+            if (wantCover)
+            {
+                coverBytes = _onlineTagCoverBytes;
+                if (coverBytes == null && !string.IsNullOrWhiteSpace(candidate.CoverUrl))
+                {
+                    coverBytes = await OnlineTagFill.DownloadCoverBytesAsync(candidate.CoverUrl).ConfigureAwait(true);
+                    _onlineTagCoverBytes = coverBytes;
+                }
+
+                if (coverBytes == null)
+                {
+                    SetOnlineTagStatus("封面下载失败——把「封面」的勾去掉再写，或换个结果。");
+                    return;
+                }
+            }
+
+            SetOnlineTagStatus($"正在写入 {targets.Count} 个文件…");
+            OnlineTagWriteButton.IsEnabled = false;
+
+            List<(string Path, TagEditModel Before, byte[]? CoverBefore)> snapshots = new();
+            List<string> written = new();
+            List<string> failures = new();
+            List<string> coverFailures = new();
+
+            await Task.Run(() =>
+            {
+                foreach (TagFileItem item in targets)
+                {
+                    string path = item.FilePath;
+                    if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
+                    {
+                        failures.Add(path);
+                        continue;
+                    }
+
+                    TagEditModel before = TagEditorService.ReadTagRaw(path);
+                    byte[]? coverBefore = TagEditorService.ReadCoverBytes(path);
+                    snapshots.Add((path, before, coverBefore));
+
+                    TagEditModel toWrite = CloneModel(before);
+                    if (wantTitle && candidate.Title.Length > 0)
+                    {
+                        toWrite.Title = candidate.Title;
+                        toWrite.MarkDirty(TagField.Title);
+                    }
+
+                    if (wantArtist && candidate.Artist.Length > 0)
+                    {
+                        toWrite.Artist = candidate.Artist;
+                        toWrite.MarkDirty(TagField.Performers);
+                    }
+
+                    if (wantAlbum && candidate.Album.Length > 0)
+                    {
+                        toWrite.Album = candidate.Album;
+                        toWrite.MarkDirty(TagField.Album);
+                    }
+
+                    if (wantAlbumArtist && candidate.AlbumArtist.Length > 0)
+                    {
+                        toWrite.AlbumArtist = candidate.AlbumArtist;
+                        toWrite.MarkDirty(TagField.AlbumArtists);
+                    }
+
+                    if (wantYear && candidate.Year != 0)
+                    {
+                        toWrite.Year = candidate.Year;
+                        toWrite.MarkDirty(TagField.Year);
+                    }
+
+                    if (wantTrack && (candidate.Track != 0 || candidate.TrackCount != 0))
+                    {
+                        if (candidate.Track != 0)
+                        {
+                            toWrite.Track = candidate.Track;
+                            toWrite.MarkDirty(TagField.Track);
+                        }
+
+                        if (candidate.TrackCount != 0)
+                        {
+                            toWrite.TrackCount = candidate.TrackCount;
+                            toWrite.MarkDirty(TagField.TrackCount);
+                        }
+                    }
+
+                    if (wantDisc && (candidate.Disc != 0 || candidate.DiscCount != 0))
+                    {
+                        if (candidate.Disc != 0)
+                        {
+                            toWrite.Disc = candidate.Disc;
+                            toWrite.MarkDirty(TagField.Disc);
+                        }
+
+                        if (candidate.DiscCount != 0)
+                        {
+                            toWrite.DiscCount = candidate.DiscCount;
+                            toWrite.MarkDirty(TagField.DiscCount);
+                        }
+                    }
+
+                    if (wantGenre && candidate.Genre.Length > 0)
+                    {
+                        toWrite.Genre = candidate.Genre;
+                        toWrite.MarkDirty(TagField.Genres);
+                    }
+
+                    if (wantLyrics && lyric.Length > 0)
+                    {
+                        toWrite.Lyrics = lyric;
+                        toWrite.MarkDirty(TagField.Lyrics);
+                    }
+
+                    if (toWrite.Dirty.Count == 0)
+                    {
+                        continue;
+                    }
+
+                    if (!TagEditorService.SaveTag(path, toWrite))
+                    {
+                        failures.Add(path);
+                        continue;
+                    }
+
+                    written.Add(path);
+                    if (coverBytes != null && !TagEditorService.SetCoverBytes(path, coverBytes))
+                    {
+                        coverFailures.Add(path);
+                    }
+                }
+            });
+
+            if (failures.Count > 0 || coverFailures.Count > 0)
+            {
+                int rolledBack = 0;
+                await Task.Run(() =>
+                {
+                    foreach ((string path, TagEditModel before, byte[]? coverBefore) in snapshots)
+                    {
+                        if (!written.Contains(path, StringComparer.OrdinalIgnoreCase))
+                        {
+                            continue;
+                        }
+
+                        before.MarkAllDirty();
+                        if (TagEditorService.SaveTag(path, before))
+                        {
+                            rolledBack++;
+                        }
+
+                        if (coverBytes != null)
+                        {
+                            if (coverBefore is { Length: > 0 })
+                            {
+                                TagEditorService.SetCoverBytes(path, coverBefore);
+                            }
+                            else
+                            {
+                                TagEditorService.ClearCover(path);
+                            }
+                        }
+                    }
+                });
+
+                global::CelesteMusicPlayer.StartupLog.Write(
+                    $"TagPanel: 在线标签写入失败整体回滚：目标 {targets.Count}，标签失败 {failures.Count}，封面失败 {coverFailures.Count}，已还原 {rolledBack}");
+                SetOnlineTagStatus($"{failures.Count + coverFailures.Count} 个文件写入失败（标签 {failures.Count}，封面 {coverFailures.Count}）；已写成功的 {rolledBack} 个已还原到改动前。详情见日志。");
+                OnlineTagWriteButton.IsEnabled = true;
+                return;
+            }
+
+            if (written.Count == 0)
+            {
+                SetOnlineTagStatus("没有需要写入的字段——这个结果里你勾的字段都是空的（比如 MB 结果没有流派）。换一个结果或改勾选的字段。");
+                OnlineTagWriteButton.IsEnabled = true;
+                return;
+            }
+
+            foreach (string path in written)
+            {
+                TagsSaved?.Invoke(path);
+            }
+
+            List<TagFileItem> touched = targets
+                .Where(t => written.Contains(t.FilePath, StringComparer.OrdinalIgnoreCase))
+                .ToList();
+            await RefreshSavedRowsAsync(touched);
+
+            SetOnlineTagStatus($"已写入 {written.Count} 个文件{BatchScopeText(wholeList, targets.Count)}。");
+            OnlineTagWriteButton.IsEnabled = true;
         }
     }
 

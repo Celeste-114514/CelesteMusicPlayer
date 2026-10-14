@@ -2453,12 +2453,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--win)
   $('btnMore').addEventListener('click', function(e){
     var r = $('btnMore').getBoundingClientRect();
     cmShow(r.left - 40, r.top - 8, '更多功能', [
-      {t:'在线搜索…', fn:function(){ post({kind:'feat', act:'onlinesearch'}); }},
-      {sep:1},
-      {t:'下载当前歌词', fn:function(){ post({kind:'feat', act:'lyric'}); }},
-      {t:'批量下载歌词…', fn:function(){ post({kind:'feat', act:'batchlyric'}); }},
       {t:'下载当前封面', fn:function(){ post({kind:'feat', act:'cover'}); }},
-      {t:'编辑歌词…', fn:function(){ post({kind:'feat', act:'editlyric'}); }},
       {t:'编辑标签…', fn:function(){ post({kind:'feat', act:'edittag'}); }},
       {t:'在资源管理器中打开该歌曲', fn:function(){ post({kind:'feat', act:'openloc'}); }},
       {sep:1},
