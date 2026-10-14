@@ -34,10 +34,90 @@
         <Style x:Key="TagGridHeaderStyle" TargetType="dgprim:DataGridColumnHeader">
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="SemiBold" />
-            <Setter Property="Padding" Value="10,0,6,0" />
-            <Setter Property="HorizontalContentAlignment" Value="Left" />
-            <Setter Property="VerticalContentAlignment" Value="Center" />
+            <!-- 列头内边距比单元格小（8/4）：列头文字比单元格内容短，省下的宽度都给文字 -->
+            <Setter Property="Padding" Value="8,0,4,0" />
+            <!-- Stretch：列头可点区域铺满整列（不只是文字那一小块） -->
+            <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            <Setter Property="VerticalContentAlignment" Value="Stretch" />
+            <Setter Property="Background" Value="Transparent" />
+            <!-- ⚠ 整个列头模板换成自己写的，不再用 toolkit 默认模板。原因（2026-10-14 实测）：
+                 ① 默认模板的 ContentPresenter **不绑定 ContentTemplate** —— 只给 Style 设
+                    ContentTemplate 是没用的（上一版列名靠 ToString() 才显示出来，挂在上面的
+                    点击手势自然一次都没触发，排序"点了没反应"就是这么来的）；
+                 ② 默认模板右侧常驻一块排序图标位（深色主题下就是竖线左边那块白斑），
+                    既挡列名又吃掉列宽 —— 用户看到的"列头文字显示不全"是它造成的。
+                 自己写的模板只保留两样东西：左边列名 + 排序标记，右边一条 1px 分隔线。
+                 VerticalSeparator / SortIcon 这两个名字必须留着（toolkit 内部按名字找），
+                 但排序图标默认收起（排序标记我们自己画在列名旁边）。 -->
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="dgprim:DataGridColumnHeader">
+                        <Grid x:Name="Root" Background="Transparent">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <ContentPresenter
+                                Margin="{TemplateBinding Padding}"
+                                Content="{TemplateBinding Content}"
+                                ContentTemplate="{StaticResource TagGridHeaderTemplate}"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch" />
+                            <Rectangle
+                                x:Name="VerticalSeparator"
+                                Grid.Column="1"
+                                Width="1"
+                                VerticalAlignment="Stretch"
+                                Fill="{TemplateBinding SeparatorBrush}"
+                                Visibility="{TemplateBinding SeparatorVisibility}" />
+                            <FontIcon
+                                x:Name="SortIcon"
+                                Grid.Column="1"
+                                FontSize="12"
+                                Visibility="Collapsed" />
+                        </Grid>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
+
+        <!-- 列头内容模板（2026-10-14）：列名 + 排序标记自己渲染。
+             ① 修「列头文字显示不全」：文字用 TextTrimming 收尾 + 鼠标悬停出完整列名，
+                不再像默认模板那样被硬生生裁掉一半；
+             ② 排序标记（▲ / ▼，多列时前面带 1、2、3）才有地方画——
+                DataGrid 原生排序只支持单列，多列排序是我们自己排的。
+             点击手势走 PointerPressed / PointerReleased（不用 Tapped，是为了
+             拿到 Ctrl / Shift 修饰键；位移超过 4px 判为拖列宽，不触发排序）。 -->
+        <DataTemplate x:Key="TagGridHeaderTemplate" x:DataType="local:TagColumnHeaderVm">
+            <Grid
+                Background="Transparent"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                PointerPressed="TagHeader_PointerPressed"
+                PointerReleased="TagHeader_PointerReleased"
+                Tapped="TagHeader_Tapped">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    FontSize="11"
+                    FontWeight="SemiBold"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Left"
+                    TextTrimming="CharacterEllipsis"
+                    Text="{x:Bind Label, Mode=OneWay}"
+                    ToolTipService.ToolTip="{Binding Label}" />
+                <TextBlock
+                    Grid.Column="1"
+                    Margin="3,0,0,0"
+                    FontSize="9"
+                    VerticalAlignment="Center"
+                    HorizontalAlignment="Right"
+                    Opacity="0.9"
+                    Text="{x:Bind SortMark, Mode=OneWay}" />
+            </Grid>
+        </DataTemplate>
     </UserControl.Resources>
 
     <Grid ColumnSpacing="12">
@@ -109,6 +189,22 @@
                                 Background="{ThemeResource SubtleFillColorSecondaryBrush}"
                                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                                 BorderThickness="1">
+                                <!-- 封面右键菜单（2026-10-14，对标 mp3tag）：换封面 / 导出 /
+                                     复制 / 粘贴 / 移除，都作用在右侧列表当前选中的那首歌上。 -->
+                                <Border.ContextFlyout>
+                                    <MenuFlyout>
+                                        <MenuFlyoutItem Text="从图片文件替换封面…" Click="CoverMenuReplace_Click">
+                                            <MenuFlyoutItem.Icon>
+                                                <FontIcon Glyph="&#xEB9F;" />
+                                            </MenuFlyoutItem.Icon>
+                                        </MenuFlyoutItem>
+                                        <MenuFlyoutItem Text="导出封面到文件…" Click="CoverMenuExport_Click" />
+                                        <MenuFlyoutItem Text="复制封面" Click="CoverMenuCopy_Click" />
+                                        <MenuFlyoutItem Text="粘贴封面" Click="CoverMenuPaste_Click" />
+                                        <MenuFlyoutSeparator />
+                                        <MenuFlyoutItem Text="移除内嵌封面" Click="CoverMenuRemove_Click" />
+                                    </MenuFlyout>
+                                </Border.ContextFlyout>
                                 <Grid>
                                     <Image x:Name="QuickEditCover" Stretch="UniformToFill" />
                                     <FontIcon
@@ -132,17 +228,62 @@
                         <TextBox x:Name="QuickArtistBox" Header="艺术家" />
                         <TextBox x:Name="QuickAlbumBox" Header="专辑" />
                         <TextBox x:Name="QuickAlbumArtistBox" Header="专辑艺术家" />
+                        <!-- 年份 / 曲目号 / 曲目总数（mp3tag 里曲目号常显示成 "3/12"） -->
                         <Grid ColumnSpacing="10">
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
                             <TextBox x:Name="QuickYearBox" Header="年份" Grid.Column="0" />
                             <TextBox x:Name="QuickTrackBox" Header="曲目号" Grid.Column="1" />
+                            <TextBox x:Name="QuickTrackCountBox" Header="曲目总数" Grid.Column="2" />
                         </Grid>
+
+                        <!-- 碟片号 / 碟片总数 / BPM -->
+                        <Grid ColumnSpacing="10">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="QuickDiscBox" Header="碟片号（CD 号）" Grid.Column="0" />
+                            <TextBox x:Name="QuickDiscCountBox" Header="碟片总数" Grid.Column="1" />
+                            <TextBox x:Name="QuickBpmBox" Header="BPM（速度）" Grid.Column="2" />
+                        </Grid>
+
                         <TextBox x:Name="QuickGenreBox" Header="流派" />
+                        <TextBox x:Name="QuickComposerBox" Header="作曲家" />
+
                         <TextBox x:Name="QuickCommentBox" Header="注释" AcceptsReturn="True" TextWrapping="Wrap" MinHeight="54" />
-                        <TextBox x:Name="QuickLyricsBox" Header="歌词" AcceptsReturn="True" TextWrapping="Wrap" Height="150" />
+                        <TextBox
+                            x:Name="QuickLyricsBox"
+                            Header="歌词（非同步 · UNSYNCEDLYRICS）"
+                            AcceptsReturn="True"
+                            TextWrapping="Wrap"
+                            Height="150" />
+
+                        <!-- 同步歌词（带时间轴的那种，mp3tag 里就叫 LYRICS）：
+                             读得出来但写不回去（写它要重建时间轴事件，风险大又极少用），
+                             所以做成只读，省得改了以为生效。 -->
+                        <TextBox
+                            x:Name="QuickSyncedLyricsBox"
+                            Header="歌词（同步 · LYRICS，只读）"
+                            AcceptsReturn="True"
+                            IsReadOnly="True"
+                            TextWrapping="Wrap"
+                            Height="110" />
+
+                        <!-- 文件本身的信息（只读，改不了也不需要改） -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10,8">
+                            <StackPanel Spacing="2">
+                                <TextBlock Text="文件信息（只读）" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock x:Name="QuickFileInfoText" FontSize="11" Opacity="0.75" TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
                 </ScrollViewer>
 
@@ -313,27 +454,98 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- ══════════ 页 3：排序编号（阶段 8 接入，占位） ══════════ -->
-                <Grid x:Name="SortNumberPanel">
-                    <StackPanel
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Spacing="8"
-                        MaxWidth="300">
-                        <FontIcon Glyph="&#xE8CB;" FontSize="36" Opacity="0.35" HorizontalAlignment="Center" />
-                        <TextBlock
-                            Text="排序编号"
-                            FontSize="15"
-                            FontWeight="SemiBold"
-                            HorizontalAlignment="Center" />
-                        <TextBlock
-                            Text="按多个字段依次排序，再把排好的结果写入曲目号（自动编号）或加入播放队列 / 播放列表。"
-                            FontSize="12"
-                            Opacity="0.6"
-                            TextWrapping="WrapWholeWords"
-                            TextAlignment="Center" />
+                <!-- ══════════ 页 3：排序编号（2026-10-14 第 3 项落地） ══════════
+                     先在上面工具条用「排序…」排好顺序，再在这里把顺序写成曲目号，
+                     或整批加入播放队列 / 音乐库 / 播放列表。
+                     冲突处理（用户拍板的方案）：播放队列和播放列表都允许库外的歌，
+                     不冲突；音乐库是持久化的，只按文件夹收录——「加入音乐库」先做
+                     入库检查，文件夹没被收录就问一句要不要一起入库。 -->
+                <ScrollViewer
+                    x:Name="SortNumberPanel"
+                    VerticalScrollBarVisibility="Auto"
+                    Padding="0,0,4,0">
+                    <StackPanel Spacing="10">
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10,8">
+                            <TextBlock
+                                FontSize="12"
+                                Opacity="0.75"
+                                TextWrapping="WrapWholeWords"
+                                Text="这一页把「排好的顺序」用出价值：写成曲目号（自动编号），或整批加进播放队列 / 音乐库 / 播放列表。排序请在右侧工具条的「排序…」按钮里设置（列头点击排序已停用）。" />
+                        </Border>
+
+                        <!-- 当前排序状态（切到本页自动刷新） -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="当前排序" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    x:Name="SortNumberStatusText"
+                                    FontSize="12"
+                                    Opacity="0.75"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ① 把当前顺序写入曲目号 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="① 把当前顺序写入曲目号" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="按列表从上到下的顺序写曲目号：第一个文件 = 起始值，之后每个加一步长。写之前会自动备份，失败整体还原。" />
+                                <Grid ColumnSpacing="10">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBox x:Name="SortNumberStartBox" Grid.Column="0" Header="起始值" Text="1" />
+                                    <TextBox x:Name="SortNumberStepBox" Grid.Column="1" Header="步长" Text="1" />
+                                </Grid>
+                                <Button x:Name="SortNumberWriteButton" Content="写入曲目号" HorizontalAlignment="Left" Click="SortNumberWriteButton_Click" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ② 加入播放队列 / 音乐库 / 播放列表 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="② 加入播放队列 / 音乐库 / 播放列表" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    x:Name="SortNumberScopeText"
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="SortNumberQueueButton" Content="加入播放队列" Click="SortNumberQueueButton_Click" />
+                                    <Button x:Name="SortNumberLibraryButton" Content="加入音乐库…" Click="SortNumberLibraryButton_Click" />
+                                    <Button x:Name="SortNumberPlaylistButton" Content="加入播放列表…" Click="SortNumberPlaylistButton_Click" />
+                                </StackPanel>
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.55"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="播放队列和播放列表都允许库外的歌；音乐库只按文件夹收录——加入音乐库时如果文件夹还没被收录，会先问你要不要一起入库。作用范围 = 右侧列表的选中项，一个都没选就是整个列表。" />
+                                <TextBlock
+                                    x:Name="SortNumberActionText"
+                                    FontSize="12"
+                                    Opacity="0.7"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
                     </StackPanel>
-                </Grid>
+                </ScrollViewer>
 
                 <!-- ══════════ 页 4：在线补全（后续阶段接入，占位） ══════════ -->
                 <Grid x:Name="OnlineFillPanel">
@@ -375,15 +587,87 @@
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                 </Grid.ColumnDefinitions>
                 <Button CornerRadius="16" x:Name="AddFilesButton" Content="添加文件…" Click="AddFilesButton_Click" />
                 <Button CornerRadius="16" x:Name="AddFolderButton" Grid.Column="1" Content="添加文件夹…" Click="AddFolderButton_Click" />
-                <Button CornerRadius="16" x:Name="RemoveSelectedButton" Grid.Column="2" Content="移除所选" Click="RemoveSelectedButton_Click" />
-                <Button CornerRadius="16" x:Name="ClearListButton" Grid.Column="3" Content="清空" Click="ClearListButton_Click" />
+                <!-- 添加文件夹时到底要不要连子文件夹一起扫：用户自己说了算
+                     （默认勾上 = 和以前一样连子文件夹一起加）。 -->
+                <CheckBox
+                    x:Name="IncludeSubfoldersCheck"
+                    Grid.Column="2"
+                    Content="含子文件夹"
+                    FontSize="12"
+                    IsChecked="True"
+                    VerticalAlignment="Center"
+                    ToolTipService.ToolTip="勾上 = 连所选文件夹里的所有子文件夹一起扫描；不勾 = 只收这一层里的音频文件。" />
+                <Button CornerRadius="16" x:Name="RemoveSelectedButton" Grid.Column="3" Content="移除所选" Click="RemoveSelectedButton_Click" />
+                <Button CornerRadius="16" x:Name="ClearListButton" Grid.Column="4" Content="清空" Click="ClearListButton_Click" />
+
+                <!-- 排序（2026-10-14）：列头点击那条路放弃了（DataGrid 把列头的指针事件
+                     都吃掉，三条挂法都试过一次也没进来），改成按钮。面板是贴着按钮往下
+                     弹的小面板，不弹大窗、不占额外地方，可以多列依次排序（mp3tag 口径）。 -->
+                <Button
+                    CornerRadius="16"
+                    x:Name="SortButton"
+                    Grid.Column="5"
+                    Content="排序…"
+                    ToolTipService.ToolTip="按多个字段依次排序（先排的优先）">
+                    <Button.Flyout>
+                        <Flyout x:Name="SortFlyout" Opening="SortFlyout_Opening">
+                            <StackPanel Width="360" Spacing="10">
+                                <TextBlock
+                                    FontSize="12"
+                                    Opacity="0.7"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="从上到下依次生效：先按第一行排，相同的再按第二行排（和 mp3tag 的排序一个意思）。" />
+                                <StackPanel x:Name="SortRuleList" Spacing="8" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="SortAddRuleButton" Content="+ 添加一级" Click="SortAddRuleButton_Click" />
+                                    <Button x:Name="SortClearRulesButton" Content="清除排序" Click="SortClearRulesButton_Click" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
+                <!-- 列显隐 + 前后顺序（2026-10-14 用户要求：mp3tag 能读的标签也要能加进列表；
+                     而且每个字段都要能选显不显示、能前移后移）。全部 21 个真实列都归这里管
+                     （末尾星号填充列恒在末行，不参与）。顺序与勾选状态一起存配置目录的
+                     tag-panel-columns.json，重启后还在。 -->
+                <Button
+                    CornerRadius="16"
+                    x:Name="ColumnsButton"
+                    Grid.Column="6"
+                    Content="列…"
+                    ToolTipService.ToolTip="选择要显示的列，调整列的前后顺序">
+                    <Button.Flyout>
+                        <Flyout x:Name="ColumnsFlyout" Opening="ColumnsFlyout_Opening">
+                            <StackPanel Width="330" Spacing="6">
+                                <TextBlock
+                                    FontSize="12"
+                                    Opacity="0.7"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="勾上的列会显示在表格里；↑ ↓ 调整列的前后顺序（对所有列生效，包括默认列）。" />
+                                <ScrollViewer MaxHeight="440" VerticalScrollBarVisibility="Auto">
+                                    <StackPanel x:Name="ColumnToggleList" Spacing="2" />
+                                </ScrollViewer>
+                                <Button
+                                    x:Name="ColumnsResetButton"
+                                    Content="恢复默认列与顺序"
+                                    HorizontalAlignment="Left"
+                                    Click="ColumnsResetButton_Click" />
+                            </StackPanel>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
+
                 <TextBlock
                     x:Name="FileCountText"
-                    Grid.Column="4"
+                    Grid.Column="7"
                     HorizontalAlignment="Right"
                     VerticalAlignment="Center"
                     FontSize="12"
@@ -521,12 +805,20 @@
                         </dg:DataGridTemplateColumn.CellTemplate>
                     </dg:DataGridTemplateColumn>
 
+                    <!-- 文件名列可编辑（2026-10-14 用户要求）：提交 = 直接重命名磁盘上的文件
+                         （不是改标签）。扩展名没写会自动补原来的；目标名已存在 / 名字有
+                         非法字符 / 文件被占用 → 一律不改，状态条说明原因。 -->
                     <dg:DataGridTemplateColumn Tag="FileName" Header="文件名" Width="150" MinWidth="80">
                         <dg:DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="local:TagFileItem">
                                 <TextBlock FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind FileName, Mode=OneWay}" />
                             </DataTemplate>
                         </dg:DataGridTemplateColumn.CellTemplate>
+                        <dg:DataGridTemplateColumn.CellEditingTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBox FontSize="12" BorderThickness="0" Background="Transparent" Padding="0" VerticalAlignment="Stretch" VerticalContentAlignment="Center" Text="{x:Bind FileName, Mode=OneWay}" GotFocus="TagCellEditBox_GotFocus" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellEditingTemplate>
                     </dg:DataGridTemplateColumn>
 
                     <dg:DataGridTemplateColumn Tag="Format" Header="格式" Width="64" MinWidth="44">
@@ -565,6 +857,58 @@
                         <dg:DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="local:TagFileItem">
                                 <TextBlock FontSize="12" Opacity="0.75" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind FileSizeText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <!-- ══════════ 可选列（2026-10-14 用户要求：mp3tag 能读的标签也要能加进列表） ══════════
+                         默认全部隐藏（Visibility=Collapsed），在工具条「列…」按钮里勾出来才显示。
+                         勾选状态存到配置目录的 tag-panel-columns.json，下次打开还在。
+                         显示文本只读（这些字段的编辑在左侧面板做，避免两处都能改搞混）。 -->
+                    <dg:DataGridTemplateColumn Tag="AlbumArtist" Header="专辑艺术家" Width="120" MinWidth="60" Visibility="Collapsed">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind AlbumArtist, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="Composer" Header="作曲家" Width="110" MinWidth="60" Visibility="Collapsed">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind ComposerText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="Disc" Header="碟片号" Width="60" MinWidth="40" Visibility="Collapsed">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind DiscText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="TrackCount" Header="曲目总数" Width="64" MinWidth="44" Visibility="Collapsed">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind TrackCountText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="Bpm" Header="BPM" Width="56" MinWidth="40" Visibility="Collapsed">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextAlignment="Right" TextTrimming="CharacterEllipsis" Text="{x:Bind BpmText, Mode=OneWay}" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
+                    <dg:DataGridTemplateColumn Tag="Comment" Header="注释" Width="140" MinWidth="60" Visibility="Collapsed">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <TextBlock FontSize="12" VerticalAlignment="Center" TextTrimming="CharacterEllipsis" Text="{x:Bind CommentText, Mode=OneWay}" />
                             </DataTemplate>
                         </dg:DataGridTemplateColumn.CellTemplate>
                     </dg:DataGridTemplateColumn>

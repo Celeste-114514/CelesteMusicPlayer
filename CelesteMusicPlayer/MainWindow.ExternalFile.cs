@@ -115,8 +115,11 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>状态栏「添加到音乐库」：把当前播放的这首歌正式收进音乐库。</summary>
-        private void AddToLibraryButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// 状态栏「文件夹加入音乐库」：把当前播放这首歌所在的整个文件夹收进音乐库。
+        /// 音乐库只按文件夹收录（2026-10-14 口径），单曲散装入库这条路已取消。
+        /// </summary>
+        private async void AddToLibraryButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -126,73 +129,26 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                AddFilesToLibrary(new[] { path });
+                string? folder = Path.GetDirectoryName(path);
+                if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+                {
+                    NowPlayingText.Text = "找不到这首歌所在的文件夹，没法按文件夹入库。";
+                    return;
+                }
+
+                await AddFolderToLibraryAsync(folder);
+
+                // 确认态：按钮切到「已加入音乐库」（文件夹整批入列后这首歌必然在库里，
+                // _justAddedToLibraryPath 只是双保险，防止枚举阶段把它漏掉的极端情况）
+                _justAddedToLibraryPath = path;
+                UpdateAddToLibraryButtonVisibility();
+
+                NowPlayingText.Text = $"已把文件夹加入音乐库：{folder}";
             }
             catch (Exception ex)
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ExternalFile.cs", ex);
             }
-        }
-
-        /// <summary>
-        /// 把散装音频文件加入音乐库：既放进当前列表（主界面立刻能看到），
-        /// 也记进设置的 ManualLibraryFiles，这样刷新音乐库、重启程序都不会丢。
-        /// </summary>
-        internal void AddFilesToLibrary(IEnumerable<string> paths)
-        {
-            string[] valid = (paths ?? Enumerable.Empty<string>())
-                .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p))
-                .Where(p => !LibraryPathGuard.IsLibraryExcludedFile(p))
-                .Distinct(StringComparer.OrdinalIgnoreCase)
-                .ToArray();
-
-            if (valid.Length == 0)
-            {
-                return;
-            }
-
-            // 1) 进当前列表（音乐库），不替换已有内容
-            LoadAndAddFiles(valid, persist: false);
-
-            // 只认真正进了列表的那些（重复的、读不出标签被跳过的都不算）
-            string[] added = valid.Where(IsPathInLibrary).ToArray();
-            if (added.Length == 0)
-            {
-                return;
-            }
-
-            // 2) 记进设置，保证重启后还在（重启时由 AppendManualLibraryFilesAsync 补回列表）
-            AppSettingsState settings = AppSettingsStore.Load();
-            settings.ManualLibraryFiles ??= new List<string>();
-
-            bool changed = false;
-            foreach (string p in added)
-            {
-                if (!settings.ManualLibraryFiles.Contains(p, StringComparer.OrdinalIgnoreCase))
-                {
-                    settings.ManualLibraryFiles.Add(p);
-                    changed = true;
-                }
-            }
-
-            if (changed)
-            {
-                AppSettingsStore.Save(settings);
-            }
-
-            foreach (string p in added)
-            {
-                StartupLog.Write("加入音乐库: " + p);
-            }
-
-            // 3) 明确告诉用户加成功了：按钮切到「已加入音乐库」确认态，状态栏也留一句话 ——
-            //    之前是直接收起来，看起来像"点了就没了"，不知道到底加没加进去。
-            _justAddedToLibraryPath = added[^1];
-            UpdateAddToLibraryButtonVisibility();
-
-            NowPlayingText.Text = added.Length == 1
-                ? $"已加入音乐库：{Path.GetFileNameWithoutExtension(added[0])}（共 {_playlist.Count} 首）"
-                : $"已加入音乐库 {added.Length} 首（共 {_playlist.Count} 首）";
         }
 
         /// <summary>

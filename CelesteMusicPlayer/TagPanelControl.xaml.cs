@@ -19,6 +19,8 @@ using CommunityToolkit.WinUI.UI.Controls;
 using CommunityToolkit.WinUI.UI.Controls.Primitives;
 using Windows.Storage;
 using Windows.Storage.Pickers;
+using Windows.Storage.Streams;
+using Windows.ApplicationModel.DataTransfer;
 
 namespace CelesteMusicPlayer
 {
@@ -46,6 +48,12 @@ namespace CelesteMusicPlayer
             ".mp2", ".amr", ".au", ".mod", ".s3m", ".xm"
         };
 
+        /// <summary>封面图片可用的扩展名（右键封面「从图片文件替换封面」的挑选器用）。</summary>
+        private static readonly string[] CoverImageExtensions =
+        {
+            ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"
+        };
+
         private readonly ObservableCollection<TagFileItem> _files = new();
         private readonly ShellPageHost _subNav;
         private readonly Func<Brush>? _accentProvider;
@@ -59,6 +67,9 @@ namespace CelesteMusicPlayer
 
         /// <summary>面板就绪标记：Loaded 之后才允许响应选择变化（防初始化期 NRE）。</summary>
         private bool _panelReady;
+
+        /// <summary>文件加入列表的流水号（发 AddOrder；取消排序后靠它还原原顺序）。</summary>
+        private int _addOrderSeq;
 
         /// <summary>空提示区的默认引导语（XAML 初值，ctor 里收下来；失败原因临时替换它）。</summary>
         private string _emptyHintDefault = string.Empty;
@@ -81,6 +92,25 @@ namespace CelesteMusicPlayer
         /// </summary>
         public event Action<string>? TagsSaved;
 
+        /// <summary>
+        /// 「排序编号」页 → 加入播放队列（按当前列表顺序）。
+        /// 播放队列允许库外的歌，所以这条路不碰音乐库；主窗口负责把路径转成
+        /// 播放条目追加进队列。参数 = 文件路径（已按目标顺序排好）。
+        /// </summary>
+        public event Action<IReadOnlyList<string>>? PlayQueueAddRequested;
+
+        /// <summary>
+        /// 「排序编号」页 → 加入音乐库。音乐库只按文件夹收录，主窗口收到后先做
+        /// 入库检查（文件夹没被收录就问要不要一起入库），再按文件夹入库。
+        /// </summary>
+        public event Action<IReadOnlyList<string>>? LibraryAddRequested;
+
+        /// <summary>
+        /// 「排序编号」页 → 加入播放列表（命名单）。主窗口弹选择框，
+        /// 选哪个单 / 新建哪个单由用户定。
+        /// </summary>
+        public event Action<IReadOnlyList<string>>? NamedPlaylistAddRequested;
+
         // =====================================================================
         // 表格单元格内联编辑（2026-10-13 第四轮换 DataGrid 后重写）
         //
@@ -102,6 +132,12 @@ namespace CelesteMusicPlayer
         /// </summary>
         private (TagFileItem Item, TagField Field, string Text)? _gridEditPending;
 
+        /// <summary>
+        /// 待提交的「文件名」格改名（行 + 编辑框里的最终名字）。
+        /// 改文件名不写标签，是另一条路（改完直接重命名磁盘上的文件）。
+        /// </summary>
+        private (TagFileItem Item, string Text)? _gridRenamePending;
+
         /// <summary>单元格写盘串行闸：避免两个格子的提交并发写同一个文件。</summary>
         private readonly SemaphoreSlim _cellSaveGate = new(1, 1);
 
@@ -109,6 +145,13 @@ namespace CelesteMusicPlayer
         {
             _accentProvider = accentProvider;
             _hostHwnd = hostHwnd;
+
+            // 保险：在这里（界面线程）主动触碰一次静态成员，把类型的静态初始化
+            // 强制留在界面线程完成。否则第一次触碰可能落在后台线程（扫文件夹），
+            // 静态初始化里只要有任何界面对象就会炸，而且一炸整个类型永久报废
+            // （2026-10-14 实测「添加文件夹失败」的根因）。
+            _ = TagAudioExtensions.Length;
+
             InitializeComponent();
 
             _emptyHintDefault = TagListEmptyHint.Text;
@@ -123,8 +166,24 @@ namespace CelesteMusicPlayer
             _subNav.Register("在线补全", string.Empty, OnlineFillPanel);
             _subNav.Build();
 
+            // 切到「排序编号」子页时刷新当前排序状态与作用范围
+            // （排序规则可能在「排序…」弹窗里刚改过，页面里的展示不能是旧的）
+            _subNav.PageEnter += page =>
+            {
+                if (ReferenceEquals(page.Page, SortNumberPanel))
+                {
+                    RefreshSortNumberUi();
+                }
+            };
+
             Loaded += TagPanelControl_Loaded;
             Unloaded += TagPanelControl_Unloaded;
+
+            // 列头点击排序**暂不启用**（2026-10-14 用户改主意：改用工具条上的「排序…」按钮）。
+            // 三条挂法（模板内 / 列头元素 / 表格级命中测试）都试过，DataGrid 把列头的指针
+            // 事件全吃掉了，一次都没进来；而且拖列宽时容易误触排序。代码留在
+            // AttachColumnHeaderGestures 里没删，想复活就在这里调一下。
+            // AttachColumnHeaderGestures();
 
             RefreshCountUi();
             ClearQuickEditPreview();
@@ -181,6 +240,9 @@ namespace CelesteMusicPlayer
             catch (Exception caught)
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.AddFilesButton_Click", caught);
+                // 完整链另打一条：类型初始化失败这类异常的 Message 只说"某某类型初始化
+                // 失败"，真正的根因藏在 InnerException 里
+                global::CelesteMusicPlayer.StartupLog.Write("TagPanel: 添加文件异常详情 → " + caught);
                 TagStatusText.Text = "添加文件失败：" + caught.Message;
             }
         }
@@ -216,25 +278,35 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
+                bool withSubfolders = IncludeSubfoldersCheck.IsChecked == true;
+                string scope = withSubfolders ? "（含子文件夹）" : "（只看这一层）";
+
                 TagStatusText.Text = "正在扫描文件夹…";
                 System.Diagnostics.Stopwatch sw = System.Diagnostics.Stopwatch.StartNew();
-                string[] paths = await Task.Run(() => EnumerateAudioFiles(folder.Path).ToArray());
+                string[] paths = await Task.Run(() => EnumerateAudioFiles(folder.Path, withSubfolders).ToArray());
                 sw.Stop();
                 global::CelesteMusicPlayer.StartupLog.Write(
-                    $"TagPanel: 扫描文件夹 {folder.Path} → {paths.Length} 个音频（{sw.ElapsedMilliseconds}ms）");
+                    $"TagPanel: 扫描文件夹 {folder.Path} {scope} → {paths.Length} 个音频（{sw.ElapsedMilliseconds}ms）");
 
                 if (paths.Length == 0)
                 {
-                    ShowEmptyHint("这个文件夹（含里面的子文件夹）里没有找到支持的音频文件。换个文件夹试试。");
-                    TagStatusText.Text = "该文件夹（含子文件夹）里没有支持的音频文件。";
+                    ShowEmptyHint(withSubfolders
+                        ? "这个文件夹（含里面的子文件夹）里没有找到支持的音频文件。换个文件夹，或把「含子文件夹」取消再试。"
+                        : "这个文件夹这一层里没有找到支持的音频文件（子文件夹没扫）。勾上「含子文件夹」再试，或换个文件夹。");
+                    TagStatusText.Text = withSubfolders
+                        ? "该文件夹（含子文件夹）里没有支持的音频文件。"
+                        : "该文件夹这一层里没有支持的音频文件（没扫子文件夹）。";
                     return;
                 }
 
-                await AddFilesAsync(paths, $"文件夹 {folder.Path}");
+                await AddFilesAsync(paths, $"文件夹 {folder.Path}{scope}");
             }
             catch (Exception caught)
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.AddFolderButton_Click", caught);
+                // 完整链另打一条：类型初始化失败这类异常的 Message 只说"某某类型初始化
+                // 失败"，真正的根因藏在 InnerException 里（2026-10-14 就是靠它才看清的）
+                global::CelesteMusicPlayer.StartupLog.Write("TagPanel: 添加文件夹异常详情 → " + caught);
                 TagStatusText.Text = "添加文件夹失败：" + caught.Message;
             }
         }
@@ -248,6 +320,7 @@ namespace CelesteMusicPlayer
 
             HashSet<string> existing = new(_files.Select(f => f.FilePath), StringComparer.OrdinalIgnoreCase);
             string[] fresh = candidates.Where(p => !existing.Contains(p)).ToArray();
+            HashSet<string> addedPaths = new(StringComparer.OrdinalIgnoreCase);
             int skipped = candidates.Length - fresh.Length;
 
             if (fresh.Length == 0)
@@ -268,32 +341,78 @@ namespace CelesteMusicPlayer
             // 导入一开始就收起空提示：文件正在来的路上，别让用户对着「列表还是空的」干等
             TagListEmptyHint.Visibility = Visibility.Collapsed;
 
-            // 逐批读：每批 50 个，读一批报一批进度（大文件夹不会假死一片）
+            // 后台并行读；分批只为了报进度（大文件夹不会假死一片）
+            //
+            // ⚠ 关键（2026-10-14 大曲库"两三秒才 50 首"）：**绝不能边读边往列表里加**。
+            // 每 Add 一个，ObservableCollection 就发一次通知，表格跟着重排一次可见行，
+            // 上千个文件时这段 UI 开销比读文件本身还大。所以先在后台全部读完，
+            // 最后一次性挂上数据源（断开 → 重填 → 挂回）。
             System.Diagnostics.Stopwatch readSw = System.Diagnostics.Stopwatch.StartNew();
-            const int BatchSize = 50;
-            int done = 0;
-            int added = 0;
-            for (int i = 0; i < fresh.Length; i += BatchSize)
+            const int ProgressStep = 100;
+            List<TagFileItem> loaded = new();
+            for (int i = 0; i < fresh.Length; i += ProgressStep)
             {
-                string[] batch = fresh.Skip(i).Take(BatchSize).ToArray();
-                TagFileItem?[] entries = await Task.Run(() => batch.Select(BuildEntry).ToArray());
+                string[] batch = fresh.Skip(i).Take(ProgressStep).ToArray();
+                TagFileItem?[] entries = await Task.Run(() =>
+                {
+                    // 并行读：每个文件各自开一个 TagLib 对象做 I/O + 解析，彼此不共享状态。
+                    TagFileItem?[] result = new TagFileItem?[batch.Length];
+                    Parallel.For(0, batch.Length,
+                        new ParallelOptions
+                        {
+                            MaxDegreeOfParallelism = Math.Clamp(Environment.ProcessorCount, 4, 16)
+                        },
+                        idx => result[idx] = BuildEntry(batch[idx]));
+                    return result;
+                });
 
                 foreach (TagFileItem? entry in entries)
                 {
                     if (entry != null)
                     {
-                        _files.Add(entry);
-                        added++;
+                        loaded.Add(entry);
                     }
                 }
 
-                done += batch.Length;
-                TagStatusText.Text = $"正在读取标签 {done}/{fresh.Length}…";
+                TagStatusText.Text = $"正在读取标签 {Math.Min(i + ProgressStep, fresh.Length)}/{fresh.Length}…";
             }
 
+            // 一次性挂上：断开源 → 重填 → 挂回，只让表格重建一次
+            TagFileGrid.ItemsSource = null;
+            foreach (TagFileItem item in loaded)
+            {
+                // 加入顺序：取消列头排序后按它回到「添加进来时的顺序」
+                item.AddOrder = ++_addOrderSeq;
+                _files.Add(item);
+                addedPaths.Add(item.FilePath);
+            }
+
+            TagFileGrid.ItemsSource = _files;
+
             readSw.Stop();
+            int added = loaded.Count;
             int failed = fresh.Length - added;
+
+            // 失败的按扩展名归类：一眼能看出是"某一种格式整体读不出来"，
+            // 而不是散在各处的随机失败（实测 .tta 十个全军覆没：TagLib 不支持 TTA）。
+            string failDetail = string.Empty;
+            if (failed > 0)
+            {
+                string[] failedPaths = fresh.Where(p => !addedPaths.Contains(p)).ToArray();
+                IEnumerable<string> byExt = failedPaths
+                    .GroupBy(p => System.IO.Path.GetExtension(p).ToLowerInvariant())
+                    .OrderByDescending(g => g.Count())
+                    .Select(g => g.Count() > 1 ? g.Key + " ×" + g.Count() : g.Key);
+                failDetail = "（" + string.Join("、", byExt) + "）";
+            }
+
             Renumber();
+            // 已经排过序的列表：新文件要插到它该在的位置，而不是一律挂到最后
+            if (_sortRules.Count > 0)
+            {
+                ReorderFiles();
+            }
+
             RefreshCountUi();
             // 文件数变了 → 竖滚动条可能出现/消失（视口宽变，表头要跟），选中底色按新集合重画
             RefreshGridRowsChrome();
@@ -303,15 +422,15 @@ namespace CelesteMusicPlayer
             if (added == 0)
             {
                 // 全部读取失败：提示区说清楚，别只留一行小字
-                ShowEmptyHint($"选中的 {fresh.Length} 个文件都没能读出标签（详情见日志），一个都没加进来。");
-                TagStatusText.Text = "标签读取失败，详见日志。";
+                ShowEmptyHint($"选中的 {fresh.Length} 个文件都没能读出标签{failDetail}，一个都没加进来。详情见日志。");
+                TagStatusText.Text = "标签读取失败" + failDetail + "，详见日志。";
                 return;
             }
 
             ResetEmptyHint();
             TagStatusText.Text = $"已添加 {added} 个文件"
                 + (skipped > 0 ? $"（跳过重复 {skipped} 个）" : string.Empty)
-                + (failed > 0 ? $"（{failed} 个读取失败）" : string.Empty)
+                + (failed > 0 ? $"（{failed} 个读不出标签{failDetail}）" : string.Empty)
                 + "。";
         }
 
@@ -451,13 +570,68 @@ namespace CelesteMusicPlayer
             QuickAlbumArtistBox.Text = model.AlbumArtist;
             QuickYearBox.Text = model.Year > 0 ? model.Year.ToString() : string.Empty;
             QuickTrackBox.Text = model.Track > 0 ? model.Track.ToString() : string.Empty;
+            QuickTrackCountBox.Text = model.TrackCount > 0 ? model.TrackCount.ToString() : string.Empty;
+            QuickDiscBox.Text = model.Disc > 0 ? model.Disc.ToString() : string.Empty;
+            QuickDiscCountBox.Text = model.DiscCount > 0 ? model.DiscCount.ToString() : string.Empty;
+            QuickBpmBox.Text = model.Bpm ?? string.Empty;
             QuickGenreBox.Text = model.Genre;
+            QuickComposerBox.Text = model.Composer;
             QuickCommentBox.Text = model.Comment;
             QuickLyricsBox.Text = model.Lyrics;
+            QuickSyncedLyricsBox.Text = model.SyncedLyrics;
+            ApplyFileInfoCard(path);
 
             QuickEditModeHint.Text = _quickEditSelection.Count > 1
                 ? $"多选模式：填好的字段会写入全部 {_quickEditSelection.Count} 个文件，留空的字段保持原值。想把某个字段清空，请单选该文件后编辑。"
                 : "「还原」= 放弃还没保存的改动，恢复成磁盘上的当前值。";
+        }
+
+        /// <summary>
+        /// 只读文件信息卡（mp3tag 的"扩展标签"那一组）：全部取自文件本身，只能看不能改。
+        /// 列表里那份数据已经读好了（格式/时长/位深/采样率/码率/大小），直接拿来显示；
+        /// 修改日期走一次 FileInfo（很快）。
+        /// </summary>
+        private void ApplyFileInfoCard(string path)
+        {
+            string format = "-";
+            string duration = "-";
+            string depthRate = "-";
+            string bitrate = "-";
+            string size = "-";
+            if (_quickEditSelection.Count == 1)
+            {
+                TagFileItem item = _quickEditSelection[0];
+                format = string.IsNullOrEmpty(item.FormatName) ? "-" : item.FormatName;
+                duration = item.DurationText ?? "-";
+                depthRate = (item.BitDepthText ?? "-") + " / " + (item.SampleRateText ?? "-");
+                bitrate = item.BitrateText ?? "-";
+                size = item.FileSizeText ?? "-";
+            }
+
+            string modified;
+            try
+            {
+                modified = File.GetLastWriteTime(path).ToString("yyyy-MM-dd HH:mm");
+            }
+            catch
+            {
+                modified = "-";
+            }
+
+            QuickFileInfoText.Text =
+                $"文件名：{System.IO.Path.GetFileName(path)}\n" +
+                $"格式：{format}\n" +
+                $"时长：{duration}\n" +
+                $"位深 / 采样率：{depthRate}\n" +
+                $"码率：{bitrate}\n" +
+                $"大小：{size}\n" +
+                $"修改日期：{modified}\n" +
+                $"路径：{path}";
+        }
+
+        private void ClearFileInfoCard()
+        {
+            QuickFileInfoText.Text = "选中一个文件后，这里显示它的格式、时长、码率等文件本身的信息。";
         }
 
         // =====================================================================
@@ -502,6 +676,9 @@ namespace CelesteMusicPlayer
 
                 string yearText = (QuickYearBox.Text ?? string.Empty).Trim();
                 string trackText = (QuickTrackBox.Text ?? string.Empty).Trim();
+                string trackCountText = (QuickTrackCountBox.Text ?? string.Empty).Trim();
+                string discText = (QuickDiscBox.Text ?? string.Empty).Trim();
+                string discCountText = (QuickDiscCountBox.Text ?? string.Empty).Trim();
                 if (yearText.Length > 0 && !uint.TryParse(yearText, out _))
                 {
                     TagStatusText.Text = "年份要填数字（比如 2024），也可以留空。";
@@ -514,6 +691,24 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
+                if (trackCountText.Length > 0 && !uint.TryParse(trackCountText, out _))
+                {
+                    TagStatusText.Text = "曲目总数要填数字，也可以留空。";
+                    return;
+                }
+
+                if (discText.Length > 0 && !uint.TryParse(discText, out _))
+                {
+                    TagStatusText.Text = "碟片号要填数字（比如 1），也可以留空。";
+                    return;
+                }
+
+                if (discCountText.Length > 0 && !uint.TryParse(discCountText, out _))
+                {
+                    TagStatusText.Text = "碟片总数要填数字，也可以留空。";
+                    return;
+                }
+
                 bool batch = _quickEditSelection.Count > 1;
                 TagEditModel template = new()
                 {
@@ -523,9 +718,16 @@ namespace CelesteMusicPlayer
                     AlbumArtist = QuickAlbumArtistBox.Text ?? string.Empty,
                     Year = yearText.Length > 0 ? uint.Parse(yearText) : 0,
                     Track = trackText.Length > 0 ? uint.Parse(trackText) : 0,
+                    TrackCount = trackCountText.Length > 0 ? uint.Parse(trackCountText) : 0,
+                    Disc = discText.Length > 0 ? uint.Parse(discText) : 0,
+                    DiscCount = discCountText.Length > 0 ? uint.Parse(discCountText) : 0,
+                    Bpm = (QuickBpmBox.Text ?? string.Empty).Trim(),
                     Genre = QuickGenreBox.Text ?? string.Empty,
+                    Composer = QuickComposerBox.Text ?? string.Empty,
                     Comment = QuickCommentBox.Text ?? string.Empty,
                     Lyrics = QuickLyricsBox.Text ?? string.Empty
+                    // 同步歌词（QuickSyncedLyricsBox）是只读显示，不进保存表单：
+                    // 写 SYLT 要重建时间轴事件，风险大又极少用（XAML 里有注释说明）。
                 };
 
                 // 单选且一个字段都没动 → 不写盘
@@ -622,7 +824,12 @@ namespace CelesteMusicPlayer
             m.AlbumArtist = template.AlbumArtist;
             m.Year = template.Year;
             m.Track = template.Track;
+            m.TrackCount = template.TrackCount;
+            m.Disc = template.Disc;
+            m.DiscCount = template.DiscCount;
+            m.Bpm = template.Bpm;
             m.Genre = template.Genre;
+            m.Composer = template.Composer;
             m.Comment = template.Comment;
             m.Lyrics = template.Lyrics;
             m.MarkDirty(TagField.Title);
@@ -631,7 +838,12 @@ namespace CelesteMusicPlayer
             m.MarkDirty(TagField.AlbumArtists);
             m.MarkDirty(TagField.Year);
             m.MarkDirty(TagField.Track);
+            m.MarkDirty(TagField.TrackCount);
+            m.MarkDirty(TagField.Disc);
+            m.MarkDirty(TagField.DiscCount);
+            m.MarkDirty(TagField.Bpm);
             m.MarkDirty(TagField.Genres);
+            m.MarkDirty(TagField.Composers);
             m.MarkDirty(TagField.Comment);
             m.MarkDirty(TagField.Lyrics);
             return m;
@@ -677,10 +889,40 @@ namespace CelesteMusicPlayer
                 m.MarkDirty(TagField.Track);
             }
 
+            if (template.TrackCount != 0)
+            {
+                m.TrackCount = template.TrackCount;
+                m.MarkDirty(TagField.TrackCount);
+            }
+
+            if (template.Disc != 0)
+            {
+                m.Disc = template.Disc;
+                m.MarkDirty(TagField.Disc);
+            }
+
+            if (template.DiscCount != 0)
+            {
+                m.DiscCount = template.DiscCount;
+                m.MarkDirty(TagField.DiscCount);
+            }
+
+            if (!string.IsNullOrEmpty(template.Bpm))
+            {
+                m.Bpm = template.Bpm;
+                m.MarkDirty(TagField.Bpm);
+            }
+
             if (!string.IsNullOrEmpty(template.Genre))
             {
                 m.Genre = template.Genre;
                 m.MarkDirty(TagField.Genres);
+            }
+
+            if (!string.IsNullOrEmpty(template.Composer))
+            {
+                m.Composer = template.Composer;
+                m.MarkDirty(TagField.Composers);
             }
 
             if (!string.IsNullOrEmpty(template.Comment))
@@ -709,6 +951,7 @@ namespace CelesteMusicPlayer
                 && a.TrackCount == b.TrackCount
                 && a.Disc == b.Disc
                 && a.DiscCount == b.DiscCount
+                && (a.Bpm ?? string.Empty) == (b.Bpm ?? string.Empty)
                 && a.Genres.SequenceEqual(b.Genres)
                 && a.Composers.SequenceEqual(b.Composers)
                 && a.Comment == b.Comment
@@ -816,18 +1059,23 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>批量工具收尾：通知主窗口刷新元数据、重建受影响的行、汇报结果。</summary>
+        /// <param name="statusText">结果汇报到哪个状态条；不传 = 批量工具页那条
+        /// （「排序编号」页的写入曲目号也走这个收尾，传自己页的状态条）。</param>
         private async Task FinishBatchAsync(
-            List<TagFileItem> targets, List<string> written, int skipped, List<string> failures, bool wholeList)
+            List<TagFileItem> targets, List<string> written, int skipped, List<string> failures, bool wholeList,
+            TextBlock? statusText = null)
         {
+            TextBlock status = statusText ?? BatchStatusText;
+
             if (failures.Count > 0)
             {
-                BatchStatusText.Text = $"{failures.Count} 个文件处理失败；已改成功的文件已整体还原到改动前的标签。详情见日志。";
+                status.Text = $"{failures.Count} 个文件处理失败；已改成功的文件已整体还原到改动前的标签。详情见日志。";
                 return;
             }
 
             if (written.Count == 0)
             {
-                BatchStatusText.Text = skipped > 0
+                status.Text = skipped > 0
                     ? $"没有需要改的文件{BatchScopeText(wholeList, targets.Count)}（全部已是目标状态，或不满足条件被跳过）。"
                     : "没有可处理的文件。";
                 return;
@@ -843,7 +1091,7 @@ namespace CelesteMusicPlayer
                 .ToList();
             await RefreshSavedRowsAsync(touched);
 
-            BatchStatusText.Text = skipped > 0
+            status.Text = skipped > 0
                 ? $"完成{BatchScopeText(wholeList, targets.Count)}：改了 {written.Count} 个文件，跳过 {skipped} 个。"
                 : $"完成{BatchScopeText(wholeList, targets.Count)}：改了 {written.Count} 个文件。";
         }
@@ -1197,40 +1445,16 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                string startText = (BatchNumberStartBox.Text ?? string.Empty).Trim();
-                string stepText = (BatchNumberStepBox.Text ?? string.Empty).Trim();
-                if (!uint.TryParse(startText, out uint start))
+                if (!TryParseNumberBoxes(BatchNumberStartBox, BatchNumberStepBox,
+                        out uint start, out uint step, msg => BatchStatusText.Text = msg))
                 {
-                    BatchStatusText.Text = "起始值要填数字（比如 1）。";
-                    return;
-                }
-
-                if (!uint.TryParse(stepText, out uint step) || step == 0)
-                {
-                    BatchStatusText.Text = "步长要填大于 0 的数字（比如 1）。";
                     return;
                 }
 
                 BatchStatusText.Text = "正在写入曲目号…";
 
-                int position = 0;
-                (List<string> written, int skipped, List<string> failures) = await RunBatchWithRollbackAsync(
-                    targets,
-                    (path, before) =>
-                    {
-                        ulong value = (ulong)start + (ulong)position * step;
-                        uint track = value > uint.MaxValue ? uint.MaxValue : (uint)value;
-                        position++;
-                        if (before.Track == track)
-                        {
-                            return null;
-                        }
-
-                        TagEditModel toWrite = CloneModel(before);
-                        toWrite.Track = track;
-                        return toWrite;
-                    },
-                    "自动编号");
+                (List<string> written, int skipped, List<string> failures) =
+                    await WriteTrackNumbersCoreAsync(targets, start, step);
 
                 await FinishBatchAsync(targets, written, skipped, failures, wholeList);
             }
@@ -1239,6 +1463,181 @@ namespace CelesteMusicPlayer
                 global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.BatchNumberButton_Click", caught);
                 BatchStatusText.Text = "编号失败：" + caught.Message;
             }
+        }
+
+        /// <summary>
+        /// 按列表从上到下的顺序写曲目号：第一个文件 = 起始值，之后每个加一步长。
+        /// 批量工具⑤ 和「排序编号」页① 共用这一个内核（先快照、失败整体还原）。
+        /// </summary>
+        private async Task<(List<string> Written, int Skipped, List<string> Failures)> WriteTrackNumbersCoreAsync(
+            List<TagFileItem> targets, uint start, uint step)
+        {
+            int position = 0;
+            return await RunBatchWithRollbackAsync(
+                targets,
+                (path, before) =>
+                {
+                    ulong value = (ulong)start + (ulong)position * step;
+                    uint track = value > uint.MaxValue ? uint.MaxValue : (uint)value;
+                    position++;
+                    if (before.Track == track)
+                    {
+                        return null;
+                    }
+
+                    TagEditModel toWrite = CloneModel(before);
+                    toWrite.Track = track;
+                    return toWrite;
+                },
+                "自动编号");
+        }
+
+        /// <summary>解析「起始值 / 步长」两个框；不合法时调 fail 汇报并返回 false。</summary>
+        private static bool TryParseNumberBoxes(TextBox startBox, TextBox stepBox,
+            out uint start, out uint step, Action<string> fail)
+        {
+            start = 1;
+            step = 1;
+
+            string startText = (startBox.Text ?? string.Empty).Trim();
+            if (!uint.TryParse(startText, out start))
+            {
+                fail("起始值要填数字（比如 1）。");
+                return false;
+            }
+
+            string stepText = (stepBox.Text ?? string.Empty).Trim();
+            if (!uint.TryParse(stepText, out step) || step == 0)
+            {
+                fail("步长要填大于 0 的数字（比如 1）。");
+                return false;
+            }
+
+            return true;
+        }
+
+        // =====================================================================
+        // 「排序编号」页（2026-10-14 第 3 项）
+        //
+        // 把排好的顺序用出价值：写曲目号 / 加入播放队列 / 加入音乐库 / 加入播放列表。
+        // 冲突处理（用户拍板的方案）：播放队列和播放列表都允许库外的歌，不冲突；
+        // 音乐库是持久化的且只按文件夹收录，所以「加入音乐库」先做入库检查——
+        // 检查与对话框都在主窗口（那里有 XamlRoot 和设置），本页只发事件。
+        // =====================================================================
+
+        /// <summary>切进本页 / 排序规则变化后刷新：当前排序描述 + 作用范围。</summary>
+        private void RefreshSortNumberUi()
+        {
+            if (_sortRules.Count == 0)
+            {
+                SortNumberStatusText.Text = "未排序（按添加顺序）。";
+            }
+            else
+            {
+                SortNumberStatusText.Text = "当前排序：" + string.Join("  →  ",
+                    _sortRules.Select((r, i) =>
+                        $"{(i + 1)}. {ColumnLabelOf(r.Key)}{(r.Descending ? " 降序" : " 升序")}"));
+            }
+
+            (List<TagFileItem> targets, bool wholeList) = BatchTargets();
+            SortNumberScopeText.Text = targets.Count == 0
+                ? "列表是空的，先点右侧「添加文件…」或「添加文件夹…」把歌曲加进来。"
+                : BatchScopeText(wholeList, targets.Count);
+        }
+
+        /// <summary>按列 Key 取列头文字（排序状态描述用）。</summary>
+        private string ColumnLabelOf(string key)
+        {
+            return _columnLabels.TryGetValue(key, out string? label) ? label : key;
+        }
+
+        /// <summary>① 把当前顺序写入曲目号。</summary>
+        private async void SortNumberWriteButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                (List<TagFileItem> targets, bool wholeList) = BatchTargets();
+                if (targets.Count == 0)
+                {
+                    SortNumberActionText.Text = "列表是空的，先点右侧「添加文件…」或「添加文件夹…」把歌曲加进来。";
+                    return;
+                }
+
+                if (!TryParseNumberBoxes(SortNumberStartBox, SortNumberStepBox,
+                        out uint start, out uint step, msg => SortNumberActionText.Text = msg))
+                {
+                    return;
+                }
+
+                SortNumberActionText.Text = "正在写入曲目号…";
+
+                (List<string> written, int skipped, List<string> failures) =
+                    await WriteTrackNumbersCoreAsync(targets, start, step);
+
+                await FinishBatchAsync(targets, written, skipped, failures, wholeList, SortNumberActionText);
+                RefreshSortNumberUi();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.SortNumberWriteButton_Click", caught);
+                SortNumberActionText.Text = "编号失败：" + caught.Message;
+            }
+        }
+
+        /// <summary>②a 加入播放队列（按当前列表顺序；队列允许库外的歌，不碰音乐库）。</summary>
+        private void SortNumberQueueButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!TryGetSortNumberPaths(out List<string> paths))
+            {
+                return;
+            }
+
+            PlayQueueAddRequested?.Invoke(paths);
+            SortNumberActionText.Text = $"已按当前顺序加入播放队列：{paths.Count} 首。";
+        }
+
+        /// <summary>②b 加入音乐库（主窗口做入库检查后按文件夹入库）。</summary>
+        private void SortNumberLibraryButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!TryGetSortNumberPaths(out List<string> paths))
+            {
+                return;
+            }
+
+            LibraryAddRequested?.Invoke(paths);
+            SortNumberActionText.Text = "正在检查音乐库收录情况…（结果看主界面底部状态栏）";
+        }
+
+        /// <summary>②c 加入播放列表（主窗口弹选择框）。</summary>
+        private void SortNumberPlaylistButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (!TryGetSortNumberPaths(out List<string> paths))
+            {
+                return;
+            }
+
+            NamedPlaylistAddRequested?.Invoke(paths);
+            SortNumberActionText.Text = "请在弹出的对话框里选择要加入的播放列表。";
+        }
+
+        /// <summary>取本页三个「加入」按钮的共同输入：目标文件路径（保持列表顺序）。
+        /// 列表为空时在状态条说明并返回 false。</summary>
+        private bool TryGetSortNumberPaths(out List<string> paths)
+        {
+            paths = new List<string>();
+
+            (List<TagFileItem> targets, bool _) = BatchTargets();
+            if (targets.Count == 0)
+            {
+                SortNumberActionText.Text = "列表是空的，先点右侧「添加文件…」或「添加文件夹…」把歌曲加进来。";
+                return false;
+            }
+
+            paths = targets
+                .Select(t => t.FilePath)
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .ToList();
+            return true;
         }
 
         /// <summary>⑥a 清空文字标签：标题/艺术家/专辑/年份/曲目/流派/注释/歌词全部清空，内嵌封面保留。</summary>
@@ -1511,13 +1910,20 @@ namespace CelesteMusicPlayer
             QuickAlbumArtistBox.Text = string.Empty;
             QuickYearBox.Text = string.Empty;
             QuickTrackBox.Text = string.Empty;
+            QuickTrackCountBox.Text = string.Empty;
+            QuickDiscBox.Text = string.Empty;
+            QuickDiscCountBox.Text = string.Empty;
+            QuickBpmBox.Text = string.Empty;
             QuickGenreBox.Text = string.Empty;
+            QuickComposerBox.Text = string.Empty;
             QuickCommentBox.Text = string.Empty;
             QuickLyricsBox.Text = string.Empty;
+            QuickSyncedLyricsBox.Text = string.Empty;
 
             QuickEditTitle.Text = $"已选 {count} 个文件";
             QuickEditPath.Text = "批量填写：只填想改的字段，留空的不动";
             QuickEditModeHint.Text = $"多选模式：填好的字段会写入全部 {count} 个文件，留空的字段保持原值。想把某个字段清空，请单选该文件后编辑。";
+            ClearFileInfoCard();
         }
 
         private void ClearQuickEditPreview()
@@ -1537,9 +1943,16 @@ namespace CelesteMusicPlayer
             QuickAlbumArtistBox.Text = string.Empty;
             QuickYearBox.Text = string.Empty;
             QuickTrackBox.Text = string.Empty;
+            QuickTrackCountBox.Text = string.Empty;
+            QuickDiscBox.Text = string.Empty;
+            QuickDiscCountBox.Text = string.Empty;
+            QuickBpmBox.Text = string.Empty;
             QuickGenreBox.Text = string.Empty;
+            QuickComposerBox.Text = string.Empty;
             QuickCommentBox.Text = string.Empty;
             QuickLyricsBox.Text = string.Empty;
+            QuickSyncedLyricsBox.Text = string.Empty;
+            ClearFileInfoCard();
 
             QuickEditTitle.Text = "未选择文件";
             QuickEditPath.Text = "从右侧文件列表选中一个文件";
@@ -1572,6 +1985,214 @@ namespace CelesteMusicPlayer
                 global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ApplyCoverToImage", caught);
                 QuickEditCover.Source = null;
                 QuickEditNoCoverIcon.Visibility = Visibility.Visible;
+            }
+        }
+
+        // =====================================================================
+        // 封面右键菜单（2026-10-14，对标 mp3tag：在封面上点右键出菜单）
+        //
+        // 后端接口是现成的：TagEditorService.ReadCoverBytes / SetCoverBytes /
+        // ClearCover / ExtractCover。菜单作用在右侧列表当前选中的那一首上（多选
+        // 或未选时明说，不闷头改一堆文件）。
+        // =====================================================================
+
+        /// <summary>封面操作的对象 = 右侧列表当前选中的那一首；没选 / 多选时提示并返回 null。</summary>
+        private string? CoverTargetPath()
+        {
+            if (string.IsNullOrWhiteSpace(_quickEditPath))
+            {
+                TagStatusText.Text = "先在右侧列表里选中一首歌（只选一个），再右键封面。";
+                return null;
+            }
+
+            return _quickEditPath;
+        }
+
+        private async void CoverMenuReplace_Click(object sender, RoutedEventArgs e)
+        {
+            string? path = CoverTargetPath();
+            if (path == null)
+            {
+                return;
+            }
+
+            try
+            {
+                FileOpenPicker picker = new();
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, _hostHwnd);
+                foreach (string ext in CoverImageExtensions)
+                {
+                    picker.FileTypeFilter.Add(ext);
+                }
+
+                StorageFile? file = await picker.PickSingleFileAsync();
+                if (file == null)
+                {
+                    return;
+                }
+
+                byte[] bytes = await System.IO.File.ReadAllBytesAsync(file.Path);
+                bool ok = await Task.Run(() => TagEditorService.SetCoverBytes(path, bytes));
+                if (!ok)
+                {
+                    TagStatusText.Text = "封面没写进去（这种音频格式可能不支持内嵌封面），详情见日志。";
+                    return;
+                }
+
+                ApplyCoverToImage(bytes);
+                TagsSaved?.Invoke(path);
+                TagStatusText.Text = "封面已替换。";
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.CoverMenuReplace", caught);
+                TagStatusText.Text = "替换封面失败：" + caught.Message;
+            }
+        }
+
+        private async void CoverMenuExport_Click(object sender, RoutedEventArgs e)
+        {
+            string? path = CoverTargetPath();
+            if (path == null)
+            {
+                return;
+            }
+
+            try
+            {
+                byte[]? bytes = await Task.Run(() => TagEditorService.ReadCoverBytes(path));
+                if (bytes == null || bytes.Length == 0)
+                {
+                    TagStatusText.Text = "这个文件里没有内嵌封面，没有可导出的。";
+                    return;
+                }
+
+                FileSavePicker picker = new();
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, _hostHwnd);
+                picker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
+                picker.FileTypeChoices.Add("图片", new List<string> { ".jpg", ".png", ".bmp" });
+                picker.SuggestedFileName = System.IO.Path.GetFileNameWithoutExtension(path);
+                StorageFile? dest = await picker.PickSaveFileAsync();
+                if (dest == null)
+                {
+                    return;
+                }
+
+                await System.IO.File.WriteAllBytesAsync(dest.Path, bytes);
+                TagStatusText.Text = "封面已导出。";
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.CoverMenuExport", caught);
+                TagStatusText.Text = "导出封面失败：" + caught.Message;
+            }
+        }
+
+        private async void CoverMenuCopy_Click(object sender, RoutedEventArgs e)
+        {
+            string? path = CoverTargetPath();
+            if (path == null)
+            {
+                return;
+            }
+
+            try
+            {
+                byte[]? bytes = await Task.Run(() => TagEditorService.ReadCoverBytes(path));
+                if (bytes == null || bytes.Length == 0)
+                {
+                    TagStatusText.Text = "这个文件里没有内嵌封面。";
+                    return;
+                }
+
+                MemoryStream ms = new(bytes);
+                DataPackage package = new();
+                package.SetBitmap(RandomAccessStreamReference.CreateFromStream(ms.AsRandomAccessStream()));
+                Clipboard.SetContent(package);
+                TagStatusText.Text = "封面已复制到剪贴板（到另一首歌上右键封面 → 粘贴封面）。";
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.CoverMenuCopy", caught);
+                TagStatusText.Text = "复制封面失败：" + caught.Message;
+            }
+        }
+
+        private async void CoverMenuPaste_Click(object sender, RoutedEventArgs e)
+        {
+            string? path = CoverTargetPath();
+            if (path == null)
+            {
+                return;
+            }
+
+            try
+            {
+                DataPackageView view = Clipboard.GetContent();
+                if (view == null || !view.Contains(StandardDataFormats.Bitmap))
+                {
+                    TagStatusText.Text = "剪贴板里没有图片（先在别的歌上右键封面 → 复制封面）。";
+                    return;
+                }
+
+                IRandomAccessStreamReference? reference = await view.GetBitmapAsync();
+                if (reference == null)
+                {
+                    TagStatusText.Text = "剪贴板里的图片取不出来。";
+                    return;
+                }
+
+                byte[] bytes;
+                using (IRandomAccessStreamWithContentType src = await reference.OpenReadAsync())
+                {
+                    MemoryStream ms = new();
+                    await src.AsStreamForRead().CopyToAsync(ms);
+                    bytes = ms.ToArray();
+                }
+
+                bool ok = await Task.Run(() => TagEditorService.SetCoverBytes(path, bytes));
+                if (!ok)
+                {
+                    TagStatusText.Text = "封面没写进去（这种音频格式可能不支持内嵌封面），详情见日志。";
+                    return;
+                }
+
+                ApplyCoverToImage(bytes);
+                TagsSaved?.Invoke(path);
+                TagStatusText.Text = "封面已粘贴。";
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.CoverMenuPaste", caught);
+                TagStatusText.Text = "粘贴封面失败：" + caught.Message;
+            }
+        }
+
+        private async void CoverMenuRemove_Click(object sender, RoutedEventArgs e)
+        {
+            string? path = CoverTargetPath();
+            if (path == null)
+            {
+                return;
+            }
+
+            try
+            {
+                bool ok = await Task.Run(() => TagEditorService.ClearCover(path));
+                if (!ok)
+                {
+                    TagStatusText.Text = "移除封面失败，详情见日志。";
+                    return;
+                }
+
+                ApplyCoverToImage(null);
+                TagsSaved?.Invoke(path);
+                TagStatusText.Text = "已移除内嵌封面（只是删掉文件里嵌的图，音乐本身没动）。";
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.CoverMenuRemove", caught);
+                TagStatusText.Text = "移除封面失败：" + caught.Message;
             }
         }
 
@@ -1616,6 +2237,7 @@ namespace CelesteMusicPlayer
         private void TagFileGrid_CellEditEnding(object sender, DataGridCellEditEndingEventArgs e)
         {
             _gridEditPending = null;
+            _gridRenamePending = null;
 
             if (e.EditAction != DataGridEditAction.Commit)
             {
@@ -1624,6 +2246,17 @@ namespace CelesteMusicPlayer
 
             if (e.Row?.DataContext is not TagFileItem item)
             {
+                return;
+            }
+
+            // 「文件名」列不写标签，走改文件名的路（mp3tag 口径：改完立刻重命名磁盘上的文件）
+            if (string.Equals(e.Column?.Tag as string, "FileName", StringComparison.Ordinal))
+            {
+                if (e.EditingElement is TextBox nameBox)
+                {
+                    _gridRenamePending = (item, nameBox.Text ?? string.Empty);
+                }
+
                 return;
             }
 
@@ -1643,6 +2276,15 @@ namespace CelesteMusicPlayer
         /// <summary>编辑结束：取出暂存值异步落盘（串行闸内排队；失败只在状态条说明原因）。</summary>
         private async void TagFileGrid_CellEditEnded(object sender, DataGridCellEditEndedEventArgs e)
         {
+            // 文件名改名优先：它不写标签，跟标签提交是两条路
+            (TagFileItem Item, string Text)? rename = _gridRenamePending;
+            _gridRenamePending = null;
+            if (rename != null && _panelReady)
+            {
+                await CommitFileNameEditAsync(rename.Value.Item, rename.Value.Text);
+                return;
+            }
+
             (TagFileItem Item, TagField Field, string Text)? pending = _gridEditPending;
             _gridEditPending = null;
 
@@ -1728,6 +2370,117 @@ namespace CelesteMusicPlayer
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.CommitCellEdit", caught);
                 TagStatusText.Text = $"{fieldName}保存失败：" + caught.Message;
+            }
+            finally
+            {
+                _cellSaveGate.Release();
+            }
+        }
+
+        /// <summary>
+        /// 「文件名」格提交：把磁盘上的文件改成新名字（mp3tag 口径）。
+        /// 安全口径：目标名已存在 / 名字里有非法字符 / 文件被占用 → 一律不动，
+        /// 只在状态条说清原因；行显示是靠换实例重绑刷新，失败时自然还是原值。
+        /// </summary>
+        private async Task CommitFileNameEditAsync(TagFileItem item, string rawName)
+        {
+            string oldPath = item.FilePath;
+            if (string.IsNullOrWhiteSpace(oldPath))
+            {
+                return;
+            }
+
+            string newName = (rawName ?? string.Empty).Trim();
+            string ext = System.IO.Path.GetExtension(oldPath);
+            // 用户没带扩展名就补上原来的（mp3tag 也是这个口径）
+            if (ext.Length > 0 && !newName.EndsWith(ext, StringComparison.OrdinalIgnoreCase))
+            {
+                newName += ext;
+            }
+
+            if (newName.Length == 0)
+            {
+                return;
+            }
+
+            if (string.Equals(newName, item.FileName, StringComparison.OrdinalIgnoreCase))
+            {
+                return; // 没改
+            }
+
+            string? dir = System.IO.Path.GetDirectoryName(oldPath);
+            if (string.IsNullOrEmpty(dir))
+            {
+                TagStatusText.Text = "取不到这个文件所在的文件夹，没能改名。";
+                return;
+            }
+
+            char[] invalid = System.IO.Path.GetInvalidFileNameChars();
+            if (newName.IndexOfAny(invalid) >= 0)
+            {
+                TagStatusText.Text = "文件名里有不能用的字符（\\ / : * ? \" < > | 都不行），已恢复原名。";
+                return;
+            }
+
+            string newPath = System.IO.Path.Combine(dir, newName);
+
+            await _cellSaveGate.WaitAsync();
+            try
+            {
+                if (System.IO.File.Exists(newPath))
+                {
+                    TagStatusText.Text = $"同一个文件夹里已经有「{newName}」了，为避免覆盖，没有改名。";
+                    return;
+                }
+
+                TagStatusText.Text = "正在改文件名…";
+                bool moved = await Task.Run(() =>
+                {
+                    try
+                    {
+                        System.IO.File.Move(oldPath, newPath);
+                        return true;
+                    }
+                    catch (Exception caught)
+                    {
+                        global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.RenameFile", caught);
+                        return false;
+                    }
+                });
+
+                if (!moved)
+                {
+                    TagStatusText.Text = "改名失败（文件可能被别的程序占用，或没有写权限）；详情见日志。";
+                    return;
+                }
+
+                // 换实例重绑：文件路径 / 文件名都变了，重读一遍最省事也最准
+                int index = _files.IndexOf(item);
+                TagFileItem? refreshed = await Task.Run(() => BuildEntry(newPath));
+                if (refreshed == null)
+                {
+                    refreshed = item;
+                    refreshed.FilePath = newPath;
+                }
+
+                refreshed.AddOrder = item.AddOrder;
+                if (index >= 0)
+                {
+                    _files[index] = refreshed;
+                }
+
+                Renumber();
+                RefreshCountUi();
+                global::CelesteMusicPlayer.StartupLog.Write($"TagPanel: 改名 {oldPath} → {newPath}");
+
+                // 通知主窗口：曲库里这条的路径变了，元数据要跟着换
+                TagsSaved?.Invoke(newPath);
+                TagStatusText.Text = $"已改名为「{newName}」。";
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.CommitFileNameEdit", caught);
+                TagStatusText.Text = "改名失败：" + caught.Message;
             }
             finally
             {
@@ -1846,6 +2599,12 @@ namespace CelesteMusicPlayer
         /// </summary>
         private static TagFileItem? BuildEntry(string path)
         {
+            // TTA：TagLib 没有 TTA 容器解析器（File.Create 直接抛），单独一条路
+            if (TtaTagAccess.IsTtaPath(path))
+            {
+                return BuildTtaEntry(path);
+            }
+
             string fileName = System.IO.Path.GetFileNameWithoutExtension(path);
             string title = fileName;
             string artist = "未知艺术家";
@@ -1858,6 +2617,15 @@ namespace CelesteMusicPlayer
             int rate = 0;
             int bits = 0;
             int kbps = 0;
+
+            // 可选列用的附加标签（默认隐藏，用户在「列…」里勾出来才显示）
+            string composer = string.Empty;
+            string comment = string.Empty;
+            string bpm = string.Empty;
+            string lyrics = string.Empty;
+            uint trackCount = 0;
+            uint disc = 0;
+            uint discCount = 0;
 
             try
             {
@@ -1900,6 +2668,21 @@ namespace CelesteMusicPlayer
 
                 track = tagFile.Tag.Track;
                 year = tagFile.Tag.Year;
+                trackCount = tagFile.Tag.TrackCount;
+                disc = tagFile.Tag.Disc;
+                discCount = tagFile.Tag.DiscCount;
+                if (!string.IsNullOrWhiteSpace(tagFile.Tag.FirstComposer))
+                {
+                    composer = tagFile.Tag.FirstComposer.Trim();
+                }
+
+                comment = tagFile.Tag.Comment ?? string.Empty;
+                lyrics = tagFile.Tag.Lyrics ?? string.Empty;
+                if (tagFile.Tag.BeatsPerMinute > 0)
+                {
+                    bpm = tagFile.Tag.BeatsPerMinute.ToString(System.Globalization.CultureInfo.InvariantCulture);
+                }
+
                 if (!string.IsNullOrWhiteSpace(tagFile.Tag.FirstGenre))
                 {
                     genre = tagFile.Tag.FirstGenre.Trim();
@@ -1933,6 +2716,30 @@ namespace CelesteMusicPlayer
             item.YearEdit = year > 0 ? year.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
             item.TrackEdit = track > 0 ? track.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty;
 
+            // 可选列用的附加标签（默认隐藏，用户在「列…」里勾出来才显示）
+            item.ComposerText = composer;
+            item.CommentText = comment;
+            item.LyricsText = lyrics;
+            item.BpmText = bpm;
+            item.TrackCountText = trackCount > 0
+                ? trackCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                : string.Empty;
+            item.DiscText = disc > 0
+                ? (discCount > 0
+                    ? disc + "/" + discCount
+                    : disc.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                : string.Empty;
+
+            // 排序用原始数值：文本是给人看的，数值是给列头排序的
+            if (uint.TryParse(bpm, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out uint bpmValue))
+            {
+                item.BpmSortKey = bpmValue;
+            }
+
+            item.TrackCountSortKey = trackCount > 0 ? trackCount : long.MinValue;
+            item.DiscSortKey = disc > 0 ? disc : long.MinValue;
+
             // 文件派生列（格式 / 位深 / 采样率 / 码率 / 大小）：格式走扩展名，规格走上面那一趟
             // TagLib 读取（TryGetFactsFast 内部对 DSD 等 TagLib 读不了的格式会回退完整探测）。
             try
@@ -1944,9 +2751,15 @@ namespace CelesteMusicPlayer
                 item.SampleRateText = rate > 0 ? FormatSampleRate(rate) : "-";
                 item.BitrateText = kbps > 0 ? kbps + "kbps" : "-";
 
+                // 排序用的原始数值（列头排序按数值排，不按格式化文本排）
+                item.BitDepthBits = bits;
+                item.SampleRateHz = rate;
+                item.Kbps = kbps;
+
                 try
                 {
                     long len = new FileInfo(path).Length;
+                    item.FileSizeBytes = len;
                     if (len > 0)
                     {
                         item.FileSizeText = FormatFileSize(len);
@@ -1963,6 +2776,141 @@ namespace CelesteMusicPlayer
             }
 
             return item;
+        }
+
+        /// <summary>44100 → 44.1kHz；48000 → 48kHz；2822400 → 2.82MHz。</summary>
+        /// <summary>
+        /// TTA 专用建行（2026-10-14 方案 1）：TagLib 打不开 TTA 容器，所以
+        ///  · 标签 → TtaTagAccess.Read（读文件头 ID3v2 / 文件尾 APEv2）；
+        ///  · 时长 → TTA 文件头里就有（数据长度 ÷ 每秒字节数，精确到样本级）；
+        ///  · 采样率 / 位深 / 码率 → AudioInfoFormatter 完整探测（含 ffmpeg）。
+        /// 读不到标签不算失败：按「未知艺术家/未知专辑」建行，跟其它格式一个口径。
+        /// </summary>
+        private static TagFileItem BuildTtaEntry(string path)
+        {
+            TagEditModel tag = TtaTagAccess.Read(path);
+            string fileName = System.IO.Path.GetFileNameWithoutExtension(path);
+
+            string title = string.IsNullOrWhiteSpace(tag.Title) ? fileName : tag.Title.Trim();
+            string artist = tag.Performers.Length > 0 ? tag.Performers[0] : "未知艺术家";
+            string albumArtist = tag.AlbumArtists.Length > 0 ? tag.AlbumArtists[0] : artist;
+            string album = string.IsNullOrWhiteSpace(tag.Album) ? "未知专辑" : tag.Album.Trim();
+            string genre = tag.Genres.Length > 0 ? tag.Genres[0] : "未知流派";
+            string composer = tag.Composers.Length > 0 ? string.Join("; ", tag.Composers) : string.Empty;
+
+            // 规格：TTA 没有 TagLib.Properties，走完整探测（ffmpeg）
+            int rate = 0;
+            int bits = 0;
+            int kbps = 0;
+            try
+            {
+                AudioInfoFormatter.TryGetFacts(path, out rate, out bits, out kbps, out _);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.BuildTtaEntry", caught);
+            }
+
+            TagFileItem item = new()
+            {
+                Title = title,
+                Artist = artist,
+                AlbumArtist = albumArtist,
+                Album = album,
+                Track = tag.Track,
+                Year = tag.Year,
+                Genre = genre,
+                Duration = ReadTtaDuration(path),
+                FilePath = path,
+                FormatName = "TTA",
+                BitDepthText = bits > 0 ? bits + "bit" : "-",
+                SampleRateText = rate > 0 ? FormatSampleRate(rate) : "-",
+                BitrateText = kbps > 0 ? kbps + "kbps" : "-",
+                BitDepthBits = bits,
+                SampleRateHz = rate,
+                Kbps = kbps,
+                ComposerText = composer,
+                CommentText = tag.Comment ?? string.Empty,
+                LyricsText = tag.Lyrics ?? string.Empty,
+                BpmText = tag.Bpm ?? string.Empty,
+                TrackCountText = tag.TrackCount > 0
+                    ? tag.TrackCount.ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    : string.Empty,
+                DiscText = tag.Disc > 0
+                    ? (tag.DiscCount > 0
+                        ? tag.Disc + "/" + tag.DiscCount
+                        : tag.Disc.ToString(System.Globalization.CultureInfo.InvariantCulture))
+                    : string.Empty,
+                YearEdit = tag.Year > 0 ? tag.Year.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty,
+                TrackEdit = tag.Track > 0 ? tag.Track.ToString(System.Globalization.CultureInfo.InvariantCulture) : string.Empty,
+            };
+
+            if (uint.TryParse(tag.Bpm, System.Globalization.NumberStyles.None,
+                System.Globalization.CultureInfo.InvariantCulture, out uint bpmValue))
+            {
+                item.BpmSortKey = bpmValue;
+            }
+
+            item.TrackCountSortKey = tag.TrackCount > 0 ? tag.TrackCount : long.MinValue;
+            item.DiscSortKey = tag.Disc > 0 ? tag.Disc : long.MinValue;
+
+            try
+            {
+                long len = new FileInfo(path).Length;
+                item.FileSizeBytes = len;
+                if (len > 0)
+                {
+                    item.FileSizeText = FormatFileSize(len);
+                }
+            }
+            catch
+            {
+                // 被独占 / 无权限：大小列留 "-"
+            }
+
+            return item;
+        }
+
+        /// <summary>
+        /// 从 TTA 文件头算时长（精确，不用 ffmpeg）。头 22 字节（大端）：
+        /// "TTA1" + 音频格式(2) + 声道(2) + 位深(2) + 采样率(4) + 数据长度(4) + CRC(4)。
+        /// 读不出来返回 Zero（显示 00:00，不编）。
+        /// </summary>
+        private static TimeSpan ReadTtaDuration(string path)
+        {
+            try
+            {
+                using FileStream stream = File.OpenRead(path);
+                byte[] head = new byte[22];
+                if (stream.Read(head, 0, 22) != 22)
+                {
+                    return TimeSpan.Zero;
+                }
+
+                if (head[0] != 'T' || head[1] != 'T' || head[2] != 'A' || head[3] != '1')
+                {
+                    return TimeSpan.Zero;
+                }
+
+                ushort channels = (ushort)((head[6] << 8) | head[7]);
+                ushort bits = (ushort)((head[8] << 8) | head[9]);
+                uint rate = ((uint)head[10] << 24) | ((uint)head[11] << 16) | ((uint)head[12] << 8) | head[13];
+                uint dataLength = ((uint)head[14] << 24) | ((uint)head[15] << 16) | ((uint)head[16] << 8) | head[17];
+
+                if (rate == 0 || channels == 0 || bits == 0 || dataLength == 0)
+                {
+                    return TimeSpan.Zero;
+                }
+
+                double seconds = dataLength * 8.0 / ((double)rate * channels * bits);
+                return seconds > 0 && seconds < TimeSpan.MaxValue.TotalSeconds
+                    ? TimeSpan.FromSeconds(seconds)
+                    : TimeSpan.Zero;
+            }
+            catch
+            {
+                return TimeSpan.Zero;
+            }
         }
 
         /// <summary>44100 → 44.1kHz；48000 → 48kHz；2822400 → 2.82MHz。</summary>
@@ -1989,8 +2937,11 @@ namespace CelesteMusicPlayer
             return (bytes / (1024.0 * 1024.0)).ToString("0.0", System.Globalization.CultureInfo.InvariantCulture) + " MB";
         }
 
-        /// <summary>递归枚举文件夹里的音频文件；内部缓存目录（DSD DoP / 转码 / WebDAV 缓存）一律跳过。</summary>
-        private static IEnumerable<string> EnumerateAudioFiles(string folderPath)
+        /// <summary>
+        /// 枚举文件夹里的音频文件；内部缓存目录（DSD DoP / 转码 / WebDAV 缓存）一律跳过。
+        /// <paramref name="recursive"/> = 是否连子文件夹一起扫（界面上「含子文件夹」勾选框）。
+        /// </summary>
+        private static IEnumerable<string> EnumerateAudioFiles(string folderPath, bool recursive)
         {
             if (!Directory.Exists(folderPath))
             {
@@ -2006,7 +2957,8 @@ namespace CelesteMusicPlayer
             string[] files;
             try
             {
-                subDirs = Directory.GetDirectories(folderPath);
+                // 不扫子文件夹时连目录列举都省掉（大目录能快一点）
+                subDirs = recursive ? Directory.GetDirectories(folderPath) : Array.Empty<string>();
                 files = Directory.GetFiles(folderPath);
             }
             catch
@@ -2025,9 +2977,14 @@ namespace CelesteMusicPlayer
                 }
             }
 
+            if (!recursive)
+            {
+                yield break; // 只要这一层：子文件夹不进
+            }
+
             foreach (string sub in subDirs)
             {
-                foreach (string path in EnumerateAudioFiles(sub))
+                foreach (string path in EnumerateAudioFiles(sub, true))
                 {
                     yield return path;
                 }
@@ -2039,6 +2996,951 @@ namespace CelesteMusicPlayer
             for (int i = 0; i < _files.Count; i++)
             {
                 _files[i].Index = i + 1;
+            }
+        }
+
+        // =====================================================================
+        // 列头排序（2026-10-14 新增）：mp3tag 口径的多列累积排序
+        //
+        // 手势（点列头即可，不需要进菜单）：
+        //   · 直接点列头 = 只按这一列排：升序 → 再点降序 → 再点取消排序（回到添加顺序）；
+        //   · Ctrl / Shift + 点列头 = 把这一列追加成下一级排序键，列头上显示 1、2、3…
+        //     已经排过的列再 Ctrl 点 = 切换升 / 降，再点一次 = 把这一级去掉。
+        // 排序键的先后 = 点击的先后（先点的优先），这就是 mp3tag 的「按点击顺序排」。
+        //
+        // 列头是 DataGrid 原生控件（只接管它的内容模板，不自己画表头）：
+        // 原生 CanUserSortColumns 只支持单列排序，多列必须自己排，所以这里关掉
+        // 原生排序、自己维护排序键并把结果写回 ObservableCollection。
+        // =====================================================================
+
+        /// <summary>列头显示模型（每列一个，挂在 DataGridColumn.Header 上）。</summary>
+        private readonly List<TagColumnHeaderVm> _headerVms = new();
+
+        /// <summary>当前排序键，列表顺序 = 优先级顺序。</summary>
+        private readonly List<TagSortRule> _sortRules = new();
+
+        /// <summary>列头按下时的指针位置（用来区分「点击」和「拖列宽」）。</summary>
+        private Windows.Foundation.Point _headerPressPoint;
+
+        private bool _headerPressed;
+
+        /// <summary>列头按下时的 Ctrl / Shift 状态（Tapped 事件里拿不到修饰键，先存下来）。</summary>
+        private Windows.System.VirtualKeyModifiers _headerPressModifiers;
+
+        /// <summary>
+        /// 上次排序的时刻。点击同时走 PointerReleased 和 Tapped 两条路，
+        /// 500ms 内只认一次，免得一次点击切了两级（升→降，看着像"没反应"）。
+        /// </summary>
+        private long _lastSortTick = long.MinValue;
+
+        /// <summary>列头手势是否已经挂好（挂一次就够，避免每帧遍历可视化树）。</summary>
+        private bool _headerGesturesAttached;
+
+        // =====================================================================
+        // 列显隐 + 前后顺序（2026-10-14 用户要求：mp3tag 能读的标签也要能加进列表；
+        // 每个字段都要能选显不显示、还能前移后移）
+        //
+        // 全部 21 个真实列都归这里管（末尾星号填充列除外——它恒在末行吸收剩余宽度）。
+        // 顺序落地走 DataGridColumn.DisplayIndex（不动 Columns 集合本身）：
+        //   · DisplayIndex 是官方给的「显示位置」入口，设置时网格会自动把别的列
+        //     让开的位子补上（WPF 同款让位校正，toolkit 源码 DataGridColumns.cs
+        //     OnColumnDisplayIndexChanging 实锤），所以每列给一个互不相同的绝对
+        //     位置即可，不需要手工挪集合；
+        //   · 集合顺序永远保持 XAML 默认顺序，「恢复默认」因此永远不会漂。
+        // 状态存配置目录 tag-panel-columns.json：
+        //   { "order": [全部列 Key（含隐藏的，按显示顺序）], "hidden": [隐藏的 Key] }
+        // 旧格式（只有 6 个可选列 Key 的数组）自动兼容：顺序按默认、没列进去 = 隐藏。
+        // =====================================================================
+
+        /// <summary>默认隐藏的列（Key 集合；老口径的 6 个可选列）。</summary>
+        private static readonly HashSet<string> DefaultHiddenColumns = new(StringComparer.Ordinal)
+        {
+            "AlbumArtist", "Composer", "Disc", "TrackCount", "Bpm", "Comment",
+        };
+
+        /// <summary>末尾填充列的 Key（不参与显隐和顺序，恒在末行）。</summary>
+        private const string FillerColumnKey = "Filler";
+
+        /// <summary>全部真实列的 Key（XAML 默认顺序，加载时从列头模型收集）。</summary>
+        private List<string> _allColumnKeys = new();
+
+        /// <summary>各列显示名（Key → 列头文字）。</summary>
+        private readonly Dictionary<string, string> _columnLabels = new(StringComparer.Ordinal);
+
+        /// <summary>当前列顺序（含被隐藏的列——它们占位但不显示）。</summary>
+        private List<string> _columnOrder = new();
+
+        /// <summary>当前隐藏的列。</summary>
+        private HashSet<string> _hiddenColumns = new(StringComparer.Ordinal);
+
+        private static string ColumnStateFilePath =>
+            System.IO.Path.Combine(AppSettingsStore.GetConfigDirectory(), "tag-panel-columns.json");
+
+        /// <summary>
+        /// 面板加载时调：从列头模型收集全部列（此时列头还是 XAML 原文，顺序 = 默认顺序），
+        /// 读盘上存的「顺序 + 显隐」并应用到表格。
+        /// </summary>
+        private void LoadColumnLayout()
+        {
+            // 1) 收集全部列（_headerVms 在 Loaded 里已按集合顺序建好 = XAML 默认顺序）
+            _allColumnKeys = new List<string>();
+            _columnLabels.Clear();
+            foreach (TagColumnHeaderVm vm in _headerVms)
+            {
+                if (string.IsNullOrEmpty(vm.Key)
+                    || string.Equals(vm.Key, FillerColumnKey, StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                if (!_allColumnKeys.Contains(vm.Key))
+                {
+                    _allColumnKeys.Add(vm.Key);
+                }
+
+                _columnLabels[vm.Key] = vm.Label;
+            }
+
+            List<string> order = new(_allColumnKeys);
+            HashSet<string> hidden = new(DefaultHiddenColumns, StringComparer.Ordinal);
+
+            // 2) 读盘：新格式是对象 { order, hidden }；旧格式（数组 = 勾出来的可选列）兼容
+            try
+            {
+                string file = ColumnStateFilePath;
+                if (File.Exists(file))
+                {
+                    using System.Text.Json.JsonDocument doc =
+                        System.Text.Json.JsonDocument.Parse(File.ReadAllText(file));
+
+                    if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
+                    {
+                        // 旧格式：数组里列了谁 = 谁可见；6 个可选列里没列进去的 = 隐藏
+                        HashSet<string> visible = new(StringComparer.Ordinal);
+                        foreach (System.Text.Json.JsonElement element in doc.RootElement.EnumerateArray())
+                        {
+                            string? key = element.GetString();
+                            if (!string.IsNullOrEmpty(key) && _columnLabels.ContainsKey(key))
+                            {
+                                visible.Add(key);
+                            }
+                        }
+
+                        hidden = new HashSet<string>(
+                            _allColumnKeys.Where(k => !visible.Contains(k)),
+                            StringComparer.Ordinal);
+                    }
+                    else if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
+                    {
+                        List<string> loadedOrder = new();
+                        if (doc.RootElement.TryGetProperty("order", out System.Text.Json.JsonElement orderEl)
+                            && orderEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (System.Text.Json.JsonElement element in orderEl.EnumerateArray())
+                            {
+                                string? key = element.GetString();
+                                if (!string.IsNullOrEmpty(key) && _columnLabels.ContainsKey(key)
+                                    && !loadedOrder.Contains(key))
+                                {
+                                    loadedOrder.Add(key);
+                                }
+                            }
+                        }
+
+                        // 盘上没提过的列（以后新加的列）按默认顺序补到末尾
+                        foreach (string key in _allColumnKeys)
+                        {
+                            if (!loadedOrder.Contains(key))
+                            {
+                                loadedOrder.Add(key);
+                            }
+                        }
+
+                        order = loadedOrder;
+
+                        HashSet<string> loadedHidden = new(StringComparer.Ordinal);
+                        if (doc.RootElement.TryGetProperty("hidden", out System.Text.Json.JsonElement hiddenEl)
+                            && hiddenEl.ValueKind == System.Text.Json.JsonValueKind.Array)
+                        {
+                            foreach (System.Text.Json.JsonElement element in hiddenEl.EnumerateArray())
+                            {
+                                string? key = element.GetString();
+                                if (!string.IsNullOrEmpty(key) && _columnLabels.ContainsKey(key))
+                                {
+                                    loadedHidden.Add(key);
+                                }
+                            }
+                        }
+
+                        hidden = loadedHidden;
+                    }
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.LoadColumnLayout", caught);
+                order = new List<string>(_allColumnKeys);
+                hidden = new HashSet<string>(DefaultHiddenColumns, StringComparer.Ordinal);
+            }
+
+            _columnOrder = order;
+            _hiddenColumns = hidden;
+
+            ApplyColumnLayout();
+        }
+
+        /// <summary>按 Key 找表格列（找不到 = 盘上状态引用了不存在的列，调用方跳过）。</summary>
+        private DataGridColumn? FindColumnByKey(string key)
+        {
+            return TagFileGrid.Columns.FirstOrDefault(
+                c => string.Equals(c.Tag as string, key, StringComparison.Ordinal));
+        }
+
+        /// <summary>
+        /// 把「顺序 + 显隐」落到表格上：可见列按 _columnOrder 的相对顺序占前，
+        /// 隐藏列排在可见列之后（只占位、不显示），星号填充列恒在末行。
+        /// 每一列都拿一个互不相同的 DisplayIndex，网格的让位校正就无从触发。
+        /// </summary>
+        private void ApplyColumnLayout()
+        {
+            List<string> visible = _columnOrder.Where(k => !_hiddenColumns.Contains(k)).ToList();
+            List<string> hidden = _columnOrder.Where(k => _hiddenColumns.Contains(k)).ToList();
+
+            List<string> desired = new(visible);
+            desired.AddRange(hidden);
+
+            for (int i = 0; i < desired.Count; i++)
+            {
+                DataGridColumn? column = FindColumnByKey(desired[i]);
+                if (column == null)
+                {
+                    continue;
+                }
+
+                column.Visibility = i < visible.Count ? Visibility.Visible : Visibility.Collapsed;
+
+                try
+                {
+                    if (column.DisplayIndex != i)
+                    {
+                        column.DisplayIndex = i;
+                    }
+                }
+                catch (Exception caught)
+                {
+                    // 显示位置设失败不该连带把显隐也搅黄（日志留证，顺序保持原样）
+                    global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ApplyColumnLayout", caught);
+                }
+            }
+
+            // 星号填充列永远最后（吸收剩余宽度）
+            DataGridColumn? filler = FindColumnByKey(FillerColumnKey);
+            if (filler != null)
+            {
+                filler.Visibility = Visibility.Visible;
+                try
+                {
+                    int last = desired.Count; // 真实列之后
+                    if (filler.DisplayIndex != last)
+                    {
+                        filler.DisplayIndex = last;
+                    }
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ApplyColumnLayout.filler", caught);
+                }
+            }
+        }
+
+        private void SaveColumnLayout()
+        {
+            try
+            {
+                string json = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    order = _columnOrder,
+                    hidden = _hiddenColumns.ToList()
+                });
+                File.WriteAllText(ColumnStateFilePath, json);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.SaveColumnLayout", caught);
+            }
+        }
+
+        /// <summary>「列…」弹窗每次打开都按当前状态重建（勾选框 + 前移后移，避免状态过期）。</summary>
+        private void ColumnsFlyout_Opening(object sender, object e)
+        {
+            RebuildColumnToggleList();
+        }
+
+        /// <summary>按 _columnOrder 重建勾选列表：每行 = 复选框（显隐）+ ↑ 前移 + ↓ 后移。</summary>
+        private void RebuildColumnToggleList()
+        {
+            ColumnToggleList.Children.Clear();
+
+            for (int i = 0; i < _columnOrder.Count; i++)
+            {
+                string key = _columnOrder[i];
+                if (!_columnLabels.TryGetValue(key, out string? label))
+                {
+                    continue;
+                }
+
+                Grid row = new() { ColumnSpacing = 4, Padding = new Thickness(0, 1, 0, 1) };
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+                CheckBox box = new()
+                {
+                    Content = label,
+                    FontSize = 12,
+                    IsChecked = !_hiddenColumns.Contains(key),
+                };
+
+                string captured = key;
+                box.Checked += (s, args) =>
+                {
+                    _hiddenColumns.Remove(captured);
+                    ApplyColumnLayout();
+                    SaveColumnLayout();
+                };
+                box.Unchecked += (s, args) =>
+                {
+                    _hiddenColumns.Add(captured);
+                    ApplyColumnLayout();
+                    SaveColumnLayout();
+                };
+                Grid.SetColumn(box, 0);
+
+                Button upButton = new()
+                {
+                    Content = new FontIcon { Glyph = "\uE70E", FontSize = 12 },
+                    Padding = new Microsoft.UI.Xaml.Thickness(6, 3, 6, 3),
+                    IsEnabled = i > 0,
+                };
+                // 附加属性在 C# 里要用 SetToolTip（不能写在对象初始化器里）
+                ToolTipService.SetToolTip(upButton, "前移（往左挪一列）");
+                int capturedIndex = i;
+                upButton.Click += (s, args) => MoveColumn(capturedIndex, -1);
+                Grid.SetColumn(upButton, 1);
+
+                Button downButton = new()
+                {
+                    Content = new FontIcon { Glyph = "\uE70D", FontSize = 12 },
+                    Padding = new Microsoft.UI.Xaml.Thickness(6, 3, 6, 3),
+                    IsEnabled = i < _columnOrder.Count - 1,
+                };
+                ToolTipService.SetToolTip(downButton, "后移（往右挪一列）");
+                downButton.Click += (s, args) => MoveColumn(capturedIndex, +1);
+                Grid.SetColumn(downButton, 2);
+
+                row.Children.Add(box);
+                row.Children.Add(upButton);
+                row.Children.Add(downButton);
+                ColumnToggleList.Children.Add(row);
+            }
+        }
+
+        /// <summary>把某一列前移（delta=-1）或后移（delta=+1）一格，立即生效并落盘。</summary>
+        private void MoveColumn(int index, int delta)
+        {
+            int target = index + delta;
+            if (index < 0 || index >= _columnOrder.Count || target < 0 || target >= _columnOrder.Count)
+            {
+                return;
+            }
+
+            (_columnOrder[target], _columnOrder[index]) = (_columnOrder[index], _columnOrder[target]);
+            ApplyColumnLayout();
+            SaveColumnLayout();
+            RebuildColumnToggleList();
+        }
+
+        /// <summary>「恢复默认列与顺序」：15 个默认列显示在原顺序，6 个可选列重新隐藏。</summary>
+        private void ColumnsResetButton_Click(object sender, RoutedEventArgs e)
+        {
+            _columnOrder = new List<string>(_allColumnKeys);
+            _hiddenColumns = new HashSet<string>(DefaultHiddenColumns, StringComparer.Ordinal);
+            ApplyColumnLayout();
+            SaveColumnLayout();
+            RebuildColumnToggleList();
+        }
+
+        /// <summary>
+        /// 列头模型按当前显示顺序（DisplayIndex）排——「排序…」面板里的字段下拉
+        /// 跟表格里的实际列序保持一致（用户调过列序后尤其明显）。
+        /// </summary>
+        private IEnumerable<TagColumnHeaderVm> OrderedHeaderVms()
+        {
+            return _headerVms
+                .Where(v => !string.IsNullOrEmpty(v.Key)
+                    && !string.Equals(v.Key, FillerColumnKey, StringComparison.Ordinal))
+                .OrderBy(v => FindColumnByKey(v.Key)?.DisplayIndex ?? int.MaxValue);
+        }
+
+        /// <summary>
+        /// 把每列的 Header 换成列头显示模型。列头文字仍以 XAML 里写的 Header 为准
+        /// （不在这里另建一份标签表，避免两处不同步）。
+        /// </summary>
+        private void SetupColumnHeaderModels()
+        {
+            _headerVms.Clear();
+            foreach (DataGridColumn column in TagFileGrid.Columns)
+            {
+                string key = column.Tag as string ?? string.Empty;
+                string label = column.Header as string ?? string.Empty;
+                TagColumnHeaderVm vm = new(key, label);
+                _headerVms.Add(vm);
+                column.Header = vm;
+            }
+        }
+
+        private void TagHeader_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            // 修饰键先存下来：真正排序可能在 Tapped 里执行，那里拿不到 KeyModifiers
+            _headerPressModifiers = e.KeyModifiers;
+            if (sender is UIElement element)
+            {
+                _headerPressPoint = e.GetCurrentPoint(element).Position;
+                _headerPressed = true;
+            }
+            // 不设 e.Handled：列头右侧的拖列宽把手要能照常工作
+        }
+
+        private void TagHeader_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_headerPressed || sender is not FrameworkElement element)
+            {
+                return;
+            }
+
+            _headerPressed = false;
+
+            // 拖列宽也是在列头上按下 → 移动 → 松手：位移超过 4px 判为拖拽，不排序
+            Windows.Foundation.Point p = e.GetCurrentPoint(element).Position;
+            if (Math.Abs(p.X - _headerPressPoint.X) > 4 || Math.Abs(p.Y - _headerPressPoint.Y) > 4)
+            {
+                return;
+            }
+
+            TagColumnHeaderVm? vm = VmOfHeaderSender(sender);
+            if (vm != null)
+            {
+                bool additive = (e.KeyModifiers & Windows.System.VirtualKeyModifiers.Control) != 0
+                    || (e.KeyModifiers & Windows.System.VirtualKeyModifiers.Shift) != 0;
+                SortFromHeader(vm, additive);
+            }
+        }
+
+        /// <summary>
+        /// 从事件 sender 反查是哪一列：列头元素（DataGridColumnHeader）的 Content 就是
+        /// 列头显示模型；列头内容模板里的 Grid 则走 DataContext。两种来源都支持——
+        /// 手势同时挂在「列头元素」和「模板内的 Grid」上，哪条路到了都能排上。
+        /// </summary>
+        private static TagColumnHeaderVm? VmOfHeaderSender(object sender)
+        {
+            if (sender is DataGridColumnHeader header)
+            {
+                return header.Content as TagColumnHeaderVm;
+            }
+
+            return (sender as FrameworkElement)?.DataContext as TagColumnHeaderVm;
+        }
+
+        /// <summary>
+        /// 兜底的一条路：万一 PointerReleased 被 DataGrid 自己吞掉（列头本来就要处理
+        /// 拖列宽等手势），Tapped 仍然能到。两条路都汇到这里，500ms 内只执行一次。
+        /// </summary>
+        private void TagHeader_Tapped(object sender, TappedRoutedEventArgs e)
+        {
+            TagColumnHeaderVm? vm = VmOfHeaderSender(sender);
+            if (vm != null)
+            {
+                bool additive = (_headerPressModifiers & Windows.System.VirtualKeyModifiers.Control) != 0
+                    || (_headerPressModifiers & Windows.System.VirtualKeyModifiers.Shift) != 0;
+                SortFromHeader(vm, additive);
+            }
+        }
+
+        /// <summary>
+        /// 列头点击排序 —— 事件挂在**整张表格**上，再用命中测试判断点中的是哪一列。
+        ///
+        /// 为什么不挂在列头元素（DataGridColumnHeader）上：三条路都试过，一次都没进来——
+        ///   ① 挂在列头内容模板里的元素上：默认模板根本不认 ContentTemplate，模板没被采用；
+        ///   ② 挂在列头元素上（普通 += ）：DataGrid 自己处理列头指针事件后标成"已处理"，
+        ///      普通订阅收不到；
+        ///   ③ 挂在列头元素上（AddHandler + handledEventsToo）：日志写着"已挂到 17 个列头"，
+        ///      点击照样一次都不进来（2026-10-14 实测）。
+        /// 而且列头实例会随数据变化被重建，挂在它上面迟早失效。
+        /// 挂在表格根上（handledEventsToo）+ 按坐标算列，与列头实例无关，稳。
+        /// </summary>
+        private void AttachColumnHeaderGestures()
+        {
+            TagFileGrid.AddHandler(UIElement.PointerPressedEvent,
+                new PointerEventHandler(TagGrid_PointerPressed), true);
+            TagFileGrid.AddHandler(UIElement.PointerReleasedEvent,
+                new PointerEventHandler(TagGrid_PointerReleased), true);
+            global::CelesteMusicPlayer.StartupLog.Write("TagPanel: 列头排序手势已挂（表格级命中测试）");
+        }
+
+        private void TagGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            _headerPressModifiers = e.KeyModifiers;
+            _headerPressPoint = e.GetCurrentPoint(TagFileGrid).Position;
+            _headerPressed = true;
+        }
+
+        private void TagGrid_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_headerPressed)
+            {
+                return;
+            }
+
+            _headerPressed = false;
+
+            Windows.Foundation.Point p = e.GetCurrentPoint(TagFileGrid).Position;
+            // 位移超过 4px = 拖列宽（或框选），不是点列头
+            if (Math.Abs(p.X - _headerPressPoint.X) > 4 || Math.Abs(p.Y - _headerPressPoint.Y) > 4)
+            {
+                return;
+            }
+
+            TagColumnHeaderVm? vm = HitTestHeaderColumn(p);
+            if (vm == null)
+            {
+                return; // 点在数据区，不管
+            }
+
+            bool additive = (_headerPressModifiers & Windows.System.VirtualKeyModifiers.Control) != 0
+                || (_headerPressModifiers & Windows.System.VirtualKeyModifiers.Shift) != 0;
+            SortFromHeader(vm, additive);
+        }
+
+        /// <summary>
+        /// 表格坐标 → 列头显示模型：先看点在不在列头那一行（高度 = ColumnHeaderHeight），
+        /// 再按各列实际宽度累加定位到列。列头面板的横向偏移用 TransformToVisual 现取，
+        /// 所以横向滚动 / 列宽拖动之后依然算得准。
+        /// </summary>
+        private TagColumnHeaderVm? HitTestHeaderColumn(Windows.Foundation.Point pointInGrid)
+        {
+            if (pointInGrid.Y < 0 || pointInGrid.Y > TagFileGrid.ColumnHeaderHeight)
+            {
+                return null;
+            }
+
+            double originX = 0;
+            if (FindDescendant<DataGridColumnHeadersPresenter>(TagFileGrid) is DataGridColumnHeadersPresenter presenter)
+            {
+                GeneralTransform transform = presenter.TransformToVisual(TagFileGrid);
+                originX = transform.TransformPoint(new Windows.Foundation.Point(0, 0)).X;
+            }
+
+            double x = pointInGrid.X - originX;
+            foreach (DataGridColumn column in TagFileGrid.Columns)
+            {
+                double width = column.ActualWidth;
+                if (x < width)
+                {
+                    return column.Header as TagColumnHeaderVm;
+                }
+
+                x -= width;
+            }
+
+            return null;
+        }
+
+        private void SortFromHeader(TagColumnHeaderVm vm, bool additive)
+        {
+            long now = Environment.TickCount64;
+            if (now - _lastSortTick < 500)
+            {
+                return;
+            }
+
+            _lastSortTick = now;
+            ToggleSortRule(vm, additive);
+        }
+
+        /// <summary>点一次列头：按上面的手势规则更新排序键并立即重排。</summary>
+        private void ToggleSortRule(TagColumnHeaderVm vm, bool additive)
+        {
+            // 诊断用：点列头到底进没进来、进来的是哪一列，日志里一眼能看到
+            global::CelesteMusicPlayer.StartupLog.Write($"TagPanel: 列头点击 → Key={vm.Key ?? "(null)"} additive={additive}");
+
+            if (string.IsNullOrEmpty(vm.Key) || vm.Key == "Filler")
+            {
+                return; // 末尾填充列不是真列，不参与排序（# 列允许：按当前行号排）
+            }
+
+            TagSortRule? existing = _sortRules.FirstOrDefault(r => string.Equals(r.Key, vm.Key, StringComparison.Ordinal));
+
+            if (!additive)
+            {
+                // 单键模式：这一列已经是唯一键时升 → 降 → 取消，否则重置为这一列
+                if (_sortRules.Count == 1 && existing != null)
+                {
+                    if (!existing.Descending)
+                    {
+                        existing.Descending = true;
+                    }
+                    else
+                    {
+                        _sortRules.Clear();
+                    }
+                }
+                else
+                {
+                    _sortRules.Clear();
+                    _sortRules.Add(new TagSortRule(vm.Key));
+                }
+            }
+            else if (existing == null)
+            {
+                _sortRules.Add(new TagSortRule(vm.Key));
+            }
+            else if (!existing.Descending)
+            {
+                existing.Descending = true;
+            }
+            else
+            {
+                _sortRules.Remove(existing);
+            }
+
+            ApplySort();
+        }
+
+        /// <summary>按当前排序键重排列表并刷新状态条（列头点击走这条）。</summary>
+        private void ApplySort()
+        {
+            ReorderFiles();
+            WriteSortStatus();
+        }
+
+        /// <summary>
+        /// 按当前排序键重排（不动状态条）。新文件加进来时走这条：
+        /// 已经排过序的列表，新文件要落到它该在的位置，而不是挂在最后。
+        /// </summary>
+        private void ReorderFiles()
+        {
+            // 1) 列头标记
+            foreach (TagColumnHeaderVm vm in _headerVms)
+            {
+                int ordinal = _sortRules.FindIndex(r => string.Equals(r.Key, vm.Key, StringComparison.Ordinal));
+                vm.SetSort(ordinal + 1, ordinal >= 0 && _sortRules[ordinal].Descending, _sortRules.Count);
+            }
+
+            // 2) 排
+            IEnumerable<TagFileItem> seq = _files;
+            if (_sortRules.Count == 0)
+            {
+                seq = _files.OrderBy(f => f.AddOrder);
+            }
+            else
+            {
+                bool first = true;
+                foreach (TagSortRule rule in _sortRules)
+                {
+                    Func<TagFileItem, object?> selector = SortSelector(rule.Key);
+                    if (first)
+                    {
+                        seq = rule.Descending
+                            ? seq.OrderByDescending(selector, TagSortComparer.Instance)
+                            : seq.OrderBy(selector, TagSortComparer.Instance);
+                        first = false;
+                    }
+                    else
+                    {
+                        IOrderedEnumerable<TagFileItem> ordered = (IOrderedEnumerable<TagFileItem>)seq;
+                        seq = rule.Descending
+                            ? ordered.ThenByDescending(selector, TagSortComparer.Instance)
+                            : ordered.ThenBy(selector, TagSortComparer.Instance);
+                    }
+                }
+            }
+
+            List<TagFileItem> sorted = seq.ToList();
+            bool unchanged = sorted.Count == _files.Count;
+            if (unchanged)
+            {
+                for (int i = 0; i < sorted.Count; i++)
+                {
+                    if (!ReferenceEquals(sorted[i], _files[i]))
+                    {
+                        unchanged = false;
+                        break;
+                    }
+                }
+            }
+
+            if (!unchanged)
+            {
+                // 保住选中：换数据源会清掉 SelectedItems
+                HashSet<string> selected = new(
+                    TagFileGrid.SelectedItems.Cast<TagFileItem>().Select(f => f.FilePath),
+                    StringComparer.OrdinalIgnoreCase);
+
+                // 先断开再挂回：避免 n 次集合通知把表格反复重建（文件多时很卡）
+                TagFileGrid.ItemsSource = null;
+                _files.Clear();
+                foreach (TagFileItem item in sorted)
+                {
+                    _files.Add(item);
+                }
+
+                TagFileGrid.ItemsSource = _files;
+                Renumber();
+
+                foreach (TagFileItem item in _files)
+                {
+                    if (selected.Contains(item.FilePath))
+                    {
+                        TagFileGrid.SelectedItems.Add(item);
+                    }
+                }
+
+                RefreshGridRowsChrome();
+            }
+
+            global::CelesteMusicPlayer.StartupLog.Write("TagPanel: 排序 → "
+                + (_sortRules.Count == 0 ? "取消（回到添加顺序）" : string.Join(" , ", _sortRules.Select(r => r.Key + (r.Descending ? " desc" : " asc")))));
+        }
+
+        // =====================================================================
+        // 排序面板（2026-10-14）：列头点击那条路放弃了，改成工具条上的「排序…」按钮
+        // 弹出小面板。面板里每一行 = 一级排序键：选字段 + 升/降 + 上移 + 删除，
+        // 行在列表里的上下顺序就是排序的优先顺序（mp3tag 的排序对话框也是这个意思）。
+        // =====================================================================
+
+        private void SortFlyout_Opening(object sender, object e)
+        {
+            RebuildSortRuleList();
+        }
+
+        private void RebuildSortRuleList()
+        {
+            SortRuleList.Children.Clear();
+
+            if (_sortRules.Count == 0)
+            {
+                SortRuleList.Children.Add(new TextBlock
+                {
+                    Text = "还没设置排序，现在是添加进来时的顺序。",
+                    FontSize = 12,
+                    Opacity = 0.6,
+                    TextWrapping = TextWrapping.WrapWholeWords
+                });
+                return;
+            }
+
+            for (int i = 0; i < _sortRules.Count; i++)
+            {
+                SortRuleList.Children.Add(BuildSortRuleRow(_sortRules[i], i));
+            }
+        }
+
+        private FrameworkElement BuildSortRuleRow(TagSortRule rule, int index)
+        {
+            Grid grid = new() { ColumnSpacing = 6 };
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+
+            ComboBox combo = new() { HorizontalAlignment = HorizontalAlignment.Stretch, MinWidth = 160 };
+            foreach (TagColumnHeaderVm vm in OrderedHeaderVms())
+            {
+                combo.Items.Add(new ComboBoxItem { Content = vm.Label, Tag = vm.Key });
+                if (string.Equals(vm.Key, rule.Key, StringComparison.Ordinal))
+                {
+                    combo.SelectedIndex = combo.Items.Count - 1;
+                }
+            }
+
+            combo.SelectionChanged += (_, _) =>
+            {
+                if ((combo.SelectedItem as ComboBoxItem)?.Tag is string key && !string.Equals(key, rule.Key, StringComparison.Ordinal))
+                {
+                    rule.Key = key;
+                    ApplySort();
+                    RebuildSortRuleList();
+                }
+            };
+            Grid.SetColumn(combo, 0);
+
+            Button dirButton = new()
+            {
+                Content = rule.Descending ? "降序 ↓" : "升序 ↑",
+                Padding = new Microsoft.UI.Xaml.Thickness(8, 4, 8, 4)
+            };
+            dirButton.Click += (_, _) =>
+            {
+                rule.Descending = !rule.Descending;
+                ApplySort();
+                RebuildSortRuleList();
+            };
+            Grid.SetColumn(dirButton, 1);
+
+            Button upButton = new()
+            {
+                Content = "↑",
+                Padding = new Microsoft.UI.Xaml.Thickness(8, 4, 8, 4),
+                IsEnabled = index > 0
+            };
+            // 附加属性在 C# 里要用 SetToolTip（不能写在对象初始化器里）
+            ToolTipService.SetToolTip(upButton, "提高一级（行号越小越优先）");
+            upButton.Click += (_, _) =>
+            {
+                if (index <= 0 || index >= _sortRules.Count || !ReferenceEquals(_sortRules[index], rule))
+                {
+                    return;
+                }
+
+                _sortRules.RemoveAt(index);
+                _sortRules.Insert(index - 1, rule);
+                ApplySort();
+                RebuildSortRuleList();
+            };
+            Grid.SetColumn(upButton, 2);
+
+            Button delButton = new()
+            {
+                Content = "×",
+                Padding = new Microsoft.UI.Xaml.Thickness(10, 4, 10, 4)
+            };
+            ToolTipService.SetToolTip(delButton, "去掉这一级");
+            delButton.Click += (_, _) =>
+            {
+                _sortRules.Remove(rule);
+                ApplySort();
+                RebuildSortRuleList();
+            };
+            Grid.SetColumn(delButton, 3);
+
+            grid.Children.Add(combo);
+            grid.Children.Add(dirButton);
+            grid.Children.Add(upButton);
+            grid.Children.Add(delButton);
+            return grid;
+        }
+
+        private void SortAddRuleButton_Click(object sender, RoutedEventArgs e)
+        {
+            string? nextKey = null;
+            foreach (TagColumnHeaderVm vm in OrderedHeaderVms())
+            {
+                if (!_sortRules.Any(r => string.Equals(r.Key, vm.Key, StringComparison.Ordinal)))
+                {
+                    nextKey = vm.Key;
+                    break;
+                }
+            }
+
+            if (nextKey == null)
+            {
+                return; // 每一列都排上了，没得再加
+            }
+
+            _sortRules.Add(new TagSortRule(nextKey));
+            ApplySort();
+            RebuildSortRuleList();
+        }
+
+        private void SortClearRulesButton_Click(object sender, RoutedEventArgs e)
+        {
+            _sortRules.Clear();
+            ApplySort();
+            RebuildSortRuleList();
+        }
+
+        /// <summary>状态条说清「现在按什么排」（用户看得见，不用猜）。</summary>
+        private void WriteSortStatus()
+        {
+            if (_sortRules.Count == 0)
+            {
+                TagStatusText.Text = "排序已取消，列表回到添加时的顺序。";
+                return;
+            }
+
+            IEnumerable<string> parts = _sortRules.Select(r =>
+                HeaderLabelOf(r.Key) + (r.Descending ? " ↓" : " ↑"));
+            TagStatusText.Text = "排序：" + string.Join(" → ", parts)
+                + "（Ctrl / Shift + 点列头 = 加下一级排序）";
+        }
+
+        /// <summary>列 Tag → 排序取值（数值列返回数值，不按格式化文本排）。</summary>
+        private static Func<TagFileItem, object?> SortSelector(string key) => key switch
+        {
+            "Index" => f => f.Index,
+            "Title" => f => f.Title,
+            "Artist" => f => f.Artist,
+            "Album" => f => f.Album,
+            "Year" => f => f.Year,
+            "Track" => f => f.Track,
+            "Genre" => f => f.Genre,
+            "Duration" => f => f.Duration,
+            "FileName" => f => f.FileName,
+            "Format" => f => f.FormatName,
+            "BitDepth" => f => f.BitDepthBits,
+            "SampleRate" => f => f.SampleRateHz,
+            "Bitrate" => f => f.Kbps,
+            "FileSize" => f => f.FileSizeBytes,
+
+            // 可选列（默认隐藏，「列…」里勾出来）：文字列按文字排，数值列按原始数值排
+            "AlbumArtist" => f => f.AlbumArtist,
+            "Composer" => f => f.ComposerText,
+            "Disc" => f => f.DiscSortKey,
+            "TrackCount" => f => f.TrackCountSortKey,
+            "Bpm" => f => f.BpmSortKey,
+            "Comment" => f => f.CommentText,
+            _ => f => f.AddOrder
+        };
+
+        private string HeaderLabelOf(string key)
+        {
+            foreach (TagColumnHeaderVm vm in _headerVms)
+            {
+                if (string.Equals(vm.Key, key, StringComparison.Ordinal))
+                {
+                    return vm.Label;
+                }
+            }
+
+            return key;
+        }
+
+        /// <summary>
+        /// 排序比较：文字按中文习惯忽略大小写比，数值 / 时长按大小比，
+        /// 空值（读不出来的字段）始终排在升序的最前面。
+        /// </summary>
+        private sealed class TagSortComparer : IComparer<object?>
+        {
+            public static readonly TagSortComparer Instance = new();
+
+            public int Compare(object? a, object? b)
+            {
+                if (a is string sa && b is string sb)
+                {
+                    return string.Compare(sa, sb, StringComparison.CurrentCultureIgnoreCase);
+                }
+
+                if (a is null)
+                {
+                    return b is null ? 0 : -1;
+                }
+
+                if (b is null)
+                {
+                    return 1;
+                }
+
+                return (a as IComparable)?.CompareTo(b) ?? 0;
             }
         }
 
@@ -2091,11 +3993,23 @@ namespace CelesteMusicPlayer
             _panelReady = true;
             try
             {
+                // 先给列头装上显示模型（列头文字 + 排序标记），排序手势才有落点
+                SetupColumnHeaderModels();
                 SetupDataGridChrome();
             }
             catch (Exception caught)
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.Loaded.table", caught);
+            }
+
+            try
+            {
+                // 恢复上次的列顺序与显隐（mp3tag 式「列显示」，含前移后移）
+                LoadColumnLayout();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.Loaded.columns", caught);
             }
         }
 
@@ -2122,8 +4036,21 @@ namespace CelesteMusicPlayer
             RefreshGridRowsChrome();
         }
 
-        private static readonly Brush TagFallbackAccentBrush =
-            new SolidColorBrush(Windows.UI.Color.FromArgb(255, 0, 120, 212));
+        /// <summary>
+        /// 兜底强调色（纯色值，**不是画刷**）。
+        ///
+        /// ⚠ 这里绝不能写 <c>static readonly Brush X = new SolidColorBrush(...)</c>：
+        /// 静态字段初始化跑在「第一次触碰本类型」的那条线程上，而本类型的首次触碰
+        /// 很可能发生在后台线程（AddFolderButton_Click → Task.Run → EnumerateAudioFiles
+        /// 里读 TagAudioExtensions）。DependencyObject（含 SolidColorBrush）只能在 UI
+        /// 线程创建，后台线程创建会抛异常 → 类型初始化失败 → CLR 把这个类型永久标记
+        /// 为不可用 → 之后连 UI 线程上的「添加文件 / 添加文件夹」都跟着
+        /// TypeInitializationException（2026-10-14 用户实测「读不出文件夹」的真根因：
+        /// lib 日志里连着 6 条 TagPanelControl 类型初始化失败）。
+        /// 所以静态成员只留纯值，画刷在用到的时候 new（调用点全在 UI 线程）。
+        /// </summary>
+        private static readonly Windows.UI.Color TagFallbackAccentColor =
+            Windows.UI.Color.FromArgb(255, 0, 120, 212);
 
         /// <summary>取注入的强调色刷（拿不到 / 抛异常时退回默认蓝）。</summary>
         private Brush ResolveTagAccentBrush()
@@ -2140,7 +4067,7 @@ namespace CelesteMusicPlayer
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ResolveTagAccentBrush", caught);
             }
-            return TagFallbackAccentBrush;
+            return new SolidColorBrush(TagFallbackAccentColor);
         }
 
         /// <summary>
@@ -2200,7 +4127,7 @@ namespace CelesteMusicPlayer
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ResolveTagAccentColor", caught);
             }
-            return Windows.UI.Color.FromArgb(255, 0, 120, 212);
+            return TagFallbackAccentColor;
         }
 
         /// <summary>行实现（新行 / 回收行复用）时按当前选中态盖章选中外观。</summary>
@@ -2330,6 +4257,34 @@ namespace CelesteMusicPlayer
         /// <summary>文件大小（4.2 MB / 812 KB / 340 B）。</summary>
         public string FileSizeText { get; set; } = "-";
 
+        // ---------- 可选列（默认隐藏，「列…」里勾出来才显示） ----------
+        // 显示文本与排序数值分开：文本给界面，数值给列头排序（不然 "10" 会排到 "9" 前）。
+
+        /// <summary>作曲家（多值取第一个；空 = 这个文件没写）。</summary>
+        public string ComposerText { get; set; } = string.Empty;
+
+        /// <summary>注释。</summary>
+        public string CommentText { get; set; } = string.Empty;
+
+        /// <summary>非同步歌词（UNSYNCEDLYRICS）。</summary>
+        public string LyricsText { get; set; } = string.Empty;
+
+        /// <summary>BPM（速度）。</summary>
+        public string BpmText { get; set; } = string.Empty;
+
+        /// <summary>曲目总数（"5/10" 的 10）。</summary>
+        public string TrackCountText { get; set; } = string.Empty;
+
+        /// <summary>碟片号（有碟片总数时显示成 "1/2"）。</summary>
+        public string DiscText { get; set; } = string.Empty;
+
+        /// <summary>排序用的原始数值（没有就 long.MinValue，永远排最后）。</summary>
+        public long BpmSortKey { get; set; } = long.MinValue;
+
+        public long TrackCountSortKey { get; set; } = long.MinValue;
+
+        public long DiscSortKey { get; set; } = long.MinValue;
+
         /// <summary>
         /// 格内编辑代理：年份 / 曲目号编辑框的显示值。YearText/TrackText 未知时
         /// 显示 "-"，编辑框里不能是 "-"，所以单列这两个代理；BuildEntry 按真实值
@@ -2338,5 +4293,118 @@ namespace CelesteMusicPlayer
         public string YearEdit { get; set; } = string.Empty;
 
         public string TrackEdit { get; set; } = string.Empty;
+
+        // =====================================================================
+        // 列头排序用（2026-10-14 新增）
+        // =====================================================================
+
+        /// <summary>加入列表的先后顺序（1 起）。取消排序后回到这个顺序。</summary>
+        public int AddOrder { get; set; }
+
+        /// <summary>
+        /// 排序用的原始数值。派生列（采样率 / 位深 / 码率 / 大小）显示的是格式化
+        /// 文本（"44.1kHz"、"1411kbps"、"4.2 MB"），按文本排会把 1411 排到 320 前
+        /// 面、2.82MHz 排到 96kHz 前面，所以这几个列必须按原始数值排。
+        /// </summary>
+        public int SampleRateHz { get; set; }
+
+        public int BitDepthBits { get; set; }
+
+        public int Kbps { get; set; }
+
+        public long FileSizeBytes { get; set; }
+    }
+
+    /// <summary>
+    /// 列头显示模型：列名 + 排序标记（箭头；多列排序时前面带 1、2、3 优先级序号）。
+    /// 挂在 DataGridColumn.Header 上，由 TagGridHeaderTemplate 渲染。
+    /// 为什么要它：DataGrid 原生排序只认单列，多列排序要自己排，那么「现在按哪几列排、
+    /// 各自升还是降」这个状态也得自己画在列头上——列头文字继续用 XAML 里写的 Header
+    /// 原文，这里只加排序标记，不另建一份列名表。
+    /// </summary>
+    public sealed class TagColumnHeaderVm : INotifyPropertyChanged
+    {
+        private string _sortMark = string.Empty;
+        private bool _isSorted;
+
+        public TagColumnHeaderVm(string key, string label)
+        {
+            Key = key;
+            Label = label;
+        }
+
+        /// <summary>列标识（= XAML 里 DataGridColumn 的 Tag）。</summary>
+        public string Key { get; }
+
+        /// <summary>列名（= XAML 里写的 Header 原文）。</summary>
+        public string Label { get; }
+
+        /// <summary>排序标记文本："" / "▲" / "▼" / "1▲" / "2▼"。</summary>
+        public string SortMark
+        {
+            get => _sortMark;
+            private set
+            {
+                if (_sortMark == value)
+                {
+                    return;
+                }
+
+                _sortMark = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SortMark)));
+            }
+        }
+
+        /// <summary>这一列当前是否参与排序（列头文字加亮用）。</summary>
+        public bool IsSorted
+        {
+            get => _isSorted;
+            private set
+            {
+                if (_isSorted == value)
+                {
+                    return;
+                }
+
+                _isSorted = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsSorted)));
+            }
+        }
+
+        /// <summary>
+        /// 兜底：万一某个列头没走我们的内容模板（直接把对象当文本渲染），
+        /// 至少显示的是列名，而不是类名。
+        /// </summary>
+        public override string ToString() => Label;
+
+        public void SetSort(int ordinal, bool descending, int totalRules)
+        {
+            if (ordinal <= 0)
+            {
+                IsSorted = false;
+                SortMark = string.Empty;
+                return;
+            }
+
+            IsSorted = true;
+            string arrow = descending ? "▼" : "▲";
+            SortMark = totalRules > 1 ? ordinal + arrow : arrow;
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+    }
+
+    /// <summary>一条排序规则（哪列 + 降序与否）。列表里的先后顺序 = 优先级。</summary>
+    internal sealed class TagSortRule
+    {
+        public TagSortRule(string key, bool descending = false)
+        {
+            Key = key;
+            Descending = descending;
+        }
+
+        public string Key { get; set; }
+
+        public bool Descending { get; set; }
     }
 }

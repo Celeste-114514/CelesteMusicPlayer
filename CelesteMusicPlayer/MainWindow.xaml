@@ -7814,7 +7814,8 @@
             Grid.Row="3"
             MinHeight="70"
             Margin="16,6,16,10"
-            ColumnSpacing="14">
+            ColumnSpacing="14"
+            SizeChanged="BottomTransportBar_SizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" MinWidth="140" />
@@ -7905,11 +7906,13 @@
 
             <!-- 歌曲信息 -->
             <StackPanel
+                x:Name="TransportInfoPanel"
                 Grid.Column="1"
                 MinWidth="140"
                 MaxWidth="240"
                 VerticalAlignment="Center"
-                Spacing="4">
+                Spacing="4"
+                SizeChanged="TransportInfoPanel_SizeChanged">
                 <TextBlock
                     x:Name="TransportTitleText"
                     FontSize="15"
@@ -7942,10 +7945,19 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
 
-                <Grid ColumnSpacing="8">
+                <!-- 2026-10-14 用户要求：进度条不再随窗口宽度伸缩 —— 固定长度，并且
+                     以主界面左右中轴为对称轴左右对称（原来中间列是 Width="*"，窗口越大
+                     进度条越长，而且它只在右侧「播放控制区」内部居中，整体偏右）。
+                     Margin 里的负偏移由代码 UpdateTransportProgressCentering() 按左侧
+                     「封面 + 歌曲信息」的实际宽度算，保证中心落在整条播放栏的中轴上。 -->
+                <Grid
+                    x:Name="ProgressRowGrid"
+                    ColumnSpacing="8"
+                    HorizontalAlignment="Center"
+                    SizeChanged="ProgressRowGrid_SizeChanged">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="660" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
@@ -7983,11 +7995,15 @@
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
+                    <!-- 播放顺序 → 更多：这一排按钮也以主界面中轴为对称轴居中
+                         （负 Margin 由 UpdateTransportProgressCentering 计算） -->
                     <StackPanel
+                        x:Name="TransportMainButtonsPanel"
                         Grid.Column="0"
                         Orientation="Horizontal"
                         Spacing="4"
-                        HorizontalAlignment="Center">
+                        HorizontalAlignment="Center"
+                        SizeChanged="TransportMainButtonsPanel_SizeChanged">
                         <Button CornerRadius="16"
                             x:Name="PlaybackOrderButton"
                             Width="40"
@@ -8130,19 +8146,21 @@
                             Visibility="Collapsed"
                             Style="{StaticResource AccentButtonStyle}"
                             Click="AddToLibraryButton_Click"
-                            ToolTipService.ToolTip="把当前播放的这首歌加入音乐库">
+                            ToolTipService.ToolTip="音乐库只按文件夹收录：把这个文件所在的整个文件夹加进音乐库">
                             <StackPanel Orientation="Horizontal" Spacing="6">
                                 <FontIcon x:Name="AddToLibraryIcon" Glyph="&#xE710;" FontSize="14" />
-                                <TextBlock x:Name="AddToLibraryText" Text="添加到音乐库" VerticalAlignment="Center" />
+                                <TextBlock x:Name="AddToLibraryText" Text="文件夹加入音乐库" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
                     </StackPanel>
 
                     <StackPanel
+                        x:Name="TransportRightButtonsPanel"
                         Grid.Column="1"
                         Orientation="Horizontal"
                         Spacing="8"
-                        VerticalAlignment="Center">
+                        VerticalAlignment="Center"
+                        SizeChanged="TransportRightButtonsPanel_SizeChanged">
                         <Button CornerRadius="16"
                             x:Name="MiniPlayerButton"
                             Width="40"

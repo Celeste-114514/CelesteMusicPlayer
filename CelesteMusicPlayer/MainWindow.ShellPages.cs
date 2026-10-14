@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -351,6 +352,10 @@ namespace CelesteMusicPlayer
                 _tagPanel = new TagPanelControl(() => DspAccentBrush(), _mainWindowHwnd);
                 // 标签写盘后刷新曲库元数据（取代旧 TagEditorWindow.TagsSaved）
                 _tagPanel.TagsSaved += OnTagsSaved;
+                // 「排序编号」页的三个加入动作（面板只发路径，主窗口负责落地）
+                _tagPanel.PlayQueueAddRequested += OnTagPanelPlayQueueAdd;
+                _tagPanel.LibraryAddRequested += OnTagPanelLibraryAdd;
+                _tagPanel.NamedPlaylistAddRequested += OnTagPanelNamedPlaylistAdd;
                 TagPanelHost.Children.Add(_tagPanel);
             }
             catch (Exception ex)
@@ -358,6 +363,142 @@ namespace CelesteMusicPlayer
                 StartupLog.WriteException("EnsureTagEditUiBuilt", ex);
             }
         }
+
+        /// <summary>
+        /// 标签面板「排序编号」页 → 加入播放队列（按面板里排好的顺序）。
+        /// 播放队列允许库外的歌，所以直接用路径构造播放条目追加，不碰音乐库——
+        /// GetOrImportTracksByPaths 会把缺失路径写进 ManualLibraryFiles（污染曲库），必须绕开。
+        /// </summary>
+        private async void OnTagPanelPlayQueueAdd(IReadOnlyList<string> paths)
+        {
+            try
+            {
+                List<string> valid = (paths ?? Array.Empty<string>())
+                    .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (valid.Count == 0)
+                {
+                    NowPlayingText.Text = "没有可加入播放队列的文件。";
+                    return;
+                }
+
+                List<PlaylistItem> items = await System.Threading.Tasks.Task.Run(
+                    () => valid.Select(BuildItemFromTag).ToList());
+                AddSongsToUserPlaylist(items);
+                NowPlayingText.Text = $"已加入播放队列 {items.Count} 首（当前队列 {_userPlaylist.Count} 首）";
+                StartupLog.Write("排序编号页加入播放队列: " + items.Count + " 首");
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("OnTagPanelPlayQueueAdd", ex);
+            }
+        }
+
+
+        /// <summary>
+        /// 标签面板「排序编号」页 → 加入音乐库。
+        /// 音乐库只按文件夹收录：先看这些文件所在的文件夹有没有被 LibraryWatchFolders 收录，
+        /// 有没收录的就问用户要不要一起入库；是→逐文件夹入库，否→取消（音乐库不受影响）。
+        /// </summary>
+        private async void OnTagPanelLibraryAdd(IReadOnlyList<string> paths)
+        {
+            try
+            {
+                List<string> valid = (paths ?? Array.Empty<string>())
+                    .Where(p => !string.IsNullOrWhiteSpace(p) && File.Exists(p))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                if (valid.Count == 0)
+                {
+                    NowPlayingText.Text = "没有可加入音乐库的文件。";
+                    return;
+                }
+
+                // 收集去重后的所在文件夹（保序）
+                List<string> folders = new();
+                foreach (string p in valid)
+                {
+                    string? dir = Path.GetDirectoryName(p);
+                    if (string.IsNullOrWhiteSpace(dir) || !Directory.Exists(dir))
+                    {
+                        continue;
+                    }
+                    if (!folders.Contains(dir, StringComparer.OrdinalIgnoreCase))
+                    {
+                        folders.Add(dir);
+                    }
+                }
+                if (folders.Count == 0)
+                {
+                    NowPlayingText.Text = "找不到这些文件所在的文件夹，没法按文件夹入库。";
+                    return;
+                }
+
+                AppSettingsState settings = AppSettingsStore.Load();
+                List<string> watch = settings.LibraryWatchFolders ?? new List<string>();
+                List<string> missing = folders
+                    .Where(f => !watch.Contains(f, StringComparer.OrdinalIgnoreCase))
+                    .ToList();
+
+                if (missing.Count == 0)
+                {
+                    // 文件夹全都已被收录，不用再问也不用再入
+                    NowPlayingText.Text = $"这些歌所在的文件夹已全部在音乐库里（共 {folders.Count} 个）";
+                    return;
+                }
+
+                string names = string.Join("\n", missing.Select(f => "· " + f));
+                var dialog = new ContentDialog
+                {
+                    Title = "要把这些文件夹一起加进音乐库吗？",
+                    Content = new TextBlock
+                    {
+                        Text = "音乐库只按文件夹收录。这些歌所在的文件夹还没有被收录：\n" + names +
+                               "\n\n选「是」会把这些文件夹整个加进音乐库；选「否」取消（音乐库不受影响）。",
+                        TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
+                    },
+                    PrimaryButtonText = "是，一起入库",
+                    CloseButtonText = "否，取消",
+                    DefaultButton = ContentDialogButton.Primary,
+                    XamlRoot = this.Content?.XamlRoot,
+                };
+                ColorHelper.ApplyDialogAccent(dialog);
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                {
+                    NowPlayingText.Text = "已取消，没有文件夹加入音乐库。";
+                    return;
+                }
+
+                foreach (string folder in missing)
+                {
+                    await AddFolderToLibraryAsync(folder);
+                }
+
+                NowPlayingText.Text = missing.Count == 1
+                    ? $"已把文件夹加入音乐库：{missing[0]}"
+                    : $"已把 {missing.Count} 个文件夹加入音乐库";
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("OnTagPanelLibraryAdd", ex);
+            }
+        }
+
+
+        /// <summary>标签面板「排序编号」页 → 加入播放列表（命名单）。命名单只存路径，库外的歌也能进。</summary>
+        private void OnTagPanelNamedPlaylistAdd(IReadOnlyList<string> paths)
+        {
+            try
+            {
+                _ = AddPathsToNamedPlaylistAsync(paths ?? Array.Empty<string>());
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("OnTagPanelNamedPlaylistAdd", ex);
+            }
+        }
+
 
         /// <summary>主题 / 皮肤切换后重刷标签板块子导航的强调条。</summary>
         internal void ReapplyTagPanelAccent()

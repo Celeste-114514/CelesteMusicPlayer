@@ -997,6 +997,84 @@ namespace CelesteMusicPlayer
             RedrawProgressStyle();
         }
 
+        /// <summary>
+        /// 进度条居中（2026-10-14 用户要求：以主界面左右中轴为对称轴左右对称）。
+        /// 进度条改成固定长度后，它只是在右侧「播放控制区」内部居中，整体是偏右的；
+        /// 所以按左侧「封面 + 歌曲信息」的实际宽度给一个负的左偏移，把它的中心
+        /// 挪到整条播放栏（也就是主界面）的中轴上。宽度随内容变，所以每次尺寸变化都重算。
+        /// </summary>
+        private void UpdateTransportProgressCentering()
+        {
+            if (ProgressRowGrid == null || TransportInfoPanel == null)
+            {
+                return;
+            }
+
+            CenterOnTransportAxis(ProgressRowGrid);
+            CenterOnTransportAxis(TransportMainButtonsPanel);
+        }
+
+        /// <summary>
+        /// 把一个元素平移到「播放栏的正中」。
+        ///
+        /// 不手算左右各占了多宽（那套算错一次就偏，2026-10-14 试过）：直接量——
+        /// 先用 TransformToVisual 求出元素中心当前相对播放栏的坐标，减掉现 Margin 得到
+        /// "不做偏移时"的中心，再一次性算出让它落在播放栏中线所需的 Margin。
+        /// 与封面宽度、歌名长短、右侧按钮多少全都无关，量几次都不会累积误差。
+        /// </summary>
+        private void CenterOnTransportAxis(FrameworkElement? element)
+        {
+            if (element == null || BottomTransportBar == null)
+            {
+                return;
+            }
+
+            if (BottomTransportBar.ActualWidth <= 0 || element.ActualWidth <= 0)
+            {
+                return; // 还没布局完，等下一次 SizeChanged
+            }
+
+            GeneralTransform transform = element.TransformToVisual(BottomTransportBar);
+            double centerNow = transform.TransformPoint(
+                new Windows.Foundation.Point(element.ActualWidth / 2, 0)).X;
+            double centerWithoutMargin = centerNow - element.Margin.Left;
+            double wanted = BottomTransportBar.ActualWidth / 2;
+            double newLeft = wanted - centerWithoutMargin;
+
+            // 差不到 0.5px 就别动：避免改 Margin 又触发一轮布局，来回抖
+            if (Math.Abs(newLeft - element.Margin.Left) < 0.5)
+            {
+                return;
+            }
+
+            element.Margin = new Microsoft.UI.Xaml.Thickness(newLeft, 0, 0, 0);
+        }
+
+        private void ProgressRowGrid_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        {
+            UpdateTransportProgressCentering();
+        }
+
+        private void TransportMainButtonsPanel_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        {
+            UpdateTransportProgressCentering();
+        }
+
+        private void TransportRightButtonsPanel_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        {
+            UpdateTransportProgressCentering();
+        }
+
+        private void BottomTransportBar_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        {
+            UpdateTransportProgressCentering();
+        }
+
+        private void TransportInfoPanel_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        {
+            UpdateTransportProgressCentering();
+        }
+
 
         /// <summary>按设置的样式重绘进度条(4 种可切换)。</summary>
         private void RedrawProgressStyle()

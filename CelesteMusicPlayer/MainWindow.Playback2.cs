@@ -1896,6 +1896,24 @@ namespace CelesteMusicPlayer
                 .ToList();
             if (paths.Count == 0) return;
 
+            await AddPathsToNamedPlaylistAsync(paths);
+        }
+
+
+        /// <summary>
+        /// 按路径弹“添加到播放列表”选择器：选命名单或新建，把路径追加进去。
+        /// 命名单只存路径，不碰音乐库，所以库外的歌也能进（标签面板「排序编号」页走这条）。
+        /// </summary>
+        internal async System.Threading.Tasks.Task AddPathsToNamedPlaylistAsync(IReadOnlyList<string> paths)
+        {
+            if (paths == null || paths.Count == 0) return;
+
+            var distinct = paths
+                .Where(p => !string.IsNullOrWhiteSpace(p))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (distinct.Count == 0) return;
+
             var prompt = new TextBlock
             {
                 Text = "选择要添加到的播放列表：",
@@ -1938,12 +1956,12 @@ namespace CelesteMusicPlayer
 
             var merged = NamedPlaylistStore
                 .LoadSongs(target)
-                .Concat(paths)
+                .Concat(distinct)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
             NamedPlaylistStore.SaveSongs(target, merged);
             PlaylistLibraryService.Refresh();
-            StartupLog.Write("已添加到播放列表: " + target + " (+" + paths.Count + " 首)");
+            StartupLog.Write("已添加到播放列表: " + target + " (+" + distinct.Count + " 首)");
         }
 
 

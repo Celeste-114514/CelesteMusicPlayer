@@ -677,6 +677,9 @@ namespace CelesteMusicPlayer
             PlaylistDetailBorder.Visibility = Visibility.Collapsed;
             AudioFxBorder.Visibility = Visibility.Collapsed;
             SettingsBorder.Visibility = Visibility.Collapsed;
+            // ⚠ 标签板块（2026-10-13 并入时漏了这一行）：切到别的分类时没人把它收起来，
+            // 于是标签面板会一直叠在其它页面内容上（2026-10-14 用户实测）。
+            TagEditBorder.Visibility = Visibility.Collapsed;
             RatingFilterPanel.Visibility = Visibility.Collapsed;
 
             switch (_currentCategory)

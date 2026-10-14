@@ -2423,7 +2423,10 @@ namespace CelesteMusicPlayer
                 double bh = Math.Max(2, _waveformData[i] * h * 0.95);
                 var rect = new Shapes.Rectangle
                 {
-                    Width = Math.Max(1, barW - 1),
+                    // 柱间留白（2026-10-14 用户要求"每条之间稍微宽一点点"）：原来是 1px 缝。
+                    // ⚠ 别改太大：进度条总宽固定后 barW 本来就不大，缝一宽柱子就被压成细线
+                    // （试过 2px，柱子全变成 1px 细丝）。1.5px 是"看得出缝又不吃柱子"的平衡点。
+                    Width = Math.Max(1, barW - 1.5),
                     Height = bh,
                     RadiusX = 1,
                     RadiusY = 1

@@ -43,6 +43,12 @@
 - 阶段六快照回滚：保存前逐文件 ReadTag 存原值→逐个写→任一失败把已成功的写回；SaveTag 返 bool。
 - 阶段七批量工具（89e579f）：六工具=文件名→标签（默认只填空）/标签→文件名重命名（先算名不碰文件、冲突跳过、失败整体改回）/文本替换（可正则）/大小写/自动编号（起始+步长写曲目号，格式存不了前导零故无位数）/清空文字标签（留封面）/移除内嵌封面。统一执行器 RunBatchWithRollbackAsync；作用范围=选中项，没选=整个列表。⚠ ReadTag 带文件名兜底，批量工具取真值必须用 ReadTagRaw（本次新增），否则「只填空」被误判没改动整个跳过。
 
+## toolkit DataGrid 列头（2026-10-14 实测，别再踩）
+- ⚠ **DataGridColumnHeader 默认模板不绑定 ContentTemplate**：只在 Style 里设 `ContentTemplate` 完全无效，Header 对象被当文本渲染（只显示 ToString()）。后果=挂在自定义模板上的点击手势**一次都不触发**（"点列头没反应"就是这么来的）。想改列头长相必须**整个换 ControlTemplate**，在模板里的 ContentPresenter 上显式写 `ContentTemplate="{StaticResource ...}"`。
+- 默认模板右侧常驻一块排序图标位：深色主题下就是竖线左边那块**白斑**，既挡列名又吃列宽（"列头文字显示不全"的真凶）。自写模板只留「列名+排序标记」+ 右侧 1px 分隔线。
+- 自写 ControlTemplate 必须保留 `x:Name="VerticalSeparator"` 与 `x:Name="SortIcon"` 两个部件（toolkit 内部按名字找，VSM/代码可能引用）；排序图标自己 Collapsed，排序标记自己画。
+- 列头点击排序：PointerPressed 存 `e.KeyModifiers` + PointerReleased 判位移（>4px = 拖列宽不排序），**再挂 Tapped 兜底**（万一 PointerReleased 被 DataGrid 吞掉），两条路汇到 SortFromHeader 并用 500ms 去重，免得一次点击切两级。
+
 ## 工程约定
 - 用户不懂编程：大白话结论先行，禁营销腔。bit-perfect 铁律。推送：不 rebase/force-push、不 git add -A；commit 独立可回退；构建过才推。安装包只在用户说「发新版」时打；日常交付=dist\run-latest\。
 - 版本号=日期命名；发版前 git log <上tag>..HEAD 逐条过完再写日志。
@@ -56,4 +62,6 @@
 - run-latest 必须自包含发布：`dotnet publish -c Release -r win-x64 -p:Platform=x64 -p:WindowsPackageType=None -p:CelesteSelfContainedDistribute=true -p:EnableSourceControlManagerQueries=false`（约 625 文件）。⚠ 换形态前先清空 dist\run-latest 再全量拷（残留旧 hostfxr/hostpolicy 会带歪运行时）。
 - CI：push main/tag v* 均触发 ci.yml 自动打包建 release；本地构建只作冒烟，发版走 CI。IL 判据以 icacls 实查为准（「无标签」才是正确状态）。
 - ⚠ publish 偶发挂住 10+ 分钟 CPU 几乎不动（环境性非代码，2026-10-13 连遇两次）：流式读 `p.stdout` 在子进程不输出时永久阻塞、timeout 形同虚设→必须 `communicate(timeout=~540)` 超时杀进程重试，再跑常一次即过（实测 71s）。dotnet 管道输出是块缓冲，别指望流式等。
+- ⚠ **XamlCompiler MSB3073 / 0xC0000005 会连崩两次才过**（2026-10-14 一次发布里 attempt1、2 都崩，3 才成）。发布脚本判成功必须 **`rc==0` 且产物 mtime 是本次的**：只看时间戳会把上一次的旧产物当成成功（当时就是这么漏过去的，用户拿到旧 exe 白等一轮）。
+- 发布脚本 `_pub_runlatest.py`：publish → 备份 run-latest 到仓库外 `C:\Users\MSI\_runlatest_bak_<时间戳>`（**别用 rmtree 删旧备份**，626 文件会触发安全删除批量确认把脚本打断）→ 按 mtime 增量覆盖同步（不清空：CelesteUpdater.exe / RestartAgent.exe / createdump.exe 是 publish 产物里没有的，清空会丢）。
 - publish 产物路径会漂（`bin/Release/...` 与 `bin/x64/Release/...` 都出现过），交付前先 find 定位再拷。kill 杀掉的冒烟启动不写主日志（退出才 flush），佐证进程活跃看 `app-settings.json.pathlog` mtime 或 .running 生命周期。

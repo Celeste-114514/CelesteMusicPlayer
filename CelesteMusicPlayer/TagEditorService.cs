@@ -21,7 +21,12 @@ namespace CelesteMusicPlayer
         Disc,
         DiscCount,
         Comment,
+        /// <summary>非同步歌词（ID3v2 的 USLT、Vorbis 的 UNSYNCEDLYRICS）—— mp3tag 里叫 UNSYNCEDLYRICS。</summary>
         Lyrics,
+        /// <summary>同步歌词（ID3v2 的 SYLT、Vorbis 的 LYRICS）—— mp3tag 里就叫 LYRICS。</summary>
+        SyncedLyrics,
+        /// <summary>速度 BPM（ID3v2 TBPM / Vorbis BPM / MP4 tmpo）。没有标准属性，各格式各自存。</summary>
+        Bpm,
     }
 
     /// <summary>
@@ -39,7 +44,7 @@ namespace CelesteMusicPlayer
             TagField.Title, TagField.Performers, TagField.Album, TagField.AlbumArtists,
             TagField.Genres, TagField.Composers, TagField.Year, TagField.Track,
             TagField.TrackCount, TagField.Disc, TagField.DiscCount, TagField.Comment,
-            TagField.Lyrics,
+            TagField.Lyrics, TagField.SyncedLyrics, TagField.Bpm,
         };
 
         /// <summary>多值字段的显示分隔符（mp3tag 约定）。</summary>
@@ -51,7 +56,17 @@ namespace CelesteMusicPlayer
 
         public string Comment { get; set; } = string.Empty;
 
+        /// <summary>非同步歌词（mp3tag：UNSYNCEDLYRICS；ID3v2 = USLT）。</summary>
         public string Lyrics { get; set; } = string.Empty;
+
+        /// <summary>同步歌词（mp3tag：LYRICS；ID3v2 = SYLT）。带时间轴的那种。</summary>
+        public string SyncedLyrics { get; set; } = string.Empty;
+
+        /// <summary>
+        /// 速度 BPM。各格式存法不统一（ID3v2=TBPM、Vorbis=BPM、MP4=tmpo），
+        /// 而且有人在里面写非数字，所以用文本存，写盘时按各格式自己的口味转换。
+        /// </summary>
+        public string Bpm { get; set; } = string.Empty;
 
         /// <summary>艺术家（多值）。ID3=TPE1 多帧值 / Vorbis=多 ARTIST / MP4=多 ©ART。</summary>
         public string[] Performers { get; set; } = Array.Empty<string>();
@@ -218,6 +233,14 @@ namespace CelesteMusicPlayer
                 return TagSaveResult.Success(skipped: true);
             }
 
+            // TTA：整份写 APEv2（重写文件 + 原子替换），失败带原因返回
+            if (TtaTagAccess.IsTtaPath(path))
+            {
+                return TtaTagAccess.Write(path, model)
+                    ? TagSaveResult.Success(false)
+                    : TagSaveResult.Fail("TTA 标签写入失败（文件可能被占用或磁盘满），详见日志。");
+            }
+
             try
             {
                 using TagLib.File file = TagLib.File.Create(path);
@@ -288,6 +311,15 @@ namespace CelesteMusicPlayer
                     tag.Lyrics = model.Lyrics ?? string.Empty;
                 }
 
+                if (model.IsDirty(TagField.Bpm))
+                {
+                    WriteBpm(file, model.Bpm ?? string.Empty);
+                }
+
+                // 同步歌词（带时间轴）只做显示，不做写盘：写它需要按帧重建时间轴事件，
+                // 风险大又极少用到 —— 面板里那个框标了只读，避免改了不生效的错觉。
+                // if (model.IsDirty(TagField.SyncedLyrics)) { ... }
+
                 // 按设置把 ID3v2.4 降成 2.3（用户设置，默认关；只在真写盘时执行）
                 if (AppSettingsStore.Load().WriteId3v23
                     && (file.TagTypes & TagLib.TagTypes.Id3v2) != 0
@@ -347,6 +379,11 @@ namespace CelesteMusicPlayer
         /// <summary>读取文件内嵌封面图片数据（无封面返回 null）。</summary>
         public static byte[]? ReadCoverBytes(string path)
         {
+            if (TtaTagAccess.IsTtaPath(path))
+            {
+                return TtaTagAccess.ReadCoverBytes(path);
+            }
+
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             {
                 return null;
@@ -376,6 +413,11 @@ namespace CelesteMusicPlayer
         /// <summary>替换（或写入）前置封面图片字节。保留文件里的其它图片（如后封）。返回是否成功。</summary>
         public static bool SetCoverBytes(string path, byte[] bytes)
         {
+            if (TtaTagAccess.IsTtaPath(path))
+            {
+                return TtaTagAccess.SetCoverBytes(path, bytes);
+            }
+
             if (string.IsNullOrWhiteSpace(path) || bytes == null || bytes.Length == 0)
             {
                 return false;
@@ -408,6 +450,11 @@ namespace CelesteMusicPlayer
         /// <summary>清除文件内嵌封面。返回是否成功。</summary>
         public static bool ClearCover(string path)
         {
+            if (TtaTagAccess.IsTtaPath(path))
+            {
+                return TtaTagAccess.ClearCover(path);
+            }
+
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             {
                 return false;
@@ -491,6 +538,13 @@ namespace CelesteMusicPlayer
         /// </summary>
         public static TagEditModel ReadTagRaw(string path)
         {
+            // TTA：TagLib 没有容器解析器（File.Create 直接抛 UnsupportedFormatException），
+            // 走 TtaTagAccess 直接读文件头尾的 ID3v2 / APEv2 标签（2026-10-14 方案 1）。
+            if (TtaTagAccess.IsTtaPath(path))
+            {
+                return TtaTagAccess.Read(path);
+            }
+
             var model = new TagEditModel();
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path))
             {
@@ -513,11 +567,132 @@ namespace CelesteMusicPlayer
                 model.Genres = CleanArray(tag.Genres);
                 model.Composers = CleanArray(tag.Composers);
                 model.Comment = tag.Comment ?? string.Empty;
-                model.Lyrics = tag.Lyrics ?? string.Empty;
+                model.Lyrics = tag.Lyrics ?? string.Empty;          // 非同步歌词（USLT）
+                model.SyncedLyrics = ReadSyncedLyrics(file);        // 同步歌词（SYLT / LYRICS）
+                model.Bpm = ReadBpm(file);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorService.cs", caught); }
 
             return model;
+        }
+
+        // =====================================================================
+        // 两个"没有统一属性"的字段：BPM 和同步歌词
+        //
+        // TagLib 的 Tag 上没有 BeatsPerMinute / SyncedLyrics 这种跨格式属性，
+        // 只能各自去格式自己的帧里取（ID3v2 帧 / Vorbis 注释）。读不到就是空，
+        // 不猜、不报错打断整个读取流程。
+        // =====================================================================
+
+        /// <summary>读 BPM：ID3v2 的 TBPM 帧，或 Vorbis 注释里的 BPM。读不到返回空串。</summary>
+        private static string ReadBpm(TagLib.File file)
+        {
+            try
+            {
+                if (file.GetTag(TagLib.TagTypes.Id3v2) is TagLib.Id3v2.Tag id3)
+                {
+                    foreach (TagLib.Id3v2.Frame frame in id3.GetFrames("TBPM"))
+                    {
+                        if (frame is TagLib.Id3v2.TextInformationFrame text && text.Text.Length > 0)
+                        {
+                            return string.Join("; ", text.Text);
+                        }
+                    }
+                }
+
+                if (file.GetTag(TagLib.TagTypes.Xiph) is TagLib.Ogg.XiphComment xiph)
+                {
+                    string[] values = xiph.GetField("BPM");
+                    if (values.Length > 0)
+                    {
+                        return values[0];
+                    }
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorService.ReadBpm", caught);
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>
+        /// 写 BPM：ID3v2 写 TBPM 帧、Vorbis 写 BPM 注释。空串 = 把这个字段删掉
+        /// （而不是写个空帧进去，免得每次打开都看到一个空壳）。
+        /// </summary>
+        private static void WriteBpm(TagLib.File file, string bpm)
+        {
+            try
+            {
+                if (file.GetTag(TagLib.TagTypes.Id3v2) is TagLib.Id3v2.Tag id3)
+                {
+                    id3.RemoveFrames("TBPM");
+                    if (!string.IsNullOrWhiteSpace(bpm))
+                    {
+                        id3.SetTextFrame("TBPM", bpm);
+                    }
+                }
+
+                if (file.GetTag(TagLib.TagTypes.Xiph) is TagLib.Ogg.XiphComment xiph)
+                {
+                    xiph.SetField("BPM", bpm ?? string.Empty);
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorService.WriteBpm", caught);
+            }
+        }
+
+        /// <summary>
+        /// 读同步歌词（mp3tag 里叫 LYRICS）：ID3v2 的 SYLT 帧（带时间轴）或 Vorbis 的
+        /// LYRICS 注释。SYLT 里的每个事件带一个时间戳，拼成 [mm:ss.xx] 歌词 的形式给人看。
+        /// </summary>
+        private static string ReadSyncedLyrics(TagLib.File file)
+        {
+            try
+            {
+                if (file.GetTag(TagLib.TagTypes.Id3v2) is TagLib.Id3v2.Tag id3)
+                {
+                    foreach (TagLib.Id3v2.Frame frame in id3.GetFrames("SYLT"))
+                    {
+                        if (frame is TagLib.Id3v2.SynchronisedLyricsFrame sylt)
+                        {
+                            System.Text.StringBuilder sb = new();
+                            foreach (TagLib.Id3v2.SynchedText ev in sylt.Text)
+                            {
+                                sb.Append('[').Append(FormatSyncedTime(ev.Time)).Append(']')
+                                  .AppendLine(ev.Text);
+                            }
+
+                            return sb.ToString().TrimEnd();
+                        }
+                    }
+                }
+
+                if (file.GetTag(TagLib.TagTypes.Xiph) is TagLib.Ogg.XiphComment xiph)
+                {
+                    string[] values = xiph.GetField("LYRICS");
+                    if (values.Length > 0)
+                    {
+                        return string.Join("\n", values);
+                    }
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagEditorService.ReadSyncedLyrics", caught);
+            }
+
+            return string.Empty;
+        }
+
+        /// <summary>毫秒 → [mm:ss.xx]（同步歌词时间戳的显示格式）。</summary>
+        private static string FormatSyncedTime(long milliseconds)
+        {
+            TimeSpan t = TimeSpan.FromMilliseconds(milliseconds);
+            return t.ToString(@"mm\:ss\.ff", System.Globalization.CultureInfo.InvariantCulture);
         }
 
         /// <summary>去掉空元素（TagLib 偶尔返回含空串的数组， Join 显示时会出现 "; ;"）。</summary>
