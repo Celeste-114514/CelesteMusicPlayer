@@ -227,18 +227,23 @@ namespace CelesteMusicPlayer
 
         private static UIElement MakeMatrixNode(double cx, double cy, Color fill, string text, bool dark)
         {
-            var panel = new Canvas
+            // 用 Grid 作节点容器：Canvas 不认 Horizontal/VerticalAlignment，TextBlock 会塌到左上角；
+            // 换成 Grid 后对齐才生效，L/R 字母才会真正落在圆点正中心。
+            var panel = new Grid
             {
                 Width = MatrixNodeDiameter,
                 Height = MatrixNodeDiameter
             };
 
-            panel.Children.Add(new Shapes.Ellipse
+            var ellipse = new Shapes.Ellipse
             {
                 Width = MatrixNodeDiameter,
                 Height = MatrixNodeDiameter,
                 Fill = new SolidColorBrush(fill)
-            });
+            };
+            ellipse.HorizontalAlignment = HorizontalAlignment.Center;
+            ellipse.VerticalAlignment = VerticalAlignment.Center;
+            panel.Children.Add(ellipse);
 
             panel.Children.Add(new TextBlock
             {
