@@ -100,6 +100,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="9" />
                 </Grid.ColumnDefinitions>
                 <TextBlock
                     FontSize="11"
@@ -117,6 +118,19 @@
                     HorizontalAlignment="Right"
                     Opacity="0.9"
                     Text="{x:Bind SortMark, Mode=OneWay}" />
+                <!-- 拖列宽的把手（2026-10-15）：列头模板整个换成自绘之后，toolkit 自带的
+                     拖拽把手跟着模板一起没了，列宽就拖不动了。这里自己补一个 9px 宽的
+                     透明热区贴在列头右边缘（= 分隔线所在处），按下即进入改宽模式。
+                     事件全部 Handled，冒泡不到外层 Grid，所以不会被误判成"点列头排序"。 -->
+                <Rectangle
+                    Grid.Column="2"
+                    Width="9"
+                    HorizontalAlignment="Right"
+                    VerticalAlignment="Stretch"
+                    Fill="Transparent"
+                    PointerPressed="TagHeaderGripper_PointerPressed"
+                    PointerMoved="TagHeaderGripper_PointerMoved"
+                    PointerReleased="TagHeaderGripper_PointerReleased" />
             </Grid>
         </DataTemplate>
     </UserControl.Resources>
@@ -767,6 +781,14 @@
                                             MaxHeight="80"
                                             TextTrimming="CharacterEllipsis"
                                             TextWrapping="WrapWholeWords" />
+                                        <!-- 数据旁署名（Discogs ToS 要求「Data provided by Discogs」紧贴数据且带可传权重的链接；
+                                             其余源按各自许可同样署名）。内容/链接由 ShowOnlineTagDetailAsync 按来源填。 -->
+                                        <HyperlinkButton
+                                            x:Name="OnlineTagSourceCredit"
+                                            FontSize="11"
+                                            Padding="0"
+                                            Margin="0,2,0,0"
+                                            Visibility="Collapsed" />
                                     </StackPanel>
                                 </Grid>
                             </StackPanel>
@@ -798,6 +820,54 @@
                                     <CheckBox x:Name="OnlineTagFieldLyrics" Content="歌词（LRClib，写进歌词字段）" />
                                 </StackPanel>
                                 <Button x:Name="OnlineTagWriteButton" Content="写入所选文件" HorizontalAlignment="Left" Click="OnlineTagWriteButton_Click" />
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ⑥ 数据来源与署名（各平台许可要求，常驻显示，不能只在详情里出现）
+                             Discogs：须声明「未被赞助/认可」+ 数据旁标 Data provided by Discogs（链接不得 nofollow）。
+                             Last.fm：仅授权非商业用途，须标注来源与指向 last.fm 的链接。
+                             fanart.tv：CC BY 3.0，须署名；图片版权归各自上传者/版权方。 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="⑥ 数据来源与署名" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.7"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="本应用使用 Discogs 的 API，但未被 Discogs 赞助、认可或附属。「Discogs」是 Zink Media, LLC 的商标。" />
+                                <HyperlinkButton
+                                    Content="Data provided by Discogs"
+                                    NavigateUri="https://www.discogs.com"
+                                    FontSize="11"
+                                    Padding="0" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.7"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="艺术家与专辑数据来自 Last.fm（其条款仅授权非商业用途）；歌词来自 LRClib。" />
+                                <HyperlinkButton
+                                    Content="Powered by AudioScrobbler / Last.fm"
+                                    NavigateUri="https://www.last.fm"
+                                    FontSize="11"
+                                    Padding="0" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.7"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="封面与艺术家图片来自 Cover Art Archive、fanart.tv（CC BY 3.0）及 Apple 提供的图源；图片版权归各自上传者或版权方所有，本应用不主张任何权利。" />
+                                <HyperlinkButton
+                                    Content="fanart.tv"
+                                    NavigateUri="https://fanart.tv"
+                                    FontSize="11"
+                                    Padding="0" />
+                                <TextBlock
+                                    FontSize="11"
+                                    Opacity="0.7"
+                                    TextWrapping="WrapWholeWords"
+                                    Text="元数据来自 MusicBrainz 与 iTunes 搜索接口（iTunes 仅用于元数据匹配，不含音频内容）。" />
                             </StackPanel>
                         </Border>
 
@@ -1288,6 +1358,22 @@
                 LoadingRow="TagFileGrid_LoadingRow"
                 UnloadingRow="TagFileGrid_UnloadingRow">
                 <dg:DataGrid.Columns>
+                    <!-- 选择框列（2026-10-15）：最左侧复选框，与表格多选双向联动。
+                         恒在首位、宽度固定、不进列设置（ApplyColumnLayout 里钉死 DisplayIndex=0）。
+                         勾选即加入/移出 SelectedItems，作用范围与左侧标签编辑、批量工具一致。 -->
+                    <dg:DataGridTemplateColumn Tag="Select" Header="" Width="30" MinWidth="26" CanUserResize="False">
+                        <dg:DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate x:DataType="local:TagFileItem">
+                                <CheckBox
+                                    MinWidth="0"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    IsChecked="{x:Bind IsChecked, Mode=TwoWay}"
+                                    Click="TagFileRowCheck_Click" />
+                            </DataTemplate>
+                        </dg:DataGridTemplateColumn.CellTemplate>
+                    </dg:DataGridTemplateColumn>
+
                     <!-- # 序号列（只读；行模型 INPC，Renumber 后可见行实时更新） -->
                     <dg:DataGridTemplateColumn Tag="Index" Header="#" Width="36" MinWidth="28">
                         <dg:DataGridTemplateColumn.CellTemplate>

@@ -497,6 +497,41 @@ namespace CelesteMusicPlayer
         // 快速编辑页：选中文件的标签编辑（阶段 6：可编辑 + 保存 + 快照整体回滚）
         // =====================================================================
 
+        // =====================================================================
+        // 选择框列 ↔ 表格多选（2026-10-15）
+        //   勾框 → SelectedItems 加/删；选中变化 → 回写勾框。
+        //   只有「不一致时才写」，INPC 不会连环触发，也不会把一次点击放大成两轮重排。
+        // =====================================================================
+
+        private void TagFileRowCheck_Click(object sender, RoutedEventArgs e)
+        {
+            if (!_panelReady || (sender as FrameworkElement)?.DataContext is not TagFileItem item)
+            {
+                return;
+            }
+
+            if (item.IsChecked)
+            {
+                if (!TagFileGrid.SelectedItems.Contains(item))
+                {
+                    TagFileGrid.SelectedItems.Add(item);
+                }
+            }
+            else if (TagFileGrid.SelectedItems.Contains(item))
+            {
+                TagFileGrid.SelectedItems.Remove(item);
+            }
+        }
+
+        private void SyncRowChecksWithSelection()
+        {
+            HashSet<TagFileItem> selected = new(TagFileGrid.SelectedItems.Cast<TagFileItem>());
+            foreach (TagFileItem item in _files)
+            {
+                item.IsChecked = selected.Contains(item);
+            }
+        }
+
         private async void TagFileGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!_panelReady)
@@ -506,6 +541,9 @@ namespace CelesteMusicPlayer
 
             // 选中底色（圆角强调色）跟着选中态走
             RefreshGridRowsChrome();
+
+            // 勾选框跟着选中态走（选择框列与 SelectedItems 双向同步）
+            SyncRowChecksWithSelection();
 
             List<TagFileItem> selected = TagFileGrid.SelectedItems.Cast<TagFileItem>().ToList();
             _quickEditSelection = selected;
@@ -3195,6 +3233,18 @@ namespace CelesteMusicPlayer
         /// <summary>列头手势是否已经挂好（挂一次就够，避免每帧遍历可视化树）。</summary>
         private bool _headerGesturesAttached;
 
+        /// <summary>拖列宽：正在拖的那一列（自绘把手，见 TagHeaderGripper_*）。</summary>
+        private DataGridColumn? _resizeColumn;
+
+        private double _resizeStartX;
+
+        private double _resizeStartWidth;
+
+        private bool _resizingColumns;
+
+        /// <summary>上次拖完列宽的时刻：拖完会紧跟一个 Tapped，300ms 内不当成"点列头排序"。</summary>
+        private long _lastResizeTick = long.MinValue;
+
         // =====================================================================
         // 列显隐 + 前后顺序（2026-10-14 用户要求：mp3tag 能读的标签也要能加进列表；
         // 每个字段都要能选显不显示、还能前移后移）
@@ -3217,6 +3267,9 @@ namespace CelesteMusicPlayer
 
         /// <summary>末尾填充列的 Key（不参与显隐和顺序，恒在末行）。</summary>
         private const string FillerColumnKey = "Filler";
+
+        /// <summary>最左侧的选择框列（2026-10-15 新增）：恒在首位、不可隐藏、不可拖宽、不参与列设置。</summary>
+        private const string SelectColumnKey = "Select";
 
         /// <summary>全部真实列的 Key（XAML 默认顺序，加载时从列头模型收集）。</summary>
         private List<string> _allColumnKeys = new();
@@ -3245,7 +3298,8 @@ namespace CelesteMusicPlayer
             foreach (TagColumnHeaderVm vm in _headerVms)
             {
                 if (string.IsNullOrEmpty(vm.Key)
-                    || string.Equals(vm.Key, FillerColumnKey, StringComparison.Ordinal))
+                    || string.Equals(vm.Key, FillerColumnKey, StringComparison.Ordinal)
+                    || string.Equals(vm.Key, SelectColumnKey, StringComparison.Ordinal))
                 {
                     continue;
                 }
@@ -3390,19 +3444,38 @@ namespace CelesteMusicPlayer
                     continue;
                 }
 
+                // 选择框列恒在最左（DisplayIndex=0），真实列从 1 开始排
                 column.Visibility = i < visible.Count ? Visibility.Visible : Visibility.Collapsed;
 
                 try
                 {
-                    if (column.DisplayIndex != i)
+                    if (column.DisplayIndex != i + 1)
                     {
-                        column.DisplayIndex = i;
+                        column.DisplayIndex = i + 1;
                     }
                 }
                 catch (Exception caught)
                 {
                     // 显示位置设失败不该连带把显隐也搅黄（日志留证，顺序保持原样）
                     global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ApplyColumnLayout", caught);
+                }
+            }
+
+            // 选择框列恒在最左
+            DataGridColumn? select = FindColumnByKey(SelectColumnKey);
+            if (select != null)
+            {
+                select.Visibility = Visibility.Visible;
+                try
+                {
+                    if (select.DisplayIndex != 0)
+                    {
+                        select.DisplayIndex = 0;
+                    }
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ApplyColumnLayout.select", caught);
                 }
             }
 
@@ -3413,7 +3486,7 @@ namespace CelesteMusicPlayer
                 filler.Visibility = Visibility.Visible;
                 try
                 {
-                    int last = desired.Count; // 真实列之后
+                    int last = desired.Count + 1; // 选择框列 + 真实列之后
                     if (filler.DisplayIndex != last)
                     {
                         filler.DisplayIndex = last;
@@ -3630,6 +3703,12 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void TagHeader_Tapped(object sender, TappedRoutedEventArgs e)
         {
+            // 刚拖完列宽会补一个 Tapped：拖宽不是排序，直接忽略
+            if (_resizingColumns || Environment.TickCount64 - _lastResizeTick < 300)
+            {
+                return;
+            }
+
             TagColumnHeaderVm? vm = VmOfHeaderSender(sender);
             if (vm != null)
             {
@@ -3637,6 +3716,96 @@ namespace CelesteMusicPlayer
                     || (_headerPressModifiers & Windows.System.VirtualKeyModifiers.Shift) != 0;
                 SortFromHeader(vm, additive);
             }
+        }
+
+        // =====================================================================
+        // 拖列宽（2026-10-15）：列头模板换成自绘之后 toolkit 自带把手失效，这里自己实现。
+        //   按下把手 → 记下列/起始指针 X/起始宽度并捕获指针；
+        //   移动 → 按位移改 column.Width（夹在 MinWidth..MaxWidth 之间，位移不足 0.5px 不动，
+        //         免得每帧都触发布局重算）；
+        //   松手 → 释放捕获。末尾星号填充列（Tag=Filler）不参与拖宽。
+        // =====================================================================
+
+        private void TagHeaderGripper_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            DataGridColumn? column = FindResizableColumn(VmOfHeaderSender(sender)?.Key);
+            if (column == null)
+            {
+                return;
+            }
+
+            _resizeColumn = column;
+            _resizeStartWidth = column.ActualWidth > 0 ? column.ActualWidth : column.Width.DisplayValue;
+            _resizeStartX = e.GetCurrentPoint(TagFileGrid).Position.X;
+            _resizingColumns = true;
+            if (sender is UIElement element)
+            {
+                element.CapturePointer(e.Pointer);
+            }
+
+            e.Handled = true;
+        }
+
+        private void TagHeaderGripper_PointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_resizingColumns || _resizeColumn == null)
+            {
+                return;
+            }
+
+            e.Handled = true;
+            double target = _resizeStartWidth + (e.GetCurrentPoint(TagFileGrid).Position.X - _resizeStartX);
+            if (target < _resizeColumn.MinWidth)
+            {
+                target = _resizeColumn.MinWidth;
+            }
+
+            if (_resizeColumn.MaxWidth > 0 && target > _resizeColumn.MaxWidth)
+            {
+                target = _resizeColumn.MaxWidth;
+            }
+
+            if (Math.Abs(target - _resizeColumn.ActualWidth) < 0.5)
+            {
+                return;
+            }
+
+            _resizeColumn.Width = new DataGridLength(target, DataGridLengthUnitType.Pixel);
+        }
+
+        private void TagHeaderGripper_PointerReleased(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_resizingColumns)
+            {
+                return;
+            }
+
+            _resizingColumns = false;
+            _resizeColumn = null;
+            _lastResizeTick = Environment.TickCount64;
+            if (sender is UIElement element)
+            {
+                element.ReleasePointerCapture(e.Pointer);
+            }
+
+            e.Handled = true;
+        }
+
+        /// <summary>
+        /// 拖宽专用：按列标识找列，但排除两类「宽度固定」的列——
+        /// 末尾星号填充列（Filler，宽度 = 剩余空间）和最左选择框列（Select，恒定窄列）。
+        /// 这两列拖了也没意义，还会让布局打架。
+        /// </summary>
+        private DataGridColumn? FindResizableColumn(string? key)
+        {
+            if (string.IsNullOrEmpty(key)
+                || string.Equals(key, FillerColumnKey, StringComparison.Ordinal)
+                || string.Equals(key, SelectColumnKey, StringComparison.Ordinal))
+            {
+                return null;
+            }
+
+            return FindColumnByKey(key);
         }
 
         /// <summary>
@@ -4960,6 +5129,7 @@ namespace CelesteMusicPlayer
                 OnlineTagCoverImage.Source = null;
                 OnlineTagDetailText.Text = string.Empty;
                 OnlineTagLyricText.Text = string.Empty;
+                OnlineTagSourceCredit.Visibility = Visibility.Collapsed;
 
                 if (_onlineTagCandidates.Count == 0)
                 {
@@ -5012,6 +5182,7 @@ namespace CelesteMusicPlayer
                 OnlineTagCoverImage.Source = null;
                 OnlineTagDetailText.Text = string.Empty;
                 OnlineTagLyricText.Text = string.Empty;
+                OnlineTagSourceCredit.Visibility = Visibility.Collapsed;
                 return;
             }
 
@@ -5025,6 +5196,7 @@ namespace CelesteMusicPlayer
             SetOnlineTagStatus("正在加载详情…");
             OnlineTagDetailText.Text = BuildOnlineTagDetailText(candidate);
             OnlineTagLyricText.Text = string.Empty;
+            ApplyOnlineTagSourceCredit(candidate);
             OnlineTagCoverImage.Source = null;
             _onlineTagCoverBytes = null;
 
@@ -5129,6 +5301,50 @@ namespace CelesteMusicPlayer
                 global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.ApplyCoverToOnlineTagImage", caught);
                 OnlineTagCoverImage.Source = null;
             }
+        }
+
+        /// <summary>详情区「数据旁」署名：按来源给出署名文字与指向该条数据的页面链接。
+        /// Discogs ToS 要求「Data provided by Discogs」紧贴数据且链接须能传递 SEO 权重（不能用 nofollow，
+        /// HyperlinkButton 走系统默认浏览器打开，天然满足）。拿不到精确页面时退回站点首页。</summary>
+        private void ApplyOnlineTagSourceCredit(OnlineTagCandidate c)
+        {
+            string text;
+            string url;
+            if (string.Equals(c.Source, OnlineTagFill.SourceDiscogs, StringComparison.OrdinalIgnoreCase))
+            {
+                text = "Data provided by Discogs";
+                url = string.IsNullOrWhiteSpace(c.Id)
+                    ? "https://www.discogs.com"
+                    : "https://www.discogs.com/release/" + Uri.EscapeDataString(c.Id);
+            }
+            else if (string.Equals(c.Source, OnlineTagFill.SourceLastFm, StringComparison.OrdinalIgnoreCase))
+            {
+                text = "Data provided by Last.fm";
+                url = string.IsNullOrWhiteSpace(c.Artist)
+                    ? "https://www.last.fm"
+                    : "https://www.last.fm/music/" + Uri.EscapeDataString(c.Artist);
+            }
+            else if (string.Equals(c.Source, OnlineTagFill.SourceMusicBrainz, StringComparison.OrdinalIgnoreCase))
+            {
+                text = "Data provided by MusicBrainz";
+                url = string.IsNullOrWhiteSpace(c.Id)
+                    ? "https://musicbrainz.org"
+                    : "https://musicbrainz.org/release/" + Uri.EscapeDataString(c.Id);
+            }
+            else if (string.Equals(c.Source, OnlineTagFill.SourceItunes, StringComparison.OrdinalIgnoreCase))
+            {
+                text = "Metadata from iTunes Search API";
+                url = "https://music.apple.com";
+            }
+            else
+            {
+                OnlineTagSourceCredit.Visibility = Visibility.Collapsed;
+                return;
+            }
+
+            OnlineTagSourceCredit.Content = text;
+            OnlineTagSourceCredit.NavigateUri = new Uri(url);
+            OnlineTagSourceCredit.Visibility = Visibility.Visible;
         }
 
         private void ApplyOnlineTagFieldDefaults(OnlineTagCandidate c, string lyric)
@@ -5428,6 +5644,27 @@ namespace CelesteMusicPlayer
         }
 
         public event PropertyChangedEventHandler? PropertyChanged;
+
+        private bool _isChecked;
+
+        /// <summary>
+        /// 最左侧选择框的勾选状态（2026-10-15）。它与表格的 SelectedItems 双向同步：
+        /// 勾框 → 加入/移出选中；选中行变化 → 回写勾选。两套状态只认一个真值源。
+        /// </summary>
+        public bool IsChecked
+        {
+            get => _isChecked;
+            set
+            {
+                if (_isChecked == value)
+                {
+                    return;
+                }
+
+                _isChecked = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(IsChecked)));
+            }
+        }
 
         /// <summary>扩展名大写（MP3 / FLAC / DSF…）；读不到显示 -。</summary>
         public string FormatName { get; set; } = "-";
