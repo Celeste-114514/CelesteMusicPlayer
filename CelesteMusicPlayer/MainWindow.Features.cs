@@ -1592,7 +1592,7 @@ namespace CelesteMusicPlayer
             // 「查找歌曲…」已按用户要求移除（老版本遗留功能，窗口一并删除）。
 
             // 「在线搜索…」已按用户要求整体下架（窗口文件删除，
-            // 在线补全能力待标签板块的「在线补全」子页重建）。
+            // 在线标签能力待标签板块的「在线标签」子页重建）。
 
             var downloadLyric = new MenuFlyoutItem { Text = "下载当前歌词" };
             downloadLyric.Click += (_, _) => _ = DownloadLyricForCurrentAsync();

@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -12,7 +13,6 @@ using System.Threading.Tasks;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>歌词候选：某来源里的一首歌（搜索接口返回的一条）。</summary>
     public sealed record LyricCandidate(
         string Source,
         string SongId,
@@ -22,7 +22,6 @@ namespace CelesteMusicPlayer
         int DurationMs,
         bool HasTranslation)
     {
-        /// <summary>结果列表里的行号（1 起），填充列表时赋值，仅用于显示。</summary>
         public int Index { get; set; }
 
         public string DurationText
@@ -39,40 +38,69 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>在线查看地址（QQ 有歌曲页；LRClib 没有稳定的单曲网页，返回空 = 按钮置灰）。</summary>
         public string OnlineUrl =>
             string.Equals(Source, OnlineLyricDownload.SourceQQ, StringComparison.Ordinal)
                 ? $"https://y.qq.com/n/ryqq/songDetail/{Uri.EscapeDataString(SongId)}"
                 : string.Empty;
     }
 
-    /// <summary>
-    /// 歌词写入口径（2026-10-14 用户拍板：写标签时让用户自己选）。
-    /// 背景：ID3v2 的 UNSYNCEDLYRICS（USLT）、Vorbis 的 UNSYNCEDLYRICS、MP4 的 ©lyr
-    /// 都是「纯文本」字段；把带 [00:12.34] 的 LRC 塞进去是 ECHO 类播放器认的潜规则，
-    /// 不是标准行为——所以三种口径都留给用户选。
-    /// </summary>
     public enum LyricWriteTarget
     {
-        /// <summary>外挂 .lrc（带时间轴，所有播放器都认，通用性最好）。</summary>
         Sidecar,
-
-        /// <summary>写入歌词标签 = 纯文本（剥掉时间戳）。标准语义。</summary>
         TagPlain,
-
-        /// <summary>写入歌词标签但保留时间戳文本。兼容 ECHO 这类把字段内容按 LRC 解析的播放器。</summary>
         TagTimestamped,
-
-        /// <summary>外挂 .lrc + 标签纯文本，两头都顾上。</summary>
         Both
     }
 
-    /// <summary>
-    /// 在线歌词下载（标签面板「歌词下载」页的后端）。
-    /// 来源：LRClib（开放歌词库，免 key 零门槛，主力）+ QQ 音乐（客户端老接口，非官方，
-    /// 2026-10-14 实测可用，限速 1 次/秒；随时可能被毙，界面上已注明）。
-    /// 网易云 2026-10-14 实测全接口 -462 风控（要滑块验证），不做。
-    /// </summary>
+    public sealed class LyricBatchItem : INotifyPropertyChanged
+    {
+        public LyricBatchItem(int index, string title, string artist)
+        {
+            Index = index;
+            Title = title;
+            Artist = artist;
+        }
+
+        public int Index { get; }
+
+        public string Title { get; }
+
+        public string Artist { get; }
+
+        private string _status = "等待中";
+
+        public string Status
+        {
+            get => _status;
+            set
+            {
+                if (_status == value)
+                {
+                    return;
+                }
+
+                _status = value;
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Status)));
+            }
+        }
+
+        public event PropertyChangedEventHandler? PropertyChanged;
+    }
+
+    public sealed record LyricBatchSong(string FilePath, string Title, string Artist, string Album, string FileName);
+
+    public sealed record LyricBatchOptions(
+        string Source,
+        bool IncludeTranslation,
+        bool SkipExisting,
+        bool SaveToSongFolder,
+        string LyricFolder);
+
+    public sealed record LyricBatchProgress(int Index, int Done, int Total, string Status);
+
+    public sealed record LyricBatchSummary(
+        int Total, int Saved, int Skipped, int NoLyric, int NoMatch, int Failed, bool Canceled);
+
     public static class OnlineLyricDownload
     {
         public const string SourceLrclib = "LRClib";
@@ -80,7 +108,6 @@ namespace CelesteMusicPlayer
 
         private static readonly HttpClient Http = CreateClient();
 
-        /// <summary>QQ 接口限速闸：全程只允许一个 QQ 请求在飞，间隔 ≥1.1s。</summary>
         private static readonly SemaphoreSlim QqGate = new(1, 1);
 
         private static long QqLastTick;
@@ -99,8 +126,6 @@ namespace CelesteMusicPlayer
             {
                 Timeout = TimeSpan.FromSeconds(20)
             };
-            // ⚠️ UA 必须带标准浏览器标识：QQ 的客户端接口对非浏览器 UA 直接拒。
-            // 别在 UA 里写应用名（2026-10-12 网易云实测：带自定义标识的 UA 被风控）。
             client.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent",
                 "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
             return client;
@@ -114,11 +139,6 @@ namespace CelesteMusicPlayer
             _ => LyricWriteTarget.Sidecar
         };
 
-        // =====================================================================
-        // 搜索
-        // =====================================================================
-
-        /// <summary>按来源搜候选歌曲。keyword 为空时返回空列表。</summary>
         public static async Task<IReadOnlyList<LyricCandidate>> SearchAsync(
             string source,
             string keyword,
@@ -146,11 +166,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>
-        /// QQ 音乐搜索。2026-10-14 实测可用（返回 data.song.list，字段
-        /// songname/songmid/albumname/interval/singer）。这是客户端老接口，
-        /// 无 SLA——哪天返回结构变了这里解析出来就是 0 条，状态栏会说明。
-        /// </summary>
         private static async Task<IReadOnlyList<LyricCandidate>> SearchQQAsync(
             string keyword,
             CancellationToken cancellationToken)
@@ -214,18 +229,10 @@ namespace CelesteMusicPlayer
             return result;
         }
 
-        /// <summary>
-        /// LRClib 搜索候选。开放接口免 key，只要求 UA 自报身份。
-        /// 返回候选不含歌词正文（歌词在 FetchLyricAsync 时按 /api/get 精确取），
-        /// 这样搜索结果列表和 QQ 的行为保持一致。
-        /// </summary>
         private static async Task<IReadOnlyList<LyricCandidate>> SearchLrclibAsync(
             string keyword,
             CancellationToken cancellationToken)
         {
-            // LRClib 的搜索按「歌名 + 艺术家」效果最好；UI 传入的 keyword 已是这种组合。
-            // 这里简单地把 keyword 整个交给 track_name，artist_name 留空——LRClib 的
-            // 搜索引擎对混合串也能命中，且 /api/get 那一步还有精确匹配兜底。
             string url = "https://lrclib.net/api/search?track_name=" + Uri.EscapeDataString(keyword);
 
             using var req = new HttpRequestMessage(HttpMethod.Get, url);
@@ -263,16 +270,6 @@ namespace CelesteMusicPlayer
             return result;
         }
 
-        // =====================================================================
-        // 取歌词
-        // =====================================================================
-
-        /// <summary>
-        /// 取某个候选的歌词正文（LRC 文本，优先带时间轴的）。
-        /// LRClib 优先 syncedLyrics，没有则 plainLyrics；QQ 取 lyric 字段，
-        /// includeTranslation 且存在 trans 时把译文附在后面（与 MusicPlayer2 一致）。
-        /// 取不到返回空串（调用方负责在状态栏说明）。
-        /// </summary>
         public static async Task<string> FetchLyricAsync(
             LyricCandidate candidate,
             bool includeTranslation,
@@ -322,7 +319,6 @@ namespace CelesteMusicPlayer
                 return string.Empty;
             }
 
-            // retcode != 0（常见 1101）= 这首歌没有歌词或 mid 无效，按「没有」处理
             if (root.TryGetProperty("retcode", out JsonElement rc) && rc.TryGetInt32(out int code) && code != 0)
             {
                 return string.Empty;
@@ -362,13 +358,11 @@ namespace CelesteMusicPlayer
                 cancellationToken).ConfigureAwait(false);
         }
 
-        /// <summary>带 Referer 的 QQ GET（歌词/搜索接口都要求 Referer: https://y.qq.com/）。</summary>
         private static async Task<string> QqRequestAsync(string url, CancellationToken cancellationToken)
         {
             await QqGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
-                // 限速：两次 QQ 请求之间至少隔 1.1s（对端没公布限流阈值，保守起见）
                 long now = Environment.TickCount64;
                 long wait = 1100 - (now - QqLastTick);
                 if (wait > 0)
@@ -394,15 +388,6 @@ namespace CelesteMusicPlayer
             }
         }
 
-        // =====================================================================
-        // 匹配（移植 MusicPlayer2 的 SelectMatchedItem：加权编辑距离相似度）
-        // =====================================================================
-
-        /// <summary>
-        /// 从候选里挑最匹配的一项，返回索引；全都对不上返回 -1（权值上限 1.0，阈值 0.3）。
-        /// 权值（与 MusicPlayer2 一致）：标题 0.4、艺术家 0.4、专辑 0.3、
-        /// 文件名 vs 标题 0.3、文件名 vs 艺术家 0.3、列表顺序 0.05。
-        /// </summary>
         public static int PickBestMatch(
             IReadOnlyList<LyricCandidate> list,
             string title,
@@ -443,7 +428,6 @@ namespace CelesteMusicPlayer
             return bestWeight < 0.3 ? -1 : bestIndex;
         }
 
-        /// <summary>匹配用归一化：去空白、全角转半角、小写。</summary>
         private static string NormalizeForMatch(string? s)
         {
             if (string.IsNullOrWhiteSpace(s))
@@ -467,7 +451,6 @@ namespace CelesteMusicPlayer
             return new string(buf, 0, n);
         }
 
-        /// <summary>编辑距离相似度：1 - 距离/最大长度。双方都空 = 1.0，一方空 = 0.0。</summary>
         private static double Similarity(string a, string b)
         {
             if (a.Length == 0 && b.Length == 0)
@@ -485,7 +468,6 @@ namespace CelesteMusicPlayer
                 return 1.0;
             }
 
-            // 超长串不做完整 DP（标题不可能这么长，防御性兜底）
             if (a.Length > 400 || b.Length > 400)
             {
                 return a.Contains(b, StringComparison.Ordinal) || b.Contains(a, StringComparison.Ordinal)
@@ -520,14 +502,6 @@ namespace CelesteMusicPlayer
             return prev[b.Length];
         }
 
-        // =====================================================================
-        // 写入
-        // =====================================================================
-
-        /// <summary>
-        /// 剥掉 LRC 的时间戳与 [ti:]/[ar:] 等元信息行，得到纯文本歌词
-        /// （写 UNSYNCEDLYRICS 这类纯文本字段时用）。
-        /// </summary>
         public static string StripLrcTimestamps(string? lrc)
         {
             if (string.IsNullOrWhiteSpace(lrc))
@@ -566,11 +540,6 @@ namespace CelesteMusicPlayer
             return sb.ToString();
         }
 
-        /// <summary>
-        /// 把歌词写到目标位置。target 含外挂时写同名 .lrc（UTF-8 无 BOM）；
-        /// 含标签时走 TagEditorService（只动歌词一个字段，带失败原因返回）。
-        /// 返回值：(是否成功, 给人看的一句话)。
-        /// </summary>
         public static async Task<(bool Ok, string Message)> WriteLyricAsync(
             string audioPath,
             string lyric,
@@ -650,6 +619,122 @@ namespace CelesteMusicPlayer
                 global::CelesteMusicPlayer.StartupLog.WriteException("OnlineLyricDownload.WriteLyricAsync", caught);
                 return (false, "写入失败：" + caught.Message);
             }
+        }
+
+        private static string ResolveSidecarPath(string audioPath, LyricBatchOptions options)
+        {
+            string dir = options.SaveToSongFolder || string.IsNullOrWhiteSpace(options.LyricFolder)
+                ? Path.GetDirectoryName(audioPath) ?? string.Empty
+                : options.LyricFolder;
+            return Path.Combine(dir, Path.GetFileNameWithoutExtension(audioPath) + ".lrc");
+        }
+
+        private static string BuildBatchKeyword(LyricBatchSong song)
+        {
+            if (string.IsNullOrWhiteSpace(song.Title))
+            {
+                return song.FileName;
+            }
+
+            if (string.IsNullOrWhiteSpace(song.Artist))
+            {
+                return song.Title;
+            }
+
+            return song.Artist + " " + song.Title;
+        }
+
+        public static async Task<LyricBatchSummary> BatchDownloadAsync(
+            IReadOnlyList<LyricBatchSong> songs,
+            LyricBatchOptions options,
+            IProgress<LyricBatchProgress>? progress,
+            CancellationToken cancellationToken = default)
+        {
+            int saved = 0;
+            int skipped = 0;
+            int noLyric = 0;
+            int noMatch = 0;
+            int failed = 0;
+            bool canceled = false;
+
+            for (int i = 0; i < songs.Count; i++)
+            {
+                if (cancellationToken.IsCancellationRequested)
+                {
+                    canceled = true;
+                    break;
+                }
+
+                LyricBatchSong song = songs[i];
+                progress?.Report(new LyricBatchProgress(i, i, songs.Count, "下载中…"));
+
+                string status;
+                try
+                {
+                    if (options.SkipExisting && File.Exists(ResolveSidecarPath(song.FilePath, options)))
+                    {
+                        skipped++;
+                        progress?.Report(new LyricBatchProgress(i, i + 1, songs.Count, "已跳过"));
+                        continue;
+                    }
+
+                    string keyword = BuildBatchKeyword(song);
+                    IReadOnlyList<LyricCandidate> hits =
+                        await SearchAsync(options.Source, keyword, cancellationToken).ConfigureAwait(false);
+                    if (hits.Count == 0)
+                    {
+                        noMatch++;
+                        progress?.Report(new LyricBatchProgress(i, i + 1, songs.Count, "没找到"));
+                        continue;
+                    }
+
+                    int best = PickBestMatch(hits, song.Title, song.Artist, song.Album, song.FileName);
+                    if (best < 0)
+                    {
+                        noMatch++;
+                        progress?.Report(new LyricBatchProgress(i, i + 1, songs.Count, "没有匹配"));
+                        continue;
+                    }
+
+                    string lyric = await FetchLyricAsync(
+                        hits[best], options.IncludeTranslation, cancellationToken).ConfigureAwait(false);
+                    if (string.IsNullOrWhiteSpace(lyric))
+                    {
+                        noLyric++;
+                        progress?.Report(new LyricBatchProgress(i, i + 1, songs.Count, "无歌词"));
+                        continue;
+                    }
+
+                    (bool ok, _) = await WriteLyricAsync(
+                        song.FilePath, lyric, LyricWriteTarget.Sidecar,
+                        options.SaveToSongFolder, options.LyricFolder, cancellationToken).ConfigureAwait(false);
+                    if (ok)
+                    {
+                        saved++;
+                        status = "已保存";
+                    }
+                    else
+                    {
+                        failed++;
+                        status = "写盘失败";
+                    }
+                }
+                catch (OperationCanceledException)
+                {
+                    canceled = true;
+                    break;
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("OnlineLyricDownload.BatchDownloadAsync", caught);
+                    failed++;
+                    status = "出错";
+                }
+
+                progress?.Report(new LyricBatchProgress(i, i + 1, songs.Count, status));
+            }
+
+            return new LyricBatchSummary(songs.Count, saved, skipped, noLyric, noMatch, failed, canceled);
         }
     }
 }

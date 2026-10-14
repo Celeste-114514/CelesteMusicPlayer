@@ -122,7 +122,7 @@
 
     <Grid ColumnSpacing="12">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="400" />
+            <ColumnDefinition Width="520" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -547,7 +547,7 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- ══════════ 页 4：在线补全（后续阶段接入，占位） ══════════ -->
+                <!-- ══════════ 页 4：在线标签（后续阶段接入，占位） ══════════ -->
                 <Grid x:Name="OnlineFillPanel">
                     <StackPanel
                         HorizontalAlignment="Center"
@@ -556,7 +556,7 @@
                         MaxWidth="300">
                         <FontIcon Glyph="&#xE774;" FontSize="36" Opacity="0.35" HorizontalAlignment="Center" />
                         <TextBlock
-                            Text="在线补全"
+                            Text="在线标签"
                             FontSize="15"
                             FontWeight="SemiBold"
                             HorizontalAlignment="Center" />
@@ -569,27 +569,12 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- ══════════ 页 5：歌词下载（对标 MusicPlayer2 的歌词下载对话框） ══════════
-                     流程：当前文件 → 搜索 → 候选列表（自动选最佳匹配）→ 预览 → 写 .lrc / 写歌词标签。
-                     写入口径用户自选（2026-10-14 拍板）：Lyrics 与 UNSYNCEDLYRICS 其实是
-                     同一个纯文本字段的不同叫法（ID3v2=USLT、Vorbis=UNSYNCEDLYRICS、MP4=©lyr），
-                     区别只在于要不要把 [mm:ss.xx] 时间戳一起写进去；外挂 .lrc 则带完整时间轴。 -->
+                <!-- ══════════ 页 5：歌词下载 ══════════ -->
                 <ScrollViewer
                     x:Name="LyricDownloadPanel"
                     VerticalScrollBarVisibility="Auto"
                     Padding="0,0,4,0">
                     <StackPanel Spacing="10">
-                        <Border
-                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                            CornerRadius="8"
-                            Padding="10,8">
-                            <TextBlock
-                                FontSize="12"
-                                Opacity="0.75"
-                                TextWrapping="WrapWholeWords"
-                                Text="给右侧选中的那首歌在线找歌词：先搜索，再从候选里挑一个（进来时会按标题/歌手/专辑自动选中最像的一个），预览确认后保存。可以存成同名 .lrc 文件，也可以写进音频文件自带的歌词字段。" />
-                        </Border>
-
                         <!-- ① 当前文件 -->
                         <Border
                             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
@@ -635,7 +620,7 @@
                                     FontSize="11"
                                     Opacity="0.6"
                                     TextWrapping="WrapWholeWords"
-                                    Text="搜索关键词 = 艺术家 + 标题（两个框都可以改）。LRClib 是开放歌词库，免注册免 key；QQ 音乐走的是客户端老接口，不是官方渠道，随时可能失效——介意的话就用 LRClib。" />
+                                    Text="关键词 = 艺术家 + 标题。QQ 音乐走客户端老接口，非官方渠道，随时可能失效。" />
                             </StackPanel>
                         </Border>
 
@@ -711,11 +696,6 @@
                                         </DataTemplate>
                                     </ListView.ItemTemplate>
                                 </ListView>
-                                <TextBlock
-                                    FontSize="11"
-                                    Opacity="0.6"
-                                    TextWrapping="WrapWholeWords"
-                                    Text="进来时会按「标题/歌手/专辑/文件名」加权算一遍，自动选中最像的一条；点别的行可以改选。一个都不像时不会自动选，需要你手动挑。" />
                             </StackPanel>
                         </Border>
 
@@ -765,11 +745,6 @@
                                         Tag="Both"
                                         Content="两头都写：外挂 .lrc + 歌词字段纯文本" />
                                 </StackPanel>
-                                <TextBlock
-                                    FontSize="11"
-                                    Opacity="0.6"
-                                    TextWrapping="WrapWholeWords"
-                                    Text="歌词字段（Lyrics / UNSYNCEDLYRICS）在 MP3 里是 USLT、FLAC 里是 UNSYNCEDLYRICS、M4A 里是 ©lyr，本来就是纯文本字段；把带时间戳的 LRC 写进去是 ECHO 认的写法，别播放器可能把 [00:12.34] 当正文显示。要时间轴优先选外挂 .lrc。" />
                                 <TextBlock FontSize="12" Text="外挂 .lrc 保存位置：" />
                                 <StackPanel Orientation="Horizontal" Spacing="16">
                                     <RadioButton
@@ -785,6 +760,93 @@
                                     <Button x:Name="LyricDownloadButton" Content="下载并保存" Click="LyricDownloadButton_Click" />
                                     <Button x:Name="LyricOnlineViewButton" Content="在线查看" Click="LyricOnlineViewButton_Click" />
                                 </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- ⑤ 批量下载 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="⑤ 批量下载" FontSize="13" FontWeight="SemiBold" />
+                                <TextBlock
+                                    x:Name="LyricBatchScopeText"
+                                    FontSize="11"
+                                    Opacity="0.6"
+                                    TextWrapping="WrapWholeWords" />
+                                <StackPanel Orientation="Horizontal" Spacing="16">
+                                    <CheckBox x:Name="LyricBatchSkipExistCheck" Content="跳过已有 .lrc 的曲目" />
+                                    <CheckBox x:Name="LyricBatchTranslateCheck" Content="带翻译" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <TextBlock Text="保存到：" FontSize="12" VerticalAlignment="Center" />
+                                    <RadioButton
+                                        x:Name="LyricBatchSaveSongFolder"
+                                        GroupName="LyricBatchSaveLoc"
+                                        Content="歌曲所在目录" />
+                                    <RadioButton
+                                        x:Name="LyricBatchSaveLyricFolder"
+                                        GroupName="LyricBatchSaveLoc"
+                                        Content="歌词文件夹" />
+                                </StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="LyricBatchStartButton" Content="开始批量下载" Click="LyricBatchStartButton_Click" />
+                                    <Button x:Name="LyricBatchStopButton" Content="停止" Click="LyricBatchStopButton_Click" IsEnabled="False" />
+                                </StackPanel>
+                                <ProgressBar x:Name="LyricBatchProgressBar" Maximum="100" />
+                                <Grid ColumnSpacing="8" Padding="2,0,2,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="22" />
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="0.9*" />
+                                        <ColumnDefinition Width="110" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="#" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="1" Text="标题" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="2" Text="艺术家" FontSize="11" Opacity="0.55" />
+                                    <TextBlock Grid.Column="3" Text="状态" FontSize="11" Opacity="0.55" />
+                                </Grid>
+                                <ListView x:Name="LyricBatchList" MaxHeight="220">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="local:LyricBatchItem">
+                                            <Grid Padding="2,4" ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="22" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="0.9*" />
+                                                    <ColumnDefinition Width="110" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock
+                                                    Grid.Column="0"
+                                                    Text="{x:Bind Index}"
+                                                    FontSize="11"
+                                                    Opacity="0.6"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="1"
+                                                    Text="{x:Bind Title}"
+                                                    FontSize="12"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="2"
+                                                    Text="{x:Bind Artist}"
+                                                    FontSize="11"
+                                                    Opacity="0.75"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    VerticalAlignment="Center" />
+                                                <TextBlock
+                                                    Grid.Column="3"
+                                                    Text="{x:Bind Status}"
+                                                    FontSize="11"
+                                                    Opacity="0.75"
+                                                    TextTrimming="CharacterEllipsis"
+                                                    VerticalAlignment="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
                             </StackPanel>
                         </Border>
 
