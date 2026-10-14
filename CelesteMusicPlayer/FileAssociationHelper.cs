@@ -59,6 +59,51 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
+        /// 找出「被 Windows 默认应用设置锁定」的扩展名：UserChoice 存在且 ProgId 不是本程序。
+        ///
+        /// 为什么需要这个：Windows 8+ 起，用户用「打开方式」给某个格式设过默认程序后，
+        /// HKCU\...\Explorer\FileExts\.xxx\UserChoice 优先于 Software\Classes 的默认值，
+        /// 且 UserChoice 带哈希防篡改、程序无法直接改写。这种情况下注册表写得再对，
+        /// 双击也仍走用户原来选的那个程序 —— 表现就是"应用了却不生效"。
+        /// 只能检测出来并引导用户去系统设置里改，所以要有这个方法。
+        /// </summary>
+        public static List<string> GetUserChoiceLockedExtensions(IEnumerable<string> extensions)
+        {
+            var result = new List<string>();
+            try
+            {
+                using RegistryKey? fileExts = Registry.CurrentUser.OpenSubKey(
+                    @"Software\Microsoft\Windows\CurrentVersion\Explorer\FileExts");
+                if (fileExts == null) return result;
+
+                foreach (string ext in extensions)
+                {
+                    string normalized = NormalizeExtension(ext);
+                    try
+                    {
+                        using RegistryKey? choice = fileExts.OpenSubKey(normalized + @"\UserChoice");
+                        string? progId = choice?.GetValue("ProgId") as string;
+                        if (!string.IsNullOrEmpty(progId)
+                            && !string.Equals(progId, ProgId, StringComparison.OrdinalIgnoreCase))
+                        {
+                            result.Add(normalized);
+                        }
+                    }
+                    catch (Exception caught)
+                    {
+                        global::CelesteMusicPlayer.StartupLog.WriteException("FileAssociationHelper.cs", caught);
+                    }
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("FileAssociationHelper.cs", caught);
+            }
+
+            return result;
+        }
+
+        /// <summary>
         /// 只解除这些扩展名的关联，保留 ProgId 本身与其它扩展名。
         ///
         /// 用途：用户在清单里取消勾选了某几个格式。这种情况**不能**直接调 <see cref="Unregister(IEnumerable{string}?)"/>，

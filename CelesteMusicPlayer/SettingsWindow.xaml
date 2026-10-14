@@ -1222,7 +1222,7 @@
                             <TextBlock x:Name="AssociationStatusText" FontSize="12" TextWrapping="WrapWholeWords" Margin="0,4,0,0" Visibility="Collapsed" />
                         </StackPanel>
                         <StackPanel Orientation="Horizontal" Spacing="12">
-                            <Button CornerRadius="16" x:Name="OpenAssociationWindowButton" Content="关联文件…" Click="OpenAssociationWindowButton_Click" MinWidth="130" />
+                            <Button CornerRadius="16" x:Name="OpenAssociationWindowButton" Content="关联文件…" ToolTipService.ToolTip="在主窗口的设置面板中打开「文件关联」页" Click="OpenAssociationWindowButton_Click" MinWidth="130" />
                             <Button CornerRadius="16" x:Name="UnregisterAssociationButton" Content="取消全部关联" Click="UnregisterAssociationButton_Click" MinWidth="130" />
                         </StackPanel>
                     </StackPanel>

@@ -3136,15 +3136,15 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 打开「文件关联」窗口，让用户逐项勾选要关联哪些音频格式。
         ///
-        /// 原来这里是一个"一键注册全部格式"的按钮，但一键全注册会把 .iso/.cue 这类
-        /// 本来属于别的软件的格式也抢过来，而且用户无法选择。改成开窗勾选后，
-        /// 注册 / 取消 / 挑选程序文件 都在那个窗口里完成，这里只负责把门打开。
+        /// 原来这里弹 FileAssociationWindow 独立窗口，2026-10-15 起统一走主窗口设置面板的
+        /// 「文件关联」页（和首次启动引导同一入口）—— 旧窗口是另一份 UI、另读一次注册表，
+        /// 两边状态会不同步（在这边应用过、主窗口面板不刷新），故废除独立窗口。
         /// </summary>
         private void OpenAssociationWindowButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                FileAssociationWindow.ShowOrActivate();
+                FileAssociationPanelControl.ShowOrActivate();
             }
             catch (Exception ex)
             {

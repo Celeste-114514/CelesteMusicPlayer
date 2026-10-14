@@ -336,7 +336,22 @@ namespace CelesteMusicPlayer
                 if (stale.Count > 0) FileAssociationHelper.UnregisterExtensions(stale);
 
                 AppliedHintText.Text = $"已应用：关联 {picked.Count} 个格式。";
-                RefreshStatus();
+
+                // 3) Windows「默认应用」锁检测：用户用"打开方式"设过默认程序的格式，
+                //    UserChoice 优先于注册表且程序改不了 —— 不提示的话用户会以为"应用了却没生效"。
+                var locked = FileAssociationHelper.GetUserChoiceLockedExtensions(picked);
+                if (locked.Count > 0)
+                {
+                    SetStatus("以下格式被 Windows「默认应用」锁定（你以前用「打开方式」设过别的程序），"
+                        + "注册表已写入但双击仍会打开原程序：\n"
+                        + string.Join("、", locked)
+                        + "\n请点下方「打开 Windows 默认应用设置」，把这些格式改成 Celeste Music Player。",
+                        ok: false);
+                }
+                else
+                {
+                    RefreshStatus();
+                }
             }
             catch (Exception ex)
             {
