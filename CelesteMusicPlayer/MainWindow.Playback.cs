@@ -1600,7 +1600,6 @@ namespace CelesteMusicPlayer
             flyout.Items.Add(fileItem);
             flyout.Items.Add(folderItem);
             flyout.Items.Add(rescanItem);
-            AppendHamburgerFeatureItems(flyout);
             flyout.Items.Add(new MenuFlyoutSeparator());
 
             var mediaLibItem = new MenuFlyoutItem { Text = "媒体库" };

@@ -1636,91 +1636,6 @@
                             <ToggleSwitch x:Name="ShowNavYearSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
                         </Grid>
 
-                        <TextBlock Text="Last.fm" FontSize="15" FontWeight="SemiBold" Margin="0,8,0,0" />
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="220" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="API Key" VerticalAlignment="Center" />
-                            <TextBox x:Name="LastFmApiKeyTextBox" Grid.Column="1" LostFocus="LastFmCredentials_Changed" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="220" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Shared Secret" VerticalAlignment="Center" />
-                            <PasswordBox x:Name="LastFmSharedSecretPasswordBox" Grid.Column="1" PasswordChanged="LastFmCredentials_Changed" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="220" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="用户名" VerticalAlignment="Center" />
-                            <TextBox x:Name="LastFmUsernameTextBox" Grid.Column="1" LostFocus="LastFmCredentials_Changed" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="220" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="密码（仅用于登录获取会话）" VerticalAlignment="Center" />
-                            <PasswordBox x:Name="LastFmLoginPasswordBox" Grid.Column="1" />
-                        </Grid>
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <Button CornerRadius="16" x:Name="LastFmSaveCredentialsButton" Content="保存凭据" Click="LastFmSaveCredentialsButton_Click" />
-                            <Button CornerRadius="16" x:Name="LastFmLoginButton" Content="登录获取会话" Click="LastFmLoginButton_Click" />
-                            <TextBlock x:Name="LastFmStatusText" VerticalAlignment="Center" FontSize="12" Opacity="0.7" />
-                        </StackPanel>
-                        <TextBlock Text="未配置时开关无效；凭据保存在 lastfm.json" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="启用 Last.fm 记录" VerticalAlignment="Center" />
-                            <ToggleSwitch x:Name="EnableLastFmSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="使用 HTTPS" VerticalAlignment="Center" />
-                            <ToggleSwitch x:Name="LastFmHttpsSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="Auto" />
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="提交正在播放" VerticalAlignment="Center" />
-                            <ToggleSwitch x:Name="LastFmNowPlayingSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="220" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="最少播放百分比" />
-                                <TextBlock x:Name="LastFmLeastPercentValueText" Text="50%" FontSize="12" Opacity="0.65" />
-                            </StackPanel>
-                            <Slider x:Name="LastFmLeastPercentSlider" Grid.Column="1" Minimum="1" Maximum="100" StepFrequency="1" ValueChanged="SettingSlider_ValueChanged" />
-                        </Grid>
-                        <Grid ColumnSpacing="16">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="220" />
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Spacing="2" VerticalAlignment="Center">
-                                <TextBlock Text="最少播放秒数" />
-                                <TextBlock x:Name="LastFmLeastSecondsValueText" Text="30 秒" FontSize="12" Opacity="0.65" />
-                            </StackPanel>
-                            <Slider x:Name="LastFmLeastSecondsSlider" Grid.Column="1" Minimum="1" Maximum="600" StepFrequency="1" ValueChanged="SettingSlider_ValueChanged" />
-                        </Grid>
                     </StackPanel>
                 </ScrollViewer>
 
@@ -1852,6 +1767,91 @@
                             <Button CornerRadius="16" x:Name="TestOnlineServicesButton" Content="网络自检" Click="TestOnlineServices_Click" MinWidth="88" />
                         </StackPanel>
                         <TextBlock x:Name="OnlineServicesStatusText" FontSize="12" Opacity="0.75" TextWrapping="WrapWholeWords" Text="" />
+                        <TextBlock Text="Last.fm 收听记录（Scrobble）" FontSize="15" FontWeight="SemiBold" Margin="0,12,0,0" />
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="220" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="API Key" VerticalAlignment="Center" />
+                            <TextBox x:Name="LastFmApiKeyTextBox" Grid.Column="1" LostFocus="LastFmCredentials_Changed" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="220" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Shared Secret" VerticalAlignment="Center" />
+                            <PasswordBox x:Name="LastFmSharedSecretPasswordBox" Grid.Column="1" PasswordChanged="LastFmCredentials_Changed" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="220" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="用户名" VerticalAlignment="Center" />
+                            <TextBox x:Name="LastFmUsernameTextBox" Grid.Column="1" LostFocus="LastFmCredentials_Changed" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="220" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="密码（仅用于登录获取会话）" VerticalAlignment="Center" />
+                            <PasswordBox x:Name="LastFmLoginPasswordBox" Grid.Column="1" />
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button CornerRadius="16" x:Name="LastFmSaveCredentialsButton" Content="保存凭据" Click="LastFmSaveCredentialsButton_Click" />
+                            <Button CornerRadius="16" x:Name="LastFmLoginButton" Content="登录获取会话" Click="LastFmLoginButton_Click" />
+                            <TextBlock x:Name="LastFmStatusText" VerticalAlignment="Center" FontSize="12" Opacity="0.7" />
+                        </StackPanel>
+                        <TextBlock Text="未配置时开关无效；凭据保存在 lastfm.json" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="启用 Last.fm 记录" VerticalAlignment="Center" />
+                            <ToggleSwitch x:Name="EnableLastFmSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="使用 HTTPS" VerticalAlignment="Center" />
+                            <ToggleSwitch x:Name="LastFmHttpsSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="提交正在播放" VerticalAlignment="Center" />
+                            <ToggleSwitch x:Name="LastFmNowPlayingSwitch" Grid.Column="1" OffContent="关" OnContent="开" Toggled="SettingToggle_Toggled" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="220" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="最少播放百分比" />
+                                <TextBlock x:Name="LastFmLeastPercentValueText" Text="50%" FontSize="12" Opacity="0.65" />
+                            </StackPanel>
+                            <Slider x:Name="LastFmLeastPercentSlider" Grid.Column="1" Minimum="1" Maximum="100" StepFrequency="1" ValueChanged="SettingSlider_ValueChanged" />
+                        </Grid>
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="220" />
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Spacing="2" VerticalAlignment="Center">
+                                <TextBlock Text="最少播放秒数" />
+                                <TextBlock x:Name="LastFmLeastSecondsValueText" Text="30 秒" FontSize="12" Opacity="0.65" />
+                            </StackPanel>
+                            <Slider x:Name="LastFmLeastSecondsSlider" Grid.Column="1" Minimum="1" Maximum="600" StepFrequency="1" ValueChanged="SettingSlider_ValueChanged" />
+                        </Grid>
                     </StackPanel>
                 </ScrollViewer>
 

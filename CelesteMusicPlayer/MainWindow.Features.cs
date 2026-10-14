@@ -3299,26 +3299,6 @@ namespace CelesteMusicPlayer
             // 「在线搜索…」入口已下架（与 FeaturesMoreButton_Click 同步）。
         }
 
-        private void AppendHamburgerFeatureItems(MenuFlyout flyout)
-        {
-            flyout.Items.Add(new MenuFlyoutSeparator());
-
-            // 「查找歌曲…」已按用户要求移除（老版本遗留功能，窗口一并删除）。
-
-            // 工具：图标用 Segoe Fluent 的「扳手/修复」字形
-            var tools = new MenuFlyoutSubItem { Text = "工具" };
-            tools.Icon = new FontIcon { Glyph = "\uE90F" };
-            var importM3u = new MenuFlyoutItem { Text = "导入 M3U…" };
-            importM3u.Click += ImportM3u_Click;
-            tools.Items.Add(importM3u);
-            var exportM3u = new MenuFlyoutItem { Text = "导出 M3U…" };
-            exportM3u.Click += ExportM3u_Click;
-            tools.Items.Add(exportM3u);
-            var cue = new MenuFlyoutItem { Text = "打开 CUE…" };
-            cue.Click += OpenCue_Click;
-            tools.Items.Add(cue);
-            flyout.Items.Add(tools);
-        }
 
         private async Task AddFilesToLibraryAsync(IEnumerable<string> paths)
         {
