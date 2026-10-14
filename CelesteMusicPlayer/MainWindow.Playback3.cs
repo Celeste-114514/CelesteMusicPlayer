@@ -1813,7 +1813,8 @@ namespace CelesteMusicPlayer
             BitmapImage? coverImage = null;
             if (coverBytes != null && coverBytes.Length > 0)
             {
-                coverImage = await CreateBitmapFromBytesAsync(coverBytes);
+                // 按封面框实际显示尺寸 × 屏幕缩化解码：大图直接交给 UI 拉伸会发糊（K2）
+                coverImage = await CreateBitmapFromBytesAsync(coverBytes, CoverDecodeTargetPx(NowPlayingCoverBorder, 320));
             }
 
             if (_nowPlayingPath != item.FilePath)

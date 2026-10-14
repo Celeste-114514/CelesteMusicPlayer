@@ -836,7 +836,7 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                BitmapImage? image = await CreateBitmapFromBytesAsync(coverBytes);
+                BitmapImage? image = await CreateBitmapFromBytesAsync(coverBytes, CoverDecodeTargetPx(VinylArtEllipse, 126));
                 UpdateVinylArt(image);
             }
             catch (Exception caught)

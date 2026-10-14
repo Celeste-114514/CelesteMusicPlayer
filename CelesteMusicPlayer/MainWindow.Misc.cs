@@ -1578,12 +1578,145 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>字节 → BitmapImage（须在 UI 线程）</summary>
-        private static async Task<BitmapImage?> CreateBitmapFromBytesAsync(byte[] bytes)
+        /// <summary>
+        /// 从图片字节头解析宽高（JPEG/PNG/BMP/GIF/WebP），不解码整图，用于「按显示尺寸解码」。
+        /// 解析不了返回 false，调用方按全分辨率解码处理（行为与从前一致）。
+        /// </summary>
+        private static bool TryMeasureImageSize(byte[] data, out int width, out int height)
+        {
+            width = 0;
+            height = 0;
+            if (data == null || data.Length < 16)
+            {
+                return false;
+            }
+
+            try
+            {
+                // PNG：\x89PNG\r\n\x1a\n + IHDR（宽高在 16..24，大端）
+                if (data[0] == 0x89 && data[1] == 0x50 && data[2] == 0x4E && data[3] == 0x47
+                    && data[4] == 0x0D && data[5] == 0x0A && data[6] == 0x1A && data[7] == 0x0A
+                    && data.Length >= 24)
+                {
+                    width = (int)(((uint)data[16] << 24) | ((uint)data[17] << 16) | ((uint)data[18] << 8) | data[19]);
+                    height = (int)(((uint)data[20] << 24) | ((uint)data[21] << 16) | ((uint)data[22] << 8) | data[23]);
+                    return width > 0 && height > 0;
+                }
+
+                // GIF："GIF8..." 逻辑屏幕宽高在 6..10（小端）
+                if (data[0] == 0x47 && data[1] == 0x49 && data[2] == 0x46 && data.Length >= 10)
+                {
+                    width = data[6] | (data[7] << 8);
+                    height = data[8] | (data[9] << 8);
+                    return width > 0 && height > 0;
+                }
+
+                // BMP："BM"，DIB 头宽高在 18..26（有符号，向下位图可能为负，取绝对值）
+                if (data[0] == 0x42 && data[1] == 0x4D && data.Length >= 26)
+                {
+                    width = Math.Abs(data[18] | (data[19] << 8) | (data[20] << 16) | (data[21] << 24));
+                    height = Math.Abs(data[22] | (data[23] << 8) | (data[24] << 16) | (data[25] << 24));
+                    return width > 0 && height > 0;
+                }
+
+                // WebP：RIFF????WEBP
+                if (data.Length >= 30
+                    && data[0] == 0x52 && data[1] == 0x49 && data[2] == 0x46 && data[3] == 0x46
+                    && data[8] == 0x57 && data[9] == 0x45 && data[10] == 0x42 && data[11] == 0x50)
+                {
+                    string chunk = System.Text.Encoding.ASCII.GetString(data, 12, 4);
+                    if (chunk == "VP8 ")
+                    {
+                        width = (data[26] | (data[27] << 8)) & 0x3FFF;
+                        height = (data[28] | (data[29] << 8)) & 0x3FFF;
+                        return width > 0 && height > 0;
+                    }
+                    if (chunk == "VP8L" && data.Length >= 25)
+                    {
+                        int bits = data[21] | (data[22] << 8) | (data[23] << 16) | (data[24] << 24);
+                        width = (bits & 0x3FFF) + 1;
+                        height = ((bits >> 14) & 0x3FFF) + 1;
+                        return width > 0 && height > 0;
+                    }
+                    if (chunk == "VP8X" && data.Length >= 30)
+                    {
+                        width = (data[24] | (data[25] << 8) | (data[26] << 16)) + 1;
+                        height = (data[27] | (data[28] << 8) | (data[29] << 16)) + 1;
+                        return width > 0 && height > 0;
+                    }
+                    return false;
+                }
+
+                // JPEG：逐段扫到 SOF0~SOF15（排除 DHT/DAC/RST 等非尺寸段）
+                if (data[0] == 0xFF && data[1] == 0xD8)
+                {
+                    int i = 2;
+                    while (i + 9 < data.Length)
+                    {
+                        if (data[i] != 0xFF)
+                        {
+                            i++;
+                            continue;
+                        }
+                        byte marker = data[i + 1];
+                        bool isSof = marker >= 0xC0 && marker <= 0xCF
+                            && marker != 0xC4 && marker != 0xC8 && marker != 0xCC;
+                        if (isSof)
+                        {
+                            height = (data[i + 5] << 8) | data[i + 6];
+                            width = (data[i + 7] << 8) | data[i + 8];
+                            return width > 0 && height > 0;
+                        }
+                        if (marker == 0xFF)
+                        {
+                            i++;
+                            continue;
+                        }
+                        if (marker == 0xD8 || marker == 0xD9 || (marker >= 0xD0 && marker <= 0xD7))
+                        {
+                            i += 2;
+                            continue;
+                        }
+                        int seg = (data[i + 2] << 8) | data[i + 3];
+                        i += 2 + seg;
+                    }
+                }
+            }
+            catch
+            {
+                // 解析失败按未知尺寸处理
+            }
+
+            return false;
+        }
+
+
+        /// <summary>
+        /// 字节 → BitmapImage（须在 UI 线程）。
+        /// maxPixel &gt; 0 且源图更大时，按显示尺寸解码（解码期高质量重采样），
+        /// 避免 1400px 大图直接被 UI 层双线性缩到 320px 显示导致的发糊/锯齿。
+        /// </summary>
+        private static async Task<BitmapImage?> CreateBitmapFromBytesAsync(byte[] bytes, int maxPixel = 0)
         {
             try
             {
                 var image = new BitmapImage();
+                if (maxPixel > 0 && TryMeasureImageSize(bytes, out int w, out int h))
+                {
+                    // 只缩不放：源图更大才按显示尺寸解码；源图更小保持原样（解码期放大没有意义）
+                    if (Math.Max(w, h) > maxPixel)
+                    {
+                        // 只设长边对应的那一维，另一维由解码器按比例推（同时设两维会拉变形）
+                        if (w >= h)
+                        {
+                            image.DecodePixelWidth = maxPixel;
+                        }
+                        else
+                        {
+                            image.DecodePixelHeight = maxPixel;
+                        }
+                    }
+                }
                 using InMemoryRandomAccessStream stream = new();
                 await stream.WriteAsync(bytes.AsBuffer());
                 stream.Seek(0);
@@ -1595,6 +1728,44 @@ namespace CelesteMusicPlayer
                 System.Diagnostics.Debug.WriteLine("封面解码失败: " + ex.Message);
                 return null;
             }
+        }
+
+
+        /// <summary>当前屏幕缩放（RasterizationScale，100%=1.0）。取不到按 1.0。</summary>
+        private double CoverRasterizationScale()
+        {
+            try
+            {
+                var root = NowPlayingCoverImage?.XamlRoot ?? Content?.XamlRoot;
+                double s = root?.RasterizationScale ?? 1.0;
+                return s > 0 && !double.IsNaN(s) ? s : 1.0;
+            }
+            catch
+            {
+                return 1.0;
+            }
+        }
+
+
+        /// <summary>
+        /// 封面解码目标像素 = 元素当前显示尺寸 × 屏幕缩放。
+        /// 显示尺寸取不到（元素隐藏/未布局）时用 fallbackLayoutPx。
+        /// </summary>
+        private int CoverDecodeTargetPx(FrameworkElement? element, double fallbackLayoutPx)
+        {
+            double layoutPx = 0;
+            if (element != null)
+            {
+                // ActualWidth 布局后才有；Width 是布局代码显式设的（未设为 NaN），可提前用
+                layoutPx = element.ActualWidth > 0
+                    ? element.ActualWidth
+                    : (double.IsNaN(element.Width) ? 0 : element.Width);
+            }
+            if (layoutPx <= 0)
+            {
+                layoutPx = fallbackLayoutPx;
+            }
+            return (int)Math.Clamp(Math.Ceiling(layoutPx * CoverRasterizationScale()), 96, 1024);
         }
 
 

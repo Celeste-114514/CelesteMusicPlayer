@@ -1888,7 +1888,7 @@ namespace CelesteMusicPlayer
                 {
                     return;
                 }
-                var bmp = await CreateBitmapFromBytesAsync(bytes); // 与专辑封面同一机制
+                var bmp = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(null, 160)); // 与专辑封面同一机制；歌单墙卡片 160px
                 if (bmp != null)
                 {
                     vm.Cover = bmp;
@@ -2051,7 +2051,7 @@ namespace CelesteMusicPlayer
 
                 if (bytes is { Length: > 0 })
                 {
-                    var bmp = await CreateBitmapFromBytesAsync(bytes); // 与专辑封面同一机制
+                    var bmp = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(PlaylistDetailCoverImage, 168)); // 与专辑封面同一机制
                     if (bmp != null)
                     {
                         PlaylistDetailCoverImage.Source = bmp;

@@ -367,7 +367,7 @@ namespace CelesteMusicPlayer
                     continue;
                 }
 
-                BitmapImage? image = await CreateBitmapFromBytesAsync(bytes);
+                BitmapImage? image = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(AlbumDetailCoverImage, 232));
                 if (image != null)
                 {
                     entry.CoverImage = image;
@@ -527,7 +527,7 @@ namespace CelesteMusicPlayer
                     continue;
                 }
 
-                BitmapImage? image = await CreateBitmapFromBytesAsync(bytes);
+                BitmapImage? image = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(AlbumDetailCoverImage, 232));
                 if (image != null)
                 {
                     entry.CoverImage = image;
