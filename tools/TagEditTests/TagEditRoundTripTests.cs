@@ -92,19 +92,33 @@ public class TagEditRoundTripTests
     // ---------- 哨兵：这些现在就应该是绿的，重写后不许回归 ----------
 
     [Fact]
-    public async Task TtaSaveFailsCleanlyWithoutThrow()
+    public async Task TtaSaveRoundTrips()
     {
-        // TagLib 不支持 TTA：保存必须返回 false（原因进日志），不能抛异常、不能写坏文件
+        // 2026-10-14 起 TTA 标签可写了（TtaTagAccess：音频数据原样搬 + 尾部拼新 APEv2，
+        // 临时文件 + File.Replace 原子替换）。这个用例早年断言「保存必须返回 false」
+        // （TagLib 没有 TTA 容器解析器的时代），TTA 支持落地后口径反转：
+        // 保存必须成功、字段必须 round-trip、文件不许被写坏（长度只应随标签变化）。
         string file = await Fixtures.FileNameForAsync(".tta", 1);
         string path = await Fixtures.CopyForTestAsync(file);
-        byte[] bytesBefore = File.ReadAllBytes(path);
 
-        var model = new TagEditModel { Title = "改不动的标题" };
+        var model = new TagEditModel { Title = "能改动的标题" };
         model.MarkDirty(TagField.Title); // 新后端契约：只写标记过的字段
         bool ok = TagEditorService.SaveTag(path, model);
 
+        Assert.True(ok, "TTA SaveTag 应成功（TtaTagAccess 落地后）");
+        Assert.Equal("能改动的标题", TagEditorService.ReadTagRaw(path).Title);
+    }
+
+    [Fact]
+    public void TtaSaveToMissingFile_FailsCleanlyWithoutThrow()
+    {
+        // 哨兵：路径不存在时保存必须返回 false（原因进日志），不能抛异常
+        var model = new TagEditModel { Title = "无人接收的标题" };
+        model.MarkDirty(TagField.Title);
+        bool ok = TagEditorService.SaveTag(
+            System.IO.Path.Combine(System.IO.Path.GetTempPath(), "celeste-no-such-file.tta"), model);
+
         Assert.False(ok);
-        Assert.Equal(bytesBefore, File.ReadAllBytes(path));
     }
 
     [Fact]

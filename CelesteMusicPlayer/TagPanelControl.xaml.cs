@@ -3052,11 +3052,9 @@ namespace CelesteMusicPlayer
         // 旧格式（只有 6 个可选列 Key 的数组）自动兼容：顺序按默认、没列进去 = 隐藏。
         // =====================================================================
 
-        /// <summary>默认隐藏的列（Key 集合；老口径的 6 个可选列）。</summary>
-        private static readonly HashSet<string> DefaultHiddenColumns = new(StringComparer.Ordinal)
-        {
-            "AlbumArtist", "Composer", "Disc", "TrackCount", "Bpm", "Comment",
-        };
+        /// <summary>默认隐藏的列（Key 集合；老口径的 6 个可选列）。单一真相在 TagColumnLayout。</summary>
+        private static readonly HashSet<string> DefaultHiddenColumns =
+            new(TagColumnLayout.DefaultHiddenColumns, StringComparer.Ordinal);
 
         /// <summary>末尾填充列的 Key（不参与显隐和顺序，恒在末行）。</summary>
         private const string FillerColumnKey = "Filler";
@@ -3103,6 +3101,7 @@ namespace CelesteMusicPlayer
 
             List<string> order = new(_allColumnKeys);
             HashSet<string> hidden = new(DefaultHiddenColumns, StringComparer.Ordinal);
+            bool legacyFormat = false;
 
             // 2) 读盘：新格式是对象 { order, hidden }；旧格式（数组 = 勾出来的可选列）兼容
             try
@@ -3115,20 +3114,15 @@ namespace CelesteMusicPlayer
 
                     if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Array)
                     {
-                        // 旧格式：数组里列了谁 = 谁可见；6 个可选列里没列进去的 = 隐藏
-                        HashSet<string> visible = new(StringComparer.Ordinal);
-                        foreach (System.Text.Json.JsonElement element in doc.RootElement.EnumerateArray())
-                        {
-                            string? key = element.GetString();
-                            if (!string.IsNullOrEmpty(key) && _columnLabels.ContainsKey(key))
-                            {
-                                visible.Add(key);
-                            }
-                        }
-
-                        hidden = new HashSet<string>(
-                            _allColumnKeys.Where(k => !visible.Contains(k)),
-                            StringComparer.Ordinal);
+                        // 旧格式（2026-10-14 之前的「列…」勾选面板）：数组里只可能躺着
+                        // 6 个可选列的 Key——默认列（标题/艺术家/…）当年根本不参与勾选、恒可见。
+                        // ⚠ 兼容口径：数组里有的可选列 = 可见，没有的可选列 = 隐藏；
+                        //    默认列一律保持可见。第一版这里写的是「数组里没有的全隐藏」，
+                        //    用户盘上存着旧版空数组 [] 时 21 列全被藏掉——表格有行、能选中，
+                        //    但一个字都不显示（2026-10-14 用户实测）。
+                        legacyFormat = true;
+                        hidden = TagColumnLayout.InterpretLegacy(
+                            doc.RootElement.GetRawText(), _allColumnKeys, DefaultHiddenColumns);
                     }
                     else if (doc.RootElement.ValueKind == System.Text.Json.JsonValueKind.Object)
                     {
@@ -3187,6 +3181,26 @@ namespace CelesteMusicPlayer
             _hiddenColumns = hidden;
 
             ApplyColumnLayout();
+
+            // 旧格式文件就地升级成新格式：下次加载直接走对象路径，
+            // 不用每次重猜兼容口径（升级失败不影响本次使用，日志留证）。
+            if (legacyFormat)
+            {
+                try
+                {
+                    SaveColumnLayout();
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException(
+                        "TagPanelControl.LoadColumnLayout.migrate", caught);
+                }
+            }
+
+            // 诊断：可见/隐藏列数 + 是否刚做过旧格式升级。「表格不显示字」类问题先看这行
+            global::CelesteMusicPlayer.StartupLog.Write(
+                $"[tagpanel] 列布局：可见 {_columnOrder.Count(k => !_hiddenColumns.Contains(k))} 列，" +
+                $"隐藏 {_hiddenColumns.Count} 列{(legacyFormat ? "（旧格式配置已升级）" : string.Empty)}");
         }
 
         /// <summary>按 Key 找表格列（找不到 = 盘上状态引用了不存在的列，调用方跳过）。</summary>
