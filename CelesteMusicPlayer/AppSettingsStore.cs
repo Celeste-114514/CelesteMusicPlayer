@@ -388,6 +388,13 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         /// <summary>Discogs personal access token（在 https://www.discogs.com/settings/developers 生成）。</summary>
         public string DiscogsToken { get; set; } = string.Empty;
 
+        /// <summary>Discogs OAuth 1.0a 消费者密钥（Consumer Key）。用户给的是这对，不是 personal token；
+        /// 在线标签用「Discogs key=…, secret=…」简化头鉴权，免完整 OAuth 流程。</summary>
+        public string DiscogsConsumerKey { get; set; } = string.Empty;
+
+        /// <summary>Discogs OAuth 1.0a 消费者密钥（Consumer Secret），与上面的 Consumer Key 配对。</summary>
+        public string DiscogsConsumerSecret { get; set; } = string.Empty;
+
         /// <summary>fanart.tv API key（在 https://fanart.tv/get-an-api-key/ 生成，可选）。</summary>
         public string FanartTvApiKey { get; set; } = string.Empty;
         /// <summary>各平台登录 Cookie（播放器内输入，本地明文存储）。空=未登录。</summary>
@@ -889,6 +896,8 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             LastFmApiKey = s.LastFmApiKey,
             LastFmSharedSecret = s.LastFmSharedSecret,
             DiscogsToken = s.DiscogsToken,
+            DiscogsConsumerKey = s.DiscogsConsumerKey,
+            DiscogsConsumerSecret = s.DiscogsConsumerSecret,
             FanartTvApiKey = s.FanartTvApiKey,
             NetEaseCookie = s.NetEaseCookie,
             QqCookie = s.QqCookie,

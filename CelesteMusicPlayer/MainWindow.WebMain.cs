@@ -692,9 +692,9 @@ namespace CelesteMusicPlayer
                         {
                             // 「onlinesearch」入口已随 OnlineSearchWindow 一并下架。
                             // 「lyric / batchlyric / editlyric」已随主窗口歌词功能一并移除
-                            // （歌词相关统一收敛到标签板块的歌词编辑 / 批量下载歌词子页）。
+                            // （歌词相关统一收敛到标签板块的在线歌词 / 批量下载歌词子页）。
+                            // 「dup」已随重复文件检测移除（曲库健康已有该能力）。
                             case "cover": _ = DownloadCoverForCurrentAsync(); break;
-                            case "dup": DuplicateFilesWindow.ShowOrActivate(this); break;
                             case "rgscan": OpenReplayGainScan(); break;
                             case "edittag":
                                 if (!string.IsNullOrWhiteSpace(_nowPlayingPath))

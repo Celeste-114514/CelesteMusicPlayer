@@ -1595,11 +1595,9 @@ namespace CelesteMusicPlayer
             // 在线标签能力已由标签板块的「在线标签」子页承接（MusicBrainz+iTunes+CAA+LRClib）。
 
             // 「下载当前歌词 / 批量下载歌词 / 编辑歌词」已按用户要求移除：
-            // 歌词相关功能统一收敛到标签板块（歌词编辑 / 批量下载歌词两个子页）。
+            // 歌词相关功能统一收敛到标签板块（在线歌词 / 批量下载歌词两个子页）。
 
-            var dupCheck = new MenuFlyoutItem { Text = "重复文件检测…" };
-            dupCheck.Click += (_, _) => DuplicateFilesWindow.ShowOrActivate(this);
-            flyout.Items.Add(dupCheck);
+            // 「重复文件检测…」已按用户要求移除：曲库健康里已有重复文件检测。
 
             var rgScan = new MenuFlyoutItem { Text = "ReplayGain 扫描…" };
             rgScan.Click += (_, _) => OpenReplayGainScan();
@@ -1609,7 +1607,7 @@ namespace CelesteMusicPlayer
             downloadCover.Click += (_, _) => _ = DownloadCoverForCurrentAsync();
             flyout.Items.Add(downloadCover);
 
-            var editTag = new MenuFlyoutItem { Text = "编辑标签…" };
+            var editTag = new MenuFlyoutItem { Text = "标签编辑" };
             editTag.Click += (_, _) =>
             {
                 if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
@@ -3235,7 +3233,7 @@ namespace CelesteMusicPlayer
 
             flyout.Items.Add(new MenuFlyoutSeparator());
 
-            var tag = new MenuFlyoutItem { Text = "编辑标签…" };
+            var tag = new MenuFlyoutItem { Text = "标签编辑" };
             tag.Click += (_, _) => OpenTagEditForFiles(new[] { song.FilePath });
             flyout.Items.Add(tag);
 

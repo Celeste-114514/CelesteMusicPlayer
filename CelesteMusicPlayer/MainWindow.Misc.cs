@@ -1399,7 +1399,7 @@ namespace CelesteMusicPlayer
                 add.Click += (_, _) => AddToUserPlaylistBack(songRef);
                 flyout.Items.Add(add);
 
-                var edit = new MenuFlyoutItem { Text = "编辑标签" };
+                var edit = new MenuFlyoutItem { Text = "标签编辑" };
                 edit.Icon = new FontIcon { Glyph = "\uE8D2" };
                 edit.Click += (_, _) => OpenTagEditForFiles(new[] { songRef.FilePath });
                 flyout.Items.Add(edit);

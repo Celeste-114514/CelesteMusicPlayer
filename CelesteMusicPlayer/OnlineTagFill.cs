@@ -49,7 +49,13 @@ namespace CelesteMusicPlayer
 
         public string YearText => Year == 0 ? "-" : Year.ToString(CultureInfo.InvariantCulture);
 
-        public string SourceLabel => string.Equals(Source, "iTunes", StringComparison.OrdinalIgnoreCase) ? "iTunes" : "MB";
+        public string SourceLabel => Source switch
+        {
+            _ when string.Equals(Source, OnlineTagFill.SourceItunes, StringComparison.OrdinalIgnoreCase) => "iTunes",
+            _ when string.Equals(Source, OnlineTagFill.SourceDiscogs, StringComparison.OrdinalIgnoreCase) => "Discogs",
+            _ when string.Equals(Source, OnlineTagFill.SourceLastFm, StringComparison.OrdinalIgnoreCase) => "Last.fm",
+            _ => "MB"
+        };
 
         public string DurationText
         {
@@ -66,12 +72,16 @@ namespace CelesteMusicPlayer
         }
     }
 
-    /// <summary>在线标签搜索/详情/封面/歌词（MusicBrainz + Cover Art Archive + iTunes + LRClib，全部免 key）。</summary>
+    /// <summary>在线标签搜索/详情/封面/歌词。免费源：MusicBrainz + Cover Art Archive + iTunes + LRClib；
+    /// 有 Key 源：Discogs（极详尽发行元数据+高清封面）、Last.fm（流派/封面）、fanart.tv（HD 封面/艺人图，按 MBID 取）。</summary>
     public static class OnlineTagFill
     {
+        public const string SourceAll = "All";
         public const string SourceBoth = "Both";
         public const string SourceMusicBrainz = "MusicBrainz";
         public const string SourceItunes = "iTunes";
+        public const string SourceDiscogs = "Discogs";
+        public const string SourceLastFm = "Last.fm";
 
         private static readonly HttpClient Http = CreateClient();
 
@@ -106,10 +116,17 @@ namespace CelesteMusicPlayer
                 return merged;
             }
 
-            bool wantMb = string.Equals(source, SourceBoth, StringComparison.OrdinalIgnoreCase)
+            bool wantAll = string.Equals(source, SourceAll, StringComparison.OrdinalIgnoreCase);
+            bool wantMb = wantAll
+                || string.Equals(source, SourceBoth, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(source, SourceMusicBrainz, StringComparison.OrdinalIgnoreCase);
-            bool wantItunes = string.Equals(source, SourceBoth, StringComparison.OrdinalIgnoreCase)
+            bool wantItunes = wantAll
+                || string.Equals(source, SourceBoth, StringComparison.OrdinalIgnoreCase)
                 || string.Equals(source, SourceItunes, StringComparison.OrdinalIgnoreCase);
+            bool wantDiscogs = wantAll
+                || string.Equals(source, SourceDiscogs, StringComparison.OrdinalIgnoreCase);
+            bool wantLastFm = wantAll
+                || string.Equals(source, SourceLastFm, StringComparison.OrdinalIgnoreCase);
 
             var tasks = new List<Task<IReadOnlyList<OnlineTagCandidate>>>();
             if (wantMb)
@@ -120,6 +137,16 @@ namespace CelesteMusicPlayer
             if (wantItunes)
             {
                 tasks.Add(SearchItunesAsync(t, a, al, cancellationToken));
+            }
+
+            if (wantDiscogs)
+            {
+                tasks.Add(SearchDiscogsAsync(t, a, al, cancellationToken));
+            }
+
+            if (wantLastFm)
+            {
+                tasks.Add(SearchLastFmAsync(t, a, al, cancellationToken));
             }
 
             IReadOnlyList<OnlineTagCandidate>[] parts = await Task.WhenAll(tasks).ConfigureAwait(false);
@@ -134,6 +161,36 @@ namespace CelesteMusicPlayer
             }
 
             return merged;
+        }
+
+        /// <summary>检查指定来源里需要 Key 的平台是否已配置 Key，返回未配置的平台名（用于界面提示）；全配齐返回 null。</summary>
+        public static string? CheckKeyAvailability(string source)
+        {
+            bool wantAll = string.Equals(source, SourceAll, StringComparison.OrdinalIgnoreCase);
+            bool wantDiscogs = wantAll
+                || string.Equals(source, SourceDiscogs, StringComparison.OrdinalIgnoreCase);
+            bool wantLastFm = wantAll
+                || string.Equals(source, SourceLastFm, StringComparison.OrdinalIgnoreCase);
+
+            var missing = new List<string>();
+            var settings = AppSettingsStore.Load();
+            if (wantDiscogs && string.IsNullOrWhiteSpace(settings.DiscogsConsumerKey))
+            {
+                missing.Add("Discogs");
+            }
+
+            if (wantLastFm && string.IsNullOrWhiteSpace(settings.LastFmApiKey))
+            {
+                missing.Add("Last.fm");
+            }
+
+            if (missing.Count == 0)
+            {
+                return null;
+            }
+
+            return "以下平台未配置 Key，已跳过：" + string.Join("、", missing)
+                + "（设置里填好 Key 后即可使用）。";
         }
 
         /// <summary>加权选最佳：标题/艺术家/专辑分别算相似度，返回候选下标；都不像返回 -1。</summary>
@@ -407,6 +464,398 @@ namespace CelesteMusicPlayer
             }
 
             return results;
+        }
+
+        // =====================================================================
+        // Discogs（有 Key）：极详尽发行元数据（year/genre/style/label/country/高清封面）
+        // 鉴权走简化头「Discogs key=…, secret=…」，免完整 OAuth 流程。
+        // =====================================================================
+
+        private static async Task<IReadOnlyList<OnlineTagCandidate>> SearchDiscogsAsync(
+            string title, string artist, string album, CancellationToken cancellationToken)
+        {
+            var results = new List<OnlineTagCandidate>();
+            try
+            {
+                var settings = AppSettingsStore.Load();
+                if (string.IsNullOrWhiteSpace(settings.DiscogsConsumerKey)
+                    || string.IsNullOrWhiteSpace(settings.DiscogsConsumerSecret))
+                {
+                    return results;
+                }
+
+                string q = string.Join(" ", new[] { title, artist, album }
+                    .Where(s => !string.IsNullOrWhiteSpace(s))).Trim();
+                if (q.Length == 0)
+                {
+                    return results;
+                }
+
+                string url = "https://api.discogs.com/database/search?type=release&per_page=20&q="
+                    + Uri.EscapeDataString(q);
+
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.TryAddWithoutValidation("Authorization",
+                    $"Discogs key={settings.DiscogsConsumerKey}, secret={settings.DiscogsConsumerSecret}");
+                request.Headers.TryAddWithoutValidation("User-Agent", "CelesteMusicPlayer/1.0");
+                using HttpResponseMessage response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return results;
+                }
+
+                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("results", out JsonElement arr)
+                    || arr.ValueKind != JsonValueKind.Array)
+                {
+                    return results;
+                }
+
+                foreach (JsonElement r in arr.EnumerateArray())
+                {
+                    cancellationToken.ThrowIfCancellationRequested();
+
+                    string id = r.TryGetProperty("id", out JsonElement idEl) && idEl.ValueKind == JsonValueKind.Number
+                        ? idEl.GetInt64().ToString(System.Globalization.CultureInfo.InvariantCulture)
+                        : TryGetString(r, "id");
+                    string rawTitle = TryGetString(r, "title"); // Discogs 形如 "Artist - Album"
+                    (string a, string alb) = ParseDiscogsTitle(rawTitle);
+                    uint year = TryGetUInt(r, "year");
+
+                    var genres = new List<string>();
+                    CollectStrings(r, "genre", genres);
+                    CollectStrings(r, "style", genres);
+
+                    string thumb = TryGetString(r, "thumb");
+
+                    results.Add(new OnlineTagCandidate
+                    {
+                        Source = SourceDiscogs,
+                        Id = id,
+                        Title = alb.Length > 0 ? alb : rawTitle,
+                        Artist = a,
+                        Album = alb,
+                        Year = year,
+                        Genre = string.Join("; ", genres.Distinct()),
+                        CoverUrl = thumb,
+                        DetailLoaded = false
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("OnlineTagFill.SearchDiscogsAsync", caught);
+            }
+
+            return results;
+        }
+
+        /// <summary>选中 Discogs 结果后拉发行详情：补高清封面、年份、流派/风格（搜索结果里可能缺）。</summary>
+        public static async Task<OnlineTagCandidate?> LoadDiscogsDetailAsync(
+            OnlineTagCandidate candidate, CancellationToken cancellationToken = default)
+        {
+            if (candidate == null || !string.Equals(candidate.Source, SourceDiscogs, StringComparison.OrdinalIgnoreCase))
+            {
+                return candidate;
+            }
+
+            try
+            {
+                string url = "https://api.discogs.com/releases/" + Uri.EscapeDataString(candidate.Id);
+                var settings = AppSettingsStore.Load();
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.TryAddWithoutValidation("Authorization",
+                    $"Discogs key={settings.DiscogsConsumerKey}, secret={settings.DiscogsConsumerSecret}");
+                request.Headers.TryAddWithoutValidation("User-Agent", "CelesteMusicPlayer/1.0");
+                using HttpResponseMessage response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    candidate.DetailLoaded = true;
+                    return candidate;
+                }
+
+                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                JsonElement root = doc.RootElement;
+
+                if (candidate.Year == 0 && root.TryGetProperty("year", out JsonElement yearEl))
+                {
+                    uint y = TryGetUInt(root, "year");
+                    if (y != 0)
+                    {
+                        candidate.Year = y;
+                    }
+                }
+
+                var genres = new List<string>();
+                CollectStrings(root, "genres", genres);
+                CollectStrings(root, "styles", genres);
+                if (genres.Count > 0)
+                {
+                    candidate.Genre = string.Join("; ", genres.Distinct());
+                }
+
+                // 高清封面：取 images 里第一条 uri（大图），覆盖搜索时的缩略图
+                if (root.TryGetProperty("images", out JsonElement images) && images.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement img in images.EnumerateArray())
+                    {
+                        string uri = TryGetString(img, "uri");
+                        string type = TryGetString(img, "type");
+                        if (uri.Length > 0 && (type == "primary" || type.Length == 0))
+                        {
+                            candidate.CoverUrl = uri;
+                            break;
+                        }
+                    }
+                }
+
+                candidate.DetailLoaded = true;
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("OnlineTagFill.LoadDiscogsDetailAsync", caught);
+                candidate.DetailLoaded = true;
+            }
+
+            return candidate;
+        }
+
+        private static (string Artist, string Album) ParseDiscogsTitle(string raw)
+        {
+            if (string.IsNullOrWhiteSpace(raw))
+            {
+                return (string.Empty, string.Empty);
+            }
+
+            int idx = raw.IndexOf(" - ", StringComparison.Ordinal);
+            if (idx < 0)
+            {
+                return (string.Empty, raw.Trim());
+            }
+
+            return (raw.Substring(0, idx).Trim(), raw.Substring(idx + 3).Trim());
+        }
+
+        // =====================================================================
+        // Last.fm（有 Key）：album.getinfo → 流派(top tags) + 高清封面（mega 图）
+        // =====================================================================
+
+        private static async Task<IReadOnlyList<OnlineTagCandidate>> SearchLastFmAsync(
+            string title, string artist, string album, CancellationToken cancellationToken)
+        {
+            var results = new List<OnlineTagCandidate>();
+            try
+            {
+                var settings = AppSettingsStore.Load();
+                if (string.IsNullOrWhiteSpace(settings.LastFmApiKey))
+                {
+                    return results;
+                }
+
+                // Last.fm 是专辑粒度：用专辑名（没有就用标题）+ 艺术家
+                string albumTerm = album.Length > 0 ? album : title;
+                if (albumTerm.Length == 0 || artist.Length == 0)
+                {
+                    return results;
+                }
+
+                string url = "https://ws.audioscrobbler.com/2.0/?method=album.getinfo&api_key="
+                    + Uri.EscapeDataString(settings.LastFmApiKey)
+                    + "&artist=" + Uri.EscapeDataString(artist)
+                    + "&album=" + Uri.EscapeDataString(albumTerm)
+                    + "&format=json";
+
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.TryAddWithoutValidation("User-Agent", "CelesteMusicPlayer/1.0");
+                using HttpResponseMessage response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return results;
+                }
+
+                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                if (!doc.RootElement.TryGetProperty("album", out JsonElement al))
+                {
+                    return results;
+                }
+
+                string name = TryGetString(al, "name");
+                string art = TryGetString(al, "artist");
+                string mbid = TryGetString(al, "mbid");
+
+                var tags = new List<string>();
+                if (al.TryGetProperty("tags", out JsonElement tagsEl)
+                    && tagsEl.TryGetProperty("tag", out JsonElement tagArr)
+                    && tagArr.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement tg in tagArr.EnumerateArray())
+                    {
+                        string? n = TryGetString(tg, "name");
+                        if (!string.IsNullOrWhiteSpace(n))
+                        {
+                            tags.Add(n);
+                        }
+                    }
+                }
+
+                // 封面：image 数组里最后一条是 mega（最大）
+                string cover = string.Empty;
+                if (al.TryGetProperty("image", out JsonElement imgs) && imgs.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (JsonElement im in imgs.EnumerateArray())
+                    {
+                        string u = TryGetString(im, "#text");
+                        if (u.Length > 0)
+                        {
+                            cover = u;
+                        }
+                    }
+                }
+
+                results.Add(new OnlineTagCandidate
+                {
+                    Source = SourceLastFm,
+                    Id = mbid,
+                    Title = name.Length > 0 ? name : albumTerm,
+                    Artist = art,
+                    Album = name,
+                    Genre = string.Join("; ", tags.Distinct()),
+                    CoverUrl = cover,
+                    DetailLoaded = true
+                });
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("OnlineTagFill.SearchLastFmAsync", caught);
+            }
+
+            return results;
+        }
+
+        // =====================================================================
+        // fanart.tv（有 Key）：按 MusicBrainz ID 取 HD 封面/艺人图，作为封面升级
+        // =====================================================================
+
+        public static async Task<string?> FetchFanartCoverAsync(
+            string mbid, bool isArtist, CancellationToken cancellationToken = default)
+        {
+            if (string.IsNullOrWhiteSpace(mbid))
+            {
+                return null;
+            }
+
+            var settings = AppSettingsStore.Load();
+            if (string.IsNullOrWhiteSpace(settings.FanartTvApiKey))
+            {
+                return null;
+            }
+
+            try
+            {
+                string url = isArtist
+                    ? "https://webservice.fanart.tv/v3/music/" + Uri.EscapeDataString(mbid)
+                        + "?api_key=" + Uri.EscapeDataString(settings.FanartTvApiKey)
+                    : "https://webservice.fanart.tv/v3/music/albums/" + Uri.EscapeDataString(mbid)
+                        + "?api_key=" + Uri.EscapeDataString(settings.FanartTvApiKey);
+
+                using var request = new HttpRequestMessage(HttpMethod.Get, url);
+                request.Headers.TryAddWithoutValidation("User-Agent", "CelesteMusicPlayer/1.0");
+                using HttpResponseMessage response = await Http.SendAsync(request, cancellationToken).ConfigureAwait(false);
+                if (!response.IsSuccessStatusCode)
+                {
+                    return null;
+                }
+
+                string json = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
+                using JsonDocument doc = JsonDocument.Parse(json);
+                JsonElement root = doc.RootElement;
+
+                // 专辑：{ "albums": { "<mbid>": [ { "url": ..., "type":"albumcover" } ] } }
+                if (!isArtist && root.TryGetProperty("albums", out JsonElement albums)
+                    && albums.ValueKind == JsonValueKind.Object)
+                {
+                    foreach (JsonProperty prop in albums.EnumerateObject())
+                    {
+                        if (prop.Value.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (JsonElement it in prop.Value.EnumerateArray())
+                            {
+                                string type = TryGetString(it, "type");
+                                if (type == "albumcover" || type.Length == 0)
+                                {
+                                    string u = TryGetString(it, "url");
+                                    if (u.Length > 0)
+                                    {
+                                        return u;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 艺人：artistthumb[] / artistbackground[]
+                if (isArtist)
+                {
+                    foreach (string key in new[] { "artistthumb", "artistbackground" })
+                    {
+                        if (root.TryGetProperty(key, out JsonElement arr) && arr.ValueKind == JsonValueKind.Array)
+                        {
+                            foreach (JsonElement it in arr.EnumerateArray())
+                            {
+                                string u = TryGetString(it, "url");
+                                if (u.Length > 0)
+                                {
+                                    return u;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                throw;
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("OnlineTagFill.FetchFanartCoverAsync", caught);
+            }
+
+            return null;
+        }
+
+        private static void CollectStrings(JsonElement el, string name, List<string> outList)
+        {
+            if (el.ValueKind != JsonValueKind.Object || !el.TryGetProperty(name, out JsonElement v)
+                || v.ValueKind != JsonValueKind.Array)
+            {
+                return;
+            }
+
+            foreach (JsonElement x in v.EnumerateArray())
+            {
+                string? s = x.ValueKind == JsonValueKind.String ? x.GetString() : null;
+                if (!string.IsNullOrWhiteSpace(s) && !outList.Contains(s))
+                {
+                    outList.Add(s);
+                }
+            }
         }
 
         // =====================================================================

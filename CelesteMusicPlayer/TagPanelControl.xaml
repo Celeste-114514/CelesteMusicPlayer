@@ -14,8 +14,8 @@
          左列：横向子导航（ShellPageHost 生成，6 页）+ 当前子页面板；
          右列：工具条 + 列表头 + 文件表格 + 状态条。
          快速编辑页：字段可编辑 + 保存 + 改动前快照整体回滚（阶段 6 落地）；
-         批量工具（阶段 7）/ 排序编号 / 在线标签（MusicBrainz+iTunes+CAA+LRClib）/
-         歌词编辑（原「歌词下载」）/ 批量下载歌词（从歌词编辑页拆出，独立成页）。
+         批量工具（阶段 7）/ 排序编号 / 在线标签（免费 MB+iTunes+CAA+LRClib，有 Key 的 Discogs+Last.fm+fanart.tv）/
+         在线歌词（原「歌词下载」）/ 批量下载歌词（从在线歌词页拆出，独立成页）。
          取色铁律：ShellPageHost 的强调色由外部注入（构造函数传 DspAccentBrush），
          界面里其它颜色一律 ThemeResource，不自己读系统强调色。 -->
 
@@ -264,16 +264,41 @@
                             TextWrapping="Wrap"
                             Height="150" />
 
-                        <!-- 同步歌词（带时间轴的那种，mp3tag 里就叫 LYRICS）：
-                             读得出来但写不回去（写它要重建时间轴事件，风险大又极少用），
-                             所以做成只读，省得改了以为生效。 -->
-                        <TextBox
-                            x:Name="QuickSyncedLyricsBox"
-                            Header="歌词（同步 · LYRICS，只读）"
-                            AcceptsReturn="True"
-                            IsReadOnly="True"
-                            TextWrapping="Wrap"
-                            Height="110" />
+                        <!-- 外挂 .lrc 编辑：直接编辑歌曲同目录（或设置里的歌词文件夹）中的同名 .lrc。
+                             它是磁盘上的独立文件，与右侧「下载并保存」写的是同一个位置；
+                             有独立的保存按钮，不走标签保存流程（不碰音频文件本身）。 -->
+                        <Border
+                            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
+                            CornerRadius="8"
+                            Padding="10">
+                            <StackPanel Spacing="6">
+                                <TextBlock Text="外挂歌词（.lrc）" FontSize="12" FontWeight="SemiBold" />
+                                <TextBlock
+                                    x:Name="QuickLrcPathText"
+                                    FontSize="11"
+                                    Opacity="0.7"
+                                    TextWrapping="WrapWholeWords" />
+                                <TextBox
+                                    x:Name="QuickLrcBox"
+                                    Height="150"
+                                    AcceptsReturn="True"
+                                    FontFamily="Consolas"
+                                    FontSize="12"
+                                    TextWrapping="NoWrap"
+                                    PlaceholderText="选中一个文件后，这里显示它同名 .lrc 的内容；还没有 .lrc 就直接写，然后点「保存 .lrc」"
+                                    ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                    ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="QuickLrcSaveButton" Content="保存 .lrc" Click="QuickLrcSaveButton_Click" />
+                                    <Button x:Name="QuickLrcReloadButton" Content="重新读取" Click="QuickLrcReloadButton_Click" />
+                                </StackPanel>
+                                <TextBlock
+                                    x:Name="QuickLrcStatusText"
+                                    FontSize="11"
+                                    Opacity="0.7"
+                                    TextWrapping="WrapWholeWords" />
+                            </StackPanel>
+                        </Border>
 
                         <!-- 文件本身的信息（只读，改不了也不需要改） -->
                         <Border
@@ -285,6 +310,17 @@
                                 <TextBlock x:Name="QuickFileInfoText" FontSize="11" Opacity="0.75" TextWrapping="WrapWholeWords" />
                             </StackPanel>
                         </Border>
+
+                        <!-- 同步歌词（带时间轴的那种，mp3tag 里就叫 LYRICS）：
+                             读得出来但写不回去（写它要重建时间轴事件，风险大又极少用），
+                             所以做成只读，省得改了以为生效。按用户要求放在本页最底部。 -->
+                        <TextBox
+                            x:Name="QuickSyncedLyricsBox"
+                            Header="歌词（同步 · LYRICS，只读）"
+                            AcceptsReturn="True"
+                            IsReadOnly="True"
+                            TextWrapping="Wrap"
+                            Height="110" />
                     </StackPanel>
                 </ScrollViewer>
 
@@ -548,7 +584,7 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- ══════════ 页 4：在线标签（MusicBrainz + iTunes + Cover Art Archive + LRClib） ══════════
+                <!-- ══════════ 页 4：在线标签（免费 MB+iTunes+CAA+LRClib；有 Key 的 Discogs+Last.fm+fanart.tv） ══════════
                      搜索 → 点结果看详情（封面/字段/歌词预览）→ 勾要写的字段 → 写入所选文件。
                      写入前快照、失败整体回滚（与快速编辑页同一套安全底线）。 -->
                 <ScrollViewer
@@ -592,13 +628,16 @@
                                         <ColumnDefinition Width="*" />
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
-                                    <ComboBox
+                                        <ComboBox
                                         x:Name="OnlineTagSourceCombo"
                                         Grid.Column="0"
                                         HorizontalAlignment="Stretch">
-                                        <ComboBoxItem Content="MusicBrainz + iTunes" Tag="Both" IsSelected="True" />
+                                        <ComboBoxItem Content="全部（免费 + Key）" Tag="All" IsSelected="True" />
+                                        <ComboBoxItem Content="MusicBrainz + iTunes" Tag="Both" />
                                         <ComboBoxItem Content="MusicBrainz" Tag="MusicBrainz" />
                                         <ComboBoxItem Content="iTunes" Tag="iTunes" />
+                                        <ComboBoxItem Content="Discogs（需 Key）" Tag="Discogs" />
+                                        <ComboBoxItem Content="Last.fm（需 Key）" Tag="Last.fm" />
                                     </ComboBox>
                                     <Button x:Name="OnlineTagSearchButton" Grid.Column="1" Content="搜索" Click="OnlineTagSearchButton_Click" />
                                 </Grid>
@@ -606,7 +645,7 @@
                                     FontSize="11"
                                     Opacity="0.6"
                                     TextWrapping="WrapWholeWords"
-                                    Text="MusicBrainz 官方限速每秒 1 次；iTunes 免 key。封面：MusicBrainz 走 Cover Art Archive，iTunes 走 Apple  artwork。歌词只有 LRClib（免 key），选中结果后自动取。" />
+                                    Text="免费源：MusicBrainz（官方限速每秒 1 次）+ iTunes，封面走 Cover Art Archive / Apple artwork，歌词只有 LRClib。有 Key 源：Discogs（极详尽发行元数据 + 高清封面）、Last.fm（流派 / 封面）、fanart.tv（按 MBID 取 HD 封面）。Key 在「设置」里填。" />
                             </StackPanel>
                         </Border>
 
@@ -771,7 +810,7 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- ══════════ 页 5：歌词编辑（原「歌词下载」改名） ══════════
+                <!-- ══════════ 页 5：在线歌词（原「歌词下载」改名） ══════════
                      单首精修：搜索 → 预览 → 选写入口径（外挂 .lrc / 歌词字段纯文本 /
                      歌词字段带时间戳 / 两头都写）。批量下载在下一个子页。 -->
                 <ScrollViewer
@@ -976,9 +1015,9 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- ══════════ 页 6：批量下载歌词（从歌词编辑页拆出，独立成页） ══════════
+                <!-- ══════════ 页 6：批量下载歌词（从在线歌词页拆出，独立成页） ══════════
                      逐首：算 .lrc 路径 → 跳过已有 → 拼关键词 → 搜索 → 加权选最佳 →
-                     下载 → 写外挂 .lrc（只写外挂；想写进歌词字段用「歌词编辑」页）。 -->
+                     下载 → 写外挂 .lrc（只写外挂；想写进歌词字段用「在线歌词」页）。 -->
                 <ScrollViewer
                     x:Name="LyricBatchPanel"
                     VerticalScrollBarVisibility="Auto"
@@ -1030,7 +1069,7 @@
                                     FontSize="11"
                                     Opacity="0.6"
                                     TextWrapping="WrapWholeWords"
-                                    Text="逐首下载并写成同名 .lrc（外挂文件）。想写进音频文件里的歌词字段，用「歌词编辑」页。QQ 音乐走客户端老接口，非官方渠道，随时可能失效。" />
+                                    Text="逐首下载并写成同名 .lrc（外挂文件）。想写进音频文件里的歌词字段，用「在线歌词」页。QQ 音乐走客户端老接口，非官方渠道，随时可能失效。" />
                                 <StackPanel Orientation="Horizontal" Spacing="8">
                                     <Button x:Name="LyricBatchStartButton" Content="开始批量下载" Click="LyricBatchStartButton_Click" />
                                     <Button x:Name="LyricBatchStopButton" Content="停止" Click="LyricBatchStopButton_Click" IsEnabled="False" />

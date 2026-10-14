@@ -29,8 +29,8 @@ namespace CelesteMusicPlayer
     /// 「标签」板块（2026-10-13 阶段 5a 骨架）：mp3tag 式左标签面板 + 右文件列表。
     ///
     /// 子页（6 个，ShellPageHost 管显隐）：快速编辑 / 批量工具 / 排序编号 /
-    /// 在线标签（MusicBrainz+iTunes+CAA+LRClib）/ 歌词编辑（原「歌词下载」）/
-    /// 批量下载歌词（从歌词编辑页拆出）。
+    /// 在线标签（MusicBrainz+iTunes+CAA+LRClib）/ 在线歌词（原「歌词下载」）/
+    /// 批量下载歌词（从在线歌词页拆出）。
     ///
     /// 复用既有件：ShellPageHost（子页导航）、TagEditorService（读写标签）、
     /// PlaylistItem（行模型，字段语义与主曲库严格一致）。
@@ -84,6 +84,9 @@ namespace CelesteMusicPlayer
 
         /// <summary>单选模式加载时的原值（「还原」与「没有改动」判断用）。</summary>
         private TagEditModel? _quickEditLoaded;
+
+        /// <summary>外挂 .lrc 编辑器当前对准的路径（选中单曲时解析出来；null=没有选中单曲）。</summary>
+        private string? _quickLrcPath;
 
         /// <summary>
         /// 标签写盘成功事件（每个路径触发一次）。主窗口订阅它来刷新曲库元数据——
@@ -163,13 +166,13 @@ namespace CelesteMusicPlayer
             _subNav.Register("批量工具", string.Empty, BatchToolsPanel);
             _subNav.Register("排序编号", string.Empty, SortNumberPanel);
             _subNav.Register("在线标签", string.Empty, OnlineTagPanel);
-            _subNav.Register("歌词编辑", string.Empty, LyricDownloadPanel);
+            _subNav.Register("在线歌词", string.Empty, LyricDownloadPanel);
             _subNav.Register("批量下载歌词", string.Empty, LyricBatchPanel);
             _subNav.Build();
 
             // 切到「排序编号」子页时刷新当前排序状态与作用范围
             // （排序规则可能在「排序…」弹窗里刚改过，页面里的展示不能是旧的）；
-            // 切到「在线标签」刷新当前文件与作用范围；切到「歌词编辑」刷新当前文件、
+            // 切到「在线标签」刷新当前文件与作用范围；切到「在线歌词」刷新当前文件、
             // 预填搜索框、恢复上次的写入口径；切到「批量下载歌词」刷新作用范围与选项。
             _subNav.PageEnter += page =>
             {
@@ -594,6 +597,7 @@ namespace CelesteMusicPlayer
             QuickCommentBox.Text = model.Comment;
             QuickLyricsBox.Text = model.Lyrics;
             QuickSyncedLyricsBox.Text = model.SyncedLyrics;
+            LoadExternalLrcForPath(path);
             ApplyFileInfoCard(path);
 
             QuickEditModeHint.Text = _quickEditSelection.Count > 1
@@ -647,6 +651,144 @@ namespace CelesteMusicPlayer
         private void ClearFileInfoCard()
         {
             QuickFileInfoText.Text = "选中一个文件后，这里显示它的格式、时长、码率等文件本身的信息。";
+        }
+
+        // =====================================================================
+        // 外挂 .lrc 编辑器（快速编辑页）
+        //
+        // 编辑对象 = 磁盘上的独立 .lrc 文件（和「在线歌词」页「下载并保存 → 外挂 .lrc」
+        // 写的是同一个位置），不碰音频文件本身的标签，所以有独立的保存按钮，
+        // 不走 QuickSave 那条标签保存链路。
+        //
+        // 路径解析优先级：① 歌曲同目录同名 .lrc（已存在）→ ② 设置里的歌词文件夹
+        // 同名 .lrc（已存在）→ ③ 都没有时按设置的默认落点给一个目标路径
+        // （保存时落那里，目录不存在会自动建）。
+        // =====================================================================
+
+        /// <summary>解析某个音频文件对应的外挂 .lrc 路径（读优先已存在的，保存用默认落点）。</summary>
+        private static string ResolveSidecarLrcForEdit(string audioPath)
+        {
+            string dir = System.IO.Path.GetDirectoryName(audioPath) ?? string.Empty;
+            string name = System.IO.Path.GetFileNameWithoutExtension(audioPath);
+            string inSongDir = System.IO.Path.Combine(dir, name + ".lrc");
+            if (File.Exists(inSongDir))
+            {
+                return inSongDir;
+            }
+
+            string lyricFolder = AppSettingsStore.Load().LyricFolder ?? string.Empty;
+            if (!string.IsNullOrWhiteSpace(lyricFolder))
+            {
+                string inLyricDir = System.IO.Path.Combine(lyricFolder, name + ".lrc");
+                if (File.Exists(inLyricDir))
+                {
+                    return inLyricDir;
+                }
+            }
+
+            // 都没有现成的：按「在线歌词」页同一套默认口径决定保存落点
+            bool saveToSongFolder = AppSettingsStore.Load().SaveLyricToSongFolder
+                || string.IsNullOrWhiteSpace(lyricFolder);
+            return saveToSongFolder ? inSongDir : System.IO.Path.Combine(lyricFolder, name + ".lrc");
+        }
+
+        /// <summary>选中单曲时把同名 .lrc 的内容读进编辑框（没有就空着，让人直接写新的）。</summary>
+        private void LoadExternalLrcForPath(string audioPath)
+        {
+            if (string.IsNullOrWhiteSpace(audioPath) || !File.Exists(audioPath))
+            {
+                ClearExternalLrcEditor();
+                return;
+            }
+
+            try
+            {
+                _quickLrcPath = ResolveSidecarLrcForEdit(audioPath);
+                if (File.Exists(_quickLrcPath))
+                {
+                    QuickLrcBox.Text = File.ReadAllText(_quickLrcPath);
+                    QuickLrcPathText.Text = "当前编辑：" + _quickLrcPath;
+                    QuickLrcStatusText.Text = string.Empty;
+                }
+                else
+                {
+                    QuickLrcBox.Text = string.Empty;
+                    QuickLrcPathText.Text = "保存到：" + _quickLrcPath + "（还没有这个文件，保存时会新建）";
+                    QuickLrcStatusText.Text = string.Empty;
+                }
+            }
+            catch (Exception caught)
+            {
+                _quickLrcPath = null;
+                QuickLrcBox.Text = string.Empty;
+                QuickLrcPathText.Text = "读取 .lrc 失败";
+                QuickLrcStatusText.Text = caught.Message;
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.LoadExternalLrcForPath", caught);
+            }
+        }
+
+        private void ClearExternalLrcEditor()
+        {
+            _quickLrcPath = null;
+            QuickLrcBox.Text = string.Empty;
+            QuickLrcPathText.Text = "选中一个文件后，这里显示它同名 .lrc 的内容。";
+            QuickLrcStatusText.Text = string.Empty;
+        }
+
+        private void QuickLrcSaveButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(_quickLrcPath))
+            {
+                QuickLrcStatusText.Text = "先选中一个文件，再保存 .lrc。";
+                return;
+            }
+
+            try
+            {
+                string? dir = System.IO.Path.GetDirectoryName(_quickLrcPath);
+                if (!string.IsNullOrWhiteSpace(dir))
+                {
+                    Directory.CreateDirectory(dir);
+                }
+
+                // 与「在线歌词」页外挂保存同口径：UTF-8 无 BOM（带 BOM 部分老播放器不认）
+                File.WriteAllText(_quickLrcPath, QuickLrcBox.Text ?? string.Empty, new System.Text.UTF8Encoding(false));
+                QuickLrcPathText.Text = "当前编辑：" + _quickLrcPath;
+                QuickLrcStatusText.Text = "已保存 → " + _quickLrcPath;
+                global::CelesteMusicPlayer.StartupLog.Write("TagPanel: 外挂 .lrc 已保存 → " + _quickLrcPath);
+            }
+            catch (Exception caught)
+            {
+                QuickLrcStatusText.Text = "保存失败：" + caught.Message;
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.QuickLrcSaveButton_Click", caught);
+            }
+        }
+
+        private void QuickLrcReloadButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrWhiteSpace(_quickLrcPath))
+            {
+                QuickLrcStatusText.Text = "先选中一个文件，再重新读取。";
+                return;
+            }
+
+            if (!File.Exists(_quickLrcPath))
+            {
+                QuickLrcBox.Text = string.Empty;
+                QuickLrcStatusText.Text = "磁盘上还没有这个 .lrc，当前内容保持不变。";
+                return;
+            }
+
+            try
+            {
+                QuickLrcBox.Text = File.ReadAllText(_quickLrcPath);
+                QuickLrcStatusText.Text = "已重新读取（未保存的改动已丢弃）。";
+            }
+            catch (Exception caught)
+            {
+                QuickLrcStatusText.Text = "读取失败：" + caught.Message;
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.QuickLrcReloadButton_Click", caught);
+            }
         }
 
         // =====================================================================
@@ -1934,6 +2076,7 @@ namespace CelesteMusicPlayer
             QuickCommentBox.Text = string.Empty;
             QuickLyricsBox.Text = string.Empty;
             QuickSyncedLyricsBox.Text = string.Empty;
+            ClearExternalLrcEditor();
 
             QuickEditTitle.Text = $"已选 {count} 个文件";
             QuickEditPath.Text = "批量填写：只填想改的字段，留空的不动";
@@ -1967,6 +2110,7 @@ namespace CelesteMusicPlayer
             QuickCommentBox.Text = string.Empty;
             QuickLyricsBox.Text = string.Empty;
             QuickSyncedLyricsBox.Text = string.Empty;
+            ClearExternalLrcEditor();
             ClearFileInfoCard();
 
             QuickEditTitle.Text = "未选择文件";
@@ -4800,6 +4944,7 @@ namespace CelesteMusicPlayer
             {
                 IReadOnlyList<OnlineTagCandidate> hits =
                     await OnlineTagFill.SearchAsync(source, title, artist, album).ConfigureAwait(true);
+                string? keyNote = OnlineTagFill.CheckKeyAvailability(source);
 
                 _onlineTagCandidates.Clear();
                 _onlineTagCandidates.AddRange(hits);
@@ -4818,7 +4963,8 @@ namespace CelesteMusicPlayer
 
                 if (_onlineTagCandidates.Count == 0)
                 {
-                    SetOnlineTagStatus("一个结果都没有。换个关键词试试，或在上面的来源里只选一边（MusicBrainz / iTunes）。");
+                    SetOnlineTagStatus("一个结果都没有。换个关键词试试，或在上面的来源里只选一边（MusicBrainz / iTunes）。"
+                        + (keyNote != null ? " " + keyNote : string.Empty));
                     return;
                 }
 
@@ -4832,10 +4978,15 @@ namespace CelesteMusicPlayer
                 {
                     OnlineTagResultList.ScrollIntoView(_onlineTagCandidates[best]);
                     await ShowOnlineTagDetailAsync().ConfigureAwait(true);
+                    if (keyNote != null)
+                    {
+                        SetOnlineTagStatus("详情已加载。（" + keyNote + "）");
+                    }
                 }
                 else
                 {
-                    SetOnlineTagStatus($"找到 {_onlineTagCandidates.Count} 个结果，但没有足够相似的——需要你手动点一个（看标题/艺术家/专辑对不上的就换）。");
+                    SetOnlineTagStatus($"找到 {_onlineTagCandidates.Count} 个结果，但没有足够相似的——需要你手动点一个（看标题/艺术家/专辑对不上的就换）。"
+                        + (keyNote != null ? " " + keyNote : string.Empty));
                 }
             }
             finally
@@ -4877,8 +5028,9 @@ namespace CelesteMusicPlayer
             OnlineTagCoverImage.Source = null;
             _onlineTagCoverBytes = null;
 
-            OnlineTagCandidate? loaded = await OnlineTagFill
-                .LoadMusicBrainzDetailAsync(candidate, localTitle).ConfigureAwait(true);
+            OnlineTagCandidate? loaded = string.Equals(candidate.Source, OnlineTagFill.SourceDiscogs, StringComparison.OrdinalIgnoreCase)
+                ? await OnlineTagFill.LoadDiscogsDetailAsync(candidate).ConfigureAwait(true)
+                : await OnlineTagFill.LoadMusicBrainzDetailAsync(candidate, localTitle).ConfigureAwait(true);
             if (loaded == null || !ReferenceEquals(OnlineTagResultList.SelectedItem, candidate))
             {
                 return;
@@ -4893,6 +5045,23 @@ namespace CelesteMusicPlayer
                 {
                     _onlineTagCoverBytes = cover;
                     ApplyCoverToOnlineTagImage(cover);
+                }
+            }
+            else if (string.Equals(candidate.Source, OnlineTagFill.SourceMusicBrainz, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(candidate.Id))
+            {
+                // CAA 没封面时，用 fanart.tv 按 MBID 取高清封面（需 Key）
+                string? fanart = await OnlineTagFill
+                    .FetchFanartCoverAsync(candidate.Id, false).ConfigureAwait(true);
+                if (!string.IsNullOrWhiteSpace(fanart)
+                    && ReferenceEquals(OnlineTagResultList.SelectedItem, candidate))
+                {
+                    byte[]? fcover = await OnlineTagFill.DownloadCoverBytesAsync(fanart).ConfigureAwait(true);
+                    if (fcover is { Length: > 0 } && ReferenceEquals(OnlineTagResultList.SelectedItem, candidate))
+                    {
+                        _onlineTagCoverBytes = fcover;
+                        ApplyCoverToOnlineTagImage(fcover);
+                    }
                 }
             }
 

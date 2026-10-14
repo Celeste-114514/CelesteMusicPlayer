@@ -207,7 +207,7 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
   - 🎨 **主界面布局与 UI / 主题大幅打磨**（`MainWindow.xaml` / `UiTheme` / `NowPlayingLayout`）
   - 📝 **音频信息格式化重写**（`AudioInfoFormatter`）
 - 🐛 修复 / 重构
-  - 🪟 一批工具 / 设置窗口同步适配与打磨（均衡器、标签编辑器、歌词编辑器、房间 / 耳机校正、重复文件、播放队列、迷你播放器、搜索、排序配置、取色器、歌手头像等）
+  - 🪟 一批工具 / 设置窗口同步适配与打磨（均衡器、标签编辑器、歌词编辑器、房间 / 耳机校正、播放队列、迷你播放器、搜索、排序配置、取色器、歌手头像等）
   - 🎵 播放与曲库逻辑微调（`Playback` / `Playback3` / `Library2` / `Misc` / `Settings`）
 - 🛠️ 优化使用体验
   - ⚙️ 设置项与关于面板联动调整；文件关联窗口同步

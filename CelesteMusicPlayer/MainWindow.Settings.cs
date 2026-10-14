@@ -191,7 +191,7 @@ namespace CelesteMusicPlayer
             };
             flyout.Items.Add(add);
 
-            var edit = new MenuFlyoutItem { Text = $"编辑标签（{sel.Count}）" };
+            var edit = new MenuFlyoutItem { Text = $"标签编辑（{sel.Count}）" };
             edit.Icon = new FontIcon { Glyph = "\uE8D2" };
             edit.Click += (_, _) => OpenTagEditForFiles(sel.Select(i => i.FilePath).ToList());
             flyout.Items.Add(edit);

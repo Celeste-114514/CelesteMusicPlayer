@@ -2546,10 +2546,9 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--mica
     var r = $('btnMore').getBoundingClientRect();
     cmShow(r.left - 40, r.top - 8, '更多功能', [
       {t:'下载当前封面', fn:function(){ post({kind:'feat', act:'cover'}); }},
-      {t:'编辑标签…', fn:function(){ post({kind:'feat', act:'edittag'}); }},
+      {t:'标签编辑', fn:function(){ post({kind:'feat', act:'edittag'}); }},
       {t:'在资源管理器中打开该歌曲', fn:function(){ post({kind:'feat', act:'openloc'}); }},
       {sep:1},
-      {t:'重复文件检测…', fn:function(){ post({kind:'feat', act:'dup'}); }},
       {t:'ReplayGain 扫描…', fn:function(){ post({kind:'feat', act:'rgscan'}); }},
       {t:'睡眠定时器…', fn:function(){ post({kind:'feat', act:'sleeptimer'}); }},
       {sep:1},
@@ -3900,7 +3899,7 @@ main{flex:1;min-width:0;display:flex;flex-direction:column;background:var(--mica
         }},
         {sep:1},
         {t:'转到所属专辑', dis: albumIdx < 0, fn:function(){ if (albumIdx >= 0) post({kind:'album', id:albumIdx}); }},
-        {t:'编辑标签…', fn:function(){ post({kind:'songact', act:'edittags', index:si}); }},
+        {t:'标签编辑', fn:function(){ post({kind:'songact', act:'edittags', index:si}); }},
         {t:'在资源管理器中打开', fn:function(){ post({kind:'songact', act:'openloc', index:si}); }},
         {sep:1},
         {t:'从媒体库中删除…', warn:1, fn:function(){ post({kind:'songact', act:'delfromlib', index:si}); }}

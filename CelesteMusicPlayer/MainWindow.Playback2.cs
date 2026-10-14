@@ -1315,7 +1315,7 @@ namespace CelesteMusicPlayer
 
         internal ObservableCollection<PlaylistItem> UserPlaylist => _userPlaylist;
 
-        /// <summary>媒体库全部歌曲（供重复文件检测等窗口使用）。</summary>
+        /// <summary>媒体库全部歌曲（供曲库健康等面板读取）。</summary>
         internal IReadOnlyList<PlaylistItem> LibraryTracks => _playlist;
 
         internal int UserPlaylistPlayingIndex => _userPlaylistIndex;
