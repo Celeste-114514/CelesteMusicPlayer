@@ -4715,14 +4715,16 @@ namespace CelesteMusicPlayer
             ApplyGridRowChrome(e.Row);
         }
 
-        /// <summary>行被回收（滚出视口 / 复用时）收回本地值，防止残留到下一条数据。</summary>
+        /// <summary>行被回收（滚出视口 / 复用时）收回前景，防止残留到下一条数据。</summary>
+        /// <remarks>
+        /// ⚠ 不要在这里（或任何地方）碰 BackgroundRectangle 的 Fill——
+        /// 选中态动画的目标就是 (Shape.Fill).(SolidColorBrush.Color)，替换实例或
+        /// ClearValue 都会让动画 Begin 时解析失败，抛
+        /// "Cannot resolve TargetProperty" COMException（0x80040154，2026-10-16 实测崩）。
+        /// </remarks>
         private void TagFileGrid_UnloadingRow(object sender, DataGridRowEventArgs e)
         {
             e.Row.ClearValue(Control.ForegroundProperty);
-            if (FindRowBackgroundRectangle(e.Row) is Rectangle background)
-            {
-                background.ClearValue(Shape.FillProperty);
-            }
         }
 
         /// <summary>
@@ -4732,14 +4734,21 @@ namespace CelesteMusicPlayer
         /// 行模板的选中底是一块 <c>Rectangle x:Name="BackgroundRectangle"</c>，Fill 绑主题
         /// 资源、选中态由 VisualState 动画写 (Fill).(SolidColorBrush.Color)——**不碰
         /// row.Background**。所以前两版在行上设 Background 全是无效功，「背景还是没变」。
-        /// 现在三件事各就各位：
+        /// 现在两件事各就各位：
         ///   ① 焦点行（DataGrid 自己选中的那行）：颜色由 SetupDataGridChrome 覆盖的四个
         ///      DataGridRowSelected* 主题资源决定（主面板同款半透明灰），动画自己会上；
-        ///   ② 勾选中的非焦点行：模板里是透明的，这里直接给 BackgroundRectangle 设本地
-        ///      Fill 补上同色（每行一支新画刷——动画改的是画刷实例的 Color，共用会串色）；
-        ///   ③ 圆角：Rectangle 自带 RadiusX/RadiusY，设一次即稳（动画不动这两个属性），
+        ///   ② 圆角：Rectangle 自带 RadiusX/RadiusY，设一次即稳（动画不动这两个属性），
         ///      不用整套重抄 DataGridRow 模板。
         /// 左侧竖条按用户要求不加；文字保持原色（模板动画不动前景，本地值就够）。
+        ///
+        /// ⚠️ 非焦点勾选行的底色**暂时不补**（只靠勾选框表达多选）：
+        /// 2026-10-16 实测——给 BackgroundRectangle 设本地 Fill（每行一支新画刷）或
+        /// ClearValue(Fill)，会让选中态动画 Begin 时解析目标属性链失败，直接抛
+        /// COMException 0x80040154「没有检测到已安装的组件 / Cannot resolve
+        /// TargetProperty (Shape.Fill).(SolidColorBrush.Color)」，程序崩。
+        /// 根因：动画按属性链定位到的是**模板原始那个画刷实例**，替换/清除后目标丢失。
+        /// 以后要补，唯一稳妥路是整套重抄 DataGridRow 模板（含视觉态动画），
+        /// 在模板里给未选中勾选态单独加动画——列为独立任务，别在行上打补丁。
         /// </summary>
         private void ApplyGridRowChrome(DataGridRow row)
         {
@@ -4748,20 +4757,6 @@ namespace CelesteMusicPlayer
             {
                 background.RadiusX = RowSelectionCornerRadius;
                 background.RadiusY = RowSelectionCornerRadius;
-            }
-
-            // ⚠ WinUI 版 DataGridRow 没有 IsSelected 属性（WPF 版有）——勾选态
-            // 只能问 _checkedSet（行被回收复用时就靠这个拿当前数据项）。
-            if (row.DataContext is TagFileItem rowItem && _checkedSet.Contains(rowItem))
-            {
-                if (background != null)
-                {
-                    background.Fill = new SolidColorBrush(_rowSelectionColor);
-                }
-            }
-            else if (background != null)
-            {
-                background.ClearValue(Shape.FillProperty);
             }
         }
 
