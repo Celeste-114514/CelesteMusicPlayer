@@ -22,8 +22,9 @@ DSP 机架 → 输出），卡片上写着这个环节**此刻的真实状态**�
 **铁律**（B1 第一条结论）：面板只当"读数器"——**拿不到的数据显示"未知"，绝不编数值**；
 面板不碰音频线程（电平表已有 30fps 消费路径，面板关掉就停刷新）。
 
-**六阶段**：① 勘察（✅ 本轮已完成）→ ② 数据模型 `AudioSignalPath` → ③ 面板 UI →
-④ 接真实状态 → ⑤ 主题适配 → ⑥ 验收。每阶段独立 commit、独立回退、出可运行版本。
+**六阶段**：① 勘察（✅ 10-16 完成）→ ② 数据模型 `AudioSignalPath`（✅ 10-16 完成，
+Debug 0 错误，未接 UI）→ ③ 面板 UI → ④ 接真实状态 → ⑤ 主题适配 → ⑥ 验收。
+每阶段独立 commit、独立回退、出可运行版本。
 
 ---
 
@@ -87,9 +88,9 @@ DSP 机架 → 输出），卡片上写着这个环节**此刻的真实状态**�
 
 ---
 
-## 2. B2 统一数据模型 `AudioSignalPath`（下一阶段，设计如下）
+## 2. B2 统一数据模型 `AudioSignalPath`（✅ 2026-10-16 完成，Debug 构建 0 错误）
 
-**新文件 `CelesteMusicPlayer/AudioSignalPath.cs`**——UI 只读这一份模型，不跨层问数据。
+**新文件 `CelesteMusicPlayer/AudioSignalPath.cs`**（已落地，未接 UI）——UI 只读这一份模型，不跨层问数据。
 
 ```csharp
 /// <summary>链路一个环节的快照。</summary>
@@ -117,13 +118,20 @@ sealed class AudioSignalPath
 }
 ```
 
-**`Capture()` 的数据来源**（全部来自 B1 表）：`_audioEngine.ChainFormat` + `DspState`
-+ `DspExtraStore`/`EqCurveStore`/`ReplayGainStore`/`RoomCorrectionStore` + 机架顺序
-+ `ProbeExclusivePlan` 缓存 + `OutputBufferMs`。**判定逻辑从 UI 控件侧搬到设置侧时，
-逐条对照 `RackModuleActive`（`MainWindow.DspRack.cs:578`）搬，搬完写个小测试比对两边一致。**
+**落地时对设计的修正（都有据）**：
+- 八模块判定用 **Store 口径**（`DspRackStore`/`DspExtraStore`/`RoomCorrectionStore`/`EqCurveStore`/
+  `ReplayGainStore` 的 IsActive/HasEffect 系列），与 `IsBitPerfectPure`（Features.cs:3297）**同源**，
+  不是 `RackModuleActive`（DspRack.cs:578）的 UI 控件口径。两处差异（UI 开着总开关但全默认值）
+  以 Store 口径为准——bit-perfect 判定本来就认总开关。B4 接线后 MainWindow 两处显示都改读模型。
+- bit-perfect 判定按 `EvaluateBitPerfectChain`（Features.cs:3343）口径在模型内复刻，
+  消除"两处各判各的"；MainWindow 后续 B4 切到读模型。
+- 事件环形缓冲（50 条，`RecordEvent`/`RecentEvents`）已立，B4 接线（切歌/切设备/切模式/协商/变速/DSP）。
+- 电平快照每次 `Capture` 顺带 `TryGetLevels` 拷贝；B4 面板刷新节流（快照 ≥100ms 重抓，电平 33ms）。
+- DSD/DoP 直出：decode 节点标注"不过处理链"，中间节点不编造状态。
+- 拿不到的设备端真实延迟/ASIO 驱动延迟：LatencyMs=null，面板显示"—"（铁律）。
 
-**事件时间线**（B2 顺带立环形缓冲，B4 接）：切歌 / 切设备 / 切输出模式 / 独占协商结果 /
-变速开关，各记一行（时间戳 + 一句话）。缓冲上限 50 条，面板关着不记也无妨（便宜）。
+**`Capture(engine, globalBypass)` 的参数说明**：globalBypass 设置侧无持久化，
+由调用方传 UI toggle 现状——是参数不是"问 UI"。engine 可空（未建引擎全节点待命）。
 
 ---
 
