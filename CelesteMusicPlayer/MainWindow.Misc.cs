@@ -412,10 +412,24 @@ namespace CelesteMusicPlayer
         /// <summary>展开态列宽的下限（与 XAML 里 CategoryColumn 的 MinWidth 一致）。</summary>
         private const double LeftNavExpandedMinWidth = 190;
 
-        /// <summary>收起态窄条的内边距。左 16 与展开态**取同一个值**——这是"图标两态位置一致"
-        /// 的前提（对齐方式也统一，见 NavContentAlignment），改一个就必须改另一个。
-        /// 右侧只留 4（窄条总共才 56px，留 14 会把内容挤没）。</summary>
-        private static Microsoft.UI.Xaml.Thickness LeftNavPaddingCollapsed => new(16, 2, 4, 2);
+        /// <summary>收起态窄条的内边距。
+        ///
+        /// 2026-10-16 用户反馈「收起时图标还是没水平居中」+「图标闪一下」——两个都由这里决定：
+        ///
+        /// ① 为什么必须**左右相等**（15/15，不是 16/4）：
+        ///    收起态的对齐是 Center（见 NavContentAlignment，用户要居中）。内容盒 =
+        ///    [Padding.Left, 卡片内宽 - Padding.Right]，它被居中 = 内容盒自己被摆到卡片中间，
+        ///    所以**只有左右留白相等，盒中心才等于卡片中心、图标才真正居中**。
+        ///    旧值 16/4 右窄左宽 → 盒中心整体右移 (16-4)/2 = 6px（实测确实偏右，用户看出来了）。
+        ///    取 15 而不是 16：卡片内宽约 56，左右各 15 剩 26，正好等于按钮自身
+        ///    （Padding 6 + 图标 14 + 6）→ 不挤不裁；左右相等 → 精确居中，且不依赖内宽具体值。
+        ///
+        /// ② 为什么左 15 与展开态的左 16 差 1 也不打紧：展开态是 Left 对齐、收起态收尾才切
+        ///    Center，切换那一刻两种算法的图标落点都是「左留白 + 13」，15/15 与它只差 1px，
+        ///    肉眼不可见（见 SetLeftNavIconMode 的完成回调）。
+        ///
+        /// ⚠️ 改这里会同时影响"居中"和"两态图标不跳"，改数前先读上面两条。</summary>
+        private static Microsoft.UI.Xaml.Thickness LeftNavPaddingCollapsed => new(15, 2, 15, 2);
 
         /// <summary>展开态卡片内边距。
         /// 左 16：2026-10-16 用户反馈"图标离主程序左边界太近"，但同时要求"分类栏要和左边界相接"
@@ -474,15 +488,6 @@ namespace CelesteMusicPlayer
                 if (GeekLibStats != null)
                 {
                     GeekLibStats.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
-                }
-
-                // 2026-10-16 用户要求：工具组（标签 / 音效处理 / 设置）从左栏卡片里移出，
-                // 成为主内容区第 0 列的独立浮层（见 MainWindow.xaml 的 NavToolPanel）。
-                // 它不再随卡片滑动，也不再受“卡片高度”约束；但窄条只有 56px，放不下这三个
-                // 带文字的条目 → 收起时整块藏起来（与上面统计块同一套规则）。
-                if (NavToolPanel != null)
-                {
-                    NavToolPanel.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
                 }
 
                 if (LeftNavCollapseButton != null)
@@ -733,6 +738,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var labels = new List<TextBlock>();
+                var buttons = new List<Button>();
                 foreach (FrameworkElement? root in new FrameworkElement?[] { CategoryNavPanel, NavToolPanel })
                 {
                     if (root == null)
@@ -742,7 +748,7 @@ namespace CelesteMusicPlayer
 
                     foreach (Button? button in FindDescendantButtons(root))
                     {
-                        button.HorizontalContentAlignment = NavContentAlignment;
+                        buttons.Add(button);
 
                         foreach (TextBlock? label in FindNavLabels(button))
                         {
@@ -753,6 +759,11 @@ namespace CelesteMusicPlayer
 
                 if (!animate)
                 {
+                    foreach (Button button in buttons)
+                    {
+                        button.HorizontalContentAlignment = NavContentAlignment;
+                    }
+
                     foreach (TextBlock label in labels)
                     {
                         label.Opacity = 1;
@@ -760,6 +771,22 @@ namespace CelesteMusicPlayer
                     }
 
                     return;
+                }
+
+                // ⚠️ 对齐（Left ↔ Center）的**切换时机**是"图标闪一下"的关键（2026-10-16 第二次反馈）：
+                //   对齐一改，内容的居中基准立刻变化。若在动画开始就切 Center，而此时文字还没淡完
+                //   （Opacity 淡出期间仍占位、内容仍是一个很宽的块）→ 宽块被重新居中 → 图标先被挤到
+                //   左边、淡出结束文字收起后又弹回中间 = 一次"闪"。
+                //   所以：
+                //     · 展开：必须在文字**变可见之前**就把对齐切回 Left（下面立刻切）；
+                //     · 收起：对齐留到淡出**结束后**再切（见 Completed），那时文字已收起、
+                //       内容只剩图标，切过去落点不变（配合 LeftNavPaddingCollapsed 的左右等宽）。
+                if (!iconOnly)
+                {
+                    foreach (Button button in buttons)
+                    {
+                        button.HorizontalContentAlignment = NavContentAlignment;
+                    }
                 }
 
                 // 淡出（收起）/ 淡入（展开）：与卡片滑动同长，动画跑完才真正改 Visibility。
@@ -790,6 +817,13 @@ namespace CelesteMusicPlayer
                 {
                     try
                     {
+                        // 收起路径的对齐在这里才切（见上面那段"切换时机"）：
+                        // 文字已收起，落点由"左留白 + 13"变成"盒中心"，两者相等/差 1px，不跳。
+                        foreach (Button button in buttons)
+                        {
+                            button.HorizontalContentAlignment = NavContentAlignment;
+                        }
+
                         foreach (TextBlock label in labels)
                         {
                             label.Visibility = iconOnly ? Visibility.Collapsed : Visibility.Visible;

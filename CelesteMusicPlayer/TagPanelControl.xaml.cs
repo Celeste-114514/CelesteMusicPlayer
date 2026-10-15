@@ -4528,7 +4528,11 @@ namespace CelesteMusicPlayer
         private void RefreshCountUi()
         {
             int total = _files.Count;
-            int selected = TagFileGrid?.SelectedItems.Count ?? 0;
+            // ⚠️ 计数必须读多选真值源 _checkedSet，**不要读 TagFileGrid.SelectedItems.Count**。
+            // 本表是 SelectionMode=Single（只管焦点行），多选完全自管在 _checkedSet；
+            // 读 SelectedItems 会跟真实勾选数对不上（2026-10-16 用户反馈「只选了一首，
+            // 却显示选中了很多」）。
+            int selected = _checkedSet.Count;
 
             FileCountText.Text = total > 0 ? $"共 {total} 个文件" : "0 个文件";
             // 只切显隐，不改文字：文字由 ShowEmptyHint / ResetEmptyHint 管
@@ -4733,6 +4737,18 @@ namespace CelesteMusicPlayer
         private void TagFileGrid_UnloadingRow(object sender, DataGridRowEventArgs e)
         {
             e.Row.ClearValue(Control.ForegroundProperty);
+
+            // 勾选底色也一起收掉：DataGridCell 会随行复用，留在单元格上的本地 Background
+            // 如果不清，行被回收去显示别的数据时会把底色带过去（表现为「没勾选的行也有底色」
+            // 或「勾选框只勾了一首、底色却铺了很多行」）。真正勾选的行由 LoadingRow /
+            // RefreshGridRowsChrome 重刷回来，这里只管别残留。
+            // ⚠️ 清的是 cell.Background（无动画目标，安全），绝不碰 BackgroundRectangle.Fill。
+            var cells = new List<DataGridCell>();
+            CollectDescendants(e.Row, cells);
+            foreach (DataGridCell cell in cells)
+            {
+                cell.ClearValue(Control.BackgroundProperty);
+            }
         }
 
         /// <summary>
