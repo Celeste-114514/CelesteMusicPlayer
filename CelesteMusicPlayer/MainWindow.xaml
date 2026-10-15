@@ -7001,6 +7001,21 @@
                                  该列整体隐藏（用户 2026-10-16 要求），代码把本组 Margin 右改 8、
                                  挪到右缘，收起时还原 280。 -->
                             <StackPanel x:Name="NowPlayingTopRightButtons" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2" Margin="0,0,280,0">
+                                <!-- 音频链路（B 组 B3，2026-10-16）：10-15 注释里给「信号路径」预留的那块。
+                                     点开从右缘滑出的抽屉面板（见 AudioChainOverlayHost）。 -->
+                                <Button CornerRadius="16"
+                                    x:Name="NowPlayingChainButton"
+                                    Height="32"
+                                    Padding="10,0"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Click="NowPlayingChainButton_Click"
+                                    ToolTipService.ToolTip="音频链路（信号路径 / 诊断 / 事件）">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <FontIcon Glyph="&#xE9D9;" FontSize="12" VerticalAlignment="Center" />
+                                        <TextBlock Text="链路" FontSize="12" VerticalAlignment="Center" />
+                                    </StackPanel>
+                                </Button>
                                 <Button CornerRadius="16"
                                     x:Name="NowPlayingVisualButton"
                                     Height="32"
@@ -8632,6 +8647,42 @@
             Visibility="Collapsed"
             HorizontalAlignment="Stretch"
             VerticalAlignment="Stretch" />
+        <!-- 音频链路抽屉面板（B 组 B3，2026-10-16）：从窗口右缘滑出的面板，风格对齐左侧分类栏卡片。
+             机制与下面的「音频设置右侧滑出面板」同源（Visibility + IsHitTestVisible + TranslateX 动画），
+             不新造一套；开合/刷新见 MainWindow.AudioChain.cs。
+             ⚠️ 必须留在主内容之后（后画的在上层）：它要盖住内容区与播放页。 -->
+        <Grid
+            x:Name="AudioChainOverlayHost"
+            Grid.RowSpan="4"
+            Visibility="Collapsed"
+            IsHitTestVisible="False">
+            <Grid.Resources>
+                <Storyboard x:Name="AudioChainOpenStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="AudioChainPanelTransform" Storyboard.TargetProperty="TranslateX"
+                                     From="420" To="0" Duration="0:0:0.22">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+                <Storyboard x:Name="AudioChainCloseStoryboard">
+                    <DoubleAnimation Storyboard.TargetName="AudioChainPanelTransform" Storyboard.TargetProperty="TranslateX"
+                                     From="0" To="420" Duration="0:0:0.18">
+                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseIn" /></DoubleAnimation.EasingFunction>
+                    </DoubleAnimation>
+                </Storyboard>
+            </Grid.Resources>
+            <Grid x:Name="AudioChainScrim" Background="#66000000" Tapped="AudioChainScrim_Tapped" />
+            <Border
+                x:Name="AudioChainPanelHost"
+                Width="420"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Stretch">
+                <Border.RenderTransform>
+                    <CompositeTransform x:Name="AudioChainPanelTransform" TranslateX="420" />
+                </Border.RenderTransform>
+                <local:AudioChainPanelControl x:Name="AudioChainPanel" />
+            </Border>
+        </Grid>
+
         <!-- 音频设置右侧滑出面板（从右边界向左延伸） -->
         <Grid
             x:Name="AudioSettingsOverlayHost"
