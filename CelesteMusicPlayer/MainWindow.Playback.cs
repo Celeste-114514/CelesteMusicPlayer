@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -1427,36 +1427,16 @@ namespace CelesteMusicPlayer
 
 
 
-        private void PlaybackRateButton_Click(object sender, RoutedEventArgs e)
-        {
-            // 2026-09-29：这个按钮以前是"死"的 —— 引擎播放时二话不说直接 return，
-            // 菜单从不弹出（用户实测"点不动"）。现在引擎也支持变速了：倍率以 atempo
-            // 过滤器烧进转码参数（缓存键含参数指纹，倍率变化自动分开缓存、互不污染）。
-            //   · 当前有 PCM 曲目在播 → 记下位置，用新倍率重新转码并原位续起；
-            //   · DSD 曲目在播       → atempo 对 1-bit 位流无意义，如实拒绝并说明；
-            //   · 空闲               → 只改设置，下一首起播生效。
-            var flyout = new MenuFlyout();
-            double current = Math.Clamp(AppSettingsStore.Load().PlaybackRate, 0.5, 2.0);
-            foreach (double rate in new[] { 0.5, 0.75, 1.0, 1.25, 1.5, 2.0 })
-            {
-                double r = rate;
-                var item = new MenuFlyoutItem
-                {
-                    Text = (Math.Abs(r - current) < 0.001 ? "● " : "　") + r.ToString("0.##") + "x"
-                };
-                item.Click += (_, _) => _ = SetPlaybackRateAsync(r);
-                flyout.Items.Add(item);
-            }
-
-            flyout.ShowAt(sender as FrameworkElement);
-        }
+        // 2026-10-16：原「播放速度」按钮 + 六档预设菜单（PlaybackRateButton_Click）已删除——
+        // 换成音频设置面板「播放速度」页里的拖动滑块（0.01 步进、拖动即时变声）。
 
 
         /// <summary>
-        /// 当前播放的"源时间刻度"倍率。atempo 变速后 WAV 时长 = 原时长 ÷ 倍率，
-        /// 而进度条一律按"原歌曲时间"显示：总时长 = WAV 时长 × 倍率，位置 = WAV 位置 × 倍率，
-        /// 反过来 seek 时引擎位置 = 界面位置 ÷ 倍率。
-        /// 未变速 / DSD / 非引擎播放恒为 1.0。
+        /// 当前播放的"源时间刻度"倍率。2026-10-16 起恒为 1.0：变速从"烧 atempo 进转码"
+        /// 改成托管侧实时变速（ManagedDspSourceProvider.SpeedStretch）后，转码产物就是原始长度，
+        /// 引擎位置本身就是"原歌曲时间"，进度条直接用、不需要再换算。
+        /// 保留这个方法与 ChainFormat.TempoShifted 判据是给老代码路径一个明确的 1.0 出口；
+        /// 若将来哪条路径又烧了时长进去，这里会自动恢复换算。
         /// 2026-09-30 用户要求：变速不要把进度条总时长拉长（1min 的歌 0.5x 变 2min）。
         /// </summary>
         private double TempoScale()
@@ -1484,88 +1464,49 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>
-        /// 设播放倍速：持久化 +（引擎在播 PCM 时）当前曲目以原位重起。
-        /// 重起走的是正式播放入口（_playGate 串行），失败会留下错误提示；
-        /// 倍率 = 1.0 时转码参数与从前逐字节一致，缓存键不变，不会触发重转码。
+        /// 设播放倍速（2026-10-15 重写为实时）：持久化 + 直接推给引擎的托管变速，
+        /// 播放中下一个音频块即变声——不重载、不重转码、不断音。
+        /// （旧实现：记住位置→用 ffmpeg atempo 按新倍率整轨重转码→原位重起，拖动一次卡几秒；
+        ///  atempo 路径已废，转码恒为原始长度，变速在 ManagedDspSourceProvider 里实时做。）
+        /// DSD/DoP 直出不过 DSP 链 → 变速无效，如实说明（转码成 PCM 的 DSD 可以变速）。
         /// </summary>
-        private async Task SetPlaybackRateAsync(double rate)
+        private Task SetPlaybackRateAsync(double rate)
         {
             double clamped = Math.Clamp(rate, 0.5, 2.0);
             double prev = Math.Clamp(AppSettingsStore.Load().PlaybackRate, 0.5, 2.0);
             if (Math.Abs(clamped - prev) < 0.001)
             {
-                return; // 点的就是当前倍率，什么都不做
+                return Task.CompletedTask; // 设的就是当前倍率，什么都不做
             }
 
-            AppSettingsStore.Update(s => s.PlaybackRate = clamped);
+            bool preserve = AppSettingsStore.Load().PlaybackRatePreservePitch;
+            AppSettingsStore.Update(s =>
+            {
+                s.PlaybackRate = clamped;
+                s.PlaybackRatePreservePitch = preserve;
+            });
             UpdatePlaybackRateButtonText();
             string rateText = clamped.ToString("0.##") + "x";
 
-            if (!IsEngineActiveNow || string.IsNullOrWhiteSpace(_nowPlayingPath))
+            // 实时下发：引擎活着就下一个音频块生效；没在播就只是记设置，起播时自动带上
+            _audioEngine?.SetPlaybackSpeed(clamped, preserve);
+
+            if (!IsEngineActiveNow)
             {
                 NowPlayingText.Text = "播放速度已设为 " + rateText + "（起播后生效）";
-                return;
+                return Task.CompletedTask;
             }
 
-            if (IsDsdFile(_nowPlayingPath))
+            if (_audioEngine?.IsDsdDirectOut == true)
             {
-                // DSD 1-bit 位流不过 atempo：设置保留给后面的 PCM 曲目，当前曲目照旧 1x
-                NowPlayingText.Text = "DSD 曲目不支持变速，当前仍按 1x 播放；速度已设为 " + rateText + "（下一首 PCM 生效）";
-                return;
+                // DoP 直出 = 1-bit 位流直通设备，不经 DSP 链，托管变速够不着它
+                NowPlayingText.Text = "DSD DoP 直出不变速（直出链路不过处理）；速度已记为 " + rateText + "，下一首 PCM 生效";
+                return Task.CompletedTask;
             }
 
-            // 在播的 PCM 曲目：记下当前位置，用新倍率重新转码并原位续起
-            TimeSpan resumeAt = _audioEngine?.Position ?? TimeSpan.Zero;
-            bool wasPaused = _isEnginePaused;
-            string path = _nowPlayingPath;
-            _startPlaybackInFlight = true; // 重载期间不写进度，避免记串曲目
-            NowPlayingText.Text = "正在按 " + rateText + " 重新加载当前曲目…";
-            StartupLog.Write("[变速] 原位重起 " + path + " resume=" + resumeAt + " rate=" + clamped);
-
-            try
-            {
-                _audioEngine ??= new AudioPlaybackEngine();
-                // CUE 分轨：按当前轨的区间重新转码（resumeAt  seek 都换算到新倍率即可，全是轨内时间）
-                (double cueStart, double cueLength) = CurrentCueRange();
-                bool ok = await _audioEngine.PlayFileWithFfmpegAsync(path, s =>
-                    DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }), cueStart, cueLength);
-                if (!ok)
-                {
-                    NowPlayingText.Text = "变速加载失败，请重试或切回 1x：" + (_audioEngine.LastError ?? "未知原因");
-                    StartupLog.Write("[变速] 原位重起失败 err=" + (_audioEngine.LastError ?? "?"));
-                    return;
-                }
-
-                _isEnginePaused = false;
-                _usingEnginePlayback = true;
-                if (resumeAt > TimeSpan.Zero)
-                {
-                    // 旧倍率下的 WAV 位置 → 源位置 → 新倍率下的 WAV 位置
-                    double prevScale = Math.Abs(prev - 1.0) < 0.001 ? 1.0 : prev;
-                    double sourcePos = resumeAt.TotalSeconds * prevScale;
-                    _audioEngine.Seek(TimeSpan.FromSeconds(sourcePos / clamped));
-                }
-
-                if (wasPaused)
-                {
-                    _audioEngine.Pause(); // 原来暂停着的，重起后保持暂停
-                    _isEnginePaused = true;
-                }
-
-                // 进度条 / 总时长保持"原歌曲时间"：0.5x 的 1min 歌曲总时长仍显示 1min
-                double totalWav = _audioEngine.Duration.TotalSeconds;
-                double shownPos = resumeAt > TimeSpan.Zero
-                    ? resumeAt.TotalSeconds * (Math.Abs(prev - 1.0) < 0.001 ? 1.0 : prev)
-                    : 0;
-                ProgressSlider.Maximum = Math.Max(1, totalWav * clamped);
-                ProgressSlider.Value = shownPos;
-                TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(totalWav * clamped));
-                NowPlayingText.Text = "正在播放（" + rateText + "）" + (wasPaused ? " · 已暂停" : "");
-            }
-            finally
-            {
-                _startPlaybackInFlight = false;
-            }
+            NowPlayingText.Text = "播放速度 " + rateText + (preserve ? " · 音调不变" : " · 音调随速度变");
+            StartupLog.Write($"[变速] 实时设为 {clamped:0.##}x 保调={preserve}");
+            return Task.CompletedTask;
         }
 
 

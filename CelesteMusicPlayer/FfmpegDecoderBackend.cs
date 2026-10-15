@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -453,18 +453,13 @@ namespace CelesteMusicPlayer
             LastTranscodePlan = null; // 阶段二：协商计划同样只对"最近一次"有效，先清防残留
             LastTranscodeTempoApplied = false; // 变速标记同样只对"最近一次"有效
 
-            // 变速（atempo）：把倍率烧进转码参数。DSD 分支不做——atempo 处理的是 1-bit 位流，
-            // 语义上不成立（调用方对 DSD 曲目拒绝变速并如实提示）。
-            double tempo = GetTempoRate();
-            bool tempoOn = IsTempoActive(tempo);
-            string tempoFilter = tempoOn
-                ? " -af \"atempo=" + tempo.ToString("0.###", CultureInfo.InvariantCulture) + "\""
-                : string.Empty;
-            if (tempoOn)
-            {
-                StartupLog.Write("[变速] 注入 atempo=" + tempo.ToString("0.###", CultureInfo.InvariantCulture)
-                    + " → " + Path.GetFileName(srcPath));
-            }
+            // 变速（2026-10-15 起改走托管侧实时变速，不再烧 atempo）：
+            // 旧做法把 atempo 过滤器烧进转码参数——倍率一换就要整轨重转码 + 原位重起，
+            // 拖动滑块会连着重转十几次，且缓存键含倍率指纹、每个倍率各占一份缓存。
+            // 现在转码恒为原始长度，变速由 ManagedDspSourceProvider 里的 SpeedStretch
+            // 在取数环节实时完成（共享/独占/ASIO 全覆盖，下一个音频块生效）。
+            // 这里保留 GetTempoRate/IsTempoActive 供上层诚实性提示使用，但不再注入过滤器。
+            LastTranscodeTempoApplied = false;
 
             if (ext is ".dsf" or ".dff")
             {
@@ -478,9 +473,9 @@ namespace CelesteMusicPlayer
                 return string.Format("-y -i \"{0}\" -vn -c:a pcm_s32le -ar 352800 -sample_fmt s32 \"{1}\"", srcPath, dstPath);
             }
 
-            // 走到这里 = 非 DSD：atempo 过滤器已在上面算好，接下来各 PCM 分支统一注入。
-            // （DSD 分支在上面已 return，到不了这里 —— DSD 拒绝变速。）
-            LastTranscodeTempoApplied = tempoOn;
+            // 走到这里 = 非 DSD。变速已改由托管侧 SpeedStretch 实时完成（见上），
+            // 转码参数与倍率彻底解耦——同一文件只转一份，倍率随便拖不重转。
+            LastTranscodeTempoApplied = false;
 
             // 异步探测（2026-09-21 改）：旧实现在这里同步 spawn ffmpeg 并 ReadToEnd + WaitForExit(3000)，
             // 起播与预加载各跑一次，阻塞调用线程最多 3 秒 —— 这是"MP3 也卡"的主要来源之一。
@@ -502,11 +497,11 @@ namespace CelesteMusicPlayer
                     var mix = HiFiOutputBackend.GetDeviceMixFormat(devicePreference);
                     if (mix is (int mr, _, _, _) && mr > 0)
                     {
-                        return string.Format("-y -i \"{0}\" -vn{1} -c:a pcm_f32le -ar {2} -ac 2 \"{3}\"", srcPath, tempoFilter, mr, dstPath);
+                        return string.Format("-y -i \"{0}\" -vn -c:a pcm_f32le -ar {1} -ac 2 \"{2}\"", srcPath, mr, dstPath);
                     }
 
                     // 设备 MixFormat 探测失败兜底：固定 48k/2ch float32（系统共享普遍支持）
-                    return string.Format("-y -i \"{0}\" -vn{1} -c:a pcm_f32le -ar 48000 -ac 2 \"{2}\"", srcPath, tempoFilter, dstPath);
+                    return string.Format("-y -i \"{0}\" -vn -c:a pcm_f32le -ar 48000 -ac 2 \"{1}\"", srcPath, dstPath);
                 }
 
                 // 严格按源位深输出（bit-perfect）：16→s16le、24→s24le、32→s32le。
@@ -522,13 +517,13 @@ namespace CelesteMusicPlayer
                     if (plan != null && plan.TargetRate != rate)
                     {
                         StartupLog.Write("[链路] 转码目标率 " + rate + "→" + plan.TargetRate + "（" + plan.Reason + "）");
-                        return string.Format("-y -i \"{0}\" -vn{1} -acodec {2} -ar {3} \"{4}\"", srcPath, tempoFilter, enc, plan.TargetRate, dstPath);
+                        return string.Format("-y -i \"{0}\" -vn -acodec {1} -ar {2} \"{3}\"", srcPath, enc, plan.TargetRate, dstPath);
                     }
 
                     StartupLog.Write("[链路] 目标率=源率 " + rate + "（设备支持，源率直通）");
                 }
 
-                return string.Format("-y -i \"{0}\" -vn{1} -acodec {2} \"{3}\"", srcPath, tempoFilter, enc, dstPath);
+                return string.Format("-y -i \"{0}\" -vn -acodec {1} \"{2}\"", srcPath, enc, dstPath);
             }
 
             // 探测失败回退：固定 16bit/44.1kHz/立体声，保证可播。
@@ -537,7 +532,7 @@ namespace CelesteMusicPlayer
             LastProbedSourceFormat = null;
             LastTranscodeWasFallback = true;
             StartupLog.Write("[转码警告] 源格式探测失败，按 16bit/44100Hz/立体声兜底（高于此规格的源会被降级）：" + srcPath);
-            return string.Format("-y -i \"{0}\" -vn{1} -acodec pcm_s16le -ar 44100 -ac 2 \"{2}\"", srcPath, tempoFilter, dstPath);
+            return string.Format("-y -i \"{0}\" -vn -acodec pcm_s16le -ar 44100 -ac 2 \"{1}\"", srcPath, dstPath);
         }
 
         /// <summary>探测缓存 key：路径 + 最后修改时间 + 文件长度。三者任一变化都视为源文件变了，重新探测。</summary>

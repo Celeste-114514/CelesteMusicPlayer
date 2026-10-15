@@ -132,12 +132,11 @@ namespace CelesteMusicPlayer
         /// 共享（系统混音）与独占（原生 WASAPI 事件驱动）均生效，改动后下次开播生效；默认 100ms。</summary>
         public int OutputBufferMs { get; set; } = 100;
 
-        /// <summary>独占输出内核："native2"=自研原生内核（默认，C++ 原生渲染线程 + 整数字节直喂，
-        /// DSP 全关时端到端 bit-perfect；DSD 走预载容器，实测最稳）；"echo"=ECHO 核心（C++ 原生渲染线程
-        /// 只 memcpy 环形缓冲，.NET GC 冻不到它——卡顿试验田，暂不支持 DSD/DoP：选了 echo 播 DSD
-        /// 也自动回退原生内核）。
-        /// 2026-10-11 起原 "self"（C# 托管渲染线程）选项删除：存量配置里的 "self"/空值/无法识别的值
-        /// 在 Normalize 里一律归一到 "native2"；代码里的自研路径仅剩设置读取失败时的兜底。改动后下次开播生效。</summary>
+        /// <summary>独占输出内核。2026-10-16 起恒为 "native2"（自研原生内核：C++ 原生渲染线程 +
+        /// 整数字节直喂，DSP 全关时端到端 bit-perfect；DSD 走预载容器，实测最稳）。
+        /// 原 "self"（C# 托管渲染线程）2026-10-11 删除；原 "echo"（ECHO 内核）2026-10-16 按用户拍板删除——
+        /// 程序只用原生内核，native/echo-core/ 的代码与 DLL 保留在仓库/安装包里供以后捡回，不再是可选项。
+        /// 存量配置里的任何旧值在 Normalize 里一律归一到 "native2"，老用户无感切换。改动后下次开播生效。</summary>
         public string ExclusiveEngine { get; set; } = "native2";
 
         public bool LyricFuzzyMatch { get; set; } = true;
@@ -308,6 +307,13 @@ namespace CelesteMusicPlayer
         public bool EnableGlobalHotkeys { get; set; } = true;
 
         public double PlaybackRate { get; set; } = 1.0;
+
+        /// <summary>
+        /// 变速时是否保持音调（2026-10-15 用户要求"音调变/不变可选"）：
+        /// true = 保调（WSOLA 时域拉伸，音调不变速度变）；
+        /// false = 变调（重采样，音调随倍率升降，nightcore/daycore 效果）。
+        /// </summary>
+        public bool PlaybackRatePreservePitch { get; set; } = true;
 
         public bool StopWhenError { get; set; } = true;
 
@@ -606,6 +612,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             }
 
             s.PlaybackRate = Math.Clamp(s.PlaybackRate, 0.25, 4.0);
+            // 变速生效区间 0.5~2.0（SpeedStretch 同款夹取）；存的时候放宽到 0.25~4.0 是历史口径，
+            // 真正下发前两处都会再夹一次，超出生效区间的存值按 2.0/0.5 边界处理。
+            s.PlaybackRatePreservePitch = s.PlaybackRatePreservePitch; // bool 无需夹取，保留字段便于将来扩展
             s.DesktopLyricOpacity = Math.Clamp(s.DesktopLyricOpacity, 20, 100);
             s.DesktopLyricFontSize = Math.Clamp(s.DesktopLyricFontSize, 14, 64);
             s.MainLyricFontSize = Math.Clamp(s.MainLyricFontSize, 12, 48);
@@ -662,7 +671,11 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             // 独占输出内核：2026-10-11 起「自研（self）」选项删除、native2 设为默认。
             // 存量配置里的 "self"/空值/无法识别的值一律归一到 native2（老用户的机器下次启动即用新默认）；
             // "echo" 保留。自研代码路径仅剩设置读取失败时的兜底，不再是可选内核。
-            s.ExclusiveEngine = s.ExclusiveEngine is "echo" or "native2" ? s.ExclusiveEngine : "native2";
+            // 独占输出内核：2026-10-16 起 ECHO 内核选项也删除（用户拍板"程序只用 Native2"；
+            // native/echo-core 代码保留供以后调用）。此前 2026-10-11 已删 "self"。
+            // 存量配置里的 "self"/"echo"/空值/无法识别的值一律归一到 "native2"——老用户下次启动
+            // 即用新默认，不需要手动改设置。托管渲染路径仅剩设置读取失败时的兜底。
+            s.ExclusiveEngine = "native2";
 
             if (string.IsNullOrWhiteSpace(s.DesktopLyricPlayedColor))
             {
@@ -834,6 +847,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             EnableGlobalHotkeys = s.EnableGlobalHotkeys,
             CrossfadeMs = s.CrossfadeMs,
             PlaybackRate = s.PlaybackRate,
+            PlaybackRatePreservePitch = s.PlaybackRatePreservePitch,
             StopWhenError = s.StopWhenError,
             AutoPlayWhenStart = s.AutoPlayWhenStart,
             ShowTaskbarProgress = s.ShowTaskbarProgress,

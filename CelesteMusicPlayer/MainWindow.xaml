@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Window
     x:Class="CelesteMusicPlayer.MainWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -8213,11 +8213,20 @@
                             <FontIcon Glyph="&#xE713;" FontSize="18" />
                             <Button.Flyout>
                                 <Flyout Placement="Top" Opened="AudioSettingsFlyout_Opened">
-                                    <ScrollViewer MaxHeight="460" Width="330" Padding="2">
-                                        <StackPanel Spacing="14">
-                                            <!-- 音频输出：模式与设备 -->
-                                            <StackPanel Spacing="8">
-                                                <TextBlock Text="音频输出" FontSize="14" FontWeight="SemiBold" />
+                                    <Grid Width="380">
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
+                                            <RowDefinition Height="*" />
+                                        </Grid.RowDefinitions>
+                                        <!-- 顶部分类页签（音频输出 / 播放设置 / 播放速度 / 睡眠定时）：
+                                             样式照标签页左侧区域头顶那条横向子导航，由 ShellPageHost 动态生成。
+                                             2026-10-16 用户要求按分类拆开；睡眠定时与播放速度各自独立成页。 -->
+                                        <StackPanel x:Name="AudioSettingsNavPanel" Orientation="Horizontal" Spacing="2" />
+                                        <ScrollViewer Grid.Row="1" MaxHeight="440" Padding="0,4,2,0">
+                                        <Grid>
+                                        <!-- 页1：音频输出（原面板内容整体搬入，未改） -->
+                                        <StackPanel x:Name="AudioSettingsPageOutput" Spacing="10">
+                                            <TextBlock Text="音频输出" FontSize="14" FontWeight="SemiBold" />
                     <StackPanel Spacing="8" Margin="0,12,0,0">
                         <TextBlock Text="输出模式" FontSize="14" FontWeight="SemiBold" />
                         <Grid ColumnSpacing="8">
@@ -8312,9 +8321,8 @@
                         </StackPanel>
                     </StackPanel>
                                             </StackPanel>
-                                            <Rectangle Height="1" Fill="{ThemeResource CardStrokeColorDefaultBrush}" />
-                                            <!-- 播放设置：音量 / 速度 / AB / 定时 -->
-                                            <StackPanel Spacing="10">
+                                        <!-- 页2：播放设置（音量 / AB 循环；播放速度与睡眠定时已拆独立页） -->
+                                        <StackPanel x:Name="AudioSettingsPagePlay" Visibility="Collapsed" Spacing="12">
                                                 <TextBlock Text="播放设置" FontSize="14" FontWeight="SemiBold" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
                         <FontIcon
@@ -8350,20 +8358,6 @@
                                 Visibility="Collapsed" />
                         </Grid>
                                                 </StackPanel>
-                                                <Button CornerRadius="16"
-                                                x:Name="PlaybackRateButton"
-                                                Width="56"
-                                                Height="40"
-                                                Padding="0"
-                                                Background="Transparent"
-                                                BorderThickness="0"
-                                                Click="PlaybackRateButton_Click"
-                                                ToolTipService.ToolTip="播放速度">
-                                                <StackPanel Orientation="Horizontal" Spacing="3" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                                <TextBlock x:Name="PlaybackRateText" Text="1.0x" FontSize="13" VerticalAlignment="Center" />
-                                                <FontIcon Glyph="&#xE70D;" FontSize="10" VerticalAlignment="Center" />
-                                                </StackPanel>
-                                                </Button>
                                                 <StackPanel Spacing="2">
                                                     <Button
                                                         x:Name="AbLoopPlaceholderButton"
@@ -8376,14 +8370,56 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="尚未实现：设定 A / B 两点后只在区间内循环播放。已列入待办。" />
                                                 </StackPanel>
-                                                <Button
-                                                    x:Name="SleepTimerButton"
-                                                    Content="睡眠定时器…"
-                                                    HorizontalAlignment="Stretch"
-                                                    Click="SleepTimerButton_Click" />
+</StackPanel>
+                                        <!-- 页3：播放速度（2026-10-16 用户要求：可拖动条、两位小数、拖动即时变声） -->
+                                        <StackPanel x:Name="AudioSettingsPageSpeed" Visibility="Collapsed" Spacing="14">
+                                            <TextBlock Text="播放速度" FontSize="14" FontWeight="SemiBold" />
+                                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                                <TextBlock x:Name="PlaybackRateText" Text="1.00x" FontSize="26" FontWeight="SemiBold" VerticalAlignment="Center" />
+                                                <Button x:Name="PlaybackRateResetButton" Content="恢复 1.00x" VerticalAlignment="Center" Click="PlaybackRateResetButton_Click" />
+                                            </StackPanel>
+                                            <Slider x:Name="PlaybackRateSlider"
+                                                    Minimum="0.5" Maximum="2" StepFrequency="0.01"
+                                                    Value="1" HorizontalAlignment="Stretch"
+                                                    ValueChanged="PlaybackRateSlider_ValueChanged" />
+                                            <Grid>
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <TextBlock Grid.Column="0" Text="0.50x" FontSize="11" Opacity="0.6" />
+                                                <TextBlock Grid.Column="1" Text="1.00x" FontSize="11" Opacity="0.6" HorizontalAlignment="Center" />
+                                                <TextBlock Grid.Column="2" Text="2.00x" FontSize="11" Opacity="0.6" HorizontalAlignment="Right" />
+                                            </Grid>
+                                            <StackPanel Spacing="4">
+                                                <TextBlock Text="音调" FontSize="13" FontWeight="SemiBold" />
+                                                <RadioButton x:Name="PlaybackRatePitchPreserveRadio" Content="音调不变（速度变）" GroupName="PlaybackRatePitchMode" IsChecked="True" Checked="PlaybackRatePitchMode_Checked" />
+                                                <RadioButton x:Name="PlaybackRatePitchFollowRadio" Content="音调随速度变（快=尖 / 慢=闷）" GroupName="PlaybackRatePitchMode" Checked="PlaybackRatePitchMode_Checked" />
+                                            </StackPanel>
+                                            <TextBlock FontSize="11" Opacity="0.75" TextWrapping="WrapWholeWords"
+                                                Text="拖滑块即时变声，不重载、不断音。音调不变用时域拉伸；音调随速度变就是改采样率（nightcore 效果）。DSD 走 DoP 直出时不过处理链，那种情况下不变速。" />
+                                        </StackPanel>
+                                        <!-- 页4：睡眠定时（2026-10-16 从「播放设置」拆出；选完即生效，不再弹对话框） -->
+                                        <StackPanel x:Name="AudioSettingsPageSleep" Visibility="Collapsed" Spacing="8">
+                                            <TextBlock Text="睡眠定时器" FontSize="14" FontWeight="SemiBold" />
+                                            <TextBlock FontSize="11" Opacity="0.75" TextWrapping="WrapWholeWords"
+                                                Text="到点自动暂停播放。选完即生效。" />
+                                            <RadioButton x:Name="SleepOffRadio" Content="关闭定时器" GroupName="SleepMode" Checked="SleepModeRadio_Checked" />
+                                            <RadioButton x:Name="Sleep15Radio" Content="15 分钟" GroupName="SleepMode" Checked="SleepModeRadio_Checked" />
+                                            <RadioButton x:Name="Sleep30Radio" Content="30 分钟" GroupName="SleepMode" Checked="SleepModeRadio_Checked" />
+                                            <RadioButton x:Name="Sleep60Radio" Content="60 分钟" GroupName="SleepMode" Checked="SleepModeRadio_Checked" />
+                                            <RadioButton x:Name="Sleep90Radio" Content="90 分钟" GroupName="SleepMode" Checked="SleepModeRadio_Checked" />
+                                            <RadioButton x:Name="Sleep120Radio" Content="120 分钟" GroupName="SleepMode" Checked="SleepModeRadio_Checked" />
+                                            <RadioButton x:Name="SleepAfterTrackRadio" Content="当前曲目播完后停止" GroupName="SleepMode" Checked="SleepModeRadio_Checked" />
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <RadioButton x:Name="SleepAfterTracksRadio" Content="再播放指定曲目数后停止" GroupName="SleepMode" VerticalAlignment="Center" Checked="SleepModeRadio_Checked" />
+                                                <NumberBox x:Name="SleepTracksBox" Minimum="1" Maximum="99" Value="1" Width="80" VerticalAlignment="Center" Visibility="Collapsed" />
                                             </StackPanel>
                                         </StackPanel>
-                                    </ScrollViewer>
+                                        </Grid>
+                                        </ScrollViewer>
+                                    </Grid>
                                 </Flyout>
                             </Button.Flyout>
                         </Button>
@@ -8758,52 +8794,29 @@
                         </StackPanel>
                     </StackPanel>
 
-                    <!-- 独占输出内核（二选一：自研原生内核（默认） / ECHO 核心） -->
+                    <!-- 独占输出内核（2026-10-16 用户拍板：ECHO 内核选项删除，程序只用原生内核。
+                         native/echo-core/ 的代码与 DLL 保留在仓库/安装包里，以后要捡回来随时能接，
+                         只是不再作为运行时可选项——见 AppSettingsStore.ExclusiveEngine 归一化注释） -->
                     <StackPanel Spacing="8" Margin="0,16,0,0">
                         <TextBlock Text="独占输出内核" FontSize="14" FontWeight="SemiBold" />
-                        <Grid ColumnSpacing="8">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*" />
-                                <ColumnDefinition Width="*" />
-                            </Grid.ColumnDefinitions>
-                            <Button
-                                x:Name="EngineEchoCard"
-                                Grid.Column="0"
-                                Height="52"
-                                Padding="0"
-                                CornerRadius="8"
-                                BorderThickness="1"
-                                Click="ExclusiveEngineCard_Click"
-                                Tag="echo"
-                                HorizontalAlignment="Stretch"
-                                ToolTipService.ToolTip="ECHO 核心：C++ 原生渲染线程（实验，抗卡顿；不支持 DSD/DoP）">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="ECHO 核心" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                    <TextBlock Text="实验 / 抗卡顿" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                            <Button
-                                x:Name="EngineNative2Card"
-                                Grid.Column="1"
-                                Height="52"
-                                Padding="0"
-                                CornerRadius="8"
-                                BorderThickness="1"
-                                Click="ExclusiveEngineCard_Click"
-                                Tag="native2"
-                                HorizontalAlignment="Stretch"
-                                ToolTipService.ToolTip="原生内核（默认）：C++ 原生渲染线程 + 整数字节直喂；DSP 全关时端到端 bit-perfect；DSD 走预载容器，实测最稳">
-                                <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
-                                    <TextBlock Text="原生内核" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
-                                    <TextBlock Text="默认 / 字节直通" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
-                                </StackPanel>
-                            </Button>
-                        </Grid>
+                        <Button
+                            x:Name="EngineNative2Card"
+                            Height="52"
+                            Padding="0"
+                            CornerRadius="8"
+                            BorderThickness="1"
+                            HorizontalAlignment="Stretch"
+                            ToolTipService.ToolTip="原生内核：C++ 原生渲染线程 + 整数字节直喂；DSP 全关时端到端 bit-perfect；DSD 走预载容器，实测最稳">
+                            <StackPanel Spacing="2" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                <TextBlock Text="原生内核" FontSize="13" FontWeight="SemiBold" HorizontalAlignment="Center" />
+                                <TextBlock Text="字节直通 / 实测最稳" FontSize="10" Opacity="0.7" HorizontalAlignment="Center" />
+                            </StackPanel>
+                        </Button>
                         <TextBlock
                             FontSize="12"
                             Opacity="0.6"
                             TextWrapping="WrapWholeWords"
-                            Text="原生内核（默认）把渲染搬进 C++ 原生线程 + 整数字节直喂，系统回收内存时冻不到它；DSP 全关时端到端 bit-perfect，DSD 实测它最稳。ECHO 核心同样把渲染搬进 C++ 原生线程（实验，抗卡顿），但它不管 DSD/DoP，用它播 DSD 时界面会提醒你切回原生内核。改动下一首歌生效。" />
+                            Text="原生内核把渲染搬进 C++ 原生线程 + 整数字节直喂，系统回收内存时冻不到它；DSP 全关时端到端 bit-perfect，DSD 实测它最稳。" />
                         <Grid ColumnSpacing="8" Margin="0,4,0,0">
                             <Grid.ColumnDefinitions>
                                 <ColumnDefinition Width="Auto" />
@@ -8814,7 +8827,7 @@
                                 Grid.Column="0"
                                 Content="播放测试音（3 秒 1kHz）"
                                 Click="EngineSelfTest_Click"
-                                ToolTipService.ToolTip="用内存生成的正弦波走完整播放链路试听，不进音乐库。先在上面选好内核再点。" />
+                                ToolTipService.ToolTip="用内存生成的正弦波走完整播放链路试听，不进音乐库。" />
                             <TextBlock
                                 x:Name="EngineSelfTestStatus"
                                 Grid.Column="1"
@@ -8839,53 +8852,7 @@
             </Border>
         </Grid>
 
-        <!-- DSD×ECHO 内核提醒卡（2026-09-24 用户定案）：echo 内核不负责 DSD，
-             EchoCoreOutput.Init 显式拒绝 requireExact；用户用 echo 播 DSD 时左上角提醒切 native2。
-             自带一键切换 + 15s 自动收起；RootShell 最后一个子节点=渲染最顶层。 -->
-        <Border
-            x:Name="DsdEngineTipCard"
-            HorizontalAlignment="Left"
-            VerticalAlignment="Top"
-            Margin="16,64,0,0"
-            MaxWidth="430"
-            Padding="12,10"
-            CornerRadius="8"
-            Visibility="Collapsed"
-            Background="{ThemeResource LayerFillColorDefaultBrush}"
-            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-            BorderThickness="1">
-            <Grid ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <FontIcon
-                    Grid.Column="0"
-                    Glyph="&#xE7BA;"
-                    FontSize="16"
-                    Foreground="Orange"
-                    VerticalAlignment="Top"
-                    Margin="0,2,0,0" />
-                <StackPanel Grid.Column="1" Spacing="6">
-                    <TextBlock
-                        x:Name="DsdEngineTipText"
-                        FontSize="12"
-                        TextWrapping="Wrap" />
-                    <StackPanel Orientation="Horizontal" Spacing="8">
-                        <Button CornerRadius="16"
-                            x:Name="DsdEngineTipSwitch"
-                            Content="一键切换到原生内核"
-                            FontSize="12"
-                            Click="DsdEngineTipSwitch_Click" />
-                        <Button CornerRadius="16"
-                            x:Name="DsdEngineTipClose"
-                            Content="知道了"
-                            FontSize="12"
-                            Click="DsdEngineTipClose_Click" />
-                    </StackPanel>
-                </StackPanel>
-            </Grid>
-        </Border>
+
 
         <!-- 启动加载动画：盖在最上层的遮罩，曲库恢复完 / 用户点一下 / 兜底超时 就撤掉。
              故意放在 RootShell 的最后一个子元素 —— 这个 Grid 没有行/列定义，

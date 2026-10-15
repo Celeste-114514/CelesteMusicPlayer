@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -134,6 +134,16 @@ namespace CelesteMusicPlayer
 
         /// <summary>当前是否处于 DSP 总旁路。</summary>
         public bool IsBypassAll => _hifiOut?.IsBypassAll ?? false;
+
+        /// <summary>
+        /// 实时变速（2026-10-15）：倍率 + 是否保调。播放中下一个音频块生效，不重载不断音。
+        /// 倍率会由 HiFiOutputBackend 记住，播放会话重建时自动重新灌入。
+        /// </summary>
+        public void SetPlaybackSpeed(double rate, bool preservePitch)
+            => _hifiOut?.SetPlaybackSpeed(rate, preservePitch);
+
+        /// <summary>变速是否正接管取数（倍率≠1 或正在排空 FIFO）。</summary>
+        public bool SpeedActive => _hifiOut?.SpeedActive == true;
 
         private string? _devicePreference;
         private HiFiOutputBackend? _hifiOut;

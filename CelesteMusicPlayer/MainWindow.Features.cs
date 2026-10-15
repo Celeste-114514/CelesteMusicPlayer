@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -8,6 +8,7 @@ using Microsoft.UI.Text;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Controls.Primitives; // RangeBaseValueChangedEventArgs（播放速度滑块）
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.Media;
@@ -35,6 +36,7 @@ namespace CelesteMusicPlayer
 
         private SleepStopMode _sleepMode = SleepStopMode.None;
         private int _sleepTracksRemaining;
+        private int _sleepMinutes;   // AfterMinutes 模式下的分钟数（0=未设置）；面板回显用
         private AudioPlaybackEngine? _audioEngine;
         private readonly LibraryWatchService _libraryWatch = new();
         private DateTime _lastListenSampleUtc = DateTime.UtcNow;
@@ -230,20 +232,20 @@ namespace CelesteMusicPlayer
             });
         }
 
+        /// <summary>
+        /// 把设置里的变速推给引擎（2026-10-15 改：旧实现设 MediaPlayer 的
+        /// PlaybackSession.PlaybackRate——那条路只在 MediaPlayer 直出时有效、音调还会一起变；
+        /// 现在统一走托管实时变速，起播/设置变更时都要推一次）。
+        /// 引擎还没建时只是个 no-op：起播建会话时 HiFiOutputBackend 会从设置里读同样值灌进去。
+        /// </summary>
         private void ApplyPlaybackRateFromSettings()
         {
-            MediaPlayer? player = GetPlayer();
-            if (player == null)
-            {
-                return;
-            }
-
-            double rate = Math.Clamp(AppSettingsStore.Load().PlaybackRate, 0.5, 2.0);
             try
             {
-                player.PlaybackSession.PlaybackRate = rate;
+                AppSettingsState s = AppSettingsStore.Load();
+                _audioEngine?.SetPlaybackSpeed(s.PlaybackRate, s.PlaybackRatePreservePitch);
             }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs.ApplyPlaybackRateFromSettings", caught); }
         }
 
         private void RestartGlobalHotkeysFromSettings()
@@ -1749,13 +1751,19 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>播放条「音频设置」面板弹出时刷新一次（输出模式高亮、设备列表、ASIO 提示等）。
-        /// 这些控件原先在右上角面板里，现已搬进本面板，刷新的还是同一批控件。</summary>
+        /// <summary>
+        /// 播放条「音频设置」面板弹出时刷新一次（输出模式高亮、设备列表、ASIO 提示等）。
+        /// 这些控件原先在右上角面板里，现已搬进本面板，刷新的还是同一批控件。
+        /// 2026-10-16：面板改 4 页签结构，这里额外负责建页签（首次）与刷新速度/定时两页的状态。
+        /// </summary>
         private void AudioSettingsFlyout_Opened(object sender, object e)
         {
             try
             {
+                EnsureAudioSettingsNavBuilt();
                 RefreshAudioSettingsPanel();
+                RefreshSpeedPage();
+                RefreshSleepPage();
             }
             catch (Exception caught)
             {
@@ -1763,10 +1771,239 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>面板里的「睡眠定时器…」：弹原来的定时设置对话框。</summary>
-        private async void SleepTimerButton_Click(object sender, RoutedEventArgs e)
-            => await ShowSleepTimerDialogAsync();
+        // ===== 音频设置面板：4 页签（2026-10-16 用户要求按分类拆开）=====
+        // 复用 ShellPageHost（标签页左侧区域那条横向子导航的同一套实现），保证视觉一致。
+        private ShellPageHost? _audioSettingsNav;
+        private bool _audioSettingsNavBuilt;
 
+        /// <summary>
+        /// 面板「就绪」守卫：XAML 初值 + 事件绑定会在 InitializeComponent 期间就触发
+        /// ValueChanged/Checked（WinUI3 秒崩铁律，见 MEMORY.md）——那时后续 x:Name 字段还没解析，
+        /// handler 里碰任何控件都可能 NRE 秒崩。就绪前的刷新一律由本文件的 Refresh* 显式做。
+        /// </summary>
+        private bool _audioSettingsReady;
+
+        private void EnsureAudioSettingsNavBuilt()
+        {
+            if (_audioSettingsNavBuilt)
+            {
+                return;
+            }
+
+            _audioSettingsNavBuilt = true;
+            try
+            {
+                _audioSettingsNav = new ShellPageHost(AudioSettingsNavPanel, () => DspAccentBrush());
+                _audioSettingsNav.Register("音频输出", string.Empty, AudioSettingsPageOutput);
+                _audioSettingsNav.Register("播放设置", string.Empty, AudioSettingsPagePlay);
+                _audioSettingsNav.Register("播放速度", string.Empty, AudioSettingsPageSpeed);
+                _audioSettingsNav.Register("睡眠定时", string.Empty, AudioSettingsPageSleep);
+                _audioSettingsNav.Build();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.EnsureAudioSettingsNavBuilt", caught);
+            }
+        }
+
+        // ---------- 页3：播放速度 ----------
+
+        /// <summary>滑块拖动 → 实时变速（下一个音频块生效，不重载不断音）。</summary>
+        private void PlaybackRateSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        {
+            if (!_audioSettingsReady)
+            {
+                return;
+            }
+
+            _ = SetPlaybackRateAsync(e.NewValue);
+        }
+
+        /// <summary>音调模式切换：保调（WSOLA）/ 变调（重采样）。立即生效。</summary>
+        private void PlaybackRatePitchMode_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_audioSettingsReady)
+            {
+                return;
+            }
+
+            bool preserve = ReferenceEquals(sender, PlaybackRatePitchPreserveRadio);
+            AppSettingsStore.Update(s => s.PlaybackRatePreservePitch = preserve);
+            double rate = AppSettingsStore.Load().PlaybackRate;
+            _audioEngine?.SetPlaybackSpeed(rate, preserve);
+            if (Math.Abs(rate - 1.0) > 0.001 && IsEngineActiveNow)
+            {
+                NowPlayingText.Text = "播放速度 " + rate.ToString("0.##") + "x · "
+                    + (preserve ? "音调不变" : "音调随速度变");
+            }
+        }
+
+        private void PlaybackRateResetButton_Click(object sender, RoutedEventArgs e)
+        {
+            _ = SetPlaybackRateAsync(1.0);
+            if (PlaybackRateSlider != null)
+            {
+                PlaybackRateSlider.Value = 1.0; // 触发 ValueChanged → 已是 1.0 时内部 no-op
+            }
+        }
+
+        /// <summary>弹出面板时把设置里的倍率/模式同步到滑块与单选（批量赋值期间挂就绪守卫，避免触发应用）。</summary>
+        private void RefreshSpeedPage()
+        {
+            if (PlaybackRateSlider == null || PlaybackRatePitchPreserveRadio == null || PlaybackRatePitchFollowRadio == null)
+            {
+                return;
+            }
+
+            _audioSettingsReady = false;
+            try
+            {
+                AppSettingsState s = AppSettingsStore.Load();
+                PlaybackRateSlider.Value = Math.Clamp(s.PlaybackRate, 0.5, 2.0);
+                PlaybackRatePitchPreserveRadio.IsChecked = s.PlaybackRatePreservePitch;
+                PlaybackRatePitchFollowRadio.IsChecked = !s.PlaybackRatePreservePitch;
+                UpdatePlaybackRateButtonText();
+            }
+            finally
+            {
+                _audioSettingsReady = true;
+            }
+        }
+
+        // ---------- 页4：睡眠定时 ----------
+
+        private static int SleepRadioIndex(string? name) => name switch
+        {
+            "SleepOffRadio" => 0,
+            "Sleep15Radio" => 1,
+            "Sleep30Radio" => 2,
+            "Sleep60Radio" => 3,
+            "Sleep90Radio" => 4,
+            "Sleep120Radio" => 5,
+            "SleepAfterTrackRadio" => 6,
+            "SleepAfterTracksRadio" => 7,
+            _ => -1
+        };
+
+        /// <summary>睡眠定时单选：选完即生效（不再弹对话框；WebUI 遥控仍走原来的对话框）。</summary>
+        private void SleepModeRadio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_audioSettingsReady || sender is not RadioButton rb)
+            {
+                return;
+            }
+
+            int sel = SleepRadioIndex(rb.Name);
+            if (sel < 0)
+            {
+                return;
+            }
+
+            if (SleepTracksBox != null)
+            {
+                SleepTracksBox.Visibility = sel == 7 ? Visibility.Visible : Visibility.Collapsed;
+            }
+
+            ApplySleepSelection(sel, SleepTracksBox?.Value ?? 1);
+        }
+
+        /// <summary>应用睡眠定时选择（对话框与面板页签共用）。sel 口径与旧对话框 RadioButtons 一致。</summary>
+        private void ApplySleepSelection(int sel, double trackCountValue)
+        {
+            _sleepTimer?.Stop();
+            _sleepTimer = null;
+            _sleepMode = SleepStopMode.None;
+            _sleepTracksRemaining = 0;
+            _sleepMinutes = 0;
+
+            if (sel == 0)
+            {
+                NowPlayingText.Text = "睡眠定时器已关闭";
+                return;
+            }
+
+            if (sel == 6)
+            {
+                _sleepMode = SleepStopMode.AfterTrack;
+                NowPlayingText.Text = "睡眠定时器：当前曲目播完后停止";
+                return;
+            }
+
+            if (sel == 7)
+            {
+                int n = (int)Math.Clamp(Math.Round(trackCountValue), 1, 99);
+                _sleepMode = SleepStopMode.AfterTracks;
+                _sleepTracksRemaining = n;
+                NowPlayingText.Text = $"睡眠定时器：再播放 {n} 首后停止";
+                return;
+            }
+
+            int minutes = sel switch
+            {
+                1 => 15,
+                2 => 30,
+                3 => 60,
+                4 => 90,
+                _ => 120
+            };
+            _sleepMode = SleepStopMode.AfterMinutes;
+            _sleepMinutes = minutes;
+            _sleepTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+            _sleepTimer.Interval = TimeSpan.FromMinutes(minutes);
+            _sleepTimer.Tick += (_, _) => StopForSleep("睡眠定时器到点，播放已暂停");
+            _sleepTimer.Start();
+            NowPlayingText.Text = $"睡眠定时器已设置：{minutes} 分钟后停止播放";
+        }
+
+        /// <summary>弹出面板时把当前定时状态回显到单选（批量赋值挂就绪守卫）。</summary>
+        private void RefreshSleepPage()
+        {
+            if (SleepOffRadio == null || SleepAfterTracksRadio == null || SleepTracksBox == null)
+            {
+                return;
+            }
+
+            _audioSettingsReady = false;
+            try
+            {
+                int sel = _sleepMode switch
+                {
+                    SleepStopMode.AfterTrack => 6,
+                    SleepStopMode.AfterTracks => 7,
+                    SleepStopMode.AfterMinutes => _sleepMinutes switch
+                    {
+                        15 => 1,
+                        30 => 2,
+                        60 => 3,
+                        90 => 4,
+                        120 => 5,
+                        _ => 2
+                    },
+                    _ => 0
+                };
+
+                SleepOffRadio.IsChecked = sel == 0;
+                Sleep15Radio.IsChecked = sel == 1;
+                Sleep30Radio.IsChecked = sel == 2;
+                Sleep60Radio.IsChecked = sel == 3;
+                Sleep90Radio.IsChecked = sel == 4;
+                Sleep120Radio.IsChecked = sel == 5;
+                SleepAfterTrackRadio.IsChecked = sel == 6;
+                SleepAfterTracksRadio.IsChecked = sel == 7;
+                SleepTracksBox.Value = Math.Clamp(_sleepTracksRemaining <= 0 ? 1 : _sleepTracksRemaining, 1, 99);
+                SleepTracksBox.Visibility = sel == 7 ? Visibility.Visible : Visibility.Collapsed;
+            }
+            finally
+            {
+                _audioSettingsReady = true;
+            }
+        }
+
+        /// <summary>
+        /// 睡眠定时设置对话框。2026-10-16 起主入口改成音频设置面板里的「睡眠定时」页签
+        /// （选完即生效），本对话框只留给 WebUI 遥控（"sleeptimer" 命令）。
+        /// 应用逻辑与页签共用 <see cref="ApplySleepSelection"/>。
+        /// </summary>
         private async Task ShowSleepTimerDialogAsync()
         {
             var radio = new RadioButtons();
@@ -1814,48 +2051,8 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            _sleepTimer?.Stop();
-            _sleepTimer = null;
-            _sleepMode = SleepStopMode.None;
-            _sleepTracksRemaining = 0;
-
-            int sel = radio.SelectedIndex;
-            if (sel == 0)
-            {
-                NowPlayingText.Text = "睡眠定时器已关闭";
-                return;
-            }
-
-            if (sel == 6)
-            {
-                _sleepMode = SleepStopMode.AfterTrack;
-                NowPlayingText.Text = "睡眠定时器：当前曲目播完后停止";
-                return;
-            }
-
-            if (sel == 7)
-            {
-                int n = (int)Math.Clamp(Math.Round(numberBox.Value), 1, 99);
-                _sleepMode = SleepStopMode.AfterTracks;
-                _sleepTracksRemaining = n;
-                NowPlayingText.Text = $"睡眠定时器：再播放 {n} 首后停止";
-                return;
-            }
-
-            int minutes = sel switch
-            {
-                1 => 15,
-                2 => 30,
-                3 => 60,
-                4 => 90,
-                _ => 120
-            };
-            _sleepMode = SleepStopMode.AfterMinutes;
-            _sleepTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
-            _sleepTimer.Interval = TimeSpan.FromMinutes(minutes);
-            _sleepTimer.Tick += (_, _) => StopForSleep("睡眠定时器到点，播放已暂停");
-            _sleepTimer.Start();
-            NowPlayingText.Text = $"睡眠定时器已设置：{minutes} 分钟后停止播放";
+            // 与音频设置面板「睡眠定时」页签共用同一套应用逻辑（sel 口径一致）
+            ApplySleepSelection(radio.SelectedIndex, numberBox.Value);
         }
 
         /// <summary>播放结束拦截：返回 true 表示已按睡眠定时器停止，调用方不应继续切歌。</summary>
@@ -2643,31 +2840,11 @@ namespace CelesteMusicPlayer
             card.Background = active ? activeBg : null;
         }
 
-        /// <summary>独占输出内核卡片点击：native2=自研原生内核（默认），echo=ECHO 核心。
-        /// 2026-10-11 起原 self（C# 托管渲染线程）选项删除，存量设置读 Load 时已归一到 native2。</summary>
-        private void ExclusiveEngineCard_Click(object sender, RoutedEventArgs e)
-        {
-            if (_audioCombosLoading)
-            {
-                return;
-            }
-
-            if (sender is not Button b || b.Tag is not string engine)
-            {
-                return;
-            }
-
-            AppSettingsStore.Update(s => s.ExclusiveEngine = engine);
-            UpdateEngineCardHighlight(engine);
-            StartupLog.Write("[设置] 独占输出内核切换为 " + EngineDisplayName(engine) + "（下一首歌生效）");
-            RefreshAudioSettingsPanel();
-        }
-
-        /// <summary>内核标识 → 面板显示名（三处共用：点击日志 / 自检状态 / 高亮）。
-        /// 2026-10-11 起自研（self）选项删除，native2 是默认；echo 仍是实验项。</summary>
+        /// <summary>内核标识 → 面板显示名。
+        /// 2026-10-16：ECHO 内核选项已删（程序只用原生内核），echo 值只会出现在归一化前的存量设置里。</summary>
         private static string EngineDisplayName(string engine) => engine switch
         {
-            "echo" => "ECHO 核心（实验）",
+            "echo" => "原生内核", // 存量 echo 设置已被 Load 归一化成 native2，这里只是防御性兜底
             _ => "原生内核",
         };
 
@@ -2697,7 +2874,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>内核两张卡片：选中的用主题色高亮（只剩 echo / native2 二选一）。</summary>
+        /// <summary>内核卡片高亮：只剩原生内核一项（2026-10-16 ECHO 选项已删），恒高亮表示当前生效。</summary>
         private void UpdateEngineCardHighlight(string engine)
         {
             Windows.UI.Color accent = ResolveAccentColor();
@@ -2705,71 +2882,14 @@ namespace CelesteMusicPlayer
             var activeBg = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(46, accent.R, accent.G, accent.B));
             var normalBorder = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(60, 120, 120, 120));
 
-            bool echo = string.Equals(engine, "echo", StringComparison.OrdinalIgnoreCase);
-            SetModeCard(EngineEchoCard, echo, activeBorder, activeBg, normalBorder);
-            SetModeCard(EngineNative2Card, !echo, activeBorder, activeBg, normalBorder);
+            SetModeCard(EngineNative2Card, true, activeBorder, activeBg, normalBorder);
         }
 
-        // ---------- DSD×ECHO 内核提醒卡（2026-09-24 用户定案） ----------
-        // 背景：echo 内核不负责 DSD/DoP（EchoCoreOutput.Init 显式拒绝 requireExact），
-        // 用户在 echo 下播 DSF 时左上角弹提醒，建议切 native2（2026-10-11 起自研选项删除，
-        // DSD 只剩 native2 一条路；native2 实测绿灯不卡）。自带一键切换 + 15s 自动收起。
-        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _dsdEngineTipTimer;
-
-        /// <summary>播 DSD(DSF) 且当前独占内核为 echo 时，左上角显示切换提醒（每次起播重置 15s 计时）。</summary>
-        private void ShowDsdEngineTip()
-        {
-            try
-            {
-                if (DsdEngineTipCard == null || DsdEngineTipText == null)
-                {
-                    return;
-                }
-
-                DsdEngineTipText.Text = "当前输出内核是 ECHO（实验），它不负责 DSD/DoP 直出。"
-                    + "建议切换到「原生内核」再播放 DSD：音频设置 → 输出内核 → 原生内核（下一首歌生效）。";
-                DsdEngineTipCard.Visibility = Visibility.Visible;
-
-                if (_dsdEngineTipTimer == null)
-                {
-                    _dsdEngineTipTimer = DispatcherQueue.CreateTimer();
-                    _dsdEngineTipTimer.Interval = TimeSpan.FromSeconds(15);
-                    _dsdEngineTipTimer.Tick += (_, _) => HideDsdEngineTip();
-                }
-                _dsdEngineTipTimer.Stop();
-                _dsdEngineTipTimer.Start();
-                StartupLog.Write("[DSD提醒] ECHO 内核不负责 DSD/DoP，已左上角提醒切换原生内核（native2）");
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs(ShowDsdEngineTip)", caught); }
-        }
-
-        private void HideDsdEngineTip()
-        {
-            try
-            {
-                _dsdEngineTipTimer?.Stop();
-                if (DsdEngineTipCard != null)
-                {
-                    DsdEngineTipCard.Visibility = Visibility.Collapsed;
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs(HideDsdEngineTip)", caught); }
-        }
-
-        private void DsdEngineTipClose_Click(object sender, RoutedEventArgs e) => HideDsdEngineTip();
-
-        /// <summary>一键切换：ExclusiveEngine=native2（下一首歌生效），同步卡片高亮并收起提醒。</summary>
-        private void DsdEngineTipSwitch_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                AppSettingsStore.Update(s => s.ExclusiveEngine = "native2");
-                UpdateEngineCardHighlight("native2");
-                StartupLog.Write("[设置] DSD 提醒卡：一键切换独占内核=native2（下一首歌生效）");
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs(DsdEngineTipSwitch_Click)", caught); }
-            HideDsdEngineTip();
-        }
+        // ---------- （2026-10-16 删除）DSD×ECHO 内核提醒卡 ----------
+        // 背景：echo 内核不负责 DSD/DoP，用户用 echo 播 DSF 时左上角弹提醒建议切 native2。
+        // ECHO 内核选项已按用户要求删除（程序只用 native2），该提醒永不触发，整套逻辑移除：
+        // ShowDsdEngineTip / HideDsdEngineTip / DsdEngineTipClose_Click / DsdEngineTipSwitch_Click
+        // / _dsdEngineTipTimer / DsdEngineTipCard 及其 XAML。
 
         private async void AudioOutputDeviceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {

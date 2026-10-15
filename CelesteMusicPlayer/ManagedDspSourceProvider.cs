@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using NAudio.Wave;
 
 namespace CelesteMusicPlayer
@@ -47,7 +47,22 @@ namespace CelesteMusicPlayer
         // 旁路时 Read 走直通路径；电平表仍走 MeasurePassthrough 测量（不改写输出）。
         private volatile bool _bypassAll;
 
-        private volatile bool _active; // 旁路关 且（机架激活 或 音量≠1）→ 走 ProcessBlock
+        private volatile bool _active; // 旁路关 且（机架激活 或 音量≠1 或 变速中）→ 走 ProcessBlock
+
+        // ===== 实时变速（2026-10-15 用户拍板：拖动即时变声，音调变/不变可选）=====
+        // 不在原生内核里做：本类是共享/独占/ASIO 三条输出路径的共同卡口，在这里做天然全覆盖，
+        // 且不必重编 celeste_dsp_core.dll、不碰 native/dsp-core 里与 ECHO 同源（AGPL）的代码。
+        // 做法：按倍率从源拉所需数量的帧 → SpeedStretch 拉伸 → 照旧走音量/内核/电平/编码。
+        // 倍率≠1 时强制机架激活（_speedActive 参与 _active），headroom/限幅继续保护拉伸后信号。
+        private SpeedStretch? _speed;
+        private volatile bool _speedActive;    // 变速路径接管取数（含把 FIFO 吐完的排空期）
+        private volatile bool _speedDraining;  // 倍率已回 1.0，FIFO 还剩料，吐完自动回直通（防跳音）
+        // 不用 volatile：C# 不允许 volatile double；x64 上 double 读写原子，
+        // 且变速按"下一个音频块"生效，几毫秒过渡无感。
+        private double _speedRate = 1.0;
+        private volatile bool _speedPreservePitch = true;
+        private bool _speedSourceEnded;        // 源已 EOF（只被音频线程写）
+        private byte[] _speedStage = Array.Empty<byte>();  // 拉源暂存（音频线程内复用）
 
         // 实时电平表：测量 post-DSP 信号（实际送往输出的信号）的每声道峰值/RMS。
         // 默认关闭（零开销、保持 bit-perfect）；播放开始时被开启。
@@ -559,11 +574,50 @@ namespace CelesteMusicPlayer
 
         /// <summary>重算 DSP 是否生效；当无任一 DSP 生效时后续 Read 直接直通（bit-perfect，零逐样本开销）。
         /// 注意：单独的「安全限幅开关」不激活处理链 —— 源 PCM 不会超 ±1，限幅本就不改变样本
-        /// （内核侧同样只在链活跃时运行），故保持 bit-perfect 直通。</summary>
+        /// （内核侧同样只在链活跃时运行），故保持 bit-perfect 直通。
+        /// 变速例外：倍率≠1（或正在排空 FIFO）必须走处理链——变速本就不是 bit-perfect，
+        /// 且拉伸后的峰值需要内核尾段的 headroom/限幅保护。</summary>
         private void RefreshActive()
         {
-            _active = !_bypassAll && (_rackActive || Math.Abs(_volumeGain - 1f) > 0.0001f);
+            _active = !_bypassAll && (_rackActive || Math.Abs(_volumeGain - 1f) > 0.0001f || _speedActive);
         }
+
+        /// <summary>
+        /// 设实时变速（UI 线程调；渲染线程下一个音频块即按新倍率生成——不重载、不重转码、不断音）。
+        /// rate=1.0 且当前没在变速 = 完全直通（bit-perfect 恢复）；
+        /// rate=1.0 但 FIFO 还有料 = 进排空态（按 1:1 原样吐完），吐空自动回直通，避免丢音频跳音。
+        /// </summary>
+        public void SetPlaybackSpeed(double rate, bool preservePitch)
+        {
+            rate = Math.Clamp(rate, 0.5, 2.0);
+            _speedRate = rate;
+            _speedPreservePitch = preservePitch;
+            bool engage = Math.Abs(rate - 1.0) > 0.001;
+            if (engage)
+            {
+                _speed ??= new SpeedStretch(_channels);
+                _speed.PreservePitch = preservePitch;
+                _speed.SetRate(rate);
+                _speedActive = true;
+                _speedDraining = false;
+                _speedSourceEnded = false;
+                // Prepare 推迟到音频线程首块（见 ReadViaSpeed）：UI 线程重分配数组会和渲染线程抢
+            }
+            else if (_speedActive)
+            {
+                _speedDraining = true;
+            }
+            RefreshActive();
+        }
+
+        /// <summary>变速是否正接管取数（倍率≠1，或正在排空 FIFO）。UI 用于无缝预载决策等。</summary>
+        public bool SpeedActive => _speedActive;
+
+        /// <summary>当前倍率（1.0 = 直通）。</summary>
+        public double SpeedRate => _speedRate;
+
+        /// <summary>当前是否保调（true=WSOLA 音调不变；false=重采样音调随速度变）。</summary>
+        public bool SpeedPreservePitch => _speedPreservePitch;
 
         /// <summary>设置采样级总音量基因（共享/ASIO 软件音量），0..2。音量=1 时不进 Processing。
         /// 位于链首（内核机架外），其抬升的峰值由内核尾段 Headroom/限幅保护。</summary>
@@ -656,12 +710,22 @@ namespace CelesteMusicPlayer
             {
                 DspCoreInterop.celeste_dsp_reset();
             }
+            // 变速 FIFO 里是 seek 之前的旧数据，位置已经跳变，必须丢弃——
+            // 否则会把上一位置的音频当"下一段"吐出来（听感是回跳了几十毫秒）。
+            _speed?.Reset();
         }
 
         #endregion
 
         public int Read(byte[] buffer, int offset, int count)
         {
+            // 变速路径：拉源→FIFO→拉伸→音量/内核/测量→编码，一次做完（不能再走下面的
+            // ProcessBlock，那会按「未拉伸」的假设重复处理一遍）。
+            if (_speedActive && _speed != null)
+            {
+                return ReadViaSpeed(buffer, offset, count);
+            }
+
             int read = _source.Read(buffer, offset, count);
             if (read <= 0)
             {
@@ -682,6 +746,106 @@ namespace CelesteMusicPlayer
             }
 
             return read;
+        }
+
+        /// <summary>
+        /// 变速取数：从源按倍率拉所需帧数，拉伸成恰好 count 字节的输出块。
+        /// 曲尾（源 EOF + FIFO 枯竭）返回 0 让上层正常切歌；排空期内继续吐 FIFO 余料。
+        /// </summary>
+        private int ReadViaSpeed(byte[] buffer, int offset, int count)
+        {
+            int block = _format.BlockAlign;
+            if (block <= 0)
+            {
+                // 格式异常：退回直接读，绝不静默改字节流
+                return _source.Read(buffer, offset, count);
+            }
+
+            int outFrames = count / block;
+            if (outFrames <= 0)
+            {
+                return 0;
+            }
+
+            SpeedStretch speed = _speed!;
+            if (!speed.Prepared)
+            {
+                speed.Prepare(_format.SampleRate);
+            }
+
+            // 排空期（倍率已回 1.0）：按 1:1 原样吐 FIFO，吐空即回直通
+            if (_speedDraining)
+            {
+                speed.SetRate(1.0);
+                speed.PreservePitch = false; // 重采样在 rate=1 时就是逐样本拷贝，无插值损失
+            }
+            else
+            {
+                speed.SetRate(_speedRate);
+                speed.PreservePitch = _speedPreservePitch;
+            }
+
+            // 1) 拉到「本块消费量 + 前瞻窗」；源 EOF 记标点
+            PullSpeedSource(speed.RequiredInputFrames(outFrames));
+
+            // 2) 源已结束且 FIFO 枯竭 → 收工：回直通，返回 0 让上层走正常切歌
+            if (_speedSourceEnded && speed.FramesAvailable <= 0)
+            {
+                _speedActive = false;
+                _speedDraining = false;
+                RefreshActive();
+                StartupLog.Write("[变速] 曲尾 FIFO 排空，回直通");
+                return 0;
+            }
+
+            // 3) 拉伸生成 outFrames 帧
+            float[] buf = GetTempFloatBuffer(outFrames * _channels);
+            speed.Generate(buf, outFrames);
+
+            // 4) 音量 + 内核机架 + 电平/频谱/削波统计（与 ProcessBlock 中段同一段逻辑）。
+            //    注意旁路：变速优先于旁路（变速本就不是 bit-perfect），但旁路时跳过内核机架。
+            ApplyFloatTail(buf, outFrames * _channels, runChain: !_bypassAll);
+
+            // 5) 编码回写（含 TPDF dither，与 ProcessBlock 同一段逻辑）
+            EncodeFloats(buf, outFrames * _channels, buffer, offset);
+            return count;
+        }
+
+        /// <summary>从源拉数据解码进 FIFO，直到够 needFrames 帧或源 EOF。拉取块 64KB，对齐整帧。</summary>
+        private void PullSpeedSource(int needFrames)
+        {
+            if (_speedSourceEnded)
+            {
+                return;
+            }
+
+            int ch = _channels;
+            int block = _format.BlockAlign;
+            if (_speedStage.Length < 64 * 1024)
+            {
+                _speedStage = new byte[64 * 1024];
+            }
+
+            while (_speed!.FramesAvailable < needFrames)
+            {
+                int got = _source.Read(_speedStage, 0, _speedStage.Length);
+                if (got <= 0)
+                {
+                    _speedSourceEnded = true;
+                    return;
+                }
+
+                got -= got % block;
+                if (got <= 0)
+                {
+                    continue;
+                }
+
+                int frames = got / block;
+                float[] tmp = GetTempFloatBuffer(frames * ch);
+                DecodeToFloat(_speedStage, 0, frames * ch, tmp);
+                _speed.PushFrames(tmp, frames);
+            }
         }
 
         private void ProcessBlock(byte[] b, int offset, int count)
@@ -707,6 +871,19 @@ namespace CelesteMusicPlayer
             // 解码：byte → float（抽成独立方法，电平表测量与 DSP 共用）
             DecodeToFloat(b, offset, n, buf);
 
+            ApplyFloatTail(buf, n, runChain: true);
+            EncodeFloats(buf, n, b, offset);
+        }
+
+        /// <summary>
+        /// 音量 → 内核机架 → 电平/频谱/削波统计。ProcessBlock 与变速取数路径共用的中段。
+        /// runChain=false 时跳过内核机架（DSP 总旁路时变速路径仍要拉伸，只是不过机架）。
+        /// </summary>
+        private void ApplyFloatTail(float[] buf, int n, bool runChain)
+        {
+            int frames = n / _channels;
+            int ch = _channels;
+
             // 阶段 1：软件总音量（采样级增益，恒在最前；Celeste 特有件，内核机架无音量模块）
             float volumeGain = _volumeGain;
             if (volumeGain != 1f)
@@ -721,7 +898,7 @@ namespace CelesteMusicPlayer
             // 分块兜底：单块帧数超过内核上限 16384 时循环调用
             // （如 352.8kHz × 100ms 输出缓冲 = 35280 帧）。内核返回负值 = 出错：
             // 保留已处理部分、剩余原样送出、只记一次日志 —— 绝不静默改写、绝不抛到渲染线程。
-            if (_engineReady)
+            if (runChain && _engineReady)
             {
                 int done = 0;
                 unsafe
@@ -772,10 +949,13 @@ namespace CelesteMusicPlayer
             {
                 _spectrum.Push(buf, n, ch);
             }
+        }
 
-            // 编码：float → byte。整数回写时叠加 TPDF dither（幅度 = 目标位深 1 LSB）后舍入并钳制，
-            // 消除截断量化失真（与 ResamplingSourceProvider 的 24bit dither 一致）；
-            // 直通路径不经过此处，故不影响 bit-perfect。
+        /// <summary>float → byte 编码（整数回写叠加 TPDF dither；直通路径不经过，不影响 bit-perfect）。</summary>
+        private void EncodeFloats(float[] buf, int n, byte[] b, int offset)
+        {
+            // 整数回写时叠加 TPDF dither（幅度 = 目标位深 1 LSB）后舍入并钳制，
+            // 消除截断量化失真（与 ResamplingSourceProvider 的 24bit dither 一致）。
             float lsb = _isFloat ? 0f : _format.BitsPerSample switch
             {
                 32 => 1f / 2147483647f,

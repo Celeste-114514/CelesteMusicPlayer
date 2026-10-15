@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -83,7 +83,7 @@ namespace CelesteMusicPlayer
         private ReplayGainState? _rgState;
         private double _rgTrackDb, _rgAlbumDb, _rgPeak = 1.0;
         private RoomCorrectionState? _roomCorrection; // 房间校正（卷积 FIR）状态
-        private IExclusiveOutput? _native; // 独占输出器（WasapiExclusive 模式）：自研 NativeWasapiExclusiveOut 或 ECHO 核心 EchoCoreOutput（设置里 A/B 切换）
+        private IExclusiveOutput? _native; // 独占输出器（WasapiExclusive 模式）：NativeCoreOutput（原生内核，唯一项；ECHO 内核选项 2026-10-16 已删）
         private bool _useNative; // 当前播放是否走原生独占输出
         private bool _isDsd;     // 当前是否 DSD/DoP 直出（独占 + 禁降级）
         private bool _isDopWav;  // 当前是否「整轨 DoP 容器 WAV」直读：内容是 DoP 帧流的 PCM WAV，独占下绕过 DSP 直通
@@ -304,6 +304,30 @@ namespace CelesteMusicPlayer
         /// <summary>DSP 总旁路（A/B 对比）：开 = 跳过全部 DSP 使输出 bit-perfect，设置全部保留。
         /// 播放中实时切换（下一次 Read 生效）。</summary>
         public void SetBypassAll(bool bypass) => _dspProvider?.SetBypassAll(bypass);
+
+        /// <summary>
+        /// 实时变速（2026-10-15，用户拍板"拖动即时变声"）。UI 线程调；
+        /// 播放中新倍率下一个音频块即生效——不重载、不重转码、不断音。
+        /// 倍率记在本对象：播放会话会重建 provider，届时自动重新灌入。
+        /// </summary>
+        public void SetPlaybackSpeed(double rate, bool preservePitch)
+        {
+            _speedRate = Math.Clamp(rate, 0.5, 2.0);
+            _speedPreservePitch = preservePitch;
+            _dspProvider?.SetPlaybackSpeed(_speedRate, preservePitch);
+        }
+
+        /// <summary>变速是否正接管取数（倍率≠1 或正在排空 FIFO）。</summary>
+        public bool SpeedActive => _dspProvider?.SpeedActive == true;
+
+        /// <summary>当前变速倍率（1.0 = 不变速）。</summary>
+        public double SpeedRate => _speedRate;
+
+        /// <summary>当前是否保调。</summary>
+        public bool SpeedPreservePitch => _speedPreservePitch;
+
+        private double _speedRate = 1.0;
+        private bool _speedPreservePitch = true;
 
         /// <summary>当前是否处于 DSP 总旁路。</summary>
         public bool IsBypassAll => _dspProvider?.IsBypassAll ?? false;
@@ -1296,23 +1320,14 @@ namespace CelesteMusicPlayer
                 _asioFeeder.BufferedBytes));
         }
 
-        /// <summary>是否使用 ECHO 核心独占输出（设置项 ExclusiveEngine="echo"）。默认 native2=自研原生内核，可随时回退。</summary>
-        private static bool UseEchoCore()
-        {
-            try
-            {
-                return string.Equals(AppSettingsStore.Load().ExclusiveEngine, "echo", StringComparison.OrdinalIgnoreCase);
-            }
-            catch
-            {
-                return false; // 设置读失败时保守回退自研（自研是已知工作路径）
-            }
-        }
+        // 2026-10-16：原 UseEchoCore()（ExclusiveEngine="echo" → EchoCoreOutput）已删——
+        // 用户拍板程序只用原生内核（native2），ECHO 内核不再作为运行时可选项。
+        // native/echo-core/ 的代码与 DLL 保留（用户以后要捡回来随时能接），只是这里不再分派。
+        // 存量设置里的 "echo" 由 AppSettingsStore.Load 归一到 "native2"，老用户无感切换。
 
-        /// <summary>是否使用自研原生内核独占输出（设置项 ExclusiveEngine="native2"，celeste_core.dll，默认项）。
+        /// <summary>是否使用自研原生内核独占输出（设置项 ExclusiveEngine="native2"，celeste_core.dll，唯一项）。
         /// C++ 原生渲染线程 + feeder 整数字节直喂（DSP 全关时端到端 bit-perfect）。
-        /// 任一环境失败（DLL 缺失等）Init 返回 false，由上层按现有路径回退自研托管渲染线程
-        /// （2026-10-11 起自研只是兜底路径，不再是用户可选内核）。</summary>
+        /// 任一环境失败（DLL 缺失等）Init 返回 false，由上层回退托管渲染线程兜底。</summary>
         private static bool UseNativeCore()
         {
             try
@@ -1402,6 +1417,12 @@ namespace CelesteMusicPlayer
                 // 输出安全监控统计（峰值 / 削波计数）：同样只测 post-DSP 信号，
                 // requireExact（DSD/DoP 直出）不经 DSP 链 → 关闭，保持 1-bit 直通。
                 _dspProvider.SetOutputStats(!bypassDsp);
+                // 实时变速（2026-10-15）：provider 每个播放会话重建，倍率是持久设置，
+                // 必须在这里重新灌进去——否则切到下一首就悄悄回 1x（用户拖动白拖）。
+                // 同时把值记住在本对象：UI 之后调 SetPlaybackSpeed 只改这里和当前 provider。
+                _speedRate = Math.Clamp(AppSettingsStore.Load().PlaybackRate, 0.5, 2.0);
+                _speedPreservePitch = AppSettingsStore.Load().PlaybackRatePreservePitch;
+                _dspProvider.SetPlaybackSpeed(_speedRate, _speedPreservePitch);
                 switch (mode)
                 {
                     case OutputMode.WasapiShared:
@@ -1423,14 +1444,9 @@ namespace CelesteMusicPlayer
                             return false;
                         }
 
-                        // A/B 开关（设置项 ExclusiveEngine）：默认 native2=自研原生内核（C++ 原生渲染线程，
-                        // .NET GC 冻不到 → 治卡顿；feeder 走整数字节直喂，DSP 全关时端到端 bit-perfect）；
-                        // echo=ECHO 核心（同为 C++ 原生渲染线程的实验项，不支持 DSD/DoP）。
-                        // 2026-10-11 起自研（self）选项删除：设置读取失败时两边判定都落 false，
-                        // 落到最后的 NativeWasapiExclusiveOut 托管路径兜底，不影响正常使用。
-                        // 任选其一失败都可一键切回，互不影响（两边 Init 前都只做本地协商）。
+                        // 2026-10-16：只剩原生内核一条路（ECHO 内核选项已删，见 UseEchoCore 注释）。
+                        // 设置读取失败时 UseNativeCore()=false，落到 NativeWasapiExclusiveOut 托管兜底。
                         IExclusiveOutput nat = UseNativeCore() ? new NativeCoreOutput()
-                            : UseEchoCore() ? new EchoCoreOutput()
                             : new NativeWasapiExclusiveOut();
                         nat.BufferMilliseconds = OutputBufferMs; // 事件驱动缓冲跟随设置（默认 100ms，可调低延迟/抗卡顿）
                         // DSP 链在独占下同样生效：传 _dspProvider（包住无缝源，内部短路直通）。
@@ -2423,16 +2439,9 @@ namespace CelesteMusicPlayer
             else if (_waveFile != null && _waveFile.Length > 16
                 && (!_useNative || (_native?.IsStarted == true))) // native 模式下仅在渲染线程真正启动时判定，避免重建窗口期的旧 reader 误判为已读尽
             {
-                if (_useNative && _native is EchoCoreOutput echo)
+                if (_useNative && _native is NativeCoreOutput nativeCore)
                 {
-                    // ECHO 核心：feeder 超前读源备货（ring 最多囤 ~600ms），reader 游标到头时
-                    // 歌曲尾巴还在 ring/设备缓冲里。必须等 ring 也播空（IsDrained）才判播完，
-                    // 否则切歌会把歌曲尾巴切掉。
-                    sourceExhausted = echo.IsDrained;
-                }
-                else if (_useNative && _native is NativeCoreOutput nativeCore)
-                {
-                    // 自研原生内核：同上——feeder 灌 ring 常备 1.5s 存货，reader 到头时尾巴还在 ring/设备里。
+                    // 自研原生内核：feeder 灌 ring 常备 1.5s 存货，reader 到头时尾巴还在 ring/设备里。
                     sourceExhausted = nativeCore.IsDrained;
                 }
                 else

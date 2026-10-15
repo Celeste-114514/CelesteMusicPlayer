@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -2561,17 +2561,8 @@ namespace CelesteMusicPlayer
             // 独占模式下走 DoP 原生直出。提示在 PlayExtendedWithEngineAsync 成功后给出。
             StartupLog.Write("StartPlayback: " + item.FilePath + " mode=" + (AppSettingsStore.Load().OutputMode));
 
-            // DSD×ECHO 内核提醒（2026-09-24 用户定案）：echo 内核不负责 DSD/DoP
-            // （EchoCoreOutput.Init 显式拒绝 requireExact）。独占 + echo + DSF 起播 →
-            // 左上角提醒切 native2。StartPlayback 是点歌/切歌/外部文件/自动连播的总漏斗，
-            // 只认 .dsf（DFF 本就不走 DoP，提醒它会误导）。
-            if (string.Equals(AppSettingsStore.Load().OutputMode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase)
-                && string.Equals(AppSettingsStore.Load().ExclusiveEngine, "echo", StringComparison.OrdinalIgnoreCase)
-                && !string.IsNullOrEmpty(item.FilePath)
-                && item.FilePath.EndsWith(".dsf", StringComparison.OrdinalIgnoreCase))
-            {
-                ShowDsdEngineTip();
-            }
+            // （2026-10-16 删除）DSD×ECHO 内核提醒：ECHO 内核选项已删（程序只用 native2），
+            // 该分支永远不成立，整套提醒逻辑已移除。
 
             // 三模式统一走 FFmpeg 引擎 + NAudio/HiFi 输出（共享 / WASAPI 独占 / ASIO），
             // 使曲线 EQ / 声道平衡 / 限幅在所有输出模式下都能实时生效、暂停后继续保留。
@@ -2800,10 +2791,11 @@ namespace CelesteMusicPlayer
                 if (dsdDop)
                 {
                     NowPlayingText.Text = "DSD DoP 直出（bit-perfect）· " + item.Title + " - " + item.Artist;
-                    // 变速诚实性：DSD 不过 atempo，倍率≠1 时如实说明（bit-perfect 指的是直出，不含变速）
+                    // 变速诚实性（2026-10-16 起口径变了）：DoP 直出 = 1-bit 位流直通设备，
+                    // 不经 DSP 链，托管实时变速够不着 → 倍率≠1 时如实说明按 1x 播。
                     if (FfmpegDecoderBackend.IsTempoActive(FfmpegDecoderBackend.GetTempoRate()))
                     {
-                        NowPlayingText.Text += "（DSD 不支持变速，按 1x 播放）";
+                        NowPlayingText.Text += "（DoP 直出不变速，按 1x 播放）";
                     }
                 }
                 else if (IsDsdFile(item.FilePath))
@@ -2812,11 +2804,8 @@ namespace CelesteMusicPlayer
                         ? (_audioEngine?.ActualOutputFormat ?? "PCM") : _audioEngine!.SourceFormatDescription!;
                     NowPlayingText.Text = "已转码为 " + pcmDesc + " 输出";
                     StartupLog.Write("DSD 已转码 PCM 输出: " + item.FilePath + " → " + (_audioEngine?.SourceFormatDescription ?? "?"));
-                    // 变速诚实性：DSD 1-bit 位流不过 atempo，倍率≠1 时如实说明按 1x 播
-                    if (FfmpegDecoderBackend.IsTempoActive(FfmpegDecoderBackend.GetTempoRate()))
-                    {
-                        NowPlayingText.Text += "（DSD 不支持变速，按 1x 播放）";
-                    }
+                    // 转成 PCM 的 DSD 走的就是普通 PCM 链路，实时变速对它有效（2026-10-16 起），
+                    // 不再需要"不支持变速"的提示。
                 }
                 // 设备主音量（DAC 驱动级）只由用户拖动音量条时设置，切歌不重置，保持用户设定的响度。
                 // （播放器数字音量恒 100% 直通，bit-perfect；无实体音量键的小尾巴可拖动音量条调轻）
@@ -2951,6 +2940,16 @@ namespace CelesteMusicPlayer
             if (curExt is ".dsf" or ".dff")
             {
                 _seamlessPreloaded = null;
+                return;
+            }
+
+            // 变速激活时不参与无缝预加载（2026-10-15）：SpeedStretch 的 FIFO 里往往还压着
+            // 上一曲尾部，无缝续接会把两曲的信号搅在同一段分析窗里（拖腔/回声）。
+            // 倍率≠1 期间切歌留一个小间隙；倍率回 1.0 后预载自动恢复，gapless 不受影响。
+            if (_audioEngine?.SpeedActive == true)
+            {
+                _seamlessPreloaded = null;
+                StartupLog.Write("预加载: 变速中，跳过无缝预载（避免跨曲搅混）");
                 return;
             }
 
