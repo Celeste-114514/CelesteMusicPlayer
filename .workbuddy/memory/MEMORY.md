@@ -3,12 +3,21 @@
 
 ## 工作主线
 - 旧 HiFi 路线图（电平表→交叉淡入→APO EQ I/O→SRC→FIR→SQLite曲库）**已全部落地**，勿当待办。当前语境=**UI 令牌化之前准备**，标签板块已定稿；MainWindow 拆分放最后（用户定最高风险）。
-- **⚠ E 组主 UI 四项（2026-10-15 已提交，未推送）**：`1125bb1` 功能 + `9a87f87` 用户实机修复（浮动按钮列漏 HorizontalAlignment=Right 跑去左上角）+ `ee94f99` 记忆。已交付 dist\run-latest（冒烟过）。踩坑：① **Border 无 Fill 属性**（Shape 才有），WMC0011；② 环境崩溃会把真错误糊住——VS 一次构建暴露；③ 机器有"配合窗口期"，抓到就立刻连打构建+发布。ahead 29 未推送，等用户发话。
+- **⚠ E 组主 UI 四项（2026-10-15 已提交，未推送）**：`1125bb1` 功能 + `9a87f87` 用户实机修复（浮动按钮列漏 HorizontalAlignment=Right 跑去左上角）+ `ee94f99` 记忆。已交付 dist\run-latest（冒烟过）。踩坑：① **Border 无 Fill 属性**（Shape 才有），WMC0011；② 环境崩溃会把真错误糊住——VS 一次构建暴露；③ 机器有"配合窗口期"，抓到就立刻连打构建+发布。ahead 32 未推送，等用户发话。
+- **F 组（`c9e37a0`，收尾 WorkBuddy 半路**）：左分类栏浮动板块（圆角/卡片底色/CardStroke 边线/ThemeShadow）、条目左移、播放页展开左栏常显+右上按钮列隐藏、播放栏顶线升级+底色衬托。
+- **G 组（`c834120`）**：实时变速（托管 SpeedStretch，拖动即时变声+音调可选）+ 音频设置面板四页签 + 删 ECHO 内核（只用 native2）。详见下方「音频链路 / DSP」节。
+- **UI 收尾四项（`4e12d7d`，接手 deepseek harness 后）**：① 左栏图标两态位置统一（单一真相源 `NavContentAlignment`）② 波形下方按钮组 `TransportButtonsShiftX=0` 回落正中 ③ 波形柱加粗（桶数 180→120 / 缝 1.5→1.2 / 进度条 660→720）④ 播放栏 MinHeight 70→82 + 上边距 1→10；默认窗口 1400×800→1480×860（最小仍锁 1400×800）。详见当日日记。
+- **⚠ 待办清单在 `outputs/待办清单-*.md`，不在本目录**（10-16 核对版：`待办清单-2026-10-16-核对版.md`）。harness 读不到待办就是因为找错地方。
+- **⚠ 同一 UI 属性多处赋值必须抽单一真相源**：左栏"收起后点分类整列图标左偏"= SetLeftNavIconMode 设 Center、UpdateLibraryNavHighlight 写死 Left 互相覆盖。三处已统一到 `NavContentAlignment`。
+- **已确认做完（10-16 实查）**：A4 酷狗残留（只剩注释，艺术家概览改 Last.fm/MB/Discogs 三层）、C5 AB 循环点（`cee3824`）、D0 CUE 自动应用（`AutoApplyCueOnScan` 默认开）、D0 m3u 导入（进命名歌单不入库）、E 组四项。**未做**：D0 m3u 导出半边（仍批量导出，定案要"选一个歌单导出"）、Discogs 署名。K1 文件关联 / K2 封面糊代码已改待实机。
 - **零散播放架构定案（2026-10-15）**：保留文件关联（学 echo 砍关联=否）；做独立「零散播放」窗口（临时队列纯内存、不碰曲库不读 SQLite，冷启动双击只建它秒出声，主窗口按需再开并跳过启动续播）；播放器内「选择文件/文件夹」=送零散窗口播放不入库（现状 replace:true 清主窗口视图是错位）。技术底数：AudioPlaybackEngine 自包含可被零散窗口自持（DSP 读同一份 AppSettingsStore，bit-perfect 不变）；QuickPlayLauncher 已有单实例+relay。实施=待办清单 Q1~Q5。播放设置 10 项音频项**留设置当高级项**（已加「音频输出（高级设置）」分组头，不挪音频设置面板）。
 
 ## 音频链路 / DSP
-- 链路：ffmpeg PCM 缓存→SeamlessWaveProvider(gapless)→独占SRC→降混→celeste_dsp_core.dll 机架(EQ31→卷积→RG→压缩→crossfeed→声场→矩阵→balance→Headroom→限幅→变速→电平表)。**全关=bit-perfect**；测量只读音频只写标签。
-- 内核=ECHO C++ 裁剪改写（如实披露+风险自担）；UI 除「播放内核」禁出现 ECHO；变速 processBlock 空壳禁宣传「已支持」。默认 native2（用户已实机自测通过）。进程级单实例过 EngineSwapGate 全局锁。
+- 链路：ffmpeg PCM 缓存→SeamlessWaveProvider(gapless)→独占SRC→降混→**ManagedDspSourceProvider（变速 SpeedStretch：WSOLA 保调/Hermite 变调，倍率≠1 强制机架激活 → 软音量链首）**→celeste_dsp_core.dll 机架(EQ31→卷积→RG→压缩→crossfeed→声场→矩阵→balance→Headroom→限幅→电平表)。**全关=bit-perfect**；测量只读音频只写标签。
+- 内核=ECHO C++ 裁剪改写（如实披露+风险自担）；UI 除「播放内核」禁出现 ECHO。进程级单实例过 EngineSwapGate 全局锁。
+- **变速（2026-10-15 用户拍板"拖动即时变声、音调变/不变可选"）落地在托管侧，不在内核**：SpeedStretch.cs 挂在 ManagedDspSourceProvider 取数环节（按倍率从源拉帧进 FIFO → WSOLA/Hermite 拉伸 → 照旧走音量/内核/编码），共享/独占/ASIO 全覆盖、下一个音频块生效、不重载不断音。ffmpeg atempo 老路已废（转码恒原始长度、缓存键与倍率解耦）。保调=WSOLA（46ms 窗/50% 重叠/±6ms 搜索、4 倍抽取粗定位+全速率细定位）；变调=三次 Hermite 重采样。设置项 PlaybackRatePreservePitch（已补 Clone）。倍率回 1.0 先排空 FIFO 再回直通；seek/换曲清 FIFO；变速激活时跳过无缝预载（回 1x 自动恢复 gapless）。DSD：DoP 直出不过链→不变速；转 PCM 的 DSD 可变速。⚠ C# 不允许 volatile double（CS0677）。
+- **内核只剩 native2（2026-10-16 用户拍板"程序只用 Native2"）**：self（10-11 删）/echo（10-16 删）均不再是可选项，ExclusiveEngine 在 Load 强制归一到 "native2"；EchoCoreAudio/EchoCoreOutput 源码与 celeste_audio_core.dll 保留供以后捡回。
+- **音频设置面板四页签（2026-10-16）**：Flyout 改 Grid+ShellPageHost（复用标签页横向子导航）：音频输出/播放设置/播放速度/睡眠定时。速度页=0.5~2.0 滑块步长 0.01 拖动即生效 + 音调两选一；定时页 8 单选即选即生效（ApplySleepSelection 与 WebUI 对话框共用）。新面板控件事件一律带 `_audioSettingsReady` 就绪守卫。
 
 ## WinUI3 铁律
 - 新界面模式三连：①设置白名单 ②UI ComboBoxItem Tag ③ApplyUiStyleMode 分支，缺一静默不生效。
