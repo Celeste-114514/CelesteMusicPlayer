@@ -332,7 +332,7 @@
             <Border
                 x:Name="LeftCategoryNavBorder"
                 Grid.Column="0"
-                Margin="0,4,8,4"
+                Margin="-16,4,8,4"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderThickness="0,0,1,0"
                 CornerRadius="0,8,8,0"
@@ -8197,6 +8197,40 @@
                             VerticalAlignment="Center"
                             Visibility="Collapsed"
                             ToolTipService.ToolTip="实时电平（post-DSP）：细线=峰值，粗条=RMS；绿色正常，橙黄接近 0dBFS，红色满刻度" />
+                                                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <FontIcon
+                                                    x:Name="VolumeIcon"
+                                                    Glyph="&#xE767;"
+                                                    FontSize="16"
+                                                    VerticalAlignment="Center"
+                                                    ToolTipService.ToolTip="音量" />
+                                                <Grid Width="140" Height="24" VerticalAlignment="Center">
+                                                    <Slider
+                                                        x:Name="VolumeSlider"
+                                                        Minimum="0"
+                                                        Maximum="100"
+                                                        Value="0"
+                                                        VerticalAlignment="Center"
+                                                        ValueChanged="VolumeSlider_ValueChanged">
+                                                        <Slider.Template>
+                                                            <ControlTemplate TargetType="Slider">
+                                                                <Grid />
+                                                            </ControlTemplate>
+                                                        </Slider.Template>
+                                                    </Slider>
+                                                    <Canvas x:Name="VolumeStyleCanvas" />
+                                                    <!-- 极客模式：音量也字符化。靠左对齐 = 和底下 140px 画布（点击靶）完全重合，
+                                                         格数按画布宽度算，长短和原来的竖线条一致 -->
+                                                    <TextBlock
+                                                        x:Name="GeekVolumeText"
+                                                        HorizontalAlignment="Left"
+                                                        VerticalAlignment="Center"
+                                                        FontFamily="Consolas"
+                                                        FontSize="11"
+                                                        IsHitTestVisible="False"
+                                                        Visibility="Collapsed" />
+                                                </Grid>
+                                                                        </StackPanel>
                         <!-- 音频设置（2026-10-15）：分两块——音频输出（模式与设备）、
                              播放设置（音量 / 播放速度 / AB 循环点 / 睡眠定时）。
                              来源：播放条上的音量条与速度按钮、右上角面板里的输出模式与设备，
@@ -8213,7 +8247,8 @@
                             <FontIcon Glyph="&#xE713;" FontSize="18" />
                             <Button.Flyout>
                                 <Flyout Placement="Top" Opened="AudioSettingsFlyout_Opened">
-                                    <Grid Width="380">
+                                    <!-- 固定高宽：四个页签内容多少不一，不固定的话每切一个页签面板就胀缩一下（用户反馈）。滚动交给里面 ScrollViewer。 -->
+                                    <Grid Width="380" Height="492">
                                         <Grid.RowDefinitions>
                                             <RowDefinition Height="Auto" />
                                             <RowDefinition Height="*" />
@@ -8321,56 +8356,25 @@
                         </StackPanel>
                     </StackPanel>
                                             </StackPanel>
-                                        <!-- 页2：播放设置（音量 / AB 循环；播放速度与睡眠定时已拆独立页） -->
-                                        <StackPanel x:Name="AudioSettingsPagePlay" Visibility="Collapsed" Spacing="12">
-                                                <TextBlock Text="播放设置" FontSize="14" FontWeight="SemiBold" />
-                                                <StackPanel Orientation="Horizontal" Spacing="8">
-                        <FontIcon
-                            x:Name="VolumeIcon"
-                            Glyph="&#xE767;"
-                            FontSize="16"
-                            VerticalAlignment="Center"
-                            ToolTipService.ToolTip="音量" />
-                        <Grid Width="140" Height="24" VerticalAlignment="Center">
-                            <Slider
-                                x:Name="VolumeSlider"
-                                Minimum="0"
-                                Maximum="100"
-                                Value="0"
-                                VerticalAlignment="Center"
-                                ValueChanged="VolumeSlider_ValueChanged">
-                                <Slider.Template>
-                                    <ControlTemplate TargetType="Slider">
-                                        <Grid />
-                                    </ControlTemplate>
-                                </Slider.Template>
-                            </Slider>
-                            <Canvas x:Name="VolumeStyleCanvas" />
-                            <!-- 极客模式：音量也字符化。靠左对齐 = 和底下 140px 画布（点击靶）完全重合，
-                                 格数按画布宽度算，长短和原来的竖线条一致 -->
-                            <TextBlock
-                                x:Name="GeekVolumeText"
-                                HorizontalAlignment="Left"
-                                VerticalAlignment="Center"
-                                FontFamily="Consolas"
-                                FontSize="11"
-                                IsHitTestVisible="False"
-                                Visibility="Collapsed" />
-                        </Grid>
-                                                </StackPanel>
-                                                <StackPanel Spacing="2">
-                                                    <Button
-                                                        x:Name="AbLoopPlaceholderButton"
-                                                        Content="AB 循环点"
-                                                        HorizontalAlignment="Stretch"
-                                                        IsEnabled="False" />
-                                                    <TextBlock
-                                                        FontSize="11"
-                                                        Opacity="0.7"
-                                                        TextWrapping="WrapWholeWords"
-                                                        Text="尚未实现：设定 A / B 两点后只在区间内循环播放。已列入待办。" />
-                                                </StackPanel>
-</StackPanel>
+                                        <!-- 页2：AB 循环点（2026-10-16 用户要求单独占一页） -->
+                                        <StackPanel x:Name="AudioSettingsPageAbLoop" Visibility="Collapsed" Spacing="10">
+                                            <TextBlock Text="AB 循环点" FontSize="14" FontWeight="SemiBold" />
+                                            <Button
+                                                x:Name="AbLoopPlaceholderButton"
+                                                Content="设定 A / B 循环点"
+                                                HorizontalAlignment="Stretch"
+                                                IsEnabled="False" />
+                                            <TextBlock
+                                                FontSize="11"
+                                                Opacity="0.7"
+                                                TextWrapping="WrapWholeWords"
+                                                Text="尚未实现：设定 A / B 两点后只在区间内循环播放。已列入待办，做好前这个页面先占位。" />
+                                            <TextBlock
+                                                FontSize="11"
+                                                Opacity="0.6"
+                                                TextWrapping="WrapWholeWords"
+                                                Text="期间想单曲循环，可以先用左下角的播放顺序按钮（单曲播放）。" />
+                                        </StackPanel>
                                         <!-- 页3：播放速度（2026-10-16 用户要求：可拖动条、两位小数、拖动即时变声） -->
                                         <StackPanel x:Name="AudioSettingsPageSpeed" Visibility="Collapsed" Spacing="14">
                                             <TextBlock Text="播放速度" FontSize="14" FontWeight="SemiBold" />

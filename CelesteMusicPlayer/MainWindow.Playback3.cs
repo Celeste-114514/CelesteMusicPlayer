@@ -1002,6 +1002,10 @@ namespace CelesteMusicPlayer
         /// 进度条改成固定长度后，它只是在右侧「播放控制区」内部居中，整体是偏右的；
         /// 所以按左侧「封面 + 歌曲信息」的实际宽度给一个负的左偏移，把它的中心
         /// 挪到整条播放栏（也就是主界面）的中轴上。宽度随内容变，所以每次尺寸变化都重算。
+        ///
+        /// 2026-10-16 用户反馈：波形进度条离上方太近，往下调又会和左侧播放信息重叠。
+        /// 处置=进度条与按钮整组**右移 + 下移**：右移后与左侧信息列拉开水平距离，下移就不打架了。
+        /// 偏移量是两个常量，想微调只改这里。
         /// </summary>
         private void UpdateTransportProgressCentering()
         {
@@ -1010,19 +1014,25 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            CenterOnTransportAxis(ProgressRowGrid);
-            CenterOnTransportAxis(TransportMainButtonsPanel);
+            CenterOnTransportAxis(ProgressRowGrid, TransportProgressShiftX, TransportProgressShiftY);
+            CenterOnTransportAxis(TransportMainButtonsPanel, TransportProgressShiftX, TransportProgressShiftY);
         }
 
+        /// <summary>进度条/按钮组相对播放栏中轴的右移量（px）：避开左侧「封面+歌曲信息」列。</summary>
+        private const double TransportProgressShiftX = 96;
+
+        /// <summary>进度条/按钮组相对垂直居中的下移量（px）：离播放栏上沿留出呼吸。</summary>
+        private const double TransportProgressShiftY = 8;
+
         /// <summary>
-        /// 把一个元素平移到「播放栏的正中」。
+        /// 把一个元素平移到「播放栏的正中 + 指定偏移」。
         ///
         /// 不手算左右各占了多宽（那套算错一次就偏，2026-10-14 试过）：直接量——
         /// 先用 TransformToVisual 求出元素中心当前相对播放栏的坐标，减掉现 Margin 得到
-        /// "不做偏移时"的中心，再一次性算出让它落在播放栏中线所需的 Margin。
+        /// "不做偏移时"的中心，再一次性算出让它落在目标中心所需的 Margin。
         /// 与封面宽度、歌名长短、右侧按钮多少全都无关，量几次都不会累积误差。
         /// </summary>
-        private void CenterOnTransportAxis(FrameworkElement? element)
+        private void CenterOnTransportAxis(FrameworkElement? element, double offsetX = 0, double offsetY = 0)
         {
             if (element == null || BottomTransportBar == null)
             {
@@ -1038,16 +1048,16 @@ namespace CelesteMusicPlayer
             double centerNow = transform.TransformPoint(
                 new Windows.Foundation.Point(element.ActualWidth / 2, 0)).X;
             double centerWithoutMargin = centerNow - element.Margin.Left;
-            double wanted = BottomTransportBar.ActualWidth / 2;
+            double wanted = BottomTransportBar.ActualWidth / 2 + offsetX;
             double newLeft = wanted - centerWithoutMargin;
 
             // 差不到 0.5px 就别动：避免改 Margin 又触发一轮布局，来回抖
-            if (Math.Abs(newLeft - element.Margin.Left) < 0.5)
+            if (Math.Abs(newLeft - element.Margin.Left) < 0.5 && Math.Abs(offsetY - element.Margin.Top) < 0.5)
             {
                 return;
             }
 
-            element.Margin = new Microsoft.UI.Xaml.Thickness(newLeft, 0, 0, 0);
+            element.Margin = new Microsoft.UI.Xaml.Thickness(newLeft, offsetY, 0, 0);
         }
 
         private void ProgressRowGrid_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)

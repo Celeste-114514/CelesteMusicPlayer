@@ -8,6 +8,7 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Animation; // DoubleAnimation / CubicEase / Storyboard（左栏展开收起动画）
 using Microsoft.UI.Xaml.Media.Imaging;
 using Shapes = Microsoft.UI.Xaml.Shapes;
 using System;
@@ -402,49 +403,187 @@ namespace CelesteMusicPlayer
 
         private bool _leftNavCollapsed;
 
-        /// <summary>收起后的窄条宽度（只放汉堡按钮）。展开宽度与 XAML CategoryColumn 初值一致。</summary>
+        /// <summary>收起后的窄条宽度（只放图标）。展开宽度取收起前的实际列宽（记住，恢复时不跳回 156）。</summary>
         private const double LeftNavCollapsedWidth = 44;
-        private const double LeftNavExpandedWidth = 156;
+        private double _leftNavExpandedWidth = 156;
 
         private void LeftNavCollapseButton_Click(object sender, RoutedEventArgs e)
             => SetLeftNavCollapsed(!_leftNavCollapsed);
 
         /// <summary>
-        /// 收起/展开左侧分类栏。收起=CategoryColumn 缩成 44px 窄条，只留汉堡按钮；
-        /// 展开=恢复 156px。会话内有效，不持久化（重启回到展开态）。
-        /// 与播放页让位（SetLibraryNavHiddenForNowPlaying 隐藏整栏）无耦合：那个隐藏整个
-        /// LeftCategoryGrid，这个只收栏内内容，两者叠加不会互相捣乱。
+        /// 收起/展开左侧分类栏（2026-10-16 用户要求：收起后显示各分类图标 + 展开收起要有动画）。
+        ///
+        /// 做法是"抽屉"式：列宽在动画结束后才真正切换，动画期间卡片用 RenderTransform 向左滑出，
+        /// 滑到只剩 44px（与窄条同宽）时再把列宽切成 44 —— 卡片露出窗口左缘的部分被窗口裁掉，
+        /// 所以切换那一帧看不出跳变。展开反过来：先切回宽列，卡片从 -112 滑回 0。
+        /// 收起态内容整体换成图标（隐藏 NavLabel、按钮内容居中），展开态换回文字。
+        /// 会话内有效，不持久化（重启回到展开态）。
         /// </summary>
         private void SetLeftNavCollapsed(bool collapsed)
         {
             _leftNavCollapsed = collapsed;
             try
             {
-                if (CategoryColumn != null)
+                if (CategoryColumn == null || LeftCategoryNavBorder == null)
                 {
-                    CategoryColumn.Width = new GridLength(collapsed ? LeftNavCollapsedWidth : LeftNavExpandedWidth);
-                    // MinWidth 必须一起改：展开态下限 148 会把 44 顶回 148，收起就失效
-                    CategoryColumn.MinWidth = collapsed ? LeftNavCollapsedWidth : 148;
+                    return;
                 }
+
+                // 收起前记住当前列宽（用户可能拖宽过分栏，恢复时按原宽度）
+                if (!collapsed && CategoryColumn.ActualWidth > LeftNavCollapsedWidth + 20)
+                {
+                    _leftNavExpandedWidth = CategoryColumn.ActualWidth;
+                }
+
+                double slide = Math.Max(0, _leftNavExpandedWidth - LeftNavCollapsedWidth);
+
+                // 1) 内容模式切换（图标 ↔ 文字）：动画开始前就位
+                SetLeftNavIconMode(collapsed);
 
                 if (LibraryNavTitleText != null)
                 {
                     LibraryNavTitleText.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
                 }
 
-                if (CategoryNavScroll != null)
+                // 极客模式的曲库统计块（TRK/ALB/ART）在 44px 窄条里放不下，收起时一起藏
+                if (GeekLibStats != null)
                 {
-                    CategoryNavScroll.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+                    GeekLibStats.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
                 }
 
                 if (LeftNavCollapseButton != null)
                 {
                     ToolTipService.SetToolTip(LeftNavCollapseButton, collapsed ? "展开分类栏" : "收起分类栏");
                 }
+
+                // 2) RenderTransform 就位并播放滑动动画
+                if (LeftCategoryNavBorder.RenderTransform is not CompositeTransform ct)
+                {
+                    ct = new CompositeTransform();
+                    LeftCategoryNavBorder.RenderTransform = ct;
+                }
+
+                var slideAnim = new DoubleAnimation
+                {
+                    From = collapsed ? 0 : -slide,
+                    To = collapsed ? -slide : 0,
+                    Duration = new Duration(TimeSpan.FromSeconds(collapsed ? 0.16 : 0.2)),
+                    EasingFunction = new CubicEase { EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut }
+                };
+                Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(slideAnim, LeftCategoryNavBorder);
+                Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(slideAnim,
+                    "(UIElement.RenderTransform).(CompositeTransform.TranslateX)");
+
+                var sb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+                sb.Children.Add(slideAnim);
+                sb.Completed += (_, _) =>
+                {
+                    try
+                    {
+                        if (CategoryColumn != null)
+                        {
+                            // 收起：动画结束才把列宽切成窄条（播放列表这时候让位）；
+                            // 展开：上面已提前切好，这里只需把残留位移清掉
+                            if (_leftNavCollapsed)
+                            {
+                                CategoryColumn.Width = new GridLength(LeftNavCollapsedWidth);
+                                CategoryColumn.MinWidth = LeftNavCollapsedWidth;
+                            }
+
+                            if (LeftCategoryNavBorder?.RenderTransform is CompositeTransform t)
+                            {
+                                t.TranslateX = 0;
+                            }
+                        }
+                    }
+                    catch (Exception caught)
+                    {
+                        StartupLog.WriteException("MainWindow.Misc.cs.SetLeftNavCollapsed.Completed", caught);
+                    }
+                };
+
+                if (!collapsed)
+                {
+                    // 展开：先让播放列表让位（列宽立刻变宽），卡片从窄条位置滑出
+                    CategoryColumn.Width = new GridLength(_leftNavExpandedWidth);
+                    CategoryColumn.MinWidth = 148;
+                    ct.TranslateX = -slide;
+                }
+
+                sb.Begin();
             }
             catch (Exception caught)
             {
                 StartupLog.WriteException("MainWindow.Misc.cs.SetLeftNavCollapsed", caught);
+            }
+        }
+
+        /// <summary>
+        /// 左栏内容在「文字 ↔ 图标」两种模式间切换：隐藏每个导航按钮里的 NavLabel、
+        /// 按钮内容居中（图标模式下 44px 窄条里图标居中最好看）。所有导航按钮结构一致
+        /// （Button &gt; StackPanel &gt; [FontIcon][NavEmoji][NavLabel]），递归找 Tag="NavLabel" 即可。
+        /// </summary>
+        private void SetLeftNavIconMode(bool iconOnly)
+        {
+            try
+            {
+                foreach (FrameworkElement? root in new FrameworkElement?[] { CategoryNavPanel, NavToolPanel })
+                {
+                    if (root == null)
+                    {
+                        continue;
+                    }
+
+                    foreach (Button? button in FindDescendantButtons(root))
+                    {
+                        button.HorizontalContentAlignment = iconOnly
+                            ? HorizontalAlignment.Center
+                            : HorizontalAlignment.Left;
+
+                        foreach (TextBlock? label in FindNavLabels(button))
+                        {
+                            label.Visibility = iconOnly ? Visibility.Collapsed : Visibility.Visible;
+                        }
+                    }
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.Misc.cs.SetLeftNavIconMode", caught);
+            }
+        }
+
+        private static IEnumerable<Button> FindDescendantButtons(DependencyObject root)
+        {
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is Button b)
+                {
+                    yield return b;
+                }
+                foreach (Button inner in FindDescendantButtons(child))
+                {
+                    yield return inner;
+                }
+            }
+        }
+
+        private static IEnumerable<TextBlock> FindNavLabels(DependencyObject root)
+        {
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is TextBlock tb && tb.Tag is string tag && tag == "NavLabel")
+                {
+                    yield return tb;
+                }
+                foreach (TextBlock inner in FindNavLabels(child))
+                {
+                    yield return inner;
+                }
             }
         }
 

@@ -1062,9 +1062,46 @@ namespace CelesteMusicPlayer
             SetNowPlayingPaneVisible(!_nowPlayingPaneOpen);
         }
 
-        /// <summary>景深切换：切出播放信息页时面板前推、主内容区(含左侧分类)退后变暗；收起则反向恢复。</summary>
-        private void SetNowPlayingPaneVisible(bool visible)
+        /// <summary>
+        /// 还原左分类栏的「浮动卡片」外观（2026-10-16）：Margin 贴左缘（-16）+
+        /// 卡片底色 + CardStroke 右边线 + ThemeShadow 投影。
+        /// 播放页展开时会把这些全部抹掉（沉浸视觉，只留条目），收起时调本方法恢复。
+        /// 资源读取失败（主题资源被换掉）时留透明，绝不让面板起不来。
+        /// </summary>
+        private void RestoreLeftCategoryNavCard()
         {
+            if (LeftCategoryNavBorder == null)
+            {
+                return;
+            }
+
+            LeftCategoryNavBorder.Margin = new Thickness(-16, 4, 8, 4);
+            try
+            {
+                if (Application.Current.Resources["CardBackgroundFillColorDefaultBrush"] is Brush bg)
+                {
+                    LeftCategoryNavBorder.Background = bg;
+                }
+
+                if (Application.Current.Resources["CardStrokeColorDefaultBrush"] is Brush stroke)
+                {
+                    LeftCategoryNavBorder.BorderBrush = stroke;
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs.RestoreLeftCategoryNavCard", caught);
+            }
+
+            if (LeftCategoryNavBorder.Shadow is not Microsoft.UI.Xaml.Media.ThemeShadow)
+            {
+                LeftCategoryNavBorder.Shadow = new Microsoft.UI.Xaml.Media.ThemeShadow();
+                LeftCategoryNavBorder.Translation = new System.Numerics.Vector3(0, 0, 40f);
+            }
+        }
+
+        /// <summary>景深切换：切出播放信息页时面板前推、主内容区(含左侧分类)退后变暗；收起则反向恢复。</summary>
+        private void SetNowPlayingPaneVisible(bool visible)        {
             _nowPlayingPaneOpen = visible;
             if (NowPlayingPane == null)
             {
@@ -1100,9 +1137,14 @@ namespace CelesteMusicPlayer
                 // 实现=覆盖层只盖右列（XAML 里 Grid.Column="1"），左栏不再 Collapse。
                 // 旧方案 SetLibraryNavHiddenForNowPlaying(true) 已废弃删除。
                 // 左栏卡片顶部补 10px：标题栏压 0 后别让「音乐库」标题贴屏幕最顶。
+                // ⚠ 同轮用户新要求：展开态左栏**去掉卡片背景/边线/投影**——播放页是沉浸视觉，
+                // 左侧再挂一张浮起卡片会很割裂；只留分类条目本身（照样能点），收起来时恢复。
                 if (LeftCategoryNavBorder != null)
                 {
                     LeftCategoryNavBorder.Margin = new Thickness(0, 10, 8, 10);
+                    LeftCategoryNavBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
+                    LeftCategoryNavBorder.BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
+                    LeftCategoryNavBorder.Shadow = null;
                 }
                 // 右上角标题栏按钮列整列隐藏（沉浸看歌）。含最小化/最大化/关闭——
                 // 展开态要用系统按钮需先退出播放页（左上角返回或 Esc）。用户 2026-10-16 明确要求。
@@ -1151,9 +1193,10 @@ namespace CelesteMusicPlayer
                 TrySwitchTitleBar(AppTitleBar);
                 // 2026-10-16：左栏常显（不再有「播放页收起才放回来」的逻辑），只把展开态改过的
                 // 几个 Margin/Visibility 还原：左栏卡片间距、右上角浮动列、页内两按钮右距、拖动区右距。
+                // 左栏的 -16 是「贴主 UI 左缘」（卡片从窗口左缘长出来），别丢。
                 if (LeftCategoryNavBorder != null)
                 {
-                    LeftCategoryNavBorder.Margin = new Thickness(0, 4, 8, 4);
+                    RestoreLeftCategoryNavCard();
                 }
                 if (TitleBarFloatingButtons != null)
                 {
@@ -1199,9 +1242,10 @@ namespace CelesteMusicPlayer
                     NowPlayingPane.Opacity = 1;
 
                     // 2026-10-16：展开态改过的四样一并还原（左栏常显，无需恢复 Opacity）
+                    // 左栏背景/边线/投影 + -16 贴左缘都要还原（与收起路径同一套，抽成方法复用）
                     if (LeftCategoryNavBorder != null)
                     {
-                        LeftCategoryNavBorder.Margin = new Thickness(0, 4, 8, 4);
+                        RestoreLeftCategoryNavCard();
                     }
                     if (TitleBarFloatingButtons != null)
                     {
@@ -1795,7 +1839,7 @@ namespace CelesteMusicPlayer
             {
                 _audioSettingsNav = new ShellPageHost(AudioSettingsNavPanel, () => DspAccentBrush());
                 _audioSettingsNav.Register("音频输出", string.Empty, AudioSettingsPageOutput);
-                _audioSettingsNav.Register("播放设置", string.Empty, AudioSettingsPagePlay);
+                _audioSettingsNav.Register("AB 循环", string.Empty, AudioSettingsPageAbLoop);
                 _audioSettingsNav.Register("播放速度", string.Empty, AudioSettingsPageSpeed);
                 _audioSettingsNav.Register("睡眠定时", string.Empty, AudioSettingsPageSleep);
                 _audioSettingsNav.Build();
