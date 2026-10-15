@@ -32,6 +32,14 @@
             <Setter Property="FontSize" Value="12" />
             <Setter Property="VerticalContentAlignment" Value="Center" />
         </Style>
+        <!-- 选择框列专用单元格样式（2026-10-16）：该列只有 30px 宽，用通用样式的
+             左 10 / 右 6 内边距后内容区只剩 14px，20px 的复选框会被挤到溢出错位。
+             这里收窄内边距、内容居中，勾选框才摆得正。 -->
+        <Style x:Key="TagGridCheckCellStyle" TargetType="dg:DataGridCell" BasedOn="{StaticResource TagGridCellStyle}">
+            <Setter Property="Padding" Value="2,0,0,0" />
+            <Setter Property="HorizontalContentAlignment" Value="Center" />
+            <Setter Property="IsTabStop" Value="False" />
+        </Style>
         <Style x:Key="TagGridHeaderStyle" TargetType="dgprim:DataGridColumnHeader">
             <Setter Property="FontSize" Value="11" />
             <Setter Property="FontWeight" Value="SemiBold" />
@@ -1357,11 +1365,41 @@
                 CellEditEnded="TagFileGrid_CellEditEnded"
                 LoadingRow="TagFileGrid_LoadingRow"
                 UnloadingRow="TagFileGrid_UnloadingRow">
+                <!-- 2026-10-16 用户反馈：某首歌被选中后，左侧勾选框那一格会套一个非常显眼的
+                     方框，很难看，「只要勾选就可以」。
+                     根因=toolkit 的 DataGridCell 模板有 CurrentStates 视觉态：单元格成为
+                     「当前单元格且获焦」（CurrentWithFocus）时，会把 FocusVisual（2px 主框 +
+                     1px 次框）的不透明度拉到 1。点复选框 / 点行时那一格正好落进这个状态。
+                     本表是整行选择，不需要单元格级焦点框——把模板用的三支画刷覆盖成透明。
+                     ⚠ 只覆盖「资源值」，绝不碰任何动画的目标属性链：运行时替换模板动画
+                     目标的画刷实例会抛 COMException（0x80040154，已实测崩过，见
+                     ApplyGridRowChrome 的备注）。三个主题字典都写，保证任何主题下都命中。 -->
+                <dg:DataGrid.Resources>
+                    <ResourceDictionary>
+                        <ResourceDictionary.ThemeDictionaries>
+                            <ResourceDictionary x:Key="Default">
+                                <SolidColorBrush x:Key="DataGridCellFocusVisualPrimaryBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="DataGridCellFocusVisualSecondaryBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="DataGridCurrencyVisualPrimaryBrush" Color="Transparent" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="Light">
+                                <SolidColorBrush x:Key="DataGridCellFocusVisualPrimaryBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="DataGridCellFocusVisualSecondaryBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="DataGridCurrencyVisualPrimaryBrush" Color="Transparent" />
+                            </ResourceDictionary>
+                            <ResourceDictionary x:Key="HighContrast">
+                                <SolidColorBrush x:Key="DataGridCellFocusVisualPrimaryBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="DataGridCellFocusVisualSecondaryBrush" Color="Transparent" />
+                                <SolidColorBrush x:Key="DataGridCurrencyVisualPrimaryBrush" Color="Transparent" />
+                            </ResourceDictionary>
+                        </ResourceDictionary.ThemeDictionaries>
+                    </ResourceDictionary>
+                </dg:DataGrid.Resources>
                 <dg:DataGrid.Columns>
                     <!-- 选择框列（2026-10-15）：最左侧复选框，与表格多选双向联动。
                          恒在首位、宽度固定、不进列设置（ApplyColumnLayout 里钉死 DisplayIndex=0）。
                          勾选即加入/移出 SelectedItems，作用范围与左侧标签编辑、批量工具一致。 -->
-                    <dg:DataGridTemplateColumn Tag="Select" Header="" Width="30" MinWidth="26" CanUserResize="False">
+                    <dg:DataGridTemplateColumn Tag="Select" Header="" Width="30" MinWidth="26" CanUserResize="False" CellStyle="{StaticResource TagGridCheckCellStyle}">
                         <dg:DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="local:TagFileItem">
                                 <!-- 2026-10-16 用户反馈「选择框只能选一首，点另一首就切过去了」：

@@ -524,6 +524,13 @@ namespace CelesteMusicPlayer
         /// <summary>选中底色（主面板同款半透明灰，SetupDataGridChrome 按主题算）。</summary>
         private Windows.UI.Color _rowSelectionColor = Windows.UI.Color.FromArgb(40, 128, 128, 128);
 
+        /// <summary>
+        /// 「勾选行」底色的画刷（由 _rowSelectionColor 现算）。
+        /// ⚠ 只能实例字段、只能在 UI 线程 new：SolidColorBrush 是 DependencyObject，
+        /// 后台线程 new 会让类型初始化失败（同 TagFallbackAccentColor 那条教训）。
+        /// </summary>
+        private Brush? _checkedRowBrush;
+
         /// <summary>选中背景圆角（行高 34，取 4；动画不碰 RadiusX/Y，设一次即稳）。</summary>
         private const double RowSelectionCornerRadius = 4;
 
@@ -4590,6 +4597,7 @@ namespace CelesteMusicPlayer
         private void SetupDataGridChrome()
         {
             _rowSelectionColor = MainWindow.ResolveClassicRowSelectionColor(TagFileGrid);
+            _checkedRowBrush = new SolidColorBrush(_rowSelectionColor);
 
             TagFileGrid.Resources["DataGridRowSelectedBackgroundColor"] = _rowSelectionColor;
             TagFileGrid.Resources["DataGridRowSelectedBackgroundOpacity"] = 1.0;
@@ -4741,14 +4749,14 @@ namespace CelesteMusicPlayer
         ///      不用整套重抄 DataGridRow 模板。
         /// 左侧竖条按用户要求不加；文字保持原色（模板动画不动前景，本地值就够）。
         ///
-        /// ⚠️ 非焦点勾选行的底色**暂时不补**（只靠勾选框表达多选）：
-        /// 2026-10-16 实测——给 BackgroundRectangle 设本地 Fill（每行一支新画刷）或
-        /// ClearValue(Fill)，会让选中态动画 Begin 时解析目标属性链失败，直接抛
-        /// COMException 0x80040154「没有检测到已安装的组件 / Cannot resolve
-        /// TargetProperty (Shape.Fill).(SolidColorBrush.Color)」，程序崩。
+        /// ⚠️ 非焦点勾选行的底色（2026-10-16 第二轮补上，用户反馈「只有最新一首变」）：
+        /// **不能**给 BackgroundRectangle 设本地 Fill（每行一支新画刷）或 ClearValue(Fill)，
+        /// 那会让选中态动画 Begin 时解析目标属性链失败，直接抛 COMException 0x80040154
+        /// 「没有检测到已安装的组件 / Cannot resolve TargetProperty
+        /// (Shape.Fill).(SolidColorBrush.Color)」，程序崩（2026-10-16 实测）。
         /// 根因：动画按属性链定位到的是**模板原始那个画刷实例**，替换/清除后目标丢失。
-        /// 以后要补，唯一稳妥路是整套重抄 DataGridRow 模板（含视觉态动画），
-        /// 在模板里给未选中勾选态单独加动画——列为独立任务，别在行上打补丁。
+        /// 改用**每个 DataGridCell 的 Background**：模板里 CellRoot.Background 绑的是
+        /// {TemplateBinding Background}，没有任何动画碰它 → 设了安全、也不会崩。
         /// </summary>
         private void ApplyGridRowChrome(DataGridRow row)
         {
@@ -4757,6 +4765,51 @@ namespace CelesteMusicPlayer
             {
                 background.RadiusX = RowSelectionCornerRadius;
                 background.RadiusY = RowSelectionCornerRadius;
+            }
+
+            // 勾选行底色（2026-10-16 用户反馈「被选中的歌曲背景都要变，现在只有最新一首变」）。
+            // 为什么不用 BackgroundRectangle.Fill：那块矩形的 Fill 是选中态动画的目标属性链
+            //   (Shape.Fill).(SolidColorBrush.Color)，运行时替换实例 / ClearValue 会让动画 Begin
+            //   找不到目标，直接抛 COMException 0x80040154（已实测崩过，见下方备注）。
+            // 改用每个 DataGridCell 的 Background —— 模板里 CellRoot.Background 是
+            //   {TemplateBinding Background}，**没有任何动画碰它**，设了最稳。
+            // 单元格彼此紧贴（只有竖网格线在内层），整行刷完就是一条连续色带。
+            // 焦点行的原生选中底色在下面一层，被 cell 底色盖住；两者同色，视觉无差别。
+            bool isChecked = row.DataContext is TagFileItem checkedItem && _checkedSet.Contains(checkedItem);
+            Brush? fill = isChecked ? _checkedRowBrush : null;
+            var cells = new List<DataGridCell>();
+            CollectDescendants(row, cells);
+            foreach (DataGridCell cell in cells)
+            {
+                if (fill != null)
+                {
+                    cell.Background = fill;
+                }
+                else
+                {
+                    // 取消勾选 / 行被回收复用到未勾选的数据：收掉本地值，恢复模板的透明底色。
+                    cell.ClearValue(Control.BackgroundProperty);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 深度优先收集子树里所有 <typeparamref name="T"/> 类型元素（顺序 = 可视树顺序）。
+        /// 用可视树遍历而不是 DataGridCellsPresenter.Children：toolkit 的 presenter 是
+        /// ItemsControl 派生，有没有 Children 属性依版本而定，不能依赖（踩过类型不存在编译不过的坑）。
+        /// </summary>
+        private static void CollectDescendants<T>(DependencyObject root, List<T> sink) where T : DependencyObject
+        {
+            int count = VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = VisualTreeHelper.GetChild(root, i);
+                if (child is T match)
+                {
+                    sink.Add(match);
+                }
+
+                CollectDescendants(child, sink);
             }
         }
 

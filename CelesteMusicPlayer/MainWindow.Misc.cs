@@ -476,6 +476,15 @@ namespace CelesteMusicPlayer
                     GeekLibStats.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
                 }
 
+                // 2026-10-16 用户要求：工具组（标签 / 音效处理 / 设置）从左栏卡片里移出，
+                // 成为主内容区第 0 列的独立浮层（见 MainWindow.xaml 的 NavToolPanel）。
+                // 它不再随卡片滑动，也不再受“卡片高度”约束；但窄条只有 56px，放不下这三个
+                // 带文字的条目 → 收起时整块藏起来（与上面统计块同一套规则）。
+                if (NavToolPanel != null)
+                {
+                    NavToolPanel.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+                }
+
                 if (LeftNavCollapseButton != null)
                 {
                     ToolTipService.SetToolTip(LeftNavCollapseButton, collapsed ? "展开分类栏" : "收起分类栏");
