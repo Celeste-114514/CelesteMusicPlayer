@@ -403,9 +403,26 @@ namespace CelesteMusicPlayer
 
         private bool _leftNavCollapsed;
 
-        /// <summary>收起后的窄条宽度（只放图标）。展开宽度取收起前的实际列宽（记住，恢复时不跳回 156）。</summary>
-        private const double LeftNavCollapsedWidth = 44;
-        private double _leftNavExpandedWidth = 156;
+        /// <summary>收起后的窄条宽度（只放图标）。展开宽度取收起前的实际列宽（记住，恢复时不跳回 200）。
+        /// 2026-10-16：44 → 56。原来 44 减去卡片留白后只剩约 26px，汉堡按钮（28px）都放不下，
+        /// 更没法让它和下面的分类图标对齐。56 是按「卡片留白 + 汉堡 28 + 图标列」算出来的最小值。</summary>
+        private const double LeftNavCollapsedWidth = 56;
+        private double _leftNavExpandedWidth = 200;
+
+        /// <summary>展开态列宽的下限（与 XAML 里 CategoryColumn 的 MinWidth 一致）。</summary>
+        private const double LeftNavExpandedMinWidth = 190;
+
+        /// <summary>收起态窄条的内边距。左 16 与展开态**取同一个值**——这是"图标两态位置一致"
+        /// 的前提（对齐方式也统一，见 NavContentAlignment），改一个就必须改另一个。
+        /// 右侧只留 4（窄条总共才 56px，留 14 会把内容挤没）。</summary>
+        private static Microsoft.UI.Xaml.Thickness LeftNavPaddingCollapsed => new(16, 2, 4, 2);
+
+        /// <summary>展开态卡片内边距。
+        /// 左 16：2026-10-16 用户反馈"图标离主程序左边界太近"，但同时要求"分类栏要和左边界相接"
+        /// → 卡片继续贴边（Margin 左 -16），靠**内边距**把图标往右推到 16px（再算按钮自身
+        ///   Padding 6，图标实际落在离窗口左缘约 22px 处）。
+        /// 右 14：按钮离卡片右边界的呼吸（用户嫌 2px 太挤）。</summary>
+        private static Microsoft.UI.Xaml.Thickness LeftNavPaddingExpanded => new(16, 2, 14, 2);
 
         private void LeftNavCollapseButton_Click(object sender, RoutedEventArgs e)
             => SetLeftNavCollapsed(!_leftNavCollapsed);
@@ -414,9 +431,14 @@ namespace CelesteMusicPlayer
         /// 收起/展开左侧分类栏（2026-10-16 用户要求：收起后显示各分类图标 + 展开收起要有动画）。
         ///
         /// 做法是"抽屉"式：列宽在动画结束后才真正切换，动画期间卡片用 RenderTransform 向左滑出，
-        /// 滑到只剩 44px（与窄条同宽）时再把列宽切成 44 —— 卡片露出窗口左缘的部分被窗口裁掉，
-        /// 所以切换那一帧看不出跳变。展开反过来：先切回宽列，卡片从 -112 滑回 0。
-        /// 收起态内容整体换成图标（隐藏 NavLabel、按钮内容居中），展开态换回文字。
+        /// 滑到只剩窄条同宽时再把列宽切过去 —— 卡片露出窗口左缘的部分被窗口裁掉，
+        /// 所以切换那一帧看不出跳变。展开反过来：先切回宽列，卡片再滑回 0。
+        ///
+        /// 2026-10-16 用户反馈「展开收起动画会重新加载图标显示，现在会一闪」—— 两个原因：
+        ///   ① 文字用 Visibility 瞬间切换，动画一开始就整排文字凭空消失；
+        ///      → 改成 Opacity 淡出（与滑动同长），淡完了才真正 Collapsed。
+        ///   ② 图标的对齐在两态之间被切来切去，位置一变就看着像"重新出现"；
+        ///      → 两态都取 NavContentAlignment（同值），图标从头到尾不动，不闪。
         /// 会话内有效，不持久化（重启回到展开态）。
         /// </summary>
         private void SetLeftNavCollapsed(bool collapsed)
@@ -437,15 +459,18 @@ namespace CelesteMusicPlayer
 
                 double slide = Math.Max(0, _leftNavExpandedWidth - LeftNavCollapsedWidth);
 
-                // 1) 内容模式切换（图标 ↔ 文字）：动画开始前就位
-                SetLeftNavIconMode(collapsed);
+                // 1) 内容模式切换（图标 ↔ 文字）：淡出淡入，不再瞬间消失
+                SetLeftNavIconMode(collapsed, animate: true);
+
+                // 1b) 窄条 / 宽栏的留白 + 汉堡按钮归位（收起时挪到左竖线，与分类图标同一条线）
+                ApplyLeftNavChrome(collapsed);
 
                 if (LibraryNavTitleText != null)
                 {
                     LibraryNavTitleText.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
                 }
 
-                // 极客模式的曲库统计块（TRK/ALB/ART）在 44px 窄条里放不下，收起时一起藏
+                // 极客模式的曲库统计块（TRK/ALB/ART）在窄条里放不下，收起时一起藏
                 if (GeekLibStats != null)
                 {
                     GeekLibStats.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
@@ -494,6 +519,10 @@ namespace CelesteMusicPlayer
                             {
                                 t.TranslateX = 0;
                             }
+
+                            // 列宽真正落定之后再量一次汉堡与图标的实际位置：只有这时候
+                            // 窄条的最终宽度才确定，量出来的偏移才准（动画前量会量到宽栏的值）。
+                            AlignCollapsedHeaderButton();
                         }
                     }
                     catch (Exception caught)
@@ -506,7 +535,7 @@ namespace CelesteMusicPlayer
                 {
                     // 展开：先让播放列表让位（列宽立刻变宽），卡片从窄条位置滑出
                     CategoryColumn.Width = new GridLength(_leftNavExpandedWidth);
-                    CategoryColumn.MinWidth = 148;
+                    CategoryColumn.MinWidth = LeftNavExpandedMinWidth;
                     ct.TranslateX = -slide;
                 }
 
@@ -517,6 +546,102 @@ namespace CelesteMusicPlayer
                 StartupLog.WriteException("MainWindow.Misc.cs.SetLeftNavCollapsed", caught);
             }
         }
+
+        /// <summary>
+        /// 窄条 / 宽栏切换时，把留白和汉堡按钮一起换到位。
+        /// 汉堡按钮（左上角那个）在展开态靠右、在收起态必须挪到左边，
+        /// 与下面那列分类图标落在同一条竖线上（2026-10-16 用户要求）。
+        /// 只在这里改，别在别处再写一份 Margin。
+        /// </summary>
+        private void ApplyLeftNavChrome(bool collapsed)
+        {
+            if (LeftCategoryGrid != null)
+            {
+                LeftCategoryGrid.Padding = collapsed ? LeftNavPaddingCollapsed : LeftNavPaddingExpanded;
+            }
+
+            if (LeftNavHeaderRow != null)
+            {
+                // 收起态先把左偏移清零，真正的对齐量由 AlignCollapsedHeaderButton 在
+                // 列宽落定后按实测值补上（这里写死数字会因为图标字体宽度不同而漂）。
+                LeftNavHeaderRow.Margin = collapsed ? new Microsoft.UI.Xaml.Thickness(0, 6, 0, 0)
+                                                    : new Microsoft.UI.Xaml.Thickness(6, 6, 8, 0);
+            }
+
+            if (LeftNavCollapseButton != null)
+            {
+                // 收起态挪到第 0 列并靠左（第 1 列是 Auto，会把汉堡顶到最右，跟图标对不上）；
+                // 展开态还原回第 1 列靠右，跟「音乐库」标题同一行。
+                LeftNavCollapseButton.SetValue(Grid.ColumnProperty, collapsed ? 0 : 1);
+                LeftNavCollapseButton.HorizontalAlignment = collapsed ? HorizontalAlignment.Left
+                                                                      : HorizontalAlignment.Right;
+            }
+
+            if (LeftCategoryNavBorder != null && !collapsed)
+            {
+                // 展开态：播放页正在显示时卡片是「无背景」形态，留白不同
+                LeftCategoryNavBorder.Margin = _nowPlayingPaneOpen
+                    ? LeftNavCardMarginNowPlaying
+                    : LeftNavCardMarginExpanded;
+            }
+        }
+
+        /// <summary>
+        /// 收起态：把汉堡按钮的中心挪到与分类图标中心同一条竖线上。
+        /// 不写死偏移量 —— 直接量两个元素相对左栏卡片的实际中心，差多少补多少，
+        /// 换字体 / 换图标大小都不会漂。量不到（还没布局）就跳过。
+        /// </summary>
+        private void AlignCollapsedHeaderButton()
+        {
+            if (!_leftNavCollapsed || LeftCategoryGrid == null || LeftNavHeaderRow == null
+                || LeftNavCollapseButton == null)
+            {
+                return;
+            }
+
+            FontIcon? icon = FindFirstNavIcon();
+            if (icon == null || icon.ActualWidth <= 0 || LeftNavCollapseButton.ActualWidth <= 0)
+            {
+                return;
+            }
+
+            double iconCenter = icon.TransformToVisual(LeftCategoryGrid)
+                .TransformPoint(new Windows.Foundation.Point(icon.ActualWidth / 2, 0)).X;
+            double buttonCenter = LeftNavCollapseButton.TransformToVisual(LeftCategoryGrid)
+                .TransformPoint(new Windows.Foundation.Point(LeftNavCollapseButton.ActualWidth / 2, 0)).X;
+
+            double delta = iconCenter - buttonCenter;
+            if (Math.Abs(delta) < 0.5)
+            {
+                return;
+            }
+
+            LeftNavHeaderRow.Margin = new Microsoft.UI.Xaml.Thickness(
+                LeftNavHeaderRow.Margin.Left + delta, 6, 0, 0);
+        }
+
+        private FontIcon? FindFirstNavIcon()
+        {
+            foreach (FrameworkElement? root in new FrameworkElement?[] { CategoryNavPanel, NavToolPanel })
+            {
+                if (root == null)
+                {
+                    continue;
+                }
+
+                FontIcon? found = FindFirstFontIcon(root);
+                if (found != null)
+                {
+                    return found;
+                }
+            }
+
+            return null;
+        }
+
+        // ⚠️ FindFirstFontIcon 不在这里再定义一份：MainWindow.UiTheme.cs 里已经有一个
+        // （同为 MainWindow 的 partial，可直接调用）。2026-10-16 两个会话各加了一份，
+        // 编译直接 CS0111 重复定义。删掉这份，用 UiTheme.cs 那版（它带 null 检查更稳）。
 
         /// <summary>
         /// 左栏导航按钮内容的对齐方式（收起 / 展开两态统一取值）。
@@ -537,11 +662,15 @@ namespace CelesteMusicPlayer
         /// 递归找 Tag="NavLabel" 即可。
         /// 对齐不在这里切：收起态保持与展开态同一对齐（见 NavContentAlignment），
         /// 否则「点一下分类就整列偏移」会复发。
+        ///
+        /// <param name="animate">true = 文字淡出/淡入（收起展开动画期间用，避免整排文字瞬间消失的
+        /// "一闪"）；false = 直接切换（初始化时用，此时不该有动画）。</param>
         /// </summary>
-        private void SetLeftNavIconMode(bool iconOnly)
+        private void SetLeftNavIconMode(bool iconOnly, bool animate = false)
         {
             try
             {
+                var labels = new List<TextBlock>();
                 foreach (FrameworkElement? root in new FrameworkElement?[] { CategoryNavPanel, NavToolPanel })
                 {
                     if (root == null)
@@ -555,10 +684,63 @@ namespace CelesteMusicPlayer
 
                         foreach (TextBlock? label in FindNavLabels(button))
                         {
-                            label.Visibility = iconOnly ? Visibility.Collapsed : Visibility.Visible;
+                            labels.Add(label);
                         }
                     }
                 }
+
+                if (!animate)
+                {
+                    foreach (TextBlock label in labels)
+                    {
+                        label.Opacity = 1;
+                        label.Visibility = iconOnly ? Visibility.Collapsed : Visibility.Visible;
+                    }
+
+                    return;
+                }
+
+                // 淡出（收起）/ 淡入（展开）：与卡片滑动同长，动画跑完才真正改 Visibility。
+                // ⚠️ 淡的是 Opacity 不是 Visibility —— 文字仍占位，按钮内容宽度不变，
+                //    所以图标（Left 对齐）位置一动不动，这才是"图标持久显示不闪"的关键。
+                var sb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
+                foreach (TextBlock label in labels)
+                {
+                    if (!iconOnly)
+                    {
+                        label.Visibility = Visibility.Visible;
+                    }
+
+                    label.Opacity = iconOnly ? 1 : 0;
+
+                    var fade = new DoubleAnimation
+                    {
+                        From = iconOnly ? 1 : 0,
+                        To = iconOnly ? 0 : 1,
+                        Duration = new Duration(TimeSpan.FromSeconds(iconOnly ? 0.16 : 0.2))
+                    };
+                    Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(fade, label);
+                    Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(fade, "Opacity");
+                    sb.Children.Add(fade);
+                }
+
+                sb.Completed += (_, _) =>
+                {
+                    try
+                    {
+                        foreach (TextBlock label in labels)
+                        {
+                            label.Visibility = iconOnly ? Visibility.Collapsed : Visibility.Visible;
+                            label.Opacity = iconOnly ? 0 : 1;
+                        }
+                    }
+                    catch (Exception caught)
+                    {
+                        StartupLog.WriteException("MainWindow.Misc.cs.SetLeftNavIconMode.Completed", caught);
+                    }
+                };
+
+                sb.Begin();
             }
             catch (Exception caught)
             {
@@ -1744,8 +1926,34 @@ namespace CelesteMusicPlayer
                     return null;
                 }
 
-                IPicture pic = pictures.FirstOrDefault(p => p.Type == PictureType.FrontCover)
-                               ?? pictures[0];
+                // 2026-10-16 K2「歌曲面板封面还是糊」第二轮：
+                // 原来死取 FrontCover —— 但不少文件的内嵌图里 FrontCover 恰恰是 200×200 的小缩略图
+                // （真正的 1000×1000 大图挂在别的 PictureType 上），取到小的那张放到 320px 的框里必然糊。
+                // 改成**按像素尺寸取最大的一张**，同尺寸时才优先 FrontCover。
+                // ⚠️ 只解决"取错了图"；源文件里压根只有 300×300 的情况无解，那要靠在线高清图源。
+                IPicture? best = null;
+                int bestPx = -1;
+                bool bestIsFront = false;
+                foreach (IPicture candidate in pictures)
+                {
+                    byte[]? raw = candidate.Data?.Data;
+                    if (raw == null || raw.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    bool isFront = candidate.Type == PictureType.FrontCover;
+                    int px = TryMeasureImageSize(raw, out int w, out int h) ? Math.Max(w, h) : 0;
+
+                    if (best == null || px > bestPx || (px == bestPx && isFront && !bestIsFront))
+                    {
+                        best = candidate;
+                        bestPx = px;
+                        bestIsFront = isFront;
+                    }
+                }
+
+                IPicture pic = best ?? pictures[0];
                 byte[] data = pic.Data.Data;
                 return data is { Length: > 0 } ? data : null;
             }

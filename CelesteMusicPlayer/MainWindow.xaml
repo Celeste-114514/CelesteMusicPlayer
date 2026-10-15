@@ -196,6 +196,9 @@
         </Border>
 
         <!-- 中部：分类 | 播放列表（右侧信息面板已停用，播放列表区扩张到底） -->
+        <!-- ⚠️ 外边距保持 16：左栏离窗口左缘的距离由 LeftCategoryNavBorder 的
+             Margin.Left 控制（2026-10-16 从 -16 改成 6 → 卡片左边离窗口缘 22px）。
+             改这里会连带把右列和播放页一起推走，别动。 -->
         <Grid x:Name="MainContentGrid" Grid.Row="2" Margin="16,8,16,0" Tapped="MainContentGrid_Tapped">
             <Grid.Resources>
                 <!-- 主内容区景深退后：切出播放信息面板时缩小变暗 -->
@@ -314,8 +317,12 @@
                 </DataTemplate>
             </Grid.Resources>
             <Grid.ColumnDefinitions>
-                <!-- 音乐库 -->
-                <ColumnDefinition x:Name="CategoryColumn" Width="156" MinWidth="148" MaxWidth="220" />
+                <!-- 音乐库。2026-10-16 用户要求「这一块左右宽度要加宽」：
+                     列宽 156→200（留白吃掉 20 之后内容区仍比原来宽），
+                     卡片左不再贴窗口缘（-16→6）、右留白 8→14（与主面板浏览区拉开距离）。
+                     ⚠️ 同一组数值在 MainWindow.Features.cs 里还有两处硬编码
+                     （RestoreLeftCategoryNavCard / 播放页展开态），改这里必须同步改那边。 -->
+                <ColumnDefinition x:Name="CategoryColumn" Width="200" MinWidth="190" MaxWidth="280" />
                 <!-- 播放列表占剩余全部 -->
                 <ColumnDefinition x:Name="PlaylistColumn" Width="*" MinWidth="320" />
             </Grid.ColumnDefinitions>
@@ -328,18 +335,20 @@
                     ThemeShadow 需要宿主留空间， Margin 四边 4px 就是给它留的）；
                  ④ 播放页展开时本卡片仍显示（覆盖层已限定只盖右列），
                     展开/收起时的 Margin 由 SetNowPlayingPaneVisible 切换。
-                 ⚠ E3 收起态（CategoryColumn 44px）下本卡片缩成窄条，圆角/阴影自适应，勿动。 -->
+                 2026-10-16 改：左不再贴窗口缘（-16→6，离窗口左缘 22px），右留白 8→14。
+                 ⚠ E3 收起态下本卡片缩成窄条，圆角/阴影自适应，勿动。
+                 ⚠️ 这里的 Margin 与 Features.cs 的两处硬编码必须同步。 -->
             <Border
                 x:Name="LeftCategoryNavBorder"
                 Grid.Column="0"
-                Margin="-16,4,8,4"
+                Margin="-16,4,14,4"
                 Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderThickness="0,0,1,0"
                 CornerRadius="0,8,8,0"
                 BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                 <Grid
                     x:Name="LeftCategoryGrid"
-                    Padding="2"
+                    Padding="16,2,14,2"
                     RowSpacing="4"
                     RenderTransformOrigin="0.5,0.5">
                 <Grid.RenderTransform>
@@ -351,6 +360,7 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <Grid
+                    x:Name="LeftNavHeaderRow"
                     Grid.Row="0"
                     Margin="6,6,8,0">
                     <Grid.ColumnDefinitions>
@@ -1157,14 +1167,9 @@
                                     Content="打开 CUE…"
                                     Click="OpenCueWallButton_Click" />
                             </StackPanel>
-                            <Button Style="{StaticResource ButtonSecondaryStyle}"
-                                x:Name="ExportPlaylistsButton"
-                                Grid.Column="3"
-                                Height="32"
-                                Padding="12,0"
-                                CornerRadius="8"
-                                Content="导出为 m3u8"
-                                Click="ExportPlaylistsButton_Click" />
+                            <!-- 2026-10-16 D0：导出按钮从「播放列表墙总览页」挪到「歌单详情页」
+                                 （见 PlaylistDetailExportM3uButton）。m3u 是命名歌单的对外格式，
+                                 导出要针对某一个已选定的歌单，放在总览页语义不对。 -->
                         </Grid>
                         <!-- 极客列头（播放列表墙）：经典模式无 Child 不可见；极客下由 GeekTables 填入 -->
                         <Border
@@ -1365,6 +1370,18 @@
                                             BorderThickness="0"
                                             Content="添加到播放列表"
                                             Click="PlaylistDetailAddWallButton_Click" />
+                                        <!-- 导出为 m3u8（2026-10-16 D0 定案）：m3u 是「命名歌单」的对外格式，
+                                             导出 = 把**当前这个歌单**写成一个 .m3u8。入口因此放在歌单详情页
+                                             （已经选定了一个歌单），而不是播放列表墙的总览页。 -->
+                                        <Button Style="{StaticResource ButtonSecondaryStyle}"
+                                            x:Name="PlaylistDetailExportM3uButton"
+                                            Height="32"
+                                            Padding="14,0"
+                                            CornerRadius="16"
+                                            BorderThickness="0"
+                                            Content="导出为 m3u8"
+                                            ToolTipService.ToolTip="把当前这个歌单导出成一个 .m3u8 文件（选文件夹保存）"
+                                            Click="PlaylistDetailExportM3uButton_Click" />
                                         <Button Style="{StaticResource ButtonSecondaryStyle}"
                                             x:Name="PlaylistDetailSortButton"
                                             Height="32"
@@ -6891,7 +6908,7 @@
                     Grid.RowSpan="2"
                     Background="Transparent"
                     BorderThickness="0"
-                    Padding="12"
+                    Padding="6"
                     RenderTransformOrigin="0.5,0.5"
                     Visibility="Collapsed">
                     <Border.RenderTransform>
@@ -6955,7 +6972,7 @@
                          视觉上像一条压在专辑封面上的细线 —— 用户要求去掉，别再加回来。 -->
                     <Border
                         Grid.Row="0"
-                        Padding="0,2,0,10"
+                        Padding="0,0,0,8"
                         Margin="0,0,0,4"
                         BorderThickness="0">
                         <Grid>

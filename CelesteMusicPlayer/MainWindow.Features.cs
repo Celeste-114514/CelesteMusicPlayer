@@ -1068,6 +1068,19 @@ namespace CelesteMusicPlayer
         /// 播放页展开时会把这些全部抹掉（沉浸视觉，只留条目），收起时调本方法恢复。
         /// 资源读取失败（主题资源被换掉）时留透明，绝不让面板起不来。
         /// </summary>
+        /// <summary>左栏卡片（展开态）的外边距：单一真相源，XAML 初值与还原逻辑都用它。
+        /// ⚠️ 左 = -16 是**故意的**：MainContentGrid 有 16 的左外边距，-16 正好把卡片左缘
+        /// 顶到窗口左边界（用户 2026-10-16 明确要求"分类栏这一块要和主程序左边界相接"）。
+        /// 图标离边界的距离不靠这个 Margin 调，靠卡片内边距 LeftNavPaddingExpanded 调。</summary>
+        internal static Microsoft.UI.Xaml.Thickness LeftNavCardMarginExpanded => new(-16, 4, 14, 4);
+
+        /// <summary>左栏卡片（收起态窄条）的外边距：同样贴窗口左缘（与展开态一致），
+        /// 只把右侧留白收窄。窄条 56px 减去内边距后仍放得下 28px 的汉堡按钮。</summary>
+        internal static Microsoft.UI.Xaml.Thickness LeftNavCardMarginCollapsed => new(-16, 4, 6, 4);
+
+        /// <summary>播放页展开态：左栏卡片去掉背景后用的外边距（上下 10 是给标题栏压 0 留的呼吸）。</summary>
+        internal static Microsoft.UI.Xaml.Thickness LeftNavCardMarginNowPlaying => new(-16, 10, 14, 10);
+
         private void RestoreLeftCategoryNavCard()
         {
             if (LeftCategoryNavBorder == null)
@@ -1075,7 +1088,9 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            LeftCategoryNavBorder.Margin = new Thickness(-16, 4, 8, 4);
+            // ⚠️ 与 MainWindow.xaml 里 LeftCategoryNavBorder 的 Margin 保持一致
+            // （2026-10-16 从 -16,4,8,4 改成 6,4,14,4：左栏不再贴窗口缘、右侧与主面板拉开距离）
+            LeftCategoryNavBorder.Margin = LeftNavCardMarginExpanded;
             try
             {
                 if (Application.Current.Resources["CardBackgroundFillColorDefaultBrush"] is Brush bg)
@@ -1141,7 +1156,7 @@ namespace CelesteMusicPlayer
                 // 左侧再挂一张浮起卡片会很割裂；只留分类条目本身（照样能点），收起来时恢复。
                 if (LeftCategoryNavBorder != null)
                 {
-                    LeftCategoryNavBorder.Margin = new Thickness(0, 10, 8, 10);
+                    LeftCategoryNavBorder.Margin = LeftNavCardMarginNowPlaying;
                     LeftCategoryNavBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
                     LeftCategoryNavBorder.BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
                     LeftCategoryNavBorder.Shadow = null;

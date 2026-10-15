@@ -1003,9 +1003,10 @@ namespace CelesteMusicPlayer
         /// 所以按左侧「封面 + 歌曲信息」的实际宽度给一个负的左偏移，把它的中心
         /// 挪到整条播放栏（也就是主界面）的中轴上。宽度随内容变，所以每次尺寸变化都重算。
         ///
-        /// 2026-10-16 用户反馈：波形进度条离上方太近，往下调又会和左侧播放信息重叠。
-        /// 处置=进度条与按钮整组**右移 + 下移**：右移后与左侧信息列拉开水平距离，下移就不打架了。
-        /// 偏移量是两个常量，想微调只改这里。
+        /// 2026-10-16 用户反馈：波形进度条离上方太近，往下调又会和左侧播放信息重叠 → 整组下移。
+        /// 同日第二轮：进度条不再以播放栏中轴 / 固定右移量定位，改为**以播放按钮为中心对称**
+        /// （播放按钮是整排控制的视觉重心，中轴会随左侧封面+歌名宽度漂）。
+        /// 下移量是一个常量，想微调只改这里。
         /// </summary>
         private void UpdateTransportProgressCentering()
         {
@@ -1014,19 +1015,56 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            CenterOnTransportAxis(ProgressRowGrid, TransportProgressShiftX, TransportProgressShiftY);
             // 2026-10-16 用户反馈「波形进度条下面那排按钮太靠右」：原来按钮组和进度条共用
-            // +96 的右移量，跟着进度条一起被推到右边去了。按钮组单独回落到播放栏正中（0），
-            // 与进度条错开反而更像上下两层的正常排版（进度条偏右让位给左列的封面+歌名，
-            // 按钮组回正，视觉重心落在窗口中间）。
+            // +96 的右移量，跟着进度条一起被推到右边去了。按钮组单独回落到播放栏正中（0）。
+            // 顺序很重要：先把按钮组摆正，再拿播放按钮当基准摆进度条。
             CenterOnTransportAxis(TransportMainButtonsPanel, TransportButtonsShiftX, TransportProgressShiftY);
-        }
 
-        /// <summary>进度条相对播放栏中轴的右移量（px）：避开左侧「封面+歌曲信息」列。</summary>
-        private const double TransportProgressShiftX = 96;
+            // 2026-10-16 用户新要求：进度条不以播放栏中轴为基准，而是**以播放按钮为中心**
+            // 左右对称 —— 播放按钮是整排控制的视觉重心，中轴会因为左侧封面+歌名宽度不同而漂。
+            CenterOnElement(ProgressRowGrid, PlayPauseButton, TransportProgressShiftY);
+            // 按钮组刚改过 Margin，布局可能还没消化完；排一帧再量一次（0.5px 阈值挡住抖动）。
+            try
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                    CenterOnElement(ProgressRowGrid, PlayPauseButton, TransportProgressShiftY));
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback3.cs.UpdateTransportProgressCentering", caught); }
+        }
 
         /// <summary>按钮组相对播放栏中轴的偏移量（px）：0 = 正好落在窗口左右中轴上。</summary>
         private const double TransportButtonsShiftX = 0;
+
+        /// <summary>
+        /// 把一个元素的中心对齐到参照元素的中心（都相对播放栏量）。
+        /// 用法：进度条以播放按钮为中心左右对称。
+        /// </summary>
+        private void CenterOnElement(FrameworkElement? element, FrameworkElement? anchor, double offsetY = 0)
+        {
+            if (element == null || anchor == null || BottomTransportBar == null)
+            {
+                return;
+            }
+
+            if (BottomTransportBar.ActualWidth <= 0 || element.ActualWidth <= 0 || anchor.ActualWidth <= 0)
+            {
+                return;
+            }
+
+            double anchorCenter = anchor.TransformToVisual(BottomTransportBar)
+                .TransformPoint(new Windows.Foundation.Point(anchor.ActualWidth / 2, 0)).X;
+            double centerNow = element.TransformToVisual(BottomTransportBar)
+                .TransformPoint(new Windows.Foundation.Point(element.ActualWidth / 2, 0)).X;
+            double centerWithoutMargin = centerNow - element.Margin.Left;
+            double newLeft = anchorCenter - centerWithoutMargin;
+
+            if (Math.Abs(newLeft - element.Margin.Left) < 0.5 && Math.Abs(offsetY - element.Margin.Top) < 0.5)
+            {
+                return;
+            }
+
+            element.Margin = new Microsoft.UI.Xaml.Thickness(newLeft, offsetY, 0, 0);
+        }
 
         /// <summary>进度条/按钮组相对垂直居中的下移量（px）：离播放栏上沿留出呼吸。</summary>
         private const double TransportProgressShiftY = 8;

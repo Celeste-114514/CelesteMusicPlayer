@@ -2432,11 +2432,28 @@ namespace CelesteMusicPlayer
         private void OpenCueWallButton_Click(object sender, RoutedEventArgs e)
             => OpenCue_Click(sender, e);
 
-        /// <summary>导出全部播放列表为 m3u8：每命中单写一个 .m3u8 到用户选择目录。</summary>
-        private async void ExportPlaylistsButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// 歌单详情页「导出为 m3u8」：把**当前这个**命名歌单写成一个 .m3u8，让用户选文件夹保存。
+        /// 2026-10-16 D0 定案：m3u = 命名歌单的对外格式，导出 = 选一个歌单导出（不再导播放队列、
+        /// 也不批量导全部）；入口因此放在详情页，原播放列表墙总览页的「导出为 m3u8」已摘掉。
+        /// </summary>
+        private async void PlaylistDetailExportM3uButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
+                string name = _currentPlaylistDetail ?? string.Empty;
+                if (string.IsNullOrEmpty(name))
+                {
+                    return;
+                }
+
+                List<string> songs = NamedPlaylistStore.LoadSongs(name);
+                if (songs.Count == 0)
+                {
+                    NowPlayingText.Text = "歌单「" + name + "」是空的，没有可导出的曲目";
+                    return;
+                }
+
                 var picker = new Windows.Storage.Pickers.FolderPicker();
                 picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.MusicLibrary;
                 picker.FileTypeFilter.Add("*");
@@ -2444,35 +2461,25 @@ namespace CelesteMusicPlayer
                 StorageFolder folder = await picker.PickSingleFolderAsync();
                 if (folder == null) return;
 
-                int count = 0;
-                foreach (string name in NamedPlaylistStore.List())
+                var sb = new System.Text.StringBuilder();
+                sb.AppendLine("#EXTM3U");
+                foreach (string s in songs)
                 {
-                    if (string.Equals(name, NamedPlaylistStore.FavoritesPlaylistName, StringComparison.Ordinal))
-                    {
-                        continue; // 内建“我喜欢的音乐”不导出为独立 m3u8（属收藏数据）
-                    }
-
-                    List<string> songs = NamedPlaylistStore.LoadSongs(name);
-                    if (songs.Count == 0) continue;
-                    var sb = new System.Text.StringBuilder();
-                    sb.AppendLine("#EXTM3U");
-                    foreach (string s in songs)
-                    {
-                        sb.AppendLine("#EXTINF:-1," + System.IO.Path.GetFileName(s));
-                        sb.AppendLine(s);
-                    }
-                    string safe = name;
-                    foreach (char c in System.IO.Path.GetInvalidFileNameChars()) safe = safe.Replace(c, '_');
-                    StorageFile m3uFile = await folder.CreateFileAsync(safe + ".m3u8", Windows.Storage.CreationCollisionOption.ReplaceExisting);
-                    await Windows.Storage.FileIO.WriteTextAsync(m3uFile, sb.ToString(), Windows.Storage.Streams.UnicodeEncoding.Utf8);
-                    count++;
+                    sb.AppendLine("#EXTINF:-1," + System.IO.Path.GetFileName(s));
+                    sb.AppendLine(s);
                 }
 
-                StartupLog.Write("导出播放列表完成: " + count + " 个 .m3u8 → " + folder.Path);
+                string safe = name;
+                foreach (char c in System.IO.Path.GetInvalidFileNameChars()) safe = safe.Replace(c, '_');
+                StorageFile m3uFile = await folder.CreateFileAsync(safe + ".m3u8", Windows.Storage.CreationCollisionOption.ReplaceExisting);
+                await Windows.Storage.FileIO.WriteTextAsync(m3uFile, sb.ToString(), Windows.Storage.Streams.UnicodeEncoding.Utf8);
+
+                NowPlayingText.Text = "已导出歌单「" + name + "」（" + songs.Count + " 首）→ " + safe + ".m3u8";
+                StartupLog.Write("导出歌单完成: " + name + " → " + folder.Path);
             }
             catch (Exception ex)
             {
-                StartupLog.WriteException("ExportPlaylists", ex);
+                StartupLog.WriteException("ExportPlaylistDetail", ex);
             }
         }
 
