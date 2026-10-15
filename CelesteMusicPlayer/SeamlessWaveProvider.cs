@@ -40,6 +40,37 @@ namespace CelesteMusicPlayer
         private float[] _xfMix = Array.Empty<float>();
         private float[] _xfTmp = Array.Empty<float>();
 
+        // —— AB 循环（2026-10-16 用户要求）——
+        // 在数据源里回绕而不是 UI 轮询 seek：位置是 200ms 一轮，轮询会在 B 点超调，
+        // 听起来循环点打顿。这里把每轮读取截断到 B 点、到点直接把 reader 绕回 A 点，
+        // 采样级精确，共享/独占/ASIO 三条路都走同一个 Read，全覆盖。
+        // A/B 按整帧对齐（blockAlign），DoP 标记（每 16 样本一个）才不会错位。
+        // ⚠ C# 不允许 volatile double：两个秒数字段用普通 double，由 _sync 保护写入；
+        // _loopActive 保持 volatile（UI 线程要读 IsLoopActive 决定跳不跳预载）。
+        private volatile bool _loopActive;
+        private double _loopStartSec;
+        private double _loopEndSec;
+
+        /// <summary>设 AB 循环范围（秒）。endSec 必须大于 startSec，否则忽略（保持原状）。</summary>
+        public void SetLoopRange(double startSec, double endSec, bool active)
+        {
+            lock (_sync)
+            {
+                if (!active || !(endSec > startSec) || startSec < 0)
+                {
+                    _loopActive = false;
+                    return;
+                }
+
+                _loopStartSec = startSec;
+                _loopEndSec = endSec;
+                _loopActive = true;
+            }
+        }
+
+        /// <summary>当前是否有 AB 循环在跑（UI 用来回避无缝预载等）。</summary>
+        public bool IsLoopActive => _loopActive;
+
         public WaveFormat WaveFormat
         {
             get
@@ -258,10 +289,11 @@ namespace CelesteMusicPlayer
                 int block = fmt.BlockAlign;
 
                 // 交叉淡化：当前曲进入结尾窗口且下一首已就绪 → 两首重叠混合，淡化完再提升为当前曲
+                // （AB 循环激活时不淡化：循环要的是原样重复，淡化会把下一首搅进来）
                 WaveFileReader? xfNext;
                 lock (_snap) { xfNext = _next; }
-                bool xfPossible = _crossfadeMs > 0 && xfNext != null && SameFormat(fmt, xfNext.WaveFormat);
-                if (xfNext != null && ShouldCrossfade(current, xfNext))
+                bool xfPossible = _crossfadeMs > 0 && !_loopActive && xfNext != null && SameFormat(fmt, xfNext.WaveFormat);
+                if (!_loopActive && xfNext != null && ShouldCrossfade(current, xfNext))
                 {
                     int mixed = CrossfadeRead(current, xfNext, buffer, pos, remaining);
                     bool switched;
@@ -303,6 +335,36 @@ namespace CelesteMusicPlayer
                     {
                         long untilFade = curRemaining - want; // 还需正常播放多少帧才到淡化起点
                         if (untilFade > 0 && untilFade < maxFrames) maxFrames = (int)untilFade;
+                    }
+                }
+
+                // AB 循环：把本轮读取截断到 B 点；已经在 B 点（或过了）就直接绕回 A 点。
+                // 放在正常读取之前，优先于"读尽切下一首"——循环激活时压根不该切走。
+                if (_loopActive && block > 0)
+                {
+                    double bytesPerSec = fmt.SampleRate * (double)block;
+                    long endByte = (long)(_loopEndSec * bytesPerSec);
+                    long startByte = (long)(_loopStartSec * bytesPerSec);
+                    endByte -= endByte % block;   // 对齐整帧
+                    startByte -= startByte % block;
+                    if (endByte <= startByte)
+                    {
+                        _loopActive = false; // 范围非法（换格式后可能出现）：停掉，别把播放卡死
+                    }
+                    else
+                    {
+                        long posNow = current.Position;
+                        if (posNow >= endByte)
+                        {
+                            current.Position = startByte;
+                            continue; // 绕回后接着读，位置显示会跟着跳回 A 点
+                        }
+
+                        long untilB = (endByte - posNow) / block;
+                        if (maxFrames > untilB)
+                        {
+                            maxFrames = (int)untilB;
+                        }
                     }
                 }
 

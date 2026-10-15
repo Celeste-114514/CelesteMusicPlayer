@@ -8356,24 +8356,39 @@
                         </StackPanel>
                     </StackPanel>
                                             </StackPanel>
-                                        <!-- 页2：AB 循环点（2026-10-16 用户要求单独占一页） -->
-                                        <StackPanel x:Name="AudioSettingsPageAbLoop" Visibility="Collapsed" Spacing="10">
+                                        <!-- 页2：AB 循环点（2026-10-16 实现：数据源内回绕，采样级精确） -->
+                                        <StackPanel x:Name="AudioSettingsPageAbLoop" Visibility="Collapsed" Spacing="12">
                                             <TextBlock Text="AB 循环点" FontSize="14" FontWeight="SemiBold" />
-                                            <Button
-                                                x:Name="AbLoopPlaceholderButton"
-                                                Content="设定 A / B 循环点"
-                                                HorizontalAlignment="Stretch"
-                                                IsEnabled="False" />
-                                            <TextBlock
-                                                FontSize="11"
-                                                Opacity="0.7"
-                                                TextWrapping="WrapWholeWords"
-                                                Text="尚未实现：设定 A / B 两点后只在区间内循环播放。已列入待办，做好前这个页面先占位。" />
-                                            <TextBlock
-                                                FontSize="11"
-                                                Opacity="0.6"
-                                                TextWrapping="WrapWholeWords"
-                                                Text="期间想单曲循环，可以先用左下角的播放顺序按钮（单曲播放）。" />
+                                            <TextBlock FontSize="11" Opacity="0.75" TextWrapping="WrapWholeWords"
+                                                Text="在当前播放位置设 A、B 两点，开启后只在区间内反复播放。循环是在声音数据里直接拐弯的（不是到点重跳），所以很准；进度条会跟着跳回 A 点，这是正常的。" />
+                                            <Grid ColumnSpacing="8">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="*" />
+                                                </Grid.ColumnDefinitions>
+                                                <StackPanel Grid.Column="0" Spacing="2">
+                                                    <TextBlock Text="A 点" FontSize="11" Opacity="0.6" />
+                                                    <TextBlock x:Name="AbLoopAText" Text="--:--" FontSize="22" FontWeight="SemiBold" />
+                                                </StackPanel>
+                                                <StackPanel Grid.Column="1" Spacing="2">
+                                                    <TextBlock Text="B 点" FontSize="11" Opacity="0.6" />
+                                                    <TextBlock x:Name="AbLoopBText" Text="--:--" FontSize="22" FontWeight="SemiBold" />
+                                                </StackPanel>
+                                            </Grid>
+                                            <Button Style="{StaticResource ButtonNormalStyle}" CornerRadius="16"
+                                                x:Name="AbLoopSetAButton" Content="在当前播放位置设 A 点"
+                                                HorizontalAlignment="Stretch" Click="AbLoopSetAButton_Click" />
+                                            <Button Style="{StaticResource ButtonNormalStyle}" CornerRadius="16"
+                                                x:Name="AbLoopSetBButton" Content="在当前播放位置设 B 点"
+                                                HorizontalAlignment="Stretch" Click="AbLoopSetBButton_Click" />
+                                            <Button Style="{StaticResource ButtonNormalStyle}" CornerRadius="16"
+                                                x:Name="AbLoopToggleButton" Content="开启 AB 循环"
+                                                HorizontalAlignment="Stretch" Click="AbLoopToggleButton_Click" />
+                                            <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
+                                                x:Name="AbLoopClearButton" Content="清除 A / B"
+                                                HorizontalAlignment="Stretch" Click="AbLoopClearButton_Click" />
+                                            <TextBlock x:Name="AbLoopHintText" FontSize="11" Opacity="0.75"
+                                                TextWrapping="WrapWholeWords" Text="" />
                                         </StackPanel>
                                         <!-- 页3：播放速度（2026-10-16 用户要求：可拖动条、两位小数、拖动即时变声） -->
                                         <StackPanel x:Name="AudioSettingsPageSpeed" Visibility="Collapsed" Spacing="14">

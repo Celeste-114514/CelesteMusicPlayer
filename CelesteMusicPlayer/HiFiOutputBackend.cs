@@ -320,6 +320,26 @@ namespace CelesteMusicPlayer
         /// <summary>变速是否正接管取数（倍率≠1 或正在排空 FIFO）。</summary>
         public bool SpeedActive => _dspProvider?.SpeedActive == true;
 
+        /// <summary>
+        /// AB 循环（2026-10-16）：A/B 两点（秒）+ 开关。范围记在本对象，播放会话重建时
+        /// 自动重新灌给新的 SeamlessWaveProvider（和变速同一个套路）。
+        /// 实现在数据源里回绕（采样级精确），共享/独占/ASIO 全覆盖。
+        /// </summary>
+        public void SetAbLoop(double startSec, double endSec, bool active)
+        {
+            _abLoopStartSec = startSec;
+            _abLoopEndSec = endSec;
+            _abLoopActive = active && endSec > startSec;
+            _seamless?.SetLoopRange(_abLoopStartSec, _abLoopEndSec, _abLoopActive);
+        }
+
+        /// <summary>AB 循环是否激活（UI 用来跳过无缝预载——循环里不该切下一首）。</summary>
+        public bool IsAbLoopActive => _abLoopActive;
+
+        private double _abLoopStartSec;
+        private double _abLoopEndSec;
+        private bool _abLoopActive;
+
         /// <summary>当前变速倍率（1.0 = 不变速）。</summary>
         public double SpeedRate => _speedRate;
 
@@ -1376,6 +1396,8 @@ namespace CelesteMusicPlayer
                 _seamless = new SeamlessWaveProvider(_waveFile);
                 // 交叉淡化：0 = 关闭，行为与加此功能前一致（同格式字节级无缝续接）
                 _seamless.SetCrossfade(_crossfadeMs);
+                // AB 循环：provider 每会话重建，范围是持久状态，必须重新灌进去
+                _seamless.SetLoopRange(_abLoopStartSec, _abLoopEndSec, _abLoopActive);
                 // 采样率升频（SRC）：仅在独占模式下有意义（共享模式系统混音器会再重采样一次，
                 // ASIO 设备采样率固定且无法预先查询）。设备在独占下不支持目标格式则自动退回不升频。
                 // DoP 载荷（整轨预生成的缓存 WAV）与 requireExact 一样必须绕过 DSP/SRC/降混；

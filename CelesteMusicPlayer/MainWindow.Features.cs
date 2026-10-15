@@ -1808,6 +1808,7 @@ namespace CelesteMusicPlayer
                 RefreshAudioSettingsPanel();
                 RefreshSpeedPage();
                 RefreshSleepPage();
+                RefreshAbLoopPage();
             }
             catch (Exception caught)
             {
@@ -2934,6 +2935,132 @@ namespace CelesteMusicPlayer
         // ECHO 内核选项已按用户要求删除（程序只用 native2），该提醒永不触发，整套逻辑移除：
         // ShowDsdEngineTip / HideDsdEngineTip / DsdEngineTipClose_Click / DsdEngineTipSwitch_Click
         // / _dsdEngineTipTimer / DsdEngineTipCard 及其 XAML。
+
+        // ---------- 页2：AB 循环点（2026-10-16 实现） ----------
+        // 实现在数据源（SeamlessWaveProvider）里回绕：读取截断到 B 点、到点直接绕回 A 点，
+        // 采样级精确；不走 200ms 轮询 seek（那会在循环点超调打顿）。
+        // A/B 记的是"源时间秒数"，换曲/重建会话自动重灌，CUE 分轨同样适用。
+
+        private double _abLoopA = -1;   // 秒；-1 = 未设
+        private double _abLoopB = -1;
+        private bool _abLoopActive;
+
+        /// <summary>当前播放位置（源时间秒）。没在播放返回 -1。</summary>
+        private double GetAbLoopReferencePosition()
+        {
+            try
+            {
+                if (!IsEngineActiveNow)
+                {
+                    return -1;
+                }
+
+                return _audioEngine?.Position.TotalSeconds ?? -1;
+            }
+            catch
+            {
+                return -1;
+            }
+        }
+
+        private void AbLoopSetAButton_Click(object sender, RoutedEventArgs e)
+        {
+            double pos = GetAbLoopReferencePosition();
+            if (pos < 0)
+            {
+                SetAbLoopHint("先播放一首歌再设循环点。");
+                return;
+            }
+
+            _abLoopA = pos;
+            if (_abLoopB >= 0 && _abLoopB <= _abLoopA)
+            {
+                // B 不晚于 A：作废 B 让用户重设，别留下空区间/反向区间
+                _abLoopB = -1;
+                _abLoopActive = false;
+            }
+
+            ApplyAbLoop();
+            SetAbLoopHint(_abLoopB >= 0 ? "A 点已设，可以开循环了。" : "A 点已设；再拖到晚一点的位置，设 B 点。");
+            RefreshAbLoopPage();
+        }
+
+        private void AbLoopSetBButton_Click(object sender, RoutedEventArgs e)
+        {
+            double pos = GetAbLoopReferencePosition();
+            if (pos < 0)
+            {
+                SetAbLoopHint("先播放一首歌再设循环点。");
+                return;
+            }
+
+            if (_abLoopA < 0)
+            {
+                SetAbLoopHint("先设 A 点，再设 B 点。");
+                return;
+            }
+
+            if (pos <= _abLoopA)
+            {
+                SetAbLoopHint("B 点要晚于 A 点（现在这个位置比 A 点还靠前）。");
+                return;
+            }
+
+            _abLoopB = pos;
+            ApplyAbLoop();
+            SetAbLoopHint("B 点已设。点「开启 AB 循环」就开始循环。");
+            RefreshAbLoopPage();
+        }
+
+        private void AbLoopToggleButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_abLoopA < 0 || _abLoopB < 0)
+            {
+                SetAbLoopHint("A、B 两点都设好才能开循环。");
+                return;
+            }
+
+            _abLoopActive = !_abLoopActive;
+            ApplyAbLoop();
+            SetAbLoopHint(_abLoopActive
+                ? "循环中：播到 B 点自动跳回 A 点，进度条跟着跳是正常的。"
+                : "循环已关，接着正常播。");
+            RefreshAbLoopPage();
+        }
+
+        private void AbLoopClearButton_Click(object sender, RoutedEventArgs e)
+        {
+            _abLoopA = -1;
+            _abLoopB = -1;
+            _abLoopActive = false;
+            ApplyAbLoop();
+            SetAbLoopHint("已清除 A / B。");
+            RefreshAbLoopPage();
+        }
+
+        private void ApplyAbLoop() => _audioEngine?.SetAbLoop(_abLoopA, _abLoopB, _abLoopActive);
+
+        private void SetAbLoopHint(string text)
+        {
+            if (AbLoopHintText != null)
+            {
+                AbLoopHintText.Text = text;
+            }
+        }
+
+        /// <summary>弹出面板时刷新 AB 页的读数与按钮态。</summary>
+        private void RefreshAbLoopPage()
+        {
+            if (AbLoopAText == null || AbLoopBText == null || AbLoopToggleButton == null)
+            {
+                return;
+            }
+
+            AbLoopAText.Text = _abLoopA >= 0 ? FormatTime(TimeSpan.FromSeconds(_abLoopA)) : "--:--";
+            AbLoopBText.Text = _abLoopB >= 0 ? FormatTime(TimeSpan.FromSeconds(_abLoopB)) : "--:--";
+            AbLoopToggleButton.Content = _abLoopActive ? "关闭 AB 循环" : "开启 AB 循环";
+            AbLoopToggleButton.IsEnabled = _abLoopA >= 0 && _abLoopB >= 0;
+        }
 
         private async void AudioOutputDeviceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {

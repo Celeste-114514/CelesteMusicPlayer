@@ -2955,11 +2955,12 @@ namespace CelesteMusicPlayer
 
             // 变速激活时不参与无缝预加载（2026-10-15）：SpeedStretch 的 FIFO 里往往还压着
             // 上一曲尾部，无缝续接会把两曲的信号搅在同一段分析窗里（拖腔/回声）。
-            // 倍率≠1 期间切歌留一个小间隙；倍率回 1.0 后预载自动恢复，gapless 不受影响。
-            if (_audioEngine?.SpeedActive == true)
+            // AB 循环同理（2026-10-16）：循环里压根不该切下一首，预载了反而会在 B 点前
+            // 被续接逻辑抢走。倍率回 1.0 / 关掉循环后预载自动恢复，gapless 不受影响。
+            if (_audioEngine?.SpeedActive == true || _audioEngine?.IsAbLoopActive == true)
             {
                 _seamlessPreloaded = null;
-                StartupLog.Write("预加载: 变速中，跳过无缝预载（避免跨曲搅混）");
+                StartupLog.Write("预加载: 变速/AB循环中，跳过无缝预载（避免跨曲搅混/抢切）");
                 return;
             }
 

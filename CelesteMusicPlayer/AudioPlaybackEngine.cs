@@ -145,6 +145,16 @@ namespace CelesteMusicPlayer
         /// <summary>变速是否正接管取数（倍率≠1 或正在排空 FIFO）。</summary>
         public bool SpeedActive => _hifiOut?.SpeedActive == true;
 
+        /// <summary>
+        /// AB 循环（2026-10-16）：A/B 两点（秒）+ 开关。在数据源里回绕，采样级精确，
+        /// 共享/独占/ASIO 全覆盖。激活期间上层会自动跳过无缝预载（循环里不切下一首）。
+        /// </summary>
+        public void SetAbLoop(double startSec, double endSec, bool active)
+            => _hifiOut?.SetAbLoop(startSec, endSec, active);
+
+        /// <summary>AB 循环是否激活。</summary>
+        public bool IsAbLoopActive => _hifiOut?.IsAbLoopActive == true;
+
         private string? _devicePreference;
         private HiFiOutputBackend? _hifiOut;
         private HiFiOutputBackend.OutputMode _outputMode = HiFiOutputBackend.OutputMode.WasapiShared;
