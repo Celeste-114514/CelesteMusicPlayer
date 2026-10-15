@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.UI;
@@ -83,10 +83,9 @@ namespace CelesteMusicPlayer
             Brush capsule = _owner.GetCapsuleFillBrush();
 
             ApplyCapsule(ChangeSortButton, accent, accentFg);
-            ApplyCapsule(SavePlaylistButton, capsule, null);
-            ApplyCapsule(OpenPlaylistButton, capsule, null);
-            ApplyCapsule(ClearPlaylistButton, capsule, null);
-            ApplyCapsule(PlayUserPlaylistButton, capsule, null);
+            // 2026-10-16：Save/Open/Clear/PlayUserPlaylist 四个按钮的 ApplyCapsule(capsule) 调用已删——
+            // 它们已换成 E4 语义样式（与主程序操作栏一致），旧调用设的本地半透明底会覆盖样式
+            // 背景（本地值优先），换成样式后由样式供底色。XAML 里 Height/Padding/CornerRadius 都有。
             ApplyCapsule(SelectAllMultiSelectButton, accent, accentFg, cornerRadius: 8);
 
             foreach (Border? chip in new[]

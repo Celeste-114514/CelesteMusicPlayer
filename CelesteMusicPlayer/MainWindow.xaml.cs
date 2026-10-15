@@ -833,69 +833,13 @@ namespace CelesteMusicPlayer
             AppWindow.Closing += AppWindow_Closing;
             ApplyCapsuleSortButtonStyle(accent: true);
             ApplyPlaylistHeaderChipStyle();
-            ApplyCapsuleToControl(
-                AlbumDetailPlayButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
-            ApplyCapsuleToControl(
-                AlbumDetailAddToPlaylistButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
-            ApplyCapsuleToControl(
-                SavePlaylistButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
-            ApplyCapsuleToControl(
-                OpenPlaylistButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
-            ApplyCapsuleToControl(
-                ClearPlaylistButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
-            ApplyCapsuleToControl(
-                PlayUserPlaylistButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
-            // PlayArtistWorksButton / AddArtistWorksToPlaylistButton 两个按钮
-            // 2026-10-12 按用户要求从左栏删除（与歌曲列表里的播放/添加按钮重复），
-            // 这里连同它们的 capsule 样式调用一起去掉，Click 处理方法保留备用。
-            ApplyCapsuleToControl(
-                PlayArtistSongsButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
-            ApplyCapsuleToControl(
-                AddArtistSongsToPlaylistButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
-            ApplyCapsuleToControl(
-                PlayAllArtistAlbumsButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
-            ApplyCapsuleToControl(
-                AddAllArtistAlbumsToPlaylistButton,
-                32,
-                new CornerRadius(16),
-                ResolveCapsuleFillBrush(),
-                foreground: null);
+            // 2026-10-16 删除：这里原来有 10 个 ApplyCapsuleToControl(..., ResolveCapsuleFillBrush(), ...)
+            // 调用（专辑详情/播放列表操作栏/艺术家详情那批按钮）。E 组给这些按钮换上
+            // ButtonNormalStyle/SecondaryStyle/DangerStyle 之后，这些旧调用给按钮设的
+            // **本地**半透明白底色会覆盖样式的 Background（本地值优先于样式 Setter），
+            // 导致：主题色按钮显示成透明底 + 白字（用户实测"很神秘"、专辑详情页
+            // "添加至播放队列"透明）。按钮的 Height/Padding/CornerRadius 在 XAML 里都有，
+            // 删掉调用即恢复 E4 样式与 XAML 属性，无需替代逻辑。
             ApplyAccentSelectionResources(PlaylistView);
             UpdateLibraryNavHighlight();
             PlaylistView.SelectionChanged += PlaylistView_SelectionChromeChanged;

@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Application
     x:Class="CelesteMusicPlayer.App"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -37,6 +37,11 @@
 
             <Style x:Key="ButtonNormalStyle" TargetType="Button">
                 <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <!-- 2026-10-16 事故记录：曾试过把 ThemeResource 改 StaticResource 想修
+                     「Collapsed 子树按钮透明底」，结果字色继承成黑色（StaticResource 在
+                     App.xaml 解析期找不到框架键）——已改回。真正的原因是在 MainWindow
+                     构造函数里给这些按钮设了本地半透明白底（ApplyCapsuleToControl 残留调用），
+                     本地值覆盖样式；那批调用已删。 --> 
                 <Setter Property="Background" Value="{ThemeResource AccentFillColorDefaultBrush}" />
                 <Setter Property="Foreground" Value="{ThemeResource TextOnAccentFillColorPrimaryBrush}" />
                 <Setter Property="BorderThickness" Value="0" />
