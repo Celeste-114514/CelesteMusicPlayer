@@ -1341,7 +1341,7 @@
                 Grid.Row="2"
                 ItemsSource="{x:Bind _files, Mode=OneWay}"
                 AutoGenerateColumns="False"
-                SelectionMode="Extended"
+                SelectionMode="Single"
                 RowHeight="34"
                 ColumnHeaderHeight="32"
                 HeadersVisibility="Column"
@@ -1377,8 +1377,6 @@
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     IsChecked="{x:Bind IsChecked, Mode=TwoWay}"
-                                    PointerPressed="TagFileRowCheck_PointerPressed"
-                                    PointerReleased="TagFileRowCheck_PointerPressed"
                                     Click="TagFileRowCheck_Click" />
                             </DataTemplate>
                         </dg:DataGridTemplateColumn.CellTemplate>

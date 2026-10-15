@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
@@ -458,7 +458,7 @@ namespace CelesteMusicPlayer
 
         private void RemoveSelectedButton_Click(object sender, RoutedEventArgs e)
         {
-            List<TagFileItem> selected = TagFileGrid.SelectedItems.Cast<TagFileItem>().ToList();
+            List<TagFileItem> selected = CheckedItems;
             if (selected.Count == 0)
             {
                 TagStatusText.Text = "先在上方列表里选中要移除的文件（可多选）。";
@@ -502,43 +502,93 @@ namespace CelesteMusicPlayer
         // =====================================================================
 
         // =====================================================================
-        // 选择框列 ↔ 表格多选（2026-10-15）
-        //   勾框 → SelectedItems 加/删；选中变化 → 回写勾框。
-        //   只有「不一致时才写」，INPC 不会连环触发，也不会把一次点击放大成两轮重排。
+        // 选择框列 ↔ 多选（2026-10-16 第三版，前两版都失败后的定案）
+        //
+        // 为什么不用 DataGrid 自己的多选（SelectionMode=Extended）：
+        //   toolkit DataGrid 用 AddHandler(…, handledEventsToo: true) 订阅指针事件，
+        //   子元素上设 e.Handled 拦不住它；点行体时它会把选择清成单行，
+        //   连带到复选框点击也一起被冲掉 →「永远只能选一首」。
+        //   也没有可取消的 Selecting 事件（翻过 XML 文档，只有事后的 SelectionChanged）。
+        //
+        // 定案（就是 mp3tag 的行为）：
+        //   · DataGrid 退化成**只管焦点行**（SelectionMode=Single）；
+        //   · 多选完全自管：_checkedSet 是唯一真值源；
+        //   · 点**行体** = 单选（清空多选只留当前行，与 mp3tag 一致）；
+        //   · 点**复选框** = 累加/取消（不碰焦点行）。
+        //   这样两套入口语义清晰，也不用跟控件内部较劲。
         // =====================================================================
 
-        /// <summary>点选择框「之前」的选中快照，供 Click 里恢复多选。</summary>
-        private List<TagFileItem> _selectionBeforeRowCheck = new();
+        /// <summary>多选真值源（勾选框勾中的行）。顺序不重要，读取时按 _files 排。</summary>
+        private readonly HashSet<TagFileItem> _checkedSet = new();
+
+        /// <summary>选中底色（主面板同款半透明灰，SetupDataGridChrome 按主题算）。</summary>
+        private Windows.UI.Color _rowSelectionColor = Windows.UI.Color.FromArgb(40, 128, 128, 128);
+
+        /// <summary>选中背景圆角（行高 34，取 4；动画不碰 RadiusX/Y，设一次即稳）。</summary>
+        private const double RowSelectionCornerRadius = 4;
 
         /// <summary>
-        /// 抢在 DataGrid 处理之前，把「点击前的选中」记下来。
-        ///
-        /// ⚠️ 第一版想靠 e.Handled = true 掐断冒泡来阻止 DataGrid 改选中 —— **实测无效，
-        /// 用户反馈"还是只能选一首"**。原因是 toolkit DataGrid 用 AddHandler(…, handledEventsToo: true)
-        /// 订阅指针事件（本项目铁律里就记着"第三方控件的子部件一律 handledEventsToo"），
-        /// Handled 拦不住它。
-        /// 改成"先存快照、后按意图重建"：CheckBox 是子元素，它的 handler 比 DataGrid 先跑，
-        /// 这里存到的就是点击前的选择；等 Click 时 DataGrid 已经把选择清成单行，
-        /// 我们再按快照把它加回去，多选才累加得起来。
+        /// 「本回合输入手势由选择框列发起」哨兵。点复选框时 DataGrid 会顺着 Tapped 改焦点行
+        /// （对交互式子元素无豁免、Tapped 还是 handledEventsToo 订阅，拦不住），那次连带的
+        /// SelectionChanged 必须无视，否则 _checkedSet 被清成单选（前两版失败的根因）。
+        /// 每次指针按下重新判定：落在复选框上=竖起，落在别处=放倒，所以不会残留。
         /// </summary>
-        private void TagFileRowCheck_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
-        {
-            if (!_panelReady)
-            {
-                return;
-            }
+        private bool _rowCheckGuard;
 
-            try
-            {
-                _selectionBeforeRowCheck = TagFileGrid.SelectedItems.Cast<TagFileItem>().ToList();
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("TagPanelControl.RowCheckSnapshot", caught);
-                _selectionBeforeRowCheck = new List<TagFileItem>();
-            }
+        /// <summary>指针哨兵是否已挂（SetupDataGridChrome 会被 ReapplyAccent 重复调）。</summary>
+        private bool _rowCheckGuardHooked;
+
+        /// <summary>
+        /// 抑制一次"行焦点变化 → 收敛多选"（SelectRowsByPaths 恢复选中时用）。
+        /// 否则 SelectedItem 一设就触发 SelectionChanged，把刚恢复的多选冲成单选。
+        /// </summary>
+        private bool _suppressSelectionSync;
+
+        /// <summary>指针按下哨兵：判定本手势是否从选择框列发起（见 _rowCheckGuard）。</summary>
+        private void TagFileGrid_PointerPressed_WatchRowCheck(object sender, PointerRoutedEventArgs e)
+        {
+            _rowCheckGuard = FindAncestor<CheckBox>(e.OriginalSource as DependencyObject) != null;
         }
 
+        /// <summary>当前多选结果（按列表顺序，供批量工具/预览/移除读取）。</summary>
+        private List<TagFileItem> CheckedItems =>
+            _files.Where(_checkedSet.Contains).ToList();
+
+        /// <summary>
+        /// 按路径集合重建多选（_checkedSet），焦点行设到第一个。
+        /// 保存后恢复选中 / 跳转编辑 / 排序后保选中都走它。
+        /// </summary>
+        private void SelectRowsByPaths(IEnumerable<string> paths)
+        {
+            HashSet<string> want = new(paths, StringComparer.OrdinalIgnoreCase);
+            _checkedSet.Clear();
+            TagFileItem? first = null;
+            foreach (TagFileItem item in _files)
+            {
+                if (want.Contains(item.FilePath))
+                {
+                    _checkedSet.Add(item);
+                    first ??= item;
+                }
+            }
+
+            _suppressSelectionSync = true;
+            try
+            {
+                TagFileGrid.SelectedItem = first;
+            }
+            finally
+            {
+                _suppressSelectionSync = false;
+            }
+
+            RefreshSelectionChromeAndPreview();
+        }
+
+        /// <summary>
+        /// 勾选框点击：切换该行的勾选态（累加/取消），不碰 DataGrid 焦点行。
+        /// IsChecked 由 TwoWay 绑定已翻好，这里按新值同步 _checkedSet 并全线刷新。
+        /// </summary>
         private void TagFileRowCheck_Click(object sender, RoutedEventArgs e)
         {
             if (!_panelReady || (sender as FrameworkElement)?.DataContext is not TagFileItem item)
@@ -548,49 +598,22 @@ namespace CelesteMusicPlayer
 
             if (item.IsChecked)
             {
-                // DataGrid 已经把选择清成「当前行」了 —— 先把点击前的多选恢复回去，再加当前项。
-                foreach (TagFileItem kept in _selectionBeforeRowCheck)
-                {
-                    if (!TagFileGrid.SelectedItems.Contains(kept))
-                    {
-                        TagFileGrid.SelectedItems.Add(kept);
-                    }
-                }
-
-                if (!TagFileGrid.SelectedItems.Contains(item))
-                {
-                    TagFileGrid.SelectedItems.Add(item);
-                }
+                _checkedSet.Add(item);
             }
-            else if (TagFileGrid.SelectedItems.Contains(item))
+            else
             {
-                TagFileGrid.SelectedItems.Remove(item);
+                _checkedSet.Remove(item);
             }
+
+            RefreshSelectionChromeAndPreview();
         }
 
-        private void SyncRowChecksWithSelection()
+        /// <summary>勾选态变化后：底色 + 勾选框 + 计数 + 快速编辑预览一起刷新。</summary>
+        private void RefreshSelectionChromeAndPreview()
         {
-            HashSet<TagFileItem> selected = new(TagFileGrid.SelectedItems.Cast<TagFileItem>());
-            foreach (TagFileItem item in _files)
-            {
-                item.IsChecked = selected.Contains(item);
-            }
-        }
-
-        private async void TagFileGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-            if (!_panelReady)
-            {
-                return;
-            }
-
-            // 选中底色（圆角强调色）跟着选中态走
             RefreshGridRowsChrome();
-
-            // 勾选框跟着选中态走（选择框列与 SelectedItems 双向同步）
             SyncRowChecksWithSelection();
-
-            List<TagFileItem> selected = TagFileGrid.SelectedItems.Cast<TagFileItem>().ToList();
+            List<TagFileItem> selected = CheckedItems;
             _quickEditSelection = selected;
             RefreshCountUi();
 
@@ -610,7 +633,56 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            string path = selected[0].FilePath;
+            LoadQuickEditPreviewAsync(selected[0]);
+        }
+
+        /// <summary>
+        /// 行点击（DataGrid 单选焦点变化）：按 mp3tag 语义把多选收敛成"只有当前行"。
+        /// 这是用户主动点行体时的预期行为——勾选累加归复选框管。
+        ///
+        /// ⚠️ _rowCheckGuard：点**复选框**时 DataGrid 也会顺着 Tapped 改焦点行
+        /// （DataGridRow_Tapped → UpdateStateOnTapped，实测对交互式子元素没有任何豁免，
+        /// 且 Tapped 是 handledEventsToo 订阅的，子元素拦不住）。Click 先跑、Tapped 随后到，
+        /// 没有守卫的话这次连带选中会把 _checkedSet 清成单选——正是前两版
+        /// 「还是只能选一首」的根因（v2 在 Click 里恢复快照，也被紧接着的 Tapped 冲掉）。
+        /// 守卫只无视「本手势由复选框发起」期间的选中变化，行体点击的正常收敛不受影响。
+        /// </summary>
+        private void TagFileGrid_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_panelReady || _rowCheckGuard || _suppressSelectionSync)
+            {
+                return;
+            }
+
+            _checkedSet.Clear();
+            if (TagFileGrid.SelectedItem is TagFileItem focus)
+            {
+                _checkedSet.Add(focus);
+            }
+
+            RefreshSelectionChromeAndPreview();
+        }
+
+        /// <summary>把 _checkedSet 的勾选态写回每一行的选择框（只在不一致时写，避免连环通知）。</summary>
+        private void SyncRowChecksWithSelection()
+        {
+            foreach (TagFileItem item in _files)
+            {
+                bool want = _checkedSet.Contains(item);
+                if (item.IsChecked != want)
+                {
+                    item.IsChecked = want;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 单选焦点行的快速编辑预览：读标签 + 封面填进右侧编辑卡。
+        /// generation 守卫防异步期间用户又点了别的行。
+        /// </summary>
+        private async void LoadQuickEditPreviewAsync(TagFileItem item)
+        {
+            string path = item.FilePath;
             if (string.IsNullOrWhiteSpace(path))
             {
                 ClearQuickEditPreview();
@@ -1205,7 +1277,7 @@ namespace CelesteMusicPlayer
         /// <summary>批量工具的作用范围：右侧列表选中项；一个都没选 = 整个列表。</summary>
         private (List<TagFileItem> Targets, bool WholeList) BatchTargets()
         {
-            List<TagFileItem> selected = TagFileGrid.SelectedItems.Cast<TagFileItem>().ToList();
+            List<TagFileItem> selected = CheckedItems;
             if (selected.Count > 0)
             {
                 return (selected, false);
@@ -2097,7 +2169,7 @@ namespace CelesteMusicPlayer
         private async Task RefreshSavedRowsAsync(List<TagFileItem> saved)
         {
             HashSet<string> selectedPaths = new(
-                TagFileGrid.SelectedItems.Cast<TagFileItem>().Select(i => i.FilePath),
+                CheckedItems.Select(i => i.FilePath),
                 StringComparer.OrdinalIgnoreCase);
 
             (TagFileItem Old, TagFileItem? New)[] rebuilt = await Task.Run(() => saved
@@ -2121,14 +2193,7 @@ namespace CelesteMusicPlayer
             // 恢复选中（单选时顺带让预览重读磁盘，确认落盘结果）
             if (selectedPaths.Count > 0)
             {
-                TagFileGrid.SelectedItems.Clear();
-                foreach (TagFileItem item in _files)
-                {
-                    if (selectedPaths.Contains(item.FilePath))
-                    {
-                        TagFileGrid.SelectedItems.Add(item);
-                    }
-                }
+                SelectRowsByPaths(selectedPaths);
             }
 
             // 换进来的新实例序号是 0，重排一次（行模型 INPC，可见行实时更新）
@@ -2457,7 +2522,7 @@ namespace CelesteMusicPlayer
             {
                 if (FindAncestor<DataGridRow>(box) is DataGridRow row
                     && row.DataContext is TagFileItem item
-                    && !TagFileGrid.SelectedItems.Contains(item))
+                    && !_checkedSet.Contains(item))
                 {
                     TagFileGrid.SelectedItem = item;
                 }
@@ -2817,14 +2882,7 @@ namespace CelesteMusicPlayer
             await AddFilesAsync(wanted, "跳转编辑");
 
             HashSet<string> want = new(wanted, StringComparer.OrdinalIgnoreCase);
-            TagFileGrid.SelectedItems.Clear();
-            foreach (TagFileItem item in _files)
-            {
-                if (want.Contains(item.FilePath))
-                {
-                    TagFileGrid.SelectedItems.Add(item);
-                }
-            }
+            SelectRowsByPaths(want);
         }
 
         // =====================================================================
@@ -4190,9 +4248,9 @@ namespace CelesteMusicPlayer
 
             if (!unchanged)
             {
-                // 保住选中：换数据源会清掉 SelectedItems
+                // 保住选中：换数据源会清掉一切选择状态
                 HashSet<string> selected = new(
-                    TagFileGrid.SelectedItems.Cast<TagFileItem>().Select(f => f.FilePath),
+                    CheckedItems.Select(f => f.FilePath),
                     StringComparer.OrdinalIgnoreCase);
 
                 // 先断开再挂回：避免 n 次集合通知把表格反复重建（文件多时很卡）
@@ -4206,15 +4264,9 @@ namespace CelesteMusicPlayer
                 TagFileGrid.ItemsSource = _files;
                 Renumber();
 
-                foreach (TagFileItem item in _files)
-                {
-                    if (selected.Contains(item.FilePath))
-                    {
-                        TagFileGrid.SelectedItems.Add(item);
-                    }
-                }
-
-                RefreshGridRowsChrome();
+                // 重挂后按路径重建多选 + 焦点行（内部带抑制，不会被自己的
+                // SelectionChanged 收敛成单选）
+                SelectRowsByPaths(selected);
             }
 
             global::CelesteMusicPlayer.StartupLog.Write("TagPanel: 排序 → "
@@ -4523,24 +4575,42 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// DataGrid 外观初始化：选中底色染成注入的强调色。DataGrid 的选中色是
-        /// 「Color + Opacity」成对的主题资源（行模板动画里二者相乘），四组状态
-        /// （选中 / 悬停选中 / 失焦选中 / 失焦悬停选中）都要覆盖——只改 Color
-        /// 会被默认 Opacity 冲淡。Loaded 后调一次；主题 / 皮肤切换时由
-        /// ReapplyAccent 再调（强调色可能变了）。
+        /// DataGrid 外观初始化：选中底色染成主程序歌曲面板同款的「半透明灰」。
+        /// 2026-10-16 第三版定案——前两版为什么「背景还是没变」：
+        ///   DataGridRow 模板的选中底是一块 Rectangle（x:Name="BackgroundRectangle"），
+        ///   它的 Fill 绑的是主题资源、**根本不绑 row.Background**；选中态由 VisualState
+        ///   动画直接写 (Fill).(SolidColorBrush.Color)，读的就是下面这四个 Color+Opacity
+        ///   主题资源。所以在行上设 Background/画刷统统无效，唯一有效的杠杆就是这四个资源。
+        /// 颜色取 MainWindow.ResolveClassicRowSelectionColor（深色=白 23% / 浅色=灰 16%，
+        /// 令牌皮肤走 Selection.Background 令牌）——即主面板 TryApplyBarStyleRowSelection
+        /// 那一款；左侧 3px 竖条按用户要求去掉，文字保持原色不反白。
+        /// 四组状态（选中 / 悬停选中 / 失焦选中 / 失焦悬停选中）都要覆盖，只改一组会漏态。
+        /// Loaded 后调一次；主题 / 皮肤切换时由 ReapplyAccent 再调。
         /// </summary>
         private void SetupDataGridChrome()
         {
-            Windows.UI.Color accentColor = ResolveTagAccentColor();
+            _rowSelectionColor = MainWindow.ResolveClassicRowSelectionColor(TagFileGrid);
 
-            TagFileGrid.Resources["DataGridRowSelectedBackgroundColor"] = accentColor;
+            TagFileGrid.Resources["DataGridRowSelectedBackgroundColor"] = _rowSelectionColor;
             TagFileGrid.Resources["DataGridRowSelectedBackgroundOpacity"] = 1.0;
-            TagFileGrid.Resources["DataGridRowSelectedHoveredBackgroundColor"] = accentColor;
+            TagFileGrid.Resources["DataGridRowSelectedHoveredBackgroundColor"] = _rowSelectionColor;
             TagFileGrid.Resources["DataGridRowSelectedHoveredBackgroundOpacity"] = 1.0;
-            TagFileGrid.Resources["DataGridRowSelectedUnfocusedBackgroundColor"] = accentColor;
+            TagFileGrid.Resources["DataGridRowSelectedUnfocusedBackgroundColor"] = _rowSelectionColor;
             TagFileGrid.Resources["DataGridRowSelectedUnfocusedBackgroundOpacity"] = 1.0;
-            TagFileGrid.Resources["DataGridRowSelectedHoveredUnfocusedBackgroundColor"] = accentColor;
+            TagFileGrid.Resources["DataGridRowSelectedHoveredUnfocusedBackgroundColor"] = _rowSelectionColor;
             TagFileGrid.Resources["DataGridRowSelectedHoveredUnfocusedBackgroundOpacity"] = 1.0;
+
+            // 复选框交互哨兵：点选择框时 DataGrid 会顺着 Tapped 改焦点行（见下方注释），
+            // 这里竖起/放倒守卫，保证多选不被那次连带选中冲掉。
+            // 本方法 ReapplyAccent 也会调（换肤重刷资源），事件只许挂一次。
+            if (!_rowCheckGuardHooked)
+            {
+                TagFileGrid.AddHandler(
+                    UIElement.PointerPressedEvent,
+                    new PointerEventHandler(TagFileGrid_PointerPressed_WatchRowCheck),
+                    true);
+                _rowCheckGuardHooked = true;
+            }
 
             RefreshGridRowsChrome();
         }
@@ -4645,57 +4715,83 @@ namespace CelesteMusicPlayer
             ApplyGridRowChrome(e.Row);
         }
 
-        /// <summary>行被回收（滚出视口 / 复用时）收回前景，防止残留到下一条数据。</summary>
+        /// <summary>行被回收（滚出视口 / 复用时）收回本地值，防止残留到下一条数据。</summary>
         private void TagFileGrid_UnloadingRow(object sender, DataGridRowEventArgs e)
         {
             e.Row.ClearValue(Control.ForegroundProperty);
-            ClearTagRowForeground(e.Row);
+            if (FindRowBackgroundRectangle(e.Row) is Rectangle background)
+            {
+                background.ClearValue(Shape.FillProperty);
+            }
         }
 
         /// <summary>
-        /// 选中外观（承接 2026-10-13 用户实测「选中背景就是一个矩形，一点不好看」）：
-        /// DataGrid 行模板的选中态只动画 BackgroundRectangle（没有前景动画），
-        /// 所以底色靠覆盖主题资源染强调色；前景设行属性 + 逐元素本地值双保险
-        /// （单靠继承会被自带前景的默认样式盖掉，逐元素本地值压得住）。
+        /// 选中外观（承接 2026-10-13 用户实测「选中背景就是一个矩形，一点不好看」，
+        /// 2026-10-16 第三轮定位到真根因并定稿）：
+        ///
+        /// 行模板的选中底是一块 <c>Rectangle x:Name="BackgroundRectangle"</c>，Fill 绑主题
+        /// 资源、选中态由 VisualState 动画写 (Fill).(SolidColorBrush.Color)——**不碰
+        /// row.Background**。所以前两版在行上设 Background 全是无效功，「背景还是没变」。
+        /// 现在三件事各就各位：
+        ///   ① 焦点行（DataGrid 自己选中的那行）：颜色由 SetupDataGridChrome 覆盖的四个
+        ///      DataGridRowSelected* 主题资源决定（主面板同款半透明灰），动画自己会上；
+        ///   ② 勾选中的非焦点行：模板里是透明的，这里直接给 BackgroundRectangle 设本地
+        ///      Fill 补上同色（每行一支新画刷——动画改的是画刷实例的 Color，共用会串色）；
+        ///   ③ 圆角：Rectangle 自带 RadiusX/RadiusY，设一次即稳（动画不动这两个属性），
+        ///      不用整套重抄 DataGridRow 模板。
+        /// 左侧竖条按用户要求不加；文字保持原色（模板动画不动前景，本地值就够）。
         /// </summary>
         private void ApplyGridRowChrome(DataGridRow row)
         {
-            // ⚠ WinUI 版 DataGridRow 没有 IsSelected 属性（WPF 版有）——选中态
-            // 只能问表格的 SelectedItems（行被回收复用时就靠这个拿当前数据项）。
-            if (TagFileGrid.SelectedItems.Contains(row.DataContext))
+            Rectangle? background = FindRowBackgroundRectangle(row);
+            if (background != null)
             {
-                // 2026-10-16 用户反馈「选中的背景是个方方正正的矩形，好难看」，
-                // 要的是「Windows 那种」：**中性淡底 + 圆角**，不要左侧竖条、不要实心强调色块。
-                //
-                // ⚠️ 第二版踩过的坑：用强调色 18% + 左右内缩 Margin(4,1,4,1) —— 底色太重、
-                // 而且给行加 Margin 会把整行内容一起缩进，跟列头对不齐，更难看。
-                // 这一版：底色改用 WinUI 令牌 SubtleFillColorSecondaryBrush（主题自适应，
-                // 浅色=淡灰、深色=淡白，就是 Windows 列表选中那一档），圆角收到 4，
-                // **Margin 一律不动**（列必须跟列头对齐）。前景保持原色，不反白。
-                if (Application.Current.Resources.TryGetValue("SubtleFillColorSecondaryBrush", out object? subtle)
-                    && subtle is Brush subtleBrush)
+                background.RadiusX = RowSelectionCornerRadius;
+                background.RadiusY = RowSelectionCornerRadius;
+            }
+
+            // ⚠ WinUI 版 DataGridRow 没有 IsSelected 属性（WPF 版有）——勾选态
+            // 只能问 _checkedSet（行被回收复用时就靠这个拿当前数据项）。
+            if (row.DataContext is TagFileItem rowItem && _checkedSet.Contains(rowItem))
+            {
+                if (background != null)
                 {
-                    row.Background = subtleBrush;
+                    background.Fill = new SolidColorBrush(_rowSelectionColor);
                 }
-                else
+            }
+            else if (background != null)
+            {
+                background.ClearValue(Shape.FillProperty);
+            }
+        }
+
+        /// <summary>
+        /// 找行模板里的选中背景矩形。模板结构固定两层：
+        /// DataGridRow → DataGridFrozenGrid → Rectangle(x:Name="BackgroundRectangle")。
+        /// 找不到（模板变了）就返回 null，调用方静默跳过圆角/上色，不影响其它逻辑。
+        /// </summary>
+        private static Rectangle? FindRowBackgroundRectangle(DataGridRow row)
+        {
+            int count = VisualTreeHelper.GetChildrenCount(row);
+            for (int i = 0; i < count; i++)
+            {
+                if (VisualTreeHelper.GetChild(row, i) is not Panel panel)
                 {
-                    row.ClearValue(Control.BackgroundProperty);
+                    continue;
                 }
 
-                row.CornerRadius = new Microsoft.UI.Xaml.CornerRadius(4);
-                row.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
-                row.ClearValue(FrameworkElement.MarginProperty);
-                row.ClearValue(Control.ForegroundProperty);
-                ClearTagRowForeground(row);
+                foreach (UIElement child in panel.Children)
+                {
+                    if (child is Rectangle rect && string.Equals(rect.Name, "BackgroundRectangle", StringComparison.Ordinal))
+                    {
+                        return rect;
+                    }
+                }
+
+                break;
             }
-            else
-            {
-                row.ClearValue(Control.BackgroundProperty);
-                row.ClearValue(Control.CornerRadiusProperty);
-                row.ClearValue(FrameworkElement.MarginProperty);
-                row.ClearValue(Control.ForegroundProperty);
-                ClearTagRowForeground(row);
-            }
+
+            return null;
         }
 
         /// <summary>刷新所有已实现（可见）行的选中外观。只遍历行呈送器子节点，不做全量。</summary>
@@ -4766,7 +4862,7 @@ namespace CelesteMusicPlayer
                     ? 1
                     : 0;
 
-                TagFileItem? current = TagFileGrid.SelectedItems.Cast<TagFileItem>().FirstOrDefault();
+                TagFileItem? current = CheckedItems.FirstOrDefault();
                 _lyricTargetPath = current?.FilePath;
                 if (current == null || string.IsNullOrEmpty(current.FilePath))
                 {
@@ -4906,7 +5002,7 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                TagFileItem? current = TagFileGrid.SelectedItems.Cast<TagFileItem>().FirstOrDefault();
+                TagFileItem? current = CheckedItems.FirstOrDefault();
                 string fileName = current != null ? System.IO.Path.GetFileNameWithoutExtension(current.FilePath) : string.Empty;
                 string album = current != null && current.Album != "未知专辑" ? current.Album : string.Empty;
                 int best = OnlineLyricDownload.PickBestMatch(_lyricCandidates, title, artist, album, fileName);
@@ -5047,7 +5143,7 @@ namespace CelesteMusicPlayer
                 if (ok && target is not LyricWriteTarget.Sidecar)
                 {
                     TagsSaved?.Invoke(_lyricTargetPath);
-                    TagFileItem? row = TagFileGrid.SelectedItems.Cast<TagFileItem>()
+                    TagFileItem? row = CheckedItems
                         .FirstOrDefault(i => string.Equals(i.FilePath, _lyricTargetPath, StringComparison.OrdinalIgnoreCase));
                     if (row != null)
                     {
@@ -5237,7 +5333,7 @@ namespace CelesteMusicPlayer
 
         private void RefreshOnlineTagPageUi()
         {
-            TagFileItem? current = TagFileGrid.SelectedItems.Cast<TagFileItem>().FirstOrDefault();
+            TagFileItem? current = CheckedItems.FirstOrDefault();
             if (current == null || string.IsNullOrEmpty(current.FilePath))
             {
                 OnlineTagFileText.Text = "还没选文件——先去右边文件列表点一首歌（单击即选中整行），搜索框会按它的标签自动填好。";
@@ -5376,7 +5472,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            TagFileItem? current = TagFileGrid.SelectedItems.Cast<TagFileItem>().FirstOrDefault();
+            TagFileItem? current = CheckedItems.FirstOrDefault();
             string localTitle = current != null
                 ? (string.IsNullOrWhiteSpace(current.Title)
                     ? System.IO.Path.GetFileNameWithoutExtension(current.FilePath)
@@ -5594,7 +5690,7 @@ namespace CelesteMusicPlayer
                 string lyricKey = candidate.Source + "|" + candidate.Id;
                 if (!_onlineTagLyricCache.TryGetValue(lyricKey, out lyric))
                 {
-                    TagFileItem? current = TagFileGrid.SelectedItems.Cast<TagFileItem>().FirstOrDefault();
+                    TagFileItem? current = CheckedItems.FirstOrDefault();
                     double duration = current?.Duration.TotalSeconds ?? 0;
                     lyric = await OnlineTagFill.FetchLyricAsync(
                         candidate.Artist, candidate.Title, candidate.Album, duration).ConfigureAwait(true);
