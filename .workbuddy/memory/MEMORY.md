@@ -53,6 +53,7 @@
 
 ## toolkit DataGrid 列头
 - 默认模板不绑 ContentTemplate→只换整个 ControlTemplate，里面 ContentPresenter 显式 ContentTemplate。保留 x:Name=VerticalSeparator/SortIcon 部件。点击排序 PointerPressed 存 KeyModifiers+PointerReleased 判位移>4px不排序+ Tapped 兜底汇到 SortFromHeader(500ms去重)。
+- ⚠ **第三方控件模板的 VisualState 动画属性链别在运行时打补丁**：DataGridRow 选中态动画写 `(Shape.Fill).(SolidColorBrush.Color)`，目标按**模板原始画刷实例**定位——运行时给 BackgroundRectangle 换 Fill 实例或 ClearValue，动画 Begin 时解析失败直接抛 `COMException 0x80040154`（"没有检测到已安装的组件 / Cannot resolve TargetProperty"）崩程序。动画不碰的属性（如 Rectangle.RadiusX/Y）才能安全设。唯一杠杆=控件级 Resources 覆盖主题资源键。
 
 ## 工程约定
 - 用户不懂编程：大白话结论先行禁营销腔。bit-perfect 铁律。推送：不 rebase/force-push、不 git add -A、commit 独立可回退、构建过才推；日常交付 dist\run-latest\。
