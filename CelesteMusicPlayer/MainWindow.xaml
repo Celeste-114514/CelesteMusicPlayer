@@ -321,17 +321,25 @@
             </Grid.ColumnDefinitions>
 
             <!-- 左：音乐库 + 播放列表入口（统一 Button 选中样式） -->
-            <!-- E2：右缘一根 1px 分隔线（令牌化 Divider 令牌，跟随主题/皮肤换色）。
-                 历史上这条线按用户要求移除过一次（位置生硬）；本次用 DividerStrokeColorDefaultBrush
-                 细线 + 8px 间隙重做，不抢视觉。Grid 无边框属性，故外套 Border 承载。 -->
+            <!-- 2026-10-16 用户要求：左分类栏视觉上做成「从主程序左侧浮动出来的一块板块」。
+                 ① 右缘圆角（CornerRadius 0,8,8,0）+ 卡片底色，右侧留 8px 间隙；
+                 ② 右边线由 Divider 升级为 CardStroke（原来的 Divider 太淡，用户看不见）；
+                 ③ 阴影由代码挂 ThemeShadow（见 MainWindow 构造函数，WinUI3 的
+                    ThemeShadow 需要宿主留空间， Margin 四边 4px 就是给它留的）；
+                 ④ 播放页展开时本卡片仍显示（覆盖层已限定只盖右列），
+                    展开/收起时的 Margin 由 SetNowPlayingPaneVisible 切换。
+                 ⚠ E3 收起态（CategoryColumn 44px）下本卡片缩成窄条，圆角/阴影自适应，勿动。 -->
             <Border
+                x:Name="LeftCategoryNavBorder"
                 Grid.Column="0"
-                Margin="0,0,8,0"
+                Margin="0,4,8,4"
+                Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                 BorderThickness="0,0,1,0"
-                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                CornerRadius="0,8,8,0"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
                 <Grid
                     x:Name="LeftCategoryGrid"
-                    Padding="4"
+                    Padding="2"
                     RowSpacing="4"
                     RenderTransformOrigin="0.5,0.5">
                 <Grid.RenderTransform>
@@ -344,7 +352,7 @@
                 </Grid.RowDefinitions>
                 <Grid
                     Grid.Row="0"
-                    Margin="8,6,8,0">
+                    Margin="6,6,8,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*" />
                         <ColumnDefinition Width="Auto" />
@@ -393,7 +401,7 @@
                             <Button
                                 x:Name="NavSongsButton"
                                 Tag="Songs"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -413,7 +421,7 @@
                             <Button
                                 x:Name="NavAlbumsButton"
                                 Tag="Albums"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -433,7 +441,7 @@
                             <Button
                                 x:Name="NavArtistsButton"
                                 Tag="Artists"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -453,7 +461,7 @@
                             <Button
                                 x:Name="NavAlbumArtistsButton"
                                 Tag="AlbumArtists"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -473,7 +481,7 @@
                             <Button
                                 x:Name="NavFavoritesButton"
                                 Tag="Favorites"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -493,7 +501,7 @@
                             <Button
                                 x:Name="NavRatingsButton"
                                 Tag="Ratings"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -513,7 +521,7 @@
                             <Button
                                 x:Name="NavRecentButton"
                                 Tag="Recent"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -533,7 +541,7 @@
                             <Button
                                 x:Name="NavGenreButton"
                                 Tag="Genres"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -553,7 +561,7 @@
                             <Button
                                 x:Name="NavYearButton"
                                 Tag="Years"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -573,7 +581,7 @@
                             <Button
                                 x:Name="NavMostPlayedButton"
                                 Tag="MostPlayed"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -593,7 +601,7 @@
                             <Button
                                 x:Name="NavFoldersButton"
                                 Tag="Folders"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -614,7 +622,7 @@
                             <Button
                                 x:Name="UserPlaylistNavButton"
                                 Tag="PlaylistWall"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -644,7 +652,7 @@
                             <Button
                                 x:Name="NavPlaylistWallButton"
                                 Tag="UserPlaylist"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -667,7 +675,7 @@
                             <Button
                                 x:Name="NavWebDavButton"
                                 Tag="WebDav"
-                                Padding="8,6"
+                                Padding="6,6"
                                 FontSize="14"
                                 HorizontalAlignment="Stretch"
                                 HorizontalContentAlignment="Left"
@@ -709,7 +717,7 @@
                         <Button
                             x:Name="NavTagEditButton"
                             Tag="TagEdit"
-                            Padding="8,6"
+                            Padding="6,6"
                             FontSize="14"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"
@@ -729,7 +737,7 @@
                         <Button
                             x:Name="NavAudioFxButton"
                             Tag="AudioFX"
-                            Padding="8,6"
+                            Padding="6,6"
                             FontSize="14"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"
@@ -754,7 +762,7 @@
                         <Button
                             x:Name="NavSettingsButton"
                             Tag="Settings"
-                            Padding="8,6"
+                            Padding="6,6"
                             FontSize="14"
                             HorizontalAlignment="Stretch"
                             HorizontalContentAlignment="Left"
@@ -6865,8 +6873,13 @@
                 </Grid>
             </Grid>
 
-            <!-- 播放歌曲信息页(切出时占满整个主内容区，含左侧音乐库分类栏) -->
-            <Grid Grid.Column="0" Grid.ColumnSpan="2">
+            <!-- 播放歌曲信息页。2026-10-16 用户要求：播放页展开时左侧分类栏和右缘分界线
+                 仍显示，覆盖层由「占满整个主内容区（ColumnSpan=2）」收窄为只盖右列
+                 播放列表区（Column=1）。左栏露在播放页左侧，点分类条目照样能切库。
+                 ⚠ E1 的 AppTitleBar.Height=0 / MainContentGrid.Margin=0 不变：播放页仍顶到
+                 窗口最顶、右缘抵窗口右缘；左栏卡片顶部间距由 SetNowPlayingPaneVisible
+                 展开态补 10px（标题栏压 0 后别让「音乐库」标题贴屏幕最顶）。 -->
+            <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
@@ -6967,8 +6980,10 @@
                                 Margin="44,0,280,0"
                                 VerticalAlignment="Stretch" />
                             <!-- 播放页：可视化元素 + 布局切换（页内即时切换，不打断播放）。
-                                 E1：右Margin 280 避让浮在右上角的系统按钮列，防遮挡。 -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2" Margin="0,0,280,0">
+                                 Margin 右 280 是给浮在右上角的标题栏按钮列让位；播放页展开时
+                                 该列整体隐藏（用户 2026-10-16 要求），代码把本组 Margin 右改 8、
+                                 挪到右缘，收起时还原 280。 -->
+                            <StackPanel x:Name="NowPlayingTopRightButtons" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2" Margin="0,0,280,0">
                                 <Button CornerRadius="16"
                                     x:Name="NowPlayingVisualButton"
                                     Height="32"
@@ -7762,13 +7777,21 @@
         </Grid>
 
         <!-- 底部播放控制 -->
-        <!-- E2：顶缘 1px 分隔线把「下方播放栏」与主内容区划开（令牌化 Divider，
-             跟随主题/皮肤；播放页展开时整栏隐藏，线随之消失）。Grid 无边框属性，外套 Border 承载。 -->
+        <!-- 2026-10-16 用户反馈「顶缘那根线看不见」：原来只有一根 1px Divider 线、
+             无底色衬托，Divider 令牌在两个主题下都太淡（约 6%~15% 透明度），
+             且播放栏本身透明底，线等于画在窗口背景上。本次改法：
+             ① 线升级为 CardStrokeColorDefaultBrush（约 25% 对比度，清晰可见）；
+             ② 加一层 SubtleFillColorSecondaryBrush 底色把播放栏区「托」出来，
+                底色通铺到窗口左右缘（非浮动板块——不加圆角、不加阴影，与左栏卡片区分）；
+             ③ 内容内边距改挂 Border.Padding，原 16,6,16,10 的留白不变。
+             播放页展开时整栏仍隐藏（由页内悬浮控制条替代），线随之消失。 -->
         <Border
             Grid.Row="3"
-            Margin="16,6,16,10"
+            Margin="0,1,0,0"
+            Padding="16,6,16,10"
+            Background="{ThemeResource SubtleFillColorSecondaryBrush}"
             BorderThickness="1,0,0,0"
-            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+            BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
             <Grid
                 x:Name="BottomTransportBar"
                 MinHeight="70"
@@ -8397,8 +8420,11 @@
         </Border>
         </Grid>
             <!-- E1：标题栏右侧按钮列（音频设置/选项/刷新/全屏 + 自绘系统按钮）。
-                 播放页盖到顶时这一列独立浮在右上角，不随标题栏塌陷而消失。 -->
-            <StackPanel
+                 播放页盖到顶时这一列独立浮在右上角，不随标题栏塌陷而消失。
+                 2026-10-16 用户要求：播放页展开时整列隐藏（沉浸看歌），收起播放页还原；
+                 由 SetNowPlayingPaneVisible 切换 Visibility。注意：最小化/最大化/关闭也在这列里，
+                 展开态用户要用系统按钮需先退出播放页（左上角返回或 Esc）。 -->
+            <StackPanel x:Name="TitleBarFloatingButtons"
                                 Orientation="Horizontal"
                 HorizontalAlignment="Right"
                 Spacing="4"

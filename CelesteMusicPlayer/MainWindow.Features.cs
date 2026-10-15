@@ -1091,15 +1091,36 @@ namespace CelesteMusicPlayer
                 NowPlayingPane.Opacity = 0;
                 NowPlayingPane.Visibility = Visibility.Visible;
                 // E1：播放页盖到窗口最顶——标题栏整条压 0（Row 0 塌陷）、主内容区边距清零，
-                // 页面顶边直接顶到窗口上沿、左右抵到窗口边缘；右侧按钮列已独立浮动不受影响。
+                // 页面顶边直接顶到窗口上沿、右缘抵到窗口边缘。
                 AppTitleBar.Height = 0;
                 MainContentGrid.Margin = new Thickness(0);
-                // 播放页是盖在整个主内容区上的一层透明板：左侧音乐库面板必须让位，
-                // 否则会在播放页底下透出来（用户反馈过）。
-                SetLibraryNavHiddenForNowPlaying(true);
+                // 2026-10-16 用户要求：播放页展开时左侧分类栏和右缘分界线仍显示。
+                // 实现=覆盖层只盖右列（XAML 里 Grid.Column="1"），左栏不再 Collapse。
+                // 旧方案 SetLibraryNavHiddenForNowPlaying(true) 已废弃删除。
+                // 左栏卡片顶部补 10px：标题栏压 0 后别让「音乐库」标题贴屏幕最顶。
+                if (LeftCategoryNavBorder != null)
+                {
+                    LeftCategoryNavBorder.Margin = new Thickness(0, 10, 8, 10);
+                }
+                // 右上角标题栏按钮列整列隐藏（沉浸看歌）。含最小化/最大化/关闭——
+                // 展开态要用系统按钮需先退出播放页（左上角返回或 Esc）。用户 2026-10-16 明确要求。
+                if (TitleBarFloatingButtons != null)
+                {
+                    TitleBarFloatingButtons.Visibility = Visibility.Collapsed;
+                }
+                // 浮动列让位后，播放页自己的「可视化/布局」两个文字按钮挪到右缘（原右距 280 是避让浮动列）
+                if (NowPlayingTopRightButtons != null)
+                {
+                    NowPlayingTopRightButtons.Margin = new Thickness(0, 0, 8, 0);
+                }
+                // 拖动区右缘同步收紧：只避让那两个文字按钮（约 240px），不再给隐藏的浮动列留 280
+                if (NowPlayingTitleBarDragArea != null)
+                {
+                    NowPlayingTitleBarDragArea.Margin = new Thickness(44, 0, 240, 0);
+                }
                 TrySwitchTitleBar(NowPlayingTitleBarDragArea);
                 StartupLog.Write($"[深度] 展开播放页：mcBack={(mcBack != null)} depthIn={(depthIn != null)} " +
-                                 $"导航面板={LeftCategoryGrid?.Visibility}");
+                                 $"左栏={LeftCategoryGrid?.Visibility}");
                 DispatcherQueue.TryEnqueue(() => UpdateNowPlayingCardLayout());
                 // 进入播放页时按当前设置套用布局（经典/水面），并重算倒影尺寸
                 ApplyNowPlayingLayout();
@@ -1126,8 +1147,24 @@ namespace CelesteMusicPlayer
                 AppTitleBar.Height = 48;
                 MainContentGrid.Margin = new Thickness(16, 8, 16, 0);
                 TrySwitchTitleBar(AppTitleBar);
-                // 收起播放页：先把左侧面板放回来，好让"景深恢复"动画把它淡入
-                SetLibraryNavHiddenForNowPlaying(false);
+                // 2026-10-16：左栏常显（不再有「播放页收起才放回来」的逻辑），只把展开态改过的
+                // 几个 Margin/Visibility 还原：左栏卡片间距、右上角浮动列、页内两按钮右距、拖动区右距。
+                if (LeftCategoryNavBorder != null)
+                {
+                    LeftCategoryNavBorder.Margin = new Thickness(0, 4, 8, 4);
+                }
+                if (TitleBarFloatingButtons != null)
+                {
+                    TitleBarFloatingButtons.Visibility = Visibility.Visible;
+                }
+                if (NowPlayingTopRightButtons != null)
+                {
+                    NowPlayingTopRightButtons.Margin = new Thickness(0, 0, 280, 0);
+                }
+                if (NowPlayingTitleBarDragArea != null)
+                {
+                    NowPlayingTitleBarDragArea.Margin = new Thickness(44, 0, 280, 0);
+                }
                 try
                 {
                     mcBack?.Stop();
@@ -1158,9 +1195,23 @@ namespace CelesteMusicPlayer
                     TrySwitchTitleBar(AppTitleBar);
                     NowPlayingPane.Visibility = Visibility.Collapsed;
                     NowPlayingPane.Opacity = 1;
-                    if (LeftCategoryGrid != null)
+
+                    // 2026-10-16：展开态改过的四样一并还原（左栏常显，无需恢复 Opacity）
+                    if (LeftCategoryNavBorder != null)
                     {
-                        LeftCategoryGrid.Opacity = 1;
+                        LeftCategoryNavBorder.Margin = new Thickness(0, 4, 8, 4);
+                    }
+                    if (TitleBarFloatingButtons != null)
+                    {
+                        TitleBarFloatingButtons.Visibility = Visibility.Visible;
+                    }
+                    if (NowPlayingTopRightButtons != null)
+                    {
+                        NowPlayingTopRightButtons.Margin = new Thickness(0, 0, 280, 0);
+                    }
+                    if (NowPlayingTitleBarDragArea != null)
+                    {
+                        NowPlayingTitleBarDragArea.Margin = new Thickness(44, 0, 280, 0);
                     }
 
                     if (LibraryPaneRoot != null)

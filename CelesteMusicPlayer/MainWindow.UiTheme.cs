@@ -1727,21 +1727,9 @@ namespace CelesteMusicPlayer
             storyboard.Begin();
         }
 
-        /// <summary>
-        /// 播放歌曲信息页展开 / 收起时，左侧音乐库面板要一起让位：
-        /// 播放页是盖在整个主内容区上的一层透明板，下面那层不退干净就会透出来（用户反馈过）。
-        /// </summary>
-        internal void SetLibraryNavHiddenForNowPlaying(bool hidden)
-        {
-            try
-            {
-                if (LeftCategoryGrid != null)
-                {
-                    LeftCategoryGrid.Visibility = hidden ? Visibility.Collapsed : Visibility.Visible;
-                }
-            }
-            catch (Exception caught) { StartupLog.WriteException("MainWindow.UiTheme.cs.SetLibraryNavHiddenForNowPlaying", caught); }
-        }
+        // 注：原 SetLibraryNavHiddenForNowPlaying（播放页展开时隐藏左侧音乐库面板）已于
+        // 2026-10-16 按用户要求删除——播放页覆盖层收窄为只盖右列（Grid.Column="1"），
+        // 左栏常显，展开/收起不再需要切换它的 Visibility。
 
 
         /// <summary>行悬停底色：经典 / 极客界面用半透明灰（原浅白在浅色主题与近黑底上几乎看不见）。</summary>
