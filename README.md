@@ -1,4 +1,4 @@
-﻿# CelesteMusicPlayer
+# CelesteMusicPlayer
 
 一个基于 **WinUI 3 / .NET 9** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和 [ECHO-NEXT](https://github.com/moekotori/ECHO) 设计开发。代码全部由 AI 生成。
 
@@ -80,7 +80,7 @@ dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x6
   - 🎵 **播放队列图标更换**：侧栏、播放状态栏、迷你播放器三处的播放队列图标从「眼睛」换成「列表」样式，和名字对得上
   - ⚙️ **播放内核默认切换为原生内核**：独占输出的默认内核改为原生渲染（native2），已实测通过；设置界面里删掉了「自研内核」选项（该代码路径仅保留为设置读取失败时的兜底），只剩「ECHO 核心」和「原生内核」两个可选；老用户保存的设置会在下次启动时自动迁移到新默认，不用手动改
 - 📄 许可证
-  - 📜 **许可证调整为 GPL-3.0-or-later**：主程序许可证由 MIT 改为 GPL-3.0，第三方组件许可单独列清单（TagLib# 为 LGPL-2.1，动态链接、可整体替换，已如实披露）；DSP 内核的来源披露改为「已知悉风险、自行承担」口径——只取用上游 LGPL-3.0 时期公开发布的版本，权利人若提出异议，将按其要求下架、改标许可或重写相关模块
+  - 📜 **许可证调整为 AGPL-3.0-or-later**：主程序许可证由 MIT 改为 AGPL-3.0，第三方组件许可单独列清单（TagLib# 为 LGPL-2.1，动态链接、可整体替换，已如实披露）；DSP 内核经逐字节复核，确认 27/30 个文件衍生自 ECHO 当前的 AGPL-3.0 版本，据此整体改标 AGPL-3.0 并在 LICENSE 中据实披露来源、许可与现状（此前"只取用 LGPL-3.0 时期版本"的记录已更正作废）；权利人若提出异议，将按其要求下架、改标许可或重写相关模块
 - 🐛 修复
   - 🖱️ **修复系统托盘右键菜单冒出滚动条**：托盘右键菜单在屏幕底部弹出时，边缘有时会出现一条竖向滚动条。菜单窗口按每一项的测量高度计算总高，而两条分隔线测量时高 0、真正渲染占 3px，窗口因此比内容矮了几像素。现已按实际渲染高度钉死，滚动条不再出现
   - 🔀 **修复启动后播放队列被按标题重排**：上次退出时停在播放列表分类的话，重启后队列会被按标题重排一遍。现在只重新编号、不动顺序（主动点排序按钮仍按所选方式排）
@@ -412,10 +412,12 @@ makensis.exe installer\CelesteMusicPlayer.nsi
 
 ## 📄 许可证
 
-本项目自有的代码采用 [GPL-3.0](LICENSE) 许可。
+本项目采用 [AGPL-3.0](LICENSE) 许可（2026-10-16 由 GPL-3.0 变更而来——仓库内
+`native/dsp-core/audio-engine/` 主体衍生自 ECHO 当前的 AGPL-3.0 版本，据此整体改标
+并据实披露，详见 [LICENSE](LICENSE) 中「ECHO 派生代码」章节）。
 
-第三方组件（`native/echo-core/` 的 LGPL-3.0 内核、TagLibSharp 等）各自保留原有许可，
-详见 [LICENSE](LICENSE) 中的「第三方组件」小节。
+第三方组件（`native/echo-core/` 的 LGPL-3.0 内核、TagLibSharp 的 LGPL-2.1 等）
+各自保留原有许可，详见 [LICENSE](LICENSE) 中的「第三方组件」小节。
 
 ## 🙏 致谢
 
