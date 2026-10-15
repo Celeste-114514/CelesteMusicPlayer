@@ -503,6 +503,16 @@ namespace CelesteMusicPlayer
         //   只有「不一致时才写」，INPC 不会连环触发，也不会把一次点击放大成两轮重排。
         // =====================================================================
 
+        /// <summary>
+        /// 掐断选择框的指针事件冒泡（2026-10-16：修"点选择框会把多选切成单选"）。
+        /// 不掐的话 DataGrid 会把这一下当成"点了整行"，先把选中清成单行，
+        /// 导致选择框永远只能选一首。只设 Handled，不做别的——勾选与 Click 照旧。
+        /// </summary>
+        private void TagFileRowCheck_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            e.Handled = true;
+        }
+
         private void TagFileRowCheck_Click(object sender, RoutedEventArgs e)
         {
             if (!_panelReady || (sender as FrameworkElement)?.DataContext is not TagFileItem item)
@@ -4497,12 +4507,34 @@ namespace CelesteMusicPlayer
             // 只能问表格的 SelectedItems（行被回收复用时就靠这个拿当前数据项）。
             if (TagFileGrid.SelectedItems.Contains(row.DataContext))
             {
-                Brush foreground = ColorHelper.ResolveContrastingForeground(ResolveTagAccentBrush());
-                row.Foreground = foreground;
-                ApplyTagRowForeground(row, foreground);
+                // 2026-10-16 用户反馈「选中的背景是个方方正正的矩形，好难看」：
+                // DataGridRow 默认的选中底是一整条**实心**强调色，铺满整行、直角、又满又硬。
+                // 改成 ① 淡到 18% 的强调色（不再是实心色块）② 圆角 6 ③ 左右各内缩 4、上下 1，
+                // 变成一条"贴在行里的圆角淡色条"，跟左栏分类条目的观感统一。
+                Brush accent = ResolveTagAccentBrush();
+                if (accent is SolidColorBrush scb)
+                {
+                    row.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(
+                        (byte)(255 * 0.18), scb.Color.R, scb.Color.G, scb.Color.B));
+                }
+                else
+                {
+                    row.Background = accent;
+                }
+
+                row.CornerRadius = new Microsoft.UI.Xaml.CornerRadius(6);
+                row.Margin = new Microsoft.UI.Xaml.Thickness(4, 1, 4, 1);
+
+                // ⚠️ 前景不必再反色：底色已经淡到 18%，原来的文字色照样看得清，
+                //    强行反成白字反而和淡底打架（旧行为）。
+                row.ClearValue(Control.ForegroundProperty);
+                ClearTagRowForeground(row);
             }
             else
             {
+                row.ClearValue(Control.BackgroundProperty);
+                row.ClearValue(Control.CornerRadiusProperty);
+                row.ClearValue(FrameworkElement.MarginProperty);
                 row.ClearValue(Control.ForegroundProperty);
                 ClearTagRowForeground(row);
             }

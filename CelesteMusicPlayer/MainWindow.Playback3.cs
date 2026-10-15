@@ -1125,6 +1125,41 @@ namespace CelesteMusicPlayer
             UpdateTransportProgressCentering();
         }
 
+        /// <summary>校正是否已排进队列（防抖，见 BottomTransportBar_LayoutUpdated）。</summary>
+        private bool _transportCenteringPending;
+
+        /// <summary>
+        /// 布局落定后校一次进度条位置（2026-10-16：修"启动时没对齐、拖一下窗口才对齐"）。
+        ///
+        /// ⚠️⚠️ 必须**异步**做：第一版在 LayoutUpdated 里直接调 UpdateTransportProgressCentering
+        /// （同步改 Margin），结果改 Margin 又触发一轮布局 → 再进 LayoutUpdated → 死循环，
+        /// 冒烟直接抓到 LayoutCycleException（"Layout cycle detected"）。
+        /// 这里只排一个队列项，真正改 Margin 发生在布局过程**之外**，不会嵌套；
+        /// 配合 UpdateTransportProgressCentering 内部的 0.5px 阈值，位置对了就停，能收敛。
+        /// </summary>
+        private void BottomTransportBar_LayoutUpdated(object? sender, object e)
+        {
+            if (_transportCenteringPending)
+            {
+                return;
+            }
+
+            _transportCenteringPending = true;
+            try
+            {
+                DispatcherQueue.TryEnqueue(() =>
+                {
+                    _transportCenteringPending = false;
+                    UpdateTransportProgressCentering();
+                });
+            }
+            catch (Exception caught)
+            {
+                _transportCenteringPending = false;
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback3.cs.BottomTransportBar_LayoutUpdated", caught);
+            }
+        }
+
         private void TransportInfoPanel_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
         {
             UpdateTransportProgressCentering();

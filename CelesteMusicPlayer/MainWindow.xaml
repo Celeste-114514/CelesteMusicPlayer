@@ -8007,6 +8007,21 @@
                         Spacing="4"
                         HorizontalAlignment="Center"
                         SizeChanged="TransportMainButtonsPanel_SizeChanged">
+                        <!-- 2026-10-16 用户要求：把「喜欢」挪到这一排的最左侧。
+                             ⚠️ 进度条的定位是以播放按钮为中心**实测**出来的
+                             （UpdateTransportProgressCentering / CenterOnElement），
+                             所以挪动按钮顺序不会让进度条错位，不用手动补偿。 -->
+                        <Button CornerRadius="16"
+                            x:Name="FavoriteButton"
+                            Width="40"
+                            Height="40"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="FavoriteButton_Click"
+                            ToolTipService.ToolTip="我喜欢的音乐">
+                            <FontIcon x:Name="FavoriteButtonIcon" Glyph="&#xEB51;" FontSize="18" />
+                        </Button>
                         <Button CornerRadius="16"
                             x:Name="PlaybackOrderButton"
                             Width="40"
@@ -8092,17 +8107,6 @@
                             Click="NextButton_Click"
                             ToolTipService.ToolTip="下一首">
                             <FontIcon Glyph="&#xE893;" FontSize="18" />
-                        </Button>
-                        <Button CornerRadius="16"
-                            x:Name="FavoriteButton"
-                            Width="40"
-                            Height="40"
-                            Padding="0"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Click="FavoriteButton_Click"
-                            ToolTipService.ToolTip="我喜欢的音乐">
-                            <FontIcon x:Name="FavoriteButtonIcon" Glyph="&#xEB51;" FontSize="18" />
                         </Button>
                         <Button CornerRadius="16"
                             x:Name="ShowCurrentPlaylistButton"

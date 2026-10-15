@@ -1364,11 +1364,21 @@
                     <dg:DataGridTemplateColumn Tag="Select" Header="" Width="30" MinWidth="26" CanUserResize="False">
                         <dg:DataGridTemplateColumn.CellTemplate>
                             <DataTemplate x:DataType="local:TagFileItem">
+                                <!-- 2026-10-16 用户反馈「选择框只能选一首，点另一首就切过去了」：
+                                     CheckBox 的点击会一路冒泡到 DataGrid，DataGrid 把它当成
+                                     「点了这一行」→ 先把选择清成单选，我们的 Click 回调再 Add，
+                                     结果永远只剩最后点的那一行。
+                                     修法=在 CheckBox 这一层把指针事件掐断（Handled=true）不让冒泡，
+                                     DataGrid 收不到就不会改选中，多选才累加得起来。
+                                     ⚠️ 只掐 PointerPressed/PointerReleased：CheckBox 自身的
+                                     勾选与 Click 不受影响。 -->
                                 <CheckBox
                                     MinWidth="0"
                                     HorizontalAlignment="Center"
                                     VerticalAlignment="Center"
                                     IsChecked="{x:Bind IsChecked, Mode=TwoWay}"
+                                    PointerPressed="TagFileRowCheck_PointerPressed"
+                                    PointerReleased="TagFileRowCheck_PointerPressed"
                                     Click="TagFileRowCheck_Click" />
                             </DataTemplate>
                         </dg:DataGridTemplateColumn.CellTemplate>

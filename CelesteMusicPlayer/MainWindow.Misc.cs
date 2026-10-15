@@ -499,8 +499,26 @@ namespace CelesteMusicPlayer
                 Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(slideAnim,
                     "(UIElement.RenderTransform).(CompositeTransform.TranslateX)");
 
+                // ⚠️ 关键（2026-10-16 用户反馈"展开收起图标会重新加载然后一闪"的真正原因）：
+                // 上面那条动画是把**整块卡片**向左滑出窗口外（收起时滑 -slide）。图标在卡片
+                // 左边约 22px 处，跟着卡片一起滑 → 滑出窗口左缘被裁掉 → 动画结束列宽切成窄条、
+                // 卡片位移归零，图标又"弹"回原处。视觉上就是图标消失一下又出现 = 一闪。
+                // 修法=**底板滑、内容反向补偿**：给内容容器一条等量反向的位移，两者相加为 0，
+                // 图标在整个动画期间钉在原地不动，只有卡片底板（背景/圆角/边线）滑出去。
+                var contentSlideAnim = new DoubleAnimation
+                {
+                    From = collapsed ? 0 : slide,
+                    To = collapsed ? slide : 0,
+                    Duration = slideAnim.Duration,
+                    EasingFunction = new CubicEase { EasingMode = Microsoft.UI.Xaml.Media.Animation.EasingMode.EaseOut }
+                };
+                Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(contentSlideAnim, LeftCategoryGrid);
+                Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTargetProperty(contentSlideAnim,
+                    "(UIElement.RenderTransform).(CompositeTransform.TranslateX)");
+
                 var sb = new Microsoft.UI.Xaml.Media.Animation.Storyboard();
                 sb.Children.Add(slideAnim);
+                sb.Children.Add(contentSlideAnim);
                 sb.Completed += (_, _) =>
                 {
                     try
@@ -520,9 +538,28 @@ namespace CelesteMusicPlayer
                                 t.TranslateX = 0;
                             }
 
-                            // 列宽真正落定之后再量一次汉堡与图标的实际位置：只有这时候
-                            // 窄条的最终宽度才确定，量出来的偏移才准（动画前量会量到宽栏的值）。
-                            AlignCollapsedHeaderButton();
+                            // 内容容器的补偿位移同步清零（否则图标会被永久推到右边）
+                            if (LeftCategoryGrid != null)
+                            {
+                                LeftCategoryGrid.RenderTransform = new CompositeTransform();
+                            }
+
+                            // 列宽真正落定之后再量汉堡与图标的实际位置：只有这时候窄条的最终
+                            // 宽度才确定，量出来的偏移才准（动画前量会量到宽栏的值）。
+                            // ⚠️ 还要再排一帧：列宽刚改完的这一帧布局还没消化完，直接量会量到
+                            // 过渡值（表现为"对齐差一点点"），排两帧更稳。
+                            try
+                            {
+                                DispatcherQueue.TryEnqueue(() =>
+                                {
+                                    AlignCollapsedHeaderButton();
+                                    DispatcherQueue.TryEnqueue(AlignCollapsedHeaderButton);
+                                });
+                            }
+                            catch (Exception caught)
+                            {
+                                StartupLog.WriteException("MainWindow.Misc.cs.SetLeftNavCollapsed.Enqueue", caught);
+                            }
                         }
                     }
                     catch (Exception caught)
@@ -610,15 +647,26 @@ namespace CelesteMusicPlayer
             double buttonCenter = LeftNavCollapseButton.TransformToVisual(LeftCategoryGrid)
                 .TransformPoint(new Windows.Foundation.Point(LeftNavCollapseButton.ActualWidth / 2, 0)).X;
 
-            double delta = iconCenter - buttonCenter;
-            if (Math.Abs(delta) < 0.5)
+            // ⚠️ 算**绝对目标值**，不要写成 "Margin.Left += delta" 那种累加：
+            // 实测值里带了一个固定的微调量（见下），累加会每次调用都再推一次，越推越远。
+            // 先把当前 Margin 的影响减掉，得到"Margin.Left=0 时汉堡中心在哪"，再一次性算目标。
+            double buttonCenterAtZero = buttonCenter - LeftNavHeaderRow.Margin.Left;
+            double targetLeft = iconCenter - buttonCenterAtZero + CollapsedHeaderNudgeX;
+
+            if (Math.Abs(targetLeft - LeftNavHeaderRow.Margin.Left) < 0.5)
             {
                 return;
             }
 
-            LeftNavHeaderRow.Margin = new Microsoft.UI.Xaml.Thickness(
-                LeftNavHeaderRow.Margin.Left + delta, 6, 0, 0);
+            LeftNavHeaderRow.Margin = new Microsoft.UI.Xaml.Thickness(targetLeft, 6, 0, 0);
         }
+
+        /// <summary>
+        /// 收起态汉堡按钮的**额外右移量**（px）。2026-10-16 用户："图标偏右了，把汉堡图标往右调一点点"。
+        /// 主体对齐是实测出来的（不写死），这个值只做视觉微调：正数=汉堡再往右，负数=往左。
+        /// 想改松紧只动这一个数字。
+        /// </summary>
+        private const double CollapsedHeaderNudgeX = 2;
 
         private FontIcon? FindFirstNavIcon()
         {

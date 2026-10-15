@@ -237,6 +237,26 @@ namespace CelesteMusicPlayer
                         RedrawProgressStyle();
                     }
 
+                    // 2026-10-16 用户反馈：「刚启动程序时进度条没对齐（还是靠右），手动调一下
+                    // 窗口大小就对齐了」。根因=**布局尚未落定就量了位置**：
+                    // CenterOnElement 用 TransformToVisual 量播放按钮的中心，而启动时
+                    // 「按钮组先居中 → 播放按钮位置才确定」是分两帧发生的，第一次量到的是
+                    // 按钮组还没摆正时的过渡值；之后没有任何事件再触发重算，于是就一直错着，
+                    // 直到用户拖窗口触发 SizeChanged 才补上。
+                    // 修法=再挂一个 LayoutUpdated：布局每一次落定都校一次（内部有 0.5px
+                    // 阈值去重，不会来回抖，也不会因为改 Margin 触发无限循环）。
+                    if (BottomTransportBar != null)
+                    {
+                        BottomTransportBar.LayoutUpdated -= BottomTransportBar_LayoutUpdated;
+                        BottomTransportBar.LayoutUpdated += BottomTransportBar_LayoutUpdated;
+                    }
+
+                    if (PlayPauseButton != null)
+                    {
+                        PlayPauseButton.SizeChanged -= BottomTransportBar_SizeChanged;
+                        PlayPauseButton.SizeChanged += BottomTransportBar_SizeChanged;
+                    }
+
                     // 设置窗口里改「波形配色 / 白度」时即时重画进度条，用户当场看到效果（不必切歌或重启）
                     AppSettingsStore.Changed -= OnSettingsChangedForProgressStyle;
                     AppSettingsStore.Changed += OnSettingsChangedForProgressStyle;
