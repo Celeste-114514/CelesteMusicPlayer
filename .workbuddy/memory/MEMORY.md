@@ -37,6 +37,7 @@
 - 歌词页 6 子页；后端 OnlineLyricDownload(QQ+LRClib，QQ 带 Referer+1.1s 闸)；外挂 .lrc 走 QuickLrcBox(UTF-8 无 BOM，独立按钮)；SYLT 只读沉底。⚠ xaml.cs 禁裸 `Path.` 用 System.IO.Path.。
 - 在线标签 OnlineTagFill.cs：MB+iTunes(免key) + Discogs/Last.fm(需Key，用户 2026-10-14 已提供并导入本机 app-settings.json) + fanart.tv(按MBID取HD封面)。`CheckKeyAvailability` 未配Key提示跳过。设置用 AppSettingsStore.Load() 非 Instance。Key 只落本机不进仓库。
 - 「标签编辑」右键/多选栏/WebUI 入口统一走 OpenTagEditForFiles。
+- ** toolkit DataGrid 两条硬事实（2026-10-16 扒 7.1.2 源码坐实，源码在 GitHub `rel/winui/7.1.2` 分支 CommunityToolkit.WinUI.UI.Controls.DataGrid）**：① **行选中挂在 `Tapped`**（AddHandler handledEventsToo，子元素拦不住），`UpdateStateOnTapped` **对交互式子元素零豁免**——点复选框时 Click 先跑、Tapped 随后把焦点行改成当前行。多选方案=SelectionMode=Single 只管焦点行 + `_checkedSet` 自管 + **指针按下哨兵**（网格级 AddHandler PointerPressed 判 OriginalSource 是否在 CheckBox 内，本手势无视连带 SelectionChanged，每次按下重判）。② **行选中底色**：模板 `Rectangle x:Name="BackgroundRectangle"` 的 Fill 绑主题资源、选中态动画写 `(Fill).(SolidColorBrush.Color)`——**设 row.Background 完全无效**；唯一杠杆=TagFileGrid.Resources 四个 `DataGridRowSelected*BackgroundColor/Opacity`；圆角用 Rectangle 自带 RadiusX/RadiusY；勾选的非焦点行直接给矩形上本地 Fill（每行一支新画刷，动画改画刷实例 Color 会串色）。
 - **2026-10-14 回归教训**：标签页整页不显示=上一轮崩溃的 XamlCompiler 弄坏发布 dll 内嵌 TagPanelControl.xaml 资源→运行时 XamlParseException 被 EnsureTagEditUiBuilt 吞掉。修法=清 obj/bin 干净重建重发（非源码错）；验证用临时 `new TagPanelControl()` 自检写日志(禁UIA点击)，验后删。
 
 ## 在线源定局
