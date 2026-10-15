@@ -1807,34 +1807,32 @@ namespace CelesteMusicPlayer
             try
             {
                 // 优先从列表歌曲取首曲封面（第一首含封面的）；歌曲全无封面时才回落用户手动设的自定义封面。
-                byte[]? bytes = await System.Threading.Tasks.Task.Run(() =>
+                // 2026-10-16 参考 ECHO：歌单墙卡片批量出图，先走分档缓存（Album 320），
+                // 缓存命中时零 TagLib 抽取；未命中由服务内部生成一份落盘，下次直接读。
+                Microsoft.UI.Xaml.Media.Imaging.BitmapImage? bmp = null;
+                foreach (string path in NamedPlaylistStore.LoadSongs(vm.Name))
                 {
-                    foreach (string path in NamedPlaylistStore.LoadSongs(vm.Name))
+                    if (!System.IO.File.Exists(path)) continue;
+                    try
                     {
-                        if (!System.IO.File.Exists(path)) continue;
-                        try
-                        {
-                            byte[]? b = ExtractCoverBytes(path);
-                            if (b is { Length: > 0 }) return b;
-                        }
-                        catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+                        bmp = await CoverArtService.GetAsync(path, CoverVariant.Album);
+                        if (bmp != null) break;
                     }
-                    return (byte[]?)null;
-                });
-                if (bytes is not { Length: > 0 })
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback.cs", caught); }
+                }
+                if (bmp == null)
                 {
                     // 歌曲全无封面：回落到用户手动设置的自定义封面；仍无则以 Cover=null 由 View 图标兜底。
                     string? custom = PlaylistLibraryService.CustomCoverPath(vm.Name);
                     if (!string.IsNullOrWhiteSpace(custom))
                     {
-                        bytes = await System.Threading.Tasks.Task.Run(() => System.IO.File.ReadAllBytes(custom));
+                        byte[]? cb = await System.Threading.Tasks.Task.Run(() => System.IO.File.ReadAllBytes(custom));
+                        if (cb is { Length: > 0 })
+                        {
+                            bmp = await CreateBitmapFromBytesAsync(cb, CoverDecodeTargetPx(null, 160)); // 与专辑封面同一机制；歌单墙卡片 160px
+                        }
                     }
                 }
-                if (bytes is not { Length: > 0 })
-                {
-                    return;
-                }
-                var bmp = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(null, 160)); // 与专辑封面同一机制；歌单墙卡片 160px
                 if (bmp != null)
                 {
                     vm.Cover = bmp;
@@ -1986,23 +1984,33 @@ namespace CelesteMusicPlayer
             {
                 byte[]? bytes = null;
                 string? custom = PlaylistLibraryService.CustomCoverPath(name);
+                Microsoft.UI.Xaml.Media.Imaging.BitmapImage? bmp = null;
                 if (!string.IsNullOrWhiteSpace(custom))
                 {
                     bytes = await System.Threading.Tasks.Task.Run(() => System.IO.File.ReadAllBytes(custom));
+                    if (bytes is { Length: > 0 })
+                    {
+                        bmp = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(PlaylistDetailCoverImage, 168)); // 与专辑封面同一机制
+                    }
                 }
                 else if (!string.IsNullOrWhiteSpace(firstTrack))
                 {
-                    bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(firstTrack));
+                    // 2026-10-16 参考 ECHO：详情页封面走分档缓存（Album 320），未命中回落原路径
+                    bmp = await CoverArtService.GetAsync(firstTrack, CoverVariant.Album);
+                    if (bmp == null)
+                    {
+                        bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(firstTrack));
+                        if (bytes is { Length: > 0 })
+                        {
+                            bmp = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(PlaylistDetailCoverImage, 168)); // 与专辑封面同一机制
+                        }
+                    }
                 }
 
-                if (bytes is { Length: > 0 })
+                if (bmp != null)
                 {
-                    var bmp = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(PlaylistDetailCoverImage, 168)); // 与专辑封面同一机制
-                    if (bmp != null)
-                    {
-                        PlaylistDetailCoverImage.Source = bmp;
-                        ApplyCoverFrame(PlaylistDetailCover, PlaylistDetailCoverImage);
-                    }
+                    PlaylistDetailCoverImage.Source = bmp;
+                    ApplyCoverFrame(PlaylistDetailCover, PlaylistDetailCoverImage);
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }

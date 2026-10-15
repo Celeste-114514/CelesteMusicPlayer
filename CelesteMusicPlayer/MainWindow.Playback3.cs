@@ -1125,38 +1125,31 @@ namespace CelesteMusicPlayer
             UpdateTransportProgressCentering();
         }
 
-        /// <summary>校正是否已排进队列（防抖，见 BottomTransportBar_LayoutUpdated）。</summary>
-        private bool _transportCenteringPending;
-
         /// <summary>
-        /// 布局落定后校一次进度条位置（2026-10-16：修"启动时没对齐、拖一下窗口才对齐"）。
+        /// 启动期补校几次进度条位置（2026-10-16：修"刚启动没对齐、拖一下窗口才对齐"）。
         ///
-        /// ⚠️⚠️ 必须**异步**做：第一版在 LayoutUpdated 里直接调 UpdateTransportProgressCentering
-        /// （同步改 Margin），结果改 Margin 又触发一轮布局 → 再进 LayoutUpdated → 死循环，
-        /// 冒烟直接抓到 LayoutCycleException（"Layout cycle detected"）。
-        /// 这里只排一个队列项，真正改 Margin 发生在布局过程**之外**，不会嵌套；
-        /// 配合 UpdateTransportProgressCentering 内部的 0.5px 阈值，位置对了就停，能收敛。
+        /// ⚠️ 别再改成"每次布局都校"：LayoutUpdated 版会让进度条和按钮**持续快速抖动**
+        /// （改 Margin → 触发新布局 → 再校，来回颤），同步改还会直接触发
+        /// LayoutCycleException（冒烟抓到过）。这里只在启动后 200/400/600/800ms
+        /// 各校一次，把布局落定的那几帧盖住就收手；运行期只靠 SizeChanged。
         /// </summary>
-        private void BottomTransportBar_LayoutUpdated(object? sender, object e)
+        private void ScheduleStartupTransportCentering()
         {
-            if (_transportCenteringPending)
+            for (int i = 1; i <= 4; i++)
             {
-                return;
-            }
-
-            _transportCenteringPending = true;
-            try
-            {
-                DispatcherQueue.TryEnqueue(() =>
+                int delayMs = i * 200;
+                _ = System.Threading.Tasks.Task.Run(async () =>
                 {
-                    _transportCenteringPending = false;
-                    UpdateTransportProgressCentering();
+                    await System.Threading.Tasks.Task.Delay(delayMs);
+                    try
+                    {
+                        DispatcherQueue.TryEnqueue(UpdateTransportProgressCentering);
+                    }
+                    catch (Exception caught)
+                    {
+                        global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback3.cs.ScheduleStartupTransportCentering", caught);
+                    }
                 });
-            }
-            catch (Exception caught)
-            {
-                _transportCenteringPending = false;
-                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback3.cs.BottomTransportBar_LayoutUpdated", caught);
             }
         }
 

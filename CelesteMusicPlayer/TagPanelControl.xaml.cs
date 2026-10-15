@@ -450,6 +450,10 @@ namespace CelesteMusicPlayer
                 + (skipped > 0 ? $"（跳过重复 {skipped} 个）" : string.Empty)
                 + (failed > 0 ? $"（{failed} 个读不出标签{failDetail}）" : string.Empty)
                 + "。";
+
+            // 2026-10-16 Kid3 化：标签已经秒读完了，时长/码率这些要扫音频帧的列
+            // 转到后台补算（见 EnrichAudioFactsAsync）——列表立即可用，音频信息随后陆续亮。
+            _ = EnrichAudioFactsAsync(loaded);
         }
 
         private void RemoveSelectedButton_Click(object sender, RoutedEventArgs e)
@@ -503,14 +507,36 @@ namespace CelesteMusicPlayer
         //   只有「不一致时才写」，INPC 不会连环触发，也不会把一次点击放大成两轮重排。
         // =====================================================================
 
+        /// <summary>点选择框「之前」的选中快照，供 Click 里恢复多选。</summary>
+        private List<TagFileItem> _selectionBeforeRowCheck = new();
+
         /// <summary>
-        /// 掐断选择框的指针事件冒泡（2026-10-16：修"点选择框会把多选切成单选"）。
-        /// 不掐的话 DataGrid 会把这一下当成"点了整行"，先把选中清成单行，
-        /// 导致选择框永远只能选一首。只设 Handled，不做别的——勾选与 Click 照旧。
+        /// 抢在 DataGrid 处理之前，把「点击前的选中」记下来。
+        ///
+        /// ⚠️ 第一版想靠 e.Handled = true 掐断冒泡来阻止 DataGrid 改选中 —— **实测无效，
+        /// 用户反馈"还是只能选一首"**。原因是 toolkit DataGrid 用 AddHandler(…, handledEventsToo: true)
+        /// 订阅指针事件（本项目铁律里就记着"第三方控件的子部件一律 handledEventsToo"），
+        /// Handled 拦不住它。
+        /// 改成"先存快照、后按意图重建"：CheckBox 是子元素，它的 handler 比 DataGrid 先跑，
+        /// 这里存到的就是点击前的选择；等 Click 时 DataGrid 已经把选择清成单行，
+        /// 我们再按快照把它加回去，多选才累加得起来。
         /// </summary>
         private void TagFileRowCheck_PointerPressed(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
-            e.Handled = true;
+            if (!_panelReady)
+            {
+                return;
+            }
+
+            try
+            {
+                _selectionBeforeRowCheck = TagFileGrid.SelectedItems.Cast<TagFileItem>().ToList();
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("TagPanelControl.RowCheckSnapshot", caught);
+                _selectionBeforeRowCheck = new List<TagFileItem>();
+            }
         }
 
         private void TagFileRowCheck_Click(object sender, RoutedEventArgs e)
@@ -522,6 +548,15 @@ namespace CelesteMusicPlayer
 
             if (item.IsChecked)
             {
+                // DataGrid 已经把选择清成「当前行」了 —— 先把点击前的多选恢复回去，再加当前项。
+                foreach (TagFileItem kept in _selectionBeforeRowCheck)
+                {
+                    if (!TagFileGrid.SelectedItems.Contains(kept))
+                    {
+                        TagFileGrid.SelectedItems.Add(kept);
+                    }
+                }
+
                 if (!TagFileGrid.SelectedItems.Contains(item))
                 {
                     TagFileGrid.SelectedItems.Add(item);
@@ -2836,7 +2871,12 @@ namespace CelesteMusicPlayer
 
             try
             {
-                using TagLib.File tagFile = TagLib.File.Create(path);
+                // 2026-10-16 Kid3 化（用户实测「3 秒 100 首」，mp3tag/Kid3 都是秒开几千首）：
+                // ReadStyle.None = 只解析标签帧，**不碰音频帧**。Properties.Duration / 码率 /
+                // 采样率全都要扫音频帧才知道（MP3 甚至要遍历全部帧头算时长），这就是慢的主因。
+                // 这些派生列改为扫描结束后由 EnrichAudioFactsAsync 后台补算：列表瞬间可读，
+                // 时长/码率随后陆续亮（补算只读不写，与 bit-perfect 无关）。
+                using TagLib.File tagFile = TagLib.File.Create(path, TagLib.ReadStyle.None);
                 if (!string.IsNullOrWhiteSpace(tagFile.Tag.Title))
                 {
                     title = tagFile.Tag.Title.Trim();
@@ -2895,10 +2935,9 @@ namespace CelesteMusicPlayer
                     genre = tagFile.Tag.FirstGenre.Trim();
                 }
 
-                duration = tagFile.Properties.Duration;
-
-                // 派生列直接吃刚打开的 Properties：零额外 I/O、零子进程
-                AudioInfoFormatter.TryGetFactsFast(tagFile, path, out rate, out bits, out kbps);
+                // 时长 / 采样率 / 位深 / 码率：这里一律不读（ReadStyle.None 下拿不到；
+                // 且 TryGetFactsFast 发现码率缺口会回退 ffmpeg 完整探测，反而更慢）。
+                // 扫描结束后由 EnrichAudioFactsAsync 用完整 ReadStyle 后台补算，见该方法注释。
             }
             catch (Exception caught)
             {
@@ -2983,6 +3022,124 @@ namespace CelesteMusicPlayer
             }
 
             return item;
+        }
+
+        /// <summary>音频属性补算的取消源：新一批读取到达时取消上一批还没跑完的补算。</summary>
+        private CancellationTokenSource? _enrichCts;
+
+        /// <summary>
+        /// 后台补全「时长 / 采样率 / 位深 / 码率」（2026-10-16 Kid3 化第二半）。
+        ///
+        /// BuildEntry 用 <see cref="TagLib.ReadStyle.None"/> 只解析标签帧，这些要扫音频帧的列
+        /// 一律留空——这就是「列表秒开」的代价。这里扫描结束后用完整 ReadStyle 重开一次文件
+        /// 补齐（TagLib 本地解析，不起 ffmpeg 进程；只有 TagLib 读不到的格式才回退探测）。
+        ///
+        /// 设计要点：
+        ///  · 有界并发 4：I/O 密集，给机械硬盘和系统留活路（再多也不会更快，只会更卡）；
+        ///  · 每补一条就在 UI 线程赋值并发通知：用户看到时长码率**陆续亮**，不是干等全部读完；
+        ///  · 新一批读取到达即取消上一批（用户连续拖文件进来时不会叠了好几套补算在跑）；
+        ///  · 只读文件、只改行模型显示字段，不碰任何音频输出（bit-perfect 不受影响）。
+        /// </summary>
+        private async Task EnrichAudioFactsAsync(List<TagFileItem> items)
+        {
+            if (items.Count == 0)
+            {
+                return;
+            }
+
+            _enrichCts?.Cancel();
+            _enrichCts?.Dispose();
+            CancellationTokenSource cts = new();
+            _enrichCts = cts;
+            CancellationToken token = cts.Token;
+
+            try
+            {
+                int done = 0;
+                await Task.Run(async () =>
+                {
+                    using var gate = new SemaphoreSlim(4, 4);
+                    IEnumerable<Task> jobs = items.Select(async item =>
+                    {
+                        await gate.WaitAsync(token);
+                        try
+                        {
+                            if (token.IsCancellationRequested || !System.IO.File.Exists(item.FilePath))
+                            {
+                                return;
+                            }
+
+                            TimeSpan duration = TimeSpan.Zero;
+                            int rate = 0;
+                            int bits = 0;
+                            int kbps = 0;
+                            try
+                            {
+                                using TagLib.File f = TagLib.File.Create(item.FilePath);
+                                duration = f.Properties.Duration;
+                                AudioInfoFormatter.TryGetFactsFast(f, item.FilePath, out rate, out bits, out kbps);
+                            }
+                            catch (Exception caught)
+                            {
+                                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.Enrich", caught);
+                                return;
+                            }
+
+                            if (token.IsCancellationRequested)
+                            {
+                                return;
+                            }
+
+                            DispatcherQueue.TryEnqueue(() =>
+                            {
+                                if (token.IsCancellationRequested)
+                                {
+                                    return;
+                                }
+
+                                item.Duration = duration;
+                                item.BitDepthText = bits > 0 ? bits + "bit" : "-";
+                                item.SampleRateText = rate > 0 ? FormatSampleRate(rate) : "-";
+                                item.BitrateText = kbps > 0 ? kbps + "kbps" : "-";
+                                item.BitDepthBits = bits;
+                                item.SampleRateHz = rate;
+                                item.Kbps = kbps;
+                                item.NotifyAudioFactsChanged();
+                            });
+
+                            int n = Interlocked.Increment(ref done);
+                            if (n % 100 == 0 || n == items.Count)
+                            {
+                                DispatcherQueue.TryEnqueue(() =>
+                                {
+                                    if (!token.IsCancellationRequested)
+                                    {
+                                        TagStatusText.Text = $"正在补全音频信息 {n}/{items.Count}…";
+                                    }
+                                });
+                            }
+                        }
+                        finally
+                        {
+                            gate.Release();
+                        }
+                    });
+                    await Task.WhenAll(jobs);
+                }, token);
+
+                if (!token.IsCancellationRequested)
+                {
+                    TagStatusText.Text = "音频信息补全完成。";
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 被新一批取消：正常路径，不提示
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("TagPanelControl.EnrichAudioFactsAsync", caught);
+            }
         }
 
         /// <summary>44100 → 44.1kHz；48000 → 48kHz；2822400 → 2.82MHz。</summary>
@@ -4507,26 +4664,27 @@ namespace CelesteMusicPlayer
             // 只能问表格的 SelectedItems（行被回收复用时就靠这个拿当前数据项）。
             if (TagFileGrid.SelectedItems.Contains(row.DataContext))
             {
-                // 2026-10-16 用户反馈「选中的背景是个方方正正的矩形，好难看」：
-                // DataGridRow 默认的选中底是一整条**实心**强调色，铺满整行、直角、又满又硬。
-                // 改成 ① 淡到 18% 的强调色（不再是实心色块）② 圆角 6 ③ 左右各内缩 4、上下 1，
-                // 变成一条"贴在行里的圆角淡色条"，跟左栏分类条目的观感统一。
-                Brush accent = ResolveTagAccentBrush();
-                if (accent is SolidColorBrush scb)
+                // 2026-10-16 用户反馈「选中的背景是个方方正正的矩形，好难看」，
+                // 要的是「Windows 那种」：**中性淡底 + 圆角**，不要左侧竖条、不要实心强调色块。
+                //
+                // ⚠️ 第二版踩过的坑：用强调色 18% + 左右内缩 Margin(4,1,4,1) —— 底色太重、
+                // 而且给行加 Margin 会把整行内容一起缩进，跟列头对不齐，更难看。
+                // 这一版：底色改用 WinUI 令牌 SubtleFillColorSecondaryBrush（主题自适应，
+                // 浅色=淡灰、深色=淡白，就是 Windows 列表选中那一档），圆角收到 4，
+                // **Margin 一律不动**（列必须跟列头对齐）。前景保持原色，不反白。
+                if (Application.Current.Resources.TryGetValue("SubtleFillColorSecondaryBrush", out object? subtle)
+                    && subtle is Brush subtleBrush)
                 {
-                    row.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(
-                        (byte)(255 * 0.18), scb.Color.R, scb.Color.G, scb.Color.B));
+                    row.Background = subtleBrush;
                 }
                 else
                 {
-                    row.Background = accent;
+                    row.ClearValue(Control.BackgroundProperty);
                 }
 
-                row.CornerRadius = new Microsoft.UI.Xaml.CornerRadius(6);
-                row.Margin = new Microsoft.UI.Xaml.Thickness(4, 1, 4, 1);
-
-                // ⚠️ 前景不必再反色：底色已经淡到 18%，原来的文字色照样看得清，
-                //    强行反成白字反而和淡底打架（旧行为）。
+                row.CornerRadius = new Microsoft.UI.Xaml.CornerRadius(4);
+                row.BorderThickness = new Microsoft.UI.Xaml.Thickness(0);
+                row.ClearValue(FrameworkElement.MarginProperty);
                 row.ClearValue(Control.ForegroundProperty);
                 ClearTagRowForeground(row);
             }
@@ -5698,9 +5856,21 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 音频属性补算落定后一次性发齐通知（2026-10-16 Kid3 化）。
+        /// 这些列的值是后台补算写的，行模板 x:Bind 只有收到通知才会刷新；
+        /// DurationText 是基类计算属性，也按名字发一次即可。
+        /// </summary>
+        public void NotifyAudioFactsChanged()
+        {
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(DurationText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(BitDepthText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(SampleRateText)));
+            PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(BitrateText)));
+        }
+
         /// <summary>扩展名大写（MP3 / FLAC / DSF…）；读不到显示 -。</summary>
         public string FormatName { get; set; } = "-";
-
         /// <summary>位深（16bit / 24bit）；压缩格式可能没有。</summary>
         public string BitDepthText { get; set; } = "-";
 

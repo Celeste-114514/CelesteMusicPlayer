@@ -702,7 +702,12 @@ namespace CelesteMusicPlayer
         /// 修法=两态都取同一个值（Left：图标左边距与展开态完全一致，收起后
         /// 图标就停在原处不跳），所有会设这个属性的地方统一走这里，别再各写各的。
         /// </summary>
-        private static HorizontalAlignment NavContentAlignment => HorizontalAlignment.Left;
+        // 2026-10-16 第三轮：用户明确要「收起时图标在窄条里**水平居中**」（Left 靠左观感差）。
+        // 收起=Center、展开=Left。⚠️ 两态取不同值正是当初"点一下分类整列偏移"的起因，
+        // 所以必须让**所有**会设这个属性的地方都走本属性（SetLeftNavIconMode 与
+        // UpdateLibraryNavHighlight 已统一），任一行写死字面量都会让偏移复发。
+        private HorizontalAlignment NavContentAlignment
+            => _leftNavCollapsed ? HorizontalAlignment.Center : HorizontalAlignment.Left;
 
         /// <summary>
         /// 左栏内容在「文字 ↔ 图标」两种模式间切换：隐藏每个导航按钮里的 NavLabel。
@@ -1959,6 +1964,26 @@ namespace CelesteMusicPlayer
             if (!string.IsNullOrWhiteSpace(audioPath))
             {
                 CoverBytesCache.TryRemove(audioPath, out _);
+            }
+        }
+
+
+        /// <summary>
+        /// 给 CoverArtService 用的封面源字节入口：内嵌优先，其次同目录 sidecar。
+        /// 只做一层转发 —— 取图规则（含"取最大的一张"）仍由 TryLoadInnerCover /
+        /// TryLoadOuterCover 各自维护，别在封面服务里再写一份。
+        /// </summary>
+        internal static byte[]? TryReadCoverBytes(string audioPath)
+        {
+            try
+            {
+                byte[]? bytes = TryLoadInnerCover(audioPath) ?? TryLoadOuterCover(audioPath);
+                return bytes is { Length: > 0 } ? bytes : null;
+            }
+            catch (Exception ex)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Misc.cs.TryReadCoverBytes", ex);
+                return null;
             }
         }
 

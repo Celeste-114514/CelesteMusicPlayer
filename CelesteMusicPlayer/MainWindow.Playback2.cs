@@ -2353,27 +2353,35 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                byte[]? bytes = null;
+                Microsoft.UI.Xaml.Media.Imaging.BitmapImage? bmp = null;
                 await _coverLoadGate.WaitAsync();
                 try
                 {
-                    bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(song.FilePath));
+                    // 2026-10-16 参考 ECHO 的封面分档：列表小图先走 CoverArtService
+                    // （96 档 + 磁盘缓存，命中时零 TagLib/零解码），未命中才回落老路径。
+                    bmp = await CoverArtService.GetAsync(song.FilePath, CoverVariant.Thumb);
+                    if (bmp == null)
+                    {
+                        byte[]? bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(song.FilePath));
+                        if (bytes is { Length: > 0 })
+                        {
+                            bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
+                            using (var ms = new System.IO.MemoryStream(bytes))
+                            {
+                                ms.Position = 0;
+                                await bmp.SetSourceAsync(ms.AsRandomAccessStream());
+                            }
+                        }
+                    }
                 }
                 finally
                 {
                     _coverLoadGate.Release();
                 }
 
-                if (bytes is not { Length: > 0 })
+                if (bmp == null)
                 {
                     return;
-                }
-
-                var bmp = new Microsoft.UI.Xaml.Media.Imaging.BitmapImage();
-                using (var ms = new System.IO.MemoryStream(bytes))
-                {
-                    ms.Position = 0;
-                    await bmp.SetSourceAsync(ms.AsRandomAccessStream());
                 }
 
                 // 缓存解码结果供重复使用；超过上限则清空整表以限制内存增长

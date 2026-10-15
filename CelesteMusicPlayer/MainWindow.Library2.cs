@@ -361,13 +361,19 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                byte[]? bytes = await Task.Run(() => ExtractCoverBytes(entry.CoverSourcePath));
-                if (bytes == null || bytes.Length == 0)
+                // 2026-10-16 参考 ECHO：批量封面走分档缓存（Album 320），未命中回落原路径
+                BitmapImage? image = await CoverArtService.GetAsync(entry.CoverSourcePath, CoverVariant.Album);
+                if (image == null)
                 {
-                    continue;
+                    byte[]? bytes = await Task.Run(() => ExtractCoverBytes(entry.CoverSourcePath));
+                    if (bytes == null || bytes.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    image = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(AlbumDetailCoverImage, 232));
                 }
 
-                BitmapImage? image = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(AlbumDetailCoverImage, 232));
                 if (image != null)
                 {
                     entry.CoverImage = image;
@@ -521,13 +527,19 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                byte[]? bytes = await Task.Run(() => ExtractCoverBytes(entry.CoverSourcePath));
-                if (bytes == null || bytes.Length == 0)
+                // 2026-10-16 参考 ECHO：批量封面走分档缓存（Album 320），未命中回落原路径
+                BitmapImage? image = await CoverArtService.GetAsync(entry.CoverSourcePath, CoverVariant.Album);
+                if (image == null)
                 {
-                    continue;
+                    byte[]? bytes = await Task.Run(() => ExtractCoverBytes(entry.CoverSourcePath));
+                    if (bytes == null || bytes.Length == 0)
+                    {
+                        continue;
+                    }
+
+                    image = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(AlbumDetailCoverImage, 232));
                 }
 
-                BitmapImage? image = await CreateBitmapFromBytesAsync(bytes, CoverDecodeTargetPx(AlbumDetailCoverImage, 232));
                 if (image != null)
                 {
                     entry.CoverImage = image;

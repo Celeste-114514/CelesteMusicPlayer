@@ -241,15 +241,14 @@ namespace CelesteMusicPlayer
                     // 窗口大小就对齐了」。根因=**布局尚未落定就量了位置**：
                     // CenterOnElement 用 TransformToVisual 量播放按钮的中心，而启动时
                     // 「按钮组先居中 → 播放按钮位置才确定」是分两帧发生的，第一次量到的是
-                    // 按钮组还没摆正时的过渡值；之后没有任何事件再触发重算，于是就一直错着，
+                    // 按钮组还没摆正时的过渡值；之后没有事件再触发重算，于是就一直错着，
                     // 直到用户拖窗口触发 SizeChanged 才补上。
-                    // 修法=再挂一个 LayoutUpdated：布局每一次落定都校一次（内部有 0.5px
-                    // 阈值去重，不会来回抖，也不会因为改 Margin 触发无限循环）。
-                    if (BottomTransportBar != null)
-                    {
-                        BottomTransportBar.LayoutUpdated -= BottomTransportBar_LayoutUpdated;
-                        BottomTransportBar.LayoutUpdated += BottomTransportBar_LayoutUpdated;
-                    }
+                    //
+                    // ⚠️ 第一版修法是挂 LayoutUpdated 每次布局都校 —— 结果**进度条和按钮持续
+                    // 快速抖动**（改 Margin → 触发新一轮布局 → 再校，来回颤），已废弃。
+                    // 现在的做法=只在**启动后**排几次延迟校正（200/400/600/800ms），
+                    // 覆盖布局落定的那几帧；运行期一律交给 SizeChanged，不再常驻校正。
+                    ScheduleStartupTransportCentering();
 
                     if (PlayPauseButton != null)
                     {
