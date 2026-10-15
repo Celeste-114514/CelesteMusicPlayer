@@ -172,97 +172,6 @@
             </StackPanel>
 
             <!-- 标题栏右上角：功能按钮（选择/刷新/全屏）+ 自绘系统按钮（靠紧）-->
-            <StackPanel
-                Grid.Column="2"
-                Orientation="Horizontal"
-                Spacing="4"
-                VerticalAlignment="Center"
-                Margin="0,0,8,0">
-                <Button CornerRadius="16"
-                    x:Name="AudioSettingsButton"
-                    Width="34"
-                    Height="32"
-                    Padding="0"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Click="AudioSettingsButton_Click"
-                    ToolTipService.ToolTip="音频设置">
-                    <FontIcon Glyph="&#xE91F;" FontSize="15" />
-                </Button>
-                <Button CornerRadius="16"
-                    x:Name="SelectLocalAudioButton"
-                    Width="34"
-                    Height="32"
-                    Padding="0"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Click="SelectLocalAudioButton_Click"
-                    ToolTipService.ToolTip="选项">
-                    <FontIcon Glyph="&#xE700;" FontSize="16" />
-                </Button>
-                <Button CornerRadius="16"
-                    x:Name="RefreshCurrentPageButton"
-                    Width="34"
-                    Height="32"
-                    Padding="0"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Click="RefreshCurrentPageButton_Click"
-                    ToolTipService.ToolTip="刷新当前页面">
-                    <FontIcon Glyph="&#xE72C;" FontSize="15" />
-                </Button>
-                <Button CornerRadius="16"
-                    x:Name="FullScreenButton"
-                    Width="34"
-                    Height="32"
-                    Padding="0"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Click="FullScreenButton_Click"
-                    ToolTipService.ToolTip="全屏">
-                    <FontIcon x:Name="FullScreenIcon" Glyph="&#xE740;" FontSize="15" />
-                </Button>
-                <Border
-                    Width="1"
-                    Height="20"
-                    Margin="2,0"
-                    VerticalAlignment="Center"
-                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
-                <!-- 自绘系统按钮（无边框窗口） -->
-                <Button CornerRadius="16"
-                    x:Name="WindowMinButton"
-                    Width="34"
-                    Height="32"
-                    Padding="0"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Click="WindowMinButton_Click"
-                    ToolTipService.ToolTip="最小化">
-                    <FontIcon Glyph="&#xE921;" FontSize="15" />
-                </Button>
-                <Button CornerRadius="16"
-                    x:Name="WindowMaxRestoreButton"
-                    Width="34"
-                    Height="32"
-                    Padding="0"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Click="WindowMaxRestoreButton_Click"
-                    ToolTipService.ToolTip="最大化 / 还原">
-                    <FontIcon x:Name="WindowMaxRestoreIcon" Glyph="&#xE922;" FontSize="13" />
-                </Button>
-                <Button CornerRadius="16"
-                    x:Name="WindowCloseButton"
-                    Width="34"
-                    Height="32"
-                    Padding="0"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    Click="WindowCloseButton_Click"
-                    ToolTipService.ToolTip="关闭">
-                    <FontIcon Glyph="&#xE8BB;" FontSize="14" />
-                </Button>
-            </StackPanel>
 
         </Grid>
 
@@ -412,13 +321,19 @@
             </Grid.ColumnDefinitions>
 
             <!-- 左：音乐库 + 播放列表入口（统一 Button 选中样式） -->
-            <Grid
-                x:Name="LeftCategoryGrid"
+            <!-- E2：右缘一根 1px 分隔线（令牌化 Divider 令牌，跟随主题/皮肤换色）。
+                 历史上这条线按用户要求移除过一次（位置生硬）；本次用 DividerStrokeColorDefaultBrush
+                 细线 + 8px 间隙重做，不抢视觉。Grid 无边框属性，故外套 Border 承载。 -->
+            <Border
                 Grid.Column="0"
                 Margin="0,0,8,0"
-                Padding="4"
-                RowSpacing="4"
-                RenderTransformOrigin="0.5,0.5">
+                BorderThickness="0,0,1,0"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+                <Grid
+                    x:Name="LeftCategoryGrid"
+                    Padding="4"
+                    RowSpacing="4"
+                    RenderTransformOrigin="0.5,0.5">
                 <Grid.RenderTransform>
                     <CompositeTransform x:Name="LeftCategoryTransform" ScaleX="1" ScaleY="1" />
                 </Grid.RenderTransform>
@@ -442,7 +357,22 @@
                         Opacity="0.7"
                         VerticalAlignment="Center"
                         Text="音乐库" />
-                    <!-- 音乐库面板的收起/展开按钮已按用户要求移除：面板固定展开，不再有窄栏图标模式。 -->
+                    <!-- E3：左栏收起/展开开关（汉堡）。收起后分类栏缩成 44px 窄条只留本按钮，
+                         点它展开。旧版「窄栏图标模式」已废除，不再复活。 -->
+                    <Button
+                        x:Name="LeftNavCollapseButton"
+                        Grid.Column="1"
+                        Width="28"
+                        Height="28"
+                        Padding="0"
+                        HorizontalAlignment="Right"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        CornerRadius="6"
+                        Click="LeftNavCollapseButton_Click"
+                        ToolTipService.ToolTip="收起分类栏">
+                        <FontIcon Glyph="&#xE700;" FontSize="12" VerticalAlignment="Center" />
+                    </Button>
                 </Grid>
                 <!-- 音乐库导航：分类条目集中在一个可滚动面板里，音效 / 标签排序 / 播放列表固定在面板底部
                      （经典界面下与 Windows 设置同款：圆角灰底 + 左侧一根直竖条主题色指示条，切换带淡入动画）
@@ -853,8 +783,10 @@
                         Visibility="Collapsed" />
                 </StackPanel>
             </Grid>
+            </Border>
 
-            <!-- 音乐库面板与右侧内容区之间的分隔线已按用户要求移除 -->
+            <!-- 音乐库面板与右侧内容区之间的分隔线：2026-10-15 E2 重做（LeftCategoryGrid 右缘细线，
+                 早先「整条移除」的版本作废） -->
 
         <!-- 中：歌曲列表 / 专辑浏览（侧键前进/后退） -->
             <Grid
@@ -997,7 +929,7 @@
                              这里整段注释掉、代码一行没删。以后要恢复：去掉本段首尾两行注释标记即可。
                              原说明：皮肤系统第 4 步，Apple 风格主界面 · 歌曲浏览面板。
                              只在歌曲分类显示；点了才第一次创建 WebView2，不点就永远不占那 286MB。
-                        <Button
+                        <Button Style="{StaticResource ButtonSecondaryStyle}"
                             x:Name="WebMainPilotButton"
                             Height="32"
                             Padding="14,0"
@@ -1014,7 +946,7 @@
                         <!-- 【皮肤系统入口 · 2026-10-11 起临时隐藏】恢复方法同上：去掉首尾两行注释标记。
                              原说明：批次 1，Windows 风（Fluent）新版主界面。与「Apple 风格界面」互斥，
                              点谁开谁；winmain.html 是 main.html 的平行换肤页，协议零改动。
-                        <Button
+                        <Button Style="{StaticResource ButtonSecondaryStyle}"
                             x:Name="WebWinMainButton"
                             Height="32"
                             Padding="14,0"
@@ -1028,7 +960,7 @@
                             </StackPanel>
                         </Button>
                         【隐藏结束】 -->
-                        <Button
+                        <Button Style="{StaticResource ButtonNormalStyle}"
                             x:Name="PlayAllLibrarySongsButton"
                             Height="32"
                             Padding="12,0"
@@ -1062,7 +994,7 @@
                                 </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
-                        <Button CornerRadius="16"
+                        <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                             x:Name="SortOrderButton"
                             Height="32"
                             MinWidth="72"
@@ -1074,7 +1006,7 @@
                                 <TextBlock x:Name="SortOrderText" Text="升序" VerticalAlignment="Center" />
                             </StackPanel>
                         </Button>
-                        <Button CornerRadius="16"
+                        <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                             x:Name="ChangeSortButton"
                             Height="32"
                             Padding="14,0"
@@ -1141,7 +1073,7 @@
                                 </MenuFlyout>
                             </DropDownButton.Flyout>
                         </DropDownButton>
-                        <Button CornerRadius="16"
+                        <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                             x:Name="AlbumSortOrderButton"
                             Height="32"
                             MinWidth="64"
@@ -1190,7 +1122,7 @@
                                 VerticalAlignment="Center"
                                 FontSize="14"
                                 Text="播放列表墙" />
-                            <Button
+                            <Button Style="{StaticResource ButtonNormalStyle}"
                                 x:Name="CreatePlaylistWallButton"
                                 Grid.Column="1"
                                 Height="32"
@@ -1202,14 +1134,14 @@
                                 Grid.Column="2"
                                 Orientation="Horizontal"
                                 Spacing="8">
-                                <Button
+                                <Button Style="{StaticResource ButtonSecondaryStyle}"
                                     x:Name="ImportM3uWallButton"
                                     Height="32"
                                     Padding="12,0"
                                     CornerRadius="8"
                                     Content="导入 M3U…"
                                     Click="ImportM3uWallButton_Click" />
-                                <Button
+                                <Button Style="{StaticResource ButtonSecondaryStyle}"
                                     x:Name="OpenCueWallButton"
                                     Height="32"
                                     Padding="12,0"
@@ -1217,7 +1149,7 @@
                                     Content="打开 CUE…"
                                     Click="OpenCueWallButton_Click" />
                             </StackPanel>
-                            <Button
+                            <Button Style="{StaticResource ButtonSecondaryStyle}"
                                 x:Name="ExportPlaylistsButton"
                                 Grid.Column="3"
                                 Height="32"
@@ -1333,7 +1265,7 @@
                                 BorderThickness="0"
                                 Content="添加到播放队列"
                                 Click="PlaylistWallMultiAddToQueue_Click" />
-                            <Button
+                            <Button Style="{StaticResource ButtonDangerStyle}"
                                 x:Name="PlaylistWallMultiDeleteButton"
                                 Height="30"
                                 Padding="10,0"
@@ -1360,7 +1292,7 @@
                             <RowDefinition Height="*" />
                         </Grid.RowDefinitions>
                         <StackPanel Grid.Row="0" Spacing="10">
-                            <Button
+                            <Button Style="{StaticResource ButtonSecondaryStyle}"
                                 x:Name="PlaylistDetailBackButton"
                                 Content="← 返回播放列表墙"
                                 HorizontalAlignment="Left"
@@ -1401,7 +1333,7 @@
                                         FontSize="12"
                                         Opacity="0.7" />
                                     <StackPanel Orientation="Horizontal" Spacing="8">
-                                        <Button
+                                        <Button Style="{StaticResource ButtonNormalStyle}"
                                             x:Name="PlaylistDetailPlayButton"
                                             Height="32"
                                             Padding="14,0"
@@ -1409,7 +1341,7 @@
                                             BorderThickness="0"
                                             Content="播放该列表"
                                             Click="PlaylistDetailPlayButton_Click" />
-                                        <Button
+                                        <Button Style="{StaticResource ButtonSecondaryStyle}"
                                             x:Name="PlaylistDetailAddQueueButton"
                                             Height="32"
                                             Padding="14,0"
@@ -1417,7 +1349,7 @@
                                             BorderThickness="0"
                                             Content="添加至播放队列"
                                             Click="PlaylistDetailAddQueueButton_Click" />
-                                        <Button
+                                        <Button Style="{StaticResource ButtonSecondaryStyle}"
                                             x:Name="PlaylistDetailAddWallButton"
                                             Height="32"
                                             Padding="14,0"
@@ -1425,7 +1357,7 @@
                                             BorderThickness="0"
                                             Content="添加到播放列表"
                                             Click="PlaylistDetailAddWallButton_Click" />
-                                        <Button
+                                        <Button Style="{StaticResource ButtonSecondaryStyle}"
                                             x:Name="PlaylistDetailSortButton"
                                             Height="32"
                                             Padding="14,0"
@@ -2022,7 +1954,7 @@
                                 Margin="0,0,0,4"
                                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                                 BorderThickness="0,0,0,1">
-                                <Button CornerRadius="16"
+                                <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                     x:Name="AlbumDetailBackButton"
                                     Content="← 返回专辑"
                                     HorizontalAlignment="Left"
@@ -2066,7 +1998,7 @@
                                             </Grid>
                                         </Border>
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="10" HorizontalAlignment="Center">
-                                            <Button
+                                            <Button Style="{StaticResource ButtonNormalStyle}"
                                                 x:Name="AlbumDetailPlayButton"
                                                 Height="36"
                                                 Padding="18,0"
@@ -2080,7 +2012,7 @@
                                                     <TextBlock Text="播放该专辑" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button
+                                            <Button Style="{StaticResource ButtonSecondaryStyle}"
                                                 x:Name="AlbumDetailAddToPlaylistButton"
                                                 Height="36"
                                                 Padding="18,0"
@@ -2094,7 +2026,7 @@
                                                     <TextBlock Text="添加至播放队列" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </Button>
-                                            <Button
+                                            <Button Style="{StaticResource ButtonSecondaryStyle}"
                                                 x:Name="AlbumDetailAddToNamedListButton"
                                                 Height="36"
                                                 Padding="18,0"
@@ -2111,7 +2043,7 @@
                                             <!-- 【皮肤系统入口 · 2026-10-11 起临时隐藏】恢复方法同上：去掉首尾两行注释标记。
                                                  原说明：皮肤系统第 3 步，网页版专辑详情。
                                                  点了才第一次创建 WebView2，不点就永远不占那 286MB。
-                                            <Button
+                                            <Button Style="{StaticResource ButtonSecondaryStyle}"
                                                 x:Name="AlbumDetailWebPilotButton"
                                                 Height="36"
                                                 Padding="18,0"
@@ -2193,7 +2125,7 @@
                                         HorizontalAlignment="Center"
                                         Margin="0,10,0,0"
                                         Visibility="Collapsed">
-                                        <Button
+                                        <Button Style="{StaticResource ButtonSecondaryStyle}"
                                             x:Name="AlbumDetailPreloadButton"
                                             Height="32"
                                             Padding="14,0"
@@ -2202,7 +2134,7 @@
                                             ToolTipService.ToolTip="把本专辑所有 DSD 曲目提前转成可直接播放的缓存文件，播放时不再边播边装箱（用于解决固定位置卡顿）。缓存目录可在选项设置里修改。">
                                             <TextBlock x:Name="AlbumDetailPreloadText" Text="预加载整专辑 DSD" VerticalAlignment="Center" />
                                         </Button>
-                                        <Button
+                                        <Button Style="{StaticResource ButtonSecondaryStyle}"
                                             x:Name="AlbumDetailPreloadClearButton"
                                             Height="32"
                                             Padding="14,0"
@@ -2412,7 +2344,7 @@
                                 Margin="0,0,0,4"
                                 BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
                                 BorderThickness="0,0,0,1">
-                                <Button CornerRadius="16"
+                                <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                     x:Name="ArtistDetailBackButton"
                                     Content="← 返回艺术家"
                                     HorizontalAlignment="Left"
@@ -2602,7 +2534,7 @@
                                                     FontWeight="SemiBold"
                                                     FontSize="16"
                                                     Text="歌曲" />
-                                                <Button
+                                                <Button Style="{StaticResource ButtonNormalStyle}"
                                                     x:Name="PlayArtistSongsButton"
                                                     Height="32"
                                                     Padding="12,0"
@@ -2611,7 +2543,7 @@
                                                     Content="播放所有歌曲"
                                                     Click="PlayArtistSongsButton_Click"
                                                     ToolTipService.ToolTip="按当前排序替换播放列表并播放" />
-                                                <Button
+                                                <Button Style="{StaticResource ButtonSecondaryStyle}"
                                                     x:Name="AddArtistSongsToPlaylistButton"
                                                     Height="32"
                                                     Padding="12,0"
@@ -2621,7 +2553,7 @@
                                                     Click="AddArtistSongsToPlaylistButton_Click"
                                                     ToolTipService.ToolTip="按当前排序添加到播放队列" />
                                             </StackPanel>
-                                            <Button CornerRadius="16"
+                                            <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                 x:Name="ArtistSongSortButton"
                                                 Content="排序：标题"
                                                 HorizontalAlignment="Right"
@@ -2794,7 +2726,7 @@
                                                 Orientation="Horizontal"
                                                 Spacing="8"
                                                 VerticalAlignment="Center">
-                                                <Button
+                                                <Button Style="{StaticResource ButtonSecondaryStyle}"
                                                     x:Name="ArtistAlbumSortFieldButton"
                                                     Height="32"
                                                     Width="150"
@@ -2807,7 +2739,7 @@
                                                         <TextBlock x:Name="ArtistAlbumSortFieldText" Text="按标题排序" VerticalAlignment="Center" />
                                                     </StackPanel>
                                                 </Button>
-                                                <Button
+                                                <Button Style="{StaticResource ButtonSecondaryStyle}"
                                                     x:Name="ArtistAlbumSortOrderButton"
                                                     Height="32"
                                                     Width="80"
@@ -2825,7 +2757,7 @@
 
                                         <!-- 播放所有专辑 / 添加到播放列表（标题下方） -->
                                         <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="8">
-                                            <Button
+                                            <Button Style="{StaticResource ButtonNormalStyle}"
                                                 x:Name="PlayAllArtistAlbumsButton"
                                                 Height="32"
                                                 Padding="12,0"
@@ -2834,7 +2766,7 @@
                                                 Content="播放所有专辑"
                                                 Click="PlayAllArtistAlbumsButton_Click"
                                                 ToolTipService.ToolTip="按当前专辑排序依次替换播放列表并播放" />
-                                            <Button
+                                            <Button Style="{StaticResource ButtonSecondaryStyle}"
                                                 x:Name="AddAllArtistAlbumsToPlaylistButton"
                                                 Height="32"
                                                 Padding="12,0"
@@ -3007,7 +2939,7 @@
                                     <FontIcon Glyph="&#xE72C;" FontSize="14" />
                                 </Button>
                             </Grid>
-                            <Button
+                            <Button Style="{StaticResource ButtonNormalStyle}"
                                 x:Name="AddMediaFolderButton"
                                 Grid.Row="1"
                                 Margin="0,6"
@@ -3138,7 +3070,7 @@
                                         TextWrapping="NoWrap"
                                         TextTrimming="CharacterEllipsis"
                                         Text="选择文件夹查看歌曲" />
-                                    <Button
+                                    <Button Style="{StaticResource ButtonSecondaryStyle}"
                                         x:Name="MediaOptionsButton"
                                         Grid.Column="1"
                                         Height="30"
@@ -3507,11 +3439,10 @@
                                                         MaxLength="40"
                                                         VerticalContentAlignment="Center"
                                                         PlaceholderText="给这套设置起个名字，比如：夜间耳机、客厅音箱" />
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonNormalStyle}" CornerRadius="16"
                                                         x:Name="DspProfileSaveButton"
                                                         Grid.Column="1"
                                                         Content="保存为方案"
-                                                        Style="{StaticResource AccentButtonStyle}"
                                                         Click="DspProfileSave_Click" />
                                                 </Grid>
                                                 <TextBlock
@@ -3542,18 +3473,17 @@
                                                     CornerRadius="6"
                                                     SelectionChanged="DspProfileList_SelectionChanged" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonNormalStyle}" CornerRadius="16"
                                                         x:Name="DspProfileApplyButton"
                                                         Content="应用方案"
                                                         IsEnabled="False"
-                                                        Style="{StaticResource AccentButtonStyle}"
                                                         Click="DspProfileApply_Click" />
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonNormalStyle}" CornerRadius="16"
                                                         x:Name="DspProfileUpdateButton"
                                                         Content="更新为当前设置"
                                                         IsEnabled="False"
                                                         Click="DspProfileUpdate_Click" />
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonDangerStyle}" CornerRadius="16"
                                                         x:Name="DspProfileDeleteButton"
                                                         Content="删除方案"
                                                         IsEnabled="False"
@@ -4240,17 +4170,17 @@
                                                 </StackPanel>
                                                 <!-- 工具栏：撤销/重做 + A/B 对比 + 自动增益 + 频段管理 + APO 互通 -->
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                         x:Name="AudioFxEqUndoButton"
                                                         Content="撤销"
                                                         ToolTipService.ToolTip="撤销上一步曲线修改"
                                                         Click="AudioFxEqUndo_Click" />
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                         x:Name="AudioFxEqRedoButton"
                                                         Content="重做"
                                                         ToolTipService.ToolTip="恢复被撤销的曲线修改"
                                                         Click="AudioFxEqRedo_Click" />
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                         x:Name="AudioFxEqAbButton"
                                                         Content="A/B 对比"
                                                         ToolTipService.ToolTip="把当前曲线存为 B，之后随时改曲线，再点此按钮在 A/B 两条曲线间切换试听"
@@ -4261,25 +4191,25 @@
                                                         IsChecked="True"
                                                         ToolTipService.ToolTip="曲线后面叠加实时频谱（post-DSP，播放中生效）"
                                                         Click="AudioFxEqSpectrum_Click" />
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                         x:Name="AudioFxEqAutoGainButton"
                                                         Content="自动增益"
                                                         Click="AudioFxEqAutoGain_Click" />
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                         x:Name="AudioFxEqAddBandButton"
                                                         Content="＋ 添加段"
                                                         Click="AudioFxEqAddBand_Click" />
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonNormalStyle}" CornerRadius="16"
                                                         x:Name="AudioFxEqSavePresetButton"
                                                         Content="保存预设"
                                                         ToolTipService.ToolTip="把当前曲线保存为你命名的预设"
                                                         Click="AudioFxEqSavePreset_Click" />
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                         x:Name="AudioFxEqImportApoButton"
                                                         Content="导入 APO"
                                                         ToolTipService.ToolTip="读取 Equalizer APO 的 config.txt（Preamp / Filter 行），转成当前曲线"
                                                         Click="AudioFxEqImportApo_Click" />
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                         x:Name="AudioFxEqExportApoButton"
                                                         Content="导出 APO"
                                                         ToolTipService.ToolTip="把当前曲线导出为 Equalizer APO 的 config.txt"
@@ -4631,11 +4561,10 @@
                                                     PlaceholderText="输入耳机品牌 / 型号，如 Sennheiser HD 600、Sony WH-1000XM5…"
                                                     VerticalContentAlignment="Center"
                                                     KeyDown="OpraSearchBox_KeyDown" />
-                                                <Button CornerRadius="16"
+                                                <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                     x:Name="OpraSearchButton"
                                                     Grid.Column="1"
                                                     Content="搜索"
-                                                    Style="{StaticResource AccentButtonStyle}"
                                                     Click="OpraSearchButton_Click" />
                                             </Grid>
                                         </Border>
@@ -4820,14 +4749,13 @@
                                                     Opacity="0.75"
                                                     TextWrapping="WrapWholeWords" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonNormalStyle}" CornerRadius="16"
                                                         x:Name="OpraApplyButton"
                                                         Content="应用该曲线到均衡器"
                                                         HorizontalAlignment="Left"
-                                                        Style="{StaticResource AccentButtonStyle}"
                                                         IsEnabled="False"
                                                         Click="OpraApplyButton_Click" />
-                                                    <Button CornerRadius="16"
+                                                    <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                         x:Name="OpraFavoriteButton"
                                                         Content="收藏"
                                                         IsEnabled="False"
@@ -4964,12 +4892,12 @@
                                                 </StackPanel>
                                                 <TextBox x:Name="RoomIrPathBox" PlaceholderText="尚未选择 IR 文件…" IsReadOnly="True" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button
+                                                    <Button Style="{StaticResource ButtonSecondaryStyle}"
                                                         x:Name="RoomIrBrowseButton"
                                                         CornerRadius="16"
                                                         Content="浏览…"
                                                         Click="RoomIrBrowseButton_Click" />
-                                                    <Button
+                                                    <Button Style="{StaticResource ButtonSecondaryStyle}"
                                                         x:Name="RoomIrClearButton"
                                                         CornerRadius="16"
                                                         Content="清除"
@@ -4993,12 +4921,11 @@
                                                         ValueChanged="RoomIrGainSlider_ValueChanged" />
                                                     <TextBlock x:Name="RoomIrGainValueText" VerticalAlignment="Center" Width="60" Text="0.0 dB" />
                                                 </StackPanel>
-                                                <Button
+                                                <Button Style="{StaticResource ButtonNormalStyle}"
                                                     x:Name="RoomIrApplyButton"
                                                     CornerRadius="16"
                                                     HorizontalAlignment="Left"
                                                     Content="应用"
-                                                    Style="{StaticResource AccentButtonStyle}"
                                                     Click="RoomIrApplyButton_Click" />
                                             </StackPanel>
                                         </Border>
@@ -5081,7 +5008,7 @@
                                                     Opacity="0.6"
                                                     TextWrapping="WrapWholeWords"
                                                     Text="卷积常把峰值顶高：先给 -6 dB 再逐步回调，是避免爆音最省事的做法。" />
-                                                <Button CornerRadius="16"
+                                                <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                     x:Name="DspFirSafeEnableButton"
                                                     HorizontalAlignment="Left"
                                                     Click="DspFirSafeEnable_Click"
@@ -5667,13 +5594,12 @@
                                                 <ProgressBar x:Name="RgScanProgressBar" Minimum="0" Maximum="1" Value="0" />
                                                 <TextBlock x:Name="RgScanStatusText" FontSize="12" Opacity="0.75" Text="就绪" />
                                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <Button
+                                                    <Button Style="{StaticResource ButtonNormalStyle}"
                                                         x:Name="RgScanStartButton"
                                                         CornerRadius="16"
                                                         Content="开始扫描"
-                                                        Style="{StaticResource AccentButtonStyle}"
                                                         Click="RgScanStartButton_Click" />
-                                                    <Button
+                                                    <Button Style="{StaticResource ButtonSecondaryStyle}"
                                                         x:Name="RgScanCancelButton"
                                                         CornerRadius="16"
                                                         Content="取消"
@@ -5868,7 +5794,7 @@
                                                         TextWrapping="WrapWholeWords"
                                                         Text="—" />
                                                 </Grid>
-                                                <Button CornerRadius="16"
+                                                <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                                     x:Name="OutMonitorResetButton"
                                                     Content="重置统计"
                                                     HorizontalAlignment="Left"
@@ -6830,7 +6756,7 @@
                     Padding="4,8"
                     Visibility="Collapsed">
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">
-                        <Button
+                        <Button Style="{StaticResource ButtonNormalStyle}"
                             x:Name="SavePlaylistButton"
                             Height="32"
                             Padding="14,0"
@@ -6839,7 +6765,7 @@
                             Content="保存为新的播放列表"
                             Click="SavePlaylistButton_Click"
                             ToolTipService.ToolTip="把当前队列保存为新播放列表" />
-                        <Button
+                        <Button Style="{StaticResource ButtonNormalStyle}"
                             x:Name="OpenPlaylistButton"
                             Height="32"
                             Padding="14,0"
@@ -6850,7 +6776,7 @@
                             ToolTipService.ToolTip="把当前队列添加到播放列表（列表墙）" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                        <Button
+                        <Button Style="{StaticResource ButtonDangerStyle}"
                             x:Name="ClearPlaylistButton"
                             Height="32"
                             Padding="14,0"
@@ -6859,7 +6785,7 @@
                             Content="清空当前队列"
                             Click="ClearPlaylistButton_Click"
                             ToolTipService.ToolTip="清空当前播放队列" />
-                        <Button
+                        <Button Style="{StaticResource ButtonSecondaryStyle}"
                             x:Name="PlayUserPlaylistButton"
                             Height="32"
                             Padding="14,0"
@@ -7032,8 +6958,17 @@
                                 ToolTipService.ToolTip="返回音乐库">
                                 <FontIcon Glyph="&#xE70D;" FontSize="13" />
                             </Button>
-                            <!-- 播放页：可视化元素 + 布局切换（页内即时切换，不打断播放） -->
-                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2">
+                            <!-- E1：播放页顶部透明拖动条（播放页盖到顶后接替标题栏的拖动职责）。
+                                 左避返回按钮（36+8），右避右上角两个文字按钮与浮动系统按钮列（约 280px）。
+                                 播放页展开时代码把 SetTitleBar 切到它，否则窗口没法拖动。 -->
+                            <Border
+                                x:Name="NowPlayingTitleBarDragArea"
+                                Background="Transparent"
+                                Margin="44,0,280,0"
+                                VerticalAlignment="Stretch" />
+                            <!-- 播放页：可视化元素 + 布局切换（页内即时切换，不打断播放）。
+                                 E1：右Margin 280 避让浮在右上角的系统按钮列，防遮挡。 -->
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2" Margin="0,0,280,0">
                                 <Button CornerRadius="16"
                                     x:Name="NowPlayingVisualButton"
                                     Height="32"
@@ -7827,13 +7762,18 @@
         </Grid>
 
         <!-- 底部播放控制 -->
-        <Grid
-            x:Name="BottomTransportBar"
+        <!-- E2：顶缘 1px 分隔线把「下方播放栏」与主内容区划开（令牌化 Divider，
+             跟随主题/皮肤；播放页展开时整栏隐藏，线随之消失）。Grid 无边框属性，外套 Border 承载。 -->
+        <Border
             Grid.Row="3"
-            MinHeight="70"
             Margin="16,6,16,10"
-            ColumnSpacing="14"
-            SizeChanged="BottomTransportBar_SizeChanged">
+            BorderThickness="1,0,0,0"
+            BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+            <Grid
+                x:Name="BottomTransportBar"
+                MinHeight="70"
+                ColumnSpacing="14"
+                SizeChanged="BottomTransportBar_SizeChanged">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto" />
                 <ColumnDefinition Width="Auto" MinWidth="140" />
@@ -8148,7 +8088,6 @@
                             Margin="6,0,0,0"
                             CornerRadius="16"
                             Visibility="Collapsed"
-                            Style="{StaticResource AccentButtonStyle}"
                             Click="AddToLibraryButton_Click"
                             ToolTipService.ToolTip="音乐库只按文件夹收录：把这个文件所在的整个文件夹加进音乐库">
                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -8343,7 +8282,7 @@
                                 FontSize="11"
                                 Opacity="0.75"
                                 TextWrapping="Wrap" />
-                            <Button CornerRadius="16"
+                            <Button Style="{StaticResource ButtonNormalStyle}" CornerRadius="16"
                                 x:Name="SaveDeviceDspButton"
                                 Content="保存当前配置为当前设备"
                                 Click="SaveDeviceDspButton_Click" />
@@ -8455,7 +8394,102 @@
                 </Grid>
             </Grid>
         </Grid>
+        </Border>
         </Grid>
+            <!-- E1：标题栏右侧按钮列（音频设置/选项/刷新/全屏 + 自绘系统按钮）。
+                 播放页盖到顶时这一列独立浮在右上角，不随标题栏塌陷而消失。 -->
+            <StackPanel
+                                Orientation="Horizontal"
+                Spacing="4"
+                VerticalAlignment="Top"
+                Height="48"
+                Padding="0,8,8,0">
+                <Button CornerRadius="16"
+                    x:Name="AudioSettingsButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="AudioSettingsButton_Click"
+                    ToolTipService.ToolTip="音频设置">
+                    <FontIcon Glyph="&#xE91F;" FontSize="15" />
+                </Button>
+                <Button CornerRadius="16"
+                    x:Name="SelectLocalAudioButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="SelectLocalAudioButton_Click"
+                    ToolTipService.ToolTip="选项">
+                    <FontIcon Glyph="&#xE700;" FontSize="16" />
+                </Button>
+                <Button CornerRadius="16"
+                    x:Name="RefreshCurrentPageButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="RefreshCurrentPageButton_Click"
+                    ToolTipService.ToolTip="刷新当前页面">
+                    <FontIcon Glyph="&#xE72C;" FontSize="15" />
+                </Button>
+                <Button CornerRadius="16"
+                    x:Name="FullScreenButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="FullScreenButton_Click"
+                    ToolTipService.ToolTip="全屏">
+                    <FontIcon x:Name="FullScreenIcon" Glyph="&#xE740;" FontSize="15" />
+                </Button>
+                <Border
+                    Width="1"
+                    Height="20"
+                    Margin="2,0"
+                    VerticalAlignment="Center"
+                    Background="{ThemeResource DividerStrokeColorDefaultBrush}" />
+                <!-- 自绘系统按钮（无边框窗口） -->
+                <Button CornerRadius="16"
+                    x:Name="WindowMinButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="WindowMinButton_Click"
+                    ToolTipService.ToolTip="最小化">
+                    <FontIcon Glyph="&#xE921;" FontSize="15" />
+                </Button>
+                <Button CornerRadius="16"
+                    x:Name="WindowMaxRestoreButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="WindowMaxRestoreButton_Click"
+                    ToolTipService.ToolTip="最大化 / 还原">
+                    <FontIcon x:Name="WindowMaxRestoreIcon" Glyph="&#xE922;" FontSize="13" />
+                </Button>
+                <Button CornerRadius="16"
+                    x:Name="WindowCloseButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="WindowCloseButton_Click"
+                    ToolTipService.ToolTip="关闭">
+                    <FontIcon Glyph="&#xE8BB;" FontSize="14" />
+                </Button>
+            </StackPanel>
+
         <!-- 极客模式 CRT 扫描线：铺在最上面的一层很淡的横向暗纹（设置里可关）。
              不参与命中测试，也不影响音频链路。 -->
         <Border
@@ -8748,7 +8782,7 @@
                                 <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                             </Grid.ColumnDefinitions>
-                            <Button CornerRadius="16"
+                            <Button Style="{StaticResource ButtonSecondaryStyle}" CornerRadius="16"
                                 x:Name="EngineSelfTestButton"
                                 Grid.Column="0"
                                 Content="播放测试音（3 秒 1kHz）"

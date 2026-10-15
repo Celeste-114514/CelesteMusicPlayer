@@ -396,6 +396,59 @@ namespace CelesteMusicPlayer
         }
 
 
+        // =====================================================================
+        // E3：左侧分类栏收起 / 展开
+        // =====================================================================
+
+        private bool _leftNavCollapsed;
+
+        /// <summary>收起后的窄条宽度（只放汉堡按钮）。展开宽度与 XAML CategoryColumn 初值一致。</summary>
+        private const double LeftNavCollapsedWidth = 44;
+        private const double LeftNavExpandedWidth = 156;
+
+        private void LeftNavCollapseButton_Click(object sender, RoutedEventArgs e)
+            => SetLeftNavCollapsed(!_leftNavCollapsed);
+
+        /// <summary>
+        /// 收起/展开左侧分类栏。收起=CategoryColumn 缩成 44px 窄条，只留汉堡按钮；
+        /// 展开=恢复 156px。会话内有效，不持久化（重启回到展开态）。
+        /// 与播放页让位（SetLibraryNavHiddenForNowPlaying 隐藏整栏）无耦合：那个隐藏整个
+        /// LeftCategoryGrid，这个只收栏内内容，两者叠加不会互相捣乱。
+        /// </summary>
+        private void SetLeftNavCollapsed(bool collapsed)
+        {
+            _leftNavCollapsed = collapsed;
+            try
+            {
+                if (CategoryColumn != null)
+                {
+                    CategoryColumn.Width = new GridLength(collapsed ? LeftNavCollapsedWidth : LeftNavExpandedWidth);
+                    // MinWidth 必须一起改：展开态下限 148 会把 44 顶回 148，收起就失效
+                    CategoryColumn.MinWidth = collapsed ? LeftNavCollapsedWidth : 148;
+                }
+
+                if (LibraryNavTitleText != null)
+                {
+                    LibraryNavTitleText.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+                }
+
+                if (CategoryNavScroll != null)
+                {
+                    CategoryNavScroll.Visibility = collapsed ? Visibility.Collapsed : Visibility.Visible;
+                }
+
+                if (LeftNavCollapseButton != null)
+                {
+                    ToolTipService.SetToolTip(LeftNavCollapseButton, collapsed ? "展开分类栏" : "收起分类栏");
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.Misc.cs.SetLeftNavCollapsed", caught);
+            }
+        }
+
+
         /// <summary>
         /// 供选项设置「启动后进入」即时预览：直接切到指定分类（白名单内才生效）。
         /// 与左侧导航点击等价，但不做「同分类提前返回」判断，便于从任意分类立即跳转。

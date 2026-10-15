@@ -93,6 +93,11 @@ namespace CelesteMusicPlayer
         public const string OverlayBackground = "Overlay.Background";
         public const string SelectionBackground = "Selection.Background";
 
+        // ---- 按钮语义令牌（E4：普通/次要/危险三档底色，XAML 经 ButtonNormalStyle 等引用）----
+        public const string ButtonNormal = "Button.Normal";
+        public const string ButtonSecondary = "Button.Secondary";
+        public const string ButtonDanger = "Button.Danger";
+
         public const string RadiusSmall = "Radius.Small";
         public const string RadiusMedium = "Radius.Medium";
         public const string RadiusLarge = "Radius.Large";
@@ -126,6 +131,13 @@ namespace CelesteMusicPlayer
             new CelesteTokenDef(InputStroke,      "color", "#d0d0d0", "#333a46", "颜色"),
             new CelesteTokenDef(OverlayBackground,"color", "#ffffff", "#1a1e26", "颜色"),
             new CelesteTokenDef(SelectionBackground,"color","#e5f1fb", "#2a3648", "颜色"),
+
+            // ---- 按钮语义令牌 ----
+            // 普通=页面主操作（经典模式跟随系统/自定义强调色，令牌模式取此值）；
+            // 次要=低强调操作；危险=破坏性操作（删除/清空），白字。
+            new CelesteTokenDef(ButtonNormal,    "color", "#0067c0", "#f0b429", "按钮"),
+            new CelesteTokenDef(ButtonSecondary, "color", "#f6f6f6", "#262b36", "按钮"),
+            new CelesteTokenDef(ButtonDanger,    "color", "#c42b1c", "#d13438", "按钮"),
 
             // ---------------- 圆角 ----------------
             new CelesteTokenDef(RadiusSmall,  "length", "4",  "4",  "圆角", 0, 40, "行内小元素"),

@@ -69,6 +69,8 @@ namespace CelesteMusicPlayer
         /// 只收 Brush 型键；Color 型键（SubtleFillColorSecondary 等）全部用在二级窗口，
         /// 不在 RootShell 子树内，覆写了也不生效，故不收。
         /// SystemFillColorCautionBrush（危险红，36 次）无对应令牌，保留系统色。
+        /// ButtonDangerBackgroundBrush 是 App.xaml 自定义语义键（按钮三档底色之"危险"），
+        /// 经典模式为固定红，令牌模式下由此改查 Button.Danger。
         /// </summary>
         private static readonly (string SystemKey, string Token)[] TokenBrushMap =
         {
@@ -92,6 +94,7 @@ namespace CelesteMusicPlayer
             ("SystemControlHighlightListLowBrush",   CelesteTokenCatalog.SelectionBackground),
             ("SolidBackgroundFillColorBaseBrush",    CelesteTokenCatalog.AppBackground),
             ("AcrylicInAppFillColorDefaultBrush",    CelesteTokenCatalog.PanelBackground),
+            ("ButtonDangerBackgroundBrush",          CelesteTokenCatalog.ButtonDanger),
         };
 
         private ResourceDictionary? _tokenSkinDict;

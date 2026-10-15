@@ -123,7 +123,7 @@ namespace CelesteMusicPlayer
             };
             var cancelButton = new Button { Content = "取消", MinWidth = 84, CornerRadius = new CornerRadius(16) };
             var okButton = new Button { Content = "确定", MinWidth = 84, CornerRadius = new CornerRadius(16) };
-            Style? accentStyle = FindStyle("AccentButtonStyle");
+            Style? accentStyle = FindStyle("ButtonNormalStyle");
             if (accentStyle != null)
             {
                 okButton.Style = accentStyle;

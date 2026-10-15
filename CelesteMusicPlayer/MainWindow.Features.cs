@@ -1090,9 +1090,14 @@ namespace CelesteMusicPlayer
 
                 NowPlayingPane.Opacity = 0;
                 NowPlayingPane.Visibility = Visibility.Visible;
+                // E1：播放页盖到窗口最顶——标题栏整条压 0（Row 0 塌陷）、主内容区边距清零，
+                // 页面顶边直接顶到窗口上沿、左右抵到窗口边缘；右侧按钮列已独立浮动不受影响。
+                AppTitleBar.Height = 0;
+                MainContentGrid.Margin = new Thickness(0);
                 // 播放页是盖在整个主内容区上的一层透明板：左侧音乐库面板必须让位，
                 // 否则会在播放页底下透出来（用户反馈过）。
                 SetLibraryNavHiddenForNowPlaying(true);
+                TrySwitchTitleBar(NowPlayingTitleBarDragArea);
                 StartupLog.Write($"[深度] 展开播放页：mcBack={(mcBack != null)} depthIn={(depthIn != null)} " +
                                  $"导航面板={LeftCategoryGrid?.Visibility}");
                 DispatcherQueue.TryEnqueue(() => UpdateNowPlayingCardLayout());
@@ -1116,6 +1121,11 @@ namespace CelesteMusicPlayer
             }
             else
             {
+                // E1：恢复标题栏高度与主内容区边距，拖动职责交还标题栏
+                // （在主界面淡入之前恢复，退场动画里看到的就是正常形态）
+                AppTitleBar.Height = 48;
+                MainContentGrid.Margin = new Thickness(16, 8, 16, 0);
+                TrySwitchTitleBar(AppTitleBar);
                 // 收起播放页：先把左侧面板放回来，好让"景深恢复"动画把它淡入
                 SetLibraryNavHiddenForNowPlaying(false);
                 try
@@ -1142,6 +1152,10 @@ namespace CelesteMusicPlayer
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
+                    // E1：动画起不来的降级路径同样要恢复标题栏，否则收起后标题栏仍是压 0 状态
+                    AppTitleBar.Height = 48;
+                    MainContentGrid.Margin = new Thickness(16, 8, 16, 0);
+                    TrySwitchTitleBar(AppTitleBar);
                     NowPlayingPane.Visibility = Visibility.Collapsed;
                     NowPlayingPane.Opacity = 1;
                     if (LeftCategoryGrid != null)
@@ -1158,6 +1172,23 @@ namespace CelesteMusicPlayer
         }
 
         private bool nowPlayingDepthOutSubscribed;
+
+        /// <summary>E1：切换窗口拖动区（标题栏 ↔ 播放页内透明拖动条）。
+        /// SetTitleBar 重复调用即替换；目标元素不可见时切换无效，先校验再切，异常只记日志不炸。</summary>
+        private void TrySwitchTitleBar(FrameworkElement element)
+        {
+            try
+            {
+                if (element != null && element.Visibility == Visibility.Visible)
+                {
+                    SetTitleBar(element);
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs.TrySwitchTitleBar", caught);
+            }
+        }
 
         /// <summary>收起动画完成后折叠面板。</summary>
         private void NowPlayingDepthOut_Completed(object? sender, object e)
