@@ -6784,7 +6784,7 @@
                             ToolTipService.ToolTip="把当前队列添加到播放列表（列表墙）" />
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                        <Button Style="{StaticResource ButtonDangerStyle}"
+                        <Button Style="{StaticResource ButtonSecondaryStyle}"
                             x:Name="ClearPlaylistButton"
                             Height="32"
                             Padding="14,0"

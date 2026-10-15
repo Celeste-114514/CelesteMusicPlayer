@@ -324,7 +324,7 @@
                     ToolTipService.ToolTip="从 PlayList 文件夹选择并加载" />
             </StackPanel>
             <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                <Button Style="{StaticResource ButtonDangerStyle}"
+                <Button Style="{StaticResource ButtonSecondaryStyle}"
                     x:Name="ClearPlaylistButton"
                     Height="32"
                     Padding="14,0"
