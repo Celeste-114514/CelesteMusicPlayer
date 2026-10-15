@@ -1015,11 +1015,18 @@ namespace CelesteMusicPlayer
             }
 
             CenterOnTransportAxis(ProgressRowGrid, TransportProgressShiftX, TransportProgressShiftY);
-            CenterOnTransportAxis(TransportMainButtonsPanel, TransportProgressShiftX, TransportProgressShiftY);
+            // 2026-10-16 用户反馈「波形进度条下面那排按钮太靠右」：原来按钮组和进度条共用
+            // +96 的右移量，跟着进度条一起被推到右边去了。按钮组单独回落到播放栏正中（0），
+            // 与进度条错开反而更像上下两层的正常排版（进度条偏右让位给左列的封面+歌名，
+            // 按钮组回正，视觉重心落在窗口中间）。
+            CenterOnTransportAxis(TransportMainButtonsPanel, TransportButtonsShiftX, TransportProgressShiftY);
         }
 
-        /// <summary>进度条/按钮组相对播放栏中轴的右移量（px）：避开左侧「封面+歌曲信息」列。</summary>
+        /// <summary>进度条相对播放栏中轴的右移量（px）：避开左侧「封面+歌曲信息」列。</summary>
         private const double TransportProgressShiftX = 96;
+
+        /// <summary>按钮组相对播放栏中轴的偏移量（px）：0 = 正好落在窗口左右中轴上。</summary>
+        private const double TransportButtonsShiftX = 0;
 
         /// <summary>进度条/按钮组相对垂直居中的下移量（px）：离播放栏上沿留出呼吸。</summary>
         private const double TransportProgressShiftY = 8;

@@ -1225,7 +1225,9 @@ namespace CelesteMusicPlayer
                         button.BorderThickness = new Thickness(0);
                         button.ClearValue(Control.BorderBrushProperty);
                         button.ClearValue(Control.ForegroundProperty);
-                        button.HorizontalContentAlignment = HorizontalAlignment.Left;
+                        // ⚠️ 不要用 HorizontalAlignment.Left 字面量：收起态会被打回左对齐，
+                        // 造成「点一下分类整列图标偏移」。统一走 NavContentAlignment。
+                        button.HorizontalContentAlignment = NavContentAlignment;
                         ResetNavCapsuleChrome(button);
 
                         if (active)
@@ -1247,7 +1249,7 @@ namespace CelesteMusicPlayer
                         button.CornerRadius = new CornerRadius(8);
                         button.BorderThickness = new Thickness(0);
                         button.ClearValue(Control.BorderBrushProperty);
-                        button.HorizontalContentAlignment = HorizontalAlignment.Left;
+                        button.HorizontalContentAlignment = NavContentAlignment;
                         ResetNavCapsuleChrome(button);
                         if (active)
                         {

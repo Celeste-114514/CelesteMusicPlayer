@@ -823,8 +823,11 @@ namespace CelesteMusicPlayer
             HookNowPlayingLayoutSettings();
             ApplyNowPlayingLayout();
 
-            // 默认 1400×800；Resize 按 DPI 换算为物理像素
-            ResizeWindowToDips(1400, 800);
+            // 默认 1480×860；Resize 按 DPI 换算为物理像素。
+            // 2026-10-16 用户要求整体 UI 放大一点：宽 +80（进度条 660→720、波形柱加粗要地方），
+            // 高 +60（底部播放栏 86→106 吃掉 20，其余留给内容区）。
+            // 最小窗口仍锁 1400×800（MinWindowWidthDip / MinWindowHeightDip），保证还能拖小。
+            ResizeWindowToDips(1480, 860);
             // 真正锁定最小窗口 1400×800（WM_GETMINMAXINFO 子类化，无闪烁）
             SetupMinSizeHooks();
             // 标题栏扩展放到 Activated 之后，避免资源管理器直接启动时黑窗闪退（0xC000027B）

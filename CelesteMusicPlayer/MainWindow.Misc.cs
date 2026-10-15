@@ -519,9 +519,24 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 左栏内容在「文字 ↔ 图标」两种模式间切换：隐藏每个导航按钮里的 NavLabel、
-        /// 按钮内容居中（图标模式下 44px 窄条里图标居中最好看）。所有导航按钮结构一致
-        /// （Button &gt; StackPanel &gt; [FontIcon][NavEmoji][NavLabel]），递归找 Tag="NavLabel" 即可。
+        /// 左栏导航按钮内容的对齐方式（收起 / 展开两态统一取值）。
+        ///
+        /// ⚠️ 2026-10-16 用户反馈两个现象：① 收起和展开图标位置不一样；
+        /// ② 收起后点另一个分类，整列图标会往左偏。根因是同一个 ——
+        /// 收起时 SetLeftNavIconMode 把对齐设成 Center，而切换分类走到的
+        /// UpdateLibraryNavHighlight（MainWindow.Library2.cs）里写死了
+        /// HorizontalContentAlignment = Left，点一次就把 Center 覆盖掉了。
+        /// 修法=两态都取同一个值（Left：图标左边距与展开态完全一致，收起后
+        /// 图标就停在原处不跳），所有会设这个属性的地方统一走这里，别再各写各的。
+        /// </summary>
+        private static HorizontalAlignment NavContentAlignment => HorizontalAlignment.Left;
+
+        /// <summary>
+        /// 左栏内容在「文字 ↔ 图标」两种模式间切换：隐藏每个导航按钮里的 NavLabel。
+        /// 所有导航按钮结构一致（Button &gt; StackPanel &gt; [FontIcon][NavEmoji][NavLabel]），
+        /// 递归找 Tag="NavLabel" 即可。
+        /// 对齐不在这里切：收起态保持与展开态同一对齐（见 NavContentAlignment），
+        /// 否则「点一下分类就整列偏移」会复发。
         /// </summary>
         private void SetLeftNavIconMode(bool iconOnly)
         {
@@ -536,9 +551,7 @@ namespace CelesteMusicPlayer
 
                     foreach (Button? button in FindDescendantButtons(root))
                     {
-                        button.HorizontalContentAlignment = iconOnly
-                            ? HorizontalAlignment.Center
-                            : HorizontalAlignment.Left;
+                        button.HorizontalContentAlignment = NavContentAlignment;
 
                         foreach (TextBlock? label in FindNavLabels(button))
                         {
@@ -2716,7 +2729,11 @@ namespace CelesteMusicPlayer
                 return; // 已切歌/切轨
             }
 
-            float[] wave = await WaveformDataProvider.GetWaveformAsync(path, 180, startSeconds, lengthSeconds);
+            // 桶数 = 波形柱子根数。2026-10-16 用户反馈「每根竖线太细」：
+            // 180 根摊在 720px 上每根只有约 2.6px（还要再扣柱间缝），看着就是一撮细丝。
+            // 降到 120 根后每根约 4.8px，是 Poweramp 那种能看清起伏的柱状波形。
+            // ⚠️ 改这个值会让已缓存的波形全部重算一次（缓存按桶数校验），属预期。
+            float[] wave = await WaveformDataProvider.GetWaveformAsync(path, 120, startSeconds, lengthSeconds);
             if (!string.Equals(_waveformRangeKey, rangeKey, StringComparison.OrdinalIgnoreCase))
             {
                 return; // 已切歌/切轨

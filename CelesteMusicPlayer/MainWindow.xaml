@@ -7787,14 +7787,17 @@
              播放页展开时整栏仍隐藏（由页内悬浮控制条替代），线随之消失。 -->
         <Border
             Grid.Row="3"
-            Margin="0,1,0,0"
-            Padding="16,6,16,10"
+            Margin="0,10,0,0"
+            Padding="16,12,16,12"
             Background="{ThemeResource SubtleFillColorSecondaryBrush}"
             BorderThickness="1,0,0,0"
             BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+            <!-- 2026-10-16 用户反馈：① 播放栏偏窄 → MinHeight 70 提到 82；
+                 ② 上方内容贴着顶线太挤 → 上外边距 1 提到 10、上内边距 6 提到 12。
+                 整栏高度 86 → 106，默认窗口高度同步 800 → 860 补回内容区。 -->
             <Grid
                 x:Name="BottomTransportBar"
-                MinHeight="70"
+                MinHeight="82"
                 ColumnSpacing="14"
                 SizeChanged="BottomTransportBar_SizeChanged">
             <Grid.ColumnDefinitions>
@@ -7938,7 +7941,9 @@
                     SizeChanged="ProgressRowGrid_SizeChanged">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="660" />
+                        <!-- 2026-10-16：660 → 720。波形柱子加粗（桶数 180→120）后单根要占约 6px，
+                             总宽不变的话柱子根数太多又挤回细丝。默认窗口同步加宽（1400→1480）。 -->
+                        <ColumnDefinition Width="720" />
                         <ColumnDefinition Width="Auto" />
                     </Grid.ColumnDefinitions>
 
