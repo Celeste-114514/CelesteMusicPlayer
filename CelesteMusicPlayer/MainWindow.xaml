@@ -8400,6 +8400,7 @@
                  播放页盖到顶时这一列独立浮在右上角，不随标题栏塌陷而消失。 -->
             <StackPanel
                                 Orientation="Horizontal"
+                HorizontalAlignment="Right"
                 Spacing="4"
                 VerticalAlignment="Top"
                 Height="48"
