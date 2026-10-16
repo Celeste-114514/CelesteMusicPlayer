@@ -1075,7 +1075,10 @@ namespace CelesteMusicPlayer
         internal static Microsoft.UI.Xaml.Thickness LeftNavCardMarginExpanded => new(-16, 4, 14, 4);
 
         /// <summary>左栏卡片（收起态窄条）的外边距：同样贴窗口左缘（与展开态一致），
-        /// 只把右侧留白收窄。窄条 56px 减去内边距后仍放得下 28px 的汉堡按钮。</summary>
+        /// 只把右侧留白收窄。卡片宽 = 56(列宽) + 16(-16 左溢出) - 6(右留白) = 66px；
+        /// 图标在卡片内边距 15/15 下自动居中（内容盒中心 32.5），收起态不再带投影
+        /// （ThemeShadow 渐带约 25px，在窄条右缘显脏——用户 2026-10-16 反馈
+        /// "右边界似乎有宽度、遮住了一点图标"的根因之一）。</summary>
         internal static Microsoft.UI.Xaml.Thickness LeftNavCardMarginCollapsed => new(-16, 4, 6, 4);
 
         /// <summary>播放页展开态：左栏卡片去掉背景后用的外边距（上下 10 是给标题栏压 0 留的呼吸）。</summary>
@@ -1088,9 +1091,11 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // ⚠️ 与 MainWindow.xaml 里 LeftCategoryNavBorder 的 Margin 保持一致
-            // （2026-10-16 从 -16,4,8,4 改成 6,4,14,4：左栏不再贴窗口缘、右侧与主面板拉开距离）
-            LeftCategoryNavBorder.Margin = LeftNavCardMarginExpanded;
+            // ⚠️ 与 MainWindow.xaml 里 LeftCategoryNavBorder 的 Margin 保持一致。
+            // 2026-10-16：左栏当时是收起态的话，必须还原成**窄条外壳**（右留白 6 + 无投影），
+            // 不能一律按展开态还原——否则"收起着左栏关播放页"会把窄条撑宽、投影回来。
+            // 外壳三态的单一真相源在 Misc.ApplyLeftNavCardChrome。
+            LeftCategoryNavBorder.Margin = _leftNavCollapsed ? LeftNavCardMarginCollapsed : LeftNavCardMarginExpanded;
             try
             {
                 if (Application.Current.Resources["CardBackgroundFillColorDefaultBrush"] is Brush bg)
@@ -1108,7 +1113,9 @@ namespace CelesteMusicPlayer
                 global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs.RestoreLeftCategoryNavCard", caught);
             }
 
-            if (LeftCategoryNavBorder.Shadow is not Microsoft.UI.Xaml.Media.ThemeShadow)
+            // 2026-10-16：收起态窄条**不带投影**（投影渐带约 25px，在 66px 窄条上右缘会显脏）。
+            // 单一真相源在 Misc.ApplyLeftNavCardChrome——收起态就不该在这里把投影加回来。
+            if (!_leftNavCollapsed && LeftCategoryNavBorder.Shadow is not Microsoft.UI.Xaml.Media.ThemeShadow)
             {
                 LeftCategoryNavBorder.Shadow = new Microsoft.UI.Xaml.Media.ThemeShadow();
                 LeftCategoryNavBorder.Translation = new System.Numerics.Vector3(0, 0, 40f);

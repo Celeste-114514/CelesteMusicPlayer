@@ -545,6 +545,10 @@ namespace CelesteMusicPlayer
                             {
                                 CategoryColumn.Width = new GridLength(LeftNavCollapsedWidth);
                                 CategoryColumn.MinWidth = LeftNavCollapsedWidth;
+                                // 窄条外壳（右留白 6 + 去投影）与列宽同一帧切过去。
+                                // ⚠️ 不能更早：抽屉动画期间卡片得保持展开态外宽（202px），
+                                // 从宽位置滑出；提前切窄的话整张卡会滑出窗口左缘、动画中段消失。
+                                ApplyLeftNavCardChrome(true);
                             }
 
                             if (LeftCategoryNavBorder?.RenderTransform is CompositeTransform t)
@@ -553,9 +557,14 @@ namespace CelesteMusicPlayer
                             }
 
                             // 内容容器的补偿位移同步清零（否则图标会被永久推到右边）
-                            if (LeftCategoryGrid != null)
+                            // ⚠️ 只能改现有 CompositeTransform 的 TranslateX，绝不能 new 一个替换掉：
+                            // 这个变换对象在 XAML 里挂了 x:Name="LeftCategoryTransform"，
+                            // MainContentGrid 资源里的 MainContentDepthBackStoryboard / ...RestoreStoryboard
+                            // 按 TargetName 引用它。运行时换实例 → 名称解析不到 → 播放页展开时
+                            // mcBack?.Begin() 抛 COMException「Cannot resolve TargetName LeftCategoryTransform」。
+                            if (LeftCategoryGrid?.RenderTransform is CompositeTransform content)
                             {
-                                LeftCategoryGrid.RenderTransform = new CompositeTransform();
+                                content.TranslateX = 0;
                             }
 
                             // 列宽真正落定之后再量汉堡与图标的实际位置：只有这时候窄条的最终
@@ -628,12 +637,49 @@ namespace CelesteMusicPlayer
                                                                       : HorizontalAlignment.Right;
             }
 
-            if (LeftCategoryNavBorder != null && !collapsed)
+            // 展开态外壳（外边距 + 投影）立刻换到位：抽屉要从宽位置滑入。
+            // 收起态外壳不在这里换——动画期间卡片必须保持展开态的外宽从宽位置滑出，
+            // 切到窄条外壳的时机在 SetLeftNavCollapsed 的 Completed 里（列宽落定同一帧）。
+            if (!collapsed)
             {
-                // 展开态：播放页正在显示时卡片是「无背景」形态，留白不同
-                LeftCategoryNavBorder.Margin = _nowPlayingPaneOpen
-                    ? LeftNavCardMarginNowPlaying
-                    : LeftNavCardMarginExpanded;
+                ApplyLeftNavCardChrome(false);
+            }
+        }
+
+        /// <summary>
+        /// 左栏卡片"外壳"（外边距 + 投影）按收起/展开落到单一真相源。
+        ///
+        /// 2026-10-16 用户反馈收起态「右边界似乎有宽度，遮住了一点图标」——逐像素量过：
+        /// 那圈宽度主要是 ThemeShadow 的渐带（卡片右缘往外约 25px 才淡完），在 58px 的
+        /// 窄条上占比接近一半；再加 14px 右留白，右缘一整条都发"糊"。
+        /// 收起态改成：右留白 14→6（卡片宽 58→66，左缘仍贴窗口，图标靠内边距自动居中）
+        /// + 去掉投影，右缘只剩 1px 边线，利落。
+        /// 展开态：宽留白 + 投影照旧（播放页展开时的无背景形态由 Features 那边管）。
+        ///
+        /// ⚠️ 播放页展开态（_nowPlayingPaneOpen）不走本方法的收起分支：那个状态下卡片
+        /// 已由 SetNowPlayingPaneVisible 改成无背景/无投影，Margin 用 NowPlaying 那组。</summary>
+        private void ApplyLeftNavCardChrome(bool collapsed)
+        {
+            if (LeftCategoryNavBorder == null)
+            {
+                return;
+            }
+
+            if (collapsed && !_nowPlayingPaneOpen)
+            {
+                LeftCategoryNavBorder.Margin = LeftNavCardMarginCollapsed;
+                LeftCategoryNavBorder.Shadow = null;
+                return;
+            }
+
+            LeftCategoryNavBorder.Margin = _nowPlayingPaneOpen
+                ? LeftNavCardMarginNowPlaying
+                : LeftNavCardMarginExpanded;
+
+            if (LeftCategoryNavBorder.Shadow is not Microsoft.UI.Xaml.Media.ThemeShadow)
+            {
+                LeftCategoryNavBorder.Shadow = new Microsoft.UI.Xaml.Media.ThemeShadow();
+                LeftCategoryNavBorder.Translation = new System.Numerics.Vector3(0, 0, 40f);
             }
         }
 
@@ -650,7 +696,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            FontIcon? icon = FindFirstNavIcon();
+            FrameworkElement? icon = FindFirstNavIcon();
             if (icon == null || icon.ActualWidth <= 0 || LeftNavCollapseButton.ActualWidth <= 0)
             {
                 return;
@@ -682,7 +728,14 @@ namespace CelesteMusicPlayer
         /// </summary>
         private const double CollapsedHeaderNudgeX = 2;
 
-        private FontIcon? FindFirstNavIcon()
+        /// <summary>
+        /// 找左栏第一个**可见**的导航图标元素（收起态汉堡对齐的测量基准）。
+        /// 2026-10-16：设置里「启用 emoji 分类图标」开着时，每个按钮里的 FontIcon 是
+        /// Collapsed（ActualWidth=0、TransformToVisual 量不到有效位置），旧实现只找
+        /// FontIcon → 对齐整体跳过 → 汉堡和下面的图标对不齐。改成优先取可见的 emoji，
+        /// 其次 FontIcon / 极客皮肤的 Path。
+        /// </summary>
+        private FrameworkElement? FindFirstNavIcon()
         {
             foreach (FrameworkElement? root in new FrameworkElement?[] { CategoryNavPanel, NavToolPanel })
             {
@@ -691,10 +744,49 @@ namespace CelesteMusicPlayer
                     continue;
                 }
 
-                FontIcon? found = FindFirstFontIcon(root);
+                FrameworkElement? found = FindFirstVisibleNavIcon(root);
                 if (found != null)
                 {
                     return found;
+                }
+            }
+
+            return null;
+        }
+
+        /// <summary>
+        /// 在导航面板里找第一个**可见且已布局**的图标元素（emoji TextBlock / FontIcon / 极客 Path）。
+        /// 深度优先，顺序与视觉上的排列一致（先出现先返回）。
+        /// </summary>
+        private static FrameworkElement? FindFirstVisibleNavIcon(DependencyObject? root)
+        {
+            if (root == null)
+            {
+                return null;
+            }
+
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+
+                FrameworkElement? candidate = child switch
+                {
+                    TextBlock tb when tb.Tag is string tag && tag == "NavEmoji" => tb,
+                    Microsoft.UI.Xaml.Controls.FontIcon fontIcon => fontIcon,
+                    Microsoft.UI.Xaml.Shapes.Path path => path,
+                    _ => null
+                };
+
+                if (candidate != null && candidate.Visibility == Visibility.Visible && candidate.ActualWidth > 0)
+                {
+                    return candidate;
+                }
+
+                FrameworkElement? nested = FindFirstVisibleNavIcon(child);
+                if (nested != null)
+                {
+                    return nested;
                 }
             }
 
@@ -738,6 +830,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var labels = new List<TextBlock>();
+                var emojis = new List<TextBlock>();
                 var buttons = new List<Button>();
                 foreach (FrameworkElement? root in new FrameworkElement?[] { CategoryNavPanel, NavToolPanel })
                 {
@@ -754,6 +847,11 @@ namespace CelesteMusicPlayer
                         {
                             labels.Add(label);
                         }
+
+                        foreach (TextBlock? emoji in FindNavEmojis(button))
+                        {
+                            emojis.Add(emoji);
+                        }
                     }
                 }
 
@@ -763,6 +861,8 @@ namespace CelesteMusicPlayer
                     {
                         button.HorizontalContentAlignment = NavContentAlignment;
                     }
+
+                    ApplyCollapsedEmojiNudge(emojis, iconOnly);
 
                     foreach (TextBlock label in labels)
                     {
@@ -788,6 +888,11 @@ namespace CelesteMusicPlayer
                         button.HorizontalContentAlignment = NavContentAlignment;
                     }
                 }
+
+                // emoji 墨迹补偿与对齐不同，不挑时机：现在就Apply（只挪 0.75px，看不见）。
+                // ⚠️ 必须早于 AlignCollapsedHeaderButton 的测量——它在滑动结束后两帧量图标
+                // 中心，得让它量到补偿后的位置，否则汉堡会按没补偿的中心去对齐。
+                ApplyCollapsedEmojiNudge(emojis, iconOnly);
 
                 // 淡出（收起）/ 淡入（展开）：与卡片滑动同长，动画跑完才真正改 Visibility。
                 // ⚠️ 淡的是 Opacity 不是 Visibility —— 文字仍占位，按钮内容宽度不变，
@@ -875,6 +980,44 @@ namespace CelesteMusicPlayer
                 {
                     yield return inner;
                 }
+            }
+        }
+
+        private static IEnumerable<TextBlock> FindNavEmojis(DependencyObject root)
+        {
+            int count = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (int i = 0; i < count; i++)
+            {
+                DependencyObject child = Microsoft.UI.Xaml.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is TextBlock tb && tb.Tag is string tag && tag == "NavEmoji")
+                {
+                    yield return tb;
+                }
+                foreach (TextBlock inner in FindNavEmojis(child))
+                {
+                    yield return inner;
+                }
+            }
+        }
+
+        /// <summary>
+        /// 收起态 emoji 图标的**左移补偿**（px，负数=往左）。
+        ///
+        /// 2026-10-16 实测（ClassicLight +「启用 emoji 分类图标」开，2560x1392 截图逐像素量）：
+        /// Segoe UI Emoji 的字形墨迹比元素盒中心整体偏右（15 个图标 +0.5~+1.5，均值 +0.875），
+        /// 而元素盒本身是居中的（LeftNavPaddingCollapsed 左右等宽 → 盒中心=卡片中心）。
+        /// "盒居中"≠"墨迹居中"——用户看到的正是"图标整体偏右一点点，还是没有水平居中"。
+        /// 墨迹中心 ≈ 盒中心 + Margin.Left/2 + 0.9，取 -1.5 让墨迹落在卡片中心。
+        ///
+        /// 只补 emoji：Fluent 字形（FontIcon）的墨迹基本就在盒心里（汉堡 E700 实测 -0.5），
+        /// 动了反而偏；极客 Path 同理不碰。展开态必须清零（展开是左对齐，不该有位移）。</summary>
+        private static readonly Microsoft.UI.Xaml.Thickness CollapsedEmojiNudgeMargin = new(-1.5, 0, 0, 0);
+
+        private static void ApplyCollapsedEmojiNudge(List<TextBlock> emojis, bool iconOnly)
+        {
+            foreach (TextBlock emoji in emojis)
+            {
+                emoji.Margin = iconOnly ? CollapsedEmojiNudgeMargin : default(Microsoft.UI.Xaml.Thickness);
             }
         }
 
