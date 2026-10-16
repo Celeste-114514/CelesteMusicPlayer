@@ -201,20 +201,13 @@
              改这里会连带把右列和播放页一起推走，别动。 -->
         <Grid x:Name="MainContentGrid" Grid.Row="2" Margin="16,8,16,0" Tapped="MainContentGrid_Tapped">
             <Grid.Resources>
-                <!-- 主内容区景深退后：切出播放信息面板时缩小变暗 -->
+                <!-- 主内容区景深退后：切出播放信息面板时缩小变暗。
+                     ⚠️ 2026-10-16：左栏卡片（LeftCategoryGrid/Transform）的三条已删除——
+                     用户明确要求「播放页展开时左侧分类栏仍显示、点分类条目照样能切库」，
+                     左栏淡出+缩小违反该要求。景深只作用于右列音乐库（LibraryPaneRoot）。
+                     ⚠️ TargetName 运行时解析不可靠（见 Features.cs RetargetStoryboard），
+                     Begin() 前一律代码 SetTarget 兜底。 -->
                 <Storyboard x:Name="MainContentDepthBackStoryboard">
-                    <DoubleAnimation Storyboard.TargetName="LeftCategoryGrid" Storyboard.TargetProperty="Opacity"
-                                     To="0" Duration="0:0:0.28">
-                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                    <DoubleAnimation Storyboard.TargetName="LeftCategoryTransform" Storyboard.TargetProperty="ScaleX"
-                                     To="0.9" Duration="0:0:0.28">
-                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                    <DoubleAnimation Storyboard.TargetName="LeftCategoryTransform" Storyboard.TargetProperty="ScaleY"
-                                     To="0.9" Duration="0:0:0.28">
-                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
                     <DoubleAnimation Storyboard.TargetName="LibraryPaneRoot" Storyboard.TargetProperty="Opacity"
                                      To="0" Duration="0:0:0.28">
                         <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
@@ -228,20 +221,8 @@
                         <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
                     </DoubleAnimation>
                 </Storyboard>
-                <!-- 主内容区景深恢复 -->
+                <!-- 主内容区景深恢复（同样只动右列，左栏常显不动） -->
                 <Storyboard x:Name="MainContentDepthRestoreStoryboard">
-                    <DoubleAnimation Storyboard.TargetName="LeftCategoryGrid" Storyboard.TargetProperty="Opacity"
-                                     To="1" Duration="0:0:0.22">
-                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                    <DoubleAnimation Storyboard.TargetName="LeftCategoryTransform" Storyboard.TargetProperty="ScaleX"
-                                     To="1" Duration="0:0:0.22">
-                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
-                    <DoubleAnimation Storyboard.TargetName="LeftCategoryTransform" Storyboard.TargetProperty="ScaleY"
-                                     To="1" Duration="0:0:0.22">
-                        <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>
-                    </DoubleAnimation>
                     <DoubleAnimation Storyboard.TargetName="LibraryPaneRoot" Storyboard.TargetProperty="Opacity"
                                      To="1" Duration="0:0:0.22">
                         <DoubleAnimation.EasingFunction><CubicEase EasingMode="EaseOut" /></DoubleAnimation.EasingFunction>

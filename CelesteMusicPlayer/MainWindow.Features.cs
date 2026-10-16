@@ -1193,6 +1193,10 @@ namespace CelesteMusicPlayer
                 UpdateNowPlayingReflectionGeometry();
                 // 沉浸式：隐藏底部常驻状态条，改由页内悬浮控制条承担播放控制
                 ShowFloatingTransport();
+                // Begin 前把 TargetName 全部换成代码 SetTarget（否则 mcBack.Begin() 必抛
+                // COMException，主内容区不退后 = 播放页和原页面重叠）
+                RetargetStoryboard(mcBack, "mcBack");
+                RetargetStoryboard(depthIn, "depthIn");
                 try
                 {
                     mcBack?.Begin();
@@ -1241,6 +1245,9 @@ namespace CelesteMusicPlayer
                         depthOut.Completed += NowPlayingDepthOut_Completed;
                         nowPlayingDepthOutSubscribed = true;
                     }
+                    // 收起路径同样先重定向再 Begin（mcRestore/depthOut 也是 TargetName 写法）
+                    RetargetStoryboard(mcRestore, "mcRestore");
+                    RetargetStoryboard(depthOut, "depthOut");
                     mcRestore?.Begin();
                     depthOut?.Begin();
                     // 退出播放页：恢复底部常驻状态条，收起页内悬浮控制条
@@ -1291,6 +1298,70 @@ namespace CelesteMusicPlayer
         }
 
         private bool nowPlayingDepthOutSubscribed;
+
+        /// <summary>
+        /// 把 XAML 故事板里按 Storyboard.TargetName 定位的动画逐个改成代码 SetTarget。
+        ///
+        /// 2026-10-16 实录：MainContentGrid.Resources 里的 MainContentDepthBackStoryboard
+        /// 运行时 Begin() 抛 COMException「Cannot resolve TargetName LeftCategoryTransform」
+        /// （日志 15:05 / 16:03 / 16:50 三次逐字一致）。已排除的猜想：
+        /// ① "有人 new CompositeTransform 换掉了实例"——全仓库无第二处替换，且改成只改
+        ///    TranslateX 后照样抛；② "名字没注册"——生成代码里 LeftCategoryTransform 与
+        ///    能正常工作的 AudioSettingsPanelTransform 注册方式逐字相同。
+        /// 结论：元素 Resources 故事板的 TargetName 解析在本仓有案不明的失败，不赌它。
+        ///
+        /// 后果链：mcBack 一抛 → 同 try 里的 depthIn 也不跑 → 主内容区不退后、
+        /// 播放页停在 0.92 缩放 + 下移 16px → 用户看到「播放页和原来页面重叠」。
+        ///
+        /// 修法：按名字先从页面作用域 FindName，再按已知 x:Name 字段兜底，拿到对象直接
+        /// SetTarget——SetTarget 优先于 TargetName，Begin() 不再走名字解析。
+        /// 幂等，每次开合播放页都调，开销 = 几条动画。</summary>
+        private void RetargetStoryboard(Microsoft.UI.Xaml.Media.Animation.Storyboard? storyboard, string tag)
+        {
+            if (storyboard == null)
+            {
+                return;
+            }
+
+            int ok = 0;
+            int fail = 0;
+            foreach (var child in storyboard.Children)
+            {
+                string? name = Microsoft.UI.Xaml.Media.Animation.Storyboard.GetTargetName(child);
+                if (string.IsNullOrEmpty(name))
+                {
+                    continue;
+                }
+
+                DependencyObject? target = RootShell?.FindName(name) as DependencyObject;
+                if (target == null)
+                {
+                    target = name switch
+                    {
+                        "LeftCategoryGrid" => LeftCategoryGrid,
+                        "LeftCategoryTransform" => LeftCategoryGrid?.RenderTransform,
+                        "LibraryPaneRoot" => LibraryPaneRoot,
+                        "LibraryPaneTransform" => LibraryPaneRoot?.RenderTransform,
+                        "NowPlayingPane" => NowPlayingPane,
+                        "NowPlayingPaneTransform" => NowPlayingPane?.RenderTransform,
+                        _ => null
+                    };
+                }
+
+                if (target != null)
+                {
+                    Microsoft.UI.Xaml.Media.Animation.Storyboard.SetTarget(child, target);
+                    ok++;
+                }
+                else
+                {
+                    fail++;
+                    StartupLog.Write($"[深度] 重定向失败 tag={tag} name={name}");
+                }
+            }
+
+            StartupLog.Write($"[深度] 重定向 tag={tag} 动画数={storyboard.Children.Count} 已定向={ok} 失败={fail}");
+        }
 
         /// <summary>E1：切换窗口拖动区（标题栏 ↔ 播放页内透明拖动条）。
         /// SetTitleBar 重复调用即替换；目标元素不可见时切换无效，先校验再切，异常只记日志不炸。</summary>
