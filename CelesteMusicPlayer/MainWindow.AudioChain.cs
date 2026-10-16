@@ -28,6 +28,44 @@ namespace CelesteMusicPlayer
         /// </summary>
         private EventHandler<object>? _audioChainCloseCompleted;
 
+        /// <summary>
+        /// B5：面板实际宽度。默认 420，窗口不够宽时收到「窗口宽 - 40」，
+        /// 免得窄窗口下面板贴满整屏、内容被挤。
+        /// </summary>
+        private double ComputeChainPanelWidth()
+        {
+            double hostWidth = RootShell?.ActualWidth ?? 0;
+            if (hostWidth <= 80)
+            {
+                return AudioChainPanelWidth;
+            }
+
+            return Math.Min(AudioChainPanelWidth, hostWidth - 40);
+        }
+
+        /// <summary>把算出来的宽度同步给开/合两个动画（XAML 里的 420 是默认值，会被这里覆盖）。</summary>
+        private void ApplyChainPanelWidthToStoryboards(double width)
+        {
+            try
+            {
+                if (AudioChainOpenStoryboard?.Children.Count > 0
+                    && AudioChainOpenStoryboard.Children[0] is Microsoft.UI.Xaml.Media.Animation.DoubleAnimation open)
+                {
+                    open.From = width;
+                }
+
+                if (AudioChainCloseStoryboard?.Children.Count > 0
+                    && AudioChainCloseStoryboard.Children[0] is Microsoft.UI.Xaml.Media.Animation.DoubleAnimation close)
+                {
+                    close.To = width;
+                }
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.ApplyChainPanelWidthToStoryboards", caught);
+            }
+        }
+
         /// <summary>打开动画的兜底复查定时器（只跑一次，用完即弃）。</summary>
         private Microsoft.UI.Dispatching.DispatcherQueueTimer? _chainOpenFallbackTimer;
 
@@ -134,9 +172,15 @@ namespace CelesteMusicPlayer
                 // 打开本身也是一条链路事件：时间线先有内容，也便于确认面板真的在刷新
                 AudioSignalPath.RecordEvent("system", "打开音频链路面板");
 
+                // B5：窄窗口保护 —— 面板固定 420 在很窄的窗口下会被挤，
+                // 所以按窗口可用宽度收一收（两侧至少留 40px 给遮罩）。
+                double width = ComputeChainPanelWidth();
+                AudioChainPanelHost.Width = width;
+                ApplyChainPanelWidthToStoryboards(width);
+
                 AudioChainOverlayHost.Visibility = Visibility.Visible;
                 AudioChainOverlayHost.IsHitTestVisible = true;
-                AudioChainPanelTransform.TranslateX = AudioChainPanelWidth;
+                AudioChainPanelTransform.TranslateX = width;
 
                 // ⚠ 同族教训（10-16 三次）：XAML 故事板的 TargetName 在本仓有解析失败案，
                 // Begin 会抛 COMException，动画不跑 → 面板停在 420px 偏移处、完全在窗口外看不见。
