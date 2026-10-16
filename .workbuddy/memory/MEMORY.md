@@ -44,6 +44,7 @@
 ## 皮肤 / WebUI
 - 皮肤入口只隐藏主界面 pill；智能播放列表④作废；设备记忆 DSP 档③活。令牌皮肤覆写全局文字刷子，浅色下读 TextFillColorPrimary 看不见。
 - WebUI 路线 B：网页只长样；消息提 kind；winmain.html 两套图标表。
+- ⚠ **AppSettingsStore.Clone() 逐字段显式拷贝，新增设置字段必须同步 Clone**——漏拷=「存得进文件但 Load() 恒默认」，已四例：AlwaysOnTop / NowPlayingLayout / CelesteThemeName（0ebf458 修；主题文件全程没加载过，用户"选了主题没反应"的真凶）/ TranscodeCacheLimitMb。加字段时全文搜 `public ... { get; set; }` 比对 Clone 名单。
 
 ## 工程约定
 - 用户不懂编程：大白话结论先行禁营销腔。推送：不 rebase / force-push、不 `git add -A`、commit 独立可回退、构建过才推；日常交付 `dist\run-latest\`。
