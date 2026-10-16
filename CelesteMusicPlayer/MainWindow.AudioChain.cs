@@ -22,8 +22,15 @@ namespace CelesteMusicPlayer
 
         private bool _audioChainCloseHooked;
 
+        /// <summary>
+        /// 收起动画 Completed 的订阅去重：早期版本每次收起都 += 一个新 handler，
+        /// 多点几次就会叠加（同一收起动作被重复处理）。先退订再订，只留一个。
+        /// </summary>
+        private EventHandler<object>? _audioChainCloseCompleted;
+
         private void NowPlayingChainButton_Click(object sender, RoutedEventArgs e)
         {
+            StartupLog.Write($"[链路] 按钮点击 当前可见={(AudioChainOverlayHost?.Visibility.ToString() ?? "null")}");
             if (AudioChainOverlayHost == null)
             {
                 return;
@@ -66,7 +73,22 @@ namespace CelesteMusicPlayer
                 AudioChainOverlayHost.Visibility = Visibility.Visible;
                 AudioChainOverlayHost.IsHitTestVisible = true;
                 AudioChainPanelTransform.TranslateX = AudioChainPanelWidth;
-                AudioChainOpenStoryboard?.Begin();
+
+                // ⚠ 同族教训（10-16 三次）：XAML 故事板的 TargetName 在本仓有解析失败案，
+                // Begin 会抛 COMException，动画不跑 → 面板停在 420px 偏移处、完全在窗口外看不见。
+                // 开合两条路径都先用代码把动画目标锁死；万一还是抛，直接把 TranslateX 落到 0 兜底。
+                RetargetStoryboard(AudioChainOpenStoryboard, "chainOpen");
+                try
+                {
+                    AudioChainOpenStoryboard?.Begin();
+                }
+                catch (Exception sbEx)
+                {
+                    StartupLog.Write("[链路] 打开动画 Begin 失败，改用直接落位: " + sbEx.Message);
+                    AudioChainPanelTransform.TranslateX = 0;
+                }
+
+                StartupLog.Write($"[链路] 打开完成 可见={AudioChainOverlayHost.Visibility} TranslateX={AudioChainPanelTransform.TranslateX}");
 
                 // 面板可见期间才跑节拍刷新；收起时立即停（"不可见即停"，绝不空转）
                 AudioChainPanel.StartLiveRefresh(() => AudioSignalPath.Capture(_audioEngine, DspRackGlobalBypassed));
@@ -91,18 +113,36 @@ namespace CelesteMusicPlayer
 
                 if (AudioChainCloseStoryboard != null && AudioChainOverlayHost.Visibility == Visibility.Visible)
                 {
-                    AudioChainCloseStoryboard.Completed += (_, _) =>
+                    // 订阅去重：每次收起都 += 会叠加 handler
+                    if (_audioChainCloseCompleted != null)
+                    {
+                        AudioChainCloseStoryboard.Completed -= _audioChainCloseCompleted;
+                    }
+                    _audioChainCloseCompleted = (_, _) =>
                     {
                         AudioChainOverlayHost.Visibility = Visibility.Collapsed;
                         AudioChainOverlayHost.IsHitTestVisible = false;
                     };
-                    AudioChainCloseStoryboard.Begin();
+                    AudioChainCloseStoryboard.Completed += _audioChainCloseCompleted;
+
+                    RetargetStoryboard(AudioChainCloseStoryboard, "chainClose");
+                    try
+                    {
+                        AudioChainCloseStoryboard.Begin();
+                    }
+                    catch (Exception sbEx)
+                    {
+                        StartupLog.Write("[链路] 收起动画 Begin 失败，直接折叠: " + sbEx.Message);
+                        AudioChainOverlayHost.Visibility = Visibility.Collapsed;
+                        AudioChainOverlayHost.IsHitTestVisible = false;
+                    }
                 }
                 else
                 {
                     AudioChainOverlayHost.Visibility = Visibility.Collapsed;
                     AudioChainOverlayHost.IsHitTestVisible = false;
                 }
+                StartupLog.Write($"[链路] 收起完成 可见={AudioChainOverlayHost.Visibility}");
             }
             catch (Exception caught)
             {

@@ -1368,6 +1368,11 @@ namespace CelesteMusicPlayer
                         "LibraryPaneTransform" => LibraryPaneRoot?.RenderTransform,
                         "NowPlayingPane" => NowPlayingPane,
                         "NowPlayingPaneTransform" => NowPlayingPane?.RenderTransform,
+                        // 音频链路抽屉（B 组）：与上面同族，名字解析在本仓有失败案，一律代码锁死
+                        "AudioChainPanelHost" => AudioChainPanelHost,
+                        "AudioChainPanelTransform" => AudioChainPanelHost?.RenderTransform,
+                        "AudioSettingsPanel" => AudioSettingsPanel,
+                        "AudioSettingsPanelTransform" => AudioSettingsPanel?.RenderTransform,
                         _ => null
                     };
                 }
