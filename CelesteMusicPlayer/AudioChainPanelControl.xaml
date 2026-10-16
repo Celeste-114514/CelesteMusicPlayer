@@ -8,224 +8,876 @@
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     mc:Ignorable="d">
 
-    <!-- 音频链路面板（B 组 B3，2026-10-16）。
-         形态：从窗口右缘滑出的抽屉，风格对齐左侧分类栏卡片（同一批令牌：
-         CardBackgroundFillColorDefaultBrush / CardStrokeColorDefaultBrush / 圆角 / ThemeShadow）。
-         内容自下而上分五段：标题行 / 摘要行 / 实时电平 / 纵向链路图 / 可折叠分组。
+    <!--
+    ====================================================================
+     音频链路面板 · Echo 风格「信号路径」还原（B 组 B3 UI 重做，2026-10-17）
+    ====================================================================
 
-         ⚠️「显示不出来就不显示」铁律（2026-10-16 用户明确修订）：
-         拿不到的数据**整行不出** —— 不写"未知"、不写"—"、不留空占位、不做灰显。
-         落地方式：每个可缺数据的行都带独立 Visibility，由 code-behind 按模型算好
-         （见 ChainNodeVm 的 FormatVisibility / NoteVisibility / LatencyVisibility）。 -->
+    形态：从窗口右缘滑出的窄长抽屉（420px），内容整体纵向滚动，标题栏固定在顶部。
+    风格：白色（跟随主题）底 + 极浅描边 + 柔和投影；靠留白、细分割线、字号层级分区，
+          **不给每个区块套带边框的卡片**（Echo 参考明确禁止的做法）。
+
+    分区顺序（自上而下）：
+      ① 标题栏「信号路径」+ 细线关闭
+      ② 摘要行：音源摘要 + 右侧「N 层链路」胶囊
+      ③ 当前处理阶段（20px 大标题 + 状态行）
+      ④ 实时电平（分段矩形条 + dB 刻度 + 信息图标）
+      ⑤ 来源 / 处理 双列参数网格 + 后续字段双列
+      ⑥ DSP 实时余量行
+      ⑦ 技术档案胶囊组（自动换行）
+      ⑧ 音频链路节点（左侧线框图标 + 轴线串起来的链）
+      ⑨ 链路诊断（可折叠）
+      ⑩ DAC 能力图谱（可折叠，默认收起）
+      ⑪ 输出记录时间线（可折叠，默认收起）
+      ⑫ 稳定性反馈 + 双列最终状态
+      ⑬ 底部「打开音频设置」小入口
+
+    ⚠️ 铁律（2026-10-16 用户明确修订，本版继续遵守）：
+       拿不到的数据**整行不出** —— 不写"未知"、不写"—"占位、不留空行、不做灰显。
+       落地方式：每个可缺数据的元素都带独立 Visibility，由 code-behind 按模型算好。
+       唯一例外是电平数值（Echo 参考明确要求无数据时显示双短横线），这是参考图的既定样式。
+
+    ⚠️ 图标：全部是自绘 Path 线框（16x16 视口，统一 1.2 描边），
+       不用 Emoji、不用彩色实心图标，保证风格统一（Echo 参考明确禁止混用）。
+    -->
     <UserControl.Resources>
-        <!-- 链路节点小卡：一张卡 = 链路一个环节（解码 / 缓存 / 无缝 / 降混 / 变速 / DSP×N / 输出） -->
-        <DataTemplate x:Key="ChainNodeTemplate" x:DataType="local:ChainNodeVm">
-            <Border
-                CornerRadius="8"
-                Padding="10,8"
-                Background="{ThemeResource SubtleFillColorSecondaryBrush}"
-                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-                BorderThickness="1"
-                HorizontalAlignment="Stretch">
-                <StackPanel Spacing="3">
-                    <Grid ColumnSpacing="8">
+        <ResourceDictionary>
+            <ResourceDictionary.ThemeDictionaries>
+                <!-- 浅色：白底 + 深灰字 + 蓝紫强调 -->
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="ChainAccentBrush" Color="#FF6C5CE7" />
+                    <SolidColorBrush x:Key="ChainAccentSoftBrush" Color="#1A6C5CE7" />
+                    <SolidColorBrush x:Key="ChainSecondaryTextBrush" Color="#FF6B6B76" />
+                    <SolidColorBrush x:Key="ChainTertiaryTextBrush" Color="#FF8A8A96" />
+                    <SolidColorBrush x:Key="ChainDividerBrush" Color="#14000000" />
+                    <SolidColorBrush x:Key="ChainAxisBrush" Color="#1A000000" />
+                    <SolidColorBrush x:Key="ChainTagNeutralBg" Color="#FFF0F0F4" />
+                    <SolidColorBrush x:Key="ChainTagNeutralFg" Color="#FF5A5A66" />
+                    <SolidColorBrush x:Key="ChainTagAccentBg" Color="#1F6C5CE7" />
+                    <SolidColorBrush x:Key="ChainTagAccentFg" Color="#FF5B4BD6" />
+                    <SolidColorBrush x:Key="ChainTagOkBg" Color="#1F2E9E6B" />
+                    <SolidColorBrush x:Key="ChainTagOkFg" Color="#FF1F7A52" />
+                    <SolidColorBrush x:Key="ChainTagWarnBg" Color="#1FD97706" />
+                    <SolidColorBrush x:Key="ChainTagWarnFg" Color="#FFB45309" />
+                    <SolidColorBrush x:Key="ChainWarnTextBrush" Color="#FFC2410C" />
+                    <SolidColorBrush x:Key="ChainMeterIdleBrush" Color="#26333A44" />
+                    <SolidColorBrush x:Key="ChainMeterOnBrush" Color="#FF6C5CE7" />
+                    <SolidColorBrush x:Key="ChainMeterClipBrush" Color="#FFEF4444" />
+                </ResourceDictionary>
+                <!-- 深色：深底 + 浅字 + 提亮的蓝紫 -->
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="ChainAccentBrush" Color="#FFA99BFF" />
+                    <SolidColorBrush x:Key="ChainAccentSoftBrush" Color="#33A99BFF" />
+                    <SolidColorBrush x:Key="ChainSecondaryTextBrush" Color="#FFB9B9C4" />
+                    <SolidColorBrush x:Key="ChainTertiaryTextBrush" Color="#FF8E8E99" />
+                    <SolidColorBrush x:Key="ChainDividerBrush" Color="#1FFFFFFF" />
+                    <SolidColorBrush x:Key="ChainAxisBrush" Color="#26FFFFFF" />
+                    <SolidColorBrush x:Key="ChainTagNeutralBg" Color="#FF2A2A32" />
+                    <SolidColorBrush x:Key="ChainTagNeutralFg" Color="#FFC6C6D0" />
+                    <SolidColorBrush x:Key="ChainTagAccentBg" Color="#33A99BFF" />
+                    <SolidColorBrush x:Key="ChainTagAccentFg" Color="#FFC3B8FF" />
+                    <SolidColorBrush x:Key="ChainTagOkBg" Color="#2E2E9E6B" />
+                    <SolidColorBrush x:Key="ChainTagOkFg" Color="#FF6EDBA8" />
+                    <SolidColorBrush x:Key="ChainTagWarnBg" Color="#2ED97706" />
+                    <SolidColorBrush x:Key="ChainTagWarnFg" Color="#FFF0A868" />
+                    <SolidColorBrush x:Key="ChainWarnTextBrush" Color="#FFFB923C" />
+                    <SolidColorBrush x:Key="ChainMeterIdleBrush" Color="#33FFFFFF" />
+                    <SolidColorBrush x:Key="ChainMeterOnBrush" Color="#FFA99BFF" />
+                    <SolidColorBrush x:Key="ChainMeterClipBrush" Color="#FFF87171" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <!-- ══════════════════════════════════════════════════════
+                 线框图标（16x16 视口，统一描边，不用 Emoji/实心图标）
+                 ══════════════════════════════════════════════════════ -->
+            <Style x:Key="ChainIconBase" TargetType="Path">
+                <Setter Property="Stroke" Value="{ThemeResource ChainAccentBrush}" />
+                <Setter Property="StrokeThickness" Value="1.2" />
+                <Setter Property="StrokeLineJoin" Value="Round" />
+                <Setter Property="StrokeStartLineCap" Value="Round" />
+                <Setter Property="StrokeEndLineCap" Value="Round" />
+                <Setter Property="Fill" Value="Transparent" />
+                <Setter Property="HorizontalAlignment" Value="Center" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+            </Style>
+
+            <!-- 数据源：文件 -->
+            <Style x:Key="IcoSource" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M3.5 2.5 h5 l3 3 v8 h-8 z M8.5 2.5 v3 h3" />
+            </Style>
+            <!-- PCM 缓存：时钟 -->
+            <Style x:Key="IcoCache" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M8 3 a5 5 0 1 0 0 10 a5 5 0 1 0 0 -10 M8 5.2 v3 l2.2 1.4" />
+            </Style>
+            <!-- 无缝接力：链接 -->
+            <Style x:Key="IcoGapless" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M6.4 9.6 l3.2 -3.2 M6.2 5.6 l1 -1 a2.4 2.4 0 0 1 3.4 0 l1 1 M9.8 10.4 l-1 1 a2.4 2.4 0 0 1 -3.4 0 l-1 -1" />
+            </Style>
+            <!-- 降混：多声道收束 -->
+            <Style x:Key="IcoDownmix" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M2.5 4 h3.2 l2.3 3 l2.3 -3 h3.2 M8 10.5 v3 M5.5 11.2 l2.5 2.5 l2.5 -2.5" />
+            </Style>
+            <!-- 变速：带箭头的波形 -->
+            <Style x:Key="IcoTempo" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M1.5 8 h2.2 M6.5 4.5 v7 M9.5 3 v10 M12.5 6 v4 M4.2 5.6 l2.4 2.4 l-2.4 2.4" />
+            </Style>
+            <!-- DSP · EQ：频率响应曲线 -->
+            <Style x:Key="IcoEq" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M1.5 10.5 l3 -6 l3 8 l3 -10 l3 7" />
+            </Style>
+            <!-- DSP · 卷积：波形 -->
+            <Style x:Key="IcoConvolution" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M1.5 8 c1.6 -5 3.2 5 4.8 -3.4 s3.4 3.4 5.2 0" />
+            </Style>
+            <!-- DSP · 增益：加减 -->
+            <Style x:Key="IcoGain" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M3 8 h10 M8 4 v8" />
+            </Style>
+            <!-- DSP · 压缩：压缩曲线 -->
+            <Style x:Key="IcoCompressor" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M2 12.5 c3.5 0 4.5 -9 12 -9 M2 3 v9.5 h12" />
+            </Style>
+            <!-- DSP · Crossfeed：交叉 -->
+            <Style x:Key="IcoCrossfeed" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M3 4.5 l10 7 M13 4.5 l-10 7" />
+            </Style>
+            <!-- DSP · 声场：扩散扇形 -->
+            <Style x:Key="IcoField" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M8 11.5 a4.5 4.5 0 0 1 -4.5 -4.5 a4.5 4.5 0 0 1 9 0 a4.5 4.5 0 0 1 -4.5 4.5 M4.6 4.6 a5 5 0 0 0 0 0 M11.4 4.6" />
+            </Style>
+            <!-- DSP · 矩阵：网格 -->
+            <Style x:Key="IcoMatrix" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M3 3 h10 v10 h-10 z M3 8 h10 M8 3 v10" />
+            </Style>
+            <!-- DSP · 声道平衡：双滑块 -->
+            <Style x:Key="IcoBalance" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M2.5 6 h4 M9.5 6 h4 M2.5 10 h4 M9.5 10 h4 M6.2 4.5 v3 M10.8 4.5 v3" />
+            </Style>
+            <!-- 输出安全：盾 -->
+            <Style x:Key="IcoSafety" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M8 2.2 l5 2 v4 c0 3 -2.4 4.6 -5 5.6 c-2.6 -1 -5 -2.6 -5 -5.6 v-4 z" />
+            </Style>
+            <!-- 输出：扬声器 -->
+            <Style x:Key="IcoOutput" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M2.8 6.2 h2.4 l3.4 -2.6 v9 l-3.4 -2.6 h-2.4 z M11.2 5.4 a3.6 3.6 0 0 1 0 5.2" />
+            </Style>
+            <!-- 设备 / DAC：芯片 -->
+            <Style x:Key="IcoDevice" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
+                <Setter Property="Data" Value="M5 5 h6 v6 h-6 z M7 2.6 v2.4 M9 2.6 v2.4 M7 11 v2.4 M9 11 v2.4 M2.6 7 h2.4 M2.6 9 h2.4 M11 7 h2.4 M11 9 h2.4" />
+            </Style>
+
+            <!-- ══════════════════════════════════════════════════════
+                 共用小件
+                 ══════════════════════════════════════════════════════ -->
+
+            <!-- 极浅横向分割线（Echo 参考：用细线而不是粗重色块分区） -->
+            <Style x:Key="ChainDivider" TargetType="Rectangle">
+                <Setter Property="Height" Value="1" />
+                <Setter Property="Fill" Value="{ThemeResource ChainDividerBrush}" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+            </Style>
+
+            <!-- 参数标签（9.5px，次级灰） -->
+            <Style x:Key="ChainFieldLabel" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="9.5" />
+                <Setter Property="Foreground" Value="{ThemeResource ChainTertiaryTextBrush}" />
+                <Setter Property="TextWrapping" Value="NoWrap" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+
+            <!-- 参数值（11.5px，半粗，深色） -->
+            <Style x:Key="ChainFieldValue" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="11.5" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <!-- 参数补充（9.5px，灰） -->
+            <Style x:Key="ChainFieldNote" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="9.5" />
+                <Setter Property="Foreground" Value="{ThemeResource ChainTertiaryTextBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+                <Setter Property="Margin" Value="0,1,0,0" />
+            </Style>
+
+            <!-- 区块标题（12.5px，半粗） -->
+            <Style x:Key="ChainSectionTitle" TargetType="TextBlock">
+                <Setter Property="FontSize" Value="12.5" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+            </Style>
+
+            <!-- 折叠区标题按钮：高度小、无边框、无底色（Echo 参考禁止大号按钮） -->
+            <Style x:Key="ChainGroupToggle" TargetType="Button">
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="MinHeight" Value="0" />
+                <Setter Property="Height" Value="28" />
+                <Setter Property="HorizontalAlignment" Value="Stretch" />
+                <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+            </Style>
+
+            <!-- ══════════════════════════════════════════════════════
+                 数据模板
+                 ══════════════════════════════════════════════════════ -->
+
+            <!-- 双列参数网格一行：两列各「标签 / 值 / 说明」；
+                 长说明或长值的字段由 code-behind 判成整行（IsWide），跨两列显示，不挤在单列里。 -->
+            <DataTemplate x:Key="ChainFieldRowTemplate" x:DataType="local:ChainFieldRowVm">
+                <Grid Margin="0,0,0,10">
+                    <!-- 窄行：左右两列 -->
+                    <Grid ColumnSpacing="14" Visibility="{x:Bind NarrowVisibility}">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Style="{StaticResource ChainFieldLabel}" Text="{x:Bind Left.Label}" />
+                            <TextBlock Style="{StaticResource ChainFieldValue}" Text="{x:Bind Left.Value}" />
+                            <TextBlock
+                                Style="{StaticResource ChainFieldNote}"
+                                Text="{x:Bind Left.Note}"
+                                Visibility="{x:Bind Left.NoteVisibility}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Visibility="{x:Bind RightVisibility}">
+                            <TextBlock Style="{StaticResource ChainFieldLabel}" Text="{x:Bind Right.Label}" />
+                            <TextBlock Style="{StaticResource ChainFieldValue}" Text="{x:Bind Right.Value}" />
+                            <TextBlock
+                                Style="{StaticResource ChainFieldNote}"
+                                Text="{x:Bind Right.Note}"
+                                Visibility="{x:Bind Right.NoteVisibility}" />
+                        </StackPanel>
+                    </Grid>
+                    <!-- 宽行：整行（长文本自然换行） -->
+                    <StackPanel Visibility="{x:Bind WideVisibility}">
+                        <TextBlock Style="{StaticResource ChainFieldLabel}" Text="{x:Bind Left.Label}" />
+                        <TextBlock Style="{StaticResource ChainFieldValue}" Text="{x:Bind Left.Value}" />
+                        <TextBlock
+                            Style="{StaticResource ChainFieldNote}"
+                            Text="{x:Bind Left.Note}"
+                            Visibility="{x:Bind Left.NoteVisibility}" />
+                    </StackPanel>
+                </Grid>
+            </DataTemplate>
+
+            <!-- 技术档案胶囊（自动换行，高度 20-24px，间距 5px） -->
+            <DataTemplate x:Key="ChainTagTemplate" x:DataType="local:ChainTagVm">
+                <Border
+                    Margin="0,0,5,5"
+                    Padding="7,2.5"
+                    CornerRadius="9"
+                    Background="{x:Bind BackgroundBrush}">
+                    <TextBlock
+                        FontSize="9.5"
+                        FontWeight="SemiBold"
+                        Text="{x:Bind Text}"
+                        Foreground="{x:Bind ForegroundBrush}" />
+                </Border>
+            </DataTemplate>
+
+            <!-- 链路节点：左侧线框图标 + 轴线（串起处理顺序）+ 右侧三层文字。
+                 不给节点套边框卡片（Echo 参考：层级靠图标/名称/次级说明表达）。 -->
+            <DataTemplate x:Key="ChainNodeTemplate" x:DataType="local:ChainNodeVm">
+                <Grid ColumnSpacing="10" Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="22" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <!-- 图标 + 连接轴线 -->
+                    <Grid Grid.Column="0">
+                        <Viewbox
+                            Width="16"
+                            Height="16"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Top"
+                            Margin="0,1,0,0">
+                            <Path Style="{x:Bind IconStyle}" />
+                        </Viewbox>
+                        <Rectangle
+                            Width="1"
+                            Margin="0,21,0,0"
+                            VerticalAlignment="Stretch"
+                            Fill="{ThemeResource ChainAxisBrush}"
+                            Visibility="{x:Bind AxisVisibility}" />
+                    </Grid>
+                    <StackPanel Grid.Column="1" Margin="0,0,0,8">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Grid.Column="0"
+                                FontSize="12"
+                                FontWeight="SemiBold"
+                                VerticalAlignment="Center"
+                                TextTrimming="CharacterEllipsis"
+                                Text="{x:Bind Title}" />
+                            <Border
+                                Grid.Column="1"
+                                Padding="6,1"
+                                CornerRadius="8"
+                                VerticalAlignment="Center"
+                                Background="{x:Bind StateBackground}"
+                                Visibility="{x:Bind StateVisibility}">
+                                <TextBlock
+                                    FontSize="9.5"
+                                    FontWeight="SemiBold"
+                                    Text="{x:Bind StateText}"
+                                    Foreground="{x:Bind StateForeground}" />
+                            </Border>
+                        </Grid>
+                        <TextBlock
+                            Margin="0,1,0,0"
+                            FontSize="10.5"
+                            FontFamily="Consolas"
+                            TextWrapping="Wrap"
+                            Text="{x:Bind DetailText}"
+                            Visibility="{x:Bind DetailVisibility}" />
+                        <TextBlock
+                            Margin="0,1,0,0"
+                            FontSize="9.5"
+                            Foreground="{ThemeResource ChainSecondaryTextBrush}"
+                            TextWrapping="Wrap"
+                            Text="{x:Bind NoteText}"
+                            Visibility="{x:Bind NoteVisibility}" />
+                        <TextBlock
+                            Margin="0,1,0,0"
+                            FontSize="9.5"
+                            Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                            TextWrapping="Wrap"
+                            Text="{x:Bind LatencyText}"
+                            Visibility="{x:Bind LatencyVisibility}" />
+                    </StackPanel>
+                </Grid>
+            </DataTemplate>
+
+            <!-- 链路诊断一条：左侧截断类别 + 右侧（橙标题 / 原因 / 建议）。
+                 警告色只用在标题，不铺橙色底（Echo 参考明确禁止）。 -->
+            <DataTemplate x:Key="ChainDiagnosticTemplate" x:DataType="local:ChainDiagnosticVm">
+                <Grid ColumnSpacing="10" Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="58" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        Grid.Column="0"
+                        FontSize="9"
+                        FontWeight="SemiBold"
+                        FontFamily="Consolas"
+                        Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                        TextTrimming="CharacterEllipsis"
+                        VerticalAlignment="Top"
+                        Text="{x:Bind Category}" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock
+                            FontSize="10.5"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource ChainWarnTextBrush}"
+                            TextWrapping="Wrap"
+                            Text="{x:Bind Title}" />
+                        <TextBlock
+                            Margin="0,1,0,0"
+                            FontSize="9.5"
+                            Foreground="{ThemeResource ChainSecondaryTextBrush}"
+                            TextWrapping="Wrap"
+                            Text="{x:Bind Reason}"
+                            Visibility="{x:Bind ReasonVisibility}" />
+                        <TextBlock
+                            Margin="0,1,0,0"
+                            FontSize="9.5"
+                            Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                            TextWrapping="Wrap"
+                            Text="{x:Bind Advice}"
+                            Visibility="{x:Bind AdviceVisibility}" />
+                    </StackPanel>
+                </Grid>
+            </DataTemplate>
+
+            <!-- 输出记录时间线一条：时间戳 / 中央轴 + 圆点 / 右侧三层事件信息 -->
+            <DataTemplate x:Key="ChainEventTemplate" x:DataType="local:ChainEventVm">
+                <Grid ColumnSpacing="8" Margin="0,0,0,8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="46" />
+                        <ColumnDefinition Width="14" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock
+                        Grid.Column="0"
+                        FontSize="9.5"
+                        FontFamily="Consolas"
+                        Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Top"
+                        Margin="0,1,0,0"
+                        Text="{x:Bind TimeText}" />
+                    <Grid Grid.Column="1" HorizontalAlignment="Center">
+                        <Rectangle
+                            Width="1"
+                            VerticalAlignment="Stretch"
+                            Fill="{ThemeResource ChainAxisBrush}"
+                            Visibility="{x:Bind AxisVisibility}" />
+                        <Ellipse
+                            Width="8"
+                            Height="8"
+                            VerticalAlignment="Top"
+                            Margin="0,3,0,0"
+                            Fill="{x:Bind DotBrush}" />
+                    </Grid>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock
+                            FontSize="9.5"
+                            Foreground="{ThemeResource ChainAccentBrush}"
+                            TextTrimming="CharacterEllipsis"
+                            Text="{x:Bind ScopeText}"
+                            Visibility="{x:Bind ScopeVisibility}" />
+                        <TextBlock
+                            FontSize="10.5"
+                            FontWeight="SemiBold"
+                            TextTrimming="CharacterEllipsis"
+                            Text="{x:Bind NameText}" />
+                        <TextBlock
+                            Margin="0,1,0,0"
+                            FontSize="9.5"
+                            Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                            TextTrimming="CharacterEllipsis"
+                            Text="{x:Bind DetailText}"
+                            Visibility="{x:Bind DetailVisibility}" />
+                    </StackPanel>
+                </Grid>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border
+        x:Name="PanelCard"
+        Background="{ThemeResource LayerFillColorDefaultBrush}"
+        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+        BorderThickness="1,1,0,1"
+        CornerRadius="12,0,0,12"
+        Margin="0,4,0,4">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+
+            <!-- ① 标题栏：左侧「信号路径」（13.5px 半粗），右侧细线小叉。
+                 不做大圆形关闭按钮，标题栏下方不加重底色条。 -->
+            <Grid Grid.Row="0" Padding="18,10,12,8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBlock
+                    Grid.Column="0"
+                    Text="信号路径"
+                    FontSize="13.5"
+                    FontWeight="SemiBold"
+                    VerticalAlignment="Center" />
+                <Button
+                    x:Name="CloseButton"
+                    Grid.Column="1"
+                    Width="28"
+                    Height="28"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    ToolTipService.ToolTip="关闭"
+                    Click="CloseButton_Click">
+                    <FontIcon
+                        Glyph="&#xE711;"
+                        FontSize="11"
+                        Foreground="{ThemeResource ChainTertiaryTextBrush}" />
+                </Button>
+            </Grid>
+
+            <!-- 主体：整体纵向滚动，标题栏固定在上（不随内容滚走） -->
+            <ScrollViewer
+                Grid.Row="1"
+                VerticalScrollBarVisibility="Auto"
+                HorizontalScrollBarVisibility="Disabled">
+                <StackPanel Padding="18,2,18,16" Spacing="0">
+
+                    <!-- ② 摘要行：音源摘要 + 右侧「N 层链路」灰色小胶囊 -->
+                    <Grid Margin="0,0,0,8" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="SummaryText"
+                            Grid.Column="0"
+                            FontSize="10.5"
+                            Foreground="{ThemeResource ChainSecondaryTextBrush}"
+                            VerticalAlignment="Center"
+                            TextWrapping="Wrap" />
+                        <Border
+                            x:Name="LayerBadge"
+                            Grid.Column="1"
+                            Padding="7,2"
+                            CornerRadius="8"
+                            VerticalAlignment="Center"
+                            Background="{ThemeResource ChainTagNeutralBg}">
+                            <TextBlock
+                                x:Name="LayerBadgeText"
+                                FontSize="9.5"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource ChainTagNeutralFg}" />
+                        </Border>
+                    </Grid>
+
+                    <Rectangle Style="{StaticResource ChainDivider}" Margin="0,0,0,12" />
+
+                    <!-- ③ 当前处理阶段：20px 粗体大标题 + 紧随其后的状态行 -->
+                    <StackPanel Margin="0,0,0,12">
+                        <TextBlock
+                            x:Name="StageTitleText"
+                            FontSize="20"
+                            FontWeight="Bold"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            x:Name="StageNoteText"
+                            Margin="0,1,0,0"
+                            FontSize="10.5"
+                            Foreground="{ThemeResource ChainSecondaryTextBrush}"
+                            TextWrapping="Wrap" />
+                    </StackPanel>
+
+                    <!-- ④ 实时电平：标签行 + 分段矩形条 + dB 刻度 + 信息图标 -->
+                    <StackPanel x:Name="LevelsRoot" Margin="0,0,0,12">
+                        <Grid ColumnSpacing="8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock
+                                Grid.Column="0"
+                                Text="实时电平"
+                                Style="{StaticResource ChainSectionTitle}"
+                                VerticalAlignment="Center" />
+                            <TextBlock
+                                x:Name="LevelValueText"
+                                Grid.Column="1"
+                                FontSize="11.5"
+                                FontWeight="SemiBold"
+                                VerticalAlignment="Center"
+                                HorizontalAlignment="Right" />
+                        </Grid>
+                        <!-- 分段电平条（不是连续进度条）：24 段短矩形，间距很小 -->
+                        <Grid
+                            x:Name="LevelMeterGrid"
+                            Margin="0,7,0,0"
+                            Height="10"
+                            HorizontalAlignment="Stretch" />
+                        <!-- 刻度行：-60 / -24 / -12 / -6 / 0 dBFS -->
+                        <Grid Margin="0,4,0,0" ColumnSpacing="0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="-60" FontSize="9" Foreground="{ThemeResource ChainTertiaryTextBrush}" />
+                            <TextBlock Grid.Column="2" Text="-24" FontSize="9" Foreground="{ThemeResource ChainTertiaryTextBrush}" />
+                            <TextBlock Grid.Column="4" Text="-12" FontSize="9" Foreground="{ThemeResource ChainTertiaryTextBrush}" />
+                            <TextBlock Grid.Column="6" Text="-6" FontSize="9" Foreground="{ThemeResource ChainTertiaryTextBrush}" />
+                            <TextBlock Grid.Column="8" Text="0 dBFS" FontSize="9" Foreground="{ThemeResource ChainTertiaryTextBrush}" />
+                            <FontIcon
+                                Grid.Column="9"
+                                x:Name="LevelInfoIcon"
+                                Glyph="&#xE946;"
+                                FontSize="11"
+                                Margin="6,0,0,0"
+                                Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                                ToolTipService.ToolTip="峰值电平（post-DSP）。无实时信号时显示 --。" />
+                        </Grid>
+                    </StackPanel>
+
+                    <Rectangle Style="{StaticResource ChainDivider}" Margin="0,0,0,12" />
+
+                    <!-- ⑤ 双列参数网格：来源 / 处理 -->
+                    <Grid x:Name="SourceProcessGrid" ColumnSpacing="14" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" x:Name="SourceColumn">
+                            <TextBlock
+                                Text="来源"
+                                FontSize="11"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource ChainSecondaryTextBrush}" />
+                            <TextBlock
+                                x:Name="SourceValueText"
+                                Margin="0,2,0,0"
+                                Style="{StaticResource ChainFieldValue}" />
+                            <TextBlock
+                                x:Name="SourceNoteText"
+                                Style="{StaticResource ChainFieldNote}" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" x:Name="ProcessColumn">
+                            <TextBlock
+                                Text="处理"
+                                FontSize="11"
+                                FontWeight="SemiBold"
+                                Foreground="{ThemeResource ChainSecondaryTextBrush}" />
+                            <TextBlock
+                                x:Name="ProcessValueText"
+                                Margin="0,2,0,0"
+                                Style="{StaticResource ChainFieldValue}" />
+                            <TextBlock
+                                x:Name="ProcessNoteText"
+                                Style="{StaticResource ChainFieldNote}" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- ⑤b 后续字段（输出设备 / 输出模式 / 内部格式 / 实际输出 / 缓冲 / 卷积 / 变速）
+                         统一走双列网格模板；长文本由 code-behind 判成整行。 -->
+                    <ItemsControl x:Name="FieldList" ItemTemplate="{StaticResource ChainFieldRowTemplate}" />
+
+                    <!-- ⑥ DSP 实时余量：标签 + 值 + 说明（不编 CPU / 处理速度） -->
+                    <Grid x:Name="HeadroomRow" Margin="0,2,0,12" ColumnSpacing="10">
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*" />
                             <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
                         <TextBlock
                             Grid.Column="0"
-                            Text="{x:Bind Title}"
-                            FontSize="13"
-                            FontWeight="SemiBold"
-                            VerticalAlignment="Center"
-                            TextTrimming="CharacterEllipsis" />
-                        <Border
-                            Grid.Column="1"
-                            Visibility="{x:Bind StateVisibility}"
-                            CornerRadius="8"
-                            Padding="6,1"
-                            Background="{x:Bind StateBrush}">
-                            <TextBlock Text="{x:Bind StateText}" FontSize="10" />
-                        </Border>
+                            Text="DSP 实时余量"
+                            FontSize="10.5"
+                            Foreground="{ThemeResource ChainSecondaryTextBrush}"
+                            VerticalAlignment="Center" />
+                        <StackPanel Grid.Column="1" HorizontalAlignment="Right">
+                            <TextBlock
+                                x:Name="HeadroomValueText"
+                                FontSize="11"
+                                FontWeight="SemiBold"
+                                HorizontalAlignment="Right" />
+                            <TextBlock
+                                x:Name="HeadroomNoteText"
+                                FontSize="9.5"
+                                Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                                HorizontalAlignment="Right" />
+                        </StackPanel>
                     </Grid>
-                    <TextBlock
-                        Text="{x:Bind FormatText}"
-                        Visibility="{x:Bind FormatVisibility}"
-                        FontFamily="Consolas"
-                        FontSize="11"
-                        Opacity="0.85"
-                        TextWrapping="Wrap" />
-                    <TextBlock
-                        Text="{x:Bind NoteText}"
-                        Visibility="{x:Bind NoteVisibility}"
-                        FontSize="11"
-                        Opacity="0.8"
-                        TextWrapping="Wrap" />
-                    <TextBlock
-                        Text="{x:Bind LatencyText}"
-                        Visibility="{x:Bind LatencyVisibility}"
-                        FontSize="11"
-                        Opacity="0.7"
-                        TextWrapping="Wrap" />
-                </StackPanel>
-            </Border>
-        </DataTemplate>
 
-        <!-- 输出事件时间线一行 -->
-        <DataTemplate x:Key="ChainEventTemplate" x:DataType="local:ChainEventVm">
-            <Grid ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                </Grid.ColumnDefinitions>
-                <TextBlock
-                    Grid.Column="0"
-                    Text="{x:Bind TimeText}"
-                    FontFamily="Consolas"
-                    FontSize="11"
-                    Opacity="0.6"
-                    VerticalAlignment="Top" />
-                <TextBlock
-                    Grid.Column="1"
-                    Text="{x:Bind Text}"
-                    FontSize="11"
-                    TextWrapping="Wrap" />
-            </Grid>
-        </DataTemplate>
-    </UserControl.Resources>
+                    <!-- ⑦ 技术档案胶囊组 -->
+                    <StackPanel x:Name="TechTagGroup" Margin="0,0,0,12">
+                        <TextBlock
+                            Text="技术档案"
+                            Style="{StaticResource ChainSectionTitle}"
+                            Margin="0,0,0,6" />
+                        <ItemsControl x:Name="TechTagList" ItemTemplate="{StaticResource ChainTagTemplate}">
+                            <!-- WinUI 3 没有内置 WrapPanel，用项目自带的极简换行面板（ChainWrapPanel）：
+                                 按胶囊实际宽度换行，而不是按固定列宽等分。 -->
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <local:ChainWrapPanel ColumnSpacing="5" RowSpacing="5" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+                    </StackPanel>
 
-    <Border
-        x:Name="PanelCard"
-        Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
-        BorderThickness="1,1,0,1"
-        CornerRadius="8,0,0,8"
-        Margin="0,4,0,4">
-        <Grid Padding="16,14,12,14" RowSpacing="10">
-            <Grid.RowDefinitions>
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="Auto" />
-                <RowDefinition Height="*" />
-                <RowDefinition Height="Auto" />
-            </Grid.RowDefinitions>
+                    <Rectangle Style="{StaticResource ChainDivider}" Margin="0,0,0,12" />
 
-            <!-- ① 标题行：「音频链路」+ bit-perfect 徽标 + 关闭 -->
-            <Grid Grid.Row="0" ColumnSpacing="8">
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBlock
-                    Grid.Column="0"
-                    Text="音频链路"
-                    FontSize="15"
-                    FontWeight="SemiBold"
-                    VerticalAlignment="Center" />
-                <Border
-                    x:Name="VerdictBadge"
-                    Grid.Column="1"
-                    HorizontalAlignment="Left"
-                    CornerRadius="9"
-                    Padding="8,2"
-                    Margin="2,0,0,0">
-                    <TextBlock x:Name="VerdictBadgeText" FontSize="11" />
-                </Border>
-                <Button
-                    x:Name="CloseButton"
-                    Grid.Column="2"
-                    Width="30"
-                    Height="30"
-                    Padding="0"
-                    CornerRadius="15"
-                    Background="Transparent"
-                    BorderThickness="0"
-                    ToolTipService.ToolTip="关闭"
-                    Click="CloseButton_Click">
-                    <FontIcon Glyph="&#xE711;" FontSize="12" />
-                </Button>
-            </Grid>
+                    <!-- ⑧ 音频链路节点（纵向链，图标 + 轴线） -->
+                    <StackPanel Margin="0,0,0,12">
+                        <TextBlock
+                            Text="音频链路"
+                            Style="{StaticResource ChainSectionTitle}"
+                            Margin="0,0,0,8" />
+                        <ItemsControl x:Name="ChainList" ItemTemplate="{StaticResource ChainNodeTemplate}" />
+                        <TextBlock
+                            x:Name="ChainEmptyHint"
+                            Visibility="Collapsed"
+                            FontSize="10.5"
+                            Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                            TextWrapping="Wrap"
+                            Text="还没开始播放，链路节点待建立。" />
+                    </StackPanel>
 
-            <!-- ② 摘要行：源格式 → 输出格式 + 结论 -->
-            <TextBlock
-                x:Name="SummaryText"
-                Grid.Row="1"
-                FontSize="12"
-                Opacity="0.85"
-                TextWrapping="Wrap" />
+                    <!-- ⑨ 链路诊断（可折叠，默认展开） -->
+                    <StackPanel x:Name="DiagGroup" Margin="0,0,0,4">
+                        <Button
+                            x:Name="DiagToggle"
+                            Style="{StaticResource ChainGroupToggle}"
+                            Click="DiagToggle_Click">
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Grid.Column="0"
+                                    Text="链路诊断"
+                                    Style="{StaticResource ChainSectionTitle}"
+                                    VerticalAlignment="Center" />
+                                <TextBlock
+                                    x:Name="DiagCountText"
+                                    Grid.Column="1"
+                                    FontSize="9.5"
+                                    FontWeight="SemiBold"
+                                    Foreground="{ThemeResource ChainAccentBrush}"
+                                    VerticalAlignment="Center" />
+                                <FontIcon
+                                    x:Name="DiagChevron"
+                                    Grid.Column="2"
+                                    Glyph="&#xE70D;"
+                                    FontSize="10"
+                                    Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
+                        <ItemsControl
+                            x:Name="DiagList"
+                            Margin="0,4,0,0"
+                            ItemTemplate="{StaticResource ChainDiagnosticTemplate}" />
+                    </StackPanel>
 
-            <!-- ③ 实时电平（post-DSP）。无信号可测时整块收起，不摆空条 -->
-            <StackPanel x:Name="LevelsRoot" Grid.Row="2" Spacing="3" />
+                    <Rectangle Style="{StaticResource ChainDivider}" Margin="0,6,0,6" />
 
-            <!-- ④ 纵向链路图（核心，可滚动） -->
-            <ScrollViewer
-                Grid.Row="3"
-                VerticalScrollBarVisibility="Auto"
-                HorizontalScrollBarVisibility="Disabled">
-                <StackPanel>
-                    <ItemsControl x:Name="ChainList" ItemTemplate="{StaticResource ChainNodeTemplate}" />
-                    <TextBlock
-                        x:Name="ChainEmptyHint"
-                        Visibility="Collapsed"
-                        FontSize="12"
-                        Opacity="0.7"
-                        TextWrapping="Wrap"
-                        Text="还没开始播放，链路节点待建立。" />
+                    <!-- ⑩ DAC 能力图谱（可折叠，默认收起） -->
+                    <StackPanel x:Name="DacGroup" Margin="0,0,0,4">
+                        <Button
+                            x:Name="DacToggle"
+                            Style="{StaticResource ChainGroupToggle}"
+                            Click="DacToggle_Click">
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Grid.Column="0"
+                                    Text="DAC 能力图谱"
+                                    Style="{StaticResource ChainSectionTitle}"
+                                    VerticalAlignment="Center" />
+                                <TextBlock
+                                    x:Name="DacDeviceText"
+                                    Grid.Column="1"
+                                    Margin="8,0,0,0"
+                                    FontSize="9.5"
+                                    Foreground="{ThemeResource ChainAccentBrush}"
+                                    TextTrimming="CharacterEllipsis"
+                                    VerticalAlignment="Center" />
+                                <FontIcon
+                                    x:Name="DacChevron"
+                                    Grid.Column="2"
+                                    Glyph="&#xE76C;"
+                                    FontSize="10"
+                                    Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
+                        <ItemsControl
+                            x:Name="DacList"
+                            Margin="0,4,0,0"
+                            Visibility="Collapsed"
+                            ItemTemplate="{StaticResource ChainFieldRowTemplate}" />
+                    </StackPanel>
+
+                    <Rectangle Style="{StaticResource ChainDivider}" Margin="0,6,0,6" />
+
+                    <!-- ⑪ 输出记录（可折叠，默认收起） -->
+                    <StackPanel x:Name="EventsGroup" Margin="0,0,0,4">
+                        <Button
+                            x:Name="EventsToggle"
+                            Style="{StaticResource ChainGroupToggle}"
+                            Click="EventsToggle_Click">
+                            <Grid ColumnSpacing="6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock
+                                    Grid.Column="0"
+                                    Text="输出记录"
+                                    Style="{StaticResource ChainSectionTitle}"
+                                    VerticalAlignment="Center" />
+                                <TextBlock
+                                    x:Name="EventsCountText"
+                                    Grid.Column="1"
+                                    FontSize="9.5"
+                                    Foreground="{ThemeResource ChainSecondaryTextBrush}"
+                                    VerticalAlignment="Center" />
+                                <FontIcon
+                                    x:Name="EventsChevron"
+                                    Grid.Column="2"
+                                    Glyph="&#xE76C;"
+                                    FontSize="10"
+                                    Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                                    VerticalAlignment="Center" />
+                            </Grid>
+                        </Button>
+                        <ItemsControl
+                            x:Name="EventsList"
+                            Margin="0,6,0,0"
+                            Visibility="Collapsed"
+                            ItemTemplate="{StaticResource ChainEventTemplate}" />
+                    </StackPanel>
+
+                    <Rectangle Style="{StaticResource ChainDivider}" Margin="0,6,0,12" />
+
+                    <!-- ⑫ 稳定性反馈：小标签 + 总结标题 + 说明 + 双列最终状态 -->
+                    <StackPanel x:Name="StabilityGroup" Margin="0,0,0,12">
+                        <TextBlock
+                            Text="稳定性反馈"
+                            FontSize="9.5"
+                            Foreground="{ThemeResource ChainTertiaryTextBrush}" />
+                        <TextBlock
+                            x:Name="StabilityTitleText"
+                            Margin="0,2,0,0"
+                            FontSize="12.5"
+                            FontWeight="SemiBold"
+                            TextWrapping="Wrap" />
+                        <TextBlock
+                            x:Name="StabilityNoteText"
+                            Margin="0,2,0,0"
+                            FontSize="9.5"
+                            Foreground="{ThemeResource ChainSecondaryTextBrush}"
+                            TextWrapping="Wrap" />
+                        <ItemsControl
+                            x:Name="StabilityList"
+                            Margin="0,10,0,0"
+                            ItemTemplate="{StaticResource ChainFieldRowTemplate}" />
+                    </StackPanel>
+
+                    <!-- ⑬ 底部：打开音频设置（标题栏那个按钮改成链路入口后，设置从这里进） -->
+                    <Button
+                        x:Name="OpenAudioSettingsButton"
+                        Padding="0"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        MinHeight="0"
+                        Height="24"
+                        HorizontalAlignment="Left"
+                        Click="OpenAudioSettingsButton_Click">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock
+                                Text="打开音频设置"
+                                FontSize="9.5"
+                                Foreground="{ThemeResource ChainSecondaryTextBrush}"
+                                VerticalAlignment="Center" />
+                            <!-- 外链箭头用字符而不是图标码：不依赖字体里某个码位是否可用 -->
+                            <TextBlock
+                                Text="&#x203A;"
+                                FontSize="11"
+                                Foreground="{ThemeResource ChainTertiaryTextBrush}"
+                                VerticalAlignment="Center" />
+                        </StackPanel>
+                    </Button>
                 </StackPanel>
             </ScrollViewer>
-
-            <!-- ⑤ 可折叠分组：链路诊断 / 输出事件时间线（默认收起，状态不持久化） -->
-            <StackPanel Grid.Row="4" Spacing="4">
-                <StackPanel x:Name="DiagGroup">
-                    <Button
-                        x:Name="DiagToggle"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Padding="0,4"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Click="DiagToggle_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon x:Name="DiagChevron" Glyph="&#xE76C;" FontSize="10" VerticalAlignment="Center" />
-                            <TextBlock Text="链路诊断" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <TextBlock
-                        x:Name="DiagText"
-                        Visibility="Collapsed"
-                        Margin="16,2,0,4"
-                        FontSize="11"
-                        Opacity="0.85"
-                        TextWrapping="Wrap" />
-                </StackPanel>
-
-                <StackPanel x:Name="EventsGroup">
-                    <Button
-                        x:Name="EventsToggle"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Left"
-                        Padding="0,4"
-                        Background="Transparent"
-                        BorderThickness="0"
-                        Click="EventsToggle_Click">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <FontIcon x:Name="EventsChevron" Glyph="&#xE76C;" FontSize="10" VerticalAlignment="Center" />
-                            <TextBlock Text="输出事件时间线" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center" />
-                        </StackPanel>
-                    </Button>
-                    <ScrollViewer
-                        x:Name="EventsScroll"
-                        Visibility="Collapsed"
-                        MaxHeight="180"
-                        Margin="16,2,0,4"
-                        VerticalScrollBarVisibility="Auto"
-                        HorizontalScrollBarVisibility="Disabled">
-                        <ItemsControl x:Name="EventsList" ItemTemplate="{StaticResource ChainEventTemplate}" />
-                    </ScrollViewer>
-                </StackPanel>
-            </StackPanel>
         </Grid>
     </Border>
 </UserControl>

@@ -28,7 +28,11 @@ namespace CelesteMusicPlayer
         /// </summary>
         private EventHandler<object>? _audioChainCloseCompleted;
 
-        private void NowPlayingChainButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// 音频链路面板入口（2026-10-17 起：标题栏右上角按钮；播放页那个同名按钮已隐藏）。
+        /// 按钮当开关用：再点一次收起。
+        /// </summary>
+        private void AudioChainButton_Click(object sender, RoutedEventArgs e)
         {
             StartupLog.Write($"[链路] 按钮点击 当前可见={(AudioChainOverlayHost?.Visibility.ToString() ?? "null")}");
             if (AudioChainOverlayHost == null)
@@ -61,6 +65,12 @@ namespace CelesteMusicPlayer
                 if (!_audioChainCloseHooked)
                 {
                     AudioChainPanel.CloseRequested += (_, _) => HideAudioChainPanel();
+                    // 底部「打开音频设置」：标题栏那个按钮改成链路入口之后，设置面板从这里进
+                    AudioChainPanel.OpenAudioSettingsRequested += (_, _) =>
+                    {
+                        HideAudioChainPanel();
+                        OpenAudioSettingsPanel();
+                    };
                     _audioChainCloseHooked = true;
                 }
 
