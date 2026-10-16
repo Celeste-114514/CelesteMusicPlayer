@@ -135,7 +135,11 @@ namespace CelesteMusicPlayer
             new CelesteTokenDef(TextSecondary,   "color", "#5c5c5c", "#a8b0c0", "颜色"),
             new CelesteTokenDef(TextDisabled,    "color", "#a0a0a0", "#6b7280", "颜色"),
             new CelesteTokenDef(AccentSolid,     "color", "#0067c0", "#f0b429", "颜色"),
-            new CelesteTokenDef(AccentText,      "color", "#ffffff", "#101216", "颜色"),
+            // Accent.Text = 强调色底上的文字色。深色默认白：2026-10-12 用户拍板
+            // 「主题色底一律白字，不按背景深浅自动切黑白」，10-17 修默认值对齐该决策
+            // （原来是 #101216 黑，和经典皮肤白字不一致，用户实测"按钮不统一"）。
+            // 主题文件仍可覆盖（演示暖橙深色就是 #241203 深褐配它的琥珀底）。
+            new CelesteTokenDef(AccentText,      "color", "#ffffff", "#ffffff", "颜色"),
             new CelesteTokenDef(InputBackground,  "color", "#ffffff", "#151920", "颜色"),
             new CelesteTokenDef(InputStroke,      "color", "#d0d0d0", "#333a46", "颜色"),
             new CelesteTokenDef(OverlayBackground,"color", "#ffffff", "#1a1e26", "颜色"),
@@ -246,63 +250,88 @@ namespace CelesteMusicPlayer
             if (theme.Version > 1)
                 warnings.Add($"主题版本 {theme.Version} 比程序新（程序支持 1），未��字段会被忽略");
 
+            void CheckEntry(CelesteTokenDef def, string raw, string which)
+            {
+                if (string.IsNullOrWhiteSpace(raw))
+                {
+                    if (def.Type == "fontFamily") return;   // 字体允许空 = 跟随系统
+                    errors.Add($"[{which}] 令牌「{def.Name}」值为空");
+                    return;
+                }
+
+                switch (def.Type)
+                {
+                    case "color":
+                        if (!IsColorLike(raw))
+                            errors.Add($"[{which}] 「{def.Name}」不是合法颜色：{raw}");
+                        break;
+                    case "length":
+                    case "duration":
+                    case "number":
+                        if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
+                        {
+                            errors.Add($"[{which}] 「{def.Name}」不是数字：{raw}");
+                        }
+                        else if (def.Min.HasValue && d < def.Min.Value)
+                        {
+                            errors.Add($"[{which}] 「{def.Name}」={raw} 超出下限 {def.Min.Value}");
+                        }
+                        else if (def.Max.HasValue && d > def.Max.Value)
+                        {
+                            errors.Add($"[{which}] 「{def.Name}」={raw} 超出上限 {def.Max.Value}");
+                        }
+                        else if (def.Type == "duration" && d > 0 && raw.IndexOf("ms", StringComparison.OrdinalIgnoreCase) < 0)
+                        {
+                            warnings.Add($"[{which}] 「{def.Name}」是时长，建议带单位（{raw}ms）");
+                        }
+                        break;
+                    case "fontFamily":
+                        if (raw.Trim().Equals("null", StringComparison.OrdinalIgnoreCase) ||
+                            raw.Trim().Equals("none", StringComparison.OrdinalIgnoreCase))
+                            errors.Add($"[{which}] 「{def.Name}」不能是 null/none——赋给 FontFamily 会让 XAML 解析失败（0x800F1001）");
+                        break;
+                }
+            }
+
             void CheckDict(Dictionary<string, string> dict, string which)
             {
                 if (dict.Count == 0)
                 {
-                    if (which == "light") errors.Add("light 组是空的，至少要有它");
-                    else warnings.Add("dark 组是空的，将回退用 light");
+                    if (which == "light")
+                    {
+                        // metrics-only 主题（只改圆角/间距、不换颜色）是合法玩法：颜色走目录默认值。
+                        // ⚠ 2026-10-17 修：原来无条件报错，Load 直接拒绝加载——用户选这种
+                        // 主题文件静默无效果。三组全空才是真的空主题。
+                        if (theme.Metrics.Count == 0)
+                            errors.Add("light 组是空的，至少要有它（或填 metrics 只改圆角/间距等非颜色维度）");
+                        else
+                            warnings.Add("light 组为空：颜色走默认令牌，本主题只改 metrics（圆角/间距等非颜色维度）");
+                    }
+                    else
+                    {
+                        warnings.Add("dark 组是空的，将回退用 light");
+                    }
                     return;
                 }
                 foreach (var (key, raw) in dict)
                 {
                     var def = CelesteTokenCatalog.Find(key);
                     if (def == null) { warnings.Add($"[{which}] 未知令牌「{key}」已忽略"); continue; }
-
-                    if (string.IsNullOrWhiteSpace(raw))
-                    {
-                        if (def.Type == "fontFamily") continue;   // 字体允许空 = 跟随系统
-                        errors.Add($"[{which}] 令牌「{key}」值为空");
-                        continue;
-                    }
-
-                    switch (def.Type)
-                    {
-                        case "color":
-                            if (!IsColorLike(raw))
-                                errors.Add($"[{which}] 「{key}」不是合法颜色：{raw}");
-                            break;
-                        case "length":
-                        case "duration":
-                        case "number":
-                            if (!double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var d))
-                            {
-                                errors.Add($"[{which}] 「{key}」不是数字：{raw}");
-                            }
-                            else if (def.Min.HasValue && d < def.Min.Value)
-                            {
-                                errors.Add($"[{which}] 「{key}」={raw} 超出下限 {def.Min.Value}");
-                            }
-                            else if (def.Max.HasValue && d > def.Max.Value)
-                            {
-                                errors.Add($"[{which}] 「{key}」={raw} 超出上限 {def.Max.Value}");
-                            }
-                            else if (def.Type == "duration" && d > 0 && raw.IndexOf("ms", StringComparison.OrdinalIgnoreCase) < 0)
-                            {
-                                warnings.Add($"[{which}] 「{key}」是时长，建议带单位（{raw}ms）");
-                            }
-                            break;
-                        case "fontFamily":
-                            if (raw.Trim().Equals("null", StringComparison.OrdinalIgnoreCase) ||
-                                raw.Trim().Equals("none", StringComparison.OrdinalIgnoreCase))
-                                errors.Add($"[{which}] 「{key}」不能是 null/none——赋给 FontFamily 会让 XAML 解析失败（0x800F1001）");
-                            break;
-                    }
+                    CheckEntry(def, raw, which);
                 }
             }
 
             CheckDict(theme.Light, "light");
             CheckDict(theme.Dark, "dark");
+
+            // metrics 组也要逐条校验：拼错的令牌名 / 超范围的圆角值，加载时就指出来，
+            // 否则填错也静默忽略，用户以为设了其实没设。
+            foreach (var (key, raw) in theme.Metrics)
+            {
+                var def = CelesteTokenCatalog.Find(key);
+                if (def == null) { warnings.Add($"[metrics] 未知令牌「{key}」已忽略"); continue; }
+                CheckEntry(def, raw, "metrics");
+            }
 
             if (theme.Light.Count > 0)
             {
@@ -456,12 +485,20 @@ namespace CelesteMusicPlayer
             return sb.ToString();
         }
 
-        /// <summary>取某模式下的实际令牌值，未覆盖则回退默认。</summary>
+        /// <summary>
+        /// 取某模式下的实际令牌值，未覆盖则回退默认。
+        /// 顺序：明/暗颜色组 → metrics 组（非颜色维度，明暗共用）→ 目录默认值。
+        /// </summary>
         public static string Resolve(CelesteThemeFile theme, string tokenName, bool dark)
         {
             var dict = dark ? theme.Dark : theme.Light;
             if (dict.Count == 0) dict = theme.Light;
             if (dict.TryGetValue(tokenName, out var v) && !string.IsNullOrWhiteSpace(v)) return v.Trim();
+
+            // 非颜色维度（圆角/间距/动效时长/材质）放 metrics 组，明暗共用一份值。
+            // ⚠ 2026-10-17 修：这里原来只看 Light/Dark，主题文件 metrics 里填了也白填——
+            //   表现就是「测试皮肤选上了圆角主题文件，圆角一点不变」（用户实测看不出来）。
+            if (theme.Metrics.TryGetValue(tokenName, out var m) && !string.IsNullOrWhiteSpace(m)) return m.Trim();
 
             var def = CelesteTokenCatalog.Find(tokenName);
             if (def != null) return dark ? def.DefaultDark : def.DefaultLight;

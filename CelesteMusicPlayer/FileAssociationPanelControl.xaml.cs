@@ -396,7 +396,7 @@ namespace CelesteMusicPlayer
                 {
                     SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.ComputerFolder
                 };
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = MainWindow.PickerHostHandle();
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.FileTypeFilter.Add(".exe");
 

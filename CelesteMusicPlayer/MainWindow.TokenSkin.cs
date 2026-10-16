@@ -88,6 +88,13 @@ namespace CelesteMusicPlayer
             ("CardBackgroundFillColorSecondaryBrush",CelesteTokenCatalog.CardBackgroundHover),
             ("SystemControlHighlightListAccentLowBrush", CelesteTokenCatalog.SelectionBackground),
             ("TextOnAccentFillColorPrimaryBrush",    CelesteTokenCatalog.AccentText),
+            // 系统 AccentButtonStyle 的前景走这三个键（ThemeColorService 在 App 级把它们
+            // 置成白色）。不接它们，FileAssociation / ArtistAvatarEdit 这些面板里的主题色
+            // 按钮保持白字，和 ButtonNormalStyle 的黑字（TextOnAccent→Accent.Text）
+            // 同底不同字——2026-10-17 用户实测"主题色按钮不统一"。
+            ("AccentButtonForeground",               CelesteTokenCatalog.AccentText),
+            ("AccentButtonForegroundPointerOver",    CelesteTokenCatalog.AccentText),
+            ("AccentButtonForegroundPressed",        CelesteTokenCatalog.AccentText),
             ("ControlStrokeColorDefaultBrush",       CelesteTokenCatalog.InputStroke),
             ("ControlFillColorSecondaryBrush",       CelesteTokenCatalog.InputBackground),
             ("ApplicationPageBackgroundThemeBrush",  CelesteTokenCatalog.AppBackground),
@@ -110,7 +117,21 @@ namespace CelesteMusicPlayer
             RebuildTokenSkinDictionary(force: false);
             // 第四条腿：形状（圆角）—— 运行时把写死的圆角接到令牌上，不碰 XAML
             ApplyTokenShapes();
+            // 代码画的胶囊/选中块字色也统一跟 Accent.Text（2026-10-12 留的
+            // OverrideContrastForeground 钩子）；不接它，代码胶囊白字、XAML 按钮
+            // 跟主题文件走，同一屏又两种字色。
+            ApplyTokenContrastForeground();
             StartupLog.Write("[TokenSkin] 测试皮肤已激活（覆盖字典 + FrostedGlass 钩子 + 形状腿）");
+        }
+
+        /// <summary>
+        /// 强调色底上的代码侧前景（胶囊/选中块）：令牌皮肤激活时强制跟 Accent.Text 走，
+        /// 退出置回 null（=经典皮肤的"一律白"）。主题文件换了 Accent.Text 也走这里刷新。
+        /// </summary>
+        private void ApplyTokenContrastForeground()
+        {
+            Color fg = ResolveTokenSkinColor(CelesteTokenCatalog.AccentText) ?? Color.FromArgb(255, 255, 255, 255);
+            ColorHelper.OverrideContrastForeground = new SolidColorBrush(fg);
         }
 
         /// <summary>离开令牌测试皮肤：摘钩子 + 撤覆盖字典。任何模式下调用都安全（幂等）。</summary>
@@ -119,6 +140,8 @@ namespace CelesteMusicPlayer
             FrostedGlass.TokenPanelColor = null;
             FrostedGlass.TokenRootColor = null;
             FrostedGlass.TokenTitleBarForeground = null;
+            // 代码侧前景钩子摘掉：回到经典皮肤的"一律白"
+            ColorHelper.OverrideContrastForeground = null;
 
             // 形状腿：先把圆角还原回进入皮肤前的值，再撤覆盖字典
             RevertTokenShapes();
@@ -148,6 +171,7 @@ namespace CelesteMusicPlayer
             // 否则会以"已经被令牌改过的值"为基准再套一次档位，越套越偏。
             RevertTokenShapes();
             ApplyTokenShapes();
+            ApplyTokenContrastForeground();
         }
 
         /// <summary>

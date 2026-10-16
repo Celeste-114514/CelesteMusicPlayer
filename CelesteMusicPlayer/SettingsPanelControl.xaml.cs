@@ -2527,7 +2527,7 @@ namespace CelesteMusicPlayer
                 picker.FileTypeFilter.Add(".mov");
                 picker.FileTypeFilter.Add(".avi");
                 picker.FileTypeFilter.Add(".wmv");
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, MainWindow.PickerHostHandle());
                 Windows.Storage.StorageFile file = await picker.PickSingleFileAsync();
                 if (file != null)
                 {
@@ -2811,7 +2811,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var picker = new FileOpenPicker();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = MainWindow.PickerHostHandle();
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.FileTypeFilter.Add(".celeste-theme");
                 picker.FileTypeFilter.Add(".json");
@@ -2844,7 +2844,7 @@ namespace CelesteMusicPlayer
             {
                 string current = GetComboTagString(ThemeFileCombo, "");
                 var picker = new FileSavePicker();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = MainWindow.PickerHostHandle();
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.FileTypeChoices.Add("Celeste 主题文件", new[] { ".celeste-theme" });
                 picker.SuggestedFileName = (string.IsNullOrWhiteSpace(current) ? "celeste-theme" : current) + ".celeste-theme";
@@ -3201,7 +3201,7 @@ namespace CelesteMusicPlayer
         private async System.Threading.Tasks.Task<string?> PickFolderAsync()
         {
             FolderPicker picker = new();
-            nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            nint hwnd = MainWindow.PickerHostHandle();
             WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
             picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
             picker.FileTypeFilter.Add("*");
@@ -3230,7 +3230,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var picker = new Windows.Storage.Pickers.FileSavePicker();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = MainWindow.PickerHostHandle();
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.FileTypeChoices.Add("设置备份", new List<string> { ".json" });
                 picker.SuggestedFileName = "celeste-settings-backup";
@@ -3261,7 +3261,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var picker = new Windows.Storage.Pickers.FileOpenPicker();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = MainWindow.PickerHostHandle();
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.FileTypeFilter.Add(".json");
                 picker.FileTypeFilter.Add(".txt"); // 兼容旧的手动备份

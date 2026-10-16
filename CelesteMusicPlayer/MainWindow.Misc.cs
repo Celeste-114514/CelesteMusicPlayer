@@ -174,6 +174,17 @@ namespace CelesteMusicPlayer
         // 打开文件 / 选择文件夹
         // =====================================================================
 
+        /// <summary>
+        /// 文件/文件夹选取器 InitializeWithWindow 用的宿主窗口句柄（给 UserControl 用）。
+        /// ⚠ UserControl 不能 GetWindowHandle(this)：UserControl 没实现 IWindowNative，
+        /// 会抛 "Failed to create a CCW … the specified cast is not valid"。2026-10-13
+        /// 标签页实测过一次；2026-10-17 设置页「导入主题」按钮又连崩 8 次，用户根本
+        /// 导不进主题文件，连带「测试皮肤选圆角主题文件」这条路整个堵死。
+        /// 主窗口自己的选取器继续用 this（MainWindow 就是 Window，没问题）。
+        /// </summary>
+        internal static nint PickerHostHandle()
+            => Instance is Window host ? WinRT.Interop.WindowNative.GetWindowHandle(host) : 0;
+
         private async void OpenFileButton_Click(object sender, RoutedEventArgs e)
         {
             try
