@@ -140,6 +140,34 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 记一条链路事件，但**内容跟上次一样就不记**（B4 接线用）。
+        ///
+        /// 用场：DSP 滑块拖动、音量条移动这类高频回调会连续吐同一个值，
+        /// 不去重的话输出记录会被刷成一整屏重复行。按 key 各记各的上一条。
+        /// </summary>
+        public static void RecordEventDedup(string key, string kind, string text)
+        {
+            lock (EventGate)
+            {
+                if (LastEventByKey.TryGetValue(key, out string? last)
+                    && string.Equals(last, text, StringComparison.Ordinal))
+                {
+                    return;
+                }
+
+                LastEventByKey[key] = text;
+                EventRing.Add(new ChainEvent { Time = DateTime.Now, Kind = kind, Text = text });
+                if (EventRing.Count > EventCapacity)
+                {
+                    EventRing.RemoveRange(0, EventRing.Count - EventCapacity);
+                }
+            }
+        }
+
+        /// <summary>各 key 的上一条事件正文（只服务于去重，不对外）。</summary>
+        private static readonly Dictionary<string, string> LastEventByKey = new();
+
         /// <summary>最近 N 条事件（新→旧）。</summary>
         public static IReadOnlyList<ChainEvent> RecentEvents(int max = 20)
         {
@@ -766,6 +794,19 @@ namespace CelesteMusicPlayer
                 OutputBufferMs = bufferMs,
                 ConvolutionLatencyFrames = engine?.ConvolutionLatencyFrames ?? 0
             };
+        }
+
+        /// <summary>
+        /// 输出模式人话（B4 接线用：设置层保存的字符串 → 面板显示文案）。
+        /// 与 <see cref="BuildModeNote"/>（引擎侧枚举）保持同一套文案，避免两处漂移。
+        /// </summary>
+        public static string DescribeOutputMode(string? settingsMode)
+        {
+            return string.Equals(settingsMode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase)
+                ? "WASAPI 独占"
+                : string.Equals(settingsMode, "Asio", StringComparison.OrdinalIgnoreCase)
+                    ? "ASIO"
+                    : "共享（系统混音）";
         }
 
         /// <summary>输出模式人话（与音频设置面板同口径：设置层 OutputMode 字符串）。</summary>

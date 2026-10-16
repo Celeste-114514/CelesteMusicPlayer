@@ -51,6 +51,10 @@ namespace CelesteMusicPlayer
                 : string.Equals(settings.OutputMode, "Asio", System.StringComparison.OrdinalIgnoreCase)
                     ? HiFiOutputBackend.OutputMode.Asio
                     : HiFiOutputBackend.OutputMode.WasapiShared;
+
+            // B4：输出模式切换 = 链路事件（启动恢复首次调用只记值，不算"切换"）
+            NoteChainMode(settings.OutputMode);
+
             _audioEngine?.SetOutputMode(mode);
         }
 

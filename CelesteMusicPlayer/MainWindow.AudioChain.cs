@@ -160,6 +160,105 @@ namespace CelesteMusicPlayer
             }
         }
 
+        // ─────────────────────────────────────────────────────────────
+        // B4：真实事件接线（2026-10-17）
+        //
+        // 面板的「输出记录」之前只有「打开面板」一条，因为没人往事件环里写东西。
+        // 这里给各类真实事件一个统一的记账口：记一条 + 面板开着就刷新一次。
+        // ⚠ 全部只在 UI 线程调用（调用点都是 XAML 事件处理器）；
+        //   引擎侧（后台线程）直接用 AudioSignalPath.RecordEvent，那个带 lock。
+        // ─────────────────────────────────────────────────────────────
+
+        private string? _chainLastDevice;
+        private bool _chainDeviceSeen;
+        private string? _chainLastMode;
+        private bool _chainModeSeen;
+
+        /// <summary>记一条链路事件；面板开着就顺手刷一次（关着就只记账，不打扰）。</summary>
+        internal void NoteChain(string kind, string text)
+        {
+            try
+            {
+                AudioSignalPath.RecordEvent(kind, text);
+                RefreshAudioChainPanelIfOpen();
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.NoteChain", caught);
+            }
+        }
+
+        /// <summary>切歌（首次播放与无缝自动下一首都汇到 RecordPlaybackStatsOnStart）。</summary>
+        internal void NoteChainTrack(string? title, string? artist)
+        {
+            string label = string.IsNullOrWhiteSpace(title) ? "未知曲目" : title!;
+            if (!string.IsNullOrWhiteSpace(artist))
+            {
+                label = artist + " - " + label;
+            }
+
+            NoteChain("track", "开始播放：" + label);
+        }
+
+        /// <summary>
+        /// 输出设备切换。启动恢复也会走 ApplyOutputDeviceAsync，
+        /// 所以第一次只记住当前值、不记事件（那不是"切换"）。
+        /// </summary>
+        internal void NoteChainDevice(string? deviceId)
+        {
+            string key = string.IsNullOrWhiteSpace(deviceId) ? "系统默认" : deviceId!;
+            bool changed = _chainDeviceSeen && !string.Equals(_chainLastDevice, key, StringComparison.Ordinal);
+            _chainLastDevice = key;
+            _chainDeviceSeen = true;
+
+            if (!changed)
+            {
+                return;
+            }
+
+            string shown = key.Length > 24 ? key.Substring(0, 24) + "…" : key;
+            NoteChain("device", "输出设备切换 → " + shown);
+        }
+
+        /// <summary>输出模式切换（共享 / 独占 / ASIO）。同设备切换一样，首次只记值。</summary>
+        internal void NoteChainMode(string? settingsMode)
+        {
+            string key = AudioSignalPath.DescribeOutputMode(settingsMode);
+            bool changed = _chainModeSeen && !string.Equals(_chainLastMode, key, StringComparison.Ordinal);
+            _chainLastMode = key;
+            _chainModeSeen = true;
+
+            if (!changed)
+            {
+                return;
+            }
+
+            NoteChain("mode", "输出模式切换 → " + key);
+        }
+
+        /// <summary>变速（倍率变化，文案与面板口径一致）。</summary>
+        internal void NoteChainTempo(double rate)
+        {
+            NoteChain("tempo", $"播放速度 {rate:0.##}×");
+        }
+
+        /// <summary>
+        /// DSP 变化。滑块拖动会连续回调，用内容去重（同值不重复记），
+        /// 否则输出记录会被刷成一整屏一样的行。
+        /// </summary>
+        internal void NoteChainDsp(string key, string text)
+        {
+            try
+            {
+                AudioSignalPath.RecordEventDedup(key, "dsp", text);
+                RefreshAudioChainPanelIfOpen();
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.NoteChainDsp", caught);
+            }
+        }
+
         /// <summary>
         /// 外部（切歌 / 切设备 / 切输出模式 / 变速 / DSP 开关）可以主动喊一声刷新。
         /// 面板关着就什么都不做；开着也不必重抓——节拍定时器马上就会刷。

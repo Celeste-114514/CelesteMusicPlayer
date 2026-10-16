@@ -338,6 +338,9 @@ namespace CelesteMusicPlayer
         /// <summary>应用 HiFi 输出设备：记录到引擎偏好并设置 MediaPlayer 输出设备。</summary>
         private async System.Threading.Tasks.Task ApplyOutputDeviceAsync(string deviceId)
         {
+            // B4：输出设备切换 = 链路事件（启动恢复首次调用只记值，不算"切换"）
+            NoteChainDevice(deviceId);
+
             try
             {
                 _audioEngine?.SetOutputDevicePreference(string.IsNullOrWhiteSpace(deviceId) ? null : deviceId);
@@ -1491,6 +1494,9 @@ namespace CelesteMusicPlayer
             // 实时下发：引擎活着就下一个音频块生效；没在播就只是记设置，起播时自动带上
             _audioEngine?.SetPlaybackSpeed(clamped, preserve);
 
+            // B4：变速 = 链路事件（倍率≠1 时链路面板会标"已重塑采样，非原始数据"）
+            NoteChainTempo(clamped);
+
             if (!IsEngineActiveNow)
             {
                 NowPlayingText.Text = "播放速度已设为 " + rateText + "（起播后生效）";
@@ -1733,6 +1739,11 @@ namespace CelesteMusicPlayer
             double peak = _currentRgData?.Peak ?? 1.0;
             _audioEngine?.SetReplayGain(rg, tg, ag, peak);
             RefreshAudioFxRgInfo();
+
+            // B4：ReplayGain 变化 = 链路事件（内容去重，滑前级增益不会刷屏）
+            NoteChainDsp("rg", "ReplayGain " + (rg.Mode == ReplayGainMode.Off
+                ? "未启用"
+                : $"{rg.Mode}，前级 {rg.PreampDb:0.#}dB"));
         }
 
 

@@ -217,6 +217,56 @@ namespace CelesteMusicPlayer
             _rack = (rack ?? new RackState()).Clone();
             DspRackStore.Save(_rack);
             ApplyRack(_dspProvider);
+
+            // B4：机架变化（压缩器 / 声场 / 矩阵 / 模块顺序）= 链路事件。
+            // 后台线程调用：RecordEventDedup 自带 lock，线程安全；面板刷新靠它自己的节拍。
+            AudioSignalPath.RecordEventDedup("rack", "dsp", "机架：" + DescribeRackForChain(_rack));
+        }
+
+        /// <summary>机架一句话摘要（给链路面板的输出记录用）。</summary>
+        private static string DescribeRackForChain(RackState rack)
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            if (rack.Compressor.IsActive)
+            {
+                parts.Add("压缩器");
+            }
+
+            if (rack.StereoField.IsActive)
+            {
+                parts.Add("立体声场");
+            }
+
+            if (rack.Matrix.IsActive)
+            {
+                parts.Add("声道矩阵");
+            }
+
+            return parts.Count == 0 ? "三模块全部关闭" : string.Join("、", parts) + " 生效";
+        }
+
+        /// <summary>
+        /// B4：设备端协商结果 = 链路事件。三条起播通路（原生独占 / 共享·ASIO / DSD）都调它。
+        /// 后台线程调用；内容去重，重复起播同格式不会刷屏。
+        /// </summary>
+        private void NoteChainNegotiation()
+        {
+            try
+            {
+                string fmt = ChainFormat.DeviceOutput?.Describe() ?? "未拿到设备端格式";
+                string path = ChainFormat.Device switch
+                {
+                    DevicePath.Lossless => "直通",
+                    DevicePath.Degraded => "容器转换",
+                    DevicePath.Resampled => "设备端转换",
+                    _ => "未判定"
+                };
+                AudioSignalPath.RecordEventDedup("negotiate", "negotiate", $"设备端协商：{fmt}（{path}）");
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("HiFiOutputBackend.NoteChainNegotiation", caught);
+            }
         }
 
         /// <summary>压缩器当前增益衰减（dB，正数）。未播放 / DSP 链未构建时返回 0。</summary>
@@ -706,6 +756,7 @@ namespace CelesteMusicPlayer
                     // 徽标对共享模式另有"系统混音器"一等判定；ASIO 取不到该属性时保持 null（待播放确认，不假设直通）。
                     ChainFormat.DeviceOutput = new AudioFormat(wf.SampleRate, wf.BitsPerSample, wf.Channels, wf.Encoding == WaveFormatEncoding.IeeeFloat);
                     ChainFormat.DeviceEndpointName = wf.Encoding == WaveFormatEncoding.IeeeFloat ? "float32" : "PCM" + wf.BitsPerSample;
+                    NoteChainNegotiation();
                 }
             }
             catch
@@ -1596,6 +1647,7 @@ namespace CelesteMusicPlayer
                     ChainFormat.DeviceOutput = _native.NegotiatedFormat;
                     ChainFormat.Device = _native.DevicePathKind;
                     ChainFormat.DeviceEndpointName = _native.DeviceEndpointName;
+                    NoteChainNegotiation();
                 }
                 else
                 {
@@ -1961,10 +2013,11 @@ namespace CelesteMusicPlayer
 
             ActualOutputFormat = _native.ActualFormatDescription;
             // 设备端结构化协商结果（DSD/DoP：容器协商值，IsDsdPath 已置位）
-            ChainFormat.DeviceOutput = _native.NegotiatedFormat;
-            ChainFormat.Device = _native.DevicePathKind;
-            ChainFormat.DeviceEndpointName = _native.DeviceEndpointName;
-            _isPlaying = true;
+                    ChainFormat.DeviceOutput = _native.NegotiatedFormat;
+                    ChainFormat.Device = _native.DevicePathKind;
+                    ChainFormat.DeviceEndpointName = _native.DeviceEndpointName;
+                    NoteChainNegotiation();
+                    _isPlaying = true;
             CurrentMode = OutputMode.WasapiExclusive;
             _nativePosBaselineFrames = 0;
             _positionTimer.Start();

@@ -2528,6 +2528,9 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // B4：切歌 = 链路事件（首次播放与无缝自动下一首都走这里）
+                NoteChainTrack(item.Title, item.Artist);
+
                 _lastPlayedForScrobble = item;
                 _lastPlayStartUtc = DateTime.UtcNow;
                 TrackStatsStore.RecordPlayStart(item.FilePath);
@@ -2841,7 +2844,12 @@ namespace CelesteMusicPlayer
         // ---------------- 音频设置右侧面板（输出模式 / 链路状态 / 专业播放状态） ----------------
         private bool _audioCombosLoading;
 
-        private async void AudioSettingsButton_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// 打开「音频设置」右侧面板。
+        /// 2026-10-17 起不再由标题栏齿轮按钮直接触发（那个按钮改成音频链路入口），
+        /// 改由音频链路面板底部的「打开音频设置」调用（见 MainWindow.AudioChain.cs）。
+        /// </summary>
+        internal async void OpenAudioSettingsPanel()
         {
             // 半透明亚克力 + 高斯模糊背景（AcrylicBrush），覆盖 XAML 的纯色底
             AudioSettingsPanel.Background = FrostedGlass.CreatePanelBrush();

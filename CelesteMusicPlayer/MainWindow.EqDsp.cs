@@ -2000,6 +2000,62 @@ namespace CelesteMusicPlayer
             // 任何 DSP 改动都同步刷新左侧导航圆点 / 模块页徽章 / 左右偏差条
             UpdateDspNavIndicators();
             UpdateAudioFxEqQuickStrip();
+
+            // B4：DSP 变化 = 链路事件（内容去重：拖滑块连续回调同值不会刷屏）
+            NoteChainDsp("dsp", "DSP " + DescribeDspChainSummary());
+        }
+
+        /// <summary>
+        /// 一句话说出"现在链路上有哪些 DSP 在改样本"，给链路面板的输出记录用。
+        /// 口径与 AudioSignalPath 的判定同源（都以各 Store 为准，不看 UI 控件当前值）。
+        /// </summary>
+        private static string DescribeDspChainSummary()
+        {
+            var parts = new System.Collections.Generic.List<string>();
+            if (EqCurveStore.Load().HasEffect())
+            {
+                parts.Add("EQ");
+            }
+
+            var room = RoomCorrectionStore.Load();
+            if (room.Enabled && !string.IsNullOrWhiteSpace(room.IrPath))
+            {
+                parts.Add("房间校正");
+            }
+
+            if (ReplayGainStore.Load().Mode != ReplayGainMode.Off)
+            {
+                parts.Add("ReplayGain");
+            }
+
+            var rack = DspRackStore.Load();
+            if (rack.Compressor.IsActive)
+            {
+                parts.Add("压缩");
+            }
+
+            if (rack.StereoField.IsActive)
+            {
+                parts.Add("声场");
+            }
+
+            if (rack.Matrix.IsActive)
+            {
+                parts.Add("矩阵");
+            }
+
+            var extra = DspExtraStore.Load();
+            if (extra.ChannelBalance.IsActive)
+            {
+                parts.Add("声道平衡");
+            }
+
+            if (extra.Safety.AffectsBits)
+            {
+                parts.Add("余量");
+            }
+
+            return parts.Count == 0 ? "全部关闭（直通）" : string.Join("、", parts) + " 生效";
         }
 
 
