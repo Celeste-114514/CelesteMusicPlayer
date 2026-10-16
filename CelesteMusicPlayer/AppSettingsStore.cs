@@ -914,6 +914,11 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             // 表现为「选了水面布局、重启后自己变回经典」，与保存是否成功无关。
             NowPlayingLayout = string.IsNullOrWhiteSpace(s.NowPlayingLayout) ? "Classic" : s.NowPlayingLayout,
             NowPlayingVisual = string.IsNullOrWhiteSpace(s.NowPlayingVisual) ? "Waveform" : s.NowPlayingVisual,
+            // 主题文件名：此前漏拷，存得进文件但 Load() 返回的克隆里恒为空 →
+            // 主题文件永远加载不上（表现=选了主题、界面毫无变化）。与上面两条同族事故。
+            CelesteThemeName = s.CelesteThemeName ?? string.Empty,
+            // 转码缓存上限：同样漏拷，运行时读到的永远是默认 2048。
+            TranscodeCacheLimitMb = s.TranscodeCacheLimitMb,
             FileAssociationPromptShown = s.FileAssociationPromptShown
         };
 

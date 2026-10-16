@@ -21,6 +21,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Reflection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
@@ -60,6 +61,24 @@ namespace CelesteMusicPlayer
         private const int ShapeWalkLimit = 6000;
 
         /// <summary>
+        /// 调试开关：在 %LOCALAPPDATA%\CelesteMusicPlayer\ 下放一个 shape-debug.on 空文件，
+        /// 形状腿就把「每一个被改的元素（类型/名字/旧值→新值）」打进日志。
+        /// 用来回答"到底哪些圆角被令牌改了"——没有开关时只打汇总行，零噪音。
+        /// </summary>
+        private static bool ShapeDebugEnabled()
+        {
+            try
+            {
+                string dir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                return System.IO.File.Exists(System.IO.Path.Combine(dir, "CelesteMusicPlayer", "shape-debug.on"));
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
         /// 测试皮肤激活时调用：把控件树上的圆角接到令牌上。
         /// 失败不影响皮肤其它部分（宁可圆角不变，也不把界面改崩）。
         /// </summary>
@@ -72,10 +91,13 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
+                bool debug = ShapeDebugEnabled();
                 int changed = 0;
                 int walked = 0;
                 var stack = new Stack<DependencyObject>();
                 stack.Push(RootShell);
+                var detail = debug ? new List<string>(64) : null;
+                var byKind = debug ? new Dictionary<string, int>(StringComparer.Ordinal) : null;
 
                 while (stack.Count > 0 && walked < ShapeWalkLimit)
                 {
@@ -85,6 +107,16 @@ namespace CelesteMusicPlayer
                     if (node is FrameworkElement fe && TryMapCorner(fe))
                     {
                         changed++;
+                        if (debug)
+                        {
+                            string label = string.IsNullOrEmpty(fe.Name) ? "-" : fe.Name;
+                            double before = _shapeOriginal[fe].TopLeft;
+                            double after = fe.GetType().GetProperty("CornerRadius")?
+                                .GetValue(fe) is CornerRadius cr ? cr.TopLeft : double.NaN;
+                            string kind = $"{fe.GetType().Name} {before}->{after:0.##}";
+                            detail!.Add($"[{label}] {kind}");
+                            byKind![kind] = byKind.TryGetValue(kind, out int c) ? c + 1 : 1;
+                        }
                     }
 
                     int children = VisualTreeHelper.GetChildrenCount(node);
@@ -95,6 +127,19 @@ namespace CelesteMusicPlayer
                 }
 
                 StartupLog.Write($"[TokenSkin] 形状腿：遍历 {walked} 个节点，接上令牌 {changed} 处圆角");
+
+                if (debug && detail!.Count > 0)
+                {
+                    foreach (KeyValuePair<string, int> kv in byKind!.OrderByDescending(k => k.Value))
+                    {
+                        StartupLog.Write($"[TokenSkin][shape-debug] {kv.Value,3} × {kv.Key}");
+                    }
+                    for (int i = 0; i < detail.Count && i < 64; i += 8)
+                    {
+                        StartupLog.Write("[TokenSkin][shape-debug] " +
+                            string.Join(" | ", detail.Skip(i).Take(8)));
+                    }
+                }
             }
             catch (Exception caught)
             {
