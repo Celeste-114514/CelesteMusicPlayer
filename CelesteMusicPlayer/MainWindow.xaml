@@ -6985,16 +6985,17 @@
                                  该列整体隐藏（用户 2026-10-16 要求），代码把本组 Margin 右改 8、
                                  挪到右缘，收起时还原 280。 -->
                             <StackPanel x:Name="NowPlayingTopRightButtons" Orientation="Horizontal" HorizontalAlignment="Right" Spacing="2" Margin="0,0,280,0">
-                                <!-- 音频链路（B 组 B3，2026-10-16）：10-15 注释里给「信号路径」预留的那块。
-                                     点开从右缘滑出的抽屉面板（见 AudioChainOverlayHost）。 -->
+                                <!-- 音频链路入口原在这里（播放页右上角）。2026-10-17 用户拍板：
+                                     不做进播放页，统一走标题栏右上角那个按钮（见 AudioSettingsButton）。 -->
                                 <Button CornerRadius="16"
                                     x:Name="NowPlayingChainButton"
+                                    Visibility="Collapsed"
                                     Height="32"
                                     Padding="10,0"
                                     Background="Transparent"
                                     BorderThickness="0"
-                                    Click="NowPlayingChainButton_Click"
-                                    ToolTipService.ToolTip="音频链路（信号路径 / 诊断 / 事件）">
+                                    Click="AudioChainButton_Click"
+                                    ToolTipService.ToolTip="信号路径（音频链路 / 诊断 / 输出记录）">
                                     <StackPanel Orientation="Horizontal" Spacing="6">
                                         <FontIcon Glyph="&#xE9D9;" FontSize="12" VerticalAlignment="Center" />
                                         <TextBlock Text="链路" FontSize="12" VerticalAlignment="Center" />
@@ -8537,6 +8538,9 @@
                 VerticalAlignment="Top"
                 Height="48"
                 Padding="0,8,8,0">
+                <!-- 2026-10-17 用户拍板：这个位置原来是「音频设置」，现在改成音频链路
+                     （Echo 风格「信号路径」面板）的入口；音频设置改为从链路面板底部的
+                     「打开音频设置」进入。x:Name 保留（极客皮肤键位表还引用它）。 -->
                 <Button CornerRadius="16"
                     x:Name="AudioSettingsButton"
                     Width="34"
@@ -8544,9 +8548,9 @@
                     Padding="0"
                     Background="Transparent"
                     BorderThickness="0"
-                    Click="AudioSettingsButton_Click"
-                    ToolTipService.ToolTip="音频设置">
-                    <FontIcon Glyph="&#xE91F;" FontSize="15" />
+                    Click="AudioChainButton_Click"
+                    ToolTipService.ToolTip="信号路径（音频链路 / 诊断 / 输出记录）">
+                    <FontIcon Glyph="&#xE9D9;" FontSize="15" />
                 </Button>
                 <Button CornerRadius="16"
                     x:Name="SelectLocalAudioButton"

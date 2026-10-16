@@ -48,6 +48,47 @@ namespace CelesteMusicPlayer
         public double? LatencyMs { get; init; }
     }
 
+    /// <summary>技术档案标签的语气（Neutral=灰 / Accent=蓝紫 / Ok=浅绿 / Warn=浅橙）。UI 只按这个上色，不自己判语义。</summary>
+    public enum ChainTagTone
+    {
+        Neutral,
+        Accent,
+        Ok,
+        Warn
+    }
+
+    /// <summary>技术档案里的一枚状态胶囊（"均衡器未启用"）。拿不到的项压根不生成，UI 也就没有空胶囊。</summary>
+    public sealed class ChainTechTag
+    {
+        public string Text { get; init; } = string.Empty;
+
+        public ChainTagTone Tone { get; init; } = ChainTagTone.Neutral;
+    }
+
+    /// <summary>链路诊断一条：类别标识（如 BIT-PERFECT）+ 标题 + 原因 + 建议。</summary>
+    public sealed class ChainDiagnostic
+    {
+        /// <summary>左侧短类别（"BIT-PERFECT" / "DSP" / "SRC"）。</summary>
+        public string Category { get; init; } = string.Empty;
+
+        public string Title { get; init; } = string.Empty;
+
+        public string Reason { get; init; } = string.Empty;
+
+        public string Advice { get; init; } = string.Empty;
+    }
+
+    /// <summary>底部稳定性反馈网格的一项（标签 + 值 + 可选说明）。</summary>
+    public sealed class ChainField
+    {
+        public string Label { get; init; } = string.Empty;
+
+        public string Value { get; init; } = string.Empty;
+
+        /// <summary>说明。null/空 = 不显示该行（铁律）。</summary>
+        public string? Note { get; init; }
+    }
+
     /// <summary>链路事件（时间线一行）。</summary>
     public sealed class ChainEvent
     {
@@ -142,6 +183,59 @@ namespace CelesteMusicPlayer
 
         /// <summary>卷积引入的延迟（帧）。0=未启用卷积。</summary>
         public int ConvolutionLatencyFrames { get; private init; }
+
+        // ── 以下为 Echo 风格「信号路径」面板分区（2026-10-17 扩展，口径仍在模型里） ──
+
+        /// <summary>当前处理阶段大标题（"原生播放" / "DSP 处理中" / "待命"）。</summary>
+        public string StageTitle { get; private init; } = string.Empty;
+
+        /// <summary>阶段下一行的状态（"未启用 DSP" / "N 个模块生效"）。</summary>
+        public string StageNote { get; private init; } = string.Empty;
+
+        /// <summary>链路环节数（摘要行右侧「N 层链路」）。0=未建立（整枚标签不显示）。</summary>
+        public int LayerCount { get; private init; }
+
+        /// <summary>左列「来源」主值（"MP3 48kHz 2ch"）。拿不到=null。</summary>
+        public string? SourceValue { get; private init; }
+
+        /// <summary>左列「来源」补充（"320 kbps / Stereo"）。拿不到=null。</summary>
+        public string? SourceNote { get; private init; }
+
+        /// <summary>右列「处理」主值（"直接路径" / "DSP 处理"）。</summary>
+        public string? ProcessValue { get; private init; }
+
+        /// <summary>右列「处理」补充（"未启用 DSP 模块"）。</summary>
+        public string? ProcessNote { get; private init; }
+
+        /// <summary>双列后续字段（输出设备 / 输出模式 / 内部格式 / 实际输出 / 缓冲 / 卷积）。按链序。</summary>
+        public IReadOnlyList<ChainField> Fields { get; private init; } = Array.Empty<ChainField>();
+
+        /// <summary>「DSP 实时余量」行的值（"等待信号" / "未在实时播放" / "生效中"）。</summary>
+        public string? DspHeadroomValue { get; private init; }
+
+        /// <summary>「DSP 实时余量」行的说明。拿不到=null（不编 CPU/处理速度）。</summary>
+        public string? DspHeadroomNote { get; private init; }
+
+        /// <summary>技术档案胶囊组。拿不到的项不生成，一条都没有时 UI 整块收起。</summary>
+        public IReadOnlyList<ChainTechTag> TechTags { get; private init; } = Array.Empty<ChainTechTag>();
+
+        /// <summary>链路诊断条目（非 bit-perfect 的每条原因一条）。没有=空（整块收起）。</summary>
+        public IReadOnlyList<ChainDiagnostic> Diagnostics { get; private init; } = Array.Empty<ChainDiagnostic>();
+
+        /// <summary>DAC 能力图谱：设备名。null=拿不到（整块收起，不编能力）。</summary>
+        public string? DacDeviceName { get; private init; }
+
+        /// <summary>DAC 能力图谱字段（曾经输出 / 已确认能力 / 当前问题）。拿不到=空。</summary>
+        public IReadOnlyList<ChainField> DacFields { get; private init; } = Array.Empty<ChainField>();
+
+        /// <summary>稳定性反馈总结标题（"当前输出链路已确认"）。</summary>
+        public string? StabilityTitle { get; private init; }
+
+        /// <summary>稳定性反馈说明（"没有观察到错误、回退或 DSP 介入。"）。</summary>
+        public string? StabilityNote { get; private init; }
+
+        /// <summary>稳定性反馈双列网格（请求模式 / 实际路径 / 是否回退 / DSP 状态 / 限制说明）。</summary>
+        public IReadOnlyList<ChainField> StabilityFields { get; private init; } = Array.Empty<ChainField>();
 
         /// <summary>
         /// 抓一份链路快照。UI 线程调用（Store.Load/引擎属性都线程安全，但没必要高频）。
@@ -472,8 +566,194 @@ namespace CelesteMusicPlayer
                 }
             }
 
+            // ── Echo 风格「信号路径」分区（2026-10-17）────────────────────────
+            // 口径一律沿用上面已经算好的判定，不在这里另起一套，避免两处打架。
+
+            // ① 处理阶段：只有"真的在改样本"才算 DSP 处理中（与 bit-perfect 判定同口径）
+            bool dspEngaged = !globalBypass && anySampleLevelDsp;
+            int activeModules = DescribeActiveDsp(
+                eqOn, firOn, rgOn, compOn, crossfeedOn, fieldOn, matrixOn, balanceOn, headroomOn, volOn).Count();
+            string stageTitle = !session ? "待命" : (dspEngaged ? "DSP 处理中" : "原生播放");
+            string stageNote = !session
+                ? "未播放（链路待命）"
+                : dspEngaged ? $"{activeModules} 个模块在链上" : "未启用 DSP";
+
+            // ② 双列后续字段：拿不到的一律不生成（铁律）
+            var fields = new List<ChainField>();
+            if (session && !string.IsNullOrWhiteSpace(chain!.DeviceEndpointName))
+            {
+                fields.Add(new ChainField { Label = "输出设备", Value = chain.DeviceEndpointName! });
+            }
+
+            fields.Add(new ChainField { Label = "输出模式", Value = modeNote });
+            if (session && chain!.TranscodeWav is AudioFormat wavFmt)
+            {
+                fields.Add(new ChainField { Label = "内部处理格式", Value = wavFmt.Describe() });
+            }
+
+            if (session && chain!.DeviceOutput is AudioFormat devFmt)
+            {
+                fields.Add(new ChainField { Label = "实际输出", Value = devFmt.Describe() });
+            }
+
+            if (bufferMs > 0)
+            {
+                fields.Add(new ChainField { Label = "输出缓冲", Value = $"{bufferMs} ms" });
+            }
+
+            if ((engine?.ConvolutionLatencyFrames ?? 0) > 0)
+            {
+                fields.Add(new ChainField
+                {
+                    Label = "卷积延迟",
+                    Value = $"{engine!.ConvolutionLatencyFrames} 帧"
+                });
+            }
+
+            double rateValue = AppSettingsStore.Load().PlaybackRate;
+            if (session && Math.Abs(rateValue - 1.0) > 0.001)
+            {
+                fields.Add(new ChainField
+                {
+                    Label = "变速",
+                    Value = $"{rateValue:0.00}×",
+                    Note = "已重塑采样，非原始数据"
+                });
+            }
+
+            // ③ DSP 实时余量：不编 CPU / 处理速度；没在播就是等待信号
+            bool playing = engine?.IsPlaying ?? false;
+            string dspHeadroomValue = playing
+                ? (dspEngaged ? "生效中" : "待机")
+                : "等待信号";
+            string? dspHeadroomNote = playing ? null : "未在实时播放";
+
+            // ④ 技术档案胶囊：拿不到的项不生成（抖动 / 无缝播放没有结构化值）
+            var tags = new List<ChainTechTag>();
+            int volume = (int)Math.Round(AppSettingsStore.Load().Volume);
+            tags.Add(new ChainTechTag { Text = $"音量 {volume}%", Tone = ChainTagTone.Neutral });
+            if (volOn)
+            {
+                tags.Add(new ChainTechTag { Text = "软件音量生效", Tone = ChainTagTone.Warn });
+            }
+
+            tags.Add(new ChainTechTag
+            {
+                Text = rgOn ? "回放增益已启用" : "回放增益未启用",
+                Tone = rgOn ? ChainTagTone.Accent : ChainTagTone.Neutral
+            });
+            tags.Add(new ChainTechTag
+            {
+                Text = eqOn ? "均衡器已启用" : "均衡器未启用",
+                Tone = eqOn ? ChainTagTone.Accent : ChainTagTone.Neutral
+            });
+            tags.Add(new ChainTechTag
+            {
+                Text = firOn ? "房间校正已启用" : "房间校正未启用",
+                Tone = firOn ? ChainTagTone.Accent : ChainTagTone.Neutral
+            });
+            tags.Add(new ChainTechTag
+            {
+                Text = compOn ? "压缩器已启用" : "压缩器未启用",
+                Tone = compOn ? ChainTagTone.Accent : ChainTagTone.Neutral
+            });
+
+            bool resampling = session && chain!.Outcome == TranscodeOutcome.ResampledToDevice;
+            tags.Add(new ChainTechTag
+            {
+                Text = resampling ? "重采样生效中" : "重采样待机",
+                Tone = resampling ? ChainTagTone.Warn : ChainTagTone.Neutral
+            });
+
+            if (session && Math.Abs(rateValue - 1.0) > 0.001)
+            {
+                tags.Add(new ChainTechTag { Text = $"变速 {rateValue:0.00}×", Tone = ChainTagTone.Accent });
+            }
+
+            if (globalBypass)
+            {
+                tags.Add(new ChainTechTag { Text = "DSP 总旁路", Tone = ChainTagTone.Ok });
+            }
+
+            // ⑤ 链路诊断：非 bit-perfect 的每条原因一条（原因/建议都是结构化映射，不现场编）
+            var diagnostics = new List<ChainDiagnostic>();
+            foreach (string cause in causes)
+            {
+                diagnostics.Add(ToDiagnostic(cause));
+            }
+
+            // ⑥ DAC 能力图谱：只有设备名拿得到才整块显示；支持率列表没有公开访问器，不强凑
+            string? dacName = session && !string.IsNullOrWhiteSpace(chain!.DeviceEndpointName)
+                ? chain.DeviceEndpointName
+                : null;
+            var dacFields = new List<ChainField>();
+            if (dacName != null)
+            {
+                if (chain!.DeviceOutput is AudioFormat dacFmt)
+                {
+                    dacFields.Add(new ChainField { Label = "本次协商格式", Value = dacFmt.Describe() });
+                }
+
+                dacFields.Add(new ChainField
+                {
+                    Label = "设备路径判定",
+                    Value = DescribeDevicePath(chain!.Device)
+                });
+            }
+
+            // ⑦ 稳定性反馈：总结 + 双列最终状态
+            string stabilityTitle = bitPerfect ? "当前输出链路已确认" : "链路存在介入";
+            string stabilityNote = bitPerfect
+                ? "没有观察到错误、回退或 DSP 介入。"
+                : confirmed
+                    ? "已按设备端协商结果确认，但链路中存在介入。"
+                    : "尚未与设备端协商确认。";
+            var stabilityFields = new List<ChainField>
+            {
+                new ChainField { Label = "请求模式", Value = modeNote },
+                new ChainField
+                {
+                    Label = "实际确认路径",
+                    Value = session ? DescribeDevicePath(chain!.Device) : "未建立",
+                    Note = session && chain!.DeviceOutput is AudioFormat cf ? cf.Describe() : null
+                },
+                new ChainField
+                {
+                    Label = "是否回退",
+                    Value = session && chain!.Outcome == TranscodeOutcome.FailedFallback ? "是（兜底规格）" : "否"
+                },
+                new ChainField
+                {
+                    Label = "DSP 状态",
+                    Value = globalBypass ? "总旁路" : dspEngaged ? "生效中" : "未启用"
+                }
+            };
+            if (!bitPerfect && !string.IsNullOrWhiteSpace(reason))
+            {
+                stabilityFields.Add(new ChainField { Label = "限制说明", Value = reason });
+            }
+
             return new AudioSignalPath
             {
+                StageTitle = stageTitle,
+                StageNote = stageNote,
+                LayerCount = nodes.Count,
+                SourceValue = session ? srcText : null,
+                SourceNote = session && !string.IsNullOrWhiteSpace(chain?.SourceFileDescription)
+                    ? chain!.SourceFileDescription
+                    : null,
+                ProcessValue = session ? (dspEngaged ? "DSP 处理" : "直接路径") : null,
+                ProcessNote = session ? stageNote : null,
+                Fields = fields,
+                DspHeadroomValue = dspHeadroomValue,
+                DspHeadroomNote = dspHeadroomNote,
+                TechTags = tags,
+                Diagnostics = diagnostics,
+                DacDeviceName = dacName,
+                DacFields = dacFields,
+                StabilityTitle = stabilityTitle,
+                StabilityNote = stabilityNote,
+                StabilityFields = stabilityFields,
                 Nodes = nodes,
                 SummaryLine = summary,
                 BitPerfect = bitPerfect,
@@ -510,6 +790,112 @@ namespace CelesteMusicPlayer
             string mode = AppSettingsStore.Load().OutputMode;
             return string.Equals(mode, "WasapiExclusive", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase);
+        }
+
+        /// <summary>设备端路径判定的人话（与 bit-perfect 判定同口径，UI 不再自己翻译枚举）。</summary>
+        private static string DescribeDevicePath(DevicePath path)
+        {
+            return path switch
+            {
+                DevicePath.Lossless => "直通（数值无损）",
+                DevicePath.Degraded => "容器转换（数值无损，非字节直通）",
+                DevicePath.Resampled => "设备端转换（非直通）",
+                _ => "未知"
+            };
+        }
+
+        /// <summary>
+        /// 一条非 bit-perfect 原因 → 诊断条目（类别 / 标题 / 原因 / 建议）。
+        /// 建议是事先写死的结构化文案，不是现场编的；识别不出类别就归到 BIT-PERFECT。
+        /// </summary>
+        private static ChainDiagnostic ToDiagnostic(string cause)
+        {
+            bool Has(string key) => cause.IndexOf(key, StringComparison.OrdinalIgnoreCase) >= 0;
+
+            if (Has("系统混音器"))
+            {
+                return new ChainDiagnostic
+                {
+                    Category = "OUTPUT",
+                    Title = "不是 bit-perfect",
+                    Reason = "共享输出：系统混音器会接管音量与采样率。",
+                    Advice = "想要更严格的 bit-perfect 路径，优先使用独占输出或 ASIO 输出，并关闭 DSP/SRC 模块。"
+                };
+            }
+
+            if (Has("变速播放"))
+            {
+                return new ChainDiagnostic
+                {
+                    Category = "TEMPO",
+                    Title = "变速播放中",
+                    Reason = cause,
+                    Advice = "变速必然重塑采样点；回到 1.00× 即恢复原始数据流。"
+                };
+            }
+
+            if (Has("DSD"))
+            {
+                return new ChainDiagnostic
+                {
+                    Category = "DSD",
+                    Title = "DSD 直出受限",
+                    Reason = cause,
+                    Advice = "DSD/DoP 直出依赖设备端支持；必要时改用 PCM 转换输出。"
+                };
+            }
+
+            if (Has("位深转换") || Has("设备端格式低于源") || Has("源探测失败"))
+            {
+                return new ChainDiagnostic
+                {
+                    Category = "FORMAT",
+                    Title = "格式被转换",
+                    Reason = cause,
+                    Advice = "在独占模式下换一个位深/采样率档位，或让设备跟随音源规格。"
+                };
+            }
+
+            if (Has("重采样") || Has("转码降级") || Has("设备端格式转换"))
+            {
+                return new ChainDiagnostic
+                {
+                    Category = "SRC",
+                    Title = "采样率被转换",
+                    Reason = cause,
+                    Advice = "把输出采样率与音源对齐，或使用独占模式让设备跟随音源采样率。"
+                };
+            }
+
+            if (Has("设备端格式未知"))
+            {
+                return new ChainDiagnostic
+                {
+                    Category = "DEVICE",
+                    Title = "设备端未上报格式",
+                    Reason = cause,
+                    Advice = "播放一次后再看；仍然未知说明设备没有回报协商结果。"
+                };
+            }
+
+            if (cause.StartsWith("DSP：", StringComparison.Ordinal))
+            {
+                return new ChainDiagnostic
+                {
+                    Category = "DSP",
+                    Title = "DSP 正在改动样本",
+                    Reason = cause,
+                    Advice = "要听原始数据流就关掉对应模块，或用 DSP 总旁路做 A/B 对比（设置会保留）。"
+                };
+            }
+
+            return new ChainDiagnostic
+            {
+                Category = "BIT-PERFECT",
+                Title = "不是 bit-perfect",
+                Reason = cause,
+                Advice = "逐条关掉链路上的介入项（DSP / 共享模式 / 变速 / 重采样）即可恢复直通。"
+            };
         }
 
         private static IEnumerable<string> DescribeActiveDsp(
