@@ -534,6 +534,8 @@ namespace CelesteMusicPlayer
                 "tempo" => "IcoTempo",
                 "safety" => "IcoSafety",
                 "output" => "IcoOutput",
+                // 一个 DSP 都没开时面板上那一枚"DSP 未启用"节点
+                "dsp:none" => "IcoEq",
                 "dsp:0" => "IcoEq",
                 "dsp:1" => "IcoConvolution",
                 "dsp:2" => "IcoGain",

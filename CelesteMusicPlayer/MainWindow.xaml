@@ -8533,6 +8533,7 @@
                  展开态用户要用系统按钮需先退出播放页（左上角返回或 Esc）。 -->
             <StackPanel x:Name="TitleBarFloatingButtons"
                                 Orientation="Horizontal"
+                Canvas.ZIndex="100"
                 HorizontalAlignment="Right"
                 Spacing="4"
                 VerticalAlignment="Top"

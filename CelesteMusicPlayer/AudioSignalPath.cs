@@ -407,31 +407,37 @@ namespace CelesteMusicPlayer
                 eqOn, firOn, rgOn, compOn, crossfeedOn, fieldOn, matrixOn, balanceOn
             };
 
+            // ⚠ 2026-10-17 用户要求：链路里**只列已开启的 DSP 模块**；
+            //    一个都没开就只摆一个「DSP」节点并写"未启用"，不把八个模块全铺出来（太吵）。
+            //    铁律照旧：不存在的环节不虚构——没开的模块不出现，"未启用"那一个节点就是全部事实。
+            int shownDsp = 0;
             for (int i = 0; i < rack.RackOrder.Length && i < moduleTitles.Length; i++)
             {
                 int id = rack.RackOrder[i];
-                if (id < 0 || id >= moduleOn.Length)
+                if (id < 0 || id >= moduleOn.Length || !moduleOn[id])
                 {
                     continue;
                 }
 
-                SignalNodeState state = SignalNodeState.Off;
-                if (moduleOn[id])
-                {
-                    state = globalBypass ? SignalNodeState.Bypassed : SignalNodeState.Active;
-                }
-
+                SignalNodeState state = globalBypass ? SignalNodeState.Bypassed : SignalNodeState.Active;
+                shownDsp++;
                 nodes.Add(new SignalNode
                 {
                     Id = "dsp:" + id,
                     Title = moduleTitles[id],
                     State = state,
-                    Note = state switch
-                    {
-                        SignalNodeState.Active => "生效中",
-                        SignalNodeState.Bypassed => "已旁路（总旁路开）",
-                        _ => "未启用"
-                    }
+                    Note = state == SignalNodeState.Bypassed ? "已旁路（总旁路开）" : "生效中"
+                });
+            }
+
+            if (shownDsp == 0)
+            {
+                nodes.Add(new SignalNode
+                {
+                    Id = "dsp:none",
+                    Title = "DSP",
+                    State = SignalNodeState.Off,
+                    Note = "未启用（输出保持原始数据流）"
                 });
             }
 

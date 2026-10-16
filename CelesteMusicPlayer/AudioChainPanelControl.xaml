@@ -45,6 +45,8 @@
             <ResourceDictionary.ThemeDictionaries>
                 <!-- 浅色：白底 + 深灰字 + 蓝紫强调 -->
                 <ResourceDictionary x:Key="Light">
+                    <!-- 面板底色：必须**不透明**（半透明会透出下面播放页面的内容，看着像重叠） -->
+                    <SolidColorBrush x:Key="ChainPanelBgBrush" Color="#FFFBFBFD" />
                     <SolidColorBrush x:Key="ChainAccentBrush" Color="#FF6C5CE7" />
                     <SolidColorBrush x:Key="ChainAccentSoftBrush" Color="#1A6C5CE7" />
                     <SolidColorBrush x:Key="ChainSecondaryTextBrush" Color="#FF6B6B76" />
@@ -66,6 +68,7 @@
                 </ResourceDictionary>
                 <!-- 深色：深底 + 浅字 + 提亮的蓝紫 -->
                 <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="ChainPanelBgBrush" Color="#FF202024" />
                     <SolidColorBrush x:Key="ChainAccentBrush" Color="#FFA99BFF" />
                     <SolidColorBrush x:Key="ChainAccentSoftBrush" Color="#33A99BFF" />
                     <SolidColorBrush x:Key="ChainSecondaryTextBrush" Color="#FFB9B9C4" />
@@ -92,7 +95,9 @@
                  ══════════════════════════════════════════════════════ -->
             <Style x:Key="ChainIconBase" TargetType="Path">
                 <Setter Property="Stroke" Value="{ThemeResource ChainAccentBrush}" />
-                <Setter Property="StrokeThickness" Value="1.2" />
+                <!-- 1.5 描边 + 18px 尺寸：跟程序里其它 Segoe 图标的视觉重量对齐
+                     （实测 1.2/16px 偏细偏小，和旁边的字形放一起显得是另一套图标） -->
+                <Setter Property="StrokeThickness" Value="1.5" />
                 <Setter Property="StrokeLineJoin" Value="Round" />
                 <Setter Property="StrokeStartLineCap" Value="Round" />
                 <Setter Property="StrokeEndLineCap" Value="Round" />
@@ -280,22 +285,22 @@
             <DataTemplate x:Key="ChainNodeTemplate" x:DataType="local:ChainNodeVm">
                 <Grid ColumnSpacing="10" Margin="0,0,0,4">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="22" />
+                        <ColumnDefinition Width="26" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
                     <!-- 图标 + 连接轴线 -->
                     <Grid Grid.Column="0">
                         <Viewbox
-                            Width="16"
-                            Height="16"
+                            Width="18"
+                            Height="18"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Top"
-                            Margin="0,1,0,0">
+                            Margin="0,0,0,0">
                             <Path Style="{x:Bind IconStyle}" />
                         </Viewbox>
                         <Rectangle
                             Width="1"
-                            Margin="0,21,0,0"
+                            Margin="0,23,0,0"
                             VerticalAlignment="Stretch"
                             Fill="{ThemeResource ChainAxisBrush}"
                             Visibility="{x:Bind AxisVisibility}" />
@@ -451,11 +456,11 @@
 
     <Border
         x:Name="PanelCard"
-        Background="{ThemeResource LayerFillColorDefaultBrush}"
+        Background="{ThemeResource ChainPanelBgBrush}"
         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         BorderThickness="1,1,0,1"
         CornerRadius="12,0,0,12"
-        Margin="0,4,0,4">
+        Margin="0,14,0,14">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

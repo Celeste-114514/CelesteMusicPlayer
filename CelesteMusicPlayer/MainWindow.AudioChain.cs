@@ -40,10 +40,10 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // 再点一次 = 收起（按钮当成开关，避免用户找不到关闭）
+            // 已经开着就什么都不做（2026-10-17 用户实测：再点一次面板消失，被当成"点不出来"）。
+            // 关闭走三处：面板右上角 X、点面板外的遮罩、再点本按钮之外的任何关闭动作。
             if (AudioChainOverlayHost.Visibility == Visibility.Visible)
             {
-                HideAudioChainPanel();
                 return;
             }
 
