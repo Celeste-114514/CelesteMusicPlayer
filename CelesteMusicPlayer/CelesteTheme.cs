@@ -103,6 +103,15 @@ namespace CelesteMusicPlayer
         public const string RadiusLarge = "Radius.Large";
         public const string RadiusControl = "Radius.Control";
         public const string RadiusCover = "Radius.Cover";
+        // 2026-10-17 令牌化第一批：按主界面实测的圆角分布补齐档位（默认值与现状一致），
+        // 由「测试皮肤」的形状腿消费；XAML 源码一行不动，改主题文件即可整体改圆角。
+        public const string RadiusHairline = "Radius.Hairline";
+        public const string RadiusMicro = "Radius.Micro";
+        public const string RadiusXSmall = "Radius.XSmall";
+        public const string RadiusTile = "Radius.Tile";
+        public const string RadiusChip = "Radius.Chip";
+        public const string RadiusPill = "Radius.Pill";
+        public const string RadiusSheet = "Radius.Sheet";
         public const string SpaceTight = "Space.Tight";
         public const string SpaceNormal = "Space.Normal";
         public const string SpaceLoose = "Space.Loose";
@@ -145,6 +154,14 @@ namespace CelesteMusicPlayer
             new CelesteTokenDef(RadiusLarge,  "length", "12", "12", "圆角", 0, 40, "弹窗"),
             new CelesteTokenDef(RadiusControl,"length", "4",  "4",  "圆角", 0, 40, "按钮/输入框"),
             new CelesteTokenDef(RadiusCover,  "length", "14", "14", "圆角", 0, 60, "专辑封面。★现状是 XAML 写死值，主题盖不掉，令牌化时必须一并改引用"),
+            // 补档：值与主界面现状一致（零视觉变化），改主题文件才看得出变化
+            new CelesteTokenDef(RadiusHairline, "length", "1.5", "1.5", "圆角", 0, 40, "细条/电平块"),
+            new CelesteTokenDef(RadiusMicro,    "length", "2", "2", "圆角", 0, 40, "极小圆角"),
+            new CelesteTokenDef(RadiusXSmall,   "length", "3", "3", "圆角", 0, 40, "小徽标"),
+            new CelesteTokenDef(RadiusTile,     "length", "6", "6", "圆角", 0, 40, "小卡片/磁贴"),
+            new CelesteTokenDef(RadiusChip,     "length", "10", "10", "圆角", 0, 40, "胶囊小块/徽章"),
+            new CelesteTokenDef(RadiusPill,     "length", "16", "16", "圆角", 0, 40, "按钮胶囊（主界面用得最多）"),
+            new CelesteTokenDef(RadiusSheet,    "length", "18", "18", "圆角", 0, 60, "大面板/抽屉"),
 
             // ---------------- 间距 ----------------
             new CelesteTokenDef(SpaceTight,  "length", "4",  "4",  "间距", 0, 40),

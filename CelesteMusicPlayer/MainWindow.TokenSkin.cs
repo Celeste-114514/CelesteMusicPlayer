@@ -108,7 +108,9 @@ namespace CelesteMusicPlayer
             FrostedGlass.TokenRootColor = () => ResolveTokenSkinColor(CelesteTokenCatalog.AppBackground);
             FrostedGlass.TokenTitleBarForeground = () => ResolveTokenSkinColor(CelesteTokenCatalog.TextPrimary);
             RebuildTokenSkinDictionary(force: false);
-            StartupLog.Write("[TokenSkin] 测试皮肤已激活（覆盖字典 + FrostedGlass 钩子）");
+            // 第四条腿：形状（圆角）—— 运行时把写死的圆角接到令牌上，不碰 XAML
+            ApplyTokenShapes();
+            StartupLog.Write("[TokenSkin] 测试皮肤已激活（覆盖字典 + FrostedGlass 钩子 + 形状腿）");
         }
 
         /// <summary>离开令牌测试皮肤：摘钩子 + 撤覆盖字典。任何模式下调用都安全（幂等）。</summary>
@@ -117,6 +119,9 @@ namespace CelesteMusicPlayer
             FrostedGlass.TokenPanelColor = null;
             FrostedGlass.TokenRootColor = null;
             FrostedGlass.TokenTitleBarForeground = null;
+
+            // 形状腿：先把圆角还原回进入皮肤前的值，再撤覆盖字典
+            RevertTokenShapes();
 
             if (_tokenSkinDict != null)
             {
@@ -138,6 +143,11 @@ namespace CelesteMusicPlayer
                 return;
             }
             RebuildTokenSkinDictionary(force: true);
+
+            // 主题文件可能刚被改过：先还原圆角、再按新令牌值重新接上，
+            // 否则会以"已经被令牌改过的值"为基准再套一次档位，越套越偏。
+            RevertTokenShapes();
+            ApplyTokenShapes();
         }
 
         /// <summary>
