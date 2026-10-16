@@ -91,85 +91,11 @@
             </ResourceDictionary.ThemeDictionaries>
 
             <!-- ══════════════════════════════════════════════════════
-                 线框图标（16x16 视口，统一描边，不用 Emoji/实心图标）
+                 链路节点图标：用 Segoe 字形（FontIcon），跟标题栏那一列、
+                 左栏工具组是**同一套图标**（2026-10-17 用户反馈自绘线框
+                 和程序其它图标不是一个风格，已停用自绘 Path）。
+                 字形码取程序里已经在用的那些（保证字体里一定有，不会显示方框）。
                  ══════════════════════════════════════════════════════ -->
-            <Style x:Key="ChainIconBase" TargetType="Path">
-                <Setter Property="Stroke" Value="{ThemeResource ChainAccentBrush}" />
-                <!-- 1.5 描边 + 18px 尺寸：跟程序里其它 Segoe 图标的视觉重量对齐
-                     （实测 1.2/16px 偏细偏小，和旁边的字形放一起显得是另一套图标） -->
-                <Setter Property="StrokeThickness" Value="1.5" />
-                <Setter Property="StrokeLineJoin" Value="Round" />
-                <Setter Property="StrokeStartLineCap" Value="Round" />
-                <Setter Property="StrokeEndLineCap" Value="Round" />
-                <Setter Property="Fill" Value="Transparent" />
-                <Setter Property="HorizontalAlignment" Value="Center" />
-                <Setter Property="VerticalAlignment" Value="Center" />
-            </Style>
-
-            <!-- 数据源：文件 -->
-            <Style x:Key="IcoSource" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M3.5 2.5 h5 l3 3 v8 h-8 z M8.5 2.5 v3 h3" />
-            </Style>
-            <!-- PCM 缓存：时钟 -->
-            <Style x:Key="IcoCache" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M8 3 a5 5 0 1 0 0 10 a5 5 0 1 0 0 -10 M8 5.2 v3 l2.2 1.4" />
-            </Style>
-            <!-- 无缝接力：链接 -->
-            <Style x:Key="IcoGapless" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M6.4 9.6 l3.2 -3.2 M6.2 5.6 l1 -1 a2.4 2.4 0 0 1 3.4 0 l1 1 M9.8 10.4 l-1 1 a2.4 2.4 0 0 1 -3.4 0 l-1 -1" />
-            </Style>
-            <!-- 降混：多声道收束 -->
-            <Style x:Key="IcoDownmix" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M2.5 4 h3.2 l2.3 3 l2.3 -3 h3.2 M8 10.5 v3 M5.5 11.2 l2.5 2.5 l2.5 -2.5" />
-            </Style>
-            <!-- 变速：带箭头的波形 -->
-            <Style x:Key="IcoTempo" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M1.5 8 h2.2 M6.5 4.5 v7 M9.5 3 v10 M12.5 6 v4 M4.2 5.6 l2.4 2.4 l-2.4 2.4" />
-            </Style>
-            <!-- DSP · EQ：频率响应曲线 -->
-            <Style x:Key="IcoEq" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M1.5 10.5 l3 -6 l3 8 l3 -10 l3 7" />
-            </Style>
-            <!-- DSP · 卷积：波形 -->
-            <Style x:Key="IcoConvolution" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M1.5 8 c1.6 -5 3.2 5 4.8 -3.4 s3.4 3.4 5.2 0" />
-            </Style>
-            <!-- DSP · 增益：加减 -->
-            <Style x:Key="IcoGain" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M3 8 h10 M8 4 v8" />
-            </Style>
-            <!-- DSP · 压缩：压缩曲线 -->
-            <Style x:Key="IcoCompressor" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M2 12.5 c3.5 0 4.5 -9 12 -9 M2 3 v9.5 h12" />
-            </Style>
-            <!-- DSP · Crossfeed：交叉 -->
-            <Style x:Key="IcoCrossfeed" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M3 4.5 l10 7 M13 4.5 l-10 7" />
-            </Style>
-            <!-- DSP · 声场：扩散扇形 -->
-            <Style x:Key="IcoField" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M8 11.5 a4.5 4.5 0 0 1 -4.5 -4.5 a4.5 4.5 0 0 1 9 0 a4.5 4.5 0 0 1 -4.5 4.5 M4.6 4.6 a5 5 0 0 0 0 0 M11.4 4.6" />
-            </Style>
-            <!-- DSP · 矩阵：网格 -->
-            <Style x:Key="IcoMatrix" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M3 3 h10 v10 h-10 z M3 8 h10 M8 3 v10" />
-            </Style>
-            <!-- DSP · 声道平衡：双滑块 -->
-            <Style x:Key="IcoBalance" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M2.5 6 h4 M9.5 6 h4 M2.5 10 h4 M9.5 10 h4 M6.2 4.5 v3 M10.8 4.5 v3" />
-            </Style>
-            <!-- 输出安全：盾 -->
-            <Style x:Key="IcoSafety" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M8 2.2 l5 2 v4 c0 3 -2.4 4.6 -5 5.6 c-2.6 -1 -5 -2.6 -5 -5.6 v-4 z" />
-            </Style>
-            <!-- 输出：扬声器 -->
-            <Style x:Key="IcoOutput" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M2.8 6.2 h2.4 l3.4 -2.6 v9 l-3.4 -2.6 h-2.4 z M11.2 5.4 a3.6 3.6 0 0 1 0 5.2" />
-            </Style>
-            <!-- 设备 / DAC：芯片 -->
-            <Style x:Key="IcoDevice" TargetType="Path" BasedOn="{StaticResource ChainIconBase}">
-                <Setter Property="Data" Value="M5 5 h6 v6 h-6 z M7 2.6 v2.4 M9 2.6 v2.4 M7 11 v2.4 M9 11 v2.4 M2.6 7 h2.4 M2.6 9 h2.4 M11 7 h2.4 M11 9 h2.4" />
-            </Style>
 
             <!-- ══════════════════════════════════════════════════════
                  共用小件
@@ -288,16 +214,15 @@
                         <ColumnDefinition Width="26" />
                         <ColumnDefinition Width="*" />
                     </Grid.ColumnDefinitions>
-                    <!-- 图标 + 连接轴线 -->
+                    <!-- 图标（Segoe 字形，与程序其它图标同一套）+ 连接轴线 -->
                     <Grid Grid.Column="0">
-                        <Viewbox
-                            Width="18"
-                            Height="18"
+                        <FontIcon
+                            Glyph="{x:Bind IconGlyph}"
+                            FontSize="16"
+                            Foreground="{ThemeResource ChainAccentBrush}"
                             HorizontalAlignment="Center"
                             VerticalAlignment="Top"
-                            Margin="0,0,0,0">
-                            <Path Style="{x:Bind IconStyle}" />
-                        </Viewbox>
+                            Margin="0,1,0,0" />
                         <Rectangle
                             Width="1"
                             Margin="0,23,0,0"
@@ -460,7 +385,7 @@
         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
         BorderThickness="1,1,0,1"
         CornerRadius="12,0,0,12"
-        Margin="0,14,0,14">
+        Margin="0,100,0,100">
         <Grid>
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto" />

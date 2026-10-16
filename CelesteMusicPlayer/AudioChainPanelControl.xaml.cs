@@ -75,7 +75,11 @@ namespace CelesteMusicPlayer
 
         public Visibility LatencyVisibility { get; init; } = Visibility.Collapsed;
 
-        public Style IconStyle { get; init; } = null!;
+        /// <summary>
+        /// 节点图标的 Segoe 字形码（如 "\uE8D2"）。
+        /// 2026-10-17：自绘 Path 线框与程序其它图标不是一个风格，改用同一套字体图标。
+        /// </summary>
+        public string IconGlyph { get; init; } = "\uE713";
 
         /// <summary>左侧连接轴线（最后一个节点不画，避免拖一条多余的尾巴）。</summary>
         public Visibility AxisVisibility { get; init; } = Visibility.Visible;
@@ -517,49 +521,32 @@ namespace CelesteMusicPlayer
                     ? $"延迟 {ms.ToString("0.#", CultureInfo.InvariantCulture)} ms"
                     : string.Empty,
                 LatencyVisibility = node.LatencyMs.HasValue ? Visibility.Visible : Visibility.Collapsed,
-                IconStyle = NodeIconStyle(node.Id),
+                IconGlyph = NodeIconGlyph(node.Id),
                 AxisVisibility = isLast ? Visibility.Collapsed : Visibility.Visible
             };
         }
 
-        /// <summary>节点 Id → 线框图标 Style（查不到就用文件图标兜底，绝不显示空图标）。</summary>
-        private Style NodeIconStyle(string id)
+        /// <summary>
+        /// 节点 Id → Segoe 字形码。全部取程序里**已经在用**的码（字体里一定有，不会显示成方框）：
+        /// E8D2 文件/标签、E8B7 列表、E72C 刷新（接续）、E767 音量/声道、E893 快进（变速）、
+        /// E91F 音频、E768 播放/扬声器、E713 处理（DSP）、E9D9 波形（卷积）。
+        /// </summary>
+        private static string NodeIconGlyph(string id)
         {
-            string key = id switch
+            return id switch
             {
-                "decode" => "IcoSource",
-                "cache" => "IcoCache",
-                "gapless" => "IcoGapless",
-                "downmix" => "IcoDownmix",
-                "tempo" => "IcoTempo",
-                "safety" => "IcoSafety",
-                "output" => "IcoOutput",
-                // 一个 DSP 都没开时面板上那一枚"DSP 未启用"节点
-                "dsp:none" => "IcoEq",
-                "dsp:0" => "IcoEq",
-                "dsp:1" => "IcoConvolution",
-                "dsp:2" => "IcoGain",
-                "dsp:3" => "IcoCompressor",
-                "dsp:4" => "IcoCrossfeed",
-                "dsp:5" => "IcoField",
-                "dsp:6" => "IcoMatrix",
-                "dsp:7" => "IcoBalance",
-                _ => "IcoSource"
+                "decode" => "\uE8D2",
+                "cache" => "\uE8B7",
+                "gapless" => "\uE72C",
+                "downmix" => "\uE767",
+                "tempo" => "\uE893",
+                "safety" => "\uE91F",
+                "output" => "\uE768",
+                "dsp:1" => "\uE9D9",   // 卷积：波形
+                "dsp:2" => "\uE767",   // ReplayGain：音量
+                "dsp:7" => "\uE767",   // 声道平衡：声道
+                _ => "\uE713"          // 其余 DSP 模块 / 未启用：处理
             };
-
-            try
-            {
-                if (Resources[key] is Style style)
-                {
-                    return style;
-                }
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("AudioChainPanelControl.NodeIconStyle", caught);
-            }
-
-            return new Style(typeof(Path));
         }
 
         /// <summary>进/出格式拼成一行；两端都拿不到就返回空串（调用方把行收起，铁律）。</summary>
