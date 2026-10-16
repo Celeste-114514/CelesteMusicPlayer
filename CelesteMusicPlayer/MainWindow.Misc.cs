@@ -457,6 +457,13 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void SetLeftNavCollapsed(bool collapsed)
         {
+            // 播放页展开期间左栏整块隐藏、左列宽压 0（2026-10-16 晚间用户要求），
+            // 这时不允许收起/展开：否则 Completed 里改列宽会在播放页左侧撕出空白条。
+            if (_nowPlayingPaneOpen)
+            {
+                return;
+            }
+
             _leftNavCollapsed = collapsed;
             try
             {

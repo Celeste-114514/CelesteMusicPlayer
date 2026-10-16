@@ -1122,6 +1122,38 @@ namespace CelesteMusicPlayer
             }
         }
 
+        /// <summary>
+        /// 关播放页时还原左栏三件套：可见性 + 列宽 + 卡片外壳（margin/背景/边线/投影）。
+        ///
+        /// 2026-10-16 晚间用户要求「打开播放页时左侧分类栏要隐藏」：展开播放页时
+        /// LeftCategoryNavBorder 整块 Collapsed、左列宽压 0（播放页四边沉浸）；
+        /// 关闭时必须原样还回来。列宽不另存字段——按左栏自己的状态还原
+        ///（收起态 LeftNavCollapsedWidth / 展开态 _leftNavExpandedWidth，后者记住
+        /// 用户拖宽后的宽度），与 Misc.SetLeftNavCollapsed 共用同一套状态。
+        /// </summary>
+        private void RestoreLeftNavForNowPlaying()
+        {
+            if (LeftCategoryNavBorder != null)
+            {
+                LeftCategoryNavBorder.Visibility = Visibility.Visible;
+                RestoreLeftCategoryNavCard();
+            }
+
+            if (CategoryColumn != null)
+            {
+                if (_leftNavCollapsed)
+                {
+                    CategoryColumn.Width = new GridLength(LeftNavCollapsedWidth);
+                    CategoryColumn.MinWidth = LeftNavCollapsedWidth;
+                }
+                else
+                {
+                    CategoryColumn.Width = new GridLength(_leftNavExpandedWidth);
+                    CategoryColumn.MinWidth = LeftNavExpandedMinWidth;
+                }
+            }
+        }
+
         /// <summary>景深切换：切出播放信息页时面板前推、主内容区(含左侧分类)退后变暗；收起则反向恢复。</summary>
         private void SetNowPlayingPaneVisible(bool visible)        {
             _nowPlayingPaneOpen = visible;
@@ -1155,18 +1187,17 @@ namespace CelesteMusicPlayer
                 // 页面顶边直接顶到窗口上沿、右缘抵到窗口边缘。
                 AppTitleBar.Height = 0;
                 MainContentGrid.Margin = new Thickness(0);
-                // 2026-10-16 用户要求：播放页展开时左侧分类栏和右缘分界线仍显示。
-                // 实现=覆盖层只盖右列（XAML 里 Grid.Column="1"），左栏不再 Collapse。
-                // 旧方案 SetLibraryNavHiddenForNowPlaying(true) 已废弃删除。
-                // 左栏卡片顶部补 10px：标题栏压 0 后别让「音乐库」标题贴屏幕最顶。
-                // ⚠ 同轮用户新要求：展开态左栏**去掉卡片背景/边线/投影**——播放页是沉浸视觉，
-                // 左侧再挂一张浮起卡片会很割裂；只留分类条目本身（照样能点），收起来时恢复。
-                if (LeftCategoryNavBorder != null)
+                // 2026-10-16 晚间用户改要求：「打开播放页的时候左侧分类栏要隐藏」。
+                // （同天早先的要求是"仍显示、点分类条目照样能切库"——那条作废，以最新为准；
+                //   再往前的旧方案 SetLibraryNavHiddenForNowPlaying 也早已删除。）
+                // 整块 Collapsed + 左列宽压 0：播放页左缘也抵到窗口左缘（E1 沉浸四边）。
+                // 关闭时按左栏自己的状态还原列宽（收起态 56 / 展开态 _leftNavExpandedWidth，
+                // 复用 Misc 那套状态不另存字段），卡片外壳走 RestoreLeftNavForNowPlaying。
+                if (LeftCategoryNavBorder != null && CategoryColumn != null)
                 {
-                    LeftCategoryNavBorder.Margin = LeftNavCardMarginNowPlaying;
-                    LeftCategoryNavBorder.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
-                    LeftCategoryNavBorder.BorderBrush = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
-                    LeftCategoryNavBorder.Shadow = null;
+                    LeftCategoryNavBorder.Visibility = Visibility.Collapsed;
+                    CategoryColumn.Width = new GridLength(0);
+                    CategoryColumn.MinWidth = 0;
                 }
                 // 右上角标题栏按钮列整列隐藏（沉浸看歌）。含最小化/最大化/关闭——
                 // 展开态要用系统按钮需先退出播放页（左上角返回或 Esc）。用户 2026-10-16 明确要求。
@@ -1217,13 +1248,10 @@ namespace CelesteMusicPlayer
                 AppTitleBar.Height = 48;
                 MainContentGrid.Margin = new Thickness(16, 8, 16, 0);
                 TrySwitchTitleBar(AppTitleBar);
-                // 2026-10-16：左栏常显（不再有「播放页收起才放回来」的逻辑），只把展开态改过的
-                // 几个 Margin/Visibility 还原：左栏卡片间距、右上角浮动列、页内两按钮右距、拖动区右距。
-                // 左栏的 -16 是「贴主 UI 左缘」（卡片从窗口左缘长出来），别丢。
-                if (LeftCategoryNavBorder != null)
-                {
-                    RestoreLeftCategoryNavCard();
-                }
+                // 2026-10-16 晚间：左栏在播放页展开期间是**整块隐藏**的（用户最新要求），
+                // 这里连可见性 + 列宽 + 卡片外壳一起还原。列宽按左栏自己的状态走
+                //（收起态 56 / 展开态 _leftNavExpandedWidth），单一真相源在 Misc。
+                RestoreLeftNavForNowPlaying();
                 if (TitleBarFloatingButtons != null)
                 {
                     TitleBarFloatingButtons.Visibility = Visibility.Visible;
@@ -1270,12 +1298,8 @@ namespace CelesteMusicPlayer
                     NowPlayingPane.Visibility = Visibility.Collapsed;
                     NowPlayingPane.Opacity = 1;
 
-                    // 2026-10-16：展开态改过的四样一并还原（左栏常显，无需恢复 Opacity）
-                    // 左栏背景/边线/投影 + -16 贴左缘都要还原（与收起路径同一套，抽成方法复用）
-                    if (LeftCategoryNavBorder != null)
-                    {
-                        RestoreLeftCategoryNavCard();
-                    }
+                    // 2026-10-16 晚间：降级路径同样要还原左栏三件套（可见性 + 列宽 + 卡片外壳）
+                    RestoreLeftNavForNowPlaying();
                     if (TitleBarFloatingButtons != null)
                     {
                         TitleBarFloatingButtons.Visibility = Visibility.Visible;

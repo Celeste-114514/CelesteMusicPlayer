@@ -1008,12 +1008,24 @@ namespace CelesteMusicPlayer
         /// （播放按钮是整排控制的视觉重心，中轴会随左侧封面+歌名宽度漂）。
         /// 下移量是一个常量，想微调只改这里。
         /// </summary>
-        private void UpdateTransportProgressCentering()
+        /// <returns>这一轮有没有真的改动 Margin（启动补校靠它判断布局是否已经稳定）。</returns>
+        private bool UpdateTransportProgressCentering()
         {
             if (ProgressRowGrid == null || TransportInfoPanel == null)
             {
-                return;
+                return false;
             }
+
+            // 改前先留底：启动补校要判断"这轮有没有动过"，动了就继续观察，没动才算稳。
+            // ⚠️ 阈值是 2px 不是 0.01px：2026-10-16 探针实测，补校本身有 ±1px 自激振荡
+            // （CenterOnElement 的 0.5px 写入阈值与"排一帧补量"错位形成的极限环，
+            //  P 在 -325/-326/-327 之间翻、B 在 -5/-5.5 之间翻，永远差 0.5px 所以永远写）。
+            //  用精确比较会永远判"动"→ 定时器永远不停（第一版就这样跑了 195+ tick）。
+            //  2px 以下算布局已停；真正的布局落定（主题挂载/曲库加载）是上百 px 的跳动，漏不掉。
+            var beforeProgress = ProgressRowGrid.Margin;
+            var beforeButtons = TransportMainButtonsPanel != null
+                ? TransportMainButtonsPanel.Margin
+                : default(Microsoft.UI.Xaml.Thickness);
 
             // 2026-10-16 用户反馈「波形进度条下面那排按钮太靠右」：原来按钮组和进度条共用
             // +96 的右移量，跟着进度条一起被推到右边去了。按钮组单独回落到播放栏正中（0）。
@@ -1030,7 +1042,24 @@ namespace CelesteMusicPlayer
                     CenterOnElement(ProgressRowGrid, PlayPauseButton, TransportProgressShiftY));
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback3.cs.UpdateTransportProgressCentering", caught); }
+
+            bool progressMoved = MarginDrift(beforeProgress, ProgressRowGrid.Margin);
+            bool buttonsMoved = TransportMainButtonsPanel != null
+                && MarginDrift(beforeButtons, TransportMainButtonsPanel.Margin);
+            return progressMoved || buttonsMoved;
         }
+
+        /// <summary>
+        /// Margin 变化是否超过"布局还在动"的阈值（2px）。
+        /// 2026-10-16 探针实测：启动补校存在 ±1px 自激极限环（补量帧与 0.5px 写入阈值
+        /// 错位，P 在三个相邻整像素间翻、B 在相差 0.5px 的两个值间翻），
+        /// 精确比较会让"稳定"永远达不到、定时器永远不停。2px 以下视为已停。
+        /// </summary>
+        private static bool MarginDrift(Microsoft.UI.Xaml.Thickness a, Microsoft.UI.Xaml.Thickness b)
+            => Math.Abs(a.Left - b.Left) >= 2
+            || Math.Abs(a.Top - b.Top) >= 2
+            || Math.Abs(a.Right - b.Right) >= 2
+            || Math.Abs(a.Bottom - b.Bottom) >= 2;
 
         /// <summary>按钮组相对播放栏中轴的偏移量（px）：0 = 正好落在窗口左右中轴上。</summary>
         private const double TransportButtonsShiftX = 0;
@@ -1128,29 +1157,72 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 启动期补校几次进度条位置（2026-10-16：修"刚启动没对齐、拖一下窗口才对齐"）。
         ///
-        /// ⚠️ 别再改成"每次布局都校"：LayoutUpdated 版会让进度条和按钮**持续快速抖动**
-        /// （改 Margin → 触发新布局 → 再校，来回颤），同步改还会直接触发
-        /// LayoutCycleException（冒烟抓到过）。这里只在启动后 200/400/600/800ms
-        /// 各校一次，把布局落定的那几帧盖住就收手；运行期只靠 SizeChanged。
+        /// ⚠️ 历史三版（都别再改回去）：
+        /// ① 挂 LayoutUpdated 每次布局都校 → 进度条和按钮**持续快速抖动**
+        ///    （改 Margin → 触发新布局 → 再校，来回颤），同步改还会直接触发
+        ///    LayoutCycleException（冒烟抓到过）。
+        /// ② 启动后 200/400/600/800ms 各校一次 → **用户 2026-10-16 傍晚复现仍然错位**：
+        ///    实测启动时序里主题字典在 FirstActivated 后约 2.5s 才挂载、媒体库约 4s 才
+        ///    加载完，布局真正落定远比 800ms 晚，四次补校量到的全是过渡值，且之后没有
+        ///    事件再触发重算，于是一直错到用户拖窗口。
+        ///
+        /// 现在这版：DispatcherQueueTimer 每 150ms 校一次，**连续 10 次漂移不足 2px
+        /// （≈1.5s 稳定）才停**，最长 67 tick（≈10s）兜底。定时器间隔远大于布局帧、
+        /// 稳定即停，不会抖也不会 LayoutCycle；晚到的主题/曲库/元数据造成的布局变化会被
+        /// 后续 Tick 继续盖住，直到真的稳了才收手。运行期仍然只靠 SizeChanged。
+        ///
+        /// ⚠️ 2026-10-16 探针实测的两个坑（改这函数前必读）：
+        /// ① "有没有动"必须用 2px 阈值，不能用精确比较：补校自身有 ±1px 自激极限环
+        ///    （CenterOnElement 的 0.5px 写入阈值与 UpdateTransportProgressCentering 里
+        ///    "排一帧补量"错位，P 在 -325/-326/-327 间翻、B 在 -5/-5.5 间翻），
+        ///    精确比较永远判"动"→ 稳定永远达不到（第一版定时器跑了 195+ tick 不停）。
+        /// ② 兜底上限必须无条件检查：曾把 Stop 写在 if(changed) 的 else 里，
+        ///    changed 恒真时永远走不到，定时器跑一辈子。
         /// </summary>
+        private DispatcherQueueTimer? _startupCenteringTimer;
+        private int _startupCenteringStable;
+        private int _startupCenteringTicks;
+
         private void ScheduleStartupTransportCentering()
         {
-            for (int i = 1; i <= 4; i++)
+            _startupCenteringTimer?.Stop();
+            _startupCenteringStable = 0;
+            _startupCenteringTicks = 0;
+            _startupCenteringTimer = DispatcherQueue.CreateTimer();
+            _startupCenteringTimer.Interval = TimeSpan.FromMilliseconds(150);
+            _startupCenteringTimer.Tick += (s, _) =>
             {
-                int delayMs = i * 200;
-                _ = System.Threading.Tasks.Task.Run(async () =>
+                _startupCenteringTicks++;
+                bool changed;
+                try
                 {
-                    await System.Threading.Tasks.Task.Delay(delayMs);
-                    try
-                    {
-                        DispatcherQueue.TryEnqueue(UpdateTransportProgressCentering);
-                    }
-                    catch (Exception caught)
-                    {
-                        global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback3.cs.ScheduleStartupTransportCentering", caught);
-                    }
-                });
-            }
+                    changed = UpdateTransportProgressCentering();
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Playback3.cs.StartupCenteringTick", caught);
+                    changed = false;
+                }
+
+                if (changed)
+                {
+                    // 布局还在动（超过 2px 的真移动）：重新计时，继续观察
+                    _startupCenteringStable = 0;
+                }
+                else
+                {
+                    _startupCenteringStable++;
+                }
+
+                // ⚠️ 兜底上限必须无条件检查：曾把这段写在 if(changed) 的 else 里，
+                // 布局一直动时永远走不到，定时器跑一辈子不停（2026-10-16 探针抓到 195+ tick）。
+                if (_startupCenteringStable >= 10 || _startupCenteringTicks >= 67)
+                {
+                    s.Stop();
+                    StartupLog.Write($"[播放栏] 启动补校结束 ticks={_startupCenteringTicks} stable={_startupCenteringStable}");
+                }
+            };
+            _startupCenteringTimer.Start();
         }
 
         private void TransportInfoPanel_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)

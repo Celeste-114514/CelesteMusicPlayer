@@ -314,8 +314,10 @@
                  ② 右边线由 Divider 升级为 CardStroke（原来的 Divider 太淡，用户看不见）；
                  ③ 阴影由代码挂 ThemeShadow（见 MainWindow 构造函数，WinUI3 的
                     ThemeShadow 需要宿主留空间， Margin 四边 4px 就是给它留的）；
-                 ④ 播放页展开时本卡片仍显示（覆盖层已限定只盖右列），
-                    展开/收起时的 Margin 由 SetNowPlayingPaneVisible 切换。
+                 ④ 2026-10-16 晚间用户要求：播放页展开时本卡片整块隐藏
+                    （Visibility=Collapsed + 左列宽压 0，见 Features.cs 展开分支），
+                    关闭播放页时由 RestoreLeftNavForNowPlaying 还原；
+                    播放页展开期间 SetLeftNavCollapsed 直接 return，禁止收起/展开。
                  2026-10-16 改：左不再贴窗口缘（-16→6，离窗口左缘 22px），右留白 8→14。
                  ⚠ E3 收起态下本卡片缩成窄条，圆角/阴影自适应，勿动。
                  ⚠️ 这里的 Margin 与 Features.cs 的两处硬编码必须同步。 -->
@@ -6871,12 +6873,13 @@
                 </Grid>
             </Grid>
 
-            <!-- 播放歌曲信息页。2026-10-16 用户要求：播放页展开时左侧分类栏和右缘分界线
-                 仍显示，覆盖层由「占满整个主内容区（ColumnSpan=2）」收窄为只盖右列
-                 播放列表区（Column=1）。左栏露在播放页左侧，点分类条目照样能切库。
+            <!-- 播放歌曲信息页。2026-10-16 用户要求：播放页展开时左侧分类栏整块隐藏
+                 （LeftCategoryNavBorder.Visibility=Collapsed + CategoryColumn 列宽压 0），
+                 播放页独占主内容区；关闭播放页时还原左栏可见性与列宽。
                  ⚠ E1 的 AppTitleBar.Height=0 / MainContentGrid.Margin=0 不变：播放页仍顶到
-                 窗口最顶、右缘抵窗口右缘；左栏卡片顶部间距由 SetNowPlayingPaneVisible
-                 展开态补 10px（标题栏压 0 后别让「音乐库」标题贴屏幕最顶）。 -->
+                 窗口最顶、右缘抵窗口右缘。
+                 ⚠ 覆盖层只占 Grid.Column=1（播放列表列），不再 ColumnSpan=2——左列
+                 播放页期间已被压成 0 宽，留 ColumnSpan 会在还原时闪回。 -->
             <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
