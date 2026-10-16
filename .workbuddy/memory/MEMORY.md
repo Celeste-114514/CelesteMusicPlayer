@@ -4,8 +4,10 @@
 ## 工作主线
 - 旧 HiFi 路线图（电平表→交叉淡入→APO EQ I/O→SRC→FIR→SQLite曲库）**已全部落地**，勿当待办。当前=UI 令牌化前准备；MainWindow 拆分放最后（最高风险）。main 分支本地领先远端较多，未推送。
 - **当前线 = B 组音频链路面板**：B1 勘察✅、B2 模型 `AudioSignalPath.cs`✅（快照 `Capture(engine, globalBypass)` + 静态事件环 `RecordEvent` / `RecentEvents(int)`）。**B3 面板（本轮）** = 新 `AudioChainPanelControl`（右侧滑出抽屉，复用「音频设置」那套 Visibility + IsHitTestVisible + TranslateX 动画）+ 入口 `NowPlayingChainButton`（播放页右上按钮组）+ 宿主 `MainWindow.AudioChain.cs`；铁律=**拿不到的数据整行不显示**（不写"未知/—"）。B4 接真实状态 / B5 主题适配 / B6 验收 未做。
-- **左栏现状（10-16「换图层」已回退，用户不满意）**：`NavToolPanel`（标签/音效处理/设置）**在** `LeftCategoryNavBorder` 卡片内，卡片通到窗口底。收起态对齐=Center + `LeftNavPaddingCollapsed=(15,2,15,2)`（左右必须等宽，否则图标不居中）；对齐切换放在文字淡出 Completed 里（不能在动画一开始就切，否则图标窜动=闪）。
-- ⚠ **同一 UI 属性多处赋值必须抽单一真相源**（左栏三处已统一到 `NavContentAlignment`）。
+- **左栏现状（10-16 下午三连修后）**：`NavToolPanel`（标签/音效处理/设置）**在** `LeftCategoryNavBorder` 卡片内，卡片通到窗口底。收起态对齐=Center + `LeftNavPaddingCollapsed=(15,2,15,2)`；对齐切换放在文字淡出 Completed 里。外壳（margin+投影）单一真相源=`ApplyLeftNavCardChrome`：收起态右留白 6（卡片 66 宽）+ **无 ThemeShadow**（渐带 25px 在窄条上显脏=用户说的"右边界有宽度"），切窄壳必须与列宽同帧（Completed 里）。emoji 图标墨迹偏右 +0.9 → 收起态 `Margin=(-1.5,0,0,0)` 补偿（只补可见 emoji）；对齐基准=`FindFirstVisibleNavIcon`（emoji 模式下 FontIcon 是 Collapsed，旧实现只找 FontIcon 导致对齐被跳过）。
+- ⚠ **同一 UI 属性多处赋值必须抽单一真相源**（左栏已统一到 `NavContentAlignment` / `ApplyLeftNavCardChrome`）。
+- ⚠ **XAML 故事板 TargetName 在本仓有解析失败案**（`MainContentDepthBackStoryboard` 打 `LeftCategoryTransform`，Begin 必抛 COMException；同写法的音频设置故事板却是好的，根因未明）。**稳妥做法：Begin 前代码 `Storyboard.SetTarget` 锁死目标**（`Features.RetargetStoryboard` 已封装，FindName + 字段兜底）。动画目标能用代码锁死就别留给名字解析——本族事故已三次（DataGrid 选中画刷 / LeftCategoryTransform 换实例 / 本次名字解析）。
+- ⚠ **播放页景深只动右列**（`LibraryPaneRoot/Transform`）；**播放页展开时左栏整块隐藏**（10-16 晚间用户要求，推翻同天早先"仍显示"）：`LeftCategoryNavBorder.Visibility=Collapsed` + `CategoryColumn` 列宽/MinWidth 压 0，还原走 `RestoreLeftNavForNowPlaying`（可见性+列宽按 `_leftNavCollapsed`/`_leftNavExpandedWidth`+卡片外壳），关闭/降级两路径都调；展开期间 `SetLeftNavCollapsed` 直接 return（`_nowPlayingPaneOpen` 守卫）。
 - ⚠ **待办清单在 `outputs/待办清单-*.md`**，不在本目录。未做：m3u「按单歌单导出」、Discogs/fanart 署名、标签页弃用 DataGrid + 去格内编辑（排 B 组后）、零散播放窗口 Q1~Q5。
 - 零散播放定案：保留文件关联；做独立「零散播放」窗口（纯内存队列、不碰曲库不读 SQLite）；播放器内选文件 = 送该窗口不入库。
 
@@ -20,6 +22,8 @@
 - 取色只认 resolver 套；主题判断沿元素树找显式 Light/Dark 祖先，禁读 App.RequestedTheme。XAML 与 cs 同 commit。
 - 秒崩 0xC000027B = XAML 初值 + 事件绑定 → 写后续 x:Name(null) → NRE；新面板 ValueChanged/Toggled 加就绪守卫。
 - ⚠ 第三方控件模板的 VisualState 动画属性链**别在运行时打补丁**（换画刷实例 / ClearValue → 动画 Begin 解析失败 → COMException 0x80040154 崩）。DataGrid 细节见 ref-datagrid-toolkit.md。
+- ⚠ **"稳定检测"判据要容得下自激振荡**：进度条启动补校（`ScheduleStartupTransportCentering`，DispatcherQueueTimer 150ms）实测有 ±1px 极限环（CenterOnElement 0.5px 写入阈值与"排一帧补量"错位，永远差 0.5px 永远写）→ changed 判据用 **2px 漂移阈值**（`MarginDrift`），精确比较会永远判"动"、定时器永远不停（195+ tick 实录）。
+- ⚠ **兜底 Stop 必须无条件可达**：别把停机检查写在 `if (changed)` 的 else/return 后面——changed 恒真时永远走不到（本轮自学bug，探针两期才抓到）。另："改了没生效但代码明明对"→ 加临时探针日志让运行时说话，别盯代码猜。
 
 ## 标签板块（定稿）
 - 位深两条路径：表格 TryGetFactsFast(TagLib only，有损容器显"-")；状态栏/歌曲面板 TryGetPartsCached(含 ffmpeg)。表格 15 列；拖列宽帧合并。单元格编辑=mp3tag 语义（唯一选中项才进编辑）。
