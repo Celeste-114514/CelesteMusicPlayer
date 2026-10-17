@@ -100,6 +100,9 @@ namespace CelesteMusicPlayer
             ("ApplicationPageBackgroundThemeBrush",  CelesteTokenCatalog.AppBackground),
             ("SystemControlHighlightListLowBrush",   CelesteTokenCatalog.SelectionBackground),
             ("SolidBackgroundFillColorBaseBrush",    CelesteTokenCatalog.AppBackground),
+            // ⚠ 材质键不是颜色键：不能给纯色刷（会把毛玻璃变成不透光色条——
+            // 2026-10-17 用户实测播放页底部悬浮条）。构建字典时走 CreateTokenAcrylicBrush：
+            // 仍用 Panel.Background 染色，但保留真亚克力材质（HostBackdrop + 回退色）。
             ("AcrylicInAppFillColorDefaultBrush",    CelesteTokenCatalog.PanelBackground),
             ("ButtonDangerBackgroundBrush",          CelesteTokenCatalog.ButtonDanger),
         };
@@ -210,7 +213,13 @@ namespace CelesteMusicPlayer
                 {
                     var raw = CelesteThemeStore.Resolve(theme, tokenName, dark);
                     var c = CelesteTokenApplier.ParseColor(raw ?? "");
-                    if (c.HasValue)
+                    if (!c.HasValue) continue;
+                    if (systemKey == "AcrylicInAppFillColorDefaultBrush")
+                    {
+                        // 亚克力材质键：染色但保留材质，别退化成纯色（见 CreateTokenAcrylicBrush）
+                        dict[systemKey] = CreateTokenAcrylicBrush(c.Value);
+                    }
+                    else
                     {
                         dict[systemKey] = new SolidColorBrush(c.Value);
                     }
@@ -365,6 +374,34 @@ namespace CelesteMusicPlayer
         {
             var c = ThemeColorService.CurrentAccent;
             return string.Concat("#", c.R.ToString("X2"), c.G.ToString("X2"), c.B.ToString("X2"));
+        }
+
+        /// <summary>
+        /// 令牌皮肤里「亚克力材质」键的刷子：用主题 Panel.Background 染色，但保留真亚克力
+        /// 材质——2026-10-17 用户实测：播放页底部悬浮条（NowPlayingFloatingBar 背景挂
+        /// AcrylicInAppFillColorDefaultBrush）在令牌模式下被覆盖字典换成纯色，变成一条
+        /// 全不透光的色条，设置里明明是「背景亚克力毛玻璃半透明」。
+        /// 写法与 FrostedGlass.CreateBrush 的亚克力分支一致（本仓 WinUI 版本的 AcrylicBrush
+        /// 没有 BackgroundSource 属性，默认即糊应用程序自身内容）；亚克力不可用
+        /// （老系统/远程桌面）时回落 FallbackColor（主题面板色，至少不花屏）。
+        /// TintOpacity/TintLuminosityOpacity 是观感旋钮：0.6/0.7 = 明显半透明、字仍可读。
+        /// </summary>
+        private static Brush CreateTokenAcrylicBrush(Color tint)
+        {
+            try
+            {
+                return new AcrylicBrush
+                {
+                    TintColor = tint,
+                    TintOpacity = 0.6,
+                    TintLuminosityOpacity = 0.7,
+                    FallbackColor = tint,
+                };
+            }
+            catch
+            {
+                return new SolidColorBrush(tint);
+            }
         }
 
         /// <summary>选中族令牌 + 透明度档：悬停 40% / 多选底 30% / 胶囊 55% / 选中 100%。
