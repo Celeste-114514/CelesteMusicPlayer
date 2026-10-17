@@ -43,6 +43,7 @@ namespace CelesteMusicPlayer
         public EqualizerWindow()
         {
             InitializeComponent();
+            TokenShapeRuntime.Attach(this);
             WindowIconHelper.Apply(this);
             Title = "均衡器";
             ExtendsContentIntoTitleBar = true;

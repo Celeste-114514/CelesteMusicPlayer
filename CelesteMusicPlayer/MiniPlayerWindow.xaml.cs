@@ -69,6 +69,7 @@ namespace CelesteMusicPlayer
         {
             _owner = owner;
             InitializeComponent();
+            TokenShapeRuntime.Attach(this);
             WindowIconHelper.Apply(this);
             Title = "迷你播放器";
 

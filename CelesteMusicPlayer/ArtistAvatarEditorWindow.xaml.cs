@@ -48,6 +48,7 @@ namespace CelesteMusicPlayer
             _sourceImagePath = sourceImagePath;
 
             InitializeComponent();
+            TokenShapeRuntime.Attach(this);
             WindowIconHelper.Apply(this);
             AppWindow.Resize(new Windows.Graphics.SizeInt32(520, 520));
             Title = "编辑艺术家头像";

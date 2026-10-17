@@ -734,6 +734,7 @@ namespace CelesteMusicPlayer
             // 避免 DispatcherQueue.GetForCurrentThread() 返回 null 导致 NullReferenceException。
             HiFiOutputBackend.UiDispatcherQueue = this.DispatcherQueue;
             InitializeComponent();
+            TokenShapeRuntime.Attach(this);
             StartupLog.Write("MainWindow InitializeComponent done");
             // 左分类栏「浮动板块」阴影（2026-10-16 用户要求：视觉上像从主程序左侧浮出的一块板）。
             // WinUI3 ThemeShadow 对窗口内元素即可渲染；挂不上只丢阴影不丢功能，整体兜底。

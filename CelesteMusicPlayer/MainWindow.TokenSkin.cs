@@ -115,8 +115,13 @@ namespace CelesteMusicPlayer
             FrostedGlass.TokenRootColor = () => ResolveTokenSkinColor(CelesteTokenCatalog.AppBackground);
             FrostedGlass.TokenTitleBarForeground = () => ResolveTokenSkinColor(CelesteTokenCatalog.TextPrimary);
             RebuildTokenSkinDictionary(force: false);
-            // 第四条腿：形状（圆角）—— 运行时把写死的圆角接到令牌上，不碰 XAML
-            ApplyTokenShapes();
+            // 第四条腿：形状（圆角）—— 走多窗口共享运行时（主窗口 + 各独立窗口）
+            TokenShapeRuntime.Attach(this);
+            TokenShapeRuntime.Register(this, () => RootShell);
+            TokenShapeRuntime.ApplyAll();
+            // 面板/UserControl 弹窗式内容此时还没长出来：延后一帧补一轮
+            // （WinUI 里刚 Loaded 的子树同帧遍历不全，跟抽屉动画延后一帧同因）
+            DispatcherQueue.TryEnqueue(TokenShapeRuntime.ApplyAll);
             // 代码画的胶囊/选中块字色也统一跟 Accent.Text（2026-10-12 留的
             // OverrideContrastForeground 钩子）；不接它，代码胶囊白字、XAML 按钮
             // 跟主题文件走，同一屏又两种字色。
@@ -143,8 +148,8 @@ namespace CelesteMusicPlayer
             // 代码侧前景钩子摘掉：回到经典皮肤的"一律白"
             ColorHelper.OverrideContrastForeground = null;
 
-            // 形状腿：先把圆角还原回进入皮肤前的值，再撤覆盖字典
-            RevertTokenShapes();
+            // 形状腿：还原所有注册窗口（含独立窗口）的圆角，再撤覆盖字典
+            TokenShapeRuntime.RevertAll();
 
             if (_tokenSkinDict != null)
             {
@@ -169,8 +174,10 @@ namespace CelesteMusicPlayer
 
             // 主题文件可能刚被改过：先还原圆角、再按新令牌值重新接上，
             // 否则会以"已经被令牌改过的值"为基准再套一次档位，越套越偏。
-            RevertTokenShapes();
-            ApplyTokenShapes();
+            // 所有注册窗口一起（含设置窗口这种独立窗口）。
+            TokenShapeRuntime.RevertAll();
+            TokenShapeRuntime.ApplyAll();
+            DispatcherQueue.TryEnqueue(TokenShapeRuntime.ApplyAll);
             ApplyTokenContrastForeground();
         }
 

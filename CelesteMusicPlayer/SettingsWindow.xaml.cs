@@ -143,6 +143,7 @@ namespace CelesteMusicPlayer
             var initWatch = Stopwatch.StartNew();
             _loadingUi = true;
             InitializeComponent();
+            TokenShapeRuntime.Attach(this);
             long initMs = initWatch.ElapsedMilliseconds;
             WindowIconHelper.Apply(this);
             Title = "选项设置";
