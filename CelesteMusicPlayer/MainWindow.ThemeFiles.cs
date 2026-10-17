@@ -157,5 +157,147 @@ namespace CelesteMusicPlayer
                 StartupLog.WriteException("MainWindow.OpenThemesDirectory", caught);
             }
         }
+
+        // ---------------- 快速调整（2026-10-17 · 设置页直接调，不手编文件） ----------------
+
+        /// <summary>
+        /// 改当前选中的主题文件（读盘 → mutate → 校验 → 存回 → 由调用方负责刷新）。
+        /// 选的是「内置默认」（没有文件）时拒绝：先「另存为」变成文件才能调，
+        /// 否则改了没地方存，用户会以为调整丢了。
+        /// </summary>
+        internal static bool MutateCurrentTheme(Action<CelesteThemeFile> mutate, out string? error)
+        {
+            error = null;
+            try
+            {
+                string? name = AppSettingsStore.Load().CelesteThemeName;
+                if (string.IsNullOrWhiteSpace(name))
+                {
+                    error = "当前选的是内置默认，没有主题文件可改。请先点「另存为…」把它存成文件。";
+                    return false;
+                }
+
+                var theme = CelesteThemeStore.Load(name);
+                if (theme == null)
+                {
+                    error = "主题文件不存在或读不出来：" + name;
+                    return false;
+                }
+
+                mutate(theme);
+
+                var result = CelesteThemeStore.Validate(theme);
+                if (!result.Ok)
+                {
+                    error = "调整后的值不被接受：" + string.Join("；", result.Errors);
+                    return false;
+                }
+
+                if (!CelesteThemeStore.Save(theme, out error))
+                {
+                    return false;
+                }
+
+                StartupLog.Write("[Theme] 快速调整已写回 " + name);
+                return true;
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.MutateCurrentTheme", caught);
+                error = caught.Message;
+                return false;
+            }
+        }
+
+        /// <summary>删除主题文件。返回是否删的是当前选中的主题（调用方据此把选择落回内置默认）。</summary>
+        internal static bool DeleteThemeFile(string name, out string? error)
+        {
+            error = null;
+            try
+            {
+                string path = Path.Combine(CelesteThemeStore.ThemesDirectory, name + ".celeste-theme");
+                if (!File.Exists(path))
+                {
+                    error = "主题文件不存在：" + name;
+                    return false;
+                }
+
+                string? current = AppSettingsStore.Load().CelesteThemeName;
+                bool wasCurrent = string.Equals(current, name, StringComparison.OrdinalIgnoreCase);
+
+                File.Delete(path);
+                StartupLog.Write("[Theme] 已删除主题 " + name + (wasCurrent ? "（当前选中的，选择落回内置默认）" : ""));
+                return wasCurrent;
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.DeleteThemeFile", caught);
+                error = caught.Message;
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 主题文件改名（存新名 + 删旧文件）。目标名已存在时拒绝，防止覆盖别人的主题。
+        /// 返回是否改的是当前选中的主题（调用方据此把选择改指新名）。
+        /// </summary>
+        internal static bool RenameThemeFile(string oldName, string newName, out string? error)
+        {
+            error = null;
+            try
+            {
+                newName = (newName ?? string.Empty).Trim();
+                if (newName.Length == 0)
+                {
+                    error = "新名字不能为空。";
+                    return false;
+                }
+
+                if (string.Equals(oldName, newName, StringComparison.OrdinalIgnoreCase))
+                {
+                    error = "新名字和旧名字一样。";
+                    return false;
+                }
+
+                if (newName.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                {
+                    error = "名字里不能有 \\ / : * ? \" < > | 这些字符。";
+                    return false;
+                }
+
+                string target = Path.Combine(CelesteThemeStore.ThemesDirectory, newName + ".celeste-theme");
+                if (File.Exists(target))
+                {
+                    error = "已经有一个叫「" + newName + "」的主题了，换个名字。";
+                    return false;
+                }
+
+                var theme = CelesteThemeStore.Load(oldName);
+                if (theme == null)
+                {
+                    error = "主题文件不存在或读不出来：" + oldName;
+                    return false;
+                }
+
+                theme.Name = newName;
+                if (!CelesteThemeStore.Save(theme, out error))
+                {
+                    return false;
+                }
+
+                File.Delete(Path.Combine(CelesteThemeStore.ThemesDirectory, oldName + ".celeste-theme"));
+
+                string? current = AppSettingsStore.Load().CelesteThemeName;
+                bool wasCurrent = string.Equals(current, oldName, StringComparison.OrdinalIgnoreCase);
+                StartupLog.Write("[Theme] 主题已改名 " + oldName + " → " + newName);
+                return wasCurrent;
+            }
+            catch (Exception caught)
+            {
+                StartupLog.WriteException("MainWindow.RenameThemeFile", caught);
+                error = caught.Message;
+                return false;
+            }
+        }
     }
 }

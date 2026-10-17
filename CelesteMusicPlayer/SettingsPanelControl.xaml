@@ -640,6 +640,69 @@
                             <Button Content="导入…" x:Name="ThemeFileImportButton" Click="ThemeFileImportButton_Click" />
                             <Button Content="导出…" x:Name="ThemeFileExportButton" Click="ThemeFileExportButton_Click" />
                             <Button Content="打开目录" x:Name="ThemeFileOpenDirButton" Click="ThemeFileOpenDirButton_Click" />
+                            <Button Content="重命名…" x:Name="ThemeFileRenameButton" Click="ThemeFileRenameButton_Click" />
+                            <Button Content="删除" x:Name="ThemeFileDeleteButton" Click="ThemeFileDeleteButton_Click" />
+                        </StackPanel>
+                        <!-- 【快速调整当前主题 · 2026-10-17】不手编 .celeste-theme 文本，设置页直接调。
+                             调整写回当前选中的主题文件并立即刷新；选「内置默认」时整组禁用
+                             （没文件可改），引导先「另存为」。圆角/颜色两条运行时链路都已通，
+                             所以这里调的值真的会变；间距/字号滑条等维度接完再补。 -->
+                        <StackPanel x:Name="QuickTuneSection" Spacing="10">
+                            <TextBlock Text="快速调整当前主题" FontSize="15" FontWeight="SemiBold" Margin="0,6,0,0" />
+                            <TextBlock Text="不用编辑主题文件：下面的调整立即生效并写回当前主题。只对选中的主题文件有效" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                            <TextBlock x:Name="QuickTuneTargetText" FontSize="12" Text="当前调整对象：（内置默认）" />
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="圆角一键预设" />
+                                    <TextBlock Text="方角 = 全部拉直；默认 = 程序原样；圆润 = 整体放大 1.5 倍" FontSize="12" Opacity="0.65" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                    <Button Content="方角" x:Name="QuickTuneSquareButton" Click="QuickTunePresetSquare_Click" />
+                                    <Button Content="默认" x:Name="QuickTuneDefaultButton" Click="QuickTunePresetDefault_Click" />
+                                    <Button Content="圆润" x:Name="QuickTuneRoundButton" Click="QuickTunePresetRound_Click" />
+                                </StackPanel>
+                            </Grid>
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="按钮圆角（用得最多的档位）" />
+                                    <Slider x:Name="QuickTunePillSlider" Minimum="0" Maximum="24" StepFrequency="1" SnapsTo="StepValues" ValueChanged="QuickTunePillSlider_ValueChanged" PointerCaptureLost="QuickTunePillSlider_PointerCaptureLost" KeyUp="QuickTunePillSlider_KeyUp" Width="260" HorizontalAlignment="Left" />
+                                </StackPanel>
+                                <TextBlock x:Name="QuickTunePillValueText" Grid.Column="1" Text="16" VerticalAlignment="Center" MinWidth="32" />
+                            </Grid>
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="主题色" />
+                                    <TextBlock Text="测试皮肤的主题色（按钮/选中/强调条都跟它走）。经典皮肤的主题色在下面「主题色」那节，两处以后会合成一条" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                                </StackPanel>
+                                <Button x:Name="QuickTuneAccentButton" Grid.Column="1" Click="QuickTuneAccentButton_Click" MinWidth="120" VerticalAlignment="Center" />
+                            </Grid>
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="主题色底的字色" />
+                                    <TextBlock Text="自动 = 按主题色亮度自己算黑字还是白字" FontSize="12" Opacity="0.65" />
+                                </StackPanel>
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                                    <RadioButton x:Name="QuickTuneTextAutoRadio" GroupName="QuickTuneAccentText" Content="自动" Checked="QuickTuneAccentText_Checked" />
+                                    <RadioButton x:Name="QuickTuneTextWhiteRadio" GroupName="QuickTuneAccentText" Content="白" Checked="QuickTuneAccentText_Checked" />
+                                    <RadioButton x:Name="QuickTuneTextBlackRadio" GroupName="QuickTuneAccentText" Content="黑" Checked="QuickTuneAccentText_Checked" />
+                                </StackPanel>
+                            </Grid>
                         </StackPanel>
                         <Grid ColumnSpacing="16">
                             <Grid.ColumnDefinitions>

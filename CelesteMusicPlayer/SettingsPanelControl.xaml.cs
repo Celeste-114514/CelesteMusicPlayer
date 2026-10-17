@@ -2750,10 +2750,16 @@ namespace CelesteMusicPlayer
             }
 
             SelectComboByTag(ThemeFileCombo, selected ?? "");
+
+            // 快速调整面板跟着换对象（加载回填 / 另存为 / 导入 / 改名 / 删除都走这里）
+            QuickTuneRefresh();
         }
 
         private void ThemeFileCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            // 快速调整面板跟着换对象（回填/禁用态）
+            QuickTuneRefresh();
+
             if (_loadingUi)
             {
                 return;
@@ -2868,6 +2874,353 @@ namespace CelesteMusicPlayer
 
         private void ThemeFileOpenDirButton_Click(object sender, RoutedEventArgs e)
             => MainWindow.OpenThemesDirectory();
+
+        // ---------------- 快速调整当前主题（2026-10-17） ----------------
+
+        /// <summary>回填期间拦住写盘（滑条/单选在刷新面板时都会被赋值，不拦会把默认值写回主题）。</summary>
+        private bool _quickTuneReady;
+
+        /// <summary>按当前选中的主题文件刷新快速调整面板：启用态 + 目标名 + 各项回填。</summary>
+        internal void QuickTuneRefresh()
+        {
+            if (QuickTuneSection == null)
+            {
+                return;
+            }
+
+            try
+            {
+                string name = GetComboTagString(ThemeFileCombo, "");
+                bool hasFile = !string.IsNullOrWhiteSpace(name);
+                QuickTuneTargetText.Text = hasFile
+                    ? "当前调整对象：" + name
+                    : "当前调整对象：（内置默认）不可调整，先点上面「另存为…」把它存成文件";
+
+                // StackPanel 没有 IsEnabled，逐个禁用交互控件（按钮/滑条/单选都是 Control）
+                QuickTuneSquareButton.IsEnabled = hasFile;
+                QuickTuneDefaultButton.IsEnabled = hasFile;
+                QuickTuneRoundButton.IsEnabled = hasFile;
+                QuickTunePillSlider.IsEnabled = hasFile;
+                QuickTuneAccentButton.IsEnabled = hasFile;
+                QuickTuneTextAutoRadio.IsEnabled = hasFile;
+                QuickTuneTextWhiteRadio.IsEnabled = hasFile;
+                QuickTuneTextBlackRadio.IsEnabled = hasFile;
+
+                _quickTuneReady = false;
+
+                double pill = 16;
+                string accent = "";
+                string accentText = "";
+                if (hasFile)
+                {
+                    var theme = CelesteThemeStore.Load(name);
+                    if (theme != null)
+                    {
+                        if (theme.Metrics.TryGetValue("Radius.Pill", out var rawPill)
+                            && double.TryParse(rawPill, System.Globalization.NumberStyles.Float,
+                                System.Globalization.CultureInfo.InvariantCulture, out var parsedPill))
+                        {
+                            pill = parsedPill;
+                        }
+
+                        accent = theme.Light.TryGetValue("Accent.Solid", out var lightAccent) ? lightAccent
+                            : theme.Dark.TryGetValue("Accent.Solid", out var darkAccent) ? darkAccent
+                            : "";
+                        accentText = theme.Light.TryGetValue("Accent.Text", out var lightText) ? lightText
+                            : theme.Dark.TryGetValue("Accent.Text", out var darkText) ? darkText
+                            : "";
+                    }
+                }
+
+                QuickTunePillSlider.Value = Math.Clamp(pill, QuickTunePillSlider.Minimum, QuickTunePillSlider.Maximum);
+                QuickTunePillValueText.Text = pill.ToString("0.##");
+
+                if (string.IsNullOrWhiteSpace(accent))
+                {
+                    var def = CelesteTokenCatalog.Find("Accent.Solid");
+                    accent = def?.DefaultLight ?? "#0067c0";
+                }
+                UpdateQuickTuneAccentButton(accent);
+
+                if (string.Equals(accentText, "#ffffff", StringComparison.OrdinalIgnoreCase))
+                {
+                    QuickTuneTextWhiteRadio.IsChecked = true;
+                }
+                else if (string.Equals(accentText, "#101216", StringComparison.OrdinalIgnoreCase))
+                {
+                    QuickTuneTextBlackRadio.IsChecked = true;
+                }
+                else
+                {
+                    QuickTuneTextAutoRadio.IsChecked = true;
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("SettingsPanelControl.QuickTuneRefresh", caught);
+            }
+            finally
+            {
+                _quickTuneReady = true;
+            }
+        }
+
+        /// <summary>主题色按钮：色块 + hex 文本（色块用按钮自己的底色，换主题色时跟着换）。</summary>
+        private void UpdateQuickTuneAccentButton(string hex)
+        {
+            if (QuickTuneAccentButton == null)
+            {
+                return;
+            }
+
+            QuickTuneAccentButton.Tag = hex;
+            QuickTuneAccentButton.Content = hex.ToUpperInvariant();
+            if (CelesteTokenApplier.ParseColor(hex) is Windows.UI.Color c)
+            {
+                QuickTuneAccentButton.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(c);
+                // 底色和字色拉开：按亮度选黑/白字，保证色块上看得见 hex
+                bool light = (0.299 * c.R + 0.587 * c.G + 0.114 * c.B) > 140;
+                QuickTuneAccentButton.Foreground = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    light ? Windows.UI.Color.FromArgb(255, 0, 0, 0) : Windows.UI.Color.FromArgb(255, 255, 255, 255));
+            }
+        }
+
+        /// <summary>快速调整的统一落盘+刷新。失败弹窗告知，成功立即应用到界面。</summary>
+        private void ApplyQuickTune(Action<CelesteThemeFile> mutate)
+        {
+            string name = GetComboTagString(ThemeFileCombo, "");
+            if (string.IsNullOrWhiteSpace(name))
+            {
+                _ = ShowInfoDialogAsync("快速调整", "当前选的是内置默认，没有主题文件可改。请先点「另存为…」把它存成文件。");
+                return;
+            }
+
+            if (!MainWindow.MutateCurrentTheme(mutate, out string? error))
+            {
+                _ = ShowInfoDialogAsync("快速调整", error ?? "保存失败。");
+                return;
+            }
+
+            // 直接调 ApplyCelesteThemeAsync：同名主题再走 ReloadThemeFromSettings 会被
+            // "同一主题不重复应用"短路，刷新不上（令牌皮肤的形状腿也在这条链路里重接）
+            _ = MainWindow.Instance?.ApplyCelesteThemeAsync(name);
+            QuickTuneRefresh();
+        }
+
+        private void QuickTunePresetSquare_Click(object sender, RoutedEventArgs e)
+            => ApplyQuickTunePreset("square");
+
+        private void QuickTunePresetDefault_Click(object sender, RoutedEventArgs e)
+            => ApplyQuickTunePreset("default");
+
+        private void QuickTunePresetRound_Click(object sender, RoutedEventArgs e)
+            => ApplyQuickTunePreset("round");
+
+        /// <summary>圆角一键预设：方角=全 0；默认=目录默认值；圆润=默认 ×1.5。11 个档位一起写。</summary>
+        private void ApplyQuickTunePreset(string preset)
+        {
+            ApplyQuickTune(theme =>
+            {
+                foreach (var def in CelesteTokenCatalog.All)
+                {
+                    if (!def.Name.StartsWith("Radius.", StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    string raw = preset switch
+                    {
+                        "square" => "0",
+                        "default" => def.DefaultLight, // 圆角与明暗无关，两组默认同值
+                        _ => Math.Round(ParseTokenDouble(def.DefaultLight) * 1.5, 1)
+                            .ToString(System.Globalization.CultureInfo.InvariantCulture)
+                    };
+                    theme.Metrics[def.Name] = raw;
+                }
+            });
+        }
+
+        private static double ParseTokenDouble(string raw)
+            => double.TryParse(raw, System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture, out var v) ? v : 0;
+
+        /// <summary>拖动中只更新数值文本，松手才写盘（否则每 1px 都整树刷新，卡且日志刷屏）。</summary>
+        private void QuickTunePillSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            if (QuickTunePillValueText != null)
+            {
+                QuickTunePillValueText.Text = e.NewValue.ToString("0.##");
+            }
+        }
+
+        private void QuickTunePillSlider_PointerCaptureLost(object sender, Microsoft.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (!_quickTuneReady || QuickTunePillSlider == null)
+            {
+                return;
+            }
+
+            ApplyQuickTune(theme => theme.Metrics["Radius.Pill"] =
+                QuickTunePillSlider.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        /// <summary>键盘操作滑条（方向键）不经过指针事件，松键时同样提交。</summary>
+        private void QuickTunePillSlider_KeyUp(object sender, Microsoft.UI.Xaml.Input.KeyRoutedEventArgs e)
+        {
+            if (!_quickTuneReady || QuickTunePillSlider == null)
+            {
+                return;
+            }
+
+            ApplyQuickTune(theme => theme.Metrics["Radius.Pill"] =
+                QuickTunePillSlider.Value.ToString("0.##", System.Globalization.CultureInfo.InvariantCulture));
+        }
+
+        private void QuickTuneAccentButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string current = QuickTuneAccentButton.Tag as string ?? "#0067c0";
+                InlineColorPicker.Show(sender as FrameworkElement, "主题色（测试皮肤）", current,
+                    onLive: null,
+                    onCommit: hex =>
+                    {
+                        DispatcherQueue.TryEnqueue(() =>
+                        {
+                            ApplyQuickTune(theme =>
+                            {
+                                theme.Light["Accent.Solid"] = hex;
+                                theme.Dark["Accent.Solid"] = hex;
+                            });
+                        });
+                    });
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("SettingsPanelControl.QuickTuneAccent", caught);
+            }
+        }
+
+        /// <summary>主题色底字色：自动=删键回落默认（按亮度算）；白/黑=写死。</summary>
+        private void QuickTuneAccentText_Checked(object sender, RoutedEventArgs e)
+        {
+            if (!_quickTuneReady)
+            {
+                return;
+            }
+
+            string hex = QuickTuneTextWhiteRadio.IsChecked == true ? "#ffffff"
+                : QuickTuneTextBlackRadio.IsChecked == true ? "#101216"
+                : "";
+
+            ApplyQuickTune(theme =>
+            {
+                if (hex.Length == 0)
+                {
+                    theme.Light.Remove("Accent.Text");
+                    theme.Dark.Remove("Accent.Text");
+                }
+                else
+                {
+                    theme.Light["Accent.Text"] = hex;
+                    theme.Dark["Accent.Text"] = hex;
+                }
+            });
+        }
+
+        private async void ThemeFileRenameButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string current = GetComboTagString(ThemeFileCombo, "");
+                if (string.IsNullOrWhiteSpace(current))
+                {
+                    await ShowInfoDialogAsync("重命名主题", "当前选的是内置默认，它没有文件，不用也没法重命名。");
+                    return;
+                }
+
+                var box = new TextBox { Text = current };
+                var dialog = new ContentDialog
+                {
+                    Title = "重命名主题",
+                    Content = box,
+                    PrimaryButtonText = "改名",
+                    CloseButtonText = "取消",
+                    DefaultButton = ContentDialogButton.Primary,
+                    XamlRoot = Content.XamlRoot
+                };
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                {
+                    return;
+                }
+
+                bool wasCurrent = MainWindow.RenameThemeFile(current, box.Text ?? "", out string? error);
+                if (error != null)
+                {
+                    await ShowInfoDialogAsync("重命名主题", error);
+                    return;
+                }
+
+                string newName = (box.Text ?? "").Trim();
+                PopulateThemeFileCombo(wasCurrent ? newName : current);
+                if (wasCurrent)
+                {
+                    PersistAllFromUi();
+                    MainWindow.Instance?.ReloadThemeFromSettings();
+                }
+                QuickTuneRefresh();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("SettingsPanelControl.ThemeFileRename", caught);
+            }
+        }
+
+        private async void ThemeFileDeleteButton_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                string current = GetComboTagString(ThemeFileCombo, "");
+                if (string.IsNullOrWhiteSpace(current))
+                {
+                    await ShowInfoDialogAsync("删除主题", "当前选的是内置默认，它没有文件，不用也没法删除。");
+                    return;
+                }
+
+                var dialog = new ContentDialog
+                {
+                    Title = "删除主题",
+                    Content = "删掉「" + current + "」这个主题文件？删了就找不回来了，想留一手可以先「导出」。选择会落回内置默认。",
+                    PrimaryButtonText = "删除",
+                    CloseButtonText = "取消",
+                    DefaultButton = ContentDialogButton.Close,
+                    XamlRoot = Content.XamlRoot
+                };
+                if (await dialog.ShowAsync() != ContentDialogResult.Primary)
+                {
+                    return;
+                }
+
+                bool wasCurrent = MainWindow.DeleteThemeFile(current, out string? error);
+                if (error != null)
+                {
+                    await ShowInfoDialogAsync("删除主题", error);
+                    return;
+                }
+
+                PopulateThemeFileCombo(wasCurrent ? "" : current);
+                if (wasCurrent)
+                {
+                    PersistAllFromUi();
+                    MainWindow.Instance?.ReloadThemeFromSettings();
+                }
+                QuickTuneRefresh();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("SettingsPanelControl.ThemeFileDelete", caught);
+            }
+        }
 
         /// <summary>播放页布局切换：立即持久化；主窗口订阅 AppSettingsStore.Changed 后会实时套用。</summary>
         private void NowPlayingLayoutCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
