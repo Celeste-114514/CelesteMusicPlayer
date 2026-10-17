@@ -2669,6 +2669,16 @@ namespace CelesteMusicPlayer
         private void AccentSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateAccentColorButton();
+            if (_loadingUi)
+            {
+                return;
+            }
+
+            // 主题色来源也是设置的一部分：立即落盘 + 广播。令牌皮肤的强调色跟着切
+            // （自定义=盖过主题文件，系统主题色=用回文件自带色），快速调整面板的
+            // 色块也同步回填成新的生效色。
+            PersistAllFromUi();
+            QuickTuneRefresh();
         }
 
         /// <summary>
@@ -2730,6 +2740,8 @@ namespace CelesteMusicPlayer
             SelectComboByTag(AccentSourceCombo, "Custom");
             UpdateAccentColorButton();
             PersistAllFromUi();
+            // 主题色两链合并：快速调整面板的色块跟着回填生效色
+            QuickTuneRefresh();
         }
 
         // ---------------- 主题文件（.celeste-theme） ----------------
@@ -2909,37 +2921,30 @@ namespace CelesteMusicPlayer
                 _quickTuneReady = false;
 
                 double pill = 16;
-                string accent = "";
                 string accentText = "";
-                if (hasFile)
+                var theme = hasFile ? CelesteThemeStore.Load(name) : null;
+                if (theme != null)
                 {
-                    var theme = CelesteThemeStore.Load(name);
-                    if (theme != null)
+                    if (theme.Metrics.TryGetValue("Radius.Pill", out var rawPill)
+                        && double.TryParse(rawPill, System.Globalization.NumberStyles.Float,
+                            System.Globalization.CultureInfo.InvariantCulture, out var parsedPill))
                     {
-                        if (theme.Metrics.TryGetValue("Radius.Pill", out var rawPill)
-                            && double.TryParse(rawPill, System.Globalization.NumberStyles.Float,
-                                System.Globalization.CultureInfo.InvariantCulture, out var parsedPill))
-                        {
-                            pill = parsedPill;
-                        }
-
-                        accent = theme.Light.TryGetValue("Accent.Solid", out var lightAccent) ? lightAccent
-                            : theme.Dark.TryGetValue("Accent.Solid", out var darkAccent) ? darkAccent
-                            : "";
-                        accentText = theme.Light.TryGetValue("Accent.Text", out var lightText) ? lightText
-                            : theme.Dark.TryGetValue("Accent.Text", out var darkText) ? darkText
-                            : "";
+                        pill = parsedPill;
                     }
+
+                    accentText = theme.Light.TryGetValue("Accent.Text", out var lightText) ? lightText
+                        : theme.Dark.TryGetValue("Accent.Text", out var darkText) ? darkText
+                        : "";
                 }
+
+                // 主题色两链合并：色块回填「当前真正生效的颜色」——自定义色以设置为准
+                // （盖过主题文件），跟随系统时用文件自带色、文件没写则系统主题色。
+                // 内置默认没有文件，用 CreateDefault 顶替（与令牌皮肤实际取色一致）。
+                string accent = MainWindow.ResolveEffectiveAccentHex(theme ?? CelesteThemeStore.CreateDefault());
 
                 QuickTunePillSlider.Value = Math.Clamp(pill, QuickTunePillSlider.Minimum, QuickTunePillSlider.Maximum);
                 QuickTunePillValueText.Text = pill.ToString("0.##");
 
-                if (string.IsNullOrWhiteSpace(accent))
-                {
-                    var def = CelesteTokenCatalog.Find("Accent.Solid");
-                    accent = def?.DefaultLight ?? "#0067c0";
-                }
                 UpdateQuickTuneAccentButton(accent);
 
                 if (string.Equals(accentText, "#ffffff", StringComparison.OrdinalIgnoreCase))
@@ -3087,11 +3092,17 @@ namespace CelesteMusicPlayer
                     {
                         DispatcherQueue.TryEnqueue(() =>
                         {
-                            ApplyQuickTune(theme =>
-                            {
-                                theme.Light["Accent.Solid"] = hex;
-                                theme.Dark["Accent.Solid"] = hex;
-                            });
+                            // 主题色两链合并（2026-10-17）：这里写的是「自定义主题色」偏好，
+                            // 和下面「主题色」那节是同一个字段——不再改主题文件，文件保持
+                            // 可分享（把来源切回「系统主题色」才用文件自带的强调色）。
+                            // 顺序照 ThemePresetCombo_SelectionChanged：先切 combo 再落盘，
+                            // 否则 PersistAllFromUi 会拿 UI 旧值把 AccentSource 冲回 System。
+                            _accentHex = hex;
+                            SelectComboByTag(ThemePresetCombo, "");
+                            SelectComboByTag(AccentSourceCombo, "Custom");
+                            UpdateAccentColorButton();
+                            PersistAllFromUi();
+                            QuickTuneRefresh();
                         });
                     });
             }
@@ -3310,6 +3321,8 @@ namespace CelesteMusicPlayer
                             SelectComboByTag(ThemePresetCombo, "");
                             UpdateAccentColorButton();
                             PersistAllFromUi();
+                            // 主题色两链合并：快速调整面板的色块跟着回填生效色
+                            QuickTuneRefresh();
                         });
                     });
             }

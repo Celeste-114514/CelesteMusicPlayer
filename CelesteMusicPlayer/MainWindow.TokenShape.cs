@@ -32,6 +32,7 @@ namespace CelesteMusicPlayer
                 if (_tokenColorTheme == null || _tokenColorKey != key)
                 {
                     _tokenColorTheme = window.LoadCelesteActiveTheme() ?? CelesteThemeStore.CreateDefault();
+                    InjectAccentFallback(_tokenColorTheme);
                     _tokenColorKey = key;
                     _tokenColorDark = dark;
                 }

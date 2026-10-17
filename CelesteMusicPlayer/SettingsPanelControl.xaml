@@ -684,7 +684,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="主题色" />
-                                    <TextBlock Text="测试皮肤的主题色（按钮/选中/强调条都跟它走）。经典皮肤的主题色在下面「主题色」那节，两处以后会合成一条" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                                    <TextBlock Text="测试皮肤的主题色（按钮/选中/强调条都跟它走）。它和下面「主题色」那节是同一个设置：在这儿改，经典皮肤的主题色也跟着一起变；想用主题文件自带的强调色，把下面的主题色来源切成「系统主题色」即可" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                                 </StackPanel>
                                 <Button x:Name="QuickTuneAccentButton" Grid.Column="1" Click="QuickTuneAccentButton_Click" MinWidth="120" VerticalAlignment="Center" />
                             </Grid>

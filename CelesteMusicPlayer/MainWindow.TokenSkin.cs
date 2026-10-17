@@ -204,6 +204,7 @@ namespace CelesteMusicPlayer
                 }
 
                 var theme = LoadCelesteActiveTheme() ?? CelesteThemeStore.CreateDefault();
+                InjectAccentFallback(theme);
                 var dict = new ResourceDictionary();
                 foreach (var (systemKey, tokenName) in TokenBrushMap)
                 {
@@ -261,6 +262,7 @@ namespace CelesteMusicPlayer
                 if (_tokenColorTheme == null || _tokenColorKey != key)
                 {
                     _tokenColorTheme = window.LoadCelesteActiveTheme() ?? CelesteThemeStore.CreateDefault();
+                    InjectAccentFallback(_tokenColorTheme);
                     _tokenColorKey = key;
                     _tokenColorDark = dark;
                 }
@@ -280,6 +282,89 @@ namespace CelesteMusicPlayer
         {
             _tokenColorTheme = null;
             _tokenColorKey = "";
+        }
+
+        // ---------------- 主题色两链合并（设置链 ↔ 主题文件链） ----------------
+        //
+        // 背景：主题色本来有两个入口——设置页「主题色」那节（经典皮肤链：AccentSource +
+        // CustomAccentColor）和快速调整面板的主题色按钮（令牌链：写主题文件 Accent.Solid）。
+        // 用户实测两处改的是同一个东西却不互跟。2026-10-17 合成一条，规则：
+        //   · 用户偏好优先：AccentSource=Custom 时，设置里的自定义色盖过主题文件值，
+        //     两条链从此是同一个颜色；
+        //   · 主题文件保持可分享：跟随系统时以文件自带的 Accent.Solid 为准，文件没写
+        //     才回落当前系统主题色；把来源切回「系统主题色」即用回文件色。
+        // 写入侧同步改行为：快速调整的主题色按钮改为写 Custom 偏好（SettingsPanelControl），
+        // 不再 MutateCurrentTheme 改文件——文件里存的是主题作者的原意。
+
+        /// <summary>
+        /// 当前生效的主题色（"#RRGGBB"）。两条链的唯一真相源，快速调整面板的色块回填也问它。
+        /// Custom=设置里的自定义色；跟随系统=主题文件 Accent.Solid（Light 优先回落 Dark），
+        /// 文件没写则当前系统主题色。
+        /// </summary>
+        internal static string ResolveEffectiveAccentHex(CelesteThemeFile? theme)
+        {
+            var settings = AppSettingsStore.Load();
+            if (settings.AccentSource == "Custom")
+            {
+                return string.IsNullOrWhiteSpace(settings.CustomAccentColor)
+                    ? "#0078D4"
+                    : settings.CustomAccentColor;
+            }
+
+            if (TryGetThemeAccentHex(theme, out string fromFile))
+            {
+                return fromFile;
+            }
+
+            return SystemAccentHex();
+        }
+
+        /// <summary>读主题文件自带的 Accent.Solid（Light 优先回落 Dark）。没写/为空返回 false。</summary>
+        private static bool TryGetThemeAccentHex(CelesteThemeFile? theme, out string hex)
+        {
+            if (theme != null)
+            {
+                if (theme.Light.TryGetValue(CelesteTokenCatalog.AccentSolid, out var light)
+                    && !string.IsNullOrWhiteSpace(light))
+                {
+                    hex = light.Trim();
+                    return true;
+                }
+                if (theme.Dark.TryGetValue(CelesteTokenCatalog.AccentSolid, out var dark)
+                    && !string.IsNullOrWhiteSpace(dark))
+                {
+                    hex = dark.Trim();
+                    return true;
+                }
+            }
+            hex = "";
+            return false;
+        }
+
+        /// <summary>
+        /// 把生效主题色注入主题文件副本（读取侧合并点）。RebuildTokenSkinDictionary 与
+        /// ResolveTokenSkinColor / ResolveTokenSkinDouble 建取色缓存时都调它：
+        /// Custom 无条件盖过文件值；跟随系统且文件自带强调色时原样不动（主题可分享）；
+        /// 跟随系统且文件没写时才注入系统主题色兜底。
+        /// </summary>
+        private static void InjectAccentFallback(CelesteThemeFile theme)
+        {
+            var settings = AppSettingsStore.Load();
+            if (settings.AccentSource != "Custom" && TryGetThemeAccentHex(theme, out _))
+            {
+                return;
+            }
+
+            string hex = ResolveEffectiveAccentHex(theme);
+            theme.Light[CelesteTokenCatalog.AccentSolid] = hex;
+            theme.Dark[CelesteTokenCatalog.AccentSolid] = hex;
+        }
+
+        /// <summary>系统主题色 → "#RRGGBB"。只有「跟随系统」且主题文件没写强调色时才走到。</summary>
+        private static string SystemAccentHex()
+        {
+            var c = ThemeColorService.CurrentAccent;
+            return string.Concat("#", c.R.ToString("X2"), c.G.ToString("X2"), c.B.ToString("X2"));
         }
 
         /// <summary>选中族令牌 + 透明度档：悬停 40% / 多选底 30% / 胶囊 55% / 选中 100%。

@@ -3207,6 +3207,20 @@ namespace CelesteMusicPlayer
                 _desktopLyricsWindow?.ApplySettings(AppSettingsStore.Load());
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+
+            // 主题色两链合并（2026-10-17）：令牌测试皮肤的强调色也来自设置链
+            // （Custom 盖过主题文件的 Accent.Solid）。改设置页主题色时，覆盖字典和
+            // 取色缓存要立刻跟上，否则令牌皮肤还挂着重色前的旧刷子。
+            // 与 ApplyCelesteThemeAsync 里换主题文件后的刷新同一套动作。
+            try
+            {
+                if (IsTokenSkinActive())
+                {
+                    InvalidateTokenColorCache();
+                    RefreshTokenSkinIfActive();
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.OnThemeColorChanged", caught); }
         }
 
 

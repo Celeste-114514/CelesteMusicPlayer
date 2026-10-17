@@ -2449,6 +2449,14 @@ namespace CelesteMusicPlayer
         private void AccentSourceCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             UpdateAccentColorButton();
+            if (_loadingUi)
+            {
+                return;
+            }
+
+            // 主题色两链合并（2026-10-17）：来源切换立即落盘 + 广播——令牌皮肤的
+            // 强调色跟着切（自定义=盖过主题文件，系统主题色=用回文件自带色）
+            PersistAllFromUi();
         }
 
         /// <summary>
