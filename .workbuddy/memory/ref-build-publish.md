@@ -42,6 +42,21 @@
   （dll 约 2.73MB；漏该开关会出 177KB 依赖运行时版 exe，混搭会在 Main begin 后以 3221227010 退）。
   判自包含 exe 看尺寸 ≈ 303KB。
 
+## 发版 / CI（正式版由 tag 触发 CI 自动打包发布，本地不用跑 NSIS）
+- 版本号两处：csproj 的 Version/AssemblyVersion/FileVersion + Package.appxmanifest 的
+  `Identity Version`（4 段）。nsi 的 `APP_VERSION` 由 `tools\package-installers.ps1` 传入，不用手改。
+- 流程：改版本号 → 提交 → push main → `git tag -a vX -F <notes> HEAD` → push tag → CI 自动发布 Release。
+- ⚠ **发版前必须扫未跟踪的新源文件**（2026-10-20 事故）：`git add -u` 只加已跟踪文件，
+  新建的 .cs/.xaml（如 MiniPlayerBridge / ScatteredPlayWindow 全套）会被漏掉 →
+  **本地构建照样过（文件在本地），CI 才报「类型找不到」**。
+  铁律：`git status --porcelain | grep '^??'` 扫 `CelesteMusicPlayer/` 下的 .cs/.xaml，逐个显式 add。
+- ⚠ **重复 using（CS0105）在本地是 warning，CI 当成 error 判失败** → 发版前跑一次
+  `grep -c "error CS\|warning CS0105"` 或干脆看 CI 首次结果。
+- ⚠ **本沙箱没装 gh**（`/c/Program Files/GitHub CLI` 不存在，`gh` 不在 PATH）→
+  查 CI 只能用 WebFetch 打开 `https://github.com/<owner>/<repo>/actions`；
+  注意 WebFetch 有 15 分钟缓存，查新状态要换 URL（加 `?_=<随机数>`）。
+- CI 失败后重发：`git push origin :refs/tags/vX` 删远程 → `git tag -f -a vX -F <notes> HEAD` → 重推 tag。
+
 ## 安装包
 - ⚠ **GitHub Release 上的安装包是 CI 打的，不是本地那份**（ci.yml tag 时调
   `package-installers.ps1` 现场打包后 `gh release upload --clobber`）。
