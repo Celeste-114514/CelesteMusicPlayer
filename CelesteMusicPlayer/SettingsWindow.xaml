@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Window
     x:Class="CelesteMusicPlayer.SettingsWindow"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -559,8 +559,29 @@
                             </Grid>
                         </StackPanel>
 
+                        <!-- 迷你播放器（2026-10-19 重建后放回：横向小条，见 MiniPlayerBridge）。
+                             底色三选 = 用户拍板"几个选项都要"：封面压暗 / 固定深色 / 毛玻璃。 -->
                         <StackPanel Spacing="10">
                             <TextBlock Text="迷你播放器" FontSize="15" FontWeight="SemiBold" />
+                            <Grid ColumnSpacing="16">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Spacing="2" VerticalAlignment="Center">
+                                    <TextBlock Text="底色" />
+                                    <TextBlock Text="封面 = 专辑封面铺满 + 压暗纱罩（跟着封面变色，白字永远可读）；深色 = 固定深色底；毛玻璃 = 透出桌面的磨砂效果" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                                </StackPanel>
+                                <ComboBox
+                                    x:Name="MiniBackgroundCombo"
+                                    Grid.Column="1"
+                                    Width="220"
+                                    SelectionChanged="SettingCombo_SelectionChanged">
+                                    <ComboBoxItem Content="跟着封面走（压暗）" Tag="Cover" />
+                                    <ComboBoxItem Content="固定深色" Tag="Dark" />
+                                    <ComboBoxItem Content="毛玻璃" Tag="Frosted" />
+                                </ComboBox>
+                            </Grid>
                             <Grid ColumnSpacing="16">
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -611,7 +632,6 @@
                                 <ComboBoxItem Content="经典 · 浅色" Tag="ClassicLight" />
                                 <ComboBoxItem Content="经典 · 深色" Tag="ClassicDark" />
                                 <ComboBoxItem Content="极客（终端风：近黑 + 等宽字 + 技术读数）" Tag="Geek" />
-                                <ComboBoxItem Content="测试皮肤（跟随主题文件配色）" Tag="Token" />
                             </ComboBox>
                         </Grid>
                         <!-- 【主题文件入口】测试皮肤的配色来源。2026-10-11 曾随测试皮肤版本一起下架（Collapsed），

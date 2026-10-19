@@ -519,6 +519,7 @@ namespace CelesteMusicPlayer
 
                 SetToggle(MiniAlwaysOnTopSwitch, s.MiniPlayerAlwaysOnTop);
                 SetToggle(OpenMiniPlayerSwitch, s.OpenMiniPlayerOnStartup);
+                SelectComboByTag(MiniBackgroundCombo, s.MiniPlayerBackground);
 
                 // 外观
                 SelectComboByTag(UiStyleModeCombo, s.UiStyleMode);
@@ -1344,6 +1345,7 @@ namespace CelesteMusicPlayer
 
             s.MiniPlayerAlwaysOnTop = MiniAlwaysOnTopSwitch?.IsOn ?? s.MiniPlayerAlwaysOnTop;
             s.OpenMiniPlayerOnStartup = OpenMiniPlayerSwitch?.IsOn ?? s.OpenMiniPlayerOnStartup;
+            s.MiniPlayerBackground = GetComboTagString(MiniBackgroundCombo, "Cover");
 
             s.UiStyleMode = GetComboTagString(UiStyleModeCombo, "ClassicSystem");
             s.CelesteThemeName = GetComboTagString(ThemeFileCombo, "");

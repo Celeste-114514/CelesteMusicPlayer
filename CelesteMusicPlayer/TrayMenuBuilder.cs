@@ -44,6 +44,8 @@ namespace CelesteMusicPlayer
             flyout.MenuFlyoutPresenterStyle = BuildPresenterStyle();
 
             flyout.Items.Add(Item("显示主界面", () => owner.RestoreFromTray()));
+            flyout.Items.Add(Item("零散播放", () => owner.ShowScatteredWindow()));
+            flyout.Items.Add(Item("迷你播放器", () => owner.ShowMiniPlayerWindow()));
 
             if (!string.IsNullOrEmpty(pendingUpdateVersion))
             {

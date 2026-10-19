@@ -60,6 +60,13 @@ namespace CelesteMusicPlayer
 
         public bool MiniPlayerAlwaysOnTop { get; set; } = true;
 
+        /// <summary>迷你播放器的底色模式：Cover（专辑封面 + 压暗纱罩，默认）/
+        /// Dark（固定深色）/ Frosted（毛玻璃）。用户 10-19 拍板"几个选项都要"。</summary>
+        public string MiniPlayerBackground { get; set; } = "Cover";
+
+        /// <summary>零散播放窗口的背景模式：Cover（专辑封面+压暗纱罩）/ Dark（深色）/ Light（浅色）。默认 Cover。</summary>
+        public string ScatteredPlayBackground { get; set; } = "Cover";
+
         public bool OpenDesktopLyricsOnStartup { get; set; }
 
         public bool OpenMiniPlayerOnStartup { get; set; }
@@ -267,8 +274,7 @@ namespace CelesteMusicPlayer
 
         public string ThemePreset { get; set; } = string.Empty;
 
-        /// <summary>主程序界面风格：Scene = 背景图式（图景）；ClassicSystem / ClassicLight / ClassicDark = 经典界面；Geek = 极客终端风；
-        /// Token = 令牌测试皮肤（皮肤系统阶段 1，行为同经典、颜色全部来自主题文件令牌，供和经典并排对比）。
+        /// <summary>主程序界面风格：Scene = 背景图式（图景）；ClassicSystem / ClassicLight / ClassicDark = 经典界面；Geek = 极客终端风。
         /// 默认 ClassicSystem（经典 · 跟随系统）：经典界面下毛玻璃开关同样生效，可在「亚克力背板」与「纯色底」之间切换。</summary>
         public string UiStyleMode { get; set; } = "ClassicSystem";
 
@@ -750,6 +756,9 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             HiFiSoftwareVolume = s.HiFiSoftwareVolume,
             PlaybackOrder = s.PlaybackOrder,
             MiniPlayerAlwaysOnTop = s.MiniPlayerAlwaysOnTop,
+            MiniPlayerBackground = s.MiniPlayerBackground is "Cover" or "Dark" or "Frosted"
+                ? s.MiniPlayerBackground
+                : "Cover",
             OpenDesktopLyricsOnStartup = s.OpenDesktopLyricsOnStartup,
             OpenMiniPlayerOnStartup = s.OpenMiniPlayerOnStartup,
             GlobalMouseWheelVolume = s.GlobalMouseWheelVolume,
@@ -823,7 +832,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         // 早先图景用空字符串表示，老用户存档里的空值会把新默认顶掉 —— 改了默认值本机也看不到，
         // 表现就是"默认皮肤还是图景"。现在空/未设置一律归到默认「经典 · 跟随系统」。
         UiStyleMode = s.UiStyleMode?.Trim() is { Length: > 0 } uiStyle
-                      && uiStyle is "Scene" or "ClassicSystem" or "ClassicLight" or "ClassicDark" or "Geek" or "Token"
+                      && uiStyle is "Scene" or "ClassicSystem" or "ClassicLight" or "ClassicDark" or "Geek"
             ? uiStyle
             : "ClassicSystem",
         // 侧栏 emoji 图标开关：老存档没有这个字段，反序列化即 false（纯色图标），符合当前默认
@@ -913,6 +922,8 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             // 播放信息页布局：新字段必须随 Clone 拷贝，否则 Load() 返回的克隆里恒为默认，
             // 表现为「选了水面布局、重启后自己变回经典」，与保存是否成功无关。
             NowPlayingLayout = string.IsNullOrWhiteSpace(s.NowPlayingLayout) ? "Classic" : s.NowPlayingLayout,
+            // 零散播放窗口背景模式：非法值回落 Cover（与 NowPlayingLayout 同族，防手改文件后白屏）
+            ScatteredPlayBackground = s.ScatteredPlayBackground is "Dark" or "Light" or "Frosted" ? s.ScatteredPlayBackground : "Cover",
             NowPlayingVisual = string.IsNullOrWhiteSpace(s.NowPlayingVisual) ? "Waveform" : s.NowPlayingVisual,
             // 主题文件名：此前漏拷，存得进文件但 Load() 返回的克隆里恒为空 →
             // 主题文件永远加载不上（表现=选了主题、界面毫无变化）。与上面两条同族事故。

@@ -21,7 +21,6 @@ namespace CelesteMusicPlayer
         public RoomCorrectionWindow()
         {
             InitializeComponent();
-            TokenShapeRuntime.Attach(this);
             WindowIconHelper.Apply(this);
             Title = "房间校正 · 卷积 FIR";
             ExtendsContentIntoTitleBar = true;

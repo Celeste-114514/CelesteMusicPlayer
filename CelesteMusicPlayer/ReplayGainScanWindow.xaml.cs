@@ -37,7 +37,6 @@ namespace CelesteMusicPlayer
         public ReplayGainScanWindow(MainWindow owner, Func<ReplayGainScanScope, List<RgScanInput>> provider)
         {
             InitializeComponent();
-            TokenShapeRuntime.Attach(this);
             WindowIconHelper.Apply(this);
             _provider = provider;
 

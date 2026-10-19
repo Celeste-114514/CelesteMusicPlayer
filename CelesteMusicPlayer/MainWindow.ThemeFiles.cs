@@ -21,7 +21,7 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 把盘上的 CelesteThemeName 应用到界面。启动时（MainWindow_Loaded）与
         /// 设置页改完主题文件时调用。测试皮肤激活时主题文件就是皮肤配色来源，
-        /// 由调用方负责随后重刷令牌皮肤（见 ApplyTokenSkin）。
+        /// 由调用方负责随后重刷界面主题（换主题文件后需重新应用一次）。
         /// </summary>
         internal void ReloadThemeFromSettings()
         {

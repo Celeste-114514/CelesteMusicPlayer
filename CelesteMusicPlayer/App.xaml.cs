@@ -185,6 +185,15 @@ namespace CelesteMusicPlayer
             // 每次启动都同步一次，设置是关的就清掉残留 → 修复「设置里关着却仍开机自启」。
             AutoRunHelper.SyncWithSettings();
 
+            // 双击音频文件冷启动 → 直达零散播放窗口（2026-10-18 用户定案）：
+            // 不建主窗口、不恢复曲库、不弹首启关联引导，关窗即退进程。
+            // 初衷：打开散装音频时不需要打开主程序加载一遍曲库，也不能动主程序的播放列表。
+            // 开窗失败的极端情况回落下面的主窗口路径，保证程序至少能正常打开。
+            if (externalFile != null && TryLaunchScatteredOnly(externalFile))
+            {
+                return;
+            }
+
             // ============================================================
             // 启动加载动画刻意**不**另开窗口，而是盖在主窗口自己身上（见
             // MainWindow.StartupLoading.cs）。原因：另开一个窗口看着就像另一个程序，
@@ -223,6 +232,37 @@ namespace CelesteMusicPlayer
             if (externalFile == null)
             {
                 ScheduleFirstRunAssociationPrompt();
+            }
+        }
+
+        /// <summary>
+        /// 零散直达启动：只开零散播放窗口（引擎 / 队列 / 歌词 / 可视化全部自持，
+        /// 不建主窗口、不读曲库）。返回 false = 开窗失败，调用方回落正常主窗口路径。
+        /// </summary>
+        private bool TryLaunchScatteredOnly(string externalFile)
+        {
+            try
+            {
+                ScatteredPlayWindow scattered = new();
+                scattered.Activate();
+                _window = scattered;
+                scattered.EnqueueFiles(new[] { externalFile }, playNow: true);
+                StartupLog.Write("零散直达启动（不建主窗口/不读曲库）: " + externalFile);
+                return true;
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("App.TryLaunchScatteredOnly", ex);
+                try
+                {
+                    (_window as ScatteredPlayWindow)?.Close();
+                }
+                catch (Exception caught)
+                {
+                    StartupLog.WriteException("App.TryLaunchScatteredOnly.cleanup", caught);
+                }
+                _window = null;
+                return false;
             }
         }
 
@@ -280,10 +320,19 @@ namespace CelesteMusicPlayer
                     string path = command.Substring("PLAY:".Length).Trim();
                     if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path)) return;
 
-                    BringCurrentWindowToFront();
+                    if (_window is ScatteredPlayWindow scattered)
+                    {
+                        // 零散直达模式（冷启动只开了零散窗口）：文件直接进零散窗口，
+                        // 整个过程不建主窗口、不碰曲库
+                        scattered.EnqueueFiles(new[] { path }, playNow: true);
+                        scattered.Activate();
+                        return;
+                    }
 
                     if (_window is MainWindow main)
                     {
+                        // 主程序在跑：也只开零散播放窗口。刻意不调 BringCurrentWindowToFront——
+                        // 用户要的是「零散窗口不要影响主程序」，抢焦点/动队列都算影响。
                         main.PlayExternalFileAsync(path);
                     }
                 }

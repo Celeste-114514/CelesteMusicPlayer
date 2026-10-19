@@ -122,8 +122,6 @@ namespace CelesteMusicPlayer
                 ApplyUiStyleMode(settings); // 界面风格（图景/经典浅色/深色/跟随系统/极客）；图景模式内部回落毛玻璃开关
                 // 极客界面只给终端这一个播放页布局，风格刚切过来要让布局立刻跟上
                 ApplyNowPlayingLayout();
-                _miniPlayerWindow?.SetAlwaysOnTop(settings.MiniPlayerAlwaysOnTop);
-                _miniPlayerWindow?.ApplyBackdropPreference(settings.EnableFrostedGlass);
                 SettingsPanelControl.ApplyBackdropIfOpen();
                 ApplyExtendedSettingsLive(settings);
             });
@@ -134,10 +132,7 @@ namespace CelesteMusicPlayer
         {
             DispatcherQueue.TryEnqueue(() =>
             {
-                if (settings.OpenMiniPlayerOnStartup != _miniPlayerEnabled)
-                {
-                    SetMiniPlayerEnabled(settings.OpenMiniPlayerOnStartup, persistPreference: false);
-                }
+                // 「设置里改了开机打开迷你播放器」的联动：随迷你播放器一起移除（2026-10-19 删掉重写）
 
                 if (settings.OpenDesktopLyricsOnStartup != _desktopLyricsEnabled)
                 {

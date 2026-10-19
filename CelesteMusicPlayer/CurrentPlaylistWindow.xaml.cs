@@ -30,7 +30,6 @@ namespace CelesteMusicPlayer
         {
             _owner = owner;
             InitializeComponent();
-            TokenShapeRuntime.Attach(this);
             WindowIconHelper.Apply(this);
 
             ExtendsContentIntoTitleBar = true;

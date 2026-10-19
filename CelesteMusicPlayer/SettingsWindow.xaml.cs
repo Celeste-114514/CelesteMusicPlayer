@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -143,7 +143,6 @@ namespace CelesteMusicPlayer
             var initWatch = Stopwatch.StartNew();
             _loadingUi = true;
             InitializeComponent();
-            TokenShapeRuntime.Attach(this);
             long initMs = initWatch.ElapsedMilliseconds;
             WindowIconHelper.Apply(this);
             Title = "选项设置";
@@ -528,6 +527,7 @@ namespace CelesteMusicPlayer
 
                 SetToggle(MiniAlwaysOnTopSwitch, s.MiniPlayerAlwaysOnTop);
                 SetToggle(OpenMiniPlayerSwitch, s.OpenMiniPlayerOnStartup);
+                SelectComboByTag(MiniBackgroundCombo, s.MiniPlayerBackground);
 
                 // 外观
                 SelectComboByTag(UiStyleModeCombo, s.UiStyleMode);
@@ -1352,6 +1352,7 @@ namespace CelesteMusicPlayer
 
             s.MiniPlayerAlwaysOnTop = MiniAlwaysOnTopSwitch?.IsOn ?? s.MiniPlayerAlwaysOnTop;
             s.OpenMiniPlayerOnStartup = OpenMiniPlayerSwitch?.IsOn ?? s.OpenMiniPlayerOnStartup;
+            s.MiniPlayerBackground = GetComboTagString(MiniBackgroundCombo, "Cover");
 
             s.UiStyleMode = GetComboTagString(UiStyleModeCombo, "ClassicSystem");
             s.CelesteThemeName = GetComboTagString(ThemeFileCombo, "");

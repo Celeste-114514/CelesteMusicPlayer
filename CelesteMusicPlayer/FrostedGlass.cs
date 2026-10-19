@@ -29,7 +29,7 @@ namespace CelesteMusicPlayer
         public static bool BackdropEnabled { get; set; } = true;
 
         /// <summary>
-        /// 令牌测试皮肤的取色钩子（由 MainWindow.TokenSkin 在激活时挂上、退出时摘掉）。
+        /// 令牌取色钩子（主题文件机制预留：激活时挂上、退出时摘掉；当前无皮肤挂载，恒为 null）。
         /// 返回 null = 用经典硬编码色。三类：面板不透明底 / 窗口根底 / 标题栏按钮前景。
         /// 经典/图景/极客模式下这三个钩子恒为 null，既有代码路径一行不变。
         /// </summary>

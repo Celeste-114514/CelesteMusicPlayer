@@ -1,625 +1,604 @@
-﻿using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
-using Windows.Foundation;
+using Microsoft.UI.Xaml.Media.Imaging;
+using Microsoft.UI.Windowing;
+using System;
+using System.Collections.Generic;
+using System.Globalization;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.WindowsRuntime;
+using System.Threading.Tasks;
 using Windows.Graphics;
-using Windows.Media.Playback;
 using WinRT.Interop;
 
 namespace CelesteMusicPlayer
 {
     /// <summary>
-    /// 迷你播放器（重做版，布局参照 ECHO 的 mini-player）。
+    /// 迷你播放器（2026-10-19 推倒重写版）—— 主程序的一条横向小条（480×118 固定）。
     ///
-    /// 旧版的几个实际问题，这次一并解决：
-    /// 1. **音量按钮根本不调音量**：旧版 VolumeButton_Click 里只有 _owner.Activate()，
-    ///    点了是切回主窗口。现在改成 Flyout 弹音量条，走 MainWindow.SetVolumePublic()
-    ///    （内部还是改主窗口那个 VolumeSlider，所以音量图标、写盘、引擎同步全部复用主界面逻辑）。
-    /// 2. **高度会自我打架**：旧版 EnsureHeightFitsControls() 里 Measure → Resize →
-    ///    触发 AppWindow.Changed → 又调 EnsureHeightFitsControls()，反复递归。
-    ///    现在只有"收起 / 展开队列"两种固定高度，且只在目标高度与当前不同时才 Resize，必然收敛。
-    /// 3. **440×228 的大方块**：改成 420×74 的紧凑横条，进度行塞进封面右侧那 56px 里，不额外占高。
-    /// 4. **歌词跑马灯 33ms 常驻定时器**：常年在跑（费电、还容易把整条挤变形）。
-    ///    歌词显示交给独立的桌面歌词窗口，迷你条不再显示歌词。
-    /// 5. 文字全部改用主题画刷（旧版歌名写死白色，浅色主题/浅色壁纸上会看不清）。
+    /// 铁律 = **单向数据流**：本窗口一行播放逻辑都没有，也不认识 MainWindow 的任何字段。
+    ///   · 状态：订阅 <see cref="MiniPlayerBridge.StateChanged"/>，来什么画什么；
+    ///   · 命令：全部走 <see cref="MiniPlayerBridge"/> 的几个静态方法，由主窗口去执行。
+    /// 旧版（已删除，备份 _celeste_mini_removed_20261019）反过来抓着主窗口 27 处内部方法，
+    /// 主窗口动一点它就出错 —— 用户说的"很多 bug"就是这么来的。
+    ///
+    /// 功能（用户 10-19 点单）：播放/暂停、上一首/下一首、可拖进度条、双击回主窗口、
+    /// 始终置顶、音量、播放队列、一行歌词。底色三选（设置 MiniPlayerBackground，
+    /// 左上角「底」字按钮循环切换）：封面压暗 / 固定深色 / 毛玻璃。
+    ///
+    /// 移动窗口 = 按住空白处拖：轮询定时器自己读光标挪窗（零散播放窗口同款定案配方，
+    /// 本机实测三条常规路都不通，详见 StartPollingDrag 注释）。
     /// </summary>
     public sealed partial class MiniPlayerWindow : Window
     {
-        private readonly MainWindow _owner;
+        private bool _uiReady;
+        private string _bgMode = "Cover";
 
-        private bool _updatingProgress;
+        // Cover 态：封面主色压出来的纱罩渐变（取不到色兜底 82% 黑）
+        private Brush? _coverTintBrush;
+        private int _coverTintToken;
+
+        // 封面加载防串台（切歌快时旧回调不许覆盖新封面）
+        private int _coverToken;
+        private byte[]? _shownCoverBytes;
+
+        // 进度条拖动态（指针事件必须代码挂 + handledEventsToo，见 HookProgressSliderPointer）
         private bool _userSeeking;
         private uint _progressPointerId;
         private bool _progressOnThumb;
-        private bool _updatingVolume;
-        private bool _alwaysOnTop = true;
-        private bool _queueOpen;
 
-        private bool _isDragging;
-        private uint _dragPointerId;
-        private int _dragCursorStartX;
-        private int _dragCursorStartY;
-        private int _dragWindowStartX;
-        private int _dragWindowStartY;
+        // 音量条同步守卫（程序回填值时不许触发命令）
+        private bool _syncingVolume;
+        private bool _syncingQueueSelection;
 
-        private IntPtr _hwnd;
-        private SubclassProc? _subclassProc;
-        private bool _subclassInstalled;
-        private int _lastRegionW = -1;
-        private int _lastRegionH = -1;
+        // 双击判定（连续两次按下、光标没动 → 回主窗口）
+        private long _lastPressTick;
+        private int _lastPressX;
+        private int _lastPressY;
 
-        // 尺寸（DIP）：560×120 收起、380 展开队列。比例更 deskbox：圆角 20、阴影 8+64。
-        private const int WidthDip = 560;
-        private const int HeightCollapsedDip = 120;
-        private const int HeightQueueDip = 380;
+        // 自检日志只打一次（见 ApplySnapshot）
+        private bool _stateLogged;
 
-        private const double CornerRadiusDip = 20;
-        private const int RegionInsetPx = 3;
-        private const int SubclassId = 1;
+        // ----------------------------------------------------------------
+        // 扩展面板（歌词 / 播放队列，2026-10-19 追加；10-19 帧率优化 + 锯齿修复重做）
+        //
+        // 动画 = 逐帧 **AppWindow.Resize**（窗高即可见高，面板高度同步跟住）：
+        //   展开 220ms ease-out（先冲后缓）/ 收起 180ms ease-in。
+        //
+        // ⚠ 为什么又回到逐帧 resize（最初版实测 ~31ms/帧 ≈ 32fps，用户报卡）：
+        //   当年卡的主因是 **16ms 轮询定时器**（系统计时粒度 ~15.6ms，有效帧间隔被拖到
+        //   ~30ms 还抖动），不是 resize 本身。现在主驱动换成帧同步
+        //   （CompositionTarget.Rendering，合成器每帧回调、与显示刷新同拍），resize 每帧
+        //   一次 layout 的代价在 60fps 预算内（窗口内容少）；动画期间把重内容
+        //   （歌词滚动区 / 队列列表）折叠掉，每帧只剩几个 Border 在排，帧率稳。
+        // ⚠ 圆角不再用 SetWindowRgn（1 位掩码圆弧必锯齿，用户 10-19 报「四角有像素点」）：
+        //   圆角归 DWM（DWMWCP_ROUND，8px@96dpi 带 AA），见 MiniPlayerWindow.Chrome.cs。
+        //   区域机制已整体删除 —— 没有区域就意味着"撑窗 + 裁可见高"那套也没了，
+        //   可见高直接等于窗高，动画天然正确（切页缩小也不再误判成收起）。
+        // ⚠ 驱动必须**帧同步**：Rendering 真正跑满 60fps；16ms 定时器降级为**兜底**
+        //   （窗口被全屏程序遮住时 Rendering 可能暂停，保证动画跑得完）。
+        // ----------------------------------------------------------------
+        private const int BarWindowHeightDip = 118;   // 收起态窗高（小条）
+        private const int PanelGapDip = 6;            // 小条与面板之间的间隙
+        private const int LyricPanelHeightDip = 204;  // 歌词面板可见高
+        private const int QueuePanelHeightDip = 264;  // 队列面板可见高
+        private const int PanelExpandMs = 220;
+        private const int PanelCollapseMs = 180;
 
-        public event Action? ClosedByUser;
+        /// <summary>
+        /// 当前面板页：""=收起 / "Lyrics" / "Queue"。
+        /// </summary>
+        private string _panelMode = "";
 
-        public MiniPlayerWindow(MainWindow owner)
+        /// <summary>
+        /// 当前「可见高」（DIP，含小条）—— 现在窗高即可见高（没有裁剪区了），
+        /// 它只是动画的起点真相源： idle 时恒等于 AppWindow 高度（DIP）。
+        /// </summary>
+        private int _visibleHeightDip = BarWindowHeightDip;
+
+        /// <summary>面板动画进行中（Changed 事件每帧触发，这时不要推 DWM 属性）。</summary>
+        private bool _panelAnimating;
+
+        /// <summary>动画期间重内容（歌词滚动区/队列列表）已折叠；展开过 45% 后再放出来。</summary>
+        private bool _panelContentRestored;
+
+        private int _panelAnimFromWin;
+        private int _panelAnimToWin;
+        /// <summary>
+        /// 动画时钟（QPC，微秒级）。不能用 TickCount64：它的粒度就是系统计时粒度
+        /// ~15.6ms，60fps 下算出来的进度会台阶式跳，动画看起来一抖一抖。
+        /// </summary>
+        private readonly System.Diagnostics.Stopwatch _panelAnimClock = new();
+        private int _panelAnimFrames;
+        private int _panelAnimLastAppliedWin = -1;
+        private double _panelAnimLastFrameMs;
+        private double _panelAnimMaxGapMs;
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _panelTimer;
+
+        // 歌词面板：源引用变了才重建行；下标变了只换两行样式（不整表刷新）
+        private IReadOnlyList<LyricLine>? _lyricSource;
+        private readonly List<TextBlock> _lyricRows = new();
+        private int _lyricIndexShown = -2;
+        private bool _lyricsSynced;
+        private static readonly SolidColorBrush LyricDimBrush =
+            new(Windows.UI.Color.FromArgb(0x8C, 0xFF, 0xFF, 0xFF));
+        private static readonly SolidColorBrush LyricCurrentBrush =
+            new(Windows.UI.Color.FromArgb(0xFF, 0xFF, 0xFF, 0xFF));
+        private static readonly SolidColorBrush LyricHintBrush =
+            new(Windows.UI.Color.FromArgb(0x73, 0xFF, 0xFF, 0xFF));
+
+        // 队列面板：投影用的原始标题表（内容变了才重投影 + 重绑）
+        private List<string>? _queueSourceTitles;
+        private List<QueueRow>? _queueRows;
+        private int _queueIndexShown = -2;
+
+        /// <summary>队列面板一行（编号列：普通行显示序号，当前行显示播放字形）。</summary>
+        private sealed class QueueRow
         {
-            _owner = owner;
+            public string MarkerText { get; init; } = "";
+            public string MarkerGlyph { get; init; } = "";
+            public string Title { get; init; } = "";
+        }
+
+        // 轮询式拖动
+        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _dragTimer;
+        private int _dragCursorX;
+        private int _dragCursorY;
+        private int _dragWinX;
+        private int _dragWinY;
+
+        public MiniPlayerWindow()
+        {
             InitializeComponent();
-            TokenShapeRuntime.Attach(this);
+            // 与主窗口同一处置位：引擎层可能在后台线程被懒构造，取不到当前线程队列会抛
+            HiFiOutputBackend.UiDispatcherQueue = this.DispatcherQueue;
             WindowIconHelper.Apply(this);
-            Title = "迷你播放器";
+            Title = "CelesteMusicPlayer";
 
+            // 毛玻璃背板：Frosted 态透出它（被 65% 深色纱盖住，保白字可读）
+            try
+            {
+                SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.ctor.backdrop", caught);
+            }
+
+            // 底色：设置项 MiniPlayerBackground（封面 / 深色 / 毛玻璃，默认封面）
             AppSettingsState settings = AppSettingsStore.Load();
+            _bgMode = settings.MiniPlayerBackground is "Dark" or "Frosted"
+                ? settings.MiniPlayerBackground
+                : "Cover";
+            ApplyBackgroundMode(_bgMode, persist: false);
+
+            // 置顶初值（写回用同一个字段，两边一致）
             _alwaysOnTop = settings.MiniPlayerAlwaysOnTop;
-            ApplyBackdropPreference(settings.EnableFrostedGlass);
 
-            ThemeColorService.ThemeColorChanged -= OnThemeColorChangedMini;
-            ThemeColorService.ThemeColorChanged += OnThemeColorChangedMini;
-            RefreshAccentFromOwner();
-
-            // 极客皮肤：迷你播放器是独立顶级窗口，主窗口的 ApplyGeekChrome 根本走不到这里，
-            // 得自带一份上色 + 圆角归零（详见 MiniPlayerWindow.Geek.cs）。
-            // 同时挂上设置变更订阅，用户在设置里切风格/换磷光色时开着的迷你条要实时跟。
-            HookGeekMiniSettings();
-            ApplyGeekMini(MainWindow.IsGeekUiStyleActive());
-
-            // 进度条的指针事件必须代码挂 + handledEventsToo：Slider 内部会把
-            // PointerPressed/Released 标成 Handled，XAML 挂的处理器收不到，
-            // _userSeeking 永远 false —— 表现为"进度条拖不动、松手也没反应"。
+            // 滑块指针事件：Slider 内部会把 PointerPressed/Released 标成 Handled，
+            // XAML 挂的处理器收不到 → 拖动失效。必须代码挂 + handledEventsToo。
             HookProgressSliderPointer();
 
-            OverlappedPresenter presenter = OverlappedPresenter.Create();
+            // 窗口 chrome：去系统标题栏、无最大化、固定大小；关闭是自绘按钮
+            var presenter = OverlappedPresenter.Create();
             presenter.IsResizable = false;
-            presenter.IsMinimizable = false;
+            presenter.IsMinimizable = true;
             presenter.IsMaximizable = false;
             presenter.SetBorderAndTitleBar(false, false);
-            presenter.IsAlwaysOnTop = _alwaysOnTop;
             AppWindow.SetPresenter(presenter);
 
             ExtendsContentIntoTitleBar = false;
             TryCollapseTitleBar();
 
-            RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
-            ApplyChromeBackground(settings.EnableFrostedGlass);
-            AttachCardShadow();
+            AppWindow.Changed += MiniAppWindow_Changed;
 
-            // 固定高度：不再像旧版那样 Measure 出来再回写（那套会自我递归）
-            ResizeToDips(WidthDip, HeightCollapsedDip);
-            PositionNearBottomCenter();
+            ResizeToDips(480, 118);
+            CenterOnScreen();
 
             if (Content is FrameworkElement root)
             {
                 root.Loaded += (_, _) =>
                 {
+                    _uiReady = true;
                     ApplyWindowChromeNative();
-                    ApplyWindowHeight();
-                    RefreshFromOwner();
-                    SyncVolumeFromOwner();
+                    ApplyTopMostState(persist: false);
+                    // 开窗先拿一份当前状态画上（不用等下一个 tick）
+                    ApplySnapshot(MiniPlayerBridge.Current);
+                    UpdatePanelButtons();
                 };
-
-                // 双击封面/空白 = 回到主窗口（ECHO 没有，但比旧版的"设置按钮"有用）
-                root.DoubleTapped += RootGrid_DoubleTapped;
             }
 
-            AppWindow.Changed += AppWindow_Changed;
+            // 订阅主窗口推来的状态（同一个 UI 线程，直接画）
+            MiniPlayerBridge.StateChanged += OnStateChanged;
 
             Closed += (_, _) =>
             {
-                // AppSettingsStore.Changed 是静态事件，不解绑会把本窗口实例一直攥在内存里
-                Safe(UnhookGeekMiniSettings);
-                Safe(() => ThemeColorService.ThemeColorChanged -= OnThemeColorChangedMini);
-                Safe(EndDrag);
-                Safe(RemoveWindowSubclassIfNeeded);
-                Safe(() => ClosedByUser?.Invoke());
+                MiniPlayerBridge.StateChanged -= OnStateChanged;
+                _dragTimer?.Stop();
+                // 面板动画两条驱动都摘掉：Rendering 是静态事件，不退订会泄漏 +
+                // 闭窗后事件还在打（摸已释放的 XAML）；定时器留着也会继续步进。
+                Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnPanelRendering;
+                _panelTimer?.Stop();
+                RemoveWindowSubclassIfNeeded();
             };
         }
 
         // =====================================================================
-        // 对外接口（主窗口依赖，签名保持不变）
+        // 状态应用（来什么画什么）
         // =====================================================================
 
-        public void SetAlwaysOnTop(bool onTop)
+        private void OnStateChanged(MiniPlayerSnapshot snap)
         {
-            _alwaysOnTop = onTop;
-            if (AppWindow.Presenter is OverlappedPresenter presenter)
-            {
-                presenter.IsAlwaysOnTop = onTop;
-            }
+            // 订阅就是在 UI 线程（主窗口的 tick 推过来的），直接画
+            ApplySnapshot(snap);
         }
 
-        public void ApplyBackdropPreference(bool enabled)
+        private void ApplySnapshot(MiniPlayerSnapshot snap)
         {
-            Safe(() =>
-            {
-                if (enabled)
-                {
-                    FrostedGlass.ApplyWindowBackdrop(this);
-                }
-                else
-                {
-                    SystemBackdrop = null;
-                }
-
-                // 经典界面：迷你条也要跟着主程序的明暗主题走（背景图式下本调用不介入）
-                FrostedGlass.ApplyWindowTheme(this);
-                ApplyChromeBackground(enabled);
-            });
-        }
-
-        /// <summary>
-        /// 横条自身底色。开毛玻璃时只做一层很淡的压暗，让 Desktop Acrylic 透出来；
-        /// 关掉毛玻璃时必须换成不透明底 —— 否则透明内容 + 无 SystemBackdrop 会直接露出白底。
-        /// </summary>
-        private void ApplyChromeBackground(bool frosted)
-        {
-            // 经典界面下没有 Desktop Acrylic 可透（背板被关掉了），必须走不透明底，
-            // 否则半透明压暗层盖在空背景上＝一条发灰的透明条。
-            ChromeBorder.Background = frosted && FrostedGlass.ClassicMode == null
-                ? FrostedGlass.CreateMiniPlayerDimOverlay()
-                : FrostedGlass.CreateMiniPlayerBrush();
-        }
-
-        /// <summary>
-        /// 给 ChromeBorder 加 ThemeShadow，让迷你播放器看着像浮在桌面上。
-        /// WinUI3 ThemeShadow 对顶级 Window 内容能渲染出柔和阴影；构造时 Window 的合成器
-        /// 已就绪，可直接挂。Shadow 自身不会清掉背景，所以调一次就够。
-        /// </summary>
-        private void AttachCardShadow()
-        {
-            Safe(() =>
-            {
-                try
-                {
-                    ChromeBorder.Shadow ??= new ThemeShadow();
-                    // Y 向偏移让光从上方来，Z 提升阴影扩散半径
-                    ChromeBorder.Translation = new System.Numerics.Vector3(0, 8f, 32f);
-                }
-                catch (Exception caught) { StartupLog.WriteException("MiniPlayerWindow.AttachCardShadow", caught); }
-            });
-        }
-
-        /// <summary>主题色变化后刷新强调元素（进度条 + 播放按钮实心圆）。</summary>
-        public void RefreshAccentFromOwner()
-        {
-            Safe(() =>
-            {
-                // 极客模式下换成磷光色，其余情况保持原来的主题色逻辑（详见 MiniPlayerWindow.Geek.cs）
-                Windows.UI.Color accent = CurrentAccentForMini();
-
-                ThemeColorService.ApplySliderAccent(ProgressSlider, accent);
-                ThemeColorService.ApplySliderAccent(VolumeSlider, accent);
-
-                // 播放按钮：强调色实心圆 + 自动选黑/白前景保证可读
-                PlayPauseButton.Background = new SolidColorBrush(accent);
-                PlayPauseButton.Foreground = new SolidColorBrush(ReadableForeground(accent));
-                if (PlayPauseIcon != null)
-                {
-                    PlayPauseIcon.Foreground = PlayPauseButton.Foreground;
-                }
-            });
-        }
-
-        /// <summary>整条刷新（切歌、开迷你播放器时调用）。</summary>
-        public void RefreshFromOwner()
-        {
-            Safe(() =>
-            {
-                PlaylistItem? item = _owner.GetCurrentPlayingItem();
-                if (item == null)
-                {
-                    TitleText.Text = "未在播放";
-                    ArtistText.Text = string.Empty;
-                    CoverImage.Source = null;
-                }
-                else
-                {
-                    TitleText.Text = item.Title;
-                    ArtistText.Text = item.Artist;
-                    CoverImage.Source = _owner.GetCurrentCoverImage();
-                }
-
-                CoverPlaceholder.Opacity = CoverImage.Source == null ? 0.45 : 0;
-
-                RefreshTransportState();
-
-                // 引擎在放（HiFi/转码）时优先用引擎位置：MediaPlayer 可能还挂着上一首的 Source，
-                // 读它会拿到一个早已结束的会话（Position == NaturalDuration），
-                // 表现同样是"暂停后进度变成 3:19/3:19"。
-                if (_owner.IsEngineActiveNow)
-                {
-                    UpdateProgressUi(_owner.EnginePositionValue, _owner.EngineDurationValue);
-                }
-                else
-                {
-                    MediaPlayer? player = _owner.GetMediaPlayerPublic();
-                    if (player?.Source != null)
-                    {
-                        UpdateProgressUi(player.PlaybackSession.Position, player.PlaybackSession.NaturalDuration);
-                    }
-                    else
-                    {
-                        UpdateProgressUi(TimeSpan.Zero, TimeSpan.Zero);
-                    }
-                }
-
-                SyncVolumeFromOwner();
-                RefreshQueueSelection();
-            });
-        }
-
-        /// <summary>播放位置推进（主窗口每 tick 调用）。</summary>
-        public void SyncPosition(TimeSpan position, TimeSpan duration)
-        {
-            if (_userSeeking)
+            if (!_uiReady || snap == null)
             {
                 return;
             }
 
-            UpdateProgressUi(position, duration);
+            // 一次性自检日志：第一条带歌曲信息的推送落屏时打一行（之后每 200ms 都推，不打）。
+            // 排查"迷你条开了但是不显示歌名/歌词"时看这行在不在、值对不对。
+            if (!_stateLogged && !string.IsNullOrEmpty(snap.Title) && snap.Title != "未在播放")
+            {
+                _stateLogged = true;
+                StartupLog.Write(
+                    $"迷你播放器状态已应用 标题={snap.Title} 艺术家={snap.Artist} " +
+                    $"歌词={(string.IsNullOrEmpty(snap.LyricLine) ? "无" : "有")} " +
+                    $"队列={snap.QueueTitles.Count} 时长={snap.DurationSeconds:F0}s 播放中={snap.IsPlaying}");
+            }
 
-            // 播放/暂停图标跟着实际状态走（旧版在这里只改 StatusText，图标可能不同步）
-            RefreshTransportState();
-        }
-
-        // =====================================================================
-        // 内部实现
-        // =====================================================================
-
-        /// <summary>同步播放/暂停图标与音量图标。</summary>
-        private void RefreshTransportState()
-        {
             Safe(() =>
             {
-                MediaPlayer? player = _owner.GetMediaPlayerPublic();
-                bool playing = (player?.Source != null
-                        && player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
-                    || _owner.IsEnginePlayingNow;
+                TitleText.Text = string.IsNullOrWhiteSpace(snap.Title) ? "未在播放" : snap.Title;
+                ArtistText.Text = snap.Artist ?? "";
+                LyricText.Text = snap.LyricLine ?? "";
+                PlayPauseIcon.Glyph = snap.IsPlaying ? "\uE769" : "\uE768";
 
-                PlayPauseIcon.Glyph = playing ? "\uE769" : "\uE768";
-            });
-        }
-
-        private void UpdateProgressUi(TimeSpan position, TimeSpan duration)
-        {
-            Safe(() =>
-            {
-                _updatingProgress = true;
-                try
+                // 封面：主窗口已解码好的 ImageSource 直接复用（迷你不再自己解码一遍）
+                if (!ReferenceEquals(CoverImage.Source, snap.Cover))
                 {
-                    double total = duration.TotalSeconds;
-                    if (total <= 0 || double.IsNaN(total))
+                    CoverImage.Source = snap.Cover;
+                }
+
+                // 封面字节变了才重算背景模糊 + 取色（切歌才动，不每 tick 跑）。
+                // ⚠ 不能只比引用：没有内嵌封面时主窗口每次现抽一份新数组，引用恒变。
+                //   按内容比（长度 + 首/中/尾各一字节），同一首歌不重复算。
+                if (!SameCoverBytes(_shownCoverBytes, snap.CoverBytes))
+                {
+                    _shownCoverBytes = snap.CoverBytes;
+                    _ = LoadCoverBackgroundAsync(snap.CoverBytes);
+                }
+
+                // 进度（用户正在拖的时候不抢）
+                double total = snap.DurationSeconds;
+                if (total <= 0 || double.IsNaN(total))
+                {
+                    ProgressSlider.Maximum = 100;
+                    if (!_userSeeking)
                     {
-                        ProgressSlider.Maximum = 100;
                         ProgressSlider.Value = 0;
-                        TotalTimeText.Text = "--:--";
                         CurrentTimeText.Text = "--:--";
+                        TotalTimeText.Text = "--:--";
                     }
-                    else
+                }
+                else
+                {
+                    double pos = Math.Clamp(snap.PositionSeconds, 0, total);
+                    ProgressSlider.Maximum = total;
+                    if (!_userSeeking)
                     {
-                        // 当前时间按总时长夹取：源偶尔会报出比时长略大的位置，
-                        // 不夹就会显示成"3:19/3:19"这种一眼假的进度。
-                        double pos = Math.Clamp(position.TotalSeconds, 0, total);
-                        ProgressSlider.Maximum = total;
                         ProgressSlider.Value = pos;
-                        TotalTimeText.Text = FormatTime(duration);
                         CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(pos));
                     }
+                    TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(total));
                 }
-                finally
-                {
-                    _updatingProgress = false;
-                }
-            });
-        }
 
-        private static string FormatTime(TimeSpan t)
-        {
-            if (t.TotalHours >= 1)
-            {
-                return t.ToString(@"h\:mm\:ss");
-            }
-
-            return t.ToString(@"mm\:ss");
-        }
-
-        /// <summary>按强调色亮度选黑/白前景，保证圆底上的图标始终看得清。</summary>
-        private static Windows.UI.Color ReadableForeground(Windows.UI.Color background)
-        {
-            // 感知亮度（ITU-R BT.601 加权）
-            double luma = (0.299 * background.R + 0.587 * background.G + 0.114 * background.B) / 255.0;
-            return luma > 0.6
-                ? Windows.UI.Color.FromArgb(255, 0, 0, 0)
-                : Windows.UI.Color.FromArgb(255, 255, 255, 255);
-        }
-
-        // ---------------------------------------------------------------- 音量
-
-        /// <summary>从主窗口读回当前音量，同步到 Flyout 滑条与音量图标。</summary>
-        private void SyncVolumeFromOwner()
-        {
-            Safe(() =>
-            {
-                _updatingVolume = true;
+                // 音量条回填（ Flyout 开没开都同步，守卫防命令回灌）
+                _syncingVolume = true;
                 try
                 {
-                    double vol = Math.Clamp(_owner.GetVolumePublic(), 0, 100);
-                    VolumeSlider.Value = vol;
-                    ApplyVolumeIcon(vol);
+                    double vol = Math.Clamp(snap.Volume, 0, 100);
+                    if (Math.Abs(VolumeSlider.Value - vol) >= 0.5)
+                    {
+                        VolumeSlider.Value = vol;
+                    }
+                    VolumeValueText.Text = ((int)Math.Round(vol)).ToString(CultureInfo.CurrentCulture);
                 }
                 finally
                 {
-                    _updatingVolume = false;
+                    _syncingVolume = false;
+                }
+
+                // ---- 扩展面板：歌词 ----
+                // 源引用变了（切歌）才整表重建；下标变了只换两行样式 + 滚动，不整表刷新。
+                if (!ReferenceEquals(_lyricSource, snap.LyricLines))
+                {
+                    _lyricSource = snap.LyricLines;
+                    RebuildLyricRows(snap.LyricLines);
+                }
+
+                if (snap.LyricIndex != _lyricIndexShown)
+                {
+                    _lyricIndexShown = snap.LyricIndex;
+                    UpdateLyricHighlight(snap.LyricIndex);
+                    if (_panelMode == "Lyrics")
+                    {
+                        ScrollLyricToCurrent(smooth: true);
+                    }
+                }
+
+                // ---- 扩展面板：播放队列 ----
+                // 开着队列页才刷（内容或当前项变了才重投影，避免打断用户点选）。
+                if (_panelMode == "Queue"
+                    && (_queueSourceTitles == null
+                        || !ListsEqual(_queueSourceTitles, snap.QueueTitles)
+                        || snap.QueueIndex != _queueIndexShown))
+                {
+                    _queueSourceTitles = new List<string>(snap.QueueTitles);
+                    _queueIndexShown = snap.QueueIndex;
+                    RebuildQueueRows(snap.QueueTitles, snap.QueueIndex);
+                    PanelTitleText.Text = "播放队列（" + snap.QueueTitles.Count + "）";
                 }
             });
         }
 
-        private void ApplyVolumeIcon(double vol)
+        private static bool ListsEqual(List<string> a, List<string> b)
         {
-            string glyph = vol <= 0.5 ? "\uE74F" : vol < 34 ? "\uE992" : vol < 67 ? "\uE993" : "\uE767";
-            VolumeIcon.Glyph = glyph;
-            VolumeFlyoutIcon.Glyph = glyph;
-            VolumeValueText.Text = (int)Math.Round(vol) + "%";
-        }
-
-        private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
-        {
-            if (_updatingVolume)
+            if (a.Count != b.Count)
             {
-                return;
+                return false;
             }
 
-            Safe(() =>
+            for (int i = 0; i < a.Count; i++)
             {
-                double vol = Math.Clamp(e.NewValue, 0, 100);
-                // 走主窗口的 VolumeSlider，音量图标/持久化/引擎同步全部复用主界面那套
-                _owner.SetVolumePublic(vol);
-                ApplyVolumeIcon(vol);
-            });
-        }
-
-        // ---------------------------------------------------------------- 队列
-
-        private void QueueButton_Click(object sender, RoutedEventArgs e)
-        {
-            Safe(() =>
-            {
-                _queueOpen = !_queueOpen;
-                QueuePanel.Visibility = _queueOpen ? Visibility.Visible : Visibility.Collapsed;
-
-                ApplyWindowHeight();
-
-                if (_queueOpen)
+                if (!string.Equals(a[i], b[i], StringComparison.Ordinal))
                 {
-                    LoadQueue();
+                    return false;
                 }
-            });
-        }
+            }
 
-        private void LoadQueue()
-        {
-            EnsureQueueBound();
-            RefreshQueueSelection();
+            return true;
         }
 
         /// <summary>
-        /// 队列数据源绑定。主窗口会把 _userPlaylist 整个 new 掉（排序、重建队列时），
-        /// 所以不能只在点按钮时绑一次 —— 每次刷新都比对引用，换了就重绑。
+        /// 两份封面字节是否"同一份"（长度 + 首/中/尾各比一字节，够判换歌又不必全量比）。
+        /// 没有内嵌封面时主窗口每次现抽新数组，引用恒变但内容相同 —— 按内容比才不会每 tick 重算。
         /// </summary>
-        private void EnsureQueueBound()
+        private static bool SameCoverBytes(byte[]? a, byte[]? b)
         {
-            Safe(() =>
+            bool aEmpty = a is not { Length: > 0 };
+            bool bEmpty = b is not { Length: > 0 };
+            if (aEmpty || bEmpty)
             {
-                IReadOnlyList<PlaylistItem> queue = _owner.GetUserPlaylistPublic();
-                if (!ReferenceEquals(QueueList.ItemsSource, queue))
-                {
-                    QueueList.ItemsSource = queue;
-                }
-            });
-        }
-
-        /// <summary>把"正在播那首"标成选中项（收起队列时跳过，省开销）。</summary>
-        private void RefreshQueueSelection()
-        {
-            if (!_queueOpen || QueueList == null)
-            {
-                return;
+                return aEmpty && bEmpty;
             }
 
-            EnsureQueueBound();
-
-            Safe(() =>
+            if (a!.Length != b!.Length)
             {
-                int index = _owner.GetUserPlaylistIndexPublic();
-                if (index >= 0 && QueueList.SelectedIndex != index)
-                {
-                    QueueList.SelectedIndex = index;
-                }
-            });
+                return false;
+            }
+
+            int mid = a.Length / 2;
+            return a[0] == b[0] && a[mid] == b[mid] && a[^1] == b[^1];
         }
 
-        private void QueueList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        // =====================================================================
+        // Cover 态背景：封面模糊铺底 + 主色压暗纱罩（与零散播放窗口同一套口径）
+        // =====================================================================
+
+        /// <summary>换歌时把封面模糊版铺到背景（Cover 态），并重算压暗纱罩。</summary>
+        private async Task LoadCoverBackgroundAsync(byte[]? bytes)
         {
-            // 只有用户点选才跳歌；代码里设 SelectedIndex 也会触发这里，
-            // 但那种情况 index 本来就等于当前曲目，再播一次等于重启当前曲，所以先用索引挡掉。
-            Safe(() =>
+            int token = ++_coverToken;
+
+            // 纱罩取色（没有封面 → 兜底 82% 黑，见 ApplyCoverScrim）
+            Brush? brush = null;
+            if (bytes is { Length: > 0 })
             {
-                int index = QueueList.SelectedIndex;
-                if (index < 0 || index == _owner.GetUserPlaylistIndexPublic())
+                Windows.UI.Color? dominant = await CoverTint.AnalyzeAsync(bytes);
+                if (token != _coverToken)
                 {
                     return;
                 }
 
-                _owner.PlayUserPlaylistAtPublic(index);
-            });
-        }
-
-        // ---------------------------------------------------------------- 拖动
-
-        private void RootGrid_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
-        {
-            e.Handled = true;
-            Safe(() => _owner.Activate());
-        }
-
-        private void RootGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
-        {
-            if (e.Pointer.PointerDeviceType == Microsoft.UI.Input.PointerDeviceType.Mouse
-                && !e.GetCurrentPoint(RootGrid).Properties.IsLeftButtonPressed)
-            {
-                return;
-            }
-
-            // 命中任何按钮（含音量 Flyout 的按钮）都不起拖，否则点按钮会变成拖窗
-            if (e.OriginalSource is DependencyObject src && IsControlButton(src))
-            {
-                return;
-            }
-
-            if (!GetCursorPos(out POINT cursor))
-            {
-                return;
-            }
-
-            PointInt32 pos = AppWindow.Position;
-            _dragCursorStartX = cursor.X;
-            _dragCursorStartY = cursor.Y;
-            _dragWindowStartX = pos.X;
-            _dragWindowStartY = pos.Y;
-            _dragPointerId = e.Pointer.PointerId;
-            _isDragging = true;
-            RootGrid.CapturePointer(e.Pointer);
-            e.Handled = true;
-        }
-
-        private void RootGrid_PointerMoved(object sender, PointerRoutedEventArgs e)
-        {
-            if (!_isDragging || e.Pointer.PointerId != _dragPointerId)
-            {
-                return;
-            }
-
-            if (!GetCursorPos(out POINT cursor))
-            {
-                return;
-            }
-
-            AppWindow.Move(new PointInt32(
-                _dragWindowStartX + (cursor.X - _dragCursorStartX),
-                _dragWindowStartY + (cursor.Y - _dragCursorStartY)));
-            e.Handled = true;
-        }
-
-        private void RootGrid_PointerReleased(object sender, PointerRoutedEventArgs e)
-        {
-            if (e.Pointer.PointerId != _dragPointerId)
-            {
-                return;
-            }
-
-            EndDrag();
-            Safe(() => RootGrid.ReleasePointerCapture(e.Pointer));
-            e.Handled = true;
-        }
-
-        private void RootGrid_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
-            => EndDrag();
-
-        private void EndDrag()
-        {
-            _isDragging = false;
-            _dragPointerId = 0;
-        }
-
-        /// <summary>命中测试：来源是按钮（或按钮内部元素）就不拖动。</summary>
-        private static bool IsControlButton(DependencyObject src)
-        {
-            DependencyObject? node = src;
-            while (node != null)
-            {
-                // 队列列表 / 滚动区 / 输入框也要豁免：在列表上按住想滚一下，
-                // 结果整条迷你播放器被拖着跑（实测反馈）。ListView 模板里自带
-                // ScrollViewer，顺着父链都能被这一网打尽。
-                if (node is Button
-                    || node is Slider
-                    || node is ListViewBase
-                    || node is Microsoft.UI.Xaml.Controls.Primitives.SelectorItem
-                    || node is ScrollViewer
-                    || node is TextBox)
+                if (dominant != null)
                 {
-                    return true;
+                    (Windows.UI.Color start, Windows.UI.Color end) = CoverTint.BuildDimGradient(dominant.Value);
+                    var gradient = new LinearGradientBrush
+                    {
+                        StartPoint = new Windows.Foundation.Point(0, 0),
+                        EndPoint = new Windows.Foundation.Point(1, 1),
+                    };
+                    gradient.GradientStops.Add(new GradientStop
+                    {
+                        Color = Windows.UI.Color.FromArgb(199, start.R, start.G, start.B),
+                        Offset = 0,
+                    });
+                    gradient.GradientStops.Add(new GradientStop
+                    {
+                        Color = Windows.UI.Color.FromArgb(219, end.R, end.G, end.B),
+                        Offset = 1,
+                    });
+                    brush = gradient;
                 }
-
-                node = VisualTreeHelper.GetParent(node);
             }
 
-            return false;
-        }
-
-        // ---------------------------------------------------------------- 按钮
-
-        private void PreviousButton_Click(object sender, RoutedEventArgs e)
-            => Safe(_owner.PreviousPublic);
-
-        private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
-            => Safe(() =>
-            {
-                _owner.TogglePlayPausePublic();
-                RefreshTransportState();
-            });
-
-        private void NextButton_Click(object sender, RoutedEventArgs e)
-            => Safe(_owner.NextPublic);
-
-        private void CloseMiniButton_Click(object sender, RoutedEventArgs e)
-            => Safe(Close);
-
-        private void ProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
-        {
-            // 只有用户真的在拖（指针按下过）才认；程序性赋值一律忽略。
-            // 旧写法是在 ValueChanged 里直接 SeekPublic，一旦有程序性变更漏过
-            // _updatingProgress 标志（例如 Maximum 变化时值被夹取），就会把播放位置顶到
-            // 末尾 —— 表现就是"暂停后进度条变成 3:19/3:19"。这里改成和主窗口同一套把关方式。
-            if (_updatingProgress)
+            if (token != _coverToken)
             {
                 return;
             }
 
-            if (_userSeeking)
+            _coverTintBrush = brush;
+            if (_bgMode == "Cover")
             {
-                CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(e.NewValue));
+                ApplyCoverScrim();
+            }
+
+            // 模糊大图（与主程序整窗背景同一实现；模糊失败不影响纱罩，封面图不铺而已）
+            if (bytes is { Length: > 0 } && _bgMode == "Cover")
+            {
+                try
+                {
+                    byte[]? blurred = await Task.Run(() =>
+                        AlbumArtBackground.CreateHeavilyBlurredPng(bytes, workSize: 96, blurRadius: 2));
+                    if (token != _coverToken)
+                    {
+                        return;
+                    }
+
+                    BackgroundCoverImage.Source = blurred is { Length: > 0 }
+                        ? await DecodeBitmapAsync(blurred)
+                        : null;
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.LoadCoverBackgroundAsync", caught);
+                }
+            }
+            else if (_bgMode != "Cover")
+            {
+                BackgroundCoverImage.Source = null;
+            }
+        }
+
+        private void ApplyCoverScrim()
+        {
+            BackgroundScrim.Fill = _coverTintBrush
+                ?? new SolidColorBrush(Windows.UI.Color.FromArgb(209, 0, 0, 0)); // 82% 黑兜底
+            BackgroundScrim.Opacity = 1;
+        }
+
+        /// <summary>字节 → BitmapImage（须在 UI 线程调用）。</summary>
+        private static async Task<BitmapImage?> DecodeBitmapAsync(byte[] bytes)
+        {
+            try
+            {
+                var image = new BitmapImage();
+                using Windows.Storage.Streams.InMemoryRandomAccessStream stream = new();
+                await stream.WriteAsync(bytes.AsBuffer());
+                stream.Seek(0);
+                await image.SetSourceAsync(stream);
+                return image;
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.DecodeBitmapAsync", caught);
+                return null;
+            }
+        }
+
+        // =====================================================================
+        // 底色三态（封面压暗 / 深色 / 毛玻璃）
+        // =====================================================================
+
+        private void ApplyBackgroundMode(string mode, bool persist)
+        {
+            _bgMode = mode;
+            RootGrid.RequestedTheme = ElementTheme.Dark; // 三态全是深色底，白字白条
+
+            if (mode == "Cover")
+            {
+                RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
+                ApplyCoverScrim();
+                BackgroundCoverImage.Opacity = 1;
+            }
+            else if (mode == "Frosted")
+            {
+                // 毛玻璃：RootGrid 只铺一层 65% 深色纱，透出 DesktopAcrylic 背板
+                RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(165, 16, 16, 22));
+                BackgroundScrim.Opacity = 0;
+                BackgroundCoverImage.Opacity = 0;
+                EnsureAcrylicBackdrop();
+            }
+            else
+            {
+                RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 16, 16, 22));
+                BackgroundScrim.Opacity = 0;
+                BackgroundCoverImage.Opacity = 0;
+            }
+
+            PushDwmFrameColor(mode);
+
+            if (persist)
+            {
+                try
+                {
+                    AppSettingsState s = AppSettingsStore.Load();
+                    s.MiniPlayerBackground = mode;
+                    AppSettingsStore.Save(s);
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.ApplyBackgroundMode", caught);
+                }
+            }
+        }
+
+        private void BackgroundModeButton_Click(object sender, RoutedEventArgs e)
+        {
+            string next = _bgMode switch
+            {
+                "Cover" => "Dark",
+                "Dark" => "Frosted",
+                _ => "Cover"
+            };
+            ApplyBackgroundMode(next, persist: true);
+        }
+
+        private void EnsureAcrylicBackdrop()
+        {
+            try
+            {
+                if (SystemBackdrop == null)
+                {
+                    SystemBackdrop = new Microsoft.UI.Xaml.Media.DesktopAcrylicBackdrop();
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.EnsureAcrylicBackdrop", caught);
             }
         }
 
         /// <summary>
-        /// 指针事件挂接（构造器里调一次）。⚠ 不能用 XAML 属性挂、也不能用 += 裸挂：
-        /// Slider 的类处理函数会把 PointerPressed/Released 标记为 Handled，
-        /// 这两种挂法都收不到 → _userSeeking 永远 false（主窗口踩过并注释在案）。
-        /// handledEventsToo:true 才能无论事件有没有被吃掉都收到。
+        /// 把系统标题栏区折叠成 0 高并全透明（零散播放窗口同款配方）：
+        /// ExtendsContentIntoTitleBar=true 让内容区伸进标题栏位，PreferredHeightOption=Collapsed
+        /// 把该区高度压成 0，图标与系统菜单隐藏。配合构造函数里的
+        /// SetBorderAndTitleBar(false,false) 一起去掉边框+标题栏。
         /// </summary>
+        private void TryCollapseTitleBar()
+        {
+            Safe(() =>
+            {
+                AppWindowTitleBar bar = AppWindow.TitleBar;
+                bar.ExtendsContentIntoTitleBar = true;
+                bar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+                bar.IconShowOptions = IconShowOptions.HideIconAndSystemMenu;
+
+                Windows.UI.Color transparent = Windows.UI.Color.FromArgb(0, 0, 0, 0);
+                bar.BackgroundColor = transparent;
+                bar.InactiveBackgroundColor = transparent;
+                bar.ButtonBackgroundColor = transparent;
+                bar.ButtonInactiveBackgroundColor = transparent;
+                bar.ButtonHoverBackgroundColor = transparent;
+                bar.ButtonPressedBackgroundColor = transparent;
+                bar.ForegroundColor = transparent;
+                bar.InactiveForegroundColor = transparent;
+                bar.ButtonForegroundColor = transparent;
+                bar.ButtonInactiveForegroundColor = transparent;
+            });
+        }
+
+        // =====================================================================
+        // 进度条（拖动 / 点击落点 / 松手提交）
+        // =====================================================================
+
         private void HookProgressSliderPointer()
         {
             Safe(() =>
@@ -655,44 +634,37 @@ namespace CelesteMusicPlayer
             _progressPointerId = e.Pointer.PointerId;
             _progressOnThumb = IsInsideThumb(e.OriginalSource);
 
-            // 点在滑块圆头上 → 原生拖动照常工作（Thumb 自己跟手），我们不插手，
-            // 只等松开时提交。点在轨道上 → 原生 Slider 只负责把圆头瞬移过去，
-            // 按住继续拖它不管，这里按指针横坐标自己算落点，并把指针捕获过来
-            // 让拖动全程都有事件（不然拖出滑块边界就断）。
+            // 点在滑块圆头上 → 原生拖动照常工作，松手时提交；
+            // 点在轨道上 → 原生 Slider 只负责瞬移，按住继续拖它不管，这里自己算落点并捕获指针。
             if (!_progressOnThumb)
             {
-                SeekMiniFromPointer(e);
+                SeekFromPointer(e);
                 try
                 {
                     ProgressSlider.CapturePointer(e.Pointer);
                 }
                 catch (Exception caught)
                 {
-                    StartupLog.WriteException("MiniPlayerWindow.ProgressSlider_PointerPressed", caught);
+                    global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.ProgressSlider_PointerPressed", caught);
                 }
             }
         }
 
         private void ProgressSlider_PointerMoved(object sender, PointerRoutedEventArgs e)
         {
-            // 按住拖动跟随指针。圆头起手的那次不跟（原生 Thumb 自己会走，
-            // 我们插手等于两套定位互相打脸）。指针 id 卡着：不是起手那根
-            // 手指/鼠标的事件一律不理。
             if (_userSeeking && !_progressOnThumb && e.Pointer.PointerId == _progressPointerId)
             {
-                SeekMiniFromPointer(e);
+                SeekFromPointer(e);
             }
         }
 
         private void ProgressSlider_PointerExited(object sender, PointerRoutedEventArgs e)
         {
-            // 撒手撒在窗口外、且没人捕获指针时，Released 永远不会到这个滑块上，
-            // _userSeeking 会卡在 true —— 之后播放推进全被拦住，进度条像死了。
-            // 这里补一次提交（有捕获时不归我们管，等 CaptureLost）。
+            // 撒手撒在窗口外且没人捕获指针时 Released 永远不会来，_userSeeking 会卡死。
             if (_userSeeking
                 && (ProgressSlider.PointerCaptures == null || ProgressSlider.PointerCaptures.Count == 0))
             {
-                CommitMiniSeek();
+                CommitSeek();
             }
         }
 
@@ -705,23 +677,18 @@ namespace CelesteMusicPlayer
             catch (Exception caught)
             {
                 // 没捕获过（原生滑块自己在管）就会走到这里，属正常路径
-                StartupLog.WriteException("MiniPlayerWindow.ProgressSlider_PointerReleased", caught);
+                global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.ProgressSlider_PointerReleased", caught);
             }
 
-            CommitMiniSeek();
+            CommitSeek();
         }
 
         private void ProgressSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
         {
-            CommitMiniSeek();
+            CommitSeek();
         }
 
-        /// <summary>
-        /// 按指针在滑轨上的横坐标落点。WinUI 的 Slider 只认"攥住滑块圆头拖"，
-        /// 点轨道 / 在轨道上按住拖都没有原生响应 —— 用户实测反馈的"进度条拖不动"。
-        /// 宽高还没定时 ratio 会落在 0 或 1，无伤大雅（布局一定下来下次移动就准了）。
-        /// </summary>
-        private void SeekMiniFromPointer(PointerRoutedEventArgs e)
+        private void SeekFromPointer(PointerRoutedEventArgs e)
         {
             Safe(() =>
             {
@@ -733,10 +700,10 @@ namespace CelesteMusicPlayer
                 double px = e.GetCurrentPoint(ProgressSlider).Position.X;
                 double ratio = Math.Clamp(px / Math.Max(1, ProgressSlider.ActualWidth), 0, 1);
                 ProgressSlider.Value = ratio * ProgressSlider.Maximum;
+                CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(ProgressSlider.Value));
             });
         }
 
-        /// <summary>按下的位置是不是在滑块圆头里（圆头起手 = 原生拖动，不接管）。</summary>
         private static bool IsInsideThumb(object? originalSource)
         {
             DependencyObject? node = originalSource as DependencyObject;
@@ -753,8 +720,7 @@ namespace CelesteMusicPlayer
             return false;
         }
 
-        /// <summary>用户拖完进度条后才真正跳转（指针抬起/捕获丢失都算拖完）。</summary>
-        private void CommitMiniSeek()
+        private void CommitSeek()
         {
             if (!_userSeeking)
             {
@@ -765,36 +731,746 @@ namespace CelesteMusicPlayer
             Safe(() =>
             {
                 double seconds = ProgressSlider.Value;
-                _owner.SeekSourceSeconds(seconds);
+                MiniPlayerBridge.Seek(seconds);
                 CurrentTimeText.Text = FormatTime(TimeSpan.FromSeconds(seconds));
             });
         }
 
-        private void OnThemeColorChangedMini(Windows.UI.Color accent)
-            => RefreshAccentFromOwner();
+        // =====================================================================
+        // 传输按钮 / 音量 / 队列（全部只发命令，执行在主窗口）
+        // =====================================================================
 
-        // ---------------------------------------------------------------- 窗口外观
+        private void PreviousButton_Click(object sender, RoutedEventArgs e) => MiniPlayerBridge.Previous();
 
-        private void ApplyWindowHeight()
+        private void PlayPauseButton_Click(object sender, RoutedEventArgs e) => MiniPlayerBridge.TogglePlayPause();
+
+        private void NextButton_Click(object sender, RoutedEventArgs e) => MiniPlayerBridge.Next();
+
+        private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
+
+        private void VolumeSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            if (!_uiReady || _syncingVolume)
+            {
+                return;
+            }
+
+            VolumeValueText.Text = ((int)Math.Round(VolumeSlider.Value)).ToString(CultureInfo.CurrentCulture);
+            MiniPlayerBridge.SetVolume(VolumeSlider.Value);
+        }
+
+        private void LyricsButton_Click(object sender, RoutedEventArgs e) => TogglePanel("Lyrics");
+
+        private void QueueButton_Click(object sender, RoutedEventArgs e) => TogglePanel("Queue");
+
+        private void CollapsePanelButton_Click(object sender, RoutedEventArgs e) => CollapsePanel();
+
+        /// <summary>点小条上的「词/队」：同一页再点一次 = 收起；点另一页 = 切页（都带动画）。</summary>
+        private void TogglePanel(string mode)
+        {
+            if (_panelMode == mode)
+            {
+                CollapsePanel();
+                return;
+            }
+
+            ExpandPanel(mode);
+        }
+
+        private void PanelQueueList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_syncingQueueSelection || !_uiReady)
+            {
+                return;
+            }
+
+            int index = PanelQueueList.SelectedIndex;
+            if (index < 0)
+            {
+                return;
+            }
+
+            MiniPlayerBridge.PlayQueueAt(index);
+        }
+
+        // =====================================================================
+        // 扩展面板（歌词 / 播放队列）—— 2026-10-19 追加；10-19 帧率优化 + 锯齿修复重做
+        //
+        // 动画 = 帧同步驱动（CompositionTarget.Rendering 主 + 16ms 定时器兜底）逐帧
+        //   AppWindow.Resize：展开 220ms ease-out cubic（先冲后缓）/ 收起 180ms ease-in quad。
+        // 每帧窗高 = 可见高，面板高度同步跟住；内容淡入淡出由 PanelSurface.Opacity 承担，
+        // 重内容（歌词滚动区/队列列表）动画期间折叠、过半再放出来保帧率。
+        // 圆角归 DWM（DWMWCP_ROUND，8px@96dpi 带 AA）—— SetWindowRgn 1 位掩码圆弧必锯齿，
+        // 已整体删除，见 MiniPlayerWindow.Chrome.cs。
+        // =====================================================================
+
+        /// <summary>该页面对应的展开态窗高（DIP）。</summary>
+        private static int PanelWindowHeight(string mode) => mode switch
+        {
+            "Lyrics" => BarWindowHeightDip + PanelGapDip + LyricPanelHeightDip,
+            "Queue" => BarWindowHeightDip + PanelGapDip + QueuePanelHeightDip,
+            _ => BarWindowHeightDip,
+        };
+
+        private void ExpandPanel(string mode)
         {
             Safe(() =>
             {
-                int target = _queueOpen ? HeightQueueDip : HeightCollapsedDip;
-                // 只在与当前高度不同时才 Resize —— 避免 Resize → AppWindow.Changed → 再 Resize 的递归
-                if (AppWindow.Size.Height == target)
+                _panelMode = mode;
+                ExpansionPanel.Visibility = Visibility.Visible;
+                PanelSurface.Opacity = 0;
+
+                // 页内容就位 + 立刻画一份当前状态（不用等下一个 200ms 的 tick）
+                PreparePanelContent(mode);
+                ApplySnapshot(MiniPlayerBridge.Current);
+                UpdatePanelButtons();
+
+                // 动画期间重内容（歌词滚动区 / 队列列表）先折叠：每帧只剩面板壳在排，
+                // 这是逐帧 resize 下稳住 60fps 的关键；展开过 45% 后由动画放出来
+                // （那会儿 Opacity 已经起来，看不出切换）。
+                _panelContentRestored = false;
+                SetPanelContentVisible(false);
+
+                // 逐帧 resize：窗口从当前高长到目标全高，面板高度每帧跟住（见 StepPanelAnimation）
+                _panelAnimating = true;
+
+                int from = _visibleHeightDip;
+                int to = PanelWindowHeight(mode);
+                StartupLog.Write(
+                    "迷你播放器扩展区打开 模式=" + (mode == "Lyrics" ? "歌词" : "队列") +
+                    $" 窗高 {from}→{to} 歌词行={_lyricRows.Count}");
+                StartPanelAnimation(from, to);
+            });
+        }
+
+        private void CollapsePanel()
+        {
+            Safe(() =>
+            {
+                if (_panelMode == "" && ExpansionPanel.Visibility == Visibility.Collapsed && !_panelAnimating)
                 {
                     return;
                 }
 
-                ResizeToDips(WidthDip, target);
+                StartupLog.Write("迷你播放器扩展区收起");
+                // 收起 = 逐帧把窗口缩回 118（先上锁，Changed 每帧触发时别推 DWM 属性）
+                _panelAnimating = true;
+                StartPanelAnimation(_visibleHeightDip, BarWindowHeightDip);
             });
+        }
+
+        /// <summary>切页标题 + 两个视图的显隐 + 内容预热（队列页立即投影一份）。</summary>
+        private void PreparePanelContent(string mode)
+        {
+            MiniPlayerSnapshot snap = MiniPlayerBridge.Current;
+            bool lyrics = mode == "Lyrics";
+            PanelTitleText.Text = lyrics ? "歌词" : "播放队列（" + snap.QueueTitles.Count + "）";
+            LyricsScroll.Visibility = lyrics ? Visibility.Visible : Visibility.Collapsed;
+            PanelQueueList.Visibility = lyrics ? Visibility.Collapsed : Visibility.Visible;
+
+            if (!lyrics)
+            {
+                _queueSourceTitles = new List<string>(snap.QueueTitles);
+                _queueIndexShown = snap.QueueIndex;
+                RebuildQueueRows(snap.QueueTitles, snap.QueueIndex);
+            }
+        }
+
+        private void StartPanelAnimation(int fromWin, int toWin)
+        {
+            _panelAnimFromWin = fromWin;
+            _panelAnimToWin = toWin;
+            _panelAnimFrames = 0;
+            _panelAnimLastAppliedWin = -1;
+            _panelAnimLastFrameMs = 0;
+            _panelAnimMaxGapMs = 0;
+            _panelAnimClock.Restart();
+
+            // 主驱动：合成器每帧回调（与显示刷新同拍，60fps 的关键）。
+            // ⚠ Rendering 是**静态事件**：先减后加防重复订阅；窗口关闭时必须退订
+            //   （否则闭窗口后事件还在打，泄漏 + 摸到已释放的 XAML）。
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnPanelRendering;
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnPanelRendering;
+
+            // 兜底驱动：16ms 轮询定时器。窗口被全屏程序遮住时 Rendering 可能暂停，
+            // 定时器保证动画一定跑得完。两步进都是幂等的（按时钟算状态，重复触发无害）。
+            _panelTimer ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+            _panelTimer.Stop();
+            _panelTimer.Interval = TimeSpan.FromMilliseconds(16);
+            _panelTimer.Tick -= OnPanelTimerTick;
+            _panelTimer.Tick += OnPanelTimerTick;
+            _panelTimer.Start();
+
+            // 立刻走一帧，不用等第一个事件到来
+            StepPanelAnimation();
+        }
+
+        private void OnPanelRendering(object sender, object e) => StepPanelAnimation();
+
+        private void OnPanelTimerTick(object? sender, object? args) => StepPanelAnimation();
+
+        /// <summary>
+        /// 动画步进（两条驱动共用，幂等）：按时钟算当前窗高，resize 窗口 + 面板高度同步 +
+        /// 淡入淡出。只数"画面真的动了"的帧 —— 两条驱动都可能触发，按去重后的窗高统计，
+        /// 平均值才反映真实帧率（否则会被兜底定时器注水）。
+        /// </summary>
+        private void StepPanelAnimation()
+        {
+            // ⚠ 判据用"目标是不是收起态"，不是"to 是否大于 from"：切页时窗高可能变小
+            //   （队列 388 → 歌词 328），那也是展开语义。旧版按方向判，把切页缩小误判成
+            //   收起，动画一结束面板直接被摘掉 —— 队列页点「词」面板会整个消失。
+            bool collapsing = _panelAnimToWin <= BarWindowHeightDip;
+            int durationMs = collapsing ? PanelCollapseMs : PanelExpandMs;
+            double elapsed = _panelAnimClock.Elapsed.TotalMilliseconds;
+            double t = Math.Clamp(elapsed / durationMs, 0, 1);
+            // 展开先冲后缓（ease-out cubic），收起先缓后快（ease-in quad）
+            double eased = collapsing ? t * t : 1 - Math.Pow(1 - t, 3);
+
+            int win = (int)Math.Round(_panelAnimFromWin + (_panelAnimToWin - _panelAnimFromWin) * eased);
+            int lo = Math.Min(_panelAnimFromWin, _panelAnimToWin);
+            int hi = Math.Max(_panelAnimFromWin, _panelAnimToWin);
+            win = Math.Clamp(win, lo, hi);
+
+            if (win != _panelAnimLastAppliedWin)
+            {
+                _panelAnimFrames++;
+                double gap = elapsed - _panelAnimLastFrameMs;
+                if (_panelAnimLastAppliedWin >= 0 && gap > _panelAnimMaxGapMs)
+                {
+                    _panelAnimMaxGapMs = gap;
+                }
+                _panelAnimLastFrameMs = elapsed;
+                _panelAnimLastAppliedWin = win;
+            }
+
+            _visibleHeightDip = win;
+
+            // 每帧三件事：resize 窗口到当前高、面板高度跟住、面板淡入淡出。
+            // 重内容已折叠（SetPanelContentVisible），每帧只剩面板壳参与布局。
+            ResizeToDips(480, win);
+            ExpansionPanel.Height = Math.Max(0, win - BarWindowHeightDip - PanelGapDip);
+
+            // 内容随进度淡入 / 淡出（展开到 45% 之后才显，收起前 1/3 就隐）
+            double vis = collapsing
+                ? Math.Clamp(t / 0.35, 0, 1)
+                : Math.Clamp((t - 0.45) / 0.55, 0, 1);
+            PanelSurface.Opacity = vis;
+
+            // 重内容显隐与 Opacity 对齐：展开过 45% 放出来（那之前面板还是透明的），
+            // 收起淡出到 0 就折起来（之后面板不可见，折不折看不出来）。
+            if (collapsing)
+            {
+                if (vis <= 0 && _panelContentRestored)
+                {
+                    _panelContentRestored = false;
+                    SetPanelContentVisible(false);
+                }
+            }
+            else if (vis > 0 && !_panelContentRestored)
+            {
+                _panelContentRestored = true;
+                SetPanelContentVisible(true);
+            }
+
+            if (t >= 1)
+            {
+                // 摘两条驱动（静态事件必须退订，否则泄漏）
+                Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnPanelRendering;
+                _panelTimer?.Stop();
+                _panelAnimating = false;
+
+                if (collapsing)
+                {
+                    // 收尾：窗高本帧已收回 118，面板摘掉不占布局
+                    ExpansionPanel.Visibility = Visibility.Collapsed;
+                    _panelMode = "";
+                    UpdatePanelButtons();
+                    _visibleHeightDip = BarWindowHeightDip;
+                }
+                else
+                {
+                    // 展开/切页收尾：内容放出来，等最终布局落定再把当前行/当前项滚进视野
+                    _panelContentRestored = true;
+                    SetPanelContentVisible(true);
+                    if (_panelMode == "Lyrics")
+                    {
+                        RunAfterPanelLayout(() => ScrollLyricToCurrent(smooth: false));
+                    }
+                    else
+                    {
+                        RunAfterPanelLayout(ScrollQueueToCurrent);
+                    }
+                }
+
+                // 帧率验收行：帧数 / 平均帧间隔 / 最大帧间隔（不逐帧打日志，省每帧文件 I/O）
+                double avgGap = _panelAnimFrames > 1
+                    ? elapsed / (_panelAnimFrames - 1)
+                    : elapsed;
+                StartupLog.Write(
+                    "迷你播放器扩展区动画完成 模式=" +
+                    (_panelMode == "" ? "收起" : _panelMode == "Lyrics" ? "歌词" : "队列") +
+                    $" 可见高={win} 帧数={_panelAnimFrames} 总时长={elapsed:F0}ms " +
+                    $"平均帧间隔={avgGap:F1}ms 最大帧间隔={_panelAnimMaxGapMs:F1}ms");
+            }
+        }
+
+        /// <summary>
+        /// 动画期间重内容的显隐（歌词滚动区 / 队列列表二选一，另一页 PreparePanelContent
+        /// 已经折好了）。折叠 = 不参与布局，每帧只剩面板壳；显隐时机与 PanelSurface.Opacity
+        /// 对齐，用户看不出切换。
+        /// </summary>
+        private void SetPanelContentVisible(bool visible)
+        {
+            Visibility v = visible ? Visibility.Visible : Visibility.Collapsed;
+            if (_panelMode == "Lyrics")
+            {
+                LyricsScroll.Visibility = v;
+            }
+            else if (_panelMode == "Queue")
+            {
+                PanelQueueList.Visibility = v;
+            }
+        }
+
+        /// <summary>小条上两个面板按钮的选中态 + 提示语（开着哪页就把哪个点亮）。</summary>
+        private void UpdatePanelButtons()
+        {
+            Safe(() =>
+            {
+                var active = new SolidColorBrush(Windows.UI.Color.FromArgb(0x2E, 0xFF, 0xFF, 0xFF));
+                var idle = new SolidColorBrush(Windows.UI.Color.FromArgb(0x00, 0xFF, 0xFF, 0xFF));
+                LyricsButton.Background = _panelMode == "Lyrics" ? active : idle;
+                QueueButton.Background = _panelMode == "Queue" ? active : idle;
+                ToolTipService.SetToolTip(LyricsButton, _panelMode == "Lyrics" ? "收起歌词面板" : "歌词面板");
+                ToolTipService.SetToolTip(QueueButton, _panelMode == "Queue" ? "收起播放队列面板" : "播放队列面板");
+            });
+        }
+
+        // ----------------------------------------------------------------
+        // 歌词面板内容
+        // ----------------------------------------------------------------
+
+        private void RebuildLyricRows(IReadOnlyList<LyricLine>? lines)
+        {
+            Safe(() =>
+            {
+                LyricsRows.Children.Clear();
+                _lyricRows.Clear();
+                _lyricsSynced = false;
+
+                if (lines is { Count: > 0 })
+                {
+                    foreach (LyricLine line in lines)
+                    {
+                        if (line.Time > TimeSpan.Zero)
+                        {
+                            _lyricsSynced = true;
+                            break;
+                        }
+                    }
+                }
+
+                if (lines == null || lines.Count == 0)
+                {
+                    // 没有歌词：给一行提示（占位行，不高亮、不跳转）
+                    TextBlock hint = NewLyricRow("（暂无歌词）", LyricHintBrush, 12.5, current: false);
+                    LyricsRows.Children.Add(hint);
+                    _lyricRows.Add(hint);
+                }
+                else
+                {
+                    for (int i = 0; i < lines.Count; i++)
+                    {
+                        TextBlock row = NewLyricRow(lines[i].Text ?? "", LyricDimBrush, 12.5, current: false);
+                        if (_lyricsSynced)
+                        {
+                            int index = i; // 点一行 → 跳到该句（只有带时间戳的歌词才挂）
+                            row.Tapped += (_, _) =>
+                            {
+                                TimeSpan time = lines[index].Time;
+                                StartupLog.Write(
+                                    $"迷你播放器歌词面板点击跳转 行={index} 时间={time.ToString(@"mm\:ss")}");
+                                MiniPlayerBridge.Seek(time.TotalSeconds);
+                            };
+                        }
+
+                        LyricsRows.Children.Add(row);
+                        _lyricRows.Add(row);
+                    }
+                }
+
+                _lyricIndexShown = -2; // 强制下一次高亮刷新
+                StartupLog.Write($"迷你播放器歌词面板重建 行数={_lyricRows.Count} 可跳转={_lyricsSynced}");
+            });
+        }
+
+        private static TextBlock NewLyricRow(string text, Brush brush, double fontSize, bool current)
+        {
+            return new TextBlock
+            {
+                Text = text,
+                FontSize = fontSize,
+                Foreground = brush,
+                FontWeight = current
+                    ? Microsoft.UI.Text.FontWeights.SemiBold
+                    : Microsoft.UI.Text.FontWeights.Normal,
+                TextTrimming = Microsoft.UI.Xaml.TextTrimming.CharacterEllipsis,
+                Margin = new Thickness(2, 0, 2, 0),
+            };
+        }
+
+        /// <summary>高亮当前行（只动旧/新两行，不整表刷样式）。</summary>
+        private void UpdateLyricHighlight(int index)
+        {
+            Safe(() =>
+            {
+                if (_lyricIndexShown >= 0 && _lyricIndexShown < _lyricRows.Count)
+                {
+                    ApplyLyricRowStyle(_lyricRows[_lyricIndexShown], current: false);
+                }
+
+                if (index >= 0 && index < _lyricRows.Count)
+                {
+                    ApplyLyricRowStyle(_lyricRows[index], current: true);
+                }
+            });
+        }
+
+        private static void ApplyLyricRowStyle(TextBlock row, bool current)
+        {
+            row.Foreground = current ? LyricCurrentBrush : LyricDimBrush;
+            row.FontSize = current ? 14 : 12.5;
+            row.FontWeight = current
+                ? Microsoft.UI.Text.FontWeights.SemiBold
+                : Microsoft.UI.Text.FontWeights.Normal;
+        }
+
+        /// <summary>把当前歌词行滚到视口上 1/3 处（下面留出看接下来的行）。</summary>
+        private void ScrollLyricToCurrent(bool smooth)
+        {
+            // 动画期间歌词区是折叠的：量不到真实位置，跳过（动画收尾会补滚一次）
+            if (LyricsScroll.Visibility != Visibility.Visible)
+            {
+                return;
+            }
+
+            int index = _lyricIndexShown;
+            if (index < 0 || index >= _lyricRows.Count)
+            {
+                return;
+            }
+
+            Safe(() =>
+            {
+                FrameworkElement row = _lyricRows[index];
+                GeneralTransform transform = row.TransformToVisual(LyricsScroll);
+                Windows.Foundation.Point top = transform.TransformPoint(new Windows.Foundation.Point(0, 0));
+                double target = top.Y + LyricsScroll.VerticalOffset - LyricsScroll.ViewportHeight / 3.0;
+                LyricsScroll.ChangeView(null, Math.Max(0, target), null, !smooth);
+            });
+        }
+
+        /// <summary>
+        /// 内容刚放出来还没有布局：等一帧量到真实位置再执行（否则滚了个寂寞）。
+        /// LayoutUpdated 每次布局都会触发，进一次就摘（只认接下来第一帧）。
+        /// </summary>
+        private void RunAfterPanelLayout(Action action)
+        {
+            void OnLayout(object? s, object e)
+            {
+                ExpansionPanel.LayoutUpdated -= OnLayout;
+                action();
+            }
+
+            ExpansionPanel.LayoutUpdated += OnLayout;
+        }
+
+        // ----------------------------------------------------------------
+        // 队列面板内容
+        // ----------------------------------------------------------------
+
+        private void RebuildQueueRows(List<string> titles, int currentIndex)
+        {
+            Safe(() =>
+            {
+                var rows = new List<QueueRow>(titles.Count);
+                for (int i = 0; i < titles.Count; i++)
+                {
+                    bool current = i == currentIndex;
+                    rows.Add(new QueueRow
+                    {
+                        // 普通行显示序号；当前行显示播放字形（E768，程序里在用的字形）
+                        MarkerText = current ? "" : (i + 1).ToString(CultureInfo.CurrentCulture),
+                        MarkerGlyph = current ? "\uE768" : "",
+                        Title = titles[i] ?? "",
+                    });
+                }
+
+                PanelQueueList.ItemsSource = rows;
+                _queueRows = rows;
+
+                // 当前项滚进视野（只滚不选中：选中会触发 SelectionChanged 命令）。
+                // 动画期间列表是折叠的：滚不动，交给动画收尾的 ScrollQueueToCurrent 补。
+                if (currentIndex >= 0 && currentIndex < rows.Count
+                    && PanelQueueList.Visibility == Visibility.Visible)
+                {
+                    PanelQueueList.ScrollIntoView(rows[currentIndex]);
+                }
+            });
+        }
+
+        /// <summary>把当前播放项滚进视野（动画收尾、内容刚放出来时调）。</summary>
+        private void ScrollQueueToCurrent()
+        {
+            if (_queueRows == null || PanelQueueList.Visibility != Visibility.Visible)
+            {
+                return;
+            }
+
+            int index = _queueIndexShown;
+            if (index >= 0 && index < _queueRows.Count)
+            {
+                PanelQueueList.ScrollIntoView(_queueRows[index]);
+            }
+        }
+
+        // =====================================================================
+        // 始终置顶
+        // =====================================================================
+
+        private bool _alwaysOnTop = true;
+
+        private void TopMostButton_Click(object sender, RoutedEventArgs e)
+        {
+            _alwaysOnTop = !_alwaysOnTop;
+            ApplyTopMostState(persist: true);
+        }
+
+        private void ApplyTopMostState(bool persist)
+        {
+            Safe(() =>
+            {
+                if (AppWindow.Presenter is OverlappedPresenter presenter)
+                {
+                    presenter.IsAlwaysOnTop = _alwaysOnTop;
+                }
+
+                // 钉住 = 实心钉字形；取消 = 开口钉字形
+                TopMostIcon.Glyph = _alwaysOnTop ? "\uE718" : "\uE77F";
+                ToolTipService.SetToolTip(TopMostButton, _alwaysOnTop ? "取消始终置顶" : "始终置顶");
+            });
+
+            if (persist)
+            {
+                try
+                {
+                    AppSettingsState s = AppSettingsStore.Load();
+                    s.MiniPlayerAlwaysOnTop = _alwaysOnTop;
+                    AppSettingsStore.Save(s);
+                }
+                catch (Exception caught)
+                {
+                    global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.ApplyTopMostState", caught);
+                }
+            }
+        }
+
+        // =====================================================================
+        // 窗口拖动（空白处按住拖；按钮/滑条/列表自带处理不会起拖）
+        //
+        // 2026-10-19 零散播放窗口连报两次「没有区域可以拖动」后定案的配方：
+        // 按下那一下进了处理器就够了，之后每帧自己读光标、自己挪窗，松手自己停。
+        // 三条常规路在那窗口全不通（PointerMoved 收不到 / SendMessage 冒充标题栏没人理 /
+        // SetCapture 到顶层窗口窗不动），这里照抄同一套，别再改回事件跟踪。
+        //
+        // 双击（连按两次、光标没动）= 把主窗口叫到前台（用户点单功能）。
+        // =====================================================================
+
+        private void RootGrid_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            // 面板内部一律不起拖、不判双击：滚动 / 点歌词行 / 点队列项 / 点收起都归面板自己。
+            // ⚠ 必须整棵上溯认面板：歌词行埋在 ScrollViewer→Presenter→StackPanel→TextBlock
+            //   四层以上，IsControlElement 只查 3 层查不到，会把点歌词行误判成拖窗。
+            if (e.OriginalSource is DependencyObject panelSrc && IsInsideExpansionPanel(panelSrc))
+            {
+                return;
+            }
+
+            // 命中任何交互控件都不起拖，否则点按钮会变成拖窗
+            if (e.OriginalSource is DependencyObject src && IsControlElement(src))
+            {
+                return;
+            }
+
+            // 双击判定：两次按下间隔 < 350ms 且光标没动 → 回主窗口
+            // （不依赖 DoubleTapped 事件，本类窗口的输入路由以"按下一定能进"为准）
+            long now = Environment.TickCount64;
+            if (GetCursorPos(out POINT cursor))
+            {
+                if (now - _lastPressTick < 350
+                    && Math.Abs(cursor.X - _lastPressX) < 6
+                    && Math.Abs(cursor.Y - _lastPressY) < 6)
+                {
+                    _lastPressTick = 0;
+                    MiniPlayerBridge.BringMainWindowToFront();
+                    return;
+                }
+
+                _lastPressTick = now;
+                _lastPressX = cursor.X;
+                _lastPressY = cursor.Y;
+            }
+
+            StartPollingDrag();
+        }
+
+        private void StartPollingDrag()
+        {
+            Safe(() =>
+            {
+                if (!GetCursorPos(out POINT cursor))
+                {
+                    return;
+                }
+
+                PointInt32 pos = AppWindow.Position;
+                _dragCursorX = cursor.X;
+                _dragCursorY = cursor.Y;
+                _dragWinX = pos.X;
+                _dragWinY = pos.Y;
+
+                _dragTimer ??= Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
+                _dragTimer.Stop();
+                _dragTimer.Interval = TimeSpan.FromMilliseconds(16);
+                _dragTimer.Tick -= OnDragTimerTick;
+                _dragTimer.Tick += OnDragTimerTick;
+                _dragTimer.Start();
+            });
+        }
+
+        private void OnDragTimerTick(object? sender, object? args)
+        {
+            // 左键松开了就收工（不依赖 PointerReleased，双保险）
+            if (GetAsyncKeyState(VkLButton) >= 0)
+            {
+                StopPollingDrag();
+                return;
+            }
+
+            if (!GetCursorPos(out POINT cursor))
+            {
+                return;
+            }
+
+            int dx = cursor.X - _dragCursorX;
+            int dy = cursor.Y - _dragCursorY;
+            if (dx == 0 && dy == 0)
+            {
+                return;
+            }
+
+            AppWindow.Move(new PointInt32(_dragWinX + dx, _dragWinY + dy));
+        }
+
+        private void StopPollingDrag()
+        {
+            if (_dragTimer == null)
+            {
+                return;
+            }
+
+            _dragTimer.Stop();
+            _dragTimer.Tick -= OnDragTimerTick;
+        }
+
+        private const int VkLButton = 0x01;
+
+        [DllImport("user32.dll")]
+        private static extern short GetAsyncKeyState(int vKey);
+
+        /// <summary>
+        /// 命中控件就不起拖。只能往上查**有限层数**（3 层）：
+        /// 无限上溯会追到窗口内容根的滚动容器，把顶栏判成控件（零散窗口实测教训），
+        /// 只查 3 层够覆盖"点在图标/文字上、父级才是按钮"。
+        /// </summary>
+        private static bool IsControlElement(DependencyObject src)
+        {
+            const int MaxDepth = 3;
+
+            DependencyObject? node = src;
+            int depth = 0;
+            while (node != null && depth <= MaxDepth)
+            {
+                if (node is Button
+                    || node is Slider
+                    || node is ListViewBase
+                    || node is Microsoft.UI.Xaml.Controls.Primitives.SelectorItem
+                    || node is ScrollViewer
+                    || node is TextBox)
+                {
+                    return true;
+                }
+
+                node = VisualTreeHelper.GetParent(node);
+                depth++;
+            }
+
+            return false;
+        }
+
+        /// <summary>
+        /// 按下点是否落在扩展面板里（整棵上溯认 <see cref="ExpansionPanel"/>，不限层数）。
+        /// 与 <see cref="IsControlElement"/> 的 3 层限制是两个用途：那个防"点按钮变拖窗"，
+        /// 这个防"点歌词行/队列项变拖窗"——面板里的行容器埋得深，3 层查不到。
+        /// </summary>
+        private bool IsInsideExpansionPanel(DependencyObject? node)
+        {
+            int depth = 0;
+            while (node != null && depth < 32)
+            {
+                if (ReferenceEquals(node, ExpansionPanel))
+                {
+                    return true;
+                }
+
+                node = VisualTreeHelper.GetParent(node);
+                depth++;
+            }
+
+            return false;
+        }
+
+        // =====================================================================
+        // 基础设施
+        // =====================================================================
+
+        private static void Safe(Action action)
+        {
+            try
+            {
+                action();
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow", caught);
+            }
+        }
+
+        private static string FormatTime(TimeSpan t)
+        {
+            if (t.TotalHours >= 1)
+            {
+                return t.ToString(@"h\:mm\:ss");
+            }
+
+            return t.ToString(@"mm\:ss");
         }
 
         private void ResizeToDips(int widthDip, int heightDip)
         {
             Safe(() =>
             {
-                IntPtr hwnd = _hwnd != IntPtr.Zero ? _hwnd : WindowNative.GetWindowHandle(this);
+                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
                 uint dpi = GetDpiForWindow(hwnd);
                 if (dpi == 0)
                 {
@@ -808,7 +1484,7 @@ namespace CelesteMusicPlayer
             });
         }
 
-        private void PositionNearBottomCenter()
+        private void CenterOnScreen()
         {
             Safe(() =>
             {
@@ -817,239 +1493,16 @@ namespace CelesteMusicPlayer
                 int w = AppWindow.Size.Width;
                 int h = AppWindow.Size.Height;
                 int x = work.X + (work.Width - w) / 2;
-                int y = work.Y + work.Height - h - 72;
+                int y = work.Y + (work.Height - h) / 2;
                 AppWindow.Move(new PointInt32(x, Math.Max(work.Y, y)));
             });
         }
 
-        private void TryCollapseTitleBar()
-        {
-            Safe(() =>
-            {
-                AppWindowTitleBar bar = AppWindow.TitleBar;
-                bar.ExtendsContentIntoTitleBar = true;
-                bar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
-                bar.IconShowOptions = IconShowOptions.HideIconAndSystemMenu;
+        [DllImport("user32.dll")]
+        private static extern bool GetCursorPos(out POINT lpPoint);
 
-                Windows.UI.Color transparent = Windows.UI.Color.FromArgb(0, 0, 0, 0);
-                bar.BackgroundColor = transparent;
-                bar.InactiveBackgroundColor = transparent;
-                bar.ButtonBackgroundColor = transparent;
-                bar.ButtonInactiveBackgroundColor = transparent;
-                bar.ButtonHoverBackgroundColor = transparent;
-                bar.ButtonPressedBackgroundColor = transparent;
-                bar.ForegroundColor = transparent;
-                bar.InactiveForegroundColor = transparent;
-                bar.ButtonForegroundColor = transparent;
-                bar.ButtonInactiveForegroundColor = transparent;
-            });
-        }
-
-        private void ApplyWindowChromeNative()
-        {
-            Safe(() =>
-            {
-                _hwnd = WindowNative.GetWindowHandle(this);
-                InstallWindowSubclassIfNeeded();
-
-                int ex = GetWindowLong(_hwnd, GwlExStyle);
-                ex |= WsExToolWindow;
-                ex &= ~(WsExDlgModalFrame | WsExClientEdge | WsExStaticEdge | WsExWindowEdge | WsExLayered);
-                SetWindowLong(_hwnd, GwlExStyle, ex);
-
-                int style = GetWindowLong(_hwnd, GwlStyle);
-                style &= ~(WsThickFrame | WsCaption | WsMinimizeBox | WsMaximizeBox | WsSysMenu | WsBorder | WsDlgFrame);
-                SetWindowLong(_hwnd, GwlStyle, style);
-
-                if (AppWindow.Presenter is OverlappedPresenter presenter)
-                {
-                    presenter.IsResizable = false;
-                    presenter.IsMaximizable = false;
-                    presenter.SetBorderAndTitleBar(false, false);
-                }
-
-                TryCollapseTitleBar();
-
-                // 圆角交给 SetWindowRgn；同时让 DWM 不要再画一圈系统描边
-                uint corner = DwmWcpDoNotRound;
-                DwmSetWindowAttribute(_hwnd, DwmWaWindowCornerPreference, ref corner, sizeof(uint));
-
-                uint darkBorder = 0x001C151A;
-                DwmSetWindowAttribute(_hwnd, DwmWaBorderColor, ref darkBorder, sizeof(uint));
-                DwmSetWindowAttribute(_hwnd, DwmWaCaptionColor, ref darkBorder, sizeof(uint));
-
-                SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, 0, 0,
-                    SwpNoMove | SwpNoSize | SwpNoZOrder | SwpFrameChanged);
-
-                ApplyRoundedWindowRegion();
-            });
-        }
-
-        private void InstallWindowSubclassIfNeeded()
-        {
-            if (_subclassInstalled || _hwnd == IntPtr.Zero)
-            {
-                return;
-            }
-
-            _subclassProc = SubclassWndProc;
-            if (SetWindowSubclass(_hwnd, _subclassProc, (IntPtr)SubclassId, IntPtr.Zero))
-            {
-                _subclassInstalled = true;
-            }
-        }
-
-        private void RemoveWindowSubclassIfNeeded()
-        {
-            if (!_subclassInstalled || _hwnd == IntPtr.Zero || _subclassProc == null)
-            {
-                return;
-            }
-
-            RemoveWindowSubclass(_hwnd, _subclassProc, (IntPtr)SubclassId);
-            _subclassInstalled = false;
-        }
-
-        private IntPtr SubclassWndProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam, IntPtr uIdSubclass, IntPtr dwRefData)
-        {
-            // 去掉非客户区，消除顶部标题条与外圈系统边
-            if (msg == WmNcCalcSize && wParam != IntPtr.Zero)
-            {
-                return IntPtr.Zero;
-            }
-
-            if (msg == WmNcPaint)
-            {
-                return IntPtr.Zero;
-            }
-
-            return DefSubclassProc(hWnd, msg, wParam, lParam);
-        }
-
-        /// <summary>圆角裁剪 HWND；内缩 2px 剪掉丙烯酸最外圈细白线。</summary>
-        private void ApplyRoundedWindowRegion()
-        {
-            Safe(() =>
-            {
-                IntPtr hwnd = _hwnd != IntPtr.Zero ? _hwnd : WindowNative.GetWindowHandle(this);
-                int w = AppWindow.Size.Width;
-                int h = AppWindow.Size.Height;
-                if (w <= 0 || h <= 0)
-                {
-                    return;
-                }
-
-                if (w == _lastRegionW && h == _lastRegionH)
-                {
-                    return;
-                }
-
-                uint dpi = GetDpiForWindow(hwnd);
-                if (dpi == 0)
-                {
-                    dpi = 96;
-                }
-
-                int inset = RegionInsetPx;
-                // _windowCornerDip：极客皮肤下为 0（圆角一律归零），否则是标准的 20
-                int radiusPx = Math.Max(6, (int)Math.Round(_windowCornerDip * dpi / 96.0) - inset);
-                if (_windowCornerDip <= 0)
-                {
-                    radiusPx = 0;
-                }
-                IntPtr rgn = CreateRoundRectRgn(inset, inset, w - inset + 1, h - inset + 1, radiusPx * 2, radiusPx * 2);
-                if (rgn == IntPtr.Zero)
-                {
-                    return;
-                }
-
-                if (SetWindowRgn(hwnd, rgn, true) == 0)
-                {
-                    DeleteObject(rgn);
-                    return;
-                }
-
-                _lastRegionW = w;
-                _lastRegionH = h;
-            });
-        }
-
-        private void AppWindow_Changed(AppWindow sender, AppWindowChangedEventArgs args)
-        {
-            if (args.DidSizeChange)
-            {
-                _lastRegionW = -1;
-                _lastRegionH = -1;
-                ApplyRoundedWindowRegion();
-            }
-
-            // 被意外最大化（如 Win+Up）时恢复成迷你条尺寸
-            Safe(() =>
-            {
-                if (AppWindow.Presenter is OverlappedPresenter presenter
-                    && presenter.State == OverlappedPresenterState.Maximized)
-                {
-                    presenter.Restore();
-                    presenter.IsMaximizable = false;
-                    presenter.IsResizable = false;
-                    _lastRegionW = -1;
-                    _lastRegionH = -1;
-                    ApplyWindowHeight();
-                    ApplyWindowChromeNative();
-                }
-            });
-        }
-
-        // ---------------------------------------------------------------- 工具
-
-        /// <summary>统一兜底：迷你播放器里任何一处抛异常都不该把整个应用带崩。</summary>
-        private static void Safe(Action action)
-        {
-            try
-            {
-                action?.Invoke();
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MiniPlayerWindow", caught);
-            }
-        }
-
-        // ---------------------------------------------------------------- P/Invoke
-
-        private const int GwlStyle = -16;
-        private const int GwlExStyle = -20;
-        private const int WsThickFrame = 0x00040000;
-        private const int WsCaption = 0x00C00000;
-        private const int WsSysMenu = 0x00080000;
-        private const int WsMinimizeBox = 0x00020000;
-        private const int WsMaximizeBox = 0x00010000;
-        private const int WsBorder = 0x00800000;
-        private const int WsDlgFrame = 0x00400000;
-        private const int WsExToolWindow = 0x00000080;
-        private const int WsExDlgModalFrame = 0x00000001;
-        private const int WsExClientEdge = 0x00000200;
-        private const int WsExStaticEdge = 0x00020000;
-        private const int WsExWindowEdge = 0x00000100;
-        private const int WsExLayered = 0x00080000;
-        private const int WmNcCalcSize = 0x0083;
-        private const int WmNcPaint = 0x0085;
-        private const int DwmWaWindowCornerPreference = 33;
-        private const int DwmWaBorderColor = 34;
-        private const int DwmWaCaptionColor = 35;
-        private const uint DwmWcpDoNotRound = 1;
-        private const uint SwpNoSize = 0x0001;
-        private const uint SwpNoMove = 0x0002;
-        private const uint SwpNoZOrder = 0x0004;
-        private const uint SwpFrameChanged = 0x0020;
-
-        private delegate IntPtr SubclassProc(
-            IntPtr hWnd,
-            uint uMsg,
-            IntPtr wParam,
-            IntPtr lParam,
-            IntPtr uIdSubclass,
-            IntPtr dwRefData);
+        [DllImport("user32.dll")]
+        private static extern uint GetDpiForWindow(nint hWnd);
 
         [StructLayout(LayoutKind.Sequential)]
         private struct POINT
@@ -1057,46 +1510,5 @@ namespace CelesteMusicPlayer
             public int X;
             public int Y;
         }
-
-        [DllImport("user32.dll")]
-        private static extern bool GetCursorPos(out POINT lpPoint);
-
-        [DllImport("user32.dll")]
-        private static extern uint GetDpiForWindow(IntPtr hwnd);
-
-        [DllImport("user32.dll")]
-        private static extern int GetWindowLong(IntPtr hWnd, int nIndex);
-
-        [DllImport("user32.dll")]
-        private static extern int SetWindowLong(IntPtr hWnd, int nIndex, int dwNewLong);
-
-        [DllImport("user32.dll")]
-        private static extern bool SetWindowPos(
-            IntPtr hWnd, IntPtr hWndInsertAfter, int x, int y, int cx, int cy, uint uFlags);
-
-        [DllImport("gdi32.dll")]
-        private static extern IntPtr CreateRoundRectRgn(int x1, int y1, int x2, int y2, int w, int h);
-
-        [DllImport("user32.dll")]
-        private static extern int SetWindowRgn(IntPtr hWnd, IntPtr hRgn, bool bRedraw);
-
-        [DllImport("gdi32.dll")]
-        private static extern bool DeleteObject(IntPtr hObject);
-
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref uint attrValue, int attrSize);
-
-        [DllImport("comctl32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetWindowSubclass(
-            IntPtr hWnd, SubclassProc pfnSubclass, IntPtr uIdSubclass, IntPtr dwRefData);
-
-        [DllImport("comctl32.dll", SetLastError = true)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool RemoveWindowSubclass(
-            IntPtr hWnd, SubclassProc pfnSubclass, IntPtr uIdSubclass);
-
-        [DllImport("comctl32.dll", SetLastError = true)]
-        private static extern IntPtr DefSubclassProc(IntPtr hWnd, uint uMsg, IntPtr wParam, IntPtr lParam);
     }
 }

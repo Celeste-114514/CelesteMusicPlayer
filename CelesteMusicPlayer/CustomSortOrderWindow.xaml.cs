@@ -30,7 +30,6 @@ namespace CelesteMusicPlayer
             _initial = initial ?? new();
             _initialAsc = initialAsc;
             InitializeComponent();
-            TokenShapeRuntime.Attach(this);
             WindowIconHelper.Apply(this);
             AppWindow.Resize(new Windows.Graphics.SizeInt32(640, 560));
             Title = "自定义排序";

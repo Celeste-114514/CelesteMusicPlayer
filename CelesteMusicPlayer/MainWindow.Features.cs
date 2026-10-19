@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -520,7 +520,6 @@ namespace CelesteMusicPlayer
             // 迷你播放器:刷新强调元素
             try
             {
-                _miniPlayerWindow?.RefreshAccentFromOwner();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
@@ -3032,7 +3031,8 @@ namespace CelesteMusicPlayer
                 string engine = AppSettingsStore.Load().ExclusiveEngine ?? "native2";
                 string path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "celeste_selftest_1khz_3s.wav");
                 new SineWaveSource().WriteWav(path);
-                PlayExternalFileAsync(path);
+                // scattered:false = 主窗口内临时播放：试听场合不弹零散播放窗口
+                PlayExternalFileAsync(path, scattered: false);
                 if (EngineSelfTestStatus != null)
                 {
                     EngineSelfTestStatus.Text = $"已用「{EngineDisplayName(engine)}」播放 3 秒 1kHz 测试音：注意起播是否立即出声、有没有爆音或卡顿（临时文件 {path}）。";
@@ -3790,13 +3790,8 @@ namespace CelesteMusicPlayer
 
             // 「编辑歌词… / 下载歌词」已按用户要求移除：歌词功能统一收敛到标签板块。
 
-            var dlCover = new MenuFlyoutItem { Text = "下载封面" };
-            dlCover.Click += async (_, _) =>
-            {
-                bool ok = await OnlineMusicApi.DownloadAndEmbedCoverAsync(song.Title, song.Artist, song.FilePath);
-                NowPlayingText.Text = ok ? "封面已更新" : "未找到封面";
-            };
-            flyout.Items.Add(dlCover);
+            // 「下载封面」已按用户要求移除（2026-10-19）：单曲右键菜单里不再给这个入口。
+            // （批量菜单里的「批量下载封面」是另一处，用户没提，保留。）
 
             // 「在线搜索…」入口已下架（与 FeaturesMoreButton_Click 同步）。
         }

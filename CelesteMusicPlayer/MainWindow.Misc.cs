@@ -2984,17 +2984,6 @@ namespace CelesteMusicPlayer
 
         private Brush ResolveCapsuleFillBrush()
         {
-            // 令牌测试皮肤：胶囊底=Selection.Background @ 55%（选中族透明度档）。
-            // 取色失败往下走经典链路，不会把界面涂崩。
-            if (TokenSkinCached)
-            {
-                var tokenCapsule = ResolveTokenSelectionBrush(55);
-                if (tokenCapsule != null)
-                {
-                    return tokenCapsule;
-                }
-            }
-
             // 同上：经典界面下按经典主题给一套明确的中性底色
             if (FrostedGlass.ClassicMode != null)
             {
@@ -3021,18 +3010,6 @@ namespace CelesteMusicPlayer
 
         private Brush CreateMultiSelectFrostBrush()
         {
-            // 令牌测试皮肤：多选态未选中行铺 Selection.Background @ 30%（选中族透明度档）。
-            // 和经典"不铺底"故意不同——令牌皮肤要让选中族三层（悬停 40%/多选 30%/选中 100%）
-            // 可感知地区分层级。取色失败往下走经典链路。
-            if (TokenSkinCached)
-            {
-                var tokenMulti = ResolveTokenSelectionBrush(30);
-                if (tokenMulti != null)
-                {
-                    return tokenMulti;
-                }
-            }
-
             // 经典界面：多选态不给未选中行铺底色。
             // 原因：原实现用 ResolveUiBaseTintColor() 取基色，浅色主题下几个候选色都"接近白"被跳过，
             // 最后落到深灰回退色(42,42,42)，于是浅色界面里所有歌曲行都变成一片深色底

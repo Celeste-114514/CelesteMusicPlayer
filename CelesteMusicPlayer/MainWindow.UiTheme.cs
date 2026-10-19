@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -120,10 +120,7 @@ namespace CelesteMusicPlayer
                 SetDesktopLyricsEnabled(true, persistPreference: false);
             }
 
-            if (settings.OpenMiniPlayerOnStartup)
-            {
-                SetMiniPlayerEnabled(true, persistPreference: false);
-            }
+            // 开机自动打开迷你播放器：随迷你播放器一起移除（2026-10-19 删掉重写）
         }
 
 
@@ -171,6 +168,9 @@ namespace CelesteMusicPlayer
             {
                 try
                 {
+                    // 设置开了「启动时打开迷你播放器」时，首次激活后把迷你条拉起来
+                    OpenMiniPlayerIfStartupEnabled();
+
                     // 订阅主题色变化事件(统一刷新强调元素)
                     ThemeColorService.ThemeColorChanged -= OnThemeColorChanged;
                     ThemeColorService.ThemeColorChanged += OnThemeColorChanged;
@@ -193,7 +193,6 @@ namespace CelesteMusicPlayer
                     try
                     {
                         // 缓存波形主题色(信息卡频谱用)。走 ResolveAccentColor 而不是直接读 CurrentAccent，
-                        // 否则令牌测试皮肤下频谱不跟主题文件的强调色走（同音量条的老毛病）。
                         _waveAccentColor = ResolveAccentColor();
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
@@ -391,7 +390,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>当前是否处于经典不透明界面（ClassicSystem / ClassicLight / ClassicDark / 令牌测试皮肤）。供各面板刷新处判断。</summary>
         internal static bool IsClassicUiStyleActive()
         {
             string mode;
@@ -404,8 +402,7 @@ namespace CelesteMusicPlayer
                 return false;
             }
 
-            // 令牌测试皮肤=经典模式全套行为 + 令牌注入口，所以这里认它
-            return mode is "ClassicSystem" or "ClassicLight" or "ClassicDark" or UiStyleToken;
+            return mode is "ClassicSystem" or "ClassicLight" or "ClassicDark";
         }
 
         /// <summary>极客界面模式的设置值（设置项「界面风格」下拉里的「极客」）。</summary>
@@ -454,8 +451,6 @@ namespace CelesteMusicPlayer
         /// ClassicSystem / ClassicLight / ClassicDark = 经典不透明界面：
         ///   明暗主题按选项/系统切换，背板关闭、背景图层（封面背景/自定义图片/视频）全部隐藏，
         ///   面板由 FrostedGlass 总闸统一换成不透明纯色，侧栏分类图标变为彩色；
-        /// Token = 令牌测试皮肤：经典全套行为 + 颜色来自主题文件令牌（见 MainWindow.TokenSkin.cs）。
-        /// </summary>
         private void ApplyUiStyleMode(AppSettingsState settings)
         {
             try
@@ -464,25 +459,19 @@ namespace CelesteMusicPlayer
                 FrostedGlass.BackdropEnabled = settings.EnableFrostedGlass;
 
                 string mode = settings.UiStyleMode;
-                // 令牌测试皮肤走经典全套（不透明面板/隐藏背景层/彩色导航），注入口在 TokenSkin
-                bool classic = mode is "ClassicSystem" or "ClassicLight" or "ClassicDark" or UiStyleToken;
+                bool classic = mode is "ClassicSystem" or "ClassicLight" or "ClassicDark";
                 // 极客：与经典并列的不透明风格，但走终端那套视觉 —— 近黑底、等宽字、直角、技术读数。
                 bool geek = mode == UiStyleGeek;
                 bool opaque = classic || geek;
 
                 // 高频路径（列表行）读的是这个缓存值，风格一变立刻同步
                 RefreshGeekUiStyleCache(geek);
-                // 令牌测试皮肤同上：高频行的前景/选中/悬停色都要问"是不是令牌皮肤"，先在这里同步缓存
-                RefreshTokenSkinCache(mode == UiStyleToken);
-
                 // 记录本次应用的模式：设置页保存时对照它判断要不要热切换（经典家族内互切不弹重启窗）
                 _lastAppliedUiStyleMode = mode;
 
-                // 外壳实际是深还是浅（"跟随系统"按系统当前主题解析；极客恒为深色；令牌测试皮肤同样跟随系统）。
-                // 外壳底色、FrostedGlass 面板配色都以这一个判断为准，避免"跟随系统"落在深色系统上时出现外壳深、面板浅的错配。
                 bool darkClassic = geek
                     || mode == "ClassicDark"
-                    || (mode is "ClassicSystem" or UiStyleToken
+                    || (mode is "ClassicSystem"
                         && Application.Current.RequestedTheme == ApplicationTheme.Dark);
 
                 if (Content is FrameworkElement root)
@@ -516,13 +505,7 @@ namespace CelesteMusicPlayer
                     else
                     {
                         SystemBackdrop = null;
-                        // 令牌测试皮肤：根底用令牌 App.Background（解析失败回落经典灰阶）
-                        Color rootBg = mode == UiStyleToken
-                            ? ResolveTokenSkinColor(CelesteTokenCatalog.AppBackground)
-                              ?? (darkClassic
-                                  ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
-                                  : Windows.UI.Color.FromArgb(255, 243, 243, 243))
-                            : geek
+                        Color rootBg = geek
                                 ? Windows.UI.Color.FromArgb(255, 11, 15, 11)
                                 : darkClassic
                                     ? Windows.UI.Color.FromArgb(255, 32, 32, 32)
@@ -572,17 +555,6 @@ namespace CelesteMusicPlayer
                     // 否则沿用背景图式的浅灰配色会在浅底上"隐身"
                     FrostedGlass.ApplyWindowTheme(this);
 
-                    // 令牌测试皮肤：经典 chrome 跑完之后挂令牌注入口（钩子 + 覆盖字典）。
-                    // 放在这里保证切进令牌模式时面板/导航/列表都已按经典刷过一遍，令牌再盖色。
-                    if (mode == UiStyleToken)
-                    {
-                        ApplyTokenSkin();
-                    }
-                    else
-                    {
-                        RemoveTokenSkin();
-                    }
-
                     StartupLog.Write("界面风格：经典模式已应用 " + mode);
                 }
                 else
@@ -623,9 +595,6 @@ namespace CelesteMusicPlayer
                         }
                     }
                     catch (Exception caught) { StartupLog.WriteException("MainWindow.UiTheme.cs", caught); }
-
-                    // 令牌测试皮肤 → 图景/极客：撤钩子和覆盖字典（幂等，任何模式调用都安全）
-                    RemoveTokenSkin();
 
                     StartupLog.Write("界面风格：背景图式已恢复");
                 }
@@ -1194,17 +1163,6 @@ namespace CelesteMusicPlayer
         /// <summary>同上，返回颜色本身（导航项的底色要做淡入动画，得拿到颜色现搓画笔）。</summary>
         internal static Color ResolveClassicRowSelectionColor(FrameworkElement? anchor)
         {
-            // 令牌测试皮肤：选中底色=令牌 Selection.Background 原色（选中族 100% 档，
-            // 主题作者写什么透明度就是什么透明度，代码不强制）。
-            if (TokenSkinCached)
-            {
-                var token = ResolveTokenSkinColor(CelesteTokenCatalog.SelectionBackground);
-                if (token.HasValue)
-                {
-                    return token.Value;
-                }
-            }
-
             bool dark = anchor?.ActualTheme == ElementTheme.Dark;
             return dark
                 ? Color.FromArgb(58, 255, 255, 255)
@@ -1367,14 +1325,9 @@ namespace CelesteMusicPlayer
             // 把 ContentPresenter.Foreground 动画成白色（动画优先级高于任何本地值，压不住），
             // 所以选中时必须给行内每个 TextBlock 显式设值（ApplyForegroundToDescendants）；
             // 未选中时 Clear 让行内文字恢复 DataTemplate 各自的主题色层次。
-            // 令牌测试皮肤：行文字=令牌 Text.Primary——选中底换成令牌色后不一定是深底，
-            // 不能沿用经典"深色主题白字/浅色主题黑字"的写法。
-            var rowForeground = TokenSkinCached
-                ? new SolidColorBrush(ResolveTokenSkinColor(CelesteTokenCatalog.TextPrimary)
-                    ?? (dark ? Color.FromArgb(255, 255, 255, 255) : Color.FromArgb(255, 0, 0, 0)))
-                : new SolidColorBrush(dark
-                    ? Color.FromArgb(255, 255, 255, 255)
-                    : Color.FromArgb(255, 0, 0, 0));
+            var rowForeground = new SolidColorBrush(dark
+                ? Color.FromArgb(255, 255, 255, 255)
+                : Color.FromArgb(255, 0, 0, 0));
 
             if (selected)
             {
@@ -1759,17 +1712,6 @@ namespace CelesteMusicPlayer
                 return new SolidColorBrush(Windows.UI.Color.FromArgb(20, 255, 255, 255));
             }
 
-            // 令牌测试皮肤：悬停底色=Selection.Background @ 40%（选中族透明度档）。
-            // 取色失败不在这里兜底，往下落经典灰阶——按 anchor 的实际明暗给，行为不变。
-            if (TokenSkinCached)
-            {
-                var tokenHover = ResolveTokenSelectionBrush(40);
-                if (tokenHover != null)
-                {
-                    return tokenHover;
-                }
-            }
-
             bool dark = anchor?.ActualTheme == ElementTheme.Dark;
             return new SolidColorBrush(dark
                 ? Windows.UI.Color.FromArgb(34, 255, 255, 255)
@@ -1780,13 +1722,6 @@ namespace CelesteMusicPlayer
 
         private Color ResolveUiBaseTintColor()
         {
-            // 令牌测试皮肤：界面基色=令牌 App.Background（窗口根底/描边/多选底都从它推）
-            if (TokenSkinCached)
-            {
-                return ResolveTokenSkinColor(CelesteTokenCatalog.AppBackground)
-                    ?? Color.FromArgb(255, 243, 243, 243);
-            }
-
             // 经典界面：直接给出经典底色（浅 = 浅灰、深 = 炭灰）。
             // 不能走下面的候选色：浅色主题下那几个键取到的都是"接近白"被跳过，
             // 最后落到深灰回退色，浅色界面里的描边/胶囊/多选底色就会发黑。
@@ -2031,18 +1966,6 @@ namespace CelesteMusicPlayer
                 return new SolidColorBrush(GeekPhosphorColor());
             }
 
-            // 令牌测试皮肤：强调色=令牌 Accent.Solid，盖掉设置里的强调色来源——
-            // 对比测试时整个界面只认主题文件一个颜色来源，设置里的自定义色先让位。
-            // 取色失败往下走原有链路，不会把界面涂崩。
-            if (TokenSkinCached)
-            {
-                var tokenAccent = ResolveTokenSkinColor(CelesteTokenCatalog.AccentSolid);
-                if (tokenAccent.HasValue)
-                {
-                    return new SolidColorBrush(tokenAccent.Value);
-                }
-            }
-
             AppSettingsState settings = AppSettingsStore.Load();
             if (settings.AccentSource == "Custom")
             {
@@ -2073,6 +1996,8 @@ namespace CelesteMusicPlayer
             // 注意：此处不再兜底保存 EQ。每次 EQ 调整已由 ApplyDspToEngine → EqCurveStore.Save 落盘；
             // 若在此用进程内 _audioFxEq（启动时是平坦默认，未打开音效面板时不等于盘上值）覆盖保存，
             // 会把用户上次调好的曲线覆盖成平坦 —— 这正是“重启/再次打开后 EQ 还原”的根因。
+            // 迷你播放器桥接摘除：主窗口没了，别再往已关的窗口上推状态
+            MiniPlayerBridge.Detach(this);
             PersistDesktopLyricPosition();
             _taskbarProgress?.Dispose();
             _taskbarProgress = null;
@@ -2211,7 +2136,6 @@ namespace CelesteMusicPlayer
             // 关闭对话框按钮用当前主题色(ContentDialog 局部资源)
             try
             {
-                // 走统一的强调色入口，令牌测试皮肤下也会跟着主题文件走
                 Windows.UI.Color closeAccent = ResolveAccentColor();
                 var closeBrush = new Microsoft.UI.Xaml.Media.SolidColorBrush(closeAccent);
                 dialog.Resources["AccentButtonBackground"] = closeBrush;
@@ -2332,18 +2256,7 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
-            try
-            {
-                if (_miniPlayerWindow != null)
-                {
-                    MiniPlayerWindow mini = _miniPlayerWindow;
-                    _miniPlayerWindow = null;
-                    _miniPlayerEnabled = false;
-                    mini.ClosedByUser -= OnMiniPlayerClosedByUser;
-                    mini.Close();
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            // 关窗时顺带关迷你播放器：随迷你播放器一起移除（2026-10-19 删掉重写）
 
             try
             {
@@ -2370,9 +2283,6 @@ namespace CelesteMusicPlayer
 
         /// <summary>
         /// 静态版的 ResolveAccentColor：给没有窗口实例的上下文（ColorHelper 的弹窗强调、
-        /// 启动遮罩配色）用。语义完全一致（令牌测试皮肤下=主题文件 Accent.Solid），
-        /// 窗口还没建起来时回落系统默认蓝，不会把配色涂崩。
-        /// </summary>
         internal static Color ResolveAccentColorStatic()
             => Instance?.ResolveAccentColor() ?? Color.FromArgb(255, 0, 120, 212);
 
@@ -2518,6 +2428,18 @@ namespace CelesteMusicPlayer
 
                 /// <summary>最近一次当前播放曲目的封面字节：清掉自定义背景后恢复封面背景用。</summary>
         private byte[]? _lastCoverBytes;
+
+        /// <summary>最近一次当前播放曲目的封面大图（迷你播放器整窗背景同步用，读大图不是播放栏缩略图）。</summary>
+        private ImageSource? _lastCoverImage;
+
+        /// <summary>
+        /// 最近一次当前播放曲目的封面**缩略图**（Thumb 160 档，与播放栏同一张）。
+        /// 迷你播放器 72×72 小封面用这张 —— 不能拿 <see cref="_lastCoverImage"/>（Large 768）硬缩：
+        /// 768→72 十倍缩小，WinUI bilinear 出来必糊（用户 10-19 报「迷你播放器的专辑封面
+        /// 缩略图也糊」，和之前「播放栏糊」同一个病根：没用对应显示尺寸的分档）。
+        /// 由 UpdateTransportCoverAsync 取到 Thumb 档后一并写这里，两边共用一张图、零额外解码。
+        /// </summary>
+        private ImageSource? _lastCoverThumbImage;
 
         /// <summary>自定义背景图的请求序号：连续换图时丢弃过期结果，避免旧图盖掉新图。</summary>
         private int _customBackgroundRequest;
@@ -3198,7 +3120,6 @@ namespace CelesteMusicPlayer
 
             try
             {
-                _miniPlayerWindow?.RefreshAccentFromOwner();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
@@ -3208,19 +3129,6 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
-            // 主题色两链合并（2026-10-17）：令牌测试皮肤的强调色也来自设置链
-            // （Custom 盖过主题文件的 Accent.Solid）。改设置页主题色时，覆盖字典和
-            // 取色缓存要立刻跟上，否则令牌皮肤还挂着重色前的旧刷子。
-            // 与 ApplyCelesteThemeAsync 里换主题文件后的刷新同一套动作。
-            try
-            {
-                if (IsTokenSkinActive())
-                {
-                    InvalidateTokenColorCache();
-                    RefreshTokenSkinIfActive();
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.OnThemeColorChanged", caught); }
         }
 
 

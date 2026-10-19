@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.InteropServices;
 using Microsoft.Win32;
 
 namespace CelesteMusicPlayer
@@ -134,6 +135,9 @@ namespace CelesteMusicPlayer
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("FileAssociationHelper.cs", caught);
             }
+
+            PruneCapabilities();
+            NotifyShellAssociationsChanged();
         }
 
         public static void Register(string executablePath, IEnumerable<string>? extensions = null)
@@ -176,6 +180,9 @@ namespace CelesteMusicPlayer
                 using RegistryKey extKey = classes.CreateSubKey(normalized);
                 extKey.SetValue(string.Empty, ProgId);
             }
+
+            WriteCapabilities(extensions ?? CommonAudioExtensions);
+            NotifyShellAssociationsChanged();
         }
 
         public static void Unregister(IEnumerable<string>? extensions = null)
@@ -202,6 +209,9 @@ namespace CelesteMusicPlayer
                 classes.DeleteSubKeyTree(ProgId, throwOnMissingSubKey: false);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("FileAssociationHelper.cs", caught); }
+
+            RemoveCapabilities();
+            NotifyShellAssociationsChanged();
         }
 
         public static bool IsRegistered()
@@ -287,5 +297,125 @@ namespace CelesteMusicPlayer
 
             return ext.ToLowerInvariant();
         }
+
+        // =====================================================================
+        // 「已注册应用程序」声明（RegisteredApplications + Capabilities）
+        //
+        // 为什么需要：只写 Software\Classes\.ext 的默认值，双击能播，
+        // 但程序不会出现在 Windows 设置 → 应用 → 默认应用 → "按应用设置默认值"
+        // 的清单里 —— 用户想「把所有音频默认打开方式改成 Celeste」时根本找不到它。
+        // 那份清单的数据源就是 RegisteredApplications + Capabilities\FileAssociations。
+        // =====================================================================
+
+        /// <summary>
+        /// 写入/重建「已注册应用程序」声明。FileAssociations 整键重建，
+        /// 保证清单与「现在关联了哪些格式」严格一致（取消勾选的格式不留残影）。
+        /// </summary>
+        private static void WriteCapabilities(IEnumerable<string> extensions)
+        {
+            try
+            {
+                using RegistryKey regApps = Registry.CurrentUser.CreateSubKey(@"Software\RegisteredApplications");
+                regApps.SetValue("CelesteMusicPlayer", @"Software\CelesteMusicPlayer\Capabilities");
+
+                using RegistryKey caps = Registry.CurrentUser.CreateSubKey(@"Software\CelesteMusicPlayer\Capabilities");
+                caps.SetValue("ApplicationName", "Celeste Music Player");
+                caps.SetValue("ApplicationDescription", "Celeste 高保真音乐播放器");
+
+                caps.DeleteSubKey("FileAssociations", throwOnMissingSubKey: false);
+                using RegistryKey fileAssoc = caps.CreateSubKey("FileAssociations");
+                foreach (string ext in extensions)
+                {
+                    fileAssoc.SetValue(NormalizeExtension(ext), ProgId);
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("FileAssociationHelper.WriteCapabilities", caught);
+            }
+        }
+
+        /// <summary>
+        /// 撤除「已注册应用程序」声明（全量解除关联 / 格式被取消到一半时调用）。
+        /// </summary>
+        private static void RemoveCapabilities()
+        {
+            try
+            {
+                using RegistryKey? regApps = Registry.CurrentUser.OpenSubKey(
+                    @"Software\RegisteredApplications", writable: true);
+                regApps?.DeleteValue("CelesteMusicPlayer", throwOnMissingValue: false);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("FileAssociationHelper.RemoveCapabilities", caught);
+            }
+
+            try
+            {
+                // ⚠️ 只删 Capabilities 子树，绝不整棵删 Software\CelesteMusicPlayer：
+                // NSIS 安装器把 InstallLocation 写在这棵树下（更新/卸载要靠它）。
+                using RegistryKey? root = Registry.CurrentUser.OpenSubKey(@"Software", writable: true);
+                root?.DeleteSubKeyTree(@"CelesteMusicPlayer\Capabilities", throwOnMissingSubKey: false);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("FileAssociationHelper.RemoveCapabilities", caught);
+            }
+        }
+
+        /// <summary>
+        /// 取消勾选部分格式后，按注册表现状重算 Capabilities 清单；
+        /// 一个都不剩就整份撤掉（否则默认应用列表里会留一个"什么都能开"的空壳）。
+        /// </summary>
+        private static void PruneCapabilities()
+        {
+            List<string> remaining = GetAssociatedExtensions();
+            if (remaining.Count == 0)
+            {
+                RemoveCapabilities();
+                return;
+            }
+
+            try
+            {
+                using RegistryKey? caps = Registry.CurrentUser.OpenSubKey(
+                    @"Software\CelesteMusicPlayer\Capabilities", writable: true);
+                if (caps == null)
+                {
+                    return;
+                }
+
+                caps.DeleteSubKey("FileAssociations", throwOnMissingSubKey: false);
+                using RegistryKey fileAssoc = caps.CreateSubKey("FileAssociations");
+                foreach (string ext in remaining)
+                {
+                    fileAssoc.SetValue(ext, ProgId);
+                }
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("FileAssociationHelper.PruneCapabilities", caught);
+            }
+        }
+
+        /// <summary>
+        /// 通知外壳「文件关联变了」。不发这条消息，资源管理器 / 打开方式对话框
+        /// 可能要把资源管理器重启甚至重新登录才认新关联 —— 用户体感就是"应用了却没变"。
+        /// </summary>
+        private static void NotifyShellAssociationsChanged()
+        {
+            try
+            {
+                SHChangeNotify(0x08000000 /* SHCNE_ASSOCCHANGED */, 0, nint.Zero, nint.Zero);
+            }
+            catch (Exception caught)
+            {
+                global::CelesteMusicPlayer.StartupLog.WriteException("FileAssociationHelper.NotifyShell", caught);
+            }
+        }
+
+        [DllImport("shell32.dll")]
+        private static extern void SHChangeNotify(int eventId, int flags, nint item1, nint item2);
     }
 }

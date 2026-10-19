@@ -21,7 +21,6 @@ namespace CelesteMusicPlayer
             _owner = owner;
             _owner.QueueWindow = this;
             InitializeComponent();
-            TokenShapeRuntime.Attach(this);
             WindowIconHelper.Apply(this);
 
             ExtendsContentIntoTitleBar = true;

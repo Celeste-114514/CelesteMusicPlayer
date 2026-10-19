@@ -53,6 +53,15 @@ namespace CelesteMusicPlayer
             return string.Empty;
         }
 
+        /// <summary>
+        /// 整首歌的歌词行（迷你播放器扩展区用，只读）。切歌时 <see cref="_lyricLines"/>
+        /// 整个换引用，调用方按引用比对即可；不会原地增删，共享安全。
+        /// </summary>
+        internal IReadOnlyList<LyricLine> GetLyricLinesPublic() => _lyricLines;
+
+        /// <summary>当前高亮歌词行下标（-1 = 没有歌词或没开始播）。</summary>
+        internal int GetCurrentLyricIndexPublic() => _currentLyricIndex;
+
 
         private void DesktopLyricsButton_RightTapped(object sender, RightTappedRoutedEventArgs e)
         {
@@ -187,7 +196,6 @@ namespace CelesteMusicPlayer
                 {
                     ResetTerminalLyrics("NO LYRICS");
                 }
-                PushWebLyrics();   // 网页正在播放页同步进入空态（没开网页就不推）
                 return;
             }
 
@@ -319,8 +327,6 @@ namespace CelesteMusicPlayer
                 BuildTerminalLyricsRows();
             }
             _desktopLyricsWindow?.SetLyrics(_lyricLines);
-            _miniPlayerWindow?.RefreshFromOwner();
-            PushWebLyrics();   // 网页主界面的正在播放页歌词区（没开网页就不推）
         }
 
 

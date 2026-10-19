@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -78,7 +78,6 @@ namespace CelesteMusicPlayer
             _storeKey = storeKey;
 
             InitializeComponent();
-            TokenShapeRuntime.Attach(this);
             WindowIconHelper.Apply(this);
             Title = "搜索网络头像";
             ExtendsContentIntoTitleBar = true;

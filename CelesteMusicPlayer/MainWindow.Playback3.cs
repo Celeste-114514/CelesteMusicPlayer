@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -110,12 +110,9 @@ namespace CelesteMusicPlayer
                     // 显式设值（ApplyForegroundToDescendants），显式值优先于继承。
                     // 令牌测试皮肤：行文字=令牌 Text.Primary——选中底换成令牌色后不一定是深底，
                     // 不能沿用经典"深色主题白字/浅色主题黑字"的写法。取色失败回落经典灰阶。
-                    var rowForeground = new SolidColorBrush(TokenSkinCached
-                        ? ResolveTokenSkinColor(CelesteTokenCatalog.TextPrimary)
-                          ?? (darkRow ? Windows.UI.Color.FromArgb(255, 255, 255, 255)
-                                      : Windows.UI.Color.FromArgb(255, 0, 0, 0))
-                        : darkRow ? Windows.UI.Color.FromArgb(255, 255, 255, 255)
-                                  : Windows.UI.Color.FromArgb(255, 0, 0, 0));
+                    var rowForeground = new SolidColorBrush(darkRow
+                        ? Windows.UI.Color.FromArgb(255, 255, 255, 255)
+                        : Windows.UI.Color.FromArgb(255, 0, 0, 0));
                     container.Foreground = rowForeground;
                     if (selected)
                     {
@@ -199,7 +196,6 @@ namespace CelesteMusicPlayer
                 // 任务栏缩略图按钮：暂停 → 显示"播放"图标（提示用户点播放）
                 _taskbarButtons?.UpdatePlayPause(false);
 
-                _miniPlayerWindow?.RefreshFromOwner();
                 return;
             }
 
@@ -236,7 +232,6 @@ namespace CelesteMusicPlayer
                     _ = FadeInEngineAfterResumeAsync(resumeTarget);
                 }
 
-                _miniPlayerWindow?.RefreshFromOwner();
                 return;
             }
 
@@ -394,7 +389,6 @@ namespace CelesteMusicPlayer
                         PlayPauseIcon.Glyph = "\uE768";
                     }
 
-                    _miniPlayerWindow?.RefreshFromOwner();
                 }
 
                 return;
@@ -507,75 +501,11 @@ namespace CelesteMusicPlayer
         private void DesktopLyricsButton_Click(object sender, RoutedEventArgs e)
             => SetDesktopLyricsEnabled(!_desktopLyricsEnabled);
 
-        private void MiniPlayerButton_Click(object sender, RoutedEventArgs e)
-            => SetMiniPlayerEnabled(!_miniPlayerEnabled);
-
-        private void SetMiniPlayerEnabled(bool enabled, bool persistPreference = true)
-        {
-            _miniPlayerEnabled = enabled;
-            if (_miniPlayerEnabled)
-            {
-                EnsureMiniPlayerWindow();
-                AppSettingsState settings = AppSettingsStore.Load();
-                _miniPlayerWindow!.SetAlwaysOnTop(settings.MiniPlayerAlwaysOnTop);
-                _miniPlayerWindow.ApplyBackdropPreference(settings.EnableFrostedGlass);
-                _miniPlayerWindow.RefreshFromOwner();
-                _miniPlayerWindow.Activate();
-            }
-            else if (_miniPlayerWindow != null)
-            {
-                MiniPlayerWindow closing = _miniPlayerWindow;
-                _miniPlayerWindow = null;
-                closing.ClosedByUser -= OnMiniPlayerClosedByUser;
-                closing.Close();
-            }
-
-            if (persistPreference)
-            {
-                AppSettingsStore.Update(s => s.OpenMiniPlayerOnStartup = _miniPlayerEnabled);
-            }
-
-            UpdateMiniPlayerBadge();
-        }
-
-
-        private void EnsureMiniPlayerWindow()
-        {
-            if (_miniPlayerWindow != null)
-            {
-                return;
-            }
-
-            _miniPlayerWindow = new MiniPlayerWindow(this);
-            AppSettingsState settings = AppSettingsStore.Load();
-            _miniPlayerWindow.SetAlwaysOnTop(settings.MiniPlayerAlwaysOnTop);
-            _miniPlayerWindow.ApplyBackdropPreference(settings.EnableFrostedGlass);
-            _miniPlayerWindow.ClosedByUser += OnMiniPlayerClosedByUser;
-        }
-
-
-        private void OnMiniPlayerClosedByUser()
-        {
-            _miniPlayerWindow = null;
-            _miniPlayerEnabled = false;
-            AppSettingsStore.Update(s => s.OpenMiniPlayerOnStartup = false);
-            DispatcherQueue.TryEnqueue(UpdateMiniPlayerBadge);
-        }
-
-
-        private void UpdateMiniPlayerBadge()
-        {
-            if (MiniPlayerStateBadge == null)
-            {
-                return;
-            }
-
-            bool on = _miniPlayerEnabled && _miniPlayerWindow != null;
-            MiniPlayerStateBadge.Text = on ? "on" : "off";
-            MiniPlayerStateBadge.Foreground = on
-                ? new SolidColorBrush(Color.FromArgb(255, 80, 200, 120))
-                : new SolidColorBrush(Color.FromArgb(255, 176, 176, 176));
-        }
+        // 迷你播放器相关方法（MiniPlayerButton_Click / SetMiniPlayerEnabled /
+        // EnsureMiniPlayerWindow / OnMiniPlayerClosedByUser / UpdateMiniPlayerBadge）
+        // 2026-10-19 全部移除：用户对现在的迷你播放器很不满意，删掉重做，
+        // 重建方案见 outputs/迷你播放器重建方案-2026-10-19.md。
+        // 主窗口这侧的入口按钮（MiniPlayerButton）也一并从 MainWindow.xaml 里去掉了。
 
 
         // ---- Mini player / desktop lyrics helpers ----
@@ -596,7 +526,31 @@ namespace CelesteMusicPlayer
         }
 
 
-        internal ImageSource? GetCurrentCoverImage() => TransportCoverImage?.Source;
+        internal ImageSource? GetCurrentCoverImage() => _lastCoverImage;
+
+        /// <summary>
+        /// 当前曲目的封面**缩略图**（Thumb 160 档，播放栏同款同一张）。
+        /// 迷你播放器 72×72 小封面用这个 —— 按显示尺寸分档取图，不拿大图硬缩
+        /// （见 <see cref="_lastCoverThumbImage"/> 注释：768→72 十倍缩小必糊）。
+        /// 取图跟随播放栏那次异步取图，刚切歌瞬间可能还是上一首的（与播放栏
+        /// 「保持旧图不眨眼」同策略），迷你窗下一个 tick（≤200ms）就收到新的。
+        /// </summary>
+        internal ImageSource? GetCurrentCoverThumbImage() => _lastCoverThumbImage;
+
+        /// <summary>
+        /// 当前曲目的封面**原始字节**（迷你播放器取色用）。
+        /// 取色必须拿字节 —— BitmapImage 解码完不给像素，从 ImageSource 反推不出主色。
+        /// 空则回落到按路径现抽一次（例如还没解析完就被问到）。
+        /// </summary>
+        internal byte[]? GetCurrentCoverBytes()
+        {
+            if (_lastCoverBytes is { Length: > 0 })
+            {
+                return _lastCoverBytes;
+            }
+
+            return string.IsNullOrEmpty(_nowPlayingPath) ? null : ExtractCoverBytes(_nowPlayingPath);
+        }
 
         internal MediaPlayer? GetMediaPlayerPublic() => GetPlayer();
 
@@ -940,6 +894,10 @@ namespace CelesteMusicPlayer
             // 但按钮状态恰恰在这些时候最容易跟真实状态脱节（"歌在响、按钮还是 ▶"）。
             SyncTransportPlayState();
 
+            // 迷你播放器状态推送（有窗口在听才推；也要放在早退之前 —— 引擎播放时
+            // 这个 tick 会提前 return，而迷你条照样要显示进度）
+            MiniPlayerBridge.PushTick();
+
             if (_usingEnginePlayback)
             {
                 return;
@@ -977,7 +935,6 @@ namespace CelesteMusicPlayer
 
             SyncLyricsToPosition(position);
             _desktopLyricsWindow?.Sync(position);
-            _miniPlayerWindow?.SyncPosition(position, player.PlaybackSession.NaturalDuration);
             TickFeaturePlaybackExtras(position);
 
             if ((DateTime.UtcNow - _lastPlaybackPersistUtc).TotalSeconds >= 4)
@@ -1810,6 +1767,8 @@ namespace CelesteMusicPlayer
             NowPlayingTitleText.Text = "未在播放";
             ResetNowPlayingArtistAlbumLinks();
             NowPlayingCoverImage.Source = null;
+            _lastCoverImage = null;   // 迷你播放器整窗背景同步清（它读的是大图，不是播放栏缩略图）
+            _lastCoverThumbImage = null;   // 迷你播放器 72×72 小封面同步清（Thumb 160 档，见 UpdateTransportCoverAsync）
             UpdateVinylArt(null);
             SyncNowPlayingReflection(null);
             ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
@@ -1830,9 +1789,15 @@ namespace CelesteMusicPlayer
         /// <param name="coverKnown">
         /// false = 封面还在后台解析中（切歌瞬间先刷标题的那次调用）：
         /// 此时**保持**播放条上原有的封面与占位图标状态不动，避免「先闪一下光盘占位图、再被真封面盖住」的眨眼感。
-        /// true  = 封面已确定（可能是 null，表示这首歌确实没有内嵌封面），照实刷新并同步占位图标。
-        /// </param>
-        private void UpdateTransportNowPlaying(PlaylistItem? item, ImageSource? cover, bool coverKnown = true)
+    /// true  = 封面已确定（可能是 null，表示这首歌确实没有内嵌封面），照实刷新并同步占位图标。
+    /// </param>
+    /// <param name="applyCover">
+    /// false = 只刷文字，不动封面（封面由调用方随后单独填）。
+    /// 播放栏那颗 58px 小封面要按自己的显示尺寸取 Thumb 档，不能拿播放页大图缩，
+    /// 所以这里先不塞图，等 UpdateTransportCoverAsync 取到小图再填，
+    /// 免得中间闪一下"大图硬缩到 58px"的糊图。
+    /// </param>
+    private void UpdateTransportNowPlaying(PlaylistItem? item, ImageSource? cover, bool coverKnown = true, bool applyCover = true)
         {
             if (item == null)
             {
@@ -1843,7 +1808,6 @@ namespace CelesteMusicPlayer
                 TransportFormatText.Visibility = Visibility.Collapsed;
                 TransportCoverImage.Source = null;
                 ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
-                _miniPlayerWindow?.RefreshFromOwner();
                 return;
             }
 
@@ -1855,12 +1819,59 @@ namespace CelesteMusicPlayer
                 string.IsNullOrWhiteSpace(item.FormatInfoLine)
                     ? Visibility.Collapsed
                     : Visibility.Visible;
-            if (coverKnown)
+            if (coverKnown && applyCover)
             {
                 TransportCoverImage.Source = cover;
                 ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
             }
-            _miniPlayerWindow?.RefreshFromOwner();
+        }
+
+
+        /// <summary>
+        /// 播放栏（底部条）左侧那颗小封面的加载：按自己的显示尺寸取 **Thumb 档**（分档磁盘缓存）。
+        ///
+        /// 为什么要单独一份：以前这里是直接把播放页那张大图（按 320px 框解码，高 DPI 下
+        /// 实际 480px）塞进 58×58 的 Image —— 缩放比 5~8 倍，WinUI 缩这么狠会明显发糊，
+        /// 用户 10-19 报「播放栏封面糊，歌曲面板里的却清楚」就是这个（歌曲面板走的是
+        /// Thumb 档，尺寸和显示尺寸接近，所以清楚）。
+        /// 现在改成分档取图：Thumb 档 160，显示 58（150% 缩放 = 87 物理像素、200% = 116），
+        /// 任何缩放下都是"缩小显示"，解码器又用 Fant 高质量重采样，锐度对得上。
+        /// </summary>
+        private async Task UpdateTransportCoverAsync(string path, byte[]? coverBytes)
+        {
+            if (coverBytes == null || coverBytes.Length == 0)
+            {
+                // 这首歌确实没有内嵌封面：清掉（含占位图标复位），不能留着上一首的图。
+                // ⚠️ 迷你播放器的小封面也读这里清出来的 _lastCoverThumbImage —— 不清的话
+                //    换到无封面的歌时迷你条会挂着上一首的封面（回归问题）。
+                TransportCoverImage.Source = null;
+                _lastCoverThumbImage = null;
+                ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
+                return;
+            }
+
+            BitmapImage? thumb = await CoverArtService.GetAsync(coverBytes, CoverVariant.Thumb);
+            bool fromCache = thumb != null;
+            thumb ??= await CreateBitmapFromBytesAsync(coverBytes, CoverDecodeTargetPx(TransportCoverBorder, 160));
+
+            // 切歌竞态：取图期间已经换了歌就丢掉这次结果
+            if (thumb == null || !string.Equals(_nowPlayingPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            // 一行自检：缓存到底有没有命中、最终图多大像素（"糊"类问题第一取证点）。
+            // 实测这行落在 logs/app/ 当日日志里（搜「播放栏封面」即可）。
+            global::CelesteMusicPlayer.StartupLog.Write(
+                $"[播放栏封面] 缓存={(fromCache ? "命中" : "现解码")} 像素={thumb.PixelWidth}x{thumb.PixelHeight}");
+
+            TransportCoverImage.Source = thumb;
+            ApplyCoverFrame(TransportCoverBorder, TransportCoverImage);
+
+            // 迷你播放器 72×72 小封面共用这一张（Thumb 160 档）：它以前拿播放页大图
+            // （Large 768）硬缩到 72，十倍缩小必糊 —— 用户 10-19 报「缩略图也糊」。
+            // 与播放栏共用同一张图、零额外解码；切歌竞态上面已挡（旧结果不会覆盖新状态）。
+            _lastCoverThumbImage = thumb;
         }
 
 
@@ -1968,8 +1979,10 @@ namespace CelesteMusicPlayer
             BitmapImage? coverImage = null;
             if (coverBytes != null && coverBytes.Length > 0)
             {
-                // 按封面框实际显示尺寸 × 屏幕缩化解码：大图直接交给 UI 拉伸会发糊（K2）
-                coverImage = await CreateBitmapFromBytesAsync(coverBytes, CoverDecodeTargetPx(NowPlayingCoverBorder, 320));
+                // 2026-10-19「播放栏封面糊」：播放页大图改走封面分档缓存（Large 768 档），
+                // 命中时零 TagLib / 零解码；没命中（首播、缓存被清）才回落"按显示尺寸现解码"。
+                coverImage = await CoverArtService.GetAsync(coverBytes, CoverVariant.Large);
+                coverImage ??= await CreateBitmapFromBytesAsync(coverBytes, CoverDecodeTargetPx(NowPlayingCoverBorder, 320));
             }
 
             if (_nowPlayingPath != item.FilePath)
@@ -1978,10 +1991,12 @@ namespace CelesteMusicPlayer
             }
 
             NowPlayingCoverImage.Source = coverImage;
+            _lastCoverImage = coverImage;   // 迷你播放器整窗背景同步（它读的是大图，不是播放栏缩略图）
             UpdateVinylArt(coverImage);
             SyncNowPlayingReflection(coverBytes);
             ApplyCoverFrame(NowPlayingCoverBorder, NowPlayingCoverImage);
-            UpdateTransportNowPlaying(item, coverImage);
+            UpdateTransportNowPlaying(item, coverImage, applyCover: false);
+            _ = UpdateTransportCoverAsync(item.FilePath, coverBytes);
             _lastCoverBytes = coverBytes;   // 供自定义背景移除后恢复封面背景
             _ = ApplyAlbumArtBackgroundAsync(coverBytes, item.FilePath);
             ApplyNowPlayingPaneTransparent();
@@ -2403,7 +2418,6 @@ namespace CelesteMusicPlayer
                     _taskbarButtons?.UpdatePlayPause(false);
                 }
 
-                _miniPlayerWindow?.RefreshFromOwner();
             }
             else if (player != null && player.Source != null)
             {
@@ -2842,7 +2856,6 @@ namespace CelesteMusicPlayer
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
             }
 
-            _miniPlayerWindow?.RefreshFromOwner();
         }
 
 
@@ -2988,7 +3001,6 @@ namespace CelesteMusicPlayer
                 ApplyPendingStartPosition(item.FilePath);
 
                 _ = FadeInEngineAsync();
-                _miniPlayerWindow?.RefreshFromOwner();
                 ConfigureEngineSmtc(item, playing: true);
                 _ = PreloadSeamlessNextAsync(item);
                 _startPlaybackInFlight = false;
@@ -3056,7 +3068,6 @@ namespace CelesteMusicPlayer
                 _usingEnginePlayback = false;
                 UpdateWaveformTimerForPlaybackState(false);
                 UpdateEngineSmtcStatus(MediaPlaybackStatus.Stopped);
-                _miniPlayerWindow?.RefreshFromOwner();
                 HandleMediaEnded();
             });
         }
@@ -3227,7 +3238,6 @@ namespace CelesteMusicPlayer
                     }
                     ConfigureEngineSmtc(next, playing: true);
                     AdvanceUserPlaylistIndexTo(next);
-                    _miniPlayerWindow?.RefreshFromOwner();
                     _ = PreloadSeamlessNextAsync(next);
                 }
             });

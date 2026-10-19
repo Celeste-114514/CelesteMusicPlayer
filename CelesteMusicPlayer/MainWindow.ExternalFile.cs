@@ -54,30 +54,28 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 播放从程序外部传进来的音频文件（双击文件、或后一次双击由另一个进程转交过来）。
         ///
+        /// scattered = true（默认）：进「零散播放」窗口 —— 2026-10-18 用户定案，
+        /// 双击/转交的散装文件一律送独立零散播放窗口（队列/引擎/歌词/可视化全部自持，
+        /// 纯内存，不写音乐库），窗口没开会自动开。播放走窗口自己的引擎实例，
+        /// 与主程序各播各的，互不干扰。.cue 分轨表也由窗口自己解析。
+        ///
+        /// scattered = false：老行为，主窗口内「临时播放」一次（内核自检试听用这个，
+        /// 那种场合弹零散播放窗口反而莫名其妙）。
         /// 处理方式：**不加入任何列表** —— 既不进播放队列，也不进音乐库，只做一次「临时播放」。
         /// 因为主界面就是用户的音乐库，双击一个散装文件不该污染它；同理也不该往播放队列里塞外来者。
         /// 播完即止，想留下就点状态栏上的「添加到音乐库」。
         /// 播放本身仍走正常的引擎路径，电平表 / SMTC / 桌面歌词 / DSP 全部照常生效。
         /// </summary>
-        internal void PlayExternalFileAsync(string path)
+        internal void PlayExternalFileAsync(string path, bool scattered = true)
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
 
-            // .cue 不是音频文件（文件关联里注册了它）：双击进来按分轨表解析播放，
-            // 不走下面的「临时播放单文件」逻辑（那会把 .cue 当音频送进引擎然后失败）。
-            if (string.Equals(Path.GetExtension(path), ".cue", StringComparison.OrdinalIgnoreCase))
+            if (scattered)
             {
-                DispatcherQueue.TryEnqueue(async () =>
-                {
-                    try
-                    {
-                        await PlayCueFileAsync(path);
-                    }
-                    catch (Exception ex)
-                    {
-                        global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.ExternalFile.cs", ex);
-                    }
-                });
+                // 零散播放窗口：开窗（没开就建）+ 入队 + 起播。
+                // 队列和引擎都是窗口自己的，主程序的播放队列/正在播放状态一根头发都不动。
+                ShowScatteredWindow();
+                _scatteredWindow?.EnqueueFiles(new[] { path });
                 return;
             }
 
@@ -299,8 +297,9 @@ namespace CelesteMusicPlayer
             return _playlist.Any(i => string.Equals(i.FilePath, path, StringComparison.OrdinalIgnoreCase));
         }
 
-        /// <summary>读标签构造一个播放列表条目；读不出来就用文件名兜底，保证一定能播。</summary>
-        private static PlaylistItem BuildItemFromTag(string path)
+        /// <summary>读标签构造一个播放列表条目；读不出来就用文件名兜底，保证一定能播。
+        /// 零散播放窗口建队列时也用这个（internal：跨文件复用同一套兜底逻辑）。</summary>
+        internal static PlaylistItem BuildItemFromTag(string path)
         {
             PlaylistItem item = new()
             {

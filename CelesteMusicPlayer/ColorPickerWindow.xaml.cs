@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using Microsoft.UI;
@@ -34,7 +34,6 @@ namespace CelesteMusicPlayer
         public ColorPickerWindow(string title, string initialHex, Action<string>? onPicked)
         {
             InitializeComponent();
-            TokenShapeRuntime.Attach(this);
             WindowIconHelper.Apply(this);
             Title = string.IsNullOrWhiteSpace(title) ? "选择颜色" : title;
             TitleText.Text = Title;

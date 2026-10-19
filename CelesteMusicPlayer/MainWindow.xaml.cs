@@ -579,8 +579,7 @@ namespace CelesteMusicPlayer
         }
         private DesktopLyricsOverlay? _desktopLyricsWindow;
         private bool _desktopLyricsEnabled;
-        private MiniPlayerWindow? _miniPlayerWindow;
-        private bool _miniPlayerEnabled;
+        // 迷你播放器字段已移除（2026-10-19 用户要求删掉重写，见 memory 2026-10-19）
         private DateTime _lastPlaybackPersistUtc = DateTime.MinValue;
         private ArtistAvatarEditorWindow? _artistAvatarEditorWindow;
         private AppTrayIcon? _trayIcon;
@@ -734,8 +733,9 @@ namespace CelesteMusicPlayer
             // 避免 DispatcherQueue.GetForCurrentThread() 返回 null 导致 NullReferenceException。
             HiFiOutputBackend.UiDispatcherQueue = this.DispatcherQueue;
             InitializeComponent();
-            TokenShapeRuntime.Attach(this);
             StartupLog.Write("MainWindow InitializeComponent done");
+            // 迷你播放器桥接：挂上之后 tick / 命令才有宿主（单向数据流，见 MiniPlayerBridge）
+            MiniPlayerBridge.Attach(this);
             // 左分类栏「浮动板块」阴影（2026-10-16 用户要求：视觉上像从主程序左侧浮出的一块板）。
             // WinUI3 ThemeShadow 对窗口内元素即可渲染；挂不上只丢阴影不丢功能，整体兜底。
             // Z 向 40 只扩散不偏移——本卡片通高贴左缘，光从上方来的 Y 偏移会让顶部阴影发虚。

@@ -158,7 +158,6 @@ namespace CelesteMusicPlayer
                 TimeSpan sourcePos = TimeSpan.FromSeconds(seconds);
                 TimeSpan sourceDuration = TimeSpan.FromSeconds(duration);
                 _desktopLyricsWindow?.Sync(sourcePos);
-                _miniPlayerWindow?.SyncPosition(sourcePos, sourceDuration);
                 _taskbarProgress?.SetProgress(seconds, ProgressSlider.Maximum, paused: false);
 
                 // 引擎（HiFi 独占/ASIO）路径也要推进当前歌词行与滚动，
@@ -188,7 +187,6 @@ namespace CelesteMusicPlayer
                 _usingEnginePlayback = false;
                 UpdateWaveformTimerForPlaybackState(false);
                 UpdateEngineSmtcStatus(MediaPlaybackStatus.Stopped);
-                _miniPlayerWindow?.RefreshFromOwner();
             }
         }
 
@@ -361,7 +359,6 @@ namespace CelesteMusicPlayer
             _orderResolver.Order = order;
             ApplyPlaybackOrderToPlayer();
             UpdatePlaybackOrderButtonUi();
-            _miniPlayerWindow?.RefreshFromOwner();
             if (persist)
             {
                 AppSettingsStore.Update(s => s.PlaybackOrder = order.ToString());

@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -192,7 +192,6 @@ namespace CelesteMusicPlayer
             UpdateVolumeIcon(VolumeSlider.Value);
             UpdateSignalChainDisplay();
             UpdateDesktopLyricsBadge();
-            UpdateMiniPlayerBadge();
             InitializeMusicPlayer2Features();
 
             ProgressSlider.AddHandler(
@@ -1211,7 +1210,6 @@ namespace CelesteMusicPlayer
             {
                 StartPlayback(item);
                 NotifyCurrentPlaylistWindow();
-                _miniPlayerWindow?.RefreshFromOwner();
                 return;
             }
 
@@ -1227,7 +1225,6 @@ namespace CelesteMusicPlayer
             if (IsHiFiModeSelected())
             {
                 NotifyCurrentPlaylistWindow();
-                _miniPlayerWindow?.RefreshFromOwner();
                 return;
             }
 
@@ -1237,7 +1234,6 @@ namespace CelesteMusicPlayer
             // 就绪态的 SMTC 展示已由 ConfigureEngineSmtc 负责；点播放按钮由
             // PlayPauseButton_Click 转走引擎路径（按 _userPlaylistIndex 恢复到这首）。
             NotifyCurrentPlaylistWindow();
-            _miniPlayerWindow?.RefreshFromOwner();
         }
 
 

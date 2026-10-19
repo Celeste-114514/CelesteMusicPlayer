@@ -11,6 +11,173 @@
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <!-- Other merged dictionaries here -->
             </ResourceDictionary.MergedDictionaries>
+
+            <!-- ============ 素条：全局滑块外观（2026-10-18）============
+                 用户反馈："我主程序内现在还是 windows 风格居多，只不过是进度条拖累了整体的美观"。
+                 这里**只覆盖 WinUI 滑块的主题资源，不动控件模板**——粗细/颜色/圆头大小全是资源驱动的
+                 （官方模板里 HorizontalTrackRect 的 Height 绑 SliderTrackThemeHeight、Fill 绑
+                 SliderTrackFill，圆头尺寸绑 SliderInnerThumbWidth/Height），所以覆盖资源即可让
+                 全项目 70 个滑块一起换装，拖动/点击/键盘/无障碍等交互逻辑一行不动，零回归风险。
+                 目标样式：静止 = 3px 细轨 + 8px 小圆头；悬停 = 圆头按原生动画放大到约 9.3px。
+                 需要浅色/深色两套，因为播放器两种主题都在用（ThemeResource 按元素实际主题解析）。 -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <x:Double x:Key="SliderTrackThemeHeight">3</x:Double>
+                    <x:Double x:Key="SliderInnerThumbWidth">8</x:Double>
+                    <x:Double x:Key="SliderInnerThumbHeight">8</x:Double>
+                    <SolidColorBrush x:Key="SliderTrackFill" Color="#E5E5EA" />
+                    <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#DCDCE0" />
+                    <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#DCDCE0" />
+                    <SolidColorBrush x:Key="SliderTrackValueFill" Color="#1D1D1F" />
+                    <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#1D1D1F" />
+                    <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#1D1D1F" />
+                    <!-- 圆头 = 跟填充同色的实心小点：没有白色外圈、没有描边。
+                         2026-10-18 用户反馈"这个白圈真的丑"——原白底+灰边在浅色界面上是一个突兀的白圈。 -->
+                    <SolidColorBrush x:Key="SliderThumbBackground" Color="#1D1D1F" />
+                    <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#1D1D1F" />
+                    <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#1D1D1F" />
+                    <SolidColorBrush x:Key="SliderOuterThumbBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="SliderThumbBorderBrush" Color="Transparent" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <x:Double x:Key="SliderTrackThemeHeight">3</x:Double>
+                    <x:Double x:Key="SliderInnerThumbWidth">8</x:Double>
+                    <x:Double x:Key="SliderInnerThumbHeight">8</x:Double>
+                    <SolidColorBrush x:Key="SliderTrackFill" Color="#38FFFFFF" />
+                    <SolidColorBrush x:Key="SliderTrackFillPointerOver" Color="#4AFFFFFF" />
+                    <SolidColorBrush x:Key="SliderTrackFillPressed" Color="#4AFFFFFF" />
+                    <SolidColorBrush x:Key="SliderTrackValueFill" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="SliderTrackValueFillPointerOver" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="SliderTrackValueFillPressed" Color="#FFFFFF" />
+                    <!-- 深色下同规则：实心白点，无外圈无描边 -->
+                    <SolidColorBrush x:Key="SliderThumbBackground" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="SliderThumbBackgroundPointerOver" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="SliderThumbBackgroundPressed" Color="#FFFFFF" />
+                    <SolidColorBrush x:Key="SliderOuterThumbBackground" Color="Transparent" />
+                    <SolidColorBrush x:Key="SliderThumbBorderBrush" Color="Transparent" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <!-- ============ 素条 · 滑块模板（2026-10-18 二修）============
+                 上面只覆盖资源时圆头还是有"白圈"：官方模板的 Thumb 外面套了一层
+                 <Border Background=SliderOuterThumbBackground BorderBrush=SliderThumbBorderBrush>，
+                 而圆头本体颜色走 SliderThumbBackground（按主题取，深色主题=白）。
+                 在深色主题的窗口里（设置页/迷你播放器等独立窗口不跟随主窗口主题）就是个白圈。
+                 这里直接换掉模板：**圆头就是一个椭圆，Fill 绑 {TemplateBinding Foreground}**
+                 —— 永远等于填充色，浅色界面上是深色实心点，深色界面上是白色实心点，不再有外圈。
+                 必需部件名必须与官方一致（SliderContainer / HorizontalTemplate /
+                 HorizontalDecreaseRect / HorizontalThumb），Slider 的代码会按名找到它们并写宽度。
+                 横竖两向都做：Slider 的 OnOrientationChanged 按 Orientation 切换两个 Template
+                 的可见性（官方源码 Slider_Partial.cpp：只有 HorizontalTemplate 时纵向滑块
+                 会显示横向模板 = 轨道横躺、圆头不动）。纵向腿结构是横向的镜像：
+                 VerticalTemplate 恰好 3 行（*/Auto/Auto，代码会把首尾行重写为 star/auto），
+                 VerticalDecreaseRect 在第 3 行（代码按 Orientation 把它挪到第 3 行并写高度），
+                 VerticalThumb 在中间行——底行长高就把圆头往上推，与横向"左列边长推圆头"同理。 -->
+            <Style TargetType="Slider">
+                <Setter Property="Background" Value="{ThemeResource SliderTrackFill}" />
+                <Setter Property="Foreground" Value="{ThemeResource SliderTrackValueFill}" />
+                <Setter Property="MinHeight" Value="20" />
+                <Setter Property="ManipulationMode" Value="None" />
+                <Setter Property="IsFocusEngagementEnabled" Value="True" />
+                <Setter Property="UseSystemFocusVisuals" Value="True" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="Slider">
+                            <Grid x:Name="SliderContainer" Background="Transparent">
+                                <Grid x:Name="HorizontalTemplate">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="Auto" />
+                                        <ColumnDefinition Width="*" />
+                                    </Grid.ColumnDefinitions>
+                                    <Rectangle
+                                        x:Name="HorizontalTrackRect"
+                                        Grid.Row="0"
+                                        Grid.ColumnSpan="3"
+                                        Height="3"
+                                        RadiusX="1.5"
+                                        RadiusY="1.5"
+                                        VerticalAlignment="Center"
+                                        Fill="{TemplateBinding Background}" />
+                                    <Rectangle
+                                        x:Name="HorizontalDecreaseRect"
+                                        Grid.Row="0"
+                                        Height="3"
+                                        RadiusX="1.5"
+                                        RadiusY="1.5"
+                                        VerticalAlignment="Center"
+                                        Fill="{TemplateBinding Foreground}" />
+                                    <Thumb
+                                        x:Name="HorizontalThumb"
+                                        Grid.Row="0"
+                                        Grid.Column="1"
+                                        Width="8"
+                                        Height="8"
+                                        VerticalAlignment="Center"
+                                        BorderThickness="0"
+                                        Background="{TemplateBinding Foreground}"
+                                        AutomationProperties.AccessibilityView="Raw">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Ellipse
+                                                    Width="8"
+                                                    Height="8"
+                                                    Fill="{TemplateBinding Background}" />
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Grid>
+
+                                <!-- 纵向滑块（零散播放窗口的十段 EQ 用；项目里第一批纵向滑块）。
+                                     官方源码要求：VerticalTemplate 恰好 3 行、VerticalDecreaseRect
+                                     会被代码挪到第 3 行并按 Value 写高度、圆头在中间行被推着走。 -->
+                                <Grid x:Name="VerticalTemplate" Visibility="Collapsed">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+                                    <Rectangle
+                                        x:Name="VerticalTrackRect"
+                                        Grid.RowSpan="3"
+                                        Width="3"
+                                        RadiusX="1.5"
+                                        RadiusY="1.5"
+                                        HorizontalAlignment="Center"
+                                        Fill="{TemplateBinding Background}" />
+                                    <Rectangle
+                                        x:Name="VerticalDecreaseRect"
+                                        Grid.Row="2"
+                                        Width="3"
+                                        RadiusX="1.5"
+                                        RadiusY="1.5"
+                                        HorizontalAlignment="Center"
+                                        Fill="{TemplateBinding Foreground}" />
+                                    <Thumb
+                                        x:Name="VerticalThumb"
+                                        Grid.Row="1"
+                                        Width="8"
+                                        Height="8"
+                                        HorizontalAlignment="Center"
+                                        BorderThickness="0"
+                                        Background="{TemplateBinding Foreground}"
+                                        AutomationProperties.AccessibilityView="Raw">
+                                        <Thumb.Template>
+                                            <ControlTemplate TargetType="Thumb">
+                                                <Ellipse
+                                                    Width="8"
+                                                    Height="8"
+                                                    Fill="{TemplateBinding Background}" />
+                                            </ControlTemplate>
+                                        </Thumb.Template>
+                                    </Thumb>
+                                </Grid>
+                            </Grid>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+
             <!-- 关闭 ListView / GridView 选中勾；本应用用主题色背景表示选中 -->
             <x:Boolean x:Key="ListViewItemSelectionCheckMarkVisualEnabled">False</x:Boolean>
             <x:Boolean x:Key="GridViewItemSelectionCheckMarkVisualEnabled">False</x:Boolean>

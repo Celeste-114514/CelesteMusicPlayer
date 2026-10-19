@@ -926,41 +926,6 @@
                         Spacing="8"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Center">
-                        <!-- 【皮肤系统入口 · 2026-10-11 起临时隐藏】用户要求新版本不含皮肤系统，
-                             这里整段注释掉、代码一行没删。以后要恢复：去掉本段首尾两行注释标记即可。
-                             原说明：皮肤系统第 4 步，Apple 风格主界面 · 歌曲浏览面板。
-                             只在歌曲分类显示；点了才第一次创建 WebView2，不点就永远不占那 286MB。
-                        <Button Style="{StaticResource ButtonSecondaryStyle}"
-                            x:Name="WebMainPilotButton"
-                            Height="32"
-                            Padding="14,0"
-                            CornerRadius="16"
-                            BorderThickness="0"
-                            Click="WebMainPilotButton_Click"
-                            ToolTipService.ToolTip="切换到 Apple 风格界面浏览歌曲（随时可返回旧版）">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE774;" FontSize="14" VerticalAlignment="Center" />
-                                <TextBlock Text="Apple 风格界面" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        【隐藏结束】 -->
-                        <!-- 【皮肤系统入口 · 2026-10-11 起临时隐藏】恢复方法同上：去掉首尾两行注释标记。
-                             原说明：批次 1，Windows 风（Fluent）新版主界面。与「Apple 风格界面」互斥，
-                             点谁开谁；winmain.html 是 main.html 的平行换肤页，协议零改动。
-                        <Button Style="{StaticResource ButtonSecondaryStyle}"
-                            x:Name="WebWinMainButton"
-                            Height="32"
-                            Padding="14,0"
-                            CornerRadius="16"
-                            BorderThickness="0"
-                            Click="WebWinMainButton_Click"
-                            ToolTipService.ToolTip="切换到 Windows 风格（Fluent）界面浏览歌曲（随时可返回旧版）">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <FontIcon Glyph="&#xE8A9;" FontSize="14" VerticalAlignment="Center" />
-                                <TextBlock Text="新版界面" VerticalAlignment="Center" />
-                            </StackPanel>
-                        </Button>
-                        【隐藏结束】 -->
                         <Button Style="{StaticResource ButtonNormalStyle}"
                             x:Name="PlayAllLibrarySongsButton"
                             Height="32"
@@ -2048,24 +2013,6 @@
                                                     <TextBlock Text="添加到播放列表" VerticalAlignment="Center" />
                                                 </StackPanel>
                                             </Button>
-                                            <!-- 【皮肤系统入口 · 2026-10-11 起临时隐藏】恢复方法同上：去掉首尾两行注释标记。
-                                                 原说明：皮肤系统第 3 步，网页版专辑详情。
-                                                 点了才第一次创建 WebView2，不点就永远不占那 286MB。
-                                            <Button Style="{StaticResource ButtonSecondaryStyle}"
-                                                x:Name="AlbumDetailWebPilotButton"
-                                                Height="36"
-                                                Padding="18,0"
-                                                CornerRadius="18"
-                                                BorderThickness="0"
-                                                HorizontalAlignment="Center"
-                                                Click="AlbumDetailWebPilotButton_Click"
-                                                ToolTipService.ToolTip="切换到 Apple 风格界面看这张专辑（随时可返回旧版）">
-                                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <FontIcon Glyph="&#xE774;" FontSize="15" />
-                                                    <TextBlock Text="Apple 风格界面" VerticalAlignment="Center" />
-                                                </StackPanel>
-                                            </Button>
-                                            【隐藏结束】 -->
                                         </StackPanel>
                                     </Grid>
 
@@ -8179,34 +8126,8 @@
                         Spacing="8"
                         VerticalAlignment="Center"
                         SizeChanged="TransportRightButtonsPanel_SizeChanged">
-                        <Button CornerRadius="16"
-                            x:Name="MiniPlayerButton"
-                            Width="40"
-                            Height="40"
-                            Padding="0"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Click="MiniPlayerButton_Click"
-                            ToolTipService.ToolTip="迷你播放器（开/关）">
-                            <Grid Width="36" Height="36">
-                                <FontIcon Glyph="&#xE8A9;" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" />
-                                <Border
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Bottom"
-                                    Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
-                                    CornerRadius="3"
-                                    Padding="2,0"
-                                    Margin="0,0,0,1">
-                                    <TextBlock
-                                        x:Name="MiniPlayerStateBadge"
-                                        Text="off"
-                                        FontSize="8"
-                                        FontWeight="SemiBold"
-                                        LineHeight="9"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}" />
-                                </Border>
-                            </Grid>
-                        </Button>
+                        <!-- 迷你播放器入口按钮已移除（2026-10-19 删掉重写）。
+                             重建时会在这里重新放一个入口。 -->
                         <Button CornerRadius="16"
                             x:Name="DesktopLyricsButton"
                             Width="40"
@@ -8585,6 +8506,18 @@
                     Click="FullScreenButton_Click"
                     ToolTipService.ToolTip="全屏">
                     <FontIcon x:Name="FullScreenIcon" Glyph="&#xE740;" FontSize="15" />
+                </Button>
+                <!-- 迷你播放器入口（2026-10-19 重建版：横向小条，单向数据流，见 MiniPlayerBridge） -->
+                <Button CornerRadius="16"
+                    x:Name="MiniPlayerButton"
+                    Width="34"
+                    Height="32"
+                    Padding="0"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="MiniPlayerButton_Click"
+                    ToolTipService.ToolTip="迷你播放器">
+                    <FontIcon Glyph="&#xE93C;" FontSize="15" />
                 </Button>
                 <Border
                     Width="1"
@@ -8999,19 +8932,6 @@
                     MaxWidth="520" />
             </StackPanel>
         </Grid>
-
-        <!-- Apple 风格层（皮肤系统第 3 步）。
-             盖住主内容区和底部播放条，但**保留上面的原生标题栏**——
-             窗口拖动、最小化、最大化、关闭仍然归系统管，网页不接管窗口。
-             平时 Collapsed、WebView2 也还没创建，对现有界面零影响；
-             关掉 Apple 风格界面就 Visible→Collapsed，原样回到原生界面。
-             ⚠ 必须放在主 Grid 里而不是根 Grid：根 Grid 里会连标题栏一起盖掉。 -->
-        <Grid
-            x:Name="CelesteWebHostGrid"
-            Grid.Row="2"
-            Grid.RowSpan="2"
-            Visibility="Collapsed"
-            Background="{ThemeResource ApplicationPageBackgroundThemeBrush}" />
     </Grid>
 </Window>
 

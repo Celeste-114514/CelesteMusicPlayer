@@ -36,8 +36,15 @@ namespace CelesteMusicPlayer
     /// <summary>封面档位（长边像素）。数值即该档的长边目标尺寸。</summary>
     internal enum CoverVariant
     {
-        /// <summary>列表小图 / 播放栏缩略图。</summary>
-        Thumb = 96,
+    /// <summary>
+    /// 列表小图 / 播放栏缩略图 / 迷你播放器封面。
+    /// 2026-10-19 由 96 提到 160：播放栏小封面显示 58px，屏幕 150% 缩放就是 87 物理像素、
+    /// 200% 是 116、250% 是 145 —— 96 在 200% 以上会被放大，正好是用户报的
+    /// 「播放栏封面糊，歌曲面板里的却清楚」（歌曲面板走 Album 320 档，所以清楚）。
+    /// 提到 160 后 250% 也仍是缩小显示。改档位同时要把 CacheVersion 升上去，
+    /// 否则磁盘里旧的 96 小图会一直命中，新档位永远生效不了。
+    /// </summary>
+    Thumb = 160,
 
         /// <summary>常规尺寸（歌单墙、专辑卡）。</summary>
         Album = 320,
@@ -48,7 +55,12 @@ namespace CelesteMusicPlayer
 
     internal static class CoverArtService
     {
-        private const int CacheVersion = 1;
+        /// <summary>
+        /// 缓存版本号。档位尺寸一改就必须 +1 —— 目录按版本号分开，
+        /// 旧版本目录自然失效（不再被读），不用做迁移。
+        /// v1 = Thumb 96；v2 = Thumb 160（2026-10-19）。
+        /// </summary>
+        private const int CacheVersion = 2;
 
         /// <summary>同一张源图的生成任务去重（并发请求同一张只生成一次）。</summary>
         private static readonly ConcurrentDictionary<string, Task<string?>> InFlight = new(StringComparer.Ordinal);
@@ -77,7 +89,28 @@ namespace CelesteMusicPlayer
                 return null;
             }
 
-            string? file = await GetCachedFileAsync(audioPath, variant);
+            byte[]? source = await Task.Run(() => ReadSourceBytes(audioPath));
+            if (source == null || source.Length == 0)
+            {
+                return null;
+            }
+
+            return await GetAsync(source, variant);
+        }
+
+        /// <summary>
+        /// 取指定档位的封面（调用方已持有源图字节时用这个重载，省一次读文件）。
+        /// 播放栏缩略图走这里：源字节与播放页大图同一份（尊重 UseInnerCoverFirst 的取舍），
+        /// 保证两处选出同一张图；缓存键仍是源图 SHA256，与按路径调用共享同一份磁盘缓存。
+        /// </summary>
+        public static async Task<BitmapImage?> GetAsync(byte[] sourceBytes, CoverVariant variant)
+        {
+            if (sourceBytes == null || sourceBytes.Length == 0)
+            {
+                return null;
+            }
+
+            string? file = await GetCachedFileForBytesAsync(sourceBytes, variant);
             if (string.IsNullOrEmpty(file) || !File.Exists(file))
             {
                 return null;
@@ -95,6 +128,11 @@ namespace CelesteMusicPlayer
                 return null;
             }
 
+            return await GetCachedFileForBytesAsync(source, variant);
+        }
+
+        private static async Task<string?> GetCachedFileForBytesAsync(byte[] source, CoverVariant variant)
+        {
             string key = Sha256Hex(source);
             string dir = Path.Combine(CacheRoot, key.Substring(0, 2), key);
             string file = Path.Combine(dir, variant.ToString() + ".jpg");
@@ -191,7 +229,15 @@ namespace CelesteMusicPlayer
                 byte[] data = pixels.DetachPixelData();
 
                 using var outStream = new InMemoryRandomAccessStream();
-                BitmapEncoder encoder = await BitmapEncoder.CreateAsync(BitmapEncoder.JpegEncoderId, outStream);
+
+                // JPEG 质量提到 0.92（2026-10-19）：默认的编码器质量在小图上块效应很明显，
+                // 96/160 这种小图再被 UI 放到 58px 的框里，块效应会被看成"糊"。
+                // 大图也一并受益，代价只是缓存文件略大一点。
+                var quality = new BitmapPropertySet();
+                quality.Add("ImageQuality", new BitmapTypedValue(0.92f, Windows.Foundation.PropertyType.Single));
+
+                BitmapEncoder encoder = await BitmapEncoder.CreateAsync(
+                    BitmapEncoder.JpegEncoderId, outStream, quality);
                 encoder.SetPixelData(BitmapPixelFormat.Rgba8, BitmapAlphaMode.Premultiplied, dstW, dstH, 96, 96, data);
                 await encoder.FlushAsync();
 

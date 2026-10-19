@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.UI; // Colors（WinUI3 的 Colors 在 Microsoft.UI，不在 Windows.UI）
 using Microsoft.UI.Xaml;
@@ -90,10 +90,7 @@ namespace CelesteMusicPlayer
                 dlg.Resources["AccentButtonBackgroundDisabled"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(disabled);
                 // 令牌测试皮肤：对话框强调按钮的字色跟主界面按钮同一个来源（Accent.Text），
                 // 否则设置页弹窗里白字、主界面按钮跟主题文件走，同一屏两种字色（用户实测"不统一"）
-                Windows.UI.Color onAccent = MainWindow.IsTokenSkinActive()
-                    && MainWindow.ResolveTokenSkinColor(CelesteTokenCatalog.AccentText) is Windows.UI.Color tokenFg
-                        ? tokenFg
-                        : Microsoft.UI.Colors.White;
+                Windows.UI.Color onAccent = Microsoft.UI.Colors.White;
                 dlg.Resources["AccentButtonForeground"] = new Microsoft.UI.Xaml.Media.SolidColorBrush(onAccent);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }

@@ -44,13 +44,6 @@ namespace CelesteMusicPlayer
                 // ---- 1) 原生页：换掉元素级令牌字典 ----
                 ApplyCelesteTokensToTree(theme, dark);
 
-                // ---- 2) 网页：注入同名 CSS 变量（0.5ms 内生效）----
-                // 宿主没就绪就跳过（还没打开过网页页，此时不该有实例）
-                if (_celesteWebReady && theme != null)
-                {
-                    await ApplyCelesteThemeToWebAsync(theme, dark);
-                }
-
                 StartupLog.Write("[Theme] 已应用主题=" + (themeName ?? "(内置默认)") +
                                  " 模式=" + (dark ? "深色" : "浅色") + " 名称=" + theme?.Name);
 
@@ -70,19 +63,6 @@ namespace CelesteMusicPlayer
 
                 // 标签板块的子导航强调条同样重刷（阶段 5a 新增，走同一个取色入口）
                 ReapplyTagPanelAccent();
-
-                // ---- 4) 令牌测试皮肤：主题文件就是它的全部配色来源 ----
-                // 先让取色缓存失效（里面存的是旧主题对象），再重建系统刷子覆盖字典。
-                // 只动颜色不重跑 ApplyUiStyleMode——模式没变，没必要整树重排。
-                try
-                {
-                    if (IsTokenSkinActive())
-                    {
-                        InvalidateTokenColorCache();
-                        RefreshTokenSkinIfActive();
-                    }
-                }
-                catch (Exception ex) { StartupLog.WriteException("ApplyCelesteThemeAsync.tokenSkin", ex); }
 
                 await Task.CompletedTask;
             }
@@ -137,8 +117,6 @@ namespace CelesteMusicPlayer
         /// 当前生效主题：优先用户选定的主题文件，否则用内置默认。
         /// ⚠ MainWindow.WebHost.cs 里原本也有一份，装回时已删除，别再拷回来（CS0111 重复定义）。
         /// </summary>
-        // internal：令牌测试皮肤（MainWindow.TokenSkin.cs）的静态取色缓存也要用——
-        // 它在静态上下文里跑，拿不到实例私有成员。
         internal CelesteThemeFile? LoadCelesteActiveTheme()
         {
             string? name = null;
@@ -193,6 +171,61 @@ namespace CelesteMusicPlayer
                 }
             }
             catch (Exception ex) { StartupLog.WriteException("RefreshDetailPagesForTheme", ex); }
+        }
+
+        // ---- 主题色解析（2026-10-18 从已删除的 MainWindow.TokenSkin.cs 迁出）----
+        // 这套方法不属于「测试皮肤」：它是「设置页主题色」与「主题文件自带 Accent.Solid」
+        // 两条链的唯一真相源，设置页「快速调整当前主题」的色块回填直接问它，必须保留。
+
+        /// <summary>
+        /// 当前生效的主题色（"#RRGGBB"）。Custom=设置里的自定义色；跟随系统=主题文件
+        /// Accent.Solid（Light 优先回落 Dark），文件没写则当前系统主题色。
+        /// </summary>
+        internal static string ResolveEffectiveAccentHex(CelesteThemeFile? theme)
+        {
+            var settings = AppSettingsStore.Load();
+            if (settings.AccentSource == "Custom")
+            {
+                return string.IsNullOrWhiteSpace(settings.CustomAccentColor)
+                    ? "#0078D4"
+                    : settings.CustomAccentColor;
+            }
+
+            if (TryGetThemeAccentHex(theme, out string fromFile))
+            {
+                return fromFile;
+            }
+
+            return SystemAccentHex();
+        }
+
+        /// <summary>读主题文件自带的 Accent.Solid（Light 优先回落 Dark）。没写/为空返回 false。</summary>
+        private static bool TryGetThemeAccentHex(CelesteThemeFile? theme, out string hex)
+        {
+            if (theme != null)
+            {
+                if (theme.Light.TryGetValue(CelesteTokenCatalog.AccentSolid, out var light)
+                    && !string.IsNullOrWhiteSpace(light))
+                {
+                    hex = light.Trim();
+                    return true;
+                }
+                if (theme.Dark.TryGetValue(CelesteTokenCatalog.AccentSolid, out var dark)
+                    && !string.IsNullOrWhiteSpace(dark))
+                {
+                    hex = dark.Trim();
+                    return true;
+                }
+            }
+            hex = "";
+            return false;
+        }
+
+        /// <summary>系统主题色 → "#RRGGBB"。只有「跟随系统」且主题文件没写强调色时才走到。</summary>
+        private static string SystemAccentHex()
+        {
+            var c = ThemeColorService.CurrentAccent;
+            return string.Concat("#", c.R.ToString("X2"), c.G.ToString("X2"), c.B.ToString("X2"));
         }
     }
 }
