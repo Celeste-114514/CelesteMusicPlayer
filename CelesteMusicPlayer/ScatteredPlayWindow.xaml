@@ -1,0 +1,709 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="CelesteMusicPlayer.ScatteredPlayWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    mc:Ignorable="d"
+    Title="CelesteMusicPlayer">
+
+    <!--
+        零散播放窗口（2026-10-18 用户定案；10-18 深夜重构为自持引擎独立播放器）。
+
+        定位 = 主程序「播放信息页面」的独立克隆，但**完全不依附主程序**：
+        自己的音频引擎（FFmpeg 解码 + 与主程序同一套 DSP 底层，共享设置自动继承）、
+        自己的纯内存队列、自己的歌词 / 可视化 / 十段均衡器。
+        冷启动（双击文件、主程序没在跑）时主窗口都不建，曲库更不会读。
+
+        背景四态（设置项 ScatteredPlayBackground，左上角按钮循环切换）：
+          Cover = 当前专辑封面铺满 + 65% 黑纱（深色底，文字永远可读 —— 用户拍板：
+                 浅色封面上不能出现白底看不见控件的情况，参考迷你播放器的深色底座结论）
+          Dark  = 深色主题纯色底
+          Light = 浅色主题纯色底
+          Frosted = 毛玻璃：65% 深色纱 + 透出 DesktopAcrylic 背板（深色主题保白字可读）
+
+        窗口 chrome（2026-10-18 用户拍板；10-19 圆角改 DWM）：系统标题栏已去
+        （OverlappedPresenter SetBorderAndTitleBar(false,false) + 标题栏折叠成 0 高、
+        图标/系统菜单隐藏），外加原生层收尾（Chrome.cs：剥 WS_THICKFRAME/WS_CAPTION/
+        WS_BORDER 等窗口样式、子类化吞 WM_NCCALCSIZE/WM_NCPAINT、圆角归 DWM
+        DWMWCP_ROUND 8px@96dpi 带抗锯齿）—— 否则系统那圈 1px 白描边还在（用户实测
+        「外面有一圈白线框」；圆角是用户随后拍板「要圆角的」，旧版 20dp 裁剪区圆弧有
+        像素锯齿，10-19 改成 DWM 圆角，与迷你播放器同一刀）。
+        最小化/关闭用顶栏自绘按钮（E921 / E8BB，无最大化），窗口固定 540×740 不可缩放；
+        移动窗口 = 按住空白处拖（RootGrid 指针处理，按钮/滑条/列表豁免；鼠标走
+        「系统移动循环」——冒充标题栏按下让系统接管拖动，比手动跟踪稳；
+        另挂了一个只记日志的按下探针 DragProbe，排查拖动类问题用）。
+
+        进度条 / 音量条 / EQ 滑条一律白色（用户拍板）：全局素条模板的轨道/填充/圆头
+        走 TemplateBinding Background/Foreground，元素上设本地值即可压过主题资源，
+        浅色背景下也保持白条（浅色底下白条接近不可见是「一律白色」的既定取舍）。
+
+        队列 / EQ 面板都是「原地视图」：打开时主体区（封面/可视化/歌词）整块让位，
+        面板占主体那一行，进度条/传输行不被盖（固定窗口大小下最稳，用户拍板）；
+        开启动画 = 上移 24px + 淡入，代码建 Storyboard（SetTarget 锁死目标，延帧 Begin）。
+
+        图标字形只取程序里已在用的：E8BB 关 / E921 最小化 / E9D9 均衡器(EQ) /
+        E958 封面占位 / E8FD 顺序 / E8B1 随机 / E8EE 列表循环 / E8ED 单曲循环 /
+        E72A 单曲播放 / E892 上一首 / E768 播放 / E769 暂停 / E893 下一首 /
+        EA37 队列 / E710 打开文件 / E767 音量。
+    -->
+    <Grid
+        x:Name="RootGrid"
+        Background="Transparent"
+        PointerPressed="RootGrid_PointerPressed"
+        PointerMoved="RootGrid_PointerMoved"
+        PointerReleased="RootGrid_PointerReleased"
+        PointerCaptureLost="RootGrid_PointerCaptureLost"
+        AllowDrop="True"
+        DragOver="RootGrid_DragOver"
+        Drop="RootGrid_Drop">
+
+        <!-- 背景层 1：专辑封面铺满（Cover 态显示） -->
+        <Image
+            x:Name="BackgroundCoverImage"
+            Stretch="UniformToFill"
+            Opacity="0"
+            IsHitTestVisible="False" />
+
+        <!-- 背景层 2：压暗纱罩（Cover 态显示；深色主题下 65% 黑） -->
+        <Rectangle
+            x:Name="BackgroundScrim"
+            Opacity="0"
+            IsHitTestVisible="False" />
+
+        <!-- 内容层 -->
+        <Grid x:Name="ContentGrid" Padding="20,8,20,16">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- ============ 顶栏：背景模式切换 + 设置 + EQ + 最小化 + 关闭（整行是拖动区） ============ -->
+            <!-- 2026-10-19 用户报「没有区域可以鼠标点击拖动位置」：
+                 ① 这一行现在有名字、有透明背景（保证参与命中测试）并单独挂了拖动事件，
+                    中间那根把手条是给眼睛看的提示——按住它（或顶栏任何空白处）就能拖窗；
+                 ② 鼠标拖动改回迷你播放器那套「手动跟踪位置」（10-18 深夜换成的
+                    SendMessage 冒充标题栏那版在本窗口实测拖不动，已弃）。 -->
+            <Grid
+                x:Name="DragBar"
+                Grid.Row="0"
+                Height="40"
+                Background="Transparent"
+                PointerPressed="DragBar_PointerPressed"
+                PointerMoved="DragBar_PointerMoved"
+                PointerReleased="DragBar_PointerReleased"
+                PointerCaptureLost="DragBar_PointerCaptureLost">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 打开文件位置：文件夹图标按钮（2026-10-19 用户要求放左上角，
+                     原「设置」菜单里的三项拆开：这项单独成按钮，倍速进主界面，文件属性删掉） -->
+                <Button
+                    x:Name="OpenLocationButton"
+                    Grid.Column="0"
+                    Width="38"
+                    Height="38"
+                    Padding="0"
+                    CornerRadius="19"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="OpenLocationButton_Click"
+                    ToolTipService.ToolTip="打开文件位置">
+                    <FontIcon Glyph="&#xE8DA;" FontSize="15" />
+                </Button>
+
+                <Button
+                    x:Name="BackgroundModeButton"
+                    Grid.Column="1"
+                    Height="30"
+                    Margin="6,0,0,0"
+                    Padding="10,0,10,0"
+                    CornerRadius="15"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    FontSize="12"
+                    Click="BackgroundModeButton_Click"
+                    ToolTipService.ToolTip="切换背景：封面 / 深色 / 浅色 / 毛玻璃">
+                    <TextBlock x:Name="BackgroundModeText" Text="背景：封面" VerticalAlignment="Center" />
+                </Button>
+
+                <!-- 倍速：直接放主界面（原来藏在「设置」菜单里），点开选档位 -->
+                <Button
+                    x:Name="RateButton"
+                    Grid.Column="2"
+                    Height="30"
+                    Margin="6,0,0,0"
+                    Padding="10,0,10,0"
+                    CornerRadius="15"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    FontSize="12"
+                    Click="RateButton_Click"
+                    ToolTipService.ToolTip="倍速播放">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <FontIcon Glyph="&#xE893;" FontSize="12" />
+                        <TextBlock x:Name="RateButtonText" Text="1x" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Button>
+
+                <!-- 拖动把手（纯提示，无交互）：告诉用户这一条可以按着拖窗口 -->
+                <Border
+                    Grid.Column="3"
+                    Width="44"
+                    Height="4"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center"
+                    CornerRadius="2"
+                    Background="#40FFFFFF"
+                    IsHitTestVisible="False" />
+
+                <!-- 十段均衡器（图标 10-19 换成文字"EQ"：原来那个波形图标跟主程序
+                     音频链路面板撞了，用户看着分不清；字形也容易显示成方块） -->
+                <Button
+                    x:Name="EqButton"
+                    Grid.Column="4"
+                    Width="38"
+                    Height="38"
+                    Padding="0"
+                    CornerRadius="19"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="EqButton_Click"
+                    ToolTipService.ToolTip="十段均衡器">
+                    <TextBlock Text="EQ" FontSize="13" FontWeight="SemiBold" />
+                </Button>
+
+                <!-- 自绘最小化（系统标题栏已去；无最大化，窗口大小固定） -->
+                <Button
+                    x:Name="MinimizeButton"
+                    Grid.Column="5"
+                    Width="32"
+                    Height="32"
+                    Margin="4,0,0,0"
+                    Padding="0"
+                    CornerRadius="16"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="MinimizeButton_Click"
+                    ToolTipService.ToolTip="最小化">
+                    <FontIcon Glyph="&#xE921;" FontSize="14" />
+                </Button>
+
+                <Button
+                    x:Name="CloseButton"
+                    Grid.Column="6"
+                    Width="32"
+                    Height="32"
+                    Margin="4,0,0,0"
+                    Padding="0"
+                    CornerRadius="16"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="CloseButton_Click"
+                    ToolTipService.ToolTip="关闭零散播放窗口">
+                    <FontIcon Glyph="&#xE8BB;" FontSize="14" />
+                </Button>
+            </Grid>
+
+            <!-- ============ 主体：封面 + 歌曲信息 + 可视化 + 歌词（队列/EQ 打开时整块让位） ============ -->
+            <Grid x:Name="MainContentGrid" Grid.Row="1">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+
+                <StackPanel
+                    Grid.Row="0"
+                    Orientation="Vertical"
+                    Spacing="10"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Top">
+
+                    <Border
+                        x:Name="CoverBorder"
+                        Width="200"
+                        Height="200"
+                        CornerRadius="12"
+                        BorderThickness="1"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        Background="{ThemeResource SubtleFillColorSecondaryBrush}">
+                        <Grid>
+                            <FontIcon
+                                Glyph="&#xE958;"
+                                FontSize="64"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                Opacity="0.55" />
+                            <Image
+                                x:Name="CoverImage"
+                                Stretch="Uniform"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center" />
+                        </Grid>
+                    </Border>
+
+                    <TextBlock
+                        x:Name="TitleText"
+                        FontSize="21"
+                        FontWeight="SemiBold"
+                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                        TextAlignment="Center"
+                        TextWrapping="WrapWholeWords"
+                        MaxWidth="460"
+                        MaxHeight="60"
+                        Text="未在播放" />
+
+                    <TextBlock
+                        x:Name="ArtistAlbumText"
+                        FontSize="13"
+                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                        TextAlignment="Center"
+                        TextWrapping="WrapWholeWords"
+                        MaxWidth="460"
+                        Text="未知艺术家 · 未知专辑" />
+
+                    <TextBlock
+                        x:Name="AudioInfoText"
+                        FontSize="10.5"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        TextAlignment="Center"
+                        TextWrapping="WrapWholeWords"
+                        MaxWidth="460"
+                        Visibility="Collapsed" />
+                </StackPanel>
+
+                <!-- 可视化：40 段频谱柱 + 峰值帽（与主程序同款数据源：引擎真 FFT） -->
+                <Canvas
+                    x:Name="VisualizerCanvas"
+                    Grid.Row="1"
+                    Height="56"
+                    Margin="0,12,0,0"
+                    IsHitTestVisible="False" />
+
+                <!-- 歌词：当前行高亮 + 逐行居中滚动 -->
+                <ScrollViewer
+                    x:Name="LyricsScroll"
+                    Grid.Row="2"
+                    Margin="0,10,0,0"
+                    VerticalScrollBarVisibility="Auto"
+                    HorizontalScrollBarVisibility="Disabled">
+                    <StackPanel x:Name="LyricsPanel" Spacing="6" Padding="0,6,0,6" />
+                </ScrollViewer>
+            </Grid>
+
+            <!-- ============ 队列面板（原地视图：占主体行，不盖进度/传输行） ============ -->
+            <Border
+                x:Name="QueuePanel"
+                Grid.Row="1"
+                Padding="12,8,12,12"
+                Visibility="Collapsed"
+                Background="{ThemeResource ApplicationPageBackgroundThemeBrush}"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="QueuePanelTransform" />
+                </Border.RenderTransform>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                    </Grid.RowDefinitions>
+
+                    <Grid Grid.Row="0" Margin="0,0,0,6">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            x:Name="QueueTitleText"
+                            FontSize="13"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                            VerticalAlignment="Center"
+                            Text="播放队列（0）" />
+                        <Button
+                            x:Name="QueueCloseButton"
+                            Grid.Column="1"
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            CornerRadius="14"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="QueueCloseButton_Click">
+                            <FontIcon Glyph="&#xE8BB;" FontSize="11" />
+                        </Button>
+                    </Grid>
+
+                    <ListView
+                        x:Name="QueueList"
+                        Grid.Row="1"
+                        SelectionMode="Single"
+                        SelectionChanged="QueueList_SelectionChanged">
+                        <ListView.ItemTemplate>
+                            <DataTemplate>
+                                <Grid ColumnSpacing="8" Padding="0,3,0,3">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock
+                                        Grid.Column="0"
+                                        FontSize="12.5"
+                                        Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                                        TextTrimming="CharacterEllipsis"
+                                        Text="{Binding Title}" />
+                                    <TextBlock
+                                        Grid.Column="1"
+                                        FontSize="11"
+                                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                                        Text="{Binding Artist}" />
+                                </Grid>
+                            </DataTemplate>
+                        </ListView.ItemTemplate>
+                    </ListView>
+                </Grid>
+            </Border>
+
+            <!-- ============ EQ 面板（原地视图：占主体行顶部；十段均衡器） ============ -->
+            <Border
+                x:Name="EqPanel"
+                Grid.Row="1"
+                VerticalAlignment="Top"
+                Height="272"
+                Padding="16,10,16,12"
+                Visibility="Collapsed"
+                BorderThickness="0,1,0,0"
+                BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+                <Border.RenderTransform>
+                    <TranslateTransform x:Name="EqPanelTransform" />
+                </Border.RenderTransform>
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="*" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+
+                    <!-- 标题行：十段均衡器 + 全部归零 + 关闭 -->
+                    <Grid Grid.Row="0" Margin="0,0,0,8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock
+                            FontSize="13"
+                            FontWeight="SemiBold"
+                            Foreground="{ThemeResource TextFillColorPrimaryBrush}"
+                            VerticalAlignment="Center"
+                            Text="十段均衡器" />
+                        <Button
+                            x:Name="EqResetButton"
+                            Grid.Column="2"
+                            Height="26"
+                            Margin="0,0,8,0"
+                            Padding="10,0,10,0"
+                            CornerRadius="13"
+                            Background="Transparent"
+                            BorderThickness="1"
+                            FontSize="11"
+                            Click="EqResetButton_Click"
+                            ToolTipService.ToolTip="十段全部回到 0dB">
+                            <TextBlock Text="全部归零" VerticalAlignment="Center" />
+                        </Button>
+                        <Button
+                            x:Name="EqCloseButton"
+                            Grid.Column="3"
+                            Width="28"
+                            Height="28"
+                            Padding="0"
+                            CornerRadius="14"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Click="EqCloseButton_Click">
+                            <FontIcon Glyph="&#xE8BB;" FontSize="11" />
+                        </Button>
+                    </Grid>
+
+                    <!-- 十段竖滑条：值文本 + 滑条 + 频率标签（Tag = 段索引 0..9；一律白色） -->
+                    <Grid Grid.Row="1" ColumnSpacing="2">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0" Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock x:Name="EqBand0Value" Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="0.0" />
+                            <Slider x:Name="EqBand0Slider" Orientation="Vertical" Width="32" Height="120" HorizontalAlignment="Center" Minimum="-15" Maximum="15" Value="0" SmallChange="0.5" Tag="0" ValueChanged="EqBandSlider_ValueChanged" Background="#38FFFFFF" Foreground="#FFFFFF" />
+                            <TextBlock Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="31" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="1" Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock x:Name="EqBand1Value" Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="0.0" />
+                            <Slider x:Name="EqBand1Slider" Orientation="Vertical" Width="32" Height="120" HorizontalAlignment="Center" Minimum="-15" Maximum="15" Value="0" SmallChange="0.5" Tag="1" ValueChanged="EqBandSlider_ValueChanged" Background="#38FFFFFF" Foreground="#FFFFFF" />
+                            <TextBlock Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="62" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2" Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock x:Name="EqBand2Value" Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="0.0" />
+                            <Slider x:Name="EqBand2Slider" Orientation="Vertical" Width="32" Height="120" HorizontalAlignment="Center" Minimum="-15" Maximum="15" Value="0" SmallChange="0.5" Tag="2" ValueChanged="EqBandSlider_ValueChanged" Background="#38FFFFFF" Foreground="#FFFFFF" />
+                            <TextBlock Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="125" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="3" Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock x:Name="EqBand3Value" Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="0.0" />
+                            <Slider x:Name="EqBand3Slider" Orientation="Vertical" Width="32" Height="120" HorizontalAlignment="Center" Minimum="-15" Maximum="15" Value="0" SmallChange="0.5" Tag="3" ValueChanged="EqBandSlider_ValueChanged" Background="#38FFFFFF" Foreground="#FFFFFF" />
+                            <TextBlock Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="250" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="4" Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock x:Name="EqBand4Value" Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="0.0" />
+                            <Slider x:Name="EqBand4Slider" Orientation="Vertical" Width="32" Height="120" HorizontalAlignment="Center" Minimum="-15" Maximum="15" Value="0" SmallChange="0.5" Tag="4" ValueChanged="EqBandSlider_ValueChanged" Background="#38FFFFFF" Foreground="#FFFFFF" />
+                            <TextBlock Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="500" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="5" Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock x:Name="EqBand5Value" Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="0.0" />
+                            <Slider x:Name="EqBand5Slider" Orientation="Vertical" Width="32" Height="120" HorizontalAlignment="Center" Minimum="-15" Maximum="15" Value="0" SmallChange="0.5" Tag="5" ValueChanged="EqBandSlider_ValueChanged" Background="#38FFFFFF" Foreground="#FFFFFF" />
+                            <TextBlock Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="1K" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="6" Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock x:Name="EqBand6Value" Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="0.0" />
+                            <Slider x:Name="EqBand6Slider" Orientation="Vertical" Width="32" Height="120" HorizontalAlignment="Center" Minimum="-15" Maximum="15" Value="0" SmallChange="0.5" Tag="6" ValueChanged="EqBandSlider_ValueChanged" Background="#38FFFFFF" Foreground="#FFFFFF" />
+                            <TextBlock Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="2K" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="7" Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock x:Name="EqBand7Value" Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="0.0" />
+                            <Slider x:Name="EqBand7Slider" Orientation="Vertical" Width="32" Height="120" HorizontalAlignment="Center" Minimum="-15" Maximum="15" Value="0" SmallChange="0.5" Tag="7" ValueChanged="EqBandSlider_ValueChanged" Background="#38FFFFFF" Foreground="#FFFFFF" />
+                            <TextBlock Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="4K" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="8" Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock x:Name="EqBand8Value" Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="0.0" />
+                            <Slider x:Name="EqBand8Slider" Orientation="Vertical" Width="32" Height="120" HorizontalAlignment="Center" Minimum="-15" Maximum="15" Value="0" SmallChange="0.5" Tag="8" ValueChanged="EqBandSlider_ValueChanged" Background="#38FFFFFF" Foreground="#FFFFFF" />
+                            <TextBlock Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="8K" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="9" Spacing="4" HorizontalAlignment="Center">
+                            <TextBlock x:Name="EqBand9Value" Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorSecondaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="0.0" />
+                            <Slider x:Name="EqBand9Slider" Orientation="Vertical" Width="32" Height="120" HorizontalAlignment="Center" Minimum="-15" Maximum="15" Value="0" SmallChange="0.5" Tag="9" ValueChanged="EqBandSlider_ValueChanged" Background="#38FFFFFF" Foreground="#FFFFFF" />
+                            <TextBlock Height="14" FontSize="10" Foreground="{ThemeResource TextFillColorTertiaryBrush}" TextAlignment="Center" VerticalAlignment="Center" Text="16K" />
+                        </StackPanel>
+                    </Grid>
+
+                    <!-- 说明 -->
+                    <TextBlock
+                        Grid.Row="2"
+                        Margin="0,8,0,0"
+                        FontSize="10.5"
+                        Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                        TextWrapping="WrapWholeWords"
+                        Text="每段 ±15dB（向上为增强）。这里改的是与主程序同一条 EQ；31 段精调 / 压缩 / 声场等请到主程序「音频设置」里调，零散窗口自动生效。" />
+                </Grid>
+            </Border>
+
+            <!-- ============ 进度行：当前时间 / 素条 / 总时长（一律白色） ============ -->
+            <Grid Grid.Row="2" Margin="0,10,0,0" ColumnSpacing="10">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <TextBlock
+                    x:Name="CurrentTimeText"
+                    Grid.Column="0"
+                    FontSize="11"
+                    Foreground="#FFFFFF"
+                    VerticalAlignment="Center"
+                    Text="00:00" />
+
+                <Slider
+                    x:Name="ProgressSlider"
+                    Grid.Column="1"
+                    VerticalAlignment="Center"
+                    Minimum="0"
+                    Maximum="100"
+                    Value="0"
+                    Background="#38FFFFFF"
+                    Foreground="#FFFFFF"
+                    ValueChanged="ProgressSlider_ValueChanged" />
+
+                <TextBlock
+                    x:Name="TotalTimeText"
+                    Grid.Column="2"
+                    FontSize="11"
+                    Foreground="#FFFFFF"
+                    VerticalAlignment="Center"
+                    Text="00:00" />
+            </Grid>
+
+            <!-- ============ 音量 + 传输按钮行（音量条一律白色） ============ -->
+            <Grid Grid.Row="3" Margin="0,6,0,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+
+                <!-- 音量条（常驻主界面；口径同主程序：共享=数字音量，独占/ASIO 未开软体积时钉 100） -->
+                <StackPanel
+                    Grid.Column="0"
+                    Orientation="Horizontal"
+                    Spacing="6"
+                    VerticalAlignment="Center">
+                    <FontIcon
+                        x:Name="VolumeIcon"
+                        Glyph="&#xE767;"
+                        FontSize="14"
+                        Foreground="#FFFFFF"
+                        VerticalAlignment="Center" />
+                    <Slider
+                        x:Name="VolumeSlider"
+                        Width="110"
+                        VerticalAlignment="Center"
+                        Minimum="0"
+                        Maximum="100"
+                        Value="100"
+                        SmallChange="1"
+                        Background="#38FFFFFF"
+                        Foreground="#FFFFFF"
+                        ValueChanged="VolumeSlider_ValueChanged" />
+                    <TextBlock
+                        x:Name="VolumeValueText"
+                        Width="26"
+                        FontSize="10.5"
+                        Foreground="#FFFFFF"
+                        VerticalAlignment="Center"
+                        TextAlignment="Right"
+                        Text="100" />
+                </StackPanel>
+
+                <!-- 传输按钮排 -->
+                <Grid Grid.Column="2" HorizontalAlignment="Center" ColumnSpacing="6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+
+                    <Button
+                        x:Name="PlaybackOrderButton"
+                        Grid.Column="0"
+                        Width="38"
+                        Height="38"
+                        Padding="0"
+                        CornerRadius="19"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="PlaybackOrderButton_Click"
+                        ToolTipService.ToolTip="播放顺序（点击切换）">
+                        <FontIcon x:Name="PlaybackOrderIcon" Glyph="&#xE8EE;" FontSize="15" />
+                    </Button>
+
+                    <Button
+                        x:Name="PreviousButton"
+                        Grid.Column="1"
+                        Width="38"
+                        Height="38"
+                        Padding="0"
+                        CornerRadius="19"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="PreviousButton_Click"
+                        ToolTipService.ToolTip="上一首">
+                        <FontIcon Glyph="&#xE892;" FontSize="16" />
+                    </Button>
+
+                    <Button
+                        x:Name="PlayPauseButton"
+                        Grid.Column="2"
+                        Width="48"
+                        Height="48"
+                        Margin="4,0,4,0"
+                        Padding="0"
+                        CornerRadius="24"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="PlayPauseButton_Click"
+                        ToolTipService.ToolTip="播放 / 暂停">
+                        <FontIcon x:Name="PlayPauseIcon" Glyph="&#xE768;" FontSize="20" />
+                    </Button>
+
+                    <Button
+                        x:Name="NextButton"
+                        Grid.Column="3"
+                        Width="38"
+                        Height="38"
+                        Padding="0"
+                        CornerRadius="19"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="NextButton_Click"
+                        ToolTipService.ToolTip="下一首">
+                        <FontIcon Glyph="&#xE893;" FontSize="16" />
+                    </Button>
+
+                    <Button
+                        x:Name="OpenFilesButton"
+                        Grid.Column="4"
+                        Width="38"
+                        Height="38"
+                        Padding="0"
+                        CornerRadius="19"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="OpenFilesButton_Click"
+                        ToolTipService.ToolTip="打开文件（加入零散队列，不入音乐库）">
+                        <FontIcon Glyph="&#xE710;" FontSize="16" />
+                    </Button>
+
+                    <Button
+                        x:Name="QueueButton"
+                        Grid.Column="5"
+                        Width="38"
+                        Height="38"
+                        Padding="0"
+                        CornerRadius="19"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Click="QueueButton_Click"
+                        ToolTipService.ToolTip="播放队列">
+                        <FontIcon Glyph="&#xEA37;" FontSize="16" />
+                    </Button>
+                </Grid>
+            </Grid>
+
+            <!-- ============ 底栏：状态 / 拖放提示 ============ -->
+            <TextBlock
+                x:Name="StatusText"
+                Grid.Row="4"
+                Margin="0,10,0,0"
+                FontSize="11"
+                Foreground="{ThemeResource TextFillColorTertiaryBrush}"
+                TextAlignment="Center"
+                TextWrapping="WrapWholeWords"
+                Text="把音频文件拖到这里即可加入队列 · 双击关联文件也会进到这里 · 本队列只在内存里，不写音乐库" />
+        </Grid>
+    </Grid>
+</Window>

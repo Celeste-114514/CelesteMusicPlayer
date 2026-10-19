@@ -18,14 +18,12 @@ using System.Threading.Tasks;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
-using System.Linq;
 using System.Net.Http;
 using System.Text.Json;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
-using System.Threading.Tasks;
 using System.Threading;
 // TagLibSharp：包名 TagLibSharp，命名空间 TagLib
 using TagLib;
