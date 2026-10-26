@@ -308,6 +308,115 @@
     return [geometry, items];
   }
 
+  // —— 背景 ——
+  const BG_MODES = [
+    ['solid', '纯色（跟随外壳色）'],
+    ['gradient', '三色渐变'],
+    ['cover', '当前专辑封面'],
+    ['image', '我选的图片']
+  ];
+
+  function backgroundCard() {
+    const values = (data[editing] || data.light || {}).values || {};
+    const current = values['bg-mode'] || 'solid';
+
+    const card = section({
+      title: '背景',
+      tag: '图片会被拷一份',
+      note: '纯色就是默认那样。渐变用下面三个色。封面跟着当前播放的专辑换。图片会拷进程序自己的目录再显示，网页不直接读你原始的文件路径。视频背景还没做。'
+    });
+
+    // 类型
+    const modeRow = node('div', undefined, 'set-row');
+    const modeMain = node('div', undefined, 'set-row-main');
+    modeMain.append(node('div', '背景类型', 'set-label'));
+    modeRow.append(modeMain);
+    const modeHolder = node('div', undefined, 'set-control');
+    const modeSelect = node('select');
+    BG_MODES.forEach(([value, label]) => modeSelect.append(new Option(label, value)));
+    modeSelect.value = current;
+    modeSelect.addEventListener('change', async () => {
+      try {
+        data = await request('background', { mode: modeSelect.value });
+        paint();
+        if (modeSelect.value === 'image') {
+          // 选了"图片"但还没选过文件 —— 直接开文件选择框，省掉"选完类型再找按钮"这一步
+          if (!values['bg-image'] || values['bg-image'] === 'none') await pickImage();
+          else render();
+        } else {
+          status('背景已切换。', 'ok');
+          render();
+        }
+      } catch (error) { status('切换背景失败：' + error.message, 'err'); }
+    });
+    modeHolder.append(modeSelect);
+    modeRow.append(modeHolder);
+    card.append(modeRow);
+
+    // 图片相关操作
+    const fileRow = node('div', undefined, 'set-row');
+    const fileMain = node('div', undefined, 'set-row-main');
+    fileMain.append(node('div', '选择图片', 'set-label'),
+      node('div', 'jpg / png / bmp / webp。只保留最近一张，旧的会被删掉。', 'set-note'));
+    fileRow.append(fileMain);
+    const fileHolder = node('div', undefined, 'set-control');
+    const actions = node('div', undefined, 'player-button-actions');
+    actions.append(button('选择图片…', () => pickImage()));
+    if (values['bg-image'] && values['bg-image'] !== 'none') {
+      actions.append(button('去掉背景', async () => {
+        data = await request('clearBackground');
+        paint();
+        render();
+        status('已回到纯色背景。', 'ok');
+      }, 'set-mini danger'));
+    }
+    fileHolder.append(actions);
+    fileRow.append(fileHolder);
+    card.append(fileRow);
+
+    // 适配 / 位置：只对图片和封面有意义
+    [['bg-fit', '适配方式', [['cover', '铺满（裁边）'], ['contain', '完整显示（留边）']]],
+     ['bg-pos', '对齐位置', [['center', '居中'], ['top', '顶部对齐'], ['bottom', '底部对齐']]]]
+      .forEach(([id, label, options]) => {
+        const row = node('div', undefined, 'set-row');
+        const main = node('div', undefined, 'set-row-main');
+        main.append(node('div', label, 'set-label'));
+        row.append(main);
+        const holder = node('div', undefined, 'set-control');
+        const select = node('select');
+        options.forEach(([value, text]) => select.append(new Option(text, value)));
+        select.value = values[id] || options[0][0];
+        select.addEventListener('change', async () => {
+          try {
+            data = await request('background', { [id === 'bg-fit' ? 'fit' : 'pos']: select.value });
+            paint();
+            status('背景已更新。', 'ok');
+          } catch (error) { status('改背景失败：' + error.message, 'err'); }
+        });
+        holder.append(select);
+        row.append(holder);
+        card.append(row);
+      });
+
+    // 三个渐变色
+    ['bg-grad-1', 'bg-grad-2', 'bg-grad-3'].forEach((id, index) => {
+      card.append(colorRow({ id, label: '渐变第 ' + (index + 1) + ' 色' }));
+    });
+
+    // 模糊 / 亮度 / 遮罩
+    (data.numbers || []).filter(item => /^bg-/.test(item.id || '')).forEach(item => card.append(numberRow(item)));
+    return card;
+
+    async function pickImage() {
+      try {
+        data = await request('pickBackground');
+        paint();
+        render();
+        status('背景图片已更新。', 'ok');
+      } catch (error) { status('选图片失败：' + error.message, 'err'); }
+    }
+  }
+
   // —— 字体与排版 ——
   // 字体是「这台机器装了什么」的问题，选完立刻存，不跟预设走（换配色不该把你挑的字体换掉）；
   // 字号缩放与行高属于当前这套外观，仍走「预览 → 保存」那套。
@@ -569,9 +678,12 @@
     const isStateParam = item => /^disabled-opacity$/.test(item.id || '');
     // 导航几何归「半圆导航」那张卡
     const isNavParam = item => /^nav-/.test(item.id || '');
-    (data.numbers || []).filter(item => !isPlayerParam(item) && !isTypeParam(item) && !isStateParam(item) && !isNavParam(item)).forEach(item => editor.append(numberRow(item)));
+    // 背景的模糊/亮度/遮罩归「背景」那张卡
+    const isBgParam = item => /^bg-/.test(item.id || '');
+    (data.numbers || []).filter(item => !isPlayerParam(item) && !isTypeParam(item) && !isStateParam(item) && !isNavParam(item) && !isBgParam(item)).forEach(item => editor.append(numberRow(item)));
     host.append(editor);
 
+    host.append(backgroundCard());
     navCards().forEach(card => host.append(card));
     stateCards().forEach(card => host.append(card));
 

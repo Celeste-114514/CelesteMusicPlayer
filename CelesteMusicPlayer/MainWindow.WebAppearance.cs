@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Threading.Tasks;
 
 namespace CelesteMusicPlayer
 {
@@ -16,7 +18,7 @@ namespace CelesteMusicPlayer
     /// </summary>
     public sealed partial class MainWindow
     {
-        internal object WebAppearanceAsync(JsonElement msg)
+        internal async Task<object> WebAppearanceAsync(JsonElement msg)
         {
             string operation = ReadString(msg, "operation");
             StartupLog.Write("[WebShell] theme op=" + operation);
@@ -35,6 +37,9 @@ namespace CelesteMusicPlayer
                 case "playerButtons": return SetPlayerButtons(ReadString(msg, "value"));
                 case "typography": return SetTypography(msg);
                 case "navItems": return SetNavItems(ReadString(msg, "value"));
+                case "background": return SetBackground(msg);
+                case "pickBackground": return await PickBackgroundAsync().ConfigureAwait(true);
+                case "clearBackground": return ClearBackground();
                 default: throw new ArgumentException("未知的外观操作：" + operation);
             }
         }
@@ -136,7 +141,11 @@ namespace CelesteMusicPlayer
                 new { id = "nav-size", label = "导航整体尺寸", min = 240, max = 420, step = 2, unit = "px", value = Get("nav-size") },
                 new { id = "nav-icon", label = "导航图标大小", min = 20, max = 40, step = 1, unit = "px", value = Get("nav-icon") },
                 new { id = "nav-ring-1", label = "内圈半径", min = 100, max = 200, step = 2, unit = "", value = Get("nav-ring-1") },
-                new { id = "nav-ring-2", label = "外圈半径", min = 180, max = 270, step = 2, unit = "", value = Get("nav-ring-2") }
+                new { id = "nav-ring-2", label = "外圈半径", min = 180, max = 270, step = 2, unit = "", value = Get("nav-ring-2") },
+                // 背景层：模糊/亮度/遮罩浓度
+                new { id = "bg-blur", label = "背景模糊", min = 0, max = 40, step = 1, unit = "px", value = Get("bg-blur") },
+                new { id = "bg-brightness", label = "背景亮度", min = 0.4, max = 1.4, step = 0.05, unit = "×", value = Get("bg-brightness") },
+                new { id = "bg-scrim", label = "背景遮罩", min = 0, max = 0.95, step = 0.05, unit = "×", value = Get("bg-scrim") }
             };
         }
 
@@ -244,6 +253,91 @@ namespace CelesteMusicPlayer
                 WebAppearance.SetDraft(draft);
             }
             state.navItems = normalized;
+            WebAppearance.Save(state);
+            return Snapshot();
+        }
+
+        // —— 背景层 ——
+        internal const string BackgroundAssetHost = "celeste-asset.internal";
+
+        /// <summary>
+        /// 背景图片的落盘目录。网页不能直接读用户选的路径（CSP 不许），
+        /// 所以选完先把图拷进这里，再由 WebView2 的虚拟主机映射成 https://celeste-asset.internal/xxx。
+        /// </summary>
+        internal static string BackgroundFolder
+        {
+            get
+            {
+                string folder = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "CelesteMusicPlayer", "webbg");
+                Directory.CreateDirectory(folder);
+                return folder;
+            }
+        }
+
+        /// <summary>改背景模式/适配/位置。和底栏按钮一样：立刻存，但先把草稿同步好再 Save。</summary>
+        private static object SetBackground(JsonElement msg)
+        {
+            string mode = ReadString(msg, "mode");
+            string fit = ReadString(msg, "fit");
+            string pos = ReadString(msg, "pos");
+            return SaveWithDraft(state =>
+            {
+                if (mode.Length > 0) state.backgroundMode = mode;
+                if (fit.Length > 0) state.backgroundFit = fit;
+                if (pos.Length > 0) state.backgroundPos = pos;
+            });
+        }
+
+        /// <summary>选一张本机图片当背景。拷进受控目录，只留一张（不然目录会越攒越大）。</summary>
+        private async Task<object> PickBackgroundAsync()
+        {
+            string path = await PickFileAsync(this).ConfigureAwait(true);
+            if (string.IsNullOrWhiteSpace(path)) return Snapshot();
+
+            string extension = Path.GetExtension(path).ToLowerInvariant();
+            if (!new[] { ".jpg", ".jpeg", ".png", ".bmp", ".webp" }.Contains(extension))
+                throw new ArgumentException("背景只支持 jpg / png / bmp / webp 图片。");
+
+            string folder = BackgroundFolder;
+            foreach (string old in Directory.GetFiles(folder))
+            {
+                try { File.Delete(old); } catch (IOException) { /* 上一张还被占用就留着，不影响新图 */ }
+            }
+
+            string name = "background" + extension;
+            File.Copy(path, Path.Combine(folder, name), true);
+            string url = "https://" + BackgroundAssetHost + "/" + name + "?v=" + DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
+
+            return SaveWithDraft(state =>
+            {
+                state.backgroundImage = url;
+                state.backgroundMode = "image";
+            });
+        }
+
+        private static object ClearBackground() => SaveWithDraft(state =>
+        {
+            state.backgroundMode = "solid";
+            state.backgroundImage = "";
+        });
+
+        /// <summary>
+        /// 「立刻保存」类操作的统一写法：先改草稿再 Save。
+        /// 顺序不能反 —— Save 会立刻广播修订号，外壳窗口收到就抓一次快照推给网页，
+        /// 那一刻草稿里还是旧值的话，网页会先被推回旧样子。
+        /// </summary>
+        private static object SaveWithDraft(Action<WebAppearance.State> mutate)
+        {
+            WebAppearance.State state = WebAppearance.Load();
+            mutate(state);
+            if (WebAppearance.HasDraft())
+            {
+                WebAppearance.State draft = WebAppearance.Draft();
+                mutate(draft);
+                WebAppearance.SetDraft(draft);
+            }
             WebAppearance.Save(state);
             return Snapshot();
         }

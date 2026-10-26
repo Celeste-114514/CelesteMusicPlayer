@@ -39,6 +39,19 @@
   --nav-icon:28px;
   --nav-ring-1:150;
   --nav-ring-2:238;
+  /* 背景层。bg-mode 决定画什么：solid 不画（shell 保持实心）、gradient 三色渐变、
+     cover 用当前封面、image 用用户选的图。bg-image / bg-fit / bg-pos 由宿主写。
+     bg-scrim 是压在图上的一层外壳色遮罩 —— 没有它，图片上放文字会看不清。 */
+  --bg-mode:solid;
+  --bg-image:none;
+  --bg-fit:cover;
+  --bg-pos:center;
+  --bg-blur:0px;
+  --bg-brightness:1;
+  --bg-scrim:0.55;
+  --bg-grad-1:#fbf7f8;
+  --bg-grad-2:#f7e3e8;
+  --bg-grad-3:#fffafb;
   /* 底栏（播放状态栏）自己的一支：底色跟外壳走，但可以单独不透明度/模糊/封面圆角 */
   /* 底栏底色：始终由外壳色派生（比外壳亮一点点，保留原来那层"浮起来"的感觉），
      不单独存值 —— 否则改了外壳色、底栏还留着旧值，就变成"半截没变"。 */

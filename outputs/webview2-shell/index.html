@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://celeste-cover.internal; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://celeste-cover.internal https://celeste-asset.internal; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'">
   <title>Celeste · 新界面</title>
   <link rel="stylesheet" href="shell.css">
   <link rel="stylesheet" href="theme.css">
@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="audio-chain.css">
   <script src="shell.js" defer></script>
   <script src="theme.js" defer></script>
+  <script src="background.js" defer></script>
   <script src="nav-layout.js" defer></script>
   <script src="player-layout.js" defer></script>
   <script src="appearance.js" defer></script>
@@ -93,6 +94,9 @@
   </defs></svg>
 
   <div class="shell">
+    <!-- 背景层：垫在所有内容后面。纯色模式下它什么都不画，shell 保持原来的实心底色；
+         换成渐变/封面/图片时由 background.js 给 <html> 打 data-bg，shell 才变透明。 -->
+    <div id="bg-layer" aria-hidden="true"></div>
     <header class="titlebar">
       <nav class="header-tools" aria-label="应用工具">
         <button id="chain-button" aria-label="音频链路" title="音频链路 · 信号路径" aria-expanded="false"><svg><use href="#i-chain"/></svg></button>

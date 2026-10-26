@@ -6,3 +6,18 @@
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
 .orbit-extras{display:flex;flex-wrap:wrap;justify-content:center;gap:6px;margin:-4px 0 16px}.orbit-extras button{font-size:calc(9px * var(--text-scale));padding:7px 10px;border-radius:12px;background:var(--panel-soft);color:var(--muted)}.orbit-extras button:hover,.orbit-extras button[aria-current=page]{background:var(--hover);color:var(--accent)}@media(max-height:760px){.orbit-dialog{top:20px;max-height:calc(100vh - 40px);overflow:auto}.orbit-wheel{height:340px}}
 .collection-card>.capsule{position:absolute;top:25px;left:25px}.intro{color:var(--muted)}.destination small{color:var(--muted)}.track-info small{color:var(--muted)}
+
+/* —— 背景层 ——
+   纯色模式：bg-layer 不画东西，.shell 保持原来的实心底色，等于现在的样子。
+   渐变/封面/图片：.shell 变透明，露出下面的图；内容面板仍是实心 --surface，可读性不受影响。
+   z-index：bg-layer 是 0，.shell 的直接子元素统一抬到 1 —— 否则标题栏和工作区会被图盖住。 */
+.shell{position:relative;isolation:isolate}
+#bg-layer{position:absolute;inset:0;border-radius:inherit;overflow:hidden;z-index:0;pointer-events:none}
+/* inset:-6% 是为了让模糊的边缘落在裁剪区外面，否则图边上会露出一圈透明 */
+#bg-layer::before{content:'';position:absolute;inset:-6%;background-size:var(--bg-fit);background-position:var(--bg-pos);background-repeat:no-repeat;filter:blur(var(--bg-blur)) brightness(var(--bg-brightness))}
+/* 遮罩：压在图上的一层外壳色，浓度由 --bg-scrim 控制 */
+#bg-layer::after{content:'';position:absolute;inset:0;background:var(--shell);opacity:var(--bg-scrim)}
+.shell>*:not(#bg-layer){position:relative;z-index:1}
+:root[data-bg="gradient"] #bg-layer::before{background-image:linear-gradient(160deg,var(--bg-grad-1),var(--bg-grad-2) 52%,var(--bg-grad-3))}
+:root[data-bg="image"] #bg-layer::before,:root[data-bg="cover"] #bg-layer::before{background-image:var(--bg-image)}
+:root[data-bg="gradient"] .shell,:root[data-bg="image"] .shell,:root[data-bg="cover"] .shell{background:transparent}

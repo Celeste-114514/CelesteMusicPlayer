@@ -39,6 +39,8 @@ namespace CelesteMusicPlayer
             "player-ink", "player-muted",
             // 半圆导航：轨道线色与普通项目色（悬停/选中仍走强调色 —— 那是状态，不该各存一份）
             "nav-track", "nav-ink",
+            // 背景层的三色渐变（纯色模式不用它们）
+            "bg-grad-1", "bg-grad-2", "bg-grad-3",
             "danger", "success", "warning"
         };
 
@@ -54,14 +56,16 @@ namespace CelesteMusicPlayer
             "disabled-opacity",
             // 半圆导航几何：整体尺寸、图标大小、两圈半径（后两个是 SVG viewBox 单位，
             // 跟容器一起缩放，所以改整体尺寸不会让图标圈跑偏）
-            "nav-size", "nav-icon", "nav-ring-1", "nav-ring-2"
+            "nav-size", "nav-icon", "nav-ring-1", "nav-ring-2",
+            // 背景层：模糊 / 亮度 / 遮罩浓度
+            "bg-blur", "bg-brightness", "bg-scrim"
         };
 
         /// <summary>
         /// 字符串型的排版变量（字体族名）。单独一支，不混进颜色目录：
         /// 颜色选择器会按 hex 校验，字体名不是 hex，混进去只会互相干扰。
         /// </summary>
-        internal static readonly string[] TextNames = { "font-ui", "font-cjk", "font-mono" };
+        internal static readonly string[] TextNames = { "font-ui", "font-cjk", "font-mono", "bg-mode", "bg-image", "bg-fit", "bg-pos" };
 
         internal const string DefaultFontUi = "Segoe UI";
         internal const string DefaultFontCjk = "Microsoft YaHei UI";
@@ -265,6 +269,14 @@ namespace CelesteMusicPlayer
             public string playerButtons { get; set; } = DefaultPlayerButtons;
             /// <summary>半圆导航的项目分组与顺序（个人布局偏好，不随预设切换）</summary>
             public string navItems { get; set; } = DefaultNavItems;
+            /// <summary>背景模式：solid / gradient / cover / image</summary>
+            public string backgroundMode { get; set; } = "solid";
+            /// <summary>背景图片地址（由宿主拷进受控目录后给的虚拟主机地址，不是用户原始路径）</summary>
+            public string backgroundImage { get; set; } = "";
+            /// <summary>cover / contain</summary>
+            public string backgroundFit { get; set; } = "cover";
+            /// <summary>center / top / bottom</summary>
+            public string backgroundPos { get; set; } = "center";
             /// <summary>字体族（个人偏好，不随预设切换 —— 字体是这台机器上装了什么的问题，不是配色方案的一部分）</summary>
             public string fontUi { get; set; } = DefaultFontUi;
             public string fontCjk { get; set; } = DefaultFontCjk;
@@ -425,6 +437,10 @@ namespace CelesteMusicPlayer
                 ["player-muted"] = muted,
                 ["nav-track"] = dark ? Mix(bg, line, 0.55) : Mix(surface, line, 0.85),
                 ["nav-ink"] = muted,
+                // 背景层渐变：从底色往强调色/面板色各偏一点，三色叠起来才不是一块死色
+                ["bg-grad-1"] = dark ? FromHsl(h, sat * 0.9, Math.Min(0.99, l + 0.06)) : FromHsl(h, sat * 0.55, Math.Min(0.995, l + 0.04)),
+                ["bg-grad-2"] = Mix(bg, accentValue, 0.16),
+                ["bg-grad-3"] = dark ? FromHsl(h, Math.Max(0.04, sat * 0.7), Math.Max(0.03, l - 0.03)) : Mix(surface, accentValue, 0.06),
                 ["danger"] = dark ? "#ff8a80" : "#c0454f", ["success"] = dark ? "#6fd3a8" : "#3f8f6f", ["warning"] = dark ? "#e8b962" : "#b8802a",
                 // 字体族默认值。真正生效的值由 Resolve 用人选的字体覆盖，
                 // 这里给出兜底，保证没接主题（或用户没选过）时不至于 font-family 为空
@@ -473,7 +489,11 @@ namespace CelesteMusicPlayer
                 ["nav-size"] = "300px",
                 ["nav-icon"] = "28px",
                 ["nav-ring-1"] = "150",
-                ["nav-ring-2"] = "238"
+                ["nav-ring-2"] = "238",
+                // 背景层：默认不模糊、亮度 1、遮罩 55%（图片上直接放文字会看不清）
+                ["bg-blur"] = "0px",
+                ["bg-brightness"] = "1",
+                ["bg-scrim"] = "0.55"
             };
         }
 
@@ -537,6 +557,13 @@ namespace CelesteMusicPlayer
             state.customPresets ??= new List<Preset>();
             state.playerButtons = NormalizePlayerButtons(state.playerButtons);
             state.navItems = NormalizeNavItems(state.navItems);
+            // 背景模式只认这四个；旧存档没这几项就回到"纯色"
+            if (state.backgroundMode != "gradient" && state.backgroundMode != "cover" && state.backgroundMode != "image") state.backgroundMode = "solid";
+            if (state.backgroundFit != "contain") state.backgroundFit = "cover";
+            if (state.backgroundPos != "top" && state.backgroundPos != "bottom") state.backgroundPos = "center";
+            state.backgroundImage ??= "";
+            // 选了"图片"但没有图片地址 = 等于没选，回落纯色，免得界面上"选着图片却什么都没有"
+            if (state.backgroundMode == "image" && state.backgroundImage.Length == 0) state.backgroundMode = "solid";
             // 字体名留空（旧存档没这两项）就回到默认，别让 font-family 变成空值
             if (string.IsNullOrWhiteSpace(state.fontUi)) state.fontUi = DefaultFontUi;
             if (string.IsNullOrWhiteSpace(state.fontCjk)) state.fontCjk = DefaultFontCjk;
@@ -565,6 +592,8 @@ namespace CelesteMusicPlayer
                 presetId = state.presetId, revision = state.revision,
                 playerButtons = state.playerButtons,
                 navItems = state.navItems,
+                backgroundMode = state.backgroundMode, backgroundImage = state.backgroundImage,
+                backgroundFit = state.backgroundFit, backgroundPos = state.backgroundPos,
                 fontUi = state.fontUi, fontCjk = state.fontCjk, fontMono = state.fontMono,
                 overrides = new Dictionary<string, string>(state.overrides ?? new(), StringComparer.Ordinal),
                 customPresets = (state.customPresets ?? new()).Select(p => new Preset
@@ -637,6 +666,15 @@ namespace CelesteMusicPlayer
             if (!string.IsNullOrWhiteSpace(state.fontUi)) values["font-ui"] = QuoteFamily(state.fontUi);
             if (!string.IsNullOrWhiteSpace(state.fontCjk)) values["font-cjk"] = QuoteFamily(state.fontCjk);
             if (!string.IsNullOrWhiteSpace(state.fontMono)) values["font-mono"] = QuoteFamily(state.fontMono);
+
+            // 背景层。bg-image 为空时必须显式给 none：applyCss 只覆盖不清理，
+            // 省略不写会让上一张图的地址一直挂在根元素上 —— 用户"关掉背景"却还看得见图。
+            values["bg-mode"] = string.IsNullOrWhiteSpace(state.backgroundMode) ? "solid" : state.backgroundMode;
+            values["bg-image"] = string.IsNullOrWhiteSpace(state.backgroundImage)
+                ? "none"
+                : "url(\"" + state.backgroundImage + "\")";
+            values["bg-fit"] = string.IsNullOrWhiteSpace(state.backgroundFit) ? "cover" : state.backgroundFit;
+            values["bg-pos"] = string.IsNullOrWhiteSpace(state.backgroundPos) ? "center" : state.backgroundPos;
 
             foreach (KeyValuePair<string, string> pair in state.overrides ?? new())
             {
