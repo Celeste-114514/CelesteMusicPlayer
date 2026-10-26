@@ -59,15 +59,16 @@
     return el;
   }
 
-  // 预览：把当前草稿的两套变量直接刷进根元素（不落盘）
+  // 应用：只刷当前明暗这一套，并且用 data 里刚刚拿到的 bundle。
+  // （之前先写 light 再写 dark、最后 setMode 用旧 state 覆盖，等于什么都没变 —— 就是它导致的"切换预设没反应"。）
   function paint() {
     if (!data) return;
     const theme = window.CelesteTheme;
-    if (theme) {
-      theme.preview(data.light.css);
-      theme.preview(data.dark.css);
-      theme.setMode(data.resolved === 'dark' ? 'dark' : 'light');
-    }
+    if (!theme) return;
+    const mode = data.resolved === 'dark' ? 'dark' : 'light';
+    const bundle = data[mode] || data.light;
+    if (!bundle) return;
+    theme.applyBundle(mode, bundle);
   }
 
   async function reload() {

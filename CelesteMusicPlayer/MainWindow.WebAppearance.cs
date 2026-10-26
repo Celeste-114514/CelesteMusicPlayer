@@ -19,6 +19,7 @@ namespace CelesteMusicPlayer
         internal object WebAppearanceAsync(JsonElement msg)
         {
             string operation = ReadString(msg, "operation");
+            StartupLog.Write("[WebShell] theme op=" + operation);
             switch (operation)
             {
                 case "get": return Snapshot();

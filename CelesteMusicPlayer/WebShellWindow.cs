@@ -124,6 +124,7 @@ namespace CelesteMusicPlayer
                 var light = WebAppearance.Resolve(state, WebAppearance.Light);
                 var dark = WebAppearance.Resolve(state, WebAppearance.Dark);
                 _themeRevision = WebAppearance.CurrentRevision;
+                StartupLog.Write($"[WebShell] theme sent preset={state.presetId} mode={mode} accent={state.accentSource} revision={_themeRevision}");
                 Post(new
                 {
                     kind = "celeste.theme", version = 1, revision = _themeRevision, mode,
@@ -219,7 +220,9 @@ namespace CelesteMusicPlayer
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = appSettings }); break;
                     case "theme":
                         var theme = _owner.WebAppearanceAsync(msg);
-                        Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = theme }); break;
+                        Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = theme });
+                        // 外观改完立刻回推一份快照，不等 250ms 的轮询；网页拿到的永远是刚算好的那套。
+                        SendTheme(); break;
                     case "collectionOverview":
                         var overview = await ReadOverviewAsync(msg.GetProperty("category").GetString() ?? "", msg.GetProperty("name").GetString() ?? "");
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = overview }); break;

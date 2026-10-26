@@ -15,10 +15,12 @@
 
   const state = { mode: 'light', light: null, dark: null, presetId: '', revision: 0, ready: false };
 
-  function apply(mode) {
-    const bundle = mode === 'dark' ? state.dark : state.light;
-    if (!bundle) return;
-    applyCss(bundle.css);
+  // bundle 可以外部传入：外观页改完参数后手上就有算好的一套，
+  // 不能再用 state（state 只在宿主推送时更新，会拿旧值把新值盖回去）。
+  function apply(mode, bundle) {
+    const chosen = bundle || (mode === 'dark' ? state.dark : state.light);
+    if (!chosen) return;
+    applyCss(chosen.css);
     root.dataset.theme = mode || 'light';
   }
 
@@ -44,6 +46,7 @@
     /** 取消预览：回到宿主当前已保存的那套。 */
     restore() { apply(state.mode); },
     setMode(mode) { apply(mode || state.mode); },
+    applyBundle(mode, bundle) { apply(mode || state.mode, bundle); },
     value(mode, name) {
       const bundle = (mode || state.mode) === 'dark' ? state.dark : state.light;
       return bundle && bundle.values ? bundle.values[name] : '';
