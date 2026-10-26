@@ -241,6 +241,8 @@
       metadataObserver?.observe(button);
     });
     updateSongRows();
+    // 内容换新了，给一次轻淡变，让人看出"列表换了"；只动容器，不逐行开动画
+    window.CelesteMotion?.fadeIn($('songs-list'), 'list');
   }
   $('songs-more').addEventListener('click',()=>{visibleLimit+=200;renderSongs();});
   $('songs-sort').addEventListener('change', renderSongs);

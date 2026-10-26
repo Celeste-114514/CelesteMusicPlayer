@@ -37,6 +37,7 @@
     $('artists-count').textContent=`${query?visible.length+' 位匹配 · ':''}共 ${groups.length} 位 · ${shell.getLibrary().length} 首歌曲`;
     $('artists-grid').replaceChildren();$('artists-empty').hidden=visible.length>0;$('artists-more').hidden=visible.length<=limit;
     visible.slice(0,limit).forEach(group=>{const card=node('button',undefined,'artist-card');card.dataset.artist=group.name;card.append(portrait(group),node('strong',group.name),node('small',`${group.songCount} 首歌曲 · ${group.albumCount} 张专辑`));card.addEventListener('click',()=>open(group));$('artists-grid').append(card);});
+    window.CelesteMotion?.fadeIn($('artists-grid'),'list');
   }
   function stats(target,data,loading=false){
     const years=data.yearFrom?(data.yearFrom===data.yearTo?String(data.yearFrom):`${data.yearFrom}–${data.yearTo}`):'未知';

@@ -174,6 +174,8 @@
       state.offset = total;
       state.hasMore = false;
       observer.disconnect(); pending.clear(); clearTimeout(flushTimer);
+      // 表格整块换新后给一次轻淡变；逐行动画在几千行上会拖死，所以只动表格
+      window.CelesteMotion?.fadeIn(table, 'list');
       enriched.clear(); rowEls.clear(); cellEls.clear();
       lastClicked = -1;
       renderHead();

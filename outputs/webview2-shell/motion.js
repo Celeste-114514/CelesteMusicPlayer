@@ -229,6 +229,14 @@
       { duration: duration(pressed ? 90 : 260), easing: pressed ? easings.exit : easings.enter, composite: 'add' });
   }
 
+  /** 内容换新之后的一次轻淡变：只动容器，不给每一行单独开动画（几千行会拖死）。 */
+  function fadeIn(element, category = 'list') {
+    if (!element || !canFade()) return;
+    if (state.off.has(category)) return;
+    animate(element, [{ opacity: 0.35 }, { opacity: 1 }],
+      { duration: duration(160, category), easing: easings.enter, fill: 'none' });
+  }
+
   /** 分类开关：关掉某一类，就只剩"状态变化"，不做那一类的动。 */
   function setOff(list) {
     state.off = new Set((Array.isArray(list) ? list : []).filter(id => CATEGORIES.includes(id)));
@@ -253,6 +261,7 @@
     popupEnter,
     popupExit,
     flip,
+    fadeIn,
     spring,
     press,
     /** 用户选的模式：system / full / lite / off。 */
