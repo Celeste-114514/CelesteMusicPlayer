@@ -1,0 +1,90 @@
+/* 音频链路抽屉：与原生面板同一套信息分块，只是从左侧滑出而不是右侧。
+   作用域只在本文件，避免碰到 shell/首页/DSP 的既有变量。 */
+.chain-scrim{position:fixed;inset:0;z-index:55;background:#2b2126a8;opacity:0;transition:opacity .22s ease}
+.chain-scrim.is-open{opacity:1}
+.chain-drawer{position:fixed;left:0;top:0;bottom:0;z-index:60;width:min(420px,calc(100vw - 40px));display:flex;flex-direction:column;
+  background:linear-gradient(180deg,#fffafc,#fdf6f9);border-right:1px solid #eee2e8;box-shadow:18px 0 46px -22px #4a334045;
+  transform:translateX(-100%);transition:transform .22s cubic-bezier(.20,.90,.22,1)}
+.chain-drawer.is-open{transform:none}
+.chain-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0;padding:18px 20px 14px;border-bottom:1px solid #f2e6ec}
+.chain-head h2{margin:3px 0 0;font-size:17px;font-weight:650;letter-spacing:-.2px}
+.chain-head .eyebrow{font-size:9px;letter-spacing:1.3px;color:#b295a4}
+.chain-head .icon-button{width:32px;height:32px;flex:0 0 32px}
+.chain-body{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:16px 20px 22px;scrollbar-width:thin}
+.chain-foot{flex-shrink:0;padding:12px 20px 16px;border-top:1px solid #f2e6ec}
+.chain-foot .secondary{width:100%;margin:0}
+
+.chain-stage{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.chain-stage strong{display:block;font-size:15px;font-weight:650}
+.chain-stage small{display:block;margin-top:4px;font-size:11px;color:#9d8794}
+.chain-layer-badge{flex-shrink:0;padding:4px 10px;border-radius:999px;font-size:10px;color:#8b5a72;background:#f7e7ee;white-space:nowrap}
+.chain-summary{margin:10px 0 0;font-size:12px;line-height:1.7;color:#7d6672;font-variant-numeric:tabular-nums}
+.chain-verdict{margin:8px 0 0;padding:9px 12px;border-radius:12px;font-size:11px;line-height:1.65;color:#8b5a72;background:#fdf1f5}
+.chain-verdict[data-perfect=true]{color:#3f7a55;background:#e9f4ec}
+
+.chain-section{margin-top:18px;padding-top:16px;border-top:1px solid #f3e8ee;min-width:0}
+.chain-section:first-child{margin-top:0;padding-top:0;border-top:0}
+.chain-section h3{margin:0 0 12px;font-size:12px;font-weight:650;letter-spacing:.3px;color:#5f4c58}
+.chain-section>strong{display:block;font-size:13px;font-weight:600;word-break:break-word}
+.chain-section>p{margin:6px 0 0;font-size:11px;line-height:1.7;color:#a08b97}
+
+.chain-two-col{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.chain-two-col>div{min-width:0}
+.chain-two-col small{display:block;font-size:10px;letter-spacing:.6px;color:#b295a4}
+.chain-two-col strong{display:block;margin-top:6px;font-size:13px;font-weight:600;overflow-wrap:anywhere}
+.chain-two-col p{margin:5px 0 0;font-size:10px;line-height:1.6;color:#a08b97;overflow-wrap:anywhere}
+
+.chain-levels{display:grid;gap:8px}
+.chain-level-row{display:grid;grid-template-columns:34px minmax(0,1fr);align-items:center;gap:10px}
+.chain-level-row>span{font-size:9px;color:#b09ba6;text-align:right}
+.chain-level-track{position:relative;height:12px;border-radius:6px;background:#f4e9ef;overflow:hidden}
+.chain-level-rms{position:absolute;left:0;top:0;bottom:0;border-radius:6px;background:#e8a3ba;transition:width .12s linear}
+.chain-level-peak{position:absolute;top:0;bottom:0;width:2px;background:#c94e71;transition:left .12s linear}
+.chain-level-scale{display:flex;justify-content:space-between;margin:7px 0 0;padding-left:44px;font-size:8px;color:#bdaab5}
+.chain-level-empty{font-size:11px;color:#a08b97}
+
+.chain-fields{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px}
+.chain-fields>div{min-width:0}
+.chain-fields dt,.chain-field-label{font-size:9px;letter-spacing:.6px;color:#b295a4}
+.chain-field-value{display:block;margin-top:4px;font-size:12px;font-weight:600;color:#4f3f4a;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.chain-field-note{display:block;margin-top:3px;font-size:9px;line-height:1.55;color:#ab96a2;overflow-wrap:anywhere}
+
+.chain-tags{display:flex;flex-wrap:wrap;gap:6px}
+.chain-tag{padding:4px 9px;border-radius:999px;font-size:10px;background:#f2e8ee;color:#7b6371}
+.chain-tag[data-tone=accent]{background:#eee6f8;color:#6a4f92}
+.chain-tag[data-tone=ok]{background:#e4f1e9;color:#3f7a55}
+.chain-tag[data-tone=warn]{background:#fbeadf;color:#9c6a3c}
+
+.chain-nodes,.chain-events{list-style:none;margin:0;padding:0}
+.chain-node{position:relative;display:grid;grid-template-columns:18px minmax(0,1fr);gap:10px;padding:0 0 14px}
+.chain-node::before{content:"";position:absolute;left:8px;top:14px;bottom:-2px;width:1px;background:#eee0e6}
+.chain-node:last-child{padding-bottom:0}
+.chain-node:last-child::before{display:none}
+.chain-node-dot{width:9px;height:9px;margin-top:5px;border-radius:50%;background:#dcc9d2;box-shadow:0 0 0 3px #fffafc}
+.chain-node[data-state=active] .chain-node-dot{background:var(--accent)}
+.chain-node[data-state=bypassed] .chain-node-dot{background:#e0a771}
+.chain-node[data-state=standby] .chain-node-dot{background:#c9b4c4}
+.chain-node[data-state=off] .chain-node-dot{background:#dcc9d2}
+.chain-node-head{display:flex;align-items:baseline;gap:8px;min-width:0}
+.chain-node-title{font-size:12px;font-weight:600;overflow-wrap:anywhere}
+.chain-node-state{flex-shrink:0;padding:2px 7px;border-radius:999px;font-size:9px;background:#f2e8ee;color:#7b6371}
+.chain-node[data-state=active] .chain-node-state{background:#f9e5ec;color:#b04a6d}
+.chain-node[data-state=bypassed] .chain-node-state{background:#fbeadf;color:#9c6a3c}
+.chain-node-detail{margin-top:4px;font-size:10px;color:#8a7481;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.chain-node-note{margin-top:3px;font-size:10px;line-height:1.55;color:#a08b97;overflow-wrap:anywhere}
+.chain-node-latency{margin-top:3px;font-size:9px;color:#b295a4}
+
+.chain-diag{display:grid;gap:10px}
+.chain-diag-item{padding:11px 13px;border-radius:14px;background:#fff7fa;border:1px solid #f4e5ec}
+.chain-diag-item>span{display:inline-block;margin-bottom:5px;padding:2px 7px;border-radius:5px;font-size:9px;letter-spacing:.6px;color:#8b5a72;background:#f9e8ef}
+.chain-diag-item strong{display:block;font-size:12px;font-weight:600}
+.chain-diag-item p{margin:5px 0 0;font-size:10px;line-height:1.65}
+.chain-diag-reason{color:#8a7481}
+.chain-diag-advice{color:#9c6a3c}
+
+.chain-events li{display:grid;grid-template-columns:58px minmax(0,1fr);gap:10px;padding:5px 0;font-size:11px}
+.chain-events time{color:#b295a4;font-variant-numeric:tabular-nums}
+.chain-events span{color:#6d5a66;overflow-wrap:anywhere}
+.chain-empty{padding:8px 0;font-size:11px;color:#a08b97}
+
+@media(prefers-reduced-motion:reduce){.chain-drawer,.chain-scrim,.chain-level-rms,.chain-level-peak{transition:none}}

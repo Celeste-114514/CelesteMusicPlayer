@@ -29,12 +29,15 @@
 .placeholder-page .empty-canvas{margin-top:65px}
 .corner-orbit~.main .breadcrumbs{white-space:nowrap}
 .header-actions{margin-left:auto;display:flex;align-items:center;gap:12px;-webkit-app-region:no-drag}
-.header-tools,.window-actions{display:flex;align-items:center;gap:5px;margin:0}
+/* 应用工具按钮改到标题栏左侧（最小化/最大化/关闭仍留在右边）。
+   顶部半圆导航已经移到正中，左上角这块是空的，不会再压到它。 */
+.header-tools,.window-actions{display:flex;align-items:center;gap:5px;margin:0;-webkit-app-region:no-drag}
+.header-tools{position:relative;z-index:40}
 .header-divider{width:1px;height:17px;background:#e8e0e5}
-.header-actions button{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#938995;background:transparent;padding:0;transition:color .2s,background .2s}
-.header-actions svg{width:18px;height:18px;stroke-width:1.6}
-.header-actions button:hover{color:var(--accent);background:#f6e9ee}
-.header-tools button[aria-current=page]{color:var(--accent);background:#f6e9ee}
+.header-actions button,.header-tools button{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#938995;background:transparent;padding:0;transition:color .2s,background .2s}
+.header-actions svg,.header-tools svg{width:18px;height:18px;stroke-width:1.6}
+.header-actions button:hover,.header-tools button:hover{color:var(--accent);background:#f6e9ee}
+.header-tools button[aria-current=page],.header-tools button[aria-expanded=true]{color:var(--accent);background:#f6e9ee}
 .window-actions button:last-child:hover{background:#e84865;color:white}
 .player{grid-template-columns:minmax(0,1fr) clamp(280px,38vw,460px) minmax(0,1fr);gap:20px}
 .transport{width:100%;min-width:0;justify-self:center}

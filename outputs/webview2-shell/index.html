@@ -14,6 +14,7 @@
   <link rel="stylesheet" href="collections.css">
   <link rel="stylesheet" href="navigation.css">
   <link rel="stylesheet" href="home.css">
+  <link rel="stylesheet" href="audio-chain.css">
   <script src="shell.js" defer></script>
   <script src="transport-panels.js" defer></script>
   <script src="albums.js" defer></script>
@@ -22,6 +23,7 @@
   <script src="sort-menus.js" defer></script>
   <script src="browse.js" defer></script>
   <script src="home.js" defer></script>
+  <script src="audio-chain.js" defer></script>
   <script src="track-menu.js" defer></script>
   <script src="folders.js" defer></script>
   <link rel="stylesheet" href="folders.css">
@@ -76,18 +78,20 @@
     <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 8a7 7 0 0 1 11.8-1L20 12M4 12l2.1 5a7 7 0 0 0 11.8-1"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-chain" viewBox="0 0 24 24"><path d="M10.5 13.5 13.5 10.5M8 12l-1.6 1.6a2.6 2.6 0 0 0 3.7 3.7L11.7 15.7M16 12l1.6-1.6a2.6 2.6 0 0 0-3.7-3.7L12.3 8.3"/></symbol>
     <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 10v4M7 6v12M12 3v18M17 7v10M21 10v4"/></symbol>
   </defs></svg>
 
   <div class="shell">
     <header class="titlebar">
+      <nav class="header-tools" aria-label="应用工具">
+        <button id="chain-button" aria-label="音频链路" title="音频链路 · 信号路径" aria-expanded="false"><svg><use href="#i-chain"/></svg></button>
+        <button data-page="tags" aria-label="标签" title="标签"><svg><use href="#i-tag"/></svg></button>
+        <button data-page="dsp" aria-label="音效处理" title="音效处理"><svg><use href="#i-wave"/></svg></button>
+        <button data-page="settings" aria-label="设置" title="设置"><svg><use href="#i-settings"/></svg></button>
+      </nav>
       <span id="mode-label" hidden>设计预览</span>
       <div class="header-actions">
-        <nav class="header-tools" aria-label="应用工具">
-          <button data-page="tags" aria-label="标签" title="标签"><svg><use href="#i-tag"/></svg></button>
-          <button data-page="dsp" aria-label="音效处理" title="音效处理"><svg><use href="#i-wave"/></svg></button>
-          <button data-page="settings" aria-label="设置" title="设置"><svg><use href="#i-settings"/></svg></button>
-        </nav>
         <span class="header-divider" aria-hidden="true"></span>
         <div class="window-actions" aria-label="窗口操作">
           <button data-window="minimize" aria-label="最小化" title="最小化"><svg><use href="#i-minimize"/></svg></button>
@@ -173,6 +177,28 @@
         <button id="audio-settings" class="icon-button" aria-label="音频设置" title="音频设置 · 输出 / AB 循环 / 速度 / 定时"><svg><use href="#i-settings"/></svg></button>
       </div>
     </footer>
+
+    <div id="chain-scrim" class="chain-scrim" hidden></div>
+    <aside id="chain-drawer" class="chain-drawer" hidden aria-labelledby="chain-title" role="dialog" aria-modal="true">
+      <header class="chain-head"><div><p class="eyebrow">SIGNAL PATH</p><h2 id="chain-title">信号路径</h2></div><button id="chain-close" class="icon-button" aria-label="收起音频链路" title="收起"><svg><use href="#i-close"/></svg></button></header>
+      <div class="chain-body">
+        <section class="chain-section"><div class="chain-stage"><div><strong id="chain-stage-title">—</strong><small id="chain-stage-note"></small></div><span id="chain-layers" class="chain-layer-badge" hidden></span></div>
+          <p id="chain-summary" class="chain-summary"></p>
+          <p id="chain-verdict" class="chain-verdict" hidden></p>
+        </section>
+        <section class="chain-section"><h3>实时电平</h3><div id="chain-levels" class="chain-levels"></div><div class="chain-level-scale" aria-hidden="true"><span>-60</span><span>-24</span><span>-12</span><span>-6</span><span>0 dBFS</span></div></section>
+        <section class="chain-section chain-two-col"><div><small>来源</small><strong id="chain-source-value">—</strong><p id="chain-source-note"></p></div><div><small>处理</small><strong id="chain-process-value">—</strong><p id="chain-process-note"></p></div></section>
+        <section class="chain-section"><div id="chain-fields" class="chain-fields"></div></section>
+        <section class="chain-section" id="chain-headroom-section" hidden><h3>DSP 实时余量</h3><strong id="chain-headroom"></strong><p id="chain-headroom-note"></p></section>
+        <section class="chain-section" id="chain-tech-section" hidden><h3>技术档案</h3><div id="chain-tech" class="chain-tags"></div></section>
+        <section class="chain-section"><h3>音频链路</h3><ol id="chain-nodes" class="chain-nodes"></ol><p id="chain-nodes-empty" class="chain-empty" hidden>还没开始播放，链路节点待建立。</p></section>
+        <section class="chain-section" id="chain-diag-section" hidden><h3>链路诊断</h3><div id="chain-diag" class="chain-diag"></div></section>
+        <section class="chain-section" id="chain-dac-section" hidden><h3>DAC 能力图谱</h3><strong id="chain-dac-device"></strong><div id="chain-dac-fields" class="chain-fields"></div></section>
+        <section class="chain-section"><h3>输出记录</h3><ol id="chain-events" class="chain-events"></ol><p id="chain-events-empty" class="chain-empty" hidden>暂无记录。</p></section>
+        <section class="chain-section" id="chain-stability-section" hidden><h3>稳定性反馈</h3><strong id="chain-stability-title"></strong><p id="chain-stability-note"></p><div id="chain-stability-fields" class="chain-fields"></div></section>
+      </div>
+      <footer class="chain-foot"><button id="chain-open-settings" class="secondary">打开音频设置 ›</button></footer>
+    </aside>
   </div>
 
   <dialog id="transport-dialog" aria-labelledby="transport-dialog-title">
