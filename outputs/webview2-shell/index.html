@@ -18,6 +18,7 @@
   <link rel="stylesheet" href="audio-chain.css">
   <script src="shell.js" defer></script>
   <script src="theme.js" defer></script>
+  <script src="player-layout.js" defer></script>
   <script src="appearance.js" defer></script>
   <script src="transport-panels.js" defer></script>
   <script src="albums.js" defer></script>
@@ -184,16 +185,22 @@
       <div class="now-playing"><div class="mini-cover" aria-hidden="true"><span>AFTER<br>HOURS</span></div><div class="track-info"><strong id="track-title">Priestess</strong><span id="track-artist">Periphery · Juggernaut: Omega</span><small id="track-quality">演示曲目 · 未连接音频引擎</small></div></div>
       <div class="transport">
         <div class="timeline"><span id="elapsed">0:00</span><div class="waveform-seek" id="waveform-seek"><canvas id="progress-waveform" aria-hidden="true"></canvas><input id="progress" type="range" min="0" max="303" value="0" step="0.1" aria-label="播放进度"><span id="waveform-status" class="sr-only" role="status"></span></div><span id="duration">5:03</span></div>
+        <!-- 三簇：左簇 | 播放键 | 右簇。左右各自成组，收起/换序只在簇内挪，
+             播放键永远在正中（player-layout.js 按宿主存的构成重排这里）。 -->
         <div class="transport-buttons">
-          <button id="favorite" class="icon-button" aria-label="喜欢当前歌曲" title="我喜欢的音乐" aria-pressed="false"><svg><use href="#i-heart"/></svg></button>
-          <button id="playback-order" class="icon-button" aria-label="列表循环" title="列表循环 · 左键切换，右键选择"><svg><use href="#i-repeat"/></svg><small id="order-badge"></small></button>
-          <button id="previous" class="icon-button previous" aria-label="上一首" title="上一首"><svg><use href="#i-next"/></svg></button>
-          <button id="seek-back" class="icon-button previous" aria-label="快退 5 秒" title="快退 5 秒"><svg><use href="#i-seek"/></svg></button>
+          <div class="tb-side tb-left">
+            <button id="favorite" class="icon-button" aria-label="喜欢当前歌曲" title="我喜欢的音乐" aria-pressed="false"><svg><use href="#i-heart"/></svg></button>
+            <button id="playback-order" class="icon-button" aria-label="列表循环" title="列表循环 · 左键切换，右键选择"><svg><use href="#i-repeat"/></svg><small id="order-badge"></small></button>
+            <button id="previous" class="icon-button previous" aria-label="上一首" title="上一首"><svg><use href="#i-next"/></svg></button>
+            <button id="seek-back" class="icon-button previous" aria-label="快退 5 秒" title="快退 5 秒"><svg><use href="#i-seek"/></svg></button>
+          </div>
           <button id="play" class="play-button" aria-label="播放" title="播放 / 暂停" aria-pressed="false"><svg><use href="#i-play"/></svg></button>
-          <button id="seek-forward" class="icon-button" aria-label="快进 5 秒" title="快进 5 秒"><svg><use href="#i-seek"/></svg></button>
-          <button id="next" class="icon-button" aria-label="下一首" title="下一首"><svg><use href="#i-next"/></svg></button>
-          <button id="queue" class="icon-button" aria-label="显示播放队列" title="显示播放队列"><svg><use href="#i-list"/></svg></button>
-          <button id="transport-more" class="icon-button" aria-label="更多功能" title="更多功能"><svg><use href="#i-more"/></svg></button>
+          <div class="tb-side tb-right">
+            <button id="seek-forward" class="icon-button" aria-label="快进 5 秒" title="快进 5 秒"><svg><use href="#i-seek"/></svg></button>
+            <button id="next" class="icon-button" aria-label="下一首" title="下一首"><svg><use href="#i-next"/></svg></button>
+            <button id="queue" class="icon-button" aria-label="显示播放队列" title="显示播放队列"><svg><use href="#i-list"/></svg></button>
+            <button id="transport-more" class="icon-button" aria-label="更多功能" title="更多功能"><svg><use href="#i-more"/></svg></button>
+          </div>
         </div>
         <div id="order-menu" class="order-menu" role="group" aria-label="选择播放顺序" hidden>
           <button data-order="Sequential">顺序播放</button><button data-order="Random">随机播放</button><button data-order="ListLoop">列表循环</button><button data-order="TrackLoop">单曲循环</button><button data-order="TrackOnce">单曲播放</button>
@@ -201,7 +208,8 @@
       </div>
       <div class="player-tools">
         <button id="lyrics" class="icon-button" aria-label="桌面歌词" title="桌面歌词 · 左键开关，右键解锁" aria-pressed="false"><svg><use href="#i-lyrics"/></svg><small id="lyrics-badge">off</small></button>
-        <svg class="volume-icon"><use href="#i-volume"/></svg><input id="volume" type="range" min="0" max="100" value="65" aria-label="音量">
+        <!-- 图标和滑杆必须包成一组：单独一个 input 收起来时图标会剩在那里 -->
+        <span id="volume-group"><svg class="volume-icon"><use href="#i-volume"/></svg><input id="volume" type="range" min="0" max="100" value="65" aria-label="音量"></span>
         <button id="audio-settings" class="icon-button" aria-label="音频设置" title="音频设置 · 输出 / AB 循环 / 速度 / 定时"><svg><use href="#i-settings"/></svg></button>
       </div>
     </footer>

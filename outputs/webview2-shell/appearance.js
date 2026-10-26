@@ -206,6 +206,108 @@
     return Number(item.value).toFixed(item.step < 0.1 ? 2 : 0) + (item.unit === '×' ? '×' : ' ' + item.unit);
   }
 
+  // —— 底栏按钮：显隐与顺序 ——
+  // 宿主存的是 "left:a,!b|right:…|tools:…" 这种串（! = 收起来），
+  // 这里只解析和拼回，合法性校验全在宿主（NormalizePlayerButtons）做。
+  const BUTTON_GROUPS = ['left', 'right', 'tools'];
+  const BUTTON_GROUP_LABELS = {
+    left: '播放键左侧',
+    right: '播放键右侧',
+    tools: '最右工具区（歌词 / 音量 / 音频设置）'
+  };
+
+  function parseButtons(text) {
+    const map = { left: [], right: [], tools: [] };
+    String(text || '').split('|').forEach(chunk => {
+      const split = chunk.indexOf(':');
+      if (split <= 0) return;
+      const group = chunk.slice(0, split).trim();
+      if (!BUTTON_GROUPS.includes(group)) return;
+      chunk.slice(split + 1).split(',').forEach(token => {
+        const value = token.trim();
+        if (!value) return;
+        map[group].push(value.charAt(0) === '!'
+          ? { id: value.slice(1), hidden: true }
+          : { id: value, hidden: false });
+      });
+    });
+    return map;
+  }
+
+  function serializeButtons(map) {
+    return BUTTON_GROUPS
+      .map(group => group + ':' + (map[group] || []).map(item => (item.hidden ? '!' : '') + item.id).join(','))
+      .join('|');
+  }
+
+  function swap(list, from, to) {
+    if (to < 0 || to >= list.length) return;
+    const hold = list[from];
+    list[from] = list[to];
+    list[to] = hold;
+  }
+
+  /**
+   * 底栏按钮卡片。改一下立刻存（这是"我要用哪个布局"，不是"外观预览"），
+   * 所以刻意不接「保存 / 取消预览」那套；改完只重画这张卡片自己的行，
+   * 不整页 render()，否则用户滚到页面底部一动就会跳回顶部。
+   */
+  function playerButtonCard() {
+    const card = section({
+      title: '底栏按钮',
+      tag: '立即生效',
+      note: '收起来 = 从底栏拿掉；「上一首 / 下一首」是核心，不能收。播放键永远在正中，不在这里。顺序就是它们在底栏里从左到右的位置。'
+    });
+    const list = node('div', undefined, 'player-button-list');
+    card.append(list);
+    const catalog = new Map((data.playerButtonCatalog || []).map(item => [item.id, item]));
+
+    function push(map) {
+      return request('playerButtons', { value: serializeButtons(map) }).then(result => {
+        data = result;
+        // 宿主已经收敛过（核心强制显示、不认识的丢掉），以它回的为准
+        if (window.CelestePlayerLayout) window.CelestePlayerLayout.apply(result.playerButtons);
+        fill();
+        status('底栏按钮已保存。', 'ok');
+      }).catch(error => status('调整底栏按钮失败：' + error.message, 'err'));
+    }
+
+    function fill() {
+      const map = parseButtons(data.playerButtons);
+      list.replaceChildren();
+      BUTTON_GROUPS.forEach(group => {
+        const items = map[group] || [];
+        if (items.length === 0) return;
+        list.append(node('p', BUTTON_GROUP_LABELS[group], 'set-note'));
+        items.forEach((item, index) => {
+          const def = catalog.get(item.id) || { label: item.id, core: false };
+          const row = node('div', undefined, 'set-row');
+          const main = node('div', undefined, 'set-row-main');
+          main.append(node('div', (index + 1) + '. ' + def.label, 'set-label'));
+          row.append(main);
+          const holder = node('div', undefined, 'set-control');
+          const actions = node('div', undefined, 'player-button-actions');
+          if (def.core) actions.append(node('span', '核心，不能隐藏', 'set-note'));
+          else actions.append(button(item.hidden ? '显示' : '收起', () => {
+            item.hidden = !item.hidden;
+            return push(map);
+          }));
+          const up = button('前移', () => { swap(items, index, index - 1); return push(map); });
+          up.disabled = index === 0;
+          const down = button('后移', () => { swap(items, index, index + 1); return push(map); });
+          down.disabled = index === items.length - 1;
+          actions.append(up, down);
+          holder.append(actions);
+          row.append(holder);
+          list.append(row);
+        });
+      });
+    }
+
+    fill();
+    return card;
+  }
+
   // —— 主渲染 ——
   function render(host) {
     host = host || $('settings-scroll');
@@ -307,10 +409,16 @@
 
     const player = section({
       title: '底栏（播放状态栏）',
-      note: '底栏底色和上下边框永远跟「工作区外壳」同色（改外壳色它就跟着变），这里调的是它的质感：透多少、要不要毛玻璃、封面多圆。'
+      note: '底栏底色和上下边框永远跟「工作区外壳」同色（改外壳色它就跟着变）。这里调的是它的文字图标色和形状：字多重、多高、多宽松、封面多圆。'
     });
+    // 底栏的字/图标单独一支颜色，不和全站正文色绑在一起
+    [{ id: 'player-ink', label: '底栏文字与图标' }, { id: 'player-muted', label: '底栏次要文字' }]
+      .forEach(item => player.append(colorRow(item)));
     (data.numbers || []).filter(isPlayerParam).forEach(item => player.append(numberRow(item)));
     host.append(player);
+
+    // 按钮显隐/顺序（立即存，不走预览）
+    host.append(playerButtonCard());
 
     // 我的预设
     const mine = section({ title: '我的预设', note: '调好的外观可以存成自己的一套，随时切回来；内置的 24 套不能被覆盖。' });

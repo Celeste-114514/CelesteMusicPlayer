@@ -129,6 +129,9 @@ namespace CelesteMusicPlayer
                 {
                     kind = "celeste.theme", version = 1, revision = _themeRevision, mode,
                     presetId = state.presetId, accentSource = state.accentSource, accentCustom = state.accentCustom,
+                    // 底栏按钮的显隐/顺序搭这趟车一起送：网页那边只在修订号变化时才收到，
+                    // 不需要为「收一个按钮」单开一条通道
+                    playerButtons = state.playerButtons,
                     light = new { css = WebAppearance.ToCss(light), values = light },
                     dark = new { css = WebAppearance.ToCss(dark), values = dark }
                 });

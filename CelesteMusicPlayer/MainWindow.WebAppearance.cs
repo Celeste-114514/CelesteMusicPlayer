@@ -32,6 +32,7 @@ namespace CelesteMusicPlayer
                 case "reset": return Reset(msg);
                 case "savePreset": return SavePreset(ReadString(msg, "name"));
                 case "deletePreset": return DeletePreset(ReadString(msg, "presetId"));
+                case "playerButtons": return SetPlayerButtons(ReadString(msg, "value"));
                 default: throw new ArgumentException("未知的外观操作：" + operation);
             }
         }
@@ -55,7 +56,10 @@ namespace CelesteMusicPlayer
                 light = Bundle(WebAppearance.Resolve(state, WebAppearance.Light)),
                 dark = Bundle(WebAppearance.Resolve(state, WebAppearance.Dark)),
                 // 可继续编辑的参数清单：类型/边界/单位都在这里，网页不另存一份默认值
-                numbers = NumberSchema(state)
+                numbers = NumberSchema(state),
+                // 底栏按钮的现状 + 可选目录：显隐/顺序存在宿主，网页不自己编一套按钮表
+                playerButtons = state.playerButtons,
+                playerButtonCatalog = WebAppearance.PlayerButtonCatalog.Select(item => new { id = item.id, label = item.label, group = item.group, core = item.core }).ToArray()
             };
         }
 
@@ -112,7 +116,10 @@ namespace CelesteMusicPlayer
                 new { id = "player-opacity", label = "底栏不透明度", min = 0.5, max = 1, step = 0.02, unit = "×", value = Get("player-opacity") },
                 new { id = "player-blur", label = "底栏毛玻璃", min = 0, max = 40, step = 1, unit = "px", value = Get("player-blur") },
                 new { id = "cover-radius", label = "底栏封面圆角", min = 0, max = 27, step = 1, unit = "px", value = Get("cover-radius") },
-                new { id = "cover-size", label = "底栏封面大小", min = 42, max = 88, step = 1, unit = "px", value = Get("cover-size") }
+                new { id = "cover-size", label = "底栏封面大小", min = 42, max = 88, step = 1, unit = "px", value = Get("cover-size") },
+                new { id = "player-height", label = "底栏高度", min = 88, max = 180, step = 1, unit = "px", value = Get("player-height") },
+                new { id = "player-gap", label = "底栏区块间距", min = 8, max = 56, step = 1, unit = "px", value = Get("player-gap") },
+                new { id = "player-pad", label = "底栏上下留白", min = 6, max = 40, step = 1, unit = "px", value = Get("player-pad") }
             };
         }
 
@@ -154,6 +161,29 @@ namespace CelesteMusicPlayer
             WebAppearance.SetDraft(state);
             WebAppearance.Save(state);
             WebAppearance.ClearDraft();
+            return Snapshot();
+        }
+
+        /// <summary>
+        /// 底栏按钮的显隐与顺序。这是「布局偏好」而不是「主题细调」，所以立刻存；
+        /// 但**不动未保存的颜色草稿** —— 用户可能正在预览颜色，顺手收一个按钮不能把他没保存的改动一起提交。
+        /// </summary>
+        private static object SetPlayerButtons(string value)
+        {
+            WebAppearance.State state = WebAppearance.Load();
+            string normalized = WebAppearance.NormalizePlayerButtons(value);
+            if (normalized == state.playerButtons) return Snapshot();
+            // 顺序很讲究：**先把草稿同步好，再 Save**。
+            // Save 会立刻把新修订号播出去，外壳窗口收到就抓一次快照推给网页；
+            // 那一刻要是草稿里还留着旧构成，网页会先被推回旧布局，看着就是"点了没反应"。
+            if (WebAppearance.HasDraft())
+            {
+                WebAppearance.State draft = WebAppearance.Draft();
+                draft.playerButtons = normalized;
+                WebAppearance.SetDraft(draft);
+            }
+            state.playerButtons = normalized;
+            WebAppearance.Save(state);
             return Snapshot();
         }
 

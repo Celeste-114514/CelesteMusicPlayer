@@ -29,6 +29,14 @@
   --player-blur:0px;
   --cover-radius:12px;
   --cover-size:62px;
+  /* 底栏的文字/图标色单独一支：底色跟外壳走，但图标和字可能要更淡或更重。
+     默认值 = 原来界面上正在用的（正文色 / 次要文字色），所以没接主题时不会跳。 */
+  --player-ink:#28282e;
+  --player-muted:#929097;
+  /* 底栏三围：高度 / 区块之间 / 上下留白。默认值 = 现在的实际尺寸。 */
+  --player-height:120px;
+  --player-gap:24px;
+  --player-pad:16px;
   /* 进度波形：未播放段要压得住底，已播放段用强调色 */
   --wave-idle:#dfd5dc;
   --wave-played:#e66b96;

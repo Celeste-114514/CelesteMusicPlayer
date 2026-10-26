@@ -133,3 +133,7 @@
 .mode-option{border:1px solid var(--line);border-radius:10px;padding:6px 12px;font-size:11px;color:var(--muted);background:var(--panel-soft);transition:background calc(.2s * var(--motion-speed))}
 .mode-option:hover{color:var(--accent)}
 .mode-option.selected{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
+
+/* 底栏按钮卡片：每行是「名称 + 收起/显示 + 前移/后移」，靠右排 */
+.player-button-actions{display:flex;align-items:center;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.player-button-list .set-note:first-child{margin-top:0}

@@ -31,17 +31,94 @@ namespace CelesteMusicPlayer
             // 底栏底色不在目录里：它由 theme.css 直接引用 --shell，
             // 否则用户改了外壳色、底栏还留着旧值，看着就是"半截没变"
             "wave-idle", "wave-played",
+            // 底栏的图标与文字单独一支：底栏底色跟外壳走，但图标色用户可能要更淡或更重
+            "player-ink", "player-muted",
             "danger", "success", "warning"
         };
 
         internal static readonly string[] NumNames =
         {
             "radius", "radius-sm", "blur", "panel-opacity", "sat", "motion-speed", "motion-strength", "density",
-            "player-opacity", "player-blur", "cover-radius", "cover-size"
+            "player-opacity", "player-blur", "cover-radius", "cover-size",
+            "player-gap", "player-pad", "player-height"
         };
 
         internal const string Light = "light";
         internal const string Dark = "dark";
+
+        /// <summary>底栏一个可配置按钮。分组决定它落在播放键左侧、右侧，还是最右的工具区。</summary>
+        internal sealed class PlayerButton
+        {
+            public string id { get; set; } = "";
+            public string label { get; set; } = "";
+            /// <summary>left / right / tools</summary>
+            public string group { get; set; } = "left";
+            /// <summary>核心能力，不允许隐藏（播放键本身不在目录里，它永远是正中间那个）</summary>
+            public bool core { get; set; }
+        }
+
+        internal static readonly PlayerButton[] PlayerButtonCatalog =
+        {
+            new() { id = "favorite", label = "喜欢", group = "left" },
+            new() { id = "playback-order", label = "播放顺序", group = "left" },
+            new() { id = "previous", label = "上一首", group = "left", core = true },
+            new() { id = "seek-back", label = "快退 5 秒", group = "left" },
+            new() { id = "seek-forward", label = "快进 5 秒", group = "right" },
+            new() { id = "next", label = "下一首", group = "right", core = true },
+            new() { id = "queue", label = "播放队列", group = "right" },
+            new() { id = "transport-more", label = "更多功能", group = "right" },
+            new() { id = "lyrics", label = "桌面歌词", group = "tools" },
+            new() { id = "volume", label = "音量", group = "tools" },
+            new() { id = "audio-settings", label = "音频设置", group = "tools" }
+        };
+
+        /// <summary>默认构成。存成一段可读的字符串，用户改了也直接看得懂（加 ! 表示隐藏）。</summary>
+        internal const string DefaultPlayerButtons =
+            "left:favorite,playback-order,previous,seek-back|right:seek-forward,next,queue,transport-more|tools:lyrics,volume,audio-settings";
+
+        /// <summary>构成串里的分组顺序（也决定存档格式的顺序，别依赖字典枚举顺序）。</summary>
+        internal static readonly string[] PlayerGroups = { "left", "right", "tools" };
+
+        /// <summary>
+        /// 把用户存的构成收敛成合法值：去掉不认识的、去重、漏掉的补回默认组末尾、核心按钮强制显示。
+        /// 放在宿主做，是为了网页那侧不用再写一套校验 —— 坏值存进文件后也不会让底栏少按键。
+        /// </summary>
+        internal static string NormalizePlayerButtons(string? raw)
+        {
+            string text = (raw ?? "").Trim();
+            if (text.Length == 0) text = DefaultPlayerButtons;
+
+            var groups = new Dictionary<string, List<string>>(StringComparer.Ordinal)
+            {
+                ["left"] = new(), ["right"] = new(), ["tools"] = new()
+            };
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (string chunk in text.Split('|', StringSplitOptions.RemoveEmptyEntries))
+            {
+                int split = chunk.IndexOf(':');
+                if (split <= 0) continue;
+                string items = chunk.Substring(split + 1);
+                foreach (string token in items.Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string value = token.Trim();
+                    bool hidden = value.StartsWith("!", StringComparison.Ordinal);
+                    string id = hidden ? value.Substring(1) : value;
+                    PlayerButton? def = PlayerButtonCatalog.FirstOrDefault(button => button.id == id);
+                    if (def == null || !seen.Add(id)) continue;
+                    groups[def.group].Add(def.core || !hidden ? id : "!" + id);
+                }
+            }
+
+            foreach (PlayerButton def in PlayerButtonCatalog)
+            {
+                if (seen.Contains(def.id)) continue;
+                groups[def.group].Add(def.id);
+            }
+
+            // 分组顺序写死 left|right|tools：字典枚举顺序不写进契约，将来加组也不想让存档格式跟着漂
+            return string.Join("|", PlayerGroups.Select(group => group + ":" + string.Join(",", groups[group])));
+        }
 
         internal sealed class Preset
         {
@@ -76,6 +153,8 @@ namespace CelesteMusicPlayer
             /// <summary>在当前预设之上改过的变量（键是 "light:accent" 这种带明暗前缀的写法）</summary>
             public Dictionary<string, string> overrides { get; set; } = new(StringComparer.Ordinal);
             public List<Preset> customPresets { get; set; } = new();
+            /// <summary>底栏按钮的显隐与顺序（个人布局偏好，不随预设切换）</summary>
+            public string playerButtons { get; set; } = DefaultPlayerButtons;
             public int revision { get; set; }
         }
 
@@ -225,6 +304,9 @@ namespace CelesteMusicPlayer
                 ["row"] = row, ["row-hover"] = rowHover, ["row-active"] = rowActive, ["chip"] = chip, ["focus"] = focus,
                 ["wave-idle"] = Mix(dark ? surface : "#ffffff", muted, dark ? 0.5 : 0.28),
                 ["wave-played"] = accentValue,
+                // 底栏图标比正文再重一档（底栏底色略透，按正文色会发灰），次要文字沿用 muted
+                ["player-ink"] = dark ? FromHsl(h, Math.Min(0.14, sat), 0.95) : FromHsl(h, Math.Min(0.2, sat * 1.6), 0.18),
+                ["player-muted"] = muted,
                 ["danger"] = dark ? "#ff8a80" : "#c0454f", ["success"] = dark ? "#6fd3a8" : "#3f8f6f", ["warning"] = dark ? "#e8b962" : "#b8802a"
             };
         }
@@ -247,7 +329,12 @@ namespace CelesteMusicPlayer
                 ["player-opacity"] = "0.88",   // 与原设计一致：底栏略透，不是全实心
                 ["player-blur"] = "0px",       // 默认不模糊：每帧重绘太费，需要时在设置里开
                 ["cover-radius"] = Math.Max(0, radius * 0.46).ToString("0.##", CultureInfo.InvariantCulture) + "px",
-                ["cover-size"] = "62px"
+                ["cover-size"] = "62px",
+                // 底栏的三围：左右留白、中间空隙、整体高度。原来写死在 transport.css 里，
+                // 用户要"底栏更紧凑一点"只能改代码，所以提成参数。
+                ["player-gap"] = "24px",
+                ["player-pad"] = "16px",
+                ["player-height"] = "120px"
             };
         }
 
@@ -309,6 +396,7 @@ namespace CelesteMusicPlayer
             if (state.accentCustom.Length > 0 && !IsHex(state.accentCustom)) state.accentCustom = "#e84865";
             state.overrides ??= new Dictionary<string, string>(StringComparer.Ordinal);
             state.customPresets ??= new List<Preset>();
+            state.playerButtons = NormalizePlayerButtons(state.playerButtons);
             if (FindPreset(state.presetId, state) == null) state.presetId = BuiltIn[0].id;
         }
 
@@ -324,6 +412,7 @@ namespace CelesteMusicPlayer
             {
                 mode = state.mode, accentSource = state.accentSource, accentCustom = state.accentCustom,
                 presetId = state.presetId, revision = state.revision,
+                playerButtons = state.playerButtons,
                 overrides = new Dictionary<string, string>(state.overrides ?? new(), StringComparer.Ordinal),
                 customPresets = (state.customPresets ?? new()).Select(p => new Preset
                 {
