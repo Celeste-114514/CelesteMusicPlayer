@@ -4,13 +4,23 @@
   'use strict';
   const root = document.documentElement;
 
+  // 宿主给的是 "--bg:#eae8e6;--shell:#fcfbfa" 这种已经带 -- 前缀的串。
+  // ⚠ 别再自己拼一次 --：拼成 ----bg 会让 setProperty 直接抛错，后面所有变量都不生效
+  //   （改深浅、换预设全都"没反应"就是这个造成的）。
+  // 单个坏变量也不许连累整批，所以逐条容错。
   function applyCss(text) {
+    let applied = 0;
     String(text || '').split(';').forEach(pair => {
       if (!pair) return;
       const index = pair.indexOf(':');
       if (index < 1) return;
-      root.style.setProperty('--' + pair.slice(0, index).trim(), pair.slice(index + 1).trim());
+      const name = pair.slice(0, index).trim();
+      const value = pair.slice(index + 1).trim();
+      if (!name || !value) return;
+      try { root.style.setProperty(name.startsWith('--') ? name : '--' + name, value); applied++; }
+      catch { /* 跳过这一个，不要连累其它变量 */ }
     });
+    return applied;
   }
 
   const state = { mode: 'light', light: null, dark: null, presetId: '', revision: 0, ready: false };
@@ -20,8 +30,11 @@
   function apply(mode, bundle) {
     const chosen = bundle || (mode === 'dark' ? state.dark : state.light);
     if (!chosen) return;
-    applyCss(chosen.css);
+    const applied = applyCss(chosen.css);
+    window.CelesteTheme.lastApplied = applied;
     root.dataset.theme = mode || 'light';
+    // 一个变量都没写进去就明说，别让用户对着没变化的界面猜
+    if (applied === 0 && window.CelesteShell && chosen.css) window.CelesteShell.notify('主题变量没能写进页面，请把这一情况反馈一下。');
   }
 
   document.addEventListener('celeste:message', event => {
