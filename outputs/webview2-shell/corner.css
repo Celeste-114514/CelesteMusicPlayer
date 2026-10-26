@@ -17,7 +17,7 @@
 .corner-item svg{width:18px;height:18px}
 .corner-item.ring-1{width:28px;height:28px;color:var(--muted)}
 .corner-item.ring-1 svg{width:17px;height:17px}
-.corner-item:hover,.corner-home:hover{color:var(--accent);background:var(--accent-soft)}
+.corner-item:hover,.corner-home:hover{color:var(--accent);background:var(--hover)}
 .corner-item[aria-current=page],.corner-home[aria-current=page]{background:#f5dce566;color:var(--accent)}
 .toolbar{padding-left:255px;min-height:72px}
 .page-heading{padding-left:205px;min-height:125px;align-items:center;margin-bottom:27px}
@@ -36,7 +36,7 @@
 .header-divider{width:1px;height:17px;background:var(--accent-soft)}
 .header-actions button,.header-tools button{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:var(--muted);background:transparent;padding:0;transition:color .2s,background .2s}
 .header-actions svg,.header-tools svg{width:18px;height:18px;stroke-width:1.6}
-.header-actions button:hover,.header-tools button:hover{color:var(--accent);background:var(--accent-soft)}
+.header-actions button:hover,.header-tools button:hover{color:var(--accent);background:var(--hover)}
 .header-tools button[aria-current=page],.header-tools button[aria-expanded=true]{color:var(--accent);background:var(--accent-soft)}
 .window-actions button:last-child:hover{background:var(--accent);color:white}
 .player{grid-template-columns:minmax(0,1fr) clamp(280px,38vw,460px) minmax(0,1fr);gap:20px}

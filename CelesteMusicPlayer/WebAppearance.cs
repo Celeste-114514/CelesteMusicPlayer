@@ -28,6 +28,10 @@ namespace CelesteMusicPlayer
             "ink", "heading", "muted", "on-muted",
             "accent", "accent-strong", "accent-soft", "on-accent",
             "row", "row-hover", "row-active", "chip", "focus",
+            // 交互状态与浮层：悬停/按下/输入框/菜单/遮罩/投影。
+            // 分开建变量而不是复用 panel-soft，是因为"选中"和"悬停"必须能分别调 ——
+            // 两者共用一支值时，用户想加大选中对比，悬停也会跟着变重。
+            "hover", "pressed", "input-bg", "input-line", "menu-bg", "overlay", "shadow",
             // 底栏底色不在目录里：它由 theme.css 直接引用 --shell，
             // 否则用户改了外壳色、底栏还留着旧值，看着就是"半截没变"
             "wave-idle", "wave-played",
@@ -43,7 +47,9 @@ namespace CelesteMusicPlayer
             "player-gap", "player-pad", "player-height",
             // 排版的两个数值：字号整体缩放与行高。做成数值参数而不是开关，
             // 是因为它们和圆角/间距一样属于「预设自带 + 用户可覆盖」，跟着明暗各存一份。
-            "text-scale", "line-height"
+            "text-scale", "line-height",
+            // 禁用态透明度：各处的 .3/.5 太散，统一成一支
+            "disabled-opacity"
         };
 
         /// <summary>
@@ -333,7 +339,16 @@ namespace CelesteMusicPlayer
                 ["danger"] = dark ? "#ff8a80" : "#c0454f", ["success"] = dark ? "#6fd3a8" : "#3f8f6f", ["warning"] = dark ? "#e8b962" : "#b8802a",
                 // 字体族默认值。真正生效的值由 Resolve 用人选的字体覆盖，
                 // 这里给出兜底，保证没接主题（或用户没选过）时不至于 font-family 为空
-                ["font-ui"] = QuoteFamily(DefaultFontUi), ["font-cjk"] = QuoteFamily(DefaultFontCjk), ["font-mono"] = QuoteFamily(DefaultFontMono)
+                ["font-ui"] = QuoteFamily(DefaultFontUi), ["font-cjk"] = QuoteFamily(DefaultFontCjk), ["font-mono"] = QuoteFamily(DefaultFontMono),
+                // 交互状态：悬停比选中浅一档（选中是"已在此"，应该更实）；
+                // 输入框底色在深色下比页面亮一点才看得出是个框；遮罩与投影自带透明度
+                ["hover"] = rowHover,
+                ["pressed"] = rowActive,
+                ["input-bg"] = dark ? FromHsl(h, sat, l + 0.1) : "#ffffff",
+                ["input-line"] = line,
+                ["menu-bg"] = dark ? FromHsl(h, sat, l + 0.085) : "#ffffff",
+                ["overlay"] = dark ? "#000000A6" : "#30252d4d",
+                ["shadow"] = dark ? "#0000008C" : "#43343126"
             };
         }
 
@@ -363,7 +378,8 @@ namespace CelesteMusicPlayer
                 ["player-height"] = "120px",
                 // 排版：预设自带一套（录音室更紧、复古更松），用户可以再覆盖
                 ["text-scale"] = preset.textScale.ToString("0.##", CultureInfo.InvariantCulture),
-                ["line-height"] = preset.lineHeight.ToString("0.##", CultureInfo.InvariantCulture)
+                ["line-height"] = preset.lineHeight.ToString("0.##", CultureInfo.InvariantCulture),
+                ["disabled-opacity"] = "0.35"
             };
         }
 
@@ -561,6 +577,9 @@ namespace CelesteMusicPlayer
             values["focus"] = accent;
             values["row-hover"] = Mix(values["surface"], accent, dark ? 0.16 : 0.07);
             values["row-active"] = Mix(values["surface"], accent, dark ? 0.26 : 0.12);
+            // 悬停/按下是从选中色派生的，换了强调色要一起跟上，否则会出现"选中变粉、悬停还是旧的"
+            values["hover"] = values["row-hover"];
+            values["pressed"] = values["row-active"];
         }
 
         /// <summary>把变量表拼成一段 CSS，网页直接塞进 style 标签。原生 ARGB 不参与，这里全是 CSS 顺序。</summary>

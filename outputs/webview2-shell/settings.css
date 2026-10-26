@@ -6,7 +6,7 @@
 .settings-nav-title{font-size:calc(9px * var(--text-scale));letter-spacing:2.4px;color:var(--muted);font-weight:600;padding:6px 12px 12px}
 .settings-nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;font-size:calc(12px * var(--text-scale));color:var(--muted);text-align:left;transition:background .2s,color .2s}
 .settings-nav-item svg{width:16px;height:16px}
-.settings-nav-item:hover{background:var(--panel-soft);color:var(--accent)}
+.settings-nav-item:hover{background:var(--hover);color:var(--accent)}
 .settings-nav-item.selected{background:var(--accent-soft);color:var(--accent);font-weight:550}
 .settings-nav-count{margin-left:auto;font-size:calc(9px * var(--text-scale));color:var(--muted);background:var(--accent-soft);border-radius:8px;padding:2px 6px}
 .settings-nav-item.selected .settings-nav-count{background:var(--surface);color:var(--accent)}
@@ -53,24 +53,24 @@
 .set-slider{display:flex;align-items:center;gap:10px;width:250px}
 .set-slider input[type=range]{width:150px}
 .set-slider .set-readout{font-size:calc(11px * var(--text-scale));color:var(--muted);font-variant-numeric:tabular-nums;min-width:56px;text-align:right}
-.set-slider input[type=number]{width:62px;border:1px solid var(--accent-soft);border-radius:8px;padding:4px 7px;font-size:calc(11px * var(--text-scale));color:var(--ink);background:var(--panel)}
+.set-slider input[type=number]{width:62px;border:1px solid var(--input-line);border-radius:8px;padding:4px 7px;font-size:calc(11px * var(--text-scale));color:var(--ink);background:var(--input-bg)}
 /* 下拉 / 文本 */
-.set-control select{font-size:calc(11px * var(--text-scale));border:1px solid var(--accent-soft);border-radius:9px;padding:6px 10px;background:var(--panel);color:var(--ink);min-width:150px;max-width:320px}
+.set-control select{font-size:calc(11px * var(--text-scale));border:1px solid var(--input-line);border-radius:9px;padding:6px 10px;background:var(--input-bg);color:var(--ink);min-width:150px;max-width:320px}
 .set-control select:disabled{opacity:.5}
-.set-control input[type=text]{font-size:calc(11px * var(--text-scale));border:1px solid var(--accent-soft);border-radius:9px;padding:6px 10px;background:var(--panel);color:var(--ink);width:210px;max-width:46vw}
+.set-control input[type=text]{font-size:calc(11px * var(--text-scale));border:1px solid var(--input-line);border-radius:9px;padding:6px 10px;background:var(--input-bg);color:var(--ink);width:210px;max-width:46vw}
 .set-control input[type=text]:read-only{color:var(--muted);background:var(--panel-soft)}
-.set-control input[type=color]{width:34px;height:26px;padding:0;border:1px solid var(--accent-soft);border-radius:8px;background:none}
+.set-control input[type=color]{width:34px;height:26px;padding:0;border:1px solid var(--input-line);border-radius:8px;background:none}
 .set-color-hex{font-size:calc(10px * var(--text-scale));color:var(--muted);font-variant-numeric:tabular-nums}
 /* 路径 */
 .set-path{display:flex;gap:6px;align-items:center}
 .set-path input{max-width:44vw}
 .set-mini{border:1px solid var(--accent-soft);border-radius:9px;padding:5px 10px;font-size:calc(10px * var(--text-scale));color:var(--accent);background:var(--surface)}
-.set-mini:hover{background:var(--accent-soft)}
+.set-mini:hover{background:var(--hover)}
 .set-mini.danger{color:var(--danger);border-color:var(--accent-soft)}
-.set-mini:hover.danger{background:var(--accent-soft)}
+.set-mini:hover.danger{background:var(--hover)}
 /* 密钥 */
 .set-secret{display:flex;gap:6px;align-items:center}
-.set-secret input[type=password]{font-size:calc(11px * var(--text-scale));border:1px solid var(--accent-soft);border-radius:9px;padding:6px 10px;background:var(--panel);color:var(--ink);width:210px}
+.set-secret input[type=password]{font-size:calc(11px * var(--text-scale));border:1px solid var(--input-line);border-radius:9px;padding:6px 10px;background:var(--input-bg);color:var(--ink);width:210px}
 .set-secret-state{font-size:calc(10px * var(--text-scale));color:var(--muted)}
 .set-secret-state.on{color:var(--success)}
 /* 按钮行 */
@@ -96,7 +96,7 @@
 .set-hotkeys{display:grid;gap:7px;margin-top:10px}
 .set-hotkey{display:flex;align-items:center;gap:10px}
 .set-hotkey b{font-size:calc(11px * var(--text-scale));font-weight:520;width:112px;flex-shrink:0}
-.set-hotkey input{font-size:calc(11px * var(--text-scale));border:1px solid var(--accent-soft);border-radius:9px;padding:5px 9px;background:var(--panel);color:var(--ink);width:150px}
+.set-hotkey input{font-size:calc(11px * var(--text-scale));border:1px solid var(--input-line);border-radius:9px;padding:5px 9px;background:var(--input-bg);color:var(--ink);width:150px}
 .set-hotkey small{font-size:calc(9px * var(--text-scale));color:var(--muted)}
 /* 状态条 */
 .settings-status{display:flex;align-items:center;gap:8px;font-size:calc(10px * var(--text-scale));color:var(--muted);padding:9px 0 0}

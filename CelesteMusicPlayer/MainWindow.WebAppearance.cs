@@ -126,7 +126,8 @@ namespace CelesteMusicPlayer
                 new { id = "player-pad", label = "底栏上下留白", min = 6, max = 40, step = 1, unit = "px", value = Get("player-pad") },
                 // 排版：1 就是设计原尺寸，往两边各留一点余量；行高按字号倍数算
                 new { id = "text-scale", label = "字号整体缩放", min = 0.8, max = 1.4, step = 0.01, unit = "×", value = Get("text-scale") },
-                new { id = "line-height", label = "行高", min = 1.2, max = 2, step = 0.05, unit = "×", value = Get("line-height") }
+                new { id = "line-height", label = "行高", min = 1.2, max = 2, step = 0.05, unit = "×", value = Get("line-height") },
+                new { id = "disabled-opacity", label = "禁用态透明度", min = 0.15, max = 0.7, step = 0.05, unit = "×", value = Get("disabled-opacity") }
             };
         }
 

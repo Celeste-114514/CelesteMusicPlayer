@@ -111,7 +111,7 @@
 .dsp-rack-buttons{display:flex;gap:5px}
 .dsp-rack-move{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;background:#f4eff2;color:#8d7785;border:0;cursor:pointer}
 .dsp-rack-move:hover:not(:disabled){background:#f9e4eb;color:var(--accent)}
-.dsp-rack-move:disabled{opacity:.3;cursor:default}
+.dsp-rack-move:disabled{opacity:var(--disabled-opacity);cursor:default}
 .dsp-rack-move svg{width:13px;height:13px}
 .dsp-rack-move.up svg{transform:rotate(-90deg)}
 .dsp-rack-move.down svg{transform:rotate(90deg)}

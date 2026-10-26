@@ -4,7 +4,7 @@
 .corner-toggle{position:absolute;left:11.6129%;top:11.6129%;transform:translate(-50%,-50%);width:32px;height:32px;display:grid;place-items:center;border-radius:50%;color:var(--muted);background:var(--accent-soft);pointer-events:auto;transition:background .2s,color .2s;-webkit-app-region:no-drag}
 .corner-toggle svg{width:17px;height:17px;transition:transform .3s}
 .corner-toggle[aria-expanded=true] svg{transform:rotate(90deg)}
-.corner-toggle:hover{background:var(--accent-soft);color:var(--accent)}
+.corner-toggle:hover{background:var(--hover);color:var(--accent)}
 .corner-home{left:28.264%;top:28.264%;width:30px;height:30px}
 .toolbar{padding-left:65px}
 .page-heading{padding-left:0;min-height:125px}
@@ -24,12 +24,12 @@
 .sort-picker select{appearance:auto;max-width:90px;background:transparent;color:var(--muted);border:0;outline:none;font:inherit;cursor:pointer}
 .sort-picker:focus-within{outline:2px solid #e8486580;outline-offset:3px}
 .sort-direction{font-size:calc(11px * var(--text-scale));padding:10px 14px;border-radius:20px;background:var(--accent-soft);color:var(--muted);white-space:nowrap}
-.sort-direction:hover{background:var(--accent-soft);color:var(--accent)}
+.sort-direction:hover{background:var(--hover);color:var(--accent)}
 .songs-columns{display:grid;grid-template-columns:40px 1fr 62px;gap:17px;padding:0 24px 11px;color:var(--muted);font-size:calc(9px * var(--text-scale));letter-spacing:1px;border-bottom:1px solid var(--accent-soft);margin-bottom:6px}
 .songs-columns>span:last-child{text-align:right}
 .songs-list{padding:0;margin:0;list-style:none}
 .song-row{position:relative;width:100%;display:grid;grid-template-columns:40px 56px minmax(0,1fr) 62px;gap:17px;align-items:center;text-align:left;min-height:84px;padding:12px 24px;border-radius:15px;transition:background .18s;color:var(--ink)}
-.song-row:hover{background:var(--accent-soft)}
+.song-row:hover{background:var(--hover)}
 .song-row.selected{background:var(--accent-soft)}
 .song-row.selected:before{content:'';position:absolute;left:0;top:16px;bottom:16px;width:3px;border-radius:5px;background:var(--accent)}
 .song-row.playing .song-title{color:var(--accent)}

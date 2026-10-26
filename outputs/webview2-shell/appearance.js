@@ -155,11 +155,17 @@
     const wrap = node('div', undefined, 'set-slider');
     const picker = document.createElement('input');
     picker.type = 'color';
-    picker.value = (data[editing].values[item.id] || '#888888');
-    const hex = node('span', picker.value, 'set-color-hex');
-    const push = value => pushChange({ [editing + ':' + item.id]: value }, item.label + ' ' + value);
-    picker.addEventListener('input', () => { hex.textContent = picker.value; });
-    picker.addEventListener('change', () => { hex.textContent = picker.value; push(picker.value); });
+    // 遮罩/投影这类值带透明度（#RRGGBBAA），不能整串塞给 type=color ——
+    // 8 位值是非法的，浏览器会把它变成黑色，用户一碰就把透明度弄丢。
+    // 所以只把 RGB 交给取色器，写回时再把原来的 alpha 接回去。
+    const stored = String((data[editing].values[item.id] || '') || '#888888');
+    const alpha = stored.length === 9 ? stored.slice(7) : '';
+    const rgb = stored.length === 9 ? stored.slice(0, 7) : stored;
+    picker.value = /^#[0-9a-fA-F]{6}$/.test(rgb) ? rgb : '#888888';
+    const hex = node('span', picker.value + alpha, 'set-color-hex');
+    const push = value => pushChange({ [editing + ':' + item.id]: value + alpha }, item.label + ' ' + value + alpha);
+    picker.addEventListener('input', () => { hex.textContent = picker.value + alpha; });
+    picker.addEventListener('change', () => { hex.textContent = picker.value + alpha; push(picker.value); });
     wrap.append(picker, hex);
     holder.append(wrap);
     row.append(holder);
@@ -204,6 +210,35 @@
 
   function format(item) {
     return Number(item.value).toFixed(item.step < 0.1 ? 2 : 0) + (item.unit === '×' ? '×' : ' ' + item.unit);
+  }
+
+  // —— 按钮与输入框 / 弹窗与浮层 ——
+  // 这两类元素在页面里到处都是，以前全挤在一个 --accent-soft 上：
+  // 想"悬停淡一点"，选中态会跟着一起淡。现在拆开，各调各的。
+  function stateCards() {
+    const input = section({
+      title: '按钮与输入框',
+      note: '悬停/按下只管鼠标反馈，不影响「已选中」。输入框那三支是搜索框、下拉、文本框共用的。'
+    });
+    [
+      { id: 'hover', label: '悬停底色' },
+      { id: 'pressed', label: '按下底色' },
+      { id: 'focus', label: '焦点环' },
+      { id: 'input-bg', label: '输入框底色' },
+      { id: 'input-line', label: '输入框边框' }
+    ].forEach(item => input.append(colorRow(item)));
+    (data.numbers || []).filter(item => item.id === 'disabled-opacity').forEach(item => input.append(numberRow(item)));
+
+    const layer = section({
+      title: '弹窗与浮层',
+      note: '菜单、右键菜单、音频/队列面板、确认框共用这几支：底色、投影、以及后面那层遮罩。投影和遮罩本来就带透明度，改色不会把透明度改掉。'
+    });
+    [
+      { id: 'menu-bg', label: '浮层底色' },
+      { id: 'shadow', label: '浮层投影' },
+      { id: 'overlay', label: '遮罩' }
+    ].forEach(item => layer.append(colorRow(item)));
+    return [input, layer];
   }
 
   // —— 字体与排版 ——
@@ -460,8 +495,12 @@
     const isPlayerParam = item => /^player-|^cover-/.test(item.id || '');
     // 排版的两个数值（字号缩放/行高）单独一张卡：它们不是"某个部件的形状"，是全站文字的比例
     const isTypeParam = item => /^(text-scale|line-height)$/.test(item.id || '');
-    (data.numbers || []).filter(item => !isPlayerParam(item) && !isTypeParam(item)).forEach(item => editor.append(numberRow(item)));
+    // 禁用态透明度归「按钮与输入框」那张卡
+    const isStateParam = item => /^disabled-opacity$/.test(item.id || '');
+    (data.numbers || []).filter(item => !isPlayerParam(item) && !isTypeParam(item) && !isStateParam(item)).forEach(item => editor.append(numberRow(item)));
     host.append(editor);
+
+    stateCards().forEach(card => host.append(card));
 
     // 字体与排版：字体是个人偏好（立刻存），两个数值跟着预设走（预览→保存）
     host.append(typographyCard());
