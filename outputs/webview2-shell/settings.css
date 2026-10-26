@@ -143,3 +143,10 @@
 .type-sample{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;margin:2px 0 10px;padding:12px 14px;border:1px dashed var(--line);border-radius:12px;background:var(--panel);color:var(--ink);min-height:52px}
 .type-sample strong{font-weight:600}
 .type-sample span{color:var(--muted);font-family:var(--font-mono),var(--font-cjk),monospace}
+#library-source{max-width:170px;min-width:104px;height:30px;padding:0 26px 0 10px;border:1px solid var(--input-line);border-radius:var(--radius-sm);background:var(--input-bg);color:var(--ink);font:inherit;font-size:12px}
+.network-sources .set-row>input,.network-sources .set-row>select,.network-sources .settings-card>select{min-width:0;max-width:100%;padding:8px 10px;border:1px solid var(--input-line);border-radius:var(--radius-sm);background:var(--input-bg);color:var(--ink);font:inherit}
+.network-sources label.set-row{align-items:center}
+.network-sources label.set-row>.set-label{flex:1}
+.network-sources label.set-row>input{flex:1;width:50%}
+.network-sources .settings-card>h2{font-size:15px;margin:0 0 14px}
+.network-sources .settings-actions{flex-wrap:wrap}

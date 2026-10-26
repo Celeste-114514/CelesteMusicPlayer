@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -578,16 +578,16 @@ namespace CelesteMusicPlayer
         /// 点击行为：未收藏 → 加入；已收藏 → 移除。托盘和任务栏共用同一份逻辑。</summary>
         internal void FavoriteCurrentPublic()
         {
-            string? path = _nowPlayingPath;
+            string? path = GetCurrentPlayingItem()?.PersistenceKey ?? _nowPlayingPath;
             if (string.IsNullOrWhiteSpace(path))
             {
                 if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
                 {
-                    path = _userPlaylist[_userPlaylistIndex].FilePath;
+                    path = _userPlaylist[_userPlaylistIndex].PersistenceKey;
                 }
                 else if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
                 {
-                    path = _playlist[_currentIndex].FilePath;
+                    path = _playlist[_currentIndex].PersistenceKey;
                 }
             }
 
@@ -693,16 +693,16 @@ namespace CelesteMusicPlayer
         /// <summary>当前曲目是否已收藏。迷你播放器心形按钮用它显示空心/实心。</summary>
         internal bool IsCurrentFavoritePublic()
         {
-            string? path = _nowPlayingPath;
+            string? path = GetCurrentPlayingItem()?.PersistenceKey ?? _nowPlayingPath;
             if (string.IsNullOrWhiteSpace(path))
             {
                 if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
                 {
-                    path = _userPlaylist[_userPlaylistIndex].FilePath;
+                    path = _userPlaylist[_userPlaylistIndex].PersistenceKey;
                 }
                 else if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
                 {
-                    path = _playlist[_currentIndex].FilePath;
+                    path = _playlist[_currentIndex].PersistenceKey;
                 }
             }
 
@@ -1479,7 +1479,7 @@ namespace CelesteMusicPlayer
                 }
 
                 List<string> paths = _userPlaylist
-                    .Select(p => p.FilePath)
+                    .Select(p => p.PersistenceKey)
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
                     .ToList();
@@ -1502,7 +1502,7 @@ namespace CelesteMusicPlayer
                 var items = new List<PlaylistItem>();
                 foreach (string path in paths)
                 {
-                    if (!System.IO.File.Exists(path)) continue;
+                    if (!System.IO.File.Exists(path) && SourceFromReference(path) == null) continue;
                     try { items.Add(CreatePlaylistItemFromPath(path)); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
                 }
                 if (items.Count == 0) return;
@@ -1530,7 +1530,7 @@ namespace CelesteMusicPlayer
                 var items = new List<PlaylistItem>();
                 foreach (string path in paths)
                 {
-                    if (!System.IO.File.Exists(path))
+                    if (!System.IO.File.Exists(path) && SourceFromReference(path) == null)
                     {
                         continue;
                     }
@@ -2714,6 +2714,8 @@ namespace CelesteMusicPlayer
 
         private void StartPlayback(PlaylistItem item)
         {
+            if (item.SourceId.Length > 0 && !System.IO.File.Exists(item.FilePath)) { _ = PlaySourceAsync(item); return; }
+            PrepareSourcePlayback(item);
             // 标记"用户主动开播过"：之后 MediaPlayer 报错才值得弹「无法播放」对话框。
             _anyPlaybackStarted = true;
             // 起播途中：引擎可能还播着上一首，这期间不写进度（避免记串曲目）
@@ -3124,6 +3126,13 @@ namespace CelesteMusicPlayer
             try
             {
                 PlaylistItem? next = ResolveSequentialNextItem(current);
+                _sourcePreloadLease?.Dispose(); _sourcePreloadLease = null;
+                if (next?.SourceId.Length > 0 && NetworkLibraryStore.Track(next.SourceTrackId) is NetworkTrack nextTrack)
+                {
+                    _sourcePreloadLease = NetworkLibraryService.Lease(NetworkLibraryService.CachedPath(nextTrack));
+                    next.FilePath = await NetworkLibraryService.ResolveAsync(nextTrack, System.Threading.CancellationToken.None);
+                    if (GetCurrentPlayingItem() is not PlaylistItem stillPlaying || WebTrackId(stillPlaying) != WebTrackId(current)) return;
+                }
                 if (next == null || string.IsNullOrWhiteSpace(next.FilePath) || !System.IO.File.Exists(next.FilePath))
                 {
                     StartupLog.Write("预加载: 无下一首 or 文件不存在 next=" + (next?.Title ?? "<null>"));

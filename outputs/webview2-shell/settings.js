@@ -524,35 +524,7 @@
   }
 
   function renderNetwork(host) {
-    const webdav = section({
-      title: 'WebDAV 网络音乐库',
-      note: '这里的代理只用于这一个连接，不是全局代理。测试连接用的是已经保存的配置。'
-    });
-    addFields(webdav, ['WebDavUrl', 'WebDavDisplayName', 'WebDavUser', 'WebDavProxyMode', 'WebDavProxyHost', 'WebDavProxyPort', 'WebDavCacheDir', 'WebDavCacheLimitMb']);
-    webdav.append(credentialRow('WebDAV 密码', {
-      service: 'webdav', key: 'password', configured: !!snapshot.accounts.webdavPassword, clear: true,
-      note: '保存时走系统加密落盘；快照里不回传明文。'
-    }));
-    const resultBox = node('p', '', 'settings-card-note');
-    webdav.append(resultBox);
-    const webdavActions = node('div', undefined, 'settings-actions');
-    webdavActions.append(button('测试连接', async btn => {
-      btn.disabled = true;
-      resultBox.textContent = '正在连接…';
-      resultBox.className = 'settings-card-note';
-      try {
-        const result = await request('webdav', { action: 'test' });
-        const text = (result.headline || '') + (result.detail ? ' — ' + result.detail : '')
-          + (result.items && result.items.length ? `（根目录共 ${result.items.length} 项）` : '');
-        resultBox.textContent = text;
-        resultBox.style.color = result.ok ? '#3f8f6f' : '#c0454f';
-      } catch (error) {
-        resultBox.textContent = '测试失败：' + error.message;
-        resultBox.style.color = '#c0454f';
-      } finally { btn.disabled = false; }
-    }));
-    webdav.append(webdavActions);
-    host.append(webdav);
+    window.CelesteSources.mount(host);
 
     const lastfm = section({ title: 'Last.fm', note: '元数据查询和收听提交用的是两套凭据：这里的 API key / secret 两边都会写，保持一致。授权会话需要在旧界面的 Last.fm 面板里完成一次。' });
     addFields(lastfm, ['EnableLastFm', 'LastFmNowPlaying', 'LastFmLeastSeconds', 'LastFmLeastPercent']);

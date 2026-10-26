@@ -88,7 +88,11 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            LibraryDb.SavePlaylist(name, songs);
+            var references = songs.ToArray();
+            foreach (string reference in references)
+                if (System.IO.Path.GetExtension(reference).Equals(".ref", StringComparison.OrdinalIgnoreCase))
+                    NetworkLibraryStore.Pin(System.IO.Path.GetFileNameWithoutExtension(reference));
+            LibraryDb.SavePlaylist(name, references);
         }
 
         public static void SyncFavoritesPlaylist()

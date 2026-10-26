@@ -45,6 +45,7 @@
   <script src="tags-tools.js" defer></script>
   <script src="tags.js" defer></script>
   <link rel="stylesheet" href="settings.css">
+  <script src="sources.js" defer></script>
   <script src="settings.js" defer></script>
 </head>
 <body>
@@ -106,6 +107,7 @@
       </nav>
       <span id="mode-label" hidden>设计预览</span>
       <div class="header-actions">
+        <select id="library-source" aria-label="曲库来源" title="筛选曲库来源"><option value="all">全部来源</option><option value="local">本地曲库</option><option value="network">网络曲库</option></select>
         <span class="header-divider" aria-hidden="true"></span>
         <div class="window-actions" aria-label="窗口操作">
           <button data-window="minimize" aria-label="最小化" title="最小化"><svg><use href="#i-minimize"/></svg></button>

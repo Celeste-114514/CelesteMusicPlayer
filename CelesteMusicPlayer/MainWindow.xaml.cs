@@ -81,9 +81,15 @@ namespace CelesteMusicPlayer
 
         /// <summary>网络音乐（WebDAV）：这一首在服务器上的相对路径；空 = 本地文件。</summary>
         public string RemotePath { get; set; } = string.Empty;
+        public string SourceId { get; set; } = string.Empty;
+        public string SourceTrackId { get; set; } = string.Empty;
+        public string SourceName { get; set; } = string.Empty;
+        public bool IsCueSegment { get; set; }
+        // Persist references separately from the playback/cache path. Local ordinary files keep legacy keys.
+        public string PersistenceKey => SourceTrackId.Length > 0 ? NetworkIdentity.Reference(SourceTrackId) : FilePath;
 
         /// <summary>是否来自网络音乐库。</summary>
-        public bool IsRemote => !string.IsNullOrEmpty(RemotePath);
+        public bool IsRemote => SourceId.Length > 0 || !string.IsNullOrEmpty(RemotePath);
 
         /// <summary>
         /// 网络音乐右侧那列小字（文件大小 / 缓存状态）。

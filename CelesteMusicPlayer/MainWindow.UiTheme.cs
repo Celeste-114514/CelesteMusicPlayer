@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -1995,6 +1995,8 @@ namespace CelesteMusicPlayer
 
         private void MainWindow_Closed(object sender, WindowEventArgs args)
         {
+            _sourcePlaybackCancellation?.Cancel();
+            _sourcePlaybackLease?.Dispose(); _sourcePreloadLease?.Dispose();
             // 注意：此处不再兜底保存 EQ。每次 EQ 调整已由 ApplyDspToEngine → EqCurveStore.Save 落盘；
             // 若在此用进程内 _audioFxEq（启动时是平坦默认，未打开音效面板时不等于盘上值）覆盖保存，
             // 会把用户上次调好的曲线覆盖成平坦 —— 这正是“重启/再次打开后 EQ 还原”的根因。

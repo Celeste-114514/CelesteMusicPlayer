@@ -49,12 +49,14 @@ namespace CelesteMusicPlayer
             _timer.Tick += (_, _) => { if (_ready) { SendState(); SendThemeIfChanged(); if (_dirty) _ = SendLibraryAsync(); } };
             _library = (INotifyCollectionChanged)owner.LibraryTracks;
             _library.CollectionChanged += LibraryChanged;
+            NetworkLibraryService.Changed += SourcesChanged;
             AppWindow.Changed += BackgroundWindowChanged;
             root.Loaded += async (_, _) => await InitializeAsync();
             Closed += (_, _) =>
             {
                 _closed = true; _ready = false; _timer.Stop();
                 _library.CollectionChanged -= LibraryChanged;
+                NetworkLibraryService.Changed -= SourcesChanged;
                 AppWindow.Changed -= BackgroundWindowChanged;
                 WebAppearance.ClearDraft();
                 _waveformCancellation?.Cancel();
@@ -62,6 +64,9 @@ namespace CelesteMusicPlayer
                 _web.Close();
             };
         }
+
+        private void SourcesChanged() => DispatcherQueue.TryEnqueue(() => { _dirty = true; _metadataSent.Clear(); });
+        internal void NotifySourceStatus(string text) => Post(new { kind = "celeste.sourceStatus", version = 1, message = text });
 
         private void LibraryChanged(object? sender, NotifyCollectionChangedEventArgs args) => _dirty = true;
 
@@ -84,6 +89,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                NetworkLibraryStore.MigrateWebDav();
                 string folder = Path.Combine(AppContext.BaseDirectory, "WebShell");
                 if (!File.Exists(Path.Combine(folder, "index.html"))) throw new FileNotFoundException("网页资源缺失，请使用完整发布目录。", folder);
                 await _web.EnsureCoreWebView2Async();
@@ -168,7 +174,7 @@ namespace CelesteMusicPlayer
             int revision = ++_revision;
             try
             {
-                var snapshot = _owner.LibraryTracks.ToArray();
+                var snapshot = _owner.WebAllTracks();
                 _tracks.Clear();
                 foreach (var item in snapshot) _tracks[MainWindow.WebTrackId(item)] = item;
                 var copies = _tracks.Select(pair => (Id: pair.Key, Item: pair.Value.Clone())).ToArray();
@@ -181,7 +187,7 @@ namespace CelesteMusicPlayer
                         id = pair.Id, title = pair.Item.Title, artist = pair.Item.Artist, album = pair.Item.Album,
                         albumArtist = pair.Item.AlbumArtist, year = pair.Item.Year, genre = pair.Item.Genre,
                         track = pair.Item.Track, disc = pair.Item.Disc, sortPath = pair.Item.FilePath,
-                        remote = pair.Item.IsRemote,
+                        remote = pair.Item.IsRemote, sourceId = pair.Item.SourceId, sourceName = pair.Item.SourceName,
                         duration = Math.Max(0, pair.Item.Duration.TotalSeconds),
                         chips = Array.Empty<string>(),
                         coverUrl = CoverOrigin + "/cover/" + pair.Id
@@ -237,6 +243,10 @@ namespace CelesteMusicPlayer
                     case "appSettings":
                         var appSettings = await _owner.WebSettingsAsync(msg, this);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = appSettings }); break;
+                    case "sources":
+                        var sources = await _owner.WebSourcesAsync(msg);
+                        Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = sources });
+                        break;
                     case "theme":
                         var theme = await _owner.WebAppearanceAsync(msg).ConfigureAwait(true);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = theme });
@@ -322,7 +332,7 @@ namespace CelesteMusicPlayer
         }
 
         private PlaylistItem Resolve(string? id) => id != null && _tracks.TryGetValue(id, out var item)
-            ? item : throw new InvalidOperationException("曲目已不在当前曲库中，请稍后重试。");
+            ? item : id != null && MainWindow.ResolveSourceTrack(id) is PlaylistItem remote ? remote : throw new InvalidOperationException("曲目已不在当前曲库中，请稍后重试。");
 
         private async Task<object> ReadOverviewAsync(string category, string name)
         {
@@ -426,6 +436,21 @@ namespace CelesteMusicPlayer
                 else path = _tracks.TryGetValue(id, out var item) ? item.FilePath
                     : current != null && MainWindow.WebTrackId(current) == id ? current.FilePath
                     : _queueCoverPaths.TryGetValue(id, out var queuePath) ? queuePath : _owner.WebFolderCoverPath(id);
+                if (!playlistCover && NetworkLibraryStore.Track(id) is NetworkTrack remoteTrack && remoteTrack.SourceId.Length > 0 && (path == null || !File.Exists(path)))
+                {
+                    await _coverGate.WaitAsync(); entered = true;
+                    var source = NetworkLibraryStore.Source(remoteTrack.SourceId);
+                    string coverFile = Path.Combine(NetworkLibraryService.CacheRoot, source.Id, NetworkIdentity.Hash(remoteTrack.Entry.Key) + ".cover");
+                    byte[]? coverBytes = File.Exists(coverFile) ? await File.ReadAllBytesAsync(coverFile) : null;
+                    if (coverBytes == null && source.Enabled)
+                    {
+                        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                        coverBytes = await NetworkSourceProvider.For(source).CoverAsync(source, remoteTrack.Entry, timeout.Token);
+                        if (coverBytes != null) { Directory.CreateDirectory(Path.GetDirectoryName(coverFile)!); await File.WriteAllBytesAsync(coverFile, coverBytes); }
+                    }
+                    args.Response = sender.Environment.CreateWebResourceResponse(coverBytes == null ? null : new MemoryStream(coverBytes).AsRandomAccessStream(), coverBytes == null ? 404 : 200, coverBytes == null ? "Not Found" : "OK", "Content-Type: image/jpeg\r\nCache-Control: private, max-age=60");
+                    return;
+                }
                 if (path == null) { args.Response = sender.Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); return; }
                 await _coverGate.WaitAsync(); entered = true;
                 if (_closed) return;

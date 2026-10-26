@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../CelesteMusicPlayer/Network*.cs" LinkBase="Production" />
+    <Compile Include="../../CelesteMusicPlayer/MediaServerSourceProvider.cs" Link="Production/MediaServerSourceProvider.cs" />
+    <Compile Include="../../CelesteMusicPlayer/BaiduSourceProvider.cs" Link="Production/BaiduSourceProvider.cs" />
+    <Compile Include="../../CelesteMusicPlayer/WebDavClient.cs" Link="Production/WebDavClient.cs" />
+    <Compile Include="../../CelesteMusicPlayer/WebDavLocation.cs" Link="Production/WebDavLocation.cs" />
+    <Compile Include="../../CelesteMusicPlayer/MainWindow.WebSources.cs" Link="Production/MainWindow.WebSources.cs" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+  </ItemGroup>
+</Project>

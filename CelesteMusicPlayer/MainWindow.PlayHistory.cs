@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 
 namespace CelesteMusicPlayer
@@ -23,7 +23,7 @@ namespace CelesteMusicPlayer
 
                 string title = Path.GetFileNameWithoutExtension(_nowPlayingPath);
                 double seconds = EnginePositionValue > TimeSpan.Zero ? EnginePositionValue.TotalSeconds : 0;
-                LibraryDb.RecordPlayback(_nowPlayingPath, title, seconds, completed);
+                LibraryDb.RecordPlayback(GetCurrentPlayingItem()?.PersistenceKey ?? _nowPlayingPath, title, seconds, completed);
                 NotifyWebHomeChanged();
             }
             catch (Exception caught)

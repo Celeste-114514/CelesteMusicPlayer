@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -2537,8 +2537,8 @@ namespace CelesteMusicPlayer
 
                 _lastPlayedForScrobble = item;
                 _lastPlayStartUtc = DateTime.UtcNow;
-                TrackStatsStore.RecordPlayStart(item.FilePath);
-                _listenSamplePath = item.FilePath;
+                TrackStatsStore.RecordPlayStart(item.PersistenceKey);
+                _listenSamplePath = item.PersistenceKey;
                 _lastListenSampleUtc = DateTime.UtcNow;
                 UpdateFavoriteButtonUi();
 

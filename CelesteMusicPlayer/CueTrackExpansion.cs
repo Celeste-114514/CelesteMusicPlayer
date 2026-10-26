@@ -83,6 +83,8 @@ namespace CelesteMusicPlayer
                     track.StartTimeSeconds = start;
                     track.Duration = TimeSpan.FromSeconds(length);
                     track.Track = (uint)(i + 1); // 分轨序号即音轨号，保证专辑视图顺序正确
+                    track.IsCueSegment = true;
+                    track.SourceTrackId = "cue-" + NetworkIdentity.Hash(System.IO.Path.GetFullPath(item.FilePath).ToUpperInvariant() + "\n" + track.Track);
                     result.Add(track);
                 }
 

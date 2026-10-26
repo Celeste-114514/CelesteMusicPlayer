@@ -398,9 +398,21 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void PlayPlaylistItem(PlaylistItem track)
         {
+            if (track.SourceTrackId.Length > 0)
+            {
+                NetworkLibraryStore.Pin(track.SourceTrackId);
+                int sourceIndex = _userPlaylist.ToList().FindIndex(item => item.SourceTrackId == track.SourceTrackId);
+                if (sourceIndex < 0)
+                {
+                    AddSongsToUserPlaylist(new[] { track });
+                    sourceIndex = _userPlaylist.ToList().FindIndex(item => item.SourceTrackId == track.SourceTrackId);
+                }
+                if (sourceIndex >= 0) PlayUserPlaylistAt(sourceIndex); else StartPlayback(track);
+                return;
+            }
             // 若已在该播放队列中：保持原顺序，仅定位到它播放（不再把它移到最前）。
             // CUE 分轨：同一文件有多轨，按「路径+起点」精确匹配，否则点第 3 轨会播第 1 轨。
-            bool byStart = track.StartTimeSeconds > 0;
+            bool byStart = track.IsCueSegment || track.StartTimeSeconds > 0;
             int existing = FindUserPlaylistIndex(track.FilePath, track.StartTimeSeconds, byStart);
             if (existing >= 0)
             {
@@ -442,7 +454,7 @@ namespace CelesteMusicPlayer
         {
             for (int i = 0; i < _userPlaylist.Count; i++)
             {
-                if (!string.Equals(_userPlaylist[i].FilePath, filePath, StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(_userPlaylist[i].FilePath, filePath, StringComparison.OrdinalIgnoreCase) && !string.Equals(_userPlaylist[i].PersistenceKey, filePath, StringComparison.OrdinalIgnoreCase))
                 {
                     continue;
                 }
@@ -1985,7 +1997,7 @@ namespace CelesteMusicPlayer
             List<PlaylistItem> incoming = songs
                 .Where(s => !string.IsNullOrWhiteSpace(s.FilePath))
                 // 分组键带 CUE 分轨起点：同一文件的多轨路径相同，只按路径去重会折叠成一条
-                .GroupBy(s => s.FilePath + "\u0001" + s.StartTimeSeconds.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture), StringComparer.OrdinalIgnoreCase)
+                .GroupBy(WebTrackId, StringComparer.Ordinal)
                 .Select(g => g.First())
                 .ToList();
             if (incoming.Count == 0)
@@ -1994,18 +2006,18 @@ namespace CelesteMusicPlayer
             }
 
             string? playingPath = _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
-                ? _userPlaylist[_userPlaylistIndex].FilePath
+                ? WebTrackId(_userPlaylist[_userPlaylistIndex])
                 : null;
 
             var incomingPaths = new HashSet<string>(
-                incoming.Select(s => s.FilePath),
+                incoming.Select(WebTrackId),
                 StringComparer.OrdinalIgnoreCase);
 
             // 保留未出现在本批次中的旧项（相对顺序不变）
             var kept = new List<PlaylistItem>(_userPlaylist.Count);
             foreach (PlaylistItem existing in _userPlaylist)
             {
-                if (!incomingPaths.Contains(existing.FilePath))
+                if (!incomingPaths.Contains(WebTrackId(existing)))
                 {
                     kept.Add(existing);
                 }
@@ -2052,7 +2064,7 @@ namespace CelesteMusicPlayer
 
             if (!string.IsNullOrWhiteSpace(playingPath))
             {
-                _userPlaylistIndex = FindUserPlaylistIndex(playingPath);
+                _userPlaylistIndex = _userPlaylist.ToList().FindIndex(item => WebTrackId(item) == playingPath);
             }
 
             NotifyCurrentPlaylistWindow();
@@ -2175,21 +2187,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private static PlaylistItem ClonePlaylistItem(PlaylistItem song)
-            => new()
-            {
-                Title = song.Title,
-                Artist = song.Artist,
-                AlbumArtist = song.AlbumArtist,
-                Album = song.Album,
-                Track = song.Track,
-                Year = song.Year,
-                Genre = song.Genre,
-                Duration = song.Duration,
-                FilePath = song.FilePath,
-                StartTimeSeconds = song.StartTimeSeconds,
-                Rating = song.Rating
-            };
+        private static PlaylistItem ClonePlaylistItem(PlaylistItem song) => song.Clone();
 
 
         /// <summary>

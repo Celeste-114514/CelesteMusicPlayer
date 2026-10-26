@@ -17,13 +17,13 @@ namespace CelesteMusicPlayer
             var offset = TimeSpan.FromMinutes(-offsetMinutes);
             if (operation == "dayHistory")
             {
-                var dayTracks = LibraryTracks.ToArray();
+                var dayTracks = WebAllTracks();
                 return await Task.Run(() => WebHomeDay(msg, offset, dayTracks));
             }
             if (operation != "get") throw new ArgumentException("未知的主页操作。");
 
             // Capture UI-owned collections before leaving the UI thread.
-            var tracks = LibraryTracks.ToArray();
+            var tracks = WebAllTracks();
             var stats = TrackStatsStore.Load();
             var albums = WebAlbums(tracks);
             string today = msg.GetProperty("today").GetString() ?? "";
@@ -33,7 +33,7 @@ namespace CelesteMusicPlayer
         private static object WebHomeSnapshot(PlaylistItem[] tracks, Dictionary<string, TrackStatsEntry> stats,
             WebAlbumEntry[] albums, string today, TimeSpan offset)
         {
-            var byPath = tracks.GroupBy(track => Path.GetFullPath(track.FilePath), StringComparer.OrdinalIgnoreCase)
+            var byPath = tracks.GroupBy(track => Path.GetFullPath(track.PersistenceKey), StringComparer.OrdinalIgnoreCase)
                 .ToDictionary(group => group.Key, group => group.First(), StringComparer.OrdinalIgnoreCase);
             var recent = LibraryDb.LoadPlaybackHistory(1000);
             var last = recent.FirstOrDefault(item => byPath.ContainsKey(Path.GetFullPath(item.FilePath)));
@@ -89,7 +89,7 @@ namespace CelesteMusicPlayer
         }
 
         private static TrackStatsEntry? StatsFor(Dictionary<string, TrackStatsEntry> stats, PlaylistItem track)
-            => stats.TryGetValue(Path.GetFullPath(track.FilePath), out var entry) ? entry : null;
+            => stats.TryGetValue(Path.GetFullPath(track.PersistenceKey), out var entry) ? entry : null;
 
         private static object WebHomeDay(JsonElement msg, TimeSpan offset, PlaylistItem[] current)
         {
@@ -104,7 +104,7 @@ namespace CelesteMusicPlayer
                 total = all.Count, nextCursor = cursor + page.Count < all.Count ? cursor + page.Count : (int?)null,
                 tracks = page.Select(item =>
                 {
-                    var track = current.FirstOrDefault(candidate => string.Equals(candidate.FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase));
+                    var track = current.FirstOrDefault(candidate => string.Equals(candidate.PersistenceKey, item.FilePath, StringComparison.OrdinalIgnoreCase));
                     return new { trackId = track == null ? "" : WebTrackId(track), title = item.Title,
                         artist = track?.Artist ?? "", fileName = Path.GetFileName(item.FilePath),
                         time = (item.PlayedAtUtc.ToUniversalTime() + offset).ToString("HH:mm", CultureInfo.InvariantCulture) };

@@ -20,6 +20,7 @@ namespace CelesteMusicPlayer
         {
             public string id { get; init; } = "";
             public string title { get; init; } = "";
+            public string sourceId { get; init; } = "";
             public string artist { get; init; } = "";
             public uint year { get; init; }
             public int added { get; init; }
@@ -31,16 +32,16 @@ namespace CelesteMusicPlayer
 
         internal static WebAlbumEntry[] WebAlbums(IReadOnlyList<PlaylistItem> source)
         {
-            return source.GroupBy(item => (Album: item.Album ?? "", Artist: item.AlbumArtist ?? item.Artist ?? ""))
+            return source.GroupBy(item => (Album: item.Album ?? "", Artist: item.AlbumArtist ?? item.Artist ?? "", Source: item.SourceId))
                 .Select((group, index) =>
                 {
                     var tracks = group.ToArray();
                     var cover = tracks.FirstOrDefault(item => (item.Disc == 0 || item.Disc == 1) && item.Track == 1) ?? tracks[0];
                     string artist = string.IsNullOrWhiteSpace(group.Key.Artist) ? "未知艺术家" : group.Key.Artist;
-                    string id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("album\n" + group.Key.Album.ToUpperInvariant() + "\n" + artist.ToUpperInvariant()))).ToLowerInvariant();
+                    string id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("album\n" + group.Key.Source + "\n" + group.Key.Album.ToUpperInvariant() + "\n" + artist.ToUpperInvariant()))).ToLowerInvariant();
                     return new WebAlbumEntry
                     {
-                        id = id, title = group.Key.Album, artist = artist, year = tracks.Where(item => item.Year > 0).Select(item => item.Year).DefaultIfEmpty(0u).Max(),
+                        id = id, sourceId = group.Key.Source, title = group.Key.Album, artist = artist, year = tracks.Where(item => item.Year > 0).Select(item => item.Year).DefaultIfEmpty(0u).Max(),
                         added = index, trackCount = tracks.Length, duration = tracks.Sum(item => item.Duration.TotalSeconds),
                         coverUrl = "https://celeste-cover.internal/cover/" + WebTrackId(cover) + "?size=480",
                         trackIds = tracks.OrderBy(item => item.Disc == 0 ? 1u : item.Disc)
@@ -239,7 +240,7 @@ namespace CelesteMusicPlayer
                 case "addToPlaylist":
                     string name = msg.GetProperty("name").GetString() ?? "";
                     if (!NamedPlaylistStore.List().Contains(name)) throw new InvalidOperationException("播放列表已不存在。");
-                    NamedPlaylistStore.SaveSongs(name, NamedPlaylistStore.LoadSongs(name).Append(current.FilePath));
+                    NamedPlaylistStore.SaveSongs(name, NamedPlaylistStore.LoadSongs(name).Append(current.PersistenceKey));
                     break;
                 default: throw new ArgumentException("此功能还未接入网页。");
             }

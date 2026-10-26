@@ -157,10 +157,27 @@
   document.addEventListener('keydown', event => { if (event.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) { event.preventDefault(); $('search').focus(); } });
   $('search').addEventListener('input', event => { songQuery = event.target.value.trim(); if (currentPage === 'songs') renderSongs(); });
   $('search').addEventListener('keydown', event => { if (event.key === 'Enter') { songQuery = event.target.value.trim(); navigate(['albums','artists','albumArtists','folders','favorites','ratings','recent','mostPlayed','playlists','queue'].includes(currentPage)?currentPage:'songs'); setOrbit(false); } });
+  let sourceFilter = 'all';
+  const inSource = track => sourceFilter === 'all' || (sourceFilter === 'local' ? !track.remote : sourceFilter === 'network' ? track.remote : track.sourceId === sourceFilter);
+  function refreshSources() {
+    const select = $('library-source');
+    if (!select) return;
+    const sources = new Map(libraryTracks.filter(t => t.sourceId).map(t => [t.sourceId, t.sourceName || '网络来源']));
+    select.replaceChildren(new Option('全部来源', 'all'), new Option('本地曲库', 'local'), new Option('网络曲库', 'network'));
+    sources.forEach((name, id) => select.append(new Option(name, id)));
+    if (!['all', 'local', 'network'].includes(sourceFilter) && !sources.has(sourceFilter)) sourceFilter = 'all';
+    select.value = sourceFilter;
+  }
+  $('library-source')?.addEventListener('change', event => {
+    sourceFilter = event.target.value; visibleLimit = 200; rowStamp = '';
+    renderSongs();
+    document.dispatchEvent(new CustomEvent('celeste:library'));
+    document.dispatchEvent(new CustomEvent('celeste:navigate', { detail: currentPage }));
+  });
   function visibleSongs() {
     const query = songQuery.toLocaleLowerCase();
     const key = $('songs-sort').value;
-    return (live ? libraryTracks : samples).map((track,index) => ({ track,index })).filter(({track}) => !query || [track.title,track.artist,track.album].some(value => value.toLocaleLowerCase().includes(query))).sort((a,b) => {
+    return (live ? libraryTracks : samples).map((track,index) => ({ track,index })).filter(({track}) => inSource(track) && (!query || [track.title,track.artist,track.album].some(value => value.toLocaleLowerCase().includes(query)))).sort((a,b) => {
       const result = ['duration','year','track'].includes(key) ? Number(a.track[key]||0)-Number(b.track[key]||0) : collator.compare(a.track[key]||'',b.track[key]||'');
       return (result || collator.compare(a.track.title,b.track.title) || a.index-b.index) * (sortAscending ? 1 : -1);
     });
@@ -183,13 +200,13 @@
     $('songs-list').replaceChildren();
     metadataObserver?.disconnect();
     rowStamp = '';
-    const source = live ? libraryTracks : samples;
+    const source = live ? libraryTracks.filter(inSource) : samples;
     $('songs-count').textContent = libraryLoading ? `正在加载曲库 · ${pendingTracks.length} / ${libraryTotal} 首` : (songQuery ? `${tracks.length} 首匹配 · 共 ${source.length} 首` : `${source.length} 首歌曲 · ${format(source.reduce((sum,track)=>sum+track.duration,0)).replace(':',' 分 ')} 秒`);
-    $('songs-preview').textContent = live ? (libraryLoading ? '正在加载' : '本机曲库') : '演示曲库';
+    $('songs-preview').textContent = live ? (libraryLoading ? '正在加载' : '统一曲库') : '演示曲库';
     $('songs-play-all').disabled = tracks.length === 0;
     $('songs-empty').hidden = tracks.length > 0;
     $('songs-empty').querySelector('h2').textContent = libraryLoading ? '正在载入你的音乐' : !source.length ? '曲库中还没有歌曲' : '没有找到相关歌曲';
-    $('songs-empty').querySelector('p').textContent = libraryLoading ? '曲库较大时请稍候。' : !source.length ? '请在旧界面导入音乐，列表会自动更新。' : '试试其他歌名、艺术家或专辑。';
+    $('songs-empty').querySelector('p').textContent = libraryLoading ? '曲库较大时请稍候。' : !source.length ? '可在文件夹页添加本地音乐，或在设置的网络页添加来源。' : '试试其他歌名、艺术家或专辑。';
     $('songs-clear').hidden = !songQuery;
     $('songs-more').hidden = tracks.length <= visibleLimit;
     tracks.slice(0,visibleLimit).forEach(({track,index}, order) => {
@@ -305,7 +322,7 @@
         if(message.phase==='begin'){libraryRevision=message.revision;pendingTracks=[];libraryTotal=message.total;libraryLoading=true;}
         else if(message.revision!==libraryRevision)return;
         else if(message.phase==='batch'&&Array.isArray(message.tracks))pendingTracks.push(...message.tracks.filter(track=>typeof track.id==='string'&&typeof track.title==='string'&&typeof track.artist==='string'&&typeof track.album==='string'&&Number.isFinite(track.duration)&&Array.isArray(track.chips)));
-        else if(message.phase==='end'){libraryTracks=pendingTracks;libraryAlbums=Array.isArray(message.albums)?message.albums:[];pendingTracks=[];libraryLoading=false;visibleLimit=200;state.index=libraryTracks.findIndex(track=>track.id===state.trackId);selectedSong=null;document.dispatchEvent(new CustomEvent('celeste:library'));}
+        else if(message.phase==='end'){libraryTracks=pendingTracks;libraryAlbums=Array.isArray(message.albums)?message.albums:[];pendingTracks=[];libraryLoading=false;refreshSources();visibleLimit=200;state.index=libraryTracks.findIndex(track=>track.id===state.trackId);selectedSong=null;document.dispatchEvent(new CustomEvent('celeste:library'));}
         if(currentPage==='songs')renderSongs();
         return;
       }
@@ -336,6 +353,6 @@
     setInterval(() => { const now=performance.now(); const delta=(now-lastTick)/1000; lastTick=now; if(!state.playing||document.hidden||seeking)return; state.position=Math.min(state.duration,state.position+delta); if(state.position>=state.duration){if(state.repeat)state.position=0;else if(state.shuffle){const choices=previewQueue.filter(index=>index!==state.index);chooseTrack(choices.length?choices[Math.floor(Math.random()*choices.length)]:state.index)}else stepTrack(1)} render(); },250);
     document.addEventListener('visibilitychange',()=>lastTick=performance.now());
   }
-  window.CelesteShell=Object.freeze({send,notify,navigate,setPath,getPage:()=>currentPage,getState:()=>({...state}),getLibrary:()=>live?libraryTracks:samples,getAlbums:()=>libraryAlbums,playTrack:id=>chooseTrack(libraryTracks.findIndex(track=>track.id===id)),playDemo:chooseTrack,playTracks:ids=>send('playAll',{trackIds:ids})});
+  window.CelesteShell=Object.freeze({send,notify,navigate,setPath,getPage:()=>currentPage,getState:()=>({...state}),getLibrary:()=>live?libraryTracks.filter(inSource):samples,getAlbums:()=>libraryAlbums.filter(album=>album.trackIds.some(id=>libraryTracks.some(t=>t.id===id&&inSource(t)))),playTrack:id=>chooseTrack(libraryTracks.findIndex(track=>track.id===id)),playDemo:chooseTrack,playTracks:ids=>send('playAll',{trackIds:ids})});
   navigate('overview',false); setOrbit(true); render();
 })();

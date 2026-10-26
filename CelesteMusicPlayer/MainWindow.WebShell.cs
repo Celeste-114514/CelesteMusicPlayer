@@ -56,23 +56,25 @@ namespace CelesteMusicPlayer
 
         internal static string WebTrackId(PlaylistItem item)
         {
+            if (item.SourceTrackId.Length > 0) return item.SourceTrackId;
             string key = item.FilePath.ToUpperInvariant() + "\n" + item.StartTimeSeconds.ToString("R", CultureInfo.InvariantCulture);
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))).ToLowerInvariant();
         }
 
         internal void WebPlayTrack(PlaylistItem item)
         {
-            if (!_playlist.Contains(item)) throw new InvalidOperationException("曲库已变化，请刷新后重试。");
+            if (item.SourceTrackId.Length == 0 && !_playlist.Contains(item)) throw new InvalidOperationException("曲库已变化，请刷新后重试。");
             StartupLog.Write("[WebShell] PlayTrack id=" + WebTrackId(item) + " output=" + AppSettingsStore.Load().OutputMode);
             PlayPlaylistItem(item);
         }
 
         internal void WebPlayAll(IReadOnlyList<PlaylistItem> tracks)
         {
-            if (tracks.Count == 0 || tracks.Any(item => !_playlist.Contains(item)))
+            if (tracks.Count == 0 || tracks.Any(item => item.SourceTrackId.Length == 0 && !_playlist.Contains(item)))
                 throw new InvalidOperationException("曲库已变化，请刷新后重试。");
             _userPlaylist.Clear();
             _userPlaylistIndex = -1;
+            foreach (var track in tracks.Where(t => t.SourceTrackId.Length > 0)) NetworkLibraryStore.Pin(track.SourceTrackId);
             AddSongsToUserPlaylist(tracks);
             PlayUserPlaylistAt(0);
         }

@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -1083,7 +1083,7 @@ namespace CelesteMusicPlayer
                     var rebuilt = new List<PlaylistItem>(queue.Paths.Count);
                     foreach (string p in queue.Paths)
                     {
-                        if (string.IsNullOrWhiteSpace(p) || !System.IO.File.Exists(p))
+                        if (string.IsNullOrWhiteSpace(p) || (!System.IO.File.Exists(p) && SourceFromReference(p) == null))
                         {
                             continue;
                         }
@@ -1122,7 +1122,7 @@ namespace CelesteMusicPlayer
                 PlaybackSessionState? session = PlaybackSessionStore.TryLoad();
                 if (session == null
                     || string.IsNullOrWhiteSpace(session.FilePath)
-                    || !System.IO.File.Exists(session.FilePath))
+                    || (!System.IO.File.Exists(session.FilePath) && SourceFromReference(session.FilePath) == null))
                 {
                     return;
                 }
@@ -1361,7 +1361,7 @@ namespace CelesteMusicPlayer
                                           || (mp != null && mp.Source != null));
                     if (hasSession)
                     {
-                        PlaybackSessionStore.Save(item.FilePath, GetLivePositionSeconds());
+                        PlaybackSessionStore.Save(item.PersistenceKey, GetLivePositionSeconds());
                     }
                 }
 
@@ -1410,10 +1410,10 @@ namespace CelesteMusicPlayer
                 };
                 foreach (PlaylistItem p in _userPlaylist)
                 {
-                    if (!string.IsNullOrWhiteSpace(p.FilePath)
-                        && !LibraryPathGuard.IsInternalCacheFile(p.FilePath))
+                    if (!string.IsNullOrWhiteSpace(p.PersistenceKey)
+                        && !LibraryPathGuard.IsInternalCacheFile(p.PersistenceKey))
                     {
-                        state.Paths.Add(p.FilePath);
+                        state.Paths.Add(p.PersistenceKey);
                     }
                 }
 
@@ -1568,6 +1568,7 @@ namespace CelesteMusicPlayer
         /// <summary>TagLib 读取标题 / 艺术家 / 专辑 / 音轨号 / 年份 / 时长</summary>
         private static PlaylistItem CreatePlaylistItemFromPath(string path)
         {
+            if (SourceFromReference(path) is PlaylistItem referenced) return referenced;
             string fileName = Path.GetFileNameWithoutExtension(path);
             string title = fileName;
             string artist = "未知艺术家";
