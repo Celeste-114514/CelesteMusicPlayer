@@ -20,7 +20,7 @@
   // `source` says where the value comes from:
   //   'library' — already in memory, so it can be sorted and filtered by the host
   //   'tag'     — only readable from the file, so it is fetched lazily for visible rows and
-  //               sorting those columns only reorders what is currently loaded
+  //               their sort keys are read over the entire workspace by the host before sorting
   const COLUMNS = [
     { key: 'title', name: '标题', width: 200, source: 'library' },
     { key: 'artist', name: '艺术家', width: 150, source: 'library' },
@@ -64,7 +64,7 @@
   ];
 
   // ---- state -----------------------------------------------------------------------------
-  const PAGE_SIZE = 200;
+  const WORKSPACE_LIMIT = 20000;
   const state = {
     rows: [],
     byId: new Map(),
@@ -77,6 +77,7 @@
     asc: true,
     scopeIds: [],
     sortRules: [],
+    opening: false,
     generation: 0
   };
   const selected = new Set();       // track ids
@@ -143,55 +144,50 @@
   }
 
   async function loadRows(reset) {
-    // A reset (new search / new sort) must never be dropped just because a page is in flight —
-    // the user typed something and expects that to win. Only the append path waits.
-    if (!reset && (state.loading || !state.hasMore)) return;
+    if (!reset) return false;
     const generation = ++state.generation;
     state.loading = true;
-    if (reset) {
-      state.rows = [];
-      state.byId.clear();
-      state.offset = 0;
-      state.hasMore = true;
-      enriched.clear();
-      rowEls.clear();
-      cellEls.clear();
-      tableBody.replaceChildren();
+    table.setAttribute('aria-busy', 'true');
+    table.inert = true;
+    panel.inert = true;
+    sortButton.disabled = true;
+    updateSelection();
+    totalLabel.textContent = `正在载入完整工作集 · ${state.scopeIds.length.toLocaleString('zh-CN')} 首…`;
+    try {
+      if (state.scopeIds.length > WORKSPACE_LIMIT) throw new Error('每个标签工作集最多 20,000 个文件，请分开工作目录。原表格已保留。');
+      const result = state.scopeIds.length ? await req('list', {
+        all: true, offset: 0, limit: WORKSPACE_LIMIT, query: state.query,
+        sort: state.sort, asc: state.asc, sortRules: state.sortRules, scopeIds: [...state.scopeIds]
+      }) : { total: 0, rows: [] };
+      if (generation !== state.generation) return false;
+      const rows = result.rows || [];
+      const total = Number(result.total) || 0;
+      if (rows.length !== total || new Set(rows.map(row => row.id)).size !== total)
+        throw new Error('歌曲集合未完整返回，已保留原表格。请重试，避免只给部分歌曲排序或编号。');
+      // Like the native panel, prepare the full collection and replace the table once.
+      const models = rows.map(row => ({ trackCount: '', discCount: '', bpm: '', composer: '', comment: '', lyrics: '', syncedLyrics: '', ...row, ...(dirty.get(row.id) || {}) }));
+      state.rows = models;
+      state.byId = new Map(models.map(row => [row.id, row]));
+      state.total = total;
+      state.offset = total;
+      state.hasMore = false;
+      observer.disconnect(); pending.clear(); clearTimeout(flushTimer);
+      enriched.clear(); rowEls.clear(); cellEls.clear();
       lastClicked = -1;
       renderHead();
-    }
-    if (!state.scopeIds.length) {
-      state.total=0;state.hasMore=false;state.loading=false;renderFooter();return;
-    }
-    try {
-      const result = await req('list', {
-        offset: state.offset,
-        limit: PAGE_SIZE,
-        query: state.query,
-        sort: state.sort,
-        asc: state.asc,
-        sortRules: state.sortRules,
-        scopeIds: state.scopeIds
-      });
-      if (generation !== state.generation) return;
-      state.total = Number(result.total) || 0;
-      const rows = result.rows || [];
-      state.offset += rows.length;
-      state.hasMore = rows.length >= PAGE_SIZE && state.offset < state.total;
-      rows.forEach(row => {
-        const model = { ...row, trackCount: '', discCount: '', bpm: '', composer: '', comment: '', lyrics: '', syncedLyrics: '', ...(dirty.get(row.id) || {}) };
-        state.rows.push(model);
-        state.byId.set(model.id, model);
-      });
-      appendRows(rows.map(row => row.id));
-      renderFooter();
+      tableWrap.scrollTop = 0;
+      table.setAttribute('aria-rowcount', String(total + 1));
+      renderWindow(true);
+      return true;
     } catch (error) {
-      shell.notify(error.message || '读取曲库失败。');
-      totalLabel.textContent = '读取失败';
+      if (generation === state.generation) shell.notify(error.message || '读取失败，已保留原表格。');
+      return false;
     } finally {
-      // A newer request owns the loading flag now; clearing it here would let a second page
-      // start while that one is still running.
-      if (generation === state.generation) state.loading = false;
+      if (generation === state.generation) {
+        state.loading = false;
+        table.setAttribute('aria-busy', 'false'); table.inert = false; panel.inert = false; sortButton.disabled = false;
+        renderFooter(); updateSelection();
+      }
     }
   }
 
@@ -227,7 +223,8 @@
     pickTh.className = 'col-pick';
     const pickAll = document.createElement('input');
     pickAll.type = 'checkbox';
-    pickAll.title = '全选已加载的行';
+    pickAll.title = '全选当前完整结果';
+    pickAll.setAttribute('aria-label', '全选当前完整结果');
     pickAll.checked = state.rows.length > 0 && state.rows.every(row => selected.has(row.id));
     pickAll.addEventListener('change', () => {
       if (pickAll.checked) state.rows.forEach(row => selected.add(row.id));
@@ -271,12 +268,49 @@
     return state.asc ? result : -result;
   }
 
-  function appendRows(ids) {
-    ids.forEach(id => {
+  // Native DataGrid also virtualizes its visual rows: the full data model is already loaded.
+  // Scrolling below never calls list or fetches another page, and selection/sort/numbering use state.rows.
+  let windowStart = -1, windowEnd = -1, windowFrame = 0;
+  function renderWindow(force = false) {
+    const computed = getComputedStyle(table);
+    const fontSize = parseFloat(computed.fontSize) || 12;
+    const lineHeight = parseFloat(computed.lineHeight) || fontSize * 1.5;
+    const rowHeight = Math.max(28, lineHeight + 19);
+    table.style.setProperty('--tag-row-height', rowHeight + 'px');
+    const headerHeight = thead.getBoundingClientRect().height || 38;
+    const start = Math.max(0, Math.floor(Math.max(0, tableWrap.scrollTop - headerHeight) / rowHeight) - 12);
+    const end = Math.min(state.rows.length, start + Math.max(40, Math.ceil((tableWrap.clientHeight || 600) / rowHeight) + 24));
+    if (!force && start === windowStart && end === windowEnd) return;
+    windowStart = start; windowEnd = end;
+    if (tableBody.contains(document.activeElement) && document.activeElement.isContentEditable) document.activeElement.blur();
+    observer.disconnect(); rowEls.clear(); cellEls.clear();
+    const spacer = height => {
+      const row = document.createElement('tr'), cell = document.createElement('td');
+      row.className = 'tag-spacer'; row.setAttribute('aria-hidden', 'true');
+      cell.colSpan = COLUMNS.length + 1; cell.style.height = Math.max(0, height) + 'px';
+      row.append(cell); return row;
+    };
+    tableBody.replaceChildren();
+    if (start) tableBody.append(spacer(start * rowHeight));
+    appendRows(state.rows.slice(start, end).map(row => row.id), start);
+    if (end < state.rows.length) tableBody.append(spacer((state.rows.length - end) * rowHeight));
+  }
+  tableWrap.addEventListener('scroll', () => {
+    if (windowFrame) return;
+    windowFrame = requestAnimationFrame(() => { windowFrame = 0; renderWindow(); });
+  });
+  new ResizeObserver(() => { if (!state.loading && !page.hidden) renderWindow(true); }).observe(tableWrap);
+  document.addEventListener('celeste:theme-applied', () => { if (!state.loading && !page.hidden) renderWindow(true); });
+
+  function appendRows(ids, startIndex) {
+    const fragment = document.createDocumentFragment();
+    ids.forEach((id, index) => {
       const row = state.byId.get(id);
       if (!row || rowEls.has(id)) return;
       const tr = document.createElement('tr');
       tr.dataset.id = id;
+      tr.setAttribute('aria-rowindex', String(startIndex + index + 2));
+      tr.classList.toggle('dirty', dirty.has(id));
       tr.setAttribute('aria-selected', String(selected.has(id)));
 
       const tdPick = document.createElement('td');
@@ -303,6 +337,7 @@
         const cell = node('div', displayCell(row,c.key), 'cell');
         cell.title = displayCell(row,c.key);
         cell.dataset.field=c.key;
+        cell.classList.toggle('edited', dirty.get(id)?.[c.key] !== undefined);
         if (c.readonly) {
           cell.classList.add('readonly');
         } else {
@@ -331,9 +366,10 @@
       });
       cellEls.set(id, cells);
       rowEls.set(id, tr);
-      tableBody.append(tr);
+      fragment.append(tr);
       observer.observe(tr);
     });
+    tableBody.append(fragment);
   }
 
   function syncSelectionUi() {
@@ -362,8 +398,8 @@
   }
 
   // ---- lazy tag read --------------------------------------------------------------------
-  // Only rows that actually scroll into view ask for their file, so opening the page costs a
-  // hundred in-memory rows instead of four thousand disk reads.
+  // All file rows are loaded together. File-only display fields are hydrated on visibility;
+  // sorting these fields still reads the whole workspace on the host, never just visible rows.
   const pending = new Set();
   let flushTimer = 0;
   const observer = new IntersectionObserver(entries => {
@@ -383,12 +419,14 @@
   }, { root: tableWrap, rootMargin: '240px' });
 
   async function flushPending() {
+    const generation = state.generation;
     const ids = [...pending].slice(0, 40);
     ids.forEach(id => pending.delete(id));
     if (!ids.length) return;
     ids.forEach(id => enriched.add(id));
     try {
       const result = await req('read', { ids });
+      if (generation !== state.generation) return;
       (result.tracks || []).forEach(fields => {
         if (!fields.ok) return;
         const row = state.byId.get(fields.id);
@@ -721,8 +759,15 @@
     layout.inert = true;
     page.setAttribute('aria-busy', 'true');
     try {
-      const result = await req('write', { rows });
-      const results = result.results || [];
+      // A complete workspace can exceed the host's per-write safety limit. Compute numbering
+      // over all rows first, then transport bounded batches without restarting the sequence.
+      const results = [];
+      for (let offset = 0; offset < rows.length; offset += 500) {
+        const result = await req('write', { rows: rows.slice(offset, offset + 500) });
+        const batch = result.results || [];
+        if (batch.length !== Math.min(500, rows.length - offset)) throw new Error('写入结果不完整，请刷新后核对文件。');
+        results.push(...batch);
+      }
       const failed = results.filter(item => !item.ok);
       const skipped = results.filter(item => item.ok && item.skipped).length;
       if (failed.length) {
@@ -777,19 +822,13 @@
       ? (state.query ? `没有匹配「${state.query}」的曲目` : '曲库是空的')
       : `共 ${state.total.toLocaleString('zh-CN')} 首 · 已载入 ${state.rows.length.toLocaleString('zh-CN')}`;
     footer.replaceChildren();
-    if (state.hasMore) {
-      const more = node('button', '载入更多', 'secondary');
-      more.addEventListener('click', () => loadRows(false));
-      footer.append(more);
-    } else if (state.rows.length) {
-      footer.append(node('span', '已到末尾 · 滚动到底会自动继续载入', 'tags-footer-note'));
-    }
+    if (state.rows.length) footer.append(node('span', '全部已载入 · 全选、排序与编号基于完整结果', 'tags-footer-note'));
   }
 
   function updateSelection() {
     selectionLabel.textContent = `已选 ${selected.size} 个文件` + (dirty.size ? ` · ${dirty.size} 项待保存` : '');
     const count = new Set([...dirty.keys(), ...(Object.keys(multiDraft).length ? selected : [])]).size;
-    saveBtn.disabled = saving || count === 0;
+    saveBtn.disabled = state.loading || saving || count === 0;
     saveBtn.textContent = count ? `保存改动（${count}）` : '保存改动';
     selectionHooks.forEach(hook => hook());
   }
@@ -803,10 +842,7 @@
     }, 260);
   });
 
-  tableWrap.addEventListener('scroll', () => {
-    if (state.loading || !state.hasMore) return;
-    if (tableWrap.scrollTop + tableWrap.clientHeight >= tableWrap.scrollHeight - 400) loadRows(false);
-  });
+
 
   saveBtn.addEventListener('click', saveChanges);
   revertBtn.addEventListener('click', async () => {
@@ -840,6 +876,8 @@
 
     shell.setPath([{ label: '标签编辑', action: () => { } }]);
     renderSubnav();
+    if (state.opening) return;
+    renderWindow(true);
     if (!state.rows.length) {
       renderHead();
       loadRows(true).then(() => { renderPanel(); updateSelection(); });
@@ -854,6 +892,7 @@
   window.CelesteTags = Object.freeze({ open: async ids => {
     state.scopeIds = [...new Set(ids.filter(Boolean))]; state.query = ''; searchInput.value = '';
     selected.clear(); state.scopeIds.forEach(id => selected.add(id)); currentSub = 'quick';
-    shell.navigate('tags'); await reload(); afterSelectionChange();
+    state.opening = true;
+    try { shell.navigate('tags'); await reload(); afterSelectionChange(); } finally { state.opening = false; }
   } });
 })();

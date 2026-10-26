@@ -1,4 +1,4 @@
-/* Tag editor page. Real table over the real library: paged loading, lazy per-row tag reads,
+/* Tag editor page. Real table over the real library: complete workspace data, virtual visual rows, lazy per-row tag reads,
    inline cell edit, quick/batch/numbering tools, and writes back through TagEditorService. */
 .tags-page{padding:0 0 30px}
 .tags-tool-page{display:grid;gap:14px;min-width:0}.tags-tool-form{display:grid;gap:10px}
@@ -119,3 +119,8 @@
 .tags-side>.tags-panel{overflow:visible}
 .tags-layout>.tags-tablecol{overflow:hidden;align-content:stretch}
 .tags-tablecol>.tag-table-wrap{overscroll-behavior:contain}
+
+/* Full collection in memory, bounded visual rows like native DataGrid. */
+.tag-table tbody tr:not(.tag-spacer){height:var(--tag-row-height)}
+.tag-table td .cell{box-sizing:border-box;height:calc(var(--tag-row-height) - 1px);line-height:calc(var(--tag-row-height) - 19px)}
+.tag-table .tag-spacer td{border:0;padding:0;line-height:0;pointer-events:none}

@@ -18,7 +18,7 @@ namespace CelesteMusicPlayer
         //
         // Operations:
         //   list  — explicitly added workspace rows (file-only sort fields read metadata), sorted and
-        //           paged on this side because 4000+ rows do not fit in one reply
+        //           returned as one complete workspace when all=true; legacy paging stays compatible
         //   read  — full tag fields for the ids on screen, read lazily (only visible rows ask)
         //   write — apply only the fields the caller sent, per file
         //
@@ -51,12 +51,15 @@ namespace CelesteMusicPlayer
         {
             string query = ReadString(msg, "query").Trim();
             int offset = Math.Max(0, ReadInt(msg, "offset", 0));
-            int limit = Math.Clamp(ReadInt(msg, "limit", 300), 1, 2000);
+            bool all = msg.TryGetProperty("all", out var allRows) && allRows.ValueKind == JsonValueKind.True;
+            if (all) offset = 0;
+            int limit = all ? 20000 : Math.Clamp(ReadInt(msg, "limit", 300), 1, 2000);
 
             IEnumerable<KeyValuePair<string, PlaylistItem>> items = Array.Empty<KeyValuePair<string, PlaylistItem>>();
             if (msg.TryGetProperty("scopeIds", out var scope) && scope.ValueKind == JsonValueKind.Array && scope.GetArrayLength() > 0)
             {
-                var wanted = scope.EnumerateArray().Take(20000).Select(id => id.GetString() ?? "").Distinct();
+                if (scope.GetArrayLength() > 20000) throw new ArgumentException("每个标签工作集最多 20,000 个文件，请分开工作目录。");
+                var wanted = scope.EnumerateArray().Select(id => id.GetString() ?? "").Distinct();
                 items = wanted.Where(tracks.ContainsKey).Select(id => new KeyValuePair<string, PlaylistItem>(id, tracks[id]));
             }
             if (query.Length > 0)

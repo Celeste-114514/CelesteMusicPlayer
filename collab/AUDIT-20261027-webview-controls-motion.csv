@@ -1,0 +1,1324 @@
+﻿file,line,kind,occurrences,excerpt
+outputs/webview2-shell/albums.js,20,event,1,"lazy';image.decoding='async';image.src=album.coverUrl;image.addEventListener('error',()=>image.remove(),{once:true});art.append(image);}return art;"
+outputs/webview2-shell/albums.js,37,event,1,"open.append(artwork(album),title,artist,meta);open.addEventListener('click',()=>openAlbum(album));"
+outputs/webview2-shell/albums.js,39,event,1,"ute('href','#i-play');svg.append(use);play.append(svg);play.addEventListener('click',()=>playAlbum(album));card.append(open,play);$('albums-grid').append(card);"
+outputs/webview2-shell/albums.js,55,event,2,">live?shell.playTrack(id):shell.playDemo(Number(id));button.addEventListener('dblclick',play);button.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();play();}});$('album-tracks').append(button);"
+outputs/webview2-shell/albums.js,62,event,2,"$('album-back').addEventListener('click',()=>{opened=null;show();});$('album-play').addEventListener('click',()=>{if(opened)playAlbum(opened);});"
+outputs/webview2-shell/albums.js,63,event,1,"$('albums-sort').addEventListener('change',()=>{if($('albums-sort').value==='random')randomOrder=new Map(albums.map(album=>[album.id,Math.random()]));renderGrid();});"
+outputs/webview2-shell/albums.js,64,event,2,"$('albums-direction').addEventListener('click',()=>{ascending=!ascending;$('albums-direction').textContent=ascending?'升序 ↑':'降序 ↓';renderGrid();});$('albums-more').addEventListener('click',()=>{limit+=80;renderGrid();});"
+outputs/webview2-shell/albums.js,65,event,1,"$('search').addEventListener('input',()=>{if(shell.getPage()==='albums'){opened=null;limit=80;show();}});"
+outputs/webview2-shell/albums.js,66,event,1,"document.addEventListener('celeste:navigate',event=>{if(event.detail==='albums'){rebuild();show();}});"
+outputs/webview2-shell/albums.js,67,event,1,"document.addEventListener('celeste:library',()=>{rebuild();if(shell.getPage()==='albums')show();});"
+outputs/webview2-shell/albums.js,68,event,1,"document.addEventListener('celeste:message',event=>{if(event.detail.kind==='celeste.state')requestAnimationFrame(updatePlaying);});"
+outputs/webview2-shell/appearance.js,58,event,1,"el.addEventListener('click', () => {"
+outputs/webview2-shell/appearance.js,161,event,1,"document.addEventListener('keydown', event => {"
+outputs/webview2-shell/appearance.js,203,event,1,"card.addEventListener('click', async () => {"
+outputs/webview2-shell/appearance.js,217,event,1,"item.addEventListener('click', async () => {"
+outputs/webview2-shell/appearance.js,238,color,1,picker.type = 'color';
+outputs/webview2-shell/appearance.js,242,hardcoded_color,1,t stored = String((data[editing].values[item.id] || '') || '#888888');
+outputs/webview2-shell/appearance.js,245,hardcoded_color,1,picker.value = /^#[0-9a-fA-F]{6}$/.test(rgb) ? rgb : '#888888';
+outputs/webview2-shell/appearance.js,248,event,1,"picker.addEventListener('input', () => { hex.textContent = picker.value + alpha; });"
+outputs/webview2-shell/appearance.js,249,event,1,"picker.addEventListener('change', () => { hex.textContent = picker.value + alpha; push(picker.value); });"
+outputs/webview2-shell/appearance.js,269,range,1,range.type = 'range';
+outputs/webview2-shell/appearance.js,278,event,1,"range.addEventListener('pointerdown', () => { gesture = 'gesture:' + (++gestureId); });"
+outputs/webview2-shell/appearance.js,279,event,1,"'pointerup', 'pointercancel', 'blur'].forEach(type => range.addEventListener(type, () => { gesture = ''; }));"
+outputs/webview2-shell/appearance.js,284,event,1,"range.addEventListener('input', () => {"
+outputs/webview2-shell/appearance.js,411,select,1,const modeSelect = node('select');
+outputs/webview2-shell/appearance.js,415,event,1,"modeSelect.addEventListener('change', async () => {"
+outputs/webview2-shell/appearance.js,443,select,1,const select = node('select');
+outputs/webview2-shell/appearance.js,447,event,1,"select.addEventListener('change', () => request('background', { [id === 'bg-fit' ? 'fit' : 'pos']: select.value })"
+outputs/webview2-shell/appearance.js,455,event,1,"document.addEventListener('celeste:background-status', event => {"
+outputs/webview2-shell/appearance.js,488,select,1,const select = node('select');
+outputs/webview2-shell/appearance.js,496,event,1,"select.addEventListener('change', async () => {"
+outputs/webview2-shell/appearance.js,672,select,1,const select = node('select');
+outputs/webview2-shell/appearance.js,676,color,1,colorInput.type = 'color';
+outputs/webview2-shell/appearance.js,677,hardcoded_color,1,colorInput.value = data.accentCustom || '#e84865';
+outputs/webview2-shell/appearance.js,679,event,1,"select.addEventListener('change', async () => {"
+outputs/webview2-shell/appearance.js,685,event,1,"colorInput.addEventListener('change', async () => {"
+outputs/webview2-shell/appearance.js,719,event,1,"item.addEventListener('click', () => { editing = value; render(); });"
+outputs/webview2-shell/artists.js,25,event,1,".alt='';image.loading='lazy';image.src=track.coverUrl;image.addEventListener('error',()=>image.remove(),{once:true});art.append(image);}"
+outputs/webview2-shell/artists.js,39,event,1,"',`${group.songCount} 首歌曲 · ${group.albumCount} 张专辑`));card.addEventListener('click',()=>open(group));$('artists-grid').append(card);});"
+outputs/webview2-shell/artists.js,61,event,1,"$('artist-detail-sort').addEventListener('change',content);"
+outputs/webview2-shell/artists.js,62,event,1,"$('artist-detail-direction').addEventListener('click',()=>{detailAscending=!detailAscending;$('artist-detail-direction').textContent=detailAscending?'升序 ↑':'降序 ↓';content();});"
+outputs/webview2-shell/artists.js,68,event,2,"ll.playTrack(track.id):shell.playDemo(Number(track.id));row.addEventListener('dblclick',start);row.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();start();}});$('artist-songs').append(row);"
+outputs/webview2-shell/artists.js,71,event,1,"de('small',album.trackCount+' 首歌曲','album-card-meta'));card.addEventListener('click',()=>{const saved=opened,category=kind;window.CelesteAlbums.openById(album.id,[{label:category==='artists'?'艺术家':'专辑艺人',action:()=>{opened=null;shell.navigate(category);show();}},{label:saved.name,action:()=>{shell.navigate(category);open(saved);}}]);});$('artist-albums').append(card);"
+outputs/webview2-shell/artists.js,80,event,2,"$('artist-back').addEventListener('click',()=>{generation++;opened=null;show();});$('artist-play').addEventListener('click',()=>opened&&play(opened));"
+outputs/webview2-shell/artists.js,81,event,1,"uerySelectorAll('[data-artist-tab]').forEach(button=>button.addEventListener('click',()=>detailOptions(button.dataset.artistTab)));"
+outputs/webview2-shell/artists.js,82,event,3,"$('artists-sort').addEventListener('change',browse);$('artists-direction').addEventListener('click',()=>{ascending=!ascending;$('artists-direction').textContent=ascending?'升序 ↑':'降序 ↓';browse();});$('artists-more').addEventListener('click',()=>{limit+=80;browse();});"
+outputs/webview2-shell/artists.js,83,event,1,"$('search').addEventListener('input',()=>{if(['artists','albumArtists'].includes(shell.getPage())){generation++;opened=null;limit=80;show();}});"
+outputs/webview2-shell/artists.js,84,event,1,"document.addEventListener('celeste:navigate',event=>{if(event.detail!=='albums')generation++;if(!['artists','albumArtists'].includes(event.detail))return;if(kind!==event.detail){opened=null;detailOptions('songs');}kind=event.detail;$('search').placeholder=kind==='artists'?'搜索艺术家':'搜索专辑艺人';rebuild();show();});"
+outputs/webview2-shell/artists.js,85,event,1,"document.addEventListener('celeste:library',()=>{generation++;cache.clear();if(['artists','albumArtists'].includes(shell.getPage())){rebuild();show();}});"
+outputs/webview2-shell/artists.js,86,event,1,"document.addEventListener('celeste:message',event=>{if(event.detail.kind==='celeste.state')requestAnimationFrame(updatePlaying);});"
+outputs/webview2-shell/artists.js,88,event,1,"document.addEventListener('celeste:album-open',event=>{overview('albums',event.detail.album.title,event.detail.tracks,summary,note,++generation);});"
+outputs/webview2-shell/audio-chain.css,3,motion,1,ion:fixed;inset:0;z-index:55;background:#2b2126a8;opacity:0;transition:opacity .22s ease}
+outputs/webview2-shell/audio-chain.css,3,hardcoded_color,1,.chain-scrim{position:fixed;inset:0;z-index:55;background:#2b2126a8;opacity:0;transition:opacity .22s ease}
+outputs/webview2-shell/audio-chain.css,6,hardcoded_color,1,t:1px solid var(--accent-soft);box-shadow:18px 0 46px -22px #4a334045;
+outputs/webview2-shell/audio-chain.css,7,motion,1,"transform:translateX(-100%);transition:transform .22s cubic-bezier(.20,.90,.22,1)}"
+outputs/webview2-shell/audio-chain.css,41,motion,1,:0;bottom:0;border-radius:6px;background:var(--accent-soft);transition:width .12s linear}
+outputs/webview2-shell/audio-chain.css,42,motion,1,:absolute;top:0;bottom:0;width:2px;background:var(--accent);transition:left .12s linear}
+outputs/webview2-shell/audio-chain.css,54,hardcoded_color,1,.chain-tag[data-tone=accent]{background:#eee6f8;color:var(--muted)}
+outputs/webview2-shell/audio-chain.css,56,hardcoded_color,2,.chain-tag[data-tone=warn]{background:#fbeadf;color:#9c6a3c}
+outputs/webview2-shell/audio-chain.css,65,hardcoded_color,1,.chain-node[data-state=bypassed] .chain-node-dot{background:#e0a771}
+outputs/webview2-shell/audio-chain.css,72,hardcoded_color,2,hain-node[data-state=bypassed] .chain-node-state{background:#fbeadf;color:#9c6a3c}
+outputs/webview2-shell/audio-chain.css,83,hardcoded_color,1,.chain-diag-advice{color:#9c6a3c}
+outputs/webview2-shell/audio-chain.css,90,motion,1,"hain-drawer,.chain-scrim,.chain-level-rms,.chain-level-peak{transition:none}}"
+outputs/webview2-shell/audio-chain.js,172,event,1,"$('chain-button')?.addEventListener('click', () => open ? hide() : show());"
+outputs/webview2-shell/audio-chain.js,173,event,1,"$('chain-close').addEventListener('click', hide);"
+outputs/webview2-shell/audio-chain.js,174,event,1,"scrim.addEventListener('click', hide);"
+outputs/webview2-shell/audio-chain.js,175,event,1,"$('chain-open-settings').addEventListener('click', () => {"
+outputs/webview2-shell/audio-chain.js,179,event,1,"document.addEventListener('keydown', event => { if (event.key === 'Escape' && open) { event.preventDefault(); hide(); } });"
+outputs/webview2-shell/background.js,81,event,1,"video.addEventListener('playing', () => report());"
+outputs/webview2-shell/background.js,82,event,1,"video.addEventListener('error', () => { if (source) report('视频无法解码或文件已丢失，请重新选择 MP4（H.264）或 WebM 视频。'); });"
+outputs/webview2-shell/background.js,83,event,1,"document.addEventListener('visibilitychange', syncPlayback);"
+outputs/webview2-shell/background.js,84,event,1,"window.addEventListener('pagehide', () => { pageHidden = true; syncPlayback(); });"
+outputs/webview2-shell/background.js,85,event,1,"window.addEventListener('pageshow', () => { pageHidden = false; syncPlayback(); });"
+outputs/webview2-shell/background.js,86,event,1,"document.addEventListener('celeste:theme-applied', apply);"
+outputs/webview2-shell/background.js,87,event,1,"document.addEventListener('celeste:theme', apply);"
+outputs/webview2-shell/background.js,88,event,1,"document.addEventListener('celeste:message', event => {"
+outputs/webview2-shell/browse.js,16,event,2,"t('img');img.src=coverUrl;img.alt='';img.loading='lazy';img.addEventListener('error',()=>img.remove(),{once:true});art.append(img);}button.append(art,element('strong',name),element('small',summary));button.addEventListener('click',()=>{action();document.querySelector('.main').scrollTop=0;});$('browse-cards').append(button);return button;}"
+outputs/webview2-shell/browse.js,33,event,1,".setAttribute('aria-pressed',String(rating===value));button.addEventListener('click',()=>{rating=value;limit=200;render();});$('browse-filters').append(button);}}"
+outputs/webview2-shell/browse.js,51,event,1,"ng='lazy';if(track.coverUrl){cover.src=track.coverUrl;cover.addEventListener('error',()=>cover.removeAttribute('src'),{once:true});}"
+outputs/webview2-shell/browse.js,56,event,1,"Attribute('aria-pressed',String(!!track.favorite));favorite.addEventListener('click',()=>!loading&&mutate('favorite',{trackId:track.id,value:!track.favorite}));tools.append(favorite);"
+outputs/webview2-shell/browse.js,57,event,1,";select.append(option);}select.value=track.rating||0;select.addEventListener('change',()=>!loading&&mutate('rating',{trackId:track.id,value:Number(select.value)}));tools.append(select);"
+outputs/webview2-shell/browse.js,57,select,1,"const select=element('select');select.className='rating';select.setAttribute('aria-label','为 '+track.title+' 评分');for(let rating=0;rating<=5;rating++){const option=element('option',rating?'★'.repeat(rating):'未评分');option.value=rating;select.append(option);}select.value=track.rating||0;select.addEventListener('change',()=>!loading&&mutate('rating',{trackId:track.id,value:Number(select.value)}))"
+outputs/webview2-shell/browse.js,59,event,2,"tools.addEventListener('dblclick',event=>event.stopPropagation());tools.addEventListener('keydown',event=>event.stopPropagation());row.append(element('span',index+1,'track-number'),cover,copy,tools,element('time',time(track.duration||0)));"
+outputs/webview2-shell/browse.js,60,event,2,"row.addEventListener('dblclick',()=>start(track));row.addEventListener('keydown',event=>{if(event.key==='Enter'&&event.target===row){event.preventDefault();start(track);}});$('browse-tracks').append(row);"
+outputs/webview2-shell/browse.js,79,event,1,"$('browse-play').addEventListener('click',()=>{if(page==='playlists'&&playlist&&live)return playlistAction('playPlaylist');const all=page==='folders'?library().filter(t=>!folder||inFolder(t,folder)):rows;if(!all.length)return;if(page==='queue')start(all[0]);else if(live)shell.playTracks(all.map(t=>t.id));else shell.playDemo(Number(all[0].id));});"
+outputs/webview2-shell/browse.js,80,event,4,"$('browse-sort').addEventListener('change',render);$('browse-direction').addEventListener('click',()=>{ascending=!ascending;$('browse-direction').textContent=ascending?'升序 ↑':'降序 ↓';render();});$('browse-refresh').addEventListener('click',()=>load());$('browse-more').addEventListener('click',()=>{limit+=200;if(page==='queue'&&queue.tracks.length<queue.total)load(true);else render();});"
+outputs/webview2-shell/browse.js,81,event,1,"$('playlist-create').addEventListener('submit',async event=>{event.preventDefault();if(loading)return;const name=$('playlist-name').value.trim();if(!name)return;try{if(live)data=await window.CelesteTransport.request('browse',{operation:'createPlaylist',name});else data.playlists.push({name,trackIds:[]});$('playlist-name').value='';render();}catch(error){$('browse-status').textContent=error.messag"
+outputs/webview2-shell/browse.js,82,event,1,"$('search').addEventListener('input',()=>{limit=200;render();});"
+outputs/webview2-shell/browse.js,83,event,1,"document.addEventListener('celeste:navigate',event=>{token++;if(!titles[event.detail]){page='';return;}if(page!==event.detail){folder='';playlist=null;rating=-1;limit=200;ascending=true;$('browse-direction').textContent='升序 ↑';$('browse-sort').value='default';}page=event.detail;$('browse-title').textContent=titles[page];$('browse-cards').replaceChildren();$('browse-tracks').replaceChildren();$('s"
+outputs/webview2-shell/browse.js,84,event,2,"document.addEventListener('celeste:library',()=>{if(titles[page])load();});document.addEventListener('celeste:message',event=>{if(event.detail.kind==='celeste.state')requestAnimationFrame(playing);});"
+outputs/webview2-shell/browse.js,85,event,1,"document.addEventListener('celeste:tracksChanged',()=>{if(titles[page])load();});"
+outputs/webview2-shell/browse.js,88,event,1,",label,index===0?'primary':'secondary');button.id=id;button.addEventListener('click',action);actions.append(button);});"
+outputs/webview2-shell/browse.js,89,event,1,"laylist-detail-cover');detailCover.alt='播放列表封面';detailCover.addEventListener('error',()=>detailCover.hidden=true);$('browse-title').before(detailCover);"
+outputs/webview2-shell/browse.js,92,event,1,"$('browse-cards').addEventListener('contextmenu',event=>{const card=event.target.closest('[data-playlist-name]');if(!card)return;event.preventDefault();window.CelesteTrackMenu?.playlist(event,card.dataset.playlistName,playlistAction);});"
+outputs/webview2-shell/collections.css,4,focus_suppression,1,"ver,.sort-menu button:focus-visible{background:var(--hover);outline:none}.sort-menu button[aria-selected=true]{color:var(--accent);background:var(--menu-bg)}.sort-menu button[aria-selected=true]:after{content:'✓'}"
+outputs/webview2-shell/collections.css,6,hardcoded_color,4,"x 20px;border-radius:28px;background:linear-gradient(130deg,#f6e9ef99,#f4edf766);margin-bottom:28px}.artist-hero{display:grid;grid-template-columns:155px minmax(0,1fr);gap:30px;align-items:center;margin-bottom:32px}.artist-hero h1{font-size:clamp(calc(27px * var(--text-scale)),3vw,calc(42px * var(--text-scale)));line-height:1.3;overflow-wrap:anywhere}.artist-hero .eyebrow{font-size:calc(9px * var("
+outputs/webview2-shell/collections.css,9,motion,2,"@media(prefers-reduced-motion:no-preference){.sort-menu{animation:menu-arrive 180ms cubic-bezier(.20,.90,.22,1)}@keyframes menu-arrive{from{opacity:0;transform:translateY(-5px)}to{opacity:1;transform:none}}}"
+outputs/webview2-shell/corner.css,13,motion,1,"color:var(--nav-ink);background:transparent;box-shadow:none;transition:background .2s,color .2s;-webkit-app-region:no-drag}"
+outputs/webview2-shell/corner.css,21,hardcoded_color,1,"ia-current=page],.corner-home[aria-current=page]{background:#f5dce566;color:var(--accent)}"
+outputs/webview2-shell/corner.css,37,motion,1,":center;color:var(--muted);background:transparent;padding:0;transition:color .2s,background .2s}"
+outputs/webview2-shell/dsp-echo.css,6,hardcoded_color,2,"ent:start;gap:8px;min-width:0;padding:14px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.72)}"
+outputs/webview2-shell/dsp-echo.css,7,hardcoded_color,1,".dsp-module-metric em{color:rgba(75,84,100,.68);font-size:calc(11px * var(--text-scale))}"
+outputs/webview2-shell/dsp-echo.css,8,hardcoded_color,1,etric strong{font-size:calc(14px * var(--text-scale));color:#202939;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+outputs/webview2-shell/dsp-echo.css,9,hardcoded_color,2,"get{display:grid;gap:8px;padding:13px 14px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.68)}"
+outputs/webview2-shell/dsp-echo.css,10,hardcoded_color,3,"justify-content:space-between;gap:10px;padding:0 10px;color:#243044;border-radius:8px;background:linear-gradient(90deg,rgba(104,109,243,.18),rgba(47,155,120,.14));font-size:calc(11px * var(--text-scale))}"
+outputs/webview2-shell/dsp-echo.css,11,hardcoded_color,1,.dsp-headroom-budget strong{color:#202939;font-size:calc(12px * var(--text-scale));white-space:nowrap}
+outputs/webview2-shell/dsp-echo.css,12,hardcoded_color,2,"lay:grid;gap:10px;min-width:0;padding:14px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.72)}"
+outputs/webview2-shell/dsp-echo.css,14,hardcoded_color,1,".dsp-channel-bias-head span{color:rgba(75,84,100,.68)}"
+outputs/webview2-shell/dsp-echo.css,16,hardcoded_color,1,.dsp-channel-bias-head strong{color:#2632a2;font-size:calc(13px * var(--text-scale))}
+outputs/webview2-shell/dsp-echo.css,17,hardcoded_color,1,";height:16px;overflow:hidden;border-radius:999px;background:rgba(230,234,243,.9)}"
+outputs/webview2-shell/dsp-echo.css,18,motion,1,.dsp-channel-bias-meter span{display:block;height:100%;transition:width 160ms ease}
+outputs/webview2-shell/dsp-echo.css,19,hardcoded_color,2,"meter span[data-side=left]{background:linear-gradient(90deg,#8aa0ff,#686df3)}"
+outputs/webview2-shell/dsp-echo.css,20,hardcoded_color,2,"eter span[data-side=right]{background:linear-gradient(90deg,#2f9b78,#64c09c)}"
+outputs/webview2-shell/dsp-echo.css,21,hardcoded_color,2,"ttom:-2px;left:50%;width:2px;border-radius:999px;background:rgba(255,255,255,.95);box-shadow:0 0 0 1px rgba(32,42,56,.12)}"
+outputs/webview2-shell/dsp-echo.css,22,hardcoded_color,1,"nmax(0,1fr));font-size:calc(13px * var(--text-scale));color:#202939}"
+outputs/webview2-shell/dsp-echo.css,23,hardcoded_color,3,"ontent:space-between;gap:12px;padding:16px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.72);color:#4b5464;font-size:calc(12px * var(--text-scale))}"
+outputs/webview2-shell/dsp-echo.css,24,hardcoded_color,1,var(--text-scale));font-variant-numeric:tabular-nums;color:#2632a2}
+outputs/webview2-shell/dsp-echo.css,25,hardcoded_color,2,"or-meter[data-active=true]{background:linear-gradient(90deg,rgba(104,109,243,.08),rgba(47,155,120,.08))}"
+outputs/webview2-shell/dsp-echo.css,27,hardcoded_color,4,"t:end;gap:7px;padding:14px;overflow:hidden;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:linear-gradient(135deg,rgba(255,255,255,.84),rgba(246,249,253,.74)),rgba(255,255,255,.7)}"
+outputs/webview2-shell/dsp-echo.css,28,hardcoded_color,1,"t:16px;width:34px;height:2px;border-radius:999px;background:rgba(104,109,243,.3);content:''}"
+outputs/webview2-shell/dsp-echo.css,29,hardcoded_color,1,".dsp-safety-route>span:last-child:before{background:rgba(47,155,120,.34)}"
+outputs/webview2-shell/dsp-echo.css,30,hardcoded_color,1,".dsp-safety-route em{color:rgba(75,84,100,.68);font-size:calc(11px * var(--text-scale));font-style:normal}"
+outputs/webview2-shell/dsp-echo.css,31,hardcoded_color,1,.dsp-safety-route strong{color:#202939;font-size:calc(14px * var(--text-scale));overflow-wrap:anywhere}
+outputs/webview2-shell/dsp-echo.css,32,hardcoded_color,1,route>strong{font-size:calc(12px * var(--text-scale));color:#4b5464}
+outputs/webview2-shell/dsp-echo.css,36,hardcoded_color,1,items:center;font-size:calc(11px * var(--text-scale));color:#698079;min-height:20px}
+outputs/webview2-shell/dsp-echo.css,41,hardcoded_color,1,ign-items:center;padding:14px;border-radius:12px;background:#f5f1f4}
+outputs/webview2-shell/dsp-echo.css,42,hardcoded_color,3,grid;gap:5px;font-size:calc(10px * var(--text-scale));color:#8d7785}.eq-band-editor input{max-width:100px;padding:8px;border:1px solid #e9e1e7;border-radius:8px;background:#fff;font:inherit;font-size:calc(12px * var(--text-scale))}
+outputs/webview2-shell/dsp-echo.css,47,motion,1,prefers-reduced-motion:reduce){.dsp-channel-bias-meter span{transition:none}}
+outputs/webview2-shell/dsp-echo.css,51,hardcoded_color,2,";align-items:end;height:112px;padding:14px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.7)}"
+outputs/webview2-shell/dsp-echo.css,53,motion,1,"der-radius:4px 4px 2px 2px;background:rgba(104,109,243,.16);transition:background 160ms ease}"
+outputs/webview2-shell/dsp-echo.css,53,hardcoded_color,1,"00%;min-width:16px;border-radius:4px 4px 2px 2px;background:rgba(104,109,243,.16);transition:background 160ms ease}"
+outputs/webview2-shell/dsp-echo.css,54,hardcoded_color,2,"span[data-active=true] i{background:linear-gradient(180deg,rgba(104,109,243,.92),rgba(47,155,120,.82))}"
+outputs/webview2-shell/dsp-echo.css,55,hardcoded_color,1,".dsp-compressor-scale em{color:rgba(75,84,100,.68);font-size:calc(10px * var(--text-scale));font-style:normal;font-variant-numeric:tabular-nums}"
+outputs/webview2-shell/dsp-echo.css,57,hardcoded_color,2,"d-stage{display:grid;gap:10px;padding:16px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.7)}"
+outputs/webview2-shell/dsp-echo.css,58,hardcoded_color,2,"ght:58px;border-radius:8px;background:linear-gradient(90deg,rgba(104,109,243,.1),rgba(47,155,120,.1))}"
+outputs/webview2-shell/dsp-echo.css,59,motion,1,bottom:9px;width:6px;border-radius:999px;background:#686df3;transition:left 200ms ease}
+outputs/webview2-shell/dsp-echo.css,59,hardcoded_color,1,top:9px;bottom:9px;width:6px;border-radius:999px;background:#686df3;transition:left 200ms ease}
+outputs/webview2-shell/dsp-echo.css,60,hardcoded_color,1,"x;width:2px;margin-left:-1px;border-radius:999px;background:rgba(47,155,120,.55)}"
+outputs/webview2-shell/dsp-echo.css,61,hardcoded_color,1,".dsp-field-stage p{margin:0;color:rgba(75,84,100,.78);font-size:calc(12px * var(--text-scale));line-height:1.5}"
+outputs/webview2-shell/dsp-echo.css,63,hardcoded_color,2,"trix-box{display:grid;gap:8px;padding:16px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.7)}"
+outputs/webview2-shell/dsp-echo.css,65,hardcoded_color,1,".dsp-matrix-head em{color:rgba(75,84,100,.68);font-size:calc(11px * var(--text-scale));font-style:normal;text-align:center}"
+outputs/webview2-shell/dsp-echo.css,67,hardcoded_color,1,".dsp-matrix-map em{color:rgba(75,84,100,.68);font-size:calc(11px * var(--text-scale));font-style:normal}"
+outputs/webview2-shell/dsp-echo.css,68,hardcoded_color,2,"e-items:center;min-height:44px;border-radius:8px;background:rgba(104,109,243,.08);color:#202939;font-size:calc(15px * var(--text-scale));font-variant-numeric:tabular-nums}"
+outputs/webview2-shell/dsp-echo.css,70,hardcoded_color,2,"x;gap:12px;align-items:center;padding:14px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.7)}"
+outputs/webview2-shell/dsp-echo.css,71,hardcoded_color,1,".dsp-rg-meter em{color:rgba(75,84,100,.72);font-size:calc(12px * var(--text-scale));font-style:normal}"
+outputs/webview2-shell/dsp-echo.css,72,hardcoded_color,1,"osition:relative;height:10px;border-radius:999px;background:rgba(230,234,243,.9);overflow:hidden}"
+outputs/webview2-shell/dsp-echo.css,73,hardcoded_color,1,"ft:50%;top:0;bottom:0;width:2px;margin-left:-1px;background:rgba(32,42,56,.26)}"
+outputs/webview2-shell/dsp-echo.css,74,motion,1,osition:absolute;top:0;bottom:0;left:50%;background:#686df3;transition:width 160ms ease}
+outputs/webview2-shell/dsp-echo.css,74,hardcoded_color,1,rack i{position:absolute;top:0;bottom:0;left:50%;background:#686df3;transition:width 160ms ease}
+outputs/webview2-shell/dsp-echo.css,75,hardcoded_color,1,-rg-track i[data-sign=minus]{right:50%;left:auto;background:#2f9b78}
+outputs/webview2-shell/dsp-echo.css,76,hardcoded_color,1,.dsp-rg-meter strong{color:#202939;font-size:calc(13px * var(--text-scale));font-variant-numeric:tabular-nums;text-align:right}
+outputs/webview2-shell/dsp-echo.css,77,hardcoded_color,1,".dsp-room-expansion small,.dsp-src-compute-card small{color:rgba(75,84,100,.7);font-size:calc(11px * var(--text-scale));line-height:1.45}"
+outputs/webview2-shell/dsp-echo.css,82,hardcoded_color,2,"html[data-theme=""dark""] .dsp-rg-meter{border-color:rgba(255,255,255,.1);background:rgba(30,34,42,.72)}"
+outputs/webview2-shell/dsp-echo.css,89,hardcoded_color,1,"html[data-theme=""dark""] .dsp-src-compute-card small{color:rgba(224,230,240,.72)}"
+outputs/webview2-shell/dsp-echo.css,90,hardcoded_color,2,"html[data-theme=""dark""] .dsp-matrix-map span{background:rgba(104,109,243,.2);color:#e8edf7}"
+outputs/webview2-shell/dsp-echo.css,91,hardcoded_color,1,"html[data-theme=""dark""] .dsp-rg-meter strong{color:#eef2f8}"
+outputs/webview2-shell/dsp-echo.css,92,hardcoded_color,1,"html[data-theme=""dark""] .dsp-rg-track{background:rgba(255,255,255,.14)}"
+outputs/webview2-shell/dsp-echo.css,93,hardcoded_color,2,"=""dark""] .dsp-field-spread{background:linear-gradient(90deg,rgba(104,109,243,.26),rgba(47,155,120,.24))}"
+outputs/webview2-shell/dsp-echo.css,99,hardcoded_color,1,".dsp-channel-tools>span{color:rgba(75,84,100,.78);font-size:calc(12px * var(--text-scale));line-height:1.45}"
+outputs/webview2-shell/dsp-echo.css,100,hardcoded_color,1,".dsp-channel-tools>p{margin:0;color:rgba(75,84,100,.78);font-size:calc(12px * var(--text-scale));line-height:1.5}"
+outputs/webview2-shell/dsp-echo.css,101,hardcoded_color,3,".dsp-src-mode-switch button[data-active=true]{color:#2632a2;border-color:rgba(104,109,243,.28);background:rgba(239,241,255,.9)}"
+outputs/webview2-shell/dsp-echo.css,102,hardcoded_color,2,"udget span[data-tone=good]{background:linear-gradient(90deg,rgba(47,155,120,.2),rgba(47,155,120,.1))}"
+outputs/webview2-shell/dsp-echo.css,104,hardcoded_color,1,"html[data-theme=""dark""] .dsp-channel-tools>p{color:rgba(224,230,240,.76)}"
+outputs/webview2-shell/dsp-echo.css,105,hardcoded_color,3,"""dark""] .dsp-src-mode-switch button[data-active=true]{color:#c9d2ff;border-color:rgba(132,140,255,.4);background:rgba(104,109,243,.24)}"
+outputs/webview2-shell/dsp-echo.css,106,hardcoded_color,2,"udget span[data-tone=good]{background:linear-gradient(90deg,rgba(47,155,120,.32),rgba(47,155,120,.16))}"
+outputs/webview2-shell/dsp-echo.css,110,hardcoded_color,2,"ch;gap:8px;margin:14px 0 10px;padding:10px;border:1px solid rgba(32,42,56,.08);border-radius:12px;background:rgba(255,255,255,.62);overflow-x:auto}"
+outputs/webview2-shell/dsp-echo.css,111,motion,1,"solid rgba(32,42,56,.08);border-radius:8px;background:#fff;transition:border-color 140ms ease,background 140ms ease}"
+outputs/webview2-shell/dsp-echo.css,111,hardcoded_color,2,"96px;gap:4px;min-width:0;padding:9px 12px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:#fff;transition:border-color 140ms ease,background 140ms ease}"
+outputs/webview2-shell/dsp-echo.css,112,hardcoded_color,1,":absolute;left:-9px;top:50%;width:8px;height:1px;background:rgba(32,42,56,.18);content:''}"
+outputs/webview2-shell/dsp-echo.css,113,hardcoded_color,1,".dsp-pipeline-map em{color:rgba(75,84,100,.6);font-size:calc(10px * var(--text-scale));font-style:normal;letter-spacing:.04em}"
+outputs/webview2-shell/dsp-echo.css,114,hardcoded_color,1,.dsp-pipeline-map strong{color:#48566a;font-size:calc(12px * var(--text-scale));font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+outputs/webview2-shell/dsp-echo.css,115,hardcoded_color,2,".dsp-pipeline-map span[data-active=true]{border-color:rgba(104,109,243,.28);background:rgba(239,241,255,.9)}"
+outputs/webview2-shell/dsp-echo.css,116,hardcoded_color,1,.dsp-pipeline-map span[data-active=true] strong{color:#2632a2}
+outputs/webview2-shell/dsp-echo.css,117,hardcoded_color,2,".dsp-pipeline-map span[data-risk=true]{border-color:rgba(191,73,36,.3);background:rgba(255,242,236,.94)}"
+outputs/webview2-shell/dsp-echo.css,118,hardcoded_color,1,.dsp-pipeline-map span[data-risk=true] strong{color:#9b3d25}
+outputs/webview2-shell/dsp-echo.css,119,hardcoded_color,1,"[data-selected=true]{box-shadow:inset 0 -2px 0 var(--accent,#e0507f)}"
+outputs/webview2-shell/dsp-echo.css,120,hardcoded_color,2,":18px;margin-bottom:16px;padding:10px 14px;border:1px solid rgba(32,42,56,.08);border-radius:12px;background:rgba(255,255,255,.45)}"
+outputs/webview2-shell/dsp-echo.css,122,hardcoded_color,1,".dsp-focus-strip em{color:rgba(75,84,100,.58);font-size:calc(10px * var(--text-scale));font-style:normal;letter-spacing:.04em}"
+outputs/webview2-shell/dsp-echo.css,123,hardcoded_color,1,.dsp-focus-strip strong{color:#26303f;font-size:calc(12px * var(--text-scale));font-weight:600}
+outputs/webview2-shell/dsp-echo.css,124,hardcoded_color,3,"utton{margin-left:auto;min-height:30px;padding:0 14px;color:#39465a;border:1px solid rgba(32,42,56,.1);border-radius:999px;background:rgba(255,255,255,.8);font:inherit;font-size:calc(12px * var(--text-scale));cursor:pointer}"
+outputs/webview2-shell/dsp-echo.css,125,hardcoded_color,2,".dsp-focus-strip button:hover{border-color:rgba(104,109,243,.24);background:rgba(239,241,255,.9)}"
+outputs/webview2-shell/dsp-echo.css,126,hardcoded_color,2,"e-map,html[data-theme=""dark""] .dsp-focus-strip{border-color:rgba(255,255,255,.1);background:rgba(30,34,42,.6)}"
+outputs/webview2-shell/dsp-echo.css,127,hardcoded_color,2,"html[data-theme=""dark""] .dsp-pipeline-map span{border-color:rgba(255,255,255,.1);background:rgba(38,43,52,.9)}"
+outputs/webview2-shell/dsp-echo.css,128,hardcoded_color,1,"html[data-theme=""dark""] .dsp-pipeline-map strong{color:#cfd8e6}"
+outputs/webview2-shell/dsp-echo.css,129,hardcoded_color,1,"ne-map em,html[data-theme=""dark""] .dsp-focus-strip em{color:rgba(226,232,240,.6)}"
+outputs/webview2-shell/dsp-echo.css,130,hardcoded_color,2,"ark""] .dsp-pipeline-map span[data-active=true]{border-color:rgba(132,140,255,.4);background:rgba(104,109,243,.22)}"
+outputs/webview2-shell/dsp-echo.css,131,hardcoded_color,1,"ark""] .dsp-pipeline-map span[data-active=true] strong{color:#c9d2ff}"
+outputs/webview2-shell/dsp-echo.css,132,hardcoded_color,1,"html[data-theme=""dark""] .dsp-focus-strip strong{color:#e6ebf5}"
+outputs/webview2-shell/dsp-echo.css,133,hardcoded_color,3,"html[data-theme=""dark""] .dsp-focus-strip button{color:#d5dcea;border-color:rgba(255,255,255,.14);background:rgba(255,255,255,.08)}"
+outputs/webview2-shell/dsp-echo.css,136,hardcoded_color,2,"12px;margin:2px 2px 10px;padding:10px 12px;border:1px solid rgba(32,42,56,.08);border-radius:12px;background:rgba(255,255,255,.72)}"
+outputs/webview2-shell/dsp-echo.css,137,hardcoded_color,3,"dth:34px;height:34px;flex:0 0 34px;place-items:center;color:#686df3;border:1px solid rgba(104,109,243,.2);border-radius:50%;background:rgba(239,241,255,.8)}"
+outputs/webview2-shell/dsp-echo.css,139,hardcoded_color,1,".dsp-output-card>div>span{color:rgba(75,84,100,.6);font-size:calc(10px * var(--text-scale));letter-spacing:.04em}"
+outputs/webview2-shell/dsp-echo.css,140,hardcoded_color,1,.dsp-output-card strong{color:#202939;font-size:calc(12px * var(--text-scale));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+outputs/webview2-shell/dsp-echo.css,141,hardcoded_color,1,".dsp-output-card small{color:rgba(75,84,100,.66);font-size:calc(11px * var(--text-scale));white-space:nowrap;overflow:hidden;text-overflow:ellipsis}"
+outputs/webview2-shell/dsp-echo.css,142,hardcoded_color,1,ursor:pointer;font:inherit;text-align:left;width:100%;color:#344154}
+outputs/webview2-shell/dsp-echo.css,143,focus_suppression,1,"sp-chain-item:focus-visible{background:rgba(255,255,255,.6);outline:none}"
+outputs/webview2-shell/dsp-echo.css,143,hardcoded_color,1,"tem:hover,.dsp-nav .dsp-chain-item:focus-visible{background:rgba(255,255,255,.6);outline:none}"
+outputs/webview2-shell/dsp-echo.css,144,hardcoded_color,3,"ain-item[aria-current=true]{border-right-color:var(--accent,#e0507f);background:linear-gradient(90deg,rgba(255,255,255,.84),rgba(238,241,255,.78))}"
+outputs/webview2-shell/dsp-echo.css,145,hardcoded_color,1,"ght:22px;justify-self:center;border-radius:999px;background:rgba(99,110,124,.22)}"
+outputs/webview2-shell/dsp-echo.css,146,hardcoded_color,1,"ria-current=true] .dsp-chain-handle{background:var(--accent,#e0507f)}"
+outputs/webview2-shell/dsp-echo.css,147,hardcoded_color,4,"isplay:grid;width:34px;height:34px;place-items:center;color:#606a7b;border:1px solid rgba(32,42,56,.1);border-radius:50%;background:#fff;box-shadow:0 10px 24px rgba(25,35,50,.08)}"
+outputs/webview2-shell/dsp-echo.css,148,hardcoded_color,1,.dsp-chain-item[data-active=true] .dsp-chain-icon{color:#fff;border-color:transparent}
+outputs/webview2-shell/dsp-echo.css,149,hardcoded_color,1,a-active=true][data-accent=blue] .dsp-chain-icon{background:#3974d8}
+outputs/webview2-shell/dsp-echo.css,150,hardcoded_color,1,active=true][data-accent=violet] .dsp-chain-icon{background:#686df3}
+outputs/webview2-shell/dsp-echo.css,151,hardcoded_color,1,-active=true][data-accent=green] .dsp-chain-icon{background:#2f9b78}
+outputs/webview2-shell/dsp-echo.css,152,hardcoded_color,1,-active=true][data-accent=amber] .dsp-chain-icon{background:#c98135}
+outputs/webview2-shell/dsp-echo.css,155,hardcoded_color,1,.dsp-chain-copy strong{color:#1f2937;font-size:calc(13px * var(--text-scale));font-weight:600}
+outputs/webview2-shell/dsp-echo.css,156,hardcoded_color,1,".dsp-chain-copy small{color:rgba(75,84,100,.72);font-size:calc(11px * var(--text-scale))}"
+outputs/webview2-shell/dsp-echo.css,157,hardcoded_color,1,isplay:grid;width:20px;height:20px;place-items:center;color:#41a878}
+outputs/webview2-shell/dsp-echo.css,160,hardcoded_color,1,".dsp-chain-state.always svg{display:block;color:rgba(99,110,124,.8)}"
+outputs/webview2-shell/dsp-echo.css,161,hardcoded_color,1,"p-nav-label.dsp-chain-stage{padding:12px 14px 2px 4px;color:rgba(75,84,100,.58);letter-spacing:.04em}"
+outputs/webview2-shell/dsp-echo.css,162,hardcoded_color,2,"html[data-theme=""dark""] .dsp-output-card{border-color:rgba(255,255,255,.1);background:rgba(30,34,42,.72)}"
+outputs/webview2-shell/dsp-echo.css,163,hardcoded_color,3,"html[data-theme=""dark""] .dsp-output-icon{color:#c9d2ff;border-color:rgba(132,140,255,.4);background:rgba(104,109,243,.22)}"
+outputs/webview2-shell/dsp-echo.css,164,hardcoded_color,1,"html[data-theme=""dark""] .dsp-output-card strong{color:#eef2f8}"
+outputs/webview2-shell/dsp-echo.css,165,hardcoded_color,1,"v>span,html[data-theme=""dark""] .dsp-output-card small{color:rgba(224,230,240,.66)}"
+outputs/webview2-shell/dsp-echo.css,166,hardcoded_color,1,"html[data-theme=""dark""] .dsp-nav .dsp-chain-item{color:#d5dcea}"
+outputs/webview2-shell/dsp-echo.css,167,hardcoded_color,1,"ata-theme=""dark""] .dsp-nav .dsp-chain-item:hover{background:rgba(255,255,255,.06)}"
+outputs/webview2-shell/dsp-echo.css,168,hardcoded_color,3,"ain-item[aria-current=true]{border-right-color:var(--accent,#e0507f);background:linear-gradient(90deg,rgba(104,109,243,.14),rgba(104,109,243,.06))}"
+outputs/webview2-shell/dsp-echo.css,169,hardcoded_color,1,"html[data-theme=""dark""] .dsp-chain-handle{background:rgba(255,255,255,.18)}"
+outputs/webview2-shell/dsp-echo.css,170,hardcoded_color,3,"html[data-theme=""dark""] .dsp-chain-icon{color:#cfd8e6;border-color:rgba(255,255,255,.12);background:rgba(38,43,52,.9);box-shadow:none}"
+outputs/webview2-shell/dsp-echo.css,171,hardcoded_color,1,"html[data-theme=""dark""] .dsp-chain-copy strong{color:#eef2f8}"
+outputs/webview2-shell/dsp-echo.css,172,hardcoded_color,1,"html[data-theme=""dark""] .dsp-chain-copy small{color:rgba(224,230,240,.66)}"
+outputs/webview2-shell/dsp-echo.css,173,hardcoded_color,1,"theme=""dark""] .dsp-nav .dsp-nav-label.dsp-chain-stage{color:rgba(226,232,240,.58)}"
+outputs/webview2-shell/dsp-echo.css,176,hardcoded_color,2,"lay:grid;gap:16px;min-width:0;padding:20px;border:1px solid rgba(32,42,56,.08);border-radius:12px;background:rgba(255,255,255,.6)}"
+outputs/webview2-shell/dsp-echo.css,178,hardcoded_color,1,"ck-header .dsp-kicker{display:block;margin-bottom:4px;color:rgba(75,84,100,.6);font-size:calc(10px * var(--text-scale));letter-spacing:.08em;text-transform:uppercase}"
+outputs/webview2-shell/dsp-echo.css,179,hardcoded_color,1,h2{margin:0;font-size:calc(20px * var(--text-scale));color:#202939;letter-spacing:-.2px}
+outputs/webview2-shell/dsp-echo.css,180,hardcoded_color,1,".dsp-rack-header p{margin:6px 0 0;color:rgba(58,68,84,.78);font-size:calc(12px * var(--text-scale));line-height:1.55}"
+outputs/webview2-shell/dsp-echo.css,182,hardcoded_color,2,"-items:baseline;gap:10px;padding:12px 14px;border:1px solid rgba(32,42,56,.08);border-radius:10px;background:rgba(250,247,249,.8)}"
+outputs/webview2-shell/dsp-echo.css,183,hardcoded_color,1,.dsp-rack-fixed span{color:#4b5464;font-size:calc(12px * var(--text-scale));font-weight:600}
+outputs/webview2-shell/dsp-echo.css,184,hardcoded_color,1,".dsp-rack-fixed small{color:rgba(75,84,100,.72);font-size:calc(11px * var(--text-scale))}"
+outputs/webview2-shell/dsp-echo.css,185,hardcoded_color,2,"tml[data-theme=""dark""] .dsp-module-panel--rack{border-color:rgba(255,255,255,.1);background:rgba(30,34,42,.6)}"
+outputs/webview2-shell/dsp-echo.css,186,hardcoded_color,1,"html[data-theme=""dark""] .dsp-rack-header h2{color:#eef2f8}"
+outputs/webview2-shell/dsp-echo.css,187,hardcoded_color,1,"eader p,html[data-theme=""dark""] .dsp-rack-fixed small{color:rgba(224,230,240,.74)}"
+outputs/webview2-shell/dsp-echo.css,188,hardcoded_color,2,"html[data-theme=""dark""] .dsp-rack-fixed>div{border-color:rgba(255,255,255,.1);background:rgba(38,43,52,.8)}"
+outputs/webview2-shell/dsp-echo.css,189,hardcoded_color,1,"html[data-theme=""dark""] .dsp-rack-fixed span{color:#e6ebf5}"
+outputs/webview2-shell/dsp-echo.css,190,hardcoded_color,2,"html[data-theme=""dark""] .dsp-rack-list li{background:rgba(38,43,52,.8);border-color:rgba(255,255,255,.1)}"
+outputs/webview2-shell/dsp-echo.css,191,hardcoded_color,1,"html[data-theme=""dark""] .dsp-rack-list li strong{color:#eef2f8}"
+outputs/webview2-shell/dsp-echo.css,192,hardcoded_color,2,"html[data-theme=""dark""] .dsp-rack-move{background:rgba(255,255,255,.08);color:#d5dcea}"
+outputs/webview2-shell/dsp-echo.css,193,hardcoded_color,2,"heme=""dark""] .dsp-rack-move:hover:not(:disabled){background:rgba(104,109,243,.24);color:#c9d2ff}"
+outputs/webview2-shell/dsp-echo.css,198,hardcoded_color,1,".dsp-safety-limiter-note{color:rgba(75,84,100,.72);font-size:calc(11px * var(--text-scale));line-height:1.5}"
+outputs/webview2-shell/dsp-echo.css,200,hardcoded_color,1,"html[data-theme=""dark""] .dsp-safety-limiter-note{color:rgba(224,230,240,.7)}"
+outputs/webview2-shell/dsp-eq.js,23,select,1,"const toolbar = el('div',undefined,'eq-toolbar'), preset = el('select',undefined,'dsp-select'); preset.setAttribute('aria-label','EQ 预设');"
+outputs/webview2-shell/dsp-eq.js,24,event,1,"preset.addEventListener('change',()=>action('preset',{presetId:preset.value}));"
+outputs/webview2-shell/dsp-eq.js,31,event,1,"保存预设','eq-pill'); saveForm.append(name,savePreset);saveForm.addEventListener('submit',async e=>{e.preventDefault();if(!name.value.trim())return;await action('savePreset',{name:name.value.trim()});name.value='';});root.append(saveForm);"
+outputs/webview2-shell/dsp-eq.js,34,range,1,"p-row'), preamp=el('input'), preampValue=el('output');preamp.type='range';preamp.min=-24;preamp.max=24;preamp.step=.1;preamp.setAttribute('aria-label','EQ 预增益');preampRow.append(el('span','预增益'),preamp,preampValue);root.append(preampRow);"
+outputs/webview2-shell/dsp-eq.js,35,event,2,"preamp.addEventListener('input',()=>{state.preampDb=Number(preamp.value);preampValue.value=fmt(state.preampDb);changed();});preamp.addEventListener('change',save);"
+outputs/webview2-shell/dsp-eq.js,38,event,1,"fn) {const b=el('button',text,'eq-pill');b.type='button';b.addEventListener('click',fn);return b;}"
+outputs/webview2-shell/dsp-eq.js,51,event,2,"d(el('span',text),input,output);simpleBox.append(row);input.addEventListener('input',()=>output.value=Math.round(Number(input.value)*100)+'%');input.addEventListener('change',()=>{const data={};simpleBox.querySelectorAll('input').forEach((n,i)=>data[['bass','vocal','air','warm'][i]]=Number(n.value));action('simple',data);});});}"
+outputs/webview2-shell/dsp-eq.js,51,range,1,"ow=el('label'), input=el('input'), output=el('output');input.type='range';input.min=0;input.max=1;input.step=.05;input.value=values[key]??values[key[0].toUpperCase()+key.slice(1)]??0;input.setAttribute('aria-label',text);output.value=Math.round(Number(input.value)*100)+'%';row.append(el('span',text),input,output);simpleBox.append(row);input.addEventListener('input',()=>output.value=Math.round(Numb"
+outputs/webview2-shell/dsp-eq.js,54,event,1,"e=id;type.append(o);});type.value=band.type||'Peaking';type.addEventListener('change',()=>{band.type=type.value;changed();save();});editor.append(title,type);"
+outputs/webview2-shell/dsp-eq.js,54,select,1,"const title=el('strong',`频段 ${selected+1}`),type=el('select',undefined,'dsp-select');type.setAttribute('aria-label','滤波器类型');types.forEach(([id,label])=>{const o=el('option',label);o.value=id;type.append(o);});type.value=band.type||'Peaking';type.addEventListener('change',()=>{band.type=type.value;changed();save();});editor.append(title,type);"
+outputs/webview2-shell/dsp-eq.js,55,event,1,"d[key]});input.setAttribute('aria-label','选中频段'+text);input.addEventListener('change',()=>{band[key]=clamp(Number(input.value)||min,min,max);input.value=band[key];changed();renderBands();save();});label.append(el('span',text),input);editor.append(label);});"
+outputs/webview2-shell/dsp-eq.js,57,event,2,"etAttribute('aria-label',`${frequencies(b.freq)} 增益`);input.addEventListener('input',()=>{selected=i;b.gain=Number(input.value);out.value=fmt(b.gain);changed();});input.addEventListener('change',()=>{renderBands();save();});cell.append(choose,input,out);bands.append(cell);});"
+outputs/webview2-shell/dsp-eq.js,57,range,1,"aw();}),input=el('input'),out=el('output',fmt(b.gain));input.type='range';Object.assign(input,{min:-24,max:24,step:.1,value:b.gain});input.setAttribute('aria-label',`${frequencies(b.freq)} 增益`);input.addEventListener('input',()=>{selected=i;b.gain=Number(input.value);out.value=fmt(b.gain);changed();});input.addEventListener('change',()=>{renderBands();save();});cell.append(choose,input,out);bands."
+outputs/webview2-shell/dsp-eq.js,69,hardcoded_color,1,"ath.max(1,PW/count-2),height:h,rx:1,fill:'var(--eq-spectrum,rgba(15,118,110,.102))'}));}}"
+outputs/webview2-shell/dsp-eq.js,81,event,1,"chart.addEventListener('pointerdown',e=>{const p=point(e),m=maxGain();let distance=400,best=-1;state.bands.forEach((b,i)=>{const d=(x(b.freq)-p.x)**2+(y(b.gain,m)-p.y)**2;if(d<distance){distance=d;best=i;}});if(best<0)return;selected=best;drag=true;chart.setPointerCapture(e.pointerId);chart.focus();e.preventDefault();renderBands();draw();});"
+outputs/webview2-shell/dsp-eq.js,82,event,1,"chart.addEventListener('pointermove',e=>{const p=point(e),m=maxGain(),f=clamp(20*1000**((p.x-L)/PW),20,20000),gain=clamp((T+PH/2-p.y)*2*m/PH,-24,24);if(drag){const b=state.bands[selected],step=e.shiftKey?.1:.5;b.freq=Math.round(f*10)/10;b.gain=Math.round(gain/step)*step;changed();}else{let nearest=-1,distance=400;state.bands.forEach((b,i)=>{const d=(x(b.freq)-p.x)**2+(y(b.gain,m)-p.y)**2;if(d<"
+outputs/webview2-shell/dsp-eq.js,83,event,1,"chart.addEventListener('pointerleave',()=>{hover=-1;readout.value='';draw();});"
+outputs/webview2-shell/dsp-eq.js,84,event,3,"ag(){if(!drag)return;drag=false;renderBands();save();}chart.addEventListener('pointerup',endDrag);chart.addEventListener('pointercancel',endDrag);chart.addEventListener('lostpointercapture',endDrag);"
+outputs/webview2-shell/dsp-eq.js,85,event,1,"chart.addEventListener('keydown',e=>{const b=state.bands[selected];if(!b)return;if(e.key==='Delete'){if(state.bands.length>1)state.bands.splice(selected,1);selected=clamp(selected,0,state.bands.length-1);}else if(e.key==='ArrowUp'||e.key==='ArrowDown')b.gain=clamp(b.gain+(e.key==='ArrowUp'?1:-1)*(e.shiftKey?.1:.5),-24,24);else if(e.key==='ArrowLeft'||e.key==='ArrowRight')b.freq=clamp(b.freq*2*"
+outputs/webview2-shell/dsp-headphones.js,11,event,1,",fn,cls=''){const b=el('button',text,cls);b.type='button';b.addEventListener('click',async()=>{b.disabled=true;try{await fn();}catch(e){if(alive)message.textContent=e.message;}finally{b.disabled=false;}});return b;}"
+outputs/webview2-shell/dsp-headphones.js,27,hardcoded_color,1,"art.append(svg('line',{x1:30,x2:480,y1:y(g),y2:y(g),stroke:'#cbd5e1','stroke-width':g===0?1.5:.6})));"
+outputs/webview2-shell/dsp-headphones.js,28,hardcoded_color,1,"art.append(svg('line',{x1:x(f),x2:x(f),y1:25,y2:190,stroke:'#cbd5e1','stroke-width':.6})));"
+outputs/webview2-shell/dsp-headphones.js,29,hardcoded_color,1,"end(svg('path',{d:'M'+points.join(' L'),fill:'none',stroke:'#0f766e','stroke-width':2}));curve.append(chart);const axis=el('div',undefined,'opra-curve-frequency-axis');[20,100,1000,10000,20000].forEach(f=>{const tick=el('span',f>=1000?f/1000+'k':String(f));tick.style.setProperty('--opra-axis-position',Math.log10(f/20)/3*100+'%');axis.append(tick);});const gains=el('div',undefined,'opra-curve-gain-"
+outputs/webview2-shell/dsp-headphones.js,33,event,1,"form.addEventListener('submit',e=>{e.preventDefault();if(query.value.trim())find(query.value.trim()).catch(e=>message.textContent=e.message);});emptyPreview();if(live)initialize().catch(e=>{if(alive)message.textContent=e.message;});else message.textContent='请在桌面播放器中加载 OPRA 数据库。';"
+outputs/webview2-shell/dsp-reference.css,9,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,10,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,12,hardcoded_color,1,background: #edf3f8;
+outputs/webview2-shell/dsp-reference.css,13,hardcoded_color,1,"box-shadow: 0 22px 58px rgba(25, 35, 50, 0.1);"
+outputs/webview2-shell/dsp-reference.css,24,hardcoded_color,1,"border-bottom: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,26,hardcoded_color,2,"linear-gradient(135deg, rgba(255, 255, 255, 0.96), rgba(246, 250, 253, 0.9)),"
+outputs/webview2-shell/dsp-reference.css,27,hardcoded_color,1,#ffffff;
+outputs/webview2-shell/dsp-reference.css,37,hardcoded_color,1,"color: rgba(75, 84, 100, 0.64);"
+outputs/webview2-shell/dsp-reference.css,46,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,56,hardcoded_color,1,"color: rgba(54, 64, 80, 0.7);"
+outputs/webview2-shell/dsp-reference.css,70,hardcoded_color,1,color: #69758a;
+outputs/webview2-shell/dsp-reference.css,71,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,73,hardcoded_color,1,"background: rgba(247, 250, 253, 0.94);"
+outputs/webview2-shell/dsp-reference.css,77,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,85,hardcoded_color,1,color: #2032c5;
+outputs/webview2-shell/dsp-reference.css,86,hardcoded_color,1,"border-color: rgba(82, 93, 232, 0.28);"
+outputs/webview2-shell/dsp-reference.css,87,hardcoded_color,1,"background: rgba(239, 242, 255, 0.96);"
+outputs/webview2-shell/dsp-reference.css,88,hardcoded_color,1,"box-shadow: inset 0 0 0 1px rgba(82, 93, 232, 0.08);"
+outputs/webview2-shell/dsp-reference.css,104,hardcoded_color,1,background: #cbd4df;
+outputs/webview2-shell/dsp-reference.css,105,hardcoded_color,1,"box-shadow: inset 0 1px 2px rgba(25, 35, 50, 0.16);"
+outputs/webview2-shell/dsp-reference.css,106,motion,1,transition: background 160ms ease;
+outputs/webview2-shell/dsp-reference.css,117,hardcoded_color,1,background: #fff;
+outputs/webview2-shell/dsp-reference.css,118,hardcoded_color,1,"box-shadow: 0 3px 8px rgba(25, 35, 50, 0.18);"
+outputs/webview2-shell/dsp-reference.css,119,motion,1,transition: transform 160ms ease;
+outputs/webview2-shell/dsp-reference.css,123,hardcoded_color,1,background: #5864f2;
+outputs/webview2-shell/dsp-reference.css,136,hardcoded_color,1,"outline: 2px solid rgba(82, 93, 232, 0.26);"
+outputs/webview2-shell/dsp-reference.css,147,hardcoded_color,1,"border-right: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,148,hardcoded_color,1,"background: rgba(250, 252, 255, 0.94);"
+outputs/webview2-shell/dsp-reference.css,169,hardcoded_color,1,"color: rgba(75, 84, 100, 0.72);"
+outputs/webview2-shell/dsp-reference.css,176,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,186,hardcoded_color,1,"color: rgba(54, 64, 80, 0.78);"
+outputs/webview2-shell/dsp-reference.css,201,hardcoded_color,1,"color: rgba(75, 84, 100, 0.74);"
+outputs/webview2-shell/dsp-reference.css,202,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.18);"
+outputs/webview2-shell/dsp-reference.css,204,hardcoded_color,1,background: #fff;
+outputs/webview2-shell/dsp-reference.css,205,hardcoded_color,1,"box-shadow: 0 10px 26px rgba(32, 42, 56, 0.05);"
+outputs/webview2-shell/dsp-reference.css,211,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,217,focus_suppression,1,outline: none;
+outputs/webview2-shell/dsp-reference.css,236,hardcoded_color,1,color: #39465a;
+outputs/webview2-shell/dsp-reference.css,237,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,239,hardcoded_color,1,"background: rgba(246, 248, 252, 0.9);"
+outputs/webview2-shell/dsp-reference.css,243,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,250,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,251,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.2);"
+outputs/webview2-shell/dsp-reference.css,252,hardcoded_color,1,"background: rgba(239, 241, 255, 0.92);"
+outputs/webview2-shell/dsp-reference.css,272,hardcoded_color,1,"color: rgba(75, 84, 100, 0.72);"
+outputs/webview2-shell/dsp-reference.css,281,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,290,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,292,hardcoded_color,1,"background: rgba(255, 255, 255, 0.72);"
+outputs/webview2-shell/dsp-reference.css,299,hardcoded_color,1,color: #7a4d19;
+outputs/webview2-shell/dsp-reference.css,318,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,337,hardcoded_color,1,color: #263449;
+outputs/webview2-shell/dsp-reference.css,338,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,340,hardcoded_color,1,"background: rgba(255, 255, 255, 0.76);"
+outputs/webview2-shell/dsp-reference.css,359,hardcoded_color,1,"color: rgba(75, 84, 100, 0.66);"
+outputs/webview2-shell/dsp-reference.css,378,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,379,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.09);"
+outputs/webview2-shell/dsp-reference.css,381,hardcoded_color,1,background: #fff;
+outputs/webview2-shell/dsp-reference.css,384,hardcoded_color,1,"box-shadow: 0 10px 24px rgba(32, 42, 56, 0.035);"
+outputs/webview2-shell/dsp-reference.css,385,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,394,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.22);"
+outputs/webview2-shell/dsp-reference.css,395,hardcoded_color,1,background: #fbfcff;
+outputs/webview2-shell/dsp-reference.css,396,hardcoded_color,1,"box-shadow: 0 16px 34px rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,398,focus_suppression,1,outline: none;
+outputs/webview2-shell/dsp-reference.css,413,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,426,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,436,hardcoded_color,1,"color: rgba(75, 84, 100, 0.62);"
+outputs/webview2-shell/dsp-reference.css,457,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,460,hardcoded_color,1,background: #dbe4f0;
+outputs/webview2-shell/dsp-reference.css,463,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,472,hardcoded_color,1,"border-color: rgba(77, 99, 255, 0.28);"
+outputs/webview2-shell/dsp-reference.css,473,hardcoded_color,1,background: #e4ebf5;
+outputs/webview2-shell/dsp-reference.css,474,hardcoded_color,1,"box-shadow: 0 8px 22px rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,476,focus_suppression,1,outline: none;
+outputs/webview2-shell/dsp-reference.css,480,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.22);"
+outputs/webview2-shell/dsp-reference.css,481,hardcoded_color,1,background: #cbd9ee;
+outputs/webview2-shell/dsp-reference.css,490,hardcoded_color,1,"border: 1px solid rgba(77, 99, 255, 0.16);"
+outputs/webview2-shell/dsp-reference.css,493,hardcoded_color,1,"radial-gradient(circle at 30% 22%, rgba(255, 255, 255, 0.34), transparent 42%),"
+outputs/webview2-shell/dsp-reference.css,494,hardcoded_color,2,"linear-gradient(145deg, #7180a6, #465575);"
+outputs/webview2-shell/dsp-reference.css,495,hardcoded_color,1,"box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.2);"
+outputs/webview2-shell/dsp-reference.css,506,hardcoded_color,1,color: #34445f;
+outputs/webview2-shell/dsp-reference.css,524,hardcoded_color,1,"color: rgba(75, 84, 100, 0.64);"
+outputs/webview2-shell/dsp-reference.css,538,hardcoded_color,1,background: #f3f6fa;
+outputs/webview2-shell/dsp-reference.css,550,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,552,hardcoded_color,2,"linear-gradient(180deg, rgba(255, 255, 255, 0.96), rgba(246, 249, 253, 0.94)),"
+outputs/webview2-shell/dsp-reference.css,553,hardcoded_color,1,#f8fafc;
+outputs/webview2-shell/dsp-reference.css,554,hardcoded_color,1,"box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.82);"
+outputs/webview2-shell/dsp-reference.css,564,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.06);"
+outputs/webview2-shell/dsp-reference.css,567,hardcoded_color,2,"linear-gradient(180deg, rgba(255, 255, 255, 0.42), rgba(237, 242, 248, 0.24)),"
+outputs/webview2-shell/dsp-reference.css,568,hardcoded_color,1,"rgba(255, 255, 255, 0.22);"
+outputs/webview2-shell/dsp-reference.css,584,hardcoded_color,1,"stroke: rgba(76, 88, 108, 0.13);"
+outputs/webview2-shell/dsp-reference.css,590,hardcoded_color,1,stroke: #4d63ff;
+outputs/webview2-shell/dsp-reference.css,595,hardcoded_color,1,"filter: drop-shadow(0 5px 10px rgba(77, 99, 255, 0.16));"
+outputs/webview2-shell/dsp-reference.css,603,hardcoded_color,1,"color: rgba(82, 92, 112, 0.76);"
+outputs/webview2-shell/dsp-reference.css,662,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,663,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,665,hardcoded_color,1,"background: rgba(255, 255, 255, 0.92);"
+outputs/webview2-shell/dsp-reference.css,666,hardcoded_color,1,"box-shadow: 0 12px 30px rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,688,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,690,hardcoded_color,1,"background: rgba(255, 255, 255, 0.76);"
+outputs/webview2-shell/dsp-reference.css,706,hardcoded_color,1,"color: rgba(75, 84, 100, 0.62);"
+outputs/webview2-shell/dsp-reference.css,707,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,709,hardcoded_color,1,"background: rgba(255, 255, 255, 0.74);"
+outputs/webview2-shell/dsp-reference.css,719,hardcoded_color,1,color: #9a6b09;
+outputs/webview2-shell/dsp-reference.css,720,hardcoded_color,1,"border-color: rgba(202, 148, 36, 0.32);"
+outputs/webview2-shell/dsp-reference.css,721,hardcoded_color,1,"background: rgba(255, 247, 221, 0.92);"
+outputs/webview2-shell/dsp-reference.css,735,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,736,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,738,hardcoded_color,1,"background: rgba(247, 250, 253, 0.88);"
+outputs/webview2-shell/dsp-reference.css,744,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.24);"
+outputs/webview2-shell/dsp-reference.css,745,hardcoded_color,1,"background: rgba(239, 241, 255, 0.9);"
+outputs/webview2-shell/dsp-reference.css,765,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,767,hardcoded_color,1,"background: rgba(247, 250, 253, 0.86);"
+outputs/webview2-shell/dsp-reference.css,780,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,781,hardcoded_color,1,"border: 1px solid rgba(104, 109, 243, 0.22);"
+outputs/webview2-shell/dsp-reference.css,783,hardcoded_color,1,"background: rgba(239, 241, 255, 0.9);"
+outputs/webview2-shell/dsp-reference.css,790,hardcoded_color,1,color: #217358;
+outputs/webview2-shell/dsp-reference.css,791,hardcoded_color,1,"border-color: rgba(47, 155, 120, 0.2);"
+outputs/webview2-shell/dsp-reference.css,792,hardcoded_color,1,"background: rgba(239, 250, 245, 0.9);"
+outputs/webview2-shell/dsp-reference.css,806,hardcoded_color,1,color: #243044;
+outputs/webview2-shell/dsp-reference.css,807,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,810,hardcoded_color,2,"linear-gradient(135deg, rgba(255, 255, 255, 0.92), rgba(248, 250, 253, 0.82)),"
+outputs/webview2-shell/dsp-reference.css,811,hardcoded_color,1,#ffffff;
+outputs/webview2-shell/dsp-reference.css,812,hardcoded_color,1,"box-shadow: 0 18px 46px rgba(25, 35, 50, 0.08);"
+outputs/webview2-shell/dsp-reference.css,867,hardcoded_color,1,color: #9a631e;
+outputs/webview2-shell/dsp-reference.css,885,hardcoded_color,1,"color: rgba(54, 64, 80, 0.72);"
+outputs/webview2-shell/dsp-reference.css,898,hardcoded_color,1,color: #34415a;
+outputs/webview2-shell/dsp-reference.css,899,hardcoded_color,1,"border: 1px solid rgba(52, 65, 90, 0.14);"
+outputs/webview2-shell/dsp-reference.css,901,hardcoded_color,1,"background: rgba(248, 250, 253, 0.94);"
+outputs/webview2-shell/dsp-reference.css,909,hardcoded_color,1,color: #fff;
+outputs/webview2-shell/dsp-reference.css,910,hardcoded_color,1,border-color: #a86b20;
+outputs/webview2-shell/dsp-reference.css,911,hardcoded_color,1,background: #a86b20;
+outputs/webview2-shell/dsp-reference.css,926,hardcoded_color,1,color: #566174;
+outputs/webview2-shell/dsp-reference.css,927,hardcoded_color,1,"border: 1px solid rgba(49, 60, 82, 0.1);"
+outputs/webview2-shell/dsp-reference.css,929,hardcoded_color,1,"background: rgba(248, 250, 253, 0.82);"
+outputs/webview2-shell/dsp-reference.css,933,hardcoded_color,1,color: #895716;
+outputs/webview2-shell/dsp-reference.css,934,hardcoded_color,1,"border-color: rgba(168, 107, 32, 0.24);"
+outputs/webview2-shell/dsp-reference.css,935,hardcoded_color,1,"background: rgba(255, 248, 235, 0.9);"
+outputs/webview2-shell/dsp-reference.css,948,hardcoded_color,1,"border: 1px solid rgba(49, 60, 82, 0.1);"
+outputs/webview2-shell/dsp-reference.css,950,hardcoded_color,1,"background: rgba(248, 250, 253, 0.7);"
+outputs/webview2-shell/dsp-reference.css,961,hardcoded_color,1,color: #8b5a1a;
+outputs/webview2-shell/dsp-reference.css,967,range,1,".dsp-compressor-controls input[type=""range""] {"
+outputs/webview2-shell/dsp-reference.css,969,hardcoded_color,1,accent-color: #a86b20;
+outputs/webview2-shell/dsp-reference.css,987,hardcoded_color,1,color: #6f4b1d;
+outputs/webview2-shell/dsp-reference.css,988,hardcoded_color,1,"border: 1px solid rgba(168, 107, 32, 0.22);"
+outputs/webview2-shell/dsp-reference.css,990,hardcoded_color,1,"background: rgba(255, 248, 235, 0.9);"
+outputs/webview2-shell/dsp-reference.css,1027,hardcoded_color,1,"color: rgba(58, 68, 84, 0.76);"
+outputs/webview2-shell/dsp-reference.css,1040,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,1042,hardcoded_color,1,"background: rgba(255, 255, 255, 0.66);"
+outputs/webview2-shell/dsp-reference.css,1052,hardcoded_color,1,"border: 1px solid rgba(104, 109, 243, 0.13);"
+outputs/webview2-shell/dsp-reference.css,1055,hardcoded_color,2,"linear-gradient(135deg, rgba(241, 244, 255, 0.9), rgba(255, 255, 255, 0.74)),"
+outputs/webview2-shell/dsp-reference.css,1056,hardcoded_color,1,"rgba(255, 255, 255, 0.7);"
+outputs/webview2-shell/dsp-reference.css,1081,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,1091,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,1099,hardcoded_color,1,"color: rgba(75, 84, 100, 0.66);"
+outputs/webview2-shell/dsp-reference.css,1114,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,1115,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.2);"
+outputs/webview2-shell/dsp-reference.css,1116,hardcoded_color,1,"background: rgba(239, 241, 255, 0.78);"
+outputs/webview2-shell/dsp-reference.css,1135,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,1137,hardcoded_color,1,"background: rgba(255, 255, 255, 0.54);"
+outputs/webview2-shell/dsp-reference.css,1143,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,1145,hardcoded_color,1,"background: rgba(255, 255, 255, 0.6);"
+outputs/webview2-shell/dsp-reference.css,1151,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,1166,hardcoded_color,1,color: #39465a;
+outputs/webview2-shell/dsp-reference.css,1167,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,1169,hardcoded_color,1,"background: rgba(255, 255, 255, 0.78);"
+outputs/webview2-shell/dsp-reference.css,1182,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,1183,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.24);"
+outputs/webview2-shell/dsp-reference.css,1184,hardcoded_color,1,"background: rgba(239, 241, 255, 0.82);"
+outputs/webview2-shell/dsp-reference.css,1196,hardcoded_color,1,color: #217358;
+outputs/webview2-shell/dsp-reference.css,1197,hardcoded_color,1,"border-color: rgba(47, 155, 120, 0.18);"
+outputs/webview2-shell/dsp-reference.css,1198,hardcoded_color,1,"background: rgba(239, 250, 245, 0.78);"
+outputs/webview2-shell/dsp-reference.css,1202,hardcoded_color,1,color: #3f4bc4;
+outputs/webview2-shell/dsp-reference.css,1210,hardcoded_color,1,color: #217358;
+outputs/webview2-shell/dsp-reference.css,1211,hardcoded_color,1,"border-color: rgba(47, 155, 120, 0.18);"
+outputs/webview2-shell/dsp-reference.css,1212,hardcoded_color,1,"background: rgba(239, 250, 245, 0.78);"
+outputs/webview2-shell/dsp-reference.css,1226,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,1228,hardcoded_color,1,"background: rgba(255, 255, 255, 0.72);"
+outputs/webview2-shell/dsp-reference.css,1250,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,1261,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,1274,hardcoded_color,1,"background: rgba(230, 234, 243, 0.9);"
+outputs/webview2-shell/dsp-reference.css,1280,motion,1,transition: width 160ms ease;
+outputs/webview2-shell/dsp-reference.css,1284,hardcoded_color,2,"background: linear-gradient(90deg, #8aa0ff, #686df3);"
+outputs/webview2-shell/dsp-reference.css,1288,hardcoded_color,2,"background: linear-gradient(90deg, #2f9b78, #64c09c);"
+outputs/webview2-shell/dsp-reference.css,1298,hardcoded_color,1,"background: rgba(255, 255, 255, 0.95);"
+outputs/webview2-shell/dsp-reference.css,1299,hardcoded_color,1,"box-shadow: 0 0 0 1px rgba(32, 42, 56, 0.12);"
+outputs/webview2-shell/dsp-reference.css,1308,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,1318,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,1320,hardcoded_color,1,"background: rgba(255, 255, 255, 0.62);"
+outputs/webview2-shell/dsp-reference.css,1325,hardcoded_color,1,"color: rgba(58, 68, 84, 0.78);"
+outputs/webview2-shell/dsp-reference.css,1333,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,1342,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,1343,hardcoded_color,1,"background: rgba(239, 241, 255, 0.9);"
+outputs/webview2-shell/dsp-reference.css,1344,hardcoded_color,1,"box-shadow: 0 8px 18px rgba(104, 109, 243, 0.1);"
+outputs/webview2-shell/dsp-reference.css,1366,hardcoded_color,1,"color: rgba(58, 68, 84, 0.78);"
+outputs/webview2-shell/dsp-reference.css,1380,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,1389,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,1397,hardcoded_color,1,"color: rgba(75, 84, 100, 0.64);"
+outputs/webview2-shell/dsp-reference.css,1412,hardcoded_color,1,"color: rgba(58, 68, 84, 0.72);"
+outputs/webview2-shell/dsp-reference.css,1422,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.07);"
+outputs/webview2-shell/dsp-reference.css,1424,hardcoded_color,1,"background: rgba(247, 250, 253, 0.68);"
+outputs/webview2-shell/dsp-reference.css,1437,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,1438,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,1440,focus_suppression,1,outline: none;
+outputs/webview2-shell/dsp-reference.css,1441,hardcoded_color,1,"background: rgba(255, 255, 255, 0.84);"
+outputs/webview2-shell/dsp-reference.css,1445,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,1452,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.34);"
+outputs/webview2-shell/dsp-reference.css,1453,hardcoded_color,1,"box-shadow: 0 0 0 3px rgba(104, 109, 243, 0.1);"
+outputs/webview2-shell/dsp-reference.css,1459,hardcoded_color,1,color: #686df3;
+outputs/webview2-shell/dsp-reference.css,1473,hardcoded_color,1,"border: 1px solid rgba(104, 109, 243, 0.12);"
+outputs/webview2-shell/dsp-reference.css,1476,hardcoded_color,2,"linear-gradient(135deg, rgba(247, 249, 255, 0.9), rgba(255, 255, 255, 0.7)),"
+outputs/webview2-shell/dsp-reference.css,1477,hardcoded_color,1,"rgba(255, 255, 255, 0.72);"
+outputs/webview2-shell/dsp-reference.css,1478,hardcoded_color,1,"box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74);"
+outputs/webview2-shell/dsp-reference.css,1496,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,1507,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,1508,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,1510,focus_suppression,1,outline: none;
+outputs/webview2-shell/dsp-reference.css,1511,hardcoded_color,1,"background: rgba(255, 255, 255, 0.88);"
+outputs/webview2-shell/dsp-reference.css,1512,hardcoded_color,1,"box-shadow: 0 1px 0 rgba(255, 255, 255, 0.72);"
+outputs/webview2-shell/dsp-reference.css,1516,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,1526,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.34);"
+outputs/webview2-shell/dsp-reference.css,1527,hardcoded_color,1,"background: rgba(255, 255, 255, 0.96);"
+outputs/webview2-shell/dsp-reference.css,1528,hardcoded_color,1,"box-shadow: 0 0 0 3px rgba(104, 109, 243, 0.1);"
+outputs/webview2-shell/dsp-reference.css,1552,motion,1,animation: dsp-channel-rename-enter 180ms ease both;
+outputs/webview2-shell/dsp-reference.css,1562,hardcoded_color,1,"color: rgba(75, 84, 100, 0.62);"
+outputs/webview2-shell/dsp-reference.css,1578,hardcoded_color,1,color: #39465a;
+outputs/webview2-shell/dsp-reference.css,1579,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,1581,hardcoded_color,1,"background: rgba(255, 255, 255, 0.82);"
+outputs/webview2-shell/dsp-reference.css,1588,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,1611,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,1612,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.24);"
+outputs/webview2-shell/dsp-reference.css,1613,hardcoded_color,1,"background: rgba(239, 241, 255, 0.82);"
+outputs/webview2-shell/dsp-reference.css,1614,hardcoded_color,1,"box-shadow: 0 8px 18px rgba(104, 109, 243, 0.12);"
+outputs/webview2-shell/dsp-reference.css,1625,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,1626,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.2);"
+outputs/webview2-shell/dsp-reference.css,1627,hardcoded_color,1,"background: rgba(239, 241, 255, 0.92);"
+outputs/webview2-shell/dsp-reference.css,1631,hardcoded_color,1,color: #8a3b2d;
+outputs/webview2-shell/dsp-reference.css,1640,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,1642,hardcoded_color,1,"background: rgba(255, 255, 255, 0.7);"
+outputs/webview2-shell/dsp-reference.css,1646,hardcoded_color,1,"border-color: rgba(47, 155, 120, 0.16);"
+outputs/webview2-shell/dsp-reference.css,1647,hardcoded_color,1,"background: rgba(239, 250, 245, 0.72);"
+outputs/webview2-shell/dsp-reference.css,1651,hardcoded_color,1,"border-color: rgba(201, 129, 53, 0.2);"
+outputs/webview2-shell/dsp-reference.css,1652,hardcoded_color,1,"background: rgba(255, 246, 232, 0.76);"
+outputs/webview2-shell/dsp-reference.css,1656,hardcoded_color,1,"border-color: rgba(191, 73, 36, 0.22);"
+outputs/webview2-shell/dsp-reference.css,1657,hardcoded_color,1,"background: rgba(255, 242, 236, 0.88);"
+outputs/webview2-shell/dsp-reference.css,1674,hardcoded_color,1,color: #248465;
+outputs/webview2-shell/dsp-reference.css,1675,hardcoded_color,1,"border: 1px solid rgba(47, 155, 120, 0.16);"
+outputs/webview2-shell/dsp-reference.css,1678,hardcoded_color,2,"linear-gradient(135deg, rgba(239, 250, 245, 0.92), rgba(255, 255, 255, 0.76)),"
+outputs/webview2-shell/dsp-reference.css,1679,hardcoded_color,1,"rgba(239, 250, 245, 0.86);"
+outputs/webview2-shell/dsp-reference.css,1683,hardcoded_color,1,color: #3f4bc4;
+outputs/webview2-shell/dsp-reference.css,1684,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.18);"
+outputs/webview2-shell/dsp-reference.css,1685,hardcoded_color,1,"background: rgba(239, 241, 255, 0.78);"
+outputs/webview2-shell/dsp-reference.css,1689,hardcoded_color,1,color: #9b3d25;
+outputs/webview2-shell/dsp-reference.css,1690,hardcoded_color,1,"border-color: rgba(191, 73, 36, 0.2);"
+outputs/webview2-shell/dsp-reference.css,1691,hardcoded_color,1,"background: rgba(255, 242, 236, 0.88);"
+outputs/webview2-shell/dsp-reference.css,1696,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,1706,hardcoded_color,1,"color: rgba(58, 68, 84, 0.78);"
+outputs/webview2-shell/dsp-reference.css,1728,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,1731,hardcoded_color,2,"linear-gradient(135deg, rgba(255, 255, 255, 0.84), rgba(246, 249, 253, 0.74)),"
+outputs/webview2-shell/dsp-reference.css,1732,hardcoded_color,1,"rgba(255, 255, 255, 0.7);"
+outputs/webview2-shell/dsp-reference.css,1742,hardcoded_color,1,"background: rgba(104, 109, 243, 0.3);"
+outputs/webview2-shell/dsp-reference.css,1747,hardcoded_color,1,"background: rgba(47, 155, 120, 0.34);"
+outputs/webview2-shell/dsp-reference.css,1751,hardcoded_color,1,color: #686df3;
+outputs/webview2-shell/dsp-reference.css,1767,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,1775,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,1801,hardcoded_color,1,"color: rgba(75, 84, 100, 0.74);"
+outputs/webview2-shell/dsp-reference.css,1808,hardcoded_color,1,color: #686df3;
+outputs/webview2-shell/dsp-reference.css,1817,hardcoded_color,1,"border: 1px solid rgba(47, 155, 120, 0.16);"
+outputs/webview2-shell/dsp-reference.css,1819,hardcoded_color,1,"background: rgba(239, 250, 245, 0.74);"
+outputs/webview2-shell/dsp-reference.css,1823,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.18);"
+outputs/webview2-shell/dsp-reference.css,1824,hardcoded_color,1,"background: rgba(239, 241, 255, 0.76);"
+outputs/webview2-shell/dsp-reference.css,1828,hardcoded_color,1,"border-color: rgba(191, 73, 36, 0.22);"
+outputs/webview2-shell/dsp-reference.css,1829,hardcoded_color,1,"background: rgba(255, 242, 236, 0.9);"
+outputs/webview2-shell/dsp-reference.css,1833,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,1841,hardcoded_color,1,"color: rgba(58, 68, 84, 0.78);"
+outputs/webview2-shell/dsp-reference.css,1855,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,1856,hardcoded_color,1,"border: 1px solid rgba(104, 109, 243, 0.2);"
+outputs/webview2-shell/dsp-reference.css,1858,hardcoded_color,1,"background: rgba(255, 255, 255, 0.78);"
+outputs/webview2-shell/dsp-reference.css,1867,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.28);"
+outputs/webview2-shell/dsp-reference.css,1868,hardcoded_color,1,"background: rgba(239, 241, 255, 0.86);"
+outputs/webview2-shell/dsp-reference.css,1886,hardcoded_color,1,color: #686df3;
+outputs/webview2-shell/dsp-reference.css,1891,hardcoded_color,1,color: #1f2937;
+outputs/webview2-shell/dsp-reference.css,1898,hardcoded_color,1,color: #248465;
+outputs/webview2-shell/dsp-reference.css,1902,hardcoded_color,1,color: #9a5721;
+outputs/webview2-shell/dsp-reference.css,1906,hardcoded_color,1,color: #9b3d25;
+outputs/webview2-shell/dsp-reference.css,1912,hardcoded_color,1,"color: rgba(58, 68, 84, 0.76);"
+outputs/webview2-shell/dsp-reference.css,1931,hardcoded_color,1,"border-top: 1px solid rgba(32, 42, 56, 0.07);"
+outputs/webview2-shell/dsp-reference.css,1944,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,1950,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,1965,hardcoded_color,1,"color: rgba(57, 70, 90, 0.78);"
+outputs/webview2-shell/dsp-reference.css,1966,hardcoded_color,1,"border: 1px dashed rgba(104, 109, 243, 0.24);"
+outputs/webview2-shell/dsp-reference.css,1968,hardcoded_color,1,"background: rgba(248, 250, 255, 0.7);"
+outputs/webview2-shell/dsp-reference.css,1995,hardcoded_color,1,"border: 1px solid rgba(47, 155, 120, 0.16);"
+outputs/webview2-shell/dsp-reference.css,1997,hardcoded_color,1,"background: rgba(239, 250, 245, 0.78);"
+outputs/webview2-shell/dsp-reference.css,2001,hardcoded_color,1,"border-color: rgba(201, 129, 53, 0.22);"
+outputs/webview2-shell/dsp-reference.css,2002,hardcoded_color,1,"background: rgba(255, 246, 232, 0.82);"
+outputs/webview2-shell/dsp-reference.css,2006,hardcoded_color,1,"border-color: rgba(191, 73, 36, 0.22);"
+outputs/webview2-shell/dsp-reference.css,2007,hardcoded_color,1,"background: rgba(255, 242, 236, 0.88);"
+outputs/webview2-shell/dsp-reference.css,2035,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,2042,hardcoded_color,1,color: #248465;
+outputs/webview2-shell/dsp-reference.css,2049,hardcoded_color,1,color: #9a5721;
+outputs/webview2-shell/dsp-reference.css,2053,hardcoded_color,1,color: #9b3d25;
+outputs/webview2-shell/dsp-reference.css,2058,hardcoded_color,1,"color: rgba(58, 68, 84, 0.84);"
+outputs/webview2-shell/dsp-reference.css,2072,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,2074,hardcoded_color,1,"background: rgba(255, 255, 255, 0.68);"
+outputs/webview2-shell/dsp-reference.css,2086,hardcoded_color,1,color: #243044;
+outputs/webview2-shell/dsp-reference.css,2088,hardcoded_color,2,"background: linear-gradient(90deg, rgba(104, 109, 243, 0.18), rgba(47, 155, 120, 0.14));"
+outputs/webview2-shell/dsp-reference.css,2092,hardcoded_color,1,"background: rgba(255, 246, 232, 0.9);"
+outputs/webview2-shell/dsp-reference.css,2096,hardcoded_color,1,"background: rgba(255, 242, 236, 0.92);"
+outputs/webview2-shell/dsp-reference.css,2100,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,2110,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,2112,hardcoded_color,1,"background: rgba(255, 255, 255, 0.74);"
+outputs/webview2-shell/dsp-reference.css,2116,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.2);"
+outputs/webview2-shell/dsp-reference.css,2117,hardcoded_color,1,"background: rgba(239, 241, 255, 0.76);"
+outputs/webview2-shell/dsp-reference.css,2124,hardcoded_color,1,"border: 1px solid rgba(47, 155, 120, 0.18);"
+outputs/webview2-shell/dsp-reference.css,2126,hardcoded_color,2,"background: linear-gradient(135deg, rgba(239, 250, 245, 0.9), rgba(255, 255, 255, 0.78));"
+outputs/webview2-shell/dsp-reference.css,2130,hardcoded_color,1,"border-color: rgba(201, 129, 53, 0.22);"
+outputs/webview2-shell/dsp-reference.css,2131,hardcoded_color,2,"background: linear-gradient(135deg, rgba(255, 246, 232, 0.9), rgba(255, 255, 255, 0.78));"
+outputs/webview2-shell/dsp-reference.css,2135,hardcoded_color,1,"border-color: rgba(191, 73, 36, 0.24);"
+outputs/webview2-shell/dsp-reference.css,2136,hardcoded_color,2,"background: linear-gradient(135deg, rgba(255, 242, 236, 0.92), rgba(255, 255, 255, 0.8));"
+outputs/webview2-shell/dsp-reference.css,2154,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,2162,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,2170,hardcoded_color,1,"color: rgba(58, 68, 84, 0.82);"
+outputs/webview2-shell/dsp-reference.css,2186,hardcoded_color,1,"border: 1px solid rgba(47, 155, 120, 0.14);"
+outputs/webview2-shell/dsp-reference.css,2188,hardcoded_color,1,"background: rgba(239, 250, 245, 0.72);"
+outputs/webview2-shell/dsp-reference.css,2205,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,2212,hardcoded_color,1,"color: rgba(40, 96, 76, 0.9);"
+outputs/webview2-shell/dsp-reference.css,2219,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,2229,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,2231,hardcoded_color,1,"background: rgba(255, 255, 255, 0.78);"
+outputs/webview2-shell/dsp-reference.css,2244,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,2250,hardcoded_color,1,color: #fff;
+outputs/webview2-shell/dsp-reference.css,2251,hardcoded_color,1,"border-color: rgba(33, 115, 88, 0.22);"
+outputs/webview2-shell/dsp-reference.css,2252,hardcoded_color,1,background: #2f9b78;
+outputs/webview2-shell/dsp-reference.css,2256,hardcoded_color,1,color: #3140be;
+outputs/webview2-shell/dsp-reference.css,2260,hardcoded_color,1,color: #217358;
+outputs/webview2-shell/dsp-reference.css,2266,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.24);"
+outputs/webview2-shell/dsp-reference.css,2267,hardcoded_color,1,"background: rgba(239, 241, 255, 0.9);"
+outputs/webview2-shell/dsp-reference.css,2271,hardcoded_color,1,"border-color: rgba(33, 115, 88, 0.24);"
+outputs/webview2-shell/dsp-reference.css,2272,hardcoded_color,1,background: #288665;
+outputs/webview2-shell/dsp-reference.css,2298,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.24);"
+outputs/webview2-shell/dsp-reference.css,2299,hardcoded_color,1,"background: rgba(239, 241, 255, 0.84);"
+outputs/webview2-shell/dsp-reference.css,2308,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,2316,hardcoded_color,1,"color: rgba(75, 84, 100, 0.72);"
+outputs/webview2-shell/dsp-reference.css,2323,hardcoded_color,1,color: #3f4bc4;
+outputs/webview2-shell/dsp-reference.css,2343,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,2345,hardcoded_color,1,"background: rgba(255, 255, 255, 0.74);"
+outputs/webview2-shell/dsp-reference.css,2357,hardcoded_color,1,"color: rgba(75, 84, 100, 0.68);"
+outputs/webview2-shell/dsp-reference.css,2364,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,2370,hardcoded_color,1,color: #248465;
+outputs/webview2-shell/dsp-reference.css,2374,hardcoded_color,1,"border-color: rgba(201, 129, 53, 0.2);"
+outputs/webview2-shell/dsp-reference.css,2375,hardcoded_color,1,"background: rgba(255, 246, 232, 0.74);"
+outputs/webview2-shell/dsp-reference.css,2379,hardcoded_color,1,color: #9a5721;
+outputs/webview2-shell/dsp-reference.css,2383,hardcoded_color,1,"border-color: rgba(201, 129, 53, 0.24);"
+outputs/webview2-shell/dsp-reference.css,2384,hardcoded_color,1,"background: rgba(255, 246, 232, 0.8);"
+outputs/webview2-shell/dsp-reference.css,2388,hardcoded_color,1,color: #9a5721;
+outputs/webview2-shell/dsp-reference.css,2398,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,2400,hardcoded_color,1,"background: rgba(255, 255, 255, 0.68);"
+outputs/webview2-shell/dsp-reference.css,2404,hardcoded_color,1,"color: rgba(75, 84, 100, 0.72);"
+outputs/webview2-shell/dsp-reference.css,2411,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,2416,range,1,".dsp-module-range input[type=""range""] {"
+outputs/webview2-shell/dsp-reference.css,2418,hardcoded_color,1,accent-color: #686df3;
+outputs/webview2-shell/dsp-reference.css,2434,hardcoded_color,1,color: #39465a;
+outputs/webview2-shell/dsp-reference.css,2435,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,2437,hardcoded_color,1,"background: rgba(255, 255, 255, 0.76);"
+outputs/webview2-shell/dsp-reference.css,2443,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,2453,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,2454,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.24);"
+outputs/webview2-shell/dsp-reference.css,2455,hardcoded_color,1,"background: rgba(239, 241, 255, 0.78);"
+outputs/webview2-shell/dsp-reference.css,2460,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,2461,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.28);"
+outputs/webview2-shell/dsp-reference.css,2462,hardcoded_color,1,"background: rgba(239, 241, 255, 0.9);"
+outputs/webview2-shell/dsp-reference.css,2474,hardcoded_color,1,color: #324055;
+outputs/webview2-shell/dsp-reference.css,2475,hardcoded_color,1,"border-color: rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,2477,hardcoded_color,2,"linear-gradient(135deg, rgba(255, 255, 255, 0.9), rgba(247, 250, 253, 0.78)),"
+outputs/webview2-shell/dsp-reference.css,2478,hardcoded_color,1,"rgba(255, 255, 255, 0.82);"
+outputs/webview2-shell/dsp-reference.css,2479,hardcoded_color,1,"box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.74);"
+outputs/webview2-shell/dsp-reference.css,2483,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,2484,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.2);"
+outputs/webview2-shell/dsp-reference.css,2486,hardcoded_color,2,"linear-gradient(135deg, rgba(247, 249, 255, 0.96), rgba(255, 255, 255, 0.82)),"
+outputs/webview2-shell/dsp-reference.css,2487,hardcoded_color,1,"rgba(255, 255, 255, 0.86);"
+outputs/webview2-shell/dsp-reference.css,2488,hardcoded_color,1,"box-shadow: 0 10px 22px rgba(104, 109, 243, 0.12);"
+outputs/webview2-shell/dsp-reference.css,2492,hardcoded_color,1,color: #1f6f58;
+outputs/webview2-shell/dsp-reference.css,2493,hardcoded_color,1,"border-color: rgba(47, 155, 120, 0.22);"
+outputs/webview2-shell/dsp-reference.css,2495,hardcoded_color,2,"linear-gradient(135deg, rgba(239, 250, 245, 0.94), rgba(255, 255, 255, 0.8)),"
+outputs/webview2-shell/dsp-reference.css,2496,hardcoded_color,1,"rgba(239, 250, 245, 0.86);"
+outputs/webview2-shell/dsp-reference.css,2505,hardcoded_color,1,"background: rgba(142, 151, 168, 0.34);"
+outputs/webview2-shell/dsp-reference.css,2506,hardcoded_color,1,"box-shadow: inset 0 0 0 1px rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,2507,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,2519,hardcoded_color,1,background: #ffffff;
+outputs/webview2-shell/dsp-reference.css,2520,hardcoded_color,1,"box-shadow: 0 2px 8px rgba(25, 35, 50, 0.18);"
+outputs/webview2-shell/dsp-reference.css,2521,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,2528,hardcoded_color,2,"background: linear-gradient(90deg, #686df3, #2f9b78);"
+outputs/webview2-shell/dsp-reference.css,2529,hardcoded_color,1,"box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.26);"
+outputs/webview2-shell/dsp-reference.css,2534,hardcoded_color,1,"box-shadow: 0 2px 9px rgba(25, 35, 50, 0.22);"
+outputs/webview2-shell/dsp-reference.css,2560,hardcoded_color,1,"color: rgba(75, 84, 100, 0.64);"
+outputs/webview2-shell/dsp-reference.css,2567,hardcoded_color,1,"color: rgba(31, 111, 88, 0.72);"
+outputs/webview2-shell/dsp-reference.css,2576,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,2578,hardcoded_color,1,"background: rgba(255, 255, 255, 0.58);"
+outputs/webview2-shell/dsp-reference.css,2587,hardcoded_color,1,"color: rgba(75, 84, 100, 0.72);"
+outputs/webview2-shell/dsp-reference.css,2598,hardcoded_color,1,color: #39465a;
+outputs/webview2-shell/dsp-reference.css,2599,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,2601,hardcoded_color,1,"background: rgba(255, 255, 255, 0.8);"
+outputs/webview2-shell/dsp-reference.css,2609,hardcoded_color,1,color: #2632a2;
+outputs/webview2-shell/dsp-reference.css,2610,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.28);"
+outputs/webview2-shell/dsp-reference.css,2611,hardcoded_color,1,"background: rgba(239, 241, 255, 0.92);"
+outputs/webview2-shell/dsp-reference.css,2618,hardcoded_color,1,"border: 1px solid rgba(104, 109, 243, 0.13);"
+outputs/webview2-shell/dsp-reference.css,2621,hardcoded_color,2,"linear-gradient(135deg, rgba(247, 249, 255, 0.92), rgba(240, 250, 246, 0.78)),"
+outputs/webview2-shell/dsp-reference.css,2622,hardcoded_color,1,"rgba(255, 255, 255, 0.74);"
+outputs/webview2-shell/dsp-reference.css,2642,hardcoded_color,1,color: #3f4bc4;
+outputs/webview2-shell/dsp-reference.css,2657,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,2666,hardcoded_color,1,"color: rgba(75, 84, 100, 0.72);"
+outputs/webview2-shell/dsp-reference.css,2678,hardcoded_color,1,color: #8a5a17;
+outputs/webview2-shell/dsp-reference.css,2679,hardcoded_color,1,"border: 1px solid rgba(201, 129, 53, 0.2);"
+outputs/webview2-shell/dsp-reference.css,2681,hardcoded_color,1,"background: rgba(255, 246, 232, 0.82);"
+outputs/webview2-shell/dsp-reference.css,2699,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,2701,hardcoded_color,1,"background: rgba(255, 255, 255, 0.72);"
+outputs/webview2-shell/dsp-reference.css,2705,hardcoded_color,1,"border-color: rgba(201, 129, 53, 0.2);"
+outputs/webview2-shell/dsp-reference.css,2706,hardcoded_color,1,"background: rgba(255, 246, 232, 0.72);"
+outputs/webview2-shell/dsp-reference.css,2710,hardcoded_color,1,"color: rgba(75, 84, 100, 0.66);"
+outputs/webview2-shell/dsp-reference.css,2717,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,2725,hardcoded_color,1,"color: rgba(75, 84, 100, 0.66);"
+outputs/webview2-shell/dsp-reference.css,2743,hardcoded_color,1,color: #39465a;
+outputs/webview2-shell/dsp-reference.css,2754,hardcoded_color,1,color: #3f4bc4;
+outputs/webview2-shell/dsp-reference.css,2755,hardcoded_color,1,"border: 1px solid rgba(104, 109, 243, 0.18);"
+outputs/webview2-shell/dsp-reference.css,2757,hardcoded_color,1,"background: rgba(239, 241, 255, 0.74);"
+outputs/webview2-shell/dsp-reference.css,2791,hardcoded_color,1,color: #39465a;
+outputs/webview2-shell/dsp-reference.css,2801,hardcoded_color,1,color: #7a8798;
+outputs/webview2-shell/dsp-reference.css,2816,hardcoded_color,1,color: #3f4bc4;
+outputs/webview2-shell/dsp-reference.css,2817,hardcoded_color,1,"border: 1px solid rgba(104, 109, 243, 0.18);"
+outputs/webview2-shell/dsp-reference.css,2819,hardcoded_color,1,"background: rgba(239, 241, 255, 0.74);"
+outputs/webview2-shell/dsp-reference.css,2851,hardcoded_color,1,color: #334155;
+outputs/webview2-shell/dsp-reference.css,2852,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.09);"
+outputs/webview2-shell/dsp-reference.css,2854,hardcoded_color,1,"background: rgba(255, 255, 255, 0.78);"
+outputs/webview2-shell/dsp-reference.css,2858,motion,1,transition:
+outputs/webview2-shell/dsp-reference.css,2867,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.22);"
+outputs/webview2-shell/dsp-reference.css,2868,hardcoded_color,1,"background: rgba(249, 250, 255, 0.9);"
+outputs/webview2-shell/dsp-reference.css,2874,hardcoded_color,1,"border-color: rgba(104, 109, 243, 0.3);"
+outputs/webview2-shell/dsp-reference.css,2875,hardcoded_color,1,"background: rgba(239, 241, 255, 0.94);"
+outputs/webview2-shell/dsp-reference.css,2876,hardcoded_color,1,"box-shadow: inset 3px 0 0 rgba(104, 109, 243, 0.62);"
+outputs/webview2-shell/dsp-reference.css,2890,hardcoded_color,1,color: #5964d8;
+outputs/webview2-shell/dsp-reference.css,2895,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,2904,hardcoded_color,1,color: #54627a;
+outputs/webview2-shell/dsp-reference.css,2905,hardcoded_color,1,"border: 1px solid rgba(32, 42, 56, 0.08);"
+outputs/webview2-shell/dsp-reference.css,2907,hardcoded_color,1,"background: rgba(241, 245, 249, 0.76);"
+outputs/webview2-shell/dsp-reference.css,2919,hardcoded_color,1,color: #39465a;
+outputs/webview2-shell/dsp-reference.css,2920,hardcoded_color,1,"border: 1px solid rgba(201, 129, 53, 0.2);"
+outputs/webview2-shell/dsp-reference.css,2922,hardcoded_color,1,"background: rgba(255, 246, 232, 0.76);"
+outputs/webview2-shell/dsp-reference.css,2934,hardcoded_color,1,color: #c98135;
+outputs/webview2-shell/dsp-reference.css,2940,hardcoded_color,1,color: #202939;
+outputs/webview2-shell/dsp-reference.css,2949,hardcoded_color,1,color: #8a5a17;
+outputs/webview2-shell/dsp-reference.css,2950,hardcoded_color,1,"border: 1px solid rgba(201, 129, 53, 0.18);"
+outputs/webview2-shell/dsp-reference.css,2952,hardcoded_color,1,"background: rgba(255, 255, 255, 0.56);"
+outputs/webview2-shell/dsp-reference.css,2962,hardcoded_color,1,"color: rgba(75, 84, 100, 0.78);"
+outputs/webview2-shell/dsp-reference.css,3003,hardcoded_color,1,color: #f1f5ff;
+outputs/webview2-shell/dsp-reference.css,3019,hardcoded_color,1,"color: rgba(220, 229, 247, 0.66);"
+outputs/webview2-shell/dsp-reference.css,3051,hardcoded_color,1,color: #dfe7f7;
+outputs/webview2-shell/dsp-reference.css,3052,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.12);"
+outputs/webview2-shell/dsp-reference.css,3053,hardcoded_color,1,"background: rgba(34, 40, 54, 0.72);"
+outputs/webview2-shell/dsp-reference.css,3062,hardcoded_color,1,color: #dfe7f7;
+outputs/webview2-shell/dsp-reference.css,3063,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.12);"
+outputs/webview2-shell/dsp-reference.css,3064,hardcoded_color,1,"background: rgba(34, 40, 54, 0.72);"
+outputs/webview2-shell/dsp-reference.css,3068,hardcoded_color,1,"background: rgba(24, 30, 42, 0.62);"
+outputs/webview2-shell/dsp-reference.css,3079,hardcoded_color,1,"color: rgba(220, 229, 247, 0.68);"
+outputs/webview2-shell/dsp-reference.css,3087,hardcoded_color,1,color: #dfe7f7;
+outputs/webview2-shell/dsp-reference.css,3088,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.12);"
+outputs/webview2-shell/dsp-reference.css,3089,hardcoded_color,1,"background: rgba(24, 30, 42, 0.72);"
+outputs/webview2-shell/dsp-reference.css,3095,hardcoded_color,1,color: #dfe3ff;
+outputs/webview2-shell/dsp-reference.css,3096,hardcoded_color,1,"border-color: rgba(142, 149, 255, 0.24);"
+outputs/webview2-shell/dsp-reference.css,3097,hardcoded_color,1,"background: rgba(54, 61, 96, 0.74);"
+outputs/webview2-shell/dsp-reference.css,3106,hardcoded_color,1,color: #f1f5ff;
+outputs/webview2-shell/dsp-reference.css,3111,hardcoded_color,1,color: #ffe3ba;
+outputs/webview2-shell/dsp-reference.css,3112,hardcoded_color,1,"border-color: rgba(242, 189, 120, 0.22);"
+outputs/webview2-shell/dsp-reference.css,3113,hardcoded_color,1,"background: rgba(82, 55, 34, 0.58);"
+outputs/webview2-shell/dsp-reference.css,3117,hardcoded_color,1,color: #dfe7f7;
+outputs/webview2-shell/dsp-reference.css,3118,hardcoded_color,1,"border-color: rgba(99, 208, 167, 0.16);"
+outputs/webview2-shell/dsp-reference.css,3119,hardcoded_color,1,"background: rgba(36, 58, 52, 0.62);"
+outputs/webview2-shell/dsp-reference.css,3123,hardcoded_color,1,"border-color: rgba(242, 189, 120, 0.24);"
+outputs/webview2-shell/dsp-reference.css,3124,hardcoded_color,1,"background: rgba(82, 55, 34, 0.58);"
+outputs/webview2-shell/dsp-reference.css,3128,hardcoded_color,1,"border-color: rgba(255, 154, 125, 0.24);"
+outputs/webview2-shell/dsp-reference.css,3129,hardcoded_color,1,"background: rgba(83, 42, 35, 0.62);"
+outputs/webview2-shell/dsp-reference.css,3133,hardcoded_color,1,color: #63d0a7;
+outputs/webview2-shell/dsp-reference.css,3134,hardcoded_color,1,"border-color: rgba(99, 208, 167, 0.16);"
+outputs/webview2-shell/dsp-reference.css,3135,hardcoded_color,1,"background: rgba(36, 58, 52, 0.62);"
+outputs/webview2-shell/dsp-reference.css,3140,hardcoded_color,1,color: #dfe3ff;
+outputs/webview2-shell/dsp-reference.css,3141,hardcoded_color,1,"border-color: rgba(142, 149, 255, 0.2);"
+outputs/webview2-shell/dsp-reference.css,3142,hardcoded_color,1,"background: rgba(54, 61, 96, 0.64);"
+outputs/webview2-shell/dsp-reference.css,3147,hardcoded_color,1,color: #ffd6cc;
+outputs/webview2-shell/dsp-reference.css,3148,hardcoded_color,1,"border-color: rgba(255, 154, 125, 0.24);"
+outputs/webview2-shell/dsp-reference.css,3149,hardcoded_color,1,"background: rgba(83, 42, 35, 0.66);"
+outputs/webview2-shell/dsp-reference.css,3153,hardcoded_color,1,"background: rgba(142, 149, 255, 0.28);"
+outputs/webview2-shell/dsp-reference.css,3157,hardcoded_color,1,"background: rgba(99, 208, 167, 0.28);"
+outputs/webview2-shell/dsp-reference.css,3167,hardcoded_color,1,color: #f1f5ff;
+outputs/webview2-shell/dsp-reference.css,3179,hardcoded_color,1,"color: rgba(220, 229, 247, 0.72);"
+outputs/webview2-shell/dsp-reference.css,3184,hardcoded_color,1,"color: rgba(220, 229, 247, 0.66);"
+outputs/webview2-shell/dsp-reference.css,3188,hardcoded_color,1,color: #b8c2ff;
+outputs/webview2-shell/dsp-reference.css,3192,hardcoded_color,1,color: #f1f5ff;
+outputs/webview2-shell/dsp-reference.css,3197,hardcoded_color,1,"color: rgba(220, 229, 247, 0.66);"
+outputs/webview2-shell/dsp-reference.css,3202,hardcoded_color,1,color: #dfe7f7;
+outputs/webview2-shell/dsp-reference.css,3203,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.1);"
+outputs/webview2-shell/dsp-reference.css,3204,hardcoded_color,1,"background: rgba(34, 40, 54, 0.66);"
+outputs/webview2-shell/dsp-reference.css,3208,hardcoded_color,1,color: #dfe7f7;
+outputs/webview2-shell/dsp-reference.css,3209,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.12);"
+outputs/webview2-shell/dsp-reference.css,3210,hardcoded_color,1,"background: rgba(24, 30, 42, 0.72);"
+outputs/webview2-shell/dsp-reference.css,3214,hardcoded_color,1,"color: rgba(220, 229, 247, 0.72);"
+outputs/webview2-shell/dsp-reference.css,3218,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.1);"
+outputs/webview2-shell/dsp-reference.css,3219,hardcoded_color,1,"background: rgba(24, 30, 42, 0.62);"
+outputs/webview2-shell/dsp-reference.css,3223,hardcoded_color,1,"color: rgba(220, 229, 247, 0.68);"
+outputs/webview2-shell/dsp-reference.css,3228,hardcoded_color,1,color: #b8c2ff;
+outputs/webview2-shell/dsp-reference.css,3229,hardcoded_color,1,"background: rgba(54, 61, 96, 0.72);"
+outputs/webview2-shell/dsp-reference.css,3233,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.1);"
+outputs/webview2-shell/dsp-reference.css,3235,hardcoded_color,2,"linear-gradient(135deg, rgba(34, 40, 54, 0.82), rgba(24, 30, 42, 0.66)),"
+outputs/webview2-shell/dsp-reference.css,3236,hardcoded_color,1,"rgba(24, 30, 42, 0.76);"
+outputs/webview2-shell/dsp-reference.css,3237,hardcoded_color,1,"box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);"
+outputs/webview2-shell/dsp-reference.css,3241,hardcoded_color,1,"color: rgba(220, 229, 247, 0.62);"
+outputs/webview2-shell/dsp-reference.css,3246,hardcoded_color,1,color: #dfe7f7;
+outputs/webview2-shell/dsp-reference.css,3247,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.12);"
+outputs/webview2-shell/dsp-reference.css,3248,hardcoded_color,1,"background: rgba(34, 40, 54, 0.72);"
+outputs/webview2-shell/dsp-reference.css,3253,hardcoded_color,1,"color: rgba(220, 229, 247, 0.66);"
+outputs/webview2-shell/dsp-reference.css,3260,hardcoded_color,1,color: #dfe7f7;
+outputs/webview2-shell/dsp-reference.css,3261,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.12);"
+outputs/webview2-shell/dsp-reference.css,3262,hardcoded_color,1,"background: rgba(34, 40, 54, 0.72);"
+outputs/webview2-shell/dsp-reference.css,3266,hardcoded_color,1,color: #dfe7f7;
+outputs/webview2-shell/dsp-reference.css,3267,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.12);"
+outputs/webview2-shell/dsp-reference.css,3269,hardcoded_color,2,"linear-gradient(135deg, rgba(34, 40, 54, 0.82), rgba(24, 30, 42, 0.62)),"
+outputs/webview2-shell/dsp-reference.css,3270,hardcoded_color,1,"rgba(24, 30, 42, 0.72);"
+outputs/webview2-shell/dsp-reference.css,3274,hardcoded_color,1,color: #bdf8dc;
+outputs/webview2-shell/dsp-reference.css,3275,hardcoded_color,1,"border-color: rgba(99, 208, 167, 0.2);"
+outputs/webview2-shell/dsp-reference.css,3277,hardcoded_color,2,"linear-gradient(135deg, rgba(36, 58, 52, 0.76), rgba(24, 30, 42, 0.66)),"
+outputs/webview2-shell/dsp-reference.css,3278,hardcoded_color,1,"rgba(36, 58, 52, 0.68);"
+outputs/webview2-shell/dsp-reference.css,3282,hardcoded_color,1,"background: rgba(129, 142, 164, 0.28);"
+outputs/webview2-shell/dsp-reference.css,3283,hardcoded_color,1,"box-shadow: inset 0 0 0 1px rgba(207, 218, 255, 0.1);"
+outputs/webview2-shell/dsp-reference.css,3287,hardcoded_color,1,"color: rgba(220, 229, 247, 0.62);"
+outputs/webview2-shell/dsp-reference.css,3291,hardcoded_color,1,"color: rgba(189, 248, 220, 0.72);"
+outputs/webview2-shell/dsp-reference.css,3295,hardcoded_color,1,"background: rgba(20, 25, 35, 0.9);"
+outputs/webview2-shell/dsp-reference.css,3300,hardcoded_color,1,color: #bdf8dc;
+outputs/webview2-shell/dsp-reference.css,3301,hardcoded_color,1,"border-color: rgba(99, 208, 167, 0.18);"
+outputs/webview2-shell/dsp-reference.css,3302,hardcoded_color,1,"background: rgba(36, 58, 52, 0.68);"
+outputs/webview2-shell/dsp-reference.css,3306,hardcoded_color,1,color: #bdf8dc;
+outputs/webview2-shell/dsp-reference.css,3307,hardcoded_color,1,"border-color: rgba(99, 208, 167, 0.18);"
+outputs/webview2-shell/dsp-reference.css,3308,hardcoded_color,1,"background: rgba(36, 58, 52, 0.68);"
+outputs/webview2-shell/dsp-reference.css,3316,hardcoded_color,1,"color: rgba(220, 229, 247, 0.64);"
+outputs/webview2-shell/dsp-reference.css,3320,hardcoded_color,1,color: #63d0a7;
+outputs/webview2-shell/dsp-reference.css,3324,hardcoded_color,1,color: #63d0a7;
+outputs/webview2-shell/dsp-reference.css,3330,hardcoded_color,1,color: #f2bd78;
+outputs/webview2-shell/dsp-reference.css,3336,hardcoded_color,1,color: #ff9a7d;
+outputs/webview2-shell/dsp-reference.css,3342,hardcoded_color,1,color: #b8c2ff;
+outputs/webview2-shell/dsp-reference.css,3346,hardcoded_color,1,color: #effdf8;
+outputs/webview2-shell/dsp-reference.css,3347,hardcoded_color,1,background: #24785d;
+outputs/webview2-shell/dsp-reference.css,3351,hardcoded_color,1,color: #b8c2ff;
+outputs/webview2-shell/dsp-reference.css,3355,hardcoded_color,1,"border-color: rgba(242, 189, 120, 0.24);"
+outputs/webview2-shell/dsp-reference.css,3356,hardcoded_color,1,"background: rgba(82, 55, 34, 0.58);"
+outputs/webview2-shell/dsp-reference.css,3360,hardcoded_color,1,color: #f2bd78;
+outputs/webview2-shell/dsp-reference.css,3364,hardcoded_color,1,color: #f1f5ff;
+outputs/webview2-shell/dsp-reference.css,3365,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.1);"
+outputs/webview2-shell/dsp-reference.css,3366,hardcoded_color,1,background: #111722;
+outputs/webview2-shell/dsp-reference.css,3370,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.1);"
+outputs/webview2-shell/dsp-reference.css,3372,hardcoded_color,2,"linear-gradient(135deg, rgba(31, 38, 52, 0.96), rgba(24, 30, 43, 0.92)),"
+outputs/webview2-shell/dsp-reference.css,3373,hardcoded_color,1,#151b27;
+outputs/webview2-shell/dsp-reference.css,3379,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.1);"
+outputs/webview2-shell/dsp-reference.css,3380,hardcoded_color,1,"background: rgba(20, 25, 35, 0.88);"
+outputs/webview2-shell/dsp-reference.css,3391,hardcoded_color,1,color: #f1f5ff;
+outputs/webview2-shell/dsp-reference.css,3408,hardcoded_color,1,"color: rgba(220, 229, 247, 0.68);"
+outputs/webview2-shell/dsp-reference.css,3420,hardcoded_color,1,color: #dfe7f7;
+outputs/webview2-shell/dsp-reference.css,3421,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.1);"
+outputs/webview2-shell/dsp-reference.css,3422,hardcoded_color,1,"background: rgba(30, 36, 49, 0.88);"
+outputs/webview2-shell/dsp-reference.css,3426,hardcoded_color,1,color: #dfe3ff;
+outputs/webview2-shell/dsp-reference.css,3427,hardcoded_color,1,"border-color: rgba(142, 149, 255, 0.28);"
+outputs/webview2-shell/dsp-reference.css,3428,hardcoded_color,1,"background: rgba(61, 68, 107, 0.9);"
+outputs/webview2-shell/dsp-reference.css,3432,hardcoded_color,1,color: #f1f5ff;
+outputs/webview2-shell/dsp-reference.css,3436,hardcoded_color,1,color: #ffe49a;
+outputs/webview2-shell/dsp-reference.css,3437,hardcoded_color,1,"border-color: rgba(255, 216, 114, 0.32);"
+outputs/webview2-shell/dsp-reference.css,3438,hardcoded_color,1,"background: rgba(91, 70, 28, 0.74);"
+outputs/webview2-shell/dsp-reference.css,3442,hardcoded_color,1,"background: rgba(91, 101, 124, 0.78);"
+outputs/webview2-shell/dsp-reference.css,3446,hardcoded_color,1,background: #737cff;
+outputs/webview2-shell/dsp-reference.css,3450,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.1);"
+outputs/webview2-shell/dsp-reference.css,3452,hardcoded_color,2,"linear-gradient(180deg, rgba(32, 38, 52, 0.96), rgba(25, 31, 44, 0.94)),"
+outputs/webview2-shell/dsp-reference.css,3453,hardcoded_color,1,#171d2a;
+outputs/webview2-shell/dsp-reference.css,3454,hardcoded_color,1,"box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);"
+outputs/webview2-shell/dsp-reference.css,3458,hardcoded_color,1,"border-color: rgba(207, 218, 255, 0.08);"
+outputs/webview2-shell/dsp-reference.css,3460,hardcoded_color,2,"linear-gradient(180deg, rgba(52, 62, 86, 0.3), rgba(22, 28, 40, 0.22)),"
+outputs/webview2-shell/dsp-reference.css,3461,hardcoded_color,1,"rgba(18, 24, 36, 0.22);"
+outputs/webview2-shell/dsp-reference.css,3465,hardcoded_color,1,"stroke: rgba(220, 229, 247, 0.12);"
+outputs/webview2-shell/dsp-reference.css,3469,hardcoded_color,1,stroke: #8f98ff;
+outputs/webview2-shell/dsp-reference.css,3474,hardcoded_color,1,"color: rgba(229, 236, 255, 0.58);"
+outputs/webview2-shell/dsp-reference.css,3479,hardcoded_color,1,"text-shadow: 0 1px 0 rgba(12, 16, 24, 0.84);"
+outputs/webview2-shell/dsp-reference.css,3483,hardcoded_color,1,color: #f1f5ff;
+outputs/webview2-shell/dsp-reference.css,3487,hardcoded_color,1,color: #f1f5ff;
+outputs/webview2-shell/dsp-reference.css,3488,hardcoded_color,1,"background: rgba(45, 56, 76, 0.92);"
+outputs/webview2-shell/dsp-reference.css,3493,hardcoded_color,1,"border-color: rgba(142, 149, 255, 0.28);"
+outputs/webview2-shell/dsp-reference.css,3494,hardcoded_color,1,"background: rgba(61, 68, 107, 0.9);"
+outputs/webview2-shell/dsp-reference.css,3499,hardcoded_color,1,"border-color: rgba(142, 149, 255, 0.28);"
+outputs/webview2-shell/dsp-reference.css,3500,hardcoded_color,1,"background: rgba(38, 46, 64, 0.96);"
+outputs/webview2-shell/dsp-reference.css,3504,hardcoded_color,1,color: #f1f5ff;
+outputs/webview2-shell/dsp-reference.css,3505,hardcoded_color,1,"background: rgba(20, 25, 35, 0.96);"
+outputs/webview2-shell/dsp-reference.css,3555,hardcoded_color,1,"border-bottom: 1px solid rgba(32, 42, 56, 0.1);"
+outputs/webview2-shell/dsp-reference.css,4006,hardcoded_color,1,color: #34445f;
+outputs/webview2-shell/dsp-reference.css,4010,hardcoded_color,1,"box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.36);"
+outputs/webview2-shell/dsp-reference.css,4021,hardcoded_color,1,color: #34445f !important;
+outputs/webview2-shell/dsp-reference.css,4025,hardcoded_color,10,".dsp-page{--color-accent:#686df3;--color-bg:#f6f9fd;--color-text:#202939;--color-text-secondary:#4b5464;--theme-heading-text:#202939;--theme-page-text:#202939;--theme-muted-text:#667085;--theme-panel-bg:#fff;--theme-panel-bg-strong:#fff;--theme-panel-border:rgba(32,42,56,.1);--echo-weight-body:400;--echo-weight-label:500;--echo-weight-heading:600}"
+outputs/webview2-shell/dsp-reference.css,4032,hardcoded_color,1,"--dsp-surface: color-mix(in srgb, var(--theme-panel-bg, rgba(255, 255, 255, 0.72)) 72%, transparent);"
+outputs/webview2-shell/dsp-reference.css,4033,hardcoded_color,1,"rface-muted: color-mix(in srgb, var(--theme-panel-bg-muted, rgba(239, 240, 242, 0.78)) 72%, transparent);"
+outputs/webview2-shell/dsp-reference.css,4034,hardcoded_color,1,"ace-strong: color-mix(in srgb, var(--theme-panel-bg-strong, rgba(255, 255, 255, 0.92)) 82%, transparent);"
+outputs/webview2-shell/dsp-reference.css,4035,hardcoded_color,1,"dsp-surface-faint: color-mix(in srgb, var(--theme-panel-bg, rgba(255, 255, 255, 0.72)) 42%, transparent);"
+outputs/webview2-shell/dsp-reference.css,4036,hardcoded_color,1,"--dsp-field: color-mix(in srgb, var(--theme-field-bg, rgba(255, 255, 255, 0.86)) 78%, transparent);"
+outputs/webview2-shell/dsp-reference.css,4037,hardcoded_color,1,"eld-strong: color-mix(in srgb, var(--theme-field-bg-strong, rgba(255, 255, 255, 0.96)) 86%, transparent);"
+outputs/webview2-shell/dsp-reference.css,4038,hardcoded_color,1,"--dsp-border: var(--theme-panel-border, rgba(38, 40, 46, 0.1));"
+outputs/webview2-shell/dsp-reference.css,4039,hardcoded_color,1,"--dsp-border-strong: var(--theme-panel-border-strong, rgba(38, 40, 46, 0.18));"
+outputs/webview2-shell/dsp-reference.css,4040,hardcoded_color,1,"--dsp-text: var(--theme-page-text, #182230);"
+outputs/webview2-shell/dsp-reference.css,4041,hardcoded_color,1,"--dsp-heading: var(--theme-heading-text, #1e2633);"
+outputs/webview2-shell/dsp-reference.css,4042,hardcoded_color,1,"--dsp-muted: var(--theme-muted-text, #6c7179);"
+outputs/webview2-shell/dsp-reference.css,4043,hardcoded_color,1,"--dsp-subtle: var(--theme-subtle-text, #a0a4aa);"
+outputs/webview2-shell/dsp-reference.css,4044,hardcoded_color,1,"var(--theme-accent-text-strong, var(--color-accent-strong, #3239c7));"
+outputs/webview2-shell/dsp-reference.css,4045,hardcoded_color,1,"--dsp-accent-bg: color-mix(in srgb, var(--theme-accent-bg, rgba(75, 85, 232, 0.13)) 82%, transparent);"
+outputs/webview2-shell/dsp-reference.css,4046,hardcoded_color,1,"bg-strong: color-mix(in srgb, var(--theme-accent-bg-strong, rgba(75, 85, 232, 0.18)) 86%, var(--dsp-surface));"
+outputs/webview2-shell/dsp-reference.css,4047,hardcoded_color,1,"--dsp-success: var(--theme-success-text, #456d58);"
+outputs/webview2-shell/dsp-reference.css,4048,hardcoded_color,1,"-dsp-success-bg: color-mix(in srgb, var(--theme-success-bg, rgba(77, 132, 104, 0.12)) 74%, var(--dsp-surface));"
+outputs/webview2-shell/dsp-reference.css,4049,hardcoded_color,1,"--dsp-warning: var(--theme-warning-text, #72572a);"
+outputs/webview2-shell/dsp-reference.css,4050,hardcoded_color,1,"-dsp-warning-bg: color-mix(in srgb, var(--theme-warning-bg, rgba(245, 189, 84, 0.2)) 72%, var(--dsp-surface));"
+outputs/webview2-shell/dsp-reference.css,4051,hardcoded_color,1,"--dsp-danger: var(--theme-danger-text, #b3261e);"
+outputs/webview2-shell/dsp-reference.css,4052,hardcoded_color,1,"--dsp-danger-bg: color-mix(in srgb, var(--theme-danger-bg, rgba(255, 59, 48, 0.12)) 74%, var(--dsp-surface));"
+outputs/webview2-shell/dsp-reference.css,4053,hardcoded_color,1,"--dsp-shadow: var(--theme-shadow-panel, 0 10px 28px rgba(36, 39, 48, 0.05));"
+outputs/webview2-shell/dsp-visuals.js,69,event,1,"b.addEventListener('click',async()=>{b.disabled=true;try{await fn();}catch(e){window.CelesteShell.notify(e.message);}finally{if(b.isConnected)b.disabled=!!opts.disabled;}});"
+outputs/webview2-shell/dsp-visuals.js,76,range,1,const input=el('input');input.type='range';
+outputs/webview2-shell/dsp-visuals.js,80,event,1,"input.addEventListener('input',()=>{out.textContent=db(input.value);});"
+outputs/webview2-shell/dsp-visuals.js,81,event,1,"input.addEventListener('change',async()=>{try{await write(Number(input.value));}catch(e){window.CelesteShell.notify(e.message);}});"
+outputs/webview2-shell/dsp-visuals.js,156,event,1,"b.addEventListener('click',async()=>{b.disabled=true;try{await set('AudioFxSafetyHeadroomSlider',value);refresh();}catch(e){window.CelesteShell.notify(e.message);b.disabled=false;}});"
+outputs/webview2-shell/dsp-visuals.js,187,event,1,"ctive=String(Math.abs(trim-value)<=.05);b.disabled=!hasIr;b.addEventListener('click',async()=>{b.disabled=true;try{await set('RoomTrimSlider',value);refresh();}catch(e){window.CelesteShell.notify(e.message);b.disabled=false;}});trimTools.append(b);});"
+outputs/webview2-shell/dsp-visuals.js,214,event,1,"('button');b.append(glyph('file',14),el('span','导入 IR…'));b.addEventListener('click',()=>request('firImport').then(refresh));nextActions.append(b);}"
+outputs/webview2-shell/dsp-visuals.js,215,event,1,"tton');b.append(glyph('gauge',14),el('span','压实到 -6 dB'));b.addEventListener('click',async()=>{await set('RoomTrimSlider',-6);refresh();});nextActions.append(b);}"
+outputs/webview2-shell/dsp-visuals.js,216,event,1,"lyph('zap',14),el('span','旁路对比'));b.dataset.active='true';b.addEventListener('click',async()=>{await set('RoomIrEnabledToggle',false);refresh();});nextActions.append(b);}"
+outputs/webview2-shell/dsp-visuals.js,217,event,1,"('button');b.append(glyph('shield',14),el('span','安全启用'));b.addEventListener('click',async()=>{await set('RoomIrEnabledToggle',true);await set('RoomTrimSlider',-6);refresh();});nextActions.append(b);}"
+outputs/webview2-shell/dsp-visuals.js,218,event,1,"');again.append(glyph('activity',14),el('span','刷新'));again.addEventListener('click',()=>refresh());nextActions.append(again);"
+outputs/webview2-shell/dsp-visuals.js,313,event,1,"b.addEventListener('click',async()=>{b.disabled=true;try{await set('SrcRateCombo',index);refresh();}catch(e){window.CelesteShell.notify(e.message);b.disabled=false;}});"
+outputs/webview2-shell/dsp-visuals.js,328,event,1,"b.append(top);b.addEventListener('click',async()=>{b.disabled=true;try{await set(name,index);refresh();}catch(e){window.CelesteShell.notify(e.message);b.disabled=false;}});"
+outputs/webview2-shell/dsp-visuals.js,352,event,1,"power.addEventListener('click',async()=>{power.disabled=true;try{await set('DspCompToggle',off);refresh();}catch(e){window.CelesteShell.notify(e.message);power.disabled=false;}});"
+outputs/webview2-shell/dsp.css,6,hardcoded_color,2,er;gap:10px;padding:10px 16px;border-radius:19px;background:#f4eff2;font-size:calc(11px * var(--text-scale));color:#8d7785;white-space:nowrap}
+outputs/webview2-shell/dsp.css,7,hardcoded_color,1,ck-toggle[aria-pressed=true]{background:var(--accent);color:#fff}
+outputs/webview2-shell/dsp.css,9,hardcoded_color,2,play:grid;gap:2px;padding:8px;border-radius:19px;background:#faf7f9;border:1px solid #f1e9ee}
+outputs/webview2-shell/dsp.css,12,hardcoded_color,1,ar(--text-scale));font-weight:600;letter-spacing:.3px;color:#b09ba8;padding:13px 12px 5px}
+outputs/webview2-shell/dsp.css,14,hardcoded_color,2,.dsp-module{border-radius:21px;background:#fdfafb;border:1px solid #f1e9ee;padding:22px}
+outputs/webview2-shell/dsp.css,17,hardcoded_color,1,odule-head p{font-size:calc(10px * var(--text-scale));color:#aaa0a8;margin-top:5px}
+outputs/webview2-shell/dsp.css,22,hardcoded_color,1,sp-row-label{font-size:calc(12px * var(--text-scale));color:#8d7785;white-space:nowrap}
+outputs/webview2-shell/dsp.css,23,hardcoded_color,1,sp-row-value{font-size:calc(11px * var(--text-scale));color:#6d5b68;text-align:right;font-variant-numeric:tabular-nums}
+outputs/webview2-shell/dsp.css,24,hardcoded_color,1,t-size:calc(10px * var(--text-scale));line-height:1.8;color:#a89ca5}
+outputs/webview2-shell/dsp.css,27,hardcoded_color,3,:260px;padding:8px 12px;border-radius:12px;border:1px solid #ece2e8;background:#faf7f9;font-size:calc(12px * var(--text-scale));color:#6d5b68;font-family:inherit}
+outputs/webview2-shell/dsp.css,29,hardcoded_color,2,9px;padding:7px 14px 7px 7px;border-radius:999px;background:#f4eff2;font-size:calc(12px * var(--text-scale));color:#8d7785;justify-self:start}
+outputs/webview2-shell/dsp.css,30,motion,1,width:16px;height:16px;border-radius:50%;background:#d8c8d2;transition:background .18s var(--ease)}
+outputs/webview2-shell/dsp.css,30,hardcoded_color,1,ch-knob{width:16px;height:16px;border-radius:50%;background:#d8c8d2;transition:background .18s var(--ease)}
+outputs/webview2-shell/dsp.css,31,hardcoded_color,1,.dsp-switch[aria-pressed=true]{background:#f9e4eb;color:var(--accent)}
+outputs/webview2-shell/dsp.css,34,hardcoded_color,2,.dsp-power{padding:9px 16px;border-radius:17px;background:#f4eff2;font-size:calc(11px * var(--text-scale));color:#8d7785;white-space:nowrap}
+outputs/webview2-shell/dsp.css,35,hardcoded_color,1,dsp-power[aria-pressed=true]{background:var(--accent);color:#fff}
+outputs/webview2-shell/dsp.css,36,hardcoded_color,2,.dsp-pending{border-radius:16px;background:#f7f2f5;padding:26px;text-align:center;color:#a2939e;font-size:calc(12px * var(--text-scale));line-height:1.9}
+outputs/webview2-shell/dsp.css,42,hardcoded_color,2,.eq-pill{padding:9px 14px;border-radius:17px;background:#f4eff2;font-size:calc(11px * var(--text-scale));color:#8d7785}
+outputs/webview2-shell/dsp.css,43,hardcoded_color,1,.eq-pill[aria-pressed=true]{background:#f9e4eb;color:var(--accent)}
+outputs/webview2-shell/dsp.css,44,hardcoded_color,1,nter;gap:9px;font-size:calc(11px * var(--text-scale));color:#8d7785}
+outputs/webview2-shell/dsp.css,45,hardcoded_color,1,px;text-align:right;font-variant-numeric:tabular-nums;color:#6d5b68}
+outputs/webview2-shell/dsp.css,51,hardcoded_color,2,-curve-wrap{position:relative;border-radius:17px;background:#fff;border:1px solid #f1e9ee;overflow:hidden;
+outputs/webview2-shell/dsp.css,52,hardcoded_color,3,"--eq-grid:rgba(0,0,0,0.118);--eq-grid-strong:rgba(0,0,0,0.29);--eq-label:rgba(30,30,30,0.588);"
+outputs/webview2-shell/dsp.css,53,hardcoded_color,3,--eq-stop-1:#1d4ed8;--eq-stop-2:#0f766e;--eq-stop-3:#b45309;
+outputs/webview2-shell/dsp.css,54,hardcoded_color,2,"--eq-fill-top:rgba(15,118,110,0.157);--eq-fill-bottom:rgba(15,118,110,0.02);"
+outputs/webview2-shell/dsp.css,55,hardcoded_color,4,"--eq-node:#2f6fa8;--eq-node-halo:rgba(47,111,168,0.14);--eq-node-dot:#2f6fa8;--eq-readout:#28282e}"
+outputs/webview2-shell/dsp.css,56,hardcoded_color,2,.eq-curve-wrap[data-dark=true]{background:#2b2730;border-color:#2b2730;
+outputs/webview2-shell/dsp.css,57,hardcoded_color,3,"--eq-grid:rgba(255,255,255,0.10);--eq-grid-strong:rgba(255,255,255,0.25);--eq-label:rgba(255,255,255,0.69);"
+outputs/webview2-shell/dsp.css,58,hardcoded_color,3,--eq-stop-1:#264A63;--eq-stop-2:#2E7168;--eq-stop-3:#8A6235;
+outputs/webview2-shell/dsp.css,59,hardcoded_color,2,"--eq-fill-top:rgba(46,113,104,0.18);--eq-fill-bottom:rgba(46,113,104,0.02);"
+outputs/webview2-shell/dsp.css,60,hardcoded_color,4,"--eq-node:#9dc3d8;--eq-node-halo:rgba(157,195,216,0.14);--eq-node-dot:#ffffff;--eq-readout:#ffffff}"
+outputs/webview2-shell/dsp.css,77,hardcoded_color,1,items:center;padding:12px 8px;border-radius:15px;background:#faf7f9}
+outputs/webview2-shell/dsp.css,78,hardcoded_color,1,q-band label{font-size:calc(10px * var(--text-scale));color:#a093a0;font-variant-numeric:tabular-nums}
+outputs/webview2-shell/dsp.css,80,hardcoded_color,1,-band output{font-size:calc(10px * var(--text-scale));color:#88737f;font-variant-numeric:tabular-nums}
+outputs/webview2-shell/dsp.css,81,hardcoded_color,1,t-size:calc(10px * var(--text-scale));line-height:1.8;color:#a89ca5}
+outputs/webview2-shell/dsp.css,82,hardcoded_color,1,t-size:calc(10px * var(--text-scale));line-height:1.8;color:#a89ca5}
+outputs/webview2-shell/dsp.css,86,hardcoded_color,3,dth:0;padding:10px 14px;border-radius:14px;border:1px solid #ece2e8;background:#faf7f9;font:inherit;font-size:calc(12px * var(--text-scale));color:#6d5b68}
+outputs/webview2-shell/dsp.css,87,focus_suppression,1,.dsp-input:focus{outline:none;border-color:#e2c9d6;box-shadow:0 0 0 3px #e8486520}
+outputs/webview2-shell/dsp.css,87,hardcoded_color,2,.dsp-input:focus{outline:none;border-color:#e2c9d6;box-shadow:0 0 0 3px #e8486520}
+outputs/webview2-shell/dsp.css,91,hardcoded_color,2,en;gap:14px;padding:12px 14px;border-radius:16px;background:#faf7f9;border:1px solid #f3ebf0}
+outputs/webview2-shell/dsp.css,92,hardcoded_color,2,.dsp-profile-row[data-active=true]{background:#fdf1f5;border-color:#f2d9e3}
+outputs/webview2-shell/dsp.css,94,hardcoded_color,1,nter;gap:8px;font-size:calc(13px * var(--text-scale));color:#5f4d5a;font-weight:600}
+outputs/webview2-shell/dsp.css,95,hardcoded_color,1,ng:3px 7px;border-radius:8px;background:var(--accent);color:#fff}
+outputs/webview2-shell/dsp.css,96,hardcoded_color,1,rofile-stamp{font-size:calc(10px * var(--text-scale));color:#a89ca5;margin-top:4px}
+outputs/webview2-shell/dsp.css,99,hardcoded_color,1,.eq-pill.danger{color:#a4485c}
+outputs/webview2-shell/dsp.css,100,hardcoded_color,1,.eq-pill.danger:hover{background:#fbe6ec}
+outputs/webview2-shell/dsp.css,104,hardcoded_color,2,er;gap:12px;padding:11px 14px;border-radius:15px;background:#faf7f9;border:1px solid #f3ebf0}
+outputs/webview2-shell/dsp.css,105,hardcoded_color,1,.dsp-rack-grip{color:#c9bac5;display:grid;place-items:center}
+outputs/webview2-shell/dsp.css,106,hardcoded_color,1,p-rack-index{font-size:calc(11px * var(--text-scale));color:#b09ba8;font-variant-numeric:tabular-nums;text-align:center}
+outputs/webview2-shell/dsp.css,109,hardcoded_color,1,li strong{font-size:calc(12.5px * var(--text-scale));color:#5f4d5a;font-weight:600}
+outputs/webview2-shell/dsp.css,110,hardcoded_color,1,t-size:calc(10px * var(--text-scale));line-height:1.7;color:#a89ca5}
+outputs/webview2-shell/dsp.css,112,hardcoded_color,2,rder-radius:10px;display:grid;place-items:center;background:#f4eff2;color:#8d7785;border:0;cursor:pointer}
+outputs/webview2-shell/dsp.css,113,hardcoded_color,1,.dsp-rack-move:hover:not(:disabled){background:#f9e4eb;color:var(--accent)}
+outputs/webview2-shell/dsp.css,123,hardcoded_color,1,.dsp-meter-label{color:#8d7785}
+outputs/webview2-shell/dsp.css,124,hardcoded_color,1,.dsp-meter-value{color:#6d5b68;font-variant-numeric:tabular-nums}
+outputs/webview2-shell/dsp.css,125,hardcoded_color,1,{position:relative;height:14px;border-radius:8px;background:#f2ebf0;overflow:hidden}
+outputs/webview2-shell/dsp.css,126,motion,1,"adius:8px;background:linear-gradient(90deg,#7fa7c9,#4b9c6e);transition:width .12s linear,background .2s var(--ease)}"
+outputs/webview2-shell/dsp.css,126,hardcoded_color,2,";width:0;border-radius:8px;background:linear-gradient(90deg,#7fa7c9,#4b9c6e);transition:width .12s linear,background .2s var(--ease)}"
+outputs/webview2-shell/dsp.css,127,hardcoded_color,2,"meter-bar[data-level=warm]{background:linear-gradient(90deg,#6fa9a0,#c9a53f)}"
+outputs/webview2-shell/dsp.css,128,hardcoded_color,2,"-meter-bar[data-level=hot]{background:linear-gradient(90deg,#d08a3f,#c03a52)}"
+outputs/webview2-shell/dsp.css,129,hardcoded_color,1,nslateY(-50%);font-size:calc(9px * var(--text-scale));color:#8d7785}
+outputs/webview2-shell/dsp.css,131,hardcoded_color,2,.dsp-stat{padding:12px 14px;border-radius:15px;background:#faf7f9;border:1px solid #f3ebf0;display:grid;gap:6px}
+outputs/webview2-shell/dsp.css,132,hardcoded_color,1,p-stat-label{font-size:calc(10px * var(--text-scale));color:#a89ca5}
+outputs/webview2-shell/dsp.css,133,hardcoded_color,1,p-stat-value{font-size:calc(15px * var(--text-scale));color:#5f4d5a;font-weight:600;font-variant-numeric:tabular-nums}
+outputs/webview2-shell/dsp.css,134,hardcoded_color,1,.dsp-stat-value[data-state=ok]{color:#3f7d5a}
+outputs/webview2-shell/dsp.css,135,hardcoded_color,1,.dsp-stat-value[data-state=warn]{color:#b4562c}
+outputs/webview2-shell/dsp.css,136,hardcoded_color,2,id;gap:10px;padding:14px 16px;border-radius:16px;background:#faf7f9;border:1px solid #f3ebf0;margin-bottom:14px}
+outputs/webview2-shell/dsp.css,137,hardcoded_color,1,een;gap:16px;font-size:calc(11px * var(--text-scale));color:#a89ca5}
+outputs/webview2-shell/dsp.css,138,hardcoded_color,1,.dsp-chain-value{color:#5f4d5a;text-align:right}
+outputs/webview2-shell/dsp.css,139,hardcoded_color,1,.dsp-chain-value[data-state=ok]{color:#3f7d5a}
+outputs/webview2-shell/dsp.css,140,hardcoded_color,1,.dsp-chain-value[data-state=warn]{color:#8d7785}
+outputs/webview2-shell/dsp.js,69,event,1,"rackToggle.addEventListener('click', async () => {"
+outputs/webview2-shell/dsp.js,105,event,1,"focusRefresh.addEventListener('click', () => { refreshModuleDots(); renderModule(); });"
+outputs/webview2-shell/dsp.js,247,select,1,const select = document.createElement('select');
+outputs/webview2-shell/dsp.js,258,event,1,"select.addEventListener('change', () => { moduleVisual?.update(control.name, Number(select.value)); pushControl(control.name, { index: Number(select.value) }); });"
+outputs/webview2-shell/dsp.js,268,event,1,"toggle.addEventListener('click', () => {"
+outputs/webview2-shell/dsp.js,283,range,1,input.type = 'range';
+outputs/webview2-shell/dsp.js,291,event,1,"input.addEventListener('input', () => {"
+outputs/webview2-shell/dsp.js,297,event,1,"input.addEventListener('change', () => { clearTimeout(controlTimer); pushControl(control.name, { value: Number(input.value) }, module); });"
+outputs/webview2-shell/dsp.js,347,event,1,"toggle.addEventListener('click', () => {"
+outputs/webview2-shell/dsp.js,441,event,1,"saveBtn.addEventListener('click', async () => {"
+outputs/webview2-shell/dsp.js,483,event,1,"apply.addEventListener('click', async () => {"
+outputs/webview2-shell/dsp.js,490,event,1,"update.addEventListener('click', async () => {"
+outputs/webview2-shell/dsp.js,496,event,1,"remove.addEventListener('click', async () => {"
+outputs/webview2-shell/dsp.js,517,event,1,"reset.addEventListener('click', async () => {"
+outputs/webview2-shell/dsp.js,559,event,1,"button.addEventListener('click', async () => {"
+outputs/webview2-shell/dsp.js,621,event,1,"reset.addEventListener('click', async () => {"
+outputs/webview2-shell/dsp.js,656,event,1,"b.addEventListener('click', async () => {"
+outputs/webview2-shell/dsp.js,739,event,1,"refreshBtn.addEventListener('click', () => { refreshModuleDots(); pollLevels(); });"
+outputs/webview2-shell/dsp.js,834,event,1,"b.addEventListener('click', () => { current = m.id; renderModule(); });"
+outputs/webview2-shell/dsp.js,843,event,1,"document.addEventListener('celeste:navigate', event => {"
+outputs/webview2-shell/folders.css,3,focus_suppression,1,"8px;font-size:calc(12px * var(--text-scale));cursor:pointer;outline:none}.folder-node:hover{background:var(--hover)}.folder-node[aria-selected=true],.folder-node:focus-visible{background:var(--accent-soft);color:var(--accent)}.folder-chevron{display:grid;place-items:center;flex:0 0 22px;width:22px;height:34px;font-size:calc(18px * var(--text-scale))}"
+outputs/webview2-shell/folders.css,6,motion,1,"14px;fill:none;stroke:currentColor;transform:rotate(180deg);transition:transform 180ms cubic-bezier(.2,.8,.2,1)}"
+outputs/webview2-shell/folders.css,8,motion,1,@media(prefers-reduced-motion:reduce){.folder-chevron svg{transition:none}}.folder-node-icon{color:var(--muted);font-size:calc(18px * var(--text-scale));flex:0 0 20px}.folder-node-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+outputs/webview2-shell/folders.js,37,event,1,"label',(expanded.has(item.id)?'折叠 ':'展开 ')+item.name);arrow.addEventListener('click',event=>{event.stopPropagation();toggle(item,true);});row.append(arrow);"
+outputs/webview2-shell/folders.js,40,event,2,"row.addEventListener('click',()=>{if(item.folder)toggle(item,false);else select(item);});row.addEventListener('dblclick',event=>{event.preventDefault();if(item.folder)select(item);else action('play',item);});"
+outputs/webview2-shell/folders.js,41,event,1,"row.addEventListener('keydown',event=>{const rows=[...tree.querySelectorAll('[role=treeitem]')],i=rows.indexOf(row);if(event.key==='ArrowDown'||event.key==='ArrowUp'){event.preventDefault();rows[Math.max(0,Math.min(rows.length-1,i+(event.key==='ArrowDown'?1:-1)))]?.focus();}else if(event.key==='ArrowRight'&&item.folder){event.preventDefault();if(!expanded.has(item.id))toggle(item,true);else"
+outputs/webview2-shell/folders.js,42,event,1,"row.addEventListener('contextmenu',async event=>{event.preventDefault();if(item.folder)window.CelesteTrackMenu?.folder(event,item,action);else{await select(item);const song=list.querySelector('.folder-track');if(song)window.CelesteTrackMenu?.open(song,event.clientX,event.clientY);}});"
+outputs/webview2-shell/folders.js,57,event,2,"notify(error.message)):shell.playDemo(Number(track.id));row.addEventListener('dblclick',start);row.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();start();}});list.append(row);});"
+outputs/webview2-shell/folders.js,65,event,5,"refresh.addEventListener('click',()=>load());add.addEventListener('click',()=>load('add'));play.addEventListener('click',()=>action('play'));queue.addEventListener('click',()=>action('queue'));more.addEventListener('click',()=>{limit+=200;renderSongs();});"
+outputs/webview2-shell/folders.js,66,event,1,"document.getElementById('search').addEventListener('input',()=>{if(active){limit=200;renderSongs();}});"
+outputs/webview2-shell/folders.js,67,event,1,"document.addEventListener('celeste:navigate',event=>{active=event.detail==='folders';page.hidden=!active;if(active){document.getElementById('browse-page').hidden=true;shell.setPath([{label:'文件夹',action:()=>load()}]);document.getElementById('search').placeholder='搜索当前文件夹歌曲';load();}else{epoch++;selectionEpoch++;}});"
+outputs/webview2-shell/folders.js,68,event,2,"document.addEventListener('celeste:library',()=>{if(active)load();});document.addEventListener('celeste:message',event=>{if(active&&event.detail.kind==='celeste.state')playing();});"
+outputs/webview2-shell/folders.js,69,event,1,"document.addEventListener('celeste:tracksChanged',event=>{if(active&&current&&event.detail?.source!=='folders')select(current);});"
+outputs/webview2-shell/home.css,3,hardcoded_color,1,px}.home-page .primary{padding:0 20px;box-shadow:0 7px 18px #e8486522}.home-page .secondary{padding:0 18px}.home-page .text-button{padding:0 10px;color:var(--muted)}.home-page .text-button:hover{color:var(--accent)}
+outputs/webview2-shell/home.css,4,hardcoded_color,4,"26px;background:radial-gradient(ellipse 58% 88% at 88% -12%,#e8486512,transparent 62%),linear-gradient(118deg,var(--accent-soft) 0%,var(--accent-soft) 58%,var(--panel-soft) 100%);box-shadow:0 1px 2px #10182808,0 16px 40px -18px #74506424,inset 0 1px #ffffffd0}"
+outputs/webview2-shell/home.css,5,hardcoded_color,3,"nset:0;pointer-events:none;background:linear-gradient(90deg,#49313d08 1px,transparent 1px),linear-gradient(#49313d08 1px,transparent 1px);background-size:34px 34px;mask-image:radial-gradient(ellipse 90% 120% at 0% 0%,#0008,transparent 68%)}"
+outputs/webview2-shell/home.css,7,hardcoded_color,4,x;align-items:center;gap:20px;padding:18px;border:1px solid #ffffffb8;border-radius:22px;background:#ffffff80;box-shadow:0 8px 25px #7853660a}.home-now-cover{position:relative;width:124px;height:124px;flex:0 0 124px;border-radius:17px;background:var(--accent-soft);box-shadow:0 8px 22px #4e374523;overflow:hidden;display:grid;place-items:center;color:var(--muted)}.home-now-cover svg{width:38px;heigh
+outputs/webview2-shell/home.css,9,hardcoded_color,1,radius:22px;background:var(--surface);box-shadow:0 8px 28px #65435407}.home-panel>header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px}.home-panel h2{font-size:calc(18px * var(--text-scale));line-height:1.4;font-weight:650;margin-top:4px}.home-panel .eyebrow{font-size:calc(9px * var(--text-scale));letter-spacing:1.3px;color:var(--muted)}.home-panel-note{
+outputs/webview2-shell/home.css,10,motion,1,"ow:0 4px 12px #5a384a26;opacity:0;transform:translateY(3px);transition:opacity 150ms,transform 150ms}.home-album-play svg{width:16px;height:16px}.home-album-card:hover .home-album-play,.home-album-play:focus-visible{opacity:1;transform:none}"
+outputs/webview2-shell/home.css,10,hardcoded_color,4,));color:var(--muted);overflow:hidden;box-shadow:0 5px 14px #54374314}.home-album-art svg{width:32px;height:32px}.home-album-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.home-album-open>strong{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;overflow-wrap:anywhere;font-size:calc(13px * var(--text-scale));line-height:1.45;margin:10px
+outputs/webview2-shell/home.css,18,motion,1,@media(prefers-reduced-motion:reduce){.home-album-play{transition:none}}
+outputs/webview2-shell/home.js,13,event,1,"lazy';image.decoding='async';image.src=album.coverUrl;image.addEventListener('error',()=>image.remove(),{once:true});art.append(image);}"
+outputs/webview2-shell/home.js,19,event,1,"node('strong',album.title),node('small',album.artist));open.addEventListener('click',()=>window.CelesteAlbums.openById(album.id,homeTrail()));"
+outputs/webview2-shell/home.js,20,event,1,"辑';play.setAttribute('aria-label','播放专辑 '+album.title);play.addEventListener('click',()=>live?shell.playTracks(album.trackIds):shell.playDemo(Number(album.trackIds[0])));"
+outputs/webview2-shell/home.js,33,event,1,"udes(state.trackId));albumButton.disabled=!album;albumButton.onclick=album?()=>window.CelesteAlbums.openById(album.id,homeTrail()):null;"
+outputs/webview2-shell/home.js,52,event,1,"onst retry=node('button','足迹加载失败，点击重试','text-button');retry.addEventListener('click',()=>refresh(true));root.append(retry);return;}const counts=snapshot?.dailyCounts||{},start=dayStart(),end=today();let total=0;"
+outputs/webview2-shell/home.js,54,event,1,"abled=future;cell.setAttribute('aria-pressed','false');cell.addEventListener('click',()=>loadDay(key,cell));root.append(cell);"
+outputs/webview2-shell/home.js,63,event,1,"n('close'));close.setAttribute('aria-label','收起当日记录');close.addEventListener('click',()=>{panel.hidden=true;cell.setAttribute('aria-pressed','false');});header.append(title,close);panel.append(header);}"
+outputs/webview2-shell/home.js,64,event,1,"e||''));row.title=item.title;row.disabled=!item.trackId;row.addEventListener('click',()=>shell.playTrack(item.trackId));panel.append(row);});"
+outputs/webview2-shell/home.js,66,event,1,"more=node('button','加载更多','text-button home-day-more');more.addEventListener('click',()=>loadDay(date,cell,data.nextCursor));panel.append(more);}"
+outputs/webview2-shell/home.js,67,event,1,"retry=node('button','重试','text-button home-day-more');retry.addEventListener('click',()=>loadDay(date,cell,cursor));panel.append(retry);}"
+outputs/webview2-shell/home.js,72,event,1,"button.title=item.name||item.title;button.addEventListener('click',()=>artist?window.CelesteArtists.openByName(item.name,homeTrail()):window.CelesteAlbums.openById(item.id,homeTrail()));row.append(button);return row;"
+outputs/webview2-shell/home.js,86,event,1,"数据暂不可用';const retry=node('button','重试','text-button');retry.addEventListener('click',()=>refresh(true));$('home-recent-grid').replaceChildren(retry);$('home-recent-empty').hidden=true;$('home-activity-total').textContent='加载失败';}"
+outputs/webview2-shell/home.js,89,event,1,"$('home-play').addEventListener('click',async()=>{"
+outputs/webview2-shell/home.js,97,event,2,"$('home-shuffle').addEventListener('click',shuffle);$('home-refresh-albums').addEventListener('click',pickRecommendations);"
+outputs/webview2-shell/home.js,98,event,1,"document.addEventListener('celeste:navigate',event=>{if(event.detail==='overview'){requestAnimationFrame(()=>{document.querySelector('.main').scrollTop=scrollTop;});refresh();}else{generation++;loading=false;scrollTop=document.querySelector('.main').scrollTop;$('home-day-history').hidden=true;}});"
+outputs/webview2-shell/home.js,99,event,1,"document.addEventListener('celeste:library',()=>{if(shell.getPage()==='overview'){recommendations=[];refresh(true);}});"
+outputs/webview2-shell/home.js,100,event,1,"document.addEventListener('celeste:message',event=>{"
+outputs/webview2-shell/index.html,110,select,1,"<select id=""library-source"" aria-label=""曲库来源"" title=""筛选曲库来源""><option value=""all"">全部来源</option><option value=""local"">本地曲库</option><option value=""network"">网络曲库</option></select>"
+outputs/webview2-shell/index.html,149,select,1,"g>播放所有歌曲</button><label class=""sort-picker""><span>排序：</span><select id=""songs-sort"" aria-label=""歌曲排序""><option value=""title"">标题</option><option value=""artist"">艺术家</option><option value=""album"">专辑</option><option value=""year"">年份</option><option value=""duration"">时长</option><option value=""genre"">流派</option><option value=""track"">音轨号</option><option value=""sortPath"">文件路径</option></select></label><button"
+outputs/webview2-shell/index.html,157,select,1,"um-sort-actions""><label class=""sort-picker""><span>排序：</span><select id=""albums-sort"" aria-label=""专辑排序""><option value=""title"">专辑名称</option><option value=""artist"">艺术家</option><option value=""year"">发行年份</option><option value=""added"">添加顺序</option><option value=""random"">随机</option><option value=""trackCount"">曲目数</option><option value=""duration"">总时长</option></select></label><button id=""albums-direction"" c"
+outputs/webview2-shell/index.html,161,select,1,"um-sort-actions""><label class=""sort-picker""><span>排序：</span><select id=""artists-sort"" aria-label=""艺术家排序""><option value=""name"">名称</option><option value=""songCount"">歌曲数</option><option value=""albumCount"">专辑数</option><option value=""duration"">总时长</option><option value=""year"">最新发行年份</option></select></label><button id=""artists-direction"" class=""sort-direction"">升序 ↑</button></div></div><div id=""artists-"
+outputs/webview2-shell/index.html,162,select,1,"il-sort-actions""><label class=""sort-picker""><span>排序：</span><select id=""artist-detail-sort"" aria-label=""艺术家详情排序""><option value=""title"">名称</option><option value=""year"">年份</option><option value=""duration"">时长</option><option value=""album"">专辑</option><option value=""track"">音轨号</option></select></label><button id=""artist-detail-direction"" class=""sort-direction"">升序 ↑</button></div><div id=""artist-songs"""
+outputs/webview2-shell/index.html,164,select,1,"ry"">播放全部</button><label class=""sort-picker""><span>排序：</span><select id=""browse-sort"" aria-label=""分类排序""><option value=""default"">默认顺序</option><option value=""title"">名称</option><option value=""artist"">艺术家</option><option value=""album"">专辑</option><option value=""duration"">时长</option><option value=""rating"">评分</option><option value=""playCount"">播放次数</option><option value=""lastPlayed"">最近播放时间</option></select"
+outputs/webview2-shell/index.html,194,range,1,"-waveform"" aria-hidden=""true""></canvas><input id=""progress"" type=""range"" min=""0"" max=""303"" value=""0"" step=""0.1"" aria-label=""播放进度""><span id=""waveform-status"" class=""sr-only"" role=""status""></span></div><span id=""duration"">5:03</span></div>"
+outputs/webview2-shell/index.html,219,range,1,"olume-icon""><use href=""#i-volume""/></svg><input id=""volume"" type=""range"" min=""0"" max=""100"" value=""65"" aria-label=""音量""></span>"
+outputs/webview2-shell/index.html,247,dialog,1,"<dialog id=""transport-dialog"" aria-labelledby=""transport-dialog-title"">"
+outputs/webview2-shell/index.html,256,select,1,"n id=""audio-refresh"" class=""text-button"">刷新设备</button></div><select id=""audio-device"" aria-label=""输出设备""></select>"
+outputs/webview2-shell/index.html,259,checkbox_radio,1,"l>切换设备时，使用它保存的声音设置。</small></span><input id=""device-memory"" type=""checkbox"" role=""switch""></label><p id=""device-profile-hint"" class=""setting-note""></p><button id=""save-device-profile"" class=""secondary"">保存当前设备的 DSP 配置</button></div>"
+outputs/webview2-shell/index.html,262,checkbox_radio,2,"dset class=""pitch-options""><legend>音调</legend><label><input type=""radio"" name=""audio-pitch"" value=""preserve"" checked>音调不变</label><label><input type=""radio"" name=""audio-pitch"" value=""follow"">音调随速度变化</label></fieldset><p id=""audio-dsd-note"" class=""setting-note"">DSD / DoP 直出不经过变速处理；设置会保留给后续 PCM 播放。</p></section>"
+outputs/webview2-shell/index.html,262,range,1,"""text-button"">恢复 1.00×</button></div><input id=""audio-rate"" type=""range"" min=""0.5"" max=""2"" step=""0.01"" value=""1"" aria-label=""播放速度""><div class=""rate-ticks""><span>0.50×</span><span>1.00×</span><span>2.00×</span></div><fieldset class=""pitch-options""><legend>音调</legend><label><input type=""radio"" name=""audio-pitch"" value=""preserve"" checked>音调不变</label><label><input type=""radio"" name=""audio-pitch"" value"
+outputs/webview2-shell/library.css,10,hardcoded_color,2,n;background-color:var(--accent-soft);box-shadow:0 7px 20px #7453650c;isolation:isolate}.album-art img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.album-art>small{position:absolute;inset:0;display:grid;place-content:center;white-space:pre-line;padding:20px;font-size:calc(11px * var(--text-scale));letter-spacing:2px;line-height:1.8;text-align:center;color:var(--muted)}.album-
+outputs/webview2-shell/library.css,11,motion,2,"ow:0 10px 25px #74536519}.album-card .album-open .album-art{transition:box-shadow 180ms var(--motion-continuity),transform 240ms var(--motion-continuity)}.album-card .album-open:hover .album-art{transform:translateY(-3px)}.album-card-title{display:block;font-size:calc(13px * var(--text-scale));font-weight:600;overflow:hidden;white-space:nowrap;text-overflow:ellipsis;margin:14px 36px 5px 0;color:va"
+outputs/webview2-shell/library.css,11,hardcoded_color,1,"um-card .album-open:hover .album-art{box-shadow:0 10px 25px #74536519}.album-card .album-open .album-art{transition:box-shadow 180ms var(--motion-continuity),transform 240ms var(--motion-continuity)}.album-card .album-open:hover .album-art{transform:translateY(-3px)}.album-card-title{display:block;font-size:calc(13px * var(--text-scale));font-weight:600;overflow:hidden;white-space:nowrap;text-over"
+outputs/webview2-shell/library.css,12,motion,1,"-align:left;padding:16px 18px;width:100%;border-radius:13px;transition:background 180ms var(--motion-continuity)}.album-track:hover{background:var(--hover)}.album-track[aria-current=true]{background:var(--accent-soft);color:var(--accent)}.album-track .track-number,.album-track time{font-size:calc(11px * var(--text-scale));color:var(--muted);font-variant-numeric:tabular-nums}.album-track time{text-"
+outputs/webview2-shell/library.css,12,hardcoded_color,1,":100%;height:100%;border-radius:21px;box-shadow:0 12px 30px #7453651c}.album-hero-copy h1{font-size:clamp(calc(23px * var(--text-scale)),2.7vw,calc(36px * var(--text-scale)));line-height:1.35;letter-spacing:-1px;overflow-wrap:anywhere}.album-hero-copy .eyebrow{font-size:calc(8px * var(--text-scale));margin-bottom:13px}#album-detail-artist{color:var(--accent);font-size:calc(14px * var(--text-scale)"
+outputs/webview2-shell/library.css,16,motion,1,"-card .album-open .album-art,.album-quick-play,.album-track{transition:none}}"
+outputs/webview2-shell/nav-layout.js,119,event,1,"document.addEventListener('celeste:theme', event => {"
+outputs/webview2-shell/nav-layout.js,130,event,1,"document.addEventListener('celeste:theme-applied', () => relayout());"
+outputs/webview2-shell/navigation.css,4,motion,1,".orbit-content{transform-origin:50% 3.448%;transition:transform 420ms cubic-bezier(.20,.90,.22,1),opacity 180ms,visibility 0s}"
+outputs/webview2-shell/navigation.css,5,motion,1,"rner-orbit.is-collapsed .orbit-content{transform:scale(.04);transition:transform 320ms cubic-bezier(.20,.90,.22,1),opacity 160ms,visibility 0s 320ms}"
+outputs/webview2-shell/navigation.css,11,hardcoded_color,1,"fill{fill:var(--accent-soft);filter:drop-shadow(0 10px 16px #86546a12)}.quarter-edge,.quarter-inner,.quarter-core{stroke:var(--nav-track)}"
+outputs/webview2-shell/navigation.css,23,motion,1,"ink:0}.main{overflow-y:scroll;scrollbar-gutter:stable}.page{animation:none!important}.page-heading{padding-left:0!important}.placeholder-page>.eyebrow,.placeholder-page>h1,.placeholder-page>.intro{margin-left:0!important}"
+outputs/webview2-shell/navigation.css,28,motion,1,@media(prefers-reduced-motion:reduce){.orbit-content{transition:none!important}}
+outputs/webview2-shell/player-layout.js,66,event,1,"document.addEventListener('celeste:theme', event => {"
+outputs/webview2-shell/settings.css,7,motion,1,"2px * var(--text-scale));color:var(--muted);text-align:left;transition:background .2s,color .2s}"
+outputs/webview2-shell/settings.css,20,focus_suppression,1,.settings-search input{border:0;background:none;outline:none;font-size:calc(12px * var(--text-scale));color:var(--ink);width:180px}
+outputs/webview2-shell/settings.css,21,hardcoded_color,1,.settings-search:focus-within{box-shadow:0 0 0 3px #e8486520}
+outputs/webview2-shell/settings.css,34,hardcoded_color,1,.set-badge.native{color:var(--muted);background:#f0eef8}
+outputs/webview2-shell/settings.css,35,hardcoded_color,1,.set-badge.web{color:var(--muted);background:#e8f3 ee}
+outputs/webview2-shell/settings.css,37,hardcoded_color,2,.set-badge.locked{color:#a1743f;background:#f8f0e5}
+outputs/webview2-shell/settings.css,43,motion,1,.set-row.hit{animation:set-hit 1.2s ease}
+outputs/webview2-shell/settings.css,44,motion,1,"@keyframes set-hit{0%,100%{background:transparent}25%{background:var(--accent-soft)}}"
+outputs/webview2-shell/settings.css,46,motion,1,x;border-radius:20px;background:var(--accent-soft);border:0;transition:background .22s var(--ease);flex-shrink:0}
+outputs/webview2-shell/settings.css,47,motion,1,us:50%;background:var(--surface);box-shadow:0 1px 4px #0002;transition:transform .22s var(--ease)}
+outputs/webview2-shell/settings.css,47,hardcoded_color,1,r-radius:50%;background:var(--surface);box-shadow:0 1px 4px #0002;transition:transform .22s var(--ease)}
+outputs/webview2-shell/settings.css,119,motion,1,"order-radius:15px;background:var(--surface);text-align:left;transition:border-color calc(.2s * var(--motion-speed)),box-shadow calc(.2s * var(--motion-speed));color:var(--ink)}"
+outputs/webview2-shell/settings.css,133,motion,1,ext-scale));color:var(--muted);background:var(--panel-soft);transition:background calc(.2s * var(--motion-speed))}
+outputs/webview2-shell/settings.js,62,event,1,"el.addEventListener('click', () => { Promise.resolve(onClick(el)).catch(error => status(error.message, 'err')); });"
+outputs/webview2-shell/settings.js,201,select,1,const select = node('select');
+outputs/webview2-shell/settings.js,222,event,1,"sw.addEventListener('click', async () => {"
+outputs/webview2-shell/settings.js,242,range,1,range.type = 'range';
+outputs/webview2-shell/settings.js,258,event,1,"range.addEventListener('input', () => {"
+outputs/webview2-shell/settings.js,262,event,1,"box.addEventListener('change', () => {"
+outputs/webview2-shell/settings.js,272,select,1,const select = node('select');
+outputs/webview2-shell/settings.js,279,event,1,"select.addEventListener('change', () => {"
+outputs/webview2-shell/settings.js,290,event,1,"input.addEventListener('input', () => commitDebounced(def.id, input.value));"
+outputs/webview2-shell/settings.js,291,event,1,"input.addEventListener('change', () => patch({ [def.id]: input.value }).catch(() => {}));"
+outputs/webview2-shell/settings.js,298,color,1,picker.type = 'color';
+outputs/webview2-shell/settings.js,299,hardcoded_color,1,picker.value = String(value ?? '#0078D4');
+outputs/webview2-shell/settings.js,302,event,1,"picker.addEventListener('input', () => { hex.textContent = picker.value; });"
+outputs/webview2-shell/settings.js,303,event,1,"picker.addEventListener('change', () => {"
+outputs/webview2-shell/settings.js,597,event,1,"shellSwitch.addEventListener('click', async () => {"
+outputs/webview2-shell/settings.js,702,select,1,const selector = node('select');
+outputs/webview2-shell/settings.js,758,hardcoded_color,1,tContent = '检查失败：' + result.error; updateBox.style.color = '#c0454f'; return; }
+outputs/webview2-shell/settings.js,762,hardcoded_color,2,updateBox.style.color = result.hasUpdate ? '#c99a4a' : '#3f8f6f';
+outputs/webview2-shell/settings.js,854,event,1,"button.addEventListener('click', () => {"
+outputs/webview2-shell/settings.js,892,event,1,"document.addEventListener('celeste:navigate', event => {"
+outputs/webview2-shell/settings.js,898,event,1,"searchInput.addEventListener('input', debounce(() => {"
+outputs/webview2-shell/settings.js,906,event,1,"if (refresh) refresh.addEventListener('click', async btn => {"
+outputs/webview2-shell/shell.css,1,hardcoded_color,1,"r(--accent);--ink:var(--ink);--muted:var(--muted);--surface:#fff;--line:var(--line);--radius:26px;--ease:cubic-bezier(.2,.8,.2,1);font-family:var(--font-ui),var(--font-cjk),sans-serif;line-height:var(--line-height);color:var(--ink);background:var(--bg);font-synthesis:none}"
+outputs/webview2-shell/shell.css,2,motion,14,"nd:var(--accent);color:#fff;box-shadow:0 7px 20px #e848652c;transition:transform .3s var(--ease),box-shadow .3s}.orbit-toggle:hover{transform:rotate(-7deg);box-shadow:0 8px 25px #e8486550}.orbit-toggle svg{width:24px;height:24px}.orbit-dot{position:absolute;right:8px;top:8px;width:5px;height:5px;border-radius:50%;background:var(--accent-soft)}.rail-caption{font-size:calc(10px * var(--text-scale));"
+outputs/webview2-shell/shell.css,2,focus_suppression,1,dth:16px;height:16px}.search input{border:0;background:none;outline:none;min-width:0;width:100%;font-size:calc(12px * var(--text-scale));color:var(--ink)}.search:focus-within{box-shadow:0 0 0 3px #e8486520}.search input::placeholder{color:var(--muted)}kbd{font-family:inherit;font-size:calc(10px * var(--text-scale));color:var(--muted);border:1px solid var(--panel-soft);border-radius:4px;padding:1px
+outputs/webview2-shell/shell.css,2,hardcoded_color,34,"border-radius:30px;background:var(--shell);border:1px solid #fff9;box-shadow:0 18px 65px #43343112;overflow:hidden}.titlebar{height:67px;min-height:67px;display:flex;align-items:center;padding:0 26px;gap:18px;-webkit-app-region:drag}.identity{display:flex;align-items:center;gap:11px;font-size:calc(23px * var(--text-scale));font-weight:650;letter-spacing:-1px}.brand-mark{font-family:Georgia,serif;c"
+outputs/webview2-shell/shell.css,5,hardcoded_color,1,18px;top:80px;bottom:130px;z-index:2;box-shadow:0 15px 45px #65445422}.quiet-note{margin-top:20px}.orbit-dialog{left:15px;top:75px}}
+outputs/webview2-shell/shell.css,6,motion,2,"@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}"
+outputs/webview2-shell/shell.js,87,event,1,"reateElement('button');button.textContent=item.label;button.addEventListener('click',()=>item.action?.());if(index===pathActions.length-1)button.setAttribute('aria-current','page');root.append(button);});"
+outputs/webview2-shell/shell.js,147,event,1,"$('orbit-toggle').addEventListener('click', () => setOrbit($('orbit-toggle').getAttribute('aria-expanded') !== 'true'));"
+outputs/webview2-shell/shell.js,149,event,1,"document.querySelector('.workspace').addEventListener('wheel', () => setOrbit(false), { passive: true });"
+outputs/webview2-shell/shell.js,150,event,1,"document.querySelector('.main').addEventListener('scroll', () => setOrbit(false), { passive: true });"
+outputs/webview2-shell/shell.js,151,event,1,"document.addEventListener('keydown', event => {"
+outputs/webview2-shell/shell.js,155,event,1,"document.addEventListener('click', event => { const target = event.target.closest('[data-page]'); if (target) { navigate(target.dataset.page); setOrbit(false); } else if (!event.target.closest('#corner-orbit')) setOrbit(false); });"
+outputs/webview2-shell/shell.js,156,event,1,"$('back').addEventListener('click', () => {const parent=pathActions.at(-2);if(parent?.action)parent.action();else navigate('overview');});"
+outputs/webview2-shell/shell.js,157,event,1,"document.addEventListener('keydown', event => { if (event.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) { event.preventDefault(); $('search').focus(); } });"
+outputs/webview2-shell/shell.js,158,event,1,"$('search').addEventListener('input', event => { songQuery = event.target.value.trim(); if (currentPage === 'songs') renderSongs(); });"
+outputs/webview2-shell/shell.js,159,event,1,"$('search').addEventListener('keydown', event => { if (event.key === 'Enter') { songQuery = event.target.value.trim(); navigate(['albums','artists','albumArtists','folders','favorites','ratings','recent','mostPlayed','playlists','queue'].includes(currentPage)?currentPage:'songs'); setOrbit(false); } });"
+outputs/webview2-shell/shell.js,171,event,1,"$('library-source')?.addEventListener('change', event => {"
+outputs/webview2-shell/shell.js,220,event,1,"c=track.coverUrl; image.loading='lazy'; image.alt=''; image.addEventListener('error',()=>image.remove(),{once:true}); cover.append(image); }"
+outputs/webview2-shell/shell.js,231,event,1,"button.addEventListener('click', event => { selectedSong=index; updateSongRows(); if (event.detail === 0) playFromList(); });"
+outputs/webview2-shell/shell.js,232,event,1,"button.addEventListener('dblclick', playFromList);"
+outputs/webview2-shell/shell.js,238,event,1,"$('songs-more').addEventListener('click',()=>{visibleLimit+=200;renderSongs();});"
+outputs/webview2-shell/shell.js,239,event,1,"$('songs-sort').addEventListener('change', renderSongs);"
+outputs/webview2-shell/shell.js,240,event,1,"$('songs-direction').addEventListener('click', () => { sortAscending=!sortAscending; $('songs-direction').textContent=sortAscending?'升序 ↑':'降序 ↓'; $('songs-direction').setAttribute('aria-label',sortAscending?'切换为降序':'切换为升序'); renderSongs(); });"
+outputs/webview2-shell/shell.js,241,event,1,"$('songs-clear').addEventListener('click', () => { songQuery=''; $('search').value=''; renderSongs(); $('search').focus(); });"
+outputs/webview2-shell/shell.js,242,event,1,"$('songs-play-all').addEventListener('click', () => { const tracks=visibleSongs(); if(tracks.length) { if(live)send('playAll',{trackIds:tracks.map(item=>item.track.id)});else{previewQueue=tracks.map(item=>item.index);chooseTrack(previewQueue[0]);} } });"
+outputs/webview2-shell/shell.js,282,event,1,"$('play').addEventListener('click', togglePlay);"
+outputs/webview2-shell/shell.js,283,event,1,"$('next').addEventListener('click', () => stepTrack(1));"
+outputs/webview2-shell/shell.js,284,event,1,"$('previous').addEventListener('click', () => stepTrack(-1));"
+outputs/webview2-shell/shell.js,285,event,1,"$('favorite').addEventListener('click',()=>{if(live)send('favorite');else{state.favorite=!state.favorite;render();}});"
+outputs/webview2-shell/shell.js,287,event,1,"$('playback-order').addEventListener('click',()=>{if(live)send('transport',{action:'cycleOrder'});else{const keys=Object.keys(orders);setOrder(keys[(keys.indexOf(state.playbackOrder)+1)%keys.length]);}});"
+outputs/webview2-shell/shell.js,288,event,1,"$('playback-order').addEventListener('contextmenu',event=>{event.preventDefault();$('order-menu').hidden=!$('order-menu').hidden;});"
+outputs/webview2-shell/shell.js,289,event,1,"ent.querySelectorAll('[data-order]').forEach(button=>button.addEventListener('click',()=>setOrder(button.dataset.order)));"
+outputs/webview2-shell/shell.js,290,event,1,"document.addEventListener('pointerdown',event=>{if(!event.target.closest('#order-menu,#playback-order'))$('order-menu').hidden=true;});"
+outputs/webview2-shell/shell.js,291,event,1,"document.addEventListener('keydown',event=>{if(event.key==='Escape')$('order-menu').hidden=true;});"
+outputs/webview2-shell/shell.js,292,event,1,"ard','seekForward',5]].forEach(([id,action,seconds])=>$(id).addEventListener('click',()=>{if(live)send('transport',{action});else{state.position=Math.max(0,Math.min(state.duration,state.position+seconds));render();}}));"
+outputs/webview2-shell/shell.js,293,event,1,"more','more'],['queue','queue']].forEach(([id,view])=>$(id).addEventListener('click',()=>window.CelesteTransport?.open(view,$(id))));"
+outputs/webview2-shell/shell.js,294,event,1,"$('lyrics').addEventListener('click',()=>live?send('transport',{action:'desktopLyrics'}):notify('桌面歌词需在桌面预览版中使用'));"
+outputs/webview2-shell/shell.js,295,event,1,"$('lyrics').addEventListener('contextmenu',event=>{event.preventDefault();if(live)send('transport',{action:'unlockLyrics'});});"
+outputs/webview2-shell/shell.js,296,event,1,"$('progress').addEventListener('input', event => { seeking=true; fill(event.target); $('elapsed').textContent=format(Number(event.target.value)); });"
+outputs/webview2-shell/shell.js,297,event,1,"$('progress').addEventListener('change', event => { const position=Number(event.target.value); seeking=false; state.position=position; if (live) send('seek', { seconds: position }); render(); });"
+outputs/webview2-shell/shell.js,298,event,1,"$('volume').addEventListener('input', event => { volumeChanging=true;const volume=Number(event.target.value);state.volume=volume;fill(event.target);if(live)send('setVolume',{volume}); });"
+outputs/webview2-shell/shell.js,299,event,1,"$('volume').addEventListener('change',()=>{volumeChanging=false;});"
+outputs/webview2-shell/shell.js,300,event,1,"$('volume').addEventListener('blur',()=>{volumeChanging=false;});"
+outputs/webview2-shell/shell.js,301,event,1,"; text.append(duration); button.append(number,text); button.addEventListener('click',()=>chooseTrack(index)); $('panel-body').append(button); }); else { const p=document.createElement('p'); p.className=panel==='lyrics'?'lyric-placeholder':'panel-notice'; p.textContent=panel==='lyrics'?'让每一句，\n都有回响。':'队列接口准备接入。'; $('panel-body').append(p); } const note=document.createElement('p'); note.className='p"
+outputs/webview2-shell/shell.js,303,event,1,"$('panel-close').addEventListener('click',()=>setPanel(null));"
+outputs/webview2-shell/shell.js,304,event,1,"nt.querySelectorAll('[data-window]').forEach(button=>button.addEventListener('click',()=>live?send('window',{ action:button.dataset.window }):notify('窗口操作将在 WebView2 桌面外壳中启用')));"
+outputs/webview2-shell/shell.js,307,event,1,"$('native-view').addEventListener('click',()=>send('window',{action:'close'}));"
+outputs/webview2-shell/shell.js,310,event,1,"webview.addEventListener('message', event => {"
+outputs/webview2-shell/shell.js,354,event,1,"document.addEventListener('visibilitychange',()=>lastTick=performance.now());"
+outputs/webview2-shell/songs.css,2,motion,1,"osition:absolute;inset:0;transform-origin:11.6129% 11.6129%;transition:transform 360ms cubic-bezier(.22,.8,.2,1),opacity 220ms ease,visibility 0s;transform:scale(1);opacity:1;visibility:visible}"
+outputs/webview2-shell/songs.css,3,motion,1,"sform:scale(.08) rotate(-12deg);opacity:0;visibility:hidden;transition:transform 300ms cubic-bezier(.4,0,.2,1),opacity 160ms ease,visibility 0s 300ms}"
+outputs/webview2-shell/songs.css,4,motion,1,"(--muted);background:var(--accent-soft);pointer-events:auto;transition:background .2s,color .2s;-webkit-app-region:no-drag}"
+outputs/webview2-shell/songs.css,5,motion,1,.corner-toggle svg{width:17px;height:17px;transition:transform .3s}
+outputs/webview2-shell/songs.css,24,focus_suppression,1,dth:90px;background:transparent;color:var(--muted);border:0;outline:none;font:inherit;cursor:pointer}
+outputs/webview2-shell/songs.css,25,hardcoded_color,1,.sort-picker:focus-within{outline:2px solid #e8486580;outline-offset:3px}
+outputs/webview2-shell/songs.css,31,motion,1,n:left;min-height:84px;padding:12px 24px;border-radius:15px;transition:background .18s;color:var(--ink)}
+outputs/webview2-shell/songs.css,38,hardcoded_color,1,w:hidden;padding:7px;position:relative;box-shadow:0 3px 9px #53404d0a;isolation:isolate}
+outputs/webview2-shell/songs.css,39,hardcoded_color,1,ight:47px;right:-11px;top:15px;border-radius:50%;background:#ffffff40;z-index:-1}
+outputs/webview2-shell/songs.css,40,hardcoded_color,1,"';position:absolute;inset:0;background:linear-gradient(0deg,#0003,transparent 60%);z-index:-1}"
+outputs/webview2-shell/songs.css,41,hardcoded_color,1,ar(--text-scale));line-height:1.4;letter-spacing:.8px;color:#fff9;white-space:pre-line;font-weight:550}
+outputs/webview2-shell/songs.css,42,hardcoded_color,1,"d:linear-gradient(150deg,var(--panel-soft),var(--muted) 55%,#e9b79c)}"
+outputs/webview2-shell/songs.css,43,hardcoded_color,1,"kground:linear-gradient(135deg,var(--ink),var(--accent) 50%,#203655)}"
+outputs/webview2-shell/songs.css,44,hardcoded_color,1,".art-gold{background:linear-gradient(135deg,#f1d296,var(--muted) 55%,var(--ink))}"
+outputs/webview2-shell/songs.css,48,hardcoded_color,3,".art-blue{background:linear-gradient(145deg,#c1e0e7,#4d95b3 50%,#23698c)}"
+outputs/webview2-shell/songs.css,67,motion,1,"rs-reduced-motion:reduce){.orbit-content,.corner-toggle svg{transition:none!important}}"
+outputs/webview2-shell/sort-menus.js,10,event,1,"select.addEventListener('change',update);wrapper.append(button);update();"
+outputs/webview2-shell/sort-menus.js,17,event,1,"item.addEventListener('click',()=>{select.value=option.value;select.dispatchEvent(new Event('change',{bubbles:true}));close();button.focus();});menu.append(item);"
+outputs/webview2-shell/sort-menus.js,22,event,1,"menu.addEventListener('keydown',event=>{const items=[...menu.querySelectorAll('button')],index=items.indexOf(document.activeElement);let next=index;if(event.key==='ArrowDown')next=(index+1)%items.length;else if(event.key==='ArrowUp')next=(index-1+items.length)%items.length;else if(event.key==='Home')next=0;else if(event.key==='End')next=items.length-1;else return;event.preventDefault();items"
+outputs/webview2-shell/sort-menus.js,24,event,2,"button.addEventListener('click',()=>show());button.addEventListener('keydown',event=>{if(['ArrowDown','ArrowUp'].includes(event.key)){event.preventDefault();show(true);}});"
+outputs/webview2-shell/sort-menus.js,30,event,1,"document.addEventListener('pointerdown',event=>{if(opened&&!opened.menu.contains(event.target)&&!opened.button.contains(event.target))close();});"
+outputs/webview2-shell/sort-menus.js,31,event,1,"document.addEventListener('keydown',event=>{if(event.key==='Escape'&&opened){const button=opened.button;close();button.focus();}else if(event.key==='Tab')close();});"
+outputs/webview2-shell/sort-menus.js,32,event,3,"window.addEventListener('resize',close);document.querySelector('.main').addEventListener('scroll',close,{passive:true});document.addEventListener('celeste:navigate',close);"
+outputs/webview2-shell/sources.js,11,event,1,"button.addEventListener('click', async () => { button.disabled = true; try { await fn(); } catch (e) { say(e.message); } finally { button.disabled = false; } }); return button;"
+outputs/webview2-shell/sources.js,44,select,1,"const provider = el('select'); provider.id = 'source-provider'; provider.setAttribute('aria-label', '网络来源类型');"
+outputs/webview2-shell/sources.js,52,select,1,"const auth = el('select'); auth.append(new Option('用户名与密码', 'password'), new Option('API Key / Token', 'token')); auth.value = source?.auth || 'password'; section.append(auth);"
+outputs/webview2-shell/sources.js,63,event,1,"provider.addEventListener('change', update); update();"
+outputs/webview2-shell/sources.js,121,event,1,"document.addEventListener('celeste:message', event => { if (event.detail?.kind === 'celeste.sourceStatus') { say(event.detail.message); window.CelesteShell?.notify?.(event.detail.message); } });"
+outputs/webview2-shell/tags-tools.js,8,select,1,"=>{const wrap=el('label',undefined,'tags-tool-field'),input=el('select');input.name=name;input.setAttribute('aria-label',label);options.forEach(([id,text])=>{const o=el('option',text);o.value=id;input.append(o);});wrap.append(el('span',label),input);return {wrap,input};};"
+outputs/webview2-shell/tags-tools.js,9,event,1,"condary')=>{const b=el('button',text,cls);b.type='button';b.addEventListener('click',async()=>{b.disabled=true;try{await fn();}catch(e){status.textContent=e.message;notify(e.message);}finally{b.disabled=false;}});return b;};"
+outputs/webview2-shell/tags-tools.js,25,event,1,"form.addEventListener('submit',async e=>{e.preventDefault();const stamp=++epoch;selected=-1;detail=null;preview.replaceChildren();results.replaceChildren();search.disabled=true;status.textContent='正在搜索…';try{const data=await request(kind==='online'?'searchOnline':'searchLyrics',{title:title.input.value,artist:artist.input.value,album:album.input.value,source:source.input.value});if(!alive||s"
+outputs/webview2-shell/tags-tools.js,39,event,1,"translation?.input.addEventListener('change',()=>{if(selected>=0)choose(selected).catch(e=>status.textContent=e.message);});"
+outputs/webview2-shell/tags.css,39,focus_suppression,1,".tag-grid input:focus,.tag-grid textarea:focus{outline:none;box-shadow:0 0 0 3px #e8486520;border-color:var(--accent-soft)}"
+outputs/webview2-shell/tags.css,39,hardcoded_color,1,",.tag-grid textarea:focus{outline:none;box-shadow:0 0 0 3px #e8486520;border-color:var(--accent-soft)}"
+outputs/webview2-shell/tags.css,57,hardcoded_color,1,.tag-table thead th .col-resizer:hover{background:#e8486540}
+outputs/webview2-shell/tags.css,61,hardcoded_color,1,.tag-table td .cell:focus{outline:2px solid #e8486580;outline-offset:-2px;background:var(--surface)}
+outputs/webview2-shell/tags.css,76,focus_suppression,1,font-size:calc(12px * var(--text-scale));color:var(--muted);outline:none;width:100%;min-width:0}
+outputs/webview2-shell/tags.css,85,hardcoded_color,2,.tag-table td .cell.edited{background:#fff4d8;box-shadow:inset 0 0 0 1px #f0d9a4;border-radius:7px}
+outputs/webview2-shell/tags.css,86,hardcoded_color,1,able tbody tr.dirty td:first-child{box-shadow:inset 3px 0 0 #e8a33d}
+outputs/webview2-shell/tags.css,90,focus_suppression,1,.tags-panel select:focus{outline:none;box-shadow:0 0 0 3px #e8486520;border-color:var(--accent-soft)}
+outputs/webview2-shell/tags.css,90,hardcoded_color,1,.tags-panel select:focus{outline:none;box-shadow:0 0 0 3px #e8486520;border-color:var(--accent-soft)}
+outputs/webview2-shell/tags.css,106,hardcoded_color,1,var(--accent-soft);border-radius:12px;box-shadow:0 8px 30px #43343122}.tags-column-options label{display:flex;align-items:center;gap:6px}.tags-column-options input{accent-color:var(--accent)}
+outputs/webview2-shell/tags.js,127,event,1,"el])=>{const button=node('button',label,'secondary');button.addEventListener('click',async()=>{button.disabled=true;try{if(operation==='changeDirectory'&&dirty.size&&!confirm('改变工作目录会放弃未保存的标签改动，是否继续？'))return;const result=await req(operation);if(result.canceled)return;if(operation==='changeDirectory'){state.scopeIds=[];selected.clear();dirty.clear();multiDraft={};}state.scopeIds=[...new Set([...st"
+outputs/webview2-shell/tags.js,127,native_confirm,1,"led=true;try{if(operation==='changeDirectory'&&dirty.size&&!confirm('改变工作目录会放弃未保存的标签改动，是否继续？'))return;const result=await req(operation);if(result.canceled)return;if(operation==='changeDirectory'){state.scopeIds=[];selected.clear();dirty.clear();multiDraft={};}state.scopeIds=[...new Set([...state.scopeIds,...(result.ids||[])])];if(result.directory)directoryLabel.textContent=result.directory;await r"
+outputs/webview2-shell/tags.js,207,event,1,"s(c.key);check.setAttribute('aria-label','显示'+c.name);check.addEventListener('change',()=>{if(check.checked)hiddenColumns.delete(c.key);else hiddenColumns.add(c.key);try{localStorage.setItem('celeste.tagHiddenColumns',JSON.stringify([...hiddenColumns]));}catch{}applyColumnVisibility();});label.append(check,node('span',c.name));columnOptions.append(label);});"
+outputs/webview2-shell/tags.js,207,checkbox_radio,1,"el=node('label'),check=document.createElement('input');check.type='checkbox';check.checked=!hiddenColumns.has(c.key);check.setAttribute('aria-label','显示'+c.name);check.addEventListener('change',()=>{if(check.checked)hiddenColumns.delete(c.key);else hiddenColumns.add(c.key);try{localStorage.setItem('celeste.tagHiddenColumns',JSON.stringify([...hiddenColumns]));}catch{}applyColumnVisibility();});lab"
+outputs/webview2-shell/tags.js,212,dialog,1,"const sortPanel=node('dialog',undefined,'tags-sort-dialog'),sortTitle=node('h2','排序'),sortRules=node('div',undefined,'tags-sort-rules'),sortDescription=node('p','按规则从上到下依次排序；清空规则恢复添加顺序。','panel-note');"
+outputs/webview2-shell/tags.js,214,event,1,">{const b=node('button',text,'secondary');b.type='button';b.addEventListener('click',fn);return b;};"
+outputs/webview2-shell/tags.js,215,event,2,"name);o.value=c.key;key.append(o);});key.value=rule.key;key.addEventListener('change',()=>rule.key=key.value);[['asc','升序'],['desc','降序']].forEach(([value,text])=>{const o=node('option',text);o.value=value;direction.append(o);});direction.value=rule.descending?'desc':'asc';direction.addEventListener('change',()=>rule.descending=direction.value==='desc');const up=sortAction('上移',()=>{[draftRules[in"
+outputs/webview2-shell/tags.js,215,select,2,"nst row=node('div',undefined,'tags-sort-rule'),key=document.createElement('select'),direction=document.createElement('select');key.setAttribute('aria-label',`第 ${index+1} 排序字段`);direction.setAttribute('aria-label',`第 ${index+1} 排序方向`);COLUMNS.forEach(c=>{const o=node('option',c.name);o.value=c.key;key.append(o);});key.value=rule.key;key.addEventListener('change',()=>rule.key=key.value);[['asc','升序"
+outputs/webview2-shell/tags.js,216,event,1,"sortButton.addEventListener('click',()=>{draftRules=state.sortRules.map(r=>({...r}));drawSortRules();sortPanel.showModal();});"
+outputs/webview2-shell/tags.js,225,checkbox_radio,1,pickAll.type = 'checkbox';
+outputs/webview2-shell/tags.js,229,event,1,"pickAll.addEventListener('change', () => {"
+outputs/webview2-shell/tags.js,249,event,1,"resizer.addEventListener('pointerdown', event => {"
+outputs/webview2-shell/tags.js,254,event,1,"window.addEventListener('pointermove', move);"
+outputs/webview2-shell/tags.js,255,event,1,"window.addEventListener('pointerup', up);"
+outputs/webview2-shell/tags.js,298,event,1,"tableWrap.addEventListener('scroll', () => {"
+outputs/webview2-shell/tags.js,303,event,1,"document.addEventListener('celeste:theme-applied', () => { if (!state.loading && !page.hidden) renderWindow(true); });"
+outputs/webview2-shell/tags.js,319,checkbox_radio,1,box.type = 'checkbox';
+outputs/webview2-shell/tags.js,321,event,1,"box.addEventListener('click', event => {"
+outputs/webview2-shell/tags.js,345,event,1,"cell.addEventListener('click', event => { if(!selected.has(id)||selected.size!==1||event.ctrlKey||event.shiftKey||event.metaKey)return;event.stopPropagation();if(cell.contentEditable==='true')return;cell.contentEditable='true';cell.focus();document.getSelection()?.selectAllChildren(cell); });"
+outputs/webview2-shell/tags.js,346,event,1,"cell.addEventListener('blur', () => {"
+outputs/webview2-shell/tags.js,358,event,1,"cell.addEventListener('keydown', event => {"
+outputs/webview2-shell/tags.js,452,event,1,"b.addEventListener('click', () => { currentSub = s.id; renderSubnav(); renderPanel(); });"
+outputs/webview2-shell/tags.js,517,event,1,"button.addEventListener('click', async () => {"
+outputs/webview2-shell/tags.js,533,event,1,"input.addEventListener('input', () => { if (single) markDirty(single.id, key, input.value); else if (selected.size) { multiDraft[key] = input.value; updateSelection(); } });"
+outputs/webview2-shell/tags.js,545,event,1,"lyricArea.addEventListener('input', () => { if (single) markDirty(single.id, 'lyrics', lyricArea.value); else if (selected.size) { multiDraft.lyrics = lyricArea.value; updateSelection(); } });"
+outputs/webview2-shell/tags.js,610,select,1,const select = document.createElement('select');
+outputs/webview2-shell/tags.js,624,event,1,"apply.addEventListener('click', async () => {"
+outputs/webview2-shell/tags.js,641,select,2,"tools = node('div', undefined, 'tag-grid'), mode = document.createElement('select'), field = document.createElement('select');"
+outputs/webview2-shell/tags.js,645,checkbox_radio,1,"erwrite=document.createElement('input');regex.type=overwrite.type='checkbox';regex.setAttribute('aria-label','正则表达式');overwrite.setAttribute('aria-label','覆盖已有标题和艺术家');"
+outputs/webview2-shell/tags.js,648,event,1,"de('button','应用预览改动','primary');commit.disabled=true;commit.addEventListener('click',()=>writeRows(planned,'批量处理完成'));"
+outputs/webview2-shell/tags.js,649,event,1,"makePreview=node('button','预览所选文件','secondary');makePreview.addEventListener('click',async()=>{if(!selected.size)return shell.notify('请先选择文件。');makePreview.disabled=true;try{const result=await req('batchTransform',{ids:[...selected],mode:mode.value,field:field.value,find:find.value,replacement:replacement.value,regex:regex.checked,overwrite:overwrite.checked});planned=result.rows||[];preview.textC"
+outputs/webview2-shell/tags.js,650,event,1,"tools.addEventListener('input',()=>{planned=[];commit.disabled=true;});const toolActions=node('div',undefined,'tags-panel-actions');toolActions.append(makePreview,commit);panel.append(toolActions,preview);"
+outputs/webview2-shell/tags.js,653,event,1,"pareRename=node('button','预览文件名','secondary');prepareRename.addEventListener('click',async()=>{if(!selected.size)return shell.notify('先选择文件。');try{renameRows=[...selected].map(id=>{const row=state.byId.get(id);const file=pattern.value.replace(/%(title|artist|album|track|disc)%/g,(_,key)=>String(row?.[key]??'').replace(/[<>:""/\\|?*]/g,'_')).trim();return{id,file};});renamePreview.textContent=rename"
+outputs/webview2-shell/tags.js,654,event,1,"renameApply.addEventListener('click',async()=>{renameApply.disabled=true;try{const result=await req('rename',{rows:renameRows});const remap=result.remap||{};state.scopeIds=state.scopeIds.map(id=>remap[id]||id);for(const [oldId,newId] of Object.entries(remap)){if(dirty.has(oldId)){dirty.set(newId,dirty.get(oldId));dirty.delete(oldId);}}selected.clear();await reload();document.dispatchEvent(new"
+outputs/webview2-shell/tags.js,655,event,1,"pattern.addEventListener('input',()=>renameApply.disabled=true);const renameActions=node('div',undefined,'tags-panel-actions');renameActions.append(prepareRename,renameApply);panel.append(pattern,node('p','可用：%title% / %artist% / %album% / %track% / %disc%；扩展名会保留。','panel-note'),renameActions,renamePreview);"
+outputs/webview2-shell/tags.js,673,checkbox_radio,1,useDisc.type = 'checkbox';
+outputs/webview2-shell/tags.js,682,select,1,const order = document.createElement('select');
+outputs/webview2-shell/tags.js,705,event,1,"apply.addEventListener('click', async () => {"
+outputs/webview2-shell/tags.js,837,event,1,"searchInput.addEventListener('input', () => {"
+outputs/webview2-shell/tags.js,847,event,1,"saveBtn.addEventListener('click', saveChanges);"
+outputs/webview2-shell/tags.js,848,event,1,"revertBtn.addEventListener('click', async () => {"
+outputs/webview2-shell/tags.js,856,event,1,"tableBody.addEventListener('click', event => {"
+outputs/webview2-shell/tags.js,869,event,1,"document.addEventListener('celeste:navigate', event => {"
+outputs/webview2-shell/theme.css,5,hardcoded_color,1,--bg:#eae8e6;              /* 窗口外底色 */
+outputs/webview2-shell/theme.css,6,hardcoded_color,1,--shell:#fcfbfa;           /* 主工作区外壳 */
+outputs/webview2-shell/theme.css,7,hardcoded_color,1,--surface:#fff;            /* 页面/卡片 */
+outputs/webview2-shell/theme.css,8,hardcoded_color,1,--panel:#fbfafb;           /* 次级面板 */
+outputs/webview2-shell/theme.css,9,hardcoded_color,1,--panel-soft:#f7f4f6;      /* 更弱的面板底 */
+outputs/webview2-shell/theme.css,10,hardcoded_color,1,--line:#efedef;
+outputs/webview2-shell/theme.css,11,hardcoded_color,1,--ink:#28282e;
+outputs/webview2-shell/theme.css,12,hardcoded_color,1,--heading:#1f1f24;
+outputs/webview2-shell/theme.css,13,hardcoded_color,1,--muted:#929097;
+outputs/webview2-shell/theme.css,14,hardcoded_color,1,--on-muted:#6f6871;
+outputs/webview2-shell/theme.css,15,hardcoded_color,1,--accent:#e84865;
+outputs/webview2-shell/theme.css,16,hardcoded_color,1,--accent-strong:#d83b58;
+outputs/webview2-shell/theme.css,17,hardcoded_color,1,--accent-soft:#fceef1;
+outputs/webview2-shell/theme.css,18,hardcoded_color,1,--on-accent:#fff;
+outputs/webview2-shell/theme.css,19,hardcoded_color,1,--row:#fff;
+outputs/webview2-shell/theme.css,20,hardcoded_color,1,--row-hover:#fcf3f6;
+outputs/webview2-shell/theme.css,21,hardcoded_color,1,--row-active:#f9e7ec;
+outputs/webview2-shell/theme.css,22,hardcoded_color,1,--chip:#f4eff3;
+outputs/webview2-shell/theme.css,23,hardcoded_color,1,--focus:#e84865;
+outputs/webview2-shell/theme.css,26,hardcoded_color,1,--hover:#fcf3f6;            /* 悬停底 */
+outputs/webview2-shell/theme.css,27,hardcoded_color,1,--pressed:#f9e7ec;          /* 按下底 */
+outputs/webview2-shell/theme.css,28,hardcoded_color,1,--input-bg:#fff;            /* 输入框/下拉底色 */
+outputs/webview2-shell/theme.css,29,hardcoded_color,1,--input-line:#efedef;       /* 输入框边框 */
+outputs/webview2-shell/theme.css,30,hardcoded_color,1,--menu-bg:#fff;             /* 菜单/弹窗/浮层底色 */
+outputs/webview2-shell/theme.css,31,hardcoded_color,1,--overlay:#30252d4d;        /* 弹窗后面的遮罩（带透明度） */
+outputs/webview2-shell/theme.css,32,hardcoded_color,1,--shadow:#43343126;         /* 浮层投影色（带透明度） */
+outputs/webview2-shell/theme.css,36,hardcoded_color,1,--nav-track:#e6dfe4;
+outputs/webview2-shell/theme.css,37,hardcoded_color,1,--nav-ink:#929097;
+outputs/webview2-shell/theme.css,53,hardcoded_color,1,--bg-grad-1:#fbf7f8;
+outputs/webview2-shell/theme.css,54,hardcoded_color,1,--bg-grad-2:#f7e3e8;
+outputs/webview2-shell/theme.css,55,hardcoded_color,1,--bg-grad-3:#fffafb;
+outputs/webview2-shell/theme.css,66,hardcoded_color,1,--player-ink:#28282e;
+outputs/webview2-shell/theme.css,67,hardcoded_color,1,--player-muted:#929097;
+outputs/webview2-shell/theme.css,73,hardcoded_color,1,--wave-idle:#dfd5dc;
+outputs/webview2-shell/theme.css,74,hardcoded_color,1,--wave-played:#e66b96;
+outputs/webview2-shell/theme.css,75,hardcoded_color,1,--danger:#c0454f;
+outputs/webview2-shell/theme.css,76,hardcoded_color,1,--success:#3f8f6f;
+outputs/webview2-shell/theme.css,77,hardcoded_color,1,--warning:#b8802a;
+outputs/webview2-shell/theme.js,7,hardcoded_color,2,"// 宿主给的是 ""--bg:#eae8e6;--shell:#fcfbfa"" 这种已经带 -- 前缀的串。"
+outputs/webview2-shell/theme.js,42,event,1,"document.addEventListener('celeste:message', event => {"
+outputs/webview2-shell/track-menu.css,7,hardcoded_color,1,us:18px;background:var(--accent-soft);box-shadow:0 5px 28px #65445433;font-size:calc(12px * var(--text-scale));max-width:calc(100vw - 24px)}
+outputs/webview2-shell/track-menu.js,12,event,2,"ent='操作所选歌曲';operate.disabled=!chosen().length||busy;operate.onclick=()=>{const first=chosen()[0],box=operate.getBoundingClientRect();if(first)openTracks(first,box.left,box.top-12);};const done=document.createElement('button');done.textContent='完成';done.onclick=reset;bar.append(operate,done);}"
+outputs/webview2-shell/track-menu.js,17,event,1,menuitem';item.textContent=label;item.disabled=disabled;item.onclick=async()=>{if(busy)return;close();try{busy=true;await action();}catch(error){shell.notify(error.message);}finally{busy=false;paint();}};menu.append(item);return item;}
+outputs/webview2-shell/track-menu.js,46,event,1,"document.addEventListener('contextmenu',event=>{const row=rowFrom(event);if(!row)return;event.preventDefault();event.stopPropagation();openTracks(row,event.clientX,event.clientY);});"
+outputs/webview2-shell/track-menu.js,47,event,1,"document.addEventListener('click',event=>{const row=rowFrom(event);if(!row||event.target.closest('select,input,.row-tools'))return;const selecting=multi||event.ctrlKey||event.metaKey||event.shiftKey;select(row,event);if(selecting){event.preventDefault();event.stopImmediatePropagation();}},true);"
+outputs/webview2-shell/track-menu.js,48,event,1,"document.addEventListener('dblclick',event=>{if(multi&&rowFrom(event)){event.preventDefault();event.stopImmediatePropagation();}},true);"
+outputs/webview2-shell/track-menu.js,49,event,1,"document.addEventListener('keydown',event=>{"
+outputs/webview2-shell/track-menu.js,56,event,1,"document.addEventListener('pointerdown',event=>{if(!menu.contains(event.target))close();},true);"
+outputs/webview2-shell/track-menu.js,57,event,2,"document.addEventListener('celeste:navigate',reset);document.addEventListener('celeste:library',reset);"
+outputs/webview2-shell/track-menu.js,58,event,2,"document.addEventListener('scroll',event=>{if(!menu.contains(event.target))close();},true);window.addEventListener('resize',()=>close());"
+outputs/webview2-shell/transport-panels.css,13,motion,1,"));white-space:nowrap;border-radius:10px;color:var(--muted);transition:background var(--motion-fast) var(--motion-continuity),color var(--motion-fast) var(--motion-continuity)}"
+outputs/webview2-shell/transport-panels.css,14,hardcoded_color,1,und:var(--surface);color:var(--accent);box-shadow:0 2px 7px #5e354e08}
+outputs/webview2-shell/transport-panels.css,16,motion,1,"der-radius:16px;text-align:center;background:var(--surface);transition:background var(--motion-fast) var(--motion-continuity),border-color var(--motion-fast) var(--motion-continuity),transform var(--motion-fast) var(--motion-continuity)}"
+outputs/webview2-shell/transport-panels.css,21,motion,2,-panel-soft);position:relative;flex-shrink:0;cursor:pointer;transition:background var(--motion-fast) var(--motion-continuity)}.switch-row input:after{content:'';position:absolute;width:17px;height:17px;top:2px;left:2px;border-radius:50%;background:var(--surface);box-shadow:0 1px 4px #0001;transition:transform var(--motion-fast) var(--motion-continuity)}.switch-row input:checked{background:var(--ac
+outputs/webview2-shell/transport-panels.css,21,hardcoded_color,1,r-radius:50%;background:var(--surface);box-shadow:0 1px 4px #0001;transition:transform var(--motion-fast) var(--motion-continuity)}.switch-row input:checked{background:var(--accent)}.switch-row input:checked:after{transform:translateX(15px)}
+outputs/webview2-shell/transport-panels.css,26,motion,1,ing:13px 10px;border-radius:13px;width:100%;text-align:left;transition:background var(--motion-fast) var(--motion-continuity)}.web-queue-row:hover{background:var(--hover)}.web-queue-row[aria-current=true]{background:var(--accent-soft);color:var(--accent)}.web-queue-row>small{font-size:calc(10px * var(--text-scale));color:var(--muted);width:22px;flex-shrink:0}.web-queue-row>span{min-width:0;flex:1}
+outputs/webview2-shell/transport-panels.css,27,motion,1,"olor:var(--muted)}.player .icon-button,.player .play-button{transition:background var(--motion-fast) var(--motion-continuity),color var(--motion-fast) var(--motion-continuity),transform var(--motion-fast) var(--motion-continuity)}"
+outputs/webview2-shell/transport-panels.css,28,motion,1,".live-cover img{transition:opacity 360ms var(--motion-continuity),transform 420ms var(--motion-continuity)}"
+outputs/webview2-shell/transport-panels.css,30,motion,2,"w,.player .icon-button,.player .play-button,.live-cover img{animation:none;transition:none}}"
+outputs/webview2-shell/transport-panels.js,21,event,1,"document.addEventListener('celeste:message',event=>{"
+outputs/webview2-shell/transport-panels.js,44,motion,1,"element.animate(frames,{duration:420,easing:'linear'});"
+outputs/webview2-shell/transport-panels.js,67,event,1,"addEventListener('resize',()=>{if(dialog.open)placePanel();});"
+outputs/webview2-shell/transport-panels.js,71,motion,1,"if(!reduced())try{await dialog.animate([{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY(8px)'}],{duration:140,easing:'cubic-bezier(.20,.90,.22,1)'}).finished;}catch{}"
+outputs/webview2-shell/transport-panels.js,74,event,2,"$('transport-dialog-close').addEventListener('click',close);dialog.addEventListener('cancel',event=>{event.preventDefault();close();});"
+outputs/webview2-shell/transport-panels.js,75,event,1,"dialog.addEventListener('click',event=>{const r=dialog.getBoundingClientRect();if(event.target===dialog&&(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom))close();});"
+outputs/webview2-shell/transport-panels.js,77,event,1,"querySelectorAll('[data-audio-tab]').forEach(button=>button.addEventListener('click',()=>{setTab(button.dataset.audioTab);if(!reduced())document.querySelector(`[data-audio-page=""${tab}""]`).animate([{opacity:0,transform:'translateY(5px)'},{opacity:1,transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.20,.90,.22,1)'});}));"
+outputs/webview2-shell/transport-panels.js,77,motion,1,"duced())document.querySelector(`[data-audio-page=""${tab}""]`).animate([{opacity:0,transform:'translateY(5px)'},{opacity:1,transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.20,.90,.22,1)'});}));"
+outputs/webview2-shell/transport-panels.js,123,event,1,"erySelectorAll('[data-output-mode]').forEach(button=>button.addEventListener('click',()=>audio('setMode',{mode:button.dataset.outputMode})));"
+outputs/webview2-shell/transport-panels.js,124,event,1,"$('audio-device').addEventListener('change',()=>audio('setDevice',{mode:settings.selectedMode,deviceId:$('audio-device').value}));"
+outputs/webview2-shell/transport-panels.js,125,event,1,"$('audio-refresh').addEventListener('click',()=>audio('refresh'));"
+outputs/webview2-shell/transport-panels.js,126,event,1,"$('device-memory').addEventListener('change',()=>audio('deviceMemory',{enabled:$('device-memory').checked}));"
+outputs/webview2-shell/transport-panels.js,127,event,1,"$('save-device-profile').addEventListener('click',()=>audio('saveDeviceProfile'));"
+outputs/webview2-shell/transport-panels.js,128,event,1,"cument.querySelectorAll('[data-ab]').forEach(button=>button.addEventListener('click',()=>audio('ab',{action:button.dataset.ab})));"
+outputs/webview2-shell/transport-panels.js,129,event,1,"$('audio-rate').addEventListener('input',()=>{$('audio-rate-value').textContent=Number($('audio-rate').value).toFixed(2)+'×';});"
+outputs/webview2-shell/transport-panels.js,130,event,1,"$('audio-rate').addEventListener('change',()=>audio('setRate',{rate:Number($('audio-rate').value)}));"
+outputs/webview2-shell/transport-panels.js,131,event,1,"$('audio-rate-reset').addEventListener('click',()=>audio('setRate',{rate:1}));"
+outputs/webview2-shell/transport-panels.js,132,event,1,"erySelectorAll('[name=""audio-pitch""]').forEach(input=>input.addEventListener('change',()=>audio('setPitch',{preservePitch:input.value==='preserve'})));"
+outputs/webview2-shell/transport-panels.js,133,event,1,"ent.querySelectorAll('[data-sleep]').forEach(button=>button.addEventListener('click',()=>{"
+outputs/webview2-shell/transport-panels.js,138,event,1,"$('sleep-custom').addEventListener('submit',event=>{event.preventDefault();if(!$('sleep-minutes').checkValidity())return;customEditing=false;audio('setSleep',{selection:8,minutes:Number($('sleep-minutes').value),tracks:1});});"
+outputs/webview2-shell/transport-panels.js,139,event,1,"$('sleep-minutes').addEventListener('input',()=>{customEditing=true;});"
+outputs/webview2-shell/transport-panels.js,140,event,1,"$('sleep-count').addEventListener('change',()=>audio('setSleep',{selection:7,tracks:Math.max(1,Math.min(99,Number($('sleep-count').value)||1))}));"
+outputs/webview2-shell/transport-panels.js,153,event,2,"button.addEventListener('dblclick',play);button.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();play();}});$('web-queue-list').append(button);"
+outputs/webview2-shell/transport-panels.js,158,event,1,"$('web-queue-more').addEventListener('click',()=>loadQueue(queue?.tracks.length||0));"
+outputs/webview2-shell/transport-panels.js,159,event,1,"document.addEventListener('celeste:tracksChanged',()=>{if(view==='queue')loadQueue();});"
+outputs/webview2-shell/transport-panels.js,164,event,1,"ment.querySelectorAll('[data-more]').forEach(button=>button.addEventListener('click',async()=>{"
+outputs/webview2-shell/transport-panels.js,178,event,1,"document.createElement('button');item.textContent=name;item.addEventListener('click',()=>moreAction('addToPlaylist',{name}));$('web-playlist-list').append(item);});"
+outputs/webview2-shell/transport-panels.js,197,event,1,"document.addEventListener('pointerdown',event=>{if(!event.target.closest('#transport-more-menu,#transport-more'))$('transport-more-menu').hidden=true;if(dialog.open&&!event.target.closest('#transport-dialog,#audio-settings,#queue,#transport-more,#transport-more-menu'))close(false);});"
+outputs/webview2-shell/transport-panels.js,198,event,1,"document.addEventListener('keydown',event=>{if(event.key==='Escape'){$('transport-more-menu').hidden=true;if(dialog.open){event.preventDefault();close();}}});"
+outputs/webview2-shell/transport-panels.js,199,event,1,"window.addEventListener('resize',()=>{$('transport-more-menu').hidden=true;if(dialog.open)requestAnimationFrame(placePanel);});"
+outputs/webview2-shell/transport.css,5,hardcoded_color,1,"));border-top:1px solid var(--line);box-shadow:0 -10px 40px rgba(88,59,75,.035)}"
+outputs/webview2-shell/transport.css,20,motion,1,".player .icon-button{position:relative;transition:background .16s,color .16s,transform .16s}.player .icon-button:active,.player .play-button:active{transform:scale(.91)}"
+outputs/webview2-shell/transport.css,21,hardcoded_color,1,k:0;border-radius:var(--cover-radius);box-shadow:0 4px 16px #62445318}.track-info{gap:5px;min-width:0}.track-info strong{font-size:calc(14px * var(--text-scale))}.track-info small{font-size:calc(10px * var(--text-scale));color:var(--player-muted)}
+outputs/webview2-shell/transport.css,25,motion,1,"x * var(--text-scale))}.mini-cover.live-cover img{opacity:0;transition:opacity .36s ease,transform .45s ease;transform:scale(1.045)}.mini-cover.live-cover img.cover-current{opacity:1;transform:scale(1)}"
+outputs/webview2-shell/transport.css,38,motion,1,"reduced-motion:reduce){.live-cover img,.player .icon-button{transition:none}}"
+outputs/webview2-shell/waveform.js,10,hardcoded_color,2,"return {idle:pick('--wave-idle',pick('--muted','#dfd5dc')),played:pick('--wave-played',pick('--accent','#e66b96'))};"
+outputs/webview2-shell/waveform.js,33,event,1,"document.addEventListener('celeste:message',event=>{"
+outputs/webview2-shell/waveform.js,42,event,1,"input.addEventListener('input',schedule);new ResizeObserver(schedule).observe(container);"
+outputs/webview2-shell/waveform.js,44,event,1,"document.addEventListener('celeste:theme-applied',()=>{palette=null;schedule();});"

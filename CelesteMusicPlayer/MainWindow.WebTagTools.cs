@@ -262,7 +262,7 @@ namespace CelesteMusicPlayer
                 if (selected == null) return (Array.Empty<PlaylistItem>(), "", true);
                 directory = selected.Path;
                 paths = await Task.Run(() => Directory.EnumerateFiles(selected.Path, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint })
-                    .Where(path => AudioExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase)).Take(20000).ToArray());
+                    .Where(path => AudioExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase)).Take(20001).ToArray());
             }
             else
             {
@@ -273,6 +273,7 @@ namespace CelesteMusicPlayer
                 paths = files.Select(f => f.Path).ToArray();
                 if (paths.Length == 0) return (Array.Empty<PlaylistItem>(), "", true);
             }
+            if (paths.Length > 20000) throw new ArgumentException("每个标签工作集最多 20,000 个文件，请分开工作目录。原工作集已保留。");
             return (await Task.Run(() => paths.Select(CreatePlaylistItemFromPath).ToArray()), directory, false);
         }
         internal PlaylistItem WebTagFromPath(string path) => CreatePlaylistItemFromPath(path);
