@@ -82,7 +82,12 @@ namespace CelesteMusicPlayer
                     strength = WebAppearance.EffectiveMotionStrength(state),
                     bounce = state.motionBounce,
                     speedMin = 0.6, speedMax = 1.6, speedStep = 0.05,
-                    strengthMin = 0.0, strengthMax = 1.25, strengthStep = 0.05
+                    strengthMin = 0.0, strengthMax = 1.25, strengthStep = 0.05,
+                    // 被关掉的类别 + 全部可选类别（含中文名，网页直接拿来画开关）
+                    off = WebAppearance.MotionOffList(state),
+                    categories = WebAppearance.MotionCategories
+                        .Select(id => new { id, label = WebAppearance.MotionCategoryLabels.TryGetValue(id, out string? label) ? label : id })
+                        .ToArray()
                 },
                 // 导航构成：哪些项、在哪一圈、什么顺序
                 navItems = state.navItems,
@@ -261,6 +266,20 @@ namespace CelesteMusicPlayer
                     double? parsed = ReadNullableNumber(rawStrength);
                     if (parsed.HasValue) state.motionStrength = Math.Clamp(parsed.Value, 0, 1.25);
                     else state.motionStrength = null;
+                }
+                // 被关掉的类别：整份替换，不做增量合并 —— 网页那边是"开关"语义
+                if (msg.TryGetProperty("off", out JsonElement rawOff))
+                {
+                    var ids = new List<string>();
+                    if (rawOff.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (JsonElement item in rawOff.EnumerateArray())
+                        {
+                            string id = item.ValueKind == JsonValueKind.String ? (item.GetString() ?? "").Trim() : "";
+                            if (id.Length > 0) ids.Add(id);
+                        }
+                    }
+                    state.motionOff = WebAppearance.NormalizeMotionOff(string.Join(",", ids));
                 }
             });
         }

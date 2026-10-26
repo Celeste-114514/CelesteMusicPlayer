@@ -23,8 +23,13 @@
     systemReduce: false,
     speed: 1,              // 越大越快
     strength: 1,           // 位移/回弹幅度
-    bounce: 'soft'         // calm | soft | lively —— 回弹风格
+    bounce: 'soft',        // calm | soft | lively —— 回弹风格
+    off: new Set()         // 被关掉的类别（nav/popup/list/control/theme/cover）
   };
+
+  // 分类开关：关掉某一类，就只剩"状态变化"，不做那一类的动。
+  // CSS 侧靠 --motion-cat-<类别> 变量（1 = 正常，0.001 = 几乎瞬时）跟着一起变。
+  const CATEGORIES = ['nav', 'popup', 'list', 'control', 'theme', 'cover'];
 
   // 回弹风格：参数取自 BiliPai 的 interactiveSnap 思路（阻尼 .78 / 刚度 420），
   // 这里按"克制 / 柔和 / 灵动"给三档。阻尼越低回弹越明显，但不许低于 .68 —— 再低就不收敛了。
@@ -85,13 +90,15 @@
   const canMove = () => state.effective === 'full';
 
   /** 基准毫秒 → 实际毫秒。幅度只影响位移，不影响时长。 */
-  function duration(base) {
+  function duration(base, category) {
     if (state.effective === 'off') return 0;
+    if (category && state.off.has(category)) return 1;      // 这一类被关了：只留状态变化
     const scale = readNumber('--motion-scale', 1);
     return Math.max(1, Math.round(base * scale));
   }
-  function shift(base) {
+  function shift(base, category) {
     if (!canMove()) return 0;
+    if (category && state.off.has(category)) return 0;
     return base * state.strength;
   }
 
@@ -140,33 +147,33 @@
   /** 页面切换：新页面淡入并轻微上移。旧页面不参与，保证快速切换不闪白。 */
   function page(element, direction = 'forward') {
     if (!element) return Promise.resolve();
-    const distance = shift(10) * (direction === 'back' ? -1 : 1);
+    const distance = shift(10, 'nav') * (direction === 'back' ? -1 : 1);
     if (!canFade()) { element.style.opacity = ''; return Promise.resolve(); }
     const frames = canMove() && distance
       ? [{ opacity: 0, transform: `translateY(${distance}px)` }, { opacity: 1, transform: 'translateY(0)' }]
       : [{ opacity: 0 }, { opacity: 1 }];
-    return animate(element, frames, { duration: duration(240), easing: easings.enter }).finished;
+    return animate(element, frames, { duration: duration(240, 'nav'), easing: easings.enter }).finished;
   }
 
   /** 浮层进场：轻微下移 + 缩放。 */
   function popupEnter(element) {
     if (!element || !canFade()) return Promise.resolve();
-    const offset = shift(6);
+    const offset = shift(6, 'popup');
     const frames = canMove() && offset
       ? [{ opacity: 0, transform: `translateY(${offset}px) scale(.985)` }, { opacity: 1, transform: 'translateY(0) scale(1)' }]
       : [{ opacity: 0 }, { opacity: 1 }];
-    return animate(element, frames, { duration: duration(180), easing: easings.enter }).finished;
+    return animate(element, frames, { duration: duration(180, 'popup'), easing: easings.enter }).finished;
   }
 
   /** 浮层退场：结束后才真正隐藏/移除。 */
   function popupExit(element, onDone) {
     if (!element) { onDone?.(); return Promise.resolve(); }
     if (!canFade()) { onDone?.(); return Promise.resolve(); }
-    const offset = shift(4);
+    const offset = shift(4, 'popup');
     const frames = canMove() && offset
       ? [{ opacity: 1, transform: 'translateY(0) scale(1)' }, { opacity: 0, transform: `translateY(${-offset}px) scale(.99)` }]
       : [{ opacity: 1 }, { opacity: 0 }];
-    const { generation, finished } = animate(element, frames, { duration: duration(140), easing: easings.exit });
+    const { generation, finished } = animate(element, frames, { duration: duration(140, 'popup'), easing: easings.exit, fill: 'none' });
     return finished.then(() => {
       // 退场期间用户又打开了同一个元素 —— 旧动画不许把它关掉
       if (isCurrent(element, generation)) onDone?.();
@@ -174,20 +181,20 @@
   }
 
   /** 列表重排：测量前后位置差，反向补偿再放开。 */
-  function flip(elements, mutate) {
+  function flip(elements, mutate, category = 'list') {
     const nodes = [...elements].filter(node => node && node.isConnected);
     if (!nodes.length) { mutate?.(); return; }
     const first = new Map();
     nodes.forEach(node => first.set(node, node.getBoundingClientRect()));
     mutate?.();
-    if (!canMove() || state.effective === 'off') return;
+    if (!canMove() || state.effective === 'off' || state.off.has(category)) return;
     nodes.forEach(node => {
       const before = first.get(node);
       const after = node.getBoundingClientRect();
       const dx = before.left - after.left;
       const dy = before.top - after.top;
       if (!dx && !dy) return;
-      animate(node, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }], { duration: duration(180), easing: easings.enter });
+      animate(node, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }], { duration: duration(180, category), easing: easings.enter });
     });
   }
 
@@ -215,8 +222,21 @@
   /** 按压反馈：按下缩小一点，松开弹回来。 */
   function press(element, pressed) {
     if (!element || !canMove()) return;
+    if (state.off.has('control')) return;
     const scale = pressed ? 0.97 : 1;
-    animate(element, [{ transform: pressed ? 'scale(1)' : 'scale(.97)' }, { transform: `scale(${scale})` }], { duration: duration(pressed ? 90 : 260), easing: pressed ? easings.exit : easings.enter });
+    // composite:'add' —— 与页面自己的 transform（悬停时的位移）叠加，不会互相顶掉
+    animate(element, [{ transform: pressed ? 'scale(1)' : 'scale(.97)' }, { transform: `scale(${scale})` }],
+      { duration: duration(pressed ? 90 : 260), easing: pressed ? easings.exit : easings.enter, composite: 'add' });
+  }
+
+  /** 分类开关：关掉某一类，就只剩"状态变化"，不做那一类的动。 */
+  function setOff(list) {
+    state.off = new Set((Array.isArray(list) ? list : []).filter(id => CATEGORIES.includes(id)));
+    // CSS 侧靠这些变量跟着一起关：1 = 正常，0.001 = 几乎瞬时
+    CATEGORIES.forEach(id => root.style.setProperty(`--motion-cat-${id}`, state.off.has(id) ? '0.001' : '1'));
+    listeners.forEach(fn => { try { fn(state); } catch { /* 单个订阅者出错不能连累其它 */ } });
+    document.dispatchEvent(new CustomEvent('celeste:motion', { detail: { ...state, off: [...state.off] } }));
+    return [...state.off];
   }
 
   window.CelesteMotion = {
@@ -249,6 +269,10 @@
     },
     getBounce: () => state.bounce,
     bounceStyles,
+    /** 分类开关：传入要关掉的类别 id 数组。 */
+    setOff,
+    getOff: () => [...state.off],
+    categories: CATEGORIES,
     onChange(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     resolve
   };

@@ -59,6 +59,8 @@
       if (window.CelesteMotion) {
         window.CelesteMotion.setMode(message.motion.mode || 'system');
         window.CelesteMotion.setBounce(message.motion.bounce || 'soft');
+        // 被关掉的类别：CSS 侧靠 --motion-cat-* 变量一起关
+        window.CelesteMotion.setOff(Array.isArray(message.motion.off) ? message.motion.off : []);
       }
     }
     state.ready = true;

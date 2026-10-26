@@ -290,6 +290,8 @@ namespace CelesteMusicPlayer
             public double? motionStrength { get; set; }
             /// <summary>回弹风格：calm（克制）/ soft（柔和）/ lively（灵动）</summary>
             public string motionBounce { get; set; } = "soft";
+            /// <summary>被关掉的动效类别（逗号分隔）。空 = 全开。</summary>
+            public string motionOff { get; set; } = "";
             public int revision { get; set; }
         }
 
@@ -603,6 +605,7 @@ namespace CelesteMusicPlayer
                 state.motionBounce = "soft";
             if (state.motionSpeed.HasValue) state.motionSpeed = Math.Clamp(state.motionSpeed.Value, 0.6, 1.6);
             if (state.motionStrength.HasValue) state.motionStrength = Math.Clamp(state.motionStrength.Value, 0, 1.25);
+            state.motionOff = NormalizeMotionOff(state.motionOff);
             if (FindPreset(state.presetId, state) == null) state.presetId = BuiltIn[0].id;
         }
 
@@ -633,6 +636,7 @@ namespace CelesteMusicPlayer
                 // ⚠ 动效偏好也要逐字段拷贝：漏一个就是「存得进文件、Load() 恒默认」
                 motionMode = state.motionMode, motionSpeed = state.motionSpeed,
                 motionStrength = state.motionStrength, motionBounce = state.motionBounce,
+                motionOff = state.motionOff,
                 overrides = new Dictionary<string, string>(state.overrides ?? new(), StringComparer.Ordinal),
                 customPresets = (state.customPresets ?? new()).Select(p => new Preset
                 {
@@ -730,6 +734,34 @@ namespace CelesteMusicPlayer
             Preset? preset = FindPreset(state.presetId, state) ?? BuiltIn[0];
             return Math.Clamp(state.motionStrength ?? preset.motionStrength, 0, 1.25);
         }
+
+        /// <summary>可单独关掉的动效类别。分类是为了让用户能"少动一点"，而不是给几十个参数。</summary>
+        internal static readonly string[] MotionCategories = { "nav", "popup", "list", "control", "theme", "cover" };
+
+        internal static readonly Dictionary<string, string> MotionCategoryLabels = new(StringComparer.Ordinal)
+        {
+            ["nav"] = "导航与页面转场",
+            ["popup"] = "弹窗与浮层",
+            ["list"] = "列表重排",
+            ["control"] = "控件反馈",
+            ["theme"] = "主题与背景",
+            ["cover"] = "封面转场"
+        };
+
+        /// <summary>只保留认识的类别，去重并按目录顺序排列。</summary>
+        internal static string NormalizeMotionOff(string? raw)
+        {
+            var wanted = new HashSet<string>(
+                (raw ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                StringComparer.OrdinalIgnoreCase);
+            return string.Join(",", MotionCategories.Where(item => wanted.Contains(item)));
+        }
+
+        /// <summary>当前被关掉的类别清单。</summary>
+        internal static string[] MotionOffList(State state)
+            => state.motionOff.Length == 0
+                ? Array.Empty<string>()
+                : state.motionOff.Split(',', StringSplitOptions.RemoveEmptyEntries);
 
         internal static Dictionary<string, string> Resolve(State state, string mode)
         {

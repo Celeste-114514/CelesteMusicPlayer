@@ -9,7 +9,6 @@
   let customEditing=false;
   let demo={selectedMode:'Shared',selectedDeviceId:'',actualMode:'',actualDevice:'',devices:[{id:'',name:'演示设备'}],rate:1,preservePitch:true,a:-1,b:-1,abActive:false,abHint:'先播放一首歌，再设置循环点。',sleepSelection:0,sleepTracks:1,deviceMemory:false,canSaveProfile:false,hasDeviceProfile:false};
   const time=value=>value<0?'--:--':`${Math.floor(value/60)}:${String(Math.floor(value%60)).padStart(2,'0')}`;
-  const reduced=()=>matchMedia('(prefers-reduced-motion: reduce)').matches;
   function rpc(command,payload){
     if(!live)return Promise.reject(new Error('请在桌面预览版中使用此功能。'));
     const requestId='transport-'+(++serial);
@@ -32,16 +31,18 @@
   });
   // BiliPai Continuity: (.20,.90,.22,1). Small damped spring for panel entry;
   // sampled in Web Animations because Compose springs do not run in WebView2.
+  // 时长与弹簧参数都走统一控制器（motion.js）—— 用户改速度/幅度/回弹风格，这里跟着变。
+  const motion=window.CelesteMotion;
   function enter(element){
     element.getAnimations().forEach(animation=>animation.cancel());
-    if(reduced())return;
-    const damping=.86,omega=Math.sqrt(420),wd=omega*Math.sqrt(1-damping*damping);
-    const frames=Array.from({length:41},(_,i)=>{
-      const t=i/40*.42,decay=Math.exp(-damping*omega*t);
-      const progress=i===40?1:1-decay*(Math.cos(wd*t)+damping*omega/wd*Math.sin(wd*t));
-      return {offset:i/40,opacity:Math.min(1,i/8),transform:`translateY(${8*(1-progress)}px) scale(${.985+.015*progress})`};
-    });
-    element.animate(frames,{duration:420,easing:'linear'});
+    if(!motion||!motion.canFade())return;
+    const frames=motion.spring({from:0,to:1});
+    const keyframes=frames.map((progress,index)=>({
+      offset:frames.length>1?index/(frames.length-1):1,
+      opacity:Math.min(1,index/8),
+      transform:`translateY(${8*(1-progress)}px) scale(${.985+.015*progress})`
+    }));
+    motion.animate(element,keyframes,{duration:motion.duration(420,'popup'),easing:'linear'});
   }
   function show(next,button){
     epoch++;opener=button||document.activeElement;view=next;status.textContent='';queueStamp='';
@@ -68,13 +69,13 @@
   async function close(restoreFocus=true){
     const closing=++epoch;view='';$('audio-settings').setAttribute('aria-expanded','false');$('queue').setAttribute('aria-expanded','false');
     dialog.getAnimations().forEach(animation=>animation.cancel());
-    if(!reduced())try{await dialog.animate([{opacity:1,transform:'translateY(0)'},{opacity:0,transform:'translateY(8px)'}],{duration:140,easing:'cubic-bezier(.20,.90,.22,1)'}).finished;}catch{}
+    if(motion&&motion.canFade())try{await motion.popupExit(dialog);}catch{}
     if(epoch!==closing)return;dialog.close();if(restoreFocus&&opener?.isConnected)opener.focus();
   }
   $('transport-dialog-close').addEventListener('click',close);dialog.addEventListener('cancel',event=>{event.preventDefault();close();});
   dialog.addEventListener('click',event=>{const r=dialog.getBoundingClientRect();if(event.target===dialog&&(event.clientX<r.left||event.clientX>r.right||event.clientY<r.top||event.clientY>r.bottom))close();});
   function setTab(next){tab=next;document.querySelectorAll('[data-audio-tab]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.audioTab===tab)));document.querySelectorAll('[data-audio-page]').forEach(page=>page.hidden=page.dataset.audioPage!==tab);document.querySelector('.transport-dialog-body').scrollTop=0;}
-  document.querySelectorAll('[data-audio-tab]').forEach(button=>button.addEventListener('click',()=>{setTab(button.dataset.audioTab);if(!reduced())document.querySelector(`[data-audio-page="${tab}"]`).animate([{opacity:0,transform:'translateY(5px)'},{opacity:1,transform:'translateY(0)'}],{duration:180,easing:'cubic-bezier(.20,.90,.22,1)'});}));
+  document.querySelectorAll('[data-audio-tab]').forEach(button=>button.addEventListener('click',()=>{setTab(button.dataset.audioTab);const page=document.querySelector(`[data-audio-page="${tab}"]`);if(page&&motion&&motion.canFade())motion.animate(page,[{opacity:0,transform:'translateY(5px)'},{opacity:1,transform:'translateY(0)'}],{duration:motion.duration(180,'nav'),easing:motion.easings.continuity});}));
   function setBusy(value){busy=value;dialog.setAttribute('aria-busy',String(value));document.querySelectorAll('#audio-pages button,#audio-pages input,#audio-pages select').forEach(control=>control.disabled=value);if(!value&&settings)renderSettings(settings);}
   function renderSettings(data,force=false){
     settings=data;

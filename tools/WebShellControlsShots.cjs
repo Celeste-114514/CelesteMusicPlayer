@@ -108,6 +108,13 @@ const SNAPSHOT = {
     });
     await page.waitForTimeout(400);
     await page.screenshot({ path: path.join(DIR, 'shot-motion-card.png') });
+
+    // 轮盘展开：合并 CSS 规则后几何不能变
+    await page.evaluate(() => { document.getElementById('appearance-host')?.remove(); });
+    await page.waitForTimeout(200);
+    await page.evaluate(() => document.querySelector('.corner-toggle')?.click());
+    await page.waitForTimeout(600);
+    await page.screenshot({ path: path.join(DIR, 'shot-orbit-open.png') });
     console.log('SHOTS_OK');
   } catch (error) {
     console.error('FAIL:', error.message);

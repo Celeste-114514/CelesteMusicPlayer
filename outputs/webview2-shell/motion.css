@@ -17,6 +17,15 @@
   --motion-scale:1;
   --motion-shift:1;
 
+  /* 分类开关倍率：motion.js 写 1（正常）或 0.001（几乎瞬时）。
+     用户可以在外观页按类别单独关掉动效 —— 关掉哪一类，哪一类就只剩状态变化。 */
+  --motion-cat-nav:1;
+  --motion-cat-popup:1;
+  --motion-cat-list:1;
+  --motion-cat-control:1;
+  --motion-cat-theme:1;
+  --motion-cat-cover:1;
+
   /* 语义时长：按操作含义分组，不按控件分组 */
   --dur-tap:calc(100ms * var(--motion-scale));      /* 按下/勾选微反馈 */
   --dur-exit:calc(140ms * var(--motion-scale));     /* 菜单、浮层收起 */
@@ -31,6 +40,21 @@
   --shift-popup:calc(6px * var(--motion-shift));
   --shift-panel:calc(12px * var(--motion-shift));
   --press-scale:calc(1 - .02 * var(--motion-shift));
+
+  /* 分类时长：基准不变，只是多乘一个分类倍率，分类被关掉就几乎瞬时 */
+  --dur-nav:calc(180ms * var(--motion-scale) * var(--motion-cat-nav));
+  --dur-nav-slow:calc(420ms * var(--motion-scale) * var(--motion-cat-nav));
+  --dur-nav-collapse:calc(320ms * var(--motion-scale) * var(--motion-cat-nav));
+  --dur-popup:calc(180ms * var(--motion-scale) * var(--motion-cat-popup));
+  --dur-popup-exit:calc(140ms * var(--motion-scale) * var(--motion-cat-popup));
+  --dur-panel-in:calc(420ms * var(--motion-scale) * var(--motion-cat-popup));
+  --dur-panel-out:calc(140ms * var(--motion-scale) * var(--motion-cat-popup));
+  --dur-tab:calc(180ms * var(--motion-scale) * var(--motion-cat-nav));
+  --dur-cover:calc(360ms * var(--motion-scale) * var(--motion-cat-cover));
+  --dur-cover-zoom:calc(420ms * var(--motion-scale) * var(--motion-cat-cover));
+  --dur-list:calc(180ms * var(--motion-scale) * var(--motion-cat-list));
+  --dur-control:calc(200ms * var(--motion-scale) * var(--motion-cat-control));
+  --dur-theme:calc(240ms * var(--motion-scale) * var(--motion-cat-theme));
 
   /* 旧名字的兼容别名。之前 library.css / transport-panels.css 里用了
      var(--motion-continuity) 和 var(--motion-fast)，但这两个变量从来没定义过 ——
@@ -51,9 +75,9 @@
 :root[data-motion="off"] *,
 :root[data-motion="off"] *::before,
 :root[data-motion="off"] *::after{
-  animation-duration:1ms!important;
+  animation-duration:calc(1ms * var(--motion-scale))!important;
   animation-iteration-count:1!important;
-  transition-duration:1ms!important;
+  transition-duration:calc(1ms * var(--motion-scale))!important;
   scroll-behavior:auto!important;
 }
 /* lite：保留淡变与状态色，去掉几何位移 */

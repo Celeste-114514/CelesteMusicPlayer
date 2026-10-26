@@ -18,7 +18,7 @@
 .ui-listbox-caption{padding:8px 10px 9px;font-size:calc(9px * var(--text-scale));letter-spacing:1px;color:var(--muted)}
 .ui-listbox button{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;
   padding:9px 10px;border-radius:10px;text-align:left;color:var(--muted);font-size:calc(12px * var(--text-scale));
-  transition:background var(--dur-tap) var(--ease-continuity),color var(--dur-tap) var(--ease-continuity)}
+  transition:background var(--dur-control) var(--ease-continuity),color var(--dur-control) var(--ease-continuity)}
 .ui-listbox button:hover,.ui-listbox button:focus-visible{background:var(--hover);color:var(--accent);outline:none}
 .ui-listbox button[aria-selected=true]{color:var(--accent);background:var(--accent-soft)}
 .ui-listbox button[aria-disabled=true]{opacity:var(--disabled-opacity);cursor:default}
@@ -53,7 +53,7 @@ select.ui-select[data-ui-size=compact]{padding-top:4px!important;padding-bottom:
   appearance:none;-webkit-appearance:none;width:16px;height:16px;flex-shrink:0;margin:0;
   border:1.5px solid color-mix(in srgb,var(--muted) 70%,transparent);border-radius:5px;background:var(--input-bg);
   display:inline-grid;place-content:center;cursor:pointer;vertical-align:-3px;
-  transition:background var(--dur-tap) var(--ease-continuity),border-color var(--dur-tap) var(--ease-continuity)}
+  transition:background var(--dur-control) var(--ease-continuity),border-color var(--dur-control) var(--ease-continuity)}
 :where(input[type=checkbox]):not([role=switch]):hover:not(:disabled){border-color:var(--focus)}
 :where(input[type=checkbox]):not([role=switch]):focus-visible{outline:none;border-color:var(--focus);box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 24%,transparent)}
 :where(input[type=checkbox]):not([role=switch]):checked,
@@ -70,18 +70,18 @@ select.ui-select[data-ui-size=compact]{padding-top:4px!important;padding-bottom:
 :where(input[type=checkbox][role=switch]){
   appearance:none;-webkit-appearance:none;width:42px;height:24px;border-radius:20px;border:0;margin:0;
   background:var(--accent-soft);cursor:pointer;position:relative;flex-shrink:0;vertical-align:-6px;
-  transition:background var(--dur-quick) var(--ease-continuity)}
+  transition:background var(--dur-control) var(--ease-continuity)}
 :where(input[type=checkbox][role=switch])::after{
   content:'';position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
-  background:var(--surface);box-shadow:0 1px 4px #0002;transition:transform var(--dur-quick) var(--ease-continuity)}
+  background:var(--surface);box-shadow:0 1px 4px #0002;transition:transform var(--dur-control) var(--ease-continuity)}
 :where(input[type=checkbox][role=switch]):checked{background:var(--accent)}
 :where(input[type=checkbox][role=switch]):checked::after{transform:translateX(18px)}
 :where(input[type=checkbox][role=switch]):focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 24%,transparent)}
 :where(input[type=checkbox][role=switch]):disabled{opacity:var(--disabled-opacity);cursor:default}
 .set-switch{position:relative;width:42px;height:24px;border-radius:20px;background:var(--accent-soft);border:0;
-  transition:background var(--dur-quick) var(--ease-continuity);flex-shrink:0;cursor:pointer}
+  transition:background var(--dur-control) var(--ease-continuity);flex-shrink:0;cursor:pointer}
 .set-switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;
-  background:var(--surface);box-shadow:0 1px 4px #0002;transition:transform var(--dur-quick) var(--ease-continuity)}
+  background:var(--surface);box-shadow:0 1px 4px #0002;transition:transform var(--dur-control) var(--ease-continuity)}
 .set-switch[aria-checked=true]{background:var(--accent)}
 .set-switch[aria-checked=true]::after{transform:translateX(18px)}
 .set-switch:focus-visible{outline:none;box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 24%,transparent)}
@@ -89,16 +89,16 @@ select.ui-select[data-ui-size=compact]{padding-top:4px!important;padding-bottom:
 .set-switch[aria-busy=true]{opacity:.6}
 
 /* —— 滑杆：保留真实 range，统一轨道/滑块/焦点 —— */
-:where(input[type=range]){transition:filter var(--dur-tap) var(--ease-continuity)}
+:where(input[type=range]){transition:filter var(--dur-control) var(--ease-continuity)}
 :where(input[type=range]):focus-visible{outline:none;filter:drop-shadow(0 0 0 color-mix(in srgb,var(--focus) 40%,transparent)) drop-shadow(0 0 6px color-mix(in srgb,var(--focus) 50%,transparent))}
 :where(input[type=range]):active::-webkit-slider-thumb{transform:scale(1.15)}
-:where(input[type=range])::-webkit-slider-thumb{transition:transform var(--dur-tap) var(--ease-continuity)}
+:where(input[type=range])::-webkit-slider-thumb{transition:transform var(--dur-control) var(--ease-continuity)}
 
 /* —— 表单：统一输入框族 —— */
 :where(input[type=text],input[type=number],input[type=search],input[type=password],textarea){
   border-radius:9px;border:1px solid var(--input-line);background:var(--input-bg);color:var(--ink);
   font-size:calc(12px * var(--text-scale));padding:8px 10px;
-  transition:border-color var(--dur-quick) var(--ease-continuity),box-shadow var(--dur-quick) var(--ease-continuity)}
+  transition:border-color var(--dur-control) var(--ease-continuity),box-shadow var(--dur-control) var(--ease-continuity)}
 :where(input[type=text],input[type=number],input[type=search],input[type=password],textarea):focus-visible{
   outline:none;border-color:var(--focus);box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 22%,transparent)}
 :where(input[type=search])::-webkit-search-cancel-button{-webkit-appearance:none;width:12px;height:12px;
@@ -124,7 +124,7 @@ select.ui-select[data-ui-size=compact]{padding-top:4px!important;padding-bottom:
 :where(progress){appearance:none;-webkit-appearance:none;width:100%;height:6px;border:0;border-radius:6px;
   background:var(--panel-soft);overflow:hidden}
 :where(progress)::-webkit-progress-bar{background:var(--panel-soft);border-radius:6px}
-:where(progress)::-webkit-progress-value{background:var(--accent);border-radius:6px;transition:width var(--dur-quick) var(--ease-continuity)}
+:where(progress)::-webkit-progress-value{background:var(--accent);border-radius:6px;transition:width var(--dur-control) var(--ease-continuity)}
 
 /* —— 折叠：统一展开箭头（用 SVG 遮罩，不用字符冒充图形）—— */
 :where(details>summary){list-style:none;cursor:pointer}
@@ -132,7 +132,7 @@ select.ui-select[data-ui-size=compact]{padding-top:4px!important;padding-bottom:
 :where(details>summary)::before{content:'';display:inline-block;width:9px;height:9px;margin-right:7px;
   background:currentColor;color:var(--muted);
   mask:url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><path d='m9 5 7 7-7 7' stroke='black' stroke-width='2.4' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>") center/contain no-repeat;
-  transition:transform var(--dur-quick) var(--ease-continuity);vertical-align:-1px}
+  transition:transform var(--dur-control) var(--ease-continuity);vertical-align:-1px}
 :where(details[open]>summary)::before{transform:rotate(90deg)}
 
 /* —— 提示气泡 —— */

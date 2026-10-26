@@ -131,6 +131,52 @@ const SNAPSHOT = {
     console.log('animating=' + animating);
     assert.ok(animating > 0, '切页没有触发动画');
 
+    // ⑥ 分类开关：关掉"导航"这一类，页面转场就不该再有位移
+    await page.evaluate(() => window.CelesteMotion.setOff(['nav']));
+    await page.waitForTimeout(120);
+    const offNav = await page.evaluate(() => ({
+      cat: getComputedStyle(document.documentElement).getPropertyValue('--motion-cat-nav').trim(),
+      other: getComputedStyle(document.documentElement).getPropertyValue('--motion-cat-popup').trim(),
+      off: window.CelesteMotion.getOff()
+    }));
+    console.log('offNav=' + JSON.stringify(offNav));
+    assert.deepEqual(offNav.off, ['nav'], '分类开关没记上');
+    assert.ok(Number(offNav.cat) < 0.01, '导航类别的倍率没压下去：' + offNav.cat);
+    assert.ok(Number(offNav.other) > 0.99, '不该动的类别被误关了：' + offNav.other);
+
+    // 关掉弹窗这一类时，浮层进场应当几乎瞬时
+    await page.evaluate(() => window.CelesteMotion.setOff(['popup']));
+    const popupMs = await page.evaluate(() => window.CelesteMotion.duration(180, 'popup'));
+    assert.ok(popupMs <= 2, '弹窗类别关掉后时长没压下去：' + popupMs);
+    await page.evaluate(() => window.CelesteMotion.setOff([]));
+
+    // ⑦ 按压回弹：按下按钮应当有动画，松手回到原样
+    const press = await page.evaluate(async () => {
+      const button = document.getElementById('favorite');
+      const box = button.getBoundingClientRect();
+      button.dispatchEvent(new PointerEvent('pointerdown', { bubbles: true, clientX: box.x + 2, clientY: box.y + 2 }));
+      const during = document.getAnimations().length;
+      await new Promise(r => setTimeout(r, 120));
+      window.dispatchEvent(new PointerEvent('pointerup', { bubbles: true }));
+      await new Promise(r => setTimeout(r, 400));
+      const transform = getComputedStyle(button).transform;
+      return { during, transform };
+    });
+    console.log('press=' + JSON.stringify(press));
+    assert.ok(press.during > 0, '按压没有回弹反馈');
+    assert.ok(press.transform === 'none' || press.transform === 'matrix(1, 0, 0, 1, 0, 0)', '松手后没有回到原样：' + press.transform);
+
+    // ⑧ 外观页「动效」卡有分类开关
+    const categories = await page.evaluate(async () => {
+      const host = document.createElement('div');
+      document.body.append(host);
+      await window.CelesteAppearance.mount(host);
+      const card = [...host.querySelectorAll('.settings-card')].find(c => (c.querySelector('h2') || {}).textContent === '动效');
+      return card ? [...card.querySelectorAll('.motion-category')].map(b => b.textContent) : null;
+    });
+    console.log('categories=' + JSON.stringify(categories));
+    assert.ok(categories && categories.length === 6, '分类开关不是 6 个：' + JSON.stringify(categories));
+
     assert.deepEqual(errors, [], '页面有 JS 异常：' + errors.join(' / '));
     console.log('MOTION_OK');
   } catch (error) {

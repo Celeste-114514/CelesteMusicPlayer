@@ -1,8 +1,6 @@
 /* Collapsible corner. The toggle stays available when the disc retracts. */
-.orbit-content{position:absolute;inset:0;transform-origin:11.6129% 11.6129%;transition:transform 360ms cubic-bezier(.22,.8,.2,1),opacity 220ms ease,visibility 0s;transform:scale(1);opacity:1;visibility:visible}
-.corner-orbit.is-collapsed .orbit-content{transform:scale(.08) rotate(-12deg);opacity:0;visibility:hidden;transition:transform 300ms cubic-bezier(.4,0,.2,1),opacity 160ms ease,visibility 0s 300ms}
-.corner-toggle{position:absolute;left:11.6129%;top:11.6129%;transform:translate(-50%,-50%);width:32px;height:32px;display:grid;place-items:center;border-radius:50%;color:var(--muted);background:var(--accent-soft);pointer-events:auto;transition:background .2s,color .2s;-webkit-app-region:no-drag}
-.corner-toggle svg{width:17px;height:17px;transition:transform .3s}
+.corner-toggle{position:absolute;left:11.6129%;top:11.6129%;transform:translate(-50%,-50%);width:32px;height:32px;display:grid;place-items:center;border-radius:50%;color:var(--muted);background:var(--accent-soft);pointer-events:auto;transition:background calc(200ms * var(--motion-scale)),color calc(200ms * var(--motion-scale));-webkit-app-region:no-drag}
+.corner-toggle svg{width:17px;height:17px;transition:transform calc(300ms * var(--motion-scale))}
 .corner-toggle[aria-expanded=true] svg{transform:rotate(90deg)}
 .corner-toggle:hover{background:var(--hover);color:var(--accent)}
 .corner-home{left:28.264%;top:28.264%;width:30px;height:30px}
@@ -28,7 +26,7 @@
 .songs-columns{display:grid;grid-template-columns:40px 1fr 62px;gap:17px;padding:0 24px 11px;color:var(--muted);font-size:calc(9px * var(--text-scale));letter-spacing:1px;border-bottom:1px solid var(--accent-soft);margin-bottom:6px}
 .songs-columns>span:last-child{text-align:right}
 .songs-list{padding:0;margin:0;list-style:none}
-.song-row{position:relative;width:100%;display:grid;grid-template-columns:40px 56px minmax(0,1fr) 62px;gap:17px;align-items:center;text-align:left;min-height:84px;padding:12px 24px;border-radius:15px;transition:background .18s;color:var(--ink)}
+.song-row{position:relative;width:100%;display:grid;grid-template-columns:40px 56px minmax(0,1fr) 62px;gap:17px;align-items:center;text-align:left;min-height:84px;padding:12px 24px;border-radius:15px;transition:background calc(180ms * var(--motion-scale));color:var(--ink)}
 .song-row:hover{background:var(--hover)}
 .song-row.selected{background:var(--accent-soft)}
 .song-row.selected:before{content:'';position:absolute;left:0;top:16px;bottom:16px;width:3px;border-radius:5px;background:var(--accent)}

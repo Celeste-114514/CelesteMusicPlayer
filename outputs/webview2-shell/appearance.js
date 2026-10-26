@@ -420,6 +420,37 @@
     bounceRow.append(bounceHolder);
     card.append(bounceRow);
 
+    // 分类开关：关掉哪一类，哪一类就只剩"状态变化"。分类是为了让用户能"少动一点"，
+    // 不是给几十个难懂的参数。
+    const categories = Array.isArray(info.categories) && info.categories.length
+      ? info.categories
+      : [{ id: 'nav', label: '导航与页面转场' }, { id: 'popup', label: '弹窗与浮层' }, { id: 'list', label: '列表重排' },
+         { id: 'control', label: '控件反馈' }, { id: 'theme', label: '主题与背景' }, { id: 'cover', label: '封面转场' }];
+    const off = new Set(Array.isArray(info.off) ? info.off : []);
+    const catRow = node('div', undefined, 'set-row');
+    const catMain = node('div', undefined, 'set-row-main');
+    catMain.append(node('div', '分类开关', 'set-label'));
+    catMain.append(node('p', '单独关掉某一类动效。关掉的类别不会消失，只是不再移动 —— 状态变化照样看得见。', 'set-note'));
+    catRow.append(catMain);
+    const catHolder = node('div', undefined, 'set-control');
+    const catList = node('div', undefined, 'motion-category-list');
+    categories.forEach(item => {
+      const disabled = off.has(item.id);
+      const chip = node('button', item.label + (disabled ? ' · 已关' : ''), 'motion-category' + (disabled ? ' off' : ''));
+      chip.type = 'button';
+      chip.setAttribute('aria-pressed', String(!disabled));
+      chip.addEventListener('click', () => {
+        const next = new Set(off);
+        if (next.has(item.id)) next.delete(item.id); else next.add(item.id);
+        request('motion', { off: [...next] }, '动效分类：' + item.label)
+          .catch(error => status('设置失败：' + error.message, 'err'));
+      });
+      catList.append(chip);
+    });
+    catHolder.append(catList);
+    catRow.append(catHolder);
+    card.append(catRow);
+
     // 演示：把当前这套参数直接跑一遍，改完立刻能看见，不用自己到处找地方试
     const demoRow = node('div', undefined, 'set-row');
     const demoMain = node('div', undefined, 'set-row-main');

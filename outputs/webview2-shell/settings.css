@@ -4,7 +4,7 @@
 .settings-layout{display:flex;gap:16px;width:100%;min-height:0;padding:18px 24px 0}
 .settings-nav{width:186px;min-width:186px;display:flex;flex-direction:column;gap:3px;overflow:auto;padding-bottom:18px;scrollbar-width:thin;scrollbar-color:var(--panel-soft) transparent}
 .settings-nav-title{font-size:calc(9px * var(--text-scale));letter-spacing:2.4px;color:var(--muted);font-weight:600;padding:6px 12px 12px}
-.settings-nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;font-size:calc(12px * var(--text-scale));color:var(--muted);text-align:left;transition:background .2s,color .2s}
+.settings-nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;font-size:calc(12px * var(--text-scale));color:var(--muted);text-align:left;transition:background calc(200ms * var(--motion-scale)),color calc(200ms * var(--motion-scale))}
 .settings-nav-item svg{width:16px;height:16px}
 .settings-nav-item:hover{background:var(--hover);color:var(--accent)}
 .settings-nav-item.selected{background:var(--accent-soft);color:var(--accent);font-weight:550}
@@ -40,11 +40,11 @@
 .set-row.dirty .set-label{color:var(--accent)}
 .set-row.saved .set-label::after{content:"已保存";font-size:calc(9px * var(--text-scale));color:var(--success);background:var(--panel-soft);border-radius:6px;padding:2px 6px;font-weight:400}
 .set-row.failed .set-note{color:var(--danger)}
-.set-row.hit{animation:set-hit 1.2s ease}
+.set-row.hit{animation:set-hit calc(1200ms * var(--motion-scale)) ease}
 @keyframes set-hit{0%,100%{background:transparent}25%{background:var(--accent-soft)}}
 /* 开关 */
-.set-switch{position:relative;width:42px;height:24px;border-radius:20px;background:var(--accent-soft);border:0;transition:background .22s var(--ease);flex-shrink:0}
-.set-switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--surface);box-shadow:0 1px 4px #0002;transition:transform .22s var(--ease)}
+.set-switch{position:relative;width:42px;height:24px;border-radius:20px;background:var(--accent-soft);border:0;transition:background calc(220ms * var(--motion-scale)) var(--ease);flex-shrink:0}
+.set-switch::after{content:"";position:absolute;top:3px;left:3px;width:18px;height:18px;border-radius:50%;background:var(--surface);box-shadow:0 1px 4px #0002;transition:transform calc(220ms * var(--motion-scale)) var(--ease)}
 .set-switch[aria-checked=true]{background:var(--accent)}
 .set-switch[aria-checked=true]::after{transform:translateX(18px)}
 .set-switch:disabled{opacity:.45}
@@ -133,6 +133,11 @@
 .mode-group{display:flex;flex-wrap:wrap;gap:6px}
 .mode-option{border:1px solid var(--line);border-radius:10px;padding:6px 12px;font-size:calc(11px * var(--text-scale));color:var(--muted);background:var(--panel-soft);transition:background calc(.2s * var(--motion-scale))}
 /* 动效演示用的浮层：跟真实浮层同一条路径（共用 popup 层），所以看到的就是真的 */
+.motion-category-list{display:flex;flex-wrap:wrap;gap:6px}
+.motion-category{border:1px solid var(--line);border-radius:10px;padding:6px 11px;font-size:calc(11px * var(--text-scale));
+  color:var(--muted);background:var(--panel-soft);transition:background var(--dur-control) var(--ease-continuity),color var(--dur-control) var(--ease-continuity)}
+.motion-category:hover{color:var(--accent)}
+.motion-category.off{border-color:var(--accent-soft);color:var(--muted);background:var(--surface);opacity:.72}
 .motion-demo-layer{width:280px;padding:16px}
 .motion-demo-text{margin:0;font-size:calc(11px * var(--text-scale));color:var(--muted);line-height:1.8}
 .mode-option:hover{color:var(--accent)}

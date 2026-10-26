@@ -357,10 +357,32 @@
     }).then(value => value === true);
   }
 
+  /** 按压回弹：按下轻轻缩一点，松开弹回来。用委托，动态生成的按钮也照样有。 */
+  function bindPressFeedback() {
+    const target = event => event.target instanceof Element ? event.target : null;
+    document.addEventListener('pointerdown', event => {
+      const element = target(event);
+      const button = element?.closest('button');
+      if (!button || button.disabled) return;
+      pressed = button;
+      motion.press(button, true);
+    }, true);
+    const release = () => {
+      if (!pressed) return;
+      const button = pressed;
+      pressed = null;
+      motion.press(button, false);
+    };
+    window.addEventListener('pointerup', release, true);
+    window.addEventListener('pointercancel', release, true);
+  }
+  let pressed = null;
+
   /** 页面就绪后统一挂载：静态下拉先扫一遍，之后只盯新出现的下拉。 */
   function autoMount() {
     scan(document);
     observe(document.body);
+    bindPressFeedback();
   }
 
   window.CelesteControls = {

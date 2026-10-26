@@ -1,8 +1,9 @@
 /* A fixed overlay: opening navigation never changes the page's geometry. */
 .corner-orbit{left:50%;top:27px;transform:translateX(-50%);width:min(var(--nav-size),42vw);height:auto;aspect-ratio:600/290;z-index:30}
 .header-actions{position:relative;z-index:40}
-.orbit-content{transform-origin:50% 3.448%;transition:transform 420ms cubic-bezier(.20,.90,.22,1),opacity 180ms,visibility 0s}
-.corner-orbit.is-collapsed .orbit-content{transform:scale(.04);transition:transform 320ms cubic-bezier(.20,.90,.22,1),opacity 160ms,visibility 0s 320ms}
+.orbit-content{position:absolute;inset:0;transform-origin:50% 3.448%;transform:scale(1);opacity:1;visibility:visible;transition:transform var(--dur-nav-slow) var(--ease-continuity),opacity var(--dur-nav) var(--ease-continuity),visibility 0s}
+.corner-orbit.is-collapsed .orbit-content{transform:scale(.04);opacity:0;visibility:hidden;transition:transform var(--dur-nav-collapse) var(--ease-continuity),opacity var(--dur-nav) var(--ease-continuity),visibility 0s var(--dur-nav-collapse)}
+
 /* Wheel is 300x145. Outer ring therefore lands at ~119px radius (the size the user asked for).
    Items sit slightly larger than an exact scale-down so they stay clickable at 28px.
    The two ring radii live in shell.js — if you change the size here, check there too. */

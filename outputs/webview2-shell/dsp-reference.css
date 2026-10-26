@@ -75,10 +75,10 @@ display: inline-grid;
   font-size:calc(11px * var(--text-scale));
   font-weight: var(--echo-weight-label);
   transition:
-    color 160ms ease,
-    border-color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease;
+    color calc(160ms * var(--motion-scale)) ease,
+    border-color calc(160ms * var(--motion-scale)) ease,
+    background calc(160ms * var(--motion-scale)) ease,
+    box-shadow calc(160ms * var(--motion-scale)) ease;
 }
 
 .opra-enable-switch[data-active="true"] {
@@ -103,7 +103,7 @@ position: relative;
   border-radius: 999px;
   background: #cbd4df;
   box-shadow: inset 0 1px 2px rgba(25, 35, 50, 0.16);
-  transition: background 160ms ease;
+  transition: background calc(160ms * var(--motion-scale)) ease;
 }
 
 .opra-enable-switch > span::after {
@@ -116,7 +116,7 @@ position: absolute;
   border-radius: 999px;
   background: #fff;
   box-shadow: 0 3px 8px rgba(25, 35, 50, 0.18);
-  transition: transform 160ms ease;
+  transition: transform calc(160ms * var(--motion-scale)) ease;
 }
 
 .opra-enable-switch[data-active="true"] > span {
@@ -241,9 +241,9 @@ display: inline-flex;
   font-size:calc(12px * var(--text-scale));
   font-weight: var(--echo-weight-label);
   transition:
-    color 140ms ease,
-    border-color 140ms ease,
-    background 140ms ease;
+    color calc(140ms * var(--motion-scale)) ease,
+    border-color calc(140ms * var(--motion-scale)) ease,
+    background calc(140ms * var(--motion-scale)) ease;
 }
 
 .opra-browser-search button:hover:not(:disabled) {
@@ -383,10 +383,10 @@ display: grid;
   text-align: center;
   box-shadow: 0 10px 24px rgba(32, 42, 56, 0.035);
   transition:
-    transform 150ms ease,
-    border-color 150ms ease,
-    box-shadow 150ms ease,
-    background 150ms ease;
+    transform calc(150ms * var(--motion-scale)) ease,
+    border-color calc(150ms * var(--motion-scale)) ease,
+    box-shadow calc(150ms * var(--motion-scale)) ease,
+    background calc(150ms * var(--motion-scale)) ease;
 }
 
 .opra-vendor-grid button:hover,
@@ -461,10 +461,10 @@ display: grid;
   cursor: pointer;
   text-align: left;
   transition:
-    border-color 150ms ease,
-    background 150ms ease,
-    box-shadow 150ms ease,
-    transform 150ms ease;
+    border-color calc(150ms * var(--motion-scale)) ease,
+    background calc(150ms * var(--motion-scale)) ease,
+    box-shadow calc(150ms * var(--motion-scale)) ease,
+    transform calc(150ms * var(--motion-scale)) ease;
 }
 
 .opra-product-list button:hover,
@@ -1277,7 +1277,7 @@ position: relative;
 .dsp-channel-bias-meter span {
 display: block;
   height: 100%;
-  transition: width 160ms ease;
+  transition: width calc(160ms * var(--motion-scale)) ease;
 }
 
 .dsp-channel-bias-meter span[data-side="left"] {
@@ -1331,10 +1331,10 @@ min-height: 34px;
   font-size:calc(12px * var(--text-scale));
   font-weight: var(--echo-weight-label);
   transition:
-    color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    color calc(160ms * var(--motion-scale)) ease,
+    background calc(160ms * var(--motion-scale)) ease,
+    box-shadow calc(160ms * var(--motion-scale)) ease,
+    transform calc(160ms * var(--motion-scale)) ease;
 }
 
 .dsp-channel-mode-tabs button:hover,
@@ -1443,9 +1443,9 @@ min-width: 0;
   font-size:calc(12px * var(--text-scale));
   font-weight: var(--echo-weight-body);
   transition:
-    border-color 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    border-color calc(160ms * var(--motion-scale)) ease,
+    box-shadow calc(160ms * var(--motion-scale)) ease,
+    transform calc(160ms * var(--motion-scale)) ease;
 }
 
 .dsp-channel-band-row input:focus {
@@ -1514,10 +1514,10 @@ min-width: 0;
   font-size:calc(12px * var(--text-scale));
   font-weight: var(--echo-weight-body);
   transition:
-    border-color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    border-color calc(160ms * var(--motion-scale)) ease,
+    background calc(160ms * var(--motion-scale)) ease,
+    box-shadow calc(160ms * var(--motion-scale)) ease,
+    transform calc(160ms * var(--motion-scale)) ease;
 }
 
 .dsp-channel-save-row input:focus,
@@ -1549,7 +1549,7 @@ grid-template-columns: repeat(2, minmax(0, auto));
 .dsp-channel-rename-row {
 grid-template-columns: minmax(0, 1fr) 58px 46px;
   overflow: hidden;
-  animation: dsp-channel-rename-enter 180ms ease both;
+  animation: dsp-channel-rename-enter calc(180ms * var(--motion-scale)) ease both;
 }
 
 .dsp-channel-preset-actions {
@@ -1586,12 +1586,12 @@ display: inline-flex;
   text-overflow: ellipsis;
   white-space: nowrap;
   transition:
-    color 160ms ease,
-    border-color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease,
-    opacity 160ms ease,
-    transform 160ms ease;
+    color calc(160ms * var(--motion-scale)) ease,
+    border-color calc(160ms * var(--motion-scale)) ease,
+    background calc(160ms * var(--motion-scale)) ease,
+    box-shadow calc(160ms * var(--motion-scale)) ease,
+    opacity calc(160ms * var(--motion-scale)) ease,
+    transform calc(160ms * var(--motion-scale)) ease;
 }
 
 .dsp-channel-preset-actions button svg,
@@ -2441,12 +2441,12 @@ display: inline-flex;
   font-weight: var(--echo-weight-label);
   white-space: nowrap;
   transition:
-    color 160ms ease,
-    border-color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease,
-    opacity 160ms ease,
-    transform 160ms ease;
+    color calc(160ms * var(--motion-scale)) ease,
+    border-color calc(160ms * var(--motion-scale)) ease,
+    background calc(160ms * var(--motion-scale)) ease,
+    box-shadow calc(160ms * var(--motion-scale)) ease,
+    opacity calc(160ms * var(--motion-scale)) ease,
+    transform calc(160ms * var(--motion-scale)) ease;
 }
 
 .dsp-module-actions button:hover {
@@ -2505,8 +2505,8 @@ position: relative;
   background: rgba(142, 151, 168, 0.34);
   box-shadow: inset 0 0 0 1px rgba(32, 42, 56, 0.08);
   transition:
-    background 180ms ease,
-    box-shadow 180ms ease;
+    background calc(180ms * var(--motion-scale)) ease,
+    box-shadow calc(180ms * var(--motion-scale)) ease;
 }
 
 .dsp-channel-toggle-rail span {
@@ -2519,9 +2519,9 @@ position: absolute;
   background: #ffffff;
   box-shadow: 0 2px 8px rgba(25, 35, 50, 0.18);
   transition:
-    background 180ms ease,
-    box-shadow 180ms ease,
-    transform 180ms ease;
+    background calc(180ms * var(--motion-scale)) ease,
+    box-shadow calc(180ms * var(--motion-scale)) ease,
+    transform calc(180ms * var(--motion-scale)) ease;
 }
 
 .dsp-channel-toggle[data-active="true"] .dsp-channel-toggle-rail {
@@ -2856,10 +2856,10 @@ display: grid;
   font: inherit;
   text-align: left;
   transition:
-    border-color 160ms ease,
-    background 160ms ease,
-    box-shadow 160ms ease,
-    transform 160ms ease;
+    border-color calc(160ms * var(--motion-scale)) ease,
+    background calc(160ms * var(--motion-scale)) ease,
+    box-shadow calc(160ms * var(--motion-scale)) ease,
+    transform calc(160ms * var(--motion-scale)) ease;
 }
 
 .dsp-src-filter-card:hover,
