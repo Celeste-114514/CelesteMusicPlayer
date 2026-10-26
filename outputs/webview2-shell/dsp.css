@@ -1,0 +1,144 @@
+/* DSP rack page — layout, EQ curve, and the three real pages (profiles / rack order / safety
+   meters). Everything here is driven by the native bridge; there is no placeholder data left. */
+.dsp-page{padding:0 0 30px}
+.dsp-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:22px}
+.dsp-heading h1{font-size:clamp(24px,2.4vw,32px)}
+.dsp-rack-toggle{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:19px;background:#f4eff2;font-size:11px;color:#8d7785;white-space:nowrap}
+.dsp-rack-toggle[aria-pressed=true]{background:var(--accent);color:#fff}
+.dsp-layout{display:grid;grid-template-columns:172px minmax(0,1fr);gap:20px;align-items:start}
+.dsp-nav{display:grid;gap:4px;padding:8px;border-radius:19px;background:#faf7f9;border:1px solid #f1e9ee}
+.dsp-nav button{display:flex;align-items:center;gap:9px;width:100%;padding:10px 12px;border-radius:13px;text-align:left;font-size:12px;color:#88737f}
+.dsp-nav button:hover{background:#f6eaef;color:var(--accent)}
+.dsp-nav button[aria-current=true]{background:#f9e4eb;color:var(--accent);font-weight:600}
+.dsp-nav button .dsp-nav-dot{width:6px;height:6px;border-radius:50%;background:#d8c8d2;flex:0 0 6px}
+/* Green = this module is really processing right now, same meaning as the native nav dots. */
+.dsp-nav button[data-active=true] .dsp-nav-dot{background:#4b9c6e}
+.dsp-nav button[aria-current=true] .dsp-nav-dot{background:var(--accent)}
+.dsp-nav button[aria-current=true][data-active=true] .dsp-nav-dot{background:#4b9c6e}
+.dsp-nav button[data-bypassed=true] .dsp-nav-dot{background:#e2ced7}
+.dsp-nav .dsp-nav-label{font-size:10px;font-weight:600;letter-spacing:.3px;color:#b09ba8;padding:13px 12px 5px}
+
+.dsp-module{border-radius:21px;background:#fdfafb;border:1px solid #f1e9ee;padding:22px}
+.dsp-module-head{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:18px}
+.dsp-module-head h2{font-size:17px;font-weight:600;letter-spacing:-.4px}
+.dsp-module-head p{font-size:10px;color:#aaa0a8;margin-top:5px}
+.dsp-module-body{display:grid;gap:18px}
+
+/* ---- generic control rows (every non-EQ module reuses these) ---- */
+.dsp-row{display:grid;grid-template-columns:132px minmax(0,1fr) 74px;align-items:center;gap:14px;min-height:34px}
+.dsp-row-label{font-size:12px;color:#8d7785;white-space:nowrap}
+.dsp-row-value{font-size:11px;color:#6d5b68;text-align:right;font-variant-numeric:tabular-nums}
+.dsp-row-hint{grid-column:2 / -1;font-size:10px;line-height:1.8;color:#a89ca5}
+.dsp-row input[type=range]{width:100%}
+.dsp-row input[type=range]:disabled{opacity:.45}
+.dsp-select{grid-column:2 / -1;width:100%;max-width:260px;padding:8px 12px;border-radius:12px;border:1px solid #ece2e8;background:#faf7f9;font-size:12px;color:#6d5b68;font-family:inherit}
+.dsp-select:disabled{opacity:.5}
+.dsp-switch{grid-column:2 / -1;display:inline-flex;align-items:center;gap:9px;padding:7px 14px 7px 7px;border-radius:999px;background:#f4eff2;font-size:12px;color:#8d7785;justify-self:start}
+.dsp-switch-knob{width:16px;height:16px;border-radius:50%;background:#d8c8d2;transition:background .18s var(--ease)}
+.dsp-switch[aria-pressed=true]{background:#f9e4eb;color:var(--accent)}
+.dsp-switch[aria-pressed=true] .dsp-switch-knob{background:var(--accent)}
+.dsp-switch:disabled{opacity:.45}
+.dsp-power{padding:9px 16px;border-radius:17px;background:#f4eff2;font-size:11px;color:#8d7785;white-space:nowrap}
+.dsp-power[aria-pressed=true]{background:var(--accent);color:#fff}
+.dsp-pending{border-radius:16px;background:#f7f2f5;padding:26px;text-align:center;color:#a2939e;font-size:12px;line-height:1.9}
+.dsp-pending button{margin-top:12px}
+
+/* ---- EQ ---- */
+.eq-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.eq-toolbar .spacer{margin-left:auto}
+.eq-pill{padding:9px 14px;border-radius:17px;background:#f4eff2;font-size:11px;color:#8d7785}
+.eq-pill[aria-pressed=true]{background:#f9e4eb;color:var(--accent)}
+.eq-preamp{display:flex;align-items:center;gap:9px;font-size:11px;color:#8d7785}
+.eq-preamp output{min-width:46px;text-align:right;font-variant-numeric:tabular-nums;color:#6d5b68}
+
+/* ---- EQ curve palette ----
+   Values are the native ones (MainWindow.EqDsp.cs:594-601), both branches kept. The shell is light
+   today, so the light branch is what renders; when the shell gets a dark skin, set
+   data-dark="true" on .eq-curve-wrap and the whole curve follows with no JS change. */
+.eq-curve-wrap{position:relative;border-radius:17px;background:#fff;border:1px solid #f1e9ee;overflow:hidden;
+  --eq-grid:rgba(0,0,0,0.118);--eq-grid-strong:rgba(0,0,0,0.29);--eq-label:rgba(30,30,30,0.588);
+  --eq-stop-1:#1d4ed8;--eq-stop-2:#0f766e;--eq-stop-3:#b45309;
+  --eq-fill-top:rgba(15,118,110,0.157);--eq-fill-bottom:rgba(15,118,110,0.02);
+  --eq-node:#2f6fa8;--eq-node-halo:rgba(47,111,168,0.14);--eq-node-dot:#2f6fa8;--eq-readout:#28282e}
+.eq-curve-wrap[data-dark=true]{background:#2b2730;border-color:#2b2730;
+  --eq-grid:rgba(255,255,255,0.10);--eq-grid-strong:rgba(255,255,255,0.25);--eq-label:rgba(255,255,255,0.69);
+  --eq-stop-1:#264A63;--eq-stop-2:#2E7168;--eq-stop-3:#8A6235;
+  --eq-fill-top:rgba(46,113,104,0.18);--eq-fill-bottom:rgba(46,113,104,0.02);
+  --eq-node:#9dc3d8;--eq-node-halo:rgba(157,195,216,0.14);--eq-node-dot:#ffffff;--eq-readout:#ffffff}
+.eq-curve{display:block;width:100%;height:auto;touch-action:none}
+.eq-curve .grid-line{stroke:var(--eq-grid);stroke-width:1}
+.eq-curve .grid-zero{stroke:var(--eq-grid-strong);stroke-width:1.4}
+.eq-curve .tick-label{fill:var(--eq-label);font-size:10px;font-family:inherit}
+.eq-curve .tick-label.freq{fill:var(--eq-label)}
+.eq-curve .node-ring{fill:var(--eq-node-halo);stroke:var(--eq-node);stroke-width:1.5}
+.eq-curve .node-ring:hover{fill:var(--eq-node-halo);stroke-width:2.5}
+.eq-curve .node-dot{fill:var(--eq-node-dot)}
+.eq-curve .readout{fill:var(--eq-readout);font-size:11px;font-family:inherit}
+.eq-curve .readout-sub{fill:var(--eq-readout);opacity:.72;font-size:10px;font-family:inherit}
+
+.eq-bands{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:12px}
+.eq-band{display:grid;gap:7px;justify-items:center;padding:12px 8px;border-radius:15px;background:#faf7f9}
+.eq-band label{font-size:10px;color:#a093a0;font-variant-numeric:tabular-nums}
+.eq-band input[type=range]{width:100%}
+.eq-band output{font-size:10px;color:#88737f;font-variant-numeric:tabular-nums}
+.eq-hint{font-size:10px;line-height:1.8;color:#a89ca5}
+.dsp-hint{font-size:10px;line-height:1.8;color:#a89ca5}
+
+/* ---- 听音方案 ---- */
+.dsp-profile-save{display:flex;gap:10px;margin-bottom:16px}
+.dsp-input{flex:1;min-width:0;padding:10px 14px;border-radius:14px;border:1px solid #ece2e8;background:#faf7f9;font:inherit;font-size:12px;color:#6d5b68}
+.dsp-input:focus{outline:none;border-color:#e2c9d6;box-shadow:0 0 0 3px #e8486520}
+.dsp-profile-save .primary{margin:0;height:38px;padding:0 18px;white-space:nowrap}
+.dsp-profile-save .primary:disabled{opacity:.5}
+.dsp-profile-list{display:grid;gap:9px}
+.dsp-profile-row{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:12px 14px;border-radius:16px;background:#faf7f9;border:1px solid #f3ebf0}
+.dsp-profile-row[data-active=true]{background:#fdf1f5;border-color:#f2d9e3}
+.dsp-profile-info{min-width:0}
+.dsp-profile-name{display:flex;align-items:center;gap:8px;font-size:13px;color:#5f4d5a;font-weight:600}
+.dsp-profile-badge{font-size:9px;font-weight:600;letter-spacing:.4px;padding:3px 7px;border-radius:8px;background:var(--accent);color:#fff}
+.dsp-profile-stamp{font-size:10px;color:#a89ca5;margin-top:4px}
+.dsp-profile-actions{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.dsp-profile-actions .eq-pill:disabled{opacity:.45}
+.eq-pill.danger{color:#a4485c}
+.eq-pill.danger:hover{background:#fbe6ec}
+
+/* ---- 机架编排 ---- */
+.dsp-rack-list{display:grid;gap:8px}
+.dsp-rack-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;align-items:center;gap:12px;padding:11px 14px;border-radius:15px;background:#faf7f9;border:1px solid #f3ebf0}
+.dsp-rack-index{font-size:11px;color:#b09ba8;font-variant-numeric:tabular-nums;text-align:center}
+.dsp-rack-name{font-size:12.5px;color:#5f4d5a;font-weight:600}
+.dsp-rack-hint{font-size:10px;line-height:1.7;color:#a89ca5;margin-top:3px}
+.dsp-rack-buttons{display:flex;gap:5px}
+.dsp-rack-move{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;background:#f4eff2;color:#8d7785}
+.dsp-rack-move:hover:not(:disabled){background:#f9e4eb;color:var(--accent)}
+.dsp-rack-move:disabled{opacity:.3;cursor:default}
+.dsp-rack-move svg{width:13px;height:13px}
+.dsp-rack-move.up svg{transform:rotate(-90deg)}
+.dsp-rack-move.down svg{transform:rotate(90deg)}
+
+/* ---- 输出安全：实时电平 ---- */
+.dsp-meters{display:grid;gap:12px;margin-bottom:20px}
+.dsp-meter{display:grid;gap:7px}
+.dsp-meter-head{display:flex;justify-content:space-between;align-items:baseline;font-size:11px}
+.dsp-meter-label{color:#8d7785}
+.dsp-meter-value{color:#6d5b68;font-variant-numeric:tabular-nums}
+.dsp-meter-track{position:relative;height:14px;border-radius:8px;background:#f2ebf0;overflow:hidden}
+.dsp-meter-bar{height:100%;width:0;border-radius:8px;background:linear-gradient(90deg,#7fa7c9,#4b9c6e);transition:width .12s linear,background .2s var(--ease)}
+.dsp-meter-bar[data-level=warm]{background:linear-gradient(90deg,#6fa9a0,#c9a53f)}
+.dsp-meter-bar[data-level=hot]{background:linear-gradient(90deg,#d08a3f,#c03a52)}
+.dsp-meter-track[data-rms]::after{content:attr(data-rms);position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:9px;color:#8d7785}
+.dsp-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;margin-bottom:18px}
+.dsp-stat{padding:12px 14px;border-radius:15px;background:#faf7f9;border:1px solid #f3ebf0;display:grid;gap:6px}
+.dsp-stat-label{font-size:10px;color:#a89ca5}
+.dsp-stat-value{font-size:15px;color:#5f4d5a;font-weight:600;font-variant-numeric:tabular-nums}
+.dsp-stat-value[data-state=ok]{color:#3f7d5a}
+.dsp-stat-value[data-state=warn]{color:#b4562c}
+.dsp-chain{display:grid;gap:10px;padding:14px 16px;border-radius:16px;background:#faf7f9;border:1px solid #f3ebf0;margin-bottom:14px}
+.dsp-chain-label{display:flex;justify-content:space-between;gap:16px;font-size:11px;color:#a89ca5}
+.dsp-chain-value{color:#5f4d5a;text-align:right}
+.dsp-chain-value[data-state=ok]{color:#3f7d5a}
+.dsp-chain-value[data-state=warn]{color:#8d7785}
+
+/* Narrow layout turns the nav into one horizontal strip. Group headings have no place in a strip,
+   so they are hidden rather than laid out as empty columns. */
+@media(max-width:980px){.dsp-layout{grid-template-columns:1fr}.dsp-nav{grid-auto-flow:column;grid-auto-columns:max-content;overflow-x:auto}.dsp-nav .dsp-nav-label{display:none}}

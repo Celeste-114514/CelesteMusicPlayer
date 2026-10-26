@@ -1,0 +1,48 @@
+/* ECHO visualization layouts adapted from src/renderer/styles/dsp.css (AGPL-3.0).
+   ECHO's channel bias / headroom budget / room and safety routes keep their original geometry. */
+.echo-dsp-visual{display:grid;gap:16px;margin-bottom:22px;min-width:0}
+.echo-dsp-visual em{font-style:normal}
+.dsp-module-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:10px;min-width:0}
+.dsp-module-metric{display:grid;align-content:start;gap:8px;min-width:0;padding:14px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.72)}
+.dsp-module-metric em{color:rgba(75,84,100,.68);font-size:11px}
+.dsp-module-metric strong{font-size:14px;color:#202939;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.dsp-headroom-budget{display:grid;gap:8px;padding:13px 14px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.68)}
+.dsp-headroom-budget span{display:flex;min-width:160px;max-width:100%;min-height:30px;align-items:center;justify-content:space-between;gap:10px;padding:0 10px;color:#243044;border-radius:8px;background:linear-gradient(90deg,rgba(104,109,243,.18),rgba(47,155,120,.14));font-size:11px}
+.dsp-headroom-budget strong{color:#202939;font-size:12px;white-space:nowrap}
+.dsp-channel-bias-card{display:grid;gap:10px;min-width:0;padding:14px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.72)}
+.dsp-channel-bias-head,.dsp-channel-bias-values{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);gap:10px;align-items:center;min-width:0;font-size:11px}
+.dsp-channel-bias-head span{color:rgba(75,84,100,.68)}
+.dsp-channel-bias-head span:last-child,.dsp-channel-bias-values strong:last-child{text-align:right}
+.dsp-channel-bias-head strong{color:#2632a2;font-size:13px}
+.dsp-channel-bias-meter{position:relative;display:flex;align-items:center;height:16px;overflow:hidden;border-radius:999px;background:rgba(230,234,243,.9)}
+.dsp-channel-bias-meter span{display:block;height:100%;transition:width 160ms ease}
+.dsp-channel-bias-meter span[data-side=left]{background:linear-gradient(90deg,#8aa0ff,#686df3)}
+.dsp-channel-bias-meter span[data-side=right]{background:linear-gradient(90deg,#2f9b78,#64c09c)}
+.dsp-channel-bias-meter i{position:absolute;top:-2px;bottom:-2px;left:50%;width:2px;border-radius:999px;background:rgba(255,255,255,.95);box-shadow:0 0 0 1px rgba(32,42,56,.12)}
+.dsp-channel-bias-values{grid-template-columns:repeat(2,minmax(0,1fr));font-size:13px;color:#202939}
+.dsp-compressor-meter{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:16px;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:rgba(255,255,255,.72);color:#4b5464;font-size:12px}
+.dsp-compressor-meter strong{font-size:24px;font-variant-numeric:tabular-nums;color:#2632a2}
+.dsp-compressor-meter[data-active=true]{background:linear-gradient(90deg,rgba(104,109,243,.08),rgba(47,155,120,.08))}
+.dsp-safety-route{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;min-width:0;margin-bottom:16px}
+.dsp-safety-route>span{position:relative;display:grid;min-width:0;min-height:118px;align-content:end;gap:7px;padding:14px;overflow:hidden;border:1px solid rgba(32,42,56,.08);border-radius:8px;background:linear-gradient(135deg,rgba(255,255,255,.84),rgba(246,249,253,.74)),rgba(255,255,255,.7)}
+.dsp-safety-route>span:before{position:absolute;top:17px;right:16px;width:34px;height:2px;border-radius:999px;background:rgba(104,109,243,.3);content:''}
+.dsp-safety-route>span:last-child:before{background:rgba(47,155,120,.34)}
+.dsp-safety-route em{color:rgba(75,84,100,.68);font-size:11px;font-style:normal}
+.dsp-safety-route strong{color:#202939;font-size:14px;overflow-wrap:anywhere}
+.dsp-room-route{display:grid;gap:12px;min-width:0}.dsp-room-route>strong{font-size:12px;color:#4b5464}
+.echo-actions,.dsp-spatial-presets{display:flex;flex-wrap:wrap;gap:8px}
+.eq-workbench{display:grid;gap:16px;min-width:0}.eq-workbench .dsp-module-head{margin:0}.eq-workbench .dsp-select{max-width:250px;grid-column:auto}
+.eq-workbench .eq-pill{font-size:12px;white-space:nowrap}.eq-workbench .eq-tools{gap:6px}.eq-workbench .eq-tools .eq-pill{padding:7px 10px}
+.eq-workbench .dsp-profile-save{margin:0}.eq-summary{display:flex;align-items:center;font-size:11px;color:#698079;min-height:20px}
+.eq-readout{position:absolute;right:16px;top:12px;color:var(--eq-readout);font-size:11px;pointer-events:none;font-variant-numeric:tabular-nums}
+.eq-workbench .eq-curve{stroke:none}.eq-workbench .eq-curve text{stroke:none}.eq-workbench .eq-curve rect{stroke:none}
+.eq-workbench .node-ring[data-selected=true]{stroke-width:2;fill:var(--eq-node-halo)}
+.eq-node-glyph{font-size:8px;font-weight:600;fill:var(--eq-node);font-family:inherit}.eq-preamp-row{display:grid;grid-template-columns:70px minmax(0,1fr) 70px;gap:14px}
+.eq-band-editor{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:14px;border-radius:12px;background:#f5f1f4}
+.eq-band-editor>strong{font-size:12px}.eq-band-editor label{display:grid;gap:5px;font-size:10px;color:#8d7785}.eq-band-editor input{max-width:100px;padding:8px;border:1px solid #e9e1e7;border-radius:8px;background:#fff;font:inherit;font-size:12px}
+.eq-band[data-selected=true]{outline:1px solid var(--accent)}.eq-band .eq-pill{background:transparent;padding:0;font-size:10px}.eq-band output{white-space:nowrap}
+.eq-simple{display:grid;gap:16px}.eq-simple label{display:grid;grid-template-columns:50px minmax(0,1fr) 40px;gap:12px;font-size:12px;align-items:center}
+.eq-workbench [hidden]{display:none!important}.dsp-page [aria-busy=true]{cursor:progress}
+@media(max-width:1050px){.dsp-layout{grid-template-columns:145px minmax(0,1fr);gap:12px}.dsp-module{padding:16px}.dsp-safety-route{grid-template-columns:repeat(2,minmax(0,1fr))}.dsp-row{grid-template-columns:110px minmax(0,1fr) 60px;gap:8px}}
+@media(max-width:760px){.dsp-layout{grid-template-columns:1fr}.dsp-nav{display:flex;flex-wrap:wrap}.dsp-nav button{width:auto}.dsp-nav .dsp-nav-label{display:none}.dsp-heading{align-items:center}.dsp-row{grid-template-columns:100px minmax(0,1fr) 55px}}
+@media(prefers-reduced-motion:reduce){.dsp-channel-bias-meter span{transition:none}}
