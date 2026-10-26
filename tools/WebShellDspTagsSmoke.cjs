@@ -58,7 +58,14 @@ const {chromium} = require('playwright');
   assert.equal(nodes[0].r,nodes[1].r,'first node must use the same size as every other band');
   assert.equal(await page.locator('.eq-guide').count(),2,'selected band has native dashed guides');
   assert.equal(await page.locator('.eq-node-frequency').count(),2,'native band frequency labels are visible');
-  assert.ok(Math.abs(nodes[0].x-(52+Math.log2(125/20)/Math.log2(1000)*800))<.01,'first band shares the logarithmic frequency mapping');
+  const vb=(await page.locator('.eq-curve').getAttribute('viewBox')).split(' ').map(Number);
+  assert.ok(Math.abs(nodes[0].x-(52+Math.log2(125/20)/Math.log2(1000)*(vb[2]-60)))<.01,'first band shares the logarithmic frequency mapping');
+  // The native plot is a fixed 300 px tall drawing at 1 unit = 1 CSS px. Widening the window must
+  // not scale the chart, its labels or its nodes — it only reveals more horizontal resolution.
+  const chartBox=await page.locator('.eq-curve').evaluate(n=>{const r=n.getBoundingClientRect();return{w:r.width,h:r.height};});
+  assert.equal(vb[3],300,'EQ chart keeps the native 300 px plot height');
+  assert.ok(Math.abs(chartBox.h-300)<1.5,'EQ chart never stretches vertically');
+  assert.ok(Math.abs(chartBox.w-vb[2])<1.5,'EQ chart draws at 1 unit = 1 CSS px');
   await page.locator('.opra-vendor-grid').getByRole('button').first().click();await page.waitForSelector('.opra-product-list button');await page.locator('.opra-product-list button').first().click();await page.waitForSelector('.opra-preset-list button');await page.locator('.opra-preset-list button').first().click();await page.waitForSelector('.opra-response');assert.equal(await page.locator('.opra-preset-list button').count(),1,'preset choices remain accessible beside preview');
   await page.getByRole('button',{name:'收藏曲线',exact:true}).last().click();await page.waitForSelector('.opra-preset-actions button');
   await page.getByRole('button',{name:'应用耳机校正',exact:true}).click();await page.waitForTimeout(80);assert.equal(await page.evaluate(()=>commands.some(c=>c.operation==='opraApply'&&c.eqId==='curve')),true,'headphone correction applies chosen curve through native service');
@@ -75,12 +82,18 @@ const {chromium} = require('playwright');
    for(const width of [1024,760]){await page.setViewportSize({width,height:960});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'DSP '+id+' width '+width);}await page.setViewportSize({width:1440,height:960});
    if(['headroom','src','channel','fir','safety'].includes(id))await page.screenshot({path:path.join(__dirname,`../outputs/web-dsp-${id}-preview.png`)});
   }
-  const limiter=page.getByRole('button',{name:'安全限制器',exact:true});
-  await limiter.click();await page.waitForTimeout(60);
-  assert.equal(await limiter.getAttribute('aria-pressed'),'false');
+  // The limiter switch lives in the headroom module, but ECHO exposes it on the safety page as an
+  // explicit enable/disable pair. Both paths must still write through setControl on headroom.
+  await page.locator('[data-module="safety"]').click();await page.waitForTimeout(150);
+  const limiterOn=page.getByRole('button',{name:'开启限制器',exact:true}),limiterOff=page.getByRole('button',{name:'停用限制器',exact:true});
+  assert.equal(await limiterOn.getAttribute('data-active'),'true','safety reflects the enabled limiter from headroom');
+  await limiterOff.click();await page.waitForTimeout(80);
   assert.equal(await page.evaluate(()=>commands.findLast(c=>c.operation==='setControl').module),'headroom','safety writes through the headroom module');
-  await page.evaluate(()=>window.failDspWrites=true);await limiter.click();await page.waitForTimeout(60);
-  assert.equal(await limiter.getAttribute('aria-pressed'),'false','failed write keeps actual limiter state');
+  assert.equal(await page.evaluate(()=>commands.findLast(c=>c.operation==='setControl').value),false,'disabling sends the native off value');
+  assert.equal(await limiterOff.getAttribute('data-active'),'true','safety follows the written limiter state');
+  assert.equal(await page.locator('.dsp-safety-limiter-note').isVisible(),true,'clipping warning appears while the limiter is off');
+  await page.evaluate(()=>window.failDspWrites=true);await limiterOn.click();await page.waitForTimeout(120);
+  assert.equal(await limiterOff.getAttribute('data-active'),'true','failed write keeps the actual limiter state');
   await page.evaluate(()=>window.failDspWrites=false);
   await page.locator('[data-module="headroom"]').click();await page.waitForTimeout(80);
   assert.match(await page.locator('.dsp-module-metric strong').first().textContent(),/^-3.0 dB$/,'headroom retains native attenuation sign');
@@ -92,6 +105,16 @@ const {chromium} = require('playwright');
   assert.match(await page.locator('.dsp-channel-bias-head strong').textContent(),/偏右/);
   for(const width of [1440,1024,760]){await page.setViewportSize({width,height:960});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'DSP viewport '+width);}
   await page.setViewportSize({width:1440,height:960});await page.locator('[data-module="eq"]').click();await page.waitForTimeout(180);await page.screenshot({path:path.join(__dirname,'../outputs/web-dsp-eq-preview.png')});
+  // Same page on a much wider window: the plot gets more horizontal resolution, nothing else scales.
+  const narrow=await page.locator('.eq-curve').evaluate(n=>{const r=n.getBoundingClientRect();return{w:r.width,h:r.height};});
+  const radiusBefore=await page.locator('.eq-curve .node-ring').first().getAttribute('r');
+  await page.setViewportSize({width:1920,height:960});await page.waitForTimeout(200);
+  const wide=await page.locator('.eq-curve').evaluate(n=>{const r=n.getBoundingClientRect();return{w:r.width,h:r.height};});
+  assert.ok(wide.w>narrow.w,'EQ plot uses the extra width');
+  assert.ok(Math.abs(wide.h-300)<1.5,'EQ plot height stays fixed when the window widens');
+  assert.equal(await page.locator('.eq-curve .node-ring').first().getAttribute('r'),radiusBefore,'band nodes keep their pixel size');
+  await page.screenshot({path:path.join(__dirname,'../outputs/web-dsp-eq-preview-wide.png')});await page.setViewportSize({width:1440,height:960});
+  await page.locator('[data-module="eq"]').click();await page.waitForTimeout(120);
   await page.evaluate(()=>CelesteShell.navigate('tags'));await page.waitForTimeout(180);
   assert.equal(await page.locator('.tag-table tbody tr').count(),0,'tag workspace starts empty');
   assert.equal(await page.evaluate(()=>commands.filter(c=>c.command==='tags'&&['read','list'].includes(c.operation)).length),0,'opening tags does not read library or music files');

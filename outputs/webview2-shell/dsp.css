@@ -5,17 +5,10 @@
 .dsp-heading h1{font-size:clamp(24px,2.4vw,32px)}
 .dsp-rack-toggle{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:19px;background:#f4eff2;font-size:11px;color:#8d7785;white-space:nowrap}
 .dsp-rack-toggle[aria-pressed=true]{background:var(--accent);color:#fff}
-.dsp-layout{display:grid;grid-template-columns:172px minmax(0,1fr);gap:20px;align-items:start}
-.dsp-nav{display:grid;gap:4px;padding:8px;border-radius:19px;background:#faf7f9;border:1px solid #f1e9ee}
-.dsp-nav button{display:flex;align-items:center;gap:9px;width:100%;padding:10px 12px;border-radius:13px;text-align:left;font-size:12px;color:#88737f}
-.dsp-nav button:hover{background:#f6eaef;color:var(--accent)}
-.dsp-nav button[aria-current=true]{background:#f9e4eb;color:var(--accent);font-weight:600}
-.dsp-nav button .dsp-nav-dot{width:6px;height:6px;border-radius:50%;background:#d8c8d2;flex:0 0 6px}
-/* Green = this module is really processing right now, same meaning as the native nav dots. */
-.dsp-nav button[data-active=true] .dsp-nav-dot{background:#4b9c6e}
-.dsp-nav button[aria-current=true] .dsp-nav-dot{background:var(--accent)}
-.dsp-nav button[aria-current=true][data-active=true] .dsp-nav-dot{background:#4b9c6e}
-.dsp-nav button[data-bypassed=true] .dsp-nav-dot{background:#e2ced7}
+.dsp-layout{display:grid;grid-template-columns:236px minmax(0,1fr);gap:20px;align-items:start}
+.dsp-nav{display:grid;gap:2px;padding:8px;border-radius:19px;background:#faf7f9;border:1px solid #f1e9ee}
+/* Item look comes from .dsp-chain-item in dsp-echo.css (ECHO rail). The container only
+   positions. The old dot nav is gone — the chain state icon carries the same meaning. */
 .dsp-nav .dsp-nav-label{font-size:10px;font-weight:600;letter-spacing:.3px;color:#b09ba8;padding:13px 12px 5px}
 
 .dsp-module{border-radius:21px;background:#fdfafb;border:1px solid #f1e9ee;padding:22px}
@@ -65,7 +58,9 @@
   --eq-stop-1:#264A63;--eq-stop-2:#2E7168;--eq-stop-3:#8A6235;
   --eq-fill-top:rgba(46,113,104,0.18);--eq-fill-bottom:rgba(46,113,104,0.02);
   --eq-node:#9dc3d8;--eq-node-halo:rgba(157,195,216,0.14);--eq-node-dot:#ffffff;--eq-readout:#ffffff}
-.eq-curve{display:block;width:100%;height:auto;touch-action:none}
+/* Fixed height + 1:1 viewBox (see dsp-eq.js measure()): the chart no longer grows with the
+   window, so tick labels, node rings and stroke widths keep their native size. */
+.eq-curve{display:block;width:100%;height:300px;touch-action:none}
 .eq-curve .grid-line{stroke:var(--eq-grid);stroke-width:1}
 .eq-curve .grid-zero{stroke:var(--eq-grid-strong);stroke-width:1.4}
 .eq-curve .tick-label{fill:var(--eq-label);font-size:10px;font-family:inherit}
@@ -76,7 +71,9 @@
 .eq-curve .readout{fill:var(--eq-readout);font-size:11px;font-family:inherit}
 .eq-curve .readout-sub{fill:var(--eq-readout);opacity:.72;font-size:10px;font-family:inherit}
 
-.eq-bands{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,1fr));gap:12px}
+/* Band cells keep a native-scale size; extra width becomes breathing room instead of
+   growing every slider into a 300px-wide plank. */
+.eq-bands{display:grid;grid-template-columns:repeat(auto-fit,minmax(74px,96px));gap:12px;justify-content:start}
 .eq-band{display:grid;gap:7px;justify-items:center;padding:12px 8px;border-radius:15px;background:#faf7f9}
 .eq-band label{font-size:10px;color:#a093a0;font-variant-numeric:tabular-nums}
 .eq-band input[type=range]{width:100%}
@@ -102,14 +99,17 @@
 .eq-pill.danger{color:#a4485c}
 .eq-pill.danger:hover{background:#fbe6ec}
 
-/* ---- 机架编排 ---- */
-.dsp-rack-list{display:grid;gap:8px}
-.dsp-rack-row{display:grid;grid-template-columns:26px minmax(0,1fr) auto;align-items:center;gap:12px;padding:11px 14px;border-radius:15px;background:#faf7f9;border:1px solid #f3ebf0}
+/* ---- 机架编排（ECHO DspRackPanel 的列表骨架；面板外观在 dsp-echo.css） ---- */
+.dsp-rack-list{list-style:none;margin:0;padding:0;display:grid;gap:8px}
+.dsp-rack-list li{display:grid;grid-template-columns:18px 30px minmax(0,1fr) auto;align-items:center;gap:12px;padding:11px 14px;border-radius:15px;background:#faf7f9;border:1px solid #f3ebf0}
+.dsp-rack-grip{color:#c9bac5;display:grid;place-items:center}
 .dsp-rack-index{font-size:11px;color:#b09ba8;font-variant-numeric:tabular-nums;text-align:center}
-.dsp-rack-name{font-size:12.5px;color:#5f4d5a;font-weight:600}
-.dsp-rack-hint{font-size:10px;line-height:1.7;color:#a89ca5;margin-top:3px}
+.dsp-rack-list li>div{display:grid;gap:3px;min-width:0}
+.dsp-rack-list li>div.dsp-rack-buttons{display:flex;gap:5px;grid-template-columns:none}
+.dsp-rack-list li strong{font-size:12.5px;color:#5f4d5a;font-weight:600}
+.dsp-rack-list li small{font-size:10px;line-height:1.7;color:#a89ca5}
 .dsp-rack-buttons{display:flex;gap:5px}
-.dsp-rack-move{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;background:#f4eff2;color:#8d7785}
+.dsp-rack-move{width:28px;height:28px;border-radius:10px;display:grid;place-items:center;background:#f4eff2;color:#8d7785;border:0;cursor:pointer}
 .dsp-rack-move:hover:not(:disabled){background:#f9e4eb;color:var(--accent)}
 .dsp-rack-move:disabled{opacity:.3;cursor:default}
 .dsp-rack-move svg{width:13px;height:13px}
@@ -139,6 +139,4 @@
 .dsp-chain-value[data-state=ok]{color:#3f7d5a}
 .dsp-chain-value[data-state=warn]{color:#8d7785}
 
-/* Narrow layout turns the nav into one horizontal strip. Group headings have no place in a strip,
-   so they are hidden rather than laid out as empty columns. */
-@media(max-width:980px){.dsp-layout{grid-template-columns:1fr}.dsp-nav{grid-auto-flow:column;grid-auto-columns:max-content;overflow-x:auto}.dsp-nav .dsp-nav-label{display:none}}
+/* Narrow layout rules live at the end of dsp-echo.css (nav becomes a horizontal strip). */

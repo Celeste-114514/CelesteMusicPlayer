@@ -140,3 +140,27 @@ python _wb_hash_manifest.py <目录>                      # 重新生成哈希�
 | `e8304dd` | 工作日记 10-18/10-19/10-23/10-26 + 项目记忆中的网页外壳关键事实 |
 
 未入库的仍是缓存与临时探针（`dist/`、`_binbak_*`、`_bin_verify/`、`_xc_*.txt`、`.reasonix/`、9 月的历史 handoff 文档等）。
+
+### 7. 追加：DSP 可视化按 ECHO 补齐 + EQ 曲线固定像素（2026-10-26 晚）
+
+**起因**：用户指出 DSP 各板块可视化元素缺失（除 EQ 外要照 ECHO），以及 EQ 曲线随窗口拉宽而放大。
+
+**EQ 几何修复（`dsp-eq.js` / `dsp.css`）**：
+- 原 SVG 是固定 860×300 viewBox 被 CSS 拉伸到容器宽 → 文字、节点、描边全部跟着放大。
+- 改为 1 用户单位 = 1 CSS 像素：宽度跟随容器实测（`ResizeObserver` + `MIN_W=420` 下限），高度恒 300，轴文字与节点不再随窗口缩放。
+- 底部频段卡片 `eq-bands` 限宽（最小 74px、最大 96px）居中，不再被拉宽。
+- 冒烟脚本新增断言：viewBox 高恒 300、图表渲染尺寸与 viewBox 1:1、1920 宽下高度不变且节点半径不变。
+
+**ECHO 可视化补齐（`dsp-visuals.js` / `dsp.js` / `dsp-echo.css` / `dsp.css`）**：
+- 8 个可视化模块（headroom/fir/channel/src/comp/stereo/matrix/rg）重写为 ECHO 面板结构：状态卡、指标行、预算条、模式卡、建议下一步、安全徽章、路线图、SRC 计算卡、压缩器增益衰减表+刻度条、2×2 矩阵路由图、声场宽度条、RG 预增益条。
+- 左侧导航改为 ECHO 链条样式：图标圆 + 名称 + 一句说明 + 启用勾；顶部新增输出卡（DSP 状态 + 实时采样率链路）。
+- 新增页面顶部 8 节点管线图（输入→余量→SRC→EQ→压缩→声道→卷积→输出，实时标注 旁路/参与）与焦点条（当前模块 / 状态 / 直通状态 / 刷新）。
+- 机架编排页改为 ECHO 面板（抓握把手 + 序号 + 上移/下移按钮 + 固定页脚）；输出安全页重写为 ECHO hero + 4 路线卡 + 检查列（五张模块参与卡 + 电平表 + 统计 + 链路）+ 建议栏（限制器 开/停 用按钮对，写穿 headroom 模块）。
+- 控件归属表 `VISUAL_OWNED`：headroom 双控件、fir 三控件、comp 双控件、rg 模式卡、channel 四开关由可视化面板接管，通用控件表不再重复渲染（两侧永不跑偏：可视化层仍直接读写原生控件值）。
+
+**验证**：
+- `node tools/WebShellDspTagsSmoke.cjs` → PASS（12 DSP 页 + 全宽 1024/760 无横向溢出 + 限制器按钮对/写穿/失败保持 + EQ 1:1 几何 + 1920 宽不缩放）。
+- Playwright 逐模块截图（`outputs/_v-*.png`）人工过目 11 页无破版、无溢出。
+- 交付目录 `dist/web-shell-dsp-tags-complete/WebShell/` 已同步 5 个改动文件，哈希清单重新生成（363 项）。
+
+**本次入库**：`outputs/webview2-shell/{dsp.js,dsp-eq.js,dsp-visuals.js,dsp-echo.css,dsp.css}` + `tools/WebShellDspTagsSmoke.cjs` + 页面预览截图。

@@ -84,29 +84,61 @@
   heading.append(rackToggle);
   page.append(heading);
 
+  // ECHO DspPage: a read-only pipeline map of the signal path plus a focus strip naming the open
+  // module. Both read the same state as the nav dots and the editor, so nothing can drift.
+  const pipeline = node('div', undefined, 'dsp-pipeline-map');
+  pipeline.setAttribute('aria-label', '信号管线条');
+  const pipelineCells = new Map();
+  [['input', '输入'], ['headroom', '余量'], ['src', 'SRC'], ['eq', 'EQ'], ['comp', '压缩'], ['channel', '声道'], ['fir', '卷积'], ['output', '输出']].forEach(([id, label]) => {
+    const cell = node('span'), value = node('strong', '—');
+    cell.dataset.node = id;
+    cell.append(node('em', label), value);
+    pipeline.append(cell);
+    pipelineCells.set(id, { cell, value });
+  });
+  page.append(pipeline);
+
+  const focus = node('div', undefined, 'dsp-focus-strip');
+  const focusModule = node('strong', '—'), focusState = node('strong', '—'), focusBit = node('strong', '—');
+  const focusCell = (label, valueNode) => { const cell = node('span'); cell.append(node('em', label), valueNode); return cell; };
+  const focusRefresh = node('button', '刷新');
+  focusRefresh.addEventListener('click', () => { refreshModuleDots(); renderModule(); });
+  focus.append(focusCell('当前模块', focusModule), focusCell('模块状态', focusState), focusCell('直通状态', focusBit), focusRefresh);
+  page.append(focus);
+
   const layout = node('div', undefined, 'dsp-layout');
   const nav = node('aside', undefined, 'dsp-nav');
   const body = node('div', undefined, 'dsp-module');
 
   // Mirrors MainWindow.DspNav.cs:124-140 — same 12 entries, same order, same group names.
-  // The first two carry an empty group on purpose: the native page also renders them above the
-  // first group heading. `ready` marks what has a bridge; everything here does now.
+  // `icon`/`desc`/`accent` drive the ECHO chain-item rail (DspPage.tsx 6218-6255); accents reuse
+  // ECHO's four-colour palette. `ready` marks what has a bridge; everything here does now.
   const MODULES = [
-    { id: 'profiles', name: '听音方案', group: '', ready: true },
-    { id: 'rack', name: 'DSP 机架编排', group: '', ready: true },
-    { id: 'headroom', name: '输入余量', group: '输入', ready: true },
-    { id: 'rg', name: '响度 · ReplayGain', group: '输入', ready: true },
-    { id: 'src', name: 'SRC / 升频', group: '采样率', ready: true },
-    { id: 'eq', name: '参数 EQ', group: '塑形', ready: true },
-    { id: 'comp', name: '动态压缩器', group: '塑形', ready: true },
-    { id: 'channel', name: '声道工具', group: '声道', ready: true },
-    { id: 'stereo', name: '立体声场', group: '声道', ready: true },
-    { id: 'matrix', name: '声道矩阵', group: '声道', ready: true },
-    { id: 'fir', name: 'FIR / 房间校正', group: '空间', ready: true },
-    { id: 'safety', name: '输出安全', group: '输出安全', ready: true }
+    { id: 'profiles', name: '听音方案', group: '', ready: true, icon: 'file', desc: '把整套设置存成命名快照', accent: 'blue' },
+    { id: 'rack', name: 'DSP 机架编排', group: '', ready: true, icon: 'route', desc: '调整模块的处理顺序', accent: 'blue' },
+    { id: 'headroom', name: '输入余量', group: '输入', ready: true, icon: 'shield', desc: '进入处理链前先留余量', accent: 'amber' },
+    { id: 'rg', name: '响度 · ReplayGain', group: '输入', ready: true, icon: 'gauge', desc: '按响度标签自动补偿音量', accent: 'violet' },
+    { id: 'src', name: 'SRC / 升频', group: '采样率', ready: true, icon: 'cpu', desc: '重采样到声卡支持的速率', accent: 'blue' },
+    { id: 'eq', name: '参数 EQ', group: '塑形', ready: true, icon: 'sliders', desc: '参数均衡，塑形音色', accent: 'violet' },
+    { id: 'comp', name: '动态压缩器', group: '塑形', ready: true, icon: 'activity', desc: '压缩动态，压住过载', accent: 'amber' },
+    { id: 'channel', name: '声道工具', group: '声道', ready: true, icon: 'speaker', desc: '平衡、反相、延迟与串扰', accent: 'blue' },
+    { id: 'stereo', name: '立体声场', group: '声道', ready: true, icon: 'waves', desc: '调整声场宽度与中侧配比', accent: 'violet' },
+    { id: 'matrix', name: '声道矩阵', group: '声道', ready: true, icon: 'layers', desc: '四路系数决定左右混音', accent: 'blue' },
+    { id: 'fir', name: 'FIR / 房间校正', group: '空间', ready: true, icon: 'target', desc: '脉冲响应做房间与耳机校正', accent: 'green' },
+    { id: 'safety', name: '输出安全', group: '输出安全', ready: true, icon: 'shield', desc: '实时电平、削波与保护状态', accent: 'green' }
   ];
   let current = 'eq';
   let disposeEq = null, moduleEpoch = 0, moduleVisual = null, telemetryBusy = false;
+
+  // Controls the ECHO visual layer already renders as its own card / button group. Listing them
+  // here keeps one writer per parameter: the generic row would otherwise duplicate the slider.
+  const VISUAL_OWNED = {
+    headroom: ['AudioFxSafetyHeadroomSlider', 'AudioFxSafetyLimiterToggle'],
+    fir: ['RoomTrimSlider', 'RoomIrGainSlider', 'RoomIrEnabledToggle'],
+    comp: ['DspCompToggle', 'DspCompPeakToggle'],
+    rg: ['AudioFxRgModeCombo'],
+    channel: ['AudioFxChannelMonoCombo', 'AudioFxChannelSwapToggle', 'AudioFxChannelInvertLToggle', 'AudioFxChannelInvertRToggle']
+  };
 
   // ---- generic module renderer ------------------------------------------------------------
   // Every non-EQ module is a set of native controls, and the bridge hands back that set in page
@@ -304,6 +336,7 @@
       const powerName = (result.controls || []).find(c => /^DspPower/.test(c.name));
       (result.controls || []).forEach(control => {
         if (id==='src' && ['SrcRateCombo','SrcQualityCombo','SrcDitherCombo'].includes(control.name)) return;
+        if ((VISUAL_OWNED[id] || []).includes(control.name)) return;
         if (powerName && control === powerName) return;   // rendered in the header instead
         controlRow(control).forEach(row => group.append(row));
       });
@@ -327,16 +360,49 @@
     });
   }
 
+  // Pipeline map + focus strip write-through helpers. `moduleMap` and `lastLevels` are the two
+  // snapshots the bridge already hands out, so these two never issue their own requests.
+  let moduleMap = {}, lastLevels = null;
+  function paintPipeline() {
+    pipelineCells.forEach(({ cell, value }, id) => {
+      cell.dataset.selected = String(id === current);
+      if (id === 'input' || id === 'output') return;
+      const on = !!moduleMap[id];
+      cell.dataset.active = String(on);
+      value.textContent = on ? '参与' : '旁路';
+    });
+    const input = pipelineCells.get('input'), output = pipelineCells.get('output');
+    input.cell.dataset.active = 'true';
+    if (!lastLevels) return;
+    const chain = String(lastLevels.chain || '');
+    input.value.textContent = chain ? (chain.split('→')[0] || '').trim() || '—' : '—';
+    const peak = lastLevels.session ? Number(lastLevels.peakDb) : NaN;
+    output.value.textContent = Number.isFinite(peak) ? peak.toFixed(1) + ' dB' : (lastLevels.session ? '—' : '未播放');
+    output.cell.dataset.risk = String(lastLevels.overload === 'clip');
+    output.cell.dataset.active = String(!!lastLevels.session);
+  }
+  function paintFocus() {
+    const entry = MODULES.find(m => m.id === current);
+    focusModule.textContent = entry ? entry.name : current;
+    focusState.textContent = current === 'rack' ? '可编排' : current === 'profiles' ? '可保存' : (moduleMap[current] ? '已启用' : '已旁路');
+    focusBit.textContent = lastLevels ? (lastLevels.bypass ? '总旁路中' : (lastLevels.bitPerfect ? '直通' : 'DSP 链路')) : '—';
+    // ECHO output card in the rail: only what the levels poll really supplies.
+    outputValue.textContent = lastLevels ? (lastLevels.bypass ? '总旁路' : (lastLevels.bitPerfect ? '直通' : 'DSP 处理中')) : '—';
+    outputChain.textContent = lastLevels ? (lastLevels.chain || '—') : '未播放';
+  }
+
   // Nav dots show which modules are actually processing, same meaning as the native dots.
   async function refreshModuleDots() {
     if (!live) return;
     try {
       const result = await dsp('modules');
       const map = result.modules || {};
+      moduleMap = map;
       MODULES.forEach(m => {
         const b = nav.querySelector(`[data-module="${m.id}"]`);
-        if (b) b.dataset.active = String(!!map[m.id]);
+        if (b) b.dataset.active = String(m.id === 'rack' || !!map[m.id]);
       });
+      paintPipeline(); paintFocus();
     } catch { /* dots are decoration; never block the page on them */ }
   }
 
@@ -347,6 +413,7 @@
     body.replaceChildren();
     ensureLevelPoll(true);
     MODULES.forEach(m => { const b = nav.querySelector(`[data-module="${m.id}"]`); if (b) b.setAttribute('aria-current', String(m.id === current)); });
+    paintPipeline(); paintFocus();
     if (current === 'profiles') { renderProfiles(); return; }
     if (current === 'rack') { renderRack(); return; }
     if (current === 'safety') { renderSafety(); return; }
@@ -441,6 +508,8 @@
   }
 
   // ---- 机架编排 ---------------------------------------------------------------------------
+  // ECHO DspRackPanel: a panel with a header row, then an ordered list where each entry carries
+  // a grip, a zero-padded position, the module copy and its two move buttons.
   function renderRack() {
     if (!live) { body.append(moduleHead('rack'), node('p', '请在桌面播放器中使用这个页面。', 'dsp-row-hint')); return; }
 
@@ -450,28 +519,40 @@
       try { await dsp('rackReset'); renderModule(); }
       catch (error) { shell.notify(error.message || '恢复失败。'); reset.disabled = false; }
     });
-    body.append(moduleHead('rack', reset));
-    body.append(node('p', '越靠上的模块越先处理。改一次顺序会立刻重排内核链路，声音变化马上能听到。', 'dsp-row-hint'));
 
-    const list = node('div', undefined, 'dsp-rack-list');
+    const panel = node('section', undefined, 'dsp-module-panel dsp-module-panel--rack');
+    const header = node('header', undefined, 'dsp-rack-header');
+    const headerCopy = node('div');
+    headerCopy.append(node('span', 'Native DSP Rack', 'dsp-kicker'), node('h2', '编排实际处理顺序'), node('p', '越靠上的模块越先处理。改一次顺序会立刻重排内核链路，声音变化马上能听到。'));
+    const headerActions = node('div', undefined, 'dsp-rack-actions');
+    headerActions.append(reset);
+    header.append(headerCopy, headerActions);
+    panel.append(header);
+
+    const list = node('ol', undefined, 'dsp-rack-list');
     list.append(node('p', '读取中…', 'dsp-row-hint'));
-    body.append(list);
+    panel.append(list);
+    const foot = node('footer', undefined, 'dsp-rack-fixed');
+    panel.append(foot);
+    body.append(panel);
 
     dsp('rack').then(result => {
       if (current !== 'rack') return;
       list.replaceChildren();
       const modules = result.modules || [];
       modules.forEach(module => {
-        const row = node('div', undefined, 'dsp-rack-row');
-        row.append(node('span', String(module.index + 1), 'dsp-rack-index'));
-        const info = node('div', undefined, 'dsp-rack-info');
-        info.append(node('div', module.name, 'dsp-rack-name'));
-        if (module.hint) info.append(node('p', module.hint, 'dsp-rack-hint'));
+        const row = node('li');
+        const grip = node('span', undefined, 'dsp-rack-grip');
+        grip.append(glyph('grip', 15));
+        row.append(grip, node('span', String(module.index + 1).padStart(2, '0'), 'dsp-rack-index'));
+        const info = node('div');
+        info.append(node('strong', module.name));
+        if (module.hint) info.append(node('small', module.hint));
         row.append(info);
 
-        const move = (delta, label, glyph) => {
+        const move = (delta, label) => {
           const button = node('button', undefined, 'dsp-rack-move');
-          button.append(icon(glyph));
+          button.append(icon('#i-chevron'));
           button.title = label;
           button.setAttribute('aria-label', label);
           button.disabled = module.index + delta < 0 || module.index + delta >= modules.length;
@@ -485,17 +566,19 @@
         const buttons = node('div', undefined, 'dsp-rack-buttons');
         // Chevron is a single glyph pointing right in the icon set; rotate it for up/down instead
         // of inventing a second asset.
-        const up = move(-1, '上移', '#i-chevron');
+        const up = move(-1, '上移');
         up.classList.add('up');
-        const down = move(1, '下移', '#i-chevron');
+        const down = move(1, '下移');
         down.classList.add('down');
         buttons.append(up, down);
         row.append(buttons);
         list.append(row);
       });
 
-      if (result.isDefault) body.append(node('p', '当前是默认顺序（EQ → 卷积 → ReplayGain → 压缩 → Crossfeed → 声场 → 矩阵 → 平衡）。', 'eq-hint'));
-      else body.append(node('p', '当前是自定义顺序。这份顺序会跟着「听音方案」一起保存。', 'eq-hint'));
+      foot.replaceChildren();
+      const fixed = node('div');
+      fixed.append(node('span', result.isDefault ? '默认顺序' : '自定义顺序'), node('small', result.isDefault ? 'EQ → 卷积 → ReplayGain → 压缩 → Crossfeed → 声场 → 矩阵 → 平衡' : '这份顺序会跟着「听音方案」一起保存。'));
+      foot.append(fixed);
     }).catch(error => {
       list.replaceChildren(node('p', error.message || '读取机架失败。', 'dsp-row-hint'));
     });
@@ -540,19 +623,70 @@
       catch (error) { shell.notify(error.message || '重置失败。'); }
     });
     body.append(moduleHead('safety', reset));
+
+    // ECHO OutputSafetyPanel: hero → route → checks + next action, all fed by the levels poll.
+    const panel = node('section', undefined, 'dsp-module-panel dsp-module-panel--safety');
+    const hero = node('div', undefined, 'dsp-safety-hero');
+    const emblem = node('div', undefined, 'dsp-safety-emblem');
+    emblem.append(glyph('shield', 26));
+    const heroText = node('div');
+    const heroTitle = node('h2', '正在读取输出状态');
+    const heroDetail = node('p', '播放后显示当前电平与保护状态。');
+    heroText.append(heroTitle, heroDetail);
+    hero.append(emblem, heroText);
+    panel.append(hero);
+
     const route = node('div', undefined, 'dsp-safety-route');
-    const routeValues = ['DSP 状态','输出峰值','限制器','削波次数'].map(label => { const cell=node('span'), value=node('strong','—');cell.append(node('em',label),value);route.append(cell);return value; });
-    body.append(route);
-    const limiter = node('button','安全限制器','eq-pill');
-    limiter.disabled = true;
-    dsp('module',{module:'headroom'}).then(result=>{const control=(result.controls||[]).find(c=>c.name==='AudioFxSafetyLimiterToggle');if(!control||current!=='safety'||!limiter.isConnected)return;limiter.disabled=!control.enabled;limiter.setAttribute('aria-pressed',String(!!control.value));routeValues[2].textContent=control.value?'开启':'关闭';}).catch(error=>{if(limiter.isConnected)shell.notify(error.message);});
-    limiter.addEventListener('click',async()=>{const next=limiter.getAttribute('aria-pressed')!=='true';limiter.disabled=true;try{const result=await pushControl('AudioFxSafetyLimiterToggle',{value:next},'headroom');if(result===false||!limiter.isConnected)return;limiter.setAttribute('aria-pressed',String(next));routeValues[2].textContent=next?'开启':'关闭';}finally{limiter.disabled=false;}});body.append(limiter);
+    const routeValues = [['DSP 状态', 'activity'], ['输出峰值', 'wave'], ['限制器', 'shield'], ['削波次数', 'zap']].map(([label, ico]) => {
+      const cell = node('span'), value = node('strong', '—');
+      cell.append(glyph(ico, 16), node('em', label), value);
+      route.append(cell);
+      return value;
+    });
+    panel.append(route);
+
+    // The limiter switch really lives in the headroom module; expose it here as ECHO's
+    // enable/disable pair and keep the route cell honest through the same state.
+    let limiterEnabled = null, limiterUsable = true;
+    const limiterActions = node('div', undefined, 'dsp-module-actions');
+    const mkLimiter = (label, target, ico) => {
+      const b = node('button');
+      b.type = 'button';
+      b.append(glyph(ico, 14), node('span', label));
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        try {
+          const result = await pushControl('AudioFxSafetyLimiterToggle', { value: target }, 'headroom');
+          if (result === false) return;
+          limiterEnabled = target;
+          syncLimiter();
+        } finally { if (b.isConnected) b.disabled = !limiterUsable; }
+      });
+      return b;
+    };
+    const limiterOn = mkLimiter('开启限制器', true, 'shield');
+    const limiterOff = mkLimiter('停用限制器', false, 'zap');
+    limiterActions.append(limiterOn, limiterOff);
+    const limiterNote = node('p', '限制器关闭时，超过满刻度的信号会直接削波。', 'dsp-safety-limiter-note');
+    const syncLimiter = () => {
+      limiterOn.dataset.active = String(limiterEnabled === true);
+      limiterOff.dataset.active = String(limiterEnabled === false);
+      limiterOn.disabled = limiterOff.disabled = !limiterUsable;
+      limiterNote.hidden = limiterEnabled !== false;
+      routeValues[2].textContent = limiterEnabled === null ? '—' : limiterEnabled ? '开启' : '关闭';
+    };
+    dsp('module', { module: 'headroom' }).then(result => {
+      if (current !== 'safety' || !limiterOn.isConnected) return;
+      const control = (result.controls || []).find(c => c.name === 'AudioFxSafetyLimiterToggle');
+      limiterUsable = !control || control.enabled !== false;
+      limiterEnabled = control ? !!control.value : null;
+      syncLimiter();
+    }).catch(error => { if (limiterOn.isConnected) shell.notify(error.message); });
 
     const meters = node('div', undefined, 'dsp-meters');
     const left = meterRow('左声道');
     const right = meterRow('右声道');
     meters.append(left.wrap, right.wrap);
-    body.append(meters);
 
     const stats = node('div', undefined, 'dsp-stats');
     const stat = (label) => {
@@ -567,7 +701,6 @@
     const clipValue = stat('削波次数');
     const stateValue = stat('输出状态');
     const grValue = stat('压缩器衰减');
-    body.append(stats);
 
     const chainBox = node('div', undefined, 'dsp-chain');
     const chainHead = node('p', undefined, 'dsp-chain-label');
@@ -579,13 +712,36 @@
     const activeText = node('span', '—', 'dsp-chain-value');
     activeLabel.append(activeText);
     chainBox.append(chainHead, activeLabel);
-    body.append(chainBox);
 
-    body.append(node('p', '电平来自音频内核。完整输出格式与直通状态以播放器的音频链路信息为准。', 'eq-hint'));
+    const safetyBody = node('div', undefined, 'dsp-safety-body');
+    const checks = node('div', undefined, 'dsp-safety-checks');
+    const sectionHead = node('div', undefined, 'dsp-safety-section-head');
+    const headSpan = node('span');
+    headSpan.append(glyph('waves', 15), node('em', '输出检查'));
+    sectionHead.append(headSpan);
+    const checkMetrics = node('div', undefined, 'dsp-module-metrics dsp-safety-metrics');
+    const check = (label) => {
+      const card = node('span', undefined, 'dsp-module-metric');
+      const value = node('strong', '—');
+      card.append(node('em', label), value);
+      checkMetrics.append(card);
+      return { card, value };
+    };
+    const eqCheck = check('EQ'), srcCheck = check('SRC'), firCheck = check('卷积'), chCheck = check('声道工具'), reasonCheck = check('直通原因');
+    checks.append(sectionHead, checkMetrics, meters, stats, chainBox);
 
-    // ECHO OutputSafetyPanel: hero → route → checks + next action.
-    const panel=node('section',undefined,'dsp-module-panel dsp-module-panel--safety'),hero=node('div',undefined,'dsp-safety-hero'),heroText=node('div'),heroTitle=node('h2','正在读取输出状态'),heroDetail=node('p','播放后显示当前电平与保护状态。'),emblem=node('div',undefined,'dsp-safety-emblem');emblem.append(icon('#i-wave'));heroText.append(heroTitle,heroDetail);hero.append(emblem,heroText);
-    const safetyBody=node('div',undefined,'dsp-safety-body'),checks=node('div',undefined,'dsp-safety-checks'),next=node('aside',undefined,'dsp-safety-next');next.append(node('span','建议下一步'),node('strong','保留输出余量'),node('p','开启限制器，在处理链末端防止过载；有削波记录时降低前级增益。'),limiter);checks.append(meters,stats,chainBox);safetyBody.append(checks,next);panel.append(hero,route,safetyBody);body.append(panel);
+    const next = node('aside', undefined, 'dsp-safety-next');
+    const nextHead = node('span');
+    nextHead.append(glyph('info', 15), node('em', '建议下一步'));
+    const refreshBtn = node('button');
+    refreshBtn.type = 'button';
+    refreshBtn.append(glyph('activity', 14), node('span', '刷新'));
+    refreshBtn.addEventListener('click', () => { refreshModuleDots(); pollLevels(); });
+    next.append(nextHead, node('strong', '保留输出余量'), node('p', '开启限制器，在处理链末端防止过载；有削波记录时降低前级增益。'), limiterActions, limiterNote, refreshBtn);
+    safetyBody.append(checks, next);
+    panel.append(safetyBody);
+    panel.append(node('p', '电平来自音频内核。完整输出格式与直通状态以播放器的音频链路信息为准。', 'dsp-module-note'));
+    body.append(panel);
 
     const setMeter = (meter, peakDb, rmsDb) => {
       meter.bar.style.width = meterPct(peakDb) + '%';
@@ -599,6 +755,13 @@
       routeValues[0].textContent = data.bypass ? '总旁路' : (data.activeDsp?.length ? '正在处理' : '无音效处理');
       routeValues[1].textContent = data.session ? Number(data.peakDb).toFixed(1)+' dBFS' : '未播放';
       routeValues[3].textContent = String(data.clipCount || 0);
+      const on = data.bypass ? [] : (data.activeDsp || []);
+      [[eqCheck,'EQ'],[srcCheck,'SRC'],[firCheck,'FIR'],[chCheck,'声道工具']].forEach(([item,label])=>{
+        const active=on.includes(label);
+        item.value.textContent=active?'参与':'旁路';
+        item.card.dataset.tone=active?'good':undefined;
+      });
+      reasonCheck.value.textContent = data.bypass ? '总旁路开启' : data.bitPerfect ? '无模块参与，bit-perfect' : 'DSP 正在处理信号';
       setMeter(left, Number(data.left?.peak ?? METER_MIN), Number(data.left?.rms ?? METER_MIN));
       setMeter(right, Number(data.right?.peak ?? METER_MIN), Number(data.right?.rms ?? METER_MIN));
 
@@ -625,12 +788,15 @@
     pollLevels();
   }
 
+
   async function pollLevels() {
     if (page.hidden || document.hidden || !live || telemetryBusy) return;
     const epoch = moduleEpoch; telemetryBusy = true;
     try {
       const data = await dsp('levels');
       if (epoch !== moduleEpoch || page.hidden) return;
+      lastLevels = data;
+      paintPipeline(); paintFocus();
       if (current === 'safety') renderSafety.paint?.(data);
       moduleVisual?.telemetry(data);
     } catch { /* a failed poll just leaves the last frame on screen */ }
@@ -638,19 +804,37 @@
   }
 
   // Group heading is emitted lazily: only when the group name changes, so the two top entries
-  // (empty group) get none, exactly like the native nav.
+  // (empty group) get none, exactly like the native nav. Items use ECHO's chain-item geometry:
+  // handle + icon + copy + state, with the state check lit only for modules actually processing.
+  const glyph = window.CelesteDspGlyphs || (() => document.createElement('span'));
+  const outputCard = node('div', undefined, 'dsp-output-card');
+  const outputIcon = node('span', undefined, 'dsp-output-icon');
+  outputIcon.append(glyph('waves', 16));
+  const outputCopy = node('div');
+  const outputValue = node('strong', '—'), outputChain = node('small', '未播放');
+  outputCopy.append(node('span', '输出链路'), outputValue, outputChain);
+  outputCard.append(outputIcon, outputCopy);
   let lastGroup = null;
   MODULES.forEach(m => {
     if (m.group && m.group !== lastGroup) {
-      nav.append(node('div', m.group, 'dsp-nav-label'));
+      nav.append(node('div', m.group, 'dsp-nav-label dsp-chain-stage'));
       lastGroup = m.group;
     }
-    const b = node('button', undefined);
+    const b = node('button', undefined, 'dsp-chain-item');
     b.dataset.module = m.id;
-    b.append(node('span', undefined, 'dsp-nav-dot'), node('span', m.name));
+    b.dataset.accent = m.accent || 'blue';
+    const ico = node('span', undefined, 'dsp-chain-icon');
+    ico.append(glyph(m.icon, 17));
+    const copy = node('span', undefined, 'dsp-chain-copy');
+    copy.append(node('strong', m.name), node('small', m.desc));
+    const state = node('span', undefined, 'dsp-chain-state');
+    state.append(glyph('check', 14));
+    if (m.id === 'rack') state.classList.add('always');
+    b.append(node('span', undefined, 'dsp-chain-handle'), ico, copy, state);
     b.addEventListener('click', () => { current = m.id; renderModule(); });
     nav.append(b);
   });
+  nav.prepend(outputCard);
 
   layout.append(nav, body);
   page.append(layout);

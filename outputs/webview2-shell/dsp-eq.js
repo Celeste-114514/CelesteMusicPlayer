@@ -1,7 +1,12 @@
 /* Native Celeste EQ: MainWindow.EqDsp.cs geometry, palette, response and editing semantics. */
 (() => {
   'use strict';
-  const NS = 'http://www.w3.org/2000/svg', W = 860, H = 300, L = 52, R = 8, T = 14, B = 30, PW = W - L - R, PH = H - T - B;
+  // The native page draws against the control's real pixel size. Keeping the SVG in a fixed
+  // 860x300 viewBox and letting CSS stretch it made the whole chart (text, nodes, strokes)
+  // scale up with the window, which is not what the native EQ does. W/PW therefore follow
+  // the host width at 1 user unit = 1 CSS px, while the height stays pinned at H.
+  const NS = 'http://www.w3.org/2000/svg', H = 300, L = 52, R = 8, T = 14, B = 30, PH = H - T - B, MIN_W = 420;
+  let W = 860, PW = W - L - R;
   const ticks = [32,64,125,250,500,1000,2000,4000,8000,16000], ladders = [12,18,24,36], steps = [3,6,6,12];
   const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
   const el = (tag, text, cls) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n; };
@@ -52,11 +57,14 @@
       state.bands.forEach((b,i)=>{const cell=el('div',undefined,'eq-band');cell.dataset.selected=i===selected;const choose=button(frequencies(b.freq),()=>{selected=i;renderBands();draw();}),input=el('input'),out=el('output',fmt(b.gain));input.type='range';Object.assign(input,{min:-24,max:24,step:.1,value:b.gain});input.setAttribute('aria-label',`${frequencies(b.freq)} 增益`);input.addEventListener('input',()=>{selected=i;b.gain=Number(input.value);out.value=fmt(b.gain);changed();});input.addEventListener('change',()=>{renderBands();save();});cell.append(choose,input,out);bands.append(cell);});
     }
     const x=f=>L+Math.log2(clamp(f,20,20000)/20)/Math.log2(1000)*PW;
+    // Re-fit the viewBox to the real host width. A collapsed/hidden page reports 0 and is
+    // skipped, so switching modules never resets the chart to the minimum width.
+    function measure(){if(stopped)return false;const rect=chart.getBoundingClientRect();if(!rect.width)return false;const next=clamp(Math.round(rect.width),MIN_W,4096);if(Math.abs(next-W)<1)return false;W=next;PW=W-L-R;chart.setAttribute('viewBox',`0 0 ${W} ${H}`);return true;}
     function maxGain(){const peak=Math.max(0,...state.bands.filter(b=>b.enabled).map(b=>Math.abs(b.gain)));return ladders.find(n=>n>=peak+2)||36;}
     const y=(g,m)=>clamp(T+PH/2-g*PH/(2*m),T,T+PH);
     function response(f){return state.bands.reduce((sum,b)=>sum+(b.enabled?bandGainAt(f,b):0),0);}
     function draw(){
-      if(stopped)return;const max=maxGain(),step=steps[ladders.indexOf(max)];chart.replaceChildren();const defs=svg('defs'),gradient=svg('linearGradient',{id:'native-eq-stroke',x1:0,y1:0,x2:1,y2:0}),fill=svg('linearGradient',{id:'native-eq-fill',x1:0,y1:0,x2:0,y2:1});
+      if(stopped)return;measure();const max=maxGain(),step=steps[ladders.indexOf(max)];chart.replaceChildren();const defs=svg('defs'),gradient=svg('linearGradient',{id:'native-eq-stroke',x1:0,y1:0,x2:1,y2:0}),fill=svg('linearGradient',{id:'native-eq-fill',x1:0,y1:0,x2:0,y2:1});
       [0,.55,1].forEach((offset,i)=>gradient.append(svg('stop',{offset,'stop-color':`var(--eq-stop-${i+1})`})));fill.append(svg('stop',{offset:0,'stop-color':'var(--eq-fill-top)'}),svg('stop',{offset:1,'stop-color':'var(--eq-fill-bottom)'}));defs.append(gradient,fill);chart.append(defs);
       if(spectrumOn){const count=spectrum.length;for(let i=0;i<count;i++){const h=clamp(spectrum[i],0,1)*PH*.9;chart.append(svg('rect',{x:L+i*PW/count+1,y:T+PH-h,width:Math.max(1,PW/count-2),height:h,rx:1,fill:'var(--eq-spectrum,rgba(15,118,110,.102))'}));}}
       for(let db=-max;db<=max;db+=step){chart.append(svg('line',{class:db===0?'grid-zero':'grid-line',x1:L,y1:y(db,max),x2:W-R,y2:y(db,max)}));const t=svg('text',{class:'tick-label',x:L-8,y:y(db,max)+4,'text-anchor':'end'});t.textContent=(db>0?'+':'')+db;chart.append(t);}
@@ -77,6 +85,8 @@
     chart.addEventListener('keydown',e=>{const b=state.bands[selected];if(!b)return;if(e.key==='Delete'){if(state.bands.length>1)state.bands.splice(selected,1);selected=clamp(selected,0,state.bands.length-1);}else if(e.key==='ArrowUp'||e.key==='ArrowDown')b.gain=clamp(b.gain+(e.key==='ArrowUp'?1:-1)*(e.shiftKey?.1:.5),-24,24);else if(e.key==='ArrowLeft'||e.key==='ArrowRight')b.freq=clamp(b.freq*2**((e.key==='ArrowRight'?1:-1)/3),20,20000);else return;e.preventDefault();changed();renderBands();save();});
     timer=setInterval(async()=>{if(stopped||document.hidden||!live||!spectrumOn||pollBusy)return;pollBusy=true;try{const data=await request('spectrum');if(stopped)return;spectrum=data.available?data.bands:spectrum.map(v=>v*.8);draw();}catch{}finally{pollBusy=false;}},100);
     const disposeHeadphones=window.CelesteHeadphones.mount(root,{request,onApplied:load,bandGainAt,live});
-    load();return ()=>{if(editing)save();stopped=true;clearInterval(timer);disposeHeadphones();};
+    let resizeObserver=null;
+    if(typeof ResizeObserver==='function'){resizeObserver=new ResizeObserver(()=>{if(!stopped&&measure())draw();});resizeObserver.observe(wrap);}
+    load();return ()=>{if(editing)save();stopped=true;clearInterval(timer);resizeObserver?.disconnect();disposeHeadphones();};
   }};
 })();
