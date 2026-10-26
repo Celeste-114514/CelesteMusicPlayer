@@ -475,6 +475,8 @@
     selectionHooks.length = 0;
     const sub = SUBPAGES.find(s => s.id === currentSub);
     panel.append(node('h2', sub.name));
+    // 面板换页时给一次轻淡变，让人看出"换了一页工具"
+    window.CelesteMotion?.fadeIn(panel, 'list');
 
     if (currentSub === 'quick') { renderQuick(); return; }
     if (currentSub === 'batch') { renderBatch(); return; }

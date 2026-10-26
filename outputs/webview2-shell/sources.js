@@ -108,7 +108,15 @@
       snapshot = await request('list');
       for (const source of snapshot.sources) {
         const status = [...host.querySelectorAll('[data-source-status]')].find(node => node.dataset.sourceStatus === source.id);
-        if (status) status.textContent = statusText(source);
+        if (!status) continue;
+        const text = statusText(source);
+        // 只在内容真的变了的时候才动一下：轮询每 2 秒一次，不该每次都闪
+        if (status.textContent === text) continue;
+        status.textContent = text;
+        status.classList.remove('just-changed');
+        void status.offsetWidth;          // 强制重排，让动画能重播
+        status.classList.add('just-changed');
+        window.CelesteMotion?.fadeIn(status, 'list');
       }
     } catch { /* 主操作显示错误；轮询不打断编辑 */ }
   }

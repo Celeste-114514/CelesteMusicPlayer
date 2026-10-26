@@ -153,6 +153,8 @@
 .type-sample strong{font-weight:600}
 .type-sample span{color:var(--muted);font-family:var(--font-mono),var(--font-cjk),monospace}
 #library-source{max-width:170px;min-width:104px;height:30px;padding:0 26px 0 10px;border:1px solid var(--input-line);border-radius:var(--radius-sm);background:var(--input-bg);color:var(--ink);font:inherit;font-size:12px}
+.network-sources [data-source-status].just-changed{animation:source-status-flash calc(1.2s * var(--motion-scale)) ease}
+@keyframes source-status-flash{0%{color:var(--accent)}100%{color:var(--muted)}}
 .network-sources .set-row>input,.network-sources .set-row>select,.network-sources .settings-card>select{min-width:0;max-width:100%;padding:8px 10px;border:1px solid var(--input-line);border-radius:var(--radius-sm);background:var(--input-bg);color:var(--ink);font:inherit}
 .network-sources label.set-row{align-items:center}
 .network-sources label.set-row>.set-label{flex:1}

@@ -177,6 +177,25 @@ const SNAPSHOT = {
     console.log('categories=' + JSON.stringify(categories));
     assert.ok(categories && categories.length === 6, '分类开关不是 6 个：' + JSON.stringify(categories));
 
+    // ⑨ 列表淡变：容器动、行不动；关掉"列表重排"这一类就不该有动画
+    const fade = await page.evaluate(async () => {
+      const box = document.createElement('div');
+      box.innerHTML = '<p>一</p><p>二</p>';
+      document.body.append(box);
+      window.CelesteMotion.fadeIn(box, 'list');
+      const during = document.getAnimations().length;
+      await new Promise(r => setTimeout(r, 300));
+      window.CelesteMotion.setOff(['list']);
+      const before = document.getAnimations().length;
+      window.CelesteMotion.fadeIn(box, 'list');
+      const after = document.getAnimations().length;
+      window.CelesteMotion.setOff([]);
+      return { during, before, after };
+    });
+    console.log('fade=' + JSON.stringify(fade));
+    assert.ok(fade.during > 0, '列表淡变没动画');
+    assert.equal(fade.after, fade.before, '关掉列表类别后还在动');
+
     assert.deepEqual(errors, [], '页面有 JS 异常：' + errors.join(' / '));
     console.log('MOTION_OK');
   } catch (error) {
