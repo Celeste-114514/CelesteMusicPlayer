@@ -28,12 +28,16 @@ namespace CelesteMusicPlayer
             "ink", "heading", "muted", "on-muted",
             "accent", "accent-strong", "accent-soft", "on-accent",
             "row", "row-hover", "row-active", "chip", "focus",
+            // 底栏底色不在目录里：它由 theme.css 直接引用 --shell，
+            // 否则用户改了外壳色、底栏还留着旧值，看着就是"半截没变"
+            "wave-idle", "wave-played",
             "danger", "success", "warning"
         };
 
         internal static readonly string[] NumNames =
         {
-            "radius", "radius-sm", "blur", "panel-opacity", "sat", "motion-speed", "motion-strength", "density"
+            "radius", "radius-sm", "blur", "panel-opacity", "sat", "motion-speed", "motion-strength", "density",
+            "player-opacity", "player-blur", "cover-radius", "cover-size"
         };
 
         internal const string Light = "light";
@@ -219,6 +223,8 @@ namespace CelesteMusicPlayer
                 ["ink"] = ink, ["heading"] = heading, ["muted"] = muted, ["on-muted"] = dark ? FromHsl(h, sat * 0.5, 0.8) : FromHsl(h, sat * 0.4, 0.45),
                 ["accent"] = accentValue, ["accent-strong"] = accentStrong, ["accent-soft"] = accentSoft, ["on-accent"] = onAccent,
                 ["row"] = row, ["row-hover"] = rowHover, ["row-active"] = rowActive, ["chip"] = chip, ["focus"] = focus,
+                ["wave-idle"] = Mix(dark ? surface : "#ffffff", muted, dark ? 0.5 : 0.28),
+                ["wave-played"] = accentValue,
                 ["danger"] = dark ? "#ff8a80" : "#c0454f", ["success"] = dark ? "#6fd3a8" : "#3f8f6f", ["warning"] = dark ? "#e8b962" : "#b8802a"
             };
         }
@@ -237,7 +243,11 @@ namespace CelesteMusicPlayer
                 ["sat"] = preset.sat.ToString("0.##", CultureInfo.InvariantCulture),
                 ["motion-speed"] = preset.motionSpeed.ToString("0.##", CultureInfo.InvariantCulture),
                 ["motion-strength"] = preset.motionStrength.ToString("0.##", CultureInfo.InvariantCulture),
-                ["density"] = densityScale.ToString("0.##", CultureInfo.InvariantCulture)
+                ["density"] = densityScale.ToString("0.##", CultureInfo.InvariantCulture),
+                ["player-opacity"] = "0.88",   // 与原设计一致：底栏略透，不是全实心
+                ["player-blur"] = "0px",       // 默认不模糊：每帧重绘太费，需要时在设置里开
+                ["cover-radius"] = Math.Max(0, radius * 0.46).ToString("0.##", CultureInfo.InvariantCulture) + "px",
+                ["cover-size"] = "62px"
             };
         }
 

@@ -299,8 +299,18 @@
     });
     editor.append(editSwitch);
     COLORS.forEach(item => editor.append(colorRow(item)));
-    (data.numbers || []).forEach(item => editor.append(numberRow(item)));
+    // 底栏那三个参数单独一组：它们是"某个部件的形状"，跟整站的比例尺不是一回事，
+    // 混在元素细调里用户找不到「播放状态栏到底在哪调」。
+    const isPlayerParam = item => /^player-|^cover-/.test(item.id || '');
+    (data.numbers || []).filter(item => !isPlayerParam(item)).forEach(item => editor.append(numberRow(item)));
     host.append(editor);
+
+    const player = section({
+      title: '底栏（播放状态栏）',
+      note: '底栏底色和上下边框永远跟「工作区外壳」同色（改外壳色它就跟着变），这里调的是它的质感：透多少、要不要毛玻璃、封面多圆。'
+    });
+    (data.numbers || []).filter(isPlayerParam).forEach(item => player.append(numberRow(item)));
+    host.append(player);
 
     // 我的预设
     const mine = section({ title: '我的预设', note: '调好的外观可以存成自己的一套，随时切回来；内置的 24 套不能被覆盖。' });

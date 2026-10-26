@@ -21,6 +21,17 @@
   --row-active:#f9e7ec;
   --chip:#f4eff3;
   --focus:#e84865;
+  /* 底栏（播放状态栏）自己的一支：底色跟外壳走，但可以单独不透明度/模糊/封面圆角 */
+  /* 底栏底色：始终由外壳色派生（比外壳亮一点点，保留原来那层"浮起来"的感觉），
+     不单独存值 —— 否则改了外壳色、底栏还留着旧值，就变成"半截没变"。 */
+  --player-bg:color-mix(in srgb,var(--shell) 88%,var(--surface));
+  --player-opacity:1;
+  --player-blur:0px;
+  --cover-radius:12px;
+  --cover-size:62px;
+  /* 进度波形：未播放段要压得住底，已播放段用强调色 */
+  --wave-idle:#dfd5dc;
+  --wave-played:#e66b96;
   --danger:#c0454f;
   --success:#3f8f6f;
   --warning:#b8802a;
@@ -35,3 +46,8 @@
 }
 /* 动效速度：所有过渡按这个系数缩放，关掉动效时缩到 0 而不是留一个"看起来动了"的假动画 */
 @media(prefers-reduced-motion:reduce){:root{--motion-speed:0;--motion-strength:0}}
+
+/* 深色下把原生控件（滚动条、range 轨道、select、日期选择器）交给系统变暗。
+   这些部件不是我们在画，CSS 变量管不到，只有 color-scheme 能影响。 */
+:root[data-theme="dark"]{color-scheme:dark}
+:root[data-theme="light"]{color-scheme:light}

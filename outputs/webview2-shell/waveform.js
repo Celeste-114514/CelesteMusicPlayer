@@ -2,7 +2,13 @@
   'use strict';
   const shell=window.CelesteShell,canvas=document.getElementById('progress-waveform'),input=document.getElementById('progress'),container=document.getElementById('waveform-seek'),status=document.getElementById('waveform-status');
   const live=typeof window.chrome?.webview?.postMessage==='function',cache=new Map();
-  let trackId='',peaks=[],scheduled=false;
+  let trackId='',peaks=[],scheduled=false,palette=null;
+  // 画布不认 CSS 变量，得自己把当前主题色读出来；主题一变就作废重读
+  function readPalette(){
+    const styles=getComputedStyle(document.documentElement);
+    const pick=(name,fallback)=>{const value=styles.getPropertyValue(name).trim();return value||fallback;};
+    return {idle:pick('--wave-idle',pick('--muted','#dfd5dc')),played:pick('--wave-played',pick('--accent','#e66b96'))};
+  }
   function draw(){
     scheduled=false;const width=container.clientWidth,height=container.clientHeight;if(!width||!height)return;
     const dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
@@ -15,7 +21,7 @@
       const barHeight=peaks.length?Math.max(2,Math.min(1,level)*(height-4)):2;
       context.beginPath();context.roundRect(i*pitch+(pitch-barWidth)/2,(height-barHeight)/2,barWidth,barHeight,Math.min(1.2,barWidth/2));context.fill();
     }};
-    paint('#dfd5dc');context.save();context.beginPath();context.rect(0,0,width*ratio,height);context.clip();paint('#e66b96');context.restore();
+    paint((palette||(palette=readPalette())).idle);context.save();context.beginPath();context.rect(0,0,width*ratio,height);context.clip();paint((palette||(palette=readPalette())).played);context.restore();
   }
   function schedule(){if(!scheduled){scheduled=true;requestAnimationFrame(draw);}}
   function updateTrack(state){
@@ -34,6 +40,8 @@
     }
   });
   input.addEventListener('input',schedule);new ResizeObserver(schedule).observe(container);
+  // 主题（含外观页的草稿预览）一变就重读色板并重画
+  document.addEventListener('celeste:theme-applied',()=>{palette=null;schedule();});
   if(!live){peaks=Array.from({length:120},(_,i)=>.12+.65*Math.abs(Math.sin(i*.23)*Math.cos(i*.067))+.12*Math.abs(Math.sin(i*1.7)));status.textContent='演示波形';setInterval(schedule,250);}
   else updateTrack(shell.getState());
   schedule();

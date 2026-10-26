@@ -35,6 +35,8 @@
     root.dataset.theme = mode || 'light';
     // 一个变量都没写进去就明说，别让用户对着没变化的界面猜
     if (applied === 0 && window.CelesteShell && chosen.css) window.CelesteShell.notify('主题变量没能写进页面，请把这一情况反馈一下。');
+    // 画在 canvas 里的东西（进度波形）拿不到 CSS 变量，得有人告诉它们重画
+    document.dispatchEvent(new CustomEvent('celeste:theme-applied', { detail: { mode: root.dataset.theme } }));
   }
 
   document.addEventListener('celeste:message', event => {
@@ -55,7 +57,10 @@
     apply,
     applyCss,
     /** 草稿预览：直接覆盖根变量，不落盘；点保存才由宿主写入。 */
-    preview(css) { applyCss(css); },
+    preview(css) {
+      applyCss(css);
+      document.dispatchEvent(new CustomEvent('celeste:theme-applied', { detail: { mode: root.dataset.theme, preview: true } }));
+    },
     /** 取消预览：回到宿主当前已保存的那套。 */
     restore() { apply(state.mode); },
     setMode(mode) { apply(mode || state.mode); },

@@ -91,7 +91,10 @@ namespace CelesteMusicPlayer
             WebAppearance.Preset preset = WebAppearance.FindPreset(state.presetId, state) ?? WebAppearance.BuiltIn[0];
             double Get(string key)
             {
-                if (state.overrides.TryGetValue("light:" + key, out string? raw) && double.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed)) return parsed;
+                // 覆盖值里带单位（"70px"），直接 TryParse 会失败 →
+                // 滑杆回弹到预设值，但页面上生效的还是覆盖值，看着就是"滑了没记住"。先剥单位。
+                if (state.overrides.TryGetValue("light:" + key, out string? raw)
+                    && double.TryParse((raw ?? "").Replace("px", "").Trim(), NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed)) return parsed;
                 var numbers = WebAppearance.Numbers(preset);
                 string text = numbers.TryGetValue(key, out string? value) ? value : "";
                 return double.TryParse(text.Replace("px", ""), NumberStyles.Float, CultureInfo.InvariantCulture, out double fallback) ? fallback : 0;
@@ -104,7 +107,12 @@ namespace CelesteMusicPlayer
                 new { id = "sat", label = "饱和度", min = 0.4, max = 1.6, step = 0.05, unit = "×", value = Get("sat") },
                 new { id = "motion-speed", label = "动效速度", min = 0.4, max = 1.6, step = 0.05, unit = "×", value = Get("motion-speed") },
                 new { id = "motion-strength", label = "动效幅度", min = 0, max = 1.6, step = 0.05, unit = "×", value = Get("motion-strength") },
-                new { id = "density", label = "间距密度", min = 0.8, max = 1.25, step = 0.01, unit = "×", value = Get("density") }
+                new { id = "density", label = "间距密度", min = 0.8, max = 1.25, step = 0.01, unit = "×", value = Get("density") },
+                // 底栏单独一组：它要的语义和别处不一样（可以略透、可以毛玻璃、封面圆角自成一档）
+                new { id = "player-opacity", label = "底栏不透明度", min = 0.5, max = 1, step = 0.02, unit = "×", value = Get("player-opacity") },
+                new { id = "player-blur", label = "底栏毛玻璃", min = 0, max = 40, step = 1, unit = "px", value = Get("player-blur") },
+                new { id = "cover-radius", label = "底栏封面圆角", min = 0, max = 27, step = 1, unit = "px", value = Get("cover-radius") },
+                new { id = "cover-size", label = "底栏封面大小", min = 42, max = 88, step = 1, unit = "px", value = Get("cover-size") }
             };
         }
 
