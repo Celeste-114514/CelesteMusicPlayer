@@ -22,6 +22,11 @@ KEY = [
     "WebShell/waveform.js",
     "WebShell/settings.js",
     "WebShell/settings.css",
+    "WebShell/motion.js",
+    "WebShell/motion.css",
+    "WebShell/popup-manager.js",
+    "WebShell/ui-controls.js",
+    "WebShell/ui-controls.css",
 ]
 
 

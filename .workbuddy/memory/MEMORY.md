@@ -35,6 +35,20 @@
 - ⚠ **命令行传文件走「零散播放窗口」**（精简引擎，无完整 DSP 机架），那条路永远测不到 FIR/EQ。
 - OPRA 源 `opra.roonlabs.net`，缓存 `%LOCALAPPDATA%\CelesteMusicPlayer\opra\database_v1.jsonl`（12MB）；
   `tools/OpraOnlineProbe` 可无界面验证。⚠ 沙箱曾把 `WebShellDspTagsSmoke.cjs` 整个清成纯 NUL，改完大文件要查 NUL。
+- **统一控件层与动效控制器（10-27 落地，方案 `collab/RESULT-20261027-webview-controls-motion-plan.md`）**：
+  新增 `ui-controls.js/css`（统一下拉 + 共享模态 + 控件令牌）、`popup-manager.js`（共用浮层）、
+  `motion.js/css`（动效控制器）。计划见 `collab/RESULT-20261027-webview-controls-motion-batch1.md`。
+  - **铁律：下拉一律"原地增强原生 select"** —— 保留原生控件的值/尺寸/位置/读屏/Tab，
+    只接管外框、箭头、焦点圈，展开层用自绘 listbox。
+    **绝不藏起原生控件再插一个兄弟按钮**：grid/flex 会多占一格（标签排序 4 列、DSP `grid-column:2/-1`）。
+  - ⚠ **`ui-controls.css` 必须加载在所有页面样式之后**（index.html 最后一行），否则页面 `background:` 简写清掉箭头图；
+    箭头用 `background-image:...!important` 单独钉住，底色/边框仍归页面。
+  - 同一 select 可能被扫两次（自动挂载 + 模块带参数调用）→ `enhanceSelect` 要**并参数**而不是返回旧的。
+  - **动效速度语义 = 越大越快**；预设里存的是旧「时长倍率」（大=慢），宿主派生时取倒数换算。
+  - 宿主动效偏好 `motionMode/motionSpeed(0.6-1.6)/motionStrength(0-1.25)/motionBounce` **单独存、不随外观预设切换**；
+    外观页「动效」卡改它们走 `theme` 通道的 `motion` 操作（显式传 null = 回到预设）。
+  - `--motion-continuity`/`--motion-fast` 曾经从未定义 → 30 处 transition 整条作废（悬停一直是瞬变），现已补别名。
+  - `file://` 下页面里读 `document.styleSheets[].cssRules` 会抛安全错误 → 扫 CSS 硬编码颜色要在 Node 里读文件。
 
 ## 构建 / 发布
 - **publish 目录是 `CelesteMusicPlayer\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish`**
