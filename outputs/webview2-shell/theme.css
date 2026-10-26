@@ -1,0 +1,37 @@
+/* 主题变量层。默认值 = 现在界面上正在用的值，所以没接主题时外观不会跳。
+   真正的数值由宿主推送的 celeste.theme 快照写入 documentElement 的 style（见 theme.js）。
+   页面 CSS 只消费这些名字 —— 想加可调元素，就在项目里先让对应样式用上变量。 */
+:root{
+  --bg:#eae8e6;              /* 窗口外底色 */
+  --shell:#fcfbfa;           /* 主工作区外壳 */
+  --surface:#fff;            /* 页面/卡片 */
+  --panel:#fbfafb;           /* 次级面板 */
+  --panel-soft:#f7f4f6;      /* 更弱的面板底 */
+  --line:#efedef;
+  --ink:#28282e;
+  --heading:#1f1f24;
+  --muted:#929097;
+  --on-muted:#6f6871;
+  --accent:#e84865;
+  --accent-strong:#d83b58;
+  --accent-soft:#fceef1;
+  --on-accent:#fff;
+  --row:#fff;
+  --row-hover:#fcf3f6;
+  --row-active:#f9e7ec;
+  --chip:#f4eff3;
+  --focus:#e84865;
+  --danger:#c0454f;
+  --success:#3f8f6f;
+  --warning:#b8802a;
+  --radius:26px;
+  --radius-sm:12px;
+  --blur:25px;
+  --panel-opacity:1;
+  --sat:1;
+  --motion-speed:1;
+  --motion-strength:1;
+  --density:1;
+}
+/* 动效速度：所有过渡按这个系数缩放，关掉动效时缩到 0 而不是留一个"看起来动了"的假动画 */
+@media(prefers-reduced-motion:reduce){:root{--motion-speed:0;--motion-strength:0}}

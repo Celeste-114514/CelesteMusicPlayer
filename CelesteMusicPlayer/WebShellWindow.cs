@@ -34,6 +34,7 @@ namespace CelesteMusicPlayer
         private readonly Dictionary<string, string> _queueCoverPaths = new(StringComparer.Ordinal);
         private bool _closed, _ready, _dirty = true, _sending;
         private int _revision;
+        private int _themeRevision = -1;
         private CancellationTokenSource? _waveformCancellation;
         private CancellationTokenSource? _overviewCancellation;
 
@@ -45,7 +46,7 @@ namespace CelesteMusicPlayer
             // Keep a small native title bar for reliable drag/resize and recovery.
             AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 960));
             _timer = DispatcherQueue.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(250);
-            _timer.Tick += (_, _) => { if (_ready) { SendState(); if (_dirty) _ = SendLibraryAsync(); } };
+            _timer.Tick += (_, _) => { if (_ready) { SendState(); SendThemeIfChanged(); if (_dirty) _ = SendLibraryAsync(); } };
             _library = (INotifyCollectionChanged)owner.LibraryTracks;
             _library.CollectionChanged += LibraryChanged;
             root.Loaded += async (_, _) => await InitializeAsync();
@@ -113,6 +114,33 @@ namespace CelesteMusicPlayer
             catch (Exception ex) { StartupLog.WriteException("WebShell.State", ex); }
         }
 
+        /// <summary>主题快照：ready 时立刻给一次，避免网页先白一下再跳主题；之后只在修订号变了才重发。</summary>
+        private void SendTheme()
+        {
+            try
+            {
+                var state = WebAppearance.HasDraft() ? WebAppearance.Draft() : WebAppearance.Load();
+                string mode = WebAppearance.ResolveMode(state.mode);
+                var light = WebAppearance.Resolve(state, WebAppearance.Light);
+                var dark = WebAppearance.Resolve(state, WebAppearance.Dark);
+                _themeRevision = WebAppearance.CurrentRevision;
+                Post(new
+                {
+                    kind = "celeste.theme", version = 1, revision = _themeRevision, mode,
+                    presetId = state.presetId, accentSource = state.accentSource, accentCustom = state.accentCustom,
+                    light = new { css = WebAppearance.ToCss(light), values = light },
+                    dark = new { css = WebAppearance.ToCss(dark), values = dark }
+                });
+            }
+            catch (Exception ex) { StartupLog.WriteException("WebShell.Theme", ex); }
+        }
+
+        private void SendThemeIfChanged()
+        {
+            if (WebAppearance.CurrentRevision == _themeRevision) return;
+            SendTheme();
+        }
+
         private async Task SendLibraryAsync()
         {
             if (_sending || _closed || !_ready) return;
@@ -163,7 +191,7 @@ namespace CelesteMusicPlayer
                 if (requestId?.Length > 100) return;
                 switch (command)
                 {
-                    case "ready": _ready = true; _metadataSent.Clear(); _status.Visibility = Visibility.Collapsed; _dirty = true; _timer.Start(); _ = SendLibraryAsync(); break;
+                    case "ready": _ready = true; _metadataSent.Clear(); _status.Visibility = Visibility.Collapsed; _dirty = true; _timer.Start(); SendTheme(); _ = SendLibraryAsync(); break;
                     case "trackInfo":
                         var metadataIds = msg.GetProperty("trackIds").EnumerateArray().Take(100).Select(value => value.GetString() ?? "").ToArray();
                         _ = SendTrackInfoAsync(metadataIds); break;
@@ -189,6 +217,9 @@ namespace CelesteMusicPlayer
                     case "appSettings":
                         var appSettings = await _owner.WebSettingsAsync(msg, this);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = appSettings }); break;
+                    case "theme":
+                        var theme = _owner.WebAppearanceAsync(msg);
+                        Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = theme }); break;
                     case "collectionOverview":
                         var overview = await ReadOverviewAsync(msg.GetProperty("category").GetString() ?? "", msg.GetProperty("name").GetString() ?? "");
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = overview }); break;

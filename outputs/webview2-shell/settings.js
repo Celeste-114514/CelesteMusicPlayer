@@ -424,15 +424,20 @@
   }
 
   function renderAppearance(host) {
-    const style = section({ title: '界面风格', note: '标记为「仅旧界面」的项不影响网页这一层，改它们不会让这个页面有任何变化。' });
-    addFields(style, ['UiStyleMode', 'CelesteThemeName', 'EnableFrostedGlass']);
+    // 网页这一层的外观走「主题通道」：预设库 + 明暗 + 元素细调 + 实时预览。
+    // 下面这些旧字段只影响旧主窗口，所以单独摆在后面一块，不混进工作区。
+    // 工作区自己占一个容器：它内部会整块重画，不能和下面的旧界面卡片共用一个父节点
+    const workspace = node('div', undefined, 'appearance-workspace');
+    host.append(workspace);
+    if (window.CelesteAppearance) {
+      window.CelesteAppearance.mount(workspace).catch(error => status('外观工作区加载失败：' + error.message, 'err'));
+    }
+
+    const style = section({ title: '旧界面的外观（不影响网页这一层）', note: '这些只作用于旧主窗口和独立原生窗。网页的外观请用上面的预设库与元素细调。' });
+    addFields(style, ['UiStyleMode', 'CelesteThemeName', 'EnableFrostedGlass', 'AccentSource', 'CustomAccentColor']);
     host.append(style);
 
-    const accent = section({ title: '强调色' });
-    addFields(accent, ['AccentSource', 'CustomAccentColor']);
-    host.append(accent);
-
-    const background = section({ title: '背景' });
+    const background = section({ title: '背景（旧界面）' });
     addFields(background, ['EnableBackground', 'AlbumCoverAsBackground', 'BackgroundGaussBlur', 'GaussBlurRadius', 'BackgroundPreset', 'BackgroundPresetMotion', 'CustomBackgroundPath']);
     host.append(background);
 
