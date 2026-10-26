@@ -21,8 +21,8 @@
 .songs-actions{display:flex;align-items:center;gap:10px}
 .songs-actions .primary{margin:0;box-shadow:none;padding:10px 16px}
 .sort-picker{display:flex;align-items:center;gap:3px;padding:9px 12px;border-radius:20px;background:var(--accent-soft);font-size:calc(11px * var(--text-scale));color:var(--muted);white-space:nowrap}
-.sort-picker select{appearance:auto;max-width:90px;background:transparent;color:var(--muted);border:0;outline:none;font:inherit;cursor:pointer}
-.sort-picker:focus-within{outline:2px solid #e8486580;outline-offset:3px}
+.sort-picker select{appearance:none;max-width:90px;background:transparent;color:var(--muted);border:0;outline:none;font:inherit;cursor:pointer}
+.sort-picker:focus-within{outline:2px solid color-mix(in srgb,var(--focus) 50%,transparent);outline-offset:3px}
 .sort-direction{font-size:calc(11px * var(--text-scale));padding:10px 14px;border-radius:20px;background:var(--accent-soft);color:var(--muted);white-space:nowrap}
 .sort-direction:hover{background:var(--hover);color:var(--accent)}
 .songs-columns{display:grid;grid-template-columns:40px 1fr 62px;gap:17px;padding:0 24px 11px;color:var(--muted);font-size:calc(9px * var(--text-scale));letter-spacing:1px;border-bottom:1px solid var(--accent-soft);margin-bottom:6px}
@@ -80,7 +80,7 @@
 
 @media(max-width:850px){.songs-preview{display:none}.songs-actions .primary{font-size:calc(10px * var(--text-scale));padding:9px 11px}.sort-picker{padding:9px 10px}.songs-controls,.songs-heading{min-height:55px}.song-row{min-height:76px}.songs-page{column-gap:12px}}
 /* Opening the wheel preserves the song list's vertical position. */
-.live-cover{position:relative;background:var(--accent-soft);overflow:hidden}
+.live-cover{position:relative;background:var(--accent-soft);overflow:hidden}.live-cover>svg{position:absolute;inset:0;margin:auto;width:24px;height:24px;color:var(--muted);opacity:.75}
 .live-cover img{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 #songs-more{grid-column:1/-1;justify-self:center;margin:20px}
 #native-view{font-size:calc(10px * var(--text-scale));color:var(--accent)}

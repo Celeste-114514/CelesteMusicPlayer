@@ -84,7 +84,7 @@
 /* ---- 听音方案 ---- */
 .dsp-profile-save{display:flex;gap:10px;margin-bottom:16px}
 .dsp-input{flex:1;min-width:0;padding:10px 14px;border-radius:14px;border:1px solid #ece2e8;background:#faf7f9;font:inherit;font-size:calc(12px * var(--text-scale));color:#6d5b68}
-.dsp-input:focus{outline:none;border-color:#e2c9d6;box-shadow:0 0 0 3px #e8486520}
+.dsp-input:focus{outline:none;border-color:#e2c9d6;box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 13%,transparent)}
 .dsp-profile-save .primary{margin:0;height:38px;padding:0 18px;white-space:nowrap}
 .dsp-profile-save .primary:disabled{opacity:.5}
 .dsp-profile-list{display:grid;gap:9px}

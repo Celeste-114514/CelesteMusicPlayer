@@ -23,7 +23,7 @@
     return applied;
   }
 
-  const state = { mode: 'light', light: null, dark: null, presetId: '', revision: 0, ready: false, playerButtons: '', navItems: '' };
+  const state = { mode: 'light', light: null, dark: null, presetId: '', revision: 0, ready: false, playerButtons: '', navItems: '', motion: null };
 
   // bundle 可以外部传入：外观页改完参数后手上就有算好的一套，
   // 不能再用 state（state 只在宿主推送时更新，会拿旧值把新值盖回去）。
@@ -52,6 +52,15 @@
     if (typeof message.playerButtons === 'string') state.playerButtons = message.playerButtons;
     // 导航构成也搭这趟车（只有项目增删/换圈时才变，几何由 nav-layout.js 重算）
     if (typeof message.navItems === 'string') state.navItems = message.navItems;
+    // 动效偏好也搭这趟车：模式是"跟随系统/完整/轻量/关闭"，另外还有速度、幅度、回弹风格。
+    // 减动画的系统偏好优先级最高，所以这里只把"用户选了哪种模式"交给动效控制器去判断。
+    if (message.motion && typeof message.motion === 'object') {
+      state.motion = message.motion;
+      if (window.CelesteMotion) {
+        window.CelesteMotion.setMode(message.motion.mode || 'system');
+        window.CelesteMotion.setBounce(message.motion.bounce || 'soft');
+      }
+    }
     state.ready = true;
     apply(state.mode);
     document.dispatchEvent(new CustomEvent('celeste:theme', { detail: { ...state } }));

@@ -16,7 +16,8 @@
   }
   function artwork(album){
     const art=document.createElement('span');art.className='album-art'+(!live?' art-'+album.art:'');
-    const placeholder=document.createElement('small');placeholder.textContent=live?'♪':album.sleeve||'CELESTE';art.append(placeholder);
+    if(live){const mark=document.createElementNS('http://www.w3.org/2000/svg','svg');const use=document.createElementNS('http://www.w3.org/2000/svg','use');use.setAttribute('href','#i-note');mark.append(use);mark.setAttribute('aria-hidden','true');mark.classList.add('art-note');art.append(mark);}
+    else{const placeholder=document.createElement('small');placeholder.textContent=album.sleeve||'CELESTE';art.append(placeholder);}
     if(album.coverUrl){const image=document.createElement('img');image.alt='';image.loading='lazy';image.decoding='async';image.src=album.coverUrl;image.addEventListener('error',()=>image.remove(),{once:true});art.append(image);}return art;
   }
   function playAlbum(album){if(live)shell.playTracks(album.trackIds);else shell.playDemo(Number(album.trackIds[0]));}

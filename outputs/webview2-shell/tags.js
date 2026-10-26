@@ -1,6 +1,8 @@
 (() => {
   'use strict';
   const shell = window.CelesteShell;
+  const controls = window.CelesteControls;
+  const popup = window.CelestePopup;
   const live = typeof window.chrome?.webview?.postMessage === 'function';
   const node = (tag, text, cls) => { const n = document.createElement(tag); if (text !== undefined) n.textContent = text; if (cls) n.className = cls; return n; };
   const SVGNS = 'http://www.w3.org/2000/svg';
@@ -124,7 +126,7 @@
   toolbar.append(searchWrap, totalLabel);
   const fileActions = node('div',undefined,'tags-file-actions');
   const directoryLabel=node('span','尚未选择工作目录','tags-working-directory');
-  [['addFiles','添加文件…'],['addFolder','添加文件夹…'],['changeDirectory','改变工作目录…']].forEach(([operation,label])=>{const button=node('button',label,'secondary');button.addEventListener('click',async()=>{button.disabled=true;try{if(operation==='changeDirectory'&&dirty.size&&!confirm('改变工作目录会放弃未保存的标签改动，是否继续？'))return;const result=await req(operation);if(result.canceled)return;if(operation==='changeDirectory'){state.scopeIds=[];selected.clear();dirty.clear();multiDraft={};}state.scopeIds=[...new Set([...state.scopeIds,...(result.ids||[])])];if(result.directory)directoryLabel.textContent=result.directory;await reload();shell.notify(`已添加 ${result.count} 个文件`);}catch(error){shell.notify(error.message);}finally{button.disabled=false;}});fileActions.append(button);});
+  [['addFiles','添加文件…'],['addFolder','添加文件夹…'],['changeDirectory','改变工作目录…']].forEach(([operation,label])=>{const button=node('button',label,'secondary');button.addEventListener('click',async()=>{button.disabled=true;try{if(operation==='changeDirectory'&&dirty.size&&!(await controls.confirm({title:'改变工作目录',message:'这会放弃未保存的标签改动，是否继续？',confirmText:'继续',cancelText:'再想想',danger:true})))return;const result=await req(operation);if(result.canceled)return;if(operation==='changeDirectory'){state.scopeIds=[];selected.clear();dirty.clear();multiDraft={};}state.scopeIds=[...new Set([...state.scopeIds,...(result.ids||[])])];if(result.directory)directoryLabel.textContent=result.directory;await reload();shell.notify(`已添加 ${result.count} 个文件`);}catch(error){shell.notify(error.message);}finally{button.disabled=false;}});fileActions.append(button);});
   fileActions.append(directoryLabel);
   tableCol.prepend(fileActions);
 
@@ -203,8 +205,10 @@
   const tableBody = document.createElement('tbody');
   table.append(thead, tableBody);
 
-  const columnPicker=node('details',undefined,'tags-column-picker'),columnSummary=node('summary','显示列'),columnOptions=node('div',undefined,'tags-column-options');columnPicker.append(columnSummary,columnOptions);fileActions.append(columnPicker);
+  const columnButton=node('button','显示列','secondary');columnButton.type='button';const columnOptions=node('div',undefined,'tags-column-options');fileActions.append(columnButton);
   COLUMNS.forEach(c=>{const label=node('label'),check=document.createElement('input');check.type='checkbox';check.checked=!hiddenColumns.has(c.key);check.setAttribute('aria-label','显示'+c.name);check.addEventListener('change',()=>{if(check.checked)hiddenColumns.delete(c.key);else hiddenColumns.add(c.key);try{localStorage.setItem('celeste.tagHiddenColumns',JSON.stringify([...hiddenColumns]));}catch{}applyColumnVisibility();});label.append(check,node('span',c.name));columnOptions.append(label);});
+  // 列选择器进共用浮层：之前它挂在左栏面板里，会被面板自己盖住。
+  columnButton.addEventListener('click',()=>{if(popup.isOpen('tags-columns')){popup.close('tags-columns');return;}popup.open({id:'tags-columns',element:columnOptions,anchor:columnButton,placement:'bottom-start',maxHeight:340});});
   function applyColumnVisibility(){COLUMNS.forEach((c,i)=>{const hidden=hiddenColumns.has(c.key);colgroup.children[i+1].style.width=hidden?'0px':c.width+'px';table.querySelectorAll(`[data-column="${c.key}"]`).forEach(n=>n.hidden=hidden);});}
   applyColumnVisibility();
 
@@ -226,6 +230,7 @@
     pickAll.title = '全选当前完整结果';
     pickAll.setAttribute('aria-label', '全选当前完整结果');
     pickAll.checked = state.rows.length > 0 && state.rows.every(row => selected.has(row.id));
+    pickAll.indeterminate = !pickAll.checked && state.rows.some(row => selected.has(row.id));
     pickAll.addEventListener('change', () => {
       if (pickAll.checked) state.rows.forEach(row => selected.add(row.id));
       else selected.clear();
@@ -378,6 +383,14 @@
       const box = tr.querySelector('.col-pick input');
       if (box) box.checked = selected.has(id);
     });
+    // 全选框要能表达"选了一部分" —— 混合状态不能画成普通未选中
+    const pickAll = thead.querySelector('.col-pick input');
+    if (pickAll) {
+      const total = state.rows.length;
+      const count = state.rows.reduce((count, row) => count + (selected.has(row.id) ? 1 : 0), 0);
+      pickAll.checked = total > 0 && count === total;
+      pickAll.indeterminate = count > 0 && count < total;
+    }
   }
 
   function afterSelectionChange() {

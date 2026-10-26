@@ -282,6 +282,14 @@ namespace CelesteMusicPlayer
             public string fontUi { get; set; } = DefaultFontUi;
             public string fontCjk { get; set; } = DefaultFontCjk;
             public string fontMono { get; set; } = DefaultFontMono;
+            /// <summary>动效模式：system（跟随系统）/ full（完整）/ lite（轻量）/ off（关闭）</summary>
+            public string motionMode { get; set; } = "system";
+            /// <summary>动画速度：越大越快（1 = 基准）。null = 沿用预设自带的性格</summary>
+            public double? motionSpeed { get; set; }
+            /// <summary>位移/回弹幅度：0 = 只保留颜色与状态变化，不做几何运动。null = 沿用预设</summary>
+            public double? motionStrength { get; set; }
+            /// <summary>回弹风格：calm（克制）/ soft（柔和）/ lively（灵动）</summary>
+            public string motionBounce { get; set; } = "soft";
             public int revision { get; set; }
         }
 
@@ -473,7 +481,10 @@ namespace CelesteMusicPlayer
                 ["blur"] = preset.blur.ToString("0.##", CultureInfo.InvariantCulture) + "px",
                 ["panel-opacity"] = "1",
                 ["sat"] = preset.sat.ToString("0.##", CultureInfo.InvariantCulture),
-                ["motion-speed"] = preset.motionSpeed.ToString("0.##", CultureInfo.InvariantCulture),
+                // 动效速度：这里换过一次语义。
+                // 预设里存的是旧的"时长倍率"（大 = 慢），网页/动效控制器要的是"速度"（大 = 快），
+                // 所以这里取倒数。用户自己在外观页调的值会盖掉这个基准。
+                ["motion-speed"] = (1.0 / Math.Max(0.05, preset.motionSpeed)).ToString("0.##", CultureInfo.InvariantCulture),
                 ["motion-strength"] = preset.motionStrength.ToString("0.##", CultureInfo.InvariantCulture),
                 ["density"] = densityScale.ToString("0.##", CultureInfo.InvariantCulture),
                 ["player-opacity"] = "0.88",   // 与原设计一致：底栏略透，不是全实心
@@ -585,6 +596,13 @@ namespace CelesteMusicPlayer
             if (string.IsNullOrWhiteSpace(state.fontUi)) state.fontUi = DefaultFontUi;
             if (string.IsNullOrWhiteSpace(state.fontCjk)) state.fontCjk = DefaultFontCjk;
             if (string.IsNullOrWhiteSpace(state.fontMono)) state.fontMono = DefaultFontMono;
+            // 动效偏好单独保存，不随外观预设切换 —— 换配色不该把用户关掉的动画又打开
+            if (state.motionMode != "system" && state.motionMode != "full" && state.motionMode != "lite" && state.motionMode != "off")
+                state.motionMode = "system";
+            if (state.motionBounce != "calm" && state.motionBounce != "soft" && state.motionBounce != "lively")
+                state.motionBounce = "soft";
+            if (state.motionSpeed.HasValue) state.motionSpeed = Math.Clamp(state.motionSpeed.Value, 0.6, 1.6);
+            if (state.motionStrength.HasValue) state.motionStrength = Math.Clamp(state.motionStrength.Value, 0, 1.25);
             if (FindPreset(state.presetId, state) == null) state.presetId = BuiltIn[0].id;
         }
 
@@ -612,6 +630,9 @@ namespace CelesteMusicPlayer
                 backgroundMode = state.backgroundMode, backgroundImage = state.backgroundImage, backgroundVideo = state.backgroundVideo,
                 backgroundFit = state.backgroundFit, backgroundPos = state.backgroundPos,
                 fontUi = state.fontUi, fontCjk = state.fontCjk, fontMono = state.fontMono,
+                // ⚠ 动效偏好也要逐字段拷贝：漏一个就是「存得进文件、Load() 恒默认」
+                motionMode = state.motionMode, motionSpeed = state.motionSpeed,
+                motionStrength = state.motionStrength, motionBounce = state.motionBounce,
                 overrides = new Dictionary<string, string>(state.overrides ?? new(), StringComparer.Ordinal),
                 customPresets = (state.customPresets ?? new()).Select(p => new Preset
                 {
@@ -695,6 +716,21 @@ namespace CelesteMusicPlayer
         }
 
         // —— 解析：预设 → 覆盖 → 强调色策略 ——
+        /// <summary>当前生效的动画速度（越大越快）。用户没自己定过，就用预设自带的性格。</summary>
+        internal static double EffectiveMotionSpeed(State state)
+        {
+            Preset? preset = FindPreset(state.presetId, state) ?? BuiltIn[0];
+            double baseSpeed = 1.0 / Math.Max(0.05, preset.motionSpeed);
+            return Math.Clamp(state.motionSpeed ?? baseSpeed, 0.6, 1.6);
+        }
+
+        /// <summary>当前生效的位移幅度。0 = 只保留颜色与状态变化，不做几何运动。</summary>
+        internal static double EffectiveMotionStrength(State state)
+        {
+            Preset? preset = FindPreset(state.presetId, state) ?? BuiltIn[0];
+            return Math.Clamp(state.motionStrength ?? preset.motionStrength, 0, 1.25);
+        }
+
         internal static Dictionary<string, string> Resolve(State state, string mode)
         {
             Preset? preset = FindPreset(state.presetId, state) ?? BuiltIn[0];
@@ -726,6 +762,11 @@ namespace CelesteMusicPlayer
                 else if (TextNames.Contains(name)) values[name] = pair.Value;
                 else if (NumNames.Contains(name)) numbers[name] = pair.Value;
             }
+
+            // 动效偏好：用户自己定过的值盖过预设自带的速度与幅度，也盖过旧版留下的覆盖值。
+            // 放在覆盖之后是有意的 —— 换外观预设不该把用户关掉的动画又打开。
+            if (state.motionSpeed.HasValue) numbers["motion-speed"] = state.motionSpeed.Value.ToString("0.##", CultureInfo.InvariantCulture);
+            if (state.motionStrength.HasValue) numbers["motion-strength"] = state.motionStrength.Value.ToString("0.##", CultureInfo.InvariantCulture);
 
             // 强调色策略：跟随系统时只换 accent 一支，不动其余语义色（避免整站跳色）
             if (state.accentSource == "custom" && IsHex(state.accentCustom))

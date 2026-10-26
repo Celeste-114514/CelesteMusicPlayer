@@ -94,8 +94,8 @@
   --text-scale:1;
   --line-height:1.5;
 }
-/* 动效速度：所有过渡按这个系数缩放，关掉动效时缩到 0 而不是留一个"看起来动了"的假动画 */
-@media(prefers-reduced-motion:reduce){:root{--motion-speed:0;--motion-strength:0}}
+/* 动效速度：现在是"越大越快"，时长一律算成 基准 / 速度（见 motion.css 的 --motion-scale）。
+   系统要求减少动画时不用把速度写成 0 —— 那样除法会炸；由 motion.js 把倍率压到 0.001。 */
 
 /* 深色下把原生控件（滚动条、range 轨道、select、日期选择器）交给系统变暗。
    这些部件不是我们在画，CSS 变量管不到，只有 color-scheme 能影响。 */

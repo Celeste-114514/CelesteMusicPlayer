@@ -1,0 +1,66 @@
+/* 动效令牌层。
+   唯一来源：--motion-speed（越大越快）、--motion-strength（位移幅度）、data-motion（有效模式）。
+   motion.js 把它们算成两个运行时倍率写回根元素：
+     --motion-scale  时长倍率 = 1 / 速度（全站时长一律 calc(基准 * var(--motion-scale))）
+     --motion-shift  位移倍率 = 幅度（0 表示只保留颜色/透明度变化，不做几何运动）
+   本文件只声明基准值和曲线，不再给任何模块写死毫秒数 ——
+   散落的固定时长正是"有些地方动、有些地方不动"的根源。 */
+:root{
+  /* 曲线：进入减速、退出提速、可逆几何变化用对称曲线 */
+  --ease-continuity:cubic-bezier(.20,.90,.22,1);   /* 主要交互（沿用 BiliPai Continuity） */
+  --ease-enter:cubic-bezier(.22,1,.36,1);
+  --ease-exit:cubic-bezier(.32,0,.67,0);
+  --ease-morph:cubic-bezier(.42,0,.58,1);
+  --ease:cubic-bezier(.2,.8,.2,1);                 /* 旧样式仍在用，保留同名兜底 */
+
+  /* 运行时倍率。JS 没跑起来时按 1 走，界面不会卡在半动画状态 */
+  --motion-scale:1;
+  --motion-shift:1;
+
+  /* 语义时长：按操作含义分组，不按控件分组 */
+  --dur-tap:calc(100ms * var(--motion-scale));      /* 按下/勾选微反馈 */
+  --dur-exit:calc(140ms * var(--motion-scale));     /* 菜单、浮层收起 */
+  --dur-quick:calc(180ms * var(--motion-scale));    /* 列表重排、状态色 */
+  --dur-enter:calc(220ms * var(--motion-scale));    /* 浮层、面板展开 */
+  --dur-panel:calc(280ms * var(--motion-scale));    /* 抽屉、大面板 */
+  --dur-page:calc(240ms * var(--motion-scale));     /* 页面切换 */
+  --dur-slow:calc(360ms * var(--motion-scale));     /* 轮盘、强调动作 */
+
+  /* 语义位移：乘 --motion-shift，幅度滑杆才能真正生效 */
+  --shift-page:calc(10px * var(--motion-shift));
+  --shift-popup:calc(6px * var(--motion-shift));
+  --shift-panel:calc(12px * var(--motion-shift));
+  --press-scale:calc(1 - .02 * var(--motion-shift));
+
+  /* 旧名字的兼容别名。之前 library.css / transport-panels.css 里用了
+     var(--motion-continuity) 和 var(--motion-fast)，但这两个变量从来没定义过 ——
+     那条 transition 整条作废，悬停/按下其实一直是"瞬变"。这里补上，
+     顺便让它们也跟着 --motion-scale 走。 */
+  --motion-continuity:var(--ease-continuity);
+  --motion-fast:var(--dur-tap);
+}
+
+/* JS 没接管时的兜底：系统要求减少动画就直接压掉时长（保留状态可读性） */
+@media (prefers-reduced-motion:reduce){
+  :root:not([data-motion]){--motion-scale:.001;--motion-shift:0}
+}
+
+/* 有效模式由 motion.js 写在 <html data-motion> 上。
+   off：不隐藏内容，只让所有过渡瞬间完成 —— 结构、焦点、可读性都还在。 */
+:root[data-motion="off"]{--motion-scale:.001;--motion-shift:0}
+:root[data-motion="off"] *,
+:root[data-motion="off"] *::before,
+:root[data-motion="off"] *::after{
+  animation-duration:1ms!important;
+  animation-iteration-count:1!important;
+  transition-duration:1ms!important;
+  scroll-behavior:auto!important;
+}
+/* lite：保留淡变与状态色，去掉几何位移 */
+:root[data-motion="lite"]{--motion-shift:0}
+
+/* 动画只是为了"看得见发生了什么"，不该把文字抖糊 */
+@media (prefers-reduced-motion:reduce){
+  :root:not([data-motion="full"]) .ui-popup,
+  :root:not([data-motion="full"]) .ui-listbox{transform:none!important}
+}

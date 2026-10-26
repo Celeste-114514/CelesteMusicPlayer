@@ -37,6 +37,7 @@ namespace CelesteMusicPlayer
                 case "deletePreset": return DeletePreset(ReadString(msg, "presetId"));
                 case "playerButtons": return SetPlayerButtons(ReadString(msg, "value"));
                 case "typography": return SetTypography(msg);
+                case "motion": return SetMotion(msg);
                 case "navItems": return SetNavItems(ReadString(msg, "value"));
                 case "background": return SetBackground(msg);
                 case "pickBackground": return await PickBackgroundAsync(ReadString(msg, "media")).ConfigureAwait(true);
@@ -72,6 +73,17 @@ namespace CelesteMusicPlayer
                 // 字体选择器：族名清单来自宿主（网页拿不到 Windows 字体表），当前选中值也在这一起给
                 fonts = FontCatalog.Families(),
                 typography = new { fontUi = state.fontUi, fontCjk = state.fontCjk, fontMono = state.fontMono },
+                // 动效：模式/速度/幅度/回弹风格。速度是"越大越快"，幅度 0 = 不做几何运动。
+                // 这几项单独存，不随外观预设切换 —— 换配色不该把用户关掉的动画又打开。
+                motion = new
+                {
+                    mode = state.motionMode,
+                    speed = WebAppearance.EffectiveMotionSpeed(state),
+                    strength = WebAppearance.EffectiveMotionStrength(state),
+                    bounce = state.motionBounce,
+                    speedMin = 0.6, speedMax = 1.6, speedStep = 0.05,
+                    strengthMin = 0.0, strengthMax = 1.25, strengthStep = 0.05
+                },
                 // 导航构成：哪些项、在哪一圈、什么顺序
                 navItems = state.navItems,
                 navItemCatalog = WebAppearance.NavItemCatalog.Select(item => new { id = item.id, label = item.label, group = item.group }).ToArray()
@@ -124,8 +136,8 @@ namespace CelesteMusicPlayer
                 new { id = "radius", label = "圆角", min = 0, max = 34, step = 1, unit = "px", value = Get("radius") },
                 new { id = "blur", label = "玻璃模糊", min = 0, max = 60, step = 1, unit = "px", value = Get("blur") },
                 new { id = "sat", label = "饱和度", min = 0.4, max = 1.6, step = 0.05, unit = "×", value = Get("sat") },
-                new { id = "motion-speed", label = "动效速度", min = 0.4, max = 1.6, step = 0.05, unit = "×", value = Get("motion-speed") },
-                new { id = "motion-strength", label = "动效幅度", min = 0, max = 1.6, step = 0.05, unit = "×", value = Get("motion-strength") },
+                // ⚠ 动效速度/幅度不在这里：它们有独立的一份用户偏好（motion 字段），
+                // 走覆盖表的话一换外观预设就被清掉了 —— 换配色不该把用户调过的动效重置。
                 new { id = "density", label = "间距密度", min = 0.8, max = 1.25, step = 0.01, unit = "×", value = Get("density") },
                 // 底栏单独一组：它要的语义和别处不一样（可以略透、可以毛玻璃、封面圆角自成一档）
                 new { id = "player-opacity", label = "底栏不透明度", min = 0.5, max = 1, step = 0.02, unit = "×", value = Get("player-opacity") },
@@ -213,6 +225,55 @@ namespace CelesteMusicPlayer
 
             WebAppearance.SetDraft(state);
             return Snapshot();
+        }
+
+        /// <summary>
+        /// 动效偏好（模式/速度/幅度/回弹风格）。只更新内存草稿，跟颜色一起保存/取消/撤销。
+        /// speed 与 strength 传 null 表示"沿用预设自带"，传数字就固定成用户值。
+        /// </summary>
+        private static object SetMotion(JsonElement msg)
+        {
+            string mode = (ReadString(msg, "mode") ?? "").Trim();
+            string bounce = (ReadString(msg, "bounce") ?? "").Trim();
+            return ChangeDraft(state =>
+            {
+                if (mode.Length > 0)
+                {
+                    if (mode != "system" && mode != "full" && mode != "lite" && mode != "off")
+                        throw new ArgumentException("未知的动效模式。");
+                    state.motionMode = mode;
+                }
+                if (bounce.Length > 0)
+                {
+                    if (bounce != "calm" && bounce != "soft" && bounce != "lively")
+                        throw new ArgumentException("未知的回弹风格。");
+                    state.motionBounce = bounce;
+                }
+                // 显式传 null = 撤销用户自己的设定，回到预设自带的性格
+                if (msg.TryGetProperty("speed", out JsonElement rawSpeed))
+                {
+                    double? parsed = ReadNullableNumber(rawSpeed);
+                    if (parsed.HasValue) state.motionSpeed = Math.Clamp(parsed.Value, 0.6, 1.6);
+                    else state.motionSpeed = null;
+                }
+                if (msg.TryGetProperty("strength", out JsonElement rawStrength))
+                {
+                    double? parsed = ReadNullableNumber(rawStrength);
+                    if (parsed.HasValue) state.motionStrength = Math.Clamp(parsed.Value, 0, 1.25);
+                    else state.motionStrength = null;
+                }
+            });
+        }
+
+        /// <summary>读一个数字字段；不是数字就当作"没有"。</summary>
+        private static double? ReadNullableNumber(JsonElement raw)
+        {
+            if (raw.ValueKind == JsonValueKind.Null) return null;
+            if (raw.ValueKind != JsonValueKind.Number && raw.ValueKind != JsonValueKind.String) return null;
+            string text = raw.ValueKind == JsonValueKind.Number
+                ? raw.GetDouble().ToString("0.####", CultureInfo.InvariantCulture)
+                : (raw.GetString() ?? "").Trim();
+            return double.TryParse(text, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed) ? parsed : null;
         }
 
         /// <summary>半圆导航的项目分组/顺序，进入统一草稿。</summary>
@@ -415,7 +476,9 @@ namespace CelesteMusicPlayer
                 radius = ParseNumber(light, "radius", 26),
                 blur = ParseNumber(light, "blur", 25),
                 sat = ParseNumber(light, "sat", 1),
-                motionSpeed = ParseNumber(light, "motion-speed", 1),
+                // 预设里存的是旧的"时长倍率"（大 = 慢），派生时用的是它的倒数（速度）。
+                // 保存个人预设时要把速度换回倍率存，否则存进去再取出来方向就反了。
+                motionSpeed = 1.0 / Math.Max(0.05, ParseNumber(light, "motion-speed", 1)),
                 motionStrength = ParseNumber(light, "motion-strength", 1),
                 // 排版也算预设的一部分（录音室更紧、复古更松），存进「我的预设」时要一起带上
                 textScale = ParseNumber(light, "text-scale", 1),

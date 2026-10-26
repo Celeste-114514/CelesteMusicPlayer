@@ -86,10 +86,10 @@
   const history = [], future = [];
   const HISTORY_LIMIT = 80;
   const EDITS = new Set(['preview', 'select', 'mode', 'accent', 'background', 'pickBackground',
-    'clearBackground', 'typography', 'navItems', 'playerButtons', 'reset']);
+    'clearBackground', 'typography', 'navItems', 'playerButtons', 'reset', 'motion']);
   const NOTES = { select: '切换预设', mode: '明暗模式', accent: '强调色', background: '背景设置',
     pickBackground: '背景资源', clearBackground: '去掉背景', typography: '字体', navItems: '导航项目',
-    playerButtons: '底栏按钮', reset: '恢复当前预设' };
+    playerButtons: '底栏按钮', reset: '恢复当前预设', motion: '动效' };
   const clone = value => JSON.parse(JSON.stringify(value));
   let lastChangeAt = 0;
   function enqueue(action) {
@@ -323,6 +323,136 @@
       { id: 'overlay', label: '遮罩' }
     ].forEach(item => layer.append(colorRow(item)));
     return [input, layer];
+  }
+
+  // —— 动效：模式 / 速度 / 幅度 / 回弹风格 ——
+  // 这几项是个人偏好，宿主单独存，不随外观预设切换；
+  // 换配色不会把用户调过的动效重置（这是方案里写死的规矩）。
+  function motionSlider(item) {
+    const row = node('div', undefined, 'set-row');
+    const main = node('div', undefined, 'set-row-main');
+    main.append(node('div', item.label, 'set-label'));
+    if (item.hint) main.append(node('p', item.hint, 'set-note'));
+    row.append(main);
+    const holder = node('div', undefined, 'set-control');
+    const wrap = node('div', undefined, 'set-slider');
+    const range = document.createElement('input');
+    range.type = 'range';
+    range.min = item.min; range.max = item.max; range.step = item.step;
+    range.value = item.value;
+    const show = value => Number(value).toFixed(2) + '×';
+    const readout = node('span', show(item.value), 'set-readout');
+    const fill = () => range.style.setProperty('--fill',
+      ((Number(range.value) - item.min) / Math.max(0.0001, item.max - item.min) * 100) + '%');
+    fill();
+    let gesture = '';
+    range.addEventListener('pointerdown', () => { gesture = 'gesture:motion-' + item.id + ':' + (++gestureId); });
+    ['pointerup', 'pointercancel', 'blur'].forEach(type => range.addEventListener(type, () => { gesture = ''; }));
+    range.addEventListener('input', () => {
+      readout.textContent = show(range.value);
+      fill();
+      request('motion', { [item.id]: Number(range.value) }, item.label + ' ' + show(range.value), gesture)
+        .catch(error => status('设置失败：' + error.message, 'err'));
+    });
+    wrap.append(range, readout);
+    holder.append(wrap);
+    row.append(holder);
+    return row;
+  }
+
+  function motionCard() {
+    const info = data.motion || {};
+    const card = section({
+      title: '动效',
+      note: '这一页的设置跟着你走，不随外观预设切换：换配色不会把动效重置。系统开了「减少动画」时，「跟随系统」会自动压掉位移和弹跳，但状态变化仍然看得见。'
+    });
+
+    const modeRow = node('div', undefined, 'set-row');
+    const modeMain = node('div', undefined, 'set-row-main');
+    modeMain.append(node('div', '动画模式', 'set-label'));
+    modeMain.append(node('p', '关闭 = 什么都不动；轻量 = 只留颜色与状态变化；完整 = 位移和回弹一起。', 'set-note'));
+    modeRow.append(modeMain);
+    const modeHolder = node('div', undefined, 'set-control');
+    const modeGroup = node('div', undefined, 'mode-group');
+    const currentMode = info.mode || 'system';
+    [['system', '跟随系统'], ['full', '完整'], ['lite', '轻量'], ['off', '关闭']].forEach(([value, label]) => {
+      const item = node('button', label, 'mode-option' + (currentMode === value ? ' selected' : ''));
+      item.type = 'button';
+      item.addEventListener('click', () => {
+        request('motion', { mode: value }, '动效模式：' + label)
+          .catch(error => status('设置失败：' + error.message, 'err'));
+      });
+      modeGroup.append(item);
+    });
+    modeHolder.append(modeGroup);
+    modeRow.append(modeHolder);
+    card.append(modeRow);
+
+    card.append(motionSlider({
+      id: 'speed', label: '动画速度',
+      min: info.speedMin ?? 0.6, max: info.speedMax ?? 1.6, step: info.speedStep ?? 0.05,
+      value: info.speed ?? 1, hint: '越大越快。1 是基准；0.6 更拖沓，1.6 更干脆。'
+    }));
+    card.append(motionSlider({
+      id: 'strength', label: '位移幅度',
+      min: info.strengthMin ?? 0, max: info.strengthMax ?? 1.25, step: info.strengthStep ?? 0.05,
+      value: info.strength ?? 1, hint: '0 = 只换颜色，不做位移和回弹；不影响浮层贴在哪里、也不影响点击范围。'
+    }));
+
+    const bounceRow = node('div', undefined, 'set-row');
+    const bounceMain = node('div', undefined, 'set-row-main');
+    bounceMain.append(node('div', '回弹风格', 'set-label'));
+    bounceMain.append(node('p', '按压和展开时的回弹手感。克制最稳，灵动最明显。', 'set-note'));
+    bounceRow.append(bounceMain);
+    const bounceHolder = node('div', undefined, 'set-control');
+    const bounceGroup = node('div', undefined, 'mode-group');
+    const currentBounce = info.bounce || 'soft';
+    [['calm', '克制'], ['soft', '柔和'], ['lively', '灵动']].forEach(([value, label]) => {
+      const item = node('button', label, 'mode-option' + (currentBounce === value ? ' selected' : ''));
+      item.type = 'button';
+      item.addEventListener('click', () => {
+        request('motion', { bounce: value }, '回弹风格：' + label)
+          .catch(error => status('设置失败：' + error.message, 'err'));
+      });
+      bounceGroup.append(item);
+    });
+    bounceHolder.append(bounceGroup);
+    bounceRow.append(bounceHolder);
+    card.append(bounceRow);
+
+    // 演示：把当前这套参数直接跑一遍，改完立刻能看见，不用自己到处找地方试
+    const demoRow = node('div', undefined, 'set-row');
+    const demoMain = node('div', undefined, 'set-row-main');
+    demoMain.append(node('div', '演示', 'set-label'));
+    demoMain.append(node('p', '按当前参数跑一遍：浮层进出 + 页面转场 + 按压回弹。', 'set-note'));
+    demoRow.append(demoMain);
+    const demoHolder = node('div', undefined, 'set-control');
+    demoHolder.append(button('演示一下', () => runMotionDemo(card)));
+    demoRow.append(demoHolder);
+    card.append(demoRow);
+    return card;
+  }
+
+  /** 演示用的浮层：按当前参数进出一次，再做一次页面式转场。 */
+  function runMotionDemo(host) {
+    const motion = window.CelesteMotion;
+    if (!motion) { status('动效控制器还没就绪。', 'err'); return; }
+    let layer = host.querySelector('.motion-demo-layer');
+    if (!layer) {
+      layer = node('div', undefined, 'motion-demo-layer');
+      layer.append(node('p', '这是一个浮层：进场、退场都走统一控制器。', 'motion-demo-text'));
+      host.append(layer);
+    }
+    const popup = window.CelestePopup;
+    popup.open({
+      id: 'motion-demo', element: layer, anchor: host, placement: 'bottom-start',
+      maxHeight: 200, dismissable: true
+    });
+    setTimeout(() => {
+      popup.close('motion-demo');
+      const sample = host.querySelector('.motion-demo-sample');
+      if (sample) motion.page(sample, 'forward');
+    }, 700);
   }
 
   // —— 半圆导航：几何 + 项目构成 ——
@@ -738,6 +868,7 @@
     host.append(backgroundCard());
     navCards().forEach(card => host.append(card));
     stateCards().forEach(card => host.append(card));
+    host.append(motionCard());
 
     // 字体与排版：字体是个人偏好（立刻存），两个数值跟着预设走（预览→保存）
     host.append(typographyCard());

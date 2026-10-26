@@ -81,14 +81,17 @@
   const format = seconds => { seconds = Math.max(0, Math.floor(seconds)); return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'); };
   const fill = input => input.style.setProperty('--fill', `${Number(input.value) / Math.max(1, Number(input.max)) * 100}%`);
   let pathActions=[];
+  let pendingDirection='forward';   // 返回键走反方向转场
   function setPath(items){
     const root=$('breadcrumb');root.replaceChildren();pathActions=[{label:'主页',action:()=>navigate('overview')},...items];
     if(currentPage==='overview')pathActions=pathActions.slice(0,1);
     pathActions.forEach((item,index)=>{if(index){const slash=document.createElement('span');slash.className='slash';slash.textContent='/';root.append(slash);}const button=document.createElement('button');button.textContent=item.label;button.addEventListener('click',()=>item.action?.());if(index===pathActions.length-1)button.setAttribute('aria-current','page');root.append(button);});
     $('back').disabled=pathActions.length<2;
   }
-  function navigate(page, remember = true) {
+  function navigate(page, remember = true, direction = 'forward') {
     if (!pages[page]) return;
+    const moveDirection = direction === 'back' ? 'back' : (pendingDirection === 'back' ? 'back' : 'forward');
+    pendingDirection = 'forward';
     send('cancelOverview');
     if (remember && page !== currentPage) history.push(currentPage);
     currentPage = page;
@@ -111,6 +114,10 @@
     document.querySelector('.main').scrollTop = 0;
     if (page === 'songs') renderSongs();
     document.dispatchEvent(new CustomEvent('celeste:navigate',{detail:page}));
+    // 页面转场交给动效控制器：新页淡入并轻微上移。快速连点时旧动画会被作废，
+    // 不会闪白，也不会把刚打开的页面又关掉。
+    const shown = [...document.querySelectorAll('.page')].find(el => !el.hidden);
+    if (shown) window.CelesteMotion?.page(shown, moveDirection);
   }
   // Fixed quarter-circle, clockwise from the top edge toward the left edge.
   // Radii are in the 600x290 SVG viewBox, so they scale together with the container size in navigation.css.
@@ -153,7 +160,7 @@
     if (['PageDown','PageUp','Home','End','ArrowDown','ArrowUp',' '].includes(event.key) && !event.target.closest('#corner-orbit,input,select,button')) setOrbit(false);
   });
   document.addEventListener('click', event => { const target = event.target.closest('[data-page]'); if (target) { navigate(target.dataset.page); setOrbit(false); } else if (!event.target.closest('#corner-orbit')) setOrbit(false); });
-  $('back').addEventListener('click', () => {const parent=pathActions.at(-2);if(parent?.action)parent.action();else navigate('overview');});
+  $('back').addEventListener('click', () => {pendingDirection='back';const parent=pathActions.at(-2);if(parent?.action)parent.action();else navigate('overview');});
   document.addEventListener('keydown', event => { if (event.key === '/' && !['INPUT','TEXTAREA'].includes(document.activeElement.tagName)) { event.preventDefault(); $('search').focus(); } });
   $('search').addEventListener('input', event => { songQuery = event.target.value.trim(); if (currentPage === 'songs') renderSongs(); });
   $('search').addEventListener('keydown', event => { if (event.key === 'Enter') { songQuery = event.target.value.trim(); navigate(['albums','artists','albumArtists','folders','favorites','ratings','recent','mostPlayed','playlists','queue'].includes(currentPage)?currentPage:'songs'); setOrbit(false); } });
@@ -217,7 +224,7 @@
       const number = document.createElement('span'); number.className='song-number'; number.textContent=order+1;
       const cover = document.createElement('span'); cover.className='song-cover art-'+(track.art || 'teal'); cover.setAttribute('aria-hidden','true');
       const sleeve = document.createElement('small'); sleeve.textContent=track.sleeve; cover.append(sleeve);
-      if (live) { cover.className='song-cover live-cover'; sleeve.textContent='♫'; const image=document.createElement('img'); image.src=track.coverUrl; image.loading='lazy'; image.alt=''; image.addEventListener('error',()=>image.remove(),{once:true}); cover.append(image); }
+      if (live) { cover.className='song-cover live-cover'; sleeve.textContent=''; cover.append(icon('note')); const image=document.createElement('img'); image.src=track.coverUrl; image.loading='lazy'; image.alt=''; image.addEventListener('error',()=>image.remove(),{once:true}); cover.append(image); }
       const copy = document.createElement('span'); copy.className='song-copy';
       const title = document.createElement('span'); title.className='song-title'; title.textContent=track.title;
       const subtitle = document.createElement('span'); subtitle.className='song-subtitle'; subtitle.textContent=track.artist+' · '+track.album;

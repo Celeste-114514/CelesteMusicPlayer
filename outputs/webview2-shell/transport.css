@@ -22,7 +22,7 @@
 /* 歌手行也是底栏里的字，跟着 --player-muted 走 —— 否则用户调了"底栏文字色"，
    歌名变了、歌手还留着旧色，看着就是"只改了一半"。 */
 .player .track-info>span{color:var(--player-muted)}
-.live-cover:empty:after{content:'♪';position:absolute;inset:0;display:grid;place-items:center;color:var(--player-muted);font-size:calc(25px * var(--text-scale))}.mini-cover.live-cover img{opacity:0;transition:opacity .36s ease,transform .45s ease;transform:scale(1.045)}.mini-cover.live-cover img.cover-current{opacity:1;transform:scale(1)}
+.live-cover>svg{position:absolute;inset:0;margin:auto;width:22px;height:22px;color:var(--muted);opacity:.75}.mini-cover.live-cover img{opacity:0;transition:opacity .36s ease,transform .45s ease;transform:scale(1.045)}.mini-cover.live-cover img.cover-current{opacity:1;transform:scale(1)}
 .player-tools{display:flex!important;justify-content:flex-end;align-items:center;gap:10px;min-width:0}.player-tools input{width:clamp(55px,7vw,118px);min-width:45px}.player-tools .icon-button{width:34px;height:34px;flex-shrink:0}.player-tools .volume-icon{width:17px;flex-shrink:0}
 /* 音量图标 + 滑杆包成一组，才能整体排序/收起（单个 input 没法当 flex item 排序后还带着图标） */
 .player-tools #volume-group{display:flex;align-items:center;gap:8px;min-width:0}

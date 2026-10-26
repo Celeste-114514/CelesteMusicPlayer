@@ -18,7 +18,7 @@
 .settings-search{display:flex;align-items:center;gap:8px;background:var(--panel);border:1px solid var(--panel-soft);border-radius:12px;padding:8px 12px;color:var(--muted)}
 .settings-search svg{width:15px;height:15px}
 .settings-search input{border:0;background:none;outline:none;font-size:calc(12px * var(--text-scale));color:var(--ink);width:180px}
-.settings-search:focus-within{box-shadow:0 0 0 3px #e8486520}
+.settings-search:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 13%,transparent)}
 .settings-scroll{flex:1;min-height:0;overflow:auto;padding-right:6px;padding-bottom:40px;scrollbar-width:thin;scrollbar-color:var(--panel-soft) transparent}
 .settings-card{border:1px solid var(--line);border-radius:18px;padding:16px 18px;margin-bottom:14px;background:var(--surface)}
 .settings-card-title{display:flex;align-items:center;gap:10px;margin-bottom:4px}
@@ -116,7 +116,7 @@
 /* —— 外观工作区（预设库 / 明暗 / 元素细调）—— */
 .appearance-workspace{display:grid;gap:14px}
 .preset-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:12px;margin-top:8px}
-.preset-card{display:grid;gap:7px;padding:11px;border:1px solid var(--line);border-radius:15px;background:var(--surface);text-align:left;transition:border-color calc(.2s * var(--motion-speed)),box-shadow calc(.2s * var(--motion-speed));color:var(--ink)}
+.preset-card{display:grid;gap:7px;padding:11px;border:1px solid var(--line);border-radius:15px;background:var(--surface);text-align:left;transition:border-color calc(.2s * var(--motion-scale)),box-shadow calc(.2s * var(--motion-scale));color:var(--ink)}
 .preset-card:hover{border-color:var(--accent)}
 .preset-card.selected{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-soft)}
 .preset-card strong{font-size:calc(12px * var(--text-scale));font-weight:560}
@@ -130,7 +130,11 @@
 .preset-art-card{position:absolute;left:9px;right:9px;bottom:9px;height:24px;border-radius:var(--p-radius);background:var(--p-surface);border:1px solid var(--p-line)}
 .preset-art::after{content:"";position:absolute;left:12px;bottom:13px;width:18px;height:18px;border-radius:5px;background:var(--p-accent)}
 .mode-picker{display:flex;flex-wrap:wrap;gap:6px;margin-top:9px}
-.mode-option{border:1px solid var(--line);border-radius:10px;padding:6px 12px;font-size:calc(11px * var(--text-scale));color:var(--muted);background:var(--panel-soft);transition:background calc(.2s * var(--motion-speed))}
+.mode-group{display:flex;flex-wrap:wrap;gap:6px}
+.mode-option{border:1px solid var(--line);border-radius:10px;padding:6px 12px;font-size:calc(11px * var(--text-scale));color:var(--muted);background:var(--panel-soft);transition:background calc(.2s * var(--motion-scale))}
+/* 动效演示用的浮层：跟真实浮层同一条路径（共用 popup 层），所以看到的就是真的 */
+.motion-demo-layer{width:280px;padding:16px}
+.motion-demo-text{margin:0;font-size:calc(11px * var(--text-scale));color:var(--muted);line-height:1.8}
 .mode-option:hover{color:var(--accent)}
 .mode-option.selected{background:var(--accent-soft);color:var(--accent);border-color:var(--accent)}
 
