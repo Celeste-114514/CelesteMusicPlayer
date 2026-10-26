@@ -34,6 +34,7 @@ namespace CelesteMusicPlayer
                 case "deletePreset": return DeletePreset(ReadString(msg, "presetId"));
                 case "playerButtons": return SetPlayerButtons(ReadString(msg, "value"));
                 case "typography": return SetTypography(msg);
+                case "navItems": return SetNavItems(ReadString(msg, "value"));
                 default: throw new ArgumentException("未知的外观操作：" + operation);
             }
         }
@@ -63,7 +64,10 @@ namespace CelesteMusicPlayer
                 playerButtonCatalog = WebAppearance.PlayerButtonCatalog.Select(item => new { id = item.id, label = item.label, group = item.group, core = item.core }).ToArray(),
                 // 字体选择器：族名清单来自宿主（网页拿不到 Windows 字体表），当前选中值也在这一起给
                 fonts = FontCatalog.Families(),
-                typography = new { fontUi = state.fontUi, fontCjk = state.fontCjk, fontMono = state.fontMono }
+                typography = new { fontUi = state.fontUi, fontCjk = state.fontCjk, fontMono = state.fontMono },
+                // 导航构成：哪些项、在哪一圈、什么顺序
+                navItems = state.navItems,
+                navItemCatalog = WebAppearance.NavItemCatalog.Select(item => new { id = item.id, label = item.label, group = item.group }).ToArray()
             };
         }
 
@@ -127,7 +131,12 @@ namespace CelesteMusicPlayer
                 // 排版：1 就是设计原尺寸，往两边各留一点余量；行高按字号倍数算
                 new { id = "text-scale", label = "字号整体缩放", min = 0.8, max = 1.4, step = 0.01, unit = "×", value = Get("text-scale") },
                 new { id = "line-height", label = "行高", min = 1.2, max = 2, step = 0.05, unit = "×", value = Get("line-height") },
-                new { id = "disabled-opacity", label = "禁用态透明度", min = 0.15, max = 0.7, step = 0.05, unit = "×", value = Get("disabled-opacity") }
+                new { id = "disabled-opacity", label = "禁用态透明度", min = 0.15, max = 0.7, step = 0.05, unit = "×", value = Get("disabled-opacity") },
+                // 导航几何。两圈半径是 SVG viewBox 单位，跟整个轮盘一起缩放
+                new { id = "nav-size", label = "导航整体尺寸", min = 240, max = 420, step = 2, unit = "px", value = Get("nav-size") },
+                new { id = "nav-icon", label = "导航图标大小", min = 20, max = 40, step = 1, unit = "px", value = Get("nav-icon") },
+                new { id = "nav-ring-1", label = "内圈半径", min = 100, max = 200, step = 2, unit = "", value = Get("nav-ring-1") },
+                new { id = "nav-ring-2", label = "外圈半径", min = 180, max = 270, step = 2, unit = "", value = Get("nav-ring-2") }
             };
         }
 
@@ -218,6 +227,23 @@ namespace CelesteMusicPlayer
                 draft.fontMono = state.fontMono;
                 WebAppearance.SetDraft(draft);
             }
+            WebAppearance.Save(state);
+            return Snapshot();
+        }
+
+        /// <summary>半圆导航的项目分组/顺序。和底栏按钮一样是布局偏好：立刻存，但先把草稿同步好再 Save。</summary>
+        private static object SetNavItems(string value)
+        {
+            WebAppearance.State state = WebAppearance.Load();
+            string normalized = WebAppearance.NormalizeNavItems(value);
+            if (normalized == state.navItems) return Snapshot();
+            if (WebAppearance.HasDraft())
+            {
+                WebAppearance.State draft = WebAppearance.Draft();
+                draft.navItems = normalized;
+                WebAppearance.SetDraft(draft);
+            }
+            state.navItems = normalized;
             WebAppearance.Save(state);
             return Snapshot();
         }

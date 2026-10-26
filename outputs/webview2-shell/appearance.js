@@ -241,6 +241,73 @@
     return [input, layer];
   }
 
+  // —— 半圆导航：几何 + 项目构成 ——
+  const NAV_GROUPS = ['ring1', 'ring2'];
+  const NAV_GROUP_LABELS = { ring1: '内圈（主要分类）', ring2: '外圈（收藏与历史）' };
+
+  function navCards() {
+    const geometry = section({
+      title: '半圆导航',
+      note: '轮盘的整体尺寸、图标大小和两圈半径属于同一套几何：改半径时轨道线会跟着重画，不会出现图标跑出轨道。'
+    });
+    [{ id: 'nav-track', label: '轨道与分隔线' }, { id: 'nav-ink', label: '普通项目颜色' }]
+      .forEach(item => geometry.append(colorRow(item)));
+    (data.numbers || []).filter(item => /^nav-/.test(item.id || '')).forEach(item => geometry.append(numberRow(item)));
+
+    const items = section({
+      title: '导航项目',
+      tag: '立即生效',
+      note: '收起后同一圈剩下的项目会重新均分这段弧，不会留空位；每圈至少保留一个 —— 整圈都收起来的话轮盘算不出角度，会全叠在一起。'
+    });
+    const list = node('div', undefined, 'player-button-list');
+    items.append(list);
+    const catalog = new Map((data.navItemCatalog || []).map(item => [item.id, item]));
+
+    function push(map) {
+      return request('navItems', { value: serializeComposition(map, NAV_GROUPS) }).then(result => {
+        data = result;
+        // 宿主已经收敛过（每圈至少一个可见），以它回的为准
+        if (window.CelesteNavLayout) window.CelesteNavLayout.apply(result.navItems);
+        fill();
+        status('导航项目已保存。', 'ok');
+      }).catch(error => status('调整导航项目失败：' + error.message, 'err'));
+    }
+
+    function fill() {
+      const map = parseComposition(data.navItems, NAV_GROUPS);
+      list.replaceChildren();
+      NAV_GROUPS.forEach(group => {
+        const entries = map[group] || [];
+        if (entries.length === 0) return;
+        list.append(node('p', NAV_GROUP_LABELS[group], 'set-note'));
+        entries.forEach((item, index) => {
+          const def = catalog.get(item.id) || { label: item.id };
+          const row = node('div', undefined, 'set-row');
+          const main = node('div', undefined, 'set-row-main');
+          main.append(node('div', (index + 1) + '. ' + def.label, 'set-label'));
+          row.append(main);
+          const holder = node('div', undefined, 'set-control');
+          const actions = node('div', undefined, 'player-button-actions');
+          actions.append(button(item.hidden ? '显示' : '收起', () => {
+            item.hidden = !item.hidden;
+            return push(map);
+          }));
+          const up = button('前移', () => { swap(entries, index, index - 1); return push(map); });
+          up.disabled = index === 0;
+          const down = button('后移', () => { swap(entries, index, index + 1); return push(map); });
+          down.disabled = index === entries.length - 1;
+          actions.append(up, down);
+          holder.append(actions);
+          row.append(holder);
+          list.append(row);
+        });
+      });
+    }
+
+    fill();
+    return [geometry, items];
+  }
+
   // —— 字体与排版 ——
   // 字体是「这台机器装了什么」的问题，选完立刻存，不跟预设走（换配色不该把你挑的字体换掉）；
   // 字号缩放与行高属于当前这套外观，仍走「预览 → 保存」那套。
@@ -305,13 +372,16 @@
     tools: '最右工具区（歌词 / 音量 / 音频设置）'
   };
 
-  function parseButtons(text) {
-    const map = { left: [], right: [], tools: [] };
+  // 构成串的通用读写：底栏按钮和半圆导航用的是同一套格式（组:项,项|组:…，`!` = 收起）。
+  // 合法性校验都在宿主做，这里只负责拆和拼，免得两端各有一套规则互相打架。
+  function parseComposition(text, groups) {
+    const map = {};
+    groups.forEach(group => { map[group] = []; });
     String(text || '').split('|').forEach(chunk => {
       const split = chunk.indexOf(':');
       if (split <= 0) return;
       const group = chunk.slice(0, split).trim();
-      if (!BUTTON_GROUPS.includes(group)) return;
+      if (!groups.includes(group)) return;
       chunk.slice(split + 1).split(',').forEach(token => {
         const value = token.trim();
         if (!value) return;
@@ -323,8 +393,8 @@
     return map;
   }
 
-  function serializeButtons(map) {
-    return BUTTON_GROUPS
+  function serializeComposition(map, groups) {
+    return groups
       .map(group => group + ':' + (map[group] || []).map(item => (item.hidden ? '!' : '') + item.id).join(','))
       .join('|');
   }
@@ -352,7 +422,7 @@
     const catalog = new Map((data.playerButtonCatalog || []).map(item => [item.id, item]));
 
     function push(map) {
-      return request('playerButtons', { value: serializeButtons(map) }).then(result => {
+      return request('playerButtons', { value: serializeComposition(map, BUTTON_GROUPS) }).then(result => {
         data = result;
         // 宿主已经收敛过（核心强制显示、不认识的丢掉），以它回的为准
         if (window.CelestePlayerLayout) window.CelestePlayerLayout.apply(result.playerButtons);
@@ -362,7 +432,7 @@
     }
 
     function fill() {
-      const map = parseButtons(data.playerButtons);
+      const map = parseComposition(data.playerButtons, BUTTON_GROUPS);
       list.replaceChildren();
       BUTTON_GROUPS.forEach(group => {
         const items = map[group] || [];
@@ -497,9 +567,12 @@
     const isTypeParam = item => /^(text-scale|line-height)$/.test(item.id || '');
     // 禁用态透明度归「按钮与输入框」那张卡
     const isStateParam = item => /^disabled-opacity$/.test(item.id || '');
-    (data.numbers || []).filter(item => !isPlayerParam(item) && !isTypeParam(item) && !isStateParam(item)).forEach(item => editor.append(numberRow(item)));
+    // 导航几何归「半圆导航」那张卡
+    const isNavParam = item => /^nav-/.test(item.id || '');
+    (data.numbers || []).filter(item => !isPlayerParam(item) && !isTypeParam(item) && !isStateParam(item) && !isNavParam(item)).forEach(item => editor.append(numberRow(item)));
     host.append(editor);
 
+    navCards().forEach(card => host.append(card));
     stateCards().forEach(card => host.append(card));
 
     // 字体与排版：字体是个人偏好（立刻存），两个数值跟着预设走（预览→保存）

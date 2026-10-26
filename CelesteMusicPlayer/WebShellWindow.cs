@@ -132,6 +132,8 @@ namespace CelesteMusicPlayer
                     // 底栏按钮的显隐/顺序搭这趟车一起送：网页那边只在修订号变化时才收到，
                     // 不需要为「收一个按钮」单开一条通道
                     playerButtons = state.playerButtons,
+                    // 导航构成同理：和主题同一趟车，网页按修订号收
+                    navItems = state.navItems,
                     light = new { css = WebAppearance.ToCss(light), values = light },
                     dark = new { css = WebAppearance.ToCss(dark), values = dark }
                 });

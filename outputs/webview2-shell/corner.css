@@ -10,12 +10,12 @@
 .quarter-edge{stroke:var(--accent-soft);stroke-width:1;fill:none}
 .quarter-inner{stroke:var(--accent-soft);stroke-width:1;fill:none}
 .quarter-core{stroke:var(--accent-soft);stroke-width:1;fill:none}
-.corner-home,.corner-item{position:absolute;pointer-events:auto;display:grid;place-items:center;transform:translate(-50%,-50%);border:0;border-radius:50%;color:var(--muted);background:transparent;box-shadow:none;transition:background .2s,color .2s;-webkit-app-region:no-drag}
+.corner-home,.corner-item{position:absolute;pointer-events:auto;display:grid;place-items:center;transform:translate(-50%,-50%);border:0;border-radius:50%;color:var(--nav-ink);background:transparent;box-shadow:none;transition:background .2s,color .2s;-webkit-app-region:no-drag}
 .corner-home{left:11.6129%;top:11.6129%;width:29px;height:29px}
 .corner-home svg{width:18px;height:18px}
 .corner-item{width:34px;height:34px}
 .corner-item svg{width:18px;height:18px}
-.corner-item.ring-1{width:28px;height:28px;color:var(--muted)}
+.corner-item.ring-1{width:28px;height:28px;color:var(--nav-ink)}
 .corner-item.ring-1 svg{width:17px;height:17px}
 .corner-item:hover,.corner-home:hover{color:var(--accent);background:var(--hover)}
 .corner-item[aria-current=page],.corner-home[aria-current=page]{background:#f5dce566;color:var(--accent)}

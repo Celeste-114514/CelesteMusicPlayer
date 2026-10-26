@@ -37,6 +37,8 @@ namespace CelesteMusicPlayer
             "wave-idle", "wave-played",
             // 底栏的图标与文字单独一支：底栏底色跟外壳走，但图标色用户可能要更淡或更重
             "player-ink", "player-muted",
+            // 半圆导航：轨道线色与普通项目色（悬停/选中仍走强调色 —— 那是状态，不该各存一份）
+            "nav-track", "nav-ink",
             "danger", "success", "warning"
         };
 
@@ -49,7 +51,10 @@ namespace CelesteMusicPlayer
             // 是因为它们和圆角/间距一样属于「预设自带 + 用户可覆盖」，跟着明暗各存一份。
             "text-scale", "line-height",
             // 禁用态透明度：各处的 .3/.5 太散，统一成一支
-            "disabled-opacity"
+            "disabled-opacity",
+            // 半圆导航几何：整体尺寸、图标大小、两圈半径（后两个是 SVG viewBox 单位，
+            // 跟容器一起缩放，所以改整体尺寸不会让图标圈跑偏）
+            "nav-size", "nav-icon", "nav-ring-1", "nav-ring-2"
         };
 
         /// <summary>
@@ -139,9 +144,89 @@ namespace CelesteMusicPlayer
             return string.Join("|", PlayerGroups.Select(group => group + ":" + string.Join(",", groups[group])));
         }
 
-        internal sealed class Preset
+        /// <summary>半圆导航里的一个项目。group 决定它落在内圈还是外圈。</summary>
+        internal sealed class NavItem
         {
             public string id { get; set; } = "";
+            public string label { get; set; } = "";
+            /// <summary>ring1（内圈）/ ring2（外圈）</summary>
+            public string group { get; set; } = "ring1";
+        }
+
+        internal static readonly NavItem[] NavItemCatalog =
+        {
+            new() { id = "songs", label = "歌曲", group = "ring1" },
+            new() { id = "albums", label = "专辑", group = "ring1" },
+            new() { id = "artists", label = "艺术家", group = "ring1" },
+            new() { id = "albumArtists", label = "专辑艺人", group = "ring1" },
+            new() { id = "folders", label = "文件夹", group = "ring1" },
+            new() { id = "favorites", label = "喜欢的音乐", group = "ring2" },
+            new() { id = "ratings", label = "评分", group = "ring2" },
+            new() { id = "mostPlayed", label = "播放最多", group = "ring2" },
+            new() { id = "playlists", label = "播放列表", group = "ring2" },
+            new() { id = "queue", label = "播放队列", group = "ring2" },
+            new() { id = "recent", label = "最近播放", group = "ring2" }
+        };
+
+        internal const string DefaultNavItems =
+            "ring1:songs,albums,artists,albumArtists,folders|ring2:favorites,ratings,mostPlayed,playlists,queue,recent";
+
+        internal static readonly string[] NavGroups = { "ring1", "ring2" };
+
+        /// <summary>
+        /// 导航构成收敛：去重、丢弃不认识的、漏掉的补回组末尾，**每圈至少留一个可见项**。
+        /// 最后这条是硬约束：整圈都收起来的话，JS 算角度要除以 (n-1)，会直接算出 NaN，
+        /// 项目会全叠在左上角 —— 与其让用户踩，不如宿主先把至少一个顶回来。
+        /// </summary>
+        internal static string NormalizeNavItems(string? raw)
+        {
+            string text = (raw ?? "").Trim();
+            if (text.Length == 0) text = DefaultNavItems;
+
+            var groups = new Dictionary<string, List<string>>(StringComparer.Ordinal)
+            {
+                ["ring1"] = new(), ["ring2"] = new()
+            };
+            var seen = new HashSet<string>(StringComparer.Ordinal);
+
+            foreach (string chunk in text.Split('|', StringSplitOptions.RemoveEmptyEntries))
+            {
+                int split = chunk.IndexOf(':');
+                if (split <= 0) continue;
+                foreach (string token in chunk.Substring(split + 1).Split(',', StringSplitOptions.RemoveEmptyEntries))
+                {
+                    string value = token.Trim();
+                    bool hidden = value.StartsWith("!", StringComparison.Ordinal);
+                    string id = hidden ? value.Substring(1) : value;
+                    NavItem? def = NavItemCatalog.FirstOrDefault(item => item.id == id);
+                    if (def == null || !seen.Add(id)) continue;
+                    groups[def.group].Add(hidden ? "!" + id : id);
+                }
+            }
+
+            foreach (NavItem def in NavItemCatalog)
+            {
+                if (seen.Contains(def.id)) continue;
+                groups[def.group].Add(def.id);
+            }
+
+            foreach (string group in NavGroups)
+            {
+                if (groups[group].Any(entry => !entry.StartsWith("!", StringComparison.Ordinal))) continue;
+                // 全被收起来了：把该圈目录里的第一个顶回来（先删掉它原来的隐藏项，别留重复）
+                string? first = NavItemCatalog.FirstOrDefault(item => item.group == group)?.id;
+                if (first != null)
+                {
+                    groups[group].Remove("!" + first);
+                    groups[group].Insert(0, first);
+                }
+            }
+
+            return string.Join("|", NavGroups.Select(group => group + ":" + string.Join(",", groups[group])));
+        }
+
+        internal sealed class Preset
+        {            public string id { get; set; } = "";
             public string name { get; set; } = "";
             public string group { get; set; } = "";
             /// <summary>浅色底</summary>
@@ -178,6 +263,8 @@ namespace CelesteMusicPlayer
             public List<Preset> customPresets { get; set; } = new();
             /// <summary>底栏按钮的显隐与顺序（个人布局偏好，不随预设切换）</summary>
             public string playerButtons { get; set; } = DefaultPlayerButtons;
+            /// <summary>半圆导航的项目分组与顺序（个人布局偏好，不随预设切换）</summary>
+            public string navItems { get; set; } = DefaultNavItems;
             /// <summary>字体族（个人偏好，不随预设切换 —— 字体是这台机器上装了什么的问题，不是配色方案的一部分）</summary>
             public string fontUi { get; set; } = DefaultFontUi;
             public string fontCjk { get; set; } = DefaultFontCjk;
@@ -336,6 +423,8 @@ namespace CelesteMusicPlayer
                 // 底栏图标比正文再重一档（底栏底色略透，按正文色会发灰），次要文字沿用 muted
                 ["player-ink"] = dark ? FromHsl(h, Math.Min(0.14, sat), 0.95) : FromHsl(h, Math.Min(0.2, sat * 1.6), 0.18),
                 ["player-muted"] = muted,
+                ["nav-track"] = dark ? Mix(bg, line, 0.55) : Mix(surface, line, 0.85),
+                ["nav-ink"] = muted,
                 ["danger"] = dark ? "#ff8a80" : "#c0454f", ["success"] = dark ? "#6fd3a8" : "#3f8f6f", ["warning"] = dark ? "#e8b962" : "#b8802a",
                 // 字体族默认值。真正生效的值由 Resolve 用人选的字体覆盖，
                 // 这里给出兜底，保证没接主题（或用户没选过）时不至于 font-family 为空
@@ -379,7 +468,12 @@ namespace CelesteMusicPlayer
                 // 排版：预设自带一套（录音室更紧、复古更松），用户可以再覆盖
                 ["text-scale"] = preset.textScale.ToString("0.##", CultureInfo.InvariantCulture),
                 ["line-height"] = preset.lineHeight.ToString("0.##", CultureInfo.InvariantCulture),
-                ["disabled-opacity"] = "0.35"
+                ["disabled-opacity"] = "0.35",
+                // 导航几何：300×145 的轮盘、两圈半径 150/238（原来写死在 shell.js 与 navigation.css 里）
+                ["nav-size"] = "300px",
+                ["nav-icon"] = "28px",
+                ["nav-ring-1"] = "150",
+                ["nav-ring-2"] = "238"
             };
         }
 
@@ -442,6 +536,7 @@ namespace CelesteMusicPlayer
             state.overrides ??= new Dictionary<string, string>(StringComparer.Ordinal);
             state.customPresets ??= new List<Preset>();
             state.playerButtons = NormalizePlayerButtons(state.playerButtons);
+            state.navItems = NormalizeNavItems(state.navItems);
             // 字体名留空（旧存档没这两项）就回到默认，别让 font-family 变成空值
             if (string.IsNullOrWhiteSpace(state.fontUi)) state.fontUi = DefaultFontUi;
             if (string.IsNullOrWhiteSpace(state.fontCjk)) state.fontCjk = DefaultFontCjk;
@@ -469,6 +564,7 @@ namespace CelesteMusicPlayer
                 mode = state.mode, accentSource = state.accentSource, accentCustom = state.accentCustom,
                 presetId = state.presetId, revision = state.revision,
                 playerButtons = state.playerButtons,
+                navItems = state.navItems,
                 fontUi = state.fontUi, fontCjk = state.fontCjk, fontMono = state.fontMono,
                 overrides = new Dictionary<string, string>(state.overrides ?? new(), StringComparer.Ordinal),
                 customPresets = (state.customPresets ?? new()).Select(p => new Preset

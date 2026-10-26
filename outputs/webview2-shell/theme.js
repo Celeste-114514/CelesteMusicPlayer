@@ -23,7 +23,7 @@
     return applied;
   }
 
-  const state = { mode: 'light', light: null, dark: null, presetId: '', revision: 0, ready: false, playerButtons: '' };
+  const state = { mode: 'light', light: null, dark: null, presetId: '', revision: 0, ready: false, playerButtons: '', navItems: '' };
 
   // bundle 可以外部传入：外观页改完参数后手上就有算好的一套，
   // 不能再用 state（state 只在宿主推送时更新，会拿旧值把新值盖回去）。
@@ -50,6 +50,8 @@
     // 底栏按钮的显隐/顺序搭同一趟车（宿主那边存在修订号里），
     // 单独一个字段，别和外观数值混一起 —— player-layout.js 只认它。
     if (typeof message.playerButtons === 'string') state.playerButtons = message.playerButtons;
+    // 导航构成也搭这趟车（只有项目增删/换圈时才变，几何由 nav-layout.js 重算）
+    if (typeof message.navItems === 'string') state.navItems = message.navItems;
     state.ready = true;
     apply(state.mode);
     document.dispatchEvent(new CustomEvent('celeste:theme', { detail: { ...state } }));
