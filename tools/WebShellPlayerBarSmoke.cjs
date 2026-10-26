@@ -9,7 +9,7 @@ let chromium;
 try { ({ chromium } = require('playwright')); }
 catch { ({ chromium } = require('playwright-core')); }
 
-const URL = process.argv[2] || 'http://127.0.0.1:8811/index.html';
+const URL = process.argv[2] || 'file:///C:/Users/MSI/source/repos/CelesteMusicPlayer/outputs/webview2-shell/index.html';
 
 // 宿主会算好的那一套变量。这里手写一份，重点在底栏那 5 个 + 三个三围。
 const VALUES = {
