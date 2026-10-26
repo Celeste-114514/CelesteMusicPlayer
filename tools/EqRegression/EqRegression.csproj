@@ -1,12 +1,12 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <!-- 测试工程是普通库，由 dotnet test 驱动；消费主程序集的 internal DSP 类型，不引入 WinAppSDK 打包工具链。 -->
     <OutputType>Library</OutputType>
     <Nullable>enable</Nullable>
     <ImplicitUsings>disable</ImplicitUsings>
     <Platforms>x64</Platforms>
-    <!-- 就近大版本运行库：本机/CI 装了 .NET 9 就用 9；只有 .NET 10 时自动滚到 10。避免为跑测试强装特定运行库。 -->
+    <!-- 测试以 .NET 10 运行为基线，允许在只装有更新大版本的环境运行。 -->
     <RollForward>Major</RollForward>
   </PropertyGroup>
 
@@ -18,9 +18,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 主程序集已编译产物（Release/net9.0）。主 csproj 已 InternalsVisibleTo=EqRegression。 -->
+    <!-- 主程序集已编译产物（Release/net10.0）。主 csproj 已 InternalsVisibleTo=EqRegression。 -->
     <Reference Include="CelesteMusicPlayer">
-      <HintPath>..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\CelesteMusicPlayer.dll</HintPath>
+      <HintPath>..\..\CelesteMusicPlayer\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\CelesteMusicPlayer.dll</HintPath>
     </Reference>
   </ItemGroup>
 
@@ -30,13 +30,13 @@
        不传递依赖到测试输出，需一并拷贝。 -->
   <Target Name="CopyWinAppSdkRuntime" AfterTargets="Build">
     <ItemGroup>
-      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.WindowsAppRuntime.*" />
-      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.Windows.SDK.NET.dll" />
-      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\e_sqlite3.dll" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\Microsoft.WindowsAppRuntime.*" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\Microsoft.Windows.SDK.NET.dll" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\e_sqlite3.dll" />
       <!-- Stage B：DSP 机架内核（celeste_dsp_core 的 C ABI 桥）。测试进程经
            DspCoreInterop 的解析器只在 AppContext.BaseDirectory 找它，缺了它引擎创建失败、
            整条 DSP 链降级直通，EQ/电平表测试会假失败（CI 同理，必须随拷）。 -->
-      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\celeste_dsp_core.dll" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\celeste_dsp_core.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(_Wasdk)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>

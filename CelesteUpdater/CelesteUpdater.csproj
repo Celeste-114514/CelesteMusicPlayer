@@ -2,7 +2,7 @@
   <PropertyGroup>
     <!-- WinExe 而非 Exe：更新助手在后台静默运行，不弹控制台窗口 -->
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0</TargetFramework>
+    <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <AssemblyName>CelesteUpdater</AssemblyName>

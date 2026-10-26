@@ -18,7 +18,7 @@ namespace CelesteMusicPlayer
         private const uint MbIconError = 0x00000010;
         private const uint MbIconWarning = 0x00000030;
 
-        private const string DotNetDownloadUrl = "https://dotnet.microsoft.com/download/dotnet/9.0";
+        private const string DotNetDownloadUrl = "https://dotnet.microsoft.com/download/dotnet/10.0";
         private const string WinAppSdkDownloadUrl = "https://learn.microsoft.com/windows/apps/windows-app-sdk/downloads";
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
@@ -95,7 +95,7 @@ namespace CelesteMusicPlayer
             }
 
             // 框架依赖模式下运行时的可用性由系统引导层保证：
-            // - 缺 .NET 9 桌面运行时 → apphost 启动前弹系统错误框（含官方下载链接）；
+            // - 缺 .NET 10 桌面运行时 → apphost 启动前弹系统错误框（含官方下载链接）；
             // - 缺 Windows App SDK 运行时 → Bootstrap 自动初始化在 Main 之前失败并弹引导框。
             // 能走到这里即代表运行时已就绪，无需（也无法）再自行枚举系统包——
             // 非打包应用枚举 MSIX 包无权限（UnauthorizedAccessException），且 1.8 运行时不写注册表，
@@ -168,7 +168,7 @@ namespace CelesteMusicPlayer
         {
             string content =
                 "CelesteMusicPlayer 需要以下运行环境才能启动：\n\n" +
-                "• .NET 9 桌面运行时：<A HREF=\"" + DotNetDownloadUrl + "\">点此下载</A>\n" +
+                "• .NET 10 桌面运行时：<A HREF=\"" + DotNetDownloadUrl + "\">点此下载</A>\n" +
                 "• Windows App SDK 运行时（1.8）：<A HREF=\"" + WinAppSdkDownloadUrl + "\">点此下载</A>\n\n" +
                 (string.IsNullOrWhiteSpace(detail) ? string.Empty : detail + "\n\n") +
                 "点击上面的链接即可在浏览器打开下载页，安装后重新启动本程序。";
@@ -180,7 +180,7 @@ namespace CelesteMusicPlayer
 
             // 兜底：环境中没有 comctl32 v6（TaskDialog 不可用）时，退回普通消息框（链接为纯文本）。
             string plain = "CelesteMusicPlayer 需要以下运行环境才能启动：\n\n"
-                + "• .NET 9 桌面运行时\n  下载：" + DotNetDownloadUrl + "\n\n"
+                + "• .NET 10 桌面运行时\n  下载：" + DotNetDownloadUrl + "\n\n"
                 + "• Windows App SDK 运行时（1.8）\n  下载：" + WinAppSdkDownloadUrl + "\n\n"
                 + (string.IsNullOrWhiteSpace(detail) ? string.Empty : detail + "\n\n")
                 + "请安装以上运行环境后重新启动本程序。";

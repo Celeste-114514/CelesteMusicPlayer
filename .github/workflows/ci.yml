@@ -19,15 +19,15 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET 9 SDK
+      - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '9.0.x'
+          dotnet-version: '10.0.4xx'
 
       - name: Restore main project
         # -r win-x64 必须显式传给每个工程：命令行给主工程传 RID 不会传播给
-        # ProjectReference 引用的 CelesteUpdater，顺带还原它时只生成 net9.0
-        # 目标、缺 net9.0/win-x64，Build 步骤带自包含标志时必报 NETSDK1047。
+        # ProjectReference 引用的 CelesteUpdater，顺带还原它时只生成 net10.0
+        # 目标、缺 net10.0/win-x64，Build 步骤带自包含标志时必报 NETSDK1047。
         run: dotnet restore CelesteMusicPlayer/CelesteMusicPlayer.csproj -r win-x64 -p:Platform=x64
 
       - name: Restore updater project

@@ -5,7 +5,7 @@
 
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
-    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
     <RootNamespace>CelesteMusicPlayer</RootNamespace>
     <Version>26.10.20.0</Version>
@@ -35,8 +35,8 @@
 
   <!--
     发布形态由 CelesteSelfContainedDistribute 决定（默认不设置 = 框架依赖，体积小）：
-      - 框架依赖（默认）：不打包 .NET 9 / Windows App SDK 运行时，产物约少 30–50MB，
-        目标机需先装 .NET 9 桌面运行时 + Windows App SDK 运行时（缺失时启动会弹窗提示，见 Program.cs）。
+      - 框架依赖（默认）：不打包 .NET 10 / Windows App SDK 运行时，产物约少 30–50MB，
+        目标机需先装 .NET 10 桌面运行时 + Windows App SDK 运行时（缺失时启动会弹窗提示，见 Program.cs）。
       - 自包含：dotnet publish -c Release -r win-x64 -p:CelesteSelfContainedDistribute=true，
         运行时随包走，可整夹发给没装运行时的机器（体积大）。
   -->
@@ -131,11 +131,11 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageReference Include="ToolGood.Words.Pinyin" Version="3.1.0" />
-    <PackageReference Include="System.Drawing.Common" Version="9.0.1" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.11" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
     <!-- 标签板块文件表格（2026-10-13 第四轮定稿换 DataGrid）：原生列宽/排序/格内编辑，
          替掉四轮反馈 bug 不断的自绘 15 列表格。7.1.2 是唯一稳定版（7.1.1 仅 preview），
-         草稿工程实测与 WinAppSDK 1.8.251106002 / net9.0 组合可构建可运行。 -->
+         最初在 WinAppSDK 1.8.251106002 / net9.0 下验证；升级 .NET 10 时继续保留该控件版本。 -->
     <PackageReference Include="CommunityToolkit.WinUI.UI.Controls.DataGrid" Version="7.1.2" />
     <!-- WebView2（皮肤系统第 2 步）：界面用网页渲染、音频内核仍是 C#。
          版本与本地 NuGet 缓存一致，避免离线 restore 失败。

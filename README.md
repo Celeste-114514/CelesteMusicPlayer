@@ -1,6 +1,6 @@
 # CelesteMusicPlayer
 
-一个基于 **WinUI 3 / .NET 9** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和 [ECHO-NEXT](https://github.com/moekotori/ECHO) 设计开发。代码全部由 AI 生成。
+一个基于 **WinUI 3 / .NET 10** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和 [ECHO-NEXT](https://github.com/moekotori/ECHO) 设计开发。代码全部由 AI 生成。
 
 联系我 [t.me/celesteabsolomb](https://t.me/celesteabsolomb)
 
@@ -45,23 +45,23 @@
 ## 🛠️ 技术栈
 
 - WinUI 3（Microsoft.WindowsAppSDK 1.8）
-- .NET 9 / C#
+- .NET 10 / C#
 - [TagLibSharp](https://github.com/mono/taglib-sharp) 标签读取
 - [H.NotifyIcon](https://github.com/HavenDV/H.NotifyIcon) 系统托盘
 - FFmpeg（内置）
 
 ## 🔨 构建与发布
 
-需要：.NET 9 SDK + Visual Studio 2022（含 WinUI 工作负载）
+需要：.NET 10 SDK + Visual Studio 2026（含 WinUI 工作负载）
 
 ```bash
 # 开发运行
 dotnet build -c Debug
 
-# 发布框架依赖（默认，体积小；目标机器需安装 .NET 9 运行时与 Windows App SDK，未装时程序启动会弹窗引导下载）
+# 发布框架依赖（默认，体积小；目标机器需安装 .NET 10 运行时与 Windows App SDK，未装时程序启动会弹窗引导下载）
 dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x64 -o publish
 
-# 发布自包含（免安装，含 .NET 9 运行时与 Windows App SDK，体积更大）
+# 发布自包含（免安装，含 .NET 10 运行时与 Windows App SDK，体积更大）
 dotnet publish CelesteMusicPlayer/CelesteMusicPlayer.csproj -c Release -r win-x64 -p:CelesteSelfContainedDistribute=true -o publish
 ```
 

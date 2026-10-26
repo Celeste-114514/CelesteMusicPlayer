@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
     <!-- 测试工程是普通库，由 dotnet test 驱动；只消费主程序集的公开标签编辑 API，不引入 WinAppSDK 打包工具链。 -->
     <OutputType>Library</OutputType>
     <Nullable>enable</Nullable>
@@ -18,9 +18,9 @@
   </ItemGroup>
 
   <ItemGroup>
-    <!-- 主程序集已编译产物（Release/net9.0）。标签编辑 API 是 public，不需要 InternalsVisibleTo。 -->
+    <!-- 主程序集已编译产物（Release/net10.0）。标签编辑 API 是 public，不需要 InternalsVisibleTo。 -->
     <Reference Include="CelesteMusicPlayer">
-      <HintPath>..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\CelesteMusicPlayer.dll</HintPath>
+      <HintPath>..\..\CelesteMusicPlayer\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\CelesteMusicPlayer.dll</HintPath>
     </Reference>
   </ItemGroup>
 
@@ -36,10 +36,10 @@
        用户真实的 app-settings.json 会反复被误备份（虽然不会写坏，但会让人以为配置丢了）。 -->
   <Target Name="CopyWinAppSdkRuntime" AfterTargets="Build">
     <ItemGroup>
-      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.WindowsAppRuntime.*" />
-      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.Windows.SDK.NET.dll" />
-      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\e_sqlite3.dll" />
-      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\System.Security.Cryptography.ProtectedData.dll" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\Microsoft.WindowsAppRuntime.*" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\Microsoft.Windows.SDK.NET.dll" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\e_sqlite3.dll" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net10.0-windows10.0.19041.0\win-x64\System.Security.Cryptography.ProtectedData.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(_Wasdk)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>

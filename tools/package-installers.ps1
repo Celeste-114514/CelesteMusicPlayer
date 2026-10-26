@@ -5,7 +5,7 @@
 
 .DESCRIPTION
   产物（默认输出到仓库根目录 dist\）：
-    CelesteMusicPlayer-Setup-<版本>.exe        框架依赖版（体积小，需 .NET 9 + Windows App SDK 运行时）
+    CelesteMusicPlayer-Setup-<版本>.exe        框架依赖版（体积小，需 .NET 10 + Windows App SDK 运行时）
     CelesteMusicPlayer-Setup-SC-<版本>.exe     自包含版（体积大，无需任何运行时）
     SHA256SUMS.txt                             两个安装包的 SHA-256 清单，随 release 上传，
                                                 应用内更新下载后据此校验（见 UpdateChecker）
