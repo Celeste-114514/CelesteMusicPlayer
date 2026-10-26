@@ -107,3 +107,15 @@
 .tags-sort-dialog{width:min(640px,90vw);max-height:80vh;overflow:auto;border:1px solid #eadfe7;border-radius:18px;padding:24px;color:#74576a;background:#fffafb}.tags-sort-dialog::backdrop{background:#342d3930}.tags-sort-dialog h2{font-size:20px;margin-bottom:12px}.tags-sort-dialog>.secondary{margin:14px 6px 0 0;padding:9px 12px}
 .tags-sort-rules{display:grid;gap:10px;margin-top:16px}.tags-sort-rule{display:grid;grid-template-columns:minmax(100px,1fr) 90px 60px 60px;gap:8px}.tags-sort-rule select{min-width:0;padding:8px;border:1px solid #eadfe7;border-radius:8px;background:#fff}.tags-sort-rule button{margin:0;font-size:12px}
 .tag-table thead th .th-inner{cursor:default}.tag-table td .cell{cursor:default}.tag-table tbody tr[aria-selected=true] .cell:not(.readonly){cursor:text}
+
+/* Bound the workspace to the shell; only the editor and table scroll. */
+.main:has(>.tags-page:not([hidden])){display:flex;flex-direction:column;overflow:hidden}
+.main:has(>.tags-page:not([hidden]))>.toolbar{flex-shrink:0}
+.main>.tags-page:not([hidden]){display:flex;flex-direction:column;flex:1;min-height:0;overflow:hidden;padding-bottom:14px}
+.tags-page>.tags-heading{flex-shrink:0}
+.tags-page>.tags-layout{flex:1;min-height:0;height:auto;align-items:stretch}
+.tags-layout>.tags-side{height:100%;min-height:0;overflow:auto;display:block;scrollbar-width:thin;overscroll-behavior:contain}
+.tags-side>.tags-subnav{margin-bottom:14px}
+.tags-side>.tags-panel{overflow:visible}
+.tags-layout>.tags-tablecol{overflow:hidden;align-content:stretch}
+.tags-tablecol>.tag-table-wrap{overscroll-behavior:contain}

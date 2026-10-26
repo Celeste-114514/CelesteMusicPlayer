@@ -136,14 +136,6 @@
   layout.append(side, tableCol);
   page.append(layout);
   document.querySelector('.main').append(page);
-  function fitWorkspace() {
-    if (page.hidden) return;
-    const bottom = document.querySelector('.player')?.getBoundingClientRect().top || innerHeight - 140;
-    const height = Math.max(260, bottom - layout.getBoundingClientRect().top - 24);
-    layout.style.setProperty('--tags-workspace-height', height + 'px');
-  }
-  window.addEventListener('resize', () => requestAnimationFrame(fitWorkspace));
-
   // ---- bridge ----------------------------------------------------------------------------
   async function req(operation, payload = {}) {
     if (!live) throw new Error('请在桌面播放器中使用这个功能：浏览器里读不到本机曲库。');
@@ -845,7 +837,7 @@
     const placeholder = document.getElementById('category-page');
     if (placeholder) placeholder.hidden = true;
     document.querySelector('.main').scrollTop = 0;
-    requestAnimationFrame(fitWorkspace);
+
     shell.setPath([{ label: '标签编辑', action: () => { } }]);
     renderSubnav();
     if (!state.rows.length) {

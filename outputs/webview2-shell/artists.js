@@ -40,15 +40,14 @@
   }
   function stats(target,data,loading=false){
     const years=data.yearFrom?(data.yearFrom===data.yearTo?String(data.yearFrom):`${data.yearFrom}–${data.yearTo}`):'未知';
-    const lossless=data.losslessPercent==null?(loading?'读取中…':'未知'):data.losslessPercent+'%';
-    const values=[['歌曲',data.songCount+' 首'],['专辑',data.albumCount+' 张'],['时长',duration(data.duration)],['活跃年份',years,'按库内歌曲的发行年份范围统计，不代表真实职业生涯'],['无损占比',lossless,`按已识别编码的歌曲统计；无损 ${data.losslessCount||0} 首，有损 ${data.lossyCount||0} 首，未知 ${data.unknownCount??data.songCount} 首`],['最高规格',data.highestSpec||(loading?'读取中…':'未知'),'音频文件规格；PCM 按采样率、位深排序，DSD 单独列出'],['来源',[data.localCount?'本地 '+data.localCount+' 首':'',data.remoteCount?'远程 '+data.remoteCount+' 首':''].filter(Boolean).join(' · ')||'未知'],['流派',data.genres?.join(' / ')||'未知']];
-    target.replaceChildren();values.forEach(([label,value,hint])=>{const cell=node('div'),term=node('dt',label),description=node('dd',value);if(hint){cell.title=hint;if(label==='活跃年份')description.append(node('small','库内发行年份'));}cell.append(term,description);target.append(cell);});
+    const values=[['歌曲',data.songCount+' 首'],['专辑',data.albumCount+' 张'],['时长',duration(data.duration)],['年份',years,'按库内歌曲的发行年份范围统计'],['来源',[data.localCount?'本地 '+data.localCount+' 首':'',data.remoteCount?'远程 '+data.remoteCount+' 首':''].filter(Boolean).join(' · ')||'未知'],['流派',data.genres?.join(' / ')||'未知']];
+    target.replaceChildren();values.forEach(([label,value,hint])=>{const cell=node('div'),term=node('dt',label),description=node('dd',value);if(hint){cell.title=hint;}cell.append(term,description);target.append(cell);});
   }
   async function overview(category,name,tracks,target,note,token){
     const basic=base(tracks),key=category+'\n'+name;
     stats(target,basic,live);note.textContent=live?'正在读取文件编码信息…':'演示曲库 · 未连接真实编码信息';
     if(!live)return;
-    try{let data=cache.get(key);if(!data){data=await window.CelesteTransport.request('collectionOverview',{category,name});if(!data)throw new Error('暂未取得统计信息');if(token!==generation)return;cache.set(key,data);}if(token!==generation)return;stats(target,data);note.textContent=data.unknownCount?`${data.unknownCount} 首编码未识别；无损占比仅统计已识别曲目。`:'编码信息已读取 · 活跃年份按库内发行年份统计。';}
+    try{let data=cache.get(key);if(!data){data=await window.CelesteTransport.request('collectionOverview',{category,name});if(!data)throw new Error('暂未取得统计信息');if(token!==generation)return;cache.set(key,data);}if(token!==generation)return;stats(target,data);note.textContent='年份按库内歌曲的发行年份统计。';}
     catch(error){if(token!==generation)return;stats(target,basic);note.textContent='编码统计暂不可用：'+error.message;}
   }
   function play(group){if(live)shell.playTracks(group.tracks.map(track=>track.id));else shell.playDemo(Number(group.tracks[0].id));}
@@ -87,4 +86,5 @@
   document.addEventListener('celeste:message',event=>{if(event.detail.kind==='celeste.state')requestAnimationFrame(updatePlaying);});
   const summary=node('dl',undefined,'collection-stats album-summary'),note=node('p',undefined,'setting-note');summary.id='album-summary';$('album-tracks').before(summary,note);
   document.addEventListener('celeste:album-open',event=>{overview('albums',event.detail.album.title,event.detail.tracks,summary,note,++generation);});
+  window.CelesteArtists=Object.freeze({getGroups:()=>groups,openByName:(name,trail=[])=>{kind='artists';rebuild();const group=groups.find(item=>item.name===name);if(!group)return false;opened=group;shell.navigate('artists');if(trail.length)shell.setPath([...trail,{label:group.name,action:()=>open(group)}]);return true;}});
 })();

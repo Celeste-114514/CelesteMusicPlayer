@@ -826,7 +826,7 @@
     const ico = node('span', undefined, 'dsp-chain-icon');
     ico.append(glyph(m.icon, 17));
     const copy = node('span', undefined, 'dsp-chain-copy');
-    copy.append(node('strong', m.name), node('small', m.desc));
+    copy.append(node('strong', m.name));
     const state = node('span', undefined, 'dsp-chain-state');
     state.append(glyph('check', 14));
     if (m.id === 'rack') state.classList.add('always');
