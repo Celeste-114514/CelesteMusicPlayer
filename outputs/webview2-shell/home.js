@@ -25,8 +25,7 @@
   }
   function renderNow(){
     const state=shell.getState(),hasTrack=!!state.trackId||(!live&&state.title),cover=$('home-now-cover');cover.replaceChildren();
-    if(hasTrack&&state.coverUrl)cover.append(artwork({coverUrl:state.coverUrl},''));else cover.append(icon('note'));
-    if(hasTrack&&state.coverUrl){const art=cover.firstElementChild;art.style.cssText='width:100%;height:100%;border-radius:0;box-shadow:none';}
+    if(hasTrack&&state.coverUrl)cover.append(...artwork({coverUrl:state.coverUrl},'').childNodes);else cover.append(icon('note'));
     $('home-now-label').textContent=hasTrack?(state.playing?'正在播放':'当前曲目 · 已暂停'):'上次播放';
     $('home-now-title').textContent=hasTrack?state.title:(snapshot?.lastTrackTitle||'还没有播放记录');
     $('home-now-album').textContent=hasTrack?(state.album||''):(snapshot?.lastTrackAlbum||'');
