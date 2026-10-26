@@ -18,10 +18,11 @@
 
         小条上的功能（用户 10-19 点单）：播放/暂停、上一首/下一首、可拖进度条、
         双击小条把主窗口叫到前台、始终置顶开关、音量、一行歌词。
-        底色三个选项（设置项 MiniPlayerBackground，「底」字按钮循环切换）：
+        底色四个选项（设置项 MiniPlayerBackground，「底」字按钮循环切换）：
           Cover   = 专辑封面铺满 + 压暗纱罩（封面透约两成，白字白条永远可读）
           Dark    = 固定深色纯色底
           Frosted = 毛玻璃：65% 深色纱 + 透出 DesktopAcrylic 背板
+          Glow    = 流动炫光：近黑底 + 三团封面显著色光斑缓慢漂移（Apple Music 迷你播放器那种）
 
         ★ 扩展区（用户 10-19 追加）：点「词」或「队」→ 小条**向下长高**出一块面板，
           显示滚动歌词（当前行高亮+自动滚到视野、点一行跳转到该句）或完整播放队列
@@ -61,6 +62,50 @@
             x:Name="BackgroundScrim"
             Opacity="0"
             IsHitTestVisible="False" />
+
+        <!-- 背景层 3：流动炫光（Glow 态显示）—— 三团封面显著色光斑。
+             定位用对齐锚点（左上一 / 右下一 / 居中），窗口长高时自动跟着走；
+             漂移 = RenderTransform 上的 TranslateTransform，代码帧同步驱动（双正弦叠加，
+             见 xaml.cs OnGlowRendering）；换色 = Fill 换 RadialGradientBrush（ApplyGlowColors）。
+             光斑半径渐变到边缘全透明，所以椭圆硬边看不见，看到的是一团软光。 -->
+        <Ellipse
+            x:Name="GlowBlobA"
+            Width="340"
+            Height="340"
+            HorizontalAlignment="Left"
+            VerticalAlignment="Top"
+            Margin="-90,-70,0,0"
+            Opacity="0"
+            IsHitTestVisible="False">
+            <Ellipse.RenderTransform>
+                <TranslateTransform x:Name="GlowSlideA" />
+            </Ellipse.RenderTransform>
+        </Ellipse>
+        <Ellipse
+            x:Name="GlowBlobB"
+            Width="320"
+            Height="320"
+            HorizontalAlignment="Right"
+            VerticalAlignment="Bottom"
+            Margin="0,0,-60,-90"
+            Opacity="0"
+            IsHitTestVisible="False">
+            <Ellipse.RenderTransform>
+                <TranslateTransform x:Name="GlowSlideB" />
+            </Ellipse.RenderTransform>
+        </Ellipse>
+        <Ellipse
+            x:Name="GlowBlobC"
+            Width="260"
+            Height="260"
+            HorizontalAlignment="Center"
+            VerticalAlignment="Center"
+            Opacity="0"
+            IsHitTestVisible="False">
+            <Ellipse.RenderTransform>
+                <TranslateTransform x:Name="GlowSlideC" />
+            </Ellipse.RenderTransform>
+        </Ellipse>
 
         <!-- 内容层：行0 = 小条主体（固定 105），行1 = 扩展面板（动画长高） -->
         <Grid x:Name="ContentGrid" Padding="10,6,10,7">
@@ -135,13 +180,23 @@
                         TextTrimming="CharacterEllipsis"
                         MaxWidth="190"
                         Text="" />
-                    <TextBlock
-                        x:Name="LyricText"
-                        FontSize="11"
-                        Foreground="#8CFFFFFF"
-                        TextTrimming="CharacterEllipsis"
-                        MaxWidth="190"
-                        Text="" />
+                    <!-- 单行歌词：放得下就静止；放不下跑马灯往左滚
+                         （LyricMarquee = 裁口，Clip 显式设；LyricText 整行溢出渲染；
+                         LyricSlide = TranslateTransform 平移，帧同步驱动，见 xaml.cs） -->
+                    <Grid
+                        x:Name="LyricMarquee"
+                        MaxWidth="190">
+                        <TextBlock
+                            x:Name="LyricText"
+                            FontSize="11"
+                            Foreground="#8CFFFFFF"
+                            TextTrimming="None"
+                            Text="">
+                            <TextBlock.RenderTransform>
+                                <TranslateTransform x:Name="LyricSlide" />
+                            </TextBlock.RenderTransform>
+                        </TextBlock>
+                    </Grid>
                 </StackPanel>
 
                 <!-- ============ 右侧：上排小按钮（底色/歌词/队列/音量/置顶/关闭）+ 下排传输 ============ -->
@@ -152,7 +207,7 @@
                     Spacing="2">
 
                     <StackPanel Orientation="Horizontal" Spacing="2" HorizontalAlignment="Right">
-                        <!-- 底色循环：封面 → 深色 → 毛玻璃（写回设置 MiniPlayerBackground） -->
+                        <!-- 底色循环：封面 → 深色 → 毛玻璃 → 炫光（写回设置 MiniPlayerBackground） -->
                         <Button
                             x:Name="BackgroundModeButton"
                             Width="26"
@@ -163,7 +218,7 @@
                             BorderThickness="0"
                             FontSize="11"
                             Click="BackgroundModeButton_Click"
-                            ToolTipService.ToolTip="切换底色：封面 / 深色 / 毛玻璃">
+                            ToolTipService.ToolTip="切换底色：封面 / 深色 / 毛玻璃 / 炫光">
                             <TextBlock x:Name="BackgroundModeText" Text="底" VerticalAlignment="Center" />
                         </Button>
                         <!-- 歌词面板开关（展开 = 小条向下长高显示滚动歌词） -->
@@ -379,11 +434,14 @@
                         </Grid>
 
                         <!-- 歌词视图：代码逐行建 TextBlock（当前行高亮 + 自动滚 + 点行跳转） -->
+                        <!-- 横向滚动必须禁用：默认 Auto 下内容按无穷宽量算，TextBlock 不受约束、
+                             长行会突出去；禁用后内容按视口宽量算，配合 TextWrapping=Wrap 自动换行 -->
                         <ScrollViewer
                             x:Name="LyricsScroll"
                             Grid.Row="1"
                             VerticalScrollBarVisibility="Hidden"
-                            HorizontalScrollBarVisibility="Hidden">
+                            HorizontalScrollBarVisibility="Disabled"
+                            HorizontalScrollMode="Disabled">
                             <StackPanel x:Name="LyricsRows" Spacing="6" />
                         </ScrollViewer>
 

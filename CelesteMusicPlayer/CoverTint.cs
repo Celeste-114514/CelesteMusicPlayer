@@ -16,9 +16,13 @@
 //
 // ⚠️ 解码走 WinRT 的 BitmapDecoder，不用 GDI+（System.Drawing 不认 WebP/HEIC/AVIF，
 //    内嵌封面里这些格式不少，用 GDI+ 会整片取色失败）。
+//
+// 2026-10-20 追加「显著色板」（AnalyzePaletteAsync）：迷你播放器炫光底色用 ——
+//   按色相分桶取最多 3 个分得开的鲜艳色，光斑色由 GlowColor 提亮生成。
 // ============================================================================
 
 using System;
+using System.Collections.Generic;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Media;
@@ -63,6 +67,15 @@ namespace CelesteMusicPlayer
 
         private static async Task<Color?> SampleDominantCore(byte[] coverBytes)
         {
+            byte[]? data = await SamplePixelsAsync(coverBytes).ConfigureAwait(false);
+            return data is null ? null : ComputeDominant(data);
+        }
+
+        /// <summary>
+        /// 解码 + 缩到 24×24 采样，返回 RGBA8 像素字节（主色 / 色板共用一次解码逻辑）。
+        /// </summary>
+        private static async Task<byte[]?> SamplePixelsAsync(byte[] coverBytes)
+        {
             using var inStream = new InMemoryRandomAccessStream();
             await inStream.WriteAsync(coverBytes.AsBuffer());
             inStream.Seek(0);
@@ -84,8 +97,7 @@ namespace CelesteMusicPlayer
                 ExifOrientationMode.RespectExifOrientation,
                 ColorManagementMode.ColorManageToSRgb);
 
-            byte[] data = pixels.DetachPixelData();
-            return ComputeDominant(data);
+            return pixels.DetachPixelData();
         }
 
         /// <summary>
@@ -146,6 +158,167 @@ namespace CelesteMusicPlayer
             }
 
             return Color.FromArgb(255, (byte)(sr / sw), (byte)(sg / sw), (byte)(sb / sw));
+        }
+
+        /// <summary>
+        /// 从封面取「显著色板」（迷你播放器炫光模式用）：最多 maxColors 个**色相拉开**的鲜艳色。
+        /// 取不到返回 null（调用方回落兜底家族色）。
+        /// </summary>
+        public static async Task<IReadOnlyList<Color>?> AnalyzePaletteAsync(byte[]? coverBytes, int maxColors = 3)
+        {
+            if (coverBytes == null || coverBytes.Length == 0)
+            {
+                return null;
+            }
+
+            try
+            {
+                return await Task.Run(() => SamplePaletteCore(coverBytes, maxColors)).ConfigureAwait(false);
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("CoverTint.AnalyzePalette", ex);
+                return null;
+            }
+        }
+
+        private static async Task<IReadOnlyList<Color>?> SamplePaletteCore(byte[] coverBytes, int maxColors)
+        {
+            byte[]? data = await SamplePixelsAsync(coverBytes).ConfigureAwait(false);
+            return data is null ? null : ComputePalette(data, maxColors);
+        }
+
+        /// <summary>
+        /// 显著色板 = 按色相分桶、饱和度加权，取权重最高的若干个**色相拉开差距**的桶的平均色。
+        ///
+        /// 为什么按色相分桶而不是直接求平均：炫光要的是"封面里那几个跳出来的颜色"
+        /// （比如红底专辑上的一撮蓝），平均色会把它们搅成灰。分桶后每个桶是一种色相，
+        /// 按权重挑、色相太近的跳过，出来的就是一组分得开的显著色。
+        /// </summary>
+        private static IReadOnlyList<Color>? ComputePalette(byte[] data, int maxColors)
+        {
+            const int HueBins = 18; // 每桶 20°
+            double[] binWeight = new double[HueBins];
+            double[] binR = new double[HueBins];
+            double[] binG = new double[HueBins];
+            double[] binB = new double[HueBins];
+            double ar = 0, ag = 0, ab = 0;
+            int all = 0;
+
+            for (int i = 0; i + 3 < data.Length; i += 4)
+            {
+                byte a = data[i + 3];
+                if (a < 128)
+                {
+                    continue;
+                }
+
+                byte r = data[i];
+                byte g = data[i + 1];
+                byte b = data[i + 2];
+
+                all++;
+                ar += r;
+                ag += g;
+                ab += b;
+
+                double max = Math.Max(r, Math.Max(g, b));
+                double min = Math.Min(r, Math.Min(g, b));
+                double l = (max + min) / 510.0;
+                if (l < 0.12 || l > 0.90)
+                {
+                    continue; // 近黑/近白不进桶（与主色同一口径）
+                }
+
+                double sat = max <= 0 ? 0 : (max - min) / max;
+                double w = 1.0 + sat * 2.5; // 饱和度加权：鲜艳的说了算
+
+                RgbToHsl(Color.FromArgb(255, r, g, b), out double h, out _, out _);
+                int bin = (int)(h * HueBins) % HueBins;
+                binWeight[bin] += w;
+                binR[bin] += r * w;
+                binG[bin] += g * w;
+                binB[bin] += b * w;
+            }
+
+            if (all == 0)
+            {
+                return null;
+            }
+
+            // 桶按权重排序（只排有货的）
+            var order = new List<int>();
+            for (int bin = 0; bin < HueBins; bin++)
+            {
+                if (binWeight[bin] > 0)
+                {
+                    order.Add(bin);
+                }
+            }
+            order.Sort((x, y) => binWeight[y].CompareTo(binWeight[x]));
+
+            // 贪心挑：色相与已挑的差不够 30° 就跳过（相邻桶往往是同一个颜色的两侧）
+            var picked = new List<Color>();
+            var pickedHues = new List<double>();
+            foreach (int bin in order)
+            {
+                if (picked.Count >= maxColors)
+                {
+                    break;
+                }
+
+                double hue = (bin + 0.5) / HueBins;
+                bool tooClose = false;
+                foreach (double ph in pickedHues)
+                {
+                    double d = Math.Abs(hue - ph);
+                    d = Math.Min(d, 1.0 - d); // 色相是环，0° 和 360° 是邻居
+                    if (d < 0.083)
+                    {
+                        tooClose = true;
+                        break;
+                    }
+                }
+                if (tooClose)
+                {
+                    continue;
+                }
+
+                pickedHues.Add(hue);
+                picked.Add(Color.FromArgb(255,
+                    (byte)(binR[bin] / binWeight[bin]),
+                    (byte)(binG[bin] / binWeight[bin]),
+                    (byte)(binB[bin] / binWeight[bin])));
+            }
+
+            if (picked.Count == 0)
+            {
+                // 全是近黑/近白（黑白封面）：退回普通平均，交给 GlowColor 决定怎么显色
+                picked.Add(Color.FromArgb(255, (byte)(ar / all), (byte)(ag / all), (byte)(ab / all)));
+            }
+
+            return picked;
+        }
+
+        /// <summary>
+        /// 炫光光斑色：保留色相，把亮度提到"发光"档（比压暗渐变亮一档，光斑才立得起来）。
+        /// 灰度封面没有色相可展示 → 给一档冷紫灰（与兜底色 FallbackBase 同族），
+        /// 免得 h=0 被硬染成红色、也免得灰光斑把白字衬没。
+        /// </summary>
+        public static Color GlowColor(Color source, double lightness = 0.40)
+        {
+            RgbToHsl(source, out double h, out double s, out _);
+            if (s < 0.10)
+            {
+                h = 0.72;
+                s = 0.20;
+            }
+            else
+            {
+                s = Math.Clamp(s, 0.30, 0.70);
+            }
+
+            return FromHsl(h, s, lightness);
         }
 
         /// <summary>

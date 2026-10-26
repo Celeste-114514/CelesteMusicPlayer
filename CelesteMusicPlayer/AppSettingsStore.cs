@@ -756,7 +756,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             HiFiSoftwareVolume = s.HiFiSoftwareVolume,
             PlaybackOrder = s.PlaybackOrder,
             MiniPlayerAlwaysOnTop = s.MiniPlayerAlwaysOnTop,
-            MiniPlayerBackground = s.MiniPlayerBackground is "Cover" or "Dark" or "Frosted"
+            MiniPlayerBackground = s.MiniPlayerBackground is "Cover" or "Dark" or "Frosted" or "Glow"
                 ? s.MiniPlayerBackground
                 : "Cover",
             OpenDesktopLyricsOnStartup = s.OpenDesktopLyricsOnStartup,

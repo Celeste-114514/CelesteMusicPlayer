@@ -24,9 +24,10 @@ namespace CelesteMusicPlayer
     /// 旧版（已删除，备份 _celeste_mini_removed_20261019）反过来抓着主窗口 27 处内部方法，
     /// 主窗口动一点它就出错 —— 用户说的"很多 bug"就是这么来的。
     ///
-    /// 功能（用户 10-19 点单）：播放/暂停、上一首/下一首、可拖进度条、双击回主窗口、
-    /// 始终置顶、音量、播放队列、一行歌词。底色三选（设置 MiniPlayerBackground，
-    /// 左上角「底」字按钮循环切换）：封面压暗 / 固定深色 / 毛玻璃。
+        /// 功能（用户 10-19 点单）：播放/暂停、上一首/下一首、可拖进度条、双击回主窗口、
+        /// 始终置顶、音量、播放队列、一行歌词（放不下自动跑马灯左滚）。底色四选
+        /// （设置 MiniPlayerBackground，左上角「底」字按钮循环切换）：封面压暗 /
+        /// 固定深色 / 毛玻璃 / 流动炫光（封面显著色光斑缓慢漂移）。
     ///
     /// 移动窗口 = 按住空白处拖：轮询定时器自己读光标挪窗（零散播放窗口同款定案配方，
     /// 本机实测三条常规路都不通，详见 StartPollingDrag 注释）。
@@ -43,6 +44,15 @@ namespace CelesteMusicPlayer
         // 封面加载防串台（切歌快时旧回调不许覆盖新封面）
         private int _coverToken;
         private byte[]? _shownCoverBytes;
+
+        // Glow 态（流动炫光）：封面显著色板（换歌时随 LoadCoverBackgroundAsync 重算；
+        // 取不到 → 兜底家族色）。漂移 = 帧同步驱动（CompositionTarget.Rendering），
+        // 双正弦叠加出有机轨迹；进入时三团光斑错峰淡入 400ms。
+        private IReadOnlyList<Windows.UI.Color>? _glowPalette;
+        private bool _glowRunning;
+        private readonly System.Diagnostics.Stopwatch _glowClock = new();
+        private double _glowLastSec;
+        private double _glowFade;
 
         // 进度条拖动态（指针事件必须代码挂 + handledEventsToo，见 HookProgressSliderPointer）
         private bool _userSeeking;
@@ -129,6 +139,34 @@ namespace CelesteMusicPlayer
         private static readonly SolidColorBrush LyricHintBrush =
             new(Windows.UI.Color.FromArgb(0x73, 0xFF, 0xFF, 0xFF));
 
+        // ----------------------------------------------------------------
+        // 收起态单行歌词跑马灯（2026-10-20 追加）
+        //
+        // 歌词行超过视口宽时自动往左滚：开头停 ~0.9s 让人起读 → 匀速滚到末尾 →
+        // 末尾停 ~1.4s → 回开头循环。放得下的行不动（停机，不白烧帧）。
+        //
+        // 结构：LyricMarquee（Grid，MaxWidth=190）= 裁口，Clip 必须**显式**设
+        //   （Grid 默认不裁子内容，SizeChanged 里跟住实际宽高）；LyricText
+        //   （TextBlock，TextTrimming=None）= 整行溢出渲染；LyricSlide
+        //   （TranslateTransform）= 平移量。Clip 在父、Transform 在子 —— 顺序反了
+        //   裁口会跟着文字一起跑，超宽部分就漏出来了。
+        // 驱动 = CompositionTarget.Rendering（帧同步，与面板展开动画同一套）；
+        //   位移按**真实耗时**算（Stopwatch），不按帧数算 —— 帧间隔抖动不会让
+        //   速度忽快忽慢；被全屏程序遮住恢复时钳一下 dt，别一大步跳过去。
+        // ----------------------------------------------------------------
+        private bool _marqueeRunning;
+        private readonly System.Diagnostics.Stopwatch _marqueeClock = new();
+        private double _marqueeLastMs;
+        private double _lyricMaxOffset;
+        private double _lyricOffset;
+        private int _marqueePhase;        // 0=开头停顿 1=滚动 2=末尾停顿
+        private double _marqueePhaseMs;
+        private static TextBlock? _lyricMeasureProbe;
+        private const double MarqueeSpeedPxPerSec = 50;
+        private const double MarqueeHoldStartMs = 900;
+        private const double MarqueeHoldEndMs = 1400;
+        private const double MarqueeMaxFrameMs = 120;
+
         // 队列面板：投影用的原始标题表（内容变了才重投影 + 重绑）
         private List<string>? _queueSourceTitles;
         private List<QueueRow>? _queueRows;
@@ -167,9 +205,9 @@ namespace CelesteMusicPlayer
                 global::CelesteMusicPlayer.StartupLog.WriteException("MiniPlayerWindow.ctor.backdrop", caught);
             }
 
-            // 底色：设置项 MiniPlayerBackground（封面 / 深色 / 毛玻璃，默认封面）
+            // 底色：设置项 MiniPlayerBackground（封面 / 深色 / 毛玻璃 / 炫光，默认封面）
             AppSettingsState settings = AppSettingsStore.Load();
-            _bgMode = settings.MiniPlayerBackground is "Dark" or "Frosted"
+            _bgMode = settings.MiniPlayerBackground is "Dark" or "Frosted" or "Glow"
                 ? settings.MiniPlayerBackground
                 : "Cover";
             ApplyBackgroundMode(_bgMode, persist: false);
@@ -180,6 +218,20 @@ namespace CelesteMusicPlayer
             // 滑块指针事件：Slider 内部会把 PointerPressed/Released 标成 Handled，
             // XAML 挂的处理器收不到 → 拖动失效。必须代码挂 + handledEventsToo。
             HookProgressSliderPointer();
+
+            // 跑马灯裁口：Grid 默认不裁子内容，Clip 必须显式设（跟住实际宽高；
+            // 窗口固定 480 宽，布局一次到位，之后不再变）
+            LyricMarquee.SizeChanged += (_, _) =>
+            {
+                if (LyricMarquee.ActualWidth > 0 && LyricMarquee.ActualHeight > 0)
+                {
+                    LyricMarquee.Clip = new Microsoft.UI.Xaml.Media.RectangleGeometry
+                    {
+                        Rect = new Windows.Foundation.Rect(
+                            0, 0, LyricMarquee.ActualWidth, LyricMarquee.ActualHeight),
+                    };
+                }
+            };
 
             // 窗口 chrome：去系统标题栏、无最大化、固定大小；关闭是自绘按钮
             var presenter = OverlappedPresenter.Create();
@@ -221,6 +273,12 @@ namespace CelesteMusicPlayer
                 // 闭窗后事件还在打（摸已释放的 XAML）；定时器留着也会继续步进。
                 Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnPanelRendering;
                 _panelTimer?.Stop();
+                // 跑马灯同理由此退订（静态事件，闭窗后还在打会摸到已释放的 LyricSlide）
+                Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnLyricMarqueeRendering;
+                _marqueeRunning = false;
+                // 炫光漂移同理退订（闭窗后还在打会摸到已释放的 GlowSlide*）
+                Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnGlowRendering;
+                _glowRunning = false;
                 RemoveWindowSubclassIfNeeded();
             };
         }
@@ -257,7 +315,13 @@ namespace CelesteMusicPlayer
             {
                 TitleText.Text = string.IsNullOrWhiteSpace(snap.Title) ? "未在播放" : snap.Title;
                 ArtistText.Text = snap.Artist ?? "";
-                LyricText.Text = snap.LyricLine ?? "";
+                // 歌词行换了才重启跑马灯（每 200ms 都推状态，不能每 tick 重来一遍）
+                string lyricLine = snap.LyricLine ?? "";
+                if (LyricText.Text != lyricLine)
+                {
+                    LyricText.Text = lyricLine;
+                    RestartLyricMarquee();
+                }
                 PlayPauseIcon.Glyph = snap.IsPlaying ? "\uE769" : "\uE768";
 
                 // 封面：主窗口已解码好的 ImageSource 直接复用（迷你不再自己解码一遍）
@@ -440,6 +504,41 @@ namespace CelesteMusicPlayer
                 ApplyCoverScrim();
             }
 
+            // 显著色板（Glow 态光斑用）：与主色各解一次码（换歌才跑，代价可忽略）；
+            // 当前就在 Glow 态 → 顺手把光斑换成新封面的颜色
+            if (bytes is { Length: > 0 })
+            {
+                _glowPalette = await CoverTint.AnalyzePaletteAsync(bytes);
+                if (token != _coverToken)
+                {
+                    return;
+                }
+
+                var paletteParts = new List<string>();
+                if (_glowPalette != null)
+                {
+                    foreach (Windows.UI.Color c in _glowPalette)
+                    {
+                        paletteParts.Add($"#{c.R:X2}{c.G:X2}{c.B:X2}");
+                    }
+                }
+                StartupLog.Write(
+                    $"迷你播放器炫光色板 色数={_glowPalette?.Count ?? 0} {string.Join(" ", paletteParts)}");
+
+                if (_bgMode == "Glow")
+                {
+                    ApplyGlowColors();
+                }
+            }
+            else
+            {
+                _glowPalette = null;
+                if (_bgMode == "Glow")
+                {
+                    ApplyGlowColors();
+                }
+            }
+
             // 模糊大图（与主程序整窗背景同一实现；模糊失败不影响纱罩，封面图不铺而已）
             if (bytes is { Length: > 0 } && _bgMode == "Cover")
             {
@@ -474,6 +573,127 @@ namespace CelesteMusicPlayer
             BackgroundScrim.Opacity = 1;
         }
 
+        // =====================================================================
+        // Glow 态背景：流动炫光（2026-10-20 追加）
+        //
+        // 结构 = 近黑底（RootGrid.Background）+ 三团封面显著色光斑（Ellipse 灌
+        //   RadialGradientBrush，边缘全透明所以看不见椭圆硬边）+ 一层轻黑纱
+        //   （BackgroundScrim 改作中性压暗，保证白字白条在光斑上也读得清）。
+        // 光斑定位用**对齐锚点**（左上一 / 右下一 / 居中）：窗口展开长高时
+        //   自动跟着走，不用每帧重算位置（面板动画每帧都在 resize）。
+        // 漂移 = RenderTransform 上的 TranslateTransform，帧同步驱动
+        //   （CompositionTarget.Rendering，与跑马灯/面板动画同一套），
+        //   双正弦叠加（主波 + 高频小波）→ 轨迹不重复、不像机械往复。
+        // =====================================================================
+
+        /// <summary>把三团光斑换成当前封面的显著色（换歌 / 进 Glow 态时调）。</summary>
+        private void ApplyGlowColors()
+        {
+            IReadOnlyList<Windows.UI.Color> palette = _glowPalette ?? Array.Empty<Windows.UI.Color>();
+            Windows.UI.Color c0 = palette.Count > 0 ? palette[0] : CoverTint.FallbackBase;
+            Windows.UI.Color c1 = palette.Count > 1 ? palette[1] : c0;
+            Windows.UI.Color c2 = palette.Count > 2 ? palette[2] : c0;
+
+            GlowBlobA.Fill = BuildGlowBrush(c0, 0.42);
+            GlowBlobB.Fill = BuildGlowBrush(c1, 0.36);
+            GlowBlobC.Fill = BuildGlowBrush(c2, 0.44);
+        }
+
+        /// <summary>
+        /// 一团光斑的画刷：核心亮（提亮档 + 约 2/3 不透明）→ 中段半透明 → 边缘全透明。
+        /// 亮度刻意压在 0.4 上下：再亮白字就衬不住了（实测白字在 L=0.4 上约 5:1，
+        /// 叠上轻黑纱后回到 6:1 以上）。
+        /// </summary>
+        private static RadialGradientBrush BuildGlowBrush(Windows.UI.Color color, double lightness)
+        {
+            Windows.UI.Color core = CoverTint.GlowColor(color, lightness);
+            Windows.UI.Color mid = CoverTint.GlowColor(color, lightness * 0.7);
+
+            var brush = new RadialGradientBrush();
+            brush.GradientStops.Add(new GradientStop
+            {
+                Color = Windows.UI.Color.FromArgb(170, core.R, core.G, core.B),
+                Offset = 0,
+            });
+            brush.GradientStops.Add(new GradientStop
+            {
+                Color = Windows.UI.Color.FromArgb(80, mid.R, mid.G, mid.B),
+                Offset = 0.45,
+            });
+            brush.GradientStops.Add(new GradientStop
+            {
+                Color = Windows.UI.Color.FromArgb(0, mid.R, mid.G, mid.B),
+                Offset = 1,
+            });
+            return brush;
+        }
+
+        /// <summary>进 Glow 态：换色 + 开漂移（光斑从透明错峰长出来）。</summary>
+        private void StartGlowDrift()
+        {
+            _glowFade = 0;
+            _glowLastSec = 0;
+            _glowClock.Restart();
+            if (_glowRunning)
+            {
+                return;
+            }
+
+            _glowRunning = true;
+            // ⚠ Rendering 是静态事件：先减后加防重复订阅；闭窗/离开 Glow 态必须退订
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnGlowRendering;
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnGlowRendering;
+        }
+
+        /// <summary>离开 Glow 态：停漂移 + 光斑藏起来（硬切，与其余底色态一致）。</summary>
+        private void StopGlowDrift()
+        {
+            if (_glowRunning)
+            {
+                _glowRunning = false;
+                Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnGlowRendering;
+            }
+
+            GlowBlobA.Opacity = 0;
+            GlowBlobB.Opacity = 0;
+            GlowBlobC.Opacity = 0;
+        }
+
+        /// <summary>
+        /// 漂移步进（帧同步驱动）：三团光斑各按两条正弦（主波 + 高频小波）平移，
+        /// 频率/相位/方向都错开 → 此起彼伏的缓慢流动。位移按真实耗时算，
+        /// 被全屏程序遮住恢复时钳一下 dt，别一大步跳过去。
+        /// </summary>
+        private void OnGlowRendering(object sender, object e)
+        {
+            double now = _glowClock.Elapsed.TotalSeconds;
+            double dt = now - _glowLastSec;
+            _glowLastSec = now;
+            if (dt <= 0)
+            {
+                return;
+            }
+
+            if (dt > 0.25)
+            {
+                dt = 0.25;
+            }
+
+            // 错峰淡入：A 先长出来，C 最后（400ms 内走完）
+            _glowFade = Math.Min(1, _glowFade + dt / 0.4);
+            GlowBlobA.Opacity = Math.Clamp(_glowFade / 0.5, 0, 1);
+            GlowBlobB.Opacity = Math.Clamp((_glowFade - 0.15) / 0.5, 0, 1);
+            GlowBlobC.Opacity = Math.Clamp((_glowFade - 0.3) / 0.5, 0, 1);
+
+            double t = now;
+            GlowSlideA.X = 30 * Math.Sin(t * 0.17) + 9 * Math.Sin(t * 0.53 + 1.7);
+            GlowSlideA.Y = 22 * Math.Sin(t * 0.13 + 0.9) + 7 * Math.Sin(t * 0.41 + 2.6);
+            GlowSlideB.X = -34 * Math.Sin(t * 0.11 + 2.2) + 10 * Math.Sin(t * 0.47 + 0.4);
+            GlowSlideB.Y = 26 * Math.Sin(t * 0.15 + 1.1) + 8 * Math.Sin(t * 0.37 + 3.1);
+            GlowSlideC.X = 24 * Math.Sin(t * 0.19 + 4.2) + 8 * Math.Sin(t * 0.61 + 1.2);
+            GlowSlideC.Y = -28 * Math.Sin(t * 0.12 + 2.9) + 9 * Math.Sin(t * 0.43 + 0.8);
+        }
+
         /// <summary>字节 → BitmapImage（须在 UI 线程调用）。</summary>
         private static async Task<BitmapImage?> DecodeBitmapAsync(byte[] bytes)
         {
@@ -494,19 +714,45 @@ namespace CelesteMusicPlayer
         }
 
         // =====================================================================
-        // 底色三态（封面压暗 / 深色 / 毛玻璃）
+        // 底色四态（封面压暗 / 深色 / 毛玻璃 / 流动炫光）
         // =====================================================================
 
         private void ApplyBackgroundMode(string mode, bool persist)
         {
             _bgMode = mode;
-            RootGrid.RequestedTheme = ElementTheme.Dark; // 三态全是深色底，白字白条
+            RootGrid.RequestedTheme = ElementTheme.Dark; // 四态全是深色底，白字白条
 
             if (mode == "Cover")
             {
                 RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(0, 0, 0, 0));
                 ApplyCoverScrim();
                 BackgroundCoverImage.Opacity = 1;
+                StopGlowDrift();
+            }
+            else if (mode == "Glow")
+            {
+                // 流动炫光：近黑底 + 三团封面显著色光斑 + 轻黑纱（光斑上白字也读得清）
+                RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 10, 8, 16));
+                var scrim = new LinearGradientBrush
+                {
+                    StartPoint = new Windows.Foundation.Point(0, 0),
+                    EndPoint = new Windows.Foundation.Point(0, 1),
+                };
+                scrim.GradientStops.Add(new GradientStop
+                {
+                    Color = Windows.UI.Color.FromArgb(48, 0, 0, 0),
+                    Offset = 0,
+                });
+                scrim.GradientStops.Add(new GradientStop
+                {
+                    Color = Windows.UI.Color.FromArgb(80, 0, 0, 0),
+                    Offset = 1,
+                });
+                BackgroundScrim.Fill = scrim;
+                BackgroundScrim.Opacity = 1;
+                BackgroundCoverImage.Opacity = 0;
+                ApplyGlowColors();
+                StartGlowDrift();
             }
             else if (mode == "Frosted")
             {
@@ -515,12 +761,14 @@ namespace CelesteMusicPlayer
                 BackgroundScrim.Opacity = 0;
                 BackgroundCoverImage.Opacity = 0;
                 EnsureAcrylicBackdrop();
+                StopGlowDrift();
             }
             else
             {
                 RootGrid.Background = new SolidColorBrush(Windows.UI.Color.FromArgb(255, 16, 16, 22));
                 BackgroundScrim.Opacity = 0;
                 BackgroundCoverImage.Opacity = 0;
+                StopGlowDrift();
             }
 
             PushDwmFrameColor(mode);
@@ -546,6 +794,7 @@ namespace CelesteMusicPlayer
             {
                 "Cover" => "Dark",
                 "Dark" => "Frosted",
+                "Frosted" => "Glow",
                 _ => "Cover"
             };
             ApplyBackgroundMode(next, persist: true);
@@ -1101,7 +1350,63 @@ namespace CelesteMusicPlayer
 
                 _lyricIndexShown = -2; // 强制下一次高亮刷新
                 StartupLog.Write($"迷你播放器歌词面板重建 行数={_lyricRows.Count} 可跳转={_lyricsSynced}");
+
+                // 自检：长行换行是否生效。面板开着 → 强制布局量 DesiredSize 高度（>22px 即换行）；
+                // 面板没开 → 量最长行全宽做对照（横向滚动已禁用，超视口宽必换行）。
+                double longestPx = 0;
+                foreach (TextBlock row in _lyricRows)
+                {
+                    double w = MeasureLyricRowWidth(row);
+                    if (w > longestPx)
+                    {
+                        longestPx = w;
+                    }
+                }
+
+                if (LyricsScroll.Visibility == Visibility.Visible && !_panelAnimating)
+                {
+                    LyricsScroll.UpdateLayout();
+                    int wrapped = 0;
+                    foreach (TextBlock row in _lyricRows)
+                    {
+                        if (row.DesiredSize.Height > 22)
+                        {
+                            wrapped++;
+                        }
+                    }
+
+                    StartupLog.Write(
+                        $"迷你播放器歌词换行自检 行数={_lyricRows.Count} 换行行数={wrapped} " +
+                        $"最长行宽={longestPx:F0}px 视口宽={LyricsScroll.ViewportWidth:F0}px");
+                }
+                else
+                {
+                    StartupLog.Write(
+                        $"迷你播放器歌词换行自检 面板未展开 行数={_lyricRows.Count} 最长行宽={longestPx:F0}px");
+                }
             });
+        }
+
+        /// <summary>量一行歌词面板文本的完整像素宽（树外探针，字体属性从行上现拷）。</summary>
+        private double MeasureLyricRowWidth(TextBlock row)
+        {
+            if (string.IsNullOrEmpty(row.Text))
+            {
+                return 0;
+            }
+
+            TextBlock probe = _lyricMeasureProbe ??= new TextBlock
+            {
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.NoWrap,
+            };
+            probe.FontSize = row.FontSize;
+            probe.FontFamily = row.FontFamily;
+            probe.FontWeight = row.FontWeight;
+            probe.FontStretch = row.FontStretch;
+            probe.FontStyle = row.FontStyle;
+            probe.Text = row.Text;
+            probe.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            return probe.DesiredSize.Width;
         }
 
         private static TextBlock NewLyricRow(string text, Brush brush, double fontSize, bool current)
@@ -1114,6 +1419,10 @@ namespace CelesteMusicPlayer
                 FontWeight = current
                     ? Microsoft.UI.Text.FontWeights.SemiBold
                     : Microsoft.UI.Text.FontWeights.Normal,
+                TextAlignment = Microsoft.UI.Xaml.TextAlignment.Center,
+                // 长歌词行自动换行：中文无空格，字符级 Wrap 才换得动（WrapWholeWords 会把
+                // 整行当一个词，反而换不动）；横向滚动已在 XAML 侧禁用，视口宽即约束宽
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.Wrap,
                 TextTrimming = Microsoft.UI.Xaml.TextTrimming.CharacterEllipsis,
                 Margin = new Thickness(2, 0, 2, 0),
             };
@@ -1168,6 +1477,152 @@ namespace CelesteMusicPlayer
                 double target = top.Y + LyricsScroll.VerticalOffset - LyricsScroll.ViewportHeight / 3.0;
                 LyricsScroll.ChangeView(null, Math.Max(0, target), null, !smooth);
             });
+        }
+
+        // ----------------------------------------------------------------
+        // 单行歌词跑马灯（字段说明见上方 _marqueeRunning 附近注释）
+        // ----------------------------------------------------------------
+
+        /// <summary>歌词行换了：重新量宽，放得下就归位停机，放不下就开滚。</summary>
+        private void RestartLyricMarquee()
+        {
+            double viewport = LyricMarquee.ActualWidth;
+            if (viewport <= 1)
+            {
+                // 首帧之前视口还没量出来：不动，等下一次换行再试
+                // （窗口固定大小，布局一次到位，迟早有宽）
+                StopLyricMarqueeLoop();
+                LyricSlide.X = 0;
+                return;
+            }
+
+            string text = LyricText.Text ?? "";
+            double full = MeasureLyricWidth(text);
+            _lyricMaxOffset = Math.Max(0, full - viewport);
+
+            if (_lyricMaxOffset <= 0.5 || string.IsNullOrEmpty(text))
+            {
+                // 放得下（或空行）：归位、停机，不白烧帧
+                StopLyricMarqueeLoop();
+                LyricSlide.X = 0;
+                return;
+            }
+
+            _lyricOffset = 0;
+            LyricSlide.X = 0;
+            _marqueePhase = 0;
+            _marqueePhaseMs = 0;
+            _marqueeClock.Restart();
+            _marqueeLastMs = 0;
+            StartupLog.Write(
+                $"迷你播放器单行歌词跑马灯启动 文本宽={full:F0} 视口={viewport:F0} 滚动距离={_lyricMaxOffset:F0}");
+            StartLyricMarqueeLoop();
+        }
+
+        /// <summary>
+        /// 量一行歌词的完整像素宽。用**树外探针** TextBlock 量，不动真身 ——
+        /// 直接对 LyricText.Measure(无穷宽) 会打乱它在布局树里的量算。
+        /// 字体属性从 LyricText 现拷（文本属性沿树继承，读到的是生效值），
+        /// 探针量出来的宽才和屏上一致。
+        /// </summary>
+        private double MeasureLyricWidth(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+            {
+                return 0;
+            }
+
+            TextBlock probe = _lyricMeasureProbe ??= new TextBlock
+            {
+                TextWrapping = Microsoft.UI.Xaml.TextWrapping.NoWrap,
+            };
+            probe.FontSize = LyricText.FontSize;
+            probe.FontFamily = LyricText.FontFamily;
+            probe.FontWeight = LyricText.FontWeight;
+            probe.FontStretch = LyricText.FontStretch;
+            probe.FontStyle = LyricText.FontStyle;
+            probe.Text = text;
+            probe.Measure(new Windows.Foundation.Size(double.PositiveInfinity, double.PositiveInfinity));
+            return probe.DesiredSize.Width;
+        }
+
+        private void StartLyricMarqueeLoop()
+        {
+            if (_marqueeRunning)
+            {
+                return;
+            }
+
+            _marqueeRunning = true;
+            // ⚠ Rendering 是静态事件：先减后加防重复订阅；闭窗时必须退订
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnLyricMarqueeRendering;
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering += OnLyricMarqueeRendering;
+        }
+
+        private void StopLyricMarqueeLoop()
+        {
+            if (!_marqueeRunning)
+            {
+                return;
+            }
+
+            _marqueeRunning = false;
+            Microsoft.UI.Xaml.Media.CompositionTarget.Rendering -= OnLyricMarqueeRendering;
+        }
+
+        /// <summary>
+        /// 跑马灯步进（帧同步驱动，幂等）：开头停顿 → 匀速左滚 → 末尾停顿 → 回开头。
+        /// 位移按真实耗时算，两条驱动（将来若加定时器兜底）重复触发无害。
+        /// </summary>
+        private void OnLyricMarqueeRendering(object sender, object e)
+        {
+            double nowMs = _marqueeClock.Elapsed.TotalMilliseconds;
+            double dtMs = nowMs - _marqueeLastMs;
+            _marqueeLastMs = nowMs;
+            if (dtMs <= 0)
+            {
+                return;
+            }
+
+            // 被全屏程序遮住再恢复：钳一下，别一大步跳过去
+            if (dtMs > MarqueeMaxFrameMs)
+            {
+                dtMs = MarqueeMaxFrameMs;
+            }
+
+            switch (_marqueePhase)
+            {
+                case 0: // 开头停顿：让人先把句首读起来
+                    _marqueePhaseMs += dtMs;
+                    if (_marqueePhaseMs >= MarqueeHoldStartMs)
+                    {
+                        _marqueePhase = 1;
+                        _marqueePhaseMs = 0;
+                    }
+                    break;
+
+                case 1: // 匀速左滚
+                    _lyricOffset += MarqueeSpeedPxPerSec * dtMs / 1000.0;
+                    if (_lyricOffset >= _lyricMaxOffset)
+                    {
+                        _lyricOffset = _lyricMaxOffset;
+                        _marqueePhase = 2;
+                        _marqueePhaseMs = 0;
+                    }
+                    LyricSlide.X = -_lyricOffset;
+                    break;
+
+                case 2: // 末尾停顿后回开头，循环
+                    _marqueePhaseMs += dtMs;
+                    if (_marqueePhaseMs >= MarqueeHoldEndMs)
+                    {
+                        _lyricOffset = 0;
+                        LyricSlide.X = 0;
+                        _marqueePhase = 0;
+                        _marqueePhaseMs = 0;
+                    }
+                    break;
+            }
         }
 
         /// <summary>

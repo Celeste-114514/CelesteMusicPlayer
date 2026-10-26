@@ -563,7 +563,7 @@
                         </StackPanel>
 
                         <!-- 迷你播放器（2026-10-19 重建后放回：横向小条，见 MiniPlayerBridge）。
-                             底色三选 = 用户拍板"几个选项都要"：封面压暗 / 固定深色 / 毛玻璃。 -->
+                             底色四选 = 用户拍板"几个选项都要"：封面压暗 / 固定深色 / 毛玻璃 / 流动炫光。 -->
                         <StackPanel Spacing="10">
                             <TextBlock Text="迷你播放器" FontSize="15" FontWeight="SemiBold" />
                             <Grid ColumnSpacing="16">
@@ -573,7 +573,7 @@
                                 </Grid.ColumnDefinitions>
                                 <StackPanel Spacing="2" VerticalAlignment="Center">
                                     <TextBlock Text="底色" />
-                                    <TextBlock Text="封面 = 专辑封面铺满 + 压暗纱罩（跟着封面变色，白字永远可读）；深色 = 固定深色底；毛玻璃 = 透出桌面的磨砂效果" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
+                                    <TextBlock Text="封面 = 专辑封面铺满 + 压暗纱罩（跟着封面变色，白字永远可读）；深色 = 固定深色底；毛玻璃 = 透出桌面的磨砂效果；炫光 = 取封面显著色做流动光斑（Apple Music 迷你播放器那种）" FontSize="12" Opacity="0.65" TextWrapping="WrapWholeWords" />
                                 </StackPanel>
                                 <ComboBox
                                     x:Name="MiniBackgroundCombo"
@@ -583,6 +583,7 @@
                                     <ComboBoxItem Content="跟着封面走（压暗）" Tag="Cover" />
                                     <ComboBoxItem Content="固定深色" Tag="Dark" />
                                     <ComboBoxItem Content="毛玻璃" Tag="Frosted" />
+                                    <ComboBoxItem Content="流动炫光" Tag="Glow" />
                                 </ComboBox>
                             </Grid>
                             <Grid ColumnSpacing="16">
