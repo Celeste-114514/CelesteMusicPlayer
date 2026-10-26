@@ -65,7 +65,7 @@ namespace CelesteMusicPlayer
         /// 字符串型的排版变量（字体族名）。单独一支，不混进颜色目录：
         /// 颜色选择器会按 hex 校验，字体名不是 hex，混进去只会互相干扰。
         /// </summary>
-        internal static readonly string[] TextNames = { "font-ui", "font-cjk", "font-mono", "bg-mode", "bg-image", "bg-fit", "bg-pos" };
+        internal static readonly string[] TextNames = { "font-ui", "font-cjk", "font-mono", "bg-mode", "bg-image", "bg-video", "bg-fit", "bg-pos" };
 
         internal const string DefaultFontUi = "Segoe UI";
         internal const string DefaultFontCjk = "Microsoft YaHei UI";
@@ -269,10 +269,11 @@ namespace CelesteMusicPlayer
             public string playerButtons { get; set; } = DefaultPlayerButtons;
             /// <summary>半圆导航的项目分组与顺序（个人布局偏好，不随预设切换）</summary>
             public string navItems { get; set; } = DefaultNavItems;
-            /// <summary>背景模式：solid / gradient / cover / image</summary>
+            /// <summary>背景模式：solid / gradient / cover / image / video</summary>
             public string backgroundMode { get; set; } = "solid";
             /// <summary>背景图片地址（由宿主拷进受控目录后给的虚拟主机地址，不是用户原始路径）</summary>
             public string backgroundImage { get; set; } = "";
+            public string backgroundVideo { get; set; } = "";
             /// <summary>cover / contain</summary>
             public string backgroundFit { get; set; } = "cover";
             /// <summary>center / top / bottom</summary>
@@ -284,7 +285,7 @@ namespace CelesteMusicPlayer
             public int revision { get; set; }
         }
 
-        // —— 预设库：24 套，6 组各 4 套。每套只给基色与数值，其余由 Derive 派生 ——
+        // —— 预设库：26 套（含两套系统风格）。每套只给基色与数值，其余由 Derive 派生 ——
         private static Preset P(string id, string name, string group, string accent, string lightBg, string darkBg,
                                 double radius = 26, double blur = 25, double sat = 1, double motionSpeed = 1, double motionStrength = 1, string density = "normal",
                                 double textScale = 1, double lineHeight = 1.5) =>
@@ -323,7 +324,10 @@ namespace CelesteMusicPlayer
             P("pure-white", "纯净白", "专注与清晰", "#2f6fd0", "#ffffff", "#1a1a1a", 12, 6, 1.0, 0.85, 0.7),
             P("pure-black", "纯净黑", "专注与清晰", "#7aa7ff", "#e9e9e9", "#000000", 10, 4, 1.0, 0.8, 0.65),
             P("clear-light", "清晰浅色", "专注与清晰", "#1f7a6b", "#f7fbfb", "#132020", 14, 8, 0.9, 0.85, 0.7, "relaxed"),
-            P("clear-dark", "清晰深色", "专注与清晰", "#6fd3bf", "#eef2f2", "#0e1414", 14, 10, 0.95, 0.85, 0.7, "relaxed")
+            P("clear-dark", "清晰深色", "专注与清晰", "#6fd3bf", "#eef2f2", "#0e1414", 14, 10, 0.95, 0.85, 0.7, "relaxed"),
+            // 平台风格：使用本机已有字体；浅色/深色成对，几何和动效一并切换。
+            P("windows-fluent", "Windows · Fluent", "系统风格", "#0067c0", "#f3f3f3", "#202020", 8, 24, 0.95, 0.85, 0.55, "normal", 1, 1.45),
+            P("apple-silver", "Apple · 银白", "系统风格", "#007aff", "#f5f5f7", "#1c1c1e", 20, 32, 0.9, 1.05, 0.75, "relaxed", 1, 1.55),
         };
 
         // —— 颜色工具：预设只存基色，其余按 HSL 派生，明暗各一套 ——
@@ -462,7 +466,7 @@ namespace CelesteMusicPlayer
             double radius = preset.radius;
             string density = preset.density;
             double densityScale = density switch { "compact" => 0.82, "relaxed" => 1.18, _ => 1 };
-            return new Dictionary<string, string>(StringComparer.Ordinal)
+            var values = new Dictionary<string, string>(StringComparer.Ordinal)
             {
                 ["radius"] = radius.ToString("0.##", CultureInfo.InvariantCulture) + "px",
                 ["radius-sm"] = Math.Max(6, radius * 0.42).ToString("0.##", CultureInfo.InvariantCulture) + "px",
@@ -495,6 +499,15 @@ namespace CelesteMusicPlayer
                 ["bg-brightness"] = "1",
                 ["bg-scrim"] = "0.55"
             };
+            if (preset.id == "windows-fluent" || preset.id == "apple-silver")
+            {
+                bool apple = preset.id == "apple-silver";
+                values["player-opacity"] = apple ? "0.84" : "0.94";
+                values["player-blur"] = apple ? "24px" : "16px";
+                values["cover-radius"] = apple ? "10px" : "4px";
+                values["player-height"] = apple ? "124px" : "112px";
+            }
+            return values;
         }
 
         // —— 存储 ——
@@ -558,12 +571,16 @@ namespace CelesteMusicPlayer
             state.playerButtons = NormalizePlayerButtons(state.playerButtons);
             state.navItems = NormalizeNavItems(state.navItems);
             // 背景模式只认这四个；旧存档没这几项就回到"纯色"
-            if (state.backgroundMode != "gradient" && state.backgroundMode != "cover" && state.backgroundMode != "image") state.backgroundMode = "solid";
+            if (state.backgroundMode != "gradient" && state.backgroundMode != "cover" && state.backgroundMode != "image" && state.backgroundMode != "video") state.backgroundMode = "solid";
             if (state.backgroundFit != "contain") state.backgroundFit = "cover";
             if (state.backgroundPos != "top" && state.backgroundPos != "bottom") state.backgroundPos = "center";
             state.backgroundImage ??= "";
+            state.backgroundVideo ??= "";
+            if (!IsBackgroundUrl(state.backgroundImage)) state.backgroundImage = "";
+            if (!IsBackgroundUrl(state.backgroundVideo)) state.backgroundVideo = "";
             // 选了"图片"但没有图片地址 = 等于没选，回落纯色，免得界面上"选着图片却什么都没有"
             if (state.backgroundMode == "image" && state.backgroundImage.Length == 0) state.backgroundMode = "solid";
+            if (state.backgroundMode == "video" && state.backgroundVideo.Length == 0) state.backgroundMode = "solid";
             // 字体名留空（旧存档没这两项）就回到默认，别让 font-family 变成空值
             if (string.IsNullOrWhiteSpace(state.fontUi)) state.fontUi = DefaultFontUi;
             if (string.IsNullOrWhiteSpace(state.fontCjk)) state.fontCjk = DefaultFontCjk;
@@ -592,7 +609,7 @@ namespace CelesteMusicPlayer
                 presetId = state.presetId, revision = state.revision,
                 playerButtons = state.playerButtons,
                 navItems = state.navItems,
-                backgroundMode = state.backgroundMode, backgroundImage = state.backgroundImage,
+                backgroundMode = state.backgroundMode, backgroundImage = state.backgroundImage, backgroundVideo = state.backgroundVideo,
                 backgroundFit = state.backgroundFit, backgroundPos = state.backgroundPos,
                 fontUi = state.fontUi, fontCjk = state.fontCjk, fontMono = state.fontMono,
                 overrides = new Dictionary<string, string>(state.overrides ?? new(), StringComparer.Ordinal),
@@ -623,7 +640,29 @@ namespace CelesteMusicPlayer
 
         internal static void SetDraft(State state)
         {
-            lock (DraftGate) { _draft = Clone(state); }
+            Normalize(state);
+            bool unchanged = JsonSerializer.Serialize(EditState(state)) == JsonSerializer.Serialize(EditState(Load()));
+            lock (DraftGate) { _draft = unchanged ? null : Clone(state); }
+        }
+
+        // 历史保存原始覆盖表，而非派生 CSS。恢复时可以真正移除新增覆盖。
+        internal static State EditState(State state)
+        {
+            State copy = Clone(state);
+            copy.revision = 0;
+            copy.customPresets.Clear();
+            return copy;
+        }
+
+        internal static bool IsBackgroundUrl(string? value)
+        {
+            if (string.IsNullOrEmpty(value)) return true;
+            if (!Uri.TryCreate(value, UriKind.Absolute, out Uri? uri)
+                || uri.Scheme != "https" || uri.Host != "celeste-asset.internal"
+                || !uri.IsDefaultPort || uri.UserInfo.Length != 0 || uri.Fragment.Length != 0) return false;
+            string name = Uri.UnescapeDataString(uri.AbsolutePath.TrimStart('/'));
+            return name.Length > 0 && name != "." && name != ".."
+                && name.IndexOfAny(Path.GetInvalidFileNameChars()) < 0;
         }
 
         internal static void ClearDraft()
@@ -673,6 +712,7 @@ namespace CelesteMusicPlayer
             values["bg-image"] = string.IsNullOrWhiteSpace(state.backgroundImage)
                 ? "none"
                 : "url(\"" + state.backgroundImage + "\")";
+            values["bg-video"] = string.IsNullOrEmpty(state.backgroundVideo) ? "none" : state.backgroundVideo;
             values["bg-fit"] = string.IsNullOrWhiteSpace(state.backgroundFit) ? "cover" : state.backgroundFit;
             values["bg-pos"] = string.IsNullOrWhiteSpace(state.backgroundPos) ? "center" : state.backgroundPos;
 

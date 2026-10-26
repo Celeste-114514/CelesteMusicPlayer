@@ -1,8 +1,8 @@
 /* 外观工作区：预设库 + 明暗 + 元素参数 + 实时预览。
    数据全在宿主的 theme 通道里（预设、当前值、参数边界）；这里只负责画和预览。
    规则：
-   - 选预设 / 切明暗 / 改强调色 = 立即保存的偏好（这些是"我现在要用哪套外观"）。
-   - 拖颜色、拖滑杆 = 草稿预览，先只改当前页面；点保存才落盘，点取消就回到进页面时的样子。
+   - 选预设 / 切明暗 / 改强调色 = 即时预览的草稿（这些是"我现在要用哪套外观"）。
+   - 拖颜色、拖滑杆 = 草稿预览，先只改草稿；点保存才落盘，点取消就回到进页面时的样子。
    - 换外观绝不碰音频、DSP、账号、曲库目录。 */
 (() => {
   'use strict';
@@ -13,7 +13,7 @@
     if (cls) el.className = cls;
     return el;
   };
-  const request = (operation, payload) =>
+  const send = (operation, payload) =>
     window.CelesteTransport.request('theme', Object.assign({ operation }, payload));
 
   // 开放细调的语义色（只列真实有消费者的，避免摆一排改了没反应的输入框）
@@ -32,6 +32,8 @@
   let data = null;             // 宿主快照
   let editing = 'light';       // 正在编辑哪一套明暗
   let dirty = false;
+  let mountedHost = null;
+  let gestureId = 0;
 
   function status(text, kind) {
     const bar = $('settings-status');
@@ -79,119 +81,97 @@
 
   // 草稿一定要交给宿主算：改强调色会连带 on-accent / 选中行这些派生值，
   // 本地自己拼 CSS 会漏掉它们，也会让「保存」时和预览不一致。
+  // 所有命令共用一条队列：快速拖动后立即撤销/保存，也按操作顺序执行。
   let queue = Promise.resolve();
-  // —— 撤销 / 重做（只作用于当前这次外观会话，不落盘）——
-  // 每条记录存的是「改之前的值」和「改之后的值」，撤销就是把 before 再预览一遍。
-  // 不去动宿主的覆盖表结构 —— 那条路要加"按字段清除覆盖"的接口，代价大且容易破坏已有逻辑。
-  const history = [];
-  const future = [];
+  const history = [], future = [];
   const HISTORY_LIMIT = 80;
-  const COALESCE_MS = 700;       // 滑杆连续拖动合并成一步
+  const EDITS = new Set(['preview', 'select', 'mode', 'accent', 'background', 'pickBackground',
+    'clearBackground', 'typography', 'navItems', 'playerButtons', 'reset']);
+  const NOTES = { select: '切换预设', mode: '明暗模式', accent: '强调色', background: '背景设置',
+    pickBackground: '背景资源', clearBackground: '去掉背景', typography: '字体', navItems: '导航项目',
+    playerButtons: '底栏按钮', reset: '恢复当前预设' };
+  const clone = value => JSON.parse(JSON.stringify(value));
   let lastChangeAt = 0;
-
-  function readValue(key) {
-    const split = key.indexOf(':');
-    if (split <= 0 || !data) return '';
-    const bundle = data[key.slice(0, split)];
-    const values = (bundle && bundle.values) || {};
-    const value = values[key.slice(split + 1)];
-    return typeof value === 'string' ? value : '';
+  function enqueue(action) {
+    const pending = queue.then(action);
+    queue = pending.catch(() => {}); // 一次失败不能堵死后续操作
+    return pending;
   }
-
+  function accept(result) {
+    data = result;
+    dirty = !!result.draft;
+    paint();
+    window.CelestePlayerLayout?.apply?.(result.playerButtons);
+    window.CelesteNavLayout?.apply?.(result.navItems);
+    refreshHistoryButtons();
+  }
   function refreshHistoryButtons() {
-    const undoButton = $('history-undo');
-    const redoButton = $('history-redo');
-    if (undoButton) undoButton.disabled = history.length === 0;
-    if (redoButton) redoButton.disabled = future.length === 0;
+    if ($('history-undo')) $('history-undo').disabled = history.length === 0;
+    if ($('history-redo')) $('history-redo').disabled = future.length === 0;
+    const tag = mountedHost?.querySelector('.settings-card .tag');
+    if (tag && data) tag.textContent = currentPresetName() + (dirty ? ' · 有未保存的改动' : '');
   }
-
-  /** 换预设/保存/取消之后，旧的历史已经没有意义（基线变了），直接清掉。 */
   function resetHistory() {
-    history.length = 0;
-    future.length = 0;
+    history.length = future.length = 0;
     lastChangeAt = 0;
     refreshHistoryButtons();
   }
-
-  function recordHistory(before, after, note) {
-    const keys = Object.keys(after).sort().join('|');
-    const previous = history[history.length - 1];
-    const now = Date.now();
-    if (previous && previous.keys === keys && now - lastChangeAt < COALESCE_MS) {
-      // 同一组字段在防抖窗口内连续变化 = 一次操作。
-      // 不合并的话，拖一下滑杆会积几十条，按一次撤销只退回一个像素。
-      Object.assign(previous.after, after);
+  function recordHistory(before, after, note, mergeKey) {
+    if (!before || !after || JSON.stringify(before) === JSON.stringify(after)) return;
+    const now = Date.now(), previous = history[history.length - 1];
+    if (mergeKey && previous?.mergeKey === mergeKey
+        && (mergeKey.startsWith('gesture:') || now - lastChangeAt < 700)) {
+      previous.after = clone(after);
       previous.note = note;
     } else {
-      history.push({ keys, before, after: Object.assign({}, after), note });
+      history.push({ before: clone(before), after: clone(after), note, mergeKey });
       if (history.length > HISTORY_LIMIT) history.shift();
     }
     future.length = 0;
     lastChangeAt = now;
-    refreshHistoryButtons();
   }
-
-  function applyValues(values, message) {
-    const changes = {};
-    Object.keys(values).forEach(key => {
-      if (typeof values[key] === 'string' && values[key].length > 0) changes[key] = values[key];
+  function request(operation, payload, note, mergeKey) {
+    return enqueue(async () => {
+      // 必须在请求执行时取 before，不能在入队时读过期快照。
+      const before = data?.editState && clone(data.editState);
+      const result = await send(operation, payload);
+      accept(result);
+      if (EDITS.has(operation)) recordHistory(before, result.editState, note || NOTES[operation] || operation, mergeKey);
+      else if (['commit', 'cancel', 'savePreset', 'deletePreset'].includes(operation)) resetHistory();
+      refreshHistoryButtons();
+      return result;
     });
-    if (Object.keys(changes).length === 0) return queue;
-    queue = queue.then(async () => {
-      const result = await request('preview', { changes });
-      data.light = result.light;
-      data.dark = result.dark;
-      dirty = true;
-      paint();
-      status(message, 'ok');
-    }).catch(error => status('操作失败：' + error.message, 'err'));
-    return queue;
   }
-
-  function undo() {
-    const entry = history.pop();
-    if (!entry) return undefined;
-    future.push(entry);
-    refreshHistoryButtons();
-    return applyValues(entry.before, '已撤销：' + entry.note);
+  function replay(from, to, label) {
+    return enqueue(async () => {
+      const entry = from[from.length - 1];
+      if (!entry) return;
+      // 宿主确认成功之后才移栈；失败保留原来的历史，允许重试。
+      const result = await send('restoreDraft', { state: label === '撤销' ? entry.before : entry.after });
+      from.pop(); to.push(entry);
+      lastChangeAt = 0;
+      entry.mergeKey = null;
+      accept(result);
+      render();
+      status('已' + label + '：' + entry.note, 'ok');
+    }).catch(error => status(label + '失败：' + error.message, 'err'));
   }
-
-  function redo() {
-    const entry = future.pop();
-    if (!entry) return undefined;
-    history.push(entry);
-    refreshHistoryButtons();
-    return applyValues(entry.after, '已重做：' + entry.note);
-  }
-
-  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y。只在设置页可见时接管，
-  // 且放过文本框里的原生撤销 —— 那是编辑文字，不是改外观。
+  const undo = () => replay(history, future, '撤销');
+  const redo = () => replay(future, history, '重做');
   document.addEventListener('keydown', event => {
-    if (!(event.ctrlKey || event.metaKey)) return;
-    const page = $('settings-page');
-    if (page && page.hidden) return;
+    if (!(event.ctrlKey || event.metaKey) || event.altKey || event.defaultPrevented) return;
+    if (!mountedHost?.isConnected || $('settings-page')?.hidden || !mountedHost.querySelector('#history-undo')) return;
     const target = event.target;
-    if (target && /^(TEXTAREA)$/.test(target.tagName)) return;
-    if (target && target.tagName === 'INPUT' && /^(text|search|password|number)$/.test(target.type)) return;
+    if (target?.isContentEditable || target?.tagName === 'TEXTAREA'
+        || (target?.tagName === 'INPUT' && !['range', 'color', 'checkbox', 'button'].includes(target.type))) return;
     const key = (event.key || '').toLowerCase();
-    if (key === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); }
+    if (key === 'z') { event.preventDefault(); event.shiftKey ? redo() : undo(); }
     else if (key === 'y') { event.preventDefault(); redo(); }
   });
-
-  function pushChange(changes, note) {
-    // 先记下改之前的值：请求一回来 data 就被覆盖了，那时再取就晚了
-    const before = {};
-    Object.keys(changes).forEach(key => { before[key] = readValue(key); });
-    queue = queue.then(async () => {
-      const result = await request('preview', { changes });
-      data.light = result.light;
-      data.dark = result.dark;
-      dirty = true;
-      paint();
-      status('预览中（还没保存）：' + note, 'warn');
-      recordHistory(before, changes, note);
-    }).catch(error => status('预览失败：' + error.message, 'err'));
-    return queue;
+  function pushChange(changes, note, mergeKey) {
+    return request('preview', { changes }, note, mergeKey || Object.keys(changes).sort().join('|'))
+      .then(() => status('预览中（还没保存）：' + note, 'warn'))
+      .catch(error => status('预览失败：' + error.message, 'err'));
   }
 
   function currentPresetName() {
@@ -222,12 +202,9 @@
     card.append(node('small', preset.group + (preset.custom ? ' · 我的' : '')));
     card.addEventListener('click', async () => {
       data = await request('select', { presetId: preset.id });
-      dirty = false;
-      // 换了一套预设，之前那串预览步骤的"改之前"已经不是现在这套了，历史必须清空
-      resetHistory();
       paint();
       render();
-      status('已套用「' + preset.name + '」。音频、DSP、账号和曲库都没动。', 'ok');
+      status('正在预览「' + preset.name + '」，点保存后保留。', 'warn');
     });
     return card;
   }
@@ -297,9 +274,12 @@
       ((Number(range.value) - item.min) / Math.max(0.0001, item.max - item.min) * 100) + '%');
     fill();
     // 数值参数浅深色同步改，避免只改一半导致两套外观不配套
+    let gesture = '';
+    range.addEventListener('pointerdown', () => { gesture = 'gesture:' + (++gestureId); });
+    ['pointerup', 'pointercancel', 'blur'].forEach(type => range.addEventListener(type, () => { gesture = ''; }));
     const push = value => {
       const text = value + (item.unit === 'px' ? 'px' : '');
-      pushChange({ ['light:' + item.id]: text, ['dark:' + item.id]: text }, item.label + ' ' + text);
+      pushChange({ ['light:' + item.id]: text, ['dark:' + item.id]: text }, item.label + ' ' + text, gesture);
     };
     range.addEventListener('input', () => {
       readout.textContent = Number(range.value).toFixed(item.step < 0.1 ? 2 : 0) + (item.unit === '×' ? '×' : ' ' + item.unit);
@@ -360,7 +340,7 @@
 
     const items = section({
       title: '导航项目',
-      tag: '立即生效',
+      tag: '预览 · 可撤销',
       note: '收起后同一圈剩下的项目会重新均分这段弧，不会留空位；每圈至少保留一个 —— 整圈都收起来的话轮盘算不出角度，会全叠在一起。'
     });
     const list = node('div', undefined, 'player-button-list');
@@ -373,7 +353,7 @@
         // 宿主已经收敛过（每圈至少一个可见），以它回的为准
         if (window.CelesteNavLayout) window.CelesteNavLayout.apply(result.navItems);
         fill();
-        status('导航项目已保存。', 'ok');
+        status('导航项目已预览，保存后保留。', 'ok');
       }).catch(error => status('调整导航项目失败：' + error.message, 'err'));
     }
 
@@ -417,112 +397,67 @@
     ['solid', '纯色（跟随外壳色）'],
     ['gradient', '三色渐变'],
     ['cover', '当前专辑封面'],
-    ['image', '我选的图片']
+    ['image', '我选的图片'],
+    ['video', '我选的视频（静音循环）']
   ];
 
   function backgroundCard() {
-    const values = (data[editing] || data.light || {}).values || {};
-    const current = values['bg-mode'] || 'solid';
-
-    const card = section({
-      title: '背景',
-      tag: '图片会被拷一份',
-      note: '纯色就是默认那样。渐变用下面三个色。封面跟着当前播放的专辑换。图片会拷进程序自己的目录再显示，网页不直接读你原始的文件路径。视频背景还没做。'
-    });
-
-    // 类型
-    const modeRow = node('div', undefined, 'set-row');
-    const modeMain = node('div', undefined, 'set-row-main');
-    modeMain.append(node('div', '背景类型', 'set-label'));
-    modeRow.append(modeMain);
-    const modeHolder = node('div', undefined, 'set-control');
+    const card = section({ title: '图片与视频背景', tag: '预览 · 可撤销',
+      note: '图片和视频保存在播放器的资源目录，原文件移动不影响使用。视频静音循环，窗口最小化或页面隐藏时暂停。改动需保存；取消选文件不会改变背景。' });
+    const values = data[data.resolved === 'dark' ? 'dark' : 'light'].values;
+    const currentMode = values['bg-mode'] || 'solid';
+    const row = node('div', undefined, 'set-row');
+    row.append(node('div', '背景类型', 'set-label'));
     const modeSelect = node('select');
+    modeSelect.id = 'background-mode';
     BG_MODES.forEach(([value, label]) => modeSelect.append(new Option(label, value)));
-    modeSelect.value = current;
+    modeSelect.value = currentMode;
     modeSelect.addEventListener('change', async () => {
       try {
-        data = await request('background', { mode: modeSelect.value });
-        paint();
-        if (modeSelect.value === 'image') {
-          // 选了"图片"但还没选过文件 —— 直接开文件选择框，省掉"选完类型再找按钮"这一步
-          if (!values['bg-image'] || values['bg-image'] === 'none') await pickImage();
-          else render();
-        } else {
-          status('背景已切换。', 'ok');
-          render();
-        }
-      } catch (error) { status('切换背景失败：' + error.message, 'err'); }
-    });
-    modeHolder.append(modeSelect);
-    modeRow.append(modeHolder);
-    card.append(modeRow);
-
-    // 图片相关操作
-    const fileRow = node('div', undefined, 'set-row');
-    const fileMain = node('div', undefined, 'set-row-main');
-    fileMain.append(node('div', '选择图片', 'set-label'),
-      node('div', 'jpg / png / bmp / webp。只保留最近一张，旧的会被删掉。', 'set-note'));
-    fileRow.append(fileMain);
-    const fileHolder = node('div', undefined, 'set-control');
-    const actions = node('div', undefined, 'player-button-actions');
-    actions.append(button('选择图片…', () => pickImage()));
-    if (values['bg-image'] && values['bg-image'] !== 'none') {
-      actions.append(button('去掉背景', async () => {
-        data = await request('clearBackground');
-        paint();
+        const mode = modeSelect.value;
+        const hasAsset = mode === 'video' ? data.editState?.backgroundVideo : data.editState?.backgroundImage;
+        if ((mode === 'image' || mode === 'video') && !hasAsset) await request('pickBackground', { media: mode });
+        else await request('background', { mode });
         render();
-        status('已回到纯色背景。', 'ok');
-      }, 'set-mini danger'));
+      } catch (error) { render(); status('改背景失败：' + error.message, 'err'); }
+    });
+    row.append(modeSelect); card.append(row);
+    const actions = node('div', undefined, 'settings-actions');
+    async function pick(media) {
+      await request('pickBackground', { media });
+      render();
     }
-    fileHolder.append(actions);
-    fileRow.append(fileHolder);
-    card.append(fileRow);
-
-    // 适配 / 位置：只对图片和封面有意义
+    actions.append(button('选择图片…', () => pick('image')), button('选择视频…', () => pick('video')),
+      button('去掉背景', async () => { await request('clearBackground'); render(); }));
+    if (currentMode === 'video') actions.append(button('播放视频背景', () => window.CelesteBackground?.resume()));
+    card.append(actions);
+    const feedback = node('p', window.CelesteBackground?.status || '', 'set-note');
+    feedback.id = 'background-status'; feedback.setAttribute('role', 'status');
+    card.append(feedback);
+    card.append(node('p', '图片：JPG / PNG / BMP / WebP，最大 40 MB。视频：MP4 / WebM / M4V，最大 512 MB；编码兼容性以当前 WebView2 为准。', 'set-note'));
     [['bg-fit', '适配方式', [['cover', '铺满（裁边）'], ['contain', '完整显示（留边）']]],
      ['bg-pos', '对齐位置', [['center', '居中'], ['top', '顶部对齐'], ['bottom', '底部对齐']]]]
       .forEach(([id, label, options]) => {
         const row = node('div', undefined, 'set-row');
-        const main = node('div', undefined, 'set-row-main');
-        main.append(node('div', label, 'set-label'));
-        row.append(main);
-        const holder = node('div', undefined, 'set-control');
+        row.append(node('div', label, 'set-label'));
         const select = node('select');
+        select.id = id;
         options.forEach(([value, text]) => select.append(new Option(text, value)));
         select.value = values[id] || options[0][0];
-        select.addEventListener('change', async () => {
-          try {
-            data = await request('background', { [id === 'bg-fit' ? 'fit' : 'pos']: select.value });
-            paint();
-            status('背景已更新。', 'ok');
-          } catch (error) { status('改背景失败：' + error.message, 'err'); }
-        });
-        holder.append(select);
-        row.append(holder);
-        card.append(row);
+        select.addEventListener('change', () => request('background', { [id === 'bg-fit' ? 'fit' : 'pos']: select.value })
+          .catch(error => status('改背景失败：' + error.message, 'err')));
+        row.append(select); card.append(row);
       });
-
-    // 三个渐变色
-    ['bg-grad-1', 'bg-grad-2', 'bg-grad-3'].forEach((id, index) => {
-      card.append(colorRow({ id, label: '渐变第 ' + (index + 1) + ' 色' }));
-    });
-
-    // 模糊 / 亮度 / 遮罩
+    ['bg-grad-1', 'bg-grad-2', 'bg-grad-3'].forEach((id, index) => card.append(colorRow({ id, label: '渐变第 ' + (index + 1) + ' 色' })));
     (data.numbers || []).filter(item => /^bg-/.test(item.id || '')).forEach(item => card.append(numberRow(item)));
     return card;
-
-    async function pickImage() {
-      try {
-        data = await request('pickBackground');
-        paint();
-        render();
-        status('背景图片已更新。', 'ok');
-      } catch (error) { status('选图片失败：' + error.message, 'err'); }
-    }
   }
+  document.addEventListener('celeste:background-status', event => {
+    if ($('background-status')) $('background-status').textContent = event.detail.message;
+  });
 
   // —— 字体与排版 ——
-  // 字体是「这台机器装了什么」的问题，选完立刻存，不跟预设走（换配色不该把你挑的字体换掉）；
+  // 字体作为个人偏好保留，但修改也参与草稿、撤销和保存；
   // 字号缩放与行高属于当前这套外观，仍走「预览 → 保存」那套。
   const FONT_FIELDS = [
     { key: 'fontUi', label: '西文与界面字体', note: '拉丁字母、数字、控件文字先用它' },
@@ -533,7 +468,7 @@
   function typographyCard() {
     const card = section({
       title: '字体与排版',
-      tag: '字体立即生效',
+      tag: '预览 · 可撤销',
       note: '字体清单来自这台机器已安装的字体；改名或卸载后会被标出来。字号缩放和行高是当前这套外观的一部分，跟着上面的预览/保存走。'
     });
 
@@ -562,7 +497,7 @@
         try {
           data = await request('typography', { [field.key]: select.value });
           paint();
-          status('字体已保存：' + select.value + '。', 'ok');
+          status('字体预览：' + select.value + '。', 'ok');
         } catch (error) { status('改字体失败：' + error.message, 'err'); }
       });
       holder.append(select);
@@ -620,14 +555,14 @@
   }
 
   /**
-   * 底栏按钮卡片。改一下立刻存（这是"我要用哪个布局"，不是"外观预览"），
-   * 所以刻意不接「保存 / 取消预览」那套；改完只重画这张卡片自己的行，
+   * 底栏按钮卡片。改动实时预览并进入统一草稿，
+   * 改完只重画这张卡片自己的行，
    * 不整页 render()，否则用户滚到页面底部一动就会跳回顶部。
    */
   function playerButtonCard() {
     const card = section({
       title: '底栏按钮',
-      tag: '立即生效',
+      tag: '预览 · 可撤销',
       note: '收起来 = 从底栏拿掉；「上一首 / 下一首」是核心，不能收。播放键永远在正中，不在这里。顺序就是它们在底栏里从左到右的位置。'
     });
     const list = node('div', undefined, 'player-button-list');
@@ -640,7 +575,7 @@
         // 宿主已经收敛过（核心强制显示、不认识的丢掉），以它回的为准
         if (window.CelestePlayerLayout) window.CelestePlayerLayout.apply(result.playerButtons);
         fill();
-        status('底栏按钮已保存。', 'ok');
+        status('底栏按钮已预览，保存后保留。', 'ok');
       }).catch(error => status('调整底栏按钮失败：' + error.message, 'err'));
     }
 
@@ -682,8 +617,10 @@
 
   // —— 主渲染 ——
   function render(host) {
-    host = host || $('settings-scroll');
+    host = host || mountedHost || $('settings-scroll');
+    mountedHost = host;
     if (!host) return;
+    const scrollTop = host.scrollTop;
     host.replaceChildren();
 
     const head = section({ title: '当前外观', tag: currentPresetName() + (dirty ? ' · 有未保存的改动' : '') });
@@ -718,8 +655,6 @@
     }));
     headActions.append(button('恢复当前预设', async () => {
       data = await request('reset', { scope: 'all' });
-      dirty = false;
-      resetHistory();
       paint();
       render();
       status('已把细调值全部清掉，回到预设本来的样子。', 'ok');
@@ -745,12 +680,12 @@
       colorInput.hidden = select.value !== 'custom';
       data = await request('accent', { source: select.value, color: colorInput.value });
       paint(); render();
-      status('已保存强调色设置。', 'ok');
+      status('强调色已预览，保存后保留。', 'ok');
     });
     colorInput.addEventListener('change', async () => {
       data = await request('accent', { source: 'custom', color: colorInput.value });
       paint(); render();
-      status('已保存自定义强调色。', 'ok');
+      status('自定义强调色已预览，保存后保留。', 'ok');
     });
     accentHolder.append(select, colorInput);
     accentRow.append(accentHolder);
@@ -857,6 +792,7 @@
       mine.append(row);
     });
     host.append(mine);
+    host.scrollTop = scrollTop;
   }
 
   async function mount(host) {

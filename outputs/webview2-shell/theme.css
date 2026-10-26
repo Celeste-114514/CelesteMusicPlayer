@@ -43,6 +43,7 @@
      cover 用当前封面、image 用用户选的图。bg-image / bg-fit / bg-pos 由宿主写。
      bg-scrim 是压在图上的一层外壳色遮罩 —— 没有它，图片上放文字会看不清。 */
   --bg-mode:solid;
+  --bg-video:none;
   --bg-image:none;
   --bg-fit:cover;
   --bg-pos:center;

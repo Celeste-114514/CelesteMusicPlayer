@@ -29,6 +29,7 @@ namespace CelesteMusicPlayer
                 case "mode": return SetMode(ReadString(msg, "mode"));
                 case "accent": return SetAccent(ReadString(msg, "source"), ReadString(msg, "color"));
                 case "preview": return Preview(msg);
+                case "restoreDraft": return RestoreDraft(msg);
                 case "commit": return Commit();
                 case "cancel": return Cancel();
                 case "reset": return Reset(msg);
@@ -38,7 +39,7 @@ namespace CelesteMusicPlayer
                 case "typography": return SetTypography(msg);
                 case "navItems": return SetNavItems(ReadString(msg, "value"));
                 case "background": return SetBackground(msg);
-                case "pickBackground": return await PickBackgroundAsync().ConfigureAwait(true);
+                case "pickBackground": return await PickBackgroundAsync(ReadString(msg, "media")).ConfigureAwait(true);
                 case "clearBackground": return ClearBackground();
                 default: throw new ArgumentException("未知的外观操作：" + operation);
             }
@@ -59,6 +60,7 @@ namespace CelesteMusicPlayer
                 accentCustom = state.accentCustom,
                 presetId = state.presetId,
                 overrideCount = state.overrides.Count,
+                editState = WebAppearance.EditState(state),
                 presets = PresetCards(state),
                 light = Bundle(WebAppearance.Resolve(state, WebAppearance.Light)),
                 dark = Bundle(WebAppearance.Resolve(state, WebAppearance.Dark)),
@@ -155,9 +157,9 @@ namespace CelesteMusicPlayer
             WebAppearance.State state = WebAppearance.Draft();
             if (WebAppearance.FindPreset(id, state) == null) throw new ArgumentException("没有这套预设：" + id);
             state.presetId = id;
+            state.overrides.Clear();
+            state.accentSource = "theme";
             WebAppearance.SetDraft(state);
-            WebAppearance.Save(state);
-            WebAppearance.ClearDraft();
             return Snapshot();
         }
 
@@ -168,8 +170,6 @@ namespace CelesteMusicPlayer
             WebAppearance.State state = WebAppearance.Draft();
             state.mode = mode;
             WebAppearance.SetDraft(state);
-            WebAppearance.Save(state);
-            WebAppearance.ClearDraft();
             return Snapshot();
         }
 
@@ -185,42 +185,24 @@ namespace CelesteMusicPlayer
                 state.accentCustom = hex;
             }
             WebAppearance.SetDraft(state);
-            WebAppearance.Save(state);
-            WebAppearance.ClearDraft();
             return Snapshot();
         }
 
-        /// <summary>
-        /// 底栏按钮的显隐与顺序。这是「布局偏好」而不是「主题细调」，所以立刻存；
-        /// 但**不动未保存的颜色草稿** —— 用户可能正在预览颜色，顺手收一个按钮不能把他没保存的改动一起提交。
-        /// </summary>
+        /// <summary>底栏布局进入草稿，和颜色一起保存/取消/撤销。</summary>
         private static object SetPlayerButtons(string value)
         {
-            WebAppearance.State state = WebAppearance.Load();
+            WebAppearance.State state = WebAppearance.Draft();
             string normalized = WebAppearance.NormalizePlayerButtons(value);
             if (normalized == state.playerButtons) return Snapshot();
-            // 顺序很讲究：**先把草稿同步好，再 Save**。
-            // Save 会立刻把新修订号播出去，外壳窗口收到就抓一次快照推给网页；
-            // 那一刻要是草稿里还留着旧构成，网页会先被推回旧布局，看着就是"点了没反应"。
-            if (WebAppearance.HasDraft())
-            {
-                WebAppearance.State draft = WebAppearance.Draft();
-                draft.playerButtons = normalized;
-                WebAppearance.SetDraft(draft);
-            }
             state.playerButtons = normalized;
-            WebAppearance.Save(state);
+            WebAppearance.SetDraft(state);
             return Snapshot();
         }
 
-        /// <summary>
-        /// 字体族。这是「这台机器装了什么」的个人偏好，不是配色方案的一部分，所以和底栏按钮一样立刻存；
-        /// 也照同样的顺序先改草稿再 Save，避免修订号广播那一刻把旧字体推回网页。
-        /// 空字符串表示「不改这一项」，方便网页只提交改动的那一个。
-        /// </summary>
+        /// <summary>字体族进入统一草稿；空字段表示不改。</summary>
         private static object SetTypography(JsonElement msg)
         {
-            WebAppearance.State state = WebAppearance.Load();
+            WebAppearance.State state = WebAppearance.Draft();
             string ui = (ReadString(msg, "fontUi") ?? "").Trim();
             string cjk = (ReadString(msg, "fontCjk") ?? "").Trim();
             string mono = (ReadString(msg, "fontMono") ?? "").Trim();
@@ -228,32 +210,20 @@ namespace CelesteMusicPlayer
             if (cjk.Length > 0) state.fontCjk = cjk;
             if (mono.Length > 0) state.fontMono = mono;
 
-            if (WebAppearance.HasDraft())
-            {
-                WebAppearance.State draft = WebAppearance.Draft();
-                draft.fontUi = state.fontUi;
-                draft.fontCjk = state.fontCjk;
-                draft.fontMono = state.fontMono;
-                WebAppearance.SetDraft(draft);
-            }
-            WebAppearance.Save(state);
+
+            WebAppearance.SetDraft(state);
             return Snapshot();
         }
 
-        /// <summary>半圆导航的项目分组/顺序。和底栏按钮一样是布局偏好：立刻存，但先把草稿同步好再 Save。</summary>
+        /// <summary>半圆导航的项目分组/顺序，进入统一草稿。</summary>
         private static object SetNavItems(string value)
         {
-            WebAppearance.State state = WebAppearance.Load();
+            WebAppearance.State state = WebAppearance.Draft();
             string normalized = WebAppearance.NormalizeNavItems(value);
             if (normalized == state.navItems) return Snapshot();
-            if (WebAppearance.HasDraft())
-            {
-                WebAppearance.State draft = WebAppearance.Draft();
-                draft.navItems = normalized;
-                WebAppearance.SetDraft(draft);
-            }
+
             state.navItems = normalized;
-            WebAppearance.Save(state);
+            WebAppearance.SetDraft(state);
             return Snapshot();
         }
 
@@ -276,13 +246,13 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>改背景模式/适配/位置。和底栏按钮一样：立刻存，但先把草稿同步好再 Save。</summary>
+        /// <summary>改背景模式/适配/位置，进入统一草稿。</summary>
         private static object SetBackground(JsonElement msg)
         {
             string mode = ReadString(msg, "mode");
             string fit = ReadString(msg, "fit");
             string pos = ReadString(msg, "pos");
-            return SaveWithDraft(state =>
+            return ChangeDraft(state =>
             {
                 if (mode.Length > 0) state.backgroundMode = mode;
                 if (fit.Length > 0) state.backgroundFit = fit;
@@ -290,55 +260,59 @@ namespace CelesteMusicPlayer
             });
         }
 
-        /// <summary>选一张本机图片当背景。拷进受控目录，只留一张（不然目录会越攒越大）。</summary>
-        private async Task<object> PickBackgroundAsync()
+        /// <summary>资源使用唯一文件名，换图不覆盖旧文件，撤销/取消仍可恢复。</summary>
+        private async Task<object> PickBackgroundAsync(string media)
         {
-            string path = await PickFileAsync(this).ConfigureAwait(true);
-            if (string.IsNullOrWhiteSpace(path)) return Snapshot();
-
-            string extension = Path.GetExtension(path).ToLowerInvariant();
-            if (!new[] { ".jpg", ".jpeg", ".png", ".bmp", ".webp" }.Contains(extension))
-                throw new ArgumentException("背景只支持 jpg / png / bmp / webp 图片。");
-
-            string folder = BackgroundFolder;
-            foreach (string old in Directory.GetFiles(folder))
+            bool video = media == "video";
+            var picker = new Windows.Storage.Pickers.FileOpenPicker();
+            string[] extensions = video ? new[] { ".mp4", ".webm", ".m4v" }
+                : new[] { ".jpg", ".jpeg", ".png", ".bmp", ".webp" };
+            foreach (string extension in extensions) picker.FileTypeFilter.Add(extension);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, PickerHostHandle());
+            Windows.Storage.StorageFile? file = await picker.PickSingleFileAsync();
+            if (file == null) return Snapshot();
+            string path = file.Path;
+            string ext = Path.GetExtension(path).ToLowerInvariant();
+            if (!extensions.Contains(ext)) throw new ArgumentException("所选文件类型不支持。");
+            long limit = video ? 512L * 1024 * 1024 : 40L * 1024 * 1024;
+            long length = new FileInfo(path).Length;
+            if (length <= 0 || length > limit)
+                throw new ArgumentException(video ? "请选择非空且不超过 512 MB 的视频。" : "请选择非空且不超过 40 MB 的图片。");
+            string name = Guid.NewGuid().ToString("N") + ext;
+            string destination = Path.Combine(BackgroundFolder, name);
+            try
             {
-                try { File.Delete(old); } catch (IOException) { /* 上一张还被占用就留着，不影响新图 */ }
+                await using var input = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 81920, true);
+                await using var output = new FileStream(destination, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, true);
+                await input.CopyToAsync(output);
             }
-
-            string name = "background" + extension;
-            File.Copy(path, Path.Combine(folder, name), true);
-            string url = "https://" + BackgroundAssetHost + "/" + name + "?v=" + DateTime.UtcNow.Ticks.ToString(CultureInfo.InvariantCulture);
-
-            return SaveWithDraft(state =>
+            catch
             {
-                state.backgroundImage = url;
-                state.backgroundMode = "image";
+                if (File.Exists(destination)) File.Delete(destination);
+                throw;
+            }
+            string url = "https://" + BackgroundAssetHost + "/" + name;
+            return ChangeDraft(state =>
+            {
+                if (video) state.backgroundVideo = url;
+                else state.backgroundImage = url;
+                state.backgroundMode = video ? "video" : "image";
             });
         }
 
-        private static object ClearBackground() => SaveWithDraft(state =>
+        private static object ClearBackground() => ChangeDraft(state =>
         {
             state.backgroundMode = "solid";
-            state.backgroundImage = "";
+            // 保留资源引用，重新选图片/视频模式、撤销都能恢复。
         });
 
-        /// <summary>
-        /// 「立刻保存」类操作的统一写法：先改草稿再 Save。
-        /// 顺序不能反 —— Save 会立刻广播修订号，外壳窗口收到就抓一次快照推给网页，
-        /// 那一刻草稿里还是旧值的话，网页会先被推回旧样子。
-        /// </summary>
-        private static object SaveWithDraft(Action<WebAppearance.State> mutate)
+        /// <summary>所有背景编辑均只更新内存草稿。</summary>
+        private static object ChangeDraft(Action<WebAppearance.State> mutate)
         {
-            WebAppearance.State state = WebAppearance.Load();
+            WebAppearance.State state = WebAppearance.Draft();
             mutate(state);
-            if (WebAppearance.HasDraft())
-            {
-                WebAppearance.State draft = WebAppearance.Draft();
-                mutate(draft);
-                WebAppearance.SetDraft(draft);
-            }
-            WebAppearance.Save(state);
+
+            WebAppearance.SetDraft(state);
             return Snapshot();
         }
 
@@ -363,7 +337,26 @@ namespace CelesteMusicPlayer
             }
 
             WebAppearance.SetDraft(state);
-            return new { draft = true, light = Bundle(WebAppearance.Resolve(state, WebAppearance.Light)), dark = Bundle(WebAppearance.Resolve(state, WebAppearance.Dark)) };
+            return Snapshot();
+        }
+
+        private static object RestoreDraft(JsonElement msg)
+        {
+            if (!msg.TryGetProperty("state", out JsonElement raw)) throw new ArgumentException("缺少历史状态。");
+            WebAppearance.State restored = raw.Deserialize<WebAppearance.State>() ?? throw new ArgumentException("无效历史状态。");
+            WebAppearance.State current = WebAppearance.Draft();
+            if (WebAppearance.FindPreset(restored.presetId, current) == null) throw new ArgumentException("历史预设已不存在。");
+            foreach (string key in restored.overrides.Keys)
+            {
+                string[] parts = key.Split(':');
+                if (parts.Length != 2 || (parts[0] != WebAppearance.Light && parts[0] != WebAppearance.Dark)
+                    || (!WebAppearance.VarNames.Contains(parts[1]) && !WebAppearance.NumNames.Contains(parts[1])))
+                    throw new ArgumentException("历史中包含无效参数。");
+            }
+            restored.customPresets = current.customPresets;
+            restored.revision = current.revision;
+            WebAppearance.SetDraft(restored);
+            return Snapshot();
         }
 
         private static object Commit()
@@ -399,8 +392,6 @@ namespace CelesteMusicPlayer
             else throw new ArgumentException("未知的恢复范围。");
 
             WebAppearance.SetDraft(state);
-            WebAppearance.Save(state);
-            WebAppearance.ClearDraft();
             return Snapshot();
         }
 

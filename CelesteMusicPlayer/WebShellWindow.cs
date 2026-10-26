@@ -49,11 +49,14 @@ namespace CelesteMusicPlayer
             _timer.Tick += (_, _) => { if (_ready) { SendState(); SendThemeIfChanged(); if (_dirty) _ = SendLibraryAsync(); } };
             _library = (INotifyCollectionChanged)owner.LibraryTracks;
             _library.CollectionChanged += LibraryChanged;
+            AppWindow.Changed += BackgroundWindowChanged;
             root.Loaded += async (_, _) => await InitializeAsync();
             Closed += (_, _) =>
             {
                 _closed = true; _ready = false; _timer.Stop();
                 _library.CollectionChanged -= LibraryChanged;
+                AppWindow.Changed -= BackgroundWindowChanged;
+                WebAppearance.ClearDraft();
                 _waveformCancellation?.Cancel();
                 _overviewCancellation?.Cancel();
                 _web.Close();
@@ -61,6 +64,14 @@ namespace CelesteMusicPlayer
         }
 
         private void LibraryChanged(object? sender, NotifyCollectionChangedEventArgs args) => _dirty = true;
+
+        private void BackgroundWindowChanged(AppWindow sender, AppWindowChangedEventArgs args) => SendVisibility();
+
+        private void SendVisibility() => Post(new
+        {
+            kind = "celeste.visibility", version = 1,
+            hidden = !AppWindow.IsVisible || AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized }
+        });
 
         /// <summary>播放/收藏等变化后让主页自己刷新，不重发整份曲库。</summary>
         internal void NotifyHomeChanged()
@@ -200,7 +211,7 @@ namespace CelesteMusicPlayer
                 if (requestId?.Length > 100) return;
                 switch (command)
                 {
-                    case "ready": _ready = true; _metadataSent.Clear(); _status.Visibility = Visibility.Collapsed; _dirty = true; _timer.Start(); SendTheme(); _ = SendLibraryAsync(); break;
+                    case "ready": _ready = true; _metadataSent.Clear(); _status.Visibility = Visibility.Collapsed; _dirty = true; _timer.Start(); SendTheme(); SendVisibility(); _ = SendLibraryAsync(); break;
                     case "trackInfo":
                         var metadataIds = msg.GetProperty("trackIds").EnumerateArray().Take(100).Select(value => value.GetString() ?? "").ToArray();
                         _ = SendTrackInfoAsync(metadataIds); break;
