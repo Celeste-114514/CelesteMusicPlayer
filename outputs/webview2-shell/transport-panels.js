@@ -14,7 +14,7 @@
     if(!live)return Promise.reject(new Error('请在桌面预览版中使用此功能。'));
     const requestId='transport-'+(++serial);
     return new Promise((resolve,reject)=>{
-      const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('操作响应超时，请刷新确认当前状态。'));},['collectionOverview','browse','trackAction','folders','tags','dsp','home'].includes(command)?300000:12000);
+      const timer=setTimeout(()=>{pending.delete(requestId);reject(new Error('操作响应超时，请刷新确认当前状态。'));},['collectionOverview','browse','trackAction','folders','tags','dsp','home','appSettings'].includes(command)?300000:12000);
       pending.set(requestId,{resolve,reject,timer}); shell.send(command,{...payload,requestId});
     });
   }

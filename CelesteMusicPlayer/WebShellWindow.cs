@@ -186,6 +186,9 @@ namespace CelesteMusicPlayer
                     case "audioSettings":
                         var settings = await _owner.WebAudioSettingsAsync(msg);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = settings }); break;
+                    case "appSettings":
+                        var appSettings = await _owner.WebSettingsAsync(msg, this);
+                        Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = appSettings }); break;
                     case "collectionOverview":
                         var overview = await ReadOverviewAsync(msg.GetProperty("category").GetString() ?? "", msg.GetProperty("name").GetString() ?? "");
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = overview }); break;
@@ -252,7 +255,7 @@ namespace CelesteMusicPlayer
                     case "more":
                         var more = _owner.WebMore(msg);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = more }); break;
-                    case "window": WindowCommand(msg.GetProperty("action").GetString()); break;
+                    case "window": WindowBridge(msg, requestId); break;
                     default: Error("此功能尚未接入网页，请先在旧界面操作。"); break;
                 }
                 SendState();
@@ -319,11 +322,28 @@ namespace CelesteMusicPlayer
             return double.IsFinite(value) ? value : throw new ArgumentException("无效的数值。");
         }
 
-        private void WindowCommand(string? action)
+        // 网页宿主的窗口行为：关闭/最小化/最大化沿用原生；置顶是这个窗口自己的，
+        // 和 MainWindow 的「主窗口置顶」不是一个东西 —— 设置页里也是分开两个开关。
+        private void WindowBridge(JsonElement msg, string? requestId)
+        {
+            string action = msg.GetProperty("action").GetString() ?? "";
+            if (action == "state")
+            {
+                bool top = AppWindow.Presenter is OverlappedPresenter presenter && presenter.IsAlwaysOnTop;
+                if (requestId != null) Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = new { top } });
+                return;
+            }
+
+            bool value = msg.TryGetProperty("value", out JsonElement flag) && flag.ValueKind == JsonValueKind.True;
+            WindowCommand(action, value);
+        }
+
+        private void WindowCommand(string? action, bool value)
         {
             if (action == "close") { Close(); return; }
             if (AppWindow.Presenter is not OverlappedPresenter presenter) return;
-            if (action == "minimize") presenter.Minimize();
+            if (action == "top") presenter.IsAlwaysOnTop = value;
+            else if (action == "minimize") presenter.Minimize();
             else if (action == "maximize") { if (presenter.State == OverlappedPresenterState.Maximized) presenter.Restore(); else presenter.Maximize(); }
         }
 

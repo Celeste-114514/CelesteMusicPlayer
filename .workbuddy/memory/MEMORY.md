@@ -2,6 +2,24 @@
 > 只留跨会话有效事实。提交查 git log；当日查 memory/YYYY-MM-DD.md；构建发布见 celeste-build-verify skill；细目见 memory/ref-*.md。
 
 ## 工作主线
+- ⚠ **网页设置页（10-26 已交付，按 Codex 设置调查方案）**：C# 侧
+  `WebSettingsSchema.cs`（字段单一真相源：10 分类 / ~130 项，带 kind·note·scope·min-max-step·advanced）
+  + `MainWindow.WebSettings.cs`（桥接：get/patch/pickFolder/pickFile/cache/webdav/credentials/fileAssoc/
+  hotkeys/folders/clearRecent/export/import/reset/about/update）；`WebShellWindow.cs` 命令名是 **`appSettings`**
+  （`audioSettings` 是底栏那套，别混）。网页侧 `outputs/webview2-shell/settings.css|settings.js` + `index.html`
+  的 `#settings-page` + `shell.js` 路由。
+  **铁律**：字段目录只认 schema（改字段 = 改 Defs/Readers/Writers 三处，否则网页上根本不出现）；
+  `patch` 按字段白名单写 + revision 冲突检测（别整对象回写，会覆盖别处刚改的值）；
+  密码/密钥走 `credentials` 命令（空=保留、`__clear__`=清除），快照只回"有没有"不回明文；
+  **`OutputMode` 在设置页是只读的**——真正切换走底栏音频面板，避免两处写同一件事；
+  `scope=native` 的项（桌面歌词 / 迷你窗 / 零散窗 / 主题文件 / 背景类）网页不管用，UI 上明确标出来。
+  未做：ECHO 式外观编辑器（预设库+明暗成对+元素参数+实时预览），那是独立大任务。
+- ⚠ **publish/sync 脚本的 TFM 要跟着走**：`_publish_selfcontained.py` 与 `_sync_webshell_dist.py` 里写死了
+  `net9.0-windows10.0.19041.0`，10-26 项目已升 **net10** → 实际 publish 目录是
+  `CelesteMusicPlayer\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish`（已改脚本）。
+- ⚠ **Roslyn 偶发 `Internal CLR error (0x80131506)`**（栈在 `NullableWalker.VisitAwaitExpression`，
+  `Microsoft.CSharp.CurrentVersion.targets(239,5)`）：第一次 publish 崩、**原样重试第二次就成**，
+  和 XamlCompiler 连崩同类属环境噪音，不要改自己代码找原因。
 - ⚠ **网页外壳重做（10-20 启动）**：不再用 Apple Music 试点；做"Windows 风脱离 WinUI"新界面。**上次失败根因=平行界面架构**（每原生页在 web 重抄一遍，维护无底洞），这次=一个网页一整块界面+内部路由、先浏览器调再接 C#。原型在 `outputs/webui-proto/`（纯静态，双击即看，host.js 双模式兼容真 WebView2，协议同旧 WebHost.cs）。BiliPai 动效参数已提取进 tokens/motion.css（曲线/时长/spring/液态指示器原理）。旧壳备份 C:\Users\MSI\_celeste_skin_removed_20261018\（WebHost.cs 可整搬）。详见 memory/2026-10-20.md。
 - ⚠ **网页皮肤 + 令牌测试皮肤 10-18 已全删（用户拍板，未提交）**：仓库外备份 `C:\Users\MSI\_celeste_skin_removed_20261018`（网页皮肤与 token/ 两套）。**保留**主题文件机制（CelesteTheme.cs + CelesteTokenApplier.cs + MainWindow.ThemeFiles/CelesteTheme.cs，与测试皮肤无关，用户 ClassicLight+主题文件照常生效）。教训：删文件后必须全仓 grep 方法名抓调用点；沙箱拦覆盖写会让 .g.cs 变 0 字节 → XamlCompiler 确定性 exit 1，须 obj/bin 整体搬出树外重建。
 - 令牌化遗留：圆角 7 档已落地；主题文件=明/暗颜色组+metrics；**动效层全项目为零**（新皮肤主要工作量）；主题色底字色统一走 Accent.Text 单一来源；两条主题色链已合一（ResolveEffectiveAccentHex 为唯一真相源）。
@@ -62,6 +80,14 @@
 ## 工程约定
 - 用户不懂编程：大白话结论先行禁营销腔。推送：不 rebase/force-push、不 `git add -A`、commit 独立可回退、构建过才推；日常交付 `dist\run-latest\`；禁 UIA 点击冒烟（只做单次启动验证）。
 - ⚠ publish 前 obj/x64·bin/x64 搬不动（WinError 5 拒绝访问）→ 先 `dotnet build-server shutdown` 再重试；XamlCompiler 连崩 5+ 次属环境噪音（CS_err=0），重试脚本会自动重跑。
+- ⚠ **publish 目录是 `CelesteMusicPlayer\bin\Release\net9.0-...\win-x64\publish`，不带 x64 平台段**（pubxml 的 PublishDir 相对项目目录且无平台段）；
+  构建输出才在 `bin\x64\Release\...`。**同步 dist 必须用 publish 目录**：用错=框架依赖 exe(177KB)+旧自包含 DLL 残留 → 混合目录 → 启动弹「必须安装 .NET」（本机装了也弹）。
+  `_sync_webshell_dist.py` 已加 PREFLIGHT 五项自检 + STALE 残留检查；`_publish_selfcontained.py` 已修正路径。
+- ⚠ **仓库根的 `global.json` 是未跟踪文件**（不在 git 里），把本机 SDK 锁在 `9.0.317 / rollForward:disable`。
+  本机其实装着 SDK 10.0.401 + 运行时 10.0.8/10/12。想试 net10 必须先动它，否则报 NETSDK1045（看着像不支持，其实是锁住了）。
+- ⚠ Python 改 csproj：`utf-8-sig` 读会吃掉 BOM、再 `utf-8` 写回就没 BOM → git 显示 ` M`。临时改动后用 `git checkout -- <csproj>` 还原最稳。
+- ⚠ **net9→net10 已实测可行（2026-10-26）**：临时切 TFM，`dotnet restore` + `build -c Release` 均 exit=0（0 错误/170 警告），
+  现有锁定的 WinAppSDK 1.8.2511xxxxx 全家 + CommunityToolkit DataGrid 7.1.2 **无需换包**。改 TFM 前还须动 global.json，且要**实机跑一遍**才算数（非只编译通过）。
 - ⚠ 冒烟判据 SUSPECT_LINES=0 抓不到「被 Safe() 吞掉的真错」（如 P/Invoke 挂错 DLL 的 EntryPointNotFoundException）——**必须肉眼过一遍新增 ERR 行**再下 PASS 结论。
 - ⚠ 验证 run-latest 新鲜度**别信 exe**：exe（303KB）是跨构建字节不变的启动器外壳，真代码在 `CelesteMusicPlayer.dll`——对 DLL 做 md5 比对 + 搜方法名，别 ls exe 时间戳。
 - 源码偶发被清零（前 4096 字节 NUL>0.5 判坏，从 HEAD 恢复）。工作树大量未跟踪文件（dist/run-latest、native/build 等）动不得。
