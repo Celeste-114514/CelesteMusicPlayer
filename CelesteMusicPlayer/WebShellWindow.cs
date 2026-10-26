@@ -61,6 +61,13 @@ namespace CelesteMusicPlayer
 
         private void LibraryChanged(object? sender, NotifyCollectionChangedEventArgs args) => _dirty = true;
 
+        /// <summary>播放/收藏等变化后让主页自己刷新，不重发整份曲库。</summary>
+        internal void NotifyHomeChanged()
+        {
+            if (_closed || !_ready) return;
+            Post(new { kind = "celeste.homeChanged", version = 1 });
+        }
+
         private async Task InitializeAsync()
         {
             try
@@ -186,6 +193,9 @@ namespace CelesteMusicPlayer
                     case "browse":
                         var browse = await _owner.WebBrowseAsync(msg, this);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = browse }); break;
+                    case "home":
+                        var home = await _owner.WebHomeAsync(msg);
+                        Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = home }); break;
                     case "trackAction":
                         var actionResult = await _owner.WebTrackActionAsync(msg, this);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = actionResult }); break;

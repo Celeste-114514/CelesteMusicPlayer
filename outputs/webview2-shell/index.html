@@ -13,6 +13,7 @@
   <link rel="stylesheet" href="library.css">
   <link rel="stylesheet" href="collections.css">
   <link rel="stylesheet" href="navigation.css">
+  <link rel="stylesheet" href="home.css">
   <script src="shell.js" defer></script>
   <script src="transport-panels.js" defer></script>
   <script src="albums.js" defer></script>
@@ -20,6 +21,7 @@
   <script src="artists.js" defer></script>
   <script src="sort-menus.js" defer></script>
   <script src="browse.js" defer></script>
+  <script src="home.js" defer></script>
   <script src="track-menu.js" defer></script>
   <script src="folders.js" defer></script>
   <link rel="stylesheet" href="folders.css">
@@ -72,6 +74,7 @@
     <symbol id="i-volume" viewBox="0 0 24 24"><path d="M3 9h4l5-5v16l-5-5H3Zm13-2a7 7 0 0 1 0 10m3-13a11 11 0 0 1 0 16"/></symbol>
     <symbol id="i-lyrics" viewBox="0 0 24 24"><path d="M5 3h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6l-5 3v-3H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7 8h10M7 13h7"/></symbol>
     <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 8a7 7 0 0 1 11.8-1L20 12M4 12l2.1 5a7 7 0 0 0 11.8-1"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
     <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 10v4M7 6v12M12 3v18M17 7v10M21 10v4"/></symbol>
   </defs></svg>
@@ -106,20 +109,19 @@
       <main class="main">
         <div class="toolbar"><div class="breadcrumbs"><button id="back" class="icon-button" aria-label="返回上一页" disabled><svg><use href="#i-chevron"/></svg></button><nav id="breadcrumb" aria-label="页面路径"></nav></div><label class="search"><svg><use href="#i-search"/></svg><input id="search" type="search" placeholder="搜索你的音乐" aria-label="搜索你的音乐"><kbd>/</kbd></label></div>
 
-        <section class="page" id="overview-page" aria-labelledby="overview-title">
-          <div class="page-heading"><div><p class="eyebrow">YOUR OWN LITTLE UNIVERSE</p><h1 id="overview-title">让音乐，自在发生<span>。</span></h1><p class="intro">从熟悉的旋律开始，留一点空间给新的喜欢。</p></div><span class="collection-label"><span></span> 我的私人音乐空间</span></div>
-          <div class="feature-grid">
-            <article class="feature-card"><div class="feature-copy"><span class="capsule">此刻 · 为自己留白</span><h2>把世界调小，<br>把音乐放大。</h2><p>让下一首，接住现在的心情。</p><button class="primary" id="hero-play"><svg><use href="#i-play"/></svg>从这里播放</button></div><div class="record-art" aria-hidden="true"><div class="record-sleeve"><span>CELESTE<br><b>AFTER HOURS</b></span><div class="sleeve-sun"></div><small>音 乐 与 片 刻</small></div><div class="vinyl"><div class="vinyl-label">c<span>33⅓</span></div></div></div><span class="feature-index">01 / YOUR COLLECTION</span></article>
-            <button class="collection-card" data-page="favorites"><span class="capsule">一直喜欢</span><span class="heart-art" aria-hidden="true">♡</span><span class="collection-copy"><strong>喜欢，值得反复。</strong><span>收藏属于你的声音 <span>↗</span></span></span></button>
+        <section class="page home-page" id="overview-page" aria-labelledby="overview-title">
+          <section class="home-hero" aria-labelledby="overview-title">
+            <div class="home-hero-copy"><p class="eyebrow">WELCOME BACK</p><h1 id="overview-title">今天，从喜欢的音乐开始<span>。</span></h1><p id="home-subtitle" class="home-subtitle">熟悉的旋律，随时接着听。</p><div class="home-actions"><button id="home-play" class="primary"><svg><use href="#i-play"/></svg><span>开始播放</span></button><button id="home-shuffle" class="secondary"><svg><use href="#i-shuffle"/></svg>随心听</button><button class="text-button" data-page="queue"><svg><use href="#i-queue"/></svg>查看队列</button></div></div>
+            <article class="home-now" aria-label="当前播放"><div id="home-now-cover" class="home-now-cover"></div><div class="home-now-copy"><small id="home-now-label">当前播放</small><strong id="home-now-title">未在播放</strong><button id="home-now-album"></button><span id="home-now-artist"></span></div></article>
+          </section>
+          <nav class="home-pulse" aria-label="曲库概况"><button data-page="songs"><strong id="home-song-count">—</strong><span>歌曲</span></button><button data-page="albums"><strong id="home-album-count">—</strong><span>专辑</span></button><button data-page="artists"><strong id="home-artist-count">—</strong><span>艺术家</span></button><button data-page="favorites"><strong id="home-favorite-count">—</strong><span>喜欢的歌曲</span></button><small id="home-library-status"></small></nav>
+          <div class="home-content-grid">
+            <section class="home-panel home-recent" aria-labelledby="home-recent-title"><header><div><p class="eyebrow">PICK UP WHERE YOU LEFT OFF</p><h2 id="home-recent-title">最近听过</h2></div><button class="text-button" data-page="recent">查看全部</button></header><div id="home-recent-grid" class="home-album-grid"></div><p id="home-recent-empty" class="home-empty" hidden>开始听歌后，这里会留下记录。</p></section>
+            <section class="home-panel home-activity" aria-labelledby="home-activity-title"><header><div><p class="eyebrow">YOUR LISTENING FOOTPRINT</p><h2 id="home-activity-title">听歌足迹 · 近12周</h2></div><span id="home-activity-total" class="home-panel-note"></span></header><div class="home-heatmap-wrap"><div class="home-weekdays" aria-hidden="true"><span>一</span><span>三</span><span>五</span><span>日</span></div><div id="home-heatmap" class="home-heatmap" role="grid" aria-label="近12周播放记录"></div></div><div class="home-heat-legend"><span>少</span><i data-level="0"></i><i data-level="1"></i><i data-level="2"></i><i data-level="3"></i><i data-level="4"></i><span>多</span></div><p class="home-panel-note">按已保存的播放记录统计，播放结束或切歌后更新。</p><div id="home-day-history" class="home-day-history" hidden></div></section>
           </div>
-          <div class="section-title"><div><h2>随心探索</h2><p>你的音乐，用你喜欢的方式打开。</p></div><span class="section-index">THE COLLECTION</span></div>
-          <div class="destination-grid">
-            <button class="destination" data-page="songs"><span class="destination-icon peach"><svg><use href="#i-note"/></svg></span><span><strong>歌曲</strong><small>每一首，都有位置</small></span><span class="destination-arrow">↗</span></button>
-            <button class="destination" data-page="albums"><span class="destination-icon lilac"><svg><use href="#i-grid"/></svg></span><span><strong>专辑</strong><small>听完整个故事</small></span><span class="destination-arrow">↗</span></button>
-            <button class="destination" data-page="artists"><span class="destination-icon sage"><svg><use href="#i-person"/></svg></span><span><strong>艺术家</strong><small>那些熟悉的声音</small></span><span class="destination-arrow">↗</span></button>
-            <button class="destination" data-page="playlists"><span class="destination-icon sand"><svg><use href="#i-list"/></svg></span><span><strong>播放列表</strong><small>给心情一个名字</small></span><span class="destination-arrow">↗</span></button>
-          </div>
-          <div class="quiet-note"><span>✦</span><p>音乐是主角，其他的慢慢来。</p><small>CELESTE MUSIC PLAYER</small></div>
+          <section class="home-panel home-discover" aria-labelledby="home-discover-title"><header><div><p class="eyebrow">A RECORD FROM YOUR LIBRARY</p><h2 id="home-discover-title">从曲库里挑一张</h2></div><button id="home-refresh-albums" class="text-button"><svg><use href="#i-refresh"/></svg>换一批</button></header><div id="home-discover-grid" class="home-album-grid home-discover-grid"></div><p id="home-discover-empty" class="home-empty" hidden>曲库中还没有专辑。</p></section>
+          <div class="home-rank-grid"><section class="home-panel" aria-labelledby="home-top-artists-title"><header><div><p class="eyebrow">ON REPEAT</p><h2 id="home-top-artists-title">常听艺术家 · 累计</h2></div></header><ol id="home-top-artists" class="home-rank-list"></ol><p id="home-top-artists-empty" class="home-empty" hidden>播放歌曲后，这里会出现你的常听艺术家。</p></section><section class="home-panel" aria-labelledby="home-top-albums-title"><header><div><p class="eyebrow">ALBUMS YOU RETURN TO</p><h2 id="home-top-albums-title">常听专辑 · 累计</h2></div></header><ol id="home-top-albums" class="home-rank-list"></ol><p id="home-top-albums-empty" class="home-empty" hidden>播放歌曲后，这里会出现你的常听专辑。</p></section></div>
+          <p class="home-footnote">累计次数从播放开始时计入，不代表完整听完次数。</p>
         </section>
 
         <section class="page songs-page" id="songs-page" hidden aria-labelledby="songs-title">

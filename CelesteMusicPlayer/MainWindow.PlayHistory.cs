@@ -24,6 +24,7 @@ namespace CelesteMusicPlayer
                 string title = Path.GetFileNameWithoutExtension(_nowPlayingPath);
                 double seconds = EnginePositionValue > TimeSpan.Zero ? EnginePositionValue.TotalSeconds : 0;
                 LibraryDb.RecordPlayback(_nowPlayingPath, title, seconds, completed);
+                NotifyWebHomeChanged();
             }
             catch (Exception caught)
             {

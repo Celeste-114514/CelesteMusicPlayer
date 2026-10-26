@@ -261,7 +261,7 @@
     chooseTrack(previewQueue[next]);
   }
   function togglePlay() { if (live) { send('togglePlay'); return; } state.playing = !state.playing; lastTick = performance.now(); render(); }
-  $('play').addEventListener('click', togglePlay); $('hero-play').addEventListener('click', () => { if (live) send('play'); else { state.playing=true; lastTick=performance.now(); render(); } });
+  $('play').addEventListener('click', togglePlay);
   $('next').addEventListener('click', () => stepTrack(1));
   $('previous').addEventListener('click', () => stepTrack(-1));
   $('favorite').addEventListener('click',()=>{if(live)send('favorite');else{state.favorite=!state.favorite;render();}});
@@ -310,7 +310,7 @@
       }
       if(message.kind!=='celeste.state'||!message.state||typeof message.state!=='object')return;
       const incoming=message.state;
-      ['title','artist'].forEach(key=>{if(typeof incoming[key]==='string')state[key]=incoming[key]});
+      ['title','artist','album'].forEach(key=>{if(typeof incoming[key]==='string')state[key]=incoming[key]});
       if(typeof incoming.trackId==='string'){
         state.trackId=incoming.trackId;
         state.index=libraryTracks.findIndex(track=>track.id===state.trackId);

@@ -77,3 +77,7 @@
 - OPRA 数据源 `opra.roonlabs.net`，缓存 `%LOCALAPPDATA%\CelesteMusicPlayer\opra\database_v1.jsonl`（约 12MB／6230 产品／12594 曲线）；
   `tools/OpraOnlineProbe` 可无界面验在线链路。
 - 网页 DSP 非 EQ 模块**不另建状态**，直接读写原生 XAML 控件（两侧永不跑偏）；首次访问要 `EnsureWebDspUiReady()` 补加载。
+- **网页 DSP 可视化（10-26 晚补齐，commit 0c0f67f）**：非 EQ 模块全部按 ECHO 重写（状态卡/预算条/
+  模式卡/管线图/焦点条/ECHO 链条导航）；`VISUAL_OWNED` 表（dsp.js）登记面板接管控件，通用控件表跳过防双渲染；
+  安全页限制器=开/停按钮对写穿 headroom。EQ 曲线=1 单位 1 CSS px（H 恒 300，ResizeObserver 实测宽），
+  不再随窗口拉伸。⚠ 沙箱曾把 WebShellDspTagsSmoke.cjs 整个清成纯 NUL——改完大文件要查 NUL 自检。

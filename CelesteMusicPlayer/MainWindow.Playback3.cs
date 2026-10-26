@@ -613,6 +613,7 @@ namespace CelesteMusicPlayer
             // 任务栏缩略图按钮：fav=true 实心红心 / fav=false 空心轮廓心
             _taskbarButtons?.UpdateFavorite(fav);
 
+            NotifyWebHomeChanged();
             StartupLog.Write("[托盘] " + (fav ? "已收藏 " : "已取消收藏 ") + path);
         }
 

@@ -697,6 +697,55 @@ namespace CelesteMusicPlayer
             return result;
         }
 
+        /// <summary>主页 12 周统计：读取完整时间范围，不受通用最近历史 1000 条上限影响。</summary>
+        public static List<PlaybackHistoryEntry> LoadPlaybackHistoryRange(DateTime startUtc, DateTime endUtc)
+        {
+            EnsureMigrated();
+            var result = new List<PlaybackHistoryEntry>();
+            lock (Gate)
+            {
+                using var conn = Open(GetDbFilePath());
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"SELECT file_path, title, played_at_utc, played_seconds, completed
+                    FROM playback_history WHERE played_at_utc >= $start AND played_at_utc < $end
+                    ORDER BY played_at_utc DESC";
+                cmd.Parameters.AddWithValue("$start", startUtc.ToUniversalTime().ToString("o"));
+                cmd.Parameters.AddWithValue("$end", endUtc.ToUniversalTime().ToString("o"));
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read()) result.Add(ReadHistoryEntry(reader));
+            }
+            return result;
+        }
+
+        /// <summary>主页单日记录，游标为结果偏移量；查询失败会抛给桥接层而不是伪装成空记录。</summary>
+        public static List<PlaybackHistoryEntry> LoadPlaybackHistoryDay(DateTime startUtc, DateTime endUtc, int offset, int limit)
+        {
+            EnsureMigrated();
+            var result = new List<PlaybackHistoryEntry>();
+            lock (Gate)
+            {
+                using var conn = Open(GetDbFilePath());
+                using var cmd = conn.CreateCommand();
+                cmd.CommandText = @"SELECT file_path, title, played_at_utc, played_seconds, completed
+                    FROM playback_history WHERE played_at_utc >= $start AND played_at_utc < $end
+                    ORDER BY played_at_utc DESC, id DESC LIMIT $limit OFFSET $offset";
+                cmd.Parameters.AddWithValue("$start", startUtc.ToUniversalTime().ToString("o"));
+                cmd.Parameters.AddWithValue("$end", endUtc.ToUniversalTime().ToString("o"));
+                cmd.Parameters.AddWithValue("$limit", Math.Clamp(limit, 1, 200));
+                cmd.Parameters.AddWithValue("$offset", Math.Max(0, offset));
+                using var reader = cmd.ExecuteReader();
+                while (reader.Read()) result.Add(ReadHistoryEntry(reader));
+            }
+            return result;
+        }
+
+        private static PlaybackHistoryEntry ReadHistoryEntry(SqliteDataReader reader) => new()
+        {
+            FilePath = reader.GetString(0), Title = reader.GetString(1),
+            PlayedAtUtc = DateTime.TryParse(reader.GetString(2), out var time) ? time : DateTime.MinValue,
+            PlayedSeconds = reader.GetDouble(3), Completed = reader.GetInt64(4) != 0
+        };
+
         /// <summary>清空播放历史。失败静默。</summary>
         public static void ClearPlaybackHistory()
         {

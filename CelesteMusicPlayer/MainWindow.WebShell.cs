@@ -77,6 +77,12 @@ namespace CelesteMusicPlayer
             PlayUserPlaylistAt(0);
         }
 
+        internal void NotifyWebHomeChanged()
+        {
+            if (_webShellWindow == null) return;
+            DispatcherQueue.TryEnqueue(() => _webShellWindow?.NotifyHomeChanged());
+        }
+
         internal object WebPlaybackState()
         {
             var item = GetCurrentPlayingItem();
