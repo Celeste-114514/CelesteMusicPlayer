@@ -1,0 +1,49 @@
+/* Compact quarter-circle and frameless application layout. */
+.shell{position:relative}
+.titlebar{height:58px;min-height:58px;padding:0 22px}
+.workspace{position:static}
+.main{margin:0 14px 14px;border:0;border-radius:0;background:transparent;box-shadow:none}
+.empty-canvas{border:0}
+.corner-orbit{position:absolute;left:0;top:0;width:250px;height:250px;z-index:3;isolation:isolate;pointer-events:none}
+.corner-surface{position:absolute;inset:0;width:100%;height:100%;overflow:visible;stroke:none}
+.quarter-fill{fill:#fcf7f9}
+.quarter-edge{stroke:#eadce3;stroke-width:1;fill:none}
+.quarter-inner{stroke:#e8dae1;stroke-width:1;fill:none}
+.quarter-core{stroke:#eddde5;stroke-width:1;fill:none}
+.corner-home,.corner-item{position:absolute;pointer-events:auto;display:grid;place-items:center;transform:translate(-50%,-50%);border:0;border-radius:50%;color:#a3919f;background:transparent;box-shadow:none;transition:background .2s,color .2s;-webkit-app-region:no-drag}
+.corner-home{left:11.6129%;top:11.6129%;width:29px;height:29px}
+.corner-home svg{width:18px;height:18px}
+.corner-item{width:34px;height:34px}
+.corner-item svg{width:18px;height:18px}
+.corner-item.ring-1{width:28px;height:28px;color:#ad8d9e}
+.corner-item.ring-1 svg{width:17px;height:17px}
+.corner-item:hover,.corner-home:hover{color:var(--accent);background:#fbe3ec}
+.corner-item[aria-current=page],.corner-home[aria-current=page]{background:#f5dce566;color:var(--accent)}
+.toolbar{padding-left:255px;min-height:72px}
+.page-heading{padding-left:205px;min-height:125px;align-items:center;margin-bottom:27px}
+.page-heading h1{font-size:clamp(25px,2.6vw,36px)}
+.page-heading .eyebrow{font-size:8px}
+.page-heading .collection-label{display:none}
+.placeholder-page>.eyebrow,.placeholder-page>h1,.placeholder-page>.intro{margin-left:205px}
+.placeholder-page>.eyebrow{padding-top:15px}
+.placeholder-page .empty-canvas{margin-top:65px}
+.corner-orbit~.main .breadcrumbs{white-space:nowrap}
+.header-actions{margin-left:auto;display:flex;align-items:center;gap:12px;-webkit-app-region:no-drag}
+.header-tools,.window-actions{display:flex;align-items:center;gap:5px;margin:0}
+.header-divider{width:1px;height:17px;background:#e8e0e5}
+.header-actions button{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;color:#938995;background:transparent;padding:0;transition:color .2s,background .2s}
+.header-actions svg{width:18px;height:18px;stroke-width:1.6}
+.header-actions button:hover{color:var(--accent);background:#f6e9ee}
+.header-tools button[aria-current=page]{color:var(--accent);background:#f6e9ee}
+.window-actions button:last-child:hover{background:#e84865;color:white}
+.player{grid-template-columns:minmax(0,1fr) clamp(280px,38vw,460px) minmax(0,1fr);gap:20px}
+.transport{width:100%;min-width:0;justify-self:center}
+.transport-buttons{justify-content:center}
+.timeline{width:100%}
+.timeline>span{width:27px;min-width:27px;text-align:center}
+.timeline input{margin-left:0;margin-right:0}
+.now-playing{overflow:hidden}
+.track-info strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+@media(min-width:1500px){.page-heading{padding-left:190px;min-height:122px}}
+@media(max-width:1150px){.page-heading{padding-left:215px;min-height:130px}.toolbar{padding-left:245px;gap:12px}.search{width:210px}.page-heading h1{font-size:25px}.page-heading .eyebrow{letter-spacing:1.5px}.placeholder-page>.eyebrow,.placeholder-page>h1,.placeholder-page>.intro{margin-left:215px}.now-playing>.icon-button{display:none}}
+@media(max-width:850px){.corner-orbit{width:230px;height:230px}.corner-item{width:31px;height:31px}.corner-home{width:27px;height:27px}.corner-item.ring-1{width:26px;height:26px}.corner-item.ring-1 svg{width:16px;height:16px}.toolbar{padding-left:218px;gap:8px}.breadcrumbs{gap:8px;font-size:11px}.search{width:155px}.page-heading{padding-left:185px;min-height:110px}.page-heading h1{font-size:23px;letter-spacing:-1px}.page-heading .eyebrow{font-size:7px;letter-spacing:.8px}.page-heading .intro{font-size:11px}.placeholder-page>.eyebrow,.placeholder-page>h1,.placeholder-page>.intro{margin-left:185px}.player{grid-template-columns:minmax(0,1fr) 280px minmax(0,1fr);gap:12px}.track-info{gap:4px}.track-info>span{max-width:100%}.mini-cover{width:42px;height:42px}.now-playing{gap:9px}.track-info small{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}

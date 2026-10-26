@@ -249,16 +249,18 @@ namespace CelesteMusicPlayer
             _ => throw new ArgumentException("不支持该字段。")
         };
 
-        internal async Task<PlaylistItem[]> WebTagAddFilesAsync(bool folder, Microsoft.UI.Xaml.Window host)
+        internal async Task<(PlaylistItem[] Tracks, string Directory, bool Canceled)> WebTagAddFilesAsync(bool folder, Microsoft.UI.Xaml.Window host)
         {
             nint handle = WinRT.Interop.WindowNative.GetWindowHandle(host);
             string[] paths;
+            string directory = "";
             if (folder)
             {
                 var picker = new FolderPicker(); picker.FileTypeFilter.Add("*");
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, handle);
                 var selected = await picker.PickSingleFolderAsync();
-                if (selected == null) return Array.Empty<PlaylistItem>();
+                if (selected == null) return (Array.Empty<PlaylistItem>(), "", true);
+                directory = selected.Path;
                 paths = await Task.Run(() => Directory.EnumerateFiles(selected.Path, "*", new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.ReparsePoint })
                     .Where(path => AudioExtensions.Contains(Path.GetExtension(path), StringComparer.OrdinalIgnoreCase)).Take(20000).ToArray());
             }
@@ -269,8 +271,9 @@ namespace CelesteMusicPlayer
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, handle);
                 var files = await picker.PickMultipleFilesAsync();
                 paths = files.Select(f => f.Path).ToArray();
+                if (paths.Length == 0) return (Array.Empty<PlaylistItem>(), "", true);
             }
-            return await Task.Run(() => paths.Select(CreatePlaylistItemFromPath).ToArray());
+            return (await Task.Run(() => paths.Select(CreatePlaylistItemFromPath).ToArray()), directory, false);
         }
         internal PlaylistItem WebTagFromPath(string path) => CreatePlaylistItemFromPath(path);
 
@@ -323,7 +326,7 @@ namespace CelesteMusicPlayer
                     InvalidateCoverCache(job.Old); OnTagsSaved(job.New);
                 }
                 SavePlayQueue();
-                return new { ok = true, count = jobs.Length };
+                return new { ok = true, count = jobs.Length, remap = tracks.Where(pair => pair.Key != WebTrackId(pair.Value)).ToDictionary(pair => pair.Key, pair => WebTrackId(pair.Value)) };
             }
             finally { _webTagWriteGate.Release(); }
         }

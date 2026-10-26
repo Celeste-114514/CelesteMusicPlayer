@@ -13,6 +13,7 @@ namespace CelesteMusicPlayer
         {
             string operation = ReadString(msg, "operation");
             EnsureWebDspUiReady();
+            if (operation.StartsWith("opra", StringComparison.Ordinal)) return await WebDspOpraAsync(operation, msg);
             if (operation == "importApo") { await ImportAudioFxEqApoCoreAsync(); return new { ok = true }; }
             if (operation == "exportApo") { await ExportAudioFxEqApoCoreAsync(); return new { ok = true }; }
             if (operation == "savePreset") return new { message = await SaveAudioFxEqPresetCoreAsync(ReadString(msg, "name")) };

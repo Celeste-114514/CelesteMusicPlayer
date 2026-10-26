@@ -37,6 +37,7 @@ namespace CelesteMusicPlayer
         private SleepStopMode _sleepMode = SleepStopMode.None;
         private int _sleepTracksRemaining;
         private int _sleepMinutes;   // AfterMinutes 模式下的分钟数（0=未设置）；面板回显用
+        private double _sleepCustomMinutes;
         private AudioPlaybackEngine? _audioEngine;
         private readonly LibraryWatchService _libraryWatch = new();
         private DateTime _lastListenSampleUtc = DateTime.UtcNow;
@@ -2074,13 +2075,14 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>应用睡眠定时选择（对话框与面板页签共用）。sel 口径与旧对话框 RadioButtons 一致。</summary>
-        private void ApplySleepSelection(int sel, double trackCountValue)
+        private void ApplySleepSelection(int sel, double trackCountValue, double customMinutes = 0)
         {
             _sleepTimer?.Stop();
             _sleepTimer = null;
             _sleepMode = SleepStopMode.None;
             _sleepTracksRemaining = 0;
             _sleepMinutes = 0;
+            _sleepCustomMinutes = 0;
 
             if (sel == 0)
             {
@@ -2104,7 +2106,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            int minutes = sel switch
+            double minutes = sel == 8 ? customMinutes : sel switch
             {
                 1 => 15,
                 2 => 30,
@@ -2113,7 +2115,8 @@ namespace CelesteMusicPlayer
                 _ => 120
             };
             _sleepMode = SleepStopMode.AfterMinutes;
-            _sleepMinutes = minutes;
+            _sleepMinutes = (int)Math.Ceiling(minutes);
+            _sleepCustomMinutes = sel == 8 ? minutes : 0;
             _sleepTimer = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread().CreateTimer();
             _sleepTimer.Interval = TimeSpan.FromMinutes(minutes);
             _sleepTimer.Tick += (_, _) => StopForSleep("睡眠定时器到点，播放已暂停");
@@ -2249,6 +2252,8 @@ namespace CelesteMusicPlayer
             _sleepTimer?.Stop();
             _sleepTimer = null;
             _sleepMode = SleepStopMode.None;
+            _sleepMinutes = 0;
+            _sleepCustomMinutes = 0;
             _sleepTracksRemaining = 0;
             try
             {
@@ -2967,6 +2972,12 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            await ChangeOutputModeAsync(mode);
+        }
+
+        // Both shells use this path; changing a preference does not restart audio.
+        private async Task ChangeOutputModeAsync(string mode)
+        {
             AppSettingsStore.Update(s => s.OutputMode = mode);
             ApplyEngineOutputMode(AppSettingsStore.Load());
             UpdateModeCardHighlight(mode);
@@ -3074,6 +3085,7 @@ namespace CelesteMusicPlayer
         private double _abLoopA = -1;   // 秒；-1 = 未设
         private double _abLoopB = -1;
         private bool _abLoopActive;
+        private string _abLoopHint = "先设 A 点，再设 B 点。";
 
         /// <summary>当前播放位置（源时间秒）。没在播放返回 -1。</summary>
         private double GetAbLoopReferencePosition()
@@ -3094,6 +3106,9 @@ namespace CelesteMusicPlayer
         }
 
         private void AbLoopSetAButton_Click(object sender, RoutedEventArgs e)
+            => SetAbLoopStart();
+
+        private void SetAbLoopStart()
         {
             double pos = GetAbLoopReferencePosition();
             if (pos < 0)
@@ -3116,6 +3131,9 @@ namespace CelesteMusicPlayer
         }
 
         private void AbLoopSetBButton_Click(object sender, RoutedEventArgs e)
+            => SetAbLoopEnd();
+
+        private void SetAbLoopEnd()
         {
             double pos = GetAbLoopReferencePosition();
             if (pos < 0)
@@ -3143,6 +3161,9 @@ namespace CelesteMusicPlayer
         }
 
         private void AbLoopToggleButton_Click(object sender, RoutedEventArgs e)
+            => ToggleAbLoop();
+
+        private void ToggleAbLoop()
         {
             if (_abLoopA < 0 || _abLoopB < 0)
             {
@@ -3159,6 +3180,9 @@ namespace CelesteMusicPlayer
         }
 
         private void AbLoopClearButton_Click(object sender, RoutedEventArgs e)
+            => ClearAbLoop();
+
+        private void ClearAbLoop()
         {
             _abLoopA = -1;
             _abLoopB = -1;
@@ -3172,6 +3196,7 @@ namespace CelesteMusicPlayer
 
         private void SetAbLoopHint(string text)
         {
+            _abLoopHint = text;
             if (AbLoopHintText != null)
             {
                 AbLoopHintText.Text = text;
@@ -3204,16 +3229,20 @@ namespace CelesteMusicPlayer
             {
                 // 用户手动改选 → 放弃「等设备插回自动切回」的暂存偏好
                 appliedDevice = did;
-                ClearPreferredOutputDevice();
-                AppSettingsStore.Update(s => s.OutputDeviceId = did);
-                // 阶段二：设备变更 → 清独占支持率探测缓存，新设备首次起播重新探测（缓存按设备 ID 分离，此处双保险）
-                HiFiOutputBackend.ClearExclusivePlanCache();
-                await ApplyOutputDeviceAsync(did);
+                await ChangeOutputDeviceAsync(did);
             }
 
             RefreshAudioSettingsPanel();
             // 按设备记忆：切到具体设备时自动套用该设备的 DSP 配置档
             ApplyDeviceDspProfileIfEnabled(appliedDevice);
+        }
+
+        private async Task ChangeOutputDeviceAsync(string deviceId)
+        {
+            ClearPreferredOutputDevice();
+            AppSettingsStore.Update(s => s.OutputDeviceId = deviceId);
+            HiFiOutputBackend.ClearExclusivePlanCache();
+            await ApplyOutputDeviceAsync(deviceId);
         }
 
         private void RefreshAudioSettingsPanel()

@@ -30,12 +30,16 @@
   </ItemGroup>
 
   <!-- 与 EqRegression 同理：加载主程序集可能触发 WinAppSDK 模块初始化，把原生运行库
-       拷到测试输出目录旁（本地/CI 都需要，主程序 Release 自包含产物里取）。 -->
+       拷到测试输出目录旁（本地/CI 都需要，主程序 Release 自包含产物里取）。
+       ProtectedData 必须一起拷：AppSettingsStore 反序列化时会通过它解保护字段，缺了这个程序集
+       就会被判成"设置文件损坏"→ 备份成 .corrupt-* 并回退默认值。测试宿主里缺它时，
+       用户真实的 app-settings.json 会反复被误备份（虽然不会写坏，但会让人以为配置丢了）。 -->
   <Target Name="CopyWinAppSdkRuntime" AfterTargets="Build">
     <ItemGroup>
       <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.WindowsAppRuntime.*" />
       <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.Windows.SDK.NET.dll" />
       <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\e_sqlite3.dll" />
+      <_Wasdk Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\System.Security.Cryptography.ProtectedData.dll" />
     </ItemGroup>
     <Copy SourceFiles="@(_Wasdk)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
   </Target>

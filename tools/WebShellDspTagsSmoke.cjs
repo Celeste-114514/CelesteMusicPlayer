@@ -18,6 +18,11 @@ const {chromium} = require('playwright');
     let data={ok:true},ok=true,error='';
     if(m.command==='dsp') {
      if(m.operation==='get') data=structuredClone(eq);
+     else if(m.operation==='opraInit'||m.operation==='opraRefresh')data={status:{VendorCount:1,ProductCount:1,EqCount:1,Source:'cache'},vendors:[{id:'brand',name:'测试耳机厂商',count:1}],recent:[],favorites:[],enabled:false};
+     else if(m.operation==='opraSearch')data={products:[{ProductId:'product',Name:'测试耳机',VendorName:'测试耳机厂商',EqCount:1}]};
+     else if(m.operation==='opraPresets')data={presets:[{EqId:'curve',Author:'测试来源',BandCount:2,PreampDb:-4}]};
+     else if(m.operation==='opraPreview')data={eqId:'curve',title:'测试耳机厂商 测试耳机',author:'测试来源',count:2,preampDb:-4,bands:eq.bands,warnings:[],favorite:false};
+     else if(m.operation==='opraFavorite')data={favorite:true};
      else if(m.operation==='set'){eq={...eq,enabled:m.enabled,preampDb:m.preampDb,bands:m.bands};data={ok:true};}
      else if(m.operation==='spectrum')data={available:true,bands:[.1,.2,.4,.6,.3,.2,.1]};
      else if(m.operation==='modules')data={modules:{eq:true}};
@@ -29,7 +34,9 @@ const {chromium} = require('playwright');
      else if(m.operation==='levels')data={session:true,peakDb:-6,clipCount:0,left:{peak:-6,rms:-18},right:{peak:-8,rms:-19},compressorGr:2.5,activeDsp:['EQ'],chain:'44.1 → 96 kHz'};
     }
     if(m.command==='tags') {
-     if(m.operation==='list'){const rows=tracks.filter(t=>!m.scopeIds?.length||m.scopeIds.includes(t.id));data={total:rows.length,rows:structuredClone(rows),offset:0};}
+     if(m.operation==='list'){const rows=tracks.filter(t=>m.scopeIds?.includes(t.id));data={total:rows.length,rows:structuredClone(rows),offset:0};}
+     else if(['addFiles','addFolder','changeDirectory'].includes(m.operation)){data=window.nextTagAdd||{ids:tracks.map(t=>t.id),count:tracks.length,directory:'C:/TestMusic'};delete window.nextTagAdd;}
+     else if(m.operation==='rename'){const remap={};m.rows.forEach(r=>{const t=tracks.find(t=>t.id===r.id);remap[t.id]=t.id+'-renamed';t.id=remap[t.id];t.file=r.file+'.flac';});data={count:m.rows.length,remap};}
      else if(m.operation==='read')data={tracks:m.ids.map(id=>({...tracks.find(t=>t.id===id),ok:true}))};
      else if(m.operation==='write') {data={results:m.rows.map(r=>({id:r.id,ok:!window.failWrites,error:window.failWrites?'模拟磁盘占用；已还原':''}))};if(!window.failWrites)m.rows.forEach(r=>Object.assign(tracks.find(t=>t.id===r.id),r.fields));}
      else if(m.operation==='searchOnline')data={candidates:[{index:0,title:'候选标题',artist:'候选艺人',album:'候选专辑',source:'MusicBrainz'}]};
@@ -52,6 +59,10 @@ const {chromium} = require('playwright');
   assert.equal(await page.locator('.eq-guide').count(),2,'selected band has native dashed guides');
   assert.equal(await page.locator('.eq-node-frequency').count(),2,'native band frequency labels are visible');
   assert.ok(Math.abs(nodes[0].x-(52+Math.log2(125/20)/Math.log2(1000)*800))<.01,'first band shares the logarithmic frequency mapping');
+  await page.locator('.opra-vendor-grid').getByRole('button').first().click();await page.waitForSelector('.opra-product-list button');await page.locator('.opra-product-list button').first().click();await page.waitForSelector('.opra-preset-list button');await page.locator('.opra-preset-list button').first().click();await page.waitForSelector('.opra-response');assert.equal(await page.locator('.opra-preset-list button').count(),1,'preset choices remain accessible beside preview');
+  await page.getByRole('button',{name:'收藏曲线',exact:true}).last().click();await page.waitForSelector('.opra-preset-actions button');
+  await page.getByRole('button',{name:'应用耳机校正',exact:true}).click();await page.waitForTimeout(80);assert.equal(await page.evaluate(()=>commands.some(c=>c.operation==='opraApply'&&c.eqId==='curve')),true,'headphone correction applies chosen curve through native service');
+  await page.locator('.opra-browser').scrollIntoViewIfNeeded();await page.screenshot({path:path.join(__dirname,'../outputs/web-dsp-headphones-preview.png')});
   await page.getByLabel('滤波器类型',{exact:true}).selectOption('Notch');await page.waitForTimeout(80);
   assert.equal(await page.evaluate(()=>commands.findLast(c=>c.command==='dsp'&&c.operation==='set').bands[0].type),'Notch');
   await page.locator('.eq-workbench').getByRole('button',{name:'EQ 已启用',exact:true}).click();await page.waitForTimeout(80);
@@ -61,6 +72,8 @@ const {chromium} = require('playwright');
    await page.locator(`[data-module="${id}"]`).click();await page.waitForTimeout(80);
    assert.ok(await page.locator('.dsp-module h2').count()>0,id+' renders');
    if(!['profiles','rack','safety'].includes(id))assert.equal(await page.locator(`[data-visual="${id}"]`).count(),1,id+' has ECHO presentation');
+   for(const width of [1024,760]){await page.setViewportSize({width,height:960});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'DSP '+id+' width '+width);}await page.setViewportSize({width:1440,height:960});
+   if(['headroom','src','channel','fir','safety'].includes(id))await page.screenshot({path:path.join(__dirname,`../outputs/web-dsp-${id}-preview.png`)});
   }
   const limiter=page.getByRole('button',{name:'安全限制器',exact:true});
   await limiter.click();await page.waitForTimeout(60);
@@ -79,7 +92,18 @@ const {chromium} = require('playwright');
   assert.match(await page.locator('.dsp-channel-bias-head strong').textContent(),/偏右/);
   for(const width of [1440,1024,760]){await page.setViewportSize({width,height:960});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'DSP viewport '+width);}
   await page.setViewportSize({width:1440,height:960});await page.locator('[data-module="eq"]').click();await page.waitForTimeout(180);await page.screenshot({path:path.join(__dirname,'../outputs/web-dsp-eq-preview.png')});
-  await page.evaluate(()=>CelesteShell.navigate('tags'));await page.waitForSelector('.tag-table tbody tr');await page.waitForTimeout(180);
+  await page.evaluate(()=>CelesteShell.navigate('tags'));await page.waitForTimeout(180);
+  assert.equal(await page.locator('.tag-table tbody tr').count(),0,'tag workspace starts empty');
+  assert.equal(await page.evaluate(()=>commands.filter(c=>c.command==='tags'&&['read','list'].includes(c.operation)).length),0,'opening tags does not read library or music files');
+  await page.getByRole('button',{name:'添加文件…',exact:true}).click();await page.waitForSelector('.tag-table tbody tr');
+  assert.deepEqual(await page.locator('.tag-table th[data-column]').allTextContents().then(labels=>labels.map(t=>t.trim())),['标题','艺术家','专辑艺术家','专辑','年份','曲目','流派','时长','文件名','格式','位深采样率','码率','大小','作曲家','碟片号','曲目总数','BPM','注释']);
+  const rowTitle=page.locator('.tag-table tbody tr').first().locator('[data-field="title"]');await rowTitle.click();
+  assert.notEqual(await rowTitle.getAttribute('contenteditable'),'true','first click selects only');await page.waitForTimeout(60);await rowTitle.click();
+  assert.equal(await rowTitle.getAttribute('contenteditable'),'true','second click on selected row edits');await rowTitle.press('Escape');
+  await page.locator('.tags-column-picker summary').click();await page.getByLabel('显示注释',{exact:true}).uncheck();assert.equal(await page.locator('th[data-column="comment"]').isVisible(),false);await page.getByLabel('显示注释',{exact:true}).check();await page.locator('.tags-column-picker summary').click();
+  await page.getByRole('button',{name:'排序…',exact:true}).click();await page.getByRole('button',{name:'添加规则',exact:true}).click();await page.getByLabel('第 1 排序字段',{exact:true}).selectOption('artist');await page.getByRole('button',{name:'添加规则',exact:true}).click();await page.getByLabel('第 2 排序字段',{exact:true}).selectOption('track');await page.getByLabel('第 2 排序方向',{exact:true}).selectOption('desc');await page.getByRole('button',{name:'应用排序',exact:true}).click();await page.waitForTimeout(80);
+  assert.deepEqual(await page.evaluate(()=>commands.findLast(c=>c.operation==='list').sortRules),[{key:'artist',descending:false},{key:'track',descending:true}]);
+  await page.locator('.tag-table-wrap').evaluate(n=>{n.style.maxHeight='50px';n.scrollTop=0;});const headerY=await page.locator('th[data-column="title"]').evaluate(n=>n.getBoundingClientRect().y);await page.locator('.tag-table-wrap').evaluate(n=>n.scrollTop=40);assert.ok(Math.abs(await page.locator('th[data-column="title"]').evaluate(n=>n.getBoundingClientRect().y)-headerY)<1,'header remains fixed while rows scroll');await page.locator('.tag-table-wrap').evaluate(n=>{n.style.maxHeight='';n.scrollTop=0;});
   const pollCount=await page.evaluate(()=>commands.filter(c=>c.operation==='spectrum').length);await page.waitForTimeout(220);assert.equal(await page.evaluate(()=>commands.filter(c=>c.operation==='spectrum').length),pollCount,'hidden EQ stops spectrum');
   await page.locator('.tag-table tbody tr').first().click();await page.waitForTimeout(100);
   const title=page.locator('#tag-field-title');await title.fill('改后标题');await page.getByRole('button',{name:/保存改动/}).click();await page.waitForTimeout(100);assert.equal(await page.locator('#tag-field-title').inputValue(),'改后标题');
@@ -97,11 +121,15 @@ const {chromium} = require('playwright');
   assert.equal(await page.locator('.tag-table tbody tr').count(),1,'context entry opens only requested tracks');
   assert.equal(await page.locator('#tag-field-title').inputValue(),'第二首');
   assert.equal(await page.locator('[data-more="tags"]').isEnabled(),true,'transport tag entry is connected');
-  await page.getByRole('button',{name:'显示全部曲库',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.tag-table tbody tr').length===2);
+  await page.getByRole('button',{name:'添加文件…',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.tag-table tbody tr').length===2);
   await page.locator('.tag-table tbody tr').first().click();await page.waitForTimeout(80);
   await page.evaluate(()=>{document.querySelector('.main').scrollTop=0;document.querySelector('.tags-panel').scrollTop=0;});
   await page.screenshot({path:path.join(__dirname,'../outputs/web-tags-preview.png')});
   for(const width of [1440,1024,760]){await page.setViewportSize({width,height:960});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth),'tags viewport '+width);}
+  await page.evaluate(()=>window.nextTagAdd={canceled:true});await page.getByRole('button',{name:'改变工作目录…',exact:true}).click();assert.equal(await page.locator('.tag-table tbody tr').count(),2,'canceling folder chooser preserves workspace');
+  await page.evaluate(()=>window.nextTagAdd={ids:['test-b'],count:1,directory:'C:/OtherMusic'});await page.getByRole('button',{name:'改变工作目录…',exact:true}).click();await page.waitForFunction(()=>document.querySelectorAll('.tag-table tbody tr').length===1);assert.match(await page.locator('.tags-working-directory').textContent(),/OtherMusic/);
+  await page.locator('.tag-table tbody tr').click();await page.locator('.tags-subnav').getByRole('button',{name:'批量工具',exact:true}).click();await page.getByRole('button',{name:'预览文件名',exact:true}).click();await page.getByRole('button',{name:'应用重命名',exact:true}).click();await page.waitForTimeout(100);assert.deepEqual(await page.evaluate(()=>commands.findLast(c=>c.operation==='list').scopeIds),['test-b-renamed'],'renamed file retains explicit workspace scope');assert.equal(await page.locator('.tag-table tbody tr').count(),1);
+  await page.locator('.tags-column-picker summary').click();await page.getByLabel('显示注释',{exact:true}).uncheck();await page.reload();await page.evaluate(()=>CelesteShell.navigate('tags'));await page.waitForSelector('.tag-table');assert.equal(await page.locator('th[data-column="comment"]').isVisible(),false,'column visibility survives reload');assert.equal(await page.locator('.tag-table tbody tr').count(),0,'new tag session starts with empty workspace');assert.equal(await page.evaluate(()=>commands.some(c=>c.command==='tags'&&['list','read'].includes(c.operation))),false,'empty session does not read music');
   assert.deepEqual(errors,[]);
   console.log('PASS: 12 DSP pages, native EQ filter/enable/add and first-node geometry, ECHO visuals, channel balance, hidden spectrum cleanup; tags save/failure draft/multi-field writes, online/lyric previews, batch progress, transforms and scoped tag entries; responsive widths and no JS errors.');
  } finally {await browser.close();}

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Platforms>x64</Platforms>
+    <PlatformTarget>x64</PlatformTarget>
+    <RollForward>Major</RollForward>
+    <AssemblyName>OpraOnlineProbe</AssemblyName>
+    <RootNamespace>OpraOnlineProbe</RootNamespace>
+    <!-- 控制台验证工具：不参与产品构建，不打包进交付目录。 -->
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Reference Include="CelesteMusicPlayer">
+      <HintPath>..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\CelesteMusicPlayer.dll</HintPath>
+    </Reference>
+  </ItemGroup>
+
+  <!-- 加载主程序集需要 WinAppSDK 原生库与 ProtectedData，和 TagEditTests 同一套理由。 -->
+  <Target Name="CopyRuntimeDeps" AfterTargets="Build">
+    <ItemGroup>
+      <_Dep Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.WindowsAppRuntime.*" />
+      <_Dep Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\Microsoft.Windows.SDK.NET.dll" />
+      <_Dep Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\e_sqlite3.dll" />
+      <_Dep Include="..\..\CelesteMusicPlayer\bin\x64\Release\net9.0-windows10.0.19041.0\win-x64\System.Security.Cryptography.ProtectedData.dll" />
+    </ItemGroup>
+    <Copy SourceFiles="@(_Dep)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

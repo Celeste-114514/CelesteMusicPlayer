@@ -2064,7 +2064,7 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>将歌曲文件移入回收站，并从各列表移除。</summary>
-        private async Task DeleteSongFromDiskAsync(PlaylistItem item)
+        private async Task DeleteSongFromDiskAsync(PlaylistItem item, XamlRoot? hostRoot = null)
         {
             if (AppSettingsStore.Load().DisableDeleteFromDisk)
             {
@@ -2078,7 +2078,7 @@ namespace CelesteMusicPlayer
                 PrimaryButtonText = "删除",
                 CloseButtonText = "取消",
                 DefaultButton = ContentDialogButton.Close,
-                XamlRoot = Content.XamlRoot
+                XamlRoot = hostRoot ?? Content.XamlRoot
             };
 
             ColorHelper.ApplyDialogAccent(dialog);

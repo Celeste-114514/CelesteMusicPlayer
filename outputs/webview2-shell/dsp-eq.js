@@ -76,6 +76,7 @@
     function endDrag(){if(!drag)return;drag=false;renderBands();save();}chart.addEventListener('pointerup',endDrag);chart.addEventListener('pointercancel',endDrag);chart.addEventListener('lostpointercapture',endDrag);
     chart.addEventListener('keydown',e=>{const b=state.bands[selected];if(!b)return;if(e.key==='Delete'){if(state.bands.length>1)state.bands.splice(selected,1);selected=clamp(selected,0,state.bands.length-1);}else if(e.key==='ArrowUp'||e.key==='ArrowDown')b.gain=clamp(b.gain+(e.key==='ArrowUp'?1:-1)*(e.shiftKey?.1:.5),-24,24);else if(e.key==='ArrowLeft'||e.key==='ArrowRight')b.freq=clamp(b.freq*2**((e.key==='ArrowRight'?1:-1)/3),20,20000);else return;e.preventDefault();changed();renderBands();save();});
     timer=setInterval(async()=>{if(stopped||document.hidden||!live||!spectrumOn||pollBusy)return;pollBusy=true;try{const data=await request('spectrum');if(stopped)return;spectrum=data.available?data.bands:spectrum.map(v=>v*.8);draw();}catch{}finally{pollBusy=false;}},100);
-    load();return ()=>{if(editing)save();stopped=true;clearInterval(timer);};
+    const disposeHeadphones=window.CelesteHeadphones.mount(root,{request,onApplied:load,bandGainAt,live});
+    load();return ()=>{if(editing)save();stopped=true;clearInterval(timer);disposeHeadphones();};
   }};
 })();

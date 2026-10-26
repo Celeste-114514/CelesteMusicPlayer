@@ -197,6 +197,13 @@ namespace CelesteMusicPlayer
         return TryGetPartsCached(path, out sampleRate, out bitDepth, out kbps, out channels, out _);
     }
 
+    // Collection summaries can reuse codec facts without probing each file again.
+    internal static bool TryPeekFacts(string path, out int rate, out int bits, out string codec)
+    {
+        if (InfoCache.TryGetValue(path, out var facts)) { rate = facts.Rate; bits = facts.Bits; codec = facts.Codec; return true; }
+        rate = bits = 0; codec = ""; return false;
+    }
+
     /// <summary>
     /// 表格用快速事实（采样率 / 位深 / 码率）：直接吃调用方已经打开的 TagLib.File.Properties，
     /// **不重复开文件、不起 ffmpeg 子进程**——标签板块建行时与读标签共用同一个 File，零额外 I/O。
@@ -763,7 +770,7 @@ namespace CelesteMusicPlayer
         ///  4) 未知 codec 或没匹配上 → 0，不显示。
         /// **不做"有损一律 16bit"这类按容器/类别的钳制**：WMA Lossless、DTS-HD、E-AC3
         /// 这类有损容器里同样可以装 24bit 有效精度，一刀切会把真实信息抹掉。</summary>
-        private static int ParseBitDepth(string line, string codec)
+        internal static int ParseBitDepth(string line, string codec)
         {
             // 1) 权威有效位深声明
             Match mp = Regex.Match(line, @"\((\d+)\s*bit\)");

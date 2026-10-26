@@ -303,6 +303,7 @@
       moduleVisual = window.CelesteDspVisuals.mount(visualHost, id, result.controls || [], result.info || {}, dsp, renderModule);
       const powerName = (result.controls || []).find(c => /^DspPower/.test(c.name));
       (result.controls || []).forEach(control => {
+        if (id==='src' && ['SrcRateCombo','SrcQualityCombo','SrcDitherCombo'].includes(control.name)) return;
         if (powerName && control === powerName) return;   // rendered in the header instead
         controlRow(control).forEach(row => group.append(row));
       });
@@ -582,6 +583,10 @@
 
     body.append(node('p', '电平来自音频内核。完整输出格式与直通状态以播放器的音频链路信息为准。', 'eq-hint'));
 
+    // ECHO OutputSafetyPanel: hero → route → checks + next action.
+    const panel=node('section',undefined,'dsp-module-panel dsp-module-panel--safety'),hero=node('div',undefined,'dsp-safety-hero'),heroText=node('div'),heroTitle=node('h2','正在读取输出状态'),heroDetail=node('p','播放后显示当前电平与保护状态。'),emblem=node('div',undefined,'dsp-safety-emblem');emblem.append(icon('#i-wave'));heroText.append(heroTitle,heroDetail);hero.append(emblem,heroText);
+    const safetyBody=node('div',undefined,'dsp-safety-body'),checks=node('div',undefined,'dsp-safety-checks'),next=node('aside',undefined,'dsp-safety-next');next.append(node('span','建议下一步'),node('strong','保留输出余量'),node('p','开启限制器，在处理链末端防止过载；有削波记录时降低前级增益。'),limiter);checks.append(meters,stats,chainBox);safetyBody.append(checks,next);panel.append(hero,route,safetyBody);body.append(panel);
+
     const setMeter = (meter, peakDb, rmsDb) => {
       meter.bar.style.width = meterPct(peakDb) + '%';
       meter.bar.dataset.level = peakDb > -1 ? 'hot' : peakDb > -12 ? 'warm' : 'cool';
@@ -590,6 +595,7 @@
     };
 
     const paint = data => {
+      const tone=!data.session?'idle':data.overload==='clip'?'risk':data.overload==='near'?'warn':'safe';panel.dataset.tone=tone;heroTitle.textContent=!data.session?'等待播放':tone==='risk'?'输出已削波':tone==='warn'?'输出接近满刻度':'输出电平正常';heroDetail.textContent=data.bypass?'当前总旁路，请留意原始信号电平。':'输出峰值与削波统计来自实际音频内核。';
       routeValues[0].textContent = data.bypass ? '总旁路' : (data.activeDsp?.length ? '正在处理' : '无音效处理');
       routeValues[1].textContent = data.session ? Number(data.peakDb).toFixed(1)+' dBFS' : '未播放';
       routeValues[3].textContent = String(data.clipCount || 0);

@@ -8460,6 +8460,9 @@
                 VerticalAlignment="Top"
                 Height="48"
                 Padding="0,8,8,0">
+                <Button Width="34" Height="32" Padding="0" Background="Transparent" BorderThickness="0" CornerRadius="16" Click="WebShellButton_Click" ToolTipService.ToolTip="打开新网页界面（预览）">
+                    <FontIcon Glyph="&#xE774;" FontSize="15" />
+                </Button>
                 <!-- 2026-10-17 用户拍板：这个位置原来是「音频设置」，现在改成音频链路
                      （Echo 风格「信号路径」面板）的入口；音频设置改为从链路面板底部的
                      「打开音频设置」进入。x:Name 保留（极客皮肤键位表还引用它）。 -->

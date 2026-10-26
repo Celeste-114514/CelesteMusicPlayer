@@ -1,0 +1,201 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data: https://celeste-cover.internal; style-src 'self'; script-src 'self'; object-src 'none'; base-uri 'none'">
+  <title>Celeste · 新界面</title>
+  <link rel="stylesheet" href="shell.css">
+  <link rel="stylesheet" href="corner.css">
+  <link rel="stylesheet" href="songs.css">
+  <link rel="stylesheet" href="transport.css">
+  <link rel="stylesheet" href="transport-panels.css">
+  <link rel="stylesheet" href="library.css">
+  <link rel="stylesheet" href="collections.css">
+  <link rel="stylesheet" href="navigation.css">
+  <script src="shell.js" defer></script>
+  <script src="transport-panels.js" defer></script>
+  <script src="albums.js" defer></script>
+  <script src="waveform.js" defer></script>
+  <script src="artists.js" defer></script>
+  <script src="sort-menus.js" defer></script>
+  <script src="browse.js" defer></script>
+  <script src="track-menu.js" defer></script>
+  <script src="folders.js" defer></script>
+  <link rel="stylesheet" href="folders.css">
+  <link rel="stylesheet" href="track-menu.css">
+  <link rel="stylesheet" href="dsp.css">
+  <link rel="stylesheet" href="tags.css">
+  <link rel="stylesheet" href="dsp-echo.css">
+  <link rel="stylesheet" href="dsp-reference.css">
+  <script src="dsp-headphones.js" defer></script>
+  <script src="dsp-eq.js" defer></script>
+  <script src="dsp-visuals.js" defer></script>
+  <script src="dsp.js" defer></script>
+  <script src="tags-tools.js" defer></script>
+  <script src="tags.js" defer></script>
+</head>
+<body>
+  <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
+    <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></symbol>
+    <symbol id="i-tag" viewBox="0 0 24 24"><path d="M3 4h8l10 10-7 7L3 10Z"/><circle cx="7.5" cy="8" r="1"/></symbol>
+    <symbol id="i-minimize" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+    <symbol id="i-maximize" viewBox="0 0 24 24"><rect x="5" y="5" width="14" height="14" rx="2"/></symbol>
+    <symbol id="i-disc" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="2.5"/><path d="M6 10a6.5 6.5 0 0 1 4-4m4 12a6.5 6.5 0 0 0 4-4"/></symbol>
+    <symbol id="i-people" viewBox="0 0 24 24"><circle cx="9" cy="7" r="3.5"/><path d="M2 21v-3a7 7 0 0 1 14 0v3M17 4a3.5 3.5 0 0 1 0 7m2 3a6 6 0 0 1 3 5v2"/></symbol>
+    <symbol id="i-star" viewBox="0 0 24 24"><path d="m12 3 2.8 5.8 6.4.9-4.6 4.5 1.1 6.4-5.7-3-5.7 3 1.1-6.4L2.8 9.7l6.4-.9Z"/></symbol>
+    <symbol id="i-queue" viewBox="0 0 24 24"><path d="M3 5h17M3 11h10M3 17h7m6-3 6 4-6 4Z"/></symbol>
+    <symbol id="i-note" viewBox="0 0 24 24"><path d="M9 17V5l11-2v12M9 9l11-2"/><ellipse cx="5.5" cy="17.5" rx="3.5" ry="2.5"/><ellipse cx="16.5" cy="15.5" rx="3.5" ry="2.5"/></symbol>
+    <symbol id="i-grid" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></symbol>
+    <symbol id="i-person" viewBox="0 0 24 24"><circle cx="12" cy="7" r="4"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></symbol>
+    <symbol id="i-heart" viewBox="0 0 24 24"><path d="M20.8 4.6a5.6 5.6 0 0 0-8 .1l-.8.8-.8-.8a5.6 5.6 0 0 0-8 7.9L12 21l8.8-8.4a5.6 5.6 0 0 0 0-8Z"/></symbol>
+    <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 6v6l4 2"/></symbol>
+    <symbol id="i-list" viewBox="0 0 24 24"><path d="M9 5h12M9 12h12M9 19h12M3 5h.1M3 12h.1M3 19h.1"/></symbol>
+    <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3 7V5a2 2 0 0 1 2-2h5l3 3h6a2 2 0 0 1 2 2v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2Z"/></symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24"><path d="m10 3-.7 2.5-2 .9L5 5.7 2.8 9.5l1.9 1.8v2.3l-1.9 1.8L5 19.2l2.3-.7 2 .9.7 2.5h4l.7-2.5 2-.9 2.3.7 2.2-3.8-1.9-1.8v-2.3l1.9-1.8L19 5.7l-2.3.7-2-.9L14 3Z"/><circle cx="12" cy="12.5" r="3"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="7"/><path d="m16 16 5 5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="m14 5-7 7 7 7"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="m8 4 13 8-13 8Z"/></symbol>
+    <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+    <symbol id="i-next" viewBox="0 0 24 24"><path d="m4 5 11 7-11 7ZM19 5v14"/></symbol>
+    <symbol id="i-seek" viewBox="0 0 24 24"><path d="m3 6 8 6-8 6Zm9 0 8 6-8 6Z"/></symbol>
+    <symbol id="i-shuffle" viewBox="0 0 24 24"><path d="M3 6h3c5 0 7 12 12 12h3m-4-4 4 4-4 4M3 18h3c2 0 3-2 4-4m4-4c1-2 2-4 4-4h3m-4-4 4 4-4 4"/></symbol>
+    <symbol id="i-repeat" viewBox="0 0 24 24"><path d="M20 8H6a3 3 0 0 0-3 3v2m4-9L3 8l4 4M4 16h14a3 3 0 0 0 3-3v-2m-4 9 4-4-4-4"/></symbol>
+    <symbol id="i-order-sequential" viewBox="0 0 24 24"><path d="M12 4.5v14m0 0-4.5-4.5M12 18.5l4.5-4.5"/></symbol>
+    <symbol id="i-order-listloop" viewBox="0 0 24 24"><path d="M17.5 3 20.8 6.3 17.5 9.6"/><path d="M20.6 6.3H7.2A3.2 3.2 0 0 0 4 9.5v1.8"/><path d="M6.5 21 3.2 17.7 6.5 14.4"/><path d="M3.4 17.7h13.4a3.2 3.2 0 0 0 3.2-3.2v-1.8"/></symbol>
+    <symbol id="i-order-trackloop" viewBox="0 0 24 24"><path d="m17 3 3 3-3 3M20 6H7a3 3 0 0 0-3 3v2m3 10-3-3 3-3M4 18h13a3 3 0 0 0 3-3v-2"/><path d="m10.5 10 1.5-1v6m-1.5 0h3" stroke-width="1.5"/></symbol>
+    <symbol id="i-order-once" viewBox="0 0 24 24"><path d="M12 4v10m0 0-4.5-4.5M12 14l4.5-4.5"/><path d="M7.5 19.5h9"/></symbol>
+    <symbol id="i-order-random" viewBox="0 0 24 24"><path d="M3.5 6.5h3.2c4.4 0 6.2 11 11.3 11h2.5m0 0-3.2-3.2m3.2 3.2-3.2 3.2"/><path d="M17 3.3 20.7 7 17 10.7"/><path d="M3.5 17.5h3.2c1.5 0 2.7-1.4 3.6-3.1m3.4-2.9c1-1.7 2.2-3 3.6-3h2.6m0 0-3.2-3.2m3.2 3.2-3.2 3.2"/></symbol>
+    <symbol id="i-sort-none" viewBox="0 0 24 24"><path d="M8 10l4-4 4 4M8 14l4 4 4-4"/></symbol>
+    <symbol id="i-sort-asc" viewBox="0 0 24 24"><path d="M12 19V5m0 0-5 5m5-5 5 5"/></symbol>
+    <symbol id="i-sort-desc" viewBox="0 0 24 24"><path d="M12 5v14m0 0 5-5m-5 5-5-5"/></symbol>
+    <symbol id="i-volume" viewBox="0 0 24 24"><path d="M3 9h4l5-5v16l-5-5H3Zm13-2a7 7 0 0 1 0 10m3-13a11 11 0 0 1 0 16"/></symbol>
+    <symbol id="i-lyrics" viewBox="0 0 24 24"><path d="M5 3h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6l-5 3v-3H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2ZM7 8h10M7 13h7"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
+    <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 10v4M7 6v12M12 3v18M17 7v10M21 10v4"/></symbol>
+  </defs></svg>
+
+  <div class="shell">
+    <header class="titlebar">
+      <span id="mode-label" hidden>设计预览</span>
+      <div class="header-actions">
+        <nav class="header-tools" aria-label="应用工具">
+          <button data-page="tags" aria-label="标签" title="标签"><svg><use href="#i-tag"/></svg></button>
+          <button data-page="dsp" aria-label="音效处理" title="音效处理"><svg><use href="#i-wave"/></svg></button>
+          <button data-page="settings" aria-label="设置" title="设置"><svg><use href="#i-settings"/></svg></button>
+        </nav>
+        <span class="header-divider" aria-hidden="true"></span>
+        <div class="window-actions" aria-label="窗口操作">
+          <button data-window="minimize" aria-label="最小化" title="最小化"><svg><use href="#i-minimize"/></svg></button>
+          <button data-window="maximize" aria-label="最大化" title="最大化"><svg><use href="#i-maximize"/></svg></button>
+          <button data-window="close" aria-label="关闭窗口" title="关闭窗口"><svg><use href="#i-close"/></svg></button>
+        </div>
+      </div>
+    </header>
+
+    <div class="workspace">
+      <nav id="corner-orbit" class="corner-orbit" aria-label="音乐分类轮盘">
+        <div id="orbit-content" class="orbit-content">
+        <svg class="corner-surface" viewBox="0 0 600 290" aria-hidden="true"><path class="quarter-fill" d="M20 10H580A280 280 0 0 1 20 10Z"/><path class="quarter-edge" d="M20 10A280 280 0 0 0 580 10"/><path class="quarter-inner" d="M105 10A195 195 0 0 0 495 10"/><path class="quarter-core" d="M195 10A105 105 0 0 0 405 10"/></svg>
+        <button class="corner-home" data-page="overview" aria-label="主页" title="主页" aria-current="page"><svg><use href="#i-home"/></svg></button>
+        </div>
+        <button id="orbit-toggle" class="corner-toggle" aria-label="收起分类轮盘" title="收起分类轮盘" aria-expanded="true" aria-controls="orbit-content"><svg><use href="#i-grid"/></svg></button>
+      </nav>
+
+      <main class="main">
+        <div class="toolbar"><div class="breadcrumbs"><button id="back" class="icon-button" aria-label="返回上一页" disabled><svg><use href="#i-chevron"/></svg></button><nav id="breadcrumb" aria-label="页面路径"></nav></div><label class="search"><svg><use href="#i-search"/></svg><input id="search" type="search" placeholder="搜索你的音乐" aria-label="搜索你的音乐"><kbd>/</kbd></label></div>
+
+        <section class="page" id="overview-page" aria-labelledby="overview-title">
+          <div class="page-heading"><div><p class="eyebrow">YOUR OWN LITTLE UNIVERSE</p><h1 id="overview-title">让音乐，自在发生<span>。</span></h1><p class="intro">从熟悉的旋律开始，留一点空间给新的喜欢。</p></div><span class="collection-label"><span></span> 我的私人音乐空间</span></div>
+          <div class="feature-grid">
+            <article class="feature-card"><div class="feature-copy"><span class="capsule">此刻 · 为自己留白</span><h2>把世界调小，<br>把音乐放大。</h2><p>让下一首，接住现在的心情。</p><button class="primary" id="hero-play"><svg><use href="#i-play"/></svg>从这里播放</button></div><div class="record-art" aria-hidden="true"><div class="record-sleeve"><span>CELESTE<br><b>AFTER HOURS</b></span><div class="sleeve-sun"></div><small>音 乐 与 片 刻</small></div><div class="vinyl"><div class="vinyl-label">c<span>33⅓</span></div></div></div><span class="feature-index">01 / YOUR COLLECTION</span></article>
+            <button class="collection-card" data-page="favorites"><span class="capsule">一直喜欢</span><span class="heart-art" aria-hidden="true">♡</span><span class="collection-copy"><strong>喜欢，值得反复。</strong><span>收藏属于你的声音 <span>↗</span></span></span></button>
+          </div>
+          <div class="section-title"><div><h2>随心探索</h2><p>你的音乐，用你喜欢的方式打开。</p></div><span class="section-index">THE COLLECTION</span></div>
+          <div class="destination-grid">
+            <button class="destination" data-page="songs"><span class="destination-icon peach"><svg><use href="#i-note"/></svg></span><span><strong>歌曲</strong><small>每一首，都有位置</small></span><span class="destination-arrow">↗</span></button>
+            <button class="destination" data-page="albums"><span class="destination-icon lilac"><svg><use href="#i-grid"/></svg></span><span><strong>专辑</strong><small>听完整个故事</small></span><span class="destination-arrow">↗</span></button>
+            <button class="destination" data-page="artists"><span class="destination-icon sage"><svg><use href="#i-person"/></svg></span><span><strong>艺术家</strong><small>那些熟悉的声音</small></span><span class="destination-arrow">↗</span></button>
+            <button class="destination" data-page="playlists"><span class="destination-icon sand"><svg><use href="#i-list"/></svg></span><span><strong>播放列表</strong><small>给心情一个名字</small></span><span class="destination-arrow">↗</span></button>
+          </div>
+          <div class="quiet-note"><span>✦</span><p>音乐是主角，其他的慢慢来。</p><small>CELESTE MUSIC PLAYER</small></div>
+        </section>
+
+        <section class="page songs-page" id="songs-page" hidden aria-labelledby="songs-title">
+          <div class="songs-heading"><div><p class="eyebrow">YOUR MUSIC LIBRARY</p><h1 id="songs-title">歌曲<span>。</span></h1><p class="songs-count" id="songs-count"></p></div><span class="songs-preview" id="songs-preview">演示曲库</span></div>
+          <div class="songs-controls"><p class="songs-hint">熟悉的旋律，都在这里。</p><div class="songs-actions"><button id="songs-play-all" class="primary"><svg><use href="#i-play"/></svg>播放所有歌曲</button><label class="sort-picker"><span>排序：</span><select id="songs-sort" aria-label="歌曲排序"><option value="title">标题</option><option value="artist">艺术家</option><option value="album">专辑</option><option value="year">年份</option><option value="duration">时长</option><option value="genre">流派</option><option value="track">音轨号</option><option value="sortPath">文件路径</option></select></label><button id="songs-direction" class="sort-direction" aria-label="切换为降序">升序 ↑</button></div></div>
+          <div class="songs-columns" aria-hidden="true"><span>#</span><span>歌曲 / 专辑</span><span>时长</span></div>
+          <ul id="songs-list" class="songs-list" aria-label="歌曲列表"></ul>
+          <button id="songs-more" class="secondary" hidden>加载更多歌曲</button>
+          <div id="songs-empty" class="songs-empty" hidden><svg><use href="#i-search"/></svg><h2>没有找到相关歌曲</h2><p>试试其他歌名、艺术家或专辑。</p><button id="songs-clear" class="secondary">清除搜索</button></div>
+          <p class="songs-footnote">单击选中 · 双击或按 Enter 播放<span id="library-note">封面为设计占位，真实曲库将在后续接入。</span><button id="native-view" hidden>返回旧界面</button></p>
+        </section>
+        <section class="page albums-page" id="albums-page" hidden aria-labelledby="albums-title">
+          <div id="albums-browser"><div class="albums-heading"><div><p class="eyebrow">EVERY RECORD, A LITTLE WORLD</p><h1 id="albums-title">专辑<span>。</span></h1><p id="albums-count" class="songs-count"></p></div><div class="album-sort-actions"><label class="sort-picker"><span>排序：</span><select id="albums-sort" aria-label="专辑排序"><option value="title">专辑名称</option><option value="artist">艺术家</option><option value="year">发行年份</option><option value="added">添加顺序</option><option value="random">随机</option><option value="trackCount">曲目数</option><option value="duration">总时长</option></select></label><button id="albums-direction" class="sort-direction">升序 ↑</button></div></div><div id="albums-grid" class="albums-grid"></div><p id="albums-empty" class="albums-empty" hidden>没有找到相关专辑，试试其他专辑名或艺术家。</p><button id="albums-more" class="secondary" hidden>加载更多专辑</button></div>
+          <div id="album-detail" hidden><button id="album-back" class="text-button album-back"><svg><use href="#i-chevron"/></svg>所有专辑</button><div class="album-hero"><div id="album-detail-cover" class="album-detail-cover"></div><div class="album-hero-copy"><p class="eyebrow">FROM FIRST TRACK TO LAST</p><h1 id="album-detail-title"></h1><p id="album-detail-artist"></p><p id="album-detail-meta"></p><button id="album-play" class="primary"><svg><use href="#i-play"/></svg>播放这张专辑</button></div></div><div id="album-tracks" class="album-tracks"></div></div>
+        </section>
+        <section id="artists-page" class="page artists-page" hidden aria-labelledby="artists-title">
+          <div id="artists-browser"><div class="albums-heading"><div><p class="eyebrow">THE VOICES IN YOUR COLLECTION</p><h1 id="artists-title">艺术家<span>。</span></h1><p id="artists-count" class="songs-count"></p></div><div class="album-sort-actions"><label class="sort-picker"><span>排序：</span><select id="artists-sort" aria-label="艺术家排序"><option value="name">名称</option><option value="songCount">歌曲数</option><option value="albumCount">专辑数</option><option value="duration">总时长</option><option value="year">最新发行年份</option></select></label><button id="artists-direction" class="sort-direction">升序 ↑</button></div></div><div id="artists-grid" class="artists-grid"></div><p id="artists-empty" class="albums-empty" hidden>没有找到相关艺术家。</p><button id="artists-more" class="secondary" hidden>加载更多艺术家</button></div>
+          <div id="artist-detail" hidden><button id="artist-back" class="text-button album-back">‹ 所有艺术家</button><div class="artist-overview"><div class="artist-hero"><div id="artist-portrait"></div><div><p id="artist-kind" class="eyebrow">ARTIST</p><h1 id="artist-name"></h1><p class="setting-description">收藏的声音，汇成一个音乐世界。</p><button id="artist-play" class="primary">播放全部歌曲</button></div></div><dl id="artist-stats" class="collection-stats"></dl><p id="artist-stats-note" class="setting-note" role="status"></p></div><div class="artist-tabs" role="group" aria-label="艺术家内容"><button data-artist-tab="songs" aria-pressed="true">歌曲</button><button data-artist-tab="albums" aria-pressed="false">专辑</button></div><div class="detail-sort-actions"><label class="sort-picker"><span>排序：</span><select id="artist-detail-sort" aria-label="艺术家详情排序"><option value="title">名称</option><option value="year">年份</option><option value="duration">时长</option><option value="album">专辑</option><option value="track">音轨号</option></select></label><button id="artist-detail-direction" class="sort-direction">升序 ↑</button></div><div id="artist-songs" class="album-tracks"></div><div id="artist-albums" class="albums-grid" hidden></div></div>
+        </section>
+        <section id="browse-page" class="page" hidden><div class="albums-heading"><div><p class="eyebrow" id="browse-eyebrow">YOUR COLLECTION</p><h1 id="browse-title"></h1><p id="browse-count" class="songs-count"></p></div><div class="album-sort-actions"><button id="browse-play" class="primary">播放全部</button><label class="sort-picker"><span>排序：</span><select id="browse-sort" aria-label="分类排序"><option value="default">默认顺序</option><option value="title">名称</option><option value="artist">艺术家</option><option value="album">专辑</option><option value="duration">时长</option><option value="rating">评分</option><option value="playCount">播放次数</option><option value="lastPlayed">最近播放时间</option></select></label><button id="browse-direction" class="sort-direction">升序 ↑</button><button id="browse-refresh" class="text-button">刷新</button></div></div><div id="browse-filters" class="artist-tabs" hidden></div><form id="playlist-create" class="playlist-create" hidden><input id="playlist-name" placeholder="新播放列表名称" maxlength="120" required aria-label="新播放列表名称"><button class="secondary">创建播放列表</button></form><p id="browse-status" class="setting-note" role="status"></p><div id="browse-cards" class="browse-cards"></div><div id="browse-tracks" class="album-tracks"></div><button id="browse-more" class="secondary" hidden>加载更多</button></section>
+        <section class="page placeholder-page" id="category-page" hidden aria-labelledby="category-title"><p class="eyebrow">YOUR COLLECTION</p><h1 id="category-title"></h1><p class="intro" id="category-description"></p><div class="empty-canvas"><span class="empty-orbit"><svg id="category-icon"><use href="#i-note"/></svg></span><h2 id="canvas-title">这一页，由你来定义。</h2><p id="canvas-description">整体空间已经准备好。内容布局和细节，留给下一步一起打磨。</p><button class="secondary" data-page="overview">回到概览</button></div></section>
+      </main>
+
+      <aside id="side-panel" class="side-panel" hidden aria-labelledby="panel-title"><div class="panel-header"><h2 id="panel-title">接下来播放</h2><button id="panel-close" class="icon-button" aria-label="关闭面板"><svg><use href="#i-close"/></svg></button></div><div id="panel-body"></div></aside>
+    </div>
+
+    <footer class="player" aria-label="播放控制">
+      <div class="now-playing"><div class="mini-cover" aria-hidden="true"><span>AFTER<br>HOURS</span></div><div class="track-info"><strong id="track-title">Priestess</strong><span id="track-artist">Periphery · Juggernaut: Omega</span><small id="track-quality">演示曲目 · 未连接音频引擎</small></div></div>
+      <div class="transport">
+        <div class="timeline"><span id="elapsed">0:00</span><div class="waveform-seek" id="waveform-seek"><canvas id="progress-waveform" aria-hidden="true"></canvas><input id="progress" type="range" min="0" max="303" value="0" step="0.1" aria-label="播放进度"><span id="waveform-status" class="sr-only" role="status"></span></div><span id="duration">5:03</span></div>
+        <div class="transport-buttons">
+          <button id="favorite" class="icon-button" aria-label="喜欢当前歌曲" title="我喜欢的音乐" aria-pressed="false"><svg><use href="#i-heart"/></svg></button>
+          <button id="playback-order" class="icon-button" aria-label="列表循环" title="列表循环 · 左键切换，右键选择"><svg><use href="#i-repeat"/></svg><small id="order-badge"></small></button>
+          <button id="previous" class="icon-button previous" aria-label="上一首" title="上一首"><svg><use href="#i-next"/></svg></button>
+          <button id="seek-back" class="icon-button previous" aria-label="快退 5 秒" title="快退 5 秒"><svg><use href="#i-seek"/></svg></button>
+          <button id="play" class="play-button" aria-label="播放" title="播放 / 暂停" aria-pressed="false"><svg><use href="#i-play"/></svg></button>
+          <button id="seek-forward" class="icon-button" aria-label="快进 5 秒" title="快进 5 秒"><svg><use href="#i-seek"/></svg></button>
+          <button id="next" class="icon-button" aria-label="下一首" title="下一首"><svg><use href="#i-next"/></svg></button>
+          <button id="queue" class="icon-button" aria-label="显示播放队列" title="显示播放队列"><svg><use href="#i-list"/></svg></button>
+          <button id="transport-more" class="icon-button" aria-label="更多功能" title="更多功能"><svg><use href="#i-more"/></svg></button>
+        </div>
+        <div id="order-menu" class="order-menu" role="group" aria-label="选择播放顺序" hidden>
+          <button data-order="Sequential">顺序播放</button><button data-order="Random">随机播放</button><button data-order="ListLoop">列表循环</button><button data-order="TrackLoop">单曲循环</button><button data-order="TrackOnce">单曲播放</button>
+        </div>
+      </div>
+      <div class="player-tools">
+        <button id="lyrics" class="icon-button" aria-label="桌面歌词" title="桌面歌词 · 左键开关，右键解锁" aria-pressed="false"><svg><use href="#i-lyrics"/></svg><small id="lyrics-badge">off</small></button>
+        <svg class="volume-icon"><use href="#i-volume"/></svg><input id="volume" type="range" min="0" max="100" value="65" aria-label="音量">
+        <button id="audio-settings" class="icon-button" aria-label="音频设置" title="音频设置 · 输出 / AB 循环 / 速度 / 定时"><svg><use href="#i-settings"/></svg></button>
+      </div>
+    </footer>
+  </div>
+
+  <dialog id="transport-dialog" aria-labelledby="transport-dialog-title">
+    <div class="transport-dialog-header"><div><p class="eyebrow" id="transport-dialog-eyebrow">MAKE YOURSELF AT HOME</p><h2 id="transport-dialog-title">音频设置</h2></div><button id="transport-dialog-close" class="icon-button" aria-label="关闭面板"><svg><use href="#i-close"/></svg></button></div>
+    <nav id="audio-tabs" class="audio-tabs" aria-label="音频设置分类"><button data-audio-tab="output" aria-pressed="true">音频输出</button><button data-audio-tab="ab" aria-pressed="false">AB 循环</button><button data-audio-tab="speed" aria-pressed="false">播放速度</button><button data-audio-tab="sleep" aria-pressed="false">睡眠定时</button></nav>
+    <div class="transport-dialog-body">
+    <div id="transport-panel-status" role="status"></div>
+    <div id="audio-pages">
+      <section data-audio-page="output">
+        <h3>把声音，交给合适的设备。</h3><p class="setting-description">选择输出方式与设备。更改会在下一次起播时应用。</p>
+        <div class="output-modes"><button data-output-mode="Shared"><strong>共享</strong><small>WASAPI · 系统混音</small></button><button data-output-mode="WasapiExclusive"><strong>独占</strong><small>WASAPI · 独占设备</small></button><button data-output-mode="Asio"><strong>ASIO</strong><small>专用驱动</small></button></div>
+        <div class="setting-field"><label for="audio-device">输出设备</label><button id="audio-refresh" class="text-button">刷新设备</button></div><select id="audio-device" aria-label="输出设备"></select>
+        <div class="output-actual"><span class="status-dot"></span><div><small>当前实际输出</small><p id="audio-actual">等待播放器连接</p></div></div>
+        <p id="asio-hint" class="setting-note" hidden>使用声卡或耳放提供的 ASIO 驱动。若有间歇卡顿，可在驱动控制面板中适当增大缓冲。</p>
+        <div class="setting-section"><label class="switch-row"><span><strong>按设备记忆 DSP 配置</strong><small>切换设备时，使用它保存的声音设置。</small></span><input id="device-memory" type="checkbox" role="switch"></label><p id="device-profile-hint" class="setting-note"></p><button id="save-device-profile" class="secondary">保存当前设备的 DSP 配置</button></div>
+      </section>
+      <section data-audio-page="ab" hidden><h3>留住你想反复听的片段。</h3><p class="setting-description">在当前播放位置设置两点，声音将在 A 与 B 之间循环。</p><div class="ab-points"><div><small>A · 起点</small><strong id="ab-a">--:--</strong></div><div><small>B · 终点</small><strong id="ab-b">--:--</strong></div></div><div class="setting-button-pair"><button data-ab="a" class="secondary">当前位置设为 A</button><button data-ab="b" class="secondary">当前位置设为 B</button></div><button id="ab-toggle" data-ab="toggle" class="primary">开启 AB 循环</button><button data-ab="clear" class="text-button">清除 A / B</button><p id="ab-hint" class="setting-note"></p></section>
+      <section data-audio-page="speed" hidden><h3>找到你的聆听节奏。</h3><p class="setting-description">倍率与音调设置会即时交给原音频引擎处理。</p><div class="rate-heading"><output id="audio-rate-value" for="audio-rate">1.00×</output><button id="audio-rate-reset" class="text-button">恢复 1.00×</button></div><input id="audio-rate" type="range" min="0.5" max="2" step="0.01" value="1" aria-label="播放速度"><div class="rate-ticks"><span>0.50×</span><span>1.00×</span><span>2.00×</span></div><fieldset class="pitch-options"><legend>音调</legend><label><input type="radio" name="audio-pitch" value="preserve" checked>音调不变</label><label><input type="radio" name="audio-pitch" value="follow">音调随速度变化</label></fieldset><p id="audio-dsd-note" class="setting-note">DSD / DoP 直出不经过变速处理；设置会保留给后续 PCM 播放。</p></section>
+      <section data-audio-page="sleep" hidden><h3>让音乐，陪你到刚刚好。</h3><p class="setting-description">选中后即生效，到时自动暂停。</p><div id="sleep-options" class="sleep-options"><button data-sleep="0">关闭</button><button data-sleep="1">15 分钟</button><button data-sleep="2">30 分钟</button><button data-sleep="3">60 分钟</button><button data-sleep="4">90 分钟</button><button data-sleep="5">120 分钟</button><button data-sleep="6">当前曲目结束</button><button data-sleep="7">再播放指定曲目数</button><button data-sleep="8">自定义播放时长…</button></div><label class="sleep-count" id="sleep-count-label" hidden>曲目数<input id="sleep-count" type="number" min="1" max="99" step="1" value="1"></label><form id="sleep-custom" class="sleep-custom" hidden><label for="sleep-minutes">播放时长（分钟）</label><div><input id="sleep-minutes" type="number" min="1" max="1440" step="1" value="45" required><button class="primary" type="submit">开始计时</button></div><small>1–1440 分钟 · 点击开始后生效</small></form><p id="sleep-status" class="setting-note"></p></section>
+    </div>
+    <div id="web-queue-page" hidden><p class="setting-description" id="web-queue-count"></p><div id="web-queue-list"></div><button id="web-queue-more" class="secondary" hidden>加载更多</button></div>
+    <div id="web-playlist-picker" hidden><p class="setting-description">将当前歌曲加入已有播放列表。</p><div id="web-playlist-list"></div></div>
+    </div>
+  </dialog>
+  <div id="transport-more-menu" class="transport-more-menu" role="group" aria-label="更多功能" hidden><button data-more="addToPlaylist">加入歌单…</button><button data-more="tags">编辑标签</button><button data-more="locateAlbum">定位到专辑</button><button data-more="reveal">在文件夹中显示</button><button data-more="copy">复制歌名与艺术家</button></div>
+  <div id="toast" class="toast" role="status"></div>
+</body>
+</html>

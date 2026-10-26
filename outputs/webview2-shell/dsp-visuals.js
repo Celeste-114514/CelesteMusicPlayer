@@ -7,19 +7,20 @@
   const db=n=>Number.isFinite(Number(n))?(Number(n)>0?'+':'')+Number(n).toFixed(1)+' dB':'—';
   const pct=n=>Math.min(100,Math.max(0,n));
   window.CelesteDspVisuals={mount(host,module,controls,info,request,refresh){
-    const values=new Map(controls.map(c=>[c.name,c.kind==='combo'?c.index:c.value])),root=el('section',undefined,'echo-dsp-visual');root.dataset.visual=module;host.append(root);
+    const values=new Map(controls.map(c=>[c.name,c.kind==='combo'?c.index:c.value])),root=el('section',undefined,'echo-dsp-visual dsp-module-panel dsp-module-panel--'+({fir:'room',comp:'compressor',stereo:'spatial',matrix:'spatial'}[module]||module));root.dataset.visual=module;host.append(root);
     const v=(name,fallback=0)=>values.get(name)??fallback;
     let telemetry={},stopped=false;
     function cards(entries,cls='dsp-module-metrics'){const box=el('div',undefined,cls);entries.forEach(([label,text])=>{const card=el('span',undefined,cls==='dsp-safety-route'?'':'dsp-module-metric');card.append(el('em',label),el('strong',text));box.append(card);});return box;}
     function button(text,action){const b=el('button',text,'eq-pill');b.addEventListener('click',async()=>{b.disabled=true;try{await action();refresh();}catch(e){window.CelesteShell.notify(e.message);}finally{b.disabled=false;}});return b;}
-    async function set(name,value){await request('setControl',{module,name,value});values.set(name,value);draw();}
+    async function set(name,value){const c=controls.find(c=>c.name===name);await request('setControl',{module,name,...(c?.kind==='combo'?{index:value}:{value})});values.set(name,value);draw();}
+    function notice(cls,title,text){const box=el('div',undefined,cls),label=el('span');label.append(el('em','当前状态'),el('strong',title));box.append(label,el('p',text));return box;}
     function draw(){
       if(stopped)return;root.replaceChildren();
       if(module==='headroom'){
         const headroom=Number(v('AudioFxSafetyHeadroomSlider')),peak=telemetry.session?Number(telemetry.peakDb):null;
         root.append(cards([['保留余量',db(headroom)],['输出峰值',peak===null?'—':db(peak)],['削波次数',String(telemetry.clipCount??0)],['保护限制器',v('AudioFxSafetyLimiterToggle')?'待命 / 保护':'关闭']]));
         const budget=el('div',undefined,'dsp-headroom-budget');budget.setAttribute('aria-label','Headroom 预算');
-        [['输入峰值','当前内核未提供输入测点',null],['输出峰值',peak===null?'未播放':db(peak),peak],['保留余量',db(headroom),-headroom-24]].forEach(([name,text,value])=>{const row=el('span');row.append(el('em',name),el('strong',text));if(value!==null)row.style.width=Math.max(6,Math.min(100,(value+24)*3.3))+'%';budget.append(row);});root.append(budget);
+        [['输入峰值','当前内核未提供输入测点',null],['输出峰值',peak===null?'未播放':db(peak),peak],['保留余量',db(headroom),null]].forEach(([name,text,value])=>{const row=el('span');row.append(el('em',name),el('strong',text));if(value!==null)row.style.width=Math.max(6,Math.min(100,(value+24)*3.3))+'%';budget.append(row);});root.append(budget);
         const actions=el('div',undefined,'echo-actions');[0,-3,-6,-9].forEach(value=>actions.append(button(db(value),()=>set('AudioFxSafetyHeadroomSlider',value))));root.append(actions);
       }else if(module==='channel'){
         // ECHO's bias card with Celeste's linear balance law and channel gains.
@@ -46,7 +47,23 @@
       }else if(module==='rg'){
         const mode=controls.find(c=>c.name==='AudioFxRgModeCombo');root.append(cards([['响度模式',mode?.items[v('AudioFxRgModeCombo')]||'关闭'],['预增益',db(v('AudioFxRgPreampSlider'))],['峰值保护',v('AudioFxRgPreventClippingToggle')?'开启':'关闭']]));root.append(el('p','按文件中的 ReplayGain 标签调整响度；缺少标签的曲目沿用原生引擎策略。','eq-hint'));
       }
+      // Preserve ECHO's component structure (main / assistant, status, route and choice cards).
+      // Its DSP engine-specific controls are supplied separately by the Celeste native bridge.
+      if(module==='headroom'){
+        const content=[...root.children],main=el('div',undefined,'dsp-headroom-main'),control=el('div',undefined,'dsp-headroom-control'),assist=el('aside',undefined,'dsp-headroom-assist');
+        const active=!!v('AudioFxSafetyLimiterToggle'),peak=telemetry.session?Number(telemetry.peakDb):null;
+        control.append(notice('dsp-headroom-status',telemetry.bypass?'总旁路':active?'保护已就绪':'保护关闭',peak===null?'开始播放后显示实时输出电平。':peak>=0?'输出已达到满刻度，请增加余量。':'当前输出未达到满刻度。'),content[0],content[1]);
+        assist.append(notice('dsp-headroom-next-step','建议下一步','按处理增益保留余量，限制器作为最后一道保护。'),content[2]);main.append(control,assist);root.replaceChildren(main);
+      }else if(module==='fir'){
+        const content=[...root.children],main=el('div',undefined,'dsp-room-main'),hero=el('div',undefined,'dsp-room-hero'),primary=el('div',undefined,'dsp-room-primary'),side=el('aside',undefined,'dsp-room-side');
+        primary.append(el('strong',info.irName||'导入房间脉冲响应'),el('p',info.irName?'已加载的卷积脉冲响应':'选择 PCM WAV 文件，校正房间或耳机响应。'));hero.append(primary);main.append(hero,content[1],content[0]);side.append(notice('dsp-room-status',info.enabled?'卷积已启用':'卷积已旁路',info.clippingRisk?'检测到削波风险，请降低增益。':'预衰减与输出增益会共同影响最终电平。'),content[2]);root.replaceChildren(main,side);
+      }else if(module==='channel'){
+        const content=[...root.children],main=el('div',undefined,'dsp-channel-main'),hero=el('div',undefined,'dsp-channel-hero'),side=el('aside',undefined,'dsp-channel-side');hero.append(el('div','左右声道增益、平衡与延迟','dsp-channel-primary'));main.append(hero,...content);side.append(notice('dsp-channel-summary','声道校准','偏移条根据当前左右增益与平衡参数计算。'),cards([['单声道',controls.find(c=>c.name==='AudioFxChannelMonoCombo')?.items[v('AudioFxChannelMonoCombo')]||'关闭'],['交换左右',v('AudioFxChannelSwapToggle')?'开启':'关闭'],['左 / 右反相',(v('AudioFxChannelInvertLToggle')?'开':'关')+' / '+(v('AudioFxChannelInvertRToggle')?'开':'关')]]));root.replaceChildren(main,side);
+      }else if(module==='src'){
+        const choices=el('div',undefined,'dsp-src-advanced-panel');
+        [['SrcRateCombo','目标采样率'],['SrcQualityCombo','重采样质量'],['SrcDitherCombo','抖动']].forEach(([name,title])=>{const c=controls.find(c=>c.name===name);if(!c)return;const group=el('div',undefined,'dsp-src-advanced-group'),head=el('div',undefined,'dsp-src-advanced-title'),grid=el('div',undefined,'dsp-src-filter-grid');head.append(el('strong',title));c.items.forEach((text,index)=>{const b=button(text,()=>set(name,index));b.className='dsp-src-filter-card';b.dataset.active=String(v(name)===index);b.disabled=!c.enabled;grid.append(b);});group.append(head,grid);choices.append(group);});root.append(choices);
+      }
     }
-    draw();return {update(name,value){values.set(name,value);draw();},telemetry(data){telemetry=data;if(module==='src')info.src=data.chain;draw();},dispose(){stopped=true;}};
+    draw();return {update(name,value){values.set(name,value);draw();},telemetry(data){telemetry=data;if(module==='src')info.src=data.chain;if(!root.contains(document.activeElement))draw();},dispose(){stopped=true;}};
   }};
 })();

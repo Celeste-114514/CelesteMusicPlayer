@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
@@ -15,7 +16,7 @@ namespace CelesteMusicPlayer
     /// </summary>
     internal static class WaveformDataProvider
     {
-        private static readonly Dictionary<string, float[]> Cache = new(StringComparer.OrdinalIgnoreCase);
+        private static readonly ConcurrentDictionary<string, float[]> Cache = new(StringComparer.OrdinalIgnoreCase);
         private static readonly SemaphoreSlim Gate = new(1, 1);
         private const int MaxCacheEntries = 30;
 
@@ -46,10 +47,10 @@ namespace CelesteMusicPlayer
                     Cache[key] = result;
                     if (Cache.Count > MaxCacheEntries)
                     {
-                        using Dictionary<string, float[]>.Enumerator e = Cache.GetEnumerator();
-                        if (e.MoveNext())
+                        foreach (string expiredKey in Cache.Keys)
                         {
-                            Cache.Remove(e.Current.Key);
+                            Cache.TryRemove(expiredKey, out _);
+                            break;
                         }
                     }
                 }
@@ -102,6 +103,12 @@ namespace CelesteMusicPlayer
             try
             {
                 using Process proc = Process.Start(psi)!;
+                // The web view can cancel on rapid track switches or close. Dispose
+                // alone does not terminate an ffmpeg process blocked on its pipe.
+                using var cancelProcess = ct.Register(() =>
+                {
+                    try { if (!proc.HasExited) proc.Kill(entireProcessTree: true); } catch { }
+                });
                 // 波形解码是整首歌的完整解码，CPU 占用很高；起播时它和「转码 ffmpeg」同时跑，
                 // 两个满负荷进程会一起抢占 WASAPI 独占渲染线程。降到低优先级（与转码一致）。
                 try { proc.PriorityClass = ProcessPriorityClass.BelowNormal; } catch (Exception caught) { StartupLog.WriteException("WaveformDataProvider.cs", caught); }
@@ -126,6 +133,7 @@ namespace CelesteMusicPlayer
                     }
                 }
 
+                ct.ThrowIfCancellationRequested();
                 if (peaks.Count < bucketCount)
                 {
                     StartupLog.Write("波形解码失败: 样本过少 " + peaks.Count);
@@ -169,6 +177,7 @@ namespace CelesteMusicPlayer
                 StartupLog.Write("波形解码完成: " + Path.GetFileName(path) + " buckets=" + buckets.Length);
                 return buckets;
             }
+            catch (OperationCanceledException) { throw; }
             catch (Exception ex)
             {
                 StartupLog.Write("波形解码异常: " + ex.Message);

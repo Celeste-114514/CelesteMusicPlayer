@@ -87,6 +87,7 @@
 
   <ItemGroup>
     <Manifest Include="$(ApplicationManifest)" />
+    <Content Include="..\outputs\webview2-shell\*.html;..\outputs\webview2-shell\*.css;..\outputs\webview2-shell\*.js" Link="WebShell\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- 允许 EQ 声道隔离回归测试工程访问 internal 类型 -->

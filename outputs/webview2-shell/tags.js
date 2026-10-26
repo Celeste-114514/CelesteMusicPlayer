@@ -24,27 +24,26 @@
   const COLUMNS = [
     { key: 'title', name: '标题', width: 200, source: 'library' },
     { key: 'artist', name: '艺术家', width: 150, source: 'library' },
-    { key: 'album', name: '专辑', width: 160, source: 'library' },
     { key: 'albumArtist', name: '专辑艺术家', width: 130, source: 'library' },
+    { key: 'album', name: '专辑', width: 160, source: 'library' },
     { key: 'year', name: '年份', width: 70, source: 'library', numeric: true },
-    { key: 'track', name: '曲目号', width: 72, source: 'library', numeric: true },
-    { key: 'trackCount', name: '曲目总数', width: 82, source: 'tag', numeric: true },
-    { key: 'disc', name: '碟片号（CD 号）', width: 110, source: 'library', numeric: true },
-    { key: 'discCount', name: '碟片总数', width: 82, source: 'tag', numeric: true },
-    { key: 'bpm', name: 'BPM（速度）', width: 92, source: 'tag', numeric: true },
+    { key: 'track', name: '曲目', width: 72, source: 'library', numeric: true },
     { key: 'genre', name: '流派', width: 110, source: 'library' },
-    { key: 'composer', name: '作曲家', width: 120, source: 'tag' },
-    { key: 'comment', name: '注释', width: 150, source: 'tag' },
-    { key: 'lyrics', name: '歌词（非同步）', width: 170, source: 'tag' },
-    { key: 'syncedLyrics', name: '歌词（同步 · 只读）', width: 170, source: 'tag', readonly: true },
-    { key: 'file', name: '文件名', width: 190, source: 'library', readonly: true },
     { key: 'duration', name: '时长', width: 80, source: 'library', readonly: true },
+    { key: 'file', name: '文件名', width: 190, source: 'library', readonly: true },
     { key: 'format', name: '格式', width: 70, source: 'library', readonly: true },
-    { key: 'bitDepth', name: '位深', width: 85, source: 'tag', readonly: true },
-    { key: 'sampleRate', name: '采样率', width: 100, source: 'tag', readonly: true },
+    { key: 'spec', name: '位深采样率', width: 160, source: 'tag', readonly: true },
     { key: 'bitrate', name: '码率', width: 100, source: 'tag', readonly: true },
-    { key: 'fileSize', name: '大小 (MB)', width: 90, source: 'tag', readonly: true, numeric: true }
+    { key: 'fileSize', name: '大小', width: 90, source: 'tag', readonly: true, numeric: true },
+    { key: 'composer', name: '作曲家', width: 120, source: 'tag' },
+    { key: 'disc', name: '碟片号', width: 85, source: 'library', numeric: true },
+    { key: 'trackCount', name: '曲目总数', width: 82, source: 'tag', numeric: true },
+    { key: 'bpm', name: 'BPM', width: 92, source: 'tag', numeric: true },
+    { key: 'comment', name: '注释', width: 150, source: 'tag' }
   ];
+  const hiddenColumns = new Set();
+  try { const keys=JSON.parse(localStorage.getItem('celeste.tagHiddenColumns')||'[]');if(Array.isArray(keys))keys.filter(k=>COLUMNS.some(c=>c.key===k)).forEach(k=>hiddenColumns.add(k)); } catch {}
+  const displayCell = (row,key) => key==='spec' ? [row.bitDepth,row.sampleRate].filter(Boolean).join(' / ') : row[key]??'';
   try { const widths=JSON.parse(localStorage.getItem('celeste.tagColumns')||'{}');COLUMNS.forEach(c=>{const width=Number(widths[c.key]);if(width>=56&&width<=800)c.width=width;}); } catch { }
   const COLUMN_BY_KEY = new Map(COLUMNS.map(c => [c.key, c]));
 
@@ -77,6 +76,7 @@
     sort: '',
     asc: true,
     scopeIds: [],
+    sortRules: [],
     generation: 0
   };
   const selected = new Set();       // track ids
@@ -122,7 +122,9 @@
   const totalLabel = node('span', '正在读取曲库…', 'tags-total');
   toolbar.append(searchWrap, totalLabel);
   const fileActions = node('div',undefined,'tags-file-actions');
-  [['addFiles','添加文件…'],['addFolder','添加文件夹…']].forEach(([operation,label])=>{const button=node('button',label,'secondary');button.addEventListener('click',async()=>{button.disabled=true;try{const result=await req(operation);if(result.count){await reload();shell.notify(`已添加 ${result.count} 个文件`);}}catch(error){shell.notify(error.message);}finally{button.disabled=false;}});fileActions.append(button);});
+  const directoryLabel=node('span','尚未选择工作目录','tags-working-directory');
+  [['addFiles','添加文件…'],['addFolder','添加文件夹…'],['changeDirectory','改变工作目录…']].forEach(([operation,label])=>{const button=node('button',label,'secondary');button.addEventListener('click',async()=>{button.disabled=true;try{if(operation==='changeDirectory'&&dirty.size&&!confirm('改变工作目录会放弃未保存的标签改动，是否继续？'))return;const result=await req(operation);if(result.canceled)return;if(operation==='changeDirectory'){state.scopeIds=[];selected.clear();dirty.clear();multiDraft={};}state.scopeIds=[...new Set([...state.scopeIds,...(result.ids||[])])];if(result.directory)directoryLabel.textContent=result.directory;await reload();shell.notify(`已添加 ${result.count} 个文件`);}catch(error){shell.notify(error.message);}finally{button.disabled=false;}});fileActions.append(button);});
+  fileActions.append(directoryLabel);
   tableCol.prepend(fileActions);
 
   const tableWrap = node('div', undefined, 'tag-table-wrap');
@@ -166,6 +168,9 @@
       lastClicked = -1;
       renderHead();
     }
+    if (!state.scopeIds.length) {
+      state.total=0;state.hasMore=false;state.loading=false;renderFooter();return;
+    }
     try {
       const result = await req('list', {
         offset: state.offset,
@@ -173,6 +178,7 @@
         query: state.query,
         sort: state.sort,
         asc: state.asc,
+        sortRules: state.sortRules,
         scopeIds: state.scopeIds
       });
       if (generation !== state.generation) return;
@@ -209,6 +215,19 @@
   const tableBody = document.createElement('tbody');
   table.append(thead, tableBody);
 
+  const columnPicker=node('details',undefined,'tags-column-picker'),columnSummary=node('summary','显示列'),columnOptions=node('div',undefined,'tags-column-options');columnPicker.append(columnSummary,columnOptions);fileActions.append(columnPicker);
+  COLUMNS.forEach(c=>{const label=node('label'),check=document.createElement('input');check.type='checkbox';check.checked=!hiddenColumns.has(c.key);check.setAttribute('aria-label','显示'+c.name);check.addEventListener('change',()=>{if(check.checked)hiddenColumns.delete(c.key);else hiddenColumns.add(c.key);try{localStorage.setItem('celeste.tagHiddenColumns',JSON.stringify([...hiddenColumns]));}catch{}applyColumnVisibility();});label.append(check,node('span',c.name));columnOptions.append(label);});
+  function applyColumnVisibility(){COLUMNS.forEach((c,i)=>{const hidden=hiddenColumns.has(c.key);colgroup.children[i+1].style.width=hidden?'0px':c.width+'px';table.querySelectorAll(`[data-column="${c.key}"]`).forEach(n=>n.hidden=hidden);});}
+  applyColumnVisibility();
+
+  // Native TagPanelControl uses a toolbar panel with ordered rules, rather than header clicks.
+  const sortPanel=node('dialog',undefined,'tags-sort-dialog'),sortTitle=node('h2','排序'),sortRules=node('div',undefined,'tags-sort-rules'),sortDescription=node('p','按规则从上到下依次排序；清空规则恢复添加顺序。','panel-note');
+  const sortButton=node('button','排序…','secondary');fileActions.append(sortButton);page.append(sortPanel);let draftRules=[];
+  const sortAction=(text,fn)=>{const b=node('button',text,'secondary');b.type='button';b.addEventListener('click',fn);return b;};
+  function drawSortRules(){sortRules.replaceChildren();draftRules.forEach((rule,index)=>{const row=node('div',undefined,'tags-sort-rule'),key=document.createElement('select'),direction=document.createElement('select');key.setAttribute('aria-label',`第 ${index+1} 排序字段`);direction.setAttribute('aria-label',`第 ${index+1} 排序方向`);COLUMNS.forEach(c=>{const o=node('option',c.name);o.value=c.key;key.append(o);});key.value=rule.key;key.addEventListener('change',()=>rule.key=key.value);[['asc','升序'],['desc','降序']].forEach(([value,text])=>{const o=node('option',text);o.value=value;direction.append(o);});direction.value=rule.descending?'desc':'asc';direction.addEventListener('change',()=>rule.descending=direction.value==='desc');const up=sortAction('上移',()=>{[draftRules[index-1],draftRules[index]]=[draftRules[index],draftRules[index-1]];drawSortRules();});up.disabled=index===0;row.append(key,direction,up,sortAction('删除',()=>{draftRules.splice(index,1);drawSortRules();}));sortRules.append(row);});}
+  sortButton.addEventListener('click',()=>{draftRules=state.sortRules.map(r=>({...r}));drawSortRules();sortPanel.showModal();});
+  sortPanel.append(sortTitle,sortDescription,sortRules,sortAction('添加规则',()=>{const c=COLUMNS.find(c=>!draftRules.some(r=>r.key===c.key));if(c){draftRules.push({key:c.key,descending:false});drawSortRules();}}),sortAction('清空规则',()=>{draftRules=[];drawSortRules();}),sortAction('取消',()=>sortPanel.close()),sortAction('应用排序',async()=>{state.sortRules=draftRules.map(r=>({...r}));sortPanel.close();await loadRows(true);}));
+
   function renderHead() {
     thead.replaceChildren();
     const headRow = document.createElement('tr');
@@ -228,27 +247,15 @@
 
     COLUMNS.forEach(c => {
       const th = document.createElement('th');
-      th.style.position = 'relative';
+      th.dataset.column = c.key;
+      th.hidden = hiddenColumns.has(c.key);
       th.style.width = c.width + 'px';
       if (state.sort === c.key) th.setAttribute('aria-sort', state.asc ? 'ascending' : 'descending');
       const inner = node('div', undefined, 'th-inner');
       const arrow = icon(state.sort !== c.key ? '#i-sort-none' : (state.asc ? '#i-sort-asc' : '#i-sort-desc'));
       arrow.classList.add('sort-arrow');
       inner.append(node('span', c.name), arrow);
-      if (c.source === 'tag') inner.title = '这一列只存在于文件里，排序作用于已加载的行';
-      inner.addEventListener('click', () => {
-        if (state.sort === c.key) state.asc = !state.asc;
-        else { state.sort = c.key; state.asc = true; }
-        renderHead();
-        if (c.source === 'library') loadRows(true);
-        else {
-          state.rows.sort(compareRows);
-          tableBody.replaceChildren();
-          rowEls.clear();
-          cellEls.clear();
-          appendRows(state.rows.map(row => row.id));
-        }
-      });
+      inner.title = '使用工具条「排序…」设置多级排序';
       const resizer = node('span', undefined, 'col-resizer');
       resizer.addEventListener('pointerdown', event => {
         event.preventDefault();
@@ -300,13 +307,15 @@
       const cells = {};
       COLUMNS.forEach(c => {
         const td = document.createElement('td');
-        const cell = node('div', row[c.key] ?? '', 'cell');
-        cell.title = row[c.key] ?? '';
+        td.dataset.column=c.key;td.hidden=hiddenColumns.has(c.key);
+        const cell = node('div', displayCell(row,c.key), 'cell');
+        cell.title = displayCell(row,c.key);
+        cell.dataset.field=c.key;
         if (c.readonly) {
           cell.classList.add('readonly');
         } else {
           cell.tabIndex = 0;
-          cell.addEventListener('dblclick', () => { cell.contentEditable = 'true'; cell.focus(); document.getSelection()?.selectAllChildren(cell); });
+          cell.addEventListener('click', event => { if(!selected.has(id)||selected.size!==1||event.ctrlKey||event.shiftKey||event.metaKey)return;event.stopPropagation();if(cell.contentEditable==='true')return;cell.contentEditable='true';cell.focus();document.getSelection()?.selectAllChildren(cell); });
           cell.addEventListener('blur', () => {
             if (cell.contentEditable !== 'true') return;
             cell.contentEditable = 'false';
@@ -394,9 +403,10 @@
         if (!row) return;
         COLUMNS.filter(c=>c.source==='tag').map(c=>c.key).forEach(key => {
           if (dirty.get(fields.id)?.[key] !== undefined) return;
-          row[key] = fields[key] ?? '';
+          if(key==='spec'){row.bitDepth=fields.bitDepth;row.sampleRate=fields.sampleRate;}
+          row[key] = displayCell(fields,key);
           const cell = cellEls.get(fields.id)?.[key];
-          if (cell) { cell.textContent = row[key]; cell.title = row[key]; }
+          if (cell && !cell.isContentEditable) { cell.textContent = row[key]; cell.title = row[key]; }
         });
       });
     } catch { /* a failed read only leaves the column blank */ }
@@ -546,9 +556,9 @@
       if (dirty.get(id)?.[key] !== undefined) return;   // never clobber a pending edit
       row[key] = fields[key] ?? '';
     });
-    ['trackCount', 'discCount', 'bpm', 'composer', 'comment', 'lyrics', 'syncedLyrics'].forEach(key => {
+    COLUMNS.map(c=>c.key).forEach(key => {
       const cell = cellEls.get(id)?.[key];
-      if (cell) { cell.textContent = row[key]; cell.title = row[key]; }
+      if (cell && cell.contentEditable!=='true') { cell.textContent = displayCell(row,key); cell.title = displayCell(row,key); }
     });
     enriched.add(id);
   }
@@ -611,7 +621,7 @@
     panel.append(node('h3','按标签重命名文件','tags-section-title'));
     const pattern=makeInput('rename-pattern','%track% - %title%');pattern.value='%track% - %title%';const renamePreview=node('pre','','tags-transform-preview'),renameApply=node('button','应用重命名','primary');renameApply.disabled=true;let renameRows=[];
     const prepareRename=node('button','预览文件名','secondary');prepareRename.addEventListener('click',async()=>{if(!selected.size)return shell.notify('先选择文件。');try{renameRows=[...selected].map(id=>{const row=state.byId.get(id);const file=pattern.value.replace(/%(title|artist|album|track|disc)%/g,(_,key)=>String(row?.[key]??'').replace(/[<>:"/\\|?*]/g,'_')).trim();return{id,file};});renamePreview.textContent=renameRows.slice(0,20).map(r=>(state.byId.get(r.id)?.file||r.id)+' → '+r.file).join('\n');renameApply.disabled=!renameRows.length;}catch(error){shell.notify(error.message);}});
-    renameApply.addEventListener('click',async()=>{renameApply.disabled=true;try{const result=await req('rename',{rows:renameRows});selected.clear();await reload();document.dispatchEvent(new CustomEvent('celeste:tracksChanged'));shell.notify(`已重命名 ${result.count} 个文件`);}catch(error){shell.notify(error.message);renameApply.disabled=false;}});
+    renameApply.addEventListener('click',async()=>{renameApply.disabled=true;try{const result=await req('rename',{rows:renameRows});const remap=result.remap||{};state.scopeIds=state.scopeIds.map(id=>remap[id]||id);for(const [oldId,newId] of Object.entries(remap)){if(dirty.has(oldId)){dirty.set(newId,dirty.get(oldId));dirty.delete(oldId);}}selected.clear();await reload();document.dispatchEvent(new CustomEvent('celeste:tracksChanged'));shell.notify(`已重命名 ${result.count} 个文件`);}catch(error){shell.notify(error.message);renameApply.disabled=false;}});
     pattern.addEventListener('input',()=>renameApply.disabled=true);const renameActions=node('div',undefined,'tags-panel-actions');renameActions.append(prepareRename,renameApply);panel.append(pattern,node('p','可用：%title% / %artist% / %album% / %track% / %disc%；扩展名会保留。','panel-note'),renameActions,renamePreview);
   }
 
@@ -854,5 +864,4 @@
     selected.clear(); state.scopeIds.forEach(id => selected.add(id)); currentSub = 'quick';
     shell.navigate('tags'); await reload(); afterSelectionChange();
   } });
-  const showAll = node('button','显示全部曲库','secondary');showAll.addEventListener('click',async()=>{state.scopeIds=[];selected.clear();await reload();});fileActions.append(showAll);
 })();

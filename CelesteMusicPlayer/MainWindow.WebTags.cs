@@ -17,7 +17,7 @@ namespace CelesteMusicPlayer
         // through it keeps the web page byte-identical in behaviour to the native tag panel.
         //
         // Operations:
-        //   list  — rows straight from the in-memory library (no disk access at all), sorted and
+        //   list  — explicitly added workspace rows (file-only sort fields read metadata), sorted and
         //           paged on this side because 4000+ rows do not fit in one reply
         //   read  — full tag fields for the ids on screen, read lazily (only visible rows ask)
         //   write — apply only the fields the caller sent, per file
@@ -33,7 +33,10 @@ namespace CelesteMusicPlayer
                 operation = opElement.GetString() ?? "list";
 
             if (operation == "list")
-                return WebTagsList(msg, tracks);
+            {
+                var snapshot = new Dictionary<string, PlaylistItem>(tracks, StringComparer.Ordinal);
+                return await Task.Run(() => WebTagsList(msg, snapshot));
+            }
 
             if (operation == "read")
                 return await WebTagsReadAsync(msg, tracks).ConfigureAwait(true);
@@ -49,14 +52,12 @@ namespace CelesteMusicPlayer
             string query = ReadString(msg, "query").Trim();
             int offset = Math.Max(0, ReadInt(msg, "offset", 0));
             int limit = Math.Clamp(ReadInt(msg, "limit", 300), 1, 2000);
-            string sort = ReadString(msg, "sort");
-            bool asc = !msg.TryGetProperty("asc", out var ascElement) || ascElement.ValueKind != JsonValueKind.False;
 
-            IEnumerable<KeyValuePair<string, PlaylistItem>> items = tracks;
+            IEnumerable<KeyValuePair<string, PlaylistItem>> items = Array.Empty<KeyValuePair<string, PlaylistItem>>();
             if (msg.TryGetProperty("scopeIds", out var scope) && scope.ValueKind == JsonValueKind.Array && scope.GetArrayLength() > 0)
             {
-                var wanted = scope.EnumerateArray().Take(2000).Select(id => id.GetString() ?? "").ToHashSet(StringComparer.Ordinal);
-                items = items.Where(pair => wanted.Contains(pair.Key));
+                var wanted = scope.EnumerateArray().Take(20000).Select(id => id.GetString() ?? "").Distinct();
+                items = wanted.Where(tracks.ContainsKey).Select(id => new KeyValuePair<string, PlaylistItem>(id, tracks[id]));
             }
             if (query.Length > 0)
             {
@@ -68,7 +69,7 @@ namespace CelesteMusicPlayer
             }
 
             var filtered = items.ToArray();
-            var rows = SortTagRows(filtered, sort, asc)
+            var rows = WebTagSortRules.Sort(filtered, msg, (id, path) => WebTagReadOne(id, path, false))
                 .Skip(offset)
                 .Take(limit)
                 .Select(pair => new
@@ -91,59 +92,6 @@ namespace CelesteMusicPlayer
                 .ToArray();
 
             return new { total = filtered.Length, offset, rows };
-        }
-
-        /// <summary>
-        /// Sorts by a library-backed column. Columns that only exist inside the file (BPM, composer,
-        /// comment, lyrics…) are not sortable here — the page sorts those over what it has loaded.
-        /// </summary>
-        private static IEnumerable<KeyValuePair<string, PlaylistItem>> SortTagRows(
-            IEnumerable<KeyValuePair<string, PlaylistItem>> items, string sort, bool asc)
-        {
-            IOrderedEnumerable<KeyValuePair<string, PlaylistItem>> ordered;
-            switch (sort)
-            {
-                case "title":
-                    ordered = items.OrderBy(p => p.Value.Title, StringComparer.CurrentCultureIgnoreCase);
-                    break;
-                case "artist":
-                    ordered = items.OrderBy(p => p.Value.Artist, StringComparer.CurrentCultureIgnoreCase);
-                    break;
-                case "albumArtist":
-                    ordered = items.OrderBy(p => p.Value.AlbumArtist, StringComparer.CurrentCultureIgnoreCase);
-                    break;
-                case "album":
-                    ordered = items.OrderBy(p => p.Value.Album, StringComparer.CurrentCultureIgnoreCase)
-                                   .ThenBy(p => p.Value.Disc).ThenBy(p => p.Value.Track);
-                    break;
-                case "year":
-                    ordered = items.OrderBy(p => p.Value.Year);
-                    break;
-                case "track":
-                    ordered = items.OrderBy(p => p.Value.Track);
-                    break;
-                case "disc":
-                    ordered = items.OrderBy(p => p.Value.Disc).ThenBy(p => p.Value.Track);
-                    break;
-                case "genre":
-                    ordered = items.OrderBy(p => p.Value.Genre, StringComparer.CurrentCultureIgnoreCase);
-                    break;
-                case "file":
-                    ordered = items.OrderBy(p => Path.GetFileName(p.Value.FilePath), StringComparer.CurrentCultureIgnoreCase);
-                    break;
-                case "duration": ordered = items.OrderBy(p => p.Value.Duration); break;
-                case "format": ordered = items.OrderBy(p => Path.GetExtension(p.Value.FilePath), StringComparer.CurrentCultureIgnoreCase); break;
-                default:
-                    ordered = items
-                        .OrderBy(p => p.Value.Artist, StringComparer.CurrentCultureIgnoreCase)
-                        .ThenBy(p => p.Value.Album, StringComparer.CurrentCultureIgnoreCase)
-                        .ThenBy(p => p.Value.Disc)
-                        .ThenBy(p => p.Value.Track)
-                        .ThenBy(p => p.Value.Title, StringComparer.CurrentCultureIgnoreCase);
-                    return asc ? ordered : ordered.ToArray().Reverse();
-            }
-
-            return asc ? ordered : ordered.Reverse();
         }
 
         private static bool Contains(string? text, string query) =>

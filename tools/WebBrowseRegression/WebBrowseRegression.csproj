@@ -1,0 +1,4 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net9.0</TargetFramework><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup><Compile Include="../../CelesteMusicPlayer/WebBrowseRules.cs" Link="WebBrowseRules.cs" /></ItemGroup>
+</Project>
