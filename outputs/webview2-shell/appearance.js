@@ -80,7 +80,108 @@
   // 草稿一定要交给宿主算：改强调色会连带 on-accent / 选中行这些派生值，
   // 本地自己拼 CSS 会漏掉它们，也会让「保存」时和预览不一致。
   let queue = Promise.resolve();
+  // —— 撤销 / 重做（只作用于当前这次外观会话，不落盘）——
+  // 每条记录存的是「改之前的值」和「改之后的值」，撤销就是把 before 再预览一遍。
+  // 不去动宿主的覆盖表结构 —— 那条路要加"按字段清除覆盖"的接口，代价大且容易破坏已有逻辑。
+  const history = [];
+  const future = [];
+  const HISTORY_LIMIT = 80;
+  const COALESCE_MS = 700;       // 滑杆连续拖动合并成一步
+  let lastChangeAt = 0;
+
+  function readValue(key) {
+    const split = key.indexOf(':');
+    if (split <= 0 || !data) return '';
+    const bundle = data[key.slice(0, split)];
+    const values = (bundle && bundle.values) || {};
+    const value = values[key.slice(split + 1)];
+    return typeof value === 'string' ? value : '';
+  }
+
+  function refreshHistoryButtons() {
+    const undoButton = $('history-undo');
+    const redoButton = $('history-redo');
+    if (undoButton) undoButton.disabled = history.length === 0;
+    if (redoButton) redoButton.disabled = future.length === 0;
+  }
+
+  /** 换预设/保存/取消之后，旧的历史已经没有意义（基线变了），直接清掉。 */
+  function resetHistory() {
+    history.length = 0;
+    future.length = 0;
+    lastChangeAt = 0;
+    refreshHistoryButtons();
+  }
+
+  function recordHistory(before, after, note) {
+    const keys = Object.keys(after).sort().join('|');
+    const previous = history[history.length - 1];
+    const now = Date.now();
+    if (previous && previous.keys === keys && now - lastChangeAt < COALESCE_MS) {
+      // 同一组字段在防抖窗口内连续变化 = 一次操作。
+      // 不合并的话，拖一下滑杆会积几十条，按一次撤销只退回一个像素。
+      Object.assign(previous.after, after);
+      previous.note = note;
+    } else {
+      history.push({ keys, before, after: Object.assign({}, after), note });
+      if (history.length > HISTORY_LIMIT) history.shift();
+    }
+    future.length = 0;
+    lastChangeAt = now;
+    refreshHistoryButtons();
+  }
+
+  function applyValues(values, message) {
+    const changes = {};
+    Object.keys(values).forEach(key => {
+      if (typeof values[key] === 'string' && values[key].length > 0) changes[key] = values[key];
+    });
+    if (Object.keys(changes).length === 0) return queue;
+    queue = queue.then(async () => {
+      const result = await request('preview', { changes });
+      data.light = result.light;
+      data.dark = result.dark;
+      dirty = true;
+      paint();
+      status(message, 'ok');
+    }).catch(error => status('操作失败：' + error.message, 'err'));
+    return queue;
+  }
+
+  function undo() {
+    const entry = history.pop();
+    if (!entry) return undefined;
+    future.push(entry);
+    refreshHistoryButtons();
+    return applyValues(entry.before, '已撤销：' + entry.note);
+  }
+
+  function redo() {
+    const entry = future.pop();
+    if (!entry) return undefined;
+    history.push(entry);
+    refreshHistoryButtons();
+    return applyValues(entry.after, '已重做：' + entry.note);
+  }
+
+  // Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y。只在设置页可见时接管，
+  // 且放过文本框里的原生撤销 —— 那是编辑文字，不是改外观。
+  document.addEventListener('keydown', event => {
+    if (!(event.ctrlKey || event.metaKey)) return;
+    const page = $('settings-page');
+    if (page && page.hidden) return;
+    const target = event.target;
+    if (target && /^(TEXTAREA)$/.test(target.tagName)) return;
+    if (target && target.tagName === 'INPUT' && /^(text|search|password|number)$/.test(target.type)) return;
+    const key = (event.key || '').toLowerCase();
+    if (key === 'z') { event.preventDefault(); if (event.shiftKey) redo(); else undo(); }
+    else if (key === 'y') { event.preventDefault(); redo(); }
+  });
+
   function pushChange(changes, note) {
+    // 先记下改之前的值：请求一回来 data 就被覆盖了，那时再取就晚了
+    const before = {};
+    Object.keys(changes).forEach(key => { before[key] = readValue(key); });
     queue = queue.then(async () => {
       const result = await request('preview', { changes });
       data.light = result.light;
@@ -88,6 +189,7 @@
       dirty = true;
       paint();
       status('预览中（还没保存）：' + note, 'warn');
+      recordHistory(before, changes, note);
     }).catch(error => status('预览失败：' + error.message, 'err'));
     return queue;
   }
@@ -121,6 +223,8 @@
     card.addEventListener('click', async () => {
       data = await request('select', { presetId: preset.id });
       dirty = false;
+      // 换了一套预设，之前那串预览步骤的"改之前"已经不是现在这套了，历史必须清空
+      resetHistory();
       paint();
       render();
       status('已套用「' + preset.name + '」。音频、DSP、账号和曲库都没动。', 'ok');
@@ -586,9 +690,20 @@
     head.append(modePicker());
     if (dirty) head.append(node('p', '下面这些改动还只是预览，点「保存」才会写进设置文件。', 'set-note'));
     const headActions = node('div', undefined, 'settings-actions');
+    // 撤销/重做排在保存前面：它们只影响还没保存的预览，不落盘
+    const undoButton = button('撤销', () => undo(), 'set-mini');
+    undoButton.id = 'history-undo';
+    undoButton.disabled = history.length === 0;
+    undoButton.title = '撤回上一步预览（Ctrl+Z）';
+    const redoButton = button('重做', () => redo(), 'set-mini');
+    redoButton.id = 'history-redo';
+    redoButton.disabled = future.length === 0;
+    redoButton.title = '重做刚撤销的那一步（Ctrl+Y / Ctrl+Shift+Z）';
+    headActions.append(undoButton, redoButton);
     headActions.append(button('保存改动', async () => {
       data = await request('commit');
       dirty = false;
+      resetHistory();
       paint();
       render();
       status('已保存。', 'ok');
@@ -596,6 +711,7 @@
     headActions.append(button('取消预览', async () => {
       data = await request('cancel');
       dirty = false;
+      resetHistory();
       paint();
       render();
       status('已回到上次保存的外观。', 'ok');
@@ -603,6 +719,7 @@
     headActions.append(button('恢复当前预设', async () => {
       data = await request('reset', { scope: 'all' });
       dirty = false;
+      resetHistory();
       paint();
       render();
       status('已把细调值全部清掉，回到预设本来的样子。', 'ok');
