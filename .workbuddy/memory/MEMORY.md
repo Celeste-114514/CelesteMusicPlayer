@@ -66,3 +66,14 @@
 - ⚠ 验证 run-latest 新鲜度**别信 exe**：exe（303KB）是跨构建字节不变的启动器外壳，真代码在 `CelesteMusicPlayer.dll`——对 DLL 做 md5 比对 + 搜方法名，别 ls exe 时间戳。
 - 源码偶发被清零（前 4096 字节 NUL>0.5 判坏，从 HEAD 恢复）。工作树大量未跟踪文件（dist/run-latest、native/build 等）动不得。
 - 构建/发布坑见 ref-build-publish.md；DataGrid 见 ref-datagrid-toolkit.md；在线源条款见 ref-online-sources.md。
+
+## 网页外壳（WebView2）关键事实（10-26 定案）
+- 交付目录 `dist/web-shell-dsp-tags-complete/`（自包含，双击 `打开网页直接进播放器.cmd` 即 `--web-shell`），
+  附 `交付哈希清单.txt`；旧目录留 `dist/_prev_*_20261026_1702`。验证记录 `/collab/VERIFY-20261026-web-tags-dsp.md`。
+- ⚠ **测试宿主必须拷 `System.Security.Cryptography.ProtectedData.dll`**（TagEditTests.csproj 已加）：
+  缺它 → 加载主程序集时 DPAPI 解密失败 → 把用户真实 `app-settings.json` 判成「损坏」并备份（曾积 13 份 `.corrupt-*`）。
+- ⚠ **命令行传文件走「零散播放窗口」**（独立精简引擎，无完整 DSP 机架）→ 那条路径永远测不到 FIR/EQ 机架；
+  完整 DSP 是主窗口起播时恢复（`MainWindow.Playback3.cs` 起播下发清单）。
+- OPRA 数据源 `opra.roonlabs.net`，缓存 `%LOCALAPPDATA%\CelesteMusicPlayer\opra\database_v1.jsonl`（约 12MB／6230 产品／12594 曲线）；
+  `tools/OpraOnlineProbe` 可无界面验在线链路。
+- 网页 DSP 非 EQ 模块**不另建状态**，直接读写原生 XAML 控件（两侧永不跑偏）；首次访问要 `EnsureWebDspUiReady()` 补加载。
