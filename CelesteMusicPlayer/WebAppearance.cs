@@ -40,8 +40,21 @@ namespace CelesteMusicPlayer
         {
             "radius", "radius-sm", "blur", "panel-opacity", "sat", "motion-speed", "motion-strength", "density",
             "player-opacity", "player-blur", "cover-radius", "cover-size",
-            "player-gap", "player-pad", "player-height"
+            "player-gap", "player-pad", "player-height",
+            // 排版的两个数值：字号整体缩放与行高。做成数值参数而不是开关，
+            // 是因为它们和圆角/间距一样属于「预设自带 + 用户可覆盖」，跟着明暗各存一份。
+            "text-scale", "line-height"
         };
+
+        /// <summary>
+        /// 字符串型的排版变量（字体族名）。单独一支，不混进颜色目录：
+        /// 颜色选择器会按 hex 校验，字体名不是 hex，混进去只会互相干扰。
+        /// </summary>
+        internal static readonly string[] TextNames = { "font-ui", "font-cjk", "font-mono" };
+
+        internal const string DefaultFontUi = "Segoe UI";
+        internal const string DefaultFontCjk = "Microsoft YaHei UI";
+        internal const string DefaultFontMono = "Cascadia Mono";
 
         internal const string Light = "light";
         internal const string Dark = "dark";
@@ -138,6 +151,10 @@ namespace CelesteMusicPlayer
             public double motionStrength { get; set; } = 1;
             /// <summary>compact / normal / relaxed</summary>
             public string density { get; set; } = "normal";
+            /// <summary>字号整体缩放（1 = 设计原尺寸）</summary>
+            public double textScale { get; set; } = 1;
+            /// <summary>基准行高（无单位，1.5 = 字号的 1.5 倍）</summary>
+            public double lineHeight { get; set; } = 1.5;
             /// <summary>个人预设，可删除</summary>
             public bool custom { get; set; }
         }
@@ -155,14 +172,20 @@ namespace CelesteMusicPlayer
             public List<Preset> customPresets { get; set; } = new();
             /// <summary>底栏按钮的显隐与顺序（个人布局偏好，不随预设切换）</summary>
             public string playerButtons { get; set; } = DefaultPlayerButtons;
+            /// <summary>字体族（个人偏好，不随预设切换 —— 字体是这台机器上装了什么的问题，不是配色方案的一部分）</summary>
+            public string fontUi { get; set; } = DefaultFontUi;
+            public string fontCjk { get; set; } = DefaultFontCjk;
+            public string fontMono { get; set; } = DefaultFontMono;
             public int revision { get; set; }
         }
 
         // —— 预设库：24 套，6 组各 4 套。每套只给基色与数值，其余由 Derive 派生 ——
         private static Preset P(string id, string name, string group, string accent, string lightBg, string darkBg,
-                                double radius = 26, double blur = 25, double sat = 1, double motionSpeed = 1, double motionStrength = 1, string density = "normal") =>
+                                double radius = 26, double blur = 25, double sat = 1, double motionSpeed = 1, double motionStrength = 1, string density = "normal",
+                                double textScale = 1, double lineHeight = 1.5) =>
             new() { id = id, name = name, group = group, accent = accent, lightBg = lightBg, darkBg = darkBg,
-                    radius = radius, blur = blur, sat = sat, motionSpeed = motionSpeed, motionStrength = motionStrength, density = density };
+                    radius = radius, blur = blur, sat = sat, motionSpeed = motionSpeed, motionStrength = motionStrength, density = density,
+                    textScale = textScale, lineHeight = lineHeight };
 
         internal static readonly Preset[] BuiltIn =
         {
@@ -172,20 +195,20 @@ namespace CelesteMusicPlayer
             P("peach", "蜜桃苏打", "清透柔和", "#ef6f6c", "#fff6f4", "#201917", 28, 22, 1.05, 1.05, 1.0),
             P("lavender", "薰衣草", "清透柔和", "#8b72d1", "#f8f6fd", "#1a1824", 26, 24, 1.0, 0.95, 0.9),
             // 录音室：低饱和、紧凑、动效克制
-            P("graphite", "石墨", "录音室", "#6f7d8c", "#f4f5f6", "#15171a", 14, 10, 0.7, 0.8, 0.6, "compact"),
-            P("navy", "海军蓝", "录音室", "#3f6fb5", "#f2f5f9", "#121722", 14, 12, 0.8, 0.8, 0.6, "compact"),
-            P("coolgrey", "冷灰", "录音室", "#7c8a90", "#f5f6f7", "#161819", 12, 8, 0.65, 0.75, 0.55, "compact"),
-            P("titanium", "钛银", "录音室", "#8e9aa3", "#f7f8f9", "#191b1d", 16, 14, 0.75, 0.85, 0.7),
+            P("graphite", "石墨", "录音室", "#6f7d8c", "#f4f5f6", "#15171a", 14, 10, 0.7, 0.8, 0.6, "compact", 0.94, 1.35),
+            P("navy", "海军蓝", "录音室", "#3f6fb5", "#f2f5f9", "#121722", 14, 12, 0.8, 0.8, 0.6, "compact", 0.94, 1.35),
+            P("coolgrey", "冷灰", "录音室", "#7c8a90", "#f5f6f7", "#161819", 12, 8, 0.65, 0.75, 0.55, "compact", 0.92, 1.3),
+            P("titanium", "钛银", "录音室", "#8e9aa3", "#f7f8f9", "#191b1d", 16, 14, 0.75, 0.85, 0.7, "normal", 0.96, 1.4),
             // 自然
             P("mint", "薄荷", "自然", "#3f9e86", "#f3faf7", "#121e1b", 22, 18, 0.95, 1.0, 0.85),
             P("bamboo", "竹青", "自然", "#6f9a4a", "#f7faf2", "#171d14", 20, 16, 0.9, 0.95, 0.8),
             P("seasalt", "海盐", "自然", "#4c8fa8", "#f2f8fb", "#111e23", 24, 20, 0.95, 1.0, 0.9),
             P("autumn", "秋木", "自然", "#b3733f", "#fbf5ee", "#1f1813", 18, 14, 1.0, 0.9, 0.75),
             // 复古
-            P("amber-crt", "琥珀终端", "复古", "#e0a33c", "#f8f1e2", "#1b1608", 8, 4, 1.15, 0.7, 0.5, "compact"),
-            P("green-crt", "绿磷终端", "复古", "#6fdc8c", "#f1f7f1", "#0d1710", 8, 4, 1.2, 0.7, 0.5, "compact"),
-            P("paperink", "纸墨", "复古", "#b4472f", "#faf6ef", "#1c1917", 10, 6, 0.85, 0.8, 0.6),
-            P("warmfilm", "暖胶片", "复古", "#d97b5a", "#fdf3ec", "#1e1714", 16, 20, 1.05, 0.9, 0.8),
+            P("amber-crt", "琥珀终端", "复古", "#e0a33c", "#f8f1e2", "#1b1608", 8, 4, 1.15, 0.7, 0.5, "compact", 1.02, 1.7),
+            P("green-crt", "绿磷终端", "复古", "#6fdc8c", "#f1f7f1", "#0d1710", 8, 4, 1.2, 0.7, 0.5, "compact", 1.02, 1.7),
+            P("paperink", "纸墨", "复古", "#b4472f", "#faf6ef", "#1c1917", 10, 6, 0.85, 0.8, 0.6, "normal", 1.06, 1.8),
+            P("warmfilm", "暖胶片", "复古", "#d97b5a", "#fdf3ec", "#1e1714", 16, 20, 1.05, 0.9, 0.8, "normal", 1.04, 1.7),
             // 多彩
             P("neon", "霓虹", "多彩", "#c840ff", "#faf4ff", "#170f22", 22, 26, 1.25, 1.2, 1.2),
             P("berry", "莓果", "多彩", "#d63a6a", "#fdf3f6", "#1d1119", 24, 22, 1.15, 1.1, 1.1),
@@ -307,7 +330,10 @@ namespace CelesteMusicPlayer
                 // 底栏图标比正文再重一档（底栏底色略透，按正文色会发灰），次要文字沿用 muted
                 ["player-ink"] = dark ? FromHsl(h, Math.Min(0.14, sat), 0.95) : FromHsl(h, Math.Min(0.2, sat * 1.6), 0.18),
                 ["player-muted"] = muted,
-                ["danger"] = dark ? "#ff8a80" : "#c0454f", ["success"] = dark ? "#6fd3a8" : "#3f8f6f", ["warning"] = dark ? "#e8b962" : "#b8802a"
+                ["danger"] = dark ? "#ff8a80" : "#c0454f", ["success"] = dark ? "#6fd3a8" : "#3f8f6f", ["warning"] = dark ? "#e8b962" : "#b8802a",
+                // 字体族默认值。真正生效的值由 Resolve 用人选的字体覆盖，
+                // 这里给出兜底，保证没接主题（或用户没选过）时不至于 font-family 为空
+                ["font-ui"] = QuoteFamily(DefaultFontUi), ["font-cjk"] = QuoteFamily(DefaultFontCjk), ["font-mono"] = QuoteFamily(DefaultFontMono)
             };
         }
 
@@ -334,7 +360,10 @@ namespace CelesteMusicPlayer
                 // 用户要"底栏更紧凑一点"只能改代码，所以提成参数。
                 ["player-gap"] = "24px",
                 ["player-pad"] = "16px",
-                ["player-height"] = "120px"
+                ["player-height"] = "120px",
+                // 排版：预设自带一套（录音室更紧、复古更松），用户可以再覆盖
+                ["text-scale"] = preset.textScale.ToString("0.##", CultureInfo.InvariantCulture),
+                ["line-height"] = preset.lineHeight.ToString("0.##", CultureInfo.InvariantCulture)
             };
         }
 
@@ -397,6 +426,10 @@ namespace CelesteMusicPlayer
             state.overrides ??= new Dictionary<string, string>(StringComparer.Ordinal);
             state.customPresets ??= new List<Preset>();
             state.playerButtons = NormalizePlayerButtons(state.playerButtons);
+            // 字体名留空（旧存档没这两项）就回到默认，别让 font-family 变成空值
+            if (string.IsNullOrWhiteSpace(state.fontUi)) state.fontUi = DefaultFontUi;
+            if (string.IsNullOrWhiteSpace(state.fontCjk)) state.fontCjk = DefaultFontCjk;
+            if (string.IsNullOrWhiteSpace(state.fontMono)) state.fontMono = DefaultFontMono;
             if (FindPreset(state.presetId, state) == null) state.presetId = BuiltIn[0].id;
         }
 
@@ -406,6 +439,13 @@ namespace CelesteMusicPlayer
             return (text.Length == 6 || text.Length == 8) && text.All(Uri.IsHexDigit);
         }
 
+        /// <summary>
+        /// 字体族名包一层引号。名字里带空格（Microsoft YaHei UI）或不常见字符时，
+        /// 不加引号的 font-family 会整条失效 —— 浏览器直接忽略这一项，看着就是"选了没反应"。
+        /// </summary>
+        internal static string QuoteFamily(string name)
+            => "\"" + (name ?? "").Replace("\"", "").Trim() + "\"";
+
         internal static State Clone(State state)
         {
             var copy = new State
@@ -413,12 +453,16 @@ namespace CelesteMusicPlayer
                 mode = state.mode, accentSource = state.accentSource, accentCustom = state.accentCustom,
                 presetId = state.presetId, revision = state.revision,
                 playerButtons = state.playerButtons,
+                fontUi = state.fontUi, fontCjk = state.fontCjk, fontMono = state.fontMono,
                 overrides = new Dictionary<string, string>(state.overrides ?? new(), StringComparer.Ordinal),
                 customPresets = (state.customPresets ?? new()).Select(p => new Preset
                 {
                     id = p.id, name = p.name, group = p.group, lightBg = p.lightBg, darkBg = p.darkBg, accent = p.accent,
                     radius = p.radius, blur = p.blur, sat = p.sat, motionSpeed = p.motionSpeed,
-                    motionStrength = p.motionStrength, density = p.density, custom = p.custom
+                    motionStrength = p.motionStrength, density = p.density,
+                    // ⚠ 逐字段拷贝：漏一个就会出现「存得进文件、Load() 恒默认」
+                    textScale = p.textScale, lineHeight = p.lineHeight,
+                    custom = p.custom
                 }).ToList()
             };
             return copy;
@@ -477,6 +521,11 @@ namespace CelesteMusicPlayer
             var values = Derive(preset, mode);
             var numbers = Numbers(preset);
 
+            // 字体是「这台机器装了什么」决定的个人偏好，明暗共用一套，所以先于覆盖值铺上底
+            if (!string.IsNullOrWhiteSpace(state.fontUi)) values["font-ui"] = QuoteFamily(state.fontUi);
+            if (!string.IsNullOrWhiteSpace(state.fontCjk)) values["font-cjk"] = QuoteFamily(state.fontCjk);
+            if (!string.IsNullOrWhiteSpace(state.fontMono)) values["font-mono"] = QuoteFamily(state.fontMono);
+
             foreach (KeyValuePair<string, string> pair in state.overrides ?? new())
             {
                 int split = pair.Key.IndexOf(':');
@@ -484,6 +533,7 @@ namespace CelesteMusicPlayer
                 if (pair.Key.Substring(0, split) != mode) continue;
                 string name = pair.Key.Substring(split + 1);
                 if (VarNames.Contains(name)) values[name] = pair.Value;
+                else if (TextNames.Contains(name)) values[name] = pair.Value;
                 else if (NumNames.Contains(name)) numbers[name] = pair.Value;
             }
 
@@ -494,6 +544,7 @@ namespace CelesteMusicPlayer
             var result = new Dictionary<string, string>(StringComparer.Ordinal);
             foreach (string name in VarNames) result[name] = values.TryGetValue(name, out string? v) ? v : "#888888";
             foreach (string name in NumNames) result[name] = numbers.TryGetValue(name, out string? v) ? v : "";
+            foreach (string name in TextNames) result[name] = values.TryGetValue(name, out string? v) ? v : "";
             return result;
         }
 

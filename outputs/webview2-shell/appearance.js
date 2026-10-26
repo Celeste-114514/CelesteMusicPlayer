@@ -206,6 +206,60 @@
     return Number(item.value).toFixed(item.step < 0.1 ? 2 : 0) + (item.unit === '×' ? '×' : ' ' + item.unit);
   }
 
+  // —— 字体与排版 ——
+  // 字体是「这台机器装了什么」的问题，选完立刻存，不跟预设走（换配色不该把你挑的字体换掉）；
+  // 字号缩放与行高属于当前这套外观，仍走「预览 → 保存」那套。
+  const FONT_FIELDS = [
+    { key: 'fontUi', label: '西文与界面字体', note: '拉丁字母、数字、控件文字先用它' },
+    { key: 'fontCjk', label: '中文字体', note: '上面那套字体里没有汉字时用这套' },
+    { key: 'fontMono', label: '等宽字体', note: '播放进度、时长这类要对齐的数字' }
+  ];
+
+  function typographyCard() {
+    const card = section({
+      title: '字体与排版',
+      tag: '字体立即生效',
+      note: '字体清单来自这台机器已安装的字体；改名或卸载后会被标出来。字号缩放和行高是当前这套外观的一部分，跟着上面的预览/保存走。'
+    });
+
+    // 实时样本：它没有任何自己的 font-family/size，全靠根元素变量，
+    // 所以拖动下面两个滑杆时它跟真实页面一起变 —— 不会出现"样本对、页面不对"。
+    const sample = node('div', undefined, 'type-sample');
+    sample.append(node('strong', 'Celeste · 音乐播放器'));
+    sample.append(node('span', ' 永不失联的爱 · 5:03 · FLAC 24bit/96kHz'));
+    card.append(sample);
+
+    FONT_FIELDS.forEach(field => {
+      const row = node('div', undefined, 'set-row');
+      const main = node('div', undefined, 'set-row-main');
+      main.append(node('div', field.label, 'set-label'), node('div', field.note, 'set-note'));
+      row.append(main);
+      const holder = node('div', undefined, 'set-control');
+      const select = node('select');
+      const current = (data.typography || {})[field.key] || '';
+      const names = data.fonts || [];
+      // 存着的字体可能已经被卸载：仍然列出来并明确标注，否则下拉框会静默跳到第一项，
+      // 用户什么都没动却"字体变了"
+      if (current && !names.includes(current)) select.append(new Option(current + '（系统里没找到）', current));
+      names.forEach(name => select.append(new Option(name, name)));
+      select.value = current;
+      select.addEventListener('change', async () => {
+        try {
+          data = await request('typography', { [field.key]: select.value });
+          paint();
+          status('字体已保存：' + select.value + '。', 'ok');
+        } catch (error) { status('改字体失败：' + error.message, 'err'); }
+      });
+      holder.append(select);
+      row.append(holder);
+      card.append(row);
+    });
+
+    (data.numbers || []).filter(item => /^(text-scale|line-height)$/.test(item.id || ''))
+      .forEach(item => card.append(numberRow(item)));
+    return card;
+  }
+
   // —— 底栏按钮：显隐与顺序 ——
   // 宿主存的是 "left:a,!b|right:…|tools:…" 这种串（! = 收起来），
   // 这里只解析和拼回，合法性校验全在宿主（NormalizePlayerButtons）做。
@@ -404,8 +458,13 @@
     // 底栏那三个参数单独一组：它们是"某个部件的形状"，跟整站的比例尺不是一回事，
     // 混在元素细调里用户找不到「播放状态栏到底在哪调」。
     const isPlayerParam = item => /^player-|^cover-/.test(item.id || '');
-    (data.numbers || []).filter(item => !isPlayerParam(item)).forEach(item => editor.append(numberRow(item)));
+    // 排版的两个数值（字号缩放/行高）单独一张卡：它们不是"某个部件的形状"，是全站文字的比例
+    const isTypeParam = item => /^(text-scale|line-height)$/.test(item.id || '');
+    (data.numbers || []).filter(item => !isPlayerParam(item) && !isTypeParam(item)).forEach(item => editor.append(numberRow(item)));
     host.append(editor);
+
+    // 字体与排版：字体是个人偏好（立刻存），两个数值跟着预设走（预览→保存）
+    host.append(typographyCard());
 
     const player = section({
       title: '底栏（播放状态栏）',

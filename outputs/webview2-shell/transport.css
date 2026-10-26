@@ -8,7 +8,7 @@
    写成 .player .icon-button 会盖住悬停反馈，看着像"点了没反应"。 */
 .player :where(.icon-button,.volume-icon){color:var(--player-ink)}
 .transport{position:relative;display:flex;flex-direction:column;gap:9px;width:100%}
-.timeline{width:100%;gap:10px}.timeline span{font-variant-numeric:tabular-nums;color:var(--player-muted);font-size:11px}
+.timeline{width:100%;gap:10px}.timeline span{font-variant-numeric:tabular-nums;color:var(--player-muted);font-size:calc(11px * var(--text-scale));font-family:var(--font-mono),var(--font-cjk),monospace}
 /* 三簇居中：左簇 | 播放键 | 右簇。两侧各占 1fr 且对称，
    所以收起中间某个按钮时播放键不会往一边偏 —— 别改回"固定列数"。 */
 .transport-buttons{display:grid;grid-template-columns:1fr auto 1fr;align-items:center}
@@ -18,11 +18,11 @@
 .transport-buttons .icon-button{width:34px;height:34px;border-radius:12px;display:flex!important}
 .transport-buttons .icon-button svg{width:19px;height:19px}.transport-buttons .play-button{width:42px;height:42px;justify-self:center;background:var(--accent-soft);color:var(--accent);box-shadow:none}
 .player .icon-button{position:relative;transition:background .16s,color .16s,transform .16s}.player .icon-button:active,.player .play-button:active{transform:scale(.91)}
-.player .icon-button[aria-pressed=true]{color:var(--accent);background:var(--accent-soft)}.now-playing{gap:13px;min-width:0}.mini-cover{width:var(--cover-size);height:var(--cover-size);flex-shrink:0;border-radius:var(--cover-radius);box-shadow:0 4px 16px #62445318}.track-info{gap:5px;min-width:0}.track-info strong{font-size:14px}.track-info small{font-size:10px;color:var(--player-muted)}
+.player .icon-button[aria-pressed=true]{color:var(--accent);background:var(--accent-soft)}.now-playing{gap:13px;min-width:0}.mini-cover{width:var(--cover-size);height:var(--cover-size);flex-shrink:0;border-radius:var(--cover-radius);box-shadow:0 4px 16px #62445318}.track-info{gap:5px;min-width:0}.track-info strong{font-size:calc(14px * var(--text-scale))}.track-info small{font-size:calc(10px * var(--text-scale));color:var(--player-muted)}
 /* 歌手行也是底栏里的字，跟着 --player-muted 走 —— 否则用户调了"底栏文字色"，
    歌名变了、歌手还留着旧色，看着就是"只改了一半"。 */
 .player .track-info>span{color:var(--player-muted)}
-.live-cover:empty:after{content:'♪';position:absolute;inset:0;display:grid;place-items:center;color:var(--player-muted);font-size:25px}.mini-cover.live-cover img{opacity:0;transition:opacity .36s ease,transform .45s ease;transform:scale(1.045)}.mini-cover.live-cover img.cover-current{opacity:1;transform:scale(1)}
+.live-cover:empty:after{content:'♪';position:absolute;inset:0;display:grid;place-items:center;color:var(--player-muted);font-size:calc(25px * var(--text-scale))}.mini-cover.live-cover img{opacity:0;transition:opacity .36s ease,transform .45s ease;transform:scale(1.045)}.mini-cover.live-cover img.cover-current{opacity:1;transform:scale(1)}
 .player-tools{display:flex!important;justify-content:flex-end;align-items:center;gap:10px;min-width:0}.player-tools input{width:clamp(55px,7vw,118px);min-width:45px}.player-tools .icon-button{width:34px;height:34px;flex-shrink:0}.player-tools .volume-icon{width:17px;flex-shrink:0}
 /* 音量图标 + 滑杆包成一组，才能整体排序/收起（单个 input 没法当 flex item 排序后还带着图标） */
 .player-tools #volume-group{display:flex;align-items:center;gap:8px;min-width:0}
@@ -30,8 +30,8 @@
    上面 .transport-buttons .icon-button{display:flex!important} 会把它又顶出来，
    所以这里显式压一条。 */
 .player [hidden]{display:none!important}
-#order-badge,#lyrics-badge{position:absolute;right:2px;bottom:0;font-size:8px;line-height:12px;background:var(--accent-soft);border-radius:3px;padding:0 2px;color:var(--muted)}#order-badge:empty{display:none}
-.order-menu{position:absolute;bottom:88px;left:50%;transform:translateX(-50%);width:174px;padding:6px;background:var(--surface);box-shadow:0 10px 40px #58404c24;border:1px solid var(--line);border-radius:15px;z-index:50}.order-menu button{display:block;width:100%;text-align:left;padding:10px 13px;border-radius:9px;font-size:12px}.order-menu button:hover,.order-menu button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent)}
+#order-badge,#lyrics-badge{position:absolute;right:2px;bottom:0;font-size:calc(8px * var(--text-scale));line-height:12px;background:var(--accent-soft);border-radius:3px;padding:0 2px;color:var(--muted)}#order-badge:empty{display:none}
+.order-menu{position:absolute;bottom:88px;left:50%;transform:translateX(-50%);width:174px;padding:6px;background:var(--surface);box-shadow:0 10px 40px #58404c24;border:1px solid var(--line);border-radius:15px;z-index:50}.order-menu button{display:block;width:100%;text-align:left;padding:10px 13px;border-radius:9px;font-size:calc(12px * var(--text-scale))}.order-menu button:hover,.order-menu button[aria-pressed=true]{background:var(--accent-soft);color:var(--accent)}
 @media(max-width:1050px){.player{grid-template-columns:minmax(0,1fr) 360px minmax(0,1fr);padding-left:18px;padding-right:18px}.player-tools{gap:5px}.player-tools .volume-icon{display:none}.track-info small{max-width:150px}}
 /* 窄屏改成上下两层：高度要在用户设定的高度上再加一行，所以是 calc 而不是死值 */
 @media(max-width:760px){.player{height:calc(var(--player-height) + 38px);grid-template-columns:1fr 1fr;grid-template-rows:48px 75px;gap:5px 12px;padding:10px 16px}.transport{grid-column:1/-1;grid-row:2;max-width:480px}.now-playing{grid-column:1;grid-row:1}.mini-cover{width:42px;height:42px;border-radius:calc(var(--cover-radius)*.7)}.track-info small{display:none}.player-tools{grid-column:2;grid-row:1}.player-tools input{width:70px}.tb-side{gap:2px}}

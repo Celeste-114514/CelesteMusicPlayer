@@ -51,6 +51,16 @@
   --motion-speed:1;
   --motion-strength:1;
   --density:1;
+  /* 排版：字体族分「西文 / 中文 / 等宽」三支，串成一条字体栈 ——
+     西文优先、中文兜底、都没有就用系统 sans-serif。
+     默认值特意选 Windows 上一定存在的族名，等于原来的实际效果（Inter/SF Pro 本来也没装）。 */
+  --font-ui:"Segoe UI";
+  --font-cjk:"Microsoft YaHei UI";
+  --font-mono:"Cascadia Mono";
+  /* 字号整体缩放与行高。所有 font-size 都写成 calc(Npx * var(--text-scale))，
+     所以调这一个数，全站一起变；行高是无单位倍数。 */
+  --text-scale:1;
+  --line-height:1.5;
 }
 /* 动效速度：所有过渡按这个系数缩放，关掉动效时缩到 0 而不是留一个"看起来动了"的假动画 */
 @media(prefers-reduced-motion:reduce){:root{--motion-speed:0;--motion-strength:0}}

@@ -33,6 +33,7 @@ namespace CelesteMusicPlayer
                 case "savePreset": return SavePreset(ReadString(msg, "name"));
                 case "deletePreset": return DeletePreset(ReadString(msg, "presetId"));
                 case "playerButtons": return SetPlayerButtons(ReadString(msg, "value"));
+                case "typography": return SetTypography(msg);
                 default: throw new ArgumentException("未知的外观操作：" + operation);
             }
         }
@@ -59,7 +60,10 @@ namespace CelesteMusicPlayer
                 numbers = NumberSchema(state),
                 // 底栏按钮的现状 + 可选目录：显隐/顺序存在宿主，网页不自己编一套按钮表
                 playerButtons = state.playerButtons,
-                playerButtonCatalog = WebAppearance.PlayerButtonCatalog.Select(item => new { id = item.id, label = item.label, group = item.group, core = item.core }).ToArray()
+                playerButtonCatalog = WebAppearance.PlayerButtonCatalog.Select(item => new { id = item.id, label = item.label, group = item.group, core = item.core }).ToArray(),
+                // 字体选择器：族名清单来自宿主（网页拿不到 Windows 字体表），当前选中值也在这一起给
+                fonts = FontCatalog.Families(),
+                typography = new { fontUi = state.fontUi, fontCjk = state.fontCjk, fontMono = state.fontMono }
             };
         }
 
@@ -119,7 +123,10 @@ namespace CelesteMusicPlayer
                 new { id = "cover-size", label = "底栏封面大小", min = 42, max = 88, step = 1, unit = "px", value = Get("cover-size") },
                 new { id = "player-height", label = "底栏高度", min = 88, max = 180, step = 1, unit = "px", value = Get("player-height") },
                 new { id = "player-gap", label = "底栏区块间距", min = 8, max = 56, step = 1, unit = "px", value = Get("player-gap") },
-                new { id = "player-pad", label = "底栏上下留白", min = 6, max = 40, step = 1, unit = "px", value = Get("player-pad") }
+                new { id = "player-pad", label = "底栏上下留白", min = 6, max = 40, step = 1, unit = "px", value = Get("player-pad") },
+                // 排版：1 就是设计原尺寸，往两边各留一点余量；行高按字号倍数算
+                new { id = "text-scale", label = "字号整体缩放", min = 0.8, max = 1.4, step = 0.01, unit = "×", value = Get("text-scale") },
+                new { id = "line-height", label = "行高", min = 1.2, max = 2, step = 0.05, unit = "×", value = Get("line-height") }
             };
         }
 
@@ -183,6 +190,33 @@ namespace CelesteMusicPlayer
                 WebAppearance.SetDraft(draft);
             }
             state.playerButtons = normalized;
+            WebAppearance.Save(state);
+            return Snapshot();
+        }
+
+        /// <summary>
+        /// 字体族。这是「这台机器装了什么」的个人偏好，不是配色方案的一部分，所以和底栏按钮一样立刻存；
+        /// 也照同样的顺序先改草稿再 Save，避免修订号广播那一刻把旧字体推回网页。
+        /// 空字符串表示「不改这一项」，方便网页只提交改动的那一个。
+        /// </summary>
+        private static object SetTypography(JsonElement msg)
+        {
+            WebAppearance.State state = WebAppearance.Load();
+            string ui = (ReadString(msg, "fontUi") ?? "").Trim();
+            string cjk = (ReadString(msg, "fontCjk") ?? "").Trim();
+            string mono = (ReadString(msg, "fontMono") ?? "").Trim();
+            if (ui.Length > 0) state.fontUi = ui;
+            if (cjk.Length > 0) state.fontCjk = cjk;
+            if (mono.Length > 0) state.fontMono = mono;
+
+            if (WebAppearance.HasDraft())
+            {
+                WebAppearance.State draft = WebAppearance.Draft();
+                draft.fontUi = state.fontUi;
+                draft.fontCjk = state.fontCjk;
+                draft.fontMono = state.fontMono;
+                WebAppearance.SetDraft(draft);
+            }
             WebAppearance.Save(state);
             return Snapshot();
         }
@@ -271,6 +305,9 @@ namespace CelesteMusicPlayer
                 sat = ParseNumber(light, "sat", 1),
                 motionSpeed = ParseNumber(light, "motion-speed", 1),
                 motionStrength = ParseNumber(light, "motion-strength", 1),
+                // 排版也算预设的一部分（录音室更紧、复古更松），存进「我的预设」时要一起带上
+                textScale = ParseNumber(light, "text-scale", 1),
+                lineHeight = ParseNumber(light, "line-height", 1.5),
                 density = ParseNumber(light, "density", 1) < 0.95 ? "compact" : ParseNumber(light, "density", 1) > 1.05 ? "relaxed" : "normal"
             };
 
