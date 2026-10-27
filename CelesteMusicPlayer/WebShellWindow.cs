@@ -37,20 +37,9 @@ namespace CelesteMusicPlayer
         private bool _restoreMaximizedAfterFullscreen;
         private OverlappedPresenter? _windowedPresenter;
         private bool _closed, _ready, _dirty = true, _sending;
-        // 网页标题栏拖动：WebView2 抢走了指针消息，宿主收不到 XAML 指针事件。
-        // 优先把 WM_NCLBUTTONDOWN 交给系统跑它自己的模态移动循环（零轮询、最跟手）；
-        // 探测到系统没接管时，回落到 SetWindowPos 高频轮询。
-        private const int WM_NCLBUTTONDOWN = 0x00A1;
-        private const int WM_LBUTTONUP = 0x0202;
-        private const int HTCAPTION = 0x0002;
+        // Drag sampling must not share the UI dispatcher with library/theme refreshes.
         private const uint SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
-        private DispatcherQueueTimer? _dragTimer;
-        private DispatcherQueueTimer? _dragProbe;
-        private bool _dragging, _dragPolling;
-        private int _dragOffsetX, _dragOffsetY;
-        private IntPtr _dragHwnd;
-        private Windows.Graphics.PointInt32 _dragOrigin;
-        private NativeMethods.POINT _dragStartCursor;
+        private int _dragGeneration;
         private int _revision;
         private int _themeRevision = -1;
         private CancellationTokenSource? _waveformCancellation;
@@ -92,8 +81,10 @@ namespace CelesteMusicPlayer
 
         private void BackgroundWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
         {
-            SendVisibility();
-            SendWindowState();
+            // Position changes during a drag do not alter visibility or fullscreen state.
+            // Avoid two WebView messages and DOM updates for every native move.
+            if (args.DidVisibilityChange || args.DidPresenterChange) SendVisibility();
+            if (args.DidPresenterChange) SendWindowState();
         }
 
         private void SendWindowState() => Post(new { kind = "celeste.window", version = 1, fullscreen = AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen });
@@ -491,118 +482,43 @@ namespace CelesteMusicPlayer
             else if (action == "maximize") { if (presenter.State == OverlappedPresenterState.Maximized) presenter.Restore(); else presenter.Maximize(); }
         }
 
-        /// <summary>网页标题栏空白区按下。</summary>
+        /// <summary>Track the physical cursor independently of WebView2/UI dispatcher traffic.</summary>
         private void StartWindowDrag()
         {
-            // 最大化/全屏下拖动无意义，也不允许（会让窗口抖出奇怪的位置）
-            if (AppWindow.Presenter is not OverlappedPresenter presenter || presenter.State == OverlappedPresenterState.Maximized) return;
+            if (_closed || AppWindow.Presenter is not OverlappedPresenter presenter ||
+                presenter.State == OverlappedPresenterState.Maximized || !IsLeftButtonDown()) return;
             IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
-            if (hwnd == IntPtr.Zero || !NativeMethods.GetCursorPos(out NativeMethods.POINT cursor)) return;
-            // ⚠ 关键修一次伪拖动：从网页 pointerdown 到宿主收到这次 IPC 隔了几十毫秒，
-            // 物理按键很可能已经松开了（就是一次普通点击）。此时若照发 WM_NCLBUTTONDOWN，
-            // 系统会以为键还按着而进入自己的移动循环 —— 表现就是「点一下，之后不按住也能拖着窗口跑」。
-            // 所以一律以**当前的真实按键状态**为准，而不是以消息到达时间为准。
-            if (!IsLeftButtonDown()) return;
-            _dragHwnd = hwnd;
-            _dragOrigin = AppWindow.Position;
-            _dragStartCursor = cursor;
-            _dragOffsetX = cursor.X - _dragOrigin.X;
-            _dragOffsetY = cursor.Y - _dragOrigin.Y;
-            _dragging = true;
-            // 同步进入 Windows 移动循环，返回时拖动已结束；不再让探针/轮询争夺窗口位置。
-            try { TryNativeMoveLoop(cursor); }
-            finally { StopWindowDrag(); }
+            if (hwnd == IntPtr.Zero || !NativeMethods.GetCursorPos(out var cursor) ||
+                !NativeMethods.GetWindowRect(hwnd, out var bounds)) return;
+            int offsetX = cursor.X - bounds.Left, offsetY = cursor.Y - bounds.Top;
+            int ticket = Interlocked.Increment(ref _dragGeneration);
+            new Thread(() =>
+            {
+                // Scoped timer resolution: no permanent system/process power setting changes.
+                bool preciseTimer = NativeMethods.timeBeginPeriod(1) == 0;
+                try
+                {
+                    int lastX = bounds.Left, lastY = bounds.Top;
+                    while (Volatile.Read(ref _dragGeneration) == ticket && IsLeftButtonDown())
+                    {
+                        if (!NativeMethods.GetCursorPos(out var point)) break;
+                        int x = point.X - offsetX, y = point.Y - offsetY;
+                        if (x != lastX || y != lastY)
+                        {
+                            // Synchronous call applies backpressure rather than queueing stale moves.
+                            if (!NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, x, y, 0, 0,
+                                SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE)) break;
+                            lastX = x; lastY = y;
+                        }
+                        Thread.Sleep(4);
+                    }
+                }
+                finally { if (preciseTimer) NativeMethods.timeEndPeriod(1); }
+            }) { IsBackground = true, Name = "Celeste window drag" }.Start();
         }
 
         private static bool IsLeftButtonDown() => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0;
-
-        /// <summary>让 Windows 跑自己的模态移动循环：不轮询、UI 线程零负担，跟手程度和系统窗口一致。</summary>
-        private bool TryNativeMoveLoop(NativeMethods.POINT cursor)
-        {
-            try
-            {
-                if (_dragHwnd == IntPtr.Zero) return false;
-                // 再查一次：查到发这条消息之间仍有极小的时间窗，宁可不拖也不要拖成"粘住"
-                if (!IsLeftButtonDown()) return false;
-                // 光标可能被 WebView2 捕获着，不释放系统进不了自己的移动循环
-                NativeMethods.ReleaseCapture();
-                NativeMethods.SendMessage(_dragHwnd, WM_NCLBUTTONDOWN, HTCAPTION, (IntPtr)((cursor.Y << 16) | (cursor.X & 0xFFFF)));
-                return true;
-            }
-            catch (Exception ex) { StartupLog.WriteException("WebShell.NativeMove", ex); return false; }
-        }
-
-        private void DragProbeTick(DispatcherQueueTimer sender, object args)
-        {
-            try
-            {
-                if (!_dragging) { StopWindowDrag(); return; }
-                if (!IsLeftButtonDown())
-                {
-                    // 自愈：万一上面那次检查之后还是晚了一步、系统进了一个没人按住的移动循环，
-                    // 窗口会一直占着鼠标捕获不放。补一个 WM_LBUTTONUP 让它自己把循环收掉。
-                    if (_dragHwnd != IntPtr.Zero && NativeMethods.GetCapture() == _dragHwnd)
-                    {
-                        NativeMethods.PostMessage(_dragHwnd, WM_LBUTTONUP, 0, IntPtr.Zero);
-                        StartupLog.Write("[WebShell] 拖动：结束了一次没人按住的残留移动循环");
-                    }
-                    StopWindowDrag();
-                    return;
-                }
-                if (_dragPolling) { StopProbe(); return; }
-                if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor)) return;
-                // 光标还没动就判断不出谁在管窗口，继续探下一轮
-                if (Math.Abs(cursor.X - _dragStartCursor.X) <= 4 && Math.Abs(cursor.Y - _dragStartCursor.Y) <= 4) return;
-                Windows.Graphics.PointInt32 now = AppWindow.Position;
-                StopProbe();
-                // 窗口跟着动了 = 系统已接管；否则说明本机不吃这条消息，切轮询兜底
-                if (now.X == _dragOrigin.X && now.Y == _dragOrigin.Y) StartDragPolling();
-            }
-            catch (Exception ex) { StopProbe(); StartupLog.WriteException("WebShell.DragProbe", ex); }
-        }
-
-        private void StartDragPolling()
-        {
-            if (_dragPolling) return;
-            _dragPolling = true;
-            _dragTimer ??= DispatcherQueue.CreateTimer();
-            _dragTimer.Interval = TimeSpan.FromMilliseconds(8);
-            _dragTimer.Tick -= DragTick;
-            _dragTimer.Tick += DragTick;
-            _dragTimer.Start();
-        }
-
-        private void StopProbe()
-        {
-            if (_dragProbe != null) { _dragProbe.Stop(); _dragProbe.Tick -= DragProbeTick; }
-        }
-
-        private void DragTick(DispatcherQueueTimer sender, object args)
-        {
-            try
-            {
-                if (_dragHwnd == IntPtr.Zero || !IsLeftButtonDown()) { StopWindowDrag(); return; }
-                if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor)) return;
-                // 兜底路径也必须直接 SetWindowPos：AppWindow.Move() 每次都要绕一圈
-                // XAML→AppWindow→窗口服务，拖动时每帧的开销肉眼可见地拖后手。
-                NativeMethods.SetWindowPos(_dragHwnd, IntPtr.Zero, cursor.X - _dragOffsetX, cursor.Y - _dragOffsetY, 0, 0,
-                    SWP_NOSIZE | SWP_NOZORDER | SWP_NOACTIVATE);
-            }
-            catch (Exception ex)
-            {
-                StopWindowDrag();
-                StartupLog.WriteException("WebShell.Drag", ex);
-            }
-        }
-
-        private void StopWindowDrag()
-        {
-            _dragging = false;
-            _dragPolling = false;
-            StopProbe();
-            if (_dragTimer != null) { _dragTimer.Stop(); _dragTimer.Tick -= DragTick; }
-        }
-
+        private void StopWindowDrag() => Interlocked.Increment(ref _dragGeneration);
         private void Error(string message) => Post(new { kind = "celeste.error", version = 1, message });
 
         private async void OnCoverRequest(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
@@ -671,6 +587,15 @@ namespace CelesteMusicPlayer
 
             [StructLayout(LayoutKind.Sequential)]
             internal struct POINT { public int X; public int Y; }
+            [StructLayout(LayoutKind.Sequential)]
+            internal struct RECT { public int Left, Top, Right, Bottom; }
+            [DllImport("user32.dll")]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
+            [DllImport("winmm.dll")]
+            internal static extern uint timeBeginPeriod(uint period);
+            [DllImport("winmm.dll")]
+            internal static extern uint timeEndPeriod(uint period);
 
             [DllImport("user32.dll")]
             [return: MarshalAs(UnmanagedType.Bool)]

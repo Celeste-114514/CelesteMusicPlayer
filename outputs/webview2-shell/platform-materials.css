@@ -38,10 +38,7 @@
 :root .shell,:root[data-material] .shell{border:0;border-radius:0;box-shadow:none}
 :root .main,:root[data-material] .main{margin:0;border-radius:0}
 :root .now-playing-page,:root[data-material] .now-playing-page{border:0;border-radius:0}
-/* Deliberately NOT using app-region for window dragging.
-   WebView2 only honours it when IsNonClientRegionSupportEnabled is set before the *next* navigation and
-   the installed Runtime supports it; when both that and the shell.js pointer drag are live they fight
-   each other and the window judders. shell.js owns dragging over a single command channel instead. */
-.titlebar,.np-head{-webkit-app-region:no-drag}
-button,input,select,a,.header-tools,.header-actions,.np-head-actions{app-region:no-drag;-webkit-app-region:no-drag}
+/* Host cursor tracking owns dragging. Keep all CSS non-client regions disabled to avoid competing moves. */
+.titlebar,.np-head{app-region:no-drag;-webkit-app-region:no-drag;user-select:none}
+button,input,select,textarea,a,label,.header-tools,.header-actions,.np-head-actions,.window-actions{app-region:no-drag;-webkit-app-region:no-drag}
 .is-fullscreen .titlebar,.is-fullscreen .np-head{app-region:no-drag;-webkit-app-region:no-drag}
