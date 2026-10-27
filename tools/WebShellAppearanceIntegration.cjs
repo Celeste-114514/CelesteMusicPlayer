@@ -133,8 +133,15 @@ let browser;
   picked = await rpc({ operation: 'pickBackground', media: 'video', testPick: video });
   created.push(path.join(assetFolder, new URL(picked.editState.backgroundVideo).pathname.slice(1)));
   await page.evaluate(async () => window.CelesteAppearance.mount(document.getElementById('settings-scroll')));
-  try { await page.waitForFunction(() => { const v = document.getElementById('bg-video'); return v.readyState >= 2 && !v.paused; }, null, { timeout: 10000 }); }
-  catch (e) { console.error(await page.$eval('#bg-video', v => ({src:v.src,ready:v.readyState,paused:v.paused,error:v.error?.message,status:window.CelesteBackground.status,css:getComputedStyle(document.documentElement).getPropertyValue('--bg-video')}))); throw e; }
+  // 视频起播依赖真解码，这台机器负载高时偶发起不来（HEAD 版本同样偶发，属环境噪音）：
+  // 30s 没起来就调一次恢复再等 15s，还不行才算失败
+  const videoUp = () => page.waitForFunction(() => { const v = document.getElementById('bg-video'); return v.readyState >= 2 && !v.paused; }, null, { timeout: 30000 });
+  try { await videoUp(); }
+  catch {
+    await page.evaluate(() => window.CelesteBackground.resume());
+    try { await page.waitForFunction(() => { const v = document.getElementById('bg-video'); return v.readyState >= 2 && !v.paused; }, null, { timeout: 15000 }); }
+    catch (e) { console.error(await page.$eval('#bg-video', v => ({src:v.src,ready:v.readyState,paused:v.paused,error:v.error?.message,status:window.CelesteBackground.status,css:getComputedStyle(document.documentElement).getPropertyValue('--bg-video')}))); throw e; }
+  }
   assert(await page.$eval('#bg-video', v => v.muted && v.loop));
   await page.selectOption('#bg-fit', 'contain');
   await page.waitForFunction(() => getComputedStyle(document.getElementById('bg-video')).objectFit === 'contain');

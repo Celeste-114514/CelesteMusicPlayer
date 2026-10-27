@@ -34,6 +34,10 @@
    * **不能**给每个节点挂 transition —— 那会每秒重算整棵树，24 套预设和 DSP 那种大页面扛不住。
    * 不支持就直接换（老引擎、或动效被关掉），不报错。
    */
+  // "Transition was skipped. New ViewTransition started" 这类跳过/中断
+  // 会变成三个 Promise 的拒绝，接住就不会再是页面级未捕获异常。
+  // **不要**用"过渡进行中就不开新的"来防它：那会把 work 改成同步执行，
+  // 恰好赶上背景视频刚 load() 完的节骨眼，play() 会被 AbortError 打断（冒烟实测偶发）。
   function shouldTransition(animate) {
     if (!animate) return false;
     if (typeof document.startViewTransition !== 'function') return false;
@@ -57,8 +61,15 @@
       document.dispatchEvent(new CustomEvent('celeste:theme-applied', { detail: { mode: root.dataset.theme } }));
     };
     if (!shouldTransition(animate)) { work(); return; }
-    try { document.startViewTransition(work); }
-    catch { work(); }   // 快照失败也不能让主题不生效
+    try {
+      const transition = document.startViewTransition(work);
+      // 三个 Promise 都要接住：跳过/中断时它们会 reject，不接就是页面级未捕获异常
+      transition.finished.then(() => {}, () => {});
+      transition.ready.catch(() => {});
+      transition.updateCallbackDone.catch(() => {});
+    } catch {
+      work();           // 快照失败也不能让主题不生效
+    }
   }
 
   document.addEventListener('celeste:message', event => {

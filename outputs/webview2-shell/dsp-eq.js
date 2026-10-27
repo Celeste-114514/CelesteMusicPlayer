@@ -20,7 +20,7 @@
     // 曲线插值：换预设 / 撤销 / 重置时，增益从旧值滑到新值，而不是整条线瞬移。
     // drawBands 只在插值期间有值，别处一律读 state.bands（真实状态）。
     let drawBands = null, tweenFrame = 0;
-    const activeBands = () => drawBands || state.bands;
+    const activeBands = () => drawBands || state.bands || [];
     const root = el('div',undefined,'eq-workbench'), heading = el('div',undefined,'dsp-module-head'), title = el('div');
     title.append(el('h2','参数 EQ'),el('p','拖动频段节点调整频率与增益，Shift 可精细调整。'));
     const power = button('启用 EQ', async () => { revision++; state.enabled = !state.enabled; paintState(); await save(); }); heading.append(title,power); root.append(heading);
@@ -75,7 +75,7 @@
       };
       tweenFrame = requestAnimationFrame(step);
     }
-    async function load() {const stamp=revision;try {let data=live?await request('get'):{enabled:false,bands:ticks.map(freq=>({freq,gain:0,q:1,type:'Peaking',enabled:true})),preampDb:0,presetId:'flat',userPresets:[]};if(stopped||stamp!==revision||editing)return;const previousGains=state.bands.map(b=>b.gain);state=data;selected=clamp(selected,0,state.bands.length-1);paintState();renderBands();tweenTo(previousGains);draw();status.textContent=live?'已读取当前 EQ 设置':'界面预览 · 启动桌面播放器后可调节声音';}catch(e){status.textContent=e.message;}}
+    async function load() {const stamp=revision;try {let data=live?await request('get'):{enabled:false,bands:ticks.map(freq=>({freq,gain:0,q:1,type:'Peaking',enabled:true})),preampDb:0,presetId:'flat',userPresets:[]};if(stopped||stamp!==revision||editing)return;if(!data||!Array.isArray(data.bands))throw new Error('宿主返回的 EQ 数据不完整，先不动当前设置。');const previousGains=state.bands.map(b=>b.gain);state=data;selected=clamp(selected,0,state.bands.length-1);paintState();renderBands();tweenTo(previousGains);draw();status.textContent=live?'已读取当前 EQ 设置':'界面预览 · 启动桌面播放器后可调节声音';}catch(e){status.textContent=e.message;}}
     function paintState() {
       power.textContent=state.enabled?'EQ 已启用':'EQ 已关闭';power.setAttribute('aria-pressed',state.enabled);undo.disabled=!state.undo;redo.disabled=!state.redo;ab.textContent=state.ab?(state.abShowingA?'回到 B（调整后）':'试听 A（参考）'):'A/B 对比';
       preset.replaceChildren();const presets=[['flat','平坦'],['pop','流行'],['rock','摇滚'],['jazz','爵士'],['classical','古典'],['bass','低音增强'],['soft','柔和'],['custom','自定义'],...(state.userPresets||[]).map(p=>[p.id,p.name])];presets.forEach(([id,text])=>{const o=el('option',text);o.value=id;preset.append(o);});preset.value=state.presetId;
