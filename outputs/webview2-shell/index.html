@@ -27,6 +27,9 @@
   <script src="player-layout.js" defer></script>
   <script src="now-playing.js" defer></script>
   <script src="now-playing-themes.js" defer></script>
+  <!-- 相位仪必须在终端页之前：terminal-player.js 启动时就要 new PhaseScope -->
+  <script src="phase-scope.js" defer></script>
+  <script src="terminal-player.js" defer></script>
   <script src="player-window.js" defer></script>
   <script src="window-drag.js" defer></script>
   <script src="appearance.js" defer></script>
@@ -57,6 +60,8 @@
   <link rel="stylesheet" href="settings.css">
   <link rel="stylesheet" href="now-playing.css">
   <link rel="stylesheet" href="now-playing-themes.css">
+  <!-- 终端页自带深底，必须排在 now-playing-themes.css 之后才能盖住仪表主题的底色 -->
+  <link rel="stylesheet" href="terminal-player.css">
   <!-- DSP 的动效补充必须排在 dsp-echo.css / settings.css 之后：它要改写"当前项右边框"的实现 -->
   <link rel="stylesheet" href="dsp-motion.css">
   <!-- 外观跟随补丁：ECHO 两层皮肤里的浅色面板、原生表单控件，必须排在所有 DSP 样式之后 -->
@@ -247,7 +252,7 @@
       <header class="np-head">
         <button id="np-close" class="icon-button" type="button" aria-label="收起正在播放" title="收起（Esc）"><svg><use href="#i-chevron"/></svg></button>
         <div class="np-head-actions">
-          <label class="np-theme-label">详情主题 <select id="np-theme" aria-label="播放详情页主题"><option value="default">默认 · 封面与歌词</option><option value="instrument">音频仪表</option></select></label>
+          <label class="np-theme-label">详情主题 <select id="np-theme" aria-label="播放详情页主题"><option value="default">默认 · 封面与歌词</option><option value="instrument">音频仪表</option><option value="terminal">音频终端</option></select></label>
           <button id="np-fullscreen" class="icon-button" type="button" aria-label="全屏" title="全屏（F11）" aria-pressed="false"><svg><use href="#i-fullscreen"/></svg></button>
         </div>
       </header>

@@ -1,0 +1,75 @@
+/* 音频终端详情页。它自带深底 —— 不跟主页明暗模式走，否则浅色主页下这块会变成"灰底黑字"。
+   强调色默认琥珀，可切"跟随主程序 / 琥珀 / 绿 / 青"。 */
+.np-terminal{display:none;flex-direction:column;min-height:0;height:100%;
+  --term-bg:#0b0e12;--term-panel:#11161c;--term-line:#29323d;
+  --term-ink:#d6dce5;--term-muted:#929dac;--term-accent:#ffbe28;
+  background:var(--term-bg);color:var(--term-ink);
+  font-family:var(--font-mono),ui-monospace,'Cascadia Mono',Consolas,monospace;
+  font-size:calc(12px * var(--text-scale));line-height:1.6}
+[data-player-theme=terminal] .np-terminal{display:flex}
+[data-player-theme=terminal] .np-body,.np-terminal:not([hidden])~.np-body{display:none}
+.np-terminal[data-term-accent=follow]{--term-accent:var(--accent)}
+.np-terminal[data-term-accent=green]{--term-accent:#57e389}
+.np-terminal[data-term-accent=cyan]{--term-accent:#4fd6e0}
+
+/* 顶栏：标题 / 状态 / 位置 / 输出链路摘要 */
+.term-head{display:flex;align-items:center;gap:14px;flex-wrap:wrap;
+  padding:10px 16px;border-bottom:1px solid var(--term-line);background:var(--term-panel)}
+.term-brand{letter-spacing:2.4px;font-weight:600;color:var(--term-accent);white-space:nowrap}
+.term-state{font-size:.86em;letter-spacing:1.6px;color:var(--term-muted);
+  border:1px solid var(--term-line);border-radius:4px;padding:1px 8px;white-space:nowrap}
+.term-state[data-playing=true]{color:var(--term-accent);border-color:var(--term-accent)}
+.term-time{font-variant-numeric:tabular-nums}
+.term-chain{margin-left:auto;color:var(--term-muted);max-width:38ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* 主区三栏：左 25% / 中 47% / 右 28% */
+.term-grid{display:grid;grid-template-columns:25% 47% 28%;gap:12px;padding:12px 16px;min-height:0;flex:1}
+.term-col{display:flex;flex-direction:column;gap:12px;min-width:0}
+.term-block{background:var(--term-panel);border:1px solid var(--term-line);border-radius:6px;padding:10px 12px;min-width:0}
+.term-block h3{margin:0 0 8px;font-size:.78em;letter-spacing:1.8px;color:var(--term-muted);font-weight:600}
+/* 读数一律用等宽 —— 这是终端页的意义所在：数字不该在播放时左右跳动 */
+.term-block dl,.term-readout{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0;font-variant-numeric:tabular-nums}
+.term-block dt{color:var(--term-muted);white-space:nowrap}
+.term-block dd{margin:0;text-align:right;overflow:hidden;text-overflow:ellipsis}
+.term-block dd.is-live{color:var(--term-accent)}
+
+.term-chart{width:100%;height:150px;display:block}
+.term-chart.ps{height:260px}
+.ps-grid line{stroke:var(--term-line);stroke-width:1;opacity:.55}
+.ps-axis{stroke:var(--term-muted);opacity:.5}
+.ps-diagonals line{stroke:var(--term-accent);stroke-width:1;opacity:.18;stroke-dasharray:4 6}
+.ps-traces path{fill:none;stroke:var(--term-accent);stroke-width:1.1;stroke-linejoin:round}
+.ps-silence{fill:var(--term-accent);opacity:0}
+.ps-note{fill:var(--term-muted);font-size:11px;opacity:.75}
+.term-status{margin-top:6px;font-size:.85em;color:var(--term-muted);font-variant-numeric:tabular-nums}
+
+/* 左右电平：上下两根横条，峰值短暂保持 */
+.term-levels{display:grid;gap:8px}
+.term-level{display:grid;grid-template-columns:2.2em 1fr auto;align-items:center;gap:8px}
+.term-level span:first-child{color:var(--term-muted)}
+.term-level-bar{position:relative;height:10px;border:1px solid var(--term-line);border-radius:3px;overflow:hidden}
+.term-level-fill{position:absolute;inset:0 auto 0 0;background:var(--term-accent);transform-origin:left center;transform:scaleX(0);transition:transform 90ms linear}
+.term-level-peak{position:absolute;top:0;bottom:0;width:2px;background:var(--term-ink);left:0}
+.term-level b{font-weight:400;font-variant-numeric:tabular-nums;min-width:6.5em;text-align:right}
+
+/* 下方：歌词 2/3 + 队列 1/3 */
+.term-lower{display:grid;grid-template-columns:2fr 1fr;gap:12px;padding:0 16px 12px;min-height:0}
+.term-lyrics,.term-queue{background:var(--term-panel);border:1px solid var(--term-line);border-radius:6px;padding:10px 12px;overflow:auto;max-height:26vh;min-height:0}
+.term-line{padding:3px 0;color:var(--term-muted);white-space:pre-wrap}
+.term-line.is-current{color:var(--term-accent)}
+.term-queue-row{display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;
+  padding:3px 4px;border-radius:3px;color:var(--term-muted);font:inherit}
+.term-queue-row[aria-current=true]{color:var(--term-accent)}
+.term-queue-row:hover{background:#ffffff0d;color:var(--term-ink)}
+.term-queue-row small{font-variant-numeric:tabular-nums;min-width:2.4em;color:var(--term-muted)}
+
+/* 窄窗口：先把右栏挪到下一行，再彻底单列 —— 不把仪表挤成小字 */
+@media (max-width:1100px){
+  .term-grid{grid-template-columns:1fr 1fr}
+  .term-col-right{grid-column:1 / -1}
+}
+@media (max-width:760px){
+  .term-grid{grid-template-columns:1fr}
+  .term-col-right{grid-column:auto}
+  .term-lower{grid-template-columns:1fr}
+}

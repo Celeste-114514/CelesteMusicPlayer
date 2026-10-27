@@ -9,7 +9,9 @@
   const fmt = seconds => `${Math.floor((seconds||0)/60)}:${String(Math.floor((seconds||0)%60)).padStart(2,'0')}`;
   let theme='default', timer=0, frame=0, busy=false, generation=0, hostHidden=false, trackId=null, previousTime=0, receivedAt=0;
   let target=[], displayed=[], waveformRequested='', audioFacts=new Map(), hasSignal=false;
-  try { if(['instrument','twilight'].includes(localStorage.getItem('celeste.now-playing.theme')))theme='instrument'; } catch {}
+  try { const saved=localStorage.getItem('celeste.now-playing.theme');
+    if(saved==='terminal')theme='terminal';
+    else if(['instrument','twilight'].includes(saved))theme='instrument'; } catch {}
   const dial=svg('svg',{viewBox:'0 0 600 600','aria-hidden':'true'});
   [200,250,298].forEach((r,i)=>dial.append(svg('circle',{cx:300,cy:300,r,class:i===1?'np-dial-dashed':''})));
   for(let i=0;i<72;i++) {const a=i*Math.PI/36,r=i%6===0?280:290;dial.append(svg('line',{x1:300+Math.sin(a)*r,y1:300+Math.cos(a)*r,x2:300+Math.sin(a)*296,y2:300+Math.cos(a)*296}));}
@@ -105,9 +107,14 @@
     }
   }
   function apply(value){
-    theme=value==='instrument'?'instrument':'default';generation++;
+    // 'terminal' 由 terminal-player.js 接管渲染，这里只负责登记与让位（藏掉仪表视图）
+    theme=value==='instrument'?'instrument':value==='terminal'?'terminal':'default';generation++;
     selector.value=theme;page.dataset.playerTheme=theme;visual.hidden=theme!=='instrument';
-    if(theme==='instrument')$('np-overview').append(progress);else page.querySelector('.np-left').insertBefore(progress,page.querySelector('.np-controls'));
+    const npLeft=page.querySelector('.np-left'),controls=page.querySelector('.np-controls');
+    if(theme==='instrument')$('np-overview').append(progress);
+    // 终端模式下控制条被搬进终端区了，此时它不在 .np-left 里，别硬插（会抛 NotFoundError）
+    else if(npLeft&&controls&&controls.parentElement===npLeft)npLeft.insertBefore(progress,controls);
+    else if(npLeft)npLeft.append(progress);
     try{localStorage.setItem('celeste.now-playing.theme',theme);}catch{}
     sync();if(window.CelesteNowPlaying.isOpen())window.CelesteMotion?.reveal(page.querySelector('.np-body'),'cover',8);
   }
