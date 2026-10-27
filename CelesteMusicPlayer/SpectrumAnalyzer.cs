@@ -367,6 +367,30 @@ namespace CelesteMusicPlayer
             return true;
         }
 
+        private float[] _detailScratch = Array.Empty<float>();
+        /// <summary>Dense, uncompensated spectrum for the audio instrument. Existing 40-band consumers stay unchanged.</summary>
+        public bool TryComputeDetailed(float[] bandsOut, out int sampleRate)
+        {
+            sampleRate = _sampleRate;
+            if (bandsOut.Length == 0) return false;
+            if (_detailScratch.Length != _bandCount) _detailScratch = new float[_bandCount];
+            if (!TryCompute(_detailScratch)) return false;
+            double maximum = Math.Min(20000, sampleRate * 0.5);
+            if (maximum <= 20) return false;
+            for (int band = 0; band < bandsOut.Length; band++)
+            {
+                double low = 20 * Math.Pow(maximum / 20, band / (double)bandsOut.Length);
+                double high = 20 * Math.Pow(maximum / 20, (band + 1.0) / bandsOut.Length);
+                int first = Math.Clamp((int)(low * _fftSize / sampleRate), 1, _mag.Length - 1);
+                int last = Math.Clamp((int)Math.Ceiling(high * _fftSize / sampleRate), first, _mag.Length - 1);
+                float peak = 0;
+                for (int bin = first; bin <= last; bin++) peak = Math.Max(peak, _mag[bin]);
+                double db = peak > 1e-10 ? 20 * Math.Log10(peak) : -100;
+                bandsOut[band] = (float)Math.Clamp((db + 100) / 100, 0, 1);
+            }
+            return true;
+        }
+
         /// <summary>
         /// UI 线程：取最近的单声道样本（旧→新排列）到 outSamples，用于示波器画实时波形线。
         /// 纯只读拷贝，与播放路径无关。返回 false = 暂无数据（未播放/未启用）。

@@ -76,6 +76,12 @@ namespace CelesteMusicPlayer
 
         /// <summary>读取实时频谱（真 FFT，对数分频）到调用方数组，返回是否取到。
         /// false = 未播放 / DSD 直出 / 样本不足，UI 应回退到装饰性动画。UI 线程调用。</summary>
+        public bool TryGetDetailedSpectrum(float[] bands, out int sampleRate)
+        {
+            sampleRate = 0;
+            return _hifiOut != null && _hifiOut.TryGetDetailedSpectrum(bands, out sampleRate);
+        }
+
         public bool TryGetSpectrum(float[] bandsOut) => _hifiOut?.TryGetSpectrum(bandsOut) ?? false;
 
         /// <summary>读取最近实时样本（post-DSP，旧→新），供示波器。false = 暂无数据。UI 线程调用。</summary>

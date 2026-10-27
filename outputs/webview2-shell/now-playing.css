@@ -46,8 +46,8 @@ body.now-playing-open .side-panel{display:none}
 }
 
 /* ---- 左列：封面 + 信息 + 控件 ---- */
-.np-left{display:flex;flex-direction:column;min-width:0;min-height:0;overflow-y:auto;gap:18px}
-.np-artwork{position:relative;width:min(100%,360px);aspect-ratio:1;flex-shrink:0}
+.np-left{display:flex;flex-direction:column;min-width:0;min-height:0;overflow:hidden;gap:18px;padding-bottom:5px}
+.np-artwork{position:relative;width:min(100%,360px,max(120px,calc(100dvh - 540px * var(--text-scale))));aspect-ratio:1;flex-shrink:0}
 #np-radar{display:none}
 .np-cover{
   position:relative;
@@ -177,3 +177,14 @@ button.mini-cover:hover::after{
 .np-pin{transition:background calc(160ms * var(--motion-scale) * var(--motion-cat-control))}
 .np-pin:hover{background:var(--hover)}
 @media(prefers-reduced-motion:reduce){.np-lyrics{scroll-behavior:auto}.np-lyric,.np-pin,.np-play{transition:none}}
+
+.np-controls{flex-shrink:0}
+@media(max-width:980px){
+  .now-playing-page:not([data-player-theme=instrument]) .np-left{display:grid;grid-template-columns:140px minmax(0,1fr);grid-template-rows:auto auto auto auto auto;gap:6px 18px;align-content:start}
+  .now-playing-page:not([data-player-theme=instrument]) .np-artwork{width:140px;grid-column:1;grid-row:1/4;align-self:start}
+  .now-playing-page:not([data-player-theme=instrument]) .np-title{grid-column:2;grid-row:1;font-size:24px}
+  .now-playing-page:not([data-player-theme=instrument]) .np-artist{grid-column:2;grid-row:2;font-size:15px}
+  .now-playing-page:not([data-player-theme=instrument]) .np-meta{grid-column:2;grid-row:3}
+  .now-playing-page:not([data-player-theme=instrument]) .np-progress{grid-column:1/-1;grid-row:4;margin:10px 0 0}
+  .now-playing-page:not([data-player-theme=instrument]) .np-controls{grid-column:1/-1;grid-row:5}
+}

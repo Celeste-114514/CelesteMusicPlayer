@@ -11,6 +11,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.Web.WebView2.Core;
 
 namespace CelesteMusicPlayer
@@ -43,9 +44,10 @@ namespace CelesteMusicPlayer
         internal WebShellWindow(MainWindow owner)
         {
             _owner = owner;
-            Title = "Celeste · 网页界面";
+            Title = "Celeste";
             var root = new Grid(); root.Children.Add(_web); root.Children.Add(_status); Content = root;
-            // Keep a small native title bar for reliable drag/resize and recovery.
+            // One caption only: HTML controls, native resize border and WebView2 draggable regions.
+            if (AppWindow.Presenter is OverlappedPresenter chrome) chrome.SetBorderAndTitleBar(true, false);
             AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 960));
             _timer = DispatcherQueue.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(250);
             _timer.Tick += (_, _) => { if (_ready) { SendState(); SendThemeIfChanged(); if (_dirty) _ = SendLibraryAsync(); } };
@@ -110,6 +112,7 @@ namespace CelesteMusicPlayer
                 core.Settings.AreDefaultContextMenusEnabled = false;
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.AreDevToolsEnabled = false;
+                core.Settings.IsNonClientRegionSupportEnabled = true;
                 core.NavigationStarting += (_, args) => { if (!IsTrusted(args.Uri)) args.Cancel = true; };
                 core.NewWindowRequested += (_, args) => args.Handled = true;
                 core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
@@ -117,7 +120,7 @@ namespace CelesteMusicPlayer
                 core.AddWebResourceRequestedFilter(CoverOrigin + "/cover/*", CoreWebView2WebResourceContext.Image);
                 core.AddWebResourceRequestedFilter(CoverOrigin + "/playlist/*", CoreWebView2WebResourceContext.Image);
                 core.WebResourceRequested += OnCoverRequest;
-                core.ProcessFailed += (_, _) => { _ready = false; _status.Text = "网页进程异常，请关闭此窗口后从旧界面重新打开。"; _status.Visibility = Visibility.Visible; };
+                core.ProcessFailed += (_, _) => { _ready = false; _status.Text = "界面进程异常，请重新启动 Celeste。"; _status.Visibility = Visibility.Visible; };
                 core.NavigationCompleted += (_, args) =>
                 {
                     if (!args.IsSuccess) { _status.Text = "页面加载失败：" + args.WebErrorStatus; _status.Visibility = Visibility.Visible; }
@@ -143,6 +146,30 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>主题快照：ready 时立刻给一次，避免网页先白一下再跳主题；之后只在修订号变了才重发。</summary>
+        private bool ApplyMaterial(Dictionary<string, string> values, string mode)
+        {
+            try
+            {
+                int style = values.TryGetValue("material-style", out var raw) && int.TryParse(raw, out var parsed) ? parsed : 0;
+                bool transparent = !values.TryGetValue("material-transparency", out var enabled) || enabled != "0";
+                bool highContrast = new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
+                bool glass = style > 0 && transparent && !highContrast;
+                if (Content is FrameworkElement root) root.RequestedTheme = mode == "dark" ? ElementTheme.Dark : ElementTheme.Light;
+                if (glass)
+                {
+                    if (SystemBackdrop is not DesktopAcrylicBackdrop) SystemBackdrop = new DesktopAcrylicBackdrop();
+                    _web.DefaultBackgroundColor = Microsoft.UI.Colors.Transparent;
+                }
+                else
+                {
+                    SystemBackdrop = null;
+                    _web.DefaultBackgroundColor = mode == "dark" ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White;
+                }
+                return glass;
+            }
+            catch (Exception ex) { StartupLog.WriteException("WebShell.Material", ex); SystemBackdrop = null; return false; }
+        }
+
         private void SendTheme()
         {
             try
@@ -151,12 +178,13 @@ namespace CelesteMusicPlayer
                 string mode = WebAppearance.ResolveMode(state.mode);
                 var light = WebAppearance.Resolve(state, WebAppearance.Light);
                 var dark = WebAppearance.Resolve(state, WebAppearance.Dark);
+                bool materialActive = ApplyMaterial(mode == "dark" ? dark : light, mode);
                 _themeRevision = WebAppearance.CurrentRevision;
                 StartupLog.Write($"[WebShell] theme sent preset={state.presetId} mode={mode} accent={state.accentSource} revision={_themeRevision}");
                 Post(new
                 {
                     kind = "celeste.theme", version = 1, revision = _themeRevision, mode,
-                    presetId = state.presetId, accentSource = state.accentSource, accentCustom = state.accentCustom,
+                    materialActive, presetId = state.presetId, accentSource = state.accentSource, accentCustom = state.accentCustom,
                     // 底栏按钮的显隐/顺序搭这趟车一起送：网页那边只在修订号变化时才收到，
                     // 不需要为「收一个按钮」单开一条通道
                     playerButtons = state.playerButtons,
@@ -334,7 +362,7 @@ namespace CelesteMusicPlayer
                         var more = _owner.WebMore(msg);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = more }); break;
                     case "window": WindowBridge(msg, requestId); break;
-                    default: Error("此功能尚未接入网页，请先在旧界面操作。"); break;
+                    default: Error("此功能尚未接入当前界面。"); break;
                 }
                 SendState();
             }

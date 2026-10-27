@@ -21,11 +21,12 @@ const { chromium } = require('playwright-core');
         postMessage(message) {
           calls.push(message);
           if (message.command === 'window') { deliver({ kind: 'celeste.window', fullscreen: message.action === 'fullscreen' && message.value }); return; }
+          if(message.command==='waveform')deliver({kind:'celeste.waveform',trackId:message.trackId,peaks:Array.from({length:512},(_,i)=>.15+Math.sin(i*.04)**2*.7)});
           if (!message.requestId) return;
           const reply = data => deliver({ kind: 'celeste.reply', requestId: message.requestId, ok: true, data });
-          if (message.command === 'nowPlaying') return reply({ trackId: 'b', lines: [{ t: 0, text: '测试歌词' }, { t: 8, text: '下一句歌词' }] });
+          if (message.command === 'nowPlaying') return reply({ trackId: 'b', audio:{sampleRate:44100,bitDepth:16,kbps:537,channels:2,fileSize:7800000}, lines: [{ t: 0, text: '测试歌词' }, { t: 8, text: '下一句歌词' }] });
           if (message.command === 'nowPlayingVisual') return reply({ trackId: 'b', available: true, samplesAvailable: true,
-            bands: Array.from({ length: 40 }, (_, i) => .1 + Math.sin(i / 4) ** 2 * .65), samples: Array.from({ length: 256 }, (_, i) => Math.sin(i / 4) * .55) });
+            bands: Array.from({ length: 140 }, (_, i) => .1 + Math.sin(i / 4) ** 2 * .65), samples: Array.from({ length: 256 }, (_, i) => Math.sin(i / 4) * .55) });
           if (message.command === 'queue') {
             if (message.operation === 'move') {
               if (message.revision !== revision) return deliver({ kind: 'celeste.reply', requestId: message.requestId, ok: false, error: '播放队列已变化，请刷新后重新拖动。' });
@@ -63,11 +64,20 @@ const { chromium } = require('playwright-core');
     assert.deepEqual(await page.evaluate(() => queueItems), ['c', 'b', 'a'], '旧队列版本不能错误重排');
     await page.keyboard.press('Escape'); await page.waitForTimeout(250);
     await page.click('#now-playing-open');
-    await page.selectOption('#np-theme', 'twilight');
+    await page.selectOption('#np-theme', 'instrument');
     await page.waitForTimeout(350);
-    assert.equal(await page.locator('#now-playing').getAttribute('data-player-theme'), 'twilight');
+    assert.equal(await page.locator('#now-playing').getAttribute('data-player-theme'), 'instrument');
     assert.ok((await page.locator('.np-spectrum-signal').getAttribute('d')).includes('L'), '真实采样回复绘制频谱');
-    assert.match(await page.locator('#np-visual-level').textContent(), /RMS/);
+    assert.match(await page.locator('#np-visual-level').textContent(), /dBFS/);
+    assert.equal(await page.locator('#np-fact-rate').textContent(), '44.1 kHz');
+    assert.ok((await page.locator('.np-scope-signal').getAttribute('d')).length>100, '整曲波形实际绘制');
+    const renderFps=await page.evaluate(()=>new Promise(resolve=>{
+      let changes=0;const start=performance.now();
+      const observer=new MutationObserver(records=>changes+=records.length);observer.observe(document.querySelector('.np-spectrum-signal'),{attributes:true,attributeFilter:['d']});
+      setTimeout(()=>{observer.disconnect();resolve(changes*1000/(performance.now()-start));},800);
+    }));
+    assert.ok(renderFps>=24&&renderFps<=75,'频谱独立渲染且限制在约60fps'); console.log('Instrument render FPS: '+renderFps.toFixed(1));
+    assert.equal(await page.locator('#np-theme option[value=instrument]').textContent(),'音频仪表');
     for (const width of [1496, 920, 720]) {
       await page.setViewportSize({ width, height: 900 }); await page.waitForTimeout(100);
       const chart = await page.locator('#np-spectrum').boundingBox(), cover = await page.locator('#np-cover').boundingBox();
@@ -92,14 +102,14 @@ const { chromium } = require('playwright-core');
     await page.waitForTimeout(300);
     assert.equal(await page.evaluate(() => calls.filter(c => c.command === 'nowPlayingVisual').length), stopped, '离开仪表主题停止取样');
     assert.equal(await page.locator('#np-lyrics').isVisible(), true, '默认歌词页保留');
-    await page.selectOption('#np-theme', 'twilight');
+    await page.selectOption('#np-theme', 'instrument');
     await page.evaluate(() => deliver({ kind: 'celeste.state', state: { ...playback, playing: false } }));
     await page.waitForTimeout(100);
-    assert.equal(await page.locator('.np-spectrum-signal').getAttribute('d'), 'M0 255H800', '暂停归零');
+    assert.ok((await page.locator('.np-spectrum-signal').getAttribute('d')).length > 20, '暂停保留频谱画面');
     const paused = await page.evaluate(() => calls.filter(c => c.command === 'nowPlayingVisual').length);
     await page.waitForTimeout(250);
     assert.equal(await page.evaluate(() => calls.filter(c => c.command === 'nowPlayingVisual').length), paused);
     assert.deepEqual(errors, []);
-    console.log('PASS: 轮盘位置 / 真实拖放与键盘队列排序 / 旧版本拒绝 / 当前播放保留 / Twilight三宽度与深浅色 / 频谱波形 / 主题切换停采样 / 暂停归零 / 全屏 F11 Esc');
+    console.log('PASS: 轮盘位置 / 真实拖放与键盘队列排序 / 旧版本拒绝 / 当前播放保留 / 音频仪表三宽度与深浅色 / 频谱波形 / 主题切换停采样 / 暂停保留画面 / 全屏 F11 Esc');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

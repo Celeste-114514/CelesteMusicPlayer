@@ -55,6 +55,10 @@
       const applied = applyCss(chosen.css);
       window.CelesteTheme.lastApplied = applied;
       root.dataset.theme = mode || 'light';
+      const styles = getComputedStyle(root);
+      const material = styles.getPropertyValue('--material-style').trim();
+      root.dataset.material = material === '1' ? 'windows' : material === '2' ? 'apple' : 'flat';
+      root.dataset.reducedTransparency = String(styles.getPropertyValue('--material-transparency').trim() === '0');
       // 一个变量都没写进去就明说，别让用户对着没变化的界面猜
       if (applied === 0 && window.CelesteShell && chosen.css) window.CelesteShell.notify('主题变量没能写进页面，请把这一情况反馈一下。');
       // 画在 canvas 里的东西（进度波形）拿不到 CSS 变量，得有人告诉它们重画
@@ -75,6 +79,7 @@
   document.addEventListener('celeste:message', event => {
     const message = event.detail;
     if (message.kind !== 'celeste.theme') return;
+    root.dataset.nativeMaterial = String(!!message.materialActive);
     state.mode = message.mode || 'light';
     state.light = message.light || null;
     state.dark = message.dark || null;

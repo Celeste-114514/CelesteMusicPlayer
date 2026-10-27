@@ -53,8 +53,8 @@ namespace CelesteMusicPlayer
             try
             {
                 InitializePlayerAndTimers();
-                if (Array.Exists(Environment.GetCommandLineArgs(), arg => arg == "--web-shell"))
-                    OpenWebShell();
+                // The web shell is the sole product UI; legacy controls remain the backing session.
+                OpenWebShell();
                 // 主题系统合闸（皮肤系统第 3 步）：启动时把设置里选的主题文件应用到界面。
                 // 内部有「同名不重复应用」守卫，设置页后续变更再调也无额外开销。
                 ReloadThemeFromSettings();
@@ -2205,8 +2205,7 @@ namespace CelesteMusicPlayer
                 try
                 {
                     StartupLog.Write("托盘: RestoreFromTray 收到点击");
-                    AppWindow.Show();
-                    Activate();
+                    OpenWebShell();
                     // 托盘图标常驻：不随窗口恢复隐藏（退出时才清理）
                 }
                 catch (Exception ex)

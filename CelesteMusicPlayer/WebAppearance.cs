@@ -58,7 +58,8 @@ namespace CelesteMusicPlayer
             // 跟容器一起缩放，所以改整体尺寸不会让图标圈跑偏）
             "nav-size", "nav-icon", "nav-ring-1", "nav-ring-2",
             // 背景层：模糊 / 亮度 / 遮罩浓度
-            "bg-blur", "bg-brightness", "bg-scrim"
+            "bg-blur", "bg-brightness", "bg-scrim",
+            "material-style", "material-transparency", "material-opacity", "material-blur", "material-highlight", "material-shadow"
         };
 
         /// <summary>
@@ -252,6 +253,7 @@ namespace CelesteMusicPlayer
             public double lineHeight { get; set; } = 1.5;
             /// <summary>个人预设，可删除</summary>
             public bool custom { get; set; }
+            public int materialStyle { get; set; }
         }
 
         internal sealed class State
@@ -508,14 +510,21 @@ namespace CelesteMusicPlayer
                 ["nav-ring-1"] = "150",
                 ["nav-ring-2"] = "238",
                 // 背景层：默认不模糊、亮度 1、遮罩 55%（图片上直接放文字会看不清）
+                ["material-style"] = (preset.id == "windows-fluent" ? 1 : preset.id == "apple-silver" ? 2 : Math.Clamp(preset.materialStyle, 0, 2)).ToString(CultureInfo.InvariantCulture),
+                ["material-transparency"] = "1", ["material-opacity"] = "0.72", ["material-blur"] = "28px",
+                ["material-highlight"] = "0.36", ["material-shadow"] = "0.16",
                 ["bg-blur"] = "0px",
                 ["bg-brightness"] = "1",
                 ["bg-scrim"] = "0.55"
             };
-            if (preset.id == "windows-fluent" || preset.id == "apple-silver")
+            if (preset.id == "windows-fluent" || preset.id == "apple-silver" || preset.materialStyle > 0)
             {
-                bool apple = preset.id == "apple-silver";
-                values["player-opacity"] = apple ? "0.84" : "0.94";
+                bool apple = preset.id == "apple-silver" || preset.materialStyle == 2;
+                values["player-opacity"] = apple ? "0.76" : "0.82";
+                values["material-opacity"] = apple ? "0.74" : "0.62";
+                values["material-blur"] = apple ? "36px" : "28px";
+                values["material-highlight"] = apple ? "0.52" : "0.3";
+                values["material-shadow"] = apple ? "0.12" : "0.16";
                 values["player-blur"] = apple ? "24px" : "16px";
                 values["cover-radius"] = apple ? "10px" : "4px";
                 values["player-height"] = apple ? "124px" : "112px";
@@ -644,7 +653,7 @@ namespace CelesteMusicPlayer
                     radius = p.radius, blur = p.blur, sat = p.sat, motionSpeed = p.motionSpeed,
                     motionStrength = p.motionStrength, density = p.density,
                     // ⚠ 逐字段拷贝：漏一个就会出现「存得进文件、Load() 恒默认」
-                    textScale = p.textScale, lineHeight = p.lineHeight,
+                    textScale = p.textScale, lineHeight = p.lineHeight, materialStyle = p.materialStyle,
                     custom = p.custom
                 }).ToList()
             };

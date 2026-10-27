@@ -37,12 +37,13 @@ namespace CelesteMusicPlayer
 
         internal void OpenWebShell()
         {
-            if (_webShellWindow != null) { _webShellWindow.Activate(); return; }
+            if (_webShellWindow != null) { _webShellWindow.AppWindow.Show(); _webShellWindow.Activate(); return; }
             _webShellWindow = new WebShellWindow(this);
-            _webShellWindow.Closed += (_, _) => { _webShellWindow = null; if (!_webShellOwnerClosing) Activate(); };
+            _webShellWindow.Closed += (_, _) => { _webShellWindow = null; if (!_webShellOwnerClosing) ExitApplication(); };
             Closed -= CloseWebShellWithOwner;
             Closed += CloseWebShellWithOwner;
             _webShellWindow.Activate();
+            AppWindow.Hide();
         }
 
         private void CloseWebShellWithOwner(object sender, WindowEventArgs args)

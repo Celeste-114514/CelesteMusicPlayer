@@ -333,8 +333,7 @@
   $('panel-close').addEventListener('click',()=>setPanel(null));
   document.querySelectorAll('[data-window]').forEach(button=>button.addEventListener('click',()=>live?send('window',{ action:button.dataset.window }):notify('窗口操作将在 WebView2 桌面外壳中启用')));
   if (live) {
-    $('native-view').hidden=false;
-    $('native-view').addEventListener('click',()=>send('window',{action:'close'}));
+    $('native-view').hidden=true;
     $('library-note').textContent='本机音频引擎 · 原输出与 DSP 配置';
     $('mode-label').textContent='等待播放器连接'; $('track-title').textContent='等待播放状态'; state.title='等待播放状态'; state.artist='Celeste Music Player'; state.duration=0; $('track-quality').textContent='WebView2 · 等待宿主数据';
     webview.addEventListener('message', event => {

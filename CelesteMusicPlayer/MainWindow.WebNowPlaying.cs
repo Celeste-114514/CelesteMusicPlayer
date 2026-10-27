@@ -17,13 +17,16 @@ namespace CelesteMusicPlayer
         /// </summary>
         internal object WebNowPlayingVisual()
         {
-            var values = new float[FormatHelper.WaveBarCount];
+            var values = new float[140];
+            int sampleRate = 0;
             bool playing = IsPlaybackActuallyPlaying();
-            bool available = playing && (_audioEngine?.TryGetSpectrum(values) ?? false);
+            bool available = playing && (_audioEngine?.TryGetDetailedSpectrum(values, out sampleRate) ?? false);
             var samples = new float[256];
             bool samplesAvailable = playing && (_audioEngine?.TryGetSamples(samples) ?? false);
             return new
             {
+                sampleRate,
+                minFrequency = 20, maxFrequency = Math.Min(20000, sampleRate / 2), floorDb = -100,
                 samplesAvailable,
                 samples = samples.Select(v => samplesAvailable && float.IsFinite(v) ? Math.Clamp(v, -1f, 1f) : 0f).ToArray(),
                 trackId = GetCurrentPlayingItem() is { } item ? WebTrackId(item) : "",
@@ -36,6 +39,14 @@ namespace CelesteMusicPlayer
         {
             var item = GetCurrentPlayingItem();
             string trackId = item == null ? string.Empty : WebTrackId(item);
+            int rate = 0, bits = 0, kbps = 0, channels = 0;
+            long fileSize = 0;
+            if (item != null)
+            {
+                AudioInfoFormatter.TryGetFacts(item.FilePath, out rate, out bits, out kbps, out channels);
+                try { if (System.IO.File.Exists(item.FilePath)) fileSize = new System.IO.FileInfo(item.FilePath).Length; }
+                catch (System.IO.IOException) { }
+            }
             var lines = GetLyricLinesPublic();
             var rows = lines
                 .Select(line => new
@@ -48,6 +59,7 @@ namespace CelesteMusicPlayer
             return new
             {
                 trackId,
+                audio = new { sampleRate = rate, bitDepth = bits, kbps, channels, fileSize },
                 lyricState = rows.Length > 0 ? "ready" : "none",
                 currentIndex = GetCurrentLyricIndexPublic(),
                 lines = rows

@@ -41,7 +41,7 @@ namespace CelesteMusicPlayer
                 }
 
                 StartupLog.Write("启动带进来的外部文件: " + path);
-                PlayExternalFileAsync(path);
+                PlayExternalFileAsync(path, scattered: false);
             }
             finally
             {
@@ -66,7 +66,7 @@ namespace CelesteMusicPlayer
         /// 播完即止，想留下就点状态栏上的「添加到音乐库」。
         /// 播放本身仍走正常的引擎路径，电平表 / SMTC / 桌面歌词 / DSP 全部照常生效。
         /// </summary>
-        internal void PlayExternalFileAsync(string path, bool scattered = true)
+        internal void PlayExternalFileAsync(string path, bool scattered = false)
         {
             if (string.IsNullOrWhiteSpace(path) || !File.Exists(path)) return;
 

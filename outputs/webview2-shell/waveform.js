@@ -14,11 +14,11 @@
     const dpr=Math.min(devicePixelRatio||1,2);canvas.width=Math.round(width*dpr);canvas.height=Math.round(height*dpr);
     const context=canvas.getContext('2d');context.scale(dpr,dpr);context.clearRect(0,0,width,height);
     const ratio=Math.max(0,Math.min(1,Number(input.value)/Math.max(1,Number(input.max))));
-    const count=Math.min(peaks.length||120,Math.max(20,Math.floor(width/3.5))),pitch=width/count,barWidth=Math.max(1.5,pitch*.68);
+    const count=96,pitch=5,barWidth=3;
     const paint=colour=>{context.fillStyle=colour;for(let i=0;i<count;i++){
       const from=Math.floor(i*peaks.length/count),to=Math.max(from+1,Math.floor((i+1)*peaks.length/count));
       let level=0;for(let j=from;j<to;j++)level=Math.max(level,Number(peaks[j])||0);
-      const barHeight=peaks.length?Math.max(2,Math.min(1,level)*(height-4)):2;
+      const barHeight=peaks.length?Math.max(2,Math.min(1,level)*30):2;
       context.beginPath();context.roundRect(i*pitch+(pitch-barWidth)/2,(height-barHeight)/2,barWidth,barHeight,Math.min(1.2,barWidth/2));context.fill();
     }};
     paint((palette||(palette=readPalette())).idle);context.save();context.beginPath();context.rect(0,0,width*ratio,height);context.clip();paint((palette||(palette=readPalette())).played);context.restore();
@@ -44,5 +44,6 @@
   document.addEventListener('celeste:theme-applied',()=>{palette=null;schedule();});
   if(!live){peaks=Array.from({length:120},(_,i)=>.12+.65*Math.abs(Math.sin(i*.23)*Math.cos(i*.067))+.12*Math.abs(Math.sin(i*1.7)));status.textContent='演示波形';setInterval(schedule,250);}
   else updateTrack(shell.getState());
+  window.CelesteWaveform = { getPeaks: id => (cache.get(id) || (id === trackId ? peaks : [])).slice() };
   schedule();
 })();

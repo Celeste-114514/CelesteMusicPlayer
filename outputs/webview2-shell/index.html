@@ -60,6 +60,7 @@
   <link rel="stylesheet" href="dsp-motion.css">
   <!-- 外观跟随补丁：ECHO 两层皮肤里的浅色面板、原生表单控件，必须排在所有 DSP 样式之后 -->
   <link rel="stylesheet" href="dsp-theme.css">
+  <link rel="stylesheet" href="platform-materials.css">
   <script src="sources.js" defer></script>
   <script src="settings.js" defer></script>
 </head>
@@ -245,7 +246,7 @@
       <header class="np-head">
         <button id="np-close" class="icon-button" type="button" aria-label="收起正在播放" title="收起（Esc）"><svg><use href="#i-chevron"/></svg></button>
         <div class="np-head-actions">
-          <label class="np-theme-label">详情主题 <select id="np-theme" aria-label="播放详情页主题"><option value="default">默认 · 封面与歌词</option><option value="twilight">Twilight · 音频仪表</option></select></label>
+          <label class="np-theme-label">详情主题 <select id="np-theme" aria-label="播放详情页主题"><option value="default">默认 · 封面与歌词</option><option value="instrument">音频仪表</option></select></label>
           <button id="np-fullscreen" class="icon-button" type="button" aria-label="全屏" title="全屏（F11）" aria-pressed="false"><svg><use href="#i-fullscreen"/></svg></button>
         </div>
       </header>
@@ -268,13 +269,15 @@
           </div>
         </div>
         <section id="np-visual" class="np-visual" hidden aria-label="实时音频可视化">
-          <div class="np-instruments"><div><small>SOURCE / 来源</small><strong id="np-visual-source">—</strong></div><div><small>QUALITY / 音质</small><strong id="np-visual-quality">—</strong></div><div><small>DURATION / 时长</small><strong id="np-visual-duration">—</strong></div></div>
+          <div class="np-instruments"><div><small>BPM</small><strong>—</strong></div><div class="np-quality-corner"><small>QUALITY / 音质</small><strong id="np-visual-quality">—</strong></div><div><small>SOURCE / 来源</small><strong id="np-visual-source">—</strong></div><div><small>DURATION / 时长</small><strong id="np-visual-duration">—</strong></div></div>
           <div class="np-chart-head"><span>FREQUENCY / 实时频谱</span><span id="np-visual-status" role="status">等待音频信号</span></div>
-          <svg id="np-spectrum" viewBox="0 0 800 260" preserveAspectRatio="none" role="img" aria-label="真实音频频谱"></svg>
-          <div class="np-frequencies" aria-hidden="true"><span>LOW / 低频</span><span>对数频带 · 相对幅值</span><span>HIGH / 高频</span></div>
-          <div class="np-scope-head"><span>WAVEFORM / 瞬时波形</span><span id="np-visual-level">—</span></div>
-          <svg id="np-scope" viewBox="0 0 800 64" preserveAspectRatio="none" role="img" aria-label="真实音频瞬时波形"></svg>
-          <p class="np-visual-note">POST-DSP SIGNAL · 频谱与波形来自当前音频引擎</p>
+          <div class="np-frequency-labels" aria-hidden="true"><span>20</span><span>200</span><span>1k</span><span>2k</span><span>5k</span><span>10k</span><span>20k Hz</span></div>
+          <div class="np-spectrum-plot"><div class="np-db-labels" aria-hidden="true"><span>0</span><span>-20</span><span>-40</span><span>-60</span><span>-80</span><span>-100</span></div><svg id="np-spectrum" viewBox="0 0 800 260" preserveAspectRatio="none" role="img" aria-label="真实音频频谱"></svg></div>
+          <div class="np-frequencies" aria-hidden="true"><span>对数频带 · dBFS</span><span>POST-DSP</span></div>
+          <div id="np-overview" class="np-overview"><svg id="np-scope" viewBox="0 0 800 64" preserveAspectRatio="none" role="img" aria-label="整首歌曲波形"></svg></div>
+          <div id="np-time-ruler" class="np-time-ruler" aria-hidden="true"></div>
+          <div class="np-technical"><div><small>CREST FACTOR / 峰均比</small><strong id="np-crest">—</strong><i></i></div><div><small>RMS / 瞬时电平</small><strong id="np-visual-level">—</strong><i></i></div><div class="np-audio-facts"><div><small>SAMPLE RATE</small><strong id="np-fact-rate">—</strong></div><div><small>BIT DEPTH</small><strong id="np-fact-bits">—</strong></div><div><small>CHANNELS</small><strong id="np-fact-channels">—</strong></div><div><small>BITRATE</small><strong id="np-fact-bitrate">—</strong></div><div><small>FILE SIZE</small><strong id="np-fact-size">—</strong></div><div><small>FORMAT</small><strong id="np-fact-format">—</strong></div></div></div>
+          <p class="np-visual-note">电平与峰均比为短时样本估计值；暂停时保留当前画面。</p>
         </section>
         <div class="np-right">
           <div id="np-lyrics" class="np-lyrics" tabindex="0" role="region" aria-label="歌词"></div>

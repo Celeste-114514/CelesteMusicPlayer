@@ -8,7 +8,7 @@
 
 ## 1. 这是什么
 
-Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 9（`net9.0-windows10.0.19041.0`）/ `win-x64`。
+Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 10（`net10.0-windows10.0.19041.0`）/ `win-x64`。
 目标机器是用户本人的 MSI 笔记本，不是给别人用的商业软件 —— 这意味着可以偏向"他机器上能跑"，
 但代价是踩过的坑高度本地化。
 
@@ -108,12 +108,14 @@ Windows 桌面 HiFi 音乐播放器。WinUI 3 / C# / .NET 9（`net9.0-windows10.
 
 ## 7. 网页外壳（WebView2）— 2026-10-26 新增
 
-正在把 WinUI 界面换成 WebView2 网页壳。
+**2026-10-27 用户决定：网页壳是正式且唯一的产品主界面。** 原 WinUI 界面源码保留，MainWindow 暂作为隐藏的既有播放/控件后端；正常启动、托盘恢复和文件激活不再展示原主界面，也不提供返回旧界面入口。后续功能都以网页 UI 为落点。
+
+2026-10-28 当前交付目录为 `dist/web-ui-20261028/`，统一启动入口 `tools/OpenCeleste.cmd`。旧 dist 目录保留回退，不表示当前运行版本。
 
 **★ 网页源码唯一真身：`outputs/webview2-shell/`。**
 `dist/*/WebShell/` 是**构建产物**（`CelesteMusicPlayer.csproj:90` 用 `<Content Include="..\outputs\webview2-shell\*...">` 拷过去的），
 **在 dist 下改会被下次构建覆盖，等于白改。** 改完 src 之后要手动 `cp` 同步到正在实跑的那个 dist 目录
-（当前是 `dist/web-shell-library-preview/WebShell/`）才能立刻看到效果。
+（当前是 `dist/web-ui-20261028/WebShell/`）才能立刻看到效果。
 
 文件：`index.html`、`shell.js`、`shell.css`（主壳）、`navigation.css`、`library.css`、`collections.css`、
 `songs.css`、`corner.css`、`transport*.css|js`、`albums.js`、`artists.js`、`browse.js`、`sort-menus.js`、`waveform.js`。

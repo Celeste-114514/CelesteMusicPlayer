@@ -75,7 +75,7 @@
   function render() {
     const state = shell.getState();
     titleEl.textContent = state.title || '没有正在播放的歌曲';
-    artistEl.textContent = (page.dataset.playerTheme === 'twilight' ? state.artist : [state.artist, state.album].filter(Boolean).join(' · ')) || '—';
+    artistEl.textContent = (page.dataset.playerTheme === 'instrument' ? state.artist : [state.artist, state.album].filter(Boolean).join(' · ')) || '—';
     const quality = $('track-quality')?.textContent || '';
     metaEl.textContent = quality && !/等待播放/.test(quality) ? quality : '';
     metaEl.hidden = !metaEl.textContent;

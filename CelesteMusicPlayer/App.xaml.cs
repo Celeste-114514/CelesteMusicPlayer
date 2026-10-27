@@ -185,14 +185,7 @@ namespace CelesteMusicPlayer
             // 每次启动都同步一次，设置是关的就清掉残留 → 修复「设置里关着却仍开机自启」。
             AutoRunHelper.SyncWithSettings();
 
-            // 双击音频文件冷启动 → 直达零散播放窗口（2026-10-18 用户定案）：
-            // 不建主窗口、不恢复曲库、不弹首启关联引导，关窗即退进程。
-            // 初衷：打开散装音频时不需要打开主程序加载一遍曲库，也不能动主程序的播放列表。
-            // 开窗失败的极端情况回落下面的主窗口路径，保证程序至少能正常打开。
-            if (externalFile != null && TryLaunchScatteredOnly(externalFile))
-            {
-                return;
-            }
+            // File activation now uses the same web session. The standalone implementation remains archived in source.
 
             // ============================================================
             // 启动加载动画刻意**不**另开窗口，而是盖在主窗口自己身上（见
@@ -219,7 +212,8 @@ namespace CelesteMusicPlayer
                     : "MainWindow created");
 
                 _window.Activate();
-                StartupLog.Write("Window activated");
+                main.AppWindow.Hide();
+                StartupLog.Write("Web shell session activated; legacy owner hidden");
             }
             catch (Exception ex)
             {
@@ -333,7 +327,8 @@ namespace CelesteMusicPlayer
                     {
                         // 主程序在跑：也只开零散播放窗口。刻意不调 BringCurrentWindowToFront——
                         // 用户要的是「零散窗口不要影响主程序」，抢焦点/动队列都算影响。
-                        main.PlayExternalFileAsync(path);
+                        main.OpenWebShell();
+                        main.PlayExternalFileAsync(path, scattered: false);
                     }
                 }
                 else if (command.StartsWith("ACTIVATE:", StringComparison.OrdinalIgnoreCase))
@@ -352,6 +347,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                if (_window is MainWindow main) { main.OpenWebShell(); return; }
                 if (_window == null) return;
 
                 nint hWnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);

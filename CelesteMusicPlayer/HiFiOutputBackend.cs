@@ -439,6 +439,13 @@ namespace CelesteMusicPlayer
 
         /// <summary>读取实时频谱（post-DSP 信号的真 FFT 对数分频结果）到调用方数组，返回是否取到。
         /// 返回 false 时 UI 应回退到装饰性动画（未播放 / DSD 直出 / 样本不足）。UI 线程调用。</summary>
+        public bool TryGetDetailedSpectrum(float[] bands, out int sampleRate)
+        {
+            sampleRate = 0;
+            var analyzer = _dspProvider?.Spectrum;
+            return analyzer != null && analyzer.TryComputeDetailed(bands, out sampleRate);
+        }
+
         public bool TryGetSpectrum(float[] bandsOut)
         {
             SpectrumAnalyzer? s = _dspProvider?.Spectrum;

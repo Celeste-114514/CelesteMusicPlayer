@@ -144,6 +144,10 @@ namespace CelesteMusicPlayer
                 // ⚠ 动效速度/幅度不在这里：它们有独立的一份用户偏好（motion 字段），
                 // 走覆盖表的话一换外观预设就被清掉了 —— 换配色不该把用户调过的动效重置。
                 new { id = "density", label = "间距密度", min = 0.8, max = 1.25, step = 0.01, unit = "×", value = Get("density") },
+                new { id = "material-opacity", label = "磨砂底色浓度", min = 0.4, max = 1, step = 0.02, unit = "×", value = Get("material-opacity") },
+                new { id = "material-blur", label = "浮层磨砂强度", min = 0, max = 48, step = 1, unit = "px", value = Get("material-blur") },
+                new { id = "material-highlight", label = "玻璃边缘高光", min = 0, max = 0.8, step = 0.02, unit = "×", value = Get("material-highlight") },
+                new { id = "material-shadow", label = "浮层阴影强度", min = 0, max = 0.3, step = 0.01, unit = "×", value = Get("material-shadow") },
                 // 底栏单独一组：它要的语义和别处不一样（可以略透、可以毛玻璃、封面圆角自成一档）
                 new { id = "player-opacity", label = "底栏不透明度", min = 0.5, max = 1, step = 0.02, unit = "×", value = Get("player-opacity") },
                 new { id = "player-blur", label = "底栏毛玻璃", min = 0, max = 40, step = 1, unit = "px", value = Get("player-blur") },
@@ -492,6 +496,7 @@ namespace CelesteMusicPlayer
                 id = id, name = trimmed, group = "我的预设", custom = true,
                 // 只存能反推出整套的基色，其余仍由 Derive 计算，避免把 20 多个变量硬编码进去
                 lightBg = light["bg"], darkBg = dark["bg"], accent = light["accent"],
+                materialStyle = (int)ParseNumber(light, "material-style", 0),
                 radius = ParseNumber(light, "radius", 26),
                 blur = ParseNumber(light, "blur", 25),
                 sat = ParseNumber(light, "sat", 1),

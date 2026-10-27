@@ -893,9 +893,18 @@
     const isNavParam = item => /^nav-/.test(item.id || '');
     // 背景的模糊/亮度/遮罩归「背景」那张卡
     const isBgParam = item => /^bg-/.test(item.id || '');
-    (data.numbers || []).filter(item => !isPlayerParam(item) && !isTypeParam(item) && !isStateParam(item) && !isNavParam(item) && !isBgParam(item)).forEach(item => editor.append(numberRow(item)));
+    (data.numbers || []).filter(item => !isPlayerParam(item) && !isTypeParam(item) && !isStateParam(item) && !isNavParam(item) && !isBgParam(item) && !/^material-/.test(item.id)).forEach(item => editor.append(numberRow(item)));
     host.append(editor);
 
+    const materialCard = section({title:'材质与毛玻璃',note:'Windows 使用亚克力背板，Apple 使用银白磨砂与柔和控件。关闭透明效果可获得更清晰的实色界面。'});
+    const materialToggle = node('label', undefined, 'set-row');
+    materialToggle.append(node('span', '透明与磨砂效果', 'set-label'));
+    const materialInput = document.createElement('input'); materialInput.type = 'checkbox';
+    materialInput.checked = String(data.light?.values?.['material-transparency'] ?? '1') !== '0';
+    materialInput.addEventListener('change', () => pushChange({'light:material-transparency':materialInput.checked?'1':'0','dark:material-transparency':materialInput.checked?'1':'0'}, '透明与磨砂效果'));
+    materialToggle.append(materialInput); materialCard.append(materialToggle);
+    (data.numbers || []).filter(item=>/^material-/.test(item.id)).forEach(item=>materialCard.append(numberRow(item)));
+    host.append(materialCard);
     host.append(backgroundCard());
     navCards().forEach(card => host.append(card));
     stateCards().forEach(card => host.append(card));
