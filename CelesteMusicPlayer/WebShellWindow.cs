@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
 using System.Linq;
+using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.WindowsRuntime;
 using System.Text.Json;
 using System.Threading;
@@ -36,6 +37,11 @@ namespace CelesteMusicPlayer
         private bool _restoreMaximizedAfterFullscreen;
         private OverlappedPresenter? _windowedPresenter;
         private bool _closed, _ready, _dirty = true, _sending;
+        // 网页标题栏拖动：WebView2 抢走了指针消息，宿主收不到 XAML 指针事件，
+        // 所以改为轮询系统光标位置来跟随移动（和零散播放窗同一套路）。
+        private DispatcherQueueTimer? _dragTimer;
+        private bool _dragging;
+        private int _dragOffsetX, _dragOffsetY;
         private int _revision;
         private int _themeRevision = -1;
         private CancellationTokenSource? _waveformCancellation;
@@ -59,6 +65,7 @@ namespace CelesteMusicPlayer
             Closed += (_, _) =>
             {
                 _closed = true; _ready = false; _timer.Stop();
+                StopWindowDrag(); // 拖动轮询必须随窗口一起停，否则关窗后定时器还在跑
                 _library.CollectionChanged -= LibraryChanged;
                 NetworkLibraryService.Changed -= SourcesChanged;
                 AppWindow.Changed -= BackgroundWindowChanged;
@@ -447,6 +454,10 @@ namespace CelesteMusicPlayer
 
         private void WindowCommand(string? action, bool value)
         {
+            // 拖动命令要走在这里前述检查之前：全屏时 presenter 不是 OverlappedPresenter，
+            // 此时仍要能收到 drag-end 把轮询停掉。
+            if (action == "drag-start") { StartWindowDrag(); return; }
+            if (action == "drag-end") { StopWindowDrag(); return; }
             if (action == "close") { Close(); return; }
             if (action == "fullscreen")
             {
@@ -469,6 +480,47 @@ namespace CelesteMusicPlayer
             if (action == "top") presenter.IsAlwaysOnTop = value;
             else if (action == "minimize") presenter.Minimize();
             else if (action == "maximize") { if (presenter.State == OverlappedPresenterState.Maximized) presenter.Restore(); else presenter.Maximize(); }
+        }
+
+        /// <summary>网页标题栏空白区按下：记录光标相对窗口左上角的偏移，之后用定时器跟随移动。</summary>
+        private void StartWindowDrag()
+        {
+            // 最大化/全屏下拖动无意义，也不允许（会让窗口抖出奇怪的位置）
+            if (AppWindow.Presenter is not OverlappedPresenter presenter || presenter.State == OverlappedPresenterState.Maximized) return;
+            if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor)) return;
+            Windows.Graphics.PointInt32 origin = AppWindow.Position;
+            _dragOffsetX = cursor.X - origin.X;
+            _dragOffsetY = cursor.Y - origin.Y;
+            if (_dragging) return;
+            _dragging = true;
+            _dragTimer ??= DispatcherQueue.CreateTimer();
+            _dragTimer.Interval = TimeSpan.FromMilliseconds(16);
+            _dragTimer.Tick -= DragTick;
+            _dragTimer.Tick += DragTick;
+            _dragTimer.Start();
+        }
+
+        private void StopWindowDrag()
+        {
+            if (!_dragging) return;
+            _dragging = false;
+            if (_dragTimer != null) { _dragTimer.Stop(); _dragTimer.Tick -= DragTick; }
+        }
+
+        private void DragTick(DispatcherQueueTimer sender, object args)
+        {
+            try
+            {
+                // 兜底：网页那边万一没收到 pointerup（光标移出窗口外抬起），这里按左键状态自己收尾
+                if ((NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) == 0) { StopWindowDrag(); return; }
+                if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor)) return;
+                AppWindow.Move(new Windows.Graphics.PointInt32(cursor.X - _dragOffsetX, cursor.Y - _dragOffsetY));
+            }
+            catch (Exception ex)
+            {
+                StopWindowDrag();
+                StartupLog.WriteException("WebShell.Drag", ex);
+            }
         }
 
         private void Error(string message) => Post(new { kind = "celeste.error", version = 1, message });
@@ -530,6 +582,22 @@ namespace CelesteMusicPlayer
             }
             catch (Exception ex) { StartupLog.WriteException("WebShell.Cover", ex); if (!_closed) args.Response = sender.Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); }
             finally { if (entered) _coverGate.Release(); deferral.Complete(); }
+        }
+
+        /// <summary>拖动要用到的两个 Win32 调用。指针被 WebView2 吃掉，只能直接问系统光标位置。</summary>
+        private static class NativeMethods
+        {
+            internal const int VK_LBUTTON = 0x01;
+
+            [StructLayout(LayoutKind.Sequential)]
+            internal struct POINT { public int X; public int Y; }
+
+            [DllImport("user32.dll")]
+            [return: MarshalAs(UnmanagedType.Bool)]
+            internal static extern bool GetCursorPos(out POINT lpPoint);
+
+            [DllImport("user32.dll")]
+            internal static extern short GetAsyncKeyState(int vKey);
         }
     }
 }
