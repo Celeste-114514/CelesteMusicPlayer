@@ -55,6 +55,9 @@
       const applied = applyCss(chosen.css);
       window.CelesteTheme.lastApplied = applied;
       root.dataset.theme = mode || 'light';
+      // 预设 id 也落到根元素上：少数"不只是配色"的预设（极客）要按它改排版，
+      // 靠某一批具体色值去猜是哪个预设既脆又说不清。
+      root.dataset.preset = state.presetId || '';
       const styles = getComputedStyle(root);
       const material = styles.getPropertyValue('--material-style').trim();
       root.dataset.material = material === '1' ? 'windows' : material === '2' ? 'apple' : 'flat';

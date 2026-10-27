@@ -357,6 +357,8 @@ namespace CelesteMusicPlayer
                     case "audioChain":
                         var chain = await _owner.WebAudioChainAsync();
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = chain }); break;
+                    case "audioReadout":
+                        Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = _owner.WebAudioReadout() }); break;
                     case "trackAction":
                         var actionResult = await _owner.WebTrackActionAsync(msg, this);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = actionResult }); break;

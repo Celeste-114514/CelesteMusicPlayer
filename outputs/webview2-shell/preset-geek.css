@@ -1,0 +1,82 @@
+/* 极客预设「不只是配色」的那一半。
+   只挂 html[data-preset^="geek"]，其它预设一个字节都不受影响 ——
+   换配色不该顺带换排版，这条边界要守住。
+
+   依据：方案第 5 节。技术数字用等宽、收紧但不缩命中面积、弱边框替代重阴影。 */
+
+/* ── 顶部输出链路读数：OUT / FMT / FLAG / BUF ──────────────────────────
+   默认不显示。JS 拿到后端确认过的值才把它打开（data-on="1"），
+   拿不到就一直藏着，不摆一排 "—" 占地方。
+   位置在工具条中间（面包屑与搜索之间）：标题栏中间被右上角轮盘压着，放不下。 */
+.tech-readout { display: none; }
+
+html[data-preset^="geek"] .tech-readout[data-on="1"] {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex-shrink: 0;
+  height: 26px;
+  /* 贴着面包屑往右排，不居中：窗口中间偏右那块是分类轮盘的地盘，居中必被压 */
+  margin: 0 auto 0 6px;
+  padding: 0 2px;
+  border: 1px solid var(--line);
+  border-radius: calc(var(--radius) * 0.45);
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  overflow: hidden;
+}
+
+.tech-readout .tech-cell {
+  display: flex;
+  align-items: baseline;
+  gap: 5px;
+  padding: 0 8px;
+  white-space: nowrap;
+}
+.tech-readout .tech-cell + .tech-cell { border-left: 1px solid var(--line); }
+
+.tech-readout small {
+  font-family: var(--font-mono), ui-monospace, Consolas, monospace;
+  font-size: 9px;
+  letter-spacing: .1em;
+  color: var(--muted);
+  text-transform: uppercase;
+}
+
+.tech-readout strong {
+  font-family: var(--font-mono), ui-monospace, Consolas, monospace;
+  font-size: 11px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .02em;
+  color: var(--heading);
+}
+
+/* 状态色只给 FLAG：直通=强调色，有介入=警示色，未确认=弱文字 */
+.tech-readout .tech-cell[data-tone="pass"] strong { color: var(--accent); }
+.tech-readout .tech-cell[data-tone="warn"] strong { color: var(--warning); }
+.tech-readout .tech-cell[data-tone="muted"] strong { color: var(--muted); }
+
+/* ── 技术读数一律等宽 + 等宽数字 ─────────────────────────────────────
+   数字跳动时宽度不变，进度/时间不会左右抖。中文标题不在这里，保持原字体。 */
+html[data-preset^="geek"] #elapsed,
+html[data-preset^="geek"] #duration,
+html[data-preset^="geek"] #np-elapsed,
+html[data-preset^="geek"] #np-duration,
+html[data-preset^="geek"] .player .timeline,
+html[data-preset^="geek"] .np-progress {
+  font-family: var(--font-mono), ui-monospace, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: .01em;
+}
+
+/* ── 收紧但不缩命中：间距压小，控件本身的可点面积不动（min-height 保留） ── */
+html[data-preset^="geek"] .titlebar { gap: 10px; }
+html[data-preset^="geek"] .toolbar { gap: 8px; }
+
+/* 窗口窄了就让位给搜索框：读数不是必需品，挤在一起谁都看不清 */
+@media (max-width: 1180px) {
+  html[data-preset^="geek"] .tech-readout { display: none !important; }
+}
+
+/* 卡片用 1px 弱边框说清分区，不再靠大面积阴影堆层次 */
+html[data-preset^="geek"] .player { box-shadow: none; }

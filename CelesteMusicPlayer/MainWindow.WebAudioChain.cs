@@ -68,6 +68,37 @@ namespace CelesteMusicPlayer
 
         private static object ChainField(ChainField field) => new { label = field.Label, value = field.Value, note = field.Note };
 
+        /// <summary>
+        /// 极客预设顶部那排技术读数（OUT / FMT / FLAG / BUF）。
+        ///
+        /// 原则照方案第 5 节：**只显示后端确认的值，不从文件格式猜输出状态**。
+        /// 所以这里不做任何推断，只把链路快照里已有的字段拣出来；拿不到就是 null，
+        /// 前端显示"—"，而不是拿源文件规格冒充输出规格。
+        /// </summary>
+        internal object WebAudioReadout()
+        {
+            AudioSignalPath path = AudioSignalPath.Capture(_audioEngine, DspRackGlobalBypassed);
+            string? Field(string label)
+            {
+                foreach (ChainField field in path.Fields)
+                {
+                    if (string.Equals(field.Label, label, StringComparison.Ordinal)) return field.Value;
+                }
+                return null;
+            }
+
+            return new
+            {
+                mode = Field("输出模式"),
+                internalFormat = Field("内部处理格式"),
+                deviceFormat = Field("实际输出"),
+                bufferMs = path.OutputBufferMs > 0 ? path.OutputBufferMs : (int?)null,
+                bitPerfect = path.BitPerfect,
+                confirmed = path.BitPerfectConfirmed,
+                reason = path.VerdictReason
+            };
+        }
+
         /// <summary>节点状态文案，与原生面板 AudioChainPanelControl 完全一致（Unknown 返回空串 = 不显示）。</summary>
         private static string ChainStateText(SignalNodeState state) => state switch
         {
