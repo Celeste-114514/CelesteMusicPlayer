@@ -423,7 +423,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var uri = new Uri(args.Request.Uri);
-                int coverSize = uri.Query == "?size=480" ? 480 : 160;
+                int coverSize = uri.Query == "?size=768" ? 768 : uri.Query == "?size=480" ? 480 : 160;
                 bool playlistCover = uri.AbsolutePath.StartsWith("/playlist/", StringComparison.Ordinal);
                 string id = uri.AbsolutePath.Substring(playlistCover ? "/playlist/".Length : "/cover/".Length);
                 var current = _owner.GetCurrentPlayingItem();

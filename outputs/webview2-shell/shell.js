@@ -76,7 +76,22 @@
   let previewQueue = samples.map((_,index) => index);
   const collator = new Intl.Collator('zh-CN', { numeric: true, sensitivity: 'base' });
   let currentPage = 'overview', history = [], panel = null, toastTimer, lastTick = performance.now(), seeking = false, volumeChanging = false;
-  const send = (command, payload = {}) => { if (live) webview.postMessage({ kind: 'celeste.command', version: 1, command, ...payload }); };
+  let pendingTrack = null;
+  // Give every play entry point the same immediate feedback; only the host confirms audio playback.
+  const send = (command, payload = {}) => {
+    if (!live) return;
+    const id = command === 'playTrack' ? payload.trackId : command === 'playAll' ? payload.trackIds?.[0] : null;
+    const track = id && libraryTracks.find(item => item.id === id);
+    if (track) {
+      pendingTrack = { id, until: performance.now() + 8000 };
+      state = { ...state, ...track, trackId: id, index: libraryTracks.indexOf(track), position: 0, playing: false, favorite: !!track.favorite };
+      $('track-quality').textContent = '正在准备播放…';
+      render();
+      window.CelesteMotion?.fadeIn(document.querySelector('.track-info'), 'cover');
+      document.dispatchEvent(new CustomEvent('celeste:state', { detail: { ...state } }));
+    }
+    webview.postMessage({ kind: 'celeste.command', version: 1, command, ...payload });
+  };
   const notify = text => { $('toast').textContent = text; $('toast').classList.add('visible'); clearTimeout(toastTimer); toastTimer = setTimeout(() => $('toast').classList.remove('visible'), 2600); };
   const icon = name => { const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg'); const use = document.createElementNS(svg.namespaceURI, 'use'); use.setAttribute('href', '#i-' + name); svg.append(use); return svg; };
   const format = seconds => { seconds = Math.max(0, Math.floor(seconds)); return Math.floor(seconds / 60) + ':' + String(seconds % 60).padStart(2, '0'); };
@@ -343,6 +358,10 @@
       }
       if(message.kind!=='celeste.state'||!message.state||typeof message.state!=='object')return;
       const incoming=message.state;
+      if (pendingTrack) {
+        if (incoming.trackId !== pendingTrack.id && incoming.busy === true && !incoming.error && performance.now() < pendingTrack.until) return;
+        pendingTrack = null;
+      }
       ['title','artist','album'].forEach(key=>{if(typeof incoming[key]==='string')state[key]=incoming[key]});
       if(typeof incoming.trackId==='string'){
         state.trackId=incoming.trackId;

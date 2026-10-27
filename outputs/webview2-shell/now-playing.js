@@ -39,6 +39,7 @@
   let openGeneration = 0;
   let seekDirty = false;
   let lastTrackId = null;
+  let coverGhost = null;
 
   const format = seconds => {
     seconds = Math.max(0, Math.floor(Number(seconds) || 0));
@@ -65,6 +66,9 @@
     image.src = url;
     image.addEventListener('error', () => { if (coverBox.dataset.url === url) coverBox.replaceChildren(); }, { once: true });
     coverBox.append(image);
+    image.addEventListener('load', () => {
+      if (open && coverBox.dataset.url === url) motion()?.fadeIn(coverBox, 'cover');
+    }, { once: true });
   }
 
   // —— 顶部信息与进度 ——
@@ -76,7 +80,9 @@
     metaEl.textContent = quality && !/等待播放/.test(quality) ? quality : '';
     metaEl.hidden = !metaEl.textContent;
 
-    renderCover(state.coverUrl);
+    const coverUrl = state.coverUrl ? new URL(state.coverUrl, location.href) : null;
+    if (coverUrl?.hostname === 'celeste-cover.internal') coverUrl.searchParams.set('size', '768');
+    renderCover(coverUrl?.href || '');
     duration.textContent = format(state.duration);
     if (!seekDirty) {
       elapsed.textContent = format(state.position);
@@ -86,6 +92,7 @@
     }
     playButton.setAttribute('aria-pressed', String(!!state.playing));
     playButton.setAttribute('aria-label', state.playing ? '暂停' : '播放');
+    playButton.querySelector('use').setAttribute('href', state.playing ? '#i-pause' : '#i-play');
     favoriteButton.setAttribute('aria-pressed', String(!!state.favorite));
     previousButton.disabled = nextButton.disabled = false;
 
@@ -111,6 +118,7 @@
       return;
     }
     renderLyrics();
+    if (open) motion()?.reveal(lyricBox, 'cover', 8);
   }
 
   function renderLyrics() {
@@ -122,8 +130,11 @@
         row.dataset.index = String(index);
         row.textContent = line.text || ' ';
         // 有时间才能点着跳；纯文本歌词只展示，不装作能定位
-        if (line.t > 0 && shell.getState().duration > 0) {
-          row.addEventListener('click', () => seek(line.t));
+        if (line.t >= 0 && shell.getState().duration > 0) {
+          row.addEventListener('click', () => {
+            if (window.getSelection()?.toString()) return;
+            seek(line.t);
+          });
           row.classList.add('is-seekable');
           row.setAttribute('role', 'button');
           row.tabIndex = 0;
@@ -170,7 +181,10 @@
   function markUserScroll() {
     // 用户自己在翻：别把他拽回当前句，但要给一个出口
     userScrolled = true;
-    pinButton.hidden = false;
+    if (pinButton.hidden) {
+      pinButton.hidden = false;
+      motion()?.fadeIn(pinButton, 'control');
+    }
   }
 
   lyricBox.addEventListener('wheel', markUserScroll, { passive: true });
@@ -198,7 +212,11 @@
       const data = await window.CelesteTransport.request('nowPlaying', {});
       if (generation !== openGeneration || !open) return;
       // 换歌了：旧回复不许盖到新歌上
-      if (data && data.trackId && data.trackId !== trackId) return;
+      if (shell.getState().trackId !== trackId) return;
+      if (data && data.trackId && data.trackId !== trackId) {
+        if (attempt < 8) setTimeout(() => { if (open && openGeneration === generation) loadLyrics(trackId, attempt + 1); }, 600);
+        return;
+      }
       if (data && Array.isArray(data.lines) && data.lines.length) {
         lyricTrackId = trackId;
         setLyrics(data.lines, 'ready');
@@ -242,13 +260,16 @@
     openGeneration += 1;
     const state = shell.getState();
     lastTrackId = state.trackId || '';
+    const sourceRect = document.querySelector('.mini-cover')?.getBoundingClientRect();
     page.hidden = false;
     document.body.classList.add('now-playing-open');
     render();
     if (lastTrackId) loadLyrics(lastTrackId, 0); else setLyrics([], 'none');
     // 进场动画：页面淡入，封面从底栏飞过来
-    motion()?.reveal(page, 'cover');
-    flyCover(state.coverUrl);
+    page.getAnimations().forEach(animation => animation.cancel());
+    flyCover(coverBox.dataset.url, false, sourceRect);
+    motion()?.reveal(page, 'cover', 18);
+    motion()?.reveal(document.querySelector('.np-left'), 'cover', 10);
     ticker = setInterval(() => {
       if (document.hidden) return;
       if (pollBusy) return;
@@ -261,27 +282,39 @@
   function closePage(returnFocus = true) {
     if (!open) return;
     open = false;
-    openGeneration += 1;
+    const generation = ++openGeneration;
     clearInterval(ticker);
     ticker = 0;
     document.body.classList.remove('now-playing-open');
-    page.hidden = true;
-    lyricBox.replaceChildren();
-    lyricLines = [];
-    currentIndex = -1;
-    userScrolled = false;
+    flyCover(coverBox.dataset.url, true);
+    const finish = () => {
+      if (open || generation !== openGeneration) return;
+      page.hidden = true;
+      lyricBox.replaceChildren();
+      lyricLines = [];
+      currentIndex = -1;
+      userScrolled = false;
+    };
+    if (motion()?.canFade()) {
+      const distance = motion().shift(18, 'cover');
+      motion().animate(page, [{ opacity: 1, transform: 'translateY(0)' }, { opacity: 0, transform: `translateY(${distance}px)` }],
+        { duration: motion().duration(180, 'cover'), easing: motion().easings.exit, fill: 'none' }).finished.then(finish);
+    } else finish();
     if (returnFocus) openButton?.focus({ preventScroll: true });
   }
 
   /** 封面从底栏飞到详情页（反向同理）。减少动画时直接跳过，退回淡变。 */
-  function flyCover(url, reverse) {
+  function flyCover(url, reverse, sourceRect) {
     const small = document.querySelector('.mini-cover');
-    if (!small || !url || !motion()?.canMove()) return;
-    const from = (reverse ? coverBox : small).getBoundingClientRect();
+    coverGhost?.remove();
+    coverGhost = null;
+    if (!small || !url || !motion()?.canMove() || motion()?.getOff().includes('cover')) return;
+    const from = sourceRect || (reverse ? coverBox : small).getBoundingClientRect();
     const to = (reverse ? small : coverBox).getBoundingClientRect();
     if (!from.width || !to.width) return;
     const ghost = document.createElement('img');
     ghost.className = 'np-cover-ghost';
+    coverGhost = ghost;
     ghost.alt = '';
     ghost.src = url;
     ghost.style.left = from.left + 'px';

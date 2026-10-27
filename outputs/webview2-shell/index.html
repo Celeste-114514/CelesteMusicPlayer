@@ -235,9 +235,8 @@
 
     <!-- 正在播放详情页：唯一入口是底栏左侧封面。数据全部来自 CelesteShell.getState()，
          页面自己不持有播放状态，所以不会出现两套进度。 -->
-    <section id="now-playing" class="now-playing" hidden aria-label="正在播放">
+    <section id="now-playing" class="now-playing-page" hidden aria-label="正在播放">
       <header class="np-head">
-        <span class="np-head-title">正在播放</span>
         <button id="np-close" class="icon-button" type="button" aria-label="收起正在播放" title="收起（Esc）"><svg><use href="#i-chevron"/></svg></button>
       </header>
       <div class="np-body">

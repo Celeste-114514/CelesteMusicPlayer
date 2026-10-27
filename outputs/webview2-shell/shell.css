@@ -17,7 +17,8 @@
 #bg-layer::before{content:'';position:absolute;inset:-6%;background-size:var(--bg-fit);background-position:var(--bg-pos);background-repeat:no-repeat;filter:blur(var(--bg-blur)) brightness(var(--bg-brightness))}
 /* 遮罩：压在图上的一层外壳色，浓度由 --bg-scrim 控制 */
 #bg-layer::after{content:'';position:absolute;inset:0;background:var(--shell);opacity:var(--bg-scrim)}
-.shell>*:not(#bg-layer){position:relative;z-index:1}
+/* Only normal-flow content needs a background stacking layer. Overlays own their position/z-index. */
+.shell>:is(.titlebar,.workspace,.player){position:relative;z-index:1}
 :root[data-bg="gradient"] #bg-layer::before{background-image:linear-gradient(160deg,var(--bg-grad-1),var(--bg-grad-2) 52%,var(--bg-grad-3))}
 :root[data-bg="image"] #bg-layer::before,:root[data-bg="cover"] #bg-layer::before{background-image:var(--bg-image)}
 :root[data-bg="gradient"] .shell,:root[data-bg="image"] .shell,:root[data-bg="cover"] .shell{background:transparent}

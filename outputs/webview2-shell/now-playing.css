@@ -9,14 +9,16 @@ body.now-playing-open .workspace,
 body.now-playing-open .main,
 body.now-playing-open .side-panel{display:none}
 
-.now-playing{
-  position:relative;
+.now-playing-page{
+  position:absolute;
+  inset:0;
+  z-index:50;
   flex:1;
   min-height:0;
   display:flex;
   flex-direction:column;
   border-radius:var(--radius);
-  margin:0 14px 14px 0;
+  margin:0;
   background:var(--surface);
   border:1px solid var(--panel-soft);
   overflow:hidden;
@@ -26,14 +28,13 @@ body.now-playing-open .side-panel{display:none}
   display:flex;
   align-items:center;
   gap:12px;
-  padding:14px 18px;
-  border-bottom:1px solid var(--line);
+  padding:16px 22px;
   flex-shrink:0;
 }
 .np-head-title{font-size:calc(11px * var(--text-scale));letter-spacing:2px;color:var(--muted);text-transform:uppercase}
-/* 标题在左、收起在右：和别的页面的头一致，别让返回按钮飘在标题左边 */
-.np-head .icon-button{margin-left:auto}
-.np-head .icon-button svg{transform:rotate(180deg)}
+/* 单一左上角向下箭头收起详情页。 */
+.np-head .icon-button{margin:0}
+.np-head .icon-button svg{transform:rotate(-90deg)}
 
 .np-body{
   flex:1;
@@ -45,7 +46,7 @@ body.now-playing-open .side-panel{display:none}
 }
 
 /* ---- 左列：封面 + 信息 + 控件 ---- */
-.np-left{display:flex;flex-direction:column;min-width:0;gap:18px}
+.np-left{display:flex;flex-direction:column;min-width:0;min-height:0;overflow-y:auto;gap:18px}
 .np-cover{
   position:relative;
   width:min(100%,360px);
@@ -70,7 +71,7 @@ body.now-playing-open .side-panel{display:none}
   margin:0;
   overflow-wrap:anywhere;
 }
-.np-artist{font-size:calc(13px * var(--text-scale));color:var(--muted);margin:0;overflow-wrap:anywhere}
+.np-artist{font-size:calc(18px * var(--text-scale));line-height:1.6;color:var(--muted);margin:0;overflow-wrap:anywhere}
 .np-meta{font-size:calc(11px * var(--text-scale));color:var(--muted);margin:0;font-variant-numeric:tabular-nums}
 
 .np-progress{display:flex;align-items:center;gap:11px;margin-top:auto}
@@ -94,13 +95,16 @@ body.now-playing-open .side-panel{display:none}
 .np-play[aria-pressed=true] svg{fill:none;stroke-width:4}
 
 /* ---- 右列：歌词 ---- */
-.np-right{position:relative;min-width:0;display:flex;flex-direction:column}
+.np-right{position:relative;min-width:0;min-height:0;overflow:hidden;display:flex;flex-direction:column}
 .np-lyrics{
   flex:1;
   min-height:0;
+  position:relative;
+  user-select:text;
+  overscroll-behavior:contain;
   overflow-y:auto;
   scroll-behavior:smooth;
-  padding:30% 0;
+  padding: min(25vh,180px) 0;
   scrollbar-width:thin;
   scrollbar-color:var(--panel-soft) transparent;
   mask-image:linear-gradient(180deg,transparent,#000 14%,#000 86%,transparent);
@@ -158,9 +162,15 @@ button.mini-cover:hover::after{
 
 /* 窄窗：上下堆叠；封面收小，歌词占主导 */
 @media (max-width:980px){
-  .np-body{grid-template-columns:1fr;grid-template-rows:auto minmax(180px,1fr);gap:20px;padding:20px 22px 24px;overflow-y:auto}
+  .np-body{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) minmax(180px,1fr);gap:20px;padding:20px 22px 24px;overflow:hidden}
   .np-cover{width:min(100%,220px);align-self:center}
   .np-left{gap:12px}
   .np-lyrics{padding:24px 0}
   .np-controls{justify-content:center}
 }
+
+.np-lyric:focus-visible{outline:2px solid var(--focus);outline-offset:-2px;border-radius:8px}
+.np-lyric::selection{background:var(--accent-soft);color:var(--ink)}
+.np-pin{transition:background calc(160ms * var(--motion-scale) * var(--motion-cat-control))}
+.np-pin:hover{background:var(--hover)}
+@media(prefers-reduced-motion:reduce){.np-lyrics{scroll-behavior:auto}.np-lyric,.np-pin,.np-play{transition:none}}

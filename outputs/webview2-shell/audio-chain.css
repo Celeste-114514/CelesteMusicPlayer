@@ -88,3 +88,7 @@
 .chain-empty{padding:8px 0;font-size:calc(11px * var(--text-scale));color:var(--muted)}
 
 @media(prefers-reduced-motion:reduce){.chain-drawer,.chain-scrim,.chain-level-rms,.chain-level-peak{transition:none}}
+
+/* Reduced motion keeps the drawer fade without the full-width slide. */
+:root:not([data-motion="full"]) .chain-drawer{transform:none;opacity:0;transition-property:opacity}
+:root:not([data-motion="full"]) .chain-drawer.is-open{opacity:1}
