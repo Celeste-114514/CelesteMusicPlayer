@@ -1,0 +1,81 @@
+/* DSP 页跟随外观设置（补丁层，必须最后加载）。
+   dsp.css 里的中性色已经换成语义变量（--panel / --surface / --line / --muted / --ink / --accent-soft），
+   但 DSP 页还叠着两层 ECHO 皮肤（dsp-echo.css / dsp-reference.css），
+   它们自带一套浅色面板，深色主题下会露出白块。这一层只补这两处，外加原生表单控件。
+
+   约定：功能性配色一律不动 —— EQ 曲线的三段渐变、电平表的绿、声道偏差表的白色指针，
+   都是"读数"，不跟着外观漂。 */
+
+/* ---- ECHO 层：面板与卡片 ---- */
+html[data-theme="dark"] .echo-dsp-visual,
+html[data-theme="dark"] .dsp-module-panel,
+html[data-theme="dark"] .dsp-module-panel--headroom{
+  background:var(--surface);
+  color:var(--ink);
+  border-color:var(--line);
+  box-shadow:none;
+}
+
+html[data-theme="dark"] .dsp-compressor-power,
+html[data-theme="dark"] .dsp-compressor-actions button,
+html[data-theme="dark"] .dsp-compressor-meter{
+  background:var(--panel);
+  color:var(--ink);
+  border-color:var(--line);
+}
+/* 压缩器"已启用"那一档本来就是琥珀色强调，深色下保持原色，别被上面的通用规则刷掉 */
+html[data-theme="dark"] .dsp-compressor-power[data-active="true"],
+html[data-theme="dark"] .dsp-compressor-actions button:last-child{
+  background:#a86b20;
+  border-color:#a86b20;
+  color:#fff;
+}
+html[data-theme="dark"] .dsp-compressor-meter[data-active="true"]{
+  background:color-mix(in srgb,#a86b20 22%,var(--panel));
+  border-color:color-mix(in srgb,#a86b20 40%,var(--line));
+  color:var(--ink);
+}
+
+/* ---- 频段编辑条：ECHO 层写死 #f5f1f4 ---- */
+#dsp-page .eq-band-editor{background:var(--panel);border-color:var(--line)}
+
+/* ---- 原生表单控件：不换的话深色下是一块白 ---- */
+#dsp-page input:not([type="range"]):not([type="checkbox"]):not([type="radio"]):not([type="color"]){
+  background:var(--input-bg);
+  color:var(--ink);
+  border-color:var(--input-line);
+}
+#dsp-page input::placeholder{color:var(--muted)}
+
+/* ---- 预设/方案这类"当前项"徽标 ---- */
+#dsp-page .dsp-profile-badge,
+#dsp-page .dsp-rack-index{color:var(--muted)}
+
+/* 声场预设这类琥珀色小按钮：原来是一块很亮的米黄，深色下像贴在面板上的纸片 */
+html[data-theme="dark"] .dsp-spatial-presets button{
+  background:color-mix(in srgb,#a86b20 20%,var(--panel));
+  border-color:color-mix(in srgb,#a86b20 42%,var(--line));
+  color:var(--ink);
+}
+html[data-theme="dark"] .dsp-spatial-presets button[aria-pressed="true"]{
+  background:#a86b20;
+  border-color:#a86b20;
+  color:#fff;
+}
+
+/* ECHO 层里"已选中/主操作"的靛蓝芯片：深色下是一块浅紫板子，很跳。
+   交给强调色语义变量，顺带跟着用户选的强调色走（浅色主题保持原样）。 */
+html[data-theme="dark"] .opra-browser-search button:hover:not(:disabled),
+html[data-theme="dark"] .opra-preset-list button[data-active="true"],
+html[data-theme="dark"] .dsp-room-primary .dsp-module-actions button:first-child,
+html[data-theme="dark"] .dsp-channel-trim-tools button[data-active="true"],
+html[data-theme="dark"] .dsp-channel-mode-tabs button[data-active="true"]{
+  background:var(--accent-soft);
+  border-color:color-mix(in srgb,var(--accent) 38%,transparent);
+  color:var(--accent);
+}
+html[data-theme="dark"] .opra-preset-actions button{
+  background:var(--panel-soft);
+  border-color:var(--line);
+  color:var(--ink);
+}
