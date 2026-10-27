@@ -51,6 +51,7 @@ let chromium;try{({chromium}=require('playwright'));}catch{({chromium}=require('
     });
     await page.locator('#corner-orbit [data-page="songs"]').click();
     await page.locator('.song-row').first().dblclick();
+    await page.waitForTimeout(250);   // 播放命令是异步发出的，等一下再取
     let messages = await page.evaluate(() => window.commands);
     assert.equal(messages.filter(m => m.command === 'playTrack').length, 1);
     assert.equal(messages.find(m => m.command === 'playTrack').trackId, 'stable-a');
@@ -136,7 +137,8 @@ let chromium;try{({chromium}=require('playwright'));}catch{({chromium}=require('
     assert.equal(queuePlay.trackId,'cue-b');assert.equal(queuePlay.revision,7);assert.equal(queuePlay.index,1);
     await page.locator('#transport-dialog-close').click();await page.waitForFunction(()=>!document.querySelector('#transport-dialog').open);
     await page.locator('#transport-more').click();
-    assert.equal(await page.locator('#transport-more-menu button:disabled').count(),1);
+    // 「更多」菜单现在不再有禁用项：没有当前歌曲时点了会就地说明，不再是灰按钮
+    assert.equal(await page.locator('#transport-more-menu button').count(),5);
     await page.locator('[data-more="addToPlaylist"]').click();await page.waitForSelector('#web-playlist-list button');
     await page.locator('#web-playlist-list button').click();await page.waitForFunction(()=>!document.querySelector('#transport-dialog').open);
     assert.equal(await page.evaluate(()=>commands.some(m=>m.command==='transport'&&['audioSettings','more','queue'].includes(m.action))),false);

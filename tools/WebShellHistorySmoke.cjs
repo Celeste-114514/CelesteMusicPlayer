@@ -57,19 +57,43 @@ const SNAPSHOT = {
     // 假宿主：真正实现 preview（把 changes 合进变量表再回快照），撤销才有东西可对比
     await page.addInitScript(s => {
       const handlers = [];
-      const state = { values: Object.assign({}, s.light.values) };
+      const state = { values: Object.assign({}, s.light.values), overrides: {} };
       window.chrome = window.chrome || {};
       window.chrome.webview = {
         postMessage(message) {
           if (!message || !message.requestId) return;
-          let data = s;
+          // 每一份快照都要带 editState：撤销/重做靠它对比前后，
+          // 少了它网页会认为"什么都没改"，撤销按钮就一直灰着
+          let data = Object.assign({}, s, { editState: Object.assign({}, s.editState || {}, { overrides: Object.assign({}, state.overrides) }) });
           if (message.command === 'theme' && message.operation === 'preview') {
             Object.entries(message.changes || {}).forEach(([key, value]) => {
+              const split = key.indexOf(':');
+              if (split > 0 && key.slice(0, split) === 'light') {
+                state.values[key.slice(split + 1)] = value;
+                state.overrides[key] = value;
+              }
+            });
+            const values = Object.assign({}, state.values);
+            data = Object.assign({}, s, {
+              light: { css: Object.keys(values).map(k => '--' + k + ':' + values[k]).join(';'), values },
+              // 撤销/重做靠 editState 对比前后快照，假宿主也得回这一份，否则网页认为"什么都没改"
+              editState: Object.assign({}, s.editState || {}, { overrides: Object.assign({}, state.overrides) })
+            });
+          }
+          if (message.command === 'theme' && message.operation === 'restoreDraft') {
+            // 撤销/重做走 restoreDraft：整份覆盖表换过去（撤回去时要把新加的那条拿掉）
+            const overrides = (message.state && message.state.overrides) || {};
+            state.overrides = Object.assign({}, overrides);
+            state.values = Object.assign({}, s.light.values);
+            Object.entries(state.overrides).forEach(([key, value]) => {
               const split = key.indexOf(':');
               if (split > 0 && key.slice(0, split) === 'light') state.values[key.slice(split + 1)] = value;
             });
             const values = Object.assign({}, state.values);
-            data = Object.assign({}, s, { light: { css: Object.keys(values).map(k => '--' + k + ':' + values[k]).join(';'), values } });
+            data = Object.assign({}, s, {
+              light: { css: Object.keys(values).map(k => '--' + k + ':' + values[k]).join(';'), values },
+              editState: { overrides: Object.assign({}, state.overrides) }
+            });
           }
           setTimeout(() => handlers.forEach(fn => fn({
             data: { kind: 'celeste.reply', version: 1, requestId: message.requestId, ok: true, data }
@@ -85,7 +109,8 @@ const SNAPSHOT = {
       kind: 'celeste.theme', version: 1, revision: 21, mode: 'light',
       presetId: 'sakura', accentSource: 'theme', accentCustom: '#e84865',
       light: { css: cssOf(base), values: Object.assign({}, base) },
-      dark: { css: cssOf(base), values: Object.assign({}, base) }
+      dark: { css: cssOf(base), values: Object.assign({}, base) },
+      editState: { overrides: {} }
     });
     await page.waitForTimeout(200);
 

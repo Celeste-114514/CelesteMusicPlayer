@@ -16,6 +16,14 @@
   barHost.append(bar);
   document.body.append(barHost);
 
+  // 菜单元素复用一个：每次新建的话，退场动画期间新旧两个菜单会同时存在，
+  // 页面上会出现两个同名菜单（点按钮时"命中两个"）。
+  // 浮层管理器的令牌保证旧动画不会拆掉正在用的这一个。
+  const menu = document.createElement('div');
+  menu.id = MENU_ID;
+  menu.className = 'track-context-menu';
+  menu.setAttribute('role', 'menu');
+
   let selected = new Set(), scope = null, anchor = null, multi = false, epoch = 0, returnFocus = null, busy = false, barVisible = false;
   const key = row => row.dataset.queueIndex === undefined ? row.dataset.trackId || 'demo-' + row.dataset.index : 'q:' + row.dataset.queueRevision + ':' + row.dataset.queueIndex;
   const container = row => row.parentElement.closest('#songs-list,#album-tracks,#artist-songs,#browse-tracks,#web-queue-list,#folder-songs') || row.parentElement;
@@ -78,10 +86,8 @@
 
   /** 新建一个菜单元素并挂到共用浮层：层级、贴边、外部点击、Esc、焦点恢复都归它管。 */
   function showMenu(x, y, fill) {
-    const element = document.createElement('div');
-    element.id = MENU_ID;
-    element.className = 'track-context-menu';
-    element.setAttribute('role', 'menu');
+    const element = menu;
+    element.replaceChildren();
     fill(element);
     popup.open({
       id: MENU_ID,

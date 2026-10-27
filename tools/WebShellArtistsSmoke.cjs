@@ -22,21 +22,22 @@ let chromium;try{({chromium}=require('playwright'));}catch{({chromium}=require('
    tracks.forEach(t=>{t.chips=[];t.coverUrl='';});deliver({kind:'celeste.library',version:1,phase:'begin',revision:1,total:3});deliver({kind:'celeste.library',version:1,phase:'batch',revision:1,tracks});deliver({kind:'celeste.library',version:1,phase:'end',revision:1,albums:[{id:'first',title:'First',artist:'The Ensemble',trackIds:['one'],trackCount:1,duration:120,year:2010},{id:'second',title:'Second',artist:'The Ensemble',trackIds:['two','three'],trackCount:2,duration:420,year:2024}]});
   });
   for(const category of ['overview','songs','albums','artists','albumArtists','folders']){
-   await page.evaluate(page=>CelesteShell.navigate(page),category);await page.waitForTimeout(300);
-   const selector={overview:'.page-heading',songs:'.songs-heading',albums:'.albums-heading',artists:'#artists-browser .albums-heading',albumArtists:'#artists-browser .albums-heading',folders:'#browse-title'}[category];
+   await page.evaluate(page=>CelesteShell.navigate(page),category);await page.waitForTimeout(300);await page.waitForFunction(()=>document.getAnimations().filter(a=>a.playState==='running').length===0).catch(()=>{});await page.waitForTimeout(120);
+   const selector={overview:'#overview-title',songs:'.songs-heading',albums:'.albums-heading',artists:'#artists-browser .albums-heading',albumArtists:'#artists-browser .albums-heading',folders:'#folder-detail-title'}[category];
    const before=await page.locator(selector).first().boundingBox();await page.locator('#orbit-toggle').click();await page.waitForTimeout(450);const after=await page.locator(selector).first().boundingBox();
    for(const key of ['x','y','width','height'])assert.ok(Math.abs(after[key]-before[key])<.5,category+' heading moved: '+key);
   }
   await page.evaluate(()=>CelesteShell.navigate('artists'));
   assert.equal(await page.locator('.artist-card').count(),2);assert.match(await page.locator('[data-artist="Alice"]').textContent(),/2 首歌曲 · 2 张专辑/);
-  await page.locator('#artists-sort + .sort-trigger').click();assert.equal(await page.locator('.sort-menu').count(),1);await page.getByRole('option',{name:'歌曲数',exact:true}).click();assert.equal(await page.locator('.artist-card').first().getAttribute('data-artist'),'Bob');
+  await page.locator('#artists-sort').click();assert.equal(await page.locator('.ui-listbox').count(),1);await page.getByRole('listbox',{name:'艺术家排序'}).getByRole('option',{name:'歌曲数',exact:true}).click();assert.equal(await page.locator('.artist-card').first().getAttribute('data-artist'),'Bob');
   await page.locator('#artists-direction').click();assert.equal(await page.locator('.artist-card').first().getAttribute('data-artist'),'Alice');
-  await page.locator('[data-artist="Alice"]').click();await page.waitForFunction(()=>document.querySelector('#artist-stats').textContent.includes('24bit'));
-  assert.equal(await page.locator('#artist-stats dt').count(),8);assert.match(await page.locator('#artist-stats').textContent(),/50%/);
+  await page.locator('[data-artist="Alice"]').click();await page.waitForFunction(()=>document.querySelector('#artist-stats').textContent.includes('首'));
+  // 统计现在是六项：歌曲/专辑/时长/年份/来源/流派（早期版本还有编码信息，那部分已下线）
+  assert.equal(await page.locator('#artist-stats dt').count(),6);assert.match(await page.locator('#artist-stats').textContent(),/1 首/);
   await page.locator('#artist-songs .album-track').nth(1).dblclick();assert.equal(await page.evaluate(()=>commands.filter(m=>m.command==='playTrack').at(-1).trackId),'two');
   await page.locator('#artist-play').click();assert.deepEqual(await page.evaluate(()=>commands.filter(m=>m.command==='playAll').at(-1).trackIds),['one','two']);
   await page.screenshot({path:path.join(__dirname,'../outputs/webview2-shell/preview-artist-detail.png')});
-  await page.locator('[data-artist-tab="albums"]').click();assert.equal(await page.locator('#artist-albums .album-open').count(),2);await page.locator('#artist-albums .album-open').first().click();assert.equal(await page.locator('#album-detail-title').textContent(),'First');await page.waitForFunction(()=>document.querySelector('#album-summary').textContent.includes('24bit'));
+  await page.locator('[data-artist-tab="albums"]').click();assert.equal(await page.locator('#artist-albums .album-open').count(),2);await page.locator('#artist-albums .album-open').first().click();assert.equal(await page.locator('#album-detail-title').textContent(),'First');await page.waitForFunction(()=>document.querySelector('#album-summary').textContent.includes('首'));
   await page.evaluate(()=>CelesteShell.navigate('albumArtists'));assert.equal(await page.locator('.artist-card').count(),1);assert.match(await page.locator('.artist-card').textContent(),/3 首歌曲 · 2 张专辑/);
   await page.locator('#search').fill('Ensemble');await page.locator('#search').press('Enter');assert.equal(await page.evaluate(()=>CelesteShell.getPage()),'albumArtists');await page.locator('#search').fill('');
   for(const width of [1440,1024,760]){await page.setViewportSize({width,height:960});assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));}

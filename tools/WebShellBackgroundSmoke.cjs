@@ -164,7 +164,7 @@ SNAPSHOT.light = SNAPSHOT.dark = { css: cssOf(PAGE_VALUES), values: PAGE_VALUES 
       document.body.append(host);
       await window.CelesteAppearance.mount(host);
       const target = [...host.querySelectorAll('.settings-card')]
-        .find(el => (el.querySelector('h2') || {}).textContent === '背景');
+        .find(el => /背景/.test((el.querySelector('h2') || {}).textContent || ''));
       if (!target) return null;
       return {
         selects: [...target.querySelectorAll('select')].map(s => s.value),
