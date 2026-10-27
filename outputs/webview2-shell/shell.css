@@ -25,3 +25,8 @@
 :root[data-bg="video"] #bg-video{display:block}
 :root[data-bg="video"] .shell{background:transparent}
 :root[data-bg-state="error"] #bg-video{visibility:hidden}
+
+/* 背景交叉淡变：换类型 / 换图时，把切换前那层背景留在上面淡出（background.js 插入 .bg-ghost）。
+   几何与滤镜必须和 #bg-layer::before 完全一致，否则新旧两层会在边缘错开、模糊也不一样。 */
+#bg-layer .bg-ghost{position:absolute;inset:-6%;background-size:var(--bg-fit);background-position:var(--bg-pos);background-repeat:no-repeat;filter:blur(var(--bg-blur)) brightness(var(--bg-brightness));opacity:1;pointer-events:none;transition:opacity var(--dur-theme) var(--ease-continuity)}
+#bg-layer .bg-ghost.is-out{opacity:0}

@@ -156,6 +156,33 @@ SNAPSHOT.light = SNAPSHOT.dark = { css: cssOf(PAGE_VALUES), values: PAGE_VALUES 
     assert.equal(cover.layerZ, '0', '背景层 z-index 应为 0');
     assert.equal(cover.titlebarZ, '1', '标题栏应被抬到背景之上');
 
+    // 5) 换背景类型：旧的那层先留在上面淡出，不是"啪"一下换掉
+    const pushMode = async mode => {
+      const values = Object.assign({}, base, { 'bg-mode': mode, 'bg-image': 'none' });
+      await page.evaluate(payload => window.__deliver(payload), {
+        kind: 'celeste.theme', version: 1, revision: 13, mode: 'light',
+        presetId: 'sakura', accentSource: 'theme', accentCustom: '#e84865',
+        light: { css: cssOf(values), values }, dark: { css: cssOf(values), values }
+      });
+    };
+    await pushMode('gradient');
+    await page.waitForTimeout(420);          // 停在渐变上，并让上一层的淡出走完
+    await pushMode('image');
+    const ghostState = await page.evaluate(() => {
+      const ghosts = [...document.querySelectorAll('#bg-layer .bg-ghost')];
+      return {
+        count: ghosts.length,
+        isGradient: ghosts.some(node => /linear-gradient/.test(node.style.backgroundImage)),
+        fading: ghosts.some(node => node.classList.contains('is-out'))
+      };
+    });
+    console.log('ghost=' + JSON.stringify(ghostState));
+    assert.ok(ghostState.count >= 1, '换背景类型时应该有一层旧背景在淡出');
+    assert.equal(ghostState.isGradient, true, '淡出的那层应该还是切换前的渐变');
+    await page.waitForTimeout(700);
+    assert.equal(await page.evaluate(() => document.querySelectorAll('#bg-layer .bg-ghost').length), 0,
+      '淡出结束后不该残留叠层（会挡住底下的新背景）');
+
     // 外观页「背景」卡片
     const card = await page.evaluate(async () => {
       const host = document.createElement('div');

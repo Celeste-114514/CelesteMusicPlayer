@@ -16,6 +16,22 @@
   layer.append(video);
   let hostHidden = false, pageHidden = false, source = '', imageSource = '', imageProbe;
   let playbackAttempt = 0;
+  // 上一次真正画出来的背景（::before 的 computed background-image）与它的"身份"。
+  // 换类型/换图时把旧的那层留下来淡出 —— 直接换掉是"啪"一下，眼睛会愣一下。
+  let lastBackground = '', lastSignature = '';
+
+  /** 把切换前那层背景做成一张静态叠层，淡出后自己移除。 */
+  function ghost(previousImage) {
+    layer.querySelectorAll('.bg-ghost').forEach(node => node.remove());
+    const shade = document.createElement('div');
+    shade.className = 'bg-ghost';
+    shade.setAttribute('aria-hidden', 'true');
+    shade.style.backgroundImage = previousImage;
+    layer.append(shade);
+    requestAnimationFrame(() => shade.classList.add('is-out'));
+    const life = (window.CelesteMotion?.duration(240, 'theme') ?? 240) + 120;
+    setTimeout(() => shade.remove(), life);
+  }
 
   function report(message = '') {
     root.dataset.bgState = message ? 'error' : 'ready';
@@ -46,11 +62,16 @@
     const style = getComputedStyle(root);
     const mode = style.getPropertyValue('--bg-mode').trim();
     root.dataset.bg = ['gradient', 'cover', 'image', 'video'].includes(mode) ? mode : 'solid';
+    let desiredImage = style.getPropertyValue('--bg-image').trim();
     if (mode === 'cover') {
       const state = window.CelesteShell?.getState?.();
       const cover = state && typeof state.coverUrl === 'string' ? state.coverUrl : '';
-      root.style.setProperty('--bg-image', cover ? 'url("' + cover.replace(/["\\\r\n]/g, '') + '")' : 'none');
+      desiredImage = cover ? 'url("' + cover.replace(/["\\\r\n]/g, '') + '")' : 'none';
+      root.style.setProperty('--bg-image', desiredImage);
     }
+    // 换类型 / 换图才值得做交叉淡变；拖外观滑杆时渐变颜色一直在变，
+    // 那种时候跟着淡变只会把画面糊成一片，所以签名里只放"类型 + 图片地址"。
+    const signature = mode + '|' + desiredImage;
     const next = mode === 'video' ? assetUrl(style.getPropertyValue('--bg-video').trim()) : '';
     if (next !== source) {
       source = next;
@@ -77,6 +98,13 @@
       if (!nextImage) report('尚未选择图片背景。');
     } else { imageSource = ''; imageProbe = null; if (mode !== 'video') report(); }
     syncPlayback();
+
+    // 交叉淡变：把上一帧真正画出来的那层留在上面淡出。
+    // 读的是 ::before 的 computed background-image，所以渐变、封面、图片都走同一条路。
+    let painted = '';
+    try { painted = getComputedStyle(layer, '::before').backgroundImage; } catch { /* 老引擎不支持伪元素计算值 */ }
+    if (lastSignature && signature !== lastSignature && lastBackground && lastBackground !== painted) ghost(lastBackground);
+    if (painted) { lastBackground = painted; lastSignature = signature; }
   }
   video.addEventListener('playing', () => report());
   video.addEventListener('error', () => { if (source) report('视频无法解码或文件已丢失，请重新选择 MP4（H.264）或 WebM 视频。'); });
