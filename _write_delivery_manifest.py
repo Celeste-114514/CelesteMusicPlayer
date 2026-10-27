@@ -27,6 +27,10 @@ KEY = [
     "WebShell/popup-manager.js",
     "WebShell/ui-controls.js",
     "WebShell/ui-controls.css",
+    "WebShell/dsp.js",
+    "WebShell/dsp-motion.css",
+    "WebShell/tags-tools.js",
+    "WebShell/sources.js",
 ]
 
 

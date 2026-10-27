@@ -55,6 +55,21 @@ def clean_state():
     return moved
 
 
+def shutdown_servers():
+    """每轮之前关掉常驻的 MSBuild / VBCSCompiler。
+
+    历史记录（memory 2026-10-07 / 2026-10-02 / 2026-10-01）都说这一步能提高成功率：
+    常驻进程会带着上一次崩溃留下的坏状态复用，关掉等于每轮从干净进程开始。
+
+    注意：`-m:1` / `-nodeReuse:false` **故意不加**。celeste-build-verify skill 里做过
+    受控 A/B（并行那轮过、单节点那轮崩），结论是"巧合，不是解药"。加了只会让每轮更慢。"""
+    try:
+        subprocess.run([DOTNET, "build-server", "shutdown"], cwd=REPO,
+                       capture_output=True, text=True, timeout=120)
+    except Exception as e:
+        print("  [warn] build-server shutdown failed: %s" % e)
+
+
 def publish_once():
     p = subprocess.run([DOTNET, "publish", PROJ, "-c", "Release", "-r", "win-x64",
                         "-p:Platform=x64", "-p:WindowsPackageType=None",
@@ -67,6 +82,7 @@ def publish_once():
 
 
 for i in range(1, ATTEMPTS + 1):
+    shutdown_servers()
     moved = clean_state()
     print("\n=== publish attempt %d/%d (cleaned: %s) ===" % (i, ATTEMPTS, ",".join(moved) or "nothing"), flush=True)
     t0 = time.time()
