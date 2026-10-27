@@ -124,3 +124,8 @@
 .tag-table tbody tr:not(.tag-spacer){height:var(--tag-row-height)}
 .tag-table td .cell{box-sizing:border-box;height:calc(var(--tag-row-height) - 1px);line-height:calc(var(--tag-row-height) - 19px)}
 .tag-table .tag-spacer td{border:0;padding:0;line-height:0;pointer-events:none}
+
+/* 逐文件失败就地展开：失败的文件名和原因留在页面上，避免只弹"第一个失败"。
+   颜色只借强调色一层浅底，不改成红色 —— 这不是危险操作，是个别文件没写成。 */
+.tags-tool-fail{margin-top:10px;padding:10px 14px;border-radius:12px;border:1px solid color-mix(in srgb,var(--accent) 22%,transparent);background:color-mix(in srgb,var(--accent) 7%,transparent)}
+.tags-tool-fail .panel-note{margin:0;line-height:1.9}

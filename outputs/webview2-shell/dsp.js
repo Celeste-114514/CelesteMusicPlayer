@@ -16,6 +16,37 @@
 
   const log2 = Math.log2;
 
+  // —— 动效接入（方案 §6 DSP 行）———————————————————————————————————————————
+  // 所有动画都问 CelesteMotion 要时长，这里不写毫秒数。
+  const motion = () => window.CelesteMotion;
+  // 参数写回后的重绘是"刷新"，不是"换页"：不放入场动画，否则每拨一下开关整块内容都在晃。
+  let animateModule = false;
+  const revealIn = target => { if (animateModule && target) motion()?.reveal(target, 'nav'); };
+
+  /** 读取失败就地给重试，不留一个永远停在"读取中…"的空架子。 */
+  function failIn(container, error, retry) {
+    const box = node('div', undefined, 'dsp-fail');
+    box.append(node('p', (error && error.message) || '读取失败。', 'dsp-row-hint'));
+    if (retry) {
+      const again = node('button', '重试', 'eq-pill');
+      again.type = 'button';
+      again.addEventListener('click', () => { again.disabled = true; retry(); });
+      box.append(again);
+    }
+    container.replaceChildren(box);
+    motion()?.reveal(box, 'list');
+  }
+
+  /** 写回被内核拒绝时的回滚提示：值已经重绘回真值，这里只补一下"刚才那下没生效"。 */
+  function flashReject() {
+    if (!body.isConnected) return;
+    body.classList.remove('dsp-reject');
+    void body.offsetWidth;
+    body.classList.add('dsp-reject');
+    clearTimeout(flashReject.timer);
+    flashReject.timer = setTimeout(() => body.classList.remove('dsp-reject'), 600);
+  }
+
   // Exact port of the native ApproxBandGain (MainWindow.EqDsp.cs:803) — same branches, same
   // maths. This is what makes the web curve the shape the native page already draws: an invented
   // gaussian is about three times wider and would no longer touch its own nodes.
@@ -109,6 +140,31 @@
   const layout = node('div', undefined, 'dsp-layout');
   const nav = node('aside', undefined, 'dsp-nav');
   const body = node('div', undefined, 'dsp-module');
+
+  // 导航共享指示条：只有这一根，跟着当前项走。原来是每项自己改右边框颜色 ——
+  // 换项时是"旧的一下消失、新的一下出现"，没有任何连续感。现在由一根条滑过去。
+  const navIndicator = node('span', undefined, 'dsp-nav-indicator');
+  navIndicator.setAttribute('aria-hidden', 'true');
+  nav.append(navIndicator);
+  nav.classList.add('has-indicator');
+
+  /** 把指示条摆到当前项上。instant 用于窗口尺寸变化（那一下不该看到滑动）。 */
+  function placeIndicator(instant) {
+    const active = nav.querySelector('.dsp-chain-item[aria-current="true"]');
+    if (!active || !active.offsetHeight) { navIndicator.dataset.ready = 'false'; return; }
+    if (instant) {
+      navIndicator.style.transition = 'none';
+      requestAnimationFrame(() => { navIndicator.style.transition = ''; });
+    }
+    navIndicator.dataset.ready = 'true';
+    navIndicator.style.setProperty('--ind-y', active.offsetTop + 'px');
+    navIndicator.style.setProperty('--ind-h', active.offsetHeight + 'px');
+    navIndicator.style.setProperty('--ind-x', (active.offsetLeft + active.offsetWidth - 3) + 'px');
+  }
+  // 窗口缩放 / 导航换行都会改变每项的位置，量一次重摆。这里不监听滚动（导航自身不滚）。
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(() => placeIndicator(true)).observe(nav);
+  }
 
   // Mirrors MainWindow.DspNav.cs:124-140 — same 12 entries, same order, same group names.
   // `icon`/`desc`/`accent` drive the ECHO chain-item rail (DspPage.tsx 6218-6255); accents reuse
@@ -233,7 +289,13 @@
     const epoch = moduleEpoch;
     return dsp('setControl', { module, name, ...payload })
       .then(result => { refreshModuleDots(); return result; })
-      .catch(error => { shell.notify(error.message || '写入失败。'); if (epoch === moduleEpoch && !page.hidden) renderModule(); return false; });
+      .catch(error => {
+        shell.notify(error.message || '写入失败。');
+        // 失败 → 重绘回内核的真值（用户看到的滑块位置不会停在一个没生效的值上），
+        // 再闪一下提示"这一下被拒了"。重绘不放动画：值是回滚，不是内容换新。
+        if (epoch === moduleEpoch && !page.hidden) { renderModule(false); flashReject(); }
+        return false;
+      });
   }
 
   function controlRow(control) {
@@ -269,7 +331,7 @@
         const next = toggle.getAttribute('aria-pressed') !== 'true';
         toggle.setAttribute('aria-pressed', String(next));
         moduleVisual?.update(control.name, next);
-        Promise.resolve(pushControl(control.name, { value: next })).then(() => { if (row.isConnected) renderModule(); });
+        Promise.resolve(pushControl(control.name, { value: next })).then(ok => { if (row.isConnected) renderModule(false); });
       });
       row.append(toggle);
       if (copy.hint) row.append(node('span', copy.hint, 'dsp-row-hint'));
@@ -350,13 +412,14 @@
           toggle.textContent = next ? '已启用' : '已停用';
           pushControl(powerName.name, { value: next });
           // Native handlers enable/disable the page's own controls, so re-read once it settles.
-          setTimeout(() => { if (current === id && !page.hidden) renderModule(); }, 260);
+          setTimeout(() => { if (current === id && !page.hidden) renderModule(false); }, 260);
         });
         body.querySelector('.dsp-module-head').append(toggle);
       }
+      revealIn(group);
     }).catch(error => {
       if (current !== id || epoch !== moduleEpoch || page.hidden) return;
-      group.replaceChildren(node('p', error.message || '读取模块失败。', 'dsp-row-hint'));
+      failIn(group, error, () => renderModule());
     });
   }
 
@@ -406,7 +469,12 @@
     } catch { /* dots are decoration; never block the page on them */ }
   }
 
-  function renderModule() {
+  /**
+   * 重画当前模块。
+   * animate=false 用于"参数写回后的刷新"：内容没换，只是状态回读，不该再放一次入场。
+   */
+  function renderModule(animate = true) {
+    animateModule = animate;
     moduleEpoch++;
     disposeEq?.(); disposeEq = null;
     moduleVisual?.dispose(); moduleVisual = null;
@@ -414,10 +482,11 @@
     ensureLevelPoll(true);
     MODULES.forEach(m => { const b = nav.querySelector(`[data-module="${m.id}"]`); if (b) b.setAttribute('aria-current', String(m.id === current)); });
     paintPipeline(); paintFocus();
+    placeIndicator();
     if (current === 'profiles') { renderProfiles(); return; }
     if (current === 'rack') { renderRack(); return; }
-    if (current === 'safety') { renderSafety(); return; }
-    if (current === 'eq') { renderEq(); return; }
+    if (current === 'safety') { renderSafety(); revealIn(body); return; }
+    if (current === 'eq') { renderEq(); revealIn(body); return; }
     renderControlModule(current);
   }
 
@@ -464,6 +533,7 @@
       const profiles = result.profiles || [];
       if (!profiles.length) {
         listBox.append(node('p', '还没有保存过方案。调好声音后点上面的按钮存一份。', 'dsp-row-hint'));
+        revealIn(listBox);
         return;
       }
       profiles.forEach(profile => {
@@ -502,14 +572,19 @@
         row.append(actions);
         listBox.append(row);
       });
+      revealIn(listBox);
     }).catch(error => {
-      listBox.replaceChildren(node('p', error.message || '读取方案失败。', 'dsp-row-hint'));
+      failIn(listBox, error, () => renderModule());
     });
   }
 
   // ---- 机架编排 ---------------------------------------------------------------------------
   // ECHO DspRackPanel: a panel with a header row, then an ordered list where each entry carries
   // a grip, a zero-padded position, the module copy and its two move buttons.
+  // 机架重排用：动作前记下每一行在屏幕上的位置，重排后让行从旧位置滑到新位置。
+  // 重建列表会换掉 DOM 节点，所以不能用位置无关的通用 FLIP —— 这里按模块名对上旧位置。
+  let rackSnapshot = null;
+
   function renderRack() {
     if (!live) { body.append(moduleHead('rack'), node('p', '请在桌面播放器中使用这个页面。', 'dsp-row-hint')); return; }
 
@@ -542,6 +617,7 @@
       const modules = result.modules || [];
       modules.forEach(module => {
         const row = node('li');
+        row.dataset.rack = module.name;
         const grip = node('span', undefined, 'dsp-rack-grip');
         grip.append(glyph('grip', 15));
         row.append(grip, node('span', String(module.index + 1).padStart(2, '0'), 'dsp-rack-index'));
@@ -558,8 +634,10 @@
           button.disabled = module.index + delta < 0 || module.index + delta >= modules.length;
           button.addEventListener('click', async () => {
             button.disabled = true;
-            try { await dsp('rackMove', { index: module.index, delta }); renderModule(); }
-            catch (error) { shell.notify(error.message || '调整失败。'); button.disabled = false; }
+            // 先量位置再让宿主重排：失败时不跳，成功时才滑。
+            rackSnapshot = new Map([...list.children].map(row => [row.dataset.rack, row.getBoundingClientRect().top]));
+            try { await dsp('rackMove', { index: module.index, delta }); renderModule(false); }
+            catch (error) { rackSnapshot = null; shell.notify(error.message || '调整失败。'); button.disabled = false; }
           });
           return button;
         };
@@ -579,8 +657,28 @@
       const fixed = node('div');
       fixed.append(node('span', result.isDefault ? '默认顺序' : '自定义顺序'), node('small', result.isDefault ? 'EQ → 卷积 → ReplayGain → 压缩 → Crossfeed → 声场 → 矩阵 → 平衡' : '这份顺序会跟着「听音方案」一起保存。'));
       foot.append(fixed);
+
+      // 重排后的位移动画：只动被换位的行，没动的行不产生动画对象。
+      const m = motion();
+      if (rackSnapshot && m) {
+        const before = rackSnapshot;
+        rackSnapshot = null;
+        if (m.canMove() && !m.state.off.has('list')) {
+          [...list.children].forEach(row => {
+            const was = before.get(row.dataset.rack);
+            if (was == null) return;
+            const dy = was - row.getBoundingClientRect().top;
+            if (!dy) return;
+            m.animate(row, [{ transform: `translateY(${dy}px)` }, { transform: 'translateY(0)' }],
+              { duration: m.duration(180, 'list'), easing: m.easings.enter });
+          });
+        }
+      } else {
+        revealIn(list);
+      }
     }).catch(error => {
-      list.replaceChildren(node('p', error.message || '读取机架失败。', 'dsp-row-hint'));
+      rackSnapshot = null;
+      failIn(list, error, () => renderModule());
     });
   }
 

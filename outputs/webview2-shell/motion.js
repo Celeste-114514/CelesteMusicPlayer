@@ -243,6 +243,33 @@
       { duration: duration(160, category), easing: easings.enter, fill: 'none' });
   }
 
+  /**
+   * 数据到位之后的一段入场：淡入 + 轻微上移。
+   * 和 fadeIn 的区别：fadeIn 是"内容换成新的"（起点 .35，只动透明度），
+   * reveal 是"这块东西刚出现"（起点 0 + 位移），用于模块内容、搜索结果、目录列表。
+   * 只在内容真的填进 DOM 之后调 —— 别对一个还空着的盒子放动画。
+   */
+  function reveal(element, category = 'list', distance = 6) {
+    if (!element || !element.isConnected || !canFade()) return Promise.resolve();
+    if (state.off.has(category)) return Promise.resolve();
+    const dy = shift(distance, category);
+    const frames = dy
+      ? [{ opacity: 0, transform: `translateY(${dy}px)` }, { opacity: 1, transform: 'translateY(0)' }]
+      : [{ opacity: 0 }, { opacity: 1 }];
+    return animate(element, frames, { duration: duration(180, category), easing: easings.enter, fill: 'none' }).finished;
+  }
+
+  /**
+   * 状态文案变了才调用（轮询类专用）：给一个很短的高亮，让人注意到"这里刚刚变了"。
+   * 内容没变时千万别调 —— 每两秒闪一次就成了骚扰。
+   */
+  function markChanged(element) {
+    if (!element || !element.isConnected || !canFade() || state.off.has('list')) return;
+    element.classList.remove('state-flash');
+    void element.offsetWidth;          // 强制重排，让同一段动画能重播
+    element.classList.add('state-flash');
+  }
+
   /** 分类开关：关掉某一类，就只剩"状态变化"，不做那一类的动。 */
   function setOff(list) {
     state.off = new Set((Array.isArray(list) ? list : []).filter(id => CATEGORIES.includes(id)));
@@ -268,6 +295,8 @@
     popupExit,
     flip,
     fadeIn,
+    reveal,
+    markChanged,
     spring,
     press,
     /** 用户选的模式：system / full / lite / off。 */

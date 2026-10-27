@@ -1,0 +1,45 @@
+/* DSP 页的动效补充层（方案 §6「DSP 导航/听音方案/机架」一行）。
+   单独一份、放在最后加载：dsp-echo.css 用每项自己的右边框表示"当前项"，
+   这里要把它换成一根共用的指示条，同特异性下必须后加载才盖得住。
+   时长一律走 motion.css 的令牌，本文件不写毫秒数。 */
+
+/* 指示条的定位基准：绝对定位相对 nav 的 padding box，
+   js 用 offsetLeft/offsetTop 量，两者坐标系一致。 */
+.dsp-nav{position:relative}
+
+/* 当前项的右边框交还给指示条。留 3px 透明边框是为了不让文字左右跳动。 */
+.dsp-nav.has-indicator .dsp-chain-item[aria-current="true"]{border-right-color:transparent}
+.dsp-nav.has-indicator .dsp-chain-item[aria-current="true"]:hover{border-right-color:transparent}
+
+.dsp-nav-indicator{
+  position:absolute;
+  left:var(--ind-x,0);
+  top:var(--ind-y,0);
+  width:3px;
+  height:var(--ind-h,0);
+  border-radius:3px;
+  background:var(--accent,#e0507f);
+  opacity:0;
+  pointer-events:none;
+  /* 导航项自己是 position:relative，DOM 里排在指示条之后 —— 不加这一层会被
+     当前项的半透明渐变背景盖住，看起来是一条洗淡的粉边。 */
+  z-index:1;
+  /* 换项时滑过去，不是闪一下。高度也跟着变（不同项的行高可能不同）。 */
+  transition:top var(--dur-nav) var(--ease-continuity),
+             height var(--dur-nav) var(--ease-continuity),
+             opacity var(--dur-quick) linear;
+}
+.dsp-nav-indicator[data-ready="true"]{opacity:1}
+
+/* 写回被内核拒绝：整块内容闪一下边框色，值同时已经重绘回真值。
+   只是提示，不占位、不改布局，也不挡点击。 */
+.dsp-module.dsp-reject{animation:dsp-reject calc(520ms * var(--motion-scale) * var(--motion-cat-control)) var(--ease-exit)}
+@keyframes dsp-reject{
+  0%{box-shadow:inset 0 0 0 1px transparent}
+  30%{box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--accent) 55%,transparent)}
+  100%{box-shadow:inset 0 0 0 1px transparent}
+}
+
+/* 读取失败的容器：错误说明 + 重试按钮，不留一个永远转圈的骨架。 */
+.dsp-fail{display:grid;gap:12px;justify-items:start}
+.dsp-fail .eq-pill{justify-self:start}

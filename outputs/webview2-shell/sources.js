@@ -6,17 +6,21 @@
   const el = (tag, text, cls) => { const node = document.createElement(tag); if (text !== undefined) node.textContent = text; if (cls) node.className = cls; return node; };
   let host, snapshot, selected = '', directory = '', trail = [], timer, epoch = 0;
   const say = text => { const bar = document.getElementById('settings-status'); if (bar) bar.textContent = text; };
+  const motion = () => window.CelesteMotion;
   const action = (text, fn) => {
     const button = el('button', text, 'set-mini'); button.type = 'button';
-    button.addEventListener('click', async () => { button.disabled = true; try { await fn(); } catch (e) { say(e.message); } finally { button.disabled = false; } }); return button;
+    button.addEventListener('click', async () => {
+      if (button.getAttribute('aria-busy') === 'true') return;   // 连点不叠请求
+      button.disabled = true; button.setAttribute('aria-busy', 'true');
+      try { await fn(); } catch (e) { say(e.message); } finally { button.disabled = false; button.removeAttribute('aria-busy'); }
+    }); return button;
   };
   const card = title => { const section = el('section', undefined, 'settings-card'); section.append(el('h2', title)); return section; };
   const statusText = s => s.job.running ? `${s.job.phase} · 已发现 ${s.job.discovered} 项` : s.job.phase === 'failed' ? s.job.error : s.job.phase === 'cancelled' ? '同步已取消，旧索引保留' : `${s.enabled ? '已启用' : '已停用'} · ${s.count} 首已入库`;
   async function reload() { snapshot = await request('list'); render(); }
   function render() {
     if (!host?.isConnected) return;
-    host.replaceChildren();
-    const list = card('网络音乐来源');
+    host.replaceChildren();    const list = card('网络音乐来源');
     list.append(el('p', '支持多个连接。默认只浏览；“加入曲库 / 同步”仅索引歌曲信息，播放时才下载原文件。SMB、SSHFS 使用系统已挂载或可直接访问的目录。', 'set-note'));
     list.append(action('添加来源', () => edit()), action('取消当前下载', async () => { await request('cancelDownload'); say('当前下载已取消。'); }), action('清理网络缓存', async () => { const result = await request('clearCache'); say(`已清理 ${result.count} 个缓存文件；收藏和歌单保留，播放中的文件受保护。`); }));
     for (const source of snapshot.sources) {
@@ -59,7 +63,14 @@
     baiduField('clientSecret', '百度应用 Secret Key（留空保留）', '', 'password');
     baiduField('refreshToken', 'Refresh Token（可选，留空保留）', '', 'password');
     baidu.append(el('p', '百度使用你配置的应用身份，通过百度官方页面授权；播放器不索取百度账号密码。也可填入已有 Access Token。SSHFS 不提供 SSH 登录，请先在系统中挂载。', 'set-note'));
-    function update() { baidu.hidden = provider.value !== 'baidu'; if (provider.value === 'baidu' && !endpoint.value) endpoint.value = 'https://pan.baidu.com'; }
+    function update() {
+      const show = provider.value === 'baidu';
+      const wasHidden = baidu.hidden;
+      baidu.hidden = !show;
+      if (provider.value === 'baidu' && !endpoint.value) endpoint.value = 'https://pan.baidu.com';
+      // 依赖区出现时淡进来（收起是瞬时的：等一段高度动画再消失只会挡住下面的输入）
+      if (show && wasHidden) motion()?.reveal(baidu, 'control');
+    }
     provider.addEventListener('change', update); update();
     const buttons = el('div', undefined, 'settings-actions');
     buttons.append(action('保存来源', async () => {
@@ -77,7 +88,19 @@
   async function browse(path) {
     const currentEpoch = ++epoch; directory = path;
     say('正在读取网络目录…');
-    const data = await request('browse', { sourceId: selected, path });
+    let data;
+    try {
+      data = await request('browse', { sourceId: selected, path });
+    } catch (error) {
+      if (epoch !== currentEpoch || !host?.isConnected) return;
+      // 读取失败留在原地：说明原因 + 重试 + 回根目录，而不是把旧目录内容留在屏幕上看不出失败。
+      const section = card('网络目录读取失败');
+      section.append(el('p', error.message || '无法读取这个目录。', 'set-note'));
+      section.append(action('重试', () => browse(path)), action('回根目录', async () => { trail = []; await browse(''); }));
+      workspace().replaceChildren(section);
+      motion()?.reveal(section, 'list');
+      return;
+    }
     if (epoch !== currentEpoch || !host?.isConnected) return;
     const source = snapshot.sources.find(s => s.id === selected);
     const section = card((source?.name || '网络来源') + ' / ' + (path || '根目录'));
@@ -100,6 +123,7 @@
       limit += 100; more.hidden = limit >= data.tracks.length;
     }
     fill(); workspace().replaceChildren(section); say('目录已读取；双端数据均保留来源身份。');
+    motion()?.reveal(section, 'list');
   }
   async function poll() {
     if (!host?.isConnected) { clearInterval(timer); return; }
@@ -113,10 +137,7 @@
         // 只在内容真的变了的时候才动一下：轮询每 2 秒一次，不该每次都闪
         if (status.textContent === text) continue;
         status.textContent = text;
-        status.classList.remove('just-changed');
-        void status.offsetWidth;          // 强制重排，让动画能重播
-        status.classList.add('just-changed');
-        window.CelesteMotion?.fadeIn(status, 'list');
+        motion()?.markChanged(status);
       }
     } catch { /* 主操作显示错误；轮询不打断编辑 */ }
   }
@@ -124,7 +145,18 @@
     clearInterval(timer); epoch++;
     host = el('div', undefined, 'network-sources'); target.append(host);
     try { await reload(); timer = setInterval(poll, 2000); }
-    catch (e) { host.textContent = '读取网络来源失败：' + e.message; }
+    catch (e) {
+      // 整页读不到来源时也要能重试，否则只能重开设置页
+      host.replaceChildren();
+      const section = card('读取网络来源失败');
+      section.append(el('p', e.message || '无法读取网络来源列表。', 'set-note'));
+      section.append(action('重试', async () => {
+        try { await reload(); timer = setInterval(poll, 2000); }
+        catch (again) { say(again.message || '仍然读取失败。'); }
+      }));
+      host.append(section);
+      motion()?.reveal(section, 'list');
+    }
   }
   document.addEventListener('celeste:message', event => { if (event.detail?.kind === 'celeste.sourceStatus') { say(event.detail.message); window.CelesteShell?.notify?.(event.detail.message); } });
   window.CelesteSources = { mount };

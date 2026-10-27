@@ -96,3 +96,17 @@
   :root:not([data-motion="full"]) .ui-popup,
   :root:not([data-motion="full"]) .ui-listbox{transform:none!important}
 }
+
+/* 状态文案变化时的一次轻提示。轮询类状态（同步进度、网络来源、批量歌词）专用：
+   只有内容真的变了才该调用 markChanged()，没变就不该闪。 */
+.state-flash{animation:state-flash calc(900ms * var(--motion-scale) * var(--motion-cat-list)) var(--ease-exit)}
+@keyframes state-flash{
+  0%{background-color:transparent}
+  25%{background-color:color-mix(in srgb,var(--accent) 12%,transparent)}
+  100%{background-color:transparent}
+}
+
+/* 异步按钮的忙碌态：只换光标和一层很浅的淡化，不换文字 ——
+   换文字会让按钮宽度跳动，连带动右边一排按钮一起挪。 */
+[aria-busy="true"]{cursor:progress;opacity:.72}
+
