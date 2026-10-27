@@ -24,19 +24,41 @@
   }
 
   const state = { mode: 'light', light: null, dark: null, presetId: '', revision: 0, ready: false, playerButtons: '', navItems: '', motion: null };
+  let lastMode = '', lastPresetId = '';
 
   // bundle 可以外部传入：外观页改完参数后手上就有算好的一套，
   // 不能再用 state（state 只在宿主推送时更新，会拿旧值把新值盖回去）。
-  function apply(mode, bundle) {
+  /**
+   * 换主题/换预设时整页交叉淡变一次。
+   * 用浏览器自带的 view transition：一次快照、一条时间线。
+   * **不能**给每个节点挂 transition —— 那会每秒重算整棵树，24 套预设和 DSP 那种大页面扛不住。
+   * 不支持就直接换（老引擎、或动效被关掉），不报错。
+   */
+  function shouldTransition(animate) {
+    if (!animate) return false;
+    if (typeof document.startViewTransition !== 'function') return false;
+    // 动效关掉 / 系统要求减少动画 → 直接换
+    if (window.CelesteMotion && window.CelesteMotion.state.effective !== 'full') return false;
+    // 视频背景在播：快照会把画面冻一帧，看着像卡了一下
+    if (root.dataset.bg === 'video') return false;
+    return true;
+  }
+
+  function apply(mode, bundle, animate = false) {
     const chosen = bundle || (mode === 'dark' ? state.dark : state.light);
     if (!chosen) return;
-    const applied = applyCss(chosen.css);
-    window.CelesteTheme.lastApplied = applied;
-    root.dataset.theme = mode || 'light';
-    // 一个变量都没写进去就明说，别让用户对着没变化的界面猜
-    if (applied === 0 && window.CelesteShell && chosen.css) window.CelesteShell.notify('主题变量没能写进页面，请把这一情况反馈一下。');
-    // 画在 canvas 里的东西（进度波形）拿不到 CSS 变量，得有人告诉它们重画
-    document.dispatchEvent(new CustomEvent('celeste:theme-applied', { detail: { mode: root.dataset.theme } }));
+    const work = () => {
+      const applied = applyCss(chosen.css);
+      window.CelesteTheme.lastApplied = applied;
+      root.dataset.theme = mode || 'light';
+      // 一个变量都没写进去就明说，别让用户对着没变化的界面猜
+      if (applied === 0 && window.CelesteShell && chosen.css) window.CelesteShell.notify('主题变量没能写进页面，请把这一情况反馈一下。');
+      // 画在 canvas 里的东西（进度波形）拿不到 CSS 变量，得有人告诉它们重画
+      document.dispatchEvent(new CustomEvent('celeste:theme-applied', { detail: { mode: root.dataset.theme } }));
+    };
+    if (!shouldTransition(animate)) { work(); return; }
+    try { document.startViewTransition(work); }
+    catch { work(); }   // 快照失败也不能让主题不生效
   }
 
   document.addEventListener('celeste:message', event => {
@@ -63,8 +85,13 @@
         window.CelesteMotion.setOff(Array.isArray(message.motion.off) ? message.motion.off : []);
       }
     }
+    // 首次下发（页面刚起来）不做淡变：那一帧本来就还没有"旧画面"可淡出
+    const firstApply = !state.ready;
+    const themeChanged = message.mode !== lastMode || state.presetId !== lastPresetId;
+    lastMode = state.mode;
+    lastPresetId = state.presetId;
     state.ready = true;
-    apply(state.mode);
+    apply(state.mode, null, !firstApply && themeChanged);
     document.dispatchEvent(new CustomEvent('celeste:theme', { detail: { ...state } }));
   });
 
@@ -78,9 +105,9 @@
       document.dispatchEvent(new CustomEvent('celeste:theme-applied', { detail: { mode: root.dataset.theme, preview: true } }));
     },
     /** 取消预览：回到宿主当前已保存的那套。 */
-    restore() { apply(state.mode); },
-    setMode(mode) { apply(mode || state.mode); },
-    applyBundle(mode, bundle) { apply(mode || state.mode, bundle); },
+    restore() { apply(state.mode, null, true); },
+    setMode(mode) { apply(mode || state.mode, null, true); },
+    applyBundle(mode, bundle) { apply(mode || state.mode, bundle, true); },
     value(mode, name) {
       const bundle = (mode || state.mode) === 'dark' ? state.dark : state.light;
       return bundle && bundle.values ? bundle.values[name] : '';

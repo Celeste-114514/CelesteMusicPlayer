@@ -101,3 +101,12 @@
    这些部件不是我们在画，CSS 变量管不到，只有 color-scheme 能影响。 */
 :root[data-theme="dark"]{color-scheme:dark}
 :root[data-theme="light"]{color-scheme:light}
+
+/* 换主题 / 换预设时的整页交叉淡变（theme.js 里走 document.startViewTransition）。
+   一次快照、一条时间线；不给每个节点挂 transition —— 那会让整棵树每帧重算。
+   时长走 --dur-theme，所以动效速度、以及「主题与背景」分类开关都会一起生效。 */
+::view-transition-old(root),
+::view-transition-new(root){
+  animation-duration:var(--dur-theme);
+  animation-timing-function:var(--ease-continuity);
+}
