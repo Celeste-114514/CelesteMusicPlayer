@@ -51,6 +51,8 @@ const { chromium } = require('playwright-core');
       await page.waitForFunction(provider => window.__sourceCommands.some(message => message.operation === 'save' && message.provider === provider), provider);
       await page.getByRole('button', { name: '浏览', exact: true }).last().waitFor();
     }
+    // 每行要等宿主回包才渲染出来，数早了会少一行（这条以前是偶发失败）
+    await page.waitForFunction(() => document.querySelectorAll('.network-sources strong').length === 7, { timeout: 4000 });
     assert.equal(await page.getByRole('button', { name: '浏览', exact: true }).count(), 7);
     await page.getByRole('button', { name: '浏览', exact: true }).first().click();
     await page.locator('.source-workspace').getByRole('button', { name: '播放', exact: true }).click();
@@ -63,8 +65,8 @@ const { chromium } = require('playwright-core');
     // 目录读不到时就地给"重试"，而不是把上一次的内容留在屏幕上假装成功
     await page.evaluate(() => { window.__failBrowse = true; });
     await page.getByRole('button', { name: '浏览', exact: true }).first().click();
-    await page.waitForSelector('.source-workspace h2', { state: 'visible' });
-    assert.equal(await page.locator('.source-workspace h2').textContent(), '网络目录读取失败');
+    // 等"失败"这个标题出现，不能只等"有个 h2"——上一次浏览的标题还在那儿（竞态）
+    await page.waitForFunction(() => document.querySelector('.source-workspace h2')?.textContent === '网络目录读取失败', { timeout: 4000 });
     assert.match(await page.locator('.source-workspace').textContent(), /模拟目录不可达/);
     await page.evaluate(() => { window.__failBrowse = false; });
     await page.locator('.source-workspace').getByRole('button', { name: '重试', exact: true }).click();
