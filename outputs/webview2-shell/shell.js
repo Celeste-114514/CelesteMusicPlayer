@@ -362,6 +362,8 @@
       if(incoming.error&&incoming.error!==state.lastError)notify(incoming.error);
       state.lastError=incoming.error||'';
       render();
+      // 别的模块（正在播放详情页）也要跟着同一份状态走，别再各自轮询一遍
+      document.dispatchEvent(new CustomEvent('celeste:state',{detail:{...state}}));
     });
     send('ready');
   } else {

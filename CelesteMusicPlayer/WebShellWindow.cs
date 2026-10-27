@@ -223,6 +223,10 @@ namespace CelesteMusicPlayer
                         _ = SendTrackInfoAsync(metadataIds); break;
                     case "waveform":
                         _ = SendWaveformAsync(msg.GetProperty("trackId").GetString() ?? ""); break;
+                    case "nowPlaying":
+                        // 详情页的歌词：一次取整首，当前句由前端按播放时间算（不逐帧问宿主）
+                        Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = _owner.WebNowPlaying() });
+                        break;
                     case "playTrack": _owner.WebPlayTrack(Resolve(msg.GetProperty("trackId").GetString())); break;
                     case "playAll":
                         var ids = msg.GetProperty("trackIds");

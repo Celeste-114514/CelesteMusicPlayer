@@ -1,0 +1,166 @@
+/* 正在播放详情页。覆盖主内容区 + 底栏（底栏隐藏，避免两条进度条并列）。
+   颜色全部走语义变量，深浅主题和 24 套预设自动跟随。
+   宽窗：左封面右歌词；窄窗：上下堆叠，不强行等比缩小。 */
+
+body.now-playing-open .player{display:none}
+/* 整块工作区都要让位：只藏 .main 的话，.workspace 还占着 flex:1，
+   详情页会被挤成半屏（第一次截图就是这么坏的） */
+body.now-playing-open .workspace,
+body.now-playing-open .main,
+body.now-playing-open .side-panel{display:none}
+
+.now-playing{
+  position:relative;
+  flex:1;
+  min-height:0;
+  display:flex;
+  flex-direction:column;
+  border-radius:var(--radius);
+  margin:0 14px 14px 0;
+  background:var(--surface);
+  border:1px solid var(--panel-soft);
+  overflow:hidden;
+}
+
+.np-head{
+  display:flex;
+  align-items:center;
+  gap:12px;
+  padding:14px 18px;
+  border-bottom:1px solid var(--line);
+  flex-shrink:0;
+}
+.np-head-title{font-size:calc(11px * var(--text-scale));letter-spacing:2px;color:var(--muted);text-transform:uppercase}
+/* 标题在左、收起在右：和别的页面的头一致，别让返回按钮飘在标题左边 */
+.np-head .icon-button{margin-left:auto}
+.np-head .icon-button svg{transform:rotate(180deg)}
+
+.np-body{
+  flex:1;
+  min-height:0;
+  display:grid;
+  grid-template-columns:minmax(320px,1fr) minmax(320px,1.15fr);
+  gap:34px;
+  padding:30px 34px 34px;
+}
+
+/* ---- 左列：封面 + 信息 + 控件 ---- */
+.np-left{display:flex;flex-direction:column;min-width:0;gap:18px}
+.np-cover{
+  position:relative;
+  width:min(100%,360px);
+  aspect-ratio:1;
+  border-radius:var(--cover-radius,22px);
+  overflow:hidden;
+  background:linear-gradient(140deg,var(--accent-soft),var(--panel));
+  box-shadow:0 22px 55px var(--shadow);
+  display:grid;
+  place-items:center;
+  color:var(--muted);
+  flex-shrink:0;
+}
+.np-cover img{width:100%;height:100%;object-fit:cover;display:block}
+.np-cover svg{width:44px;height:44px;opacity:.55}
+
+.np-title{
+  font-size:clamp(calc(22px * var(--text-scale)),2.4vw,calc(34px * var(--text-scale)));
+  font-weight:650;
+  letter-spacing:-.6px;
+  line-height:1.3;
+  margin:0;
+  overflow-wrap:anywhere;
+}
+.np-artist{font-size:calc(13px * var(--text-scale));color:var(--muted);margin:0;overflow-wrap:anywhere}
+.np-meta{font-size:calc(11px * var(--text-scale));color:var(--muted);margin:0;font-variant-numeric:tabular-nums}
+
+.np-progress{display:flex;align-items:center;gap:11px;margin-top:auto}
+.np-progress span{font-size:calc(11px * var(--text-scale));color:var(--muted);font-variant-numeric:tabular-nums;min-width:34px}
+.np-progress input[type=range]{flex:1}
+.np-progress span:last-child{text-align:right}
+
+.np-controls{display:flex;align-items:center;gap:16px}
+.np-controls .icon-button{width:42px;height:42px}
+.np-controls .icon-button svg{width:20px;height:20px}
+.np-controls .previous svg{transform:rotate(180deg)}
+.np-play{
+  width:58px;height:58px;border-radius:50%;
+  background:var(--accent);color:var(--on-accent);
+  display:grid;place-items:center;
+  box-shadow:0 8px 22px color-mix(in srgb,var(--accent) 30%,transparent);
+  transition:transform calc(180ms * var(--motion-scale) * var(--motion-cat-control)) var(--ease-continuity);
+}
+.np-play:hover{transform:scale(1.05)}
+.np-play svg{width:24px;height:24px;fill:currentColor}
+.np-play[aria-pressed=true] svg{fill:none;stroke-width:4}
+
+/* ---- 右列：歌词 ---- */
+.np-right{position:relative;min-width:0;display:flex;flex-direction:column}
+.np-lyrics{
+  flex:1;
+  min-height:0;
+  overflow-y:auto;
+  scroll-behavior:smooth;
+  padding:30% 0;
+  scrollbar-width:thin;
+  scrollbar-color:var(--panel-soft) transparent;
+  mask-image:linear-gradient(180deg,transparent,#000 14%,#000 86%,transparent);
+}
+.np-lyric{
+  margin:0;
+  padding:9px 4px;
+  font-size:calc(19px * var(--text-scale));
+  line-height:1.65;
+  color:var(--muted);
+  opacity:.55;
+  transition:opacity calc(160ms * var(--motion-scale) * var(--motion-cat-cover)),
+             color calc(160ms * var(--motion-scale) * var(--motion-cat-cover)),
+             transform calc(160ms * var(--motion-scale) * var(--motion-cat-cover)) var(--ease-continuity);
+  overflow-wrap:anywhere;
+}
+.np-lyric.is-translation{font-size:calc(14px * var(--text-scale));color:var(--muted);opacity:.4}
+.np-lyric.is-seekable{cursor:pointer}
+.np-lyric.is-seekable:hover{opacity:.85}
+.np-lyric.is-current{color:var(--ink);opacity:1;font-weight:600;transform:translateX(3px)}
+.np-lyric.is-current.is-translation{color:var(--muted);font-weight:500}
+.np-lyric-empty{font-size:calc(13px * var(--text-scale));color:var(--muted);line-height:2;margin:0;padding:9px 4px}
+
+.np-pin{
+  position:absolute;
+  left:50%;
+  bottom:6px;
+  transform:translateX(-50%);
+  padding:8px 16px;
+  border-radius:999px;
+  background:var(--accent-soft);
+  color:var(--accent);
+  font-size:calc(11px * var(--text-scale));
+  box-shadow:0 6px 18px var(--shadow);
+}
+
+/* 进场时的封面飞行动画（now-playing.js 临时插一个 img） */
+.np-cover-ghost{
+  position:fixed;
+  z-index:80;
+  object-fit:cover;
+  border-radius:var(--cover-radius,22px);
+  pointer-events:none;
+  will-change:transform;
+}
+
+/* 底栏封面变成可点的按钮：形状不变，只补焦点与命中反馈 */
+button.mini-cover{padding:0;border:0;cursor:pointer;position:relative}
+button.mini-cover:focus-visible{outline:3px solid color-mix(in srgb,var(--focus) 55%,transparent);outline-offset:3px}
+button.mini-cover:hover::after{
+  content:'';
+  position:absolute;inset:0;border-radius:inherit;
+  background:color-mix(in srgb,var(--ink) 18%,transparent);
+}
+
+/* 窄窗：上下堆叠；封面收小，歌词占主导 */
+@media (max-width:980px){
+  .np-body{grid-template-columns:1fr;grid-template-rows:auto minmax(180px,1fr);gap:20px;padding:20px 22px 24px;overflow-y:auto}
+  .np-cover{width:min(100%,220px);align-self:center}
+  .np-left{gap:12px}
+  .np-lyrics{padding:24px 0}
+  .np-controls{justify-content:center}
+}

@@ -25,6 +25,7 @@
   <script src="background.js" defer></script>
   <script src="nav-layout.js" defer></script>
   <script src="player-layout.js" defer></script>
+  <script src="now-playing.js" defer></script>
   <script src="appearance.js" defer></script>
   <script src="transport-panels.js" defer></script>
   <script src="albums.js" defer></script>
@@ -51,6 +52,7 @@
   <script src="tags-tools.js" defer></script>
   <script src="tags.js" defer></script>
   <link rel="stylesheet" href="settings.css">
+  <link rel="stylesheet" href="now-playing.css">
   <!-- DSP 的动效补充必须排在 dsp-echo.css / settings.css 之后：它要改写"当前项右边框"的实现 -->
   <link rel="stylesheet" href="dsp-motion.css">
   <!-- 外观跟随补丁：ECHO 两层皮肤里的浅色面板、原生表单控件，必须排在所有 DSP 样式之后 -->
@@ -199,7 +201,7 @@
     </div>
 
     <footer class="player" aria-label="播放控制">
-      <div class="now-playing"><div class="mini-cover" aria-hidden="true"><span>AFTER<br>HOURS</span></div><div class="track-info"><strong id="track-title">Priestess</strong><span id="track-artist">Periphery · Juggernaut: Omega</span><small id="track-quality">演示曲目 · 未连接音频引擎</small></div></div>
+      <div class="now-playing"><button id="now-playing-open" class="mini-cover" type="button" aria-label="打开正在播放" title="打开正在播放"><span>AFTER<br>HOURS</span></button><div class="track-info"><strong id="track-title">Priestess</strong><span id="track-artist">Periphery · Juggernaut: Omega</span><small id="track-quality">演示曲目 · 未连接音频引擎</small></div></div>
       <div class="transport">
         <div class="timeline"><span id="elapsed">0:00</span><div class="waveform-seek" id="waveform-seek"><canvas id="progress-waveform" aria-hidden="true"></canvas><input id="progress" type="range" min="0" max="303" value="0" step="0.1" aria-label="播放进度"><span id="waveform-status" class="sr-only" role="status"></span></div><span id="duration">5:03</span></div>
         <!-- 三簇：左簇 | 播放键 | 右簇。左右各自成组，收起/换序只在簇内挪，
@@ -230,6 +232,38 @@
         <button id="audio-settings" class="icon-button" aria-label="音频设置" title="音频设置 · 输出 / AB 循环 / 速度 / 定时"><svg><use href="#i-settings"/></svg></button>
       </div>
     </footer>
+
+    <!-- 正在播放详情页：唯一入口是底栏左侧封面。数据全部来自 CelesteShell.getState()，
+         页面自己不持有播放状态，所以不会出现两套进度。 -->
+    <section id="now-playing" class="now-playing" hidden aria-label="正在播放">
+      <header class="np-head">
+        <span class="np-head-title">正在播放</span>
+        <button id="np-close" class="icon-button" type="button" aria-label="收起正在播放" title="收起（Esc）"><svg><use href="#i-chevron"/></svg></button>
+      </header>
+      <div class="np-body">
+        <div class="np-left">
+          <div class="np-cover" id="np-cover"></div>
+          <h1 class="np-title" id="np-title">—</h1>
+          <p class="np-artist" id="np-artist">—</p>
+          <p class="np-meta" id="np-meta" hidden></p>
+          <div class="np-progress">
+            <span id="np-elapsed">0:00</span>
+            <input id="np-progress" type="range" min="0" max="1" value="0" step="0.1" aria-label="播放进度">
+            <span id="np-duration">0:00</span>
+          </div>
+          <div class="np-controls">
+            <button id="np-favorite" class="icon-button" type="button" aria-label="喜欢当前歌曲" aria-pressed="false"><svg><use href="#i-heart"/></svg></button>
+            <button id="np-previous" class="icon-button previous" type="button" aria-label="上一首"><svg><use href="#i-next"/></svg></button>
+            <button id="np-play" class="np-play" type="button" aria-label="播放" aria-pressed="false"><svg><use href="#i-play"/></svg></button>
+            <button id="np-next" class="icon-button" type="button" aria-label="下一首"><svg><use href="#i-next"/></svg></button>
+          </div>
+        </div>
+        <div class="np-right">
+          <div id="np-lyrics" class="np-lyrics" tabindex="0" role="region" aria-label="歌词"></div>
+          <button id="np-lyrics-pin" class="np-pin" type="button" hidden>回到当前句</button>
+        </div>
+      </div>
+    </section>
 
     <div id="chain-scrim" class="chain-scrim" hidden></div>
     <aside id="chain-drawer" class="chain-drawer" hidden aria-labelledby="chain-title" role="dialog" aria-modal="true">
