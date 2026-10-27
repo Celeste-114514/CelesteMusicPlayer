@@ -329,6 +329,26 @@
     return played;
   }
 
+  /**
+   * 防闪烁的加载态：先把元素藏起来，超过 delay 还没回来才显示出来。
+   * 短请求（本地曲库、缓存命中）不该先闪一下"读取中…"再消失 —— 那一闪比不提示更烦。
+   * 返回 { cancel, shown }：回来时调 cancel()，已经显示过的会自己收回去。
+   */
+  function pending(element, delay = 180) {
+    if (!element) return { cancel: () => false, shown: false };
+    element.hidden = true;
+    let shown = false;
+    const timer = setTimeout(() => { shown = true; element.hidden = false; }, delay);
+    return {
+      cancel() {
+        clearTimeout(timer);
+        if (shown) element.hidden = true;
+        return shown;
+      },
+      get shown() { return shown; }
+    };
+  }
+
   /** 分类开关：关掉某一类，就只剩"状态变化"，不做那一类的动。 */
   function setOff(list) {
     state.off = new Set((Array.isArray(list) ? list : []).filter(id => CATEGORIES.includes(id)));
@@ -357,6 +377,7 @@
     reveal,
     captureRows,
     replayRows,
+    pending,
     markChanged,
     spring,
     press,

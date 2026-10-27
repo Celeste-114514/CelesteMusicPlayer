@@ -149,9 +149,11 @@
   function stop() {
     clearInterval(beat); beat = 0;
   }
+  let hideTimer = 0;
   function show() {
     if (open) return;
     open = true; epoch++;
+    clearTimeout(hideTimer);          // 上一轮还没走完的收起，立刻作废
     drawer.hidden = false; scrim.hidden = false;
     // 与既有面板同一条铁律：元素刚从隐藏变可见的同一帧开始动画会被吞掉，延一帧再加类。
     requestAnimationFrame(() => { drawer.classList.add('is-open'); scrim.classList.add('is-open'); });
@@ -163,10 +165,16 @@
   }
   function hide() {
     if (!open) return;
-    open = false; epoch++; stop();
+    open = false; const ticket = ++epoch; stop();
     drawer.classList.remove('is-open'); scrim.classList.remove('is-open');
     $('chain-button')?.removeAttribute('aria-expanded');
-    setTimeout(() => { if (!open) { drawer.hidden = true; scrim.hidden = true; } }, 240);
+    clearTimeout(hideTimer);
+    // 时长跟着同一套令牌走（含「弹窗」分类开关）：写死 240 的话，
+    // 把速度调慢以后抽屉会先被藏起来、动画还没放完。
+    hideTimer = setTimeout(() => {
+      if (open || ticket !== epoch) return;   // 退场期间又被打开：这不许把新开的抽屉藏掉
+      drawer.hidden = true; scrim.hidden = true;
+    }, (window.CelesteMotion?.duration(220, 'popup') ?? 220) + 20);
   }
 
   $('chain-button')?.addEventListener('click', () => open ? hide() : show());

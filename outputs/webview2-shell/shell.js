@@ -61,7 +61,8 @@
       if(generation!==coverGeneration){image.remove();return;}
       image.classList.add('cover-current');
       // The old layer stays opaque beneath the arriving image until it is covered.
-      setTimeout(()=>previous.forEach(old=>old.remove()),450);
+      const hold = (window.CelesteMotion?.duration(360, 'cover') ?? 360) + 90;
+      setTimeout(()=>previous.forEach(old=>old.remove()),hold);
     }));
   }
   let selectedSong = null, songQuery = '', sortAscending = true;

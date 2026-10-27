@@ -1,10 +1,10 @@
 /* 音频链路抽屉：与原生面板同一套信息分块，只是从左侧滑出而不是右侧。
    作用域只在本文件，避免碰到 shell/首页/DSP 的既有变量。 */
-.chain-scrim{position:fixed;inset:0;z-index:55;background:#2b2126a8;opacity:0;transition:opacity calc(220ms * var(--motion-scale)) ease}
+.chain-scrim{position:fixed;inset:0;z-index:55;background:#2b2126a8;opacity:0;transition:opacity calc(220ms * var(--motion-scale) * var(--motion-cat-popup)) ease}
 .chain-scrim.is-open{opacity:1}
 .chain-drawer{position:fixed;left:0;top:0;bottom:0;z-index:60;width:min(420px,calc(100vw - 40px));display:flex;flex-direction:column;
   background:linear-gradient(180deg,var(--accent-soft),var(--accent-soft));border-right:1px solid var(--accent-soft);box-shadow:18px 0 46px -22px #4a334045;
-  transform:translateX(-100%);transition:transform calc(220ms * var(--motion-scale)) cubic-bezier(.20,.90,.22,1)}
+  transform:translateX(-100%);transition:transform calc(220ms * var(--motion-scale) * var(--motion-cat-popup)) cubic-bezier(.20,.90,.22,1)}
 .chain-drawer.is-open{transform:none}
 .chain-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-shrink:0;padding:18px 20px 14px;border-bottom:1px solid var(--accent-soft)}
 .chain-head h2{margin:3px 0 0;font-size:calc(17px * var(--text-scale));font-weight:650;letter-spacing:-.2px}

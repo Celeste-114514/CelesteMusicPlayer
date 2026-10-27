@@ -44,7 +44,9 @@
     void body.offsetWidth;
     body.classList.add('dsp-reject');
     clearTimeout(flashReject.timer);
-    flashReject.timer = setTimeout(() => body.classList.remove('dsp-reject'), 600);
+    // 收尾时间跟着同一套时长走：写死 600 的话，调慢/调快动效后类会被提前摘掉
+    flashReject.timer = setTimeout(() => body.classList.remove('dsp-reject'),
+      (motion()?.duration(520, 'control') ?? 520) + 60);
   }
 
   // Exact port of the native ApproxBandGain (MainWindow.EqDsp.cs:803) — same branches, same
@@ -379,7 +381,10 @@
 
     const group = node('div', undefined, 'dsp-module-body');
     body.append(group);
-    group.append(node('p', '读取中…', 'dsp-row-hint'));
+    // 慢才显示"读取中…"：本地读很快，闪一下反而像出错
+    const loading = node('p', '读取中…', 'dsp-row-hint');
+    const loadingGate = motion()?.pending(loading);
+    group.append(loading);
 
     if (!live) {
       group.replaceChildren(node('p', '请在桌面播放器中使用这个页面：浏览器里读不到音频内核的参数。', 'dsp-row-hint'));
@@ -392,6 +397,7 @@
       // the bulk refresh failed for some reason.
       const dot = nav.querySelector(`[data-module="${id}"]`);
       if (dot) dot.dataset.active = String(!!result.active);
+      loadingGate?.cancel();
       group.replaceChildren();
       const visualHost = node('div'); group.before(visualHost);
       moduleVisual = window.CelesteDspVisuals.mount(visualHost, id, result.controls || [], result.info || {}, dsp, renderModule);
@@ -522,6 +528,7 @@
 
     const listBox = node('div', undefined, 'dsp-profile-list');
     const note = node('p', '读取中…', 'dsp-row-hint');
+    const noteGate = motion()?.pending(note);
     listBox.append(note);
     body.append(listBox);
 
@@ -529,6 +536,7 @@
 
     dsp('profiles').then(result => {
       if (current !== 'profiles') return;
+      noteGate?.cancel();
       listBox.replaceChildren();
       const profiles = result.profiles || [];
       if (!profiles.length) {
@@ -605,7 +613,9 @@
     panel.append(header);
 
     const list = node('ol', undefined, 'dsp-rack-list');
-    list.append(node('p', '读取中…', 'dsp-row-hint'));
+    const rackLoading = node('p', '读取中…', 'dsp-row-hint');
+    const rackGate = motion()?.pending(rackLoading);
+    list.append(rackLoading);
     panel.append(list);
     const foot = node('footer', undefined, 'dsp-rack-fixed');
     panel.append(foot);
@@ -613,6 +623,7 @@
 
     dsp('rack').then(result => {
       if (current !== 'rack') return;
+      rackGate?.cancel();
       list.replaceChildren();
       const modules = result.modules || [];
       modules.forEach(module => {
