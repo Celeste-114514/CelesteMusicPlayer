@@ -1,6 +1,7 @@
 /* Tag editor page. Real table over the real library: complete workspace data, virtual visual rows, lazy per-row tag reads,
    inline cell edit, quick/batch/numbering tools, and writes back through TagEditorService. */
-.tags-page{padding:0 0 30px}
+/* 只改纵向：横向内边距必须沿用 .page 的那套，写成 0 会让标题和卡片直接贴到窗口边上 */
+.tags-page{padding-bottom:30px}
 .tags-tool-page{display:grid;gap:14px;min-width:0}.tags-tool-form{display:grid;gap:10px}
 .tags-file-actions{display:flex;flex-wrap:wrap;gap:8px}.tags-file-actions .secondary{margin:0;height:34px;padding:0 13px;font-size:calc(11px * var(--text-scale))}
 .tags-panel>input{width:100%;padding:10px;border:1px solid var(--input-line);border-radius:10px;background:var(--surface);font:inherit;font-size:calc(12px * var(--text-scale));color:var(--muted)}
@@ -46,7 +47,12 @@
 .tags-cover-actions{display:flex;flex-wrap:wrap;gap:8px}
 
 /* ---- Table: kept as a real table on purpose (no card downgrade) ---- */
-.tag-table-wrap{border-radius:21px;background:var(--surface);border:1px solid var(--accent-soft);overflow:auto;max-height:calc(100vh - 260px)}
+.tag-table-wrap{border-radius:21px;background:var(--surface);border:1px solid var(--accent-soft);overflow:auto;max-height:calc(100vh - 260px);
+  /* 18 列本来就放不进一屏：滚动条要看得见，否则会被当成"表格被截断了" */
+  scrollbar-width:thin;scrollbar-color:color-mix(in oklab,var(--muted) 50%,transparent) transparent}
+.tag-table-wrap::-webkit-scrollbar{width:10px;height:10px}
+.tag-table-wrap::-webkit-scrollbar-thumb{background:color-mix(in oklab,var(--muted) 45%,transparent);border-radius:6px;border:2px solid transparent;background-clip:padding-box}
+.tag-table-wrap::-webkit-scrollbar-track{background:transparent}
 .tag-table{border-collapse:separate;border-spacing:0;width:100%;table-layout:fixed;font-size:calc(12px * var(--text-scale))}
 .tag-table thead th{position:sticky;top:0;z-index:2;background:var(--accent-soft);border-bottom:1px solid var(--accent-soft);padding:0;text-align:left;font-weight:600;color:var(--muted);font-size:calc(11px * var(--text-scale));white-space:nowrap}
 .tag-table thead th .th-inner{display:flex;align-items:center;gap:5px;padding:10px 10px;cursor:pointer;user-select:none}

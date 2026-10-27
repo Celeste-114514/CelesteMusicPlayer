@@ -1,6 +1,7 @@
 /* DSP rack page — layout, EQ curve, and the three real pages (profiles / rack order / safety
    meters). Everything here is driven by the native bridge; there is no placeholder data left. */
-.dsp-page{padding:0 0 30px}
+/* 只改纵向：横向沿用 .page 的内边距，否则 DSP 页会整块贴到窗口左边 */
+.dsp-page{padding-bottom:30px}
 .dsp-heading{display:flex;justify-content:space-between;align-items:flex-end;gap:20px;margin-bottom:22px}
 .dsp-heading h1{font-size:clamp(calc(24px * var(--text-scale)),2.4vw,calc(32px * var(--text-scale)))}
 .dsp-rack-toggle{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:19px;background:var(--panel-soft);font-size:calc(11px * var(--text-scale));color:var(--muted);white-space:nowrap}

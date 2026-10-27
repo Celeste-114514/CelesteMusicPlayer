@@ -890,6 +890,8 @@
     const placeholder = document.getElementById('category-page');
     if (placeholder) placeholder.hidden = true;
     document.querySelector('.main').scrollTop = 0;
+    // 表格列宽是固定的（18 列本来就放不进一屏），窄窗口靠横向滚动看全，这里只把位置归零。
+    tableWrap.scrollLeft = 0;
 
     shell.setPath([{ label: '标签编辑', action: () => { } }]);
     renderSubnav();
