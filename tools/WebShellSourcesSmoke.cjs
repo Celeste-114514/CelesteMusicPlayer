@@ -10,6 +10,7 @@ const { chromium } = require('playwright-core');
     await page.addInitScript(() => {
       const handlers = [], sources = [], commands = [];
       window.__sourceCommands = commands;
+      window.__failBrowse = false;      // 用来演一次"目录读不到"，看页面能不能就地重试
       window.chrome = { webview: {
         addEventListener: (_, handler) => handlers.push(handler),
         deliver: data => handlers.forEach(handler => handler({ data })),
@@ -17,6 +18,7 @@ const { chromium } = require('playwright-core');
           commands.push(message);
           if (!message.requestId || message.command !== 'sources') return;
           let result = { sources, providers: ['webdav', 'baidu', 'jellyfin', 'emby', 'smb', 'sshfs', 'subsonic'] };
+          let ok = true, error = '';
           if (message.operation === 'save') {
             const id = message.sourceId || 'fixture-' + message.provider;
             const source = { id, provider: message.provider, name: message.name, endpoint: message.endpoint, root: message.root,
@@ -25,10 +27,13 @@ const { chromium } = require('playwright-core');
             if (existing < 0) sources.push(source); else sources[existing] = source;
             result = { ...result, selectedId: id };
           } else if (message.operation === 'test') result = { ok: true, message: '连接成功' };
-          else if (message.operation === 'browse') result = { path: message.path, folders: message.path ? [] : [{ path: '/album', name: 'Album folder' }],
-            tracks: [{ id: 'remote-song', title: 'Remote song', artist: 'Artist', album: 'Album', cue: true }] };
+          else if (message.operation === 'browse') {
+            if (window.__failBrowse) { ok = false; error = '模拟目录不可达'; }
+            else result = { path: message.path, folders: message.path ? [] : [{ path: '/album', name: 'Album folder' }],
+              tracks: [{ id: 'remote-song', title: 'Remote song', artist: 'Artist', album: 'Album', cue: true }] };
+          }
           else if (message.operation === 'clearCache') result = { count: 2 };
-          setTimeout(() => handlers.forEach(handler => handler({ data: { kind: 'celeste.reply', version: 1, ok: true, requestId: message.requestId, data: result } })), 5);
+          setTimeout(() => handlers.forEach(handler => handler({ data: { kind: 'celeste.reply', version: 1, ok, error, requestId: message.requestId, data: result } })), 5);
         }
       } };
     });
@@ -54,6 +59,17 @@ const { chromium } = require('playwright-core');
     await page.getByRole('button', { name: '上一级', exact: true }).click();
     await page.getByRole('button', { name: '加入曲库 / 同步', exact: true }).first().click();
     await page.getByRole('button', { name: '取消同步', exact: true }).first().click();
+
+    // 目录读不到时就地给"重试"，而不是把上一次的内容留在屏幕上假装成功
+    await page.evaluate(() => { window.__failBrowse = true; });
+    await page.getByRole('button', { name: '浏览', exact: true }).first().click();
+    await page.waitForSelector('.source-workspace h2', { state: 'visible' });
+    assert.equal(await page.locator('.source-workspace h2').textContent(), '网络目录读取失败');
+    assert.match(await page.locator('.source-workspace').textContent(), /模拟目录不可达/);
+    await page.evaluate(() => { window.__failBrowse = false; });
+    await page.locator('.source-workspace').getByRole('button', { name: '重试', exact: true }).click();
+    await page.waitForFunction(() => document.querySelector('.source-workspace')?.textContent.includes('Remote song'));
+
     const commands = await page.evaluate(() => window.__sourceCommands);
     assert(commands.some(c => c.command === 'playTrack' && c.trackId === 'remote-song'));
     assert(commands.some(c => c.operation === 'pin' && c.trackId === 'remote-song'));
