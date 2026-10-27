@@ -50,9 +50,11 @@
       marks.append(el('line', { x1: 0, y1: size, x2: size, y2: 0 }));
       marks.append(el('line', { x1: 0, y1: 0, x2: size, y2: size }));
       svg.append(marks);
-      const label = (x, y, text) => { const t = el('text', { x, y, class: 'ps-note' }); t.textContent = text; svg.append(t); };
-      label(size - 6, 16, '同相 L=R');
-      label(6, 16, '反相 L=−R');
+      // 标注必须朝内对齐：靠右边的字用 end、左边用 start，否则文字会顶出 viewBox 被裁掉，
+      // 看起来就像"右边把图遮住了一块"。
+      const label = (x, y, text, anchor) => { const t = el('text', { x, y, class: 'ps-note', 'text-anchor': anchor }); t.textContent = text; svg.append(t); };
+      label(size - 6, 16, '同相 L=R', 'end');
+      label(6, 16, '反相 L=−R', 'start');
       this.traceGroup = el('g', { class: 'ps-traces' });
       svg.append(this.traceGroup);
       this.dot = el('circle', { cx: half, cy: half, r: 2, class: 'ps-silence', opacity: 0 });
@@ -115,7 +117,8 @@
         this.dot.setAttribute('opacity', '0');
         return;
       }
-      const scale = this.half * 0.9 * this.gain;
+      // 留 15% 余量：满幅信号也别贴到框边上被切掉
+      const scale = this.half * 0.8 * this.gain;
       for (const layer of this.layers) {
         const age = now - layer.at;
         if (age > AFTERGLOW_MS) continue;

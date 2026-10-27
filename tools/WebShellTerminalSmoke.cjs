@@ -71,9 +71,43 @@ const root = path.resolve(__dirname, '..');
     assert.ok((await page.textContent('#term-lyrics')).includes('第一行'), '歌词区应有内容');
     assert.ok((await page.textContent('#term-queue')).includes('第一首'), '队列区应列出真实顺序');
 
-    // 播放控制条被搬进终端区底部（方案要求底部保留统一控制）
+    // 播放控制条与进度条都要搬进终端区（方案要求底部保留统一控制 + 可拖动进度条）
     const controlsInside = await page.evaluate(() => !!document.querySelector('#np-terminal .np-controls'));
     assert.ok(controlsInside, '底部播放控制应搬进终端区');
+    assert.ok(await page.evaluate(() => !!document.querySelector('#np-terminal .np-progress')), '进度条也要搬进终端区');
+
+    // 顶部那条头不是终端区的一部分，必须跟着变深色，不能留一条白杠
+    const headBg = await page.evaluate(() => getComputedStyle(document.querySelector('.np-head')).backgroundColor);
+    const [r, g, b] = headBg.match(/\d+/g).map(Number);
+    assert.ok(r + g + b < 240, `终端模式下顶栏应是深色，实际 ${headBg}`);
+
+    // 相位图注记不能顶出 viewBox 被裁（右侧那条要朝内对齐）
+    const anchor = await page.evaluate(() => [...document.querySelectorAll('#term-phase .ps-note')].map(n => n.getAttribute('text-anchor')));
+    assert.deepEqual(anchor, ['end', 'start'], '相位图注记应朝内对齐');
+
+    // 三栏不能横向溢出 —— 25%+47%+28% 再叠 gap 会把右栏顶出窗口、看着像被右边裁掉
+    const overflow = await page.evaluate(() => {
+      const t = document.querySelector('#np-terminal'), g = document.querySelector('.term-grid');
+      return { term: t.scrollWidth - t.clientWidth, grid: g.scrollWidth - g.clientWidth };
+    });
+    assert.ok(overflow.term <= 1 && overflow.grid <= 1, `终端区不应横向溢出：${JSON.stringify(overflow)}`);
+
+    // 电平条必须真有填充：inset 只写 left 时宽度是 0，条形就只剩一圈边框
+    const fillWidth = await page.evaluate(() => document.querySelector('.term-level-fill').getBoundingClientRect().width);
+    assert.ok(fillWidth > 20, `电平填充应有可见宽度，实际 ${fillWidth}`);
+
+    // 纵向：主区按内容高度排完，剩余高度给歌词/队列，不能留一大片空白把歌词挤成两行
+    const lyricsH = await page.evaluate(() => document.querySelector('#term-lyrics').getBoundingClientRect().height);
+    assert.ok(lyricsH > 140, `歌词区不应被挤扁，实际高度 ${lyricsH}`);
+
+    // 三栏末尾卡片应齐平（卡片长高吃掉剩余高度），否则栏底留出一块块空洞
+    const bottoms = await page.evaluate(() => [...document.querySelectorAll('.term-col')]
+      .map(c => Math.round(c.lastElementChild.getBoundingClientRect().bottom)));
+    assert.ok(Math.max(...bottoms) - Math.min(...bottoms) <= 2, `三栏底部应齐平，实际 ${bottoms}`);
+
+    // 设备卡只放输出侧事实，不能把文件体积挂在「设备」下面
+    const deviceText = await page.textContent('#term-device');
+    assert.ok(!/SIZE/.test(deviceText), `设备卡不应出现文件体积：${deviceText}`);
 
     // 订阅应已打开
     assert.ok(await page.evaluate(() => window.__sent.includes('stereoSampling:true')), '终端应订阅立体声采样');
@@ -95,6 +129,12 @@ const root = path.resolve(__dirname, '..');
     assert.equal(await page.evaluate(() => getComputedStyle(document.querySelector('.term-grid')).gridTemplateColumns.split(' ').length), 1, '窄窗口应单列');
 
     assert.deepEqual(errors, [], '不应有页面报错');
+    // 留张截图，视觉问题（白杠、右栏裁切）肉眼一看就知道
+    await page.setViewportSize({ width: 1426, height: 920 });
+    await page.evaluate(() => { const s = document.getElementById('np-theme'); s.value = 'terminal'; s.dispatchEvent(new Event('change')); });
+    await page.evaluate(() => deliver({ kind: 'celeste.state', state: { trackId: 'test', title: '测试曲', artist: 'T', duration: 130, position: 12, playing: true, quality: 'ALAC · 24bit/44.1kHz', source: '本地曲库', outputDevice: 'WASAPI · 独占' } }));
+    await page.waitForTimeout(600);
+    await page.locator('#now-playing').screenshot({ path: path.join(root, 'outputs/web-shell-terminal-preview.png') });
     console.log('TERMINAL_SMOKE_OK');
   } finally { await browser.close(); }
 })();

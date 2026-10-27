@@ -42,7 +42,7 @@
     left.append(block('AUDIO STREAM / 音频流', 'term-stream'), block('SIGNAL CHAIN / 信号链', 'term-signal'), block('FILE / 文件', 'term-file'));
 
     const center = document.createElement('section'); center.className = 'term-col term-col-center';
-    const spec = document.createElement('div'); spec.className = 'term-block';
+    const spec = document.createElement('div'); spec.className = 'term-block term-block-grow';
     const specTitle = document.createElement('h3'); specTitle.textContent = 'SPECTRUM / 实时频谱'; spec.append(specTitle);
     els.spectrum = svgEl('svg', { id: 'term-spectrum', class: 'term-chart', viewBox: '0 0 800 220', preserveAspectRatio: 'none', 'aria-hidden': 'true' });
     spec.append(els.spectrum);
@@ -66,7 +66,7 @@
     center.append(spec, level);
 
     const right = document.createElement('aside'); right.className = 'term-col term-col-right';
-    const phase = document.createElement('div'); phase.className = 'term-block';
+    const phase = document.createElement('div'); phase.className = 'term-block term-block-grow';
     const phaseTitle = document.createElement('h3'); phaseTitle.textContent = 'PHASE / 相位'; phase.append(phaseTitle);
     els.phase = svgEl('svg', { id: 'term-phase', class: 'term-chart ps', viewBox: '0 0 400 400', role: 'img', 'aria-label': '立体声相位图' });
     phase.append(els.phase);
@@ -90,18 +90,30 @@
 
   // 播放控制条是整页共用的（方案：底部保留统一播放控制）。
   // 终端模式把 .np-body 整个藏起来了，所以要把控制条搬进终端区底部，退出时原样放回。
-  let controlsHome = null;
+  let controlsHome = null, progressHome = null;
   function moveControls(intoTerminal) {
+    // 进度条也要一起搬：它不在 .np-controls 里，而 .np-left 在终端模式下是隐藏的，
+    // 不搬过来的话底部就只有按钮、没有可拖动的进度条。
     const controls = page.querySelector('.np-controls');
-    if (!controls) return;
+    const progress = document.getElementById('np-progress')?.closest('.np-progress');
     if (intoTerminal) {
-      controlsHome ||= { parent: controls.parentElement, next: controls.nextElementSibling };
-      els.root.append(controls);
-    } else if (controlsHome?.parent) {
-      if (controlsHome.next && controlsHome.next.parentElement === controlsHome.parent) controlsHome.parent.insertBefore(controls, controlsHome.next);
-      else controlsHome.parent.append(controls);
-      controlsHome = null;
+      if (controls) {
+        controlsHome ||= { parent: controls.parentElement, next: controls.nextElementSibling };
+        els.root.append(controls);
+      }
+      if (progress) {
+        progressHome ||= { parent: progress.parentElement, next: progress.nextElementSibling };
+        // 进度条放在控制条上面：先看到进度，再看到按钮
+        els.root.insertBefore(progress, controls || null);
+      }
+      return;
     }
+    [[controls, controlsHome], [progress, progressHome]].forEach(([node, home]) => {
+      if (!node || !home?.parent) return;
+      if (home.next && home.next.parentElement === home.parent) home.parent.insertBefore(node, home.next);
+      else home.parent.append(node);
+    });
+    controlsHome = null; progressHome = null;
   }
 
   function setStereo(on) {
@@ -142,10 +154,14 @@
       ['OUTPUT', state.outputDevice || dash],
       ['STAGE', 'post-dsp']
     ]);
+    // 设备卡只放"输出侧"的事实。原来这里有 SIZE（文件体积），那是文件的事，
+    // 挂在「设备」下面会让人以为输出缓冲有多大 —— 换成位深/采样率这个真属于输出的读数。
+    const khz = a.sampleRate ? `${(a.sampleRate / 1000).toFixed(a.sampleRate % 1000 ? 1 : 0)} kHz` : '';
+    const resolution = [a.bitDepth ? `${a.bitDepth}-bit` : '', khz].filter(Boolean).join(' / ') || dash;
     rows($('term-device'), [
       ['OUTPUT', state.outputDevice || dash],
-      ['SIZE', a.fileSize ? `${(a.fileSize / 1048576).toFixed(1)} MB` : dash],
-      ['FORMAT', state.quality?.split(' · ')[0] || dash]
+      ['FORMAT', state.quality?.split(' · ')[0] || dash],
+      ['RESOLUTION', resolution]
     ]);
     rows($('term-file'), [
       ['FILE SIZE', a.fileSize ? `${(a.fileSize / 1048576).toFixed(1)} MB` : dash],

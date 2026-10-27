@@ -1,8 +1,17 @@
 /* 音频终端详情页。它自带深底 —— 不跟主页明暗模式走，否则浅色主页下这块会变成"灰底黑字"。
    强调色默认琥珀，可切"跟随主程序 / 琥珀 / 绿 / 青"。 */
-.np-terminal{display:none;flex-direction:column;min-height:0;height:100%;
+/* 变量挂在**页面**上而不是终端区里：详情页顶部那条头（主题下拉在那儿）也要跟着变深色，
+   否则就是一条白杠压在深底界面上。 */
+.now-playing-page[data-player-theme=terminal]{
   --term-bg:#0b0e12;--term-panel:#11161c;--term-line:#29323d;
-  --term-ink:#d6dce5;--term-muted:#929dac;--term-accent:#ffbe28;
+  --term-ink:#d6dce5;--term-muted:#929dac;--term-accent:#ffbe28}
+/* 顶部那条是详情页自己的头部，不是终端区的一部分，必须单独压成深色 */
+[data-player-theme=terminal] .np-head{background:var(--term-panel);border-bottom:1px solid var(--term-line)}
+[data-player-theme=terminal] .np-head .np-theme-label,[data-player-theme=terminal] .np-head select{color:var(--term-ink)}
+[data-player-theme=terminal] .np-head .icon-button{color:var(--term-muted)}
+[data-player-theme=terminal] .np-head .np-theme-label select{background:var(--term-bg);border-color:var(--term-line)}
+
+.np-terminal{display:none;flex-direction:column;min-height:0;height:100%;
   background:var(--term-bg);color:var(--term-ink);
   font-family:var(--font-mono),ui-monospace,'Cascadia Mono',Consolas,monospace;
   font-size:calc(12px * var(--text-scale));line-height:1.6}
@@ -22,18 +31,30 @@
 .term-time{font-variant-numeric:tabular-nums}
 .term-chain{margin-left:auto;color:var(--term-muted);max-width:38ch;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 
-/* 主区三栏：左 25% / 中 47% / 右 28% */
-.term-grid{display:grid;grid-template-columns:25% 47% 28%;gap:12px;padding:12px 16px;min-height:0;flex:1}
+/* 主区三栏：左 25 / 中 47 / 右 28。用 fr 而不是百分比 —— 百分比是按内容宽算的，
+   再叠上 gap 就超过 100%，右栏会被窗口边界裁掉一条。 */
+.term-grid{display:grid;grid-template-columns:minmax(0,25fr) minmax(0,47fr) minmax(0,28fr);
+  gap:12px;padding:12px 16px;min-height:0;flex:0 0 auto;overflow:auto}
 .term-col{display:flex;flex-direction:column;gap:12px;min-width:0}
-.term-block{background:var(--term-panel);border:1px solid var(--term-line);border-radius:6px;padding:10px 12px;min-width:0}
+/* 卡片本身竖排，图表才能吃掉多出来的高度、三栏底部对齐（不然仪表卡下面一片空） */
+.term-block{background:var(--term-panel);border:1px solid var(--term-line);border-radius:6px;padding:10px 12px;min-width:0;display:flex;flex-direction:column}
+/* 左栏三张信息卡把剩余高度分摊掉，避免在 FILE 下面留一大块空白；
+   中/右栏最后一张卡也长到栏底，三栏才会齐平 */
+.term-col-left > .term-block{flex:1 1 auto}
+.term-col > .term-block:last-child{flex:1 1 auto;min-height:0}
+/* 带图表的卡（频谱、相位）长高时，图表跟着长 */
+.term-block-grow{flex:1 1 auto;min-height:0}
 .term-block h3{margin:0 0 8px;font-size:.78em;letter-spacing:1.8px;color:var(--term-muted);font-weight:600}
 /* 读数一律用等宽 —— 这是终端页的意义所在：数字不该在播放时左右跳动 */
 .term-block dl,.term-readout{display:grid;grid-template-columns:auto 1fr;gap:2px 10px;margin:0;font-variant-numeric:tabular-nums}
 .term-block dt{color:var(--term-muted);white-space:nowrap}
-.term-block dd{margin:0;text-align:right;overflow:hidden;text-overflow:ellipsis}
+/* 值允许换行：右栏窄的时候被硬裁掉（比如设备信息）比折行更难读 */
+.term-block dd{margin:0;text-align:right;overflow-wrap:anywhere;min-width:0}
 .term-block dd.is-live{color:var(--term-accent)}
 
-.term-chart{width:100%;height:150px;display:block}
+/* 图形统一用强调色（频谱柱取 currentColor），和相位轨迹、电平条一致 */
+.term-chart{width:100%;height:150px;display:block;color:var(--term-accent)}
+.term-block-grow > .term-chart{flex:1 1 auto;min-height:110px}
 .term-chart.ps{height:260px}
 .ps-grid line{stroke:var(--term-line);stroke-width:1;opacity:.55}
 .ps-axis{stroke:var(--term-muted);opacity:.5}
@@ -45,16 +66,27 @@
 
 /* 左右电平：上下两根横条，峰值短暂保持 */
 .term-levels{display:grid;gap:8px}
-.term-level{display:grid;grid-template-columns:2.2em 1fr auto;align-items:center;gap:8px}
+.term-level{display:grid;grid-template-columns:1.6em minmax(0,1fr) minmax(0,auto);align-items:center;gap:8px}
 .term-level span:first-child{color:var(--term-muted)}
 .term-level-bar{position:relative;height:10px;border:1px solid var(--term-line);border-radius:3px;overflow:hidden}
-.term-level-fill{position:absolute;inset:0 auto 0 0;background:var(--term-accent);transform-origin:left center;transform:scaleX(0);transition:transform 90ms linear}
+/* inset 必须是四边都 0：只写 left:0 + right:auto 时宽度是"内容宽"，空 div 就是 0，
+   于是 scaleX 缩放再多也看不见。 */
+.term-level-fill{position:absolute;inset:0;background:var(--term-accent);transform-origin:left center;transform:scaleX(0);transition:transform 90ms linear}
 .term-level-peak{position:absolute;top:0;bottom:0;width:2px;background:var(--term-ink);left:0}
-.term-level b{font-weight:400;font-variant-numeric:tabular-nums;min-width:6.5em;text-align:right}
+/* 读数别钉最小宽度：中栏一窄它就把整行顶出边界、看起来像"被右边遮住" */
+.term-level b{font-weight:400;font-variant-numeric:tabular-nums;text-align:right;font-size:.92em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 
-/* 下方：歌词 2/3 + 队列 1/3 */
-.term-lower{display:grid;grid-template-columns:2fr 1fr;gap:12px;padding:0 16px 12px;min-height:0}
-.term-lyrics,.term-queue{background:var(--term-panel);border:1px solid var(--term-line);border-radius:6px;padding:10px 12px;overflow:auto;max-height:26vh;min-height:0}
+/* 搬进来的共用控制条与进度条：跟着终端的深色，别顶着主页的浅色底 */
+.np-terminal .np-progress,.np-terminal .np-controls{background:var(--term-panel);
+  border:1px solid var(--term-line);border-radius:6px;margin:0 16px 12px;padding:8px 12px;color:var(--term-ink)}
+.np-terminal .np-progress{margin-bottom:0}
+.np-terminal .np-controls button{color:var(--term-ink)}
+.np-terminal input[type=range]{background:linear-gradient(to right,var(--term-accent) var(--fill,0%),var(--term-line) var(--fill,0%))}
+
+/* 下方：歌词 2/3 + 队列 1/3。主区按内容高度排完之后，剩下的高度全给这里 ——
+   否则仪表卡下面会留一大片空白，歌词反而被挤成两行。 */
+.term-lower{display:grid;grid-template-columns:2fr 1fr;gap:12px;padding:0 16px 12px;min-height:0;flex:1 1 auto}
+.term-lyrics,.term-queue{background:var(--term-panel);border:1px solid var(--term-line);border-radius:6px;padding:10px 12px;overflow:auto;min-height:0}
 .term-line{padding:3px 0;color:var(--term-muted);white-space:pre-wrap}
 .term-line.is-current{color:var(--term-accent)}
 .term-queue-row{display:flex;gap:8px;align-items:baseline;width:100%;text-align:left;
