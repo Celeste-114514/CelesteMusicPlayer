@@ -51,7 +51,9 @@ namespace CelesteMusicPlayer
             Title = "Celeste";
             var root = new Grid(); root.Children.Add(_web); root.Children.Add(_status); Content = root;
             // One caption only: HTML controls, native resize border and WebView2 draggable regions.
-            if (AppWindow.Presenter is OverlappedPresenter chrome) chrome.SetBorderAndTitleBar(true, false);
+            if (AppWindow.Presenter is OverlappedPresenter chrome) chrome.SetBorderAndTitleBar(true, true);
+            AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
+            AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
             AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 960));
             _timer = DispatcherQueue.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(250);
             _timer.Tick += (_, _) => { if (_ready) { SendState(); SendThemeIfChanged(); if (_dirty) _ = SendLibraryAsync(); } };
@@ -448,6 +450,18 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            if (action == "caption-regions")
+            {
+                var regions = new List<Windows.Graphics.RectInt32>();
+                if (AppWindow.Presenter.Kind != AppWindowPresenterKind.FullScreen)
+                    foreach (var rect in msg.GetProperty("rects").EnumerateArray().Take(64))
+                        regions.Add(new Windows.Graphics.RectInt32(
+                            (int)Finite(rect, "x"), (int)Finite(rect, "y"),
+                            Math.Max(0, (int)Finite(rect, "width")), Math.Max(0, (int)Finite(rect, "height"))));
+                Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(AppWindow.Id)
+                    .SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Caption, regions.ToArray());
+                return;
+            }
             bool value = msg.TryGetProperty("value", out JsonElement flag) && flag.ValueKind == JsonValueKind.True;
             WindowCommand(action, value);
         }

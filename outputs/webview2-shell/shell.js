@@ -332,31 +332,7 @@
   function setPanel(next) { panel=next; $('side-panel').hidden=!panel; $('queue').setAttribute('aria-expanded',String(panel==='queue')); if(panel)renderPanel(); }
   $('panel-close').addEventListener('click',()=>setPanel(null));
   document.querySelectorAll('[data-window]').forEach(button=>button.addEventListener('click',()=>live?send('window',{ action:button.dataset.window }):notify('窗口操作将在 WebView2 桌面外壳中启用')));
-  // 窗口拖动：不依赖 WebView2 的 app-region。那条路苛刻且脆弱——要 IsNonClientRegionSupportEnabled
-  // 在**下一次导航**才生效、还看运行时版本。这里改成网页判定"指针落在标题栏空白处"，
-  // 由宿主按光标位置移动窗口；按钮/输入/下拉这些交互元素仍然自己吃事件。
-  const dragSurfaces=[document.querySelector('.titlebar'),document.querySelector('.np-head')].filter(Boolean);
-  // label 也算交互：下拉是"原地增强原生 select"的，点标签会落到控件上
-  const dragInteractive='button,input,select,textarea,a,label,.header-tools,.header-actions,.np-head-actions,.window-actions';
-  let dragActive=false;
-  const dragStop=()=>{ if(live&&dragActive){ dragActive=false; send('window',{ action:'drag-end' }); } };
-  document.addEventListener('pointerup',dragStop);
-  document.addEventListener('pointercancel',dragStop);
-  window.addEventListener('blur',dragStop);
-  dragSurfaces.forEach(surface=>{
-    surface.addEventListener('pointerdown',event=>{
-      if(!live||event.button!==0||event.target.closest(dragInteractive))return;
-      // 阻止选中标题文字；拖动手感跟原生标题栏一致
-      event.preventDefault();
-      dragActive=true;
-      send('window',{ action:'drag-start' });
-    });
-    // 双击标题栏空白处 = 原生标题栏的还原/最大化
-    surface.addEventListener('dblclick',event=>{
-      if(!live||event.target.closest(dragInteractive))return;
-      send('window',{ action:'maximize' });
-    });
-  });
+  // Native caption hit testing is configured by window-drag.js.
   if (live) {
     $('native-view').hidden=true;
     $('library-note').textContent='本机音频引擎 · 原输出与 DSP 配置';
