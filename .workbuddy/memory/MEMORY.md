@@ -49,6 +49,21 @@
     外观页「动效」卡改它们走 `theme` 通道的 `motion` 操作（显式传 null = 回到预设）。
   - `--motion-continuity`/`--motion-fast` 曾经从未定义 → 30 处 transition 整条作废（悬停一直是瞬变），现已补别名。
   - `file://` 下页面里读 `document.styleSheets[].cssRules` 会抛安全错误 → 扫 CSS 硬编码颜色要在 Node 里读文件。
+  - **共用浮层的两条铁律**（10-27 补）：
+    ① 每次 open 发一个 `popupToken`，旧浮层的退场动画只许拆自己那一份（同 id 反开不会被拆）；
+    ② 关闭时**立刻**把焦点还给触发控件，不等退场动画（等 140ms 的话这段时间键盘操作全丢）。
+  - **右键菜单（track-menu.js）已改走共用浮层**；菜单元素**复用同一个**（每次新建会出现两个
+    `#track-context-menu`，点按钮"命中两个"）。多选栏拆成"外壳居中 + 内层动画"两层：
+    外壳要 translateX(-50%)、动画要 translateY，写一起会互相覆盖。
+  - **系统「减少动画」优先于用户在外观页选的模式**：选了"完整"也不该盖过系统的无障碍设置。
+    有效档位：off / reduce（系统，只留很短淡变）/ lite（去位移）/ full。
+  - 动效分类开关（nav/popup/list/control/theme/cover）与时长令牌由并行 agent 实现（`f1a3940`），
+    令牌名很细：`--dur-nav-slow`/`--dur-nav-collapse`/`--dur-panel-in`/`--dur-cover-zoom`/`--dur-tab` 等。
+  - ⚠ **本仓库有并行 agent 同时在改**：动手前先 `git log --oneline -5` 看有没有别人的新提交，
+    重叠的改动要合并，别覆盖（我曾差点用自己那套分类开关覆盖掉他们的）。
+  - 网页冒烟脚本要能回退 `playwright-core`（本机只装了它，只 require 'playwright' 的脚本一直跑不起来）。
+    `tools/WebShell*Smoke.cjs` 共 18 个（含新增 `WebShellMotionStress.cjs`），现在全过。
+    量位置前要**等页面转场结束**（转场有 10px 位移，量早了会差 10px）。
 
 ## 构建 / 发布
 - **publish 目录是 `CelesteMusicPlayer\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish`**
@@ -59,6 +74,11 @@
   在 `MetadataWriter`；`Microsoft.CSharp.CurrentVersion.targets(239,5)`）：第一次崩、**原样重试第二次就成**，
   与 XamlCompiler 连崩同类属环境噪音，不要改自己代码找原因。
 - ⚠ publish 前 obj/x64·bin/x64 搬不动（WinError 5）→ 先 `dotnet build-server shutdown`。
+- ⚠ **XamlCompiler.exe 会 0xC0000005 崩**（`Microsoft.UI.Xaml.Markup.Compiler.interop.targets` MSB3073），
+  与 Roslyn 崩溃同类属环境噪音；挪开 obj/x64、bin/x64 全量重建也压不住。
+  **只改网页资源时不必等 publish 成功**：二进制沿用上一次成功发布，
+  按 csproj 的 Content 规则把 `outputs/webview2-shell/*.{html,css,js}` 拷进 publish 的 `WebShell\`，
+  再跑 `_sync_webshell_dist.py`（BAD=0 即可）。⚠ 改了 C# 就必须等 publish 成功，否则宿主改动不生效。
 - ⚠ 仓库根 `global.json` **未跟踪**，把本机 SDK 锁在 9.0.317（想用 net10 必须先动它，否则 NETSDK1045 看着像不支持）。
   net9→net10 已实测可行：现有 WinAppSDK 1.8.2511xxxxx + CommunityToolkit DataGrid 7.1.2 **无需换包**。
 - ⚠ 验证产物新鲜度**别信 exe**（跨构建字节不变的启动器外壳），对 `CelesteMusicPlayer.dll` 做 md5 / 搜字符串
