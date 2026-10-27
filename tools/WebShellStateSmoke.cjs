@@ -2,6 +2,14 @@
 // 以及外观页「按钮与输入框」「弹窗与浮层」两张卡是否画出来。
 //   NODE_PATH=C:\Users\MSI\_pwtmp\node_modules node tools/WebShellStateSmoke.cjs
 const assert = require('node:assert/strict');
+  // 颜色比较别用字符串相等：Chromium 在过渡进行中会把不透明色序列化成 `rgba(r, g, b, 1)`，
+  // 过渡结束后才是 `rgb(r, g, b)`。按通道比，顺带容忍 ±1 的取整误差。
+  const sameColor = (actual, expected) => {
+    const parse = value => (String(value).match(/[\d.]+/g) || []).slice(0, 3).map(Number);
+    const a = parse(actual), b = parse(expected);
+    return a.length === 3 && b.length === 3 && a.every((channel, index) => Math.abs(channel - b[index]) <= 1);
+  };
+
 const path = require('node:path');
 let chromium;
 try { ({ chromium } = require('playwright')); } catch { ({ chromium } = require('playwright-core')); }
@@ -96,7 +104,7 @@ const SNAPSHOT = {
     await page.waitForTimeout(200);
     const hoverBg = await page.evaluate(() => getComputedStyle(document.getElementById('favorite')).backgroundColor);
     console.log('hoverBg=' + hoverBg);
-    assert.equal(hoverBg, 'rgb(17, 34, 51)', '悬停底色没吃 --hover');
+    assert.ok(sameColor(hoverBg, 'rgb(17, 34, 51)'), '悬停底色没吃 --hover：' + hoverBg);
 
     // 按下：按住不放再量
     const box = await page.locator('#favorite').boundingBox();
@@ -107,7 +115,7 @@ const SNAPSHOT = {
     const activeBg = await page.evaluate(() => getComputedStyle(document.getElementById('favorite')).backgroundColor);
     await page.mouse.up();
     console.log('activeBg=' + activeBg);
-    assert.equal(activeBg, 'rgb(68, 85, 102)', '按下底色没吃 --pressed');
+    assert.ok(sameColor(activeBg, 'rgb(68, 85, 102)'), '按下底色没吃 --pressed：' + activeBg);
 
     // 卡片
     const cards = await page.evaluate(async () => {
