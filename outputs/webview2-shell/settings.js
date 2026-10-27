@@ -842,24 +842,58 @@
     scrollTarget.scrollTop = 0;
   }
 
+  // 分类导航的共享指示条：只有这一块，跟着选中项走。
+  // 之前是每项自己加 .selected 底色 —— 换分类时旧的一下消失、新的一下出现，没有连续感。
+  let navIndicator = null;
+
+  function placeNavIndicator(instant) {
+    if (!navIndicator) return;
+    const active = navTarget.querySelector('.settings-nav-item.selected');
+    if (!active || !active.offsetHeight) { navIndicator.dataset.ready = 'false'; return; }
+    if (instant) {
+      navIndicator.style.transition = 'none';
+      requestAnimationFrame(() => { navIndicator.style.transition = ''; });
+    }
+    navIndicator.dataset.ready = 'true';
+    navIndicator.style.setProperty('--ind-y', active.offsetTop + 'px');
+    navIndicator.style.setProperty('--ind-h', active.offsetHeight + 'px');
+  }
+
+  function selectGroup(id) {
+    navTarget.querySelectorAll('.settings-nav-item').forEach(button => {
+      const on = button.dataset.group === id;
+      button.classList.toggle('selected', on);
+      if (on) button.setAttribute('aria-current', 'page'); else button.removeAttribute('aria-current');
+    });
+    placeNavIndicator();
+  }
+
   function renderNav() {
     navTarget.replaceChildren();
     navTarget.append(node('p', '设置分类', 'settings-nav-title'));
     (snapshot.groups || []).forEach(item => {
       const button = node('button', undefined, 'settings-nav-item' + (item.id === group ? ' selected' : ''));
       button.type = 'button';
+      button.dataset.group = item.id;
+      if (item.id === group) button.setAttribute('aria-current', 'page');
       button.append(icon(item.icon || 'settings'), node('span', item.label));
       const count = snapshot.defs.filter(def => def.group === item.id).length;
       if (count) button.append(node('span', String(count), 'settings-nav-count'));
       button.addEventListener('click', () => {
+        if (group === item.id && !query) return;
         group = item.id;
         query = '';
         if (searchInput) searchInput.value = '';
-        renderNav();
+        // 不重建导航栏：重建会把指示条一起换掉，看着就是"跳"而不是"滑"
+        selectGroup(item.id);
         render();
       });
       navTarget.append(button);
     });
+    navIndicator = node('span', undefined, 'settings-nav-indicator');
+    navIndicator.setAttribute('aria-hidden', 'true');
+    navTarget.append(navIndicator);
+    placeNavIndicator(true);
   }
 
   async function reload() {

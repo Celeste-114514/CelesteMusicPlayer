@@ -28,9 +28,11 @@
       return (result||collator.compare(a.title,b.title))*(ascending?1:-1);
     });
     $('albums-count').textContent=query?`${visible.length} 张匹配 · 共 ${albums.length} 张专辑`:`${albums.length} 张专辑 · ${shell.getLibrary().length} 首歌曲`;
+    // 换排序时卡片会整体换位：先记位置，重建后让它们滑过去
+    const cardPositions=window.CelesteMotion?.captureRows($('albums-grid'));
     $('albums-grid').replaceChildren();$('albums-empty').hidden=visible.length>0;$('albums-more').hidden=visible.length<=limit;
     visible.slice(0,limit).forEach(album=>{
-      const card=document.createElement('article');card.className='album-card';card.dataset.albumId=album.id;
+      const card=document.createElement('article');card.className='album-card';card.dataset.albumId=album.id;card.dataset.flipkey=album.id;
       const open=document.createElement('button');open.className='album-open';open.setAttribute('aria-label',`打开专辑 ${album.title}，${album.artist}`);open.title=album.title+'\n'+album.artist;
       const title=document.createElement('strong');title.className='album-card-title';title.textContent=album.title;
       const artist=document.createElement('span');artist.className='album-card-artist';artist.textContent=album.artist;
@@ -39,7 +41,8 @@
       const play=document.createElement('button');play.className='album-quick-play';play.setAttribute('aria-label','播放专辑 '+album.title);play.title='播放这张专辑';
       const svg=document.createElementNS('http://www.w3.org/2000/svg','svg'),use=document.createElementNS(svg.namespaceURI,'use');use.setAttribute('href','#i-play');svg.append(use);play.append(svg);play.addEventListener('click',()=>playAlbum(album));card.append(open,play);$('albums-grid').append(card);
     });
-    window.CelesteMotion?.fadeIn($('albums-grid'),'list');
+    const moved=window.CelesteMotion?.replayRows($('albums-grid'),cardPositions)||0;
+    if(!moved)window.CelesteMotion?.fadeIn($('albums-grid'),'list');
   }
   function openAlbum(album){
     opened=album;$('albums-browser').hidden=true;$('album-detail').hidden=false;

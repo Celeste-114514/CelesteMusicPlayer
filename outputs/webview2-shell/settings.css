@@ -2,12 +2,20 @@
    控件只做「看得懂现在值是多少」，不替用户猜该改哪个 —— 说明文字由后端 schema 的 note 提供。 */
 .settings-page{padding:0;height:100%;display:flex;min-height:0}
 .settings-layout{display:flex;gap:16px;width:100%;min-height:0;padding:18px 24px 0}
-.settings-nav{width:186px;min-width:186px;display:flex;flex-direction:column;gap:3px;overflow:auto;padding-bottom:18px;scrollbar-width:thin;scrollbar-color:var(--panel-soft) transparent}
+.settings-nav{width:186px;min-width:186px;display:flex;flex-direction:column;gap:3px;overflow:auto;padding-bottom:18px;scrollbar-width:thin;scrollbar-color:var(--panel-soft) transparent;position:relative}
 .settings-nav-title{font-size:calc(9px * var(--text-scale));letter-spacing:2.4px;color:var(--muted);font-weight:600;padding:6px 12px 12px}
-.settings-nav-item{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;font-size:calc(12px * var(--text-scale));color:var(--muted);text-align:left;transition:background calc(200ms * var(--motion-scale)),color calc(200ms * var(--motion-scale))}
+/* 选中底色交给共享指示条，否则换分类时会看到"旧的消失、新的出现"两下跳变。
+   导航项抬到指示条之上，悬停底色才不会被盖住。 */
+.settings-nav-item{position:relative;z-index:1;display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:12px;background:transparent;font-size:calc(12px * var(--text-scale));color:var(--muted);text-align:left;transition:background calc(200ms * var(--motion-scale)),color calc(200ms * var(--motion-scale))}
 .settings-nav-item svg{width:16px;height:16px}
 .settings-nav-item:hover{background:var(--hover);color:var(--accent)}
-.settings-nav-item.selected{background:var(--accent-soft);color:var(--accent);font-weight:550}
+.settings-nav-item.selected{background:transparent;color:var(--accent);font-weight:550}
+.settings-nav-indicator{
+  position:absolute;left:0;right:0;top:var(--ind-y,0);height:var(--ind-h,0);
+  border-radius:12px;background:var(--accent-soft);opacity:0;pointer-events:none;z-index:0;
+  transition:top var(--dur-nav) var(--ease-continuity),height var(--dur-nav) var(--ease-continuity),opacity var(--dur-quick) linear;
+}
+.settings-nav-indicator[data-ready="true"]{opacity:1}
 .settings-nav-count{margin-left:auto;font-size:calc(9px * var(--text-scale));color:var(--muted);background:var(--accent-soft);border-radius:8px;padding:2px 6px}
 .settings-nav-item.selected .settings-nav-count{background:var(--surface);color:var(--accent)}
 .settings-body{flex:1;min-width:0;display:flex;flex-direction:column;min-height:0}

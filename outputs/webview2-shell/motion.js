@@ -270,6 +270,65 @@
     element.classList.add('state-flash');
   }
 
+  /**
+   * 列表重排：重建前记下每一行在屏幕上的位置（capture），重建后让新行从旧位置滑回来（replay）。
+   *
+   * 为什么不用 flip()：那套要求"前后是同一批节点"，而歌曲/专辑/艺术家列表是整体
+   * replaceChildren 重建的，节点身份对不上。这里按行自己的 data 键对齐，
+   * 换了节点也能算出该滑多远。
+   *
+   * 拆成两步是因为调用方中间还要做别的（改计数、更新选中态），
+   * 塞进一个回调里会把那些逻辑一起缩进一层，改起来更容易碰坏原有分支。
+   *
+   * 只动视口附近的行，且有上限 —— 列表可能有两百行，不能给每行都建一个动画对象。
+   */
+  const VIEW_MARGIN = 160;
+
+  function captureRows(container, options = {}) {
+    const { keyAttr = 'data-flipkey', selector = null } = options;
+    const map = new Map();
+    if (!container || typeof container.getBoundingClientRect !== 'function') return map;
+    const box = container.getBoundingClientRect();
+    const keyOf = element => (selector ? element.querySelector(selector) : element)?.getAttribute(keyAttr) || '';
+    [...container.children].forEach(element => {
+      const key = keyOf(element);
+      if (!key) return;
+      const rect = element.getBoundingClientRect();
+      if (rect.bottom < box.top - VIEW_MARGIN || rect.top > box.bottom + VIEW_MARGIN) return;
+      map.set(key, { top: rect.top, left: rect.left, box: box });
+    });
+    return map;
+  }
+
+  /** 返回真正播了动画的行数；为 0 时调用方可以退回"整块淡变"。 */
+  function replayRows(container, snapshot, options = {}) {
+    const { keyAttr = 'data-flipkey', selector = null, category = 'list', limit = 60, maxShift = 1400 } = options;
+    if (!container || !snapshot || !snapshot.size) return 0;
+    if (!canMove() || state.off.has(category)) return 0;
+    const box = snapshot.values().next().value?.box || container.getBoundingClientRect();
+    const keyOf = element => (selector ? element.querySelector(selector) : element)?.getAttribute(keyAttr) || '';
+    let played = 0;
+    [...container.children].forEach(element => {
+      if (played >= limit) return;
+      const key = keyOf(element);
+      if (!key) return;
+      const was = snapshot.get(key);
+      if (!was) return;
+      const rect = element.getBoundingClientRect();
+      if (rect.bottom < box.top - VIEW_MARGIN || rect.top > box.bottom + VIEW_MARGIN) return;
+      // 网格里换序是横向挪（同一行内换位），列表里是纵向挪 —— 两个方向都要算，
+      // 只算纵向会让"一排卡片的顺序变了"看起来完全没动。
+      const dx = was.left - rect.left;
+      const dy = was.top - rect.top;
+      if (Math.abs(dx) < 1.5 && Math.abs(dy) < 1.5) return;
+      if (Math.abs(dx) > maxShift || Math.abs(dy) > maxShift) return;
+      played += 1;
+      animate(element, [{ transform: `translate(${dx}px, ${dy}px)` }, { transform: 'translate(0, 0)' }],
+        { duration: duration(180, category), easing: easings.enter });
+    });
+    return played;
+  }
+
   /** 分类开关：关掉某一类，就只剩"状态变化"，不做那一类的动。 */
   function setOff(list) {
     state.off = new Set((Array.isArray(list) ? list : []).filter(id => CATEGORIES.includes(id)));
@@ -296,6 +355,8 @@
     flip,
     fadeIn,
     reveal,
+    captureRows,
+    replayRows,
     markChanged,
     spring,
     press,

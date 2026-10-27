@@ -204,6 +204,8 @@
   }
   function renderSongs() {
     const tracks = visibleSongs();
+    // 排序 / 换来源会让行的位置整体移动：先记位置，重建后再让新行从旧位置滑过去
+    const rowPositions = window.CelesteMotion?.captureRows($('songs-list'), { selector: '.song-row' });
     $('songs-list').replaceChildren();
     metadataObserver?.disconnect();
     rowStamp = '';
@@ -219,6 +221,8 @@
     tracks.slice(0,visibleLimit).forEach(({track,index}, order) => {
       const item = document.createElement('li'), button = document.createElement('button');
       button.className = 'song-row'; button.dataset.index = index; button.dataset.number = order + 1;
+      // 排序/换源时靠这个键把"新的一行"对回"旧位置"，才有滑动；不是给 CSS 用的
+      button.dataset.flipkey = live ? track.id : String(index);
       if(live)button.dataset.trackId=track.id;
       button.setAttribute('aria-label', `${track.title}，${track.artist}，${format(track.duration)}`);
       const number = document.createElement('span'); number.className='song-number'; number.textContent=order+1;
@@ -241,8 +245,9 @@
       metadataObserver?.observe(button);
     });
     updateSongRows();
-    // 内容换新了，给一次轻淡变，让人看出"列表换了"；只动容器，不逐行开动画
-    window.CelesteMotion?.fadeIn($('songs-list'), 'list');
+    // 有行真的换了位置就滑过去；整批换内容（切来源、搜索）才退回一次轻淡变
+    const moved = window.CelesteMotion?.replayRows($('songs-list'), rowPositions, { selector: '.song-row' }) || 0;
+    if (!moved) window.CelesteMotion?.fadeIn($('songs-list'), 'list');
   }
   $('songs-more').addEventListener('click',()=>{visibleLimit+=200;renderSongs();});
   $('songs-sort').addEventListener('change', renderSongs);
