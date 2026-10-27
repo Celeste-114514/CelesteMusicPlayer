@@ -163,7 +163,24 @@ State 冒烟断言颜色格式（新版 Edge 序列化成 `rgba(...)`）；Album
 - 加载态"延迟显示防闪烁"（短请求不闪一下 loading）；
 - 网络来源**每个任务独立**的进度区（现在只有一行状态）。
 
-### 仍然卡着的
+### 发布卡点：已解决（2026-10-27 13:24）
 
-`dotnet publish` 在这台机器上还是崩（XamlCompiler 0xC0000005 / Roslyn 内部错误）。
-本轮只改网页、没改 C#，所以二进制沿用上次成功发布的那份。**动效分类开关的宿主字段仍未编译进去。**
+之前几轮 publish 都崩在 XamlCompiler `0xC0000005` / Roslyn `0x80131506`，一直靠"沿用上次二进制"绕。
+翻历史（`.workbuddy/memory/ref-build-publish.md`、`celeste-build-verify` skill）找到了现成做法：
+
+**`python _publish_retry_clean.py 8`** —— 每轮先 `dotnet build-server shutdown`，再把 `obj/x64`、`bin/x64`
+挪走（同卷 move），然后 publish；`error CS` 判定为真错立即停，其余崩溃继续下一轮。
+这次**第 1 轮就过（75s，exit=0，CS=0）**。
+
+结论（与 skill 里受控 A/B 一致）：**这类崩溃是随机的，没有神奇开关**。
+`-m:1 / -nodeReuse:false` 是巧合（并行那轮过、串行那轮崩）；`UseWinUIOutOfProcessXamlCompiler=false`
+不是真属性；`DOTNET_EnableHWIntrinsic=0` 2/4 照崩。唯一有效的是"关服务 + 清中间产物 + 多轮重试"。
+
+产物已同步到 `dist/web-shell-dsp-tags-complete/`：
+- `CelesteMusicPlayer.dll` 3416576 → **3420160 字节**，`BAD=0`；
+- 新版二进制里 `motionOff` / `MotionOffList` / `MotionCategories` 都在
+  （**元数据里是 UTF-8**，之前只搜 UTF-16LE 才误判成"没编进去"）；
+- 单次启动验证：`[WebShell] initialized`、theme revision=37、曲库 4031 首，
+  唯一 ERR 是已知噪音 `App.PrimaryLanguageOverride`。
+
+所以**动效分类开关现在前后端都通了**，不再是空转。

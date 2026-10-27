@@ -81,8 +81,15 @@
   再跑 `_sync_webshell_dist.py`（BAD=0 即可）。⚠ 改了 C# 就必须等 publish 成功，否则宿主改动不生效。
 - ⚠ 仓库根 `global.json` **未跟踪**，把本机 SDK 锁在 9.0.317（想用 net10 必须先动它，否则 NETSDK1045 看着像不支持）。
   net9→net10 已实测可行：现有 WinAppSDK 1.8.2511xxxxx + CommunityToolkit DataGrid 7.1.2 **无需换包**。
-- ⚠ 验证产物新鲜度**别信 exe**（跨构建字节不变的启动器外壳），对 `CelesteMusicPlayer.dll` 做 md5 / 搜字符串
-  （.NET 字符串字面量是 UTF-16LE，UTF-8 搜不到）。
+- ⚠ 验证产物新鲜度**别信 exe**（跨构建字节不变的启动器外壳），对 `CelesteMusicPlayer.dll` 做 md5 / 搜字符串。
+  **搜法要按类型分**：字段/方法名在元数据 `#Strings` 堆里是 **UTF-8**，字符串字面量在 `#US` 堆里才是 UTF-16LE。
+  2026-10-27 就因为只搜 UTF-16LE，把一份**确实已编进去**的 DLL 误判成"字段没进去"。
+- ✅ **publish 崩溃有解了（10-27 实测）**：`python _publish_retry_clean.py 8` —— 每轮先
+  `dotnet build-server shutdown` + 把 obj/x64、bin/x64 挪走再 publish，**第 1 轮就过（75s）**。
+  这类崩溃就是随机的（skill 里写死 ~50% 失败率），**没有神奇开关**：
+  `-m:1`/`-nodeReuse:false` 做过受控 A/B 属巧合；`UseWinUIOutOfProcessXamlCompiler=false` 不是真属性；
+  `DOTNET_EnableHWIntrinsic=0` 2/4 照崩。**唯一有效的是"关服务 + 清中间产物 + 多轮重试"**。
+  判据：`error CS` 行数跨轮稳定 = 真代码错，立即停；崩溃时 stdout/stderr 全空、obj 下无 .g.cs。
 - ⚠ 冒烟 SUSPECT_LINES=0 抓不到被 `Safe()` 吞掉的真错 —— **必须肉眼过一遍新增 ERR 行**。
   已知噪音：`App.PrimaryLanguageOverride`、`[thumb] 渲染全透明`。脚本 `_smoke_settings.py`。
 - ⚠ Python 改 csproj：`utf-8-sig` 读会吃 BOM、`utf-8` 写回没 BOM → git 显示 ` M`，事后 `git checkout --` 还原。
