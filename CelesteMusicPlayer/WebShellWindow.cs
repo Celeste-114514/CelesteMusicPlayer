@@ -465,7 +465,7 @@ namespace CelesteMusicPlayer
         {
             // 拖动命令要走在这里前述检查之前：全屏时 presenter 不是 OverlappedPresenter，
             // 此时仍要能收到 drag-end 把轮询停掉。
-            if (action == "drag-start") { StartWindowDrag(); return; }
+            if (action == "drag-start") { DispatcherQueue.TryEnqueue(StartWindowDrag); return; }
             if (action == "drag-end") { StopWindowDrag(); return; }
             if (action == "close") { Close(); return; }
             if (action == "fullscreen")
@@ -509,13 +509,9 @@ namespace CelesteMusicPlayer
             _dragOffsetX = cursor.X - _dragOrigin.X;
             _dragOffsetY = cursor.Y - _dragOrigin.Y;
             _dragging = true;
-            if (!TryNativeMoveLoop(cursor)) { StartDragPolling(); return; }
-            // 原生循环起没起来不能靠猜，探针负责确认；没接管就切轮询，保证一定能拖
-            _dragProbe ??= DispatcherQueue.CreateTimer();
-            _dragProbe.Interval = TimeSpan.FromMilliseconds(60);
-            _dragProbe.Tick -= DragProbeTick;
-            _dragProbe.Tick += DragProbeTick;
-            _dragProbe.Start();
+            // 同步进入 Windows 移动循环，返回时拖动已结束；不再让探针/轮询争夺窗口位置。
+            try { TryNativeMoveLoop(cursor); }
+            finally { StopWindowDrag(); }
         }
 
         private static bool IsLeftButtonDown() => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0;
@@ -530,7 +526,7 @@ namespace CelesteMusicPlayer
                 if (!IsLeftButtonDown()) return false;
                 // 光标可能被 WebView2 捕获着，不释放系统进不了自己的移动循环
                 NativeMethods.ReleaseCapture();
-                NativeMethods.PostMessage(_dragHwnd, WM_NCLBUTTONDOWN, HTCAPTION, (IntPtr)((cursor.Y << 16) | (cursor.X & 0xFFFF)));
+                NativeMethods.SendMessage(_dragHwnd, WM_NCLBUTTONDOWN, HTCAPTION, (IntPtr)((cursor.Y << 16) | (cursor.X & 0xFFFF)));
                 return true;
             }
             catch (Exception ex) { StartupLog.WriteException("WebShell.NativeMove", ex); return false; }
@@ -693,6 +689,9 @@ namespace CelesteMusicPlayer
 
             [DllImport("user32.dll")]
             internal static extern IntPtr GetCapture();
+
+            [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+            internal static extern IntPtr SendMessage(IntPtr hWnd, int msg, int wParam, IntPtr lParam);
 
             [DllImport("user32.dll")]
             [return: MarshalAs(UnmanagedType.Bool)]
