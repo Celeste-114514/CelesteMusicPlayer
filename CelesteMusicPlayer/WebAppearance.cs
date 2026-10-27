@@ -297,7 +297,7 @@ namespace CelesteMusicPlayer
             public int revision { get; set; }
         }
 
-        // —— 预设库：26 套（含两套系统风格）。每套只给基色与数值，其余由 Derive 派生 ——
+        // —— 预设库：29 套（含两套系统风格、三套极客）。每套只给基色与数值，其余由 Derive 派生 ——
         private static Preset P(string id, string name, string group, string accent, string lightBg, string darkBg,
                                 double radius = 26, double blur = 25, double sat = 1, double motionSpeed = 1, double motionStrength = 1, string density = "normal",
                                 double textScale = 1, double lineHeight = 1.5) =>
@@ -340,6 +340,12 @@ namespace CelesteMusicPlayer
             // 平台风格：使用本机已有字体；浅色/深色成对，几何和动效一并切换。
             P("windows-fluent", "Windows · Fluent", "系统风格", "#0067c0", "#f3f3f3", "#202020", 8, 24, 0.95, 0.85, 0.55, "normal", 1, 1.45),
             P("apple-silver", "Apple · 银白", "系统风格", "#007aff", "#f5f5f7", "#1c1c1e", 20, 32, 0.9, 1.05, 0.75, "relaxed", 1, 1.55),
+            // 极客：近黑底 + 单一磷光强调色，小圆角、几乎不模糊、几乎没有动效位移，
+            // 走派生规则得到冷调中灰边框与文字（制度上仍是「只给基色，其余派生」，不逐值硬写）。
+            // ⚠ 这一步只做配色层：等宽 numerals、顶栏 OUT/FMT/FLAG/BUF 之类信息架构是另一件事，见方案第 5 节，尚未动。
+            P("geek-amber", "极客 · 琥珀", "极客", "#ffbe28", "#f2f4f7", "#0b0e12", 6, 2, 1.15, 0.7, 0.35, "compact", 0.98, 1.45),
+            P("geek-green", "极客 · 磷绿", "极客", "#57e389", "#eff3f0", "#080d0a", 6, 2, 1.15, 0.7, 0.35, "compact", 0.98, 1.45),
+            P("geek-cyan", "极客 · 磷青", "极客", "#4fd6e0", "#eef4f6", "#070e10", 6, 2, 1.15, 0.7, 0.35, "compact", 0.98, 1.45),
         };
 
         // —— 颜色工具：预设只存基色，其余按 HSL 派生，明暗各一套 ——
