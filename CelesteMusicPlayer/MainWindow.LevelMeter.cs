@@ -55,6 +55,10 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // 网页外壳接管界面后主窗口是隐藏的，没人看得见这块电平表。
+                // 但定时器照跑——33ms 一次读电平、改矩形，白白吃掉 UI 线程，
+                // 连拖动网页窗口都会因为它变卡。看不见就整个跳过。
+                if (!AppWindow.IsVisible) return;
                 StackPanel? panel = LevelMeterPanel;
                 if (panel == null)
                 {
