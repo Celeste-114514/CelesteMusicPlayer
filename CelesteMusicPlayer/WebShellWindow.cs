@@ -41,6 +41,7 @@ namespace CelesteMusicPlayer
         // 优先把 WM_NCLBUTTONDOWN 交给系统跑它自己的模态移动循环（零轮询、最跟手）；
         // 探测到系统没接管时，回落到 SetWindowPos 高频轮询。
         private const int WM_NCLBUTTONDOWN = 0x00A1;
+        private const int WM_LBUTTONUP = 0x0202;
         private const int HTCAPTION = 0x0002;
         private const uint SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
         private DispatcherQueueTimer? _dragTimer;
@@ -497,6 +498,11 @@ namespace CelesteMusicPlayer
             if (AppWindow.Presenter is not OverlappedPresenter presenter || presenter.State == OverlappedPresenterState.Maximized) return;
             IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
             if (hwnd == IntPtr.Zero || !NativeMethods.GetCursorPos(out NativeMethods.POINT cursor)) return;
+            // ⚠ 关键修一次伪拖动：从网页 pointerdown 到宿主收到这次 IPC 隔了几十毫秒，
+            // 物理按键很可能已经松开了（就是一次普通点击）。此时若照发 WM_NCLBUTTONDOWN，
+            // 系统会以为键还按着而进入自己的移动循环 —— 表现就是「点一下，之后不按住也能拖着窗口跑」。
+            // 所以一律以**当前的真实按键状态**为准，而不是以消息到达时间为准。
+            if (!IsLeftButtonDown()) return;
             _dragHwnd = hwnd;
             _dragOrigin = AppWindow.Position;
             _dragStartCursor = cursor;
@@ -512,12 +518,16 @@ namespace CelesteMusicPlayer
             _dragProbe.Start();
         }
 
+        private static bool IsLeftButtonDown() => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0;
+
         /// <summary>让 Windows 跑自己的模态移动循环：不轮询、UI 线程零负担，跟手程度和系统窗口一致。</summary>
         private bool TryNativeMoveLoop(NativeMethods.POINT cursor)
         {
             try
             {
                 if (_dragHwnd == IntPtr.Zero) return false;
+                // 再查一次：查到发这条消息之间仍有极小的时间窗，宁可不拖也不要拖成"粘住"
+                if (!IsLeftButtonDown()) return false;
                 // 光标可能被 WebView2 捕获着，不释放系统进不了自己的移动循环
                 NativeMethods.ReleaseCapture();
                 NativeMethods.PostMessage(_dragHwnd, WM_NCLBUTTONDOWN, HTCAPTION, (IntPtr)((cursor.Y << 16) | (cursor.X & 0xFFFF)));
@@ -530,7 +540,19 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (!_dragging || (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) == 0) { StopWindowDrag(); return; }
+                if (!_dragging) { StopWindowDrag(); return; }
+                if (!IsLeftButtonDown())
+                {
+                    // 自愈：万一上面那次检查之后还是晚了一步、系统进了一个没人按住的移动循环，
+                    // 窗口会一直占着鼠标捕获不放。补一个 WM_LBUTTONUP 让它自己把循环收掉。
+                    if (_dragHwnd != IntPtr.Zero && NativeMethods.GetCapture() == _dragHwnd)
+                    {
+                        NativeMethods.PostMessage(_dragHwnd, WM_LBUTTONUP, 0, IntPtr.Zero);
+                        StartupLog.Write("[WebShell] 拖动：结束了一次没人按住的残留移动循环");
+                    }
+                    StopWindowDrag();
+                    return;
+                }
                 if (_dragPolling) { StopProbe(); return; }
                 if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor)) return;
                 // 光标还没动就判断不出谁在管窗口，继续探下一轮
@@ -563,7 +585,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (_dragHwnd == IntPtr.Zero || (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) == 0) { StopWindowDrag(); return; }
+                if (_dragHwnd == IntPtr.Zero || !IsLeftButtonDown()) { StopWindowDrag(); return; }
                 if (!NativeMethods.GetCursorPos(out NativeMethods.POINT cursor)) return;
                 // 兜底路径也必须直接 SetWindowPos：AppWindow.Move() 每次都要绕一圈
                 // XAML→AppWindow→窗口服务，拖动时每帧的开销肉眼可见地拖后手。
@@ -668,6 +690,9 @@ namespace CelesteMusicPlayer
             [DllImport("user32.dll")]
             [return: MarshalAs(UnmanagedType.Bool)]
             internal static extern bool PostMessage(IntPtr hWnd, int msg, int wParam, IntPtr lParam);
+
+            [DllImport("user32.dll")]
+            internal static extern IntPtr GetCapture();
 
             [DllImport("user32.dll")]
             [return: MarshalAs(UnmanagedType.Bool)]
