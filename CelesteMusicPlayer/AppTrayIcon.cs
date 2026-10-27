@@ -137,6 +137,9 @@ namespace CelesteMusicPlayer
 
             _flyout = TrayMenuBuilder.Build(_owner, _pendingUpdateVersion);
             _icon.ContextFlyout = _flyout;
+            // 外观一变（换预设/换强调色/切深浅）就 rebuild 菜单：菜单跑在自己的 XAML 树里，
+            // 不继承主窗口主题，不重建它就永远是旧颜色。下一次打开即可见新样式。
+            WebAppearance.Changed += _ => AppearanceChanged();
 
             // 左键单击：有待处理更新时打开「关于」面板，否则恢复主界面
             _icon.LeftClickCommand = new TrayRelayCommand(OnLeftClick);
@@ -338,6 +341,46 @@ namespace CelesteMusicPlayer
                 // 重建失败就还用旧菜单，别让一个提示项把整个托盘菜单搞没
                 StartupLog.WriteException("AppTrayIcon.AddOrUpdateMenuItems", caught);
             }
+        }
+
+        /// <summary>
+        /// 外观修订变化：菜单正开着就先记下来，等关闭事件再重建 ——
+        /// 开着的时候直接换 ContextFlyout，库会把正在显示的窗口撤掉，
+        /// 表现就是菜单瞬间消失、这一次的命令也执行不了。
+        /// </summary>
+        private void AppearanceChanged()
+        {
+            try
+            {
+                _owner.DispatcherQueue.TryEnqueue(BuildMenuWithTheme);
+            }
+            catch (Exception caught) { StartupLog.WriteException("AppTrayIcon.AppearanceChanged", caught); }
+        }
+
+        private void BuildMenuWithTheme()
+        {
+            try
+            {
+                if (_icon == null) return;
+                if (_flyout != null && _flyout.IsOpen)
+                {
+                    if (!_closedSubscribed) { _flyout.Closed += TrayMenuClosed; _closedSubscribed = true; }
+                    return;
+                }
+                _flyout = TrayMenuBuilder.Build(_owner, _pendingUpdateVersion);
+                _icon.ContextFlyout = _flyout;
+            }
+            catch (Exception caught) { StartupLog.WriteException("AppTrayIcon.BuildMenuWithTheme", caught); }
+        }
+
+        private bool _closedSubscribed;
+
+        private void TrayMenuClosed(object? sender, object e)
+        {
+            // 先摘掉旧菜单上的订阅：下面会换一个新 _flyout，晚一步摘就摘到新菜单上去了
+            MenuFlyout? old = _flyout;
+            if (old != null) { old.Closed -= TrayMenuClosed; _closedSubscribed = false; }
+            BuildMenuWithTheme();
         }
 
         private sealed class TrayRelayCommand : ICommand
