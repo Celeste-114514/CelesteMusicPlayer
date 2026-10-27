@@ -82,6 +82,14 @@
 }
 /* lite：保留淡变与状态色，去掉几何位移 */
 :root[data-motion="lite"]{--motion-shift:0}
+/* reduce：系统要求减少动画 —— 只留很短的淡变，任何位移与弹跳都停掉 */
+:root[data-motion="reduce"]{--motion-shift:0}
+:root[data-motion="reduce"] *,
+:root[data-motion="reduce"] *::before,
+:root[data-motion="reduce"] *::after{
+  animation-duration:1ms!important;
+  animation-iteration-count:1!important;
+}
 
 /* 动画只是为了"看得见发生了什么"，不该把文字抖糊 */
 @media (prefers-reduced-motion:reduce){

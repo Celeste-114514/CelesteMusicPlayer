@@ -126,6 +126,9 @@
         maxHeight: options.maxHeight ?? 320,
         exclusive: true,
         onClose: () => {
+          // 只有"现在没有这个浮层"时才把状态收回去。
+          // 旧的那次关闭动画如果晚到一步就收状态，会把刚打开的新浮层也标成关闭。
+          if (popup.isOpen(popupId)) return;
           select.setAttribute('aria-expanded', 'false');
           select.removeAttribute('aria-controls');
         }

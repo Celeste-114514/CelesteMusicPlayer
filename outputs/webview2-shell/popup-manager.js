@@ -18,6 +18,7 @@
   }
 
   const entries = new Map();   // id -> entry
+  let tokenSeed = 0;           // 每次打开发一个令牌：旧浮层的退场动画不许拆掉新浮层
 
   function topEntry() {
     for (let index = stack.length - 1; index >= 0; index -= 1) {
@@ -102,10 +103,14 @@
     const returnFocus = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const entry = {
       id, element, anchor: options.anchor || null, options,
-      returnFocus, generation: 0, onClose: options.onClose || null
+      returnFocus, generation: 0, onClose: options.onClose || null,
+      // 令牌：同一个 id 被反复打开时，旧的那次退场动画结束时只能拆自己那一份，
+      // 不许把刚打开的新浮层一起拆掉（"打开未完成就反开"最常见的毛病）。
+      token: ++tokenSeed
     };
     entries.set(id, entry);
     stack.push(entry);
+    element.dataset.popupToken = String(entry.token);
 
     ensureLayer().append(element);
     // 先摆位再动画：位置漂移是最刺眼的毛病
@@ -133,11 +138,15 @@
     const index = stack.indexOf(entry);
     if (index >= 0) stack.splice(index, 1);
     entry.generation += 1;
+    const element = entry.element;
+    // 焦点要**立刻**回到触发它的控件，不能等退场动画走完 ——
+    // 这 100 多毫秒里键盘操作会丢（用户按 Esc 关掉菜单，马上按方向键就"没反应"）。
+    if (options.restoreFocus !== false && entry.returnFocus?.isConnected) {
+      try { entry.returnFocus.focus({ preventScroll: true }); } catch { /* 目标没了就算了 */ }
+    }
     const done = () => {
-      entry.element.remove();
-      if (options.restoreFocus !== false && entry.returnFocus?.isConnected) {
-        try { entry.returnFocus.focus({ preventScroll: true }); } catch { /* 目标没了就算了 */ }
-      }
+      // 只有还是这一份（令牌没变）才拆。同一个元素被重新打开过时，旧动画不许拆它。
+      if (element.dataset.popupToken === String(entry.token)) element.remove();
       entry.onClose?.();
     };
     if (options.immediate) { done(); return Promise.resolve(); }

@@ -46,9 +46,12 @@
     state.systemReduce = systemReduce;
     let effective;
     if (state.mode === 'off') effective = 'off';
-    else if (state.mode === 'lite') effective = systemReduce ? 'off' : 'lite';
+    // 系统要求减少动画时优先于用户选择：用户选了"完整"也不该盖过系统的无障碍设置。
+    // reduce 与 lite 的区别：reduce 保留很短的淡变，lite 只是去掉位移。
+    else if (systemReduce) effective = 'reduce';
+    else if (state.mode === 'lite') effective = 'lite';
     else if (state.mode === 'full') effective = 'full';
-    else effective = systemReduce ? 'off' : 'full';
+    else effective = 'full';
     state.effective = effective;
 
     state.speed = clamp(readNumber('--motion-speed', 1) || 1, 0.4, 1.6);
@@ -57,8 +60,11 @@
     // 时长倍率 = 1 / 速度。旧版把 --motion-speed 当"时长乘数"用（越大越慢），
     // 语义正好相反；这里统一成"越大越快"，与设置项名字对齐。
     const liteFactor = effective === 'lite' ? 1.3 : 1;
-    const scale = effective === 'off' ? 0.001 : (1 / state.speed) * liteFactor;
-    const shift = effective === 'off' ? 0 : (effective === 'lite' ? 0 : state.strength);
+    // reduce：时长压到很短（还看得见淡变），但不做任何几何运动
+    const scale = effective === 'off' ? 0.001
+      : effective === 'reduce' ? Math.min(0.35, 1 / state.speed)
+        : (1 / state.speed) * liteFactor;
+    const shift = (effective === 'off' || effective === 'lite' || effective === 'reduce') ? 0 : state.strength;
 
     root.style.setProperty('--motion-scale', String(Number(scale.toFixed(4))));
     root.style.setProperty('--motion-shift', String(Number(shift.toFixed(4))));

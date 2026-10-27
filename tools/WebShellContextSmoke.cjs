@@ -1,4 +1,5 @@
-const assert=require('node:assert/strict'),path=require('node:path'),{pathToFileURL}=require('node:url'),{chromium}=require('playwright');
+const assert=require('node:assert/strict'),path=require('node:path'),{pathToFileURL}=require('node:url');
+let chromium;try{({chromium}=require('playwright'));}catch{({chromium}=require('playwright-core'));}
 (async()=>{const browser=await chromium.launch({executablePath:'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',headless:true});try{
  const page=await browser.newPage({viewport:{width:1440,height:960}}),errors=[];page.on('pageerror',e=>errors.push(e.message));
  await page.addInitScript(()=>{window.commands=[];window.rejectQueue=false;window.chrome||={};window.chrome.webview={addEventListener:(_,callback)=>window.deliver=data=>callback({data}),postMessage:m=>{commands.push(m);if(!m.requestId)return;let data,ok=true,error='';
