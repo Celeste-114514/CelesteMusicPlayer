@@ -47,6 +47,14 @@
     frame=requestAnimationFrame(draw);
   }
   function active(){return theme==='instrument'&&window.CelesteNowPlaying.isOpen()&&!document.hidden&&!hostHidden&&shell.getState().playing;}
+  // 立体声采样是引擎侧的一个抽头，跟着"当前真的有人在看"开关：
+  // 详情页关掉/暂停/宿主隐藏都要还回去，不然引擎一直留着采集。
+  let stereoSubscribed=false;
+  function setStereoSampling(on){
+    if(on===stereoSubscribed)return;
+    stereoSubscribed=on;
+    shell.send('stereoSampling',{ enabled:on });
+  }
   function accept(data){
     hasSignal=!!data.available;
     target=hasSignal&&Array.isArray(data.bands)?data.bands.map(v=>num(v)):[];
@@ -87,9 +95,11 @@
       else if(state.trackId&&waveformRequested!==state.trackId){waveformRequested=state.trackId;shell.send('waveform',{trackId:state.trackId});}
     }
     if(active()){
+      setStereoSampling(true);
       if(!timer){poll();timer=setInterval(poll,50);}
       if(!frame){previousTime=0;frame=requestAnimationFrame(draw);}
     }else{
+      setStereoSampling(false);
       clearInterval(timer);timer=0;cancelAnimationFrame(frame);frame=0;generation++;
       if(!state.playing){text('np-visual-status','已暂停');text('np-visual-level','—');text('np-crest','—');}
     }

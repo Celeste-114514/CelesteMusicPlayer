@@ -35,6 +35,8 @@ namespace CelesteMusicPlayer
         private readonly HashSet<string> _metadataSent = new(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _queueCoverPaths = new(StringComparer.Ordinal);
         private bool _restoreMaximizedAfterFullscreen;
+        /// <summary>网页有没有订阅立体声采样（还要叠加"窗口看得见"才真的开）。</summary>
+        private bool _stereoSamplingWanted;
         private OverlappedPresenter? _windowedPresenter;
         private bool _closed, _ready, _dirty = true, _sending;
         // Drag sampling must not share the UI dispatcher with library/theme refreshes.
@@ -66,6 +68,8 @@ namespace CelesteMusicPlayer
             {
                 _closed = true; _ready = false; _timer.Stop();
                 StopWindowDrag(); // 拖动轮询必须随窗口一起停，否则关窗后定时器还在跑
+                // 关窗必须把立体声采样退订掉，否则引擎那边还留着采集抽头
+                _owner.SetStereoSampling("web.nowPlaying", false);
                 _library.CollectionChanged -= LibraryChanged;
                 NetworkLibraryService.Changed -= SourcesChanged;
                 AppWindow.Changed -= BackgroundWindowChanged;
@@ -85,7 +89,7 @@ namespace CelesteMusicPlayer
         {
             // Position changes during a drag do not alter visibility or fullscreen state.
             // Avoid two WebView messages and DOM updates for every native move.
-            if (args.DidVisibilityChange || args.DidPresenterChange) SendVisibility();
+            if (args.DidVisibilityChange || args.DidPresenterChange) { SendVisibility(); SyncStereoSampling(); }
             if (args.DidPresenterChange) SendWindowState();
         }
 
@@ -96,6 +100,13 @@ namespace CelesteMusicPlayer
             kind = "celeste.visibility", version = 1,
             hidden = !AppWindow.IsVisible || AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized }
         });
+
+        /// <summary>窗口看不见时（隐藏/最小化）采样没有意义，也不该继续让引擎留着采集。</summary>
+        private bool HiddenForSampling
+            => !AppWindow.IsVisible || AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Minimized };
+
+        private void SyncStereoSampling()
+            => _owner.SetStereoSampling("web.nowPlaying", _stereoSamplingWanted && !HiddenForSampling);
 
         /// <summary>播放/收藏等变化后让主页自己刷新，不重发整份曲库。</summary>
         internal void NotifyHomeChanged()
@@ -270,6 +281,15 @@ namespace CelesteMusicPlayer
                         _ = SendWaveformAsync(msg.GetProperty("trackId").GetString() ?? ""); break;
                     case "nowPlayingVisual":
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = _owner.WebNowPlayingVisual() });
+                        break;
+                    case "stereoSampling":
+                        // 网页订阅/退订立体声采样。详情页打开来要、关掉就还回去，
+                        // 宿主这边是引用计数，别的消费者还在看不会被一起关掉。
+                        bool wanted = msg.TryGetProperty("enabled", out JsonElement enabledFlag)
+                            && enabledFlag.ValueKind == JsonValueKind.True;
+                        _stereoSamplingWanted = wanted;
+                        _owner.SetStereoSampling("web.nowPlaying", wanted && !HiddenForSampling);
+                        if (requestId != null) Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = new { enabled = wanted } });
                         break;
                     case "nowPlaying":
                         // 详情页的歌词：一次取整首，当前句由前端按播放时间算（不逐帧问宿主）
