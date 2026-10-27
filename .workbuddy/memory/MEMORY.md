@@ -62,6 +62,8 @@
     有效档位：off / reduce（系统，只留很短淡变）/ lite（去位移）/ full。
   - 动效分类开关（nav/popup/list/control/theme/cover）与时长令牌由并行 agent 实现（`f1a3940`），
     令牌名很细：`--dur-nav-slow`/`--dur-nav-collapse`/`--dur-panel-in`/`--dur-cover-zoom`/`--dur-tab` 等。
+  - ⚠ **工作树里的不明改动，先当「自己上一轮被中断的残留」**（10-27 用户说明：本机网络/CPU 会打断任务）：
+    看到没提交的改动先读内容像不像自己的半成品，别急着判成别人在改。
   - ⚠ **本仓库有并行 agent 同时在改**：动手前先 `git log --oneline -5` 看有没有别人的新提交，
     重叠的改动要合并，别覆盖（我曾差点用自己那套分类开关覆盖掉他们的）。
   - 网页冒烟脚本要能回退 `playwright-core`（本机只装了它，只 require 'playwright' 的脚本一直跑不起来）。
