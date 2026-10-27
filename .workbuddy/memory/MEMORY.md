@@ -49,6 +49,9 @@
     外观页「动效」卡改它们走 `theme` 通道的 `motion` 操作（显式传 null = 回到预设）。
   - `--motion-continuity`/`--motion-fast` 曾经从未定义 → 30 处 transition 整条作废（悬停一直是瞬变），现已补别名。
   - `file://` 下页面里读 `document.styleSheets[].cssRules` 会抛安全错误 → 扫 CSS 硬编码颜色要在 Node 里读文件。
+  - **列表换序用 `captureRows/replayRows`，不是 `flip`**（10-27）：三个列表都是整体重建，
+    节点身份对不上；按 `data-flipkey` 对齐旧位置。**网格要算 dx**，只算 dy 等于没动。
+  - 设置页点分类**不能 `renderNav()`**（会把共享指示条一起重建，永远做不出滑动）。
   - **共用浮层的两条铁律**（10-27 补）：
     ① 每次 open 发一个 `popupToken`，旧浮层的退场动画只许拆自己那一份（同 id 反开不会被拆）；
     ② 关闭时**立刻**把焦点还给触发控件，不等退场动画（等 140ms 的话这段时间键盘操作全丢）。
