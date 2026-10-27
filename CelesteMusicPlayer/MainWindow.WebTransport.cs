@@ -211,6 +211,24 @@ namespace CelesteMusicPlayer
                     throw new InvalidOperationException("播放队列已变化，请刷新后重试。");
                 PlayUserPlaylistAt(index);
             }
+            else if (operation == "move")
+            {
+                int from = msg.GetProperty("from").GetInt32(), to = msg.GetProperty("to").GetInt32();
+                if (msg.GetProperty("revision").GetInt32() != _webQueueRevision || from < 0 || from >= items.Length
+                    || to < 0 || to >= items.Length || WebTrackId(items[from]) != msg.GetProperty("trackId").GetString())
+                    throw new InvalidOperationException("播放队列已变化，请刷新后重新拖动。");
+                if (from != to)
+                {
+                    // Preserve the exact occurrence, including duplicate songs and CUE segments. Never restart audio.
+                    _userPlaylistIndex = WebQueueRules.Move(_userPlaylist, from, to, _userPlaylistIndex);
+                    RenumberCollection(_userPlaylist);
+                    NotifyCurrentPlaylistWindow();
+                    if (_currentCategory == "UserPlaylist") ApplyUserPlaylistSearchFilter();
+                    items = _userPlaylist.ToArray();
+                    _webQueueSnapshot = items;
+                    _webQueueRevision++;
+                }
+            }
             else if (operation != "get") throw new ArgumentException("未知的队列操作。");
             int offset = msg.TryGetProperty("offset", out var value) ? value.GetInt32() : 0;
             if (offset < 0 || offset > items.Length) offset = 0;

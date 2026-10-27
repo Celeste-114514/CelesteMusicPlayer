@@ -111,6 +111,8 @@ namespace CelesteMusicPlayer
                 desktopLyricsLocked = _desktopLyricsWindow?.IsLocked == true,
                 coverUrl = item == null ? "" : "https://celeste-cover.internal/cover/" + WebTrackId(item),
                 quality = item?.FormatInfoLine ?? "",
+                source = item == null ? "" : item.IsRemote ? "NETWORK" : "LOCAL",
+                trackNumber = item?.Track ?? 0,
                 shuffle = _orderResolver.Order == PlaybackOrder.Random,
                 repeat = _orderResolver.Order is PlaybackOrder.ListLoop or PlaybackOrder.TrackLoop,
                 outputMode = _audioEngine?.CurrentOutputMode?.ToString() ?? "",

@@ -28,3 +28,10 @@
 .live-cover img{transition:opacity var(--dur-cover) var(--ease-continuity),transform var(--dur-cover-zoom) var(--ease-continuity)}
 @media(max-width:760px){#transport-dialog{padding:20px}}
 @media(prefers-reduced-motion:reduce){#transport-dialog::backdrop,.audio-tabs button,.output-modes button,.switch-row input,.switch-row input:after,.web-queue-row,.player .icon-button,.player .play-button,.live-cover img{animation:none;transition:none}}
+
+.web-queue-row[draggable=true]{cursor:grab;position:relative}
+.web-queue-row.is-dragging{opacity:.4;cursor:grabbing}
+.web-queue-row.drop-before:before,.web-queue-row.drop-after:after{content:'';position:absolute;left:4px;right:4px;height:2px;background:var(--accent);border-radius:2px}
+.web-queue-row.drop-before:before{top:-3px}.web-queue-row.drop-after:after{bottom:-3px}
+
+.queue-drag-grip{width:12px;height:18px;opacity:.45;flex-shrink:0}

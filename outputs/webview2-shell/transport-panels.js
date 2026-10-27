@@ -139,18 +139,82 @@
   $('sleep-custom').addEventListener('submit',event=>{event.preventDefault();if(!$('sleep-minutes').checkValidity())return;customEditing=false;audio('setSleep',{selection:8,minutes:Number($('sleep-minutes').value),tracks:1});});
   $('sleep-minutes').addEventListener('input',()=>{customEditing=true;});
   $('sleep-count').addEventListener('change',()=>audio('setSleep',{selection:7,tracks:Math.max(1,Math.min(99,Number($('sleep-count').value)||1))}));
+  let queueDrag = null, queueMoving = false;
+  function clearQueueDrag(){
+    queueDrag=null;
+    document.querySelectorAll('.web-queue-row').forEach(row=>row.classList.remove('is-dragging','drop-before','drop-after'));
+  }
+  async function moveQueue(from,to,revision,trackId){
+    if(queueMoving||from===to)return;
+    queueMoving=true;clearQueueDrag();
+    const generation=epoch;
+    const before=motion?.captureRows($('web-queue-list'),{keyAttr:'data-track-id'});
+    try{
+      await rpc('queue',{operation:'move',from,to,revision,trackId});
+      if(generation!==epoch)return;
+      status.textContent='已调整队列顺序';queueStamp='';
+    }catch(error){if(generation===epoch){status.textContent=error.message;queueStamp='';}}
+    finally{
+      queueMoving=false;
+      if(generation===epoch&&view==='queue'){
+        await loadQueue();
+        if(to>=(queue?.tracks.length||0)&&to<(queue?.total||0))await loadQueue(queue.tracks.length);
+        if(before)motion?.replayRows($('web-queue-list'),before,{keyAttr:'data-track-id'});
+        $('web-queue-list').querySelector(`[data-queue-index="${to}"]`)?.focus({preventScroll:true});
+      }
+    }
+  }
+  function bindQueueDrag(row,track,revision){
+    row.draggable=true;
+    const grip=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    const use=document.createElementNS(grip.namespaceURI,'use');use.setAttribute('href','#i-grip');
+    grip.append(use);grip.classList.add('queue-drag-grip');grip.setAttribute('aria-hidden','true');row.prepend(grip);
+    row.title='拖动调整顺序；Alt + 上/下方向键也可移动';
+    row.addEventListener('dragstart',event=>{
+      if(queueMoving){event.preventDefault();return;}
+      queueDrag={from:track.index,revision,trackId:track.id};
+      event.dataTransfer.effectAllowed='move';event.dataTransfer.setData('text/plain',String(track.index));
+      row.classList.add('is-dragging');
+    });
+    row.addEventListener('dragover',event=>{
+      if(!queueDrag||queueMoving)return;
+      event.preventDefault();event.dataTransfer.dropEffect='move';
+      document.querySelectorAll('.web-queue-row').forEach(item=>item.classList.remove('drop-before','drop-after'));
+      const rect=row.getBoundingClientRect(),after=event.clientY>rect.top+rect.height/2;
+      row.classList.add(after?'drop-after':'drop-before');
+      const list=$('web-queue-list').closest('.transport-dialog-body'),area=list.getBoundingClientRect();
+      if(event.clientY<area.top+36)list.scrollTop-=18;
+      if(event.clientY>area.bottom-36)list.scrollTop+=18;
+    });
+    row.addEventListener('drop',event=>{
+      if(!queueDrag)return;
+      event.preventDefault();
+      const {from,revision:rev,trackId}=queueDrag;
+      let to=track.index+(event.clientY>row.getBoundingClientRect().top+row.offsetHeight/2?1:0);
+      if(from<to)to--;
+      clearQueueDrag();moveQueue(from,to,rev,trackId);
+    });
+    row.addEventListener('dragend',clearQueueDrag);
+    row.addEventListener('keydown',event=>{
+      if(!event.altKey||!['ArrowUp','ArrowDown'].includes(event.key))return;
+      event.preventDefault();const to=track.index+(event.key==='ArrowUp'?-1:1);
+      if(to>=0&&to<queue.total)moveQueue(track.index,to,revision,track.id);
+    });
+  }
   async function loadQueue(offset=0){
+    if(queueDrag||queueMoving)return;
     const generation=epoch;
     try{
       const data=live?await rpc('queue',{operation:'get',offset}):{revision:0,total:0,currentIndex:-1,offset:0,tracks:[]};
-      if(epoch!==generation)return;
+      if(epoch!==generation||queueDrag||queueMoving)return;
       if(offset>0&&queue?.revision!==data.revision)return loadQueue(0);
       if(offset===0){const signature=String(data.revision);if(signature===queueStamp){queue.currentIndex=data.currentIndex;document.querySelectorAll('.web-queue-row').forEach(row=>row.setAttribute('aria-current',String(Number(row.dataset.queueIndex)===data.currentIndex)));return;}queueStamp=signature;queue=data;$('web-queue-list').replaceChildren();}
       else queue.tracks.push(...data.tracks);
-      $('web-queue-count').textContent=data.total?`${data.total} 首 · 双击或按 Enter 播放`:'播放队列为空';
+      $('web-queue-count').textContent=data.total?`${data.total} 首 · 拖动排序 · 双击播放`:'播放队列为空';
       data.tracks.forEach(track=>{const button=document.createElement('button');button.className='web-queue-row';button.dataset.trackId=track.id;button.dataset.queueIndex=track.index;button.dataset.queueRevision=data.revision;button.setAttribute('aria-current',String(track.index===data.currentIndex));
         const number=document.createElement('small');number.textContent=String(track.index+1).padStart(2,'0');const text=document.createElement('span');const title=document.createElement('strong');title.textContent=track.title;const artist=document.createElement('small');artist.textContent=track.artist;const duration=document.createElement('time');duration.textContent=time(track.duration);text.append(title,artist);button.append(number,text,duration);
         const play=async()=>{try{await rpc('queue',{operation:'play',revision:data.revision,index:track.index,trackId:track.id});await loadQueue();}catch(error){status.textContent=error.message;loadQueue();}};
+        bindQueueDrag(button,track,data.revision);
         button.addEventListener('dblclick',play);button.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();play();}});$('web-queue-list').append(button);
       });
       $('web-queue-more').hidden=queue.tracks.length>=data.total;

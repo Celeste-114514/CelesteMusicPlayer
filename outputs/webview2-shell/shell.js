@@ -362,7 +362,7 @@
         if (incoming.trackId !== pendingTrack.id && incoming.busy === true && !incoming.error && performance.now() < pendingTrack.until) return;
         pendingTrack = null;
       }
-      ['title','artist','album'].forEach(key=>{if(typeof incoming[key]==='string')state[key]=incoming[key]});
+      ['title','artist','album','quality','source'].forEach(key=>{if(typeof incoming[key]==='string')state[key]=incoming[key]});
       if(typeof incoming.trackId==='string'){
         state.trackId=incoming.trackId;
         state.index=libraryTracks.findIndex(track=>track.id===state.trackId);

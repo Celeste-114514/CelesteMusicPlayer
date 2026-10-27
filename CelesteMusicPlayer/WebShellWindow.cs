@@ -32,6 +32,8 @@ namespace CelesteMusicPlayer
         private readonly Dictionary<string, PlaylistItem> _tagExtraTracks = new(StringComparer.Ordinal);
         private readonly HashSet<string> _metadataSent = new(StringComparer.Ordinal);
         private readonly Dictionary<string, string> _queueCoverPaths = new(StringComparer.Ordinal);
+        private bool _restoreMaximizedAfterFullscreen;
+        private OverlappedPresenter? _windowedPresenter;
         private bool _closed, _ready, _dirty = true, _sending;
         private int _revision;
         private int _themeRevision = -1;
@@ -70,7 +72,13 @@ namespace CelesteMusicPlayer
 
         private void LibraryChanged(object? sender, NotifyCollectionChangedEventArgs args) => _dirty = true;
 
-        private void BackgroundWindowChanged(AppWindow sender, AppWindowChangedEventArgs args) => SendVisibility();
+        private void BackgroundWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+        {
+            SendVisibility();
+            SendWindowState();
+        }
+
+        private void SendWindowState() => Post(new { kind = "celeste.window", version = 1, fullscreen = AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen });
 
         private void SendVisibility() => Post(new
         {
@@ -223,6 +231,9 @@ namespace CelesteMusicPlayer
                         _ = SendTrackInfoAsync(metadataIds); break;
                     case "waveform":
                         _ = SendWaveformAsync(msg.GetProperty("trackId").GetString() ?? ""); break;
+                    case "nowPlayingVisual":
+                        Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = _owner.WebNowPlayingVisual() });
+                        break;
                     case "nowPlaying":
                         // 详情页的歌词：一次取整首，当前句由前端按播放时间算（不逐帧问宿主）
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = _owner.WebNowPlaying() });
@@ -396,8 +407,9 @@ namespace CelesteMusicPlayer
             string action = msg.GetProperty("action").GetString() ?? "";
             if (action == "state")
             {
+                SendWindowState();
                 bool top = AppWindow.Presenter is OverlappedPresenter presenter && presenter.IsAlwaysOnTop;
-                if (requestId != null) Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = new { top } });
+                if (requestId != null) Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = new { top, fullscreen = AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen } });
                 return;
             }
 
@@ -408,6 +420,23 @@ namespace CelesteMusicPlayer
         private void WindowCommand(string? action, bool value)
         {
             if (action == "close") { Close(); return; }
+            if (action == "fullscreen")
+            {
+                if (value && AppWindow.Presenter.Kind != AppWindowPresenterKind.FullScreen)
+                {
+                    _windowedPresenter = AppWindow.Presenter as OverlappedPresenter;
+                    _restoreMaximizedAfterFullscreen = AppWindow.Presenter is OverlappedPresenter { State: OverlappedPresenterState.Maximized };
+                    AppWindow.SetPresenter(AppWindowPresenterKind.FullScreen);
+                }
+                else if (!value && AppWindow.Presenter.Kind == AppWindowPresenterKind.FullScreen)
+                {
+                    if (_windowedPresenter != null) AppWindow.SetPresenter(_windowedPresenter);
+                    else AppWindow.SetPresenter(AppWindowPresenterKind.Overlapped);
+                    if (_restoreMaximizedAfterFullscreen && AppWindow.Presenter is OverlappedPresenter restored) restored.Maximize();
+                }
+                SendWindowState();
+                return;
+            }
             if (AppWindow.Presenter is not OverlappedPresenter presenter) return;
             if (action == "top") presenter.IsAlwaysOnTop = value;
             else if (action == "minimize") presenter.Minimize();

@@ -26,6 +26,8 @@
   <script src="nav-layout.js" defer></script>
   <script src="player-layout.js" defer></script>
   <script src="now-playing.js" defer></script>
+  <script src="now-playing-themes.js" defer></script>
+  <script src="player-window.js" defer></script>
   <script src="appearance.js" defer></script>
   <script src="transport-panels.js" defer></script>
   <script src="albums.js" defer></script>
@@ -53,6 +55,7 @@
   <script src="tags.js" defer></script>
   <link rel="stylesheet" href="settings.css">
   <link rel="stylesheet" href="now-playing.css">
+  <link rel="stylesheet" href="now-playing-themes.css">
   <!-- DSP 的动效补充必须排在 dsp-echo.css / settings.css 之后：它要改写"当前项右边框"的实现 -->
   <link rel="stylesheet" href="dsp-motion.css">
   <!-- 外观跟随补丁：ECHO 两层皮肤里的浅色面板、原生表单控件，必须排在所有 DSP 样式之后 -->
@@ -103,6 +106,8 @@
     <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6.1 8a7 7 0 0 1 11.8-1L20 12M4 12l2.1 5a7 7 0 0 0 11.8-1"/></symbol>
     <symbol id="i-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18"/></symbol>
     <symbol id="i-chain" viewBox="0 0 24 24"><path d="M10.5 13.5 13.5 10.5M8 12l-1.6 1.6a2.6 2.6 0 0 0 3.7 3.7L11.7 15.7M16 12l1.6-1.6a2.6 2.6 0 0 0-3.7-3.7L12.3 8.3"/></symbol>
+    <symbol id="i-fullscreen" viewBox="0 0 24 24"><path d="M8 3H3v5M16 3h5v5M21 16v5h-5M8 21H3v-5"/></symbol>
+    <symbol id="i-grip" viewBox="0 0 24 24"><path d="M9 5h.01M15 5h.01M9 12h.01M15 12h.01M9 19h.01M15 19h.01"/></symbol>
     <symbol id="i-wave" viewBox="0 0 24 24"><path d="M3 10v4M7 6v12M12 3v18M17 7v10M21 10v4"/></symbol>
   </defs></svg>
 
@@ -119,6 +124,7 @@
       </nav>
       <span id="mode-label" hidden>设计预览</span>
       <div class="header-actions">
+        <button id="window-fullscreen" type="button" class="icon-button" aria-label="全屏" title="全屏（F11）" aria-pressed="false"><svg><use href="#i-fullscreen"/></svg></button>
         <select id="library-source" aria-label="曲库来源" title="筛选曲库来源"><option value="all">全部来源</option><option value="local">本地曲库</option><option value="network">网络曲库</option></select>
         <span class="header-divider" aria-hidden="true"></span>
         <div class="window-actions" aria-label="窗口操作">
@@ -238,10 +244,14 @@
     <section id="now-playing" class="now-playing-page" hidden aria-label="正在播放">
       <header class="np-head">
         <button id="np-close" class="icon-button" type="button" aria-label="收起正在播放" title="收起（Esc）"><svg><use href="#i-chevron"/></svg></button>
+        <div class="np-head-actions">
+          <label class="np-theme-label">详情主题 <select id="np-theme" aria-label="播放详情页主题"><option value="default">默认 · 封面与歌词</option><option value="twilight">Twilight · 音频仪表</option></select></label>
+          <button id="np-fullscreen" class="icon-button" type="button" aria-label="全屏" title="全屏（F11）" aria-pressed="false"><svg><use href="#i-fullscreen"/></svg></button>
+        </div>
       </header>
       <div class="np-body">
         <div class="np-left">
-          <div class="np-cover" id="np-cover"></div>
+          <div class="np-artwork"><div id="np-radar" aria-hidden="true"></div><div class="np-cover" id="np-cover"></div></div>
           <h1 class="np-title" id="np-title">—</h1>
           <p class="np-artist" id="np-artist">—</p>
           <p class="np-meta" id="np-meta" hidden></p>
@@ -257,6 +267,15 @@
             <button id="np-next" class="icon-button" type="button" aria-label="下一首"><svg><use href="#i-next"/></svg></button>
           </div>
         </div>
+        <section id="np-visual" class="np-visual" hidden aria-label="实时音频可视化">
+          <div class="np-instruments"><div><small>SOURCE / 来源</small><strong id="np-visual-source">—</strong></div><div><small>QUALITY / 音质</small><strong id="np-visual-quality">—</strong></div><div><small>DURATION / 时长</small><strong id="np-visual-duration">—</strong></div></div>
+          <div class="np-chart-head"><span>FREQUENCY / 实时频谱</span><span id="np-visual-status" role="status">等待音频信号</span></div>
+          <svg id="np-spectrum" viewBox="0 0 800 260" preserveAspectRatio="none" role="img" aria-label="真实音频频谱"></svg>
+          <div class="np-frequencies" aria-hidden="true"><span>LOW / 低频</span><span>对数频带 · 相对幅值</span><span>HIGH / 高频</span></div>
+          <div class="np-scope-head"><span>WAVEFORM / 瞬时波形</span><span id="np-visual-level">—</span></div>
+          <svg id="np-scope" viewBox="0 0 800 64" preserveAspectRatio="none" role="img" aria-label="真实音频瞬时波形"></svg>
+          <p class="np-visual-note">POST-DSP SIGNAL · 频谱与波形来自当前音频引擎</p>
+        </section>
         <div class="np-right">
           <div id="np-lyrics" class="np-lyrics" tabindex="0" role="region" aria-label="歌词"></div>
           <button id="np-lyrics-pin" class="np-pin" type="button" hidden>回到当前句</button>

@@ -1,0 +1,46 @@
+.np-head-actions{display:flex;align-items:center;gap:18px;margin-left:auto}
+.np-theme-label{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:calc(11px * var(--text-scale))}
+.np-theme-label select{max-width:230px;border:1px solid var(--line);border-radius:10px;padding:8px 12px;background:var(--surface);color:var(--ink);font:inherit}
+.is-fullscreen{padding:0}.is-fullscreen .shell{border-radius:0}.is-fullscreen .now-playing-page{border-radius:0}
+.now-playing-page[data-player-theme=twilight]{--instrument-accent:#fa473f;--instrument-grid:#272b3710;--instrument-line:#272b3733;background:#e4e6eb;color:#181a20;border:0;
+  background-image:linear-gradient(var(--instrument-grid) 1px,transparent 1px),linear-gradient(90deg,var(--instrument-grid) 1px,transparent 1px);background-size:32px 32px}
+:root[data-theme=dark] .now-playing-page[data-player-theme=twilight]{--instrument-grid:#e8eaf00a;--instrument-line:#e8eaf033;background-color:#171a20;color:#eef0f3}
+.now-playing-page[data-player-theme=twilight] .np-theme-label select{background:transparent;color:inherit}
+.now-playing-page[data-player-theme=twilight] .np-head{padding-bottom:4px}
+.now-playing-page[data-player-theme=twilight] .np-body{grid-template-columns:minmax(260px,40%) minmax(0,1fr);grid-template-rows:auto auto minmax(210px,1fr) auto;gap:20px 44px;padding:16px 38px 36px 24px}
+.now-playing-page[data-player-theme=twilight] .np-left{display:contents}
+.now-playing-page[data-player-theme=twilight] .np-artwork{grid-column:1;grid-row:1/4;width:100%;align-self:center;display:grid;place-items:center;isolation:isolate;max-height:100%;aspect-ratio:1}
+.now-playing-page[data-player-theme=twilight] .np-cover{position:relative;z-index:1;width:58%;height:auto;border-radius:0;box-shadow:0 15px 40px #1112;border:1px solid var(--instrument-accent)}
+.now-playing-page[data-player-theme=twilight] #np-radar{display:block;position:absolute;inset:0;pointer-events:none}
+#np-radar svg{width:100%;height:100%;stroke:var(--instrument-line);stroke-width:.8;fill:none}
+#np-radar .np-dial-dashed{stroke-dasharray:3 3}#np-radar .np-dial-axis{stroke-width:.4}#np-radar .np-dial-marker{fill:var(--instrument-accent);stroke:none}
+.now-playing-page[data-player-theme=twilight] .np-title{grid-column:2;grid-row:1;align-self:end;font-size:clamp(24px,3.6vw,50px);font-weight:500;letter-spacing:1px;color:inherit}
+.now-playing-page[data-player-theme=twilight] .np-title:before{content:attr(data-album);display:block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:10px;letter-spacing:1px;font-weight:650;color:var(--muted);margin-bottom:24px}
+.now-playing-page[data-player-theme=twilight] .np-artist{grid-column:2;grid-row:2;font-size:calc(18px * var(--text-scale));border-bottom:1px solid var(--instrument-line);padding-bottom:16px}
+.now-playing-page[data-player-theme=twilight] .np-meta,.now-playing-page[data-player-theme=twilight] .np-right{display:none}
+.now-playing-page[data-player-theme=twilight] .np-controls{grid-column:1;grid-row:4;justify-content:center;gap:24px;align-self:center}
+.now-playing-page[data-player-theme=twilight] .np-controls .np-play{width:76px;height:76px;color:#fff;background:#191b20;outline:1px solid var(--instrument-line);outline-offset:5px;box-shadow:0 9px 28px #17191e30}
+.now-playing-page[data-player-theme=twilight] .np-progress{grid-column:2;grid-row:4;align-self:center;min-height:76px;margin:0;--accent:var(--instrument-accent)}
+.np-visual{grid-column:2;grid-row:3;min-height:0;display:flex;flex-direction:column}
+.np-instruments{display:grid;grid-template-columns:.8fr 2fr .8fr;gap:16px;margin-bottom:20px}
+.np-instruments>div{border-right:1px solid var(--instrument-line);min-width:0;padding-right:12px}.np-instruments>div:last-child{border:0;text-align:right;padding:0}
+.np-instruments small{display:block;font-size:10px;letter-spacing:1px;color:var(--muted);margin-bottom:10px}
+.np-instruments strong{font-size:12px;font-weight:550;line-height:1.5;overflow-wrap:anywhere}.np-instruments>div:last-child strong{font-size:23px}
+.np-chart-head,.np-scope-head{display:flex;justify-content:space-between;gap:16px;font-size:9px;letter-spacing:1px;color:var(--muted);margin:6px 0 10px}
+#np-spectrum{display:block;width:100%;height:auto;flex:1;min-height:90px;stroke:none;overflow:visible}
+.np-chart-grid{stroke:var(--instrument-line);stroke-width:.6;fill:none;vector-effect:non-scaling-stroke}
+.np-spectrum-signal{stroke:var(--instrument-accent);stroke-width:1.5;fill:color-mix(in srgb,var(--instrument-accent) 12%,transparent);vector-effect:non-scaling-stroke}
+.np-frequencies{display:flex;justify-content:space-between;font-size:9px;color:var(--muted);padding:8px 0 16px}
+#np-scope{display:block;width:100%;height:55px;min-height:35px;stroke:none;border:1px solid var(--instrument-grid)}
+.np-scope-signal{stroke:var(--instrument-accent);stroke-width:1;fill:none;vector-effect:non-scaling-stroke}
+.np-visual-note{font-size:9px;color:var(--muted);letter-spacing:.6px;padding-top:12px}
+@media(max-width:980px){
+  .now-playing-page[data-player-theme=twilight] .np-body{grid-template-columns:minmax(180px,34%) minmax(0,1fr);grid-template-rows:auto auto minmax(180px,1fr) auto;gap:16px 24px;padding:16px 24px 26px}
+  .now-playing-page[data-player-theme=twilight] .np-title{font-size:28px}.now-playing-page[data-player-theme=twilight] .np-title:before{margin-bottom:12px}
+  .now-playing-page[data-player-theme=twilight] .np-artist{font-size:15px}.np-instruments{gap:8px}.np-instruments strong{font-size:11px}.np-instruments small{font-size:8px}
+  .now-playing-page[data-player-theme=twilight] .np-controls{gap:8px}.now-playing-page[data-player-theme=twilight] .np-controls .np-play{width:58px;height:58px}
+}
+@media(max-height:680px){.now-playing-page[data-player-theme=twilight] .np-body{overflow:auto;grid-template-rows:auto auto minmax(220px,1fr) auto}.np-instruments{margin-bottom:6px}.np-scope-head,#np-scope,.np-visual-note{display:none}}
+
+#np-radar .np-dial-label{fill:var(--muted);stroke:none;font-size:10px;letter-spacing:1px}
+:root[data-theme=dark] .now-playing-page[data-player-theme=twilight] .np-controls .np-play{background:#edf0f4;color:#191b20}

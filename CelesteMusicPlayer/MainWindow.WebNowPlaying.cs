@@ -15,6 +15,23 @@ namespace CelesteMusicPlayer
         /// 歌词为空不区分「还没解析完」和「这首歌确实没有」——网页那边看到空会重试两次，
         /// 之后才显示「没有找到歌词」，因为解析是异步的。
         /// </summary>
+        internal object WebNowPlayingVisual()
+        {
+            var values = new float[FormatHelper.WaveBarCount];
+            bool playing = IsPlaybackActuallyPlaying();
+            bool available = playing && (_audioEngine?.TryGetSpectrum(values) ?? false);
+            var samples = new float[256];
+            bool samplesAvailable = playing && (_audioEngine?.TryGetSamples(samples) ?? false);
+            return new
+            {
+                samplesAvailable,
+                samples = samples.Select(v => samplesAvailable && float.IsFinite(v) ? Math.Clamp(v, -1f, 1f) : 0f).ToArray(),
+                trackId = GetCurrentPlayingItem() is { } item ? WebTrackId(item) : "",
+                available,
+                bands = values.Select(v => available && float.IsFinite(v) ? Math.Clamp(v, 0f, 1f) : 0f).ToArray()
+            };
+        }
+
         internal object WebNowPlaying()
         {
             var item = GetCurrentPlayingItem();

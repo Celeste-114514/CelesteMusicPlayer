@@ -47,6 +47,8 @@ body.now-playing-open .side-panel{display:none}
 
 /* ---- 左列：封面 + 信息 + 控件 ---- */
 .np-left{display:flex;flex-direction:column;min-width:0;min-height:0;overflow-y:auto;gap:18px}
+.np-artwork{position:relative;width:min(100%,360px);aspect-ratio:1;flex-shrink:0}
+#np-radar{display:none}
 .np-cover{
   position:relative;
   width:min(100%,360px);
@@ -163,7 +165,8 @@ button.mini-cover:hover::after{
 /* 窄窗：上下堆叠；封面收小，歌词占主导 */
 @media (max-width:980px){
   .np-body{grid-template-columns:1fr;grid-template-rows:minmax(0,1fr) minmax(180px,1fr);gap:20px;padding:20px 22px 24px;overflow:hidden}
-  .np-cover{width:min(100%,220px);align-self:center}
+  .np-artwork{width:min(100%,220px);align-self:center}
+  .np-cover{width:100%}
   .np-left{gap:12px}
   .np-lyrics{padding:24px 0}
   .np-controls{justify-content:center}
