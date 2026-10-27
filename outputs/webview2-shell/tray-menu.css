@@ -9,16 +9,22 @@ html,body{margin:0;padding:0;background:transparent;overflow:hidden}
 body{font-family:var(--font-cjk),var(--font-ui),sans-serif;font-size:calc(13px * var(--text-scale));
   color:var(--ink);-webkit-font-smoothing:antialiased}
 
-/* 默认不透明实色底：先消除"透出背景色"这个老毛病 */
+/* 默认不透明实色底：先消除"透出背景色"这个老毛病。
+   width:max-content 是为了让菜单宽度跟着最长那条文案走 —— 用 %/auto 的话
+   宽度等于 WebView 当前视口宽（固定值），量出来的尺寸永远不变，宿主没法按内容定位。
+   阴影不画：窗口大小正好等于菜单，画在窗口外的部分会被裁掉，只会留硬边。 */
 .tray-menu{background:var(--menu-bg);border:1px solid var(--line);border-radius:var(--radius);
-  padding:4px;min-width:240px;max-width:280px;box-shadow:0 8px 28px #00000045}
+  width:max-content;padding:4px;min-width:240px;max-width:280px}
 .tray-menu:empty+.tray-empty{display:block}
 
 /* 行高 36–40：是实机调整起点，不是最终值 */
 .tray-item{display:flex;align-items:center;gap:8px;width:100%;min-height:36px;padding:0 12px;
   border:0;border-radius:6px;background:none;color:var(--ink);font:inherit;text-align:left;cursor:default}
 .tray-item:hover:not([disabled]){background:var(--hover)}
-.tray-item:focus-visible{outline:2px solid var(--accent);outline-offset:-2px}
+/* 焦点环只给键盘用。鼠标划过时 chrome 有时也判成 :focus-visible（因为 JS 主动 focus 了），
+   那会在悬停行外面画一圈强调色边框，很怪。所以由 JS 标 data-kbd 决定要不要环。 */
+.tray-item:focus{outline:none}
+html[data-kbd="1"] .tray-item:focus{outline:2px solid var(--accent);outline-offset:-2px}
 .tray-item[disabled]{color:var(--muted);opacity:.55}
 .tray-item .tray-check{width:14px;flex:0 0 14px;color:var(--accent);visibility:hidden}
 .tray-item[aria-checked=true] .tray-check{visibility:visible}

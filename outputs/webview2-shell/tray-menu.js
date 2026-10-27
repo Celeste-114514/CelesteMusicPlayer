@@ -15,6 +15,20 @@
     // 宿主给的是同一套预设解析出来的 CSS 变量块，直接铺到 :root
     const root = document.documentElement;
     Object.entries(theme.vars || {}).forEach(([key, value]) => root.style.setProperty('--' + key, value));
+    // 字号缩放会改行高，换肤后必须重新量一次（此时若有 items 会被紧接着的 render 再量一次，无害）
+    reportSize();
+  }
+
+  /* 量一次菜单真实尺寸报给宿主。must be synchronous：菜单窗平时是隐藏的，
+     隐藏的 WebView 里 requestAnimationFrame 不一定会跑，等它量就永远等不到。 */
+  let lastSize = '';
+  function reportSize() {
+    const width = Math.ceil(menu.offsetWidth), height = Math.ceil(menu.offsetHeight);
+    if (width <= 0 || height <= 0) return;
+    const key = width + 'x' + height;
+    if (key === lastSize) { send({ action: 'size', width, height }); return; }
+    lastSize = key;
+    send({ action: 'size', width, height });
   }
 
   function render() {
@@ -30,11 +44,16 @@
       const label = document.createElement('span'); label.className = 'tray-label'; label.textContent = item.label || '';
       button.append(check, label);
       button.addEventListener('click', () => send({ action: 'invoke', actionId: item.actionId }));
-      button.addEventListener('mouseenter', () => { focusIndex = index; focusAt(focusIndex); });
+      button.addEventListener('mouseenter', () => { setKeyboardMode(false); focusIndex = index; focusAt(focusIndex); });
       menu.append(button);
     });
     focusIndex = -1;
+    setKeyboardMode(false);
+    reportSize();
   }
+
+  /* 输入方式：只有键盘操作才画焦点环（见 css 里的 html[data-kbd]） */
+  function setKeyboardMode(on) { document.documentElement.dataset.kbd = on ? '1' : ''; }
 
   function focusAt(index) {
     const rows = [...menu.querySelectorAll('.tray-item:not([disabled])')];
@@ -53,10 +72,10 @@
 
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape') { send({ action: 'close' }); return; }
-    if (event.key === 'ArrowDown') { move(1); event.preventDefault(); }
-    else if (event.key === 'ArrowUp') { move(-1); event.preventDefault(); }
-    else if (event.key === 'Home') { focusAt(0); event.preventDefault(); }
-    else if (event.key === 'End') { focusAt(9999); event.preventDefault(); }
+    if (event.key === 'ArrowDown') { setKeyboardMode(true); move(1); event.preventDefault(); }
+    else if (event.key === 'ArrowUp') { setKeyboardMode(true); move(-1); event.preventDefault(); }
+    else if (event.key === 'Home') { setKeyboardMode(true); focusAt(0); event.preventDefault(); }
+    else if (event.key === 'End') { setKeyboardMode(true); focusAt(9999); event.preventDefault(); }
   });
   // 焦点跑出菜单 = 用户点到别处了，让宿主收起（宿主还要判断是不是点到了自己的子窗口）
   document.addEventListener('focusout', event => { if (!menu.contains(event.relatedTarget)) send({ action: 'blur' }); });

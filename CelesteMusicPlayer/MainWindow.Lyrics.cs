@@ -73,6 +73,15 @@ namespace CelesteMusicPlayer
         }
 
 
+        /// <summary>托盘菜单用：桌面歌词当前是否开着（真实状态，不猜）。</summary>
+        internal bool DesktopLyricsEnabledPublic => _desktopLyricsEnabled;
+
+        /// <summary>
+        /// 托盘菜单用：翻转桌面歌词。走的是同一个开关（和快捷键一致），
+        /// 不在这里改那个窗口的任何实现 —— 那个窗口用户要自己重构。
+        /// </summary>
+        internal void ToggleDesktopLyricsPublic() => SetDesktopLyricsEnabled(!_desktopLyricsEnabled);
+
         private void SetDesktopLyricsEnabled(bool enabled, bool persistPreference = true)
         {
             _desktopLyricsEnabled = enabled;

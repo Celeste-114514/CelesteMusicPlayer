@@ -55,6 +55,23 @@ namespace CelesteMusicPlayer
 
         private void WebShellButton_Click(object sender, RoutedEventArgs args) => OpenWebShell();
 
+        /// <summary>
+        /// 把网页外壳拉到前台并跳到指定页（托盘菜单的「设置 / 发现新版本」用）。
+        /// 页面名必须是网页里真实存在的路由，宿主不认识也不校验 —— 传错只会停在主页。
+        /// </summary>
+        internal void ShowWebPage(string page)
+        {
+            DispatcherQueue.TryEnqueue(() =>
+            {
+                try
+                {
+                    OpenWebShell();
+                    _webShellWindow?.NavigateTo(page);
+                }
+                catch (Exception ex) { StartupLog.WriteException("MainWindow.ShowWebPage", ex); }
+            });
+        }
+
         internal static string WebTrackId(PlaylistItem item)
         {
             if (item.SourceTrackId.Length > 0) return item.SourceTrackId;

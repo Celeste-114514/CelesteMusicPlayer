@@ -115,6 +115,26 @@ namespace CelesteMusicPlayer
             Post(new { kind = "celeste.homeChanged", version = 1 });
         }
 
+        private string? _pendingPage;
+
+        /// <summary>
+        /// 从宿主侧要求网页跳页（托盘菜单的「设置」「发现新版本」用）。
+        /// 网页还没 ready 时先记下来，等 ready 那一刻再补发 —— 否则启动初期点托盘会静默无效。
+        /// </summary>
+        internal void NavigateTo(string page)
+        {
+            if (string.IsNullOrEmpty(page) || _closed) return;
+            if (!_ready) { _pendingPage = page; return; }
+            Post(new { kind = "celeste.navigate", version = 1, page });
+        }
+
+        private void FlushPendingPage()
+        {
+            if (_pendingPage is not { Length: > 0 } page) return;
+            _pendingPage = null;
+            Post(new { kind = "celeste.navigate", version = 1, page });
+        }
+
         private async Task InitializeAsync()
         {
             try
@@ -273,7 +293,7 @@ namespace CelesteMusicPlayer
                 if (requestId?.Length > 100) return;
                 switch (command)
                 {
-                    case "ready": _ready = true; _metadataSent.Clear(); _status.Visibility = Visibility.Collapsed; _dirty = true; _timer.Start(); SendTheme(); SendVisibility(); _ = SendLibraryAsync(); break;
+                    case "ready": _ready = true; _metadataSent.Clear(); _status.Visibility = Visibility.Collapsed; _dirty = true; _timer.Start(); SendTheme(); SendVisibility(); _ = SendLibraryAsync(); FlushPendingPage(); break;
                     case "trackInfo":
                         var metadataIds = msg.GetProperty("trackIds").EnumerateArray().Take(100).Select(value => value.GetString() ?? "").ToArray();
                         _ = SendTrackInfoAsync(metadataIds); break;

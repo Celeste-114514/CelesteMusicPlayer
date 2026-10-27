@@ -59,7 +59,7 @@ namespace CelesteMusicPlayer
             // 但它们是界面代码，出的问题十有八九是渲染/交互，不是音频算法。
             if (Contains(name, "MainWindow") || Contains(name, "Geek") ||
                 Contains(name, "UiTheme") || Contains(name, "ThemeColor") ||
-                Contains(name, "SettingsWindow") || Contains(name, "AppTrayIcon") ||
+                Contains(name, "SettingsWindow") || Contains(name, "Tray") ||
                 Contains(name, "TaskbarThumbnail") || Contains(name, "App.xaml") ||
                 Contains(name, "Program.cs") || Contains(name, "Lyrics") ||
                 Contains(name, "Terminal") || Contains(name, "Visualizer"))

@@ -588,7 +588,7 @@ namespace CelesteMusicPlayer
         // 迷你播放器字段已移除（2026-10-19 用户要求删掉重写，见 memory 2026-10-19）
         private DateTime _lastPlaybackPersistUtc = DateTime.MinValue;
         private ArtistAvatarEditorWindow? _artistAvatarEditorWindow;
-        private AppTrayIcon? _trayIcon;
+        private ITrayIcon? _trayIcon;
         private TaskbarThumbnailButtons? _taskbarButtons;
         // 任务栏缩略图按钮专用：宿主 WinUI 矢量 / FontIcon 的隐藏 Canvas（在视觉树中、Opacity=0、
         // 位置偏移到 -10000,-10000，肉眼看不见但能正常 measure/arrange/render）。
@@ -812,9 +812,11 @@ namespace CelesteMusicPlayer
             }
 
             // 系统托盘图标常驻：程序启动即显示（不随窗口隐藏/恢复变化，退出时清理）
+            // 2026-10-28 起走 Win32 通知图标 + WebView2 菜单（不再用 H.NotifyIcon / MenuFlyout），
+            // 见 collab/RESULT-20261028-tray-without-winui-small-plan.md 的 T3。
             try
             {
-                _trayIcon ??= new AppTrayIcon(this);
+                _trayIcon ??= new WindowsTrayService(this);
                 _trayIcon.Show();
             }
             catch (Exception caught)

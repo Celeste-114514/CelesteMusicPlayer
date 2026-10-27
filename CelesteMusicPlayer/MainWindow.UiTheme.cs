@@ -2178,7 +2178,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                _trayIcon ??= new AppTrayIcon(this);
+                _trayIcon ??= new WindowsTrayService(this);
                 _trayIcon.Show();
                 if (!_trayIcon.IsCreated)
                 {

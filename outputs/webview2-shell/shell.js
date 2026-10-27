@@ -342,6 +342,8 @@
       if(message?.version!==1)return;
       document.dispatchEvent(new CustomEvent('celeste:message',{detail:message}));
       if(message.kind==='celeste.error'){notify(String(message.message||'操作失败'));return;}
+      // 宿主主动要求跳页（托盘菜单的「设置」「发现新版本」走这条）
+      if(message.kind==='celeste.navigate'&&typeof message.page==='string'){navigate(message.page);return;}
       if(message.kind==='celeste.metadata'&&typeof message.trackId==='string'&&Array.isArray(message.chips)){
         const chips=message.chips.filter(value=>typeof value==='string');metadataCache.set(message.trackId,chips);
         const button=[...document.querySelectorAll('.song-row')].find(row=>row.dataset.trackId===message.trackId);
