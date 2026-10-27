@@ -17,6 +17,10 @@
   window.CelesteDspEq = { mount(host, { request, notify, bandGainAt, live }) {
     let state = { enabled:false, bands:[], preampDb:0, presetId:'flat' }, selected = 0, stopped = false, loading = false, revision = 0, editing = false, timer = 0;
     let drag = false, hover = -1, mode = 'pro', spectrumOn = true, spectrum = [], pollBusy = false, previewAt = 0, previewQueue = Promise.resolve();
+    // 曲线插值：换预设 / 撤销 / 重置时，增益从旧值滑到新值，而不是整条线瞬移。
+    // drawBands 只在插值期间有值，别处一律读 state.bands（真实状态）。
+    let drawBands = null, tweenFrame = 0;
+    const activeBands = () => drawBands || state.bands;
     const root = el('div',undefined,'eq-workbench'), heading = el('div',undefined,'dsp-module-head'), title = el('div');
     title.append(el('h2','参数 EQ'),el('p','拖动频段节点调整频率与增益，Shift 可精细调整。'));
     const power = button('启用 EQ', async () => { revision++; state.enabled = !state.enabled; paintState(); await save(); }); heading.append(title,power); root.append(heading);
@@ -37,10 +41,41 @@
     const status=el('p','正在读取 EQ…','eq-hint');status.setAttribute('role','status');root.append(status);host.append(root);
     function button(text, fn) {const b=el('button',text,'eq-pill');b.type='button';b.addEventListener('click',fn);return b;}
     function payload() {return {enabled:state.enabled,preampDb:state.preampDb,bands:state.bands.map(b=>({...b}))};}
-    function changed() {revision++;editing=true;state.presetId='custom';draw();if(Date.now()-previewAt>85){previewAt=Date.now();const next=payload();previewQueue=previewQueue.catch(()=>{}).then(()=>request('preview',next)).catch(e=>{status.textContent=e.message;});}}
+    function changed() {if(drawBands){cancelAnimationFrame(tweenFrame);drawBands=null;}revision++;editing=true;state.presetId='custom';draw();if(Date.now()-previewAt>85){previewAt=Date.now();const next=payload();previewQueue=previewQueue.catch(()=>{}).then(()=>request('preview',next)).catch(e=>{status.textContent=e.message;});}}
     async function save() {if(!live||stopped)return;const stamp=revision,data=payload();editing=false;try{await previewQueue;await request('set',data);status.textContent='已应用并保存';if(stamp===revision&&!editing)await load();}catch(e){status.textContent=e.message;notify(e.message);}}
     async function action(operation, payload={}) {if(!live)return notify('请在桌面播放器中使用此功能。');if(loading)return;loading=true;root.setAttribute('aria-busy','true');try{await previewQueue;const r=await request(operation,payload);if(r?.message)notify(r.message);await load();}catch(e){notify(e.message);status.textContent=e.message;}finally{loading=false;root.removeAttribute('aria-busy');}}
-    async function load() {const stamp=revision;try {let data=live?await request('get'):{enabled:false,bands:ticks.map(freq=>({freq,gain:0,q:1,type:'Peaking',enabled:true})),preampDb:0,presetId:'flat',userPresets:[]};if(stopped||stamp!==revision||editing)return;state=data;selected=clamp(selected,0,state.bands.length-1);paintState();renderBands();draw();status.textContent=live?'已读取当前 EQ 设置':'界面预览 · 启动桌面播放器后可调节声音';}catch(e){status.textContent=e.message;}}
+    /**
+     * 换预设 / 撤销 / 重置之后，把曲线从旧增益滑到新增益（150ms）。
+     * 只在"段数对得上"时插值：段数变了还硬插，会得到一条谁也没要求过的过渡曲线。
+     */
+    function tweenTo(previous) {
+      cancelAnimationFrame(tweenFrame);
+      drawBands = null;
+      const bands = state.bands;
+      if (!previous || previous.length !== bands.length) return;
+      const to = bands.map(band => band.gain);
+      if (to.every((gain, index) => Math.abs(gain - previous[index]) < 0.05)) return;
+      if (!window.CelesteMotion?.canFade?.()) return;
+      const span = window.CelesteMotion?.duration(150, 'control') ?? 150;
+      if (span < 20) return;                       // 动效被关掉时直接落在终值
+      const from = previous.slice();
+      const start = performance.now();
+      // 先同步把画面钉在"旧增益"上：调用方紧接着就会 draw 一次，
+      // 这一帧如果画的是新值，等于先闪一下终值再倒回来滑，比不插值还难看。
+      drawBands = bands.map((band, index) => ({ ...band, gain: from[index] }));
+      const ease = t => (t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2);
+      const step = now => {
+        if (stopped) { drawBands = null; return; }
+        const progress = Math.min(1, (now - start) / span);
+        const k = ease(progress);
+        drawBands = bands.map((band, index) => ({ ...band, gain: from[index] + (to[index] - from[index]) * k }));
+        draw();
+        if (progress < 1) tweenFrame = requestAnimationFrame(step);
+        else drawBands = null;
+      };
+      tweenFrame = requestAnimationFrame(step);
+    }
+    async function load() {const stamp=revision;try {let data=live?await request('get'):{enabled:false,bands:ticks.map(freq=>({freq,gain:0,q:1,type:'Peaking',enabled:true})),preampDb:0,presetId:'flat',userPresets:[]};if(stopped||stamp!==revision||editing)return;const previousGains=state.bands.map(b=>b.gain);state=data;selected=clamp(selected,0,state.bands.length-1);paintState();renderBands();tweenTo(previousGains);draw();status.textContent=live?'已读取当前 EQ 设置':'界面预览 · 启动桌面播放器后可调节声音';}catch(e){status.textContent=e.message;}}
     function paintState() {
       power.textContent=state.enabled?'EQ 已启用':'EQ 已关闭';power.setAttribute('aria-pressed',state.enabled);undo.disabled=!state.undo;redo.disabled=!state.redo;ab.textContent=state.ab?(state.abShowingA?'回到 B（调整后）':'试听 A（参考）'):'A/B 对比';
       preset.replaceChildren();const presets=[['flat','平坦'],['pop','流行'],['rock','摇滚'],['jazz','爵士'],['classical','古典'],['bass','低音增强'],['soft','柔和'],['custom','自定义'],...(state.userPresets||[]).map(p=>[p.id,p.name])];presets.forEach(([id,text])=>{const o=el('option',text);o.value=id;preset.append(o);});preset.value=state.presetId;
@@ -60,9 +95,9 @@
     // Re-fit the viewBox to the real host width. A collapsed/hidden page reports 0 and is
     // skipped, so switching modules never resets the chart to the minimum width.
     function measure(){if(stopped)return false;const rect=chart.getBoundingClientRect();if(!rect.width)return false;const next=clamp(Math.round(rect.width),MIN_W,4096);if(Math.abs(next-W)<1)return false;W=next;PW=W-L-R;chart.setAttribute('viewBox',`0 0 ${W} ${H}`);return true;}
-    function maxGain(){const peak=Math.max(0,...state.bands.filter(b=>b.enabled).map(b=>Math.abs(b.gain)));return ladders.find(n=>n>=peak+2)||36;}
+    function maxGain(){const peak=Math.max(0,...activeBands().filter(b=>b.enabled).map(b=>Math.abs(b.gain)));return ladders.find(n=>n>=peak+2)||36;}
     const y=(g,m)=>clamp(T+PH/2-g*PH/(2*m),T,T+PH);
-    function response(f){return state.bands.reduce((sum,b)=>sum+(b.enabled?bandGainAt(f,b):0),0);}
+    function response(f){return activeBands().reduce((sum,b)=>sum+(b.enabled?bandGainAt(f,b):0),0);}
     function draw(){
       if(stopped)return;measure();const max=maxGain(),step=steps[ladders.indexOf(max)];chart.replaceChildren();const defs=svg('defs'),gradient=svg('linearGradient',{id:'native-eq-stroke',x1:0,y1:0,x2:1,y2:0}),fill=svg('linearGradient',{id:'native-eq-fill',x1:0,y1:0,x2:0,y2:1});
       [0,.55,1].forEach((offset,i)=>gradient.append(svg('stop',{offset,'stop-color':`var(--eq-stop-${i+1})`})));fill.append(svg('stop',{offset:0,'stop-color':'var(--eq-fill-top)'}),svg('stop',{offset:1,'stop-color':'var(--eq-fill-bottom)'}));defs.append(gradient,fill);chart.append(defs);
@@ -72,10 +107,10 @@
       const points=Array.from({length:241},(_,i)=>{const f=20*1000**(i/240);return `${x(f).toFixed(1)},${y(response(f),max).toFixed(1)}`;});const path='M'+points.join(' L');chart.append(svg('path',{d:path+` L${W-R},${H-B} L${L},${H-B} Z`,fill:'url(#native-eq-fill)'}),svg('path',{d:path,fill:'none',stroke:'url(#native-eq-stroke)','stroke-width':2,opacity:state.enabled?1:.35}));
       // Native page: dashed guides for selected/hovered nodes and frequency labels with
       // 42px collision suppression. Node radius stays identical for every band.
-      new Set([selected,hover]).forEach(i=>{const b=state.bands[i];if(!b)return;const attrs={class:'eq-guide',stroke:'var(--eq-grid-strong)','stroke-width':1,'stroke-dasharray':'4 3','pointer-events':'none'};chart.append(svg('line',{...attrs,x1:x(b.freq),x2:x(b.freq),y1:T,y2:H-B}),svg('line',{...attrs,x1:L,x2:W-R,y1:y(b.gain,max),y2:y(b.gain,max)}));});
-      state.bands.forEach((b,i)=>{const cx=x(b.freq),cy=y(b.gain,max);chart.append(svg('circle',{cx,cy,r:7,class:'node-ring','data-band':i,'data-selected':i===selected,opacity:b.enabled?1:.45}));const glyph=svg('text',{x:cx,y:cy,'text-anchor':'middle','dominant-baseline':'central',class:'eq-node-glyph','pointer-events':'none'});glyph.textContent=b.type==='Peaking'?'P':b.type==='Notch'?'N':/Shelf/.test(b.type)?'S':'F';chart.append(glyph);});
+      new Set([selected,hover]).forEach(i=>{const b=activeBands()[i];if(!b)return;const attrs={class:'eq-guide',stroke:'var(--eq-grid-strong)','stroke-width':1,'stroke-dasharray':'4 3','pointer-events':'none'};chart.append(svg('line',{...attrs,x1:x(b.freq),x2:x(b.freq),y1:T,y2:H-B}),svg('line',{...attrs,x1:L,x2:W-R,y1:y(b.gain,max),y2:y(b.gain,max)}));});
+      activeBands().forEach((b,i)=>{const cx=x(b.freq),cy=y(b.gain,max);chart.append(svg('circle',{cx,cy,r:7,class:'node-ring','data-band':i,'data-selected':i===selected,opacity:b.enabled?1:.45}));const glyph=svg('text',{x:cx,y:cy,'text-anchor':'middle','dominant-baseline':'central',class:'eq-node-glyph','pointer-events':'none'});glyph.textContent=b.type==='Peaking'?'P':b.type==='Notch'?'N':/Shelf/.test(b.type)?'S':'F';chart.append(glyph);});
       const placed=[];
-      state.bands.map((b,i)=>({b,i,priority:(i===selected||i===hover?100000:0)+Math.abs(b.gain)*10+x(b.freq)*.001})).sort((a,b)=>b.priority-a.priority).forEach(({b})=>{const cx=x(b.freq),cy=clamp(y(b.gain,max)-14,T+11,H-B-4);if(placed.some(p=>Math.abs(p.x-cx)<42&&Math.abs(p.y-cy)<16))return;placed.push({x:cx,y:cy});const label=svg('text',{class:'tick-label eq-node-frequency',x:cx,y:cy,'text-anchor':'middle','pointer-events':'none'});label.textContent=frequencies(b.freq);chart.append(label);});
+      activeBands().map((b,i)=>({b,i,priority:(i===selected||i===hover?100000:0)+Math.abs(b.gain)*10+x(b.freq)*.001})).sort((a,b)=>b.priority-a.priority).forEach(({b})=>{const cx=x(b.freq),cy=clamp(y(b.gain,max)-14,T+11,H-B-4);if(placed.some(p=>Math.abs(p.x-cx)<42&&Math.abs(p.y-cy)<16))return;placed.push({x:cx,y:cy});const label=svg('text',{class:'tick-label eq-node-frequency',x:cx,y:cy,'text-anchor':'middle','pointer-events':'none'});label.textContent=frequencies(b.freq);chart.append(label);});
     }
     function point(e){const p=chart.createSVGPoint();p.x=e.clientX;p.y=e.clientY;const m=chart.getScreenCTM();return m?p.matrixTransform(m.inverse()):{x:0,y:0};}
     chart.addEventListener('pointerdown',e=>{const p=point(e),m=maxGain();let distance=400,best=-1;state.bands.forEach((b,i)=>{const d=(x(b.freq)-p.x)**2+(y(b.gain,m)-p.y)**2;if(d<distance){distance=d;best=i;}});if(best<0)return;selected=best;drag=true;chart.setPointerCapture(e.pointerId);chart.focus();e.preventDefault();renderBands();draw();});
