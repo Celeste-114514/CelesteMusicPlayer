@@ -7,6 +7,7 @@
  <ItemGroup>
   <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
   <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+  <PackageReference Include="TagLibSharp" Version="2.3.0" />
   <Compile Include="../../CelesteMusicPlayer/PlaybackCommandRouter.cs" Link="Core/PlaybackCommandRouter.cs" />
   <Compile Include="../../CelesteMusicPlayer/PlaybackSnapshot.cs" Link="Core/PlaybackSnapshot.cs" />
   <Compile Include="../../CelesteMusicPlayer/MainWindowCoordinator.cs" Link="Core/MainWindowCoordinator.cs" />
@@ -39,6 +40,16 @@
   <Compile Include="../../CelesteMusicPlayer/NetworkLibraryModels.cs" Link="Library/NetworkLibraryModels.cs" />
   <Compile Include="../../CelesteMusicPlayer/WebDavLocation.cs" Link="Library/WebDavLocation.cs" />
   <Compile Include="../../CelesteMusicPlayer/WebDavClient.cs" Link="Library/WebDavClient.cs" />
+  <!-- W6 第三步：歌词/CUE/M3U 解析链。必须保持不依赖 WinUI/WinRT。
+       CueTrackExpansion 暂不能进：它的入参类型 PlaylistItem 定义在 MainWindow.xaml.cs
+       （还缠着 MainWindow.GeekUiStyleCached 静态缓存），等模型类搬出界面文件后再迁。 -->
+  <Compile Include="../../CelesteMusicPlayer/LyricsLoader.cs" Link="Parsing/LyricsLoader.cs" />
+  <Compile Include="../../CelesteMusicPlayer/CueSheetParser.cs" Link="Parsing/CueSheetParser.cs" />
+  <Compile Include="../../CelesteMusicPlayer/M3uPlaylistIO.cs" Link="Parsing/M3uPlaylistIO.cs" />
+  <Compile Include="../../CelesteMusicPlayer/NetworkLibraryService.cs" Link="Library/NetworkLibraryService.cs" />
+  <Compile Include="../../CelesteMusicPlayer/NetworkSourceProvider.cs" Link="Library/NetworkSourceProvider.cs" />
+  <Compile Include="../../CelesteMusicPlayer/BaiduSourceProvider.cs" Link="Library/BaiduSourceProvider.cs" />
+  <Compile Include="../../CelesteMusicPlayer/MediaServerSourceProvider.cs" Link="Library/MediaServerSourceProvider.cs" />
   <Content Include="Web/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
  </ItemGroup>
  <Target Name="RemoveUnusedWpfWebViewReference" BeforeTargets="ResolveAssemblyReferences">

@@ -121,8 +121,14 @@ internal sealed class ProbeForm : Form, IMainWindowSurface
             foreach(string line in library.Details)Program.Record("  library: "+line);
             if(!library.Passed)throw new Exception("Library boundary check failed: "+string.Join(" | ",library.Details.Where(d=>d.Contains("FAIL")).Take(6)));
 
+            // W6 第三步：歌词/CUE/M3U 解析链边界。临时目录，全程不碰用户真实文件。
+            ParsingBoundary.Result parsing=ParsingBoundary.Run();
+            Program.Record($"Parsing boundary: checks={parsing.Checks} passed={parsing.Passed}");
+            foreach(string line in parsing.Details)Program.Record("  parsing: "+line);
+            if(!parsing.Passed)throw new Exception("Parsing boundary check failed: "+string.Join(" | ",parsing.Details.Where(d=>d.Contains("FAIL")).Take(6)));
+
             Passed=true;Program.Record("PASS: actual WebView2 JS→C#→JS roundtrip using W1 contracts; WinUI not loaded");
-            Program.WriteReport(true,new {runtime=Environment.Version.ToString(),modules,nativeTaskbarApi=_taskbar.ApiReady,settingsBoundary=boundary,libraryBoundary=library,visibleTaskbarButtons="manual verification pending",simulation=true});
+            Program.WriteReport(true,new {runtime=Environment.Version.ToString(),modules,nativeTaskbarApi=_taskbar.ApiReady,settingsBoundary=boundary,libraryBoundary=library,parsingBoundary=parsing,visibleTaskbarButtons="manual verification pending",simulation=true});
         }
         catch(Exception ex){Program.Record(ex.ToString());Program.WriteReport(false,new {error=ex.ToString()});}
         finally{Close();}
