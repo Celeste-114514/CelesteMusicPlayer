@@ -11,13 +11,8 @@ using TagLib;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>扫描输入的一首曲目（含用于专辑分组的专辑信息）。</summary>
-    public sealed class RgScanInput
-    {
-        public string FilePath = string.Empty;
-        public string Album = string.Empty;
-        public string AlbumArtist = string.Empty;
-    }
+    // RgScanInput 已迁往 RgScanInput.cs（W6：曲库层 LibraryDb 返回该类型，
+    // 不应被扫描器的 TagLib# 依赖拖住）。
 
     /// <summary>
     /// ReplayGain 2.0 (EBU R128) 扫描与写标签。

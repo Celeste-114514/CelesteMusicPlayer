@@ -115,8 +115,14 @@ internal sealed class ProbeForm : Form, IMainWindowSurface
             if(boundary.CloneMismatches>0||boundary.SchemaMismatches>0||boundary.DefsMissingReader>0)
                 throw new Exception("Settings boundary check failed: "+string.Join(" | ",boundary.Details.Take(6)));
 
+            // W6 第二步：曲库/媒体库边界。临时库 + 临时 JSON 目录，全程不碰用户真实曲库/设置。
+            LibraryBoundary.Result library=LibraryBoundary.Run();
+            Program.Record($"Library boundary: checks={library.Checks} passed={library.Passed}");
+            foreach(string line in library.Details)Program.Record("  library: "+line);
+            if(!library.Passed)throw new Exception("Library boundary check failed: "+string.Join(" | ",library.Details.Where(d=>d.Contains("FAIL")).Take(6)));
+
             Passed=true;Program.Record("PASS: actual WebView2 JS→C#→JS roundtrip using W1 contracts; WinUI not loaded");
-            Program.WriteReport(true,new {runtime=Environment.Version.ToString(),modules,nativeTaskbarApi=_taskbar.ApiReady,settingsBoundary=boundary,visibleTaskbarButtons="manual verification pending",simulation=true});
+            Program.WriteReport(true,new {runtime=Environment.Version.ToString(),modules,nativeTaskbarApi=_taskbar.ApiReady,settingsBoundary=boundary,libraryBoundary=library,visibleTaskbarButtons="manual verification pending",simulation=true});
         }
         catch(Exception ex){Program.Record(ex.ToString());Program.WriteReport(false,new {error=ex.ToString()});}
         finally{Close();}

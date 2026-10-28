@@ -170,17 +170,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                string root;
-                try
-                {
-                    root = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
-                }
-                catch
-                {
-                    root = System.IO.Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "CelesteMusicPlayer");
-                }
+                string root = AppSettingsStore.GetConfigDirectory();
 
                 string path = System.IO.Path.Combine(root, "last-library.json");
                 if (!System.IO.File.Exists(path))

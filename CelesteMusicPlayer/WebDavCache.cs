@@ -33,11 +33,8 @@ namespace CelesteMusicPlayer
 
         private static readonly object GateLock = new();
 
-        /// <summary>默认缓存根目录。</summary>
-        public static string DefaultRoot => Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "CelesteMusicPlayer",
-            "WebDavCache");
+        /// <summary>默认缓存根目录。真值在 AppCachePaths。</summary>
+        public static string DefaultRoot => AppCachePaths.WebDavCacheDefaultRoot;
 
         /// <summary>实际使用的缓存根目录（设置里为空就用默认）。</summary>
         public static string GetRoot(WebDavLocation location)

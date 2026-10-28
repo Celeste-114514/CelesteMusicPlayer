@@ -62,13 +62,25 @@ namespace CelesteMusicPlayer
             return Path.TrimEndingDirectorySeparator(trimmed);
         }
 
+        /// <summary>DSD DoP 缓存实际根目录（设置里为空就用默认）。
+        /// 原取自 DsdPreloadService.CacheRoot，为切断对音频引擎的依赖在此等价内联。</summary>
+        private static string DsdCacheRoot
+        {
+            get
+            {
+                string? custom = AppSettingsStore.Load().DsdCachePath ?? string.Empty;
+                custom = custom.Trim();
+                return string.IsNullOrEmpty(custom) ? AppCachePaths.DsdDefaultCacheRoot : custom;
+            }
+        }
+
         /// <summary>WebDAV 下载缓存实际根目录（设置里为空就用默认）。</summary>
         private static string WebDavRoot
         {
             get
             {
                 string? custom = AppSettingsStore.Load().WebDavCacheDir;
-                return Normalize(string.IsNullOrWhiteSpace(custom) ? WebDavCache.DefaultRoot : custom);
+                return Normalize(string.IsNullOrWhiteSpace(custom) ? AppCachePaths.WebDavCacheDefaultRoot : custom);
             }
         }
 
@@ -95,10 +107,12 @@ namespace CelesteMusicPlayer
                 }
 
                 // DSD 整轨 DoP WAV 缓存（默认 D:\CelesteDsdCache，设置里可改）
-                Add(DsdPreloadService.CacheRoot);
+                // 路径真值走 AppCachePaths —— 不引用 DsdPreloadService/FfmpegDecoderBackend，
+                // 否则曲库层会被拖进整个音频引擎（W6 迁出）。
+                Add(DsdCacheRoot);
 
                 // FFmpeg 转码缓存（%LOCALAPPDATA%\CelesteMusicPlayer\TranscodeCache）
-                Add(FfmpegDecoderBackend.TranscodeCacheDir);
+                Add(AppCachePaths.TranscodeCacheDir);
 
                 Volatile.Write(ref _cachedRoots, roots);
                 return roots;

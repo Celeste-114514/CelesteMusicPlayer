@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using Windows.Storage;
 
 namespace CelesteMusicPlayer
 {
@@ -32,17 +31,9 @@ namespace CelesteMusicPlayer
 
         private static string GetFilePath()
         {
-            string root;
-            try
-            {
-                root = ApplicationData.Current.LocalFolder.Path;
-            }
-            catch
-            {
-                root = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer");
-            }
+            // 与主设置(AppSettingsStore)同源：固定 %LOCALAPPDATA%\CelesteMusicPlayer
+            // （W6 迁出 WinUI 依赖：原 WinRT ApplicationData 分支在非打包运行时本就抛异常走 catch，等价改写）。
+            string root = AppSettingsStore.GetConfigDirectory();
 
             Directory.CreateDirectory(root);
             return Path.Combine(root, FileName);

@@ -23,12 +23,8 @@ namespace CelesteMusicPlayer
         public const string CacheExtension = ".dop24.wav";
         private const int BpF = 6; // 24bit 紧凑容器：每立体声帧 6 字节
 
-        /// <summary>默认缓存根目录（D 盘存在就用 D 盘，避免占系统盘；用户可在设置里改）。</summary>
-        public static string DefaultCacheRoot =>
-            Directory.Exists(@"D:\")
-                ? @"D:\CelesteDsdCache"
-                : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer", "DsdCache");
+        /// <summary>默认缓存根目录（D 盘存在就用 D 盘，避免占系统盘；用户可在设置里改）。真值在 AppCachePaths。</summary>
+        public static string DefaultCacheRoot => AppCachePaths.DsdDefaultCacheRoot;
 
         public static string CacheRoot
         {

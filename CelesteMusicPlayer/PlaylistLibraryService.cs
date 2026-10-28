@@ -91,17 +91,7 @@ namespace CelesteMusicPlayer
         {
             get
             {
-                string root;
-                try
-                {
-                    root = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
-                }
-                catch
-                {
-                    root = System.IO.Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "CelesteMusicPlayer");
-                }
+                string root = AppSettingsStore.GetConfigDirectory();
                 string dir = System.IO.Path.Combine(root, "PlaylistCovers");
                 Directory.CreateDirectory(dir);
                 return dir;

@@ -38,17 +38,10 @@ namespace CelesteMusicPlayer
                 return TestDbOverride;
             }
 
-            string root;
-            try
-            {
-                root = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
-            }
-            catch
-            {
-                root = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer");
-            }
+            // 与主设置(AppSettingsStore)同源：固定 %LOCALAPPDATA%\CelesteMusicPlayer。
+            // 历史上这里走 WinRT ApplicationData.Current，但本程序始终非打包运行，
+            // 那条分支只会抛异常落到同一个目录 —— W6 迁出 WinUI 依赖时直接删掉等价改写。
+            string root = AppSettingsStore.GetConfigDirectory();
 
             Directory.CreateDirectory(root);
             return Path.Combine(root, FileName);
@@ -166,34 +159,20 @@ namespace CelesteMusicPlayer
 
         private static string PlaylistsFolder()
         {
-            string root;
-            try
-            {
-                root = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
-            }
-            catch
-            {
-                root = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer");
-            }
+            // 与主设置(AppSettingsStore)同源：固定 %LOCALAPPDATA%\CelesteMusicPlayer。
+            // 历史上这里走 WinRT ApplicationData.Current，但本程序始终非打包运行，
+            // 那条分支只会抛异常落到同一个目录 —— W6 迁出 WinUI 依赖时直接删掉等价改写。
+            string root = AppSettingsStore.GetConfigDirectory();
 
             return Path.Combine(root, "Playlists");
         }
 
         private static string SessionJsonPath()
         {
-            string root;
-            try
-            {
-                root = Windows.Storage.ApplicationData.Current.LocalFolder.Path;
-            }
-            catch
-            {
-                root = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer");
-            }
+            // 与主设置(AppSettingsStore)同源：固定 %LOCALAPPDATA%\CelesteMusicPlayer。
+            // 历史上这里走 WinRT ApplicationData.Current，但本程序始终非打包运行，
+            // 那条分支只会抛异常落到同一个目录 —— W6 迁出 WinUI 依赖时直接删掉等价改写。
+            string root = AppSettingsStore.GetConfigDirectory();
 
             return Path.Combine(root, "last-library.json");
         }

@@ -6,6 +6,7 @@
  </PropertyGroup>
  <ItemGroup>
   <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
+  <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
   <Compile Include="../../CelesteMusicPlayer/PlaybackCommandRouter.cs" Link="Core/PlaybackCommandRouter.cs" />
   <Compile Include="../../CelesteMusicPlayer/PlaybackSnapshot.cs" Link="Core/PlaybackSnapshot.cs" />
   <Compile Include="../../CelesteMusicPlayer/MainWindowCoordinator.cs" Link="Core/MainWindowCoordinator.cs" />
@@ -21,6 +22,23 @@
   <Compile Include="../../CelesteMusicPlayer/UpdateChecker.cs" Link="Core/UpdateChecker.cs" />
   <Compile Include="../../CelesteMusicPlayer/UpdateVersioning.cs" Link="Core/UpdateVersioning.cs" />
   <Compile Include="../../CelesteMusicPlayer/HttpClients.cs" Link="Core/HttpClients.cs" />
+  <!-- W6 第二步：曲库/媒体库服务边界。同样必须保持不依赖 WinUI/WinRT，PoC 能编过就是证明。 -->
+  <Compile Include="../../CelesteMusicPlayer/LibraryDb.cs" Link="Library/LibraryDb.cs" />
+  <Compile Include="../../CelesteMusicPlayer/LibrarySessionStore.cs" Link="Library/LibrarySessionStore.cs" />
+  <Compile Include="../../CelesteMusicPlayer/LibraryWatchService.cs" Link="Library/LibraryWatchService.cs" />
+  <Compile Include="../../CelesteMusicPlayer/LibraryPathGuard.cs" Link="Library/LibraryPathGuard.cs" />
+  <Compile Include="../../CelesteMusicPlayer/PlaylistLibraryService.cs" Link="Library/PlaylistLibraryService.cs" />
+  <Compile Include="../../CelesteMusicPlayer/TrackStatsStore.cs" Link="Library/TrackStatsStore.cs" />
+  <Compile Include="../../CelesteMusicPlayer/PlayQueueStore.cs" Link="Library/PlayQueueStore.cs" />
+  <Compile Include="../../CelesteMusicPlayer/NamedPlaylistStore.cs" Link="Library/NamedPlaylistStore.cs" />
+  <Compile Include="../../CelesteMusicPlayer/UserPlaylistFileStore.cs" Link="Library/UserPlaylistFileStore.cs" />
+  <Compile Include="../../CelesteMusicPlayer/JsonFile.cs" Link="Library/JsonFile.cs" />
+  <Compile Include="../../CelesteMusicPlayer/RgScanInput.cs" Link="Library/RgScanInput.cs" />
+  <Compile Include="../../CelesteMusicPlayer/AppCachePaths.cs" Link="Library/AppCachePaths.cs" />
+  <Compile Include="../../CelesteMusicPlayer/NetworkLibraryStore.cs" Link="Library/NetworkLibraryStore.cs" />
+  <Compile Include="../../CelesteMusicPlayer/NetworkLibraryModels.cs" Link="Library/NetworkLibraryModels.cs" />
+  <Compile Include="../../CelesteMusicPlayer/WebDavLocation.cs" Link="Library/WebDavLocation.cs" />
+  <Compile Include="../../CelesteMusicPlayer/WebDavClient.cs" Link="Library/WebDavClient.cs" />
   <Content Include="Web/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
  </ItemGroup>
  <Target Name="RemoveUnusedWpfWebViewReference" BeforeTargets="ResolveAssemblyReferences">
