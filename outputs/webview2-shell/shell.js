@@ -299,7 +299,8 @@
     $('order-badge').textContent='';
     document.querySelectorAll('[data-order]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.order===state.playbackOrder)));
     $('lyrics').setAttribute('aria-pressed',String(state.desktopLyrics));
-    $('lyrics-badge').textContent=state.desktopLyrics?(state.desktopLyricsLocked?'锁':'on'):'off';
+    $('lyrics-badge').textContent=state.desktopLyrics?'on':'off';
+    const mp=$('mini-player-open'); if(mp){mp.setAttribute('aria-pressed',String(!!state.miniPlayer)); $('mini-player-badge').textContent=state.miniPlayer?'on':'off';}
     const tp=$('taskbar-player'); const tpBadge=$('taskbar-badge');
     if(tp){tp.setAttribute('aria-pressed',String(!!state.taskbarPlayer)); if(tpBadge)tpBadge.textContent=state.taskbarPlayer?'on':'off';}
     updateSongRows();
@@ -389,7 +390,7 @@
       state.volume=Math.min(100,state.volume); state.position=Math.min(state.duration,state.position);
       ['playing','favorite','shuffle','repeat'].forEach(key=>{if(typeof incoming[key]==='boolean')state[key]=incoming[key]});
       if(orders[incoming.playbackOrder])state.playbackOrder=incoming.playbackOrder;
-      ['desktopLyrics','desktopLyricsLocked','taskbarPlayer'].forEach(key=>{if(typeof incoming[key]==='boolean')state[key]=incoming[key]});
+      ['desktopLyrics','desktopLyricsLocked','taskbarPlayer','miniPlayer'].forEach(key=>{if(typeof incoming[key]==='boolean')state[key]=incoming[key]});
       if(typeof incoming.volumeEnabled==='boolean')state.volumeEnabled=incoming.volumeEnabled;
       $('mode-label').textContent='已连接播放器';
       const mode={WasapiShared:'WASAPI 共享',WasapiExclusive:'WASAPI 独占',Asio:'ASIO'}[incoming.outputMode]||'';

@@ -31,6 +31,7 @@ namespace CelesteMusicPlayer
                 favorite = IsCurrentFavoritePublic(),
                 playbackOrder = _orderResolver.Order.ToString(),
                 desktopLyrics = _desktopLyricsEnabled,
+                miniPlayer = _miniPlayerWindow != null,
                 desktopLyricsLocked = _desktopLyricsWindow?.IsLocked == true,
                 taskbarPlayer = AppSettingsStore.Load().TaskbarPlayerEnabled,
                 coverUrl = item == null ? "" : "https://celeste-cover.internal/cover/" + WebTrackId(item),

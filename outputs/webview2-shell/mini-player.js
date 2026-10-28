@@ -7,7 +7,7 @@ function icon(b,name){b.replaceChildren();const s=document.createElementNS('http
 document.querySelectorAll('[data-icon]').forEach(b=>icon(b,b.dataset.icon));
 document.querySelectorAll('[data-cmd]').forEach(b=>b.addEventListener('click',()=>send(b.dataset.cmd)));
 let panel='',seeking=false,lastIndex=-2,queueKey='',coverGeneration=0,userScrollUntil=0;
-function expand(name){panel=panel===name?'':name;$('lyrics').hidden=panel!=='lyrics';$('queue').hidden=panel!=='queue';if(panel)document.querySelector('main').hidden=false;for(const n of ['lyrics','queue'])$(n+'-button').setAttribute('aria-pressed',panel===n);send('expand',!!panel);lastIndex=-2;}
+function expand(name){panel=panel===name?'':name;$('lyrics').hidden=panel!=='lyrics';$('queue').hidden=panel!=='queue';if(panel)document.querySelector('main').hidden=false;document.body.classList.toggle('expanded',!!panel);for(const n of ['lyrics','queue'])$(n+'-button').setAttribute('aria-pressed',panel===n);send('expand',!!panel);lastIndex=-2;}
 $('lyrics-button').onclick=()=>expand('lyrics');$('queue-button').onclick=()=>expand('queue');
 $('progress').oninput=()=>{seeking=true;$('elapsed').textContent=time($('progress').value);updateProgress();};$('progress').onchange=()=>{send('seek',Number($('progress').value));seeking=false;};$('progress').onblur=()=>seeking=false;
 $('volume').oninput=()=>{$('volume-value').value=$('volume').value+'%';send('volume',Number($('volume').value));};

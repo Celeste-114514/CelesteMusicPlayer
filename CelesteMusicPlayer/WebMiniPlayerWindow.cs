@@ -16,7 +16,9 @@ namespace CelesteMusicPlayer;
 /// <summary>Web presentation only; all audio commands use the existing mini bridge.</summary>
 internal sealed class WebMiniPlayerWindow : Window
 {
-    private readonly WebView2 _web = new();
+    // Keep the browser surface stable: resizing it every frame recreates browser
+    // layout/surface work. The native client bounds clip this fixed canvas.
+    private readonly WebView2 _web = new() { Height = 620, VerticalAlignment = VerticalAlignment.Top };
     private readonly Grid _root = new();
     private bool _closed, _ready;
     private byte[]? _cover;
@@ -27,6 +29,8 @@ internal sealed class WebMiniPlayerWindow : Window
     private double _height = 188, _fromHeight, _targetHeight;
     private int _dragGeneration, _themeRevision = -1;
     private string _themeMode = "";
+    private int _lastPixelHeight = -1, _lastPixelWidth = -1;
+    private double _lastResizeFrame = -100;
     internal WebMiniPlayerWindow()
     {
         Title = "Celeste · 迷你播放器";
@@ -59,7 +63,10 @@ internal sealed class WebMiniPlayerWindow : Window
     private void ApplyHeight()
     {
         double scale = _root.XamlRoot?.RasterizationScale ?? 1;
-        AppWindow.ResizeClient(new Windows.Graphics.SizeInt32((int)(400 * scale), (int)(_height * scale)));
+        int width = (int)Math.Round(400 * scale), height = (int)Math.Round(_height * scale);
+        if (width == _lastPixelWidth && height == _lastPixelHeight) return;
+        AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(width, height));
+        _lastPixelWidth = width; _lastPixelHeight = height;
     }
     private void Expand(bool expanded, bool animate)
     {
@@ -67,12 +74,18 @@ internal sealed class WebMiniPlayerWindow : Window
         _fromHeight = _height; _targetHeight = expanded ? 620 : 188;
         if (!animate) { Resize(expanded); Post(new { kind = "resized", expanded }); return; }
         _resizeClock.Restart();
+        _lastResizeFrame = -100;
         CompositionTarget.Rendering += AnimateResize;
         _resizeTimer.Start();
     }
     private void AnimateResize(object? sender, object e)
     {
-        double t = Math.Clamp(_resizeClock.Elapsed.TotalMilliseconds / 260, 0, 1);
+        double elapsed = _resizeClock.Elapsed.TotalMilliseconds;
+        // The fallback must not resize again immediately after a render callback.
+        if (ReferenceEquals(sender, _resizeTimer) && elapsed - _lastResizeFrame < 50 && elapsed < 260) return;
+        if (elapsed - _lastResizeFrame < 4 && elapsed < 260) return;
+        _lastResizeFrame = elapsed;
+        double t = Math.Clamp(elapsed / 260, 0, 1);
         _height = _fromHeight + (_targetHeight - _fromHeight) * (1 - Math.Pow(1 - t, 3));
         ApplyHeight();
         if (t >= 1) { StopResize(); Post(new { kind = "resized", expanded = _targetHeight > 188 }); }

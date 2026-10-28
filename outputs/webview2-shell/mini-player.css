@@ -15,3 +15,11 @@ main{flex:1;min-height:0;padding:10px 22px;overflow:hidden;animation:reveal .26s
 #queue button{display:block;text-align:left;width:100%;padding:12px 8px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}button[aria-pressed=true],#queue button.current{color:var(--accent);background:color-mix(in srgb,var(--accent) 10%,transparent)}.empty{color:var(--muted);text-align:center;padding-top:80px}
 .popup{position:absolute;bottom:62px;left:16px;padding:14px;background:var(--mini-popup,#fffdfb);color:var(--mini-ink,#302c38);box-shadow:0 8px 30px #40304024;border:1px solid color-mix(in srgb,var(--muted) 25%,transparent);border-radius:12px;min-width:235px;z-index:5}.popup label{display:flex;align-items:center;gap:10px;margin:8px 0}.popup button{display:block;width:100%;text-align:left}.popup select{max-width:150px;padding:4px;border:1px solid var(--mini-track);border-radius:6px;color:inherit;background:var(--mini-bg)}.popup input[type=color]{width:34px;height:24px;border:0;padding:0;background:none}
 @keyframes reveal{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}@media(prefers-reduced-motion:reduce){main{animation:none}#lyrics button{transition:none}}
+/* A fixed browser canvas avoids per-frame WebView2 bounds and lyric reflow. */
+body{position:relative;height:620px;display:block}
+main{position:absolute;left:0;right:0;top:102px;height:432px;animation:none;clip-path:inset(0 0 100% 0);opacity:0;transition:clip-path .26s cubic-bezier(.33,1,.68,1),opacity .18s ease-out;will-change:clip-path,opacity}
+footer{position:absolute;top:102px;left:0;right:0;margin:0;transform:translateY(0);transition:transform .26s cubic-bezier(.33,1,.68,1);will-change:transform;background:var(--mini-bg,#fcf9f8)}
+body.expanded main{clip-path:inset(0);opacity:1}
+body.expanded footer{transform:translateY(432px)}
+.popup{transform:translateY(-432px)}body.expanded .popup{transform:none}
+@media(prefers-reduced-motion:reduce){main,footer{transition:none}}
