@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <!-- 本地签名密码从 csproj 外置到 CelesteMusicPlayer.signing.props（已被 .gitignore 忽略，不入库）。
        仓库克隆后若需本地 Debug MSIX 自签名，请自行创建该文件填入密码；缺失则 Debug 打包不签名（不影响 Release 自包含）。 -->
   <Import Project="CelesteMusicPlayer.signing.props" Condition="Exists('CelesteMusicPlayer.signing.props')" />
@@ -133,6 +133,9 @@
     <PackageReference Include="ToolGood.Words.Pinyin" Version="3.1.0" />
     <PackageReference Include="System.Drawing.Common" Version="10.0.11" />
     <PackageReference Include="TagLibSharp" Version="2.3.0" />
+    <!-- W6: platform-neutral image processing; Windows native Skia is shipped with this host. -->
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.4" />
     <!-- 标签板块文件表格（2026-10-13 第四轮定稿换 DataGrid）：原生列宽/排序/格内编辑，
          替掉四轮反馈 bug 不断的自绘 15 列表格。7.1.2 是唯一稳定版（7.1.1 仅 preview），
          最初在 WinAppSDK 1.8.251106002 / net9.0 下验证；升级 .NET 10 时继续保留该控件版本。 -->

@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
@@ -809,24 +809,18 @@ namespace CelesteMusicPlayer
                         coverBytes = await NetworkSourceProvider.For(source).CoverAsync(source, remoteTrack.Entry, timeout.Token);
                         if (coverBytes != null) { Directory.CreateDirectory(Path.GetDirectoryName(coverFile)!); await File.WriteAllBytesAsync(coverFile, coverBytes); }
                     }
-                    args.Response = sender.Environment.CreateWebResourceResponse(coverBytes == null ? null : new MemoryStream(coverBytes).AsRandomAccessStream(), coverBytes == null ? 404 : 200, coverBytes == null ? "Not Found" : "OK", "Content-Type: image/jpeg\r\nCache-Control: private, max-age=60");
+                    string? cachedRemote = await CoverCacheService.GetAsync(coverBytes, CoverCacheService.ForWebSize(coverSize));
+                    if (_closed) return;
+                    args.Response = sender.Environment.CreateWebResourceResponse(cachedRemote == null ? null : File.OpenRead(cachedRemote).AsRandomAccessStream(), cachedRemote == null ? 404 : 200, cachedRemote == null ? "Not Found" : "OK", "Content-Type: image/jpeg\r\nCache-Control: private, max-age=60");
                     return;
                 }
                 if (path == null) { args.Response = sender.Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); return; }
                 await _coverGate.WaitAsync(); entered = true;
                 if (_closed) return;
-                byte[]? bytes = await Task.Run(() =>
-                {
-                    var source = customCover == null ? MainWindow.ExtractCoverBytes(path) : File.ReadAllBytes(path);
-                    if (source == null || source.Length > 20_000_000) return null;
-                    using var stream = new MemoryStream(source);
-                    using var image = System.Drawing.Image.FromStream(stream);
-                    using var thumbnail = new System.Drawing.Bitmap(image, coverSize, coverSize);
-                    using var output = new MemoryStream(); thumbnail.Save(output, System.Drawing.Imaging.ImageFormat.Jpeg);
-                    return output.ToArray();
-                });
+                byte[]? sourceBytes = await Task.Run(() => customCover == null ? MainWindow.ExtractCoverBytes(path) : File.ReadAllBytes(path));
+                string? cacheFile = await CoverCacheService.GetAsync(sourceBytes, CoverCacheService.ForWebSize(coverSize));
                 if (_closed) return;
-                args.Response = sender.Environment.CreateWebResourceResponse(bytes == null ? null : new MemoryStream(bytes).AsRandomAccessStream(), bytes == null ? 404 : 200, bytes == null ? "Not Found" : "OK", "Content-Type: image/jpeg\r\nCache-Control: private, max-age=3600");
+                args.Response = sender.Environment.CreateWebResourceResponse(cacheFile == null ? null : File.OpenRead(cacheFile).AsRandomAccessStream(), cacheFile == null ? 404 : 200, cacheFile == null ? "Not Found" : "OK", "Content-Type: image/jpeg\r\nCache-Control: private, max-age=3600");
             }
             catch (Exception ex) { StartupLog.WriteException("WebShell.Cover", ex); if (!_closed) args.Response = sender.Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); }
             finally { if (entered) _coverGate.Release(); deferral.Complete(); }

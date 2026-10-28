@@ -1,5 +1,5 @@
 // ============================================================================
-// CoverArtService —— 封面分档预生成 + 磁盘缓存（2026-10-16，2026-10-29 拆分瘦身）
+// CoverArtService —— 封面分档预生成 + 磁盘缓存（2026-10-16，2026-10-29 两次改造）
 //
 // 参考 ECHO（用户给的 ECHO-main）的做法：
 //   · 封面不是"每次显示现解码"，而是**按档位预生成**好存盘，以后直接用；
@@ -14,29 +14,27 @@
 //      CoverSourceReader 改成取最大的一张），另一部分是反复按不同尺寸解码。
 //      分档后每档只解一次，之后全是读缓存。
 //
-// ⚠️ 只缩不放：源图比目标档小就原样存（放大没有意义，只会更糊）。
-// ⚠️ 全部异步，UI 线程只做最后的 BitmapImage 装配。
-//
 // ---------------------------------------------------------------------------
-// 2026-10-29（W6 第五小步）：把与图像无关的三件事搬出本文件，本文件只剩
-// "WinRT 解码/缩放 + BitmapImage 装配 + 有界并发调度"：
+// 2026-10-29 第五小步：把与图像无关的三件事搬出本文件。
 //   · 档位数值与只缩不放的几何   → CoverVariants.cs（CoverVariant / CoverSizing）
 //   · 缓存根目录、分桶路径、SHA256 键 → CoverCacheLayout.cs
 //   · 从音频文件抠封面原始字节    → CoverSourceReader.cs（原 MainWindow.Misc.cs 的实现）
-// 这样封面链路的"处理"半边不再依赖 WinUI/WinRT，能单独链接进跨平台测试宿主；
-// 剩下这半边的图像管线将来换成 ImageSharp/SkiaSharp 时，本文件是唯一要动的地方。
+//
+// 2026-10-29 第六小步：图像管线从 WinRT 换成 ImageSharp（纯托管、跨平台）。
+//   · 解码/缩放/编码的整体实现     → CoverThumbnailer.cs
+//   本文件现在只剩：查缓存 → 有界并发生成 → 把缓存文件装配成 BitmapImage 交给界面。
+//   界面拿到的已经是**缩好的缓存文件**，不再让 XAML 去解一张 1400px 的大图。
+//   整个文件里只剩 "BitmapImage" 这一处平台绑定（它本来就是 XAML 的类型），
+//   将来网页壳/跨平台壳直接用 <img src=缓存文件> 即可，不需要改本文件之外的任何逻辑。
 // ---------------------------------------------------------------------------
 
 using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Linq;
-using System.Runtime.InteropServices.WindowsRuntime;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Media.Imaging;
-using Windows.Graphics.Imaging;
-using Windows.Storage.Streams;
 
 namespace CelesteMusicPlayer
 {
@@ -107,143 +105,21 @@ namespace CelesteMusicPlayer
             return await GetCachedFileForBytesAsync(source, variant);
         }
 
-        private static async Task<string?> GetCachedFileForBytesAsync(byte[] source, CoverVariant variant)
-        {
-            string key = CoverCacheLayout.GetKey(source);
-            string dir = CoverCacheLayout.GetEntryDirectory(CacheRoot, key);
-            string file = CoverCacheLayout.GetVariantFile(CacheRoot, key, variant);
+        private static Task<string?> GetCachedFileForBytesAsync(byte[] source, CoverVariant variant)
+            => CoverCacheService.GetAsync(source, variant);
 
-            if (File.Exists(file) && new FileInfo(file).Length > 0)
-            {
-                return file;
-            }
-
-            // 并发去重：同一张图被多处同时请求时只生成一次
-            string flightKey = CoverCacheLayout.GetInFlightKey(key, variant);
-            Task<string?> task = InFlight.GetOrAdd(flightKey, _ => GenerateAsync(source, dir, file, CoverSizing.LongEdge(variant)));
-            try
-            {
-                return await task;
-            }
-            finally
-            {
-                InFlight.TryRemove(flightKey, out _);
-            }
-        }
-
-        /// <summary>生成某一档并写盘。失败返回 null（下次会重试）。</summary>
-        private static async Task<string?> GenerateAsync(byte[] source, string dir, string file, int longEdge)
-        {
-            await GenerationGate.WaitAsync();
-            try
-            {
-                if (File.Exists(file) && new FileInfo(file).Length > 0)
-                {
-                    return file;
-                }
-
-                Directory.CreateDirectory(dir);
-                string temp = CoverCacheLayout.GetTempFile(file);
-
-                bool ok = await Task.Run(() => ResizeToJpegAsync(source, temp, longEdge).GetAwaiter().GetResult());
-                if (!ok)
-                {
-                    TryDelete(temp);
-                    return null;
-                }
-
-                // 先写 .tmp 再改名的原子替换：生成到一半被杀不会留下半个坏文件
-                File.Move(temp, file, overwrite: true);
-                return file;
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("CoverArtService.Generate", ex);
-                return null;
-            }
-            finally
-            {
-                GenerationGate.Release();
-            }
-        }
-
-        /// <summary>把源图缩到指定长边并编码成 JPEG。只缩不放（几何由 CoverSizing 算）。</summary>
-        private static async Task<bool> ResizeToJpegAsync(byte[] source, string outputPath, int longEdge)
-        {
-            try
-            {
-                using var inStream = new InMemoryRandomAccessStream();
-                await inStream.WriteAsync(source.AsBuffer());
-                inStream.Seek(0);
-
-                BitmapDecoder decoder = await BitmapDecoder.CreateAsync(inStream);
-                uint srcW = decoder.PixelWidth;
-                uint srcH = decoder.PixelHeight;
-                if (srcW == 0 || srcH == 0)
-                {
-                    return false;
-                }
-
-                // 只缩不放（这一行算术搬到了 CoverSizing，好让测试宿主能钉住它）
-                (int targetWidth, int targetHeight) = CoverSizing.ComputeTargetSize((int)srcW, (int)srcH, longEdge);
-                uint dstW = (uint)targetWidth;
-                uint dstH = (uint)targetHeight;
-
-                var transform = new BitmapTransform
-                {
-                    ScaledWidth = dstW,
-                    ScaledHeight = dstH,
-                    InterpolationMode = BitmapInterpolationMode.Fant, // 缩略图质量最好
-                };
-
-                PixelDataProvider pixels = await decoder.GetPixelDataAsync(
-                    BitmapPixelFormat.Rgba8,
-                    BitmapAlphaMode.Premultiplied,
-                    transform,
-                    ExifOrientationMode.RespectExifOrientation,
-                    ColorManagementMode.ColorManageToSRgb);
-
-                byte[] data = pixels.DetachPixelData();
-
-                using var outStream = new InMemoryRandomAccessStream();
-
-                // JPEG 质量提到 0.92（2026-10-19）：默认的编码器质量在小图上块效应很明显，
-                // 96/160 这种小图再被 UI 放到 58px 的框里，块效应会被看成"糊"。
-                // 大图也一并受益，代价只是缓存文件略大一点。
-                var quality = new BitmapPropertySet();
-                quality.Add("ImageQuality", new BitmapTypedValue(0.92f, Windows.Foundation.PropertyType.Single));
-
-                BitmapEncoder encoder = await BitmapEncoder.CreateAsync(
-                    BitmapEncoder.JpegEncoderId, outStream, quality);
-                encoder.SetPixelData(BitmapPixelFormat.Rgba8, BitmapAlphaMode.Premultiplied, dstW, dstH, 96, 96, data);
-                await encoder.FlushAsync();
-
-                using (FileStream fs = new(outputPath, FileMode.Create, FileAccess.Write, FileShare.None))
-                {
-                    outStream.Seek(0);
-                    await outStream.AsStream().CopyToAsync(fs);
-                }
-
-                return true;
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("CoverArtService.Resize", ex);
-                return false;
-            }
-        }
-
+        /// <summary>
+        /// 把缓存文件装配成 BitmapImage（须在 UI 线程）。
+        /// 2026-10-29 第六小步起直接喂文件流 —— 文件已是准尺寸的 jpg，
+        /// 不再像从前那样"先读全字节、再塞进内存流、再由 XAML 解一张大图"。
+        /// </summary>
         private static async Task<BitmapImage?> DecodeFileAsync(string path)
         {
             try
             {
-                byte[] bytes = await Task.Run(() => File.ReadAllBytes(path));
-                using var stream = new InMemoryRandomAccessStream();
-                await stream.WriteAsync(bytes.AsBuffer());
-                stream.Seek(0);
-
                 var image = new BitmapImage();
-                await image.SetSourceAsync(stream);
+                using FileStream fs = File.OpenRead(path);
+                await image.SetSourceAsync(fs.AsRandomAccessStream());
                 return image;
             }
             catch (Exception ex)
