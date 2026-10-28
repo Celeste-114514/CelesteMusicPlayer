@@ -69,3 +69,6 @@ native/dsp-core/build/*.log
 
 # ===== 标签编辑测试样本（_tagfixtures/，由 tools/TagFixtures 生成器随时可重建，不入库）=====
 _tagfixtures/
+
+# Local absolute-path shortcut; regenerate with tools/NewCurrentPlayerShortcut.ps1
+/打开当前播放器.lnk

@@ -1,5 +1,7 @@
 # CelesteMusicPlayer
 
+> 本仓库日常验证入口与目录说明：[先看这里](先看这里-仓库与验证入口.md)。验证最新修改，请用仓库根目录的「打开当前播放器」快捷方式。
+
 一个基于 **WinUI 3 / .NET 10** 的本地音乐播放器，功能参考 [MusicPlayer2](https://github.com/zhongyang219/MusicPlayer2) 和 [ECHO-NEXT](https://github.com/moekotori/ECHO) 设计开发。代码全部由 AI 生成。
 
 联系我 [t.me/celesteabsolomb](https://t.me/celesteabsolomb)
