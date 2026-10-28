@@ -69,8 +69,9 @@ namespace CelesteMusicPlayer
         /// <summary>上一次轮询时左键是否按着，用来识别"刚按下"这一下。</summary>
         private bool _leftPressed;
 
-        /// <summary>网页是否已经报过"点击进到 DOM"，只记第一次，避免刷日志。</summary>
-        private bool _clickProbeLogged;
+        /// <summary>最近一次收到网页消息的时刻。点菜单项和"点外面"都算左键按下，
+        /// 唯一区别是前者网页一定会先发消息过来，所以用它给收起判据留一条后路。</summary>
+        private long _lastWebMessageTick;
 
         /// <summary>收到无法识别的消息只记一次，避免刷屏。</summary>
         private bool _unknownMessageLogged;
@@ -162,7 +163,9 @@ namespace CelesteMusicPlayer
             if (_hwnd == IntPtr.Zero || !_visible) return;
             _visible = false;
             ShowWindow(_hwnd, SW_HIDE);
-            Hidden?.Invoke();
+            // 订阅方（任务栏播放条）出问题不能连累命令执行 —— Hide 之后紧接着就要发 Invoked。
+            try { Hidden?.Invoke(); }
+            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.Hidden", ex); }
         }
 
         public void Dispose()
@@ -289,9 +292,6 @@ namespace CelesteMusicPlayer
         /// <summary>给定位用的托盘图标矩形（由 WindowsTrayService 注入，它持有通知图标）。</summary>
         internal Func<WindowsTrayIcon.RECT?>? IconRectProvider { get; set; }
 
-        /// <summary>主界面 WebView2 环境（可能还没建好，所以是"每次问问看"的委托）。</summary>
-        internal Func<CoreWebView2Environment?>? SharedEnvironmentProvider { get; set; }
-
         private bool TrayIconRect(out WindowsTrayIcon.RECT rect)
         {
             rect = default;
@@ -361,39 +361,60 @@ namespace CelesteMusicPlayer
             if (Environment.TickCount64 - _shownAt < OutsideGraceMs) return;
             try
             {
-                GetCursorPos(out POINT cursor);
-                bool insideMenu = GetWindowRect(_hwnd, out RECT bounds)
-                    && cursor.X >= bounds.Left && cursor.X < bounds.Right
-                    && cursor.Y >= bounds.Top && cursor.Y < bounds.Bottom;
-                // 托盘图标本身也算"菜单的一部分"：右键完鼠标就停在那儿。
-                bool insideIcon = _anchorIconRect is { } icon
-                    && cursor.X >= icon.Left && cursor.X < icon.Right
-                    && cursor.Y >= icon.Top && cursor.Y < icon.Bottom;
-
-                // 低位(0x0001)是"上次查询之后按过"，按下和松开落在同一个 120ms 里也不会漏。
                 short state = GetAsyncKeyState(VK_LBUTTON);
                 bool pressing = (state & 0x8000) != 0;
                 bool pressedSinceLastPoll = (state & 0x0001) != 0;
                 bool justPressed = pressing && !_leftPressed;
                 _leftPressed = pressing;
 
-                if (insideMenu || insideIcon)
+                // 只在"刚按下"这一刻判断，平时不打扰。
+                if (!justPressed && !pressedSinceLastPoll) return;
+
+                // 网页刚发过消息（点了菜单项）—— 这一下是我们的，绝不能收。
+                if (Environment.TickCount64 - _lastWebMessageTick < 300) return;
+
+                if (!GetWindowRect(_hwnd, out RECT bounds) || bounds.Right <= bounds.Left || bounds.Bottom <= bounds.Top)
                 {
-                    _outsideHits = 0;
-                    return;   // 移开鼠标不收；点在菜单里交给网页自己处理
+                    // 拿不到窗口矩形就无从判断内外，宁可多留一会儿。
+                    return;
                 }
 
-                if (justPressed || pressedSinceLastPoll)
-                {
-                    StartupLog.Write("[托盘菜单] 点在菜单外，收起");
-                    Hide();
-                }
+                GetCursorPos(out POINT cursor);
+                bool insideMenu = cursor.X >= bounds.Left && cursor.X < bounds.Right
+                    && cursor.Y >= bounds.Top && cursor.Y < bounds.Bottom;
+                // 托盘图标本身也算"菜单的一部分"：右键完鼠标就停在那儿。
+                bool insideIcon = _anchorIconRect is { } icon
+                    && cursor.X >= icon.Left && cursor.X < icon.Right
+                    && cursor.Y >= icon.Top && cursor.Y < icon.Bottom;
+                if (insideMenu || insideIcon) return;
+
+                // 前台仍是自己（或自己的子窗口）说明这一下落在了菜单里，只是坐标没算准，别收。
+                IntPtr foreground = GetForegroundWindow();
+                if (foreground == _hwnd || IsOwnPopup(foreground)) return;
+
+                StartupLog.Write($"[托盘菜单] 点在菜单外，收起 cursor={cursor.X},{cursor.Y} "
+                    + $"bounds={bounds.Left},{bounds.Top},{bounds.Right},{bounds.Bottom} fg=0x{foreground.ToInt64():X}");
+                Hide();
             }
             catch (Exception ex)
             {
                 StartupLog.WriteException("TrayMenuWindow.CheckOutside", ex);
                 StopOutsideWatcher();
             }
+        }
+
+        /// <summary>这个窗口是不是本菜单窗口自己或它的后代（WebView2 的子窗口有好几层）。</summary>
+        private bool IsOwnPopup(IntPtr hwnd)
+        {
+            try
+            {
+                for (IntPtr current = hwnd; current != IntPtr.Zero; current = GetParent(current))
+                {
+                    if (current == _hwnd) return true;
+                }
+            }
+            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.IsOwnPopup", ex); }
+            return false;
         }
 
         private IntPtr WindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
@@ -476,52 +497,33 @@ namespace CelesteMusicPlayer
 
                 // 独立 user data folder：不跟主界面抢同一个浏览器进程，
                 // 菜单预热/销毁都动不到曲库那边（代价是多一个进程，几百 MB 的页面不存在，很轻）。
-                // 优先复用主界面已经建好的 WebView2 环境。
-                // 独立环境 = 再拉起一整套浏览器进程（几百 MB + 好几秒冷启动），
-                // 复用之后菜单只多一个 controller，创建是毫秒级 —— 这是"右键秒开"的关键。
-                CoreWebView2Environment? shared = SharedEnvironmentProvider?.Invoke();
-                if (shared == null)
+                // ⚠ 这里**不能**复用主界面 WebView2 的 CoreWebView2Environment。
+                // 2026-10-28 22:43/22:53 实测：复用之后菜单能画出来，但鼠标点击全部进不了网页
+                // （日志里连 pointerdown 探针都没有），而同一份代码用独立环境时点击是通的。
+                // 原因推断：WinUI 的 WebView2 控件是用 composition hosting 建的环境，
+                // 拿它去 CreateCoreWebView2ControllerAsync 建窗口版 controller，输入链路对不上。
+                // 所以老老实实自己建一套，只多花一次冷启动。
+                string userData = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "CelesteMusicPlayer", "TrayWebView2");
+                Directory.CreateDirectory(userData);
+                if (_environment == null)
                 {
-                    // 主界面网页还起没来，等它一小会儿再决定（6 秒内每 300ms 看一眼）。
-                    for (int i = 0; i < 20 && shared == null; i++)
+                    try
                     {
-                        await Task.Delay(300);
-                        if (_disposed) return false;
-                        shared = SharedEnvironmentProvider?.Invoke();
+                        _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, userData, null);
                     }
-                }
-
-                if (shared != null)
-                {
-                    if (!ReferenceEquals(_environment, shared))
-                        StartupLog.Write("[托盘菜单] 复用主界面 WebView2 环境（不再另起浏览器进程）");
-                    _environment = shared;
-                }
-                else
-                {
-                    // 主界面网页没起来（或干脆没有）：才自己拉一套，慢但能用。
-                    string userData = Path.Combine(
-                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                        "CelesteMusicPlayer", "TrayWebView2");
-                    Directory.CreateDirectory(userData);
-                    if (_environment == null)
+                    catch (Exception ex)
                     {
-                        try
-                        {
-                            _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, userData, null);
-                        }
-                        catch (Exception ex)
-                        {
-                            // 同一个 user data folder 被另一个实例（双开/上一次没退干净）占着时会失败。
-                            // 换一个备用目录再来一次，菜单本身照常能用。
-                            StartupLog.WriteException("TrayMenuWindow.CreateEnvironment(primary)", ex);
-                            string alt = Path.Combine(
-                                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                                "CelesteMusicPlayer", "TrayWebView2-alt");
-                            Directory.CreateDirectory(alt);
-                            _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, alt, null);
-                            StartupLog.Write("[托盘菜单] 主数据目录被占用，已改用备用目录");
-                        }
+                        // 同一个 user data folder 被另一个实例（双开/上一次没退干净）占着时会失败。
+                        // 换一个备用目录再来一次，菜单本身照常能用。
+                        StartupLog.WriteException("TrayMenuWindow.CreateEnvironment(primary)", ex);
+                        string alt = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "CelesteMusicPlayer", "TrayWebView2-alt");
+                        Directory.CreateDirectory(alt);
+                        _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, alt, null);
+                        StartupLog.Write("[托盘菜单] 主数据目录被占用，已改用备用目录");
                     }
                 }
                 var windowRef = CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)_hwnd.ToInt64());
@@ -597,6 +599,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                _lastWebMessageTick = Environment.TickCount64;
                 using JsonDocument doc = JsonDocument.Parse(args.WebMessageAsJson);
                 JsonElement root = doc.RootElement;
                 if (!root.TryGetProperty("kind", out JsonElement kind) || kind.GetString() != "celeste.command")
@@ -614,13 +617,12 @@ namespace CelesteMusicPlayer
 
                 if (verb == "probe")
                 {
-                    // 网页在真正下发 invoke 之前先报一声"这一下点进 DOM 了"。
-                    // 有了它就能分清：点根本没进网页（没有这条），还是进了但命令丢了（有 probe 无 收到命令）。
-                    if (!_clickProbeLogged)
-                    {
-                        _clickProbeLogged = true;
-                        StartupLog.Write("[托盘菜单] 网页已收到点击(pointerdown)");
-                    }
+                    // 网页在捕获阶段报的"鼠标真的进网页了"。有这条说明输入链路没问题，
+                    // 没有就说明点在窗口上但没进 WebView —— 两种情况修法完全不同。
+                    int px = -1, py = -1;
+                    if (root.TryGetProperty("x", out JsonElement probeX) && probeX.TryGetInt32(out int vx)) px = vx;
+                    if (root.TryGetProperty("y", out JsonElement probeY) && probeY.TryGetInt32(out int vy)) py = vy;
+                    StartupLog.Write("[托盘菜单] 网页收到 pointerdown 于 " + px + "," + py);
                     return;
                 }
 
@@ -660,6 +662,9 @@ namespace CelesteMusicPlayer
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool IsChild(IntPtr parent, IntPtr child);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetParent(IntPtr hWnd);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]

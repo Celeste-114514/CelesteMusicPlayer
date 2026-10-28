@@ -50,8 +50,7 @@ namespace CelesteMusicPlayer
             {
                 IconRectProvider = () => _icon.TryGetIconRect(out WindowsTrayIcon.RECT rect)
                     ? rect
-                    : (WindowsTrayIcon.RECT?)null,
-                SharedEnvironmentProvider = () => _owner.TraySharedWebViewEnvironment
+                    : (WindowsTrayIcon.RECT?)null
             };
             _menu.Invoked += actionId =>
             {

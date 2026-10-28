@@ -159,8 +159,8 @@ namespace CelesteMusicPlayer
         private string? _pendingPage;
 
         /// <summary>
-        /// 本窗口 WebView2 的环境句柄。托盘菜单复用它，就不必再起一整套浏览器进程
-        /// （独立环境要额外几百 MB 和好几秒），右键菜单才可能做到"秒开"。
+        /// 本窗口 WebView2 的环境句柄（任务栏播放条复用）。
+        /// ⚠ 托盘菜单不要复用：实测窗口版 controller 挂在 composition 环境上时收不到鼠标点击。
         /// </summary>
         internal CoreWebView2Environment? WebViewEnvironment { get; private set; }
 

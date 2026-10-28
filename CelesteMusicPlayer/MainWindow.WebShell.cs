@@ -16,8 +16,10 @@ namespace CelesteMusicPlayer
         private bool _webShellOwnerClosing;
 
         /// <summary>
-        /// 给托盘菜单复用的 WebView2 环境。主界面网页还没起来时是 null，
-        /// 托盘那边会等它出现 —— 复用已有的环境比自己再拉起一套快一个量级。
+        /// 主界面已建好的 WebView2 环境（任务栏播放条在用）。
+        /// ⚠ 托盘菜单**不要**用它：2026-10-28 实测复用之后菜单能画出来，但鼠标点击
+        /// 全部进不了网页（连 pointerdown 探针都没有），原因是 WinUI 的 WebView2 控件
+        /// 用 composition hosting 建的环境，拿去建窗口版 controller 输入链路对不上。
         /// </summary>
         internal Microsoft.Web.WebView2.Core.CoreWebView2Environment? TraySharedWebViewEnvironment
             => _webShellWindow?.WebViewEnvironment;
