@@ -427,21 +427,14 @@
   <div id="transport-more-menu" class="transport-more-menu" role="group" aria-label="更多功能" hidden><button data-more="addToPlaylist">加入歌单…</button><button data-more="tags">编辑标签</button><button data-more="locateAlbum">定位到专辑</button><button data-more="reveal">在文件夹中显示</button><button data-more="copy">复制歌名与艺术家</button></div>
   <div id="recovery-overlay" class="recovery-overlay" hidden>
     <div class="recovery-card" role="dialog" aria-modal="true" aria-labelledby="recovery-title" aria-describedby="recovery-detail">
-      <div class="recovery-glyph"><svg aria-hidden="true"><use href="#i-shield"/></svg></div>
-      <h3 id="recovery-title">上次好像没有正常退出</h3>
+      <div class="recovery-glyph"><svg aria-hidden="true"><use id="recovery-glyph-use" href="#i-shield"/></svg></div>
+      <h3 id="recovery-title"></h3>
       <p class="recovery-detail" id="recovery-detail"></p>
       <ul class="recovery-facts" id="recovery-facts"></ul>
-      <p class="recovery-hint">「安全模式」只影响这一次：不自动续播，界面关掉背景层与动效，方便判断是不是它们引起的问题。下次正常打开就恢复原样。</p>
+      <p class="recovery-hint" id="recovery-hint"></p>
       <p class="recovery-status" id="recovery-status" role="status"></p>
-      <div class="recovery-links">
-        <button class="text-button" data-recovery="export">导出诊断</button>
-        <button class="text-button" data-recovery="openFolder">打开日志文件夹</button>
-      </div>
-      <div class="recovery-actions">
-        <button class="secondary" data-recovery="reload">重载界面</button>
-        <button class="secondary" data-recovery="safe">安全模式</button>
-        <button class="primary" data-recovery="normal">正常启动</button>
-      </div>
+      <div class="recovery-links" id="recovery-links"></div>
+      <div class="recovery-actions" id="recovery-actions"></div>
     </div>
   </div>
   <div id="toast" class="toast" role="status"></div>
