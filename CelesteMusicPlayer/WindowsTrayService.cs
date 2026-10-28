@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Microsoft.Web.WebView2.Core;
 
 namespace CelesteMusicPlayer
 {
@@ -102,6 +103,12 @@ namespace CelesteMusicPlayer
         }
 
         public bool IsCreated => _icon.IsCreated;
+
+        /// <summary>
+        /// 托盘菜单自己建的 WebView2 环境（还没建好就是 null）。
+        /// 任务栏播放条等同类弹出窗口共用它，省一套浏览器进程，输入也才是正常的。
+        /// </summary>
+        internal CoreWebView2Environment? PopupEnvironment => _menu.PopupEnvironment;
 
         public void Show()
         {
@@ -214,9 +221,9 @@ namespace CelesteMusicPlayer
                 var queue = _owner.DispatcherQueue;
                 if (queue == null) return;
                 var timer = queue.CreateTimer();
-                // 复用了主界面的 WebView2 环境之后，菜单只多一个 controller，几百毫秒就能建好，
-                // 所以预热可以很早开始 —— 用户第一次右键基本都能直接看到网页菜单。
-                timer.Interval = TimeSpan.FromMilliseconds(attempt == 0 ? 500 : 2000);
+                // 预热早开始、失败快重试：第一次导航常常卡在渲染进程冷启动上，
+                // 与其干等 20 秒，不如早超时、马上再来一次（重试通常两秒多就好）。
+                timer.Interval = TimeSpan.FromMilliseconds(attempt == 0 ? 500 : 500);
                 timer.IsRepeating = false;
                 timer.Tick += (_, _) =>
                 {

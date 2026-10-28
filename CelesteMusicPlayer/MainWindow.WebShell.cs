@@ -16,13 +16,16 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>
-        /// 主界面已建好的 WebView2 环境（任务栏播放条在用）。
-        /// ⚠ 托盘菜单**不要**用它：2026-10-28 实测复用之后菜单能画出来，但鼠标点击
-        /// 全部进不了网页（连 pointerdown 探针都没有），原因是 WinUI 的 WebView2 控件
-        /// 用 composition hosting 建的环境，拿去建窗口版 controller 输入链路对不上。
+        /// 给弹出的网页窗口（任务栏播放条）用的 WebView2 环境 —— **托盘菜单自己建的那个**，
+        /// 不是主界面网页控件的环境。
+        ///
+        /// ⚠ 主界面那个环境不能给弹出窗口用：2026-10-28 22:43/22:53 实测，托盘菜单复用它之后
+        /// 界面能画出来，但鼠标点击全部进不了网页（连 pointerdown 探针都没有）；改回自己建的
+        /// 环境（22:59/23:00）点击立刻恢复正常。判断是 WinUI 的 WebView2 控件走 composition
+        /// hosting，拿它的环境去建窗口版 controller 时输入链路对不上。
         /// </summary>
-        internal Microsoft.Web.WebView2.Core.CoreWebView2Environment? TraySharedWebViewEnvironment
-            => _webShellWindow?.WebViewEnvironment;
+        internal Microsoft.Web.WebView2.Core.CoreWebView2Environment? PopupWebViewEnvironment
+            => (_trayIcon as WindowsTrayService)?.PopupEnvironment;
 
         // Activate is still required to load the legacy playback owner, but its
         // first native frame must never become a visible second window.

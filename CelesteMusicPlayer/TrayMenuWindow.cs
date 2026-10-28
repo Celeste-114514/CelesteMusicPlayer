@@ -37,8 +37,11 @@ namespace CelesteMusicPlayer
         private const int WA_INACTIVE = 0;
         private const int VK_LBUTTON = 0x01;
 
-        /// <summary>导航最多等多久。冷启动 WebView2（首帧建浏览器进程）在机器忙时 4 秒根本不够。</summary>
-        private const int NavigationTimeoutMs = 20000;
+        /// <summary>
+        /// 单次导航最多等多久。第一次导航常常是渲染进程冷启动，实测撞满 20 秒也没完成，
+        /// 而**紧接着重试一次只要 2.4 秒** —— 所以这里故意设短，靠快速重试取胜。
+        /// </summary>
+        private const int NavigationTimeoutMs = 6000;
 
         /// <summary>连续失败这么多次才彻底放弃（在此之前每次右键都会重新试）。</summary>
         private const int MaxInitFailures = 3;
@@ -88,6 +91,13 @@ namespace CelesteMusicPlayer
         internal event Action? Hidden;
 
         internal bool IsReady => _ready && _controller != null;
+
+        /// <summary>
+        /// 本菜单用的 WebView2 环境（建好之后才有值）。
+        /// 任务栏播放条等其它弹出窗口可以共用它：这类窗口版 controller 挂在**自己建的**
+        /// 环境上输入才正常，挂主界面那个 composition 环境上会收不到鼠标点击。
+        /// </summary>
+        internal CoreWebView2Environment? PopupEnvironment => _environment;
 
         /// <summary>菜单此刻是否显示着（右键再点一次要能收起）。</summary>
         internal bool IsVisible => _visible;

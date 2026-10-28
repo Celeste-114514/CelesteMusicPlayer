@@ -57,7 +57,7 @@ namespace CelesteMusicPlayer
                 if (_controller == null)
                 {
                     if (_failures >= 3 || (_failures > 0 && ++_ticks % 10 != 0)) return;
-                    var environment = _owner.TraySharedWebViewEnvironment;
+                    var environment = _owner.PopupWebViewEnvironment;
                     if (environment == null) return;
                     CreateHost();
                     var controller = await environment.CreateCoreWebView2ControllerAsync(CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)_hwnd));
