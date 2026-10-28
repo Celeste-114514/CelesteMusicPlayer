@@ -32,6 +32,7 @@ namespace CelesteMusicPlayer
         private const uint WM_ACTIVATE = 0x0006;
         private const uint WM_CLOSE = 0x0010;
         private const uint WM_KEYDOWN = 0x0100;
+        private const uint WM_MOUSEACTIVATE = 0x0021;
         private const int WA_INACTIVE = 0;
 
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
@@ -220,6 +221,7 @@ namespace CelesteMusicPlayer
             _visible = true;
             StartupLog.Write($"[托盘菜单] 布局 content={_contentWidth}x{_contentHeight} scale={scale:F2} window={width}x{height}");
             ForceForeground();
+            _controller?.MoveFocus(CoreWebView2MoveFocusReason.Programmatic);
         }
 
         /// <summary>给定位用的托盘图标矩形（由 WindowsTrayService 注入，它持有通知图标）。</summary>
@@ -258,6 +260,10 @@ namespace CelesteMusicPlayer
         {
             switch (msg)
             {
+                case WM_MOUSEACTIVATE:
+                    // Activate without discarding the click that opened/focused
+                    // the native WebView child (MA_ACTIVATE, not ACTIVATEANDEAT).
+                    return new IntPtr(1);
                 case WM_ACTIVATE:
                     // 点到菜单外面就收起。子窗口（WebView2）在菜单内部，不会触发失活。
                     if (((int)(wParam.ToInt64() & 0xFFFF)) == WA_INACTIVE)
@@ -266,7 +272,14 @@ namespace CelesteMusicPlayer
                         {
                             if (_disposed) return;
                             IntPtr foreground = GetForegroundWindow();
-                            if (foreground != _hwnd && !IsChild(_hwnd, foreground)) Hide();
+                            GetCursorPos(out POINT cursor);
+                            bool inside = GetWindowRect(_hwnd, out RECT bounds)
+                                && cursor.X >= bounds.Left && cursor.X < bounds.Right
+                                && cursor.Y >= bounds.Top && cursor.Y < bounds.Bottom;
+                            // Browser child activation can report WA_INACTIVE
+                            // before pointerdown/click reaches the DOM. Do not
+                            // hide the menu out from under that click.
+                            if (!inside && foreground != _hwnd && !IsChild(_hwnd, foreground)) Hide();
                         });
                     }
                     break;
@@ -325,6 +338,7 @@ namespace CelesteMusicPlayer
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.AreBrowserAcceleratorKeysEnabled = false;
                 core.Settings.IsZoomControlEnabled = false;
+                core.Settings.IsWebMessageEnabled = true;
                 core.SetVirtualHostNameToFolderMapping("celeste.tray", folder, CoreWebView2HostResourceAccessKind.DenyCors);
                 core.WebMessageReceived += (_, args) => OnWebMessage(args);
 
@@ -367,6 +381,7 @@ namespace CelesteMusicPlayer
                 if (!root.TryGetProperty("kind", out JsonElement kind) || kind.GetString() != "celeste.command") return;
                 if (!root.TryGetProperty("action", out JsonElement action)) return;
                 string? verb = action.GetString();
+                if (verb == "ready") { StartupLog.Write("[托盘菜单] 网页消息通道已连接"); return; }
 
                 if (verb == "size")
                 {
@@ -397,6 +412,10 @@ namespace CelesteMusicPlayer
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
         private static extern bool IsChild(IntPtr parent, IntPtr child);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         private struct WNDCLASSEXW
