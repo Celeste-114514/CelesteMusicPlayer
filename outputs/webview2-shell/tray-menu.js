@@ -7,6 +7,24 @@
   const live = typeof window.chrome?.webview?.postMessage === 'function';
   let items = [], focusIndex = -1;
   let invoking = false;
+  const iconPaths = {
+    showMain:'M3 4h14v12H3z M3 8h14', showMini:'M3 4h14v12H3z M10 11h5v3h-5z',
+    showScattered:'M8 14V5l8-2v9 M8 8l8-2 M3 14h5 M11 12h5',
+    toggleLyrics:'M4 5h12 M4 10h8 M4 15h10', unlockLyrics:'M6 9V6a4 4 0 0 1 7-2 M4 9h12v8H4z',
+    previous:'M5 5v10 M15 5l-8 5 8 5z', togglePlay:'M7 4l9 6-9 6z',
+    next:'M15 5v10 M5 5l8 5-8 5z',
+    favorite:'M10 16S3 12 3 7.5C3 3 8 3 10 6c2-3 7-3 7 1.5C17 12 10 16 10 16z',
+    openSettings:'M4 5h12 M4 10h12 M4 15h12 M7 3v4 M13 8v4 M8 13v4',
+    openLogs:'M3 6V4h5l2 2h7v10H3z', openUpdate:'M10 13V3 M6 7l4-4 4 4 M4 13v4h12v-4',
+    exit:'M9 3H4v14h5 M9 10h8 M14 7l3 3-3 3'
+  };
+  function actionIcon(item) {
+    const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+    svg.classList.add('tray-icon');svg.setAttribute('viewBox','0 0 20 20');svg.setAttribute('aria-hidden','true');
+    const path=document.createElementNS(svg.namespaceURI,'path');
+    path.setAttribute('d',item.actionId==='togglePlay'&&item.label==='暂停'?'M7 4v12 M13 4v12':iconPaths[item.actionId]||iconPaths.showMain);
+    svg.append(path);return svg;
+  }
 
   const send = payload => { if (live) window.chrome.webview.postMessage({ kind: 'celeste.command', version: 1, command: 'trayMenu', ...payload }); };
 
@@ -36,16 +54,21 @@
     invoking = false;
     menu.replaceChildren();
     empty.hidden = items.length > 0;
+    if(items.length){
+      const brand=document.createElement('div');brand.className='tray-brand';brand.setAttribute('role','presentation');
+      brand.textContent='CELESTE';const dot=document.createElement('span');brand.append(dot);menu.append(brand);
+    }
     items.forEach((item, index) => {
       if (item.separator) { const sep = document.createElement('div'); sep.className = 'tray-sep'; sep.setAttribute('role', 'separator'); menu.append(sep); return; }
       const button = document.createElement('button');
+      if(item.actionId==='exit'&&index>0&&!items[index-1].separator){const sep=document.createElement('div');sep.className='tray-sep';sep.setAttribute('role','separator');menu.append(sep);}
       button.className = 'tray-item'; button.type = 'button'; button.dataset.index = String(index);
       button.setAttribute('role', 'menuitem'); button.disabled = item.enabled === false;
       if (item.checked !== null && item.checked !== undefined) button.setAttribute('aria-checked', String(!!item.checked));
       const check = document.createElementNS('http://www.w3.org/2000/svg','svg'); check.classList.add('tray-check'); check.setAttribute('viewBox','0 0 16 16'); check.setAttribute('aria-hidden','true');
       const tick=document.createElementNS('http://www.w3.org/2000/svg','path');tick.setAttribute('d','M3 8l3 3 7-7');tick.setAttribute('fill','none');tick.setAttribute('stroke','currentColor');tick.setAttribute('stroke-width','1.6');check.append(tick);
       const label = document.createElement('span'); label.className = 'tray-label'; label.textContent = item.label || '';
-      button.append(check, label);
+      button.append(actionIcon(item), label, check);
       const invoke = () => { if (button.disabled || invoking) return; invoking = true; send({ action: 'invoke', actionId: item.actionId }); };
       button.addEventListener('pointerdown', event => { if (event.button === 0) { event.preventDefault(); invoke(); } });
       button.addEventListener('click', invoke); // Keyboard / accessibility activation.
