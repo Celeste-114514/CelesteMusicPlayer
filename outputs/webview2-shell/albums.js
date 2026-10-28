@@ -3,10 +3,6 @@
   const $=id=>document.getElementById(id),shell=window.CelesteShell,live=typeof window.chrome?.webview?.postMessage==='function';
   const collator=new Intl.Collator('zh-CN',{numeric:true,sensitivity:'base'});
   let albums=[],trackMap=new Map(),opened=null,ascending=true,limit=80,randomOrder=new Map(),parentTrail=[];
-  // 浏览方式（网格 / CD 架）跟人走：存在本机，下次打开还是上次那一种
-  const VIEW_KEY='celeste.albums.view';
-  let view='grid',shelfFocusId='',pendingScroll=0,restoreFocus=false;
-  try{view=localStorage.getItem(VIEW_KEY)==='shelf'?'shelf':'grid';}catch{}
   const format=value=>`${Math.floor(value/60)}:${String(Math.floor(value%60)).padStart(2,'0')}`;
   function rebuild(){
     const tracks=shell.getLibrary();trackMap=new Map(tracks.map((track,index)=>[live?track.id:String(index),track]));
@@ -25,18 +21,17 @@
     if(album.coverUrl){const image=document.createElement('img');image.alt='';image.loading='lazy';image.decoding='async';image.src=album.coverUrl;image.addEventListener('error',()=>image.remove(),{once:true});art.append(image);}return art;
   }
   function playAlbum(album){if(live)shell.playTracks(album.trackIds);else shell.playDemo(Number(album.trackIds[0]));}
-  function visibleAlbums(){
+  function renderGrid(){
     const query=$('search').value.trim().toLocaleLowerCase(),key=$('albums-sort').value;
-    return albums.filter(album=>!query||[album.title,album.artist,album.year||''].some(value=>String(value).toLocaleLowerCase().includes(query))).sort((a,b)=>{
+    const visible=albums.filter(album=>!query||[album.title,album.artist,album.year||''].some(value=>String(value).toLocaleLowerCase().includes(query))).sort((a,b)=>{
       let result=key==='random'?(randomOrder.get(a.id)||0)-(randomOrder.get(b.id)||0):key==='year'?(Number(a.year)||(ascending?Number.MAX_SAFE_INTEGER:0))-(Number(b.year)||(ascending?Number.MAX_SAFE_INTEGER:0)):['added','trackCount','duration'].includes(key)?Number(a[key]||0)-Number(b[key]||0):collator.compare(a[key]||'',b[key]||'');
       return (result||collator.compare(a.title,b.title))*(ascending?1:-1);
     });
-  }
-  function renderGrid(visible){
+    $('albums-count').textContent=query?`${visible.length} 张匹配 · 共 ${albums.length} 张专辑`:`${albums.length} 张专辑 · ${shell.getLibrary().length} 首歌曲`;
     // 换排序时卡片会整体换位：先记位置，重建后让它们滑过去
     const cardPositions=window.CelesteMotion?.captureRows($('albums-grid'));
-    $('albums-grid').replaceChildren();
-    visible.forEach(album=>{
+    $('albums-grid').replaceChildren();$('albums-empty').hidden=visible.length>0;$('albums-more').hidden=visible.length<=limit;
+    visible.slice(0,limit).forEach(album=>{
       const card=document.createElement('article');card.className='album-card';card.dataset.albumId=album.id;card.dataset.flipkey=album.id;
       const open=document.createElement('button');open.className='album-open';open.setAttribute('aria-label',`打开专辑 ${album.title}，${album.artist}`);open.title=album.title+'\n'+album.artist;
       const title=document.createElement('strong');title.className='album-card-title';title.textContent=album.title;
@@ -49,36 +44,9 @@
     const moved=window.CelesteMotion?.replayRows($('albums-grid'),cardPositions)||0;
     if(!moved)window.CelesteMotion?.fadeIn($('albums-grid'),'list');
   }
-  // 正在播放的是哪张专辑：只认宿主 state 里的曲目 id，不在网页里另记一份
-  function playingAlbumId(){
-    const state=shell.getState(),trackId=live?state.trackId:String(state.index);
-    if(!trackId)return '';
-    const album=albums.find(item=>item.trackIds.includes(trackId));
-    return album?album.id:'';
-  }
-  function renderShelf(visible,focusNow){
-    window.CelesteCdShelf?.render({host:$('albums-shelf'),albums:visible,artwork,playingId:playingAlbumId(),focusId:shelfFocusId,focusNow,onOpen:openAlbum,onPlay:playAlbum,onFocus:id=>{shelfFocusId=id;}});
-  }
-  function render(){
-    const visible=visibleAlbums(),query=$('search').value.trim(),focusNow=restoreFocus;
-    restoreFocus=false;
-    $('albums-count').textContent=query?`${visible.length} 张匹配 · 共 ${albums.length} 张专辑`:`${albums.length} 张专辑 · ${shell.getLibrary().length} 首歌曲`;
-    // 三种"一张都没有"要说清是哪一种：还在扫库、库是空的、还是搜索没命中
-    const empty=$('albums-empty');
-    empty.hidden=visible.length>0;
-    if(!visible.length)empty.textContent=shell.isLibraryLoading()?'正在载入曲库，专辑会随扫描完成陆续出现。':query?'没有找到相关专辑，试试其他专辑名或艺术家。':'曲库里还没有专辑，添加音乐后会自动出现在这里。';
-    $('albums-more').hidden=visible.length<=limit;
-    const page=visible.slice(0,limit),shelf=view==='shelf';
-    $('albums-grid').hidden=shelf;$('albums-shelf').hidden=!shelf;
-    // 另一套视图立刻清空：留着几十张隐藏封面只会白占解码和内存
-    if(shelf){$('albums-grid').replaceChildren();renderShelf(page,focusNow);}
-    else{window.CelesteCdShelf?.clear();renderGrid(page);}
-  }
   function openAlbum(album){
-    // 进详情前记住列表滚到哪、焦点在哪：返回时原样还回去，别从头开始找
-    if(!$('albums-browser').hidden){pendingScroll=document.querySelector('.main').scrollTop;if(view==='shelf')shelfFocusId=album.id;}
     opened=album;$('albums-browser').hidden=true;$('album-detail').hidden=false;
-    shell.setPath([...(parentTrail.length?parentTrail:[{label:'专辑',action:backToBrowser}]),{label:album.title,action:()=>openAlbum(album)}]);
+    shell.setPath([...(parentTrail.length?parentTrail:[{label:'专辑',action:()=>{opened=null;show();}}]),{label:album.title,action:()=>openAlbum(album)}]);
     $('album-detail-cover').replaceChildren(artwork(album));$('album-detail-title').textContent=album.title;$('album-detail-artist').textContent=album.artist;
     $('album-detail-meta').textContent=[album.year?album.year+' 年':'',album.trackCount+' 首歌曲',Math.floor(album.duration/60)+' 分钟'].filter(Boolean).join(' · ');
     $('album-play').disabled=!album.trackIds.length;$('album-tracks').replaceChildren();
@@ -94,34 +62,11 @@
     updatePlaying();document.querySelector('.main').scrollTop=0;
     document.dispatchEvent(new CustomEvent('celeste:album-open',{detail:{album,tracks:tracks.map(item=>item.track)}}));
   }
-  function updatePlaying(){
-    const state=shell.getState();
-    document.querySelectorAll('.album-track').forEach(row=>row.setAttribute('aria-current',String(live?row.dataset.trackId===state.trackId:Number(row.dataset.trackId)===state.index)));
-    // 架子上只改播放标记，不重建 —— 切歌和每秒的进度刷新都会走到这里
-    window.CelesteCdShelf?.setPlaying(playingAlbumId());
-  }
-  function backToBrowser(){opened=null;restoreFocus=true;show();}
-  function restoreScroll(){if(!pendingScroll)return;const main=document.querySelector('.main'),top=pendingScroll;pendingScroll=0;main.scrollTop=top;}
-  function show(){
-    if(opened){openAlbum(opened);return;}
-    shell.setPath([{label:'专辑',action:backToBrowser}]);
-    $('albums-browser').hidden=false;$('album-detail').hidden=true;
-    render();
-    restoreScroll();
-  }
-  $('album-back').addEventListener('click',backToBrowser);$('album-play').addEventListener('click',()=>{if(opened)playAlbum(opened);});
-  $('albums-sort').addEventListener('change',()=>{if($('albums-sort').value==='random')randomOrder=new Map(albums.map(album=>[album.id,Math.random()]));render();});
-  $('albums-direction').addEventListener('click',()=>{ascending=!ascending;$('albums-direction').textContent=ascending?'升序 ↑':'降序 ↓';render();});$('albums-more').addEventListener('click',()=>{limit+=80;render();});
-  const viewButtons=[...document.querySelectorAll('[data-album-view]')];
-  function paintViewButtons(){viewButtons.forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.albumView===view)));}
-  viewButtons.forEach(button=>button.addEventListener('click',()=>{
-    const next=button.dataset.albumView==='shelf'?'shelf':'grid';
-    if(next===view)return;
-    view=next;try{localStorage.setItem(VIEW_KEY,view);}catch{}
-    paintViewButtons();pendingScroll=0;restoreFocus=false;
-    render();
-  }));
-  paintViewButtons();
+  function updatePlaying(){const state=shell.getState();document.querySelectorAll('.album-track').forEach(row=>row.setAttribute('aria-current',String(live?row.dataset.trackId===state.trackId:Number(row.dataset.trackId)===state.index)));}
+  function show(){if(opened)openAlbum(opened);else{shell.setPath([{label:'专辑',action:()=>{opened=null;show();}}]);$('albums-browser').hidden=false;$('album-detail').hidden=true;renderGrid();}}
+  $('album-back').addEventListener('click',()=>{opened=null;show();});$('album-play').addEventListener('click',()=>{if(opened)playAlbum(opened);});
+  $('albums-sort').addEventListener('change',()=>{if($('albums-sort').value==='random')randomOrder=new Map(albums.map(album=>[album.id,Math.random()]));renderGrid();});
+  $('albums-direction').addEventListener('click',()=>{ascending=!ascending;$('albums-direction').textContent=ascending?'升序 ↑':'降序 ↓';renderGrid();});$('albums-more').addEventListener('click',()=>{limit+=80;renderGrid();});
   $('search').addEventListener('input',()=>{if(shell.getPage()==='albums'){opened=null;limit=80;show();}});
   document.addEventListener('celeste:navigate',event=>{if(event.detail==='albums'){rebuild();show();}});
   document.addEventListener('celeste:library',()=>{rebuild();if(shell.getPage()==='albums')show();});

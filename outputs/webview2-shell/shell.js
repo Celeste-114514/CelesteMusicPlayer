@@ -403,6 +403,6 @@
     setInterval(() => { const now=performance.now(); const delta=(now-lastTick)/1000; lastTick=now; if(!state.playing||document.hidden||seeking)return; state.position=Math.min(state.duration,state.position+delta); if(state.position>=state.duration){if(state.repeat)state.position=0;else if(state.shuffle){const choices=previewQueue.filter(index=>index!==state.index);chooseTrack(choices.length?choices[Math.floor(Math.random()*choices.length)]:state.index)}else stepTrack(1)} render(); },250);
     document.addEventListener('visibilitychange',()=>lastTick=performance.now());
   }
-  window.CelesteShell=Object.freeze({send,notify,navigate,setPath,getPage:()=>currentPage,isLibraryLoading:()=>libraryLoading,getState:()=>({...state}),getLibrary:()=>live?libraryTracks.filter(inSource):samples,getAlbums:()=>libraryAlbums.filter(album=>album.trackIds.some(id=>libraryTracks.some(t=>t.id===id&&inSource(t)))),playTrack:id=>chooseTrack(libraryTracks.findIndex(track=>track.id===id)),playDemo:chooseTrack,playTracks:ids=>send('playAll',{trackIds:ids})});
+  window.CelesteShell=Object.freeze({send,notify,navigate,setPath,getPage:()=>currentPage,getState:()=>({...state}),getLibrary:()=>live?libraryTracks.filter(inSource):samples,getAlbums:()=>libraryAlbums.filter(album=>album.trackIds.some(id=>libraryTracks.some(t=>t.id===id&&inSource(t)))),playTrack:id=>chooseTrack(libraryTracks.findIndex(track=>track.id===id)),playDemo:chooseTrack,playTracks:ids=>send('playAll',{trackIds:ids})});
   navigate('overview',false); setOrbit(true); render();
 })();

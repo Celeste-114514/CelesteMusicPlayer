@@ -36,8 +36,6 @@
   <script src="transport-panels.js" defer></script>
   <!-- 顶部链路读数依赖 transport-panels.js 里的请求通道，必须排在它后面 -->
   <script src="geek-readout.js" defer></script>
-  <!-- CD 架是专辑页的一种渲染方式，必须先于 albums.js 就位 -->
-  <script src="cd-shelf.js" defer></script>
   <script src="albums.js" defer></script>
   <script src="waveform.js" defer></script>
   <script src="artists.js" defer></script>
@@ -50,7 +48,6 @@
   <script src="folders.js" defer></script>
   <link rel="stylesheet" href="folders.css">
   <link rel="stylesheet" href="queue-page.css">
-  <link rel="stylesheet" href="cd-shelf.css">
   <link rel="stylesheet" href="track-menu.css">
   <link rel="stylesheet" href="dsp.css">
   <link rel="stylesheet" href="tags.css">
@@ -197,7 +194,7 @@
           <p class="songs-footnote">单击选中 · 双击或按 Enter 播放<span id="library-note">封面为设计占位，真实曲库将在后续接入。</span><button id="native-view" hidden>返回旧界面</button></p>
         </section>
         <section class="page albums-page" id="albums-page" hidden aria-labelledby="albums-title">
-          <div id="albums-browser"><div class="albums-heading"><div><p class="eyebrow">EVERY RECORD, A LITTLE WORLD</p><h1 id="albums-title">专辑<span>。</span></h1><p id="albums-count" class="songs-count"></p></div><div class="album-sort-actions"><div class="album-view-switch" role="group" aria-label="专辑浏览方式"><button type="button" data-album-view="grid" aria-pressed="true">网格</button><button type="button" data-album-view="shelf" aria-pressed="false">CD 架</button></div><label class="sort-picker"><span>排序：</span><select id="albums-sort" aria-label="专辑排序"><option value="title">专辑名称</option><option value="artist">艺术家</option><option value="year">发行年份</option><option value="added">添加顺序</option><option value="random">随机</option><option value="trackCount">曲目数</option><option value="duration">总时长</option></select></label><button id="albums-direction" class="sort-direction">升序 ↑</button></div></div><div id="albums-grid" class="albums-grid"></div><div id="albums-shelf" class="cd-shelf" hidden aria-label="专辑 CD 架"></div><p id="albums-empty" class="albums-empty" hidden>没有找到相关专辑，试试其他专辑名或艺术家。</p><button id="albums-more" class="secondary" hidden>加载更多专辑</button></div>
+          <div id="albums-browser"><div class="albums-heading"><div><p class="eyebrow">EVERY RECORD, A LITTLE WORLD</p><h1 id="albums-title">专辑<span>。</span></h1><p id="albums-count" class="songs-count"></p></div><div class="album-sort-actions"><label class="sort-picker"><span>排序：</span><select id="albums-sort" aria-label="专辑排序"><option value="title">专辑名称</option><option value="artist">艺术家</option><option value="year">发行年份</option><option value="added">添加顺序</option><option value="random">随机</option><option value="trackCount">曲目数</option><option value="duration">总时长</option></select></label><button id="albums-direction" class="sort-direction">升序 ↑</button></div></div><div id="albums-grid" class="albums-grid"></div><p id="albums-empty" class="albums-empty" hidden>没有找到相关专辑，试试其他专辑名或艺术家。</p><button id="albums-more" class="secondary" hidden>加载更多专辑</button></div>
           <div id="album-detail" hidden><button id="album-back" class="text-button album-back"><svg><use href="#i-chevron"/></svg>所有专辑</button><div class="album-hero"><div id="album-detail-cover" class="album-detail-cover"></div><div class="album-hero-copy"><p class="eyebrow">FROM FIRST TRACK TO LAST</p><h1 id="album-detail-title"></h1><p id="album-detail-artist"></p><p id="album-detail-meta"></p><button id="album-play" class="primary"><svg><use href="#i-play"/></svg>播放这张专辑</button></div></div><div id="album-tracks" class="album-tracks"></div></div>
         </section>
         <section id="artists-page" class="page artists-page" hidden aria-labelledby="artists-title">
