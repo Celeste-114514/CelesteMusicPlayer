@@ -152,51 +152,9 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 退路：WebView2 还没就绪或初始化失败时，用系统原生弹出菜单顶上，
-        /// 保证「显示主界面 / 播放暂停 / 退出」这些关键动作永远能用。
-        /// 这也是方案要求的降级路径 —— 降级也不许退回 WinUI。
+        /// 退路菜单已按用户要求移除（2026-10-28：不要任何系统方块）。
+        /// 保留这条注释是为了以后别再把它接回来 —— 托盘菜单只有网页这一种形态。
         /// </summary>
-        internal string? ShowFallbackMenu(IReadOnlyList<TrayMenuModel.Item> items)
-        {
-            if (_hwnd == IntPtr.Zero) return null;
-            IntPtr menu = IntPtr.Zero;
-            try
-            {
-                menu = CreatePopupMenu();
-                if (menu == IntPtr.Zero) return null;
-                var map = new Dictionary<int, string>();
-                int id = 1000;
-                foreach (TrayMenuModel.Item item in items)
-                {
-                    if (item.separator) { AppendMenuW(menu, MF_SEPARATOR, IntPtr.Zero, null); continue; }
-                    uint flags = MF_STRING;
-                    if (!item.enabled) flags |= MF_GRAYED;
-                    if (item.@checked == true) flags |= MF_CHECKED;
-                    if (item.@checked == false) flags |= MF_UNCHECKED;
-                    map[id] = item.actionId;
-                    AppendMenuW(menu, flags, new IntPtr(id), item.label);
-                    id++;
-                }
-
-                if (!GetCursorPos(out POINT cursor)) return null;
-                // 这两句是 TrackPopupMenu 的老规矩：不先抢前台，点菜单外面不会关；
-                // 结束后补一条空消息，否则菜单偶尔会"粘"在屏幕上。
-                SetForegroundWindow(_hwnd);
-                int picked = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY,
-                    cursor.X, cursor.Y, 0, _hwnd, IntPtr.Zero);
-                PostMessageW(_hwnd, 0, IntPtr.Zero, IntPtr.Zero);
-                return picked > 0 && map.TryGetValue(picked, out string? action) ? action : null;
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("WindowsTrayIcon.ShowFallbackMenu", ex);
-                return null;
-            }
-            finally
-            {
-                if (menu != IntPtr.Zero) DestroyMenu(menu);
-            }
-        }
 
         public void Dispose()
         {

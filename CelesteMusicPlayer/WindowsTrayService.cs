@@ -50,7 +50,8 @@ namespace CelesteMusicPlayer
             {
                 IconRectProvider = () => _icon.TryGetIconRect(out WindowsTrayIcon.RECT rect)
                     ? rect
-                    : (WindowsTrayIcon.RECT?)null
+                    : (WindowsTrayIcon.RECT?)null,
+                SharedEnvironmentProvider = () => _owner.TraySharedWebViewEnvironment
             };
             _menu.Invoked += actionId =>
             {
@@ -173,13 +174,10 @@ namespace CelesteMusicPlayer
 
             if (shown) return;
 
-            // 降级：系统原生弹出菜单（方角、系统色），但功能齐全。绝不退回 WinUI 菜单。
-            try
-            {
-                string? action = _icon.ShowFallbackMenu(items);
-                if (!string.IsNullOrEmpty(action)) _commands.Invoke(action);
-            }
-            catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.FallbackMenu", ex); }
+            // 用户 2026-10-28 明确要求：不要任何系统方块菜单。
+            // 所以这里不再降级到 TrackPopupMenu —— 网页菜单没就绪就什么都不弹，只留日志；
+            // 初始化本身在后台继续，下一次右键就有了。
+            StartupLog.Write("[托盘菜单] 本次右键未弹出（网页菜单还没就绪），按用户要求不降级系统菜单");
             }
             finally { _opening = false; }
         }
@@ -215,9 +213,9 @@ namespace CelesteMusicPlayer
                 var queue = _owner.DispatcherQueue;
                 if (queue == null) return;
                 var timer = queue.CreateTimer();
-                // 第一次别等那么久：用户在窗口出来后马上就可能右键托盘。
-                // 后面几次间隔也压短，失败基本都是这几秒内能恢复的。
-                timer.Interval = TimeSpan.FromMilliseconds(attempt == 0 ? 1200 : 2000);
+                // 复用了主界面的 WebView2 环境之后，菜单只多一个 controller，几百毫秒就能建好，
+                // 所以预热可以很早开始 —— 用户第一次右键基本都能直接看到网页菜单。
+                timer.Interval = TimeSpan.FromMilliseconds(attempt == 0 ? 500 : 2000);
                 timer.IsRepeating = false;
                 timer.Tick += (_, _) =>
                 {

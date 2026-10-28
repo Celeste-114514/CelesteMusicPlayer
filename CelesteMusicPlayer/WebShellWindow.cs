@@ -159,6 +159,12 @@ namespace CelesteMusicPlayer
         private string? _pendingPage;
 
         /// <summary>
+        /// 本窗口 WebView2 的环境句柄。托盘菜单复用它，就不必再起一整套浏览器进程
+        /// （独立环境要额外几百 MB 和好几秒），右键菜单才可能做到"秒开"。
+        /// </summary>
+        internal CoreWebView2Environment? WebViewEnvironment { get; private set; }
+
+        /// <summary>
         /// 从宿主侧要求网页跳页（托盘菜单的「设置」「发现新版本」用）。
         /// 网页还没 ready 时先记下来，等 ready 那一刻再补发 —— 否则启动初期点托盘会静默无效。
         /// </summary>
@@ -186,6 +192,7 @@ namespace CelesteMusicPlayer
                 await _web.EnsureCoreWebView2Async();
                 if (_closed) return;
                 var core = _web.CoreWebView2;
+                try { WebViewEnvironment = core.Environment; } catch (Exception ex) { StartupLog.WriteException("WebShell.Environment", ex); }
                 core.SetVirtualHostNameToFolderMapping("celeste.internal", folder, CoreWebView2HostResourceAccessKind.DenyCors);
                 // 背景图：用户选的图片先被拷进这个受控目录，再以虚拟主机地址给网页。
                 // 直接把本机路径塞进 CSS 是不行的 —— CSP 不许 file://，WebView2 也不会去读。

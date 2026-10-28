@@ -112,7 +112,7 @@ namespace CelesteMusicPlayer
             if (!_ready)
             {
                 Task<bool> init = EnsureWebViewAsync();
-                Task first = await Task.WhenAny(init, Task.Delay(2000));
+                Task first = await Task.WhenAny(init, Task.Delay(3000));
                 if (first != init || !await init) return false;
             }
             else if (!await EnsureWebViewAsync()) return false;
@@ -286,6 +286,9 @@ namespace CelesteMusicPlayer
 
         /// <summary>给定位用的托盘图标矩形（由 WindowsTrayService 注入，它持有通知图标）。</summary>
         internal Func<WindowsTrayIcon.RECT?>? IconRectProvider { get; set; }
+
+        /// <summary>主界面 WebView2 环境（可能还没建好，所以是"每次问问看"的委托）。</summary>
+        internal Func<CoreWebView2Environment?>? SharedEnvironmentProvider { get; set; }
 
         private bool TrayIconRect(out WindowsTrayIcon.RECT rect)
         {
@@ -471,27 +474,52 @@ namespace CelesteMusicPlayer
 
                 // 独立 user data folder：不跟主界面抢同一个浏览器进程，
                 // 菜单预热/销毁都动不到曲库那边（代价是多一个进程，几百 MB 的页面不存在，很轻）。
-                string userData = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer", "TrayWebView2");
-                Directory.CreateDirectory(userData);
-                if (_environment == null)
+                // 优先复用主界面已经建好的 WebView2 环境。
+                // 独立环境 = 再拉起一整套浏览器进程（几百 MB + 好几秒冷启动），
+                // 复用之后菜单只多一个 controller，创建是毫秒级 —— 这是"右键秒开"的关键。
+                CoreWebView2Environment? shared = SharedEnvironmentProvider?.Invoke();
+                if (shared == null)
                 {
-                    try
+                    // 主界面网页还起没来，等它一小会儿再决定（6 秒内每 300ms 看一眼）。
+                    for (int i = 0; i < 20 && shared == null; i++)
                     {
-                        _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, userData, null);
+                        await Task.Delay(300);
+                        if (_disposed) return false;
+                        shared = SharedEnvironmentProvider?.Invoke();
                     }
-                    catch (Exception ex)
+                }
+
+                if (shared != null)
+                {
+                    if (!ReferenceEquals(_environment, shared))
+                        StartupLog.Write("[托盘菜单] 复用主界面 WebView2 环境（不再另起浏览器进程）");
+                    _environment = shared;
+                }
+                else
+                {
+                    // 主界面网页没起来（或干脆没有）：才自己拉一套，慢但能用。
+                    string userData = Path.Combine(
+                        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "CelesteMusicPlayer", "TrayWebView2");
+                    Directory.CreateDirectory(userData);
+                    if (_environment == null)
                     {
-                        // 同一个 user data folder 被另一个实例（双开/上一次没退干净）占着时会失败。
-                        // 换一个备用目录再来一次，菜单本身照常能用。
-                        StartupLog.WriteException("TrayMenuWindow.CreateEnvironment(primary)", ex);
-                        string alt = Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                            "CelesteMusicPlayer", "TrayWebView2-alt");
-                        Directory.CreateDirectory(alt);
-                        _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, alt, null);
-                        StartupLog.Write("[托盘菜单] 主数据目录被占用，已改用备用目录");
+                        try
+                        {
+                            _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, userData, null);
+                        }
+                        catch (Exception ex)
+                        {
+                            // 同一个 user data folder 被另一个实例（双开/上一次没退干净）占着时会失败。
+                            // 换一个备用目录再来一次，菜单本身照常能用。
+                            StartupLog.WriteException("TrayMenuWindow.CreateEnvironment(primary)", ex);
+                            string alt = Path.Combine(
+                                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                                "CelesteMusicPlayer", "TrayWebView2-alt");
+                            Directory.CreateDirectory(alt);
+                            _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, alt, null);
+                            StartupLog.Write("[托盘菜单] 主数据目录被占用，已改用备用目录");
+                        }
                     }
                 }
                 var windowRef = CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)_hwnd.ToInt64());
