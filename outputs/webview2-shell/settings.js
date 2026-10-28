@@ -32,6 +32,7 @@
   let group = 'general';
   let query = '';
   let busy = false;
+  let updateStatusHandler = null;   // 关于卡片的推送监听只留一个，切页不叠加
   const rows = new Map();       // 字段 id -> 行元素
   const defsById = new Map();
 
@@ -750,7 +751,17 @@
     const updateBox = node('p', '', 'settings-card-note');
     updateBox.id = 'about-update-note';
     info.append(updateBox);
+
+    // 进度条只在下载中出现；不确定总量时用流动条纹，不画一个假的百分比。
+    const progress = node('div', undefined, 'set-progress');
+    progress.id = 'about-progress';
+    progress.hidden = true;
+    const progressFill = node('i');
+    progress.append(progressFill);
+    info.append(progress);
+
     const actions = node('div', undefined, 'settings-actions');
+
     // 下载入口只建一次：反复点「检查更新」不该在按钮后面叠出一排链接。
     const downloadButton = button('打开下载页', async btn => {
       const url = btn.dataset.url;
@@ -763,34 +774,159 @@
     });
     downloadButton.hidden = true;
     downloadButton.id = 'about-download';
+
+    // 真下载：宿主写 .part → 校验 SHA-256 → 原子改名，进度靠 celeste.update 推送补。
+    // 名字只写「下载」不写「下载并安装」—— 装是下一步的事，按钮说什么就做什么。
+    const installButton = button('下载更新包', async btn => {
+      btn.disabled = true;
+      updateBox.textContent = '正在连接下载地址…';
+      updateBox.style.color = '';
+      try {
+        paint(await request('update', { action: 'download' }));
+      } finally { btn.disabled = false; }
+    });
+    installButton.hidden = true;
+    installButton.id = 'about-install';
+
+    const cancelButton = button('取消下载', async btn => {
+      btn.disabled = true;
+      try { paint(await request('update', { action: 'cancel' })); }
+      finally { btn.disabled = false; }
+    });
+    cancelButton.hidden = true;
+    cancelButton.id = 'about-cancel';
+
+    // 交接失败时宿主不会退出，这里必须把按钮放开，否则用户卡在一句话上。
+    const applyButton = button('立即安装并重启', async btn => {
+      btn.disabled = true;
+      updateBox.textContent = '正在把安装交给更新助手…';
+      try {
+        const result = await request('update', { action: 'install' });
+        paint(result);
+        if (result.stage !== 'installing') {
+          btn.disabled = false;
+          status('安装没有开始：' + (result.error || '未知原因'), 'err');
+        }
+      } catch (error) {
+        btn.disabled = false;
+        status(error.message || String(error), 'err');
+      }
+    });
+    applyButton.hidden = true;
+    applyButton.id = 'about-apply';
+
     const checkButton = button('检查更新', async btn => {
       btn.disabled = true;
       updateBox.textContent = '正在检查…';
       updateBox.style.color = '';
       downloadButton.hidden = true;
+      installButton.hidden = true;
+      applyButton.hidden = true;
+      cancelButton.hidden = true;
+      progress.hidden = true;
       try {
-        const result = await request('update');
-        const line = describeUpdate(result);
-        updateBox.textContent = line.text;
-        updateBox.style.color = line.color;
-        // 只有「确实有新版本、且给了能下手的地址」才亮下载按钮；
-        // 清单校验不了的时候优先给发布页，让用户自己核对，不假装可以放心自动更新。
-        const target = line.manual ? (result.releaseUrl || result.lastKnownReleaseUrl) : (result.downloadUrl || result.releaseUrl);
-        if (line.showDownload && target) {
-          downloadButton.dataset.url = target;
-          downloadButton.textContent = line.manual ? '打开发布页' : '打开下载页';
-          downloadButton.hidden = false;
-        }
+        paint(await request('update', { action: 'check' }));
       } catch (error) {
         updateBox.textContent = '检查失败：' + (error.message || error);
         updateBox.style.color = 'var(--danger)';
       } finally { btn.disabled = false; }
     });
     checkButton.id = 'about-check';
-    actions.append(checkButton, downloadButton);
+
+    actions.append(checkButton, installButton, cancelButton, applyButton, downloadButton);
     info.append(actions);
     host.append(info);
+
+    // 把一份状态画到卡片上。所有按钮的显隐都由 stage 单一决定，
+    // 不再靠「上次点过什么」猜 —— 网页刷新 / 切页回来后状态依然对得上。
+    function paint(result) {
+      if (!result) return;
+      const stage = result.stage || 'idle';
+      const transferring = stage === 'downloading' || stage === 'verifying';
+
+      progress.hidden = !transferring;
+      if (transferring) {
+        const total = Number(result.bytesTotal) || 0;
+        const got = Number(result.bytesReceived) || 0;
+        const pct = total > 0 ? Math.min(100, Math.round(got * 100 / total)) : 0;
+        progress.classList.toggle('indeterminate', total <= 0);
+        progressFill.style.width = total > 0 ? pct + '%' : '100%';
+        updateBox.textContent = stage === 'verifying'
+          ? '下载完成，正在校验安装包完整性…'
+          : (total > 0
+            ? `正在下载 ${result.latest || ''} … ${pct}%（${bytes(got)} / ${bytes(total)}）`
+            : `正在下载 ${result.latest || ''} … 已下载 ${bytes(got)}`);
+        updateBox.style.color = '';
+      }
+
+      installButton.hidden = !(stage === 'available' && result.canDownload);
+      installButton.textContent = '下载更新包';
+      cancelButton.hidden = !result.canCancel;
+      applyButton.hidden = stage !== 'ready';
+      downloadButton.hidden = true;
+
+      if (stage === 'ready') {
+        updateBox.textContent = `已下载并校验 ${result.latest || ''}，可以安装。安装时程序会退出，装完自动重开。`;
+        updateBox.style.color = 'var(--warning)';
+        return;
+      }
+      if (stage === 'preparing' || stage === 'installing') {
+        updateBox.textContent = '正在交给更新助手，程序即将退出…';
+        updateBox.style.color = 'var(--warning)';
+        return;
+      }
+      if (stage === 'cancelled') {
+        updateBox.textContent = '下载已取消，没有留下半截文件。可以重新下载。';
+        updateBox.style.color = '';
+        // 取消后 stage 不再是 available，但候选版本还在宿主里，
+        // 直接给「重新下载」比让用户再点一次「检查更新」顺得多。
+        installButton.hidden = false;
+        installButton.disabled = false;   // 下载请求收尾时按钮可能还是禁用态，这里放开
+        installButton.textContent = '重新下载更新';
+        return;
+      }
+      if (transferring) return;
+      if (stage === 'idle' && !result.checkedAt) {
+        updateBox.textContent = '还没检查过更新。';
+        updateBox.style.color = '';
+        return;
+      }
+
+      const line = describeUpdate(result);
+      updateBox.textContent = line.text;
+      updateBox.style.color = line.color;
+      // 只有「确实有新版本、且给了能下手的地址」才亮下载按钮；
+      // 清单校验不了的时候优先给发布页，让用户自己核对，不假装可以放心自动更新。
+      const target = line.manual
+        ? (result.releaseUrl || result.lastKnownReleaseUrl)
+        : (result.downloadUrl || result.releaseUrl);
+      if (line.showDownload && line.manual && target) {
+        downloadButton.dataset.url = target;
+        downloadButton.textContent = '打开发布页';
+        downloadButton.hidden = false;
+      }
+    }
+
+    function bytes(value) {
+      const size = Number(value) || 0;
+      if (size < 1024) return size + ' B';
+      if (size < 1024 * 1024) return (size / 1024).toFixed(1) + ' KB';
+      return (size / 1024 / 1024).toFixed(1) + ' MB';
+    }
+
+    // 进页面先问一次当前状态：上次下好没装成的包要能直接接着装，而不是让用户重下。
+    request('update', { action: 'status' }).then(paint).catch(() => {});
+
+    // 宿主一条消息推一次进度。只画当前这张卡片，切走之后回来会重新问状态。
+    if (updateStatusHandler) document.removeEventListener('celeste:message', updateStatusHandler);
+    updateStatusHandler = event => {
+      const message = event.detail;
+      if (!message || message.kind !== 'celeste.update' || !updateBox.isConnected) return;
+      paint(message.status);
+    };
+    document.addEventListener('celeste:message', updateStatusHandler);
   }
+
 
   // 把宿主返回的状态翻译成人话。四种状态分开写死，不靠「有没有版本号」猜。
   function describeUpdate(result) {
@@ -819,10 +955,14 @@
         const stale = result.stale && result.lastKnownTag
           ? `上次检查发现过 ${result.lastKnownTag}，这次没能确认。`
           : '';
+        // 只有「检查」这一侧失败才叫检查失败；下载/校验/交接失败说出来是另一回事，
+        // 一律写成「检查失败」会让用户以为网络有问题，白折腾。
+        const code = result.errorCategory || '';
+        const fromCheck = !code || code === 'check' || code === 'network';
         return {
-          text: `检查失败：${result.error || '未知原因'}${stale}（当前 ${current}${checked}）`,
+          text: `${fromCheck ? '检查更新失败' : '更新没有完成'}：${result.error || (result.errorCategory ? code : '未知原因')}${stale}（当前 ${current}${checked}）`,
           color: 'var(--danger)',
-          showDownload: !!result.lastKnownDownloadUrl,
+          showDownload: fromCheck && !!result.lastKnownDownloadUrl,
           manual: true
         };
       }
