@@ -103,6 +103,9 @@ namespace CelesteMusicPlayer
 
         public bool IsCreated => _icon.IsCreated;
 
+        /// <summary>托盘菜单建的 WebView2 环境，给任务栏播放条共用（进程内只允许一套）。</summary>
+        internal Microsoft.Web.WebView2.Core.CoreWebView2Environment? PopupEnvironment => _menu.PopupEnvironment;
+
         public void Show()
         {
             if (_disposed) return;

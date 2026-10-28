@@ -98,6 +98,15 @@ namespace CelesteMusicPlayer
 
         internal bool IsReady => _ready && _controller != null;
 
+        /// <summary>
+        /// 本菜单自己建的 WebView2 环境。任务栏播放条复用它 ——
+        /// 进程里只能有**一套** WebView2 环境，第二套一建起来就会把第一套的鼠标输入抢掉
+        /// （2026-10-29 00:31 日志实证，见 TaskbarPlayerWindow 里的注释）。
+        /// 注意：这套环境是窗口版 controller 建的，能正常收鼠标；主界面那个 composition
+        /// 环境不行（见 MainWindow.WebShell 的说明）。
+        /// </summary>
+        internal Microsoft.Web.WebView2.Core.CoreWebView2Environment? PopupEnvironment => _environment;
+
         /// <summary>菜单此刻是否显示着（右键再点一次要能收起）。</summary>
         internal bool IsVisible => _visible;
 
@@ -274,6 +283,10 @@ namespace CelesteMusicPlayer
             {
                 _controller.Bounds = new Rect(0, 0, width, height);
                 _controller.IsVisible = true;
+                // 窗口换了位置要告诉 WebView2，它按自己记的位置换算鼠标坐标。
+                // 不通知的话，窗口被移动过之后点击会算到错误的位置上。
+                try { _controller.NotifyParentWindowPositionChanged(); }
+                catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.NotifyParentWindowPositionChanged", ex); }
             }
 
             _visible = true;

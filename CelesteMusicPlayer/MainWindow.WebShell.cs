@@ -14,6 +14,14 @@ namespace CelesteMusicPlayer
     {
         private WebShellWindow? _webShellWindow;
 
+        /// <summary>
+        /// 给弹出网页窗口（任务栏播放条）用的 WebView2 环境 —— **托盘菜单自己建的那套**。
+        /// 整个进程只留这一套：主界面那个是 WinUI composition hosting 建的，拿它建窗口版
+        /// controller 输入有问题；而两套并列时，后建的那套会把先建的那套的鼠标输入抢掉。
+        /// </summary>
+        internal Microsoft.Web.WebView2.Core.CoreWebView2Environment? PopupWebViewEnvironment
+            => (_trayIcon as WindowsTrayService)?.PopupEnvironment;
+
 
         // ⚠ 弹出网页窗口（托盘菜单 / 任务栏播放条）**一律各建各的 WebView2 环境**。
         // 2026-10-28 22:43/22:53 实测：托盘菜单复用主界面控件的环境后界面画得出来，

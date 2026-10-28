@@ -22,8 +22,7 @@ namespace CelesteMusicPlayer
         private readonly string _className = "CelesteTaskbarPlayer_" + Guid.NewGuid().ToString("N");
         private nint _hwnd;
         private CoreWebView2Controller? _controller;
-        private CoreWebView2Environment? _environment;
-        private bool _busy, _disposed, _appBar;
+        private bool _busy, _disposed, _appBar, _loggedWaitingEnv;
         private int _failures, _ticks, _ticksTheme;
         private string _lastStatus = "";
         // 外观设置里的强调色。任务栏条自己采样任务栏底色做背景（贴任务栏），
@@ -62,18 +61,20 @@ namespace CelesteMusicPlayer
                 if (_controller == null)
                 {
                     if (_failures >= 3 || (_failures > 0 && ++_ticks % 10 != 0)) return;
-                    // 自己建一套环境，不和托盘菜单共用。
-                    // 2026-10-29 实测：共用之后托盘菜单点击完全失灵（日志里连 pointerdown 都没有），
-                    // 任务栏条一显示就把托盘的输入链路带坏了。两个弹出窗口必须各用各的环境。
-                    if (_environment == null)
+                    // 和托盘菜单共用同一套 WebView2 环境 —— 一个浏览器进程、一套输入栈。
+                    //
+                    // 2026-10-29 00:31 的日志把关系晒得很清楚：
+                    //   00:31:33 任务栏条自建环境失败并关闭控制器
+                    //   00:31:36/39/42 托盘菜单三次点击全部正常（pointerdown → 收到命令 → 执行命令）
+                    //   00:31:47 任务栏条重新建好控制器 → 托盘菜单从此再也收不到任何点击
+                    // 两套环境 = 两个浏览器进程，第二个一建起来就把第一个的输入抢掉。
+                    // 所以这里不自己建环境，等托盘那边先建好再用它。
+                    CoreWebView2Environment? environment = _owner.PopupWebViewEnvironment;
+                    if (environment == null)
                     {
-                        string storage = Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                            "CelesteMusicPlayer", "TaskbarWebView2");
-                        Directory.CreateDirectory(storage);
-                        _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, storage, null);
+                        if (!_loggedWaitingEnv) { _loggedWaitingEnv = true; Status("等待托盘网页环境"); }
+                        return;
                     }
-                    var environment = _environment;
                     CreateHost();
                     var controller = await environment.CreateCoreWebView2ControllerAsync(CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)_hwnd));
                     if (_disposed) { controller.Close(); return; }
@@ -85,6 +86,7 @@ namespace CelesteMusicPlayer
                     // 窗口本身由 ShowWindow 控制，这里只是别给渲染进程"先别画"的信号。
                     controller.IsVisible = true;
                     controller.ZoomFactor = 1;
+                    Status("网页控制器已建（共用托盘环境）");
                     var core = controller.CoreWebView2;
                     core.Settings.IsWebMessageEnabled = true;
                     core.Settings.AreDefaultContextMenusEnabled = false;
@@ -114,11 +116,15 @@ namespace CelesteMusicPlayer
                         }
                         catch (Exception ex) { StartupLog.WriteException("TaskbarPlayer.Message", ex); }
                     };
+                    // 失败原因要记下来：只写"加载失败"分不清是导航被拒、资源 404 还是别的。
+                    CoreWebView2WebErrorStatus navStatus = CoreWebView2WebErrorStatus.Unknown;
                     var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    core.NavigationCompleted += (_, args) => ready.TrySetResult(args.IsSuccess);
+                    core.NavigationCompleted += (_, args) => { navStatus = args.WebErrorStatus; ready.TrySetResult(args.IsSuccess); };
                     core.Navigate("https://celeste.taskbar/taskbar-player.html");
-                    if (await Task.WhenAny(ready.Task, Task.Delay(20000)) != ready.Task || !await ready.Task)
-                        throw new InvalidOperationException("任务栏播放条页面加载失败");
+                    if (await Task.WhenAny(ready.Task, Task.Delay(20000)) != ready.Task)
+                        throw new TimeoutException("任务栏播放条页面 20 秒内没加载完");
+                    if (!await ready.Task)
+                        throw new InvalidOperationException("任务栏播放条页面加载失败 WebErrorStatus=" + navStatus);
                     if (_disposed) return;
                     controller.IsVisible = true;
                 }
