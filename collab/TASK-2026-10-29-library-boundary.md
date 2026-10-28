@@ -83,3 +83,32 @@ M3uPlaylistIO.TryParseExtInf 的正则没消费 EXTINF 里的逗号，displayTit
 
 播放列表行模型迁出界面文件（解锁 CueTrackExpansion）→ 网络源服务（codex 正在做，别撞）
 → 封面 CoverArtService（注意 CacheVersion）→ TagLib 标签读写层。
+
+---
+
+# 追加：W6 第四小步 —— 播放顺序/队列/浏览规则/会话存储（01:41-01:47）
+
+## 结论
+
+PlaybackSessionStore / PlaybackOrderResolver / OpraHistoryStore / GlobalHotkeyService /
+WebBrowseRules / WebQueueRules 链接进 PoC。干净 HEAD（185aae2）worktree 隔离验证：
+设置 61 + 曲库 20 + 解析 10 + **服务 13** 全绿，passed=true（20261029-014556-205f79）。
+提交 185aae2。codex 的迷你播放器（2ef8880/f6e8631）与本项目零文件重叠。
+
+## 为可测性加的内部钩子（照 LibraryDb.TestDbOverride 先例，各 2-6 行）
+
+PlaybackSessionStore.FilePathOverride、OpraHistoryStore.FilePathOverride（后者 setter 顺带
+作废内存缓存，否则往返测试读到旧对象）。
+
+## 明确不迁的（写死在提交信息与任务单里）
+
+- **CoverArtService**：整个缩放/解码建立在 WinRT 图像管线（Windows.Graphics.Imaging +
+  Microsoft.UI.Xaml.Media.Imaging），迁出=重写，不是等价搬家。
+- **QuickPlayLauncher**：要 UI 线程 DispatcherQueue。
+- **WebTagEditRules / WebTagSortRules**：要 TagEditModel 和 PlaylistItem —— 和
+  CueTrackExpansion 同一个坎，等「播放列表行模型迁出界面文件」。
+
+## W6 剩余
+
+播放列表行模型迁出（解锁 CueTrackExpansion + WebTagSortRules）→ TagLib 标签层 →
+ TagEditorService。设置/曲库/解析/纯逻辑服务四个边界至此全部有机器检查钉住。
