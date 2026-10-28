@@ -338,6 +338,17 @@
     $('native-view').hidden=true;
     $('library-note').textContent='本机音频引擎 · 原输出与 DSP 配置';
     $('mode-label').textContent='等待播放器连接'; $('track-title').textContent='等待播放状态'; state.title='等待播放状态'; state.artist='Celeste Music Player'; state.duration=0; $('track-quality').textContent='WebView2 · 等待宿主数据';
+    // 网页里的外链不自己开浏览器（WebView2 的新窗口请求会被宿主吞掉），统一交回宿主：
+    // 宿主只放行 https 官方站点，拒绝时回一条错误，这里转成 toast。
+    document.addEventListener('click', event => {
+      const anchor = event.target instanceof Element ? event.target.closest('a[href]') : null;
+      if (!anchor) return;
+      const href = anchor.getAttribute('href') || '';
+      if (!/^https?:\/\//i.test(href)) return;
+      event.preventDefault();
+      window.CelesteTransport.request('openExternal', { url: href })
+        .catch(error => notify(error?.message || '打开链接失败'));
+    });
     webview.addEventListener('message', event => {
       const message=event.data;
       if(message?.version!==1)return;

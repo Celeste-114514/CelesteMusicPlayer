@@ -154,7 +154,14 @@ namespace CelesteMusicPlayer
                 core.Settings.AreDevToolsEnabled = false;
                 core.Settings.IsNonClientRegionSupportEnabled = true;
                 core.NavigationStarting += (_, args) => { if (!IsTrusted(args.Uri)) args.Cancel = true; };
-                core.NewWindowRequested += (_, args) => args.Handled = true;
+                // 网页里的外链一律由宿主代开：只放行 https 官方站点（ExternalLink 里判），
+                // 剩下的一律吞掉，避免导航把整个外壳页面顶掉。
+                core.NewWindowRequested += (_, args) =>
+                {
+                    args.Handled = true;
+                    try { ExternalLink.Open(args.Uri); }
+                    catch (Exception ex) { StartupLog.Write("[WebShell] 拒绝打开外部链接 " + args.Uri + "：" + ex.Message); }
+                };
                 core.PermissionRequested += (_, args) => args.State = CoreWebView2PermissionState.Deny;
                 core.WebMessageReceived += OnMessage;
                 core.AddWebResourceRequestedFilter(CoverOrigin + "/cover/*", CoreWebView2WebResourceContext.Image);
@@ -413,6 +420,14 @@ namespace CelesteMusicPlayer
                         var more = _owner.WebMore(msg);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = more }); break;
                     case "window": WindowBridge(msg, requestId); break;
+                    case "openExternal":
+                        string externalUrl = msg.TryGetProperty("url", out JsonElement urlElement) ? urlElement.GetString() ?? "" : "";
+                        Uri openedUri = ExternalLink.Open(externalUrl);
+                        if (requestId != null)
+                        {
+                            Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = new { url = openedUri.AbsoluteUri } });
+                        }
+                        break;
                     default: Error("此功能尚未接入当前界面。"); break;
                 }
                 SendState();

@@ -742,35 +742,102 @@
     const about = snapshot.about || {};
     const kv = node('dl', undefined, 'set-kv');
     kv.append(node('dt', '当前版本'), node('dd', about.version || ''));
-    kv.append(node('dt', '安装包类型'), node('dd', about.variant || ''));
+    kv.append(node('dt', '安装包类型'), node('dd', about.variant === 'sc' ? '自包含版' : '框架依赖版'));
     kv.append(node('dt', '设置目录'), node('dd', about.configDirectory || ''));
     info.append(kv);
     if (about.recovered) info.append(node('p', '注意：上次启动时检测到设置文件损坏，已用默认设置恢复（原文件有备份）。', 'set-note'));
+
     const updateBox = node('p', '', 'settings-card-note');
+    updateBox.id = 'about-update-note';
     info.append(updateBox);
     const actions = node('div', undefined, 'settings-actions');
-    actions.append(button('检查更新', async btn => {
+    // 下载入口只建一次：反复点「检查更新」不该在按钮后面叠出一排链接。
+    const downloadButton = button('打开下载页', async btn => {
+      const url = btn.dataset.url;
+      if (!url) return;
+      btn.disabled = true;
+      try {
+        await window.CelesteTransport.request('openExternal', { url });
+        status('已在浏览器中打开下载页。', 'ok');
+      } finally { btn.disabled = false; }
+    });
+    downloadButton.hidden = true;
+    downloadButton.id = 'about-download';
+    const checkButton = button('检查更新', async btn => {
       btn.disabled = true;
       updateBox.textContent = '正在检查…';
       updateBox.style.color = '';
+      downloadButton.hidden = true;
       try {
         const result = await request('update');
-        if (result.error) { updateBox.textContent = '检查失败：' + result.error; updateBox.style.color = '#c0454f'; return; }
-        updateBox.textContent = result.hasUpdate
-          ? `有新版本 ${result.latest}（${result.packageKind}），当前 ${result.current}。`
-          : `已经是最新版（${result.current}）。`;
-        updateBox.style.color = result.hasUpdate ? '#c99a4a' : '#3f8f6f';
-        if (result.hasUpdate && result.downloadUrl) {
-          const link = node('a', '打开下载页', 'set-mini');
-          link.href = result.downloadUrl;
-          link.target = '_blank';
-          link.rel = 'noreferrer';
-          actions.append(link);
+        const line = describeUpdate(result);
+        updateBox.textContent = line.text;
+        updateBox.style.color = line.color;
+        // 只有「确实有新版本、且给了能下手的地址」才亮下载按钮；
+        // 清单校验不了的时候优先给发布页，让用户自己核对，不假装可以放心自动更新。
+        const target = line.manual ? (result.releaseUrl || result.lastKnownReleaseUrl) : (result.downloadUrl || result.releaseUrl);
+        if (line.showDownload && target) {
+          downloadButton.dataset.url = target;
+          downloadButton.textContent = line.manual ? '打开发布页' : '打开下载页';
+          downloadButton.hidden = false;
         }
+      } catch (error) {
+        updateBox.textContent = '检查失败：' + (error.message || error);
+        updateBox.style.color = 'var(--danger)';
       } finally { btn.disabled = false; }
-    }));
+    });
+    checkButton.id = 'about-check';
+    actions.append(checkButton, downloadButton);
     info.append(actions);
     host.append(info);
+  }
+
+  // 把宿主返回的状态翻译成人话。四种状态分开写死，不靠「有没有版本号」猜。
+  function describeUpdate(result) {
+    const current = result.current || '';
+    const checked = result.checkedAt ? `（${result.checkedAt} 检查）` : '';
+    switch (result.status) {
+      case 'available': {
+        const verify = result.checksum === 'verified'
+          ? '安装包哈希与发布清单一致。'
+          : '这个版本的安装包没有可用的哈希清单，无法校验完整性，建议从发布页手动下载。';
+        return {
+          text: `有新版本 ${result.latest}（${result.packageKind}），当前 ${current}。${verify}${checked}`,
+          color: 'var(--warning)',
+          showDownload: true,
+          manual: result.checksum !== 'verified'
+        };
+      }
+      case 'unsupported':
+        return {
+          text: `有新版本 ${result.latest}，但这次发布没有适配当前安装方式（框架依赖/自包含）与架构的安装包，请到发布页手动下载。当前 ${current}${checked}`,
+          color: 'var(--warning)',
+          showDownload: true,
+          manual: true
+        };
+      case 'failed': {
+        const stale = result.stale && result.lastKnownTag
+          ? `上次检查发现过 ${result.lastKnownTag}，这次没能确认。`
+          : '';
+        return {
+          text: `检查失败：${result.error || '未知原因'}${stale}（当前 ${current}${checked}）`,
+          color: 'var(--danger)',
+          showDownload: !!result.lastKnownDownloadUrl,
+          manual: true
+        };
+      }
+      default: {
+        const pre = result.prereleaseIgnored && result.latestTag
+          ? `发现预览版 ${result.latestTag}，稳定通道不自动升级预览版。`
+          : '';
+        return {
+          text: `已经是最新版（${current}）。${pre}${checked}`,
+          color: 'var(--success)',
+          showDownload: false,
+          manual: false
+        };
+      }
+    }
   }
 
   const renderers = {

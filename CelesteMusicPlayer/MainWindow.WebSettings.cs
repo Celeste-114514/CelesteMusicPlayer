@@ -762,24 +762,46 @@ namespace CelesteMusicPlayer
 
         private static async Task<object> CheckUpdateAsync()
         {
-            try
+            UpdateChecker.UpdateCheckResult result = await UpdateChecker.CheckAsync().ConfigureAwait(true);
+            UpdateChecker.UpdateInfo? info = result.Update;
+            UpdateChecker.UpdateInfo? lastKnown = result.LastKnownUpdate;
+
+            return new
             {
-                UpdateChecker.UpdateInfo? info = await UpdateChecker.CheckForUpdateAsync().ConfigureAwait(true);
-                return new
+                status = result.Status switch
                 {
-                    current = UpdateChecker.CurrentVersionText(),
-                    latest = info?.Tag ?? "",
-                    hasUpdate = info != null,
-                    packageKind = info?.PackageKindText ?? "",
-                    downloadUrl = info?.SetupUrl ?? "",
-                    checkedAt = DateTime.Now.ToString("HH:mm:ss")
-                };
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.WebSettings.cs", caught);
-                return new { current = UpdateChecker.CurrentVersionText(), latest = "", hasUpdate = false, error = caught.Message };
-            }
+                    UpdateCheckStatus.Available => "available",
+                    UpdateCheckStatus.UnsupportedPackage => "unsupported",
+                    UpdateCheckStatus.Failed => "failed",
+                    _ => "up-to-date"
+                },
+                current = result.CurrentVersion,
+                // 服务端返回的 tag：预览版被稳定通道忽略时，界面靠它说清「看到的是哪一版」
+                latestTag = result.LatestTag ?? "",
+                latest = info?.Tag ?? "",
+                hasUpdate = result.HasUpdate,
+                canInstall = info?.SetupUrl != null,
+                packageKind = info?.PackageKindText ?? "",
+                downloadUrl = info?.SetupUrl ?? "",
+                releaseUrl = info?.ReleaseUrl ?? "",
+                // verified=清单对上了；unpublished=发布里没有清单；unverifiable=有清单但缺这枚包的哈希
+                checksum = info?.ChecksumState switch
+                {
+                    UpdateChecksumState.Verified => "verified",
+                    UpdateChecksumState.Unverifiable => "unverifiable",
+                    UpdateChecksumState.NotPublished => "unpublished",
+                    _ => ""
+                },
+                errorCategory = result.ErrorCategory ?? "",
+                error = result.ErrorMessage ?? "",
+                prereleaseIgnored = result.PrereleaseIgnored,
+                // 检查失败但上次确认过新版本：界面要显示「上次发现 X」，不能当成没有
+                stale = result.Status == UpdateCheckStatus.Failed && lastKnown != null,
+                lastKnownTag = lastKnown?.Tag ?? "",
+                lastKnownDownloadUrl = lastKnown?.SetupUrl ?? "",
+                lastKnownReleaseUrl = lastKnown?.ReleaseUrl ?? "",
+                checkedAt = result.CheckedAt.ToString("HH:mm:ss")
+            };
         }
     }
 }
