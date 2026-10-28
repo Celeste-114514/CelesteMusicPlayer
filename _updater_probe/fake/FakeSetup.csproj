@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <!-- WinExe：万一被当成主程序拉起来也不会闪一个控制台窗口 -->
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <AssemblyName>CelesteMusicPlayer</AssemblyName>
+    <RootNamespace>FakeSetup</RootNamespace>
+    <AssemblyVersion>26.11.1.0</AssemblyVersion>
+    <FileVersion>26.11.1.0</FileVersion>
+    <SelfContained>false</SelfContained>
+  </PropertyGroup>
+</Project>

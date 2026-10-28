@@ -1,0 +1,5 @@
+# 探针跑出来的现场：每次运行都重建，不入库
+case-*/
+*.ready
+updater-run.log
+_env_backup/
