@@ -35,8 +35,20 @@ namespace CelesteMusicPlayer
 
         private static OpraHistoryState? _cache;
 
+        /// <summary>测试隔离：非空时文件改用该路径并清内存缓存（照 LibraryDb.TestDbOverride 先例）。</summary>
+        internal static string? FilePathOverride
+        {
+            get => _filePathOverride;
+            set
+            {
+                _filePathOverride = value;
+                _cache = null; // 换了文件，内存缓存必须作废，否则往返测试读到旧对象
+            }
+        }
+        private static string? _filePathOverride;
+
         private static string FilePath
-            => Path.Combine(AppSettingsStore.GetConfigDirectory(), "opra-history.json");
+            => _filePathOverride ?? Path.Combine(AppSettingsStore.GetConfigDirectory(), "opra-history.json");
 
         private static readonly JsonSerializerOptions Json = new()
         {

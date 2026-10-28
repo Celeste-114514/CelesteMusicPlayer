@@ -127,8 +127,14 @@ internal sealed class ProbeForm : Form, IMainWindowSurface
             foreach(string line in parsing.Details)Program.Record("  parsing: "+line);
             if(!parsing.Passed)throw new Exception("Parsing boundary check failed: "+string.Join(" | ",parsing.Details.Where(d=>d.Contains("FAIL")).Take(6)));
 
+            // W6 第四步：播放顺序/队列/浏览规则/续播与 OPRA 历史。纯逻辑 + 临时文件。
+            ServicesBoundary.Result services=ServicesBoundary.Run();
+            Program.Record($"Services boundary: checks={services.Checks} passed={services.Passed}");
+            foreach(string line in services.Details)Program.Record("  services: "+line);
+            if(!services.Passed)throw new Exception("Services boundary check failed: "+string.Join(" | ",services.Details.Where(d=>d.Contains("FAIL")).Take(6)));
+
             Passed=true;Program.Record("PASS: actual WebView2 JS→C#→JS roundtrip using W1 contracts; WinUI not loaded");
-            Program.WriteReport(true,new {runtime=Environment.Version.ToString(),modules,nativeTaskbarApi=_taskbar.ApiReady,settingsBoundary=boundary,libraryBoundary=library,parsingBoundary=parsing,visibleTaskbarButtons="manual verification pending",simulation=true});
+            Program.WriteReport(true,new {runtime=Environment.Version.ToString(),modules,nativeTaskbarApi=_taskbar.ApiReady,settingsBoundary=boundary,libraryBoundary=library,parsingBoundary=parsing,servicesBoundary=services,visibleTaskbarButtons="manual verification pending",simulation=true});
         }
         catch(Exception ex){Program.Record(ex.ToString());Program.WriteReport(false,new {error=ex.ToString()});}
         finally{Close();}

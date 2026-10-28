@@ -15,8 +15,16 @@ namespace CelesteMusicPlayer
     {
         private const string FileName = "last-playback.json";
 
+        /// <summary>测试隔离：非空时文件改用该路径（照 LibraryDb.TestDbOverride 先例，避免污染真实数据）。</summary>
+        internal static string? FilePathOverride { get; set; }
+
         private static string GetFilePath()
         {
+            if (FilePathOverride != null)
+            {
+                return FilePathOverride;
+            }
+
             // 与主设置(AppSettingsStore)同源：固定 %LOCALAPPDATA%\CelesteMusicPlayer，
             // 规避 packaged 下 ApplicationData.Current.LocalFolder 路径漂浮导致"保存到 A/读到 B"使续播失效。
             string root = AppSettingsStore.GetConfigDirectory();

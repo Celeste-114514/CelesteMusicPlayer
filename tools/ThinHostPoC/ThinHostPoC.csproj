@@ -46,6 +46,16 @@
   <Compile Include="../../CelesteMusicPlayer/LyricsLoader.cs" Link="Parsing/LyricsLoader.cs" />
   <Compile Include="../../CelesteMusicPlayer/CueSheetParser.cs" Link="Parsing/CueSheetParser.cs" />
   <Compile Include="../../CelesteMusicPlayer/M3uPlaylistIO.cs" Link="Parsing/M3uPlaylistIO.cs" />
+  <!-- W6 第四步：播放会话/排序/历史/热键/Web 规则等纯逻辑服务。QuickPlayLauncher 需
+       DispatcherQueue 不迁；CoverArtService 是 WinRT 图像管线，迁出=重写，不属等价搬家。 -->
+  <Compile Include="../../CelesteMusicPlayer/PlaybackSessionStore.cs" Link="Services/PlaybackSessionStore.cs" />
+  <Compile Include="../../CelesteMusicPlayer/PlaybackOrderResolver.cs" Link="Services/PlaybackOrderResolver.cs" />
+  <Compile Include="../../CelesteMusicPlayer/OpraHistoryStore.cs" Link="Services/OpraHistoryStore.cs" />
+  <Compile Include="../../CelesteMusicPlayer/GlobalHotkeyService.cs" Link="Services/GlobalHotkeyService.cs" />
+  <Compile Include="../../CelesteMusicPlayer/WebBrowseRules.cs" Link="Services/WebBrowseRules.cs" />
+  <Compile Include="../../CelesteMusicPlayer/WebQueueRules.cs" Link="Services/WebQueueRules.cs" />
+  <!-- WebTagEditRules/WebTagSortRules 暂不能进：分别要 TagEditModel 和 PlaylistItem
+       （PlaylistItem 定义在 MainWindow.xaml.cs，与 CueTrackExpansion 同一个坎）。 -->
   <Compile Include="../../CelesteMusicPlayer/NetworkLibraryService.cs" Link="Library/NetworkLibraryService.cs" />
   <Compile Include="../../CelesteMusicPlayer/NetworkSourceProvider.cs" Link="Library/NetworkSourceProvider.cs" />
   <Compile Include="../../CelesteMusicPlayer/BaiduSourceProvider.cs" Link="Library/BaiduSourceProvider.cs" />
