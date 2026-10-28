@@ -26,7 +26,30 @@ namespace CelesteMusicPlayer
         private const string CoverOrigin = "https://celeste-cover.internal";
         private readonly MainWindow _owner;
         private readonly WebView2 _web = new();
-        private readonly TextBlock _status = new() { Text = "正在加载网页界面…", Margin = new Thickness(30) };
+        private readonly TextBlock _status = new()
+        {
+            Text = "正在加载网页界面…",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextAlignment = TextAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+            MaxWidth = 560
+        };
+        // 界面起不来时的唯一出路：不重启程序，把网页重新载一轮。
+        // 原生兜底之所以还需要按钮 —— 白屏的时候网页自己的恢复页根本画不出来。
+        private readonly Button _reload = new()
+        {
+            Content = "重新载入界面",
+            HorizontalAlignment = HorizontalAlignment.Center,
+            Visibility = Visibility.Collapsed
+        };
+        private readonly StackPanel _statusLayer = new()
+        {
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+            Spacing = 18,
+            MaxWidth = 600,
+            Margin = new Thickness(30)
+        };
         private readonly DispatcherQueueTimer _timer;
         private readonly INotifyCollectionChanged _library;
         private readonly SemaphoreSlim _coverGate = new(2);
@@ -51,7 +74,10 @@ namespace CelesteMusicPlayer
         {
             _owner = owner;
             Title = "Celeste";
-            var root = new Grid(); root.Children.Add(_web); root.Children.Add(_status); Content = root;
+            _statusLayer.Children.Add(_status);
+            _statusLayer.Children.Add(_reload);
+            _reload.Click += (_, _) => ReloadShell();
+            var root = new Grid(); root.Children.Add(_web); root.Children.Add(_statusLayer); Content = root;
             // One caption only: HTML controls, native resize border and WebView2 draggable regions.
             if (AppWindow.Presenter is OverlappedPresenter chrome) chrome.SetBorderAndTitleBar(true, true);
             AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
@@ -170,10 +196,10 @@ namespace CelesteMusicPlayer
                 core.AddWebResourceRequestedFilter(CoverOrigin + "/cover/*", CoreWebView2WebResourceContext.Image);
                 core.AddWebResourceRequestedFilter(CoverOrigin + "/playlist/*", CoreWebView2WebResourceContext.Image);
                 core.WebResourceRequested += OnCoverRequest;
-                core.ProcessFailed += (_, _) => { _ready = false; _status.Text = "界面进程异常，请重新启动 Celeste。"; _status.Visibility = Visibility.Visible; };
+                core.ProcessFailed += (_, _) => { _ready = false; _status.Text = "界面进程异常，请重新启动 Celeste。"; _status.Visibility = Visibility.Visible; _reload.Visibility = Visibility.Visible; };
                 core.NavigationCompleted += (_, args) =>
                 {
-                    if (!args.IsSuccess) { _status.Text = "页面加载失败：" + args.WebErrorStatus; _status.Visibility = Visibility.Visible; }
+                    if (!args.IsSuccess) { _status.Text = "页面加载失败：" + args.WebErrorStatus; _status.Visibility = Visibility.Visible; _reload.Visibility = Visibility.Visible; }
                 };
                 core.Navigate(Origin + "/index.html");
                 StartupLog.Write("[WebShell] initialized");
@@ -303,7 +329,11 @@ namespace CelesteMusicPlayer
                 if (requestId?.Length > 100) return;
                 switch (command)
                 {
-                    case "ready": _ready = true; _metadataSent.Clear(); _status.Visibility = Visibility.Collapsed; _dirty = true; _timer.Start(); SendTheme(); SendVisibility(); _ = SendLibraryAsync(); FlushPendingPage(); break;
+                    case "ready": _ready = true; _metadataSent.Clear(); _status.Visibility = Visibility.Collapsed; _reload.Visibility = Visibility.Collapsed; _dirty = true; _timer.Start(); SendTheme(); SendVisibility(); _ = SendLibraryAsync(); FlushPendingPage();
+                        // 上次没正常退出：主动把恢复页推出来。已经回答过（_recoveryAnswered）就不推了。
+                        var recovery = MainWindow.BuildRecoveryPush();
+                        if (recovery != null) Post(new { kind = "celeste.recovery", version = 1, data = recovery });
+                        break;
                     case "trackInfo":
                         var metadataIds = msg.GetProperty("trackIds").EnumerateArray().Take(100).Select(value => value.GetString() ?? "").ToArray();
                         _ = SendTrackInfoAsync(metadataIds); break;
@@ -433,6 +463,8 @@ namespace CelesteMusicPlayer
                         break;
                     case "diagnostics":
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = await _owner.WebDiagnosticsAsync(msg) }); break;
+                    case "recovery":
+                        Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = await _owner.WebRecoveryAsync(msg) }); break;
                     default: Error("此功能尚未接入当前界面。"); break;
                 }
                 SendState();
@@ -596,6 +628,27 @@ namespace CelesteMusicPlayer
         private static bool IsLeftButtonDown() => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0;
         private void StopWindowDrag() => Interlocked.Increment(ref _dragGeneration);
         private void Error(string message) => Post(new { kind = "celeste.error", version = 1, message });
+
+        /// <summary>
+        /// 重新加载网页界面。给"重载界面"按钮（网页恢复页与原生兜底都会用到）和出错后的自救。
+        /// 不会重启程序本体 —— 只让 WebView2 把 index.html 重新载一轮。
+        /// </summary>
+        internal void ReloadShell()
+        {
+            try
+            {
+                _ready = false;
+                _status.Text = "正在重新加载界面…";
+                _status.Visibility = Visibility.Visible;
+                _reload.Visibility = Visibility.Collapsed;
+                _web.Reload();
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("WebShell.Reload", ex);
+                _status.Text = "重新加载失败：" + ex.Message;
+            }
+        }
 
         private async void OnCoverRequest(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
         {

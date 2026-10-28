@@ -317,25 +317,20 @@ namespace CelesteMusicPlayer
             // 这里只取结论，不再重复写一遍。
             bool unclean = AppSettingsStore.WasUncleanExitLastTime;
 
-            // 设置文件损坏恢复提示：仅本次会话提示一次
-            if (AppSettingsStore.SettingsWereRecovered)
+            // 「上次可能异常退出」不再弹原生对话框：那条已经交给网页的启动恢复页
+            // （MainWindow.WebRecovery.cs + recovery.js），能给出诊断、安全模式、重载界面。
+            // 原生弹窗弹在一个刚被藏起来的主窗口上，用户根本看不见 —— 之前等于什么都没说。
+            if (unclean) StartupLog.Write("[recovery] 检测到上次未正常退出，交由网页恢复页处理。");
+
+            // 设置文件损坏恢复提示：仅本次会话提示一次。
+            // 恢复页也会带一句同样的说明，同时出现就是同一件事说两遍，所以让给恢复页。
+            if (AppSettingsStore.SettingsWereRecovered && !RecoveryShouldShow())
             {
                 DispatcherQueue.TryEnqueue(async () =>
                 {
                     try
                     {
                         await ShowErrorAsync("设置文件已损坏", "设置文件曾损坏，已自动备份恢复为默认设置。\n（备份文件位于设置目录的 .corrupt-* 文件）");
-                    }
-                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-                });
-            }
-            else if (unclean)
-            {
-                DispatcherQueue.TryEnqueue(async () =>
-                {
-                    try
-                    {
-                        await ShowErrorAsync("上次可能异常退出", "检测到上次程序未正常关闭（可能崩溃或被强制结束）。\n若反复出现，请查看日志目录（%LocalAppData%\\CelesteMusicPlayer\\logs）里的文件排查原因。");
                     }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
                 });

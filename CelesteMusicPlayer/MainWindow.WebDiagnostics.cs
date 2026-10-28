@@ -36,10 +36,13 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private async Task<object> ExportDiagnosticsAsync()
+        private Task<object> ExportDiagnosticsAsync() => ExportDiagnosticsAsync("设置页「导出诊断」");
+
+        /// <param name="trigger">谁触发的（写进报告，便于分辨是设置页点的还是恢复页点的）。</param>
+        private async Task<object> ExportDiagnosticsAsync(string trigger)
         {
             // 导出要读几十个日志文件，放后台线程做，别让界面卡住。
-            string path = await Task.Run(() => CrashReportService.Export("设置页「导出诊断」", CollectRuntimeFacts()))
+            string path = await Task.Run(() => CrashReportService.Export(trigger, CollectRuntimeFacts()))
                 .ConfigureAwait(true);
 
             var wire = DiagnosticsWire();
