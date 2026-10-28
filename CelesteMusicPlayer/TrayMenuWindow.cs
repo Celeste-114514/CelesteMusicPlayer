@@ -63,6 +63,12 @@ namespace CelesteMusicPlayer
         private int _outsideHits;
         private long _shownAt;
 
+        /// <summary>弹出时托盘图标的矩形。右键时鼠标还压在这块上，不能算"点了菜单外面"。</summary>
+        private WindowsTrayIcon.RECT? _anchorIconRect;
+
+        /// <summary>上一次轮询时左键是否按着，用来识别"刚按下"这一下。</summary>
+        private bool _leftPressed;
+
         /// <summary>网页是否已经报过"点击进到 DOM"，只记第一次，避免刷日志。</summary>
         private bool _clickProbeLogged;
 
@@ -220,9 +226,11 @@ namespace CelesteMusicPlayer
                 anchorX = icon.Left + icon.Width / 2;
                 anchorTop = icon.Top;
                 anchorBottom = icon.Bottom;
+                _anchorIconRect = icon;   // 收起判断要用：右键时光标还压在图标上
             }
             else
             {
+                _anchorIconRect = null;
                 GetCursorPos(out POINT cursor);
                 anchorX = cursor.X;
                 anchorTop = cursor.Y;
@@ -301,9 +309,11 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>
-        /// 点菜单外面就收起。用轮询而不是 WM_ACTIVATE：点击穿过 WebView 子窗口时，
-        /// 父窗口可能先收到一条 WA_INACTIVE，照它隐藏就会把"点的这一下"连同菜单一起吞掉。
-        /// 这里只认一个事实：光标真的在菜单矩形外面、而且没有按键按着，连续两次就收起。
+        /// 点菜单外面才收起。判据只有一条：**在菜单和托盘图标之外按下了左键**。
+        ///
+        /// 为什么不再用"光标在不在框里"：右键点托盘图标那一刻，光标正压在图标的矩形上，
+        /// 而图标不在菜单框里 —— 按原来的写法，菜单一弹出来就被自己收掉（用户看到的
+        /// 就是"菜单一闪就没"）。鼠标只是移开、不点，也不该收，系统原生菜单就是这个行为。
         /// </summary>
         private void StartOutsideWatcher()
         {
@@ -319,6 +329,7 @@ namespace CelesteMusicPlayer
                     _outsideTimer.Tick += (_, _) => CheckOutside();
                 }
                 _outsideHits = 0;
+                _leftPressed = false;
                 _outsideTimer.Start();
             }
             catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.StartOutsideWatcher", ex); }
@@ -328,6 +339,7 @@ namespace CelesteMusicPlayer
         {
             try { _outsideTimer?.Stop(); } catch { }
             _outsideHits = 0;
+            _leftPressed = false;
         }
 
         private void CheckOutside()
@@ -337,14 +349,32 @@ namespace CelesteMusicPlayer
             try
             {
                 GetCursorPos(out POINT cursor);
-                bool inside = GetWindowRect(_hwnd, out RECT bounds)
+                bool insideMenu = GetWindowRect(_hwnd, out RECT bounds)
                     && cursor.X >= bounds.Left && cursor.X < bounds.Right
                     && cursor.Y >= bounds.Top && cursor.Y < bounds.Bottom;
-                // 按着键不收起：按下-拖动-松开这一串可能跨出边界，中途收菜单会打断操作。
-                bool pressing = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0
-                             || (GetAsyncKeyState(0x02 /* VK_RBUTTON */) & 0x8000) != 0;
-                if (inside || pressing) { _outsideHits = 0; return; }
-                if (++_outsideHits >= 2) { Hide(); }
+                // 托盘图标本身也算"菜单的一部分"：右键完鼠标就停在那儿。
+                bool insideIcon = _anchorIconRect is { } icon
+                    && cursor.X >= icon.Left && cursor.X < icon.Right
+                    && cursor.Y >= icon.Top && cursor.Y < icon.Bottom;
+
+                // 低位(0x0001)是"上次查询之后按过"，按下和松开落在同一个 120ms 里也不会漏。
+                short state = GetAsyncKeyState(VK_LBUTTON);
+                bool pressing = (state & 0x8000) != 0;
+                bool pressedSinceLastPoll = (state & 0x0001) != 0;
+                bool justPressed = pressing && !_leftPressed;
+                _leftPressed = pressing;
+
+                if (insideMenu || insideIcon)
+                {
+                    _outsideHits = 0;
+                    return;   // 移开鼠标不收；点在菜单里交给网页自己处理
+                }
+
+                if (justPressed || pressedSinceLastPoll)
+                {
+                    StartupLog.Write("[托盘菜单] 点在菜单外，收起");
+                    Hide();
+                }
             }
             catch (Exception ex)
             {
