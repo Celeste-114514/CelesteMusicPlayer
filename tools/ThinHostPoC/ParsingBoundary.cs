@@ -80,7 +80,7 @@ internal static class ParsingBoundary
             try { Directory.Delete(tempRoot, recursive: true); } catch { /* 尽力清理 */ }
         }
 
-        bool passed = details.All(d => !d.EndsWith("= FAIL", StringComparison.Ordinal));
+        bool passed = details.All(d => !d.Contains("= FAIL", StringComparison.Ordinal));
         return new Result(passed, checks, details);
     }
 

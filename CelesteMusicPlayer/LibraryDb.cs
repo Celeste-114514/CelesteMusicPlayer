@@ -984,6 +984,10 @@ namespace CelesteMusicPlayer
                     int total = 0;
 
                     // 1) 各缓存根目录前缀匹配（路径里可能含 % _ 等通配符，转义后配 ESCAPE）
+                    // ⚠ 比对前先把库里路径的正斜杠统一成反斜杠：缓存根目录来自
+                    // Environment.GetFolderPath，某些环境返回 "C:/Users/..."，而 LibraryPathGuard
+                    // 比对的是 Path.GetFullPath 规范化后的反斜杠形态。不做这一步，库里只要有一条
+                    // 正斜杠路径就永远删不掉（2026-10-29 自检 purge=0 的真因，不是路径没写进库）。
                     foreach (string root in LibraryPathGuard.LibraryExcludedRoots)
                     {
                         string escaped = root
@@ -993,14 +997,14 @@ namespace CelesteMusicPlayer
                         string pattern = escaped + "\\\\%";
 
                         using var cmd = conn.CreateCommand();
-                        cmd.CommandText = "DELETE FROM tracks WHERE file_path LIKE $p ESCAPE '\\'";
+                        cmd.CommandText = "DELETE FROM tracks WHERE REPLACE(file_path,'/','\\') LIKE $p ESCAPE '\\'";
                         cmd.Parameters.AddWithValue("$p", pattern);
                         total += cmd.ExecuteNonQuery();
                     }
 
                     // 2) 名字兜底：DSD 预加载缓存文件后缀（不依赖目录配置）
                     using var cmd2 = conn.CreateCommand();
-                    cmd2.CommandText = "DELETE FROM tracks WHERE file_path LIKE $p ESCAPE '\\'";
+                    cmd2.CommandText = "DELETE FROM tracks WHERE REPLACE(file_path,'/','\\') LIKE $p ESCAPE '\\'";
                     cmd2.Parameters.AddWithValue("$p", "%" + LibraryPathGuard.DopCacheExtension.Replace("_", "\\_"));
                     total += cmd2.ExecuteNonQuery();
 

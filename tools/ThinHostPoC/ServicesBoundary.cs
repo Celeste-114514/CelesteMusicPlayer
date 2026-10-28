@@ -54,8 +54,8 @@ internal static class ServicesBoundary
                 $"移动的就是播放项 → 索引跟到 {playing}");
 
             // ---- 3) 浏览规则（纯逻辑）----
-            string folder = WebBrowseRules.Folder(@"D:\Music\华语\周杰伦", new[] { @"D:\Music" });
-            Check(details, ref checks, "browse.folder", folder == Path.Combine("华语", "周杰伦"), folder);
+            string folder = WebBrowseRules.Folder(@"D:\Music\华语\周杰伦\track.flac", new[] { @"D:\Music" });
+            Check(details, ref checks, "browse.folder", folder == Path.Combine("Music", "华语", "周杰伦"), folder);
             Check(details, ref checks, "browse.folder.outside",
                 WebBrowseRules.Folder(@"E:\Elsewhere\x.flac", new[] { @"D:\Music" }).Length > 0,
                 "根之外的文件给个兜底标签不抛");
@@ -87,7 +87,7 @@ internal static class ServicesBoundary
             try { Directory.Delete(tempRoot, recursive: true); } catch { /* 尽力清理 */ }
         }
 
-        bool passed = details.All(d => !d.EndsWith("= FAIL", StringComparison.Ordinal));
+        bool passed = details.All(d => !d.Contains("= FAIL", StringComparison.Ordinal));
         return new Result(passed, checks, details);
     }
 

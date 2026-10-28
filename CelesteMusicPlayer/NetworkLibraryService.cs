@@ -237,11 +237,14 @@ internal static class CueSourceParser
             if (match.Success) { file = match.Groups[1].Value; number = 0; continue; }
             match = Regex.Match(line, "^TRACK\\s+(\\d+)\\s+AUDIO", RegexOptions.IgnoreCase);
             if (match.Success) { number = int.Parse(match.Groups[1].Value); title = ""; artist = sheetArtist; continue; }
-            match = Regex.Match(line, "^(TITLE|PERFORMER)\\s+\"(.*)\"", RegexOptions.IgnoreCase);
+            // 真实 CUE 两种写法：TITLE "x" 和 TITLE x（不少整轨抓轨工具不写引号），
+            // 两种都要认。
+            match = Regex.Match(line, "^(TITLE|PERFORMER)\\s+(?:\"(.*)\"|(.+))$", RegexOptions.IgnoreCase);
             if (match.Success)
             {
-                if (match.Groups[1].Value.Equals("TITLE", StringComparison.OrdinalIgnoreCase)) title = match.Groups[2].Value;
-                else { artist = match.Groups[2].Value; if (number == 0) sheetArtist = artist; }
+                string value = match.Groups[2].Success ? match.Groups[2].Value : match.Groups[3].Value.Trim();
+                if (match.Groups[1].Value.Equals("TITLE", StringComparison.OrdinalIgnoreCase)) title = value;
+                else { artist = value; if (number == 0) sheetArtist = artist; }
                 continue;
             }
             match = Regex.Match(line, "^INDEX\\s+01\\s+(\\d+):(\\d{2}):(\\d{2})", RegexOptions.IgnoreCase);

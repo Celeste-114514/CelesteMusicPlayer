@@ -1,77 +1,30 @@
 <Project Sdk="Microsoft.NET.Sdk">
- <PropertyGroup>
-  <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms>
-  <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><RuntimeIdentifier>win-x64</RuntimeIdentifier><UseWinUI>false</UseWinUI>
-  <AssemblyName>CelesteThinHost.Poc</AssemblyName><ApplicationManifest>app.manifest</ApplicationManifest>
- </PropertyGroup>
- <ItemGroup>
-  <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
-  <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
-  <PackageReference Include="TagLibSharp" Version="2.3.0" />
-  <Compile Include="../../CelesteMusicPlayer/PlaybackCommandRouter.cs" Link="Core/PlaybackCommandRouter.cs" />
-  <Compile Include="../../CelesteMusicPlayer/PlaybackSnapshot.cs" Link="Core/PlaybackSnapshot.cs" />
-  <Compile Include="../../CelesteMusicPlayer/MainWindowCoordinator.cs" Link="Core/MainWindowCoordinator.cs" />
-  <!-- W6 第一步：设置读写边界。这些文件必须保持不依赖 WinUI/WinRT，PoC 能编过就是证明。 -->
-  <Compile Include="../../CelesteMusicPlayer/AppSettingsStore.cs" Link="Settings/AppSettingsStore.cs" />
-  <Compile Include="../../CelesteMusicPlayer/WebSettingsSchema.cs" Link="Settings/WebSettingsSchema.cs" />
-  <Compile Include="../../CelesteMusicPlayer/AppClosePreferences.cs" Link="Settings/AppClosePreferences.cs" />
-  <Compile Include="../../CelesteMusicPlayer/SrcOptions.cs" Link="Settings/SrcOptions.cs" />
-  <Compile Include="../../CelesteMusicPlayer/SecretProtector.cs" Link="Settings/SecretProtector.cs" />
-  <Compile Include="../../CelesteMusicPlayer/StartupLog.cs" Link="Core/StartupLog.cs" />
-  <Compile Include="../../CelesteMusicPlayer/AppLog.cs" Link="Core/AppLog.cs" />
-  <Compile Include="../../CelesteMusicPlayer/CrashReportService.cs" Link="Core/CrashReportService.cs" />
-  <Compile Include="../../CelesteMusicPlayer/UpdateChecker.cs" Link="Core/UpdateChecker.cs" />
-  <Compile Include="../../CelesteMusicPlayer/UpdateVersioning.cs" Link="Core/UpdateVersioning.cs" />
-  <Compile Include="../../CelesteMusicPlayer/HttpClients.cs" Link="Core/HttpClients.cs" />
-  <!-- W6 第二步：曲库/媒体库服务边界。同样必须保持不依赖 WinUI/WinRT，PoC 能编过就是证明。 -->
-  <Compile Include="../../CelesteMusicPlayer/LibraryDb.cs" Link="Library/LibraryDb.cs" />
-  <Compile Include="../../CelesteMusicPlayer/LibrarySessionStore.cs" Link="Library/LibrarySessionStore.cs" />
-  <Compile Include="../../CelesteMusicPlayer/LibraryWatchService.cs" Link="Library/LibraryWatchService.cs" />
-  <Compile Include="../../CelesteMusicPlayer/LibraryPathGuard.cs" Link="Library/LibraryPathGuard.cs" />
-  <Compile Include="../../CelesteMusicPlayer/PlaylistLibraryService.cs" Link="Library/PlaylistLibraryService.cs" />
-  <Compile Include="../../CelesteMusicPlayer/TrackStatsStore.cs" Link="Library/TrackStatsStore.cs" />
-  <Compile Include="../../CelesteMusicPlayer/PlayQueueStore.cs" Link="Library/PlayQueueStore.cs" />
-  <Compile Include="../../CelesteMusicPlayer/NamedPlaylistStore.cs" Link="Library/NamedPlaylistStore.cs" />
-  <Compile Include="../../CelesteMusicPlayer/UserPlaylistFileStore.cs" Link="Library/UserPlaylistFileStore.cs" />
-  <Compile Include="../../CelesteMusicPlayer/JsonFile.cs" Link="Library/JsonFile.cs" />
-  <Compile Include="../../CelesteMusicPlayer/RgScanInput.cs" Link="Library/RgScanInput.cs" />
-  <Compile Include="../../CelesteMusicPlayer/AppCachePaths.cs" Link="Library/AppCachePaths.cs" />
-  <Compile Include="../../CelesteMusicPlayer/NetworkLibraryStore.cs" Link="Library/NetworkLibraryStore.cs" />
-  <Compile Include="../../CelesteMusicPlayer/NetworkLibraryModels.cs" Link="Library/NetworkLibraryModels.cs" />
-  <Compile Include="../../CelesteMusicPlayer/WebDavLocation.cs" Link="Library/WebDavLocation.cs" />
-  <Compile Include="../../CelesteMusicPlayer/WebDavClient.cs" Link="Library/WebDavClient.cs" />
-  <!-- W6 第三步：歌词/CUE/M3U 解析链。必须保持不依赖 WinUI/WinRT。
-       CueTrackExpansion 暂不能进：它的入参类型 PlaylistItem 定义在 MainWindow.xaml.cs
-       （还缠着 MainWindow.GeekUiStyleCached 静态缓存），等模型类搬出界面文件后再迁。 -->
-  <Compile Include="../../CelesteMusicPlayer/LyricsLoader.cs" Link="Parsing/LyricsLoader.cs" />
-  <Compile Include="../../CelesteMusicPlayer/CueSheetParser.cs" Link="Parsing/CueSheetParser.cs" />
-  <Compile Include="../../CelesteMusicPlayer/M3uPlaylistIO.cs" Link="Parsing/M3uPlaylistIO.cs" />
-  <!-- W6 第四步：播放会话/排序/历史/热键/Web 规则等纯逻辑服务。QuickPlayLauncher 需
-       DispatcherQueue 不迁；CoverArtService 是 WinRT 图像管线，迁出=重写，不属等价搬家。 -->
-  <Compile Include="../../CelesteMusicPlayer/PlaybackSessionStore.cs" Link="Services/PlaybackSessionStore.cs" />
-  <Compile Include="../../CelesteMusicPlayer/PlaybackOrderResolver.cs" Link="Services/PlaybackOrderResolver.cs" />
-  <Compile Include="../../CelesteMusicPlayer/OpraHistoryStore.cs" Link="Services/OpraHistoryStore.cs" />
-  <Compile Include="../../CelesteMusicPlayer/GlobalHotkeyService.cs" Link="Services/GlobalHotkeyService.cs" />
-  <Compile Include="../../CelesteMusicPlayer/WebBrowseRules.cs" Link="Services/WebBrowseRules.cs" />
-  <Compile Include="../../CelesteMusicPlayer/WebQueueRules.cs" Link="Services/WebQueueRules.cs" />
-  <!-- WebTagEditRules/WebTagSortRules 暂不能进：分别要 TagEditModel 和 PlaylistItem
-       （PlaylistItem 定义在 MainWindow.xaml.cs，与 CueTrackExpansion 同一个坎）。 -->
-  <Compile Include="../../CelesteMusicPlayer/NetworkLibraryService.cs" Link="Library/NetworkLibraryService.cs" />
-  <Compile Include="../../CelesteMusicPlayer/NetworkSourceProvider.cs" Link="Library/NetworkSourceProvider.cs" />
-  <Compile Include="../../CelesteMusicPlayer/BaiduSourceProvider.cs" Link="Library/BaiduSourceProvider.cs" />
-  <Compile Include="../../CelesteMusicPlayer/MediaServerSourceProvider.cs" Link="Library/MediaServerSourceProvider.cs" />
-  <!-- W6 第五步：封面纯逻辑边界（档位真值 / 缓存布局 / 源字节提取）。
-       CoverArtService 本身不进：它剩下的部分就是 WinRT 解码 + BitmapImage 装配，
-       那是文档化的平台例外。但封面链路的"处理"半边必须能在这里编过。 -->
-  <Compile Include="../../CelesteMusicPlayer/CoverVariants.cs" Link="Cover/CoverVariants.cs" />
-  <Compile Include="../../CelesteMusicPlayer/CoverCacheLayout.cs" Link="Cover/CoverCacheLayout.cs" />
-  <Compile Include="../../CelesteMusicPlayer/CoverSourceReader.cs" Link="Cover/CoverSourceReader.cs" />
-  <Content Include="Web/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
-  <!-- 封面自检素材：仓库 _tagfixtures 里的"封面双图"测试音频（几 KB，只读），
-       复制成 ASCII 文件名避免中文路径在构建链上出岔子。 -->
-  <Content Include="Fixtures/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
- </ItemGroup>
- <Target Name="RemoveUnusedWpfWebViewReference" BeforeTargets="ResolveAssemblyReferences">
-  <ItemGroup><Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" /></ItemGroup>
- </Target>
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <UseWinUI>false</UseWinUI>
+    <AssemblyName>CelesteThinHost.Poc</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.4" />
+    <Content Include="Web/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Fixtures/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+  <Target Name="RemoveUnusedWpfWebViewReference" BeforeTargets="ResolveAssemblyReferences">
+    <ItemGroup>
+      <Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" />
+    </ItemGroup>
+  </Target>
+  <ItemGroup>
+    <ProjectReference Include="../../CelesteMusicPlayer.Core/CelesteMusicPlayer.Core.csproj" />
+  </ItemGroup>
 </Project>

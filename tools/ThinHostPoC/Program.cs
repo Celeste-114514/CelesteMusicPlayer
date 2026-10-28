@@ -14,6 +14,11 @@ internal static class Program
         RunDirectory = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "CelesteMusicPlayer-Poc", DateTime.Now.ToString("yyyyMMdd-HHmmss") + "-" + Guid.NewGuid().ToString("N")[..6] + "-" + Environment.ProcessId);
         Directory.CreateDirectory(RunDirectory);
+        if (selfTest)
+        {
+            AppSettingsStore.SettingsPathOverride = Path.Combine(RunDirectory, "private-settings", "app-settings.json");
+            AppSettingsStore.Save(new AppSettingsState());
+        }
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using SkiaSharp;
 
 namespace CelesteMusicPlayer.ThinHost;
 
@@ -30,6 +31,7 @@ internal static class CoverBoundary
             RunMeasureChecks(details, ref checks);
             RunPickChecks(details, ref checks);
             RunSourceChecks(details, ref checks, tempRoot);
+            RunThumbnailChecks(details, ref checks, tempRoot);
             RunFixtureChecks(details, ref checks);
         }
         finally
@@ -37,7 +39,7 @@ internal static class CoverBoundary
             try { Directory.Delete(tempRoot, recursive: true); } catch { /* 尽力清理 */ }
         }
 
-        bool passed = details.All(d => !d.EndsWith("= FAIL", StringComparison.Ordinal));
+        bool passed = details.All(d => !d.Contains("= FAIL", StringComparison.Ordinal));
         return new Result(passed, checks, details);
     }
 
@@ -249,6 +251,138 @@ internal static class CoverBoundary
         Check(details, ref checks, "read.missing-file", CoverSourceReader.Read(Path.Combine(dir, "nope.flac"), preferInnerCover: false) == null,
             "文件不存在 → null 不抛");
         Check(details, ref checks, "read.blank-path", CoverSourceReader.Read("   ", preferInnerCover: true) == null);
+    }
+
+    // ---------------------------------------------------------------- 缩略图生成（ImageSharp）
+
+    /// <summary>
+    /// 第六步的核心：确认"解码 → 按档缩放 → 编码 jpg"这半边离开 WinRT 也能跑，
+    /// 且输出尺寸与磁盘上已有缓存（CoverSizing 算出来的档位）完全对齐。
+    /// </summary>
+    private static void RunThumbnailChecks(List<string> details, ref int checks, string tempRoot)
+    {
+        string dir = Path.Combine(tempRoot, "thumbs");
+        Directory.CreateDirectory(dir);
+        byte[] source = MakeGradientPng(1200, 900);
+
+        Check(details, ref checks, "thumb.source-4x3",
+            CoverSourceReader.TryMeasureImageSize(source, out int sw, out int sh) && sw == 1200 && sh == 900,
+            $"{sw}x{sh} 的合成源图");
+
+        CheckVariantFile(details, ref checks, dir, source, CoverVariant.Thumb, 160, 120);
+        CheckVariantFile(details, ref checks, dir, source, CoverVariant.Album, 320, 240);
+        CheckVariantFile(details, ref checks, dir, source, CoverVariant.Large, 768, 576);
+
+        // 只缩不放：小图进大档必须原样尺寸，不能被放大
+        byte[] small = MakeGradientPng(200, 200);
+        string smallPath = Path.Combine(dir, "small_large.jpg");
+        bool smallOk = CoverThumbnailer.TryWriteVariant(small, smallPath, CoverVariant.Large, out string? smallErr);
+        Check(details, ref checks, "thumb.no-upscale",
+            smallOk && MeasureOnDisk(smallPath) == (200, 200),
+            smallOk ? "200² 进 768 档保持 200²" : smallErr);
+
+        // 坏输入：不能抛，必须给出原因（调用方据此回退占位图）
+        string badPath = Path.Combine(dir, "bad.jpg");
+        bool badOk = CoverThumbnailer.TryWriteVariant(new byte[] { 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16 }, badPath, CoverVariant.Album, out string? badErr);
+        Check(details, ref checks, "thumb.bad-source",
+            !badOk && !string.IsNullOrWhiteSpace(badErr) && !File.Exists(badPath),
+            badErr);
+
+        Check(details, ref checks, "thumb.empty-source",
+            !CoverThumbnailer.TryWriteVariant(Array.Empty<byte>(), Path.Combine(dir, "empty.jpg"), CoverVariant.Album, out _),
+            "空字节直接判失败，不进解码器");
+
+        // 同一路径重复写（缓存被删后重建的路径）：不能因为文件已存在就抛
+        string reusePath = Path.Combine(dir, "reuse.jpg");
+        bool first = CoverThumbnailer.TryWriteVariant(source, reusePath, CoverVariant.Thumb, out _);
+        bool second = CoverThumbnailer.TryWriteVariant(source, reusePath, CoverVariant.Thumb, out _);
+        Check(details, ref checks, "thumb.overwrite-ok",
+            first && second && MeasureOnDisk(reusePath) == (160, 120),
+            "重复生成到同一路径必须覆盖成功");
+
+        // 与布局拼起来：写进 {root}\{键前2位}\{键}\Album.jpg 后路径可复算（缓存命中就靠这个）
+        string root = CoverCacheLayout.GetRoot(tempRoot, CoverCacheLayout.CacheVersion);
+        string key = CoverCacheLayout.GetKey(source);
+        string entryDir = CoverCacheLayout.GetEntryDirectory(root, key);
+        Directory.CreateDirectory(entryDir);
+        string albumPath = CoverCacheLayout.GetVariantFile(root, key, CoverVariant.Album);
+        bool placed = CoverThumbnailer.TryWriteVariant(source, albumPath, CoverVariant.Album, out _);
+        Check(details, ref checks, "thumb.layout-path",
+            placed && File.Exists(CoverCacheLayout.GetVariantFile(root, key, CoverVariant.Album)),
+            "按布局算出的路径写盘后，同一套规则必须能再找到它");
+
+        Check(details, ref checks, "thumb.engine", CoverThumbnailer.EngineName == "SkiaSharp",
+            "引擎标识（将来换库要同步改日志与这条断言）");
+    }
+
+    private static void CheckVariantFile(List<string> details, ref int checks, string dir, byte[] source, CoverVariant variant, int expectW, int expectH)
+    {
+        string path = Path.Combine(dir, variant + ".jpg");
+        string name = "thumb." + variant.ToString().ToLowerInvariant();
+
+        bool ok = CoverThumbnailer.TryWriteVariant(source, path, variant, out string? error);
+        if (!ok)
+        {
+            Check(details, ref checks, name, false, error);
+            return;
+        }
+
+        (int width, int height) = MeasureOnDisk(path);
+        long size = new FileInfo(path).Length;
+        bool isJpeg = IsJpegFile(path);
+        Check(details, ref checks, name,
+            width == expectW && height == expectH && isJpeg && size > 0,
+            $"{width}x{height}（期望 {expectW}x{expectH}），{size} 字节，JPEG={isJpeg}");
+    }
+
+    private static (int Width, int Height) MeasureOnDisk(string path)
+    {
+        try
+        {
+            using SKCodec? codec = SKCodec.Create(path);
+            return codec == null ? (0, 0) : (codec.Info.Width, codec.Info.Height);
+        }
+        catch
+        {
+            return (0, 0);
+        }
+    }
+
+    private static bool IsJpegFile(string path)
+    {
+        try
+        {
+            using FileStream fs = File.OpenRead(path);
+            return fs.ReadByte() == 0xFF && fs.ReadByte() == 0xD8;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>造一张带对角渐变的合成图（保证缩放后仍能看出方向与比例，纯色会掩盖问题）。</summary>
+    private static byte[] MakeGradientPng(int width, int height)
+    {
+        using var bitmap = new SKBitmap(new SKImageInfo(width, height, SKColorType.Bgra8888, SKAlphaType.Opaque));
+        var pixels = new SKColor[width * height];
+        for (int y = 0; y < height; y++)
+        {
+            for (int x = 0; x < width; x++)
+            {
+                pixels[(y * width) + x] = new SKColor(
+                    (byte)(x * 255 / width),
+                    (byte)(y * 255 / height),
+                    (byte)((x + y) * 255 / (width + height)),
+                    255);
+            }
+        }
+
+        bitmap.Pixels = pixels;
+
+        using SKImage image = SKImage.FromBitmap(bitmap);
+        using SKData data = image.Encode(SKEncodedImageFormat.Png, 100);
+        return data.ToArray();
     }
 
     // ---------------------------------------------------------------- 真实容器（fixture）
