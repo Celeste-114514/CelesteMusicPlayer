@@ -120,6 +120,17 @@ const REPLIES = {
             }
           }
           if (message.command === 'openExternal') data = { url: message.url };
+          if (message.command === 'diagnostics') {
+            const action = message.action || 'status';
+            data = {
+              ok: true, unclean: true, crashes: 3,
+              lastCrashUtc: '2026-10-28T10:00:00+08:00',
+              diagnosticsDirectory: 'C:/Users/MSI/AppData/Local/CelesteMusicPlayer/diagnostics',
+              path: 'C:/diag/celeste-diagnostics-20261028.txt',
+              fileName: 'celeste-diagnostics-20261028.txt'
+            };
+            if (action !== 'export') { delete data.path; delete data.fileName; }
+          }
           setTimeout(() => window.deliver({ kind: 'celeste.reply', version: 1, requestId: message.requestId, ok: true, data }), 5);
         }
       };
@@ -301,7 +312,24 @@ const REPLIES = {
     assert.equal(linkCommand.url, 'https://github.com/Celeste-114514/CelesteMusicPlayer');
     assert.equal(await page.evaluate(() => location.href), hrefBefore, '普通外链也不应把外壳页面顶掉');
 
+    // ⑬ 诊断卡片：说清"上次是不是正常退出"，导出后给出文件名，能打开所在文件夹
+    const diagNote = await page.textContent('#about-diag-note');
+    assert.ok(diagNote.includes('上次未正常退出'), '应说明上次没正常退出：' + diagNote);
+    assert.ok(diagNote.includes('累计 3 次'), '应带出累计次数：' + diagNote);
+    assert.ok(diagNote.includes('不一定是崩溃'), '不能一口咬定是崩溃：' + diagNote);
+
+    await page.click('#about-diag-export');
+    await page.waitForFunction(() => document.getElementById('about-diag-note').textContent.includes('已导出'));
+    const exported = await page.textContent('#about-diag-note');
+    assert.ok(exported.includes('celeste-diagnostics-20261028.txt'), '应给出导出的文件名：' + exported);
+    const exportCommand = await page.evaluate(() =>
+      window.commands.filter(m => m.command === 'diagnostics').at(-1));
+    assert.equal(exportCommand.action, 'export');
+
+    await page.click('#about-diag-folder');
+    await page.waitForFunction(() => window.commands.some(m => m.command === 'diagnostics' && m.action === 'openFolder'));
+
     assert.deepEqual(errors, []);
-    console.log('PASS: 关于页更新卡片——四种检查结论分开显示、下载进度只认宿主推送、校验后可安装、取消后可重下、检查失败与安装失败文案不混用、外链统一走宿主 openExternal。');
+    console.log('PASS: 关于页——四种检查结论分开显示、下载进度只认宿主推送、校验后可安装、取消后可重下、检查失败与安装失败文案不混用、诊断卡片说清上次退出并可导出、外链统一走宿主 openExternal。');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

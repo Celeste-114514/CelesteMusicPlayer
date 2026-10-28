@@ -837,6 +837,66 @@
     info.append(actions);
     host.append(info);
 
+    // —— 诊断与恢复 ——
+    // 用户报「出问题了」时最缺现场。这里一键把版本、环境、上次退出记录、设置（脱敏）
+    // 和日志尾部打包成一个文本文件；只写本机，不自动上传，发不发用户自己决定。
+    const diag = section({ title: '诊断与恢复', note: '出问题先导出这份报告——里面是现场，不是猜测。' });
+    const diagNote = node('p', '', 'settings-card-note');
+    diagNote.id = 'about-diag-note';
+    diagNote.style.whiteSpace = 'pre-line';
+    diagNote.textContent = '正在读取上次退出记录…';
+    diag.append(diagNote);
+
+    const diagActions = node('div', undefined, 'settings-actions');
+    const exportButton = button('导出诊断报告', async btn => {
+      btn.disabled = true;
+      diagNote.style.color = '';
+      diagNote.textContent = '正在收集版本、设置与日志…（日志多时可能要几秒）';
+      try {
+        const result = await window.CelesteTransport.request('diagnostics', { action: 'export' });
+        paintDiag(result, result.path);
+      } catch (error) {
+        diagNote.textContent = '导出失败：' + (error.message || error);
+        diagNote.style.color = 'var(--danger)';
+      } finally { btn.disabled = false; }
+    });
+    exportButton.id = 'about-diag-export';
+
+    const folderButton = button('打开所在文件夹', async btn => {
+      btn.disabled = true;
+      try { await window.CelesteTransport.request('diagnostics', { action: 'openFolder' }); }
+      catch (error) { status(error.message || String(error), 'err'); }
+      finally { btn.disabled = false; }
+    }, 'set-mini');
+    folderButton.id = 'about-diag-folder';
+
+    diagActions.append(exportButton, folderButton);
+    diag.append(diagActions);
+    host.append(diag);
+
+    function paintDiag(info, exportedPath) {
+      if (!info) return;
+      const lines = [];
+      if (info.unclean) {
+        // 强杀、断电、崩溃都会留标记，不能一口咬定是崩溃。
+        const when = info.lastCrashUtc ? String(info.lastCrashUtc).replace('T', ' ').slice(0, 19) : '';
+        lines.push(`上次未正常退出${info.crashes ? `（累计 ${info.crashes} 次` + (when ? `，最近 ${when}` : '') + '）' : ''}。`
+          + '强杀或断电也会这样，不一定是崩溃。');
+      } else {
+        lines.push('上次是正常退出。');
+      }
+      if (exportedPath) {
+        lines.push(`已导出：${info.fileName || exportedPath}`);
+        diagNote.style.color = 'var(--success)';
+      }
+      diagNote.textContent = lines.join('\n');
+    }
+
+    // 进页面问一次上次退出状态；失败就退化成一句提示，不挡其它内容。
+    window.CelesteTransport.request('diagnostics', { action: 'status' })
+      .then(info => paintDiag(info))
+      .catch(() => { diagNote.textContent = '读取诊断状态失败（不影响其它设置）。'; });
+
     // 把一份状态画到卡片上。所有按钮的显隐都由 stage 单一决定，
     // 不再靠「上次点过什么」猜 —— 网页刷新 / 切页回来后状态依然对得上。
     function paint(result) {
