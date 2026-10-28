@@ -40,6 +40,18 @@ const rpc = message => new Promise((resolve, reject) => { pending.push({ resolve
       deliver({ kind: 'celeste.state', state: { trackId: 'test', title: 'Coldemark', artist: 'Bulb', album: 'Archives: Volume 5', duration: 130, position: 20, quality: 'ALAC · 24bit/44.1kHz', playing: false } });
       deliver({ kind: 'celeste.waveform', trackId: 'test', peaks: Array.from({ length: 1024 }, (_, i) => .1 + Math.sin(i * .07) ** 2 * .8) });
     });
+    // 底栏波形有入场绘制：先等画布连续两帧一致再取样。
+    // 不等的话第一次取样会拿到“画到一半”的画面，后三次是终态，比较结果会被误读成“缩放改了柱形”。
+    await page.waitForFunction(() => {
+      const canvas = document.getElementById('progress-waveform');
+      if (!canvas || !canvas.width) return false;
+      const data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data;
+      let sum = 0;
+      for (let i = 0; i < data.length; i += 19) sum = (sum * 31 + data[i]) % 1000000007;
+      const stable = sum !== 0 && window.__waveSum === sum;
+      window.__waveSum = sum;
+      return stable;
+    }, null, { timeout: 5000 });
     const pixels = [];
     for (const width of [1426, 1920, 920, 720]) {
       await page.setViewportSize({ width, height: 920 }); await page.waitForTimeout(120);
