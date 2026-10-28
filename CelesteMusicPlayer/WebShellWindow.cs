@@ -236,7 +236,7 @@ namespace CelesteMusicPlayer
 
         private void SendState()
         {
-            try { Post(new { kind = "celeste.state", version = 1, state = _owner.WebPlaybackState() }); }
+            try { Post(new { kind = "celeste.state", version = 1, state = _owner.PlaybackStateSource.Capture() }); }
             catch (Exception ex) { StartupLog.WriteException("WebShell.State", ex); }
         }
 

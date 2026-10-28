@@ -107,7 +107,7 @@ namespace CelesteMusicPlayer
                 if (!TryPlace(out RECT bounds, out nint taskbar)) { ShowWindow(_hwnd, 0); _shown = false; return; }
                 string color = SampleBackground(taskbar);
                 _controller.DefaultBackgroundColor = ColorHelper.ParseHexColor(color)!.Value;
-                string payload = JsonSerializer.Serialize(new { state = _owner.WebPlaybackState(), background = color });
+                string payload = JsonSerializer.Serialize(new { state = _owner.PlaybackStateSource.Capture(), background = color });
                 _controller.CoreWebView2.PostWebMessageAsJson(payload);
                 if (!_shown || !_lastBounds.Equals(bounds))
                 {
