@@ -125,6 +125,7 @@ namespace CelesteMusicPlayer
         /// 播放时直接从文件顺序读，绕开"边播边装箱"的实时流水线（KA13 实测：实时装箱=固定位置卡顿，
         /// 读预生成 WAV=绿灯不卡）。命中缓存即自动使用；不命中仍走原来的实时装箱，行为完全不变。</summary>
         public bool DsdPreloadEnabled { get; set; } = true;
+        public bool TaskbarPlayerEnabled { get; set; }
 
         /// <summary>ASIO 喂料器（默认 true）：复刻 foobar foo_out_asio 的「驱动回调只拷贝」架构——
         /// 后台 feeder 线程备货填 4 秒 ring，ASIO 驱动回调只 memcpy，把同步读盘/锁竞争/转换链
@@ -893,6 +894,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DsdOutputMode = s.DsdOutputMode,
             DopContainerMode = string.IsNullOrWhiteSpace(s.DopContainerMode) ? "Packed24" : s.DopContainerMode,
             DsdPreloadEnabled = s.DsdPreloadEnabled,
+            TaskbarPlayerEnabled = s.TaskbarPlayerEnabled,
             AsioFeederEnabled = s.AsioFeederEnabled,
             DsdCachePath = s.DsdCachePath ?? string.Empty,
             OutputBufferMs = s.OutputBufferMs,

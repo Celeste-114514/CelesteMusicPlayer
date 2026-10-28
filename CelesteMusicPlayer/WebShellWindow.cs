@@ -770,6 +770,12 @@ namespace CelesteMusicPlayer
             catch (Exception ex) { StartupLog.WriteException("WebShell.PushStartupNotice", ex); }
         }
 
+        internal void AttachTaskbarCovers(CoreWebView2 core)
+        {
+            core.AddWebResourceRequestedFilter(CoverOrigin + "/cover/*", CoreWebView2WebResourceContext.Image);
+            core.WebResourceRequested += OnCoverRequest;
+        }
+
         private async void OnCoverRequest(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
         {
             var deferral = args.GetDeferral();

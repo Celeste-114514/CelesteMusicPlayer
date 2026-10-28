@@ -1,0 +1,7 @@
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https://celeste-cover.internal; object-src 'none'; base-uri 'none'">
+<title>Celeste 任务栏播放条</title><link rel="stylesheet" href="taskbar-player.css"><script src="taskbar-player.js" defer></script></head>
+<body><main id="bar"><div id="identity" title="双击恢复主界面"><div class="art"><img id="cover" alt=""><span id="placeholder">C</span></div><div class="metadata"><div id="title">未在播放</div><div id="artist">Celeste</div></div></div>
+<div class="controls"><button data-action="previous" title="上一首" aria-label="上一首"><svg viewBox="0 0 20 20"><path d="M5 5v10M15 5l-8 5 8 5z"/></svg></button>
+<button data-action="togglePlay" id="play" title="播放" aria-label="播放"><svg viewBox="0 0 20 20"><path id="play-path" d="M7 4l9 6-9 6z"/></svg></button>
+<button data-action="next" title="下一首" aria-label="下一首"><svg viewBox="0 0 20 20"><path d="M15 5v10M5 5l8 5-8 5z"/></svg></button></div><div class="progress"><div id="progress"></div></div></main></body></html>
