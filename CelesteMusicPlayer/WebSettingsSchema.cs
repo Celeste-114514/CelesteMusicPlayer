@@ -148,7 +148,8 @@ namespace CelesteMusicPlayer
                 Sel("MiniPlayerBackground", "迷你播放器底色", "Cover|跟随封面;Dark|深色;Frosted|毛玻璃", "只影响独立迷你窗口。", scope: "native"),
                 Bool("MiniPlayerAlwaysOnTop", "迷你播放器置顶", "只影响独立迷你窗口。", scope: "native"),
                 Bool("OpenMiniPlayerOnStartup", "启动时打开迷你播放器", "只影响独立迷你窗口。", scope: "native"),
-                Sel("ScatteredPlayBackground", "零散播放窗口背景", "Cover|跟随封面;Dark|深色;Light|浅色;Frosted|毛玻璃", "双击音乐文件打开的那个独立播放窗。", scope: "native")
+                Sel("ScatteredPlayBackground", "零散播放窗口背景", "Cover|跟随封面;Dark|深色;Light|浅色;Frosted|毛玻璃", "双击音乐文件打开的那个独立播放窗。", scope: "native"),
+                Bool("TaskbarPlayerEnabled", "任务栏播放条", "在主显示器任务栏里显示播放控制。自动隐藏的任务栏、全屏应用或空间不足时会自动让位。", scope: "app")
             )).Concat(In("lyrics",
                 Sel("LyricSourcePriority", "歌词来源优先级", "ExternalLrc|外挂 LRC 优先;EmbeddedSynced|内嵌同步歌词优先;EmbeddedUnsynced|内嵌纯文本歌词优先",
                     "选中的来源找不到时，仍会按 外挂 → 内嵌同步 → 内嵌纯文本 的顺序继续找。"),
@@ -285,6 +286,7 @@ namespace CelesteMusicPlayer
             ["MiniPlayerAlwaysOnTop"] = s => s.MiniPlayerAlwaysOnTop,
             ["OpenMiniPlayerOnStartup"] = s => s.OpenMiniPlayerOnStartup,
             ["ScatteredPlayBackground"] = s => s.ScatteredPlayBackground,
+            ["TaskbarPlayerEnabled"] = s => s.TaskbarPlayerEnabled,
             // lyrics
             ["LyricSourcePriority"] = s => s.LyricSourcePriority,
             ["LyricFuzzyMatch"] = s => s.LyricFuzzyMatch,
@@ -412,6 +414,7 @@ namespace CelesteMusicPlayer
             ["MiniPlayerAlwaysOnTop"] = (s, v) => s.MiniPlayerAlwaysOnTop = Bool(v),
             ["OpenMiniPlayerOnStartup"] = (s, v) => s.OpenMiniPlayerOnStartup = Bool(v),
             ["ScatteredPlayBackground"] = (s, v) => s.ScatteredPlayBackground = One(v, "Cover", "Dark", "Light", "Frosted"),
+            ["TaskbarPlayerEnabled"] = (s, v) => s.TaskbarPlayerEnabled = Bool(v),
             ["LyricSourcePriority"] = (s, v) => s.LyricSourcePriority = One(v, "ExternalLrc", "EmbeddedSynced", "EmbeddedUnsynced"),
             ["LyricFuzzyMatch"] = (s, v) => s.LyricFuzzyMatch = Bool(v),
             ["HideBlankLyricLines"] = (s, v) => s.HideBlankLyricLines = Bool(v),

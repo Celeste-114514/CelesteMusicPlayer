@@ -1,4 +1,4 @@
-:root{--bg:#252525;--ink:#eee8df;--muted:#b1a99d;--accent:#d9b985;--hover:#ffffff10;color-scheme:dark}
+:root{--bg:#252525;--ink:#eee8df;--muted:#b1a99d;--accent:#d9b985;--accent-strong:#e8cfa3;--hover:#ffffff10;color-scheme:dark}
 *{box-sizing:border-box}html,body{height:100%;margin:0;overflow:hidden;background:var(--bg);color:var(--ink);user-select:none}
 body{font-family:'Segoe UI','Microsoft YaHei UI',sans-serif}#bar{height:100%;display:flex;align-items:center;gap:9px;padding:5px 9px;position:relative}
 #identity{display:flex;align-items:center;gap:10px;min-width:0;flex:1}.art{width:34px;height:34px;position:relative;flex:none;border-radius:4px;overflow:hidden;background:var(--hover)}#cover{width:100%;height:100%;object-fit:cover;display:block}#cover[hidden]{display:none}#placeholder{position:absolute;inset:0;display:grid;place-items:center;color:var(--muted);font-size:15px}#placeholder[hidden]{display:none}

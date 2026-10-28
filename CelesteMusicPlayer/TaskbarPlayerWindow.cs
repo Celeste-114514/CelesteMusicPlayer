@@ -24,8 +24,12 @@ namespace CelesteMusicPlayer
         private CoreWebView2Controller? _controller;
         private CoreWebView2Environment? _environment;
         private bool _busy, _disposed, _appBar;
-        private int _failures, _ticks;
+        private int _failures, _ticks, _ticksTheme;
         private string _lastStatus = "";
+        // 外观设置里的强调色。任务栏条自己采样任务栏底色做背景（贴任务栏），
+        // 但强调色/进度条用用户在外观设置里选的，换皮时这里跟着变。
+        private string _accent = "";
+        private string _accentStrong = "";
         private RECT _lastBounds;
         private nint _taskbarHandle;
         private bool _suspended, _shown;
@@ -76,6 +80,10 @@ namespace CelesteMusicPlayer
                     _controller = controller;
                     controller.BoundsMode = CoreWebView2BoundsMode.UseRawPixels;
                     controller.Bounds = new Rect(0, 0, 360, 48);
+                    // 导航前就让它"可见"：Chromium 对不可见/0 尺寸的视口会推迟首次渲染，
+                    // 表现为第一次导航卡满 20 秒超时、失败后重试才成（托盘菜单踩过同一个坑）。
+                    // 窗口本身由 ShowWindow 控制，这里只是别给渲染进程"先别画"的信号。
+                    controller.IsVisible = true;
                     controller.ZoomFactor = 1;
                     var core = controller.CoreWebView2;
                     core.Settings.IsWebMessageEnabled = true;
@@ -118,7 +126,14 @@ namespace CelesteMusicPlayer
                 if (!TryPlace(out RECT bounds, out nint taskbar)) { ShowWindow(_hwnd, 0); _shown = false; return; }
                 string color = SampleBackground(taskbar);
                 _controller.DefaultBackgroundColor = ColorHelper.ParseHexColor(color)!.Value;
-                string payload = JsonSerializer.Serialize(new { state = _owner.PlaybackStateSource.Capture(), background = color });
+                // 外观设置读文件，没必要每 250ms 读一次；两秒刷一次足够跟上换皮。
+                if (_accent.Length == 0 || _ticksTheme++ % 8 == 0) RefreshAppearanceAccent();
+                string payload = JsonSerializer.Serialize(new
+                {
+                    state = _owner.PlaybackStateSource.Capture(),
+                    background = color,
+                    theme = new { accent = _accent, accentStrong = _accentStrong }
+                });
                 _controller.CoreWebView2.PostWebMessageAsJson(payload);
                 if (!_shown || !_lastBounds.Equals(bounds))
                 {
@@ -187,6 +202,21 @@ namespace CelesteMusicPlayer
                 && other.Left < bounds.Right && other.Right > bounds.Left && other.Top < bounds.Bottom && other.Bottom > bounds.Top)
             { Status("ECHO 播放条占用相同位置，请先关闭另一播放条"); return false; }
             return true;
+        }
+
+        /// <summary>
+        /// 取外观设置里的强调色。任务栏条不另建一套配色：背景仍采样任务栏底色（要贴住任务栏），
+        /// 强调色/进度条跟随用户在 设置 → 外观 里的选择，换预设这里自动跟上。
+        /// </summary>
+        private void RefreshAppearanceAccent()
+        {
+            try
+            {
+                (string _, System.Collections.Generic.Dictionary<string, string> vars) = WindowsTrayService.BuildTheme();
+                if (vars.TryGetValue("accent", out string? accent) && accent.Length > 0) _accent = accent;
+                if (vars.TryGetValue("accent-strong", out string? strong) && strong.Length > 0) _accentStrong = strong;
+            }
+            catch (Exception ex) { StartupLog.WriteException("TaskbarPlayer.RefreshAppearanceAccent", ex); }
         }
 
         private string SampleBackground(nint taskbar)

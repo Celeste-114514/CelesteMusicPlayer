@@ -1,11 +1,23 @@
 (()=>{
  'use strict';const $=id=>document.getElementById(id);let coverUrl='';
  const send=action=>window.chrome?.webview?.postMessage({action});
+ /* 强调色来自宿主的「外观设置」，不是写死的。
+    背景仍然采样任务栏底色（要贴住任务栏），所以强调色还得跟背景配得上：
+    浅底上太亮的强调色会被压暗，深底上太暗的会被提亮，保证进度条和焦点环看得清。 */
+ const luma=hex=>{const c=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));return c[0]*.2126+c[1]*.7152+c[2]*.0722;};
+ const mix=(hex,target,ratio)=>{const c=[1,3,5].map(i=>parseInt(hex.slice(i,i+2),16));
+  const t=[1,3,5].map(i=>parseInt(target.slice(i,i+2),16));
+  return '#'+c.map((v,i)=>Math.round(v+(t[i]-v)*ratio).toString(16).padStart(2,'0')).join('');};
+ const fit=(hex,light)=>{if(!/^#[0-9a-f]{6}$/i.test(hex))return '';
+  const l=luma(hex);if(light&&l>150)return mix(hex,'#000000',.55);if(!light&&l<60)return mix(hex,'#ffffff',.45);return hex;};
  function render(message){
   const state=message.state||{},bg=message.background||'#252525';
   if(/^#[0-9a-f]{6}$/i.test(bg)){
    const rgb=[1,3,5].map(i=>parseInt(bg.slice(i,i+2),16));const light=rgb[0]*.2126+rgb[1]*.7152+rgb[2]*.0722>145;
-   const root=document.documentElement;root.style.setProperty('--bg',bg);root.style.setProperty('--ink',light?'#38332e':'#eee8df');root.style.setProperty('--muted',light?'#746c60':'#b1a99d');root.style.setProperty('--accent',light?'#9b784b':'#d9b985');root.style.setProperty('--hover',light?'#0000000b':'#ffffff10');root.style.colorScheme=light?'light':'dark';
+   const theme=message.theme||{};
+   const accent=fit(theme.accent,light)||(light?'#9b784b':'#d9b985');
+   const strong=fit(theme.accentStrong,light)||accent;
+   const root=document.documentElement;root.style.setProperty('--bg',bg);root.style.setProperty('--ink',light?'#38332e':'#eee8df');root.style.setProperty('--muted',light?'#746c60':'#b1a99d');root.style.setProperty('--accent',accent);root.style.setProperty('--accent-strong',strong);root.style.setProperty('--hover',light?'#0000000b':'#ffffff10');root.style.colorScheme=light?'light':'dark';
   }
   $('title').textContent=state.title||'未在播放';$('identity').title=($('title').textContent)+' · 双击恢复主界面';
   $('artist').textContent=[state.artist,state.album].filter(Boolean).join(' · ')||'Celeste';

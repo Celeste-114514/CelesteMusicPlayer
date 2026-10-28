@@ -451,7 +451,7 @@
     host.append(nav);
 
     const pages = section({ title: '播放页与独立窗口' });
-    addFields(pages, ['NowPlayingLayout', 'NowPlayingVisual', 'MiniPlayerBackground', 'MiniPlayerAlwaysOnTop', 'OpenMiniPlayerOnStartup', 'ScatteredPlayBackground']);
+    addFields(pages, ['NowPlayingLayout', 'NowPlayingVisual', 'MiniPlayerBackground', 'MiniPlayerAlwaysOnTop', 'OpenMiniPlayerOnStartup', 'ScatteredPlayBackground', 'TaskbarPlayerEnabled']);
     host.append(pages);
   }
 

@@ -1,7 +1,6 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using Microsoft.Web.WebView2.Core;
 
 namespace CelesteMusicPlayer
 {
@@ -104,12 +103,6 @@ namespace CelesteMusicPlayer
 
         public bool IsCreated => _icon.IsCreated;
 
-        /// <summary>
-        /// 托盘菜单自己建的 WebView2 环境（还没建好就是 null）。
-        /// 任务栏播放条等同类弹出窗口共用它，省一套浏览器进程，输入也才是正常的。
-        /// </summary>
-        internal CoreWebView2Environment? PopupEnvironment => _menu.PopupEnvironment;
-
         public void Show()
         {
             if (_disposed) return;
@@ -194,7 +187,7 @@ namespace CelesteMusicPlayer
         /// 主题变量直接取 WebAppearance 的解析结果 —— 托盘不另建一套配色，
         /// 网页外壳换皮时这里自动跟上。空值要剔掉，否则会把 CSS 里的兜底值清成空。
         /// </summary>
-        private static (string mode, Dictionary<string, string> vars) BuildTheme()
+        internal static (string mode, Dictionary<string, string> vars) BuildTheme()
         {
             WebAppearance.State state = WebAppearance.HasDraft() ? WebAppearance.Draft() : WebAppearance.Load();
             string mode = WebAppearance.ResolveMode(state.mode);

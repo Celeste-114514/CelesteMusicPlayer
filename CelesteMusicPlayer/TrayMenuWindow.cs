@@ -79,6 +79,9 @@ namespace CelesteMusicPlayer
         /// 唯一区别是前者网页一定会先发消息过来，所以用它给收起判据留一条后路。</summary>
         private long _lastWebMessageTick;
 
+        /// <summary>命中测试日志的最小间隔，避免按住鼠标时刷屏。</summary>
+        private long _lastHitTestTick;
+
         /// <summary>收到无法识别的消息只记一次，避免刷屏。</summary>
         private bool _unknownMessageLogged;
 
@@ -94,13 +97,6 @@ namespace CelesteMusicPlayer
         internal event Action? Hidden;
 
         internal bool IsReady => _ready && _controller != null;
-
-        /// <summary>
-        /// 本菜单用的 WebView2 环境（建好之后才有值）。
-        /// 任务栏播放条等其它弹出窗口可以共用它：这类窗口版 controller 挂在**自己建的**
-        /// 环境上输入才正常，挂主界面那个 composition 环境上会收不到鼠标点击。
-        /// </summary>
-        internal CoreWebView2Environment? PopupEnvironment => _environment;
 
         /// <summary>菜单此刻是否显示着（右键再点一次要能收起）。</summary>
         internal bool IsVisible => _visible;
@@ -300,6 +296,37 @@ namespace CelesteMusicPlayer
             });
 
             StartOutsideWatcher();
+
+            // 自己验一次命中：菜单正中间那块，光标底下到底是不是我们自己的窗口。
+            // 不需要用户操作，日志就能回答"菜单是不是被别的窗口盖住了"。
+            SelfHitTest(x + width / 2, y + 40, width, height);
+        }
+
+        /// <summary>菜单显示 400ms 后，检查菜单内部一个点是否真的能命中自己的窗口。</summary>
+        private void SelfHitTest(int x, int y, int width, int height)
+        {
+            Microsoft.UI.Dispatching.DispatcherQueue? queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            if (queue == null) return;
+            var timer = queue.CreateTimer();
+            timer.Interval = TimeSpan.FromMilliseconds(400);
+            timer.IsRepeating = false;
+            timer.Tick += (_, _) =>
+            {
+                timer.Stop();
+                try
+                {
+                    if (_disposed || !_visible) return;
+                    var probe = new POINT { X = x, Y = y };
+                    IntPtr hit = WindowFromPoint(probe);
+                    var sb = new System.Text.StringBuilder(64);
+                    GetClassNameW(hit, sb, sb.Capacity);
+                    string owner = hit == _hwnd ? "self" : (hit != IntPtr.Zero && IsChild(_hwnd, hit)) ? "child" : "other";
+                    StartupLog.Write($"[托盘菜单] 自检 点({x},{y}) hit={sb}({owner}) 窗口={width}x{height} "
+                        + $"前景={GetForegroundWindow() == _hwnd}");
+                }
+                catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.SelfHitTest", ex); }
+            };
+            timer.Start();
         }
 
         /// <summary>给定位用的托盘图标矩形（由 WindowsTrayService 注入，它持有通知图标）。</summary>
@@ -368,6 +395,60 @@ namespace CelesteMusicPlayer
             _leftPressed = false;
         }
 
+        /// <summary>
+        /// 按下鼠标时记录"光标底下是谁"。
+        /// 只有三种可能，日志一看就能分：
+        ///   ① hit=CelesteTrayMenu_xxx（或它的子窗口）→ 点进菜单了，网页却没反应 = 输入链路问题
+        ///   ② hit=别的窗口 → 菜单被挡住（谁挡的一目了然）
+        ///   ③ hit=空 → 坐标根本不在菜单上
+        /// </summary>
+        /// <summary>
+        /// 把菜单窗口的子窗口类名串起来。正常应该有 WebView2 的渲染子窗口
+        /// （Chrome_WidgetWin_0 之类）；如果这里是空的，说明窗口版控制器压根没建出
+        /// 可接收鼠标的子窗口，那"点不动"就不是收起判据的问题了。
+        /// </summary>
+        private string DescribeChildWindows()
+        {
+            try
+            {
+                var names = new List<string>();
+                IntPtr child = GetWindow(_hwnd, GW_CHILD);
+                while (child != IntPtr.Zero && names.Count < 8)
+                {
+                    var sb = new System.Text.StringBuilder(64);
+                    GetClassNameW(child, sb, sb.Capacity);
+                    names.Add(sb.ToString());
+                    child = GetWindow(child, GW_HWNDNEXT);
+                }
+                return "children=[" + string.Join(",", names) + "]";
+            }
+            catch (Exception ex)
+            {
+                StartupLog.WriteException("TrayMenuWindow.DescribeChildWindows", ex);
+                return "children=[?]";
+            }
+        }
+
+        private void LogHitTest()
+        {
+            try
+            {
+                if (Environment.TickCount64 - _lastHitTestTick < 400) return;
+                _lastHitTestTick = Environment.TickCount64;
+                if (!GetCursorPos(out POINT cursor)) return;
+                IntPtr hit = WindowFromPoint(cursor);
+                var sb = new System.Text.StringBuilder(64);
+                GetClassNameW(hit, sb, sb.Capacity);
+                string owner = hit == IntPtr.Zero ? "none"
+                    : hit == _hwnd ? "self"
+                    : IsChild(_hwnd, hit) ? "child"
+                    : IsOwnPopup(hit) ? "own-popup"
+                    : "other";
+                StartupLog.Write($"[托盘菜单] 按下 cursor={cursor.X},{cursor.Y} hit={sb}({owner})");
+            }
+            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.LogHitTest", ex); }
+        }
+
         private void CheckOutside()
         {
             if (_disposed || !_visible || _hwnd == IntPtr.Zero) { StopOutsideWatcher(); return; }
@@ -382,6 +463,10 @@ namespace CelesteMusicPlayer
 
                 // 只在"刚按下"这一刻判断，平时不打扰。
                 if (!justPressed && !pressedSinceLastPoll) return;
+
+                // 诊断：按下那一刻光标底下是谁。用来分清「菜单被别的窗口挡住」和
+                // 「点进了 WebView 但网页收不到」这两种完全不同的毛病。
+                LogHitTest();
 
                 // 网页刚发过消息（点了菜单项）—— 这一下是我们的，绝不能收。
                 if (Environment.TickCount64 - _lastWebMessageTick < 300) return;
@@ -587,7 +672,7 @@ namespace CelesteMusicPlayer
                 }
                 _ready = true;
                 _initFailures = 0;
-                StartupLog.Write("[托盘菜单] WebView2 菜单已就绪");
+                StartupLog.Write("[托盘菜单] WebView2 菜单已就绪 " + DescribeChildWindows());
                 return true;
             }
             catch (Exception ex)
@@ -678,6 +763,18 @@ namespace CelesteMusicPlayer
 
         [DllImport("user32.dll")]
         private static extern IntPtr GetParent(IntPtr hWnd);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr WindowFromPoint(POINT point);
+
+        [DllImport("user32.dll")]
+        private static extern IntPtr GetWindow(IntPtr hWnd, uint command);
+
+        private const uint GW_CHILD = 5;
+        private const uint GW_HWNDNEXT = 2;
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+        private static extern int GetClassNameW(IntPtr hWnd, System.Text.StringBuilder name, int capacity);
 
         [DllImport("user32.dll")]
         [return: MarshalAs(UnmanagedType.Bool)]
