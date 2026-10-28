@@ -35,13 +35,9 @@ namespace CelesteMusicPlayer
                         _owner.ToggleDesktopLyricsPublic();
                         break;
                     case TrayMenuModel.Actions.Previous:
-                        _owner.PreviousPublic();
-                        break;
                     case TrayMenuModel.Actions.TogglePlay:
-                        _owner.TogglePlayPausePublic();
-                        break;
                     case TrayMenuModel.Actions.Next:
-                        _owner.NextPublic();
+                        _owner.ExecutePlaybackCommand(actionId);
                         break;
                     case TrayMenuModel.Actions.Favorite:
                         _owner.FavoriteCurrentPublic();

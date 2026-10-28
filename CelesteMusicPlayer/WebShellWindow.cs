@@ -386,10 +386,10 @@ namespace CelesteMusicPlayer
                         var ids = msg.GetProperty("trackIds");
                         if (ids.GetArrayLength() > 50_000) throw new InvalidOperationException("曲目数量超出本次接口限制。");
                         _owner.WebPlayAll(ids.EnumerateArray().Select(id => Resolve(id.GetString())).Distinct().ToArray()); break;
-                    case "togglePlay": _owner.TogglePlayPausePublic(); break;
-                    case "play": if (!_owner.IsEnginePlayingNow) _owner.TogglePlayPausePublic(); break;
-                    case "next": _owner.NextPublic(); break;
-                    case "previous": _owner.PreviousPublic(); break;
+                    case "togglePlay":
+                    case "play":
+                    case "next":
+                    case "previous": _owner.ExecutePlaybackCommand(command); break;
                     case "seek": _owner.SeekSourceSeconds(Math.Clamp(Finite(msg, "seconds"), 0, Math.Max(0, _owner.EngineDurationValue.TotalSeconds))); break;
                     case "setVolume": _owner.WebSetVolume(Math.Clamp(Finite(msg, "volume"), 0, 100)); break;
                     case "favorite": _owner.FavoriteCurrentPublic(); break;
