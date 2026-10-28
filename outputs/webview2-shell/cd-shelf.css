@@ -1,0 +1,222 @@
+/* CD 架：专辑页的第二种浏览方式（封面网格 / CD 架）。
+   一张专辑 = 一个正面朝外的 CD 盒：封面 + 右侧薄书脊 + 一层塑料反光；
+   每行封面下面垫一块搁板，专辑名/艺人/年份排在搁板下方。
+
+   尺寸只跟现有专辑页对齐（封面约 150–200、间距 22），不另立一套密度。
+   颜色一律取语义变量：搁板跟 --line/--surface 走，播放中用 --accent，
+   深色/极客预设不需要另外存一套色值。 */
+
+.cd-shelf {
+  /* 这两个值 JS 会读（决定一行摆几张），改这里就等于改整架的密度 */
+  --cd-gap: 22px;
+  --cd-min: 152px;
+  padding: 2px 0 0;
+}
+
+.cd-shelf-row { position: relative; }
+.cd-shelf-row + .cd-shelf-row { margin-top: 30px; }
+.cd-shelf-cases {
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr));
+  gap: var(--cd-gap);
+}
+
+/* 搁板：贴在封面下沿。前缘压住盒子底部 5px —— 盒子看着才像"立在板上"，
+   而不是"浮在一条线上"。位置由 JS 按实测封面高度写进 --cover-h。
+   颜色往 --ink 混：浅色下变暗、深色下变亮，一个写法两种主题都立得住。 */
+.cd-shelf-row::after {
+  content: '';
+  position: absolute;
+  left: -6px;
+  right: -6px;
+  top: calc(var(--cover-h, 0px) - 5px);
+  height: 13px;
+  border-radius: 3px;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--surface) 84%, var(--ink)) 0%,
+    color-mix(in oklab, var(--surface) 90%, var(--ink)) 45%,
+    color-mix(in oklab, var(--surface) 78%, var(--ink)) 100%);
+  box-shadow: inset 0 1px 0 #ffffff5c, 0 12px 18px -14px var(--shadow);
+}
+
+.cd-case { position: relative; min-width: 0; }
+.cd-case-open { display: block; width: 100%; padding: 0; text-align: left; border-radius: 5px; }
+
+/* 盒子本体：只负责"抬起来"和投影。真正的封面在里面的 .album-art 上 */
+.cd-case-body {
+  display: block;
+  position: relative;
+  border-radius: 3px;
+  box-shadow: 0 3px 9px -5px var(--shadow);
+  transition: transform calc(180ms * var(--motion-scale)) var(--motion-continuity),
+    box-shadow calc(180ms * var(--motion-scale)) var(--motion-continuity);
+}
+
+/* 封面：网格卡片那套圆角和重投影不适合 CD 盒，这里是方角 + 一道薄边 */
+.cd-case .album-art {
+  border-radius: 3px;
+  box-shadow: none;
+  border: 1px solid color-mix(in oklab, var(--ink) 16%, transparent);
+}
+
+/* 右侧书脊：7px 塑料边。一条亮缝 + 一条暗边把"厚度"说出来，
+   不做透视 —— 封面和标题必须一眼能认。 */
+.cd-case-body::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  width: 7px;
+  border-radius: 0 2px 2px 0;
+  z-index: 2;
+  pointer-events: none;
+  background: linear-gradient(90deg,
+    color-mix(in oklab, var(--line) 52%, var(--surface)) 0%,
+    color-mix(in oklab, var(--line) 74%, var(--ink)) 16%,
+    color-mix(in oklab, var(--line) 44%, var(--surface)) 58%,
+    color-mix(in oklab, var(--line) 82%, var(--ink)) 100%);
+  box-shadow: inset 1px 0 0 color-mix(in oklab, var(--surface) 55%, transparent);
+}
+
+/* 正面高光：一条斜向反光。反光是白光，不跟主题走，只压得很低 */
+.cd-case-body::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: 3px;
+  z-index: 1;
+  pointer-events: none;
+  background: linear-gradient(112deg,
+    #ffffff3d 0%, #ffffff17 20%, transparent 46%, transparent 74%, #ffffff1f 100%);
+}
+
+/* 悬停/聚焦：盒子从搁板上抬起 4px。只在真有指针悬停的设备上做，避免触屏点一下卡住 */
+@media (hover: hover) {
+  .cd-case:hover .cd-case-body {
+    transform: translateY(-4px);
+    box-shadow: 0 12px 18px -12px var(--shadow);
+  }
+  .cd-case:hover .cd-case-play { opacity: 1; transform: translateY(-4px); }
+  .cd-case-open:hover .cd-case-title { color: var(--accent); }
+}
+
+/* 键盘焦点画在封面外圈，不是整个"封面+文字"的大方框 */
+.cd-case-open:focus-visible { outline: none; }
+.cd-case-open:focus-visible .cd-case-body {
+  outline: 2px solid color-mix(in srgb, var(--focus) 62%, transparent);
+  outline-offset: 5px;
+}
+
+/* 播放按钮：悬停才出现（和主页专辑卡一致）；键盘焦点时也必须看得见 */
+.cd-case-play {
+  position: absolute;
+  right: 13px;
+  top: 6px;
+  z-index: 3;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: color-mix(in oklab, var(--surface) 88%, transparent);
+  color: var(--accent);
+  box-shadow: 0 3px 10px -4px var(--shadow);
+  opacity: 0;
+  transform: translateY(-7px);
+  transition: opacity calc(160ms * var(--motion-scale)) var(--motion-continuity),
+    transform calc(160ms * var(--motion-scale)) var(--motion-continuity);
+}
+.cd-case-play svg { width: 13px; height: 13px; fill: currentColor; stroke-width: 1.3; }
+.cd-case-play:focus-visible { opacity: 1; transform: none; }
+
+/* 正在播放：描边 + 文字标（不能只靠颜色，也不能只靠一个小圆点） */
+.cd-case[data-playing="true"] .cd-case-body {
+  box-shadow: 0 0 0 2px var(--accent), 0 10px 16px -12px var(--shadow);
+}
+.cd-case[data-playing="true"] .cd-case-title { color: var(--accent); }
+.cd-case-flag {
+  display: none;
+  position: absolute;
+  left: 7px;
+  bottom: 7px;
+  z-index: 3;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  font-size: calc(9px * var(--text-scale));
+  letter-spacing: .04em;
+  color: var(--accent);
+  background: color-mix(in oklab, var(--surface) 87%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent);
+}
+.cd-case-flag::before { content: ''; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+.cd-case[data-playing="true"] .cd-case-flag { display: inline-flex; }
+
+/* 文字：搁板下面三行。标题固定两行高，同一行的标签才会齐 */
+.cd-case-text { display: block; padding: 21px 2px 0; }
+.cd-case-title {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+  font-size: calc(13px * var(--text-scale));
+  font-weight: 600;
+  line-height: 1.45;
+  min-height: 2.9em;
+  color: var(--ink);
+}
+.cd-case-artist {
+  display: block;
+  margin-top: 4px;
+  font-size: calc(11px * var(--text-scale));
+  color: var(--muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.cd-case-meta {
+  display: block;
+  margin-top: 3px;
+  font-size: calc(10px * var(--text-scale));
+  color: var(--muted);
+}
+
+/* ── 窄窗：间距和最小宽度一起收，别把每行的盒子挤成细条 ─────────── */
+@media (max-width: 850px) {
+  .cd-shelf { --cd-gap: 16px; --cd-min: 132px; }
+  .cd-shelf-row + .cd-shelf-row { margin-top: 26px; }
+  .cd-case-text { padding-top: 19px; }
+}
+
+/* ── 极客预设：深色机架、细线、编号感。封面保持原色 ────────────── */
+html[data-preset^="geek"] .cd-shelf-row::after {
+  height: 6px;
+  border-radius: 1px;
+  background: linear-gradient(180deg,
+    color-mix(in oklab, var(--line) 74%, var(--surface)) 0%,
+    color-mix(in oklab, var(--line) 62%, var(--muted)) 100%);
+  box-shadow: inset 0 1px 0 #ffffff1f, 0 8px 14px -11px var(--shadow);
+}
+html[data-preset^="geek"] .cd-case-body::before { display: none; }
+html[data-preset^="geek"] .cd-case .album-art,
+html[data-preset^="geek"] .cd-case-body { border-radius: 1px; }
+html[data-preset^="geek"] .cd-case-body::after { border-radius: 0; }
+html[data-preset^="geek"] .cd-case-title { font-weight: 500; }
+html[data-preset^="geek"] .cd-case-artist,
+html[data-preset^="geek"] .cd-case-meta {
+  font-family: var(--font-mono), ui-monospace, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── 减少动画：不抬盒子、不淡入，只保留选中/播放这类静态标识 ────── */
+@media (prefers-reduced-motion: reduce) {
+  .cd-case-body, .cd-case-play { transition: none; }
+  .cd-case:hover .cd-case-body,
+  .cd-case:hover .cd-case-play,
+  .cd-case-play:focus-visible { transform: none; }
+}
