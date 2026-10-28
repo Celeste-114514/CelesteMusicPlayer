@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    更新检查探针：把主工程真实的 UpdateChecker.cs / UpdateVersioning.cs 源码编进来，
+    只替换掉 StartupLog 与 HttpClients 两个宿主类型，所以跑的是线上同一份逻辑。
+
+    用法：dotnet run 指定本项目（加 -c Release），联网时验证正常链路，
+    再加一个不通的代理环境变量验证"断网不会被说成已是最新"。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RollForward>Major</RollForward>
+    <AssemblyName>UpdateCheckerProbe</AssemblyName>
+    <RootNamespace>UpdateCheckerProbe</RootNamespace>
+    <!-- 故意低于线上版本，好让正常检查走到「有新版本」分支 -->
+    <Version>26.9.0</Version>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\CelesteMusicPlayer\UpdateChecker.cs" Link="UpdateChecker.cs" />
+    <Compile Include="..\..\CelesteMusicPlayer\UpdateVersioning.cs" Link="UpdateVersioning.cs" />
+  </ItemGroup>
+</Project>

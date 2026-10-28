@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    更新检查纯逻辑的回归测试（版本比较、安装包选择、哈希清单解析）。
+    直接编译主工程里的 UpdateVersioning.cs 源文件，不引用 WinUI 产物，
+    所以既不需要还原一堆包，也不会因为主程序没编译而跑不起来。
+
+    运行：dotnet run 指定本项目（-c Release），见仓库 README 的「测试」一节。
+  -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <RollForward>Major</RollForward>
+    <AssemblyName>UpdateVersioningTests</AssemblyName>
+    <RootNamespace>UpdateVersioningTests</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\CelesteMusicPlayer\UpdateVersioning.cs" Link="UpdateVersioning.cs" />
+  </ItemGroup>
+</Project>

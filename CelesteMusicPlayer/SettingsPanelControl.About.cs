@@ -28,6 +28,12 @@ namespace CelesteMusicPlayer
         private string? _latestSetupUrl;
         private string? _latestExpectedSha256;
 
+        /// <summary>这枚安装包的哈希能不能验证。缺清单时不给「下载更新」，改指发布页手动下载。</summary>
+        private UpdateChecksumState _latestChecksumState = UpdateChecksumState.NotPublished;
+
+        /// <summary>本地测试开关（dev-update.txt）显式跳过哈希校验，和真实发布路径分开记。</summary>
+        private bool _latestIsLocalTest;
+
         /// <summary>最新版本将下载的安装包变体："sc"=自包含，"fd"=框架依赖。默认 fd（与旧安装一致）。</summary>
         private string _latestPackageKind = UpdateChecker.VariantFrameworkDependent;
 
@@ -50,6 +56,8 @@ namespace CelesteMusicPlayer
             UpdateChecker.UpdateInfo? info = await UpdateChecker.FetchLatestAsync();
             _latestSetupUrl = info?.SetupUrl;
             _latestExpectedSha256 = info?.ExpectedSha256;
+            _latestChecksumState = info?.ChecksumState ?? UpdateChecksumState.NotPublished;
+            _latestIsLocalTest = false;
             _latestPackageKind = info?.PackageKind ?? UpdateChecker.VariantFrameworkDependent;
             return info?.Tag;
         }
@@ -77,14 +85,17 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            if (!string.IsNullOrEmpty(info.SetupUrl))
+            bool cachedVerifiable = info.ChecksumState == UpdateChecksumState.Verified;
+            if (!string.IsNullOrEmpty(info.SetupUrl) && (cachedVerifiable || _latestIsLocalTest))
             {
                 AboutUpdateStatusText.Text = $"发现新版本 {info.Tag}（当前 {currentVer}）。将下载{DescribePackageKind(info.SetupUrl, info.PackageKind)}安装包，点击「下载更新」。";
                 AboutDownloadUpdateButton.Visibility = Visibility.Visible;
             }
             else
             {
-                AboutUpdateStatusText.Text = $"发现新版本 {info.Tag}（当前 {currentVer}）。该版本未附带安装包，请到「GitHub Releases ↗」手动下载。";
+                AboutUpdateStatusText.Text = string.IsNullOrEmpty(info.SetupUrl)
+                    ? $"发现新版本 {info.Tag}（当前 {currentVer}）。该版本未附带安装包，请到「GitHub Releases ↗」手动下载。"
+                    : $"发现新版本 {info.Tag}（当前 {currentVer}）。这次发布缺少可用的安装包哈希清单，无法校验完整性，请到「GitHub Releases ↗」手动下载。";
                 AboutDownloadUpdateButton.Visibility = Visibility.Collapsed;
             }
         }
@@ -111,6 +122,8 @@ namespace CelesteMusicPlayer
                 if (TryGetDevUpdate(out string devTag, out string devInstaller))
                 {
                     _latestTag = devTag;
+                    _latestIsLocalTest = true;
+                    _latestChecksumState = UpdateChecksumState.NotPublished;
                     _latestSetupUrl = new Uri(devInstaller).AbsoluteUri;
                     AboutUpdateStatusText.Text = $"【本地测试】模拟发现新版本 {devTag}（当前 {currentVer}）。点击「下载更新」用本地安装包 {Path.GetFileName(devInstaller)} 验证更新链路。";
                     AboutDownloadUpdateButton.Visibility = Visibility.Visible;
@@ -128,14 +141,16 @@ namespace CelesteMusicPlayer
                 int cmp = CompareVersionStrings(latestTag, currentVer);
                 if (cmp > 0)
                 {
-                    if (!string.IsNullOrEmpty(_latestSetupUrl))
+                    if (!string.IsNullOrEmpty(_latestSetupUrl) && (_latestChecksumState == UpdateChecksumState.Verified || _latestIsLocalTest))
                     {
                         AboutUpdateStatusText.Text = $"发现新版本 {latestTag}（当前 {currentVer}）。将下载{DescribePackageKind(_latestSetupUrl, _latestPackageKind)}安装包，点击「下载更新」。";
                         AboutDownloadUpdateButton.Visibility = Visibility.Visible;
                     }
                     else
                     {
-                        AboutUpdateStatusText.Text = $"发现新版本 {latestTag}（当前 {currentVer}）。该版本未附带安装包，请到「GitHub Releases ↗」手动下载。";
+                        AboutUpdateStatusText.Text = string.IsNullOrEmpty(_latestSetupUrl)
+                            ? $"发现新版本 {latestTag}（当前 {currentVer}）。该版本未附带安装包，请到「GitHub Releases ↗」手动下载。"
+                            : $"发现新版本 {latestTag}（当前 {currentVer}）。这次发布缺少可用的安装包哈希清单，无法校验完整性，请到「GitHub Releases ↗」手动下载。";
                         AboutDownloadUpdateButton.Visibility = Visibility.Collapsed;
                     }
                 }
