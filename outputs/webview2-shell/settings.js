@@ -461,7 +461,7 @@
     host.append(source);
 
     const desktop = section({ title: '桌面歌词', note: '桌面歌词是独立的一条原生歌词窗，和网页里的歌词页不是同一套渲染。' });
-    addFields(desktop, ['OpenDesktopLyricsOnStartup', 'DesktopLyricHideWithoutLyric', 'DesktopLyricHideWhenPaused', 'DesktopLyricLockOnStart', 'DesktopLyricShowUnlockWhenLocked', 'DesktopLyricHideTranslation', 'DesktopLyricShowBackgroundBar', 'DesktopLyricVisibleLines', 'DesktopLyricLineSpacing', 'DesktopLyricOpacity', 'DesktopLyricFontSize', 'DesktopLyricFontFamily', 'DesktopLyricPlayedColor', 'DesktopLyricUnplayedColor', 'DesktopLyricOutlineColor', 'DesktopLyricOutlineWidth', 'DesktopLyricShadowStrength', 'DesktopLyricAlign', 'DesktopLyricBackgroundColor', 'DesktopLyricClickThrough']);
+    addFields(desktop, ['OpenDesktopLyricsOnStartup', 'DesktopLyricHideWithoutLyric', 'DesktopLyricHideWhenPaused', 'DesktopLyricLockOnStart', 'DesktopLyricShowUnlockWhenLocked', 'DesktopLyricHideTranslation', 'DesktopLyricShowBackgroundBar', 'DesktopLyricVisibleLines', 'DesktopLyricLineSpacing', 'DesktopLyricOpacity', 'DesktopLyricFontSize', 'DesktopLyricSecondaryFontSize', 'DesktopLyricFontFamily', 'DesktopLyricColorMode', 'DesktopLyricGradientStart', 'DesktopLyricGradientEnd', 'DesktopLyricPlayedColor', 'DesktopLyricUnplayedColor', 'DesktopLyricOutlineColor', 'DesktopLyricOutlineWidth', 'DesktopLyricShadowStrength', 'DesktopLyricAlign', 'DesktopLyricBackgroundColor', 'DesktopLyricClickThrough']);
     host.append(desktop);
 
     const fetchGradual = section({ title: '自动获取与保存' });

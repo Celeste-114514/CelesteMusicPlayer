@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
@@ -83,6 +83,12 @@ namespace CelesteMusicPlayer
         private Color _outlineColor = Color.FromArgb(255, 0, 0, 0);
         private int _shadowStrength = 2;             // 0=关 1=弱 2=中 3=强
         private string _colorPreset = "Custom";
+        private string _echoColorMode = "Theme";
+        private Color _gradientEnd;
+        private float _secondarySize = 19;
+        private long _themeCheckedAt;
+        private int _themeRevision = -1;
+        private string _themeMode = "";
         private bool _hideTranslation;              // 隐藏译文行
         private string _align = "Center";           // Left / Center / Right
         private int _visibleLines = 3;              // 1 / 2 / 3
@@ -309,6 +315,23 @@ namespace CelesteMusicPlayer
                 ? "Microsoft YaHei UI"
                 : settings.DesktopLyricFontFamily;
             _playedColor = ParseHexColor(settings.DesktopLyricPlayedColor, Color.FromArgb(255, 64, 180, 255));
+            _echoColorMode = settings.DesktopLyricColorMode is "Solid" or "Gradient" ? settings.DesktopLyricColorMode : "Theme";
+            _secondarySize = (float)Math.Clamp(settings.DesktopLyricSecondaryFontSize, 12, 48);
+            _gradientEnd = _playedColor;
+            if (_echoColorMode == "Gradient")
+            {
+                _playedColor = ParseHexColor(settings.DesktopLyricGradientStart, Color.FromArgb(255, 79, 70, 229));
+                _gradientEnd = ParseHexColor(settings.DesktopLyricGradientEnd, Color.FromArgb(255, 236, 72, 153));
+            }
+            else if (_echoColorMode == "Theme")
+            {
+                var appearance = WebAppearance.HasDraft() ? WebAppearance.Draft() : WebAppearance.Load();
+                _themeMode = WebAppearance.ResolveMode(appearance.mode);
+                _themeRevision = WebAppearance.CurrentRevision;
+                var colors = WebAppearance.Resolve(appearance, _themeMode);
+                if (colors.TryGetValue("accent", out var accent)) _playedColor = ParseHexColor(accent, _playedColor);
+                _gradientEnd = colors.TryGetValue("accent-strong", out var end) ? ParseHexColor(end, _playedColor) : _playedColor;
+            }
             _unplayedColor = ParseHexColor(settings.DesktopLyricUnplayedColor, Color.FromArgb(255, 245, 245, 245));
 
             // 弹窗跟随：极客界面下桌面歌词也终端化 —— 等宽字 + 磷光双色
@@ -486,7 +509,7 @@ namespace CelesteMusicPlayer
 
         private int ComputeHeight()
         {
-            float side = Math.Max(12f, _fontSize * 0.72f);
+            float side = _secondarySize;
             float lineH = _fontSize * 1.45f;
             float gaps = _lineSpacing * (_visibleLines - 1);
             float total;
@@ -520,12 +543,12 @@ namespace CelesteMusicPlayer
             float maxW = MeasurePathSize(g, cur, family, _fontSize, FontStyle.Bold).Width;
             if (!string.IsNullOrEmpty(prev))
             {
-                maxW = Math.Max(maxW, MeasurePathSize(g, prev, family, Math.Max(12f, _fontSize * 0.72f), FontStyle.Regular).Width);
+                maxW = Math.Max(maxW, MeasurePathSize(g, prev, family, _secondarySize, FontStyle.Regular).Width);
             }
 
             if (!string.IsNullOrEmpty(next))
             {
-                maxW = Math.Max(maxW, MeasurePathSize(g, next, family, Math.Max(12f, _fontSize * 0.72f), FontStyle.Regular).Width);
+                maxW = Math.Max(maxW, MeasurePathSize(g, next, family, _secondarySize, FontStyle.Regular).Width);
             }
 
             GetWorkArea(out int left, out _, out int right, out _);
@@ -657,7 +680,7 @@ namespace CelesteMusicPlayer
             string next = _visibleLines >= 2 ? GetLineText(_currentIndex >= 0 && _currentIndex + 1 < _lines.Count ? _currentIndex + 1 : -1) : string.Empty;
 
             using FontFamily family = CreateFontFamily(_fontFamilyName);
-            float sideSize = Math.Max(12f, _fontSize * 0.72f);
+            float sideSize = _secondarySize;
             float centerX = _width / 2f;
 
             // 半透明底色条：提升在复杂/亮色壁纸上的可读性（默认关）
@@ -760,9 +783,14 @@ namespace CelesteMusicPlayer
                 g.DrawPath(pen, op);
             }
 
-            using var fb = new SolidBrush(fill);
+            using Brush fb = size == _fontSize && fill == _playedColor ? ActiveBrush(new RectangleF(x, y, Math.Max(1, MeasurePathSize(text, family, size, style).Width), size * 1.5f)) : new SolidBrush(fill);
             DrawTextPath(g, text, family, size, style, fb, x, y);
         }
+
+        // ECHO's theme/solid/gradient presentation, adapted to the existing layered window.
+        private Brush ActiveBrush(RectangleF bounds) => _echoColorMode == "Solid"
+            ? new SolidBrush(_playedColor)
+            : new LinearGradientBrush(bounds, _playedColor, _gradientEnd, 2f);
 
         private void DrawKaraokeLine(Graphics g, LyricLine line, FontFamily family, float x, float y, RectangleF bounds)
         {
@@ -775,7 +803,7 @@ namespace CelesteMusicPlayer
             float glyphY = y + bounds.Y;
 
             using var unplayed = new SolidBrush(_unplayedColor);
-            using var played = new SolidBrush(_playedColor);
+            using var played = ActiveBrush(new RectangleF(glyphX, glyphY, Math.Max(1, bounds.Width), Math.Max(1, bounds.Height)));
             // 底色必须先画：这句时间还没唱到时（逐字歌词的第一个字之前）也要有字，
             // 只画阴影会让整行"消失"。
             DrawTextPath(g, text, family, _fontSize, FontStyle.Bold, unplayed, x, y);
@@ -1302,6 +1330,14 @@ namespace CelesteMusicPlayer
 
         private void OnTick()
         {
+            if (_echoColorMode == "Theme" && Environment.TickCount64 - _themeCheckedAt > 500)
+            {
+                _themeCheckedAt = Environment.TickCount64;
+                var theme = WebAppearance.Load();
+                if (_themeRevision != WebAppearance.CurrentRevision || _themeMode != WebAppearance.ResolveMode(theme.mode))
+                    ApplySettings(AppSettingsStore.Load());
+            }
+
             if (_hwnd == IntPtr.Zero)
             {
                 return;

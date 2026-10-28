@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -182,6 +182,10 @@ namespace CelesteMusicPlayer
         /// <summary>20–100</summary>
         public int DesktopLyricOpacity { get; set; } = 100;
 
+        public string DesktopLyricColorMode { get; set; } = "Theme";
+        public string DesktopLyricGradientStart { get; set; } = "#4F46E5";
+        public string DesktopLyricGradientEnd { get; set; } = "#EC4899";
+        public double DesktopLyricSecondaryFontSize { get; set; } = 19;
         public double DesktopLyricFontSize { get; set; } = 28;
 
         public string DesktopLyricPlayedColor { get; set; } = "#40B4FF";
@@ -799,6 +803,10 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DesktopLyricShowUnlockWhenLocked = s.DesktopLyricShowUnlockWhenLocked,
             DesktopLyricClickThrough = s.DesktopLyricClickThrough,
             DesktopLyricOpacity = s.DesktopLyricOpacity,
+            DesktopLyricColorMode = s.DesktopLyricColorMode,
+            DesktopLyricGradientStart = s.DesktopLyricGradientStart,
+            DesktopLyricGradientEnd = s.DesktopLyricGradientEnd,
+            DesktopLyricSecondaryFontSize = s.DesktopLyricSecondaryFontSize,
             DesktopLyricFontSize = s.DesktopLyricFontSize,
             DesktopLyricPlayedColor = s.DesktopLyricPlayedColor,
             DesktopLyricUnplayedColor = s.DesktopLyricUnplayedColor,
