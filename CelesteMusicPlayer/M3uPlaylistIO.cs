@@ -9,7 +9,9 @@ namespace CelesteMusicPlayer
     public static class M3uPlaylistIO
     {
         private static readonly Regex ExtInfRegex = new(
-            @"#EXTINF:(?<duration>-?\d+(?:\.\d+)?)\s*(?<meta>.*)$",
+            // 标准格式是 "#EXTINF:时长,显示文字" —— 逗号必须消费掉，
+            // 否则 displayTitle 会带前导逗号（当前无生产调用方，解析边界自测把它钉住）。
+            @"#EXTINF:(?<duration>-?\d+(?:\.\d+)?)\s*,?\s*(?<meta>.*)$",
             RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public static List<string> Parse(string playlistPath, bool existingOnly = true)
