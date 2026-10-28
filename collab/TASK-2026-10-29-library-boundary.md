@@ -41,3 +41,45 @@ JsonFile 读写往返+DeepClone、AppCachePaths 三路径确定性。
 ## 没动的地方
 
 托盘、任务栏条、音频引擎实现、网页外壳一行未动；用户真实 library.db / app-settings.json 全程未写。
+
+---
+
+# 追加：W6 第三小步 —— 歌词/CUE/M3U 解析链（01:26-01:40）
+
+## 结论
+
+LyricsLoader / CueSheetParser / M3uPlaylistIO 链接进 PoC（+TagLibSharp 2.3.0），
+干净 HEAD 独立验证：设置 61 项 + 曲库 20 项 + 解析 10 项全绿，result.json passed=true
+（20261029-013651-e39c0d，worktree 隔离验证）。提交 a153844 后续 3 个：
+adf9653（补漏 FfmpegDecoderBackend）、e682982（解析链）、f8e1e3a（EXTINF 逗号修复）。
+
+## 顺手修的潜在 bug
+
+M3uPlaylistIO.TryParseExtInf 的正则没消费 EXTINF 里的逗号，displayTitle 会带前导逗号。
+该函数当前无生产调用方（休眠），修正后由解析边界自测钉住行为。
+
+## CueTrackExpansion 暂缓（记为待办）
+
+入参类型 PlaylistItem 定义在 MainWindow.xaml.cs（还读 MainWindow.GeekUiStyleCached 静态缓存）。
+要把「播放列表行模型」从界面文件搬出去才能迁——这是独立的一小步，风险高于本次范围。
+
+## ⚠ 并行协作实录（重要教训）
+
+1. **我漏 git add**：a153844 的 add 列表漏了 FfmpegDecoderBackend.cs，提交信息与实际内容不一致
+   （工作区和验证环境是对的，仓库里缺），adf9653 补上。教训：提交前 `git status` 全量过一遍，
+   别只看 staged。
+2. **codex 在我提交前后往同一批 PoC 文件里写他的 WIP**：LibraryBoundary.cs 被他扩到 30 项
+   （网络源/cue/identity 检查，引用了他未提交的 NetworkLibraryStore.DbPathOverride），
+   csproj 被他加了 4 个 provider 链接和重复的 TagLibSharp 行。**我的 a153844 没带上他的改动
+   （HEAD 干净自洽），但工作区混跑了**：_publish_poc 编译的是含他半成品的工作区，
+   他的 cue.parse 检查失败导致整包中断，一度让我误判成自己的问题。
+3. **处置**：他的 WIP 一行没动、没提交；我的文件单独提交；验证改用 `git worktree` 在干净
+   HEAD 上独立构建运行（发布目录、结果目录都隔离）。共享 _run_poc_test.py 取"最新结果目录"
+   的逻辑在并行跑时会抓错别人的结果——并行期间要用隔离发布目录自己挑自己的 RUN_DIR。
+4. csproj 里 codex 的 provider 链接随我的提交进了仓库（可独立编译，无破坏）；重复的
+   TagLibSharp 行已去重。
+
+## W6 剩余候选
+
+播放列表行模型迁出界面文件（解锁 CueTrackExpansion）→ 网络源服务（codex 正在做，别撞）
+→ 封面 CoverArtService（注意 CacheVersion）→ TagLib 标签读写层。
