@@ -86,11 +86,9 @@ namespace CelesteMusicPlayer
         /// 缓冲越大抗抖动余量越大（渲染线程偶尔慢一拍也不会断音），起播/拖动响应的延迟也越大。</summary>
         public int BufferMilliseconds { get; set; } = 100;
 
-        /// <summary>渲染线程主动补货的轮询间隔（毫秒）。独占模式下事件周期必须等于缓冲，
-        /// 也就是说事件只会在「整块缓冲被啃光」的那一刻才来——等到那一刻再读源，设备嘴里已经是空的，
-        /// 读源的 15ms 就是 15ms 的静音。所以渲染线程不等事件、自己按这个间隔醒来补货：
-        /// 设备缓冲被保持在接近满的水位，读源抖动被剩余存货吸收（2026-09-21 修）。</summary>
-        private int FillPollMilliseconds => Math.Clamp(BufferMilliseconds / 8, 2, 15);
+        // Exclusive EVENTCALLBACK uses two complete buffers, not shared-mode
+        // padding-based partial writes. Only the device event permits a packet.
+        private int FillPollMilliseconds => Math.Max(1, (int)Math.Ceiling(_bufferFrames * 1000.0 / Math.Max(1, _rate)));
 
         /// <summary>最近一次初始化是否触发了 AUDCLNT_E_BUFFER_SIZE_NOT_ALIGNED 对齐 dance（供日志排障）。</summary>
         public bool LastAlignDance { get; private set; }
@@ -217,10 +215,10 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>初始化日志用：描述缓冲/周期配置。独占模式下二者恒等（微软规定），
-        /// 抗抖动靠的是渲染线程按 <see cref="FillPollMilliseconds"/> 主动补货，而不是靠缩小周期。</summary>
+        /// 抗抖动靠的是渲染线程按 <see cref="FillPollMilliseconds"/> 整包提交，而不是靠缩小周期。</summary>
         private string DescribePeriod()
         {
-            return $" [周期=缓冲{BufferMilliseconds}ms 补货轮询{FillPollMilliseconds}ms]";
+            return $" [独占事件整包 缓冲={_bufferFrames}帧 周期约{FillPollMilliseconds}ms]";
         }
 
         /// <summary>线程安全请求 seek（render 线程在下一帧消费并重定位源，避免与正在读源的线程竞争）。</summary>
@@ -257,15 +255,17 @@ namespace CelesteMusicPlayer
                         int got = ReadFully(_provider, preBuf, preFrames * _srcBlock);
                         if (got > 0)
                         {
-                            preFrames = got / _dstBlock;
+                            // Keep the full endpoint packet even for a short source.
+                            // The unused tail was cleared above.
                             flags = 0; // 真实音频，不能标 SILENT
                         }
                     }
 
-                    if (preFrames > 0 && _renderClient.GetBuffer((uint)preFrames, out IntPtr pre) == NativeWasapi.S_OK)
+                    if (preFrames > 0)
                     {
+                        CheckRenderResult(_renderClient.GetBuffer((uint)preFrames, out IntPtr pre), "pre-roll GetBuffer", preFrames);
                         System.Runtime.InteropServices.Marshal.Copy(preBuf, 0, pre, preFrames * _dstBlock);
-                        _renderClient.ReleaseBuffer((uint)preFrames, flags);
+                        CheckRenderResult(_renderClient.ReleaseBuffer((uint)preFrames, flags), "pre-roll ReleaseBuffer", preFrames);
                     }
                 }
                 finally
@@ -274,6 +274,7 @@ namespace CelesteMusicPlayer
                 }
             }
 
+            _renderSignal.Reset();
             int hr = _audioClient.Start();
             if (hr != NativeWasapi.S_OK)
             {
@@ -287,11 +288,11 @@ namespace CelesteMusicPlayer
                 // 故先把 framesWritten 基准设到该帧，Position = 基准 + 已写帧，保持绝对进度。
                 if (initialPosition.HasValue && initialPosition.Value > TimeSpan.Zero)
                 {
-                    _framesWritten = (long)(initialPosition.Value.TotalSeconds * _rate);
+                    _framesWritten = (long)(initialPosition.Value.TotalSeconds * _rate) + _bufferFrames;
                 }
                 else
                 {
-                    _framesWritten = 0;
+                    _framesWritten = _bufferFrames;
                 }
             }
 
@@ -339,8 +340,8 @@ namespace CelesteMusicPlayer
 
         private void FinishInit()
         {
-            _audioClient!.SetEventHandle(_renderSignal.GetSafeWaitHandle().DangerousGetHandle());
-            _audioClient.Reset();
+            CheckRenderResult(_audioClient!.SetEventHandle(_renderSignal.GetSafeWaitHandle().DangerousGetHandle()), "SetEventHandle", 0);
+            CheckRenderResult(_audioClient.Reset(), "Reset", 0);
         }
 
         /// <summary>尝试以给定独占格式初始化并取 render client；成功返回 S_OK。
@@ -350,7 +351,7 @@ namespace CelesteMusicPlayer
         /// 否则 Initialize 必然失败。2026-09-21 那次「小周期 10ms + 缓冲 100ms」的修复因此
         /// 从未真正生效：设备拒绝了请求，代码静默退回周期=缓冲，日志里留下的
         /// `[周期=缓冲100ms]` 就是证据。所以这里不再做无谓的两次尝试，直接用 周期=缓冲。
-        /// 抗卡顿改由渲染线程主动补货实现（见 <see cref="FillPollMilliseconds"/> 与 RenderLoop）。
+        /// 渲染线程按设备事件提交整包（见 <see cref="FillPollMilliseconds"/> 与 RenderLoop）。
         /// </summary>
         private static int TryInitialize(NativeWasapi.IMMDevice device, ref NativeWasapi.WAVEFORMATEXTENSIBLE wave,
             out NativeWasapi.IAudioClient? ac, out NativeWasapi.IAudioRenderClient? rc, out uint frames,
@@ -386,7 +387,7 @@ namespace CelesteMusicPlayer
                     c = NativeWasapi.ActivateAudioClient(device);
                     if (c == null) return NativeWasapi.REGDB_E_CLASSNOTREG;
                     hnsBuf = FrameCountToHns(aligned, wave.Format.nSamplesPerSec);
-                    hnsPer = Math.Min(hnsPer, hnsBuf); // 对齐后周期仍不得越过缓冲
+                    hnsPer = hnsBuf; // Exclusive event mode requires equality after alignment too.
                     hr = c.Initialize(NativeWasapi.AUDCLNT_SHAREMODE_EXCLUSIVE, NativeWasapi.AUDCLNT_STREAMFLAGS_EVENTCALLBACK, hnsBuf, hnsPer, ref wave, IntPtr.Zero);
                 }
             }
@@ -535,20 +536,14 @@ namespace CelesteMusicPlayer
 
                 while (!_requestStop && !_disposed)
                 {
-                    // 关键（2026-09-21 修独占卡顿）：**不等设备事件**。
-                    // 独占模式下事件周期恒等于缓冲，事件只在「整块缓冲被啃光」那一刻才来——
-                    // 等到那一刻再读源，设备嘴里已经是空的，读源/GC/等锁的 15ms 就是 15ms 的静音。
-                    // 改成按 pollMs 主动醒来，每次把空闲空间（缓冲 − padding）补满：
-                    // 设备缓冲被维持在接近满的水位，剩余存货就是抗抖动的余量。
-                    // GC 精确归因（2026-09-23）：旧口径在日志点采样 GC 计数，而尖峰日志
-                    // 限频 2s——距上次采样 ≥2s，"gen2+1"只能证明"这两秒内发生过 GC"，
-                    // 证明不了它造成了本次迟到。改成每轮 WaitAny 前后各采一次计数，
-                    // 差值 = 真正冻结在本次间隔里的 GC；全 0 = 铁证 GC 不背锅。
+                    // Process one entire endpoint packet per device event.
                     int gc0Before = GC.CollectionCount(0), gc1Before = GC.CollectionCount(1), gc2Before = GC.CollectionCount(2);
-                    int wi = WaitHandle.WaitAny(waits, pollMs);
+                    int wi = WaitHandle.WaitAny(waits, 3000);
                     if (_requestStop || _disposed) break;
                     // wi==0 停止信号；wi==1 设备事件（也顺手补货）；WaitTimeout(258) 轮询到点。
-                    if (wi == 0) continue;
+                    if (wi == 0) break;
+                    if (wi == WaitHandle.WaitTimeout)
+                        throw new System.IO.IOException("WASAPI 独占设备 3 秒未发出缓冲事件，已停止输出。");
 
                     long tsNow = Stopwatch.GetTimestamp();
                     int gc0After = GC.CollectionCount(0), gc1After = GC.CollectionCount(1), gc2After = GC.CollectionCount(2);
@@ -566,7 +561,7 @@ namespace CelesteMusicPlayer
                                 tsGapLog = tsNow;
                                 int n0 = GC.CollectionCount(0), n1 = GC.CollectionCount(1), n2 = GC.CollectionCount(2);
                                 StartupLog.Write(string.Format(
-                                    "[渲染诊断] 补货间隔尖峰={0:F1}ms（轮询{1}ms／缓冲{2:F0}ms）{3} 本次间隔内 GC: gen0+{4} gen1+{5} gen2+{6}｜距上次日志 GC: gen0+{7} gen1+{8} gen2+{9} 堆={10:F0}MB 模式={11}",
+                                    "[渲染诊断] 补货间隔尖峰={0:F1}ms（事件周期{1}ms／缓冲{2:F0}ms）{3} 本次间隔内 GC: gen0+{4} gen1+{5} gen2+{6}｜距上次日志 GC: gen0+{7} gen1+{8} gen2+{9} 堆={10:F0}MB 模式={11}",
                                     gapMs, pollMs, bufMsReal,
                                     (bufMsReal > 0 && gapMs > bufMsReal) ? "★超过缓冲=必然断流" : "",
                                     gc0After - gc0Before, gc1After - gc1Before, gc2After - gc2Before,
@@ -592,12 +587,9 @@ namespace CelesteMusicPlayer
                         lock (_framesLock) { _framesWritten = (long)(seekReq.Value.TotalSeconds * _rate); }
                     }
 
-                    // 只填「空闲空间」= 整缓冲 − 设备已排队未播帧（GetCurrentPadding）。
-                    // 事件驱动标准做法（对齐微软 RenderAudio 示例）：小周期下设备每 10ms 发一次事件，
-                    // 每次只补这 10ms 的空闲；读源/GC/调度抖动（实测 15ms 尖峰）由设备嘴里
-                    // 剩下的 ~90ms 存货吸收，不再变成可闻卡顿。旧实现每次取整缓冲（100ms），
-                    // 读不满整缓冲就整体提交不足数据 → underrun → "时不时顿一下"。
-                    if (_audioClient!.GetCurrentPadding(out uint pad) != NativeWasapi.S_OK) break;
+                    // EVENTCALLBACK exclusive streams require exactly GetBufferSize
+                    // frames per event. Padding is not a valid packet-sizing policy here.
+                    uint pad = 0;
 
                     // 缓冲水位统计（2026-09-22 修正判据）：
                     // 独占 + 事件驱动下周期恒等于缓冲，实测 pad 在每个周期边界必然归零一次
@@ -609,10 +601,10 @@ namespace CelesteMusicPlayer
                     sumPad += pad;
                     if (pad == 0) padZero++;
 
-                    int toFill = (int)Math.Min((long)maxFrames - pad, maxFrames);
+                    int toFill = maxFrames;
                     if (toFill <= 0) continue; // 缓冲仍是满的（设备还没消耗）：无空闲空间可写
 
-                    if (rc.GetBuffer((uint)toFill, out IntPtr dst) != NativeWasapi.S_OK) break;
+                    CheckRenderResult(rc.GetBuffer((uint)toFill, out IntPtr dst), "GetBuffer", toFill);
 
                     int want = toFill * _srcBlock;
                     int got;
@@ -656,7 +648,7 @@ namespace CelesteMusicPlayer
                         ConvertToFloat(dst, srcBuf, toFill, srcWf);
                     }
 
-                    rc.ReleaseBuffer((uint)toFill, 0);
+                    CheckRenderResult(rc.ReleaseBuffer((uint)toFill, 0), "ReleaseBuffer", toFill);
                     lock (_framesLock) { _framesWritten += toFill; }
 
                     // C3 护栏计数（跳过本次循环生命周期的首次预填，只统计设备吃掉 demand 之后的部分）
@@ -696,7 +688,7 @@ namespace CelesteMusicPlayer
                         double zeroRatio = loops > 0 ? (double)padZero / loops : 0;
                         int m0 = GC.CollectionCount(0), m1 = GC.CollectionCount(1), m2 = GC.CollectionCount(2);
                         StartupLog.Write(string.Format(
-                            "[渲染统计] {0:F0}s 补货{1}次 | 水位 最低{2:F0}/平均{3:F0}/满{4}帧，空缓冲{5}次({6:P0}) | 间隔 最大{7:F1}ms 尖峰{8}次 断流{9}次 | 读源 最大{10:F2}ms | 真欠载{11}次 | GC gen0+{12} gen1+{13} gen2+{14} 堆{15:F0}MB 模式={16}",
+                            "[渲染统计] 独占事件整包 {0:F0}s 提交{1}次 | 每包{4}帧 | 事件间隔 最大{7:F1}ms 尖峰{8}次 晚点{9}次 | 读源 最大{10:F2}ms | 真欠载{11}次 | GC gen0+{12} gen1+{13} gen2+{14} 堆{15:F0}MB 模式={16}",
                             (tsNow - tsReport) / (double)Stopwatch.Frequency, loops,
                             minPad == double.MaxValue ? 0 : minPad, avgPad, maxFrames, padZero, zeroRatio,
                             maxGapMs, gapSpikes, starve, maxReadMs, UnderrunCount,
@@ -719,6 +711,8 @@ namespace CelesteMusicPlayer
             }
             catch (Exception ex)
             {
+                LastError = ex.Message;
+                StartupLog.WriteException("NativeWasapiExclusiveOut.RenderLoop", ex);
                 _requestStop = true;
                 IsStarted = false;
                 try { _audioClient?.Stop(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("NativeWasapiExclusiveOut.cs", caught); }
@@ -738,6 +732,12 @@ namespace CelesteMusicPlayer
                     NativeWasapi.timeEndPeriod(1);
                 }
             }
+        }
+
+        private static void CheckRenderResult(int hr, string operation, int frames)
+        {
+            if (hr != NativeWasapi.S_OK)
+                throw new System.IO.IOException($"WASAPI {operation} 失败 HRESULT=0x{hr:X8} frames={frames}");
         }
 
         private static int ReadFully(IWaveSourceProvider src, byte[] buf, int count)
