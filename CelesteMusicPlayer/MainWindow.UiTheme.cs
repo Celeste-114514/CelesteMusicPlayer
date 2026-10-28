@@ -2205,7 +2205,8 @@ namespace CelesteMusicPlayer
                 try
                 {
                     StartupLog.Write("托盘: RestoreFromTray 收到点击");
-                    OpenWebShell();
+                    // 统一走主界面恢复（建/还原/显示/拉前台），别在这里另写一套 Show。
+                    RestoreMainWindow();
                     // 托盘图标常驻：不随窗口恢复隐藏（退出时才清理）
                 }
                 catch (Exception ex)

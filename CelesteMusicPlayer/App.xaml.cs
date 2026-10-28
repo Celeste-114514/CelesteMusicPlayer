@@ -347,7 +347,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (_window is MainWindow main) { main.OpenWebShell(); return; }
+                if (_window is MainWindow main) { main.RestoreMainWindow(); return; }
                 if (_window == null) return;
 
                 nint hWnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);

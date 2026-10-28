@@ -187,7 +187,9 @@ namespace CelesteMusicPlayer
             // 排查"双击没反应"时看这行在不在 —— 在=命令发了（剩下是系统前台锁的事），
             // 不在=双击判定本身没触发。
             StartupLog.Write("迷你播放器：双击已发出，请求激活主窗口");
-            Run(h => h.Activate());
+            // 必须走主界面恢复：MainWindow.Activate() 激活的是隐藏的 WinUI 宿主，
+            // 网页外壳不会出现，看起来就是"双击没反应"。
+            Run(h => h.RestoreMainWindow());
         }
 
         private static void Run(Action<MainWindow> action)
