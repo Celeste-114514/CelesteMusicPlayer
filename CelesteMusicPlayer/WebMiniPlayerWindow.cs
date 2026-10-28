@@ -98,7 +98,23 @@ internal sealed class WebMiniPlayerWindow : Window
         string mode = WebAppearance.ResolveMode(state.mode);
         if (_themeRevision == WebAppearance.CurrentRevision && _themeMode == mode) return;
         _themeRevision = WebAppearance.CurrentRevision; _themeMode = mode;
-        Post(new { kind = "theme", mode, light = WebAppearance.Resolve(state, WebAppearance.Light), dark = WebAppearance.Resolve(state, WebAppearance.Dark) });
+        var light = WebAppearance.Resolve(state, WebAppearance.Light);
+        var dark = WebAppearance.Resolve(state, WebAppearance.Dark);
+        SetNativeBackground(mode == "dark" ? dark : light);
+        Post(new { kind = "theme", mode, light, dark });
+    }
+    private void SetNativeBackground(System.Collections.Generic.Dictionary<string, string> palette)
+    {
+        try
+        {
+            string value = palette.TryGetValue("shell", out var shell) ? shell
+                : palette.TryGetValue("bg", out var bg) ? bg : "#fcf9f8";
+            var color = Windows.UI.Color.FromArgb(255,
+                Convert.ToByte(value.Substring(1, 2), 16), Convert.ToByte(value.Substring(3, 2), 16), Convert.ToByte(value.Substring(5, 2), 16));
+            _root.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
+            if (_web.CoreWebView2 != null) _web.DefaultBackgroundColor = color;
+        }
+        catch (Exception ex) { StartupLog.WriteException("WebMiniPlayer.SetNativeBackground", ex); }
     }
     [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
     [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }

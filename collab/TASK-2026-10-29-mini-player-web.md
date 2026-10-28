@@ -23,3 +23,8 @@
 - 原生尺寸未变化不再重复 ResizeClient；帧同步为主，定时器仅在超过 50ms 没有渲染回调时兜底，避免两个驱动重复调整尺寸。
 - 自动交互检查增加三个入口的 on/off 真/假消息回填、动画终点与歌词区固定高度断言。未在用户工作期间操作窗口，也未声称实测原生帧率。
 - 交付：完整 publish 成功，已同步 dist/web-ui-20261028，核对 DLL SHA256 一致。更新前备份 outputs/mini-player-animation-backup-20261029-015049。
+
+## 2026-10-29 底部黑边
+- 根因处理：迷你窗口原生网格背景与 WebView2 自身背景之前透明；窗口变矮后 WebView surface 的未绘制区域露出黑色。按主程序当前解析出的 shell 颜色同时设置 WinUI 根网格和 WebView2 默认背景，主程序明暗或主题色更改时同步更新。
+- 验证：Release win-x64 自包含 publish 成功，dist 与 publish 的 CelesteMusicPlayer.dll SHA256 一致。
+- 交付：outputs/mini-player-black-edge-backup-20261029-015554；目标 dist/web-ui-20261028。关掉旧运行实例后从根快捷方式重启体验。
