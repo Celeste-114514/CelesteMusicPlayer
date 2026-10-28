@@ -48,7 +48,6 @@ namespace CelesteMusicPlayer
         private CoreWebView2Environment? _environment;
         private CoreWebView2Controller? _controller;
         private Task<bool>? _initTask;
-        private TaskCompletionSource<bool>? _sizeWaiter;
 
         /// <summary>网页回报的菜单内容尺寸（DIP）。</summary>
         private double _contentWidth = 260, _contentHeight = 320;
@@ -90,18 +89,21 @@ namespace CelesteMusicPlayer
                     _controller.DefaultBackgroundColor = color;
                 }
 
-                _sizeWaiter = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                PostToWeb(new
+                string payload = JsonSerializer.Serialize(new
                 {
                     kind = "celeste.trayTheme",
                     version = 1,
                     theme = new { mode, vars = themeVars },
                     items
                 });
-
-                // 等页面量完高度再定位。等不到就用上一次的尺寸，别让菜单迟迟不出现。
-                Task completed = await Task.WhenAny(_sizeWaiter.Task, Task.Delay(500));
-                _sizeWaiter = null;
+                // Render and measure in one operation; no stale theme-only size
+                // or fixed 320px fallback can win the asynchronous message race.
+                string measured = await _controller!.CoreWebView2.ExecuteScriptAsync("window.CelesteTray.render(" + payload + ")");
+                using (JsonDocument size = JsonDocument.Parse(measured))
+                {
+                    _contentWidth = size.RootElement.GetProperty("width").GetDouble();
+                    _contentHeight = size.RootElement.GetProperty("height").GetDouble();
+                }
                 if (_disposed) return false;
                 PlaceAndShow();
                 return true;
@@ -206,14 +208,17 @@ namespace CelesteMusicPlayer
             x = Math.Clamp(x, work.Left + 4, Math.Max(work.Left + 4, work.Right - width - 4));
             y = Math.Clamp(y, work.Top + 4, Math.Max(work.Top + 4, work.Bottom - height - 4));
 
+            // Resize the parent before sizing its child WebView. Otherwise the
+            // controller can retain the old 260x320 client viewport.
+            SetWindowPos(_hwnd, HWND_TOPMOST, x, y, width, height, SWP_SHOWWINDOW | SWP_NOACTIVATE);
             if (_controller != null)
             {
                 _controller.Bounds = new Rect(0, 0, width, height);
                 _controller.IsVisible = true;
             }
 
-            SetWindowPos(_hwnd, HWND_TOPMOST, x, y, width, height, SWP_SHOWWINDOW | SWP_NOACTIVATE);
             _visible = true;
+            StartupLog.Write($"[托盘菜单] 布局 content={_contentWidth}x{_contentHeight} scale={scale:F2} window={width}x{height}");
             ForceForeground();
         }
 
@@ -311,6 +316,8 @@ namespace CelesteMusicPlayer
                 var windowRef = CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)_hwnd.ToInt64());
                 _controller = await _environment.CreateCoreWebView2ControllerAsync(windowRef);
                 if (_disposed) { _controller.Close(); _controller = null; return false; }
+                _controller.BoundsMode = CoreWebView2BoundsMode.UseRawPixels;
+                _controller.ZoomFactor = 1;
 
                 CoreWebView2 core = _controller.CoreWebView2;
                 core.Settings.AreDefaultContextMenusEnabled = false;
@@ -363,14 +370,8 @@ namespace CelesteMusicPlayer
 
                 if (verb == "size")
                 {
-                    bool changed = false;
-                    if (root.TryGetProperty("width", out JsonElement w) && w.TryGetDouble(out double width)
-                        && Math.Abs(width - _contentWidth) > 0.5) { _contentWidth = width; changed = true; }
-                    if (root.TryGetProperty("height", out JsonElement h) && h.TryGetDouble(out double height)
-                        && Math.Abs(height - _contentHeight) > 0.5) { _contentHeight = height; changed = true; }
-                    _sizeWaiter?.TrySetResult(true);
-                    // 显示期间内容变了（勾选态/字号缩放）→ 跟着改成新尺寸，别让菜单截断
-                    if (changed && _visible) PlaceAndShow();
+                    // The awaited render result is authoritative. Delayed size
+                    // messages from an earlier render must not overwrite it.
                     return;
                 }
                 if (verb == "close") { Hide(); return; }

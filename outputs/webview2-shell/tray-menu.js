@@ -35,14 +35,14 @@
     const root = document.documentElement;
     Object.entries(theme.vars || {}).forEach(([key, value]) => root.style.setProperty('--' + key, value));
     // 字号缩放会改行高，换肤后必须重新量一次（此时若有 items 会被紧接着的 render 再量一次，无害）
-    reportSize();
+    // Measure only after the corresponding item list has been rendered.
   }
 
   /* 量一次菜单真实尺寸报给宿主。must be synchronous：菜单窗平时是隐藏的，
      隐藏的 WebView 里 requestAnimationFrame 不一定会跑，等它量就永远等不到。 */
   let lastSize = '';
   function reportSize() {
-    const width = Math.ceil(menu.offsetWidth), height = Math.ceil(menu.offsetHeight);
+    const width = Math.ceil(Math.max(menu.offsetWidth,menu.scrollWidth)), height = Math.ceil(Math.max(menu.offsetHeight,menu.scrollHeight));
     if (width <= 0 || height <= 0) return;
     const key = width + 'x' + height;
     if (key === lastSize) { send({ action: 'size', width, height }); return; }
@@ -110,6 +110,10 @@
   // evidence of leaving the window (especially while clicking the first row).
 
   if (live) {
+    window.CelesteTray={render:message=>{
+      applyTheme(message.theme);items=message.items||[];render();
+      return {width:Math.ceil(Math.max(menu.offsetWidth,menu.scrollWidth)),height:Math.ceil(Math.max(menu.offsetHeight,menu.scrollHeight))};
+    }};
     window.chrome.webview.addEventListener('message', event => {
       const message = event.data;
       if (!message || message.version !== 1) return;

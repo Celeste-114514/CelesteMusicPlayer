@@ -24,6 +24,17 @@ const path=require('node:path');
  await page.evaluate(()=>receive({data:{kind:'celeste.trayItems',version:1,items:[{actionId:'exit',label:'退出播放器'}]}}));
  await page.getByText('退出播放器',{exact:true}).click();
  assert.equal(await page.evaluate(()=>sent.filter(x=>x.actionId==='exit').length),1,'Pointer and click must dispatch exit exactly once');
+ for(const textScale of [1,1.5]){
+   await page.setViewportSize({width:260,height:320});
+   const size=await page.evaluate(scale=>window.CelesteTray.render({theme:{mode:'light',vars:{'text-scale':String(scale)}},items:[
+     ...['showMain','showMini','showScattered','toggleLyrics','previous','togglePlay','next','favorite','openSettings','openLogs','exit'].map(actionId=>({actionId,label:actionId}))
+   ]}),textScale);
+   assert(size.height>320,'Full menu must be measured beyond the initial viewport');
+   await page.setViewportSize({width:size.width,height:size.height});
+   const last=await page.locator('.tray-item').last().boundingBox();
+   assert(last.y+last.height<=size.height,'Exit must be fully visible without scrolling');
+   assert(await page.evaluate(()=>document.documentElement.scrollHeight<=innerHeight),'No vertical overflow');
+ }
  console.log('PASS: hover/click/keyboard actions and focus transitions');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1;});
