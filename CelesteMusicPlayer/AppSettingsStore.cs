@@ -3,7 +3,9 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
-using Windows.Storage;
+// 这里曾经 using Windows.Storage（WinRT）。2026-10-28 W6 第一步确认：文件读写早就改成
+// 普通目录（见 GetFilePath 的注释），这个 using 是历史残留、实际没用到，删掉之后
+// AppSettingsStore 就完全不依赖 WinUI/WinRT，可以被非 WinUI 宿主直接复用。
 
 namespace CelesteMusicPlayer
 {
@@ -53,10 +55,10 @@ namespace CelesteMusicPlayer
         public int SrcTargetHz { get; set; }
 
         /// <summary>SRC 质量档位：lowlatency / balanced / transparent（默认 balanced）。</summary>
-        public string SrcQuality { get; set; } = ResamplingSourceProvider.QualityBalanced;
+        public string SrcQuality { get; set; } = SrcOptions.QualityBalanced;
 
         /// <summary>SRC 量化前抖动：off / tpdf / highpass / ns5（默认 off）。</summary>
-        public string SrcDither { get; set; } = ResamplingSourceProvider.DitherOff;
+        public string SrcDither { get; set; } = SrcOptions.DitherOff;
 
         public bool MiniPlayerAlwaysOnTop { get; set; } = true;
 
@@ -743,7 +745,10 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             return s;
         }
 
-        private static AppSettingsState Clone(AppSettingsState s) => new()
+        // W6：改成 internal —— 设置边界自检（tools/ThinHostPoC）要逐个字段验证这里有没有漏拷。
+        // 这个项目出过好几次「字段存进文件了，但 Load() 返回的克隆里恒为默认」的事故，
+        // 根因都是这个 Clone 少拷一个字段；现在交给机器每次都查一遍。
+        internal static AppSettingsState Clone(AppSettingsState s) => new()
         {
             CloseAction = s.CloseAction,
             RestoreLibrary = s.RestoreLibrary,

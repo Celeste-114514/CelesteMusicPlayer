@@ -9,6 +9,18 @@
   <Compile Include="../../CelesteMusicPlayer/PlaybackCommandRouter.cs" Link="Core/PlaybackCommandRouter.cs" />
   <Compile Include="../../CelesteMusicPlayer/PlaybackSnapshot.cs" Link="Core/PlaybackSnapshot.cs" />
   <Compile Include="../../CelesteMusicPlayer/MainWindowCoordinator.cs" Link="Core/MainWindowCoordinator.cs" />
+  <!-- W6 第一步：设置读写边界。这些文件必须保持不依赖 WinUI/WinRT，PoC 能编过就是证明。 -->
+  <Compile Include="../../CelesteMusicPlayer/AppSettingsStore.cs" Link="Settings/AppSettingsStore.cs" />
+  <Compile Include="../../CelesteMusicPlayer/WebSettingsSchema.cs" Link="Settings/WebSettingsSchema.cs" />
+  <Compile Include="../../CelesteMusicPlayer/AppClosePreferences.cs" Link="Settings/AppClosePreferences.cs" />
+  <Compile Include="../../CelesteMusicPlayer/SrcOptions.cs" Link="Settings/SrcOptions.cs" />
+  <Compile Include="../../CelesteMusicPlayer/SecretProtector.cs" Link="Settings/SecretProtector.cs" />
+  <Compile Include="../../CelesteMusicPlayer/StartupLog.cs" Link="Core/StartupLog.cs" />
+  <Compile Include="../../CelesteMusicPlayer/AppLog.cs" Link="Core/AppLog.cs" />
+  <Compile Include="../../CelesteMusicPlayer/CrashReportService.cs" Link="Core/CrashReportService.cs" />
+  <Compile Include="../../CelesteMusicPlayer/UpdateChecker.cs" Link="Core/UpdateChecker.cs" />
+  <Compile Include="../../CelesteMusicPlayer/UpdateVersioning.cs" Link="Core/UpdateVersioning.cs" />
+  <Compile Include="../../CelesteMusicPlayer/HttpClients.cs" Link="Core/HttpClients.cs" />
   <Content Include="Web/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
  </ItemGroup>
  <Target Name="RemoveUnusedWpfWebViewReference" BeforeTargets="ResolveAssemblyReferences">

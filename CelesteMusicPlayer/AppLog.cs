@@ -69,7 +69,8 @@ namespace CelesteMusicPlayer
 
         private static readonly object Gate = new();
         private static readonly Dictionary<string, Sink> Sinks = new(StringComparer.OrdinalIgnoreCase);
-        private static readonly Timer FlushTimer;
+        // 全限定写法：PoC 这类同时引用 WinForms 的工程里，"Timer" 会和 Forms 的定时器撞名。
+        private static readonly System.Threading.Timer FlushTimer;
 
         private static string _root = string.Empty;
         private static bool _ready;
@@ -100,7 +101,7 @@ namespace CelesteMusicPlayer
                 _broken = true;
             }
 
-            FlushTimer = new Timer(_ => FlushAll(), null, FlushPeriodMs, FlushPeriodMs);
+            FlushTimer = new System.Threading.Timer(_ => FlushAll(), null, FlushPeriodMs, FlushPeriodMs);
             try
             {
                 AppDomain.CurrentDomain.ProcessExit += (_, _) => FlushAll();

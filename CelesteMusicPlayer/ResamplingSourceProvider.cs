@@ -27,14 +27,16 @@ namespace CelesteMusicPlayer
     /// </summary>
     internal sealed class ResamplingSourceProvider : IWaveProvider, IWaveSourceProvider
     {
-        public const string QualityLowLatency = "lowlatency";
-        public const string QualityBalanced = "balanced";
-        public const string QualityTransparent = "transparent";
+        // 真值搬到 SrcOptions（不依赖 NAudio，设置读写才能独立）。这里保留同名常量做别名，
+        // 值完全一致，老调用点不用改 —— 别在两处各写一份字符串，那迟早会漂。
+        public const string QualityLowLatency = SrcOptions.QualityLowLatency;
+        public const string QualityBalanced = SrcOptions.QualityBalanced;
+        public const string QualityTransparent = SrcOptions.QualityTransparent;
 
-        public const string DitherOff = "off";
-        public const string DitherTpdf = "tpdf";
-        public const string DitherHighpass = "highpass";
-        public const string DitherNs5 = "ns5";
+        public const string DitherOff = SrcOptions.DitherOff;
+        public const string DitherTpdf = SrcOptions.DitherTpdf;
+        public const string DitherHighpass = SrcOptions.DitherHighpass;
+        public const string DitherNs5 = SrcOptions.DitherNs5;
 
         private readonly IWaveSourceProvider _source;
         private readonly WdlResamplingSampleProvider _resampler;

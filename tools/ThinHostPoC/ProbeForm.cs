@@ -105,8 +105,18 @@ internal sealed class ProbeForm : Form, IMainWindowSurface
             string[] forbidden={"Microsoft.UI.Xaml","Microsoft.WindowsAppSDK","Microsoft.WinUI"};
             string[] modules=AppDomain.CurrentDomain.GetAssemblies().Select(a=>a.GetName().Name??"").ToArray();
             if(modules.Any(m=>forbidden.Any(f=>m.Contains(f,StringComparison.OrdinalIgnoreCase))))throw new Exception("WinUI dependency loaded");
+
+            // W6：设置读写边界。上面已经证明没加载 WinUI，而 AppSettingsStore/WebSettingsSchema
+            // 同样编译进了这个宿主 —— 说明设置读写对非 WinUI 宿主可用。
+            SettingsBoundary.Result boundary=SettingsBoundary.Run();
+            Program.Record($"Settings boundary: probed={boundary.FieldsProbed} cloneMismatch={boundary.CloneMismatches} schemaMismatch={boundary.SchemaMismatches} defsMissingReader={boundary.DefsMissingReader}");
+            foreach(string line in boundary.Details.Take(20))Program.Record("  settings: "+line);
+            if(boundary.FieldsProbed==0)throw new Exception("Settings boundary probe touched no field; check aborted");
+            if(boundary.CloneMismatches>0||boundary.SchemaMismatches>0||boundary.DefsMissingReader>0)
+                throw new Exception("Settings boundary check failed: "+string.Join(" | ",boundary.Details.Take(6)));
+
             Passed=true;Program.Record("PASS: actual WebView2 JS→C#→JS roundtrip using W1 contracts; WinUI not loaded");
-            Program.WriteReport(true,new {runtime=Environment.Version.ToString(),modules,nativeTaskbarApi=_taskbar.ApiReady,visibleTaskbarButtons="manual verification pending",simulation=true});
+            Program.WriteReport(true,new {runtime=Environment.Version.ToString(),modules,nativeTaskbarApi=_taskbar.ApiReady,settingsBoundary=boundary,visibleTaskbarButtons="manual verification pending",simulation=true});
         }
         catch(Exception ex){Program.Record(ex.ToString());Program.WriteReport(false,new {error=ex.ToString()});}
         finally{Close();}

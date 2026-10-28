@@ -1,7 +1,7 @@
 using System;
 using System.IO;
 using System.Text.Json;
-using Windows.Storage;
+// 去掉了 using Windows.Storage（W6）：本文件现在只用普通目录，不再依赖 WinRT。
 
 namespace CelesteMusicPlayer
 {
@@ -100,17 +100,13 @@ namespace CelesteMusicPlayer
 
         private static string GetLegacyFilePath()
         {
-            string root;
-            try
-            {
-                root = ApplicationData.Current.LocalFolder.Path;
-            }
-            catch
-            {
-                root = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer");
-            }
+            // 2026-10-28 W6：这里原先先试 WinRT 的 ApplicationData，失败才退回普通用户目录。
+            // 但 AppSettingsStore 早就统一用普通目录（规避 MSIX 虚拟化导致的多路径混乱），
+            // 两个偏好文件各写一处正是"保存正确却读回默认"的温床。现在统一成同一条路径。
+            // 未打包运行时 ApplicationData.Current 本来就抛异常，所以实际路径并没有变。
+            string root = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "CelesteMusicPlayer");
 
             Directory.CreateDirectory(root);
             return Path.Combine(root, LegacyFileName);

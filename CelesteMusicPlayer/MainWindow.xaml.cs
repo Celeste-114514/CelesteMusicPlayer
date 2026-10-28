@@ -383,20 +383,8 @@ namespace CelesteMusicPlayer
         Year
     }
 
-    /// <summary>播放顺序 / 循环方式</summary>
-    public enum PlaybackOrder
-    {
-        /// <summary>顺序播放：按列表顺序播完即停</summary>
-        Sequential,
-        /// <summary>随机播放：每首结束后随机选下一首</summary>
-        Random,
-        /// <summary>列表循环：按列表顺序循环</summary>
-        ListLoop,
-        /// <summary>单曲循环：重复当前曲目</summary>
-        TrackLoop,
-        /// <summary>单曲播放：播完当前曲目后停止</summary>
-        TrackOnce
-    }
+    // PlaybackOrder 枚举已移到 PlaybackSnapshot.cs（W6：设置的依赖不该寄生在界面文件里）。
+    // 命名空间相同，所有调用点无需改动。
 
     /// <summary>文件夹浏览树中的一行（文件夹或音频文件）</summary>
     public sealed class FolderBrowserItem : INotifyPropertyChanged
