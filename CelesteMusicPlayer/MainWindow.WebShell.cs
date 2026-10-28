@@ -13,7 +13,7 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
         private WebShellWindow? _webShellWindow;
-        private bool _webShellOwnerClosing;
+
 
         /// <summary>
         /// 主界面已建好的 WebView2 环境（任务栏播放条在用）。
@@ -55,82 +55,7 @@ namespace CelesteMusicPlayer
             SetPlaybackOrder(order);
         }
 
-        internal void OpenWebShell()
-        {
-            if (_webShellWindow != null) { EnsureWebShellVisible(); return; }
-            _webShellWindow = new WebShellWindow(this);
-            _webShellWindow.Closed += (_, _) => { _webShellWindow = null; if (!_webShellOwnerClosing) ExitApplication(); };
-            Closed -= CloseWebShellWithOwner;
-            Closed += CloseWebShellWithOwner;
-            _webShellWindow.Activate();
-            AppWindow.Hide();
-        }
-
-        /// <summary>
-        /// 主界面唯一的"显示/恢复"实现：没有就建，最小化就还原，隐藏了就 Show，最后拉前台。
-        /// 必须在 UI 线程调用。以前各入口各写一套（这里 Show+Activate、迷你那边直接 Activate 主窗口），
-        /// 结果是双击迷你播放器只会激活那个已经隐藏的 WinUI 宿主，用户什么都看不到。
-        /// </summary>
-        private void EnsureWebShellVisible()
-        {
-            if (_webShellWindow == null)
-            {
-                OpenWebShell();
-                return;
-            }
-
-            // Show() 不会把最小化的窗口还原，得先动 Presenter。
-            if (_webShellWindow.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter
-                && presenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Minimized)
-            {
-                presenter.Restore();
-            }
-
-            _webShellWindow.AppWindow.Show();
-            _webShellWindow.Activate();
-        }
-
-        /// <summary>
-        /// 把主界面叫到前台。托盘「显示主界面」、迷你播放器双击、协议激活、更新气泡点击都走这里，
-        /// 不要再直接调 MainWindow.Activate() —— 那个窗口是隐藏的宿主，激活它等于没反应。
-        /// </summary>
-        internal void RestoreMainWindow()
-        {
-            if (DispatcherQueue.HasThreadAccess)
-            {
-                try { EnsureWebShellVisible(); }
-                catch (Exception ex) { StartupLog.WriteException("MainWindow.RestoreMainWindow", ex); }
-                return;
-            }
-
-            DispatcherQueue.TryEnqueue(RestoreMainWindow);
-        }
-
-        private void CloseWebShellWithOwner(object sender, WindowEventArgs args)
-        {
-            Closed -= CloseWebShellWithOwner;
-            _webShellOwnerClosing = true;
-            _webShellWindow?.Close();
-        }
-
         private void WebShellButton_Click(object sender, RoutedEventArgs args) => OpenWebShell();
-
-        /// <summary>
-        /// 把网页外壳拉到前台并跳到指定页（托盘菜单的「设置 / 发现新版本」用）。
-        /// 页面名必须是网页里真实存在的路由，宿主不认识也不校验 —— 传错只会停在主页。
-        /// </summary>
-        internal void ShowWebPage(string page)
-        {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                try
-                {
-                    EnsureWebShellVisible();
-                    _webShellWindow?.NavigateTo(page);
-                }
-                catch (Exception ex) { StartupLog.WriteException("MainWindow.ShowWebPage", ex); }
-            });
-        }
 
         internal static string WebTrackId(PlaylistItem item)
         {
