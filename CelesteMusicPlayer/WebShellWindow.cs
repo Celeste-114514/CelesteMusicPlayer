@@ -83,6 +83,9 @@ namespace CelesteMusicPlayer
         private void SourcesChanged() => DispatcherQueue.TryEnqueue(() => { _dirty = true; _metadataSent.Clear(); });
         internal void NotifySourceStatus(string text) => Post(new { kind = "celeste.sourceStatus", version = 1, message = text });
 
+        /// <summary>更新进度/结论。网页的关于卡片靠这条消息画进度条，不靠轮询。</summary>
+        internal void NotifyUpdateStatus(object status) => Post(new { kind = "celeste.update", version = 1, status });
+
         private void LibraryChanged(object? sender, NotifyCollectionChangedEventArgs args) => _dirty = true;
 
         private void BackgroundWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
