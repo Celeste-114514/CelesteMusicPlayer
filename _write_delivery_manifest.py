@@ -34,8 +34,6 @@ KEY = [
     "WebShell/queue-page.js",
     "WebShell/queue-page.css",
     "WebShell/albums.js",
-    "WebShell/cd-shelf.js",
-    "WebShell/cd-shelf.css",
     "WebShell/library.css",
 ]
 
@@ -54,8 +52,8 @@ lines = [
     "生成时间：%s" % time.strftime("%Y-%m-%d %H:%M:%S"),
     "目录：%s" % os.path.basename(ROOT),
     "形态：自包含（目标机无需安装 .NET）· net10.0-windows10.0.19041.0 win-x64",
-    "本次内容：网页主界面收尾 —— 播放队列独立成页 / 专辑页 CD 架浏览 / 更新检查结论与关于卡片"
-    " / 外链统一由宿主打开 / 主界面恢复入口统一（托盘、迷你播放器双击）",
+    "本次内容：播放队列独立成页（正在播放 / 下一首 / 上一首 / 拖动排序）"
+    " / 更新检查结论与关于卡片 / 外链统一由宿主打开 / 主界面恢复入口统一（托盘、迷你播放器双击）",
     "文件总数：%d" % total,
     "",
     "== 关键文件 ==",
