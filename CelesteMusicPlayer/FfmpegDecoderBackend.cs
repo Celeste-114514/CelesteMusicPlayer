@@ -761,13 +761,9 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>转码缓存目录（%LOCALAPPDATA%\CelesteMusicPlayer\TranscodeCache）。</summary>
-        internal static string TranscodeCacheDir => GetCacheDir();
+        internal static string TranscodeCacheDir => AppCachePaths.TranscodeCacheDir;
 
-        private static string GetCacheDir()
-        {
-            string baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            return Path.Combine(baseDir, "CelesteMusicPlayer", "TranscodeCache");
-        }
+        private static string GetCacheDir() => AppCachePaths.TranscodeCacheDir;
 
         /// <summary>
         /// 把 CUE 分轨区间注入 ffmpeg 转码参数：-ss 放在 -i 前（输入定位，音频采样级精确）、
