@@ -67,7 +67,7 @@ let browser;
   assert(before.presets.some(p => p.id === 'apple-silver'));
   // Rapid slider edits followed immediately by undo: true override deletion and no stale queue reads.
   await page.evaluate(() => {
-    const range = [...document.querySelectorAll('input[type=range]')].find(el => el.closest('.set-row').textContent.includes('圆角'));
+    const range = [...document.querySelectorAll('.set-row input[type=range]')].find(el => el.closest('.set-row').textContent.includes('圆角'));
     range.dispatchEvent(new PointerEvent('pointerdown'));
     for (const n of [28, 30, 32]) { range.value = n; range.dispatchEvent(new Event('input')); }
     range.dispatchEvent(new PointerEvent('pointerup'));
@@ -82,7 +82,7 @@ let browser;
   await click('取消预览'); await waitValue('radius', before.light.values.radius);
   // Separate gestures do not collapse; undoing the second keeps first, then removes all overrides.
   await page.evaluate(() => {
-    const range = [...document.querySelectorAll('input[type=range]')].find(el => el.closest('.set-row').textContent.includes('圆角'));
+    const range = [...document.querySelectorAll('.set-row input[type=range]')].find(el => el.closest('.set-row').textContent.includes('圆角'));
     for (const n of [14, 18]) {
       range.dispatchEvent(new PointerEvent('pointerdown')); range.value = n; range.dispatchEvent(new Event('input')); range.dispatchEvent(new PointerEvent('pointerup'));
     }
