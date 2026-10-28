@@ -41,11 +41,13 @@
   <script src="artists.js" defer></script>
   <script src="sort-menus.js" defer></script>
   <script src="browse.js" defer></script>
+  <script src="queue-page.js" defer></script>
   <script src="home.js" defer></script>
   <script src="audio-chain.js" defer></script>
   <script src="track-menu.js" defer></script>
   <script src="folders.js" defer></script>
   <link rel="stylesheet" href="folders.css">
+  <link rel="stylesheet" href="queue-page.css">
   <link rel="stylesheet" href="track-menu.css">
   <link rel="stylesheet" href="dsp.css">
   <link rel="stylesheet" href="tags.css">
@@ -198,6 +200,63 @@
         <section id="artists-page" class="page artists-page" hidden aria-labelledby="artists-title">
           <div id="artists-browser"><div class="albums-heading"><div><p class="eyebrow">THE VOICES IN YOUR COLLECTION</p><h1 id="artists-title">艺术家<span>。</span></h1><p id="artists-count" class="songs-count"></p></div><div class="album-sort-actions"><label class="sort-picker"><span>排序：</span><select id="artists-sort" aria-label="艺术家排序"><option value="name">名称</option><option value="songCount">歌曲数</option><option value="albumCount">专辑数</option><option value="duration">总时长</option><option value="year">最新发行年份</option></select></label><button id="artists-direction" class="sort-direction">升序 ↑</button></div></div><div id="artists-grid" class="artists-grid"></div><p id="artists-empty" class="albums-empty" hidden>没有找到相关艺术家。</p><button id="artists-more" class="secondary" hidden>加载更多艺术家</button></div>
           <div id="artist-detail" hidden><button id="artist-back" class="text-button album-back">‹ 所有艺术家</button><div class="artist-overview"><div class="artist-hero"><div id="artist-portrait"></div><div><p id="artist-kind" class="eyebrow">ARTIST</p><h1 id="artist-name"></h1><p class="setting-description">收藏的声音，汇成一个音乐世界。</p><button id="artist-play" class="primary">播放全部歌曲</button></div></div><dl id="artist-stats" class="collection-stats"></dl><p id="artist-stats-note" class="setting-note" role="status"></p></div><div class="artist-tabs" role="group" aria-label="艺术家内容"><button data-artist-tab="songs" aria-pressed="true">歌曲</button><button data-artist-tab="albums" aria-pressed="false">专辑</button></div><div class="detail-sort-actions"><label class="sort-picker"><span>排序：</span><select id="artist-detail-sort" aria-label="艺术家详情排序"><option value="title">名称</option><option value="year">年份</option><option value="duration">时长</option><option value="album">专辑</option><option value="track">音轨号</option></select></label><button id="artist-detail-direction" class="sort-direction">升序 ↑</button></div><div id="artist-songs" class="album-tracks"></div><div id="artist-albums" class="albums-grid" hidden></div></div>
+        </section>
+        <!-- 播放队列整页：现在播什么、接下来播什么、怎样调整顺序。
+             数据全部来自宿主 queue 命令与 celeste.state，不在网页里另存一份队列。 -->
+        <section class="page queue-page" id="queue-page" hidden aria-labelledby="queue-title">
+          <header class="albums-heading queue-heading">
+            <div>
+              <p class="eyebrow">UP NEXT</p>
+              <h1 id="queue-title">播放队列<span>。</span></h1>
+              <p id="queue-summary" class="songs-count">正在读取队列…</p>
+            </div>
+            <div class="album-sort-actions queue-actions">
+              <label class="queue-search"><svg><use href="#i-search"/></svg><input id="queue-search" type="search" placeholder="搜索队列" aria-label="搜索队列"></label>
+              <button id="queue-locate" class="secondary" type="button" title="滚动到正在播放的那一首">定位当前</button>
+            </div>
+          </header>
+          <section class="queue-now" aria-label="正在播放">
+            <button id="queue-now-cover" class="queue-now-cover" type="button" aria-label="打开播放详情"><span>NO<br>MUSIC</span></button>
+            <div class="queue-now-copy">
+              <div class="queue-now-top">
+                <div class="queue-now-text">
+                  <p class="eyebrow">NOW PLAYING</p>
+                  <h2 id="queue-now-title">未在播放</h2>
+                  <p id="queue-now-meta" class="queue-now-meta"></p>
+                  <p id="queue-now-quality" class="queue-now-quality"></p>
+                </div>
+                <div class="queue-now-tools">
+                  <button id="queue-favorite" class="icon-button" type="button" aria-label="喜欢这首歌" aria-pressed="false" title="喜欢这首歌"><svg><use href="#i-heart"/></svg></button>
+                  <button id="queue-open-now" class="text-button" type="button">播放详情</button>
+                </div>
+              </div>
+              <div class="queue-progress">
+                <span id="queue-elapsed">0:00</span>
+                <input id="queue-seek" type="range" min="0" max="0" step="0.1" value="0" aria-label="播放进度">
+                <span id="queue-duration">0:00</span>
+              </div>
+            </div>
+            <div class="queue-next">
+              <p class="eyebrow">NEXT UP</p>
+              <button id="queue-next-card" class="queue-next-card" type="button">
+                <span id="queue-next-cover" class="queue-next-cover"><svg><use href="#i-note"/></svg></span>
+                <span class="queue-next-copy"><strong id="queue-next-title">队列为空</strong><small id="queue-next-meta"></small></span>
+              </button>
+            </div>
+          </section>
+          <div class="queue-list-heading">
+            <div class="queue-list-title"><h2>接下来播放</h2><p id="queue-filter-note"></p></div>
+            <div class="queue-order" id="queue-order" role="group" aria-label="播放顺序">
+              <button type="button" data-order="Sequential">顺序播放</button>
+              <button type="button" data-order="Random">随机播放</button>
+              <button type="button" data-order="ListLoop">列表循环</button>
+              <button type="button" data-order="TrackLoop">单曲循环</button>
+              <button type="button" data-order="TrackOnce">单曲播放</button>
+            </div>
+          </div>
+          <div id="queue-list" class="queue-list" role="list"></div>
+          <button id="queue-more" class="secondary" type="button" hidden>加载更多</button>
+          <p id="queue-status" class="setting-note" role="status"></p>
         </section>
         <section id="browse-page" class="page" hidden><div class="albums-heading"><div><p class="eyebrow" id="browse-eyebrow">YOUR COLLECTION</p><h1 id="browse-title"></h1><p id="browse-count" class="songs-count"></p></div><div class="album-sort-actions"><button id="browse-play" class="primary">播放全部</button><label class="sort-picker"><span>排序：</span><select id="browse-sort" aria-label="分类排序"><option value="default">默认顺序</option><option value="title">名称</option><option value="artist">艺术家</option><option value="album">专辑</option><option value="duration">时长</option><option value="rating">评分</option><option value="playCount">播放次数</option><option value="lastPlayed">最近播放时间</option></select></label><button id="browse-direction" class="sort-direction">升序 ↑</button><button id="browse-refresh" class="text-button">刷新</button></div></div><div id="browse-filters" class="artist-tabs" hidden></div><form id="playlist-create" class="playlist-create" hidden><input id="playlist-name" placeholder="新播放列表名称" maxlength="120" required aria-label="新播放列表名称"><button class="secondary">创建播放列表</button></form><p id="browse-status" class="setting-note" role="status"></p><div id="browse-cards" class="browse-cards"></div><div id="browse-tracks" class="album-tracks"></div><button id="browse-more" class="secondary" hidden>加载更多</button></section>
         <section class="page placeholder-page" id="category-page" hidden aria-labelledby="category-title"><p class="eyebrow">YOUR COLLECTION</p><h1 id="category-title"></h1><p class="intro" id="category-description"></p><div class="empty-canvas"><span class="empty-orbit"><svg id="category-icon"><use href="#i-note"/></svg></span><h2 id="canvas-title">这一页，由你来定义。</h2><p id="canvas-description">整体空间已经准备好。内容布局和细节，留给下一步一起打磨。</p><button class="secondary" data-page="overview">回到概览</button></div></section>

@@ -232,15 +232,90 @@ namespace CelesteMusicPlayer
             else if (operation != "get") throw new ArgumentException("未知的队列操作。");
             int offset = msg.TryGetProperty("offset", out var value) ? value.GetInt32() : 0;
             if (offset < 0 || offset > items.Length) offset = 0;
+
+            // 摘要按整份队列算，不是按已经翻出来的那 200 首算：
+            // 分页加载到哪儿不影响"共 N 首 / 总时长"，否则滚动一下就变数。
+            double totalSeconds = 0, remainingSeconds = 0;
+            for (int i = 0; i < items.Length; i++)
+            {
+                double seconds = Math.Max(0, items[i].Duration.TotalSeconds);
+                totalSeconds += seconds;
+                if (_userPlaylistIndex >= 0 && i > _userPlaylistIndex) remainingSeconds += seconds;
+            }
+
             return new
             {
                 revision = _webQueueRevision, total = items.Length, offset, currentIndex = _userPlaylistIndex,
+                order = _orderResolver.Order.ToString(),
+                summary = new { totalSeconds, remainingSeconds, hasCurrent = _userPlaylistIndex >= 0 && _userPlaylistIndex < items.Length },
+                next = QueueNextPreview(items),
                 tracks = items.Skip(offset).Take(200).Select((item, i) => new
                 {
                     id = WebTrackId(item), index = offset + i, title = item.Title, artist = item.Artist,
-                    duration = item.Duration.TotalSeconds, coverUrl = "https://celeste-cover.internal/cover/" + WebTrackId(item)
+                    album = item.Album, duration = item.Duration.TotalSeconds,
+                    // 容器格式用扩展名判（不做位深/码率解析：那要逐个读文件，200 行会让宿主卡住）。
+                    // 位深和采样率这种要真读文件的，只在当前播放卡片上给（见 celeste.state.quality）。
+                    format = QueueFormatLabel(item),
+                    remote = item.IsRemote,
+                    coverUrl = "https://celeste-cover.internal/cover/" + WebTrackId(item)
                 }).ToArray()
             };
+        }
+
+        /// <summary>队列列表里的"格式"列：只报容器，不去读文件（读 200 个文件会让队列页卡住）。</summary>
+        private static string QueueFormatLabel(PlaylistItem item)
+        {
+            if (item.IsRemote) return "NET";
+            string extension = System.IO.Path.GetExtension(item.FilePath).TrimStart('.').ToUpperInvariant();
+            return extension.Length is > 0 and <= 5 ? extension : "";
+        }
+
+        /// <summary>
+        /// 队列页的"下一首"预览。只按当前播放顺序推算，不看、也不推进随机数发生器 ——
+        /// 随机模式下真去摇一次，等于把真正要播的那首摇走了，预览和实际就对不上。
+        /// 随机就如实说随机，单曲循环就如实说这首会继续循环。
+        /// </summary>
+        private object QueueNextPreview(PlaylistItem[] items)
+        {
+            const string none = "none";
+            string kind;
+            int index = -1;
+            if (items.Length == 0 || _userPlaylistIndex < 0 || _userPlaylistIndex >= items.Length)
+            {
+                kind = "unknown";
+            }
+            else
+            {
+                switch (_orderResolver.Order)
+                {
+                    case PlaybackOrder.Random:
+                        kind = items.Length == 1 ? "self" : "random";
+                        index = items.Length == 1 ? _userPlaylistIndex : -1;
+                        break;
+                    case PlaybackOrder.TrackLoop:
+                        kind = "self"; index = _userPlaylistIndex; break;
+                    case PlaybackOrder.TrackOnce:
+                        kind = none; break;
+                    case PlaybackOrder.Sequential:
+                        kind = _userPlaylistIndex + 1 < items.Length ? "track" : none;
+                        index = _userPlaylistIndex + 1;
+                        break;
+                    default: // ListLoop：走到末尾就回第一首
+                        kind = "track"; index = (_userPlaylistIndex + 1) % items.Length; break;
+                }
+            }
+
+            if (index >= 0 && index < items.Length)
+            {
+                var item = items[index];
+                return new
+                {
+                    kind, index, title = item.Title, artist = item.Artist, album = item.Album,
+                    duration = item.Duration.TotalSeconds,
+                    coverUrl = "https://celeste-cover.internal/cover/" + WebTrackId(item)
+                };
+            }
+            return new { kind };
         }
 
         internal object WebMore(JsonElement msg)

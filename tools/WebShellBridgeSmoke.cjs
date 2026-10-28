@@ -79,7 +79,7 @@ let chromium;try{({chromium}=require('playwright'));}catch{({chromium}=require('
       assert.equal(await page.evaluate(() => commands.at(-1).action),action);
     }
     await page.locator('#playback-order').click({button:'right'});
-    await page.locator('[data-order="TrackOnce"]').click();
+    await page.locator('#order-menu [data-order="TrackOnce"]').click();
     assert.deepEqual(await page.evaluate(()=>commands.at(-1)),{kind:'celeste.command',version:1,command:'setPlaybackOrder',order:'TrackOnce'});
     await page.setViewportSize({width:1440,height:960});
     await page.locator('#audio-settings').click();

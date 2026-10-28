@@ -23,15 +23,16 @@ let chromium;try{({chromium}=require('playwright'));}catch{({chromium}=require('
   if(['artists','albumArtists'].includes(category))await page.locator('.artist-card').first().click();
   if(category==='folders'){await page.locator('#folder-tree [data-node-id="root"] .folder-chevron').click();await page.waitForSelector('.folder-track');}
   if(category==='playlists'){assert.equal(await page.locator('#playlist-import').isVisible(),true);assert.equal(await page.locator('.browse-card img').count(),1);await page.locator('.browse-card').click();for(const id of ['playlist-queue','playlist-copy','playlist-export','playlist-cover'])assert.equal(await page.locator('#'+id).isVisible(),true);assert.equal(await page.locator('#browse-play').textContent(),'播放该列表');}
-  const row=page.locator('.song-row:visible,.album-track:visible,.web-queue-row:visible').first();
+  if(category==='queue')await page.waitForSelector('#queue-list .queue-row');
+  const row=page.locator('.song-row:visible,.album-track:visible,.web-queue-row:visible,.queue-row:visible').first();
   const id=await row.getAttribute('data-track-id');const before=await page.evaluate(()=>commands.filter(m=>['playTrack','playAll'].includes(m.command)).length);
   await open(row);assert.equal(await page.evaluate(()=>commands.filter(m=>['playTrack','playAll'].includes(m.command)).length),before,'right click must not start playback');
   await choose('复制歌名与艺术家');const sent=await last();assert.equal(sent.operation,'copy');if(category==='queue'){assert.equal(sent.revision,3);assert.deepEqual(sent.entries,[{index:0,trackId:'a'}]);}else assert.deepEqual(sent.trackIds,[id]);
  }
  await go('songs');await open(page.locator('.song-row').first());await choose('多选');await page.locator('.song-row').nth(1).click();assert.match(await page.locator('.track-selection-bar').textContent(),/2 首/);await page.locator('.track-selection-bar button').first().click();await choose('添加至播放队列');assert.deepEqual((await last()).trackIds,['a','b']);await page.keyboard.press('Escape');
  await go('songs');await page.locator('.song-row').nth(1).focus();await page.keyboard.press('Shift+F10');await page.locator('#track-context-menu').waitFor({state:'visible'});await choose('下一首播放');assert.deepEqual((await last()).trackIds,['b']);
- await go('queue');await open(page.locator('.browse-row').nth(2));await choose('置顶');assert.deepEqual((await last()).entries,[{index:2,trackId:'a'}]);
- await page.evaluate(()=>window.rejectQueue=true);await page.locator('.browse-row').nth(1).click({button:'right',position:{x:110,y:15}});await page.waitForTimeout(100);
+ await go('queue');await page.waitForSelector('#queue-list .queue-row');await open(page.locator('#queue-list .queue-row').nth(2));await choose('置顶');assert.deepEqual((await last()).entries,[{index:2,trackId:'a'}]);
+ await page.evaluate(()=>window.rejectQueue=true);await page.locator('#queue-list .queue-row').nth(1).click({button:'right',position:{x:110,y:15}});await page.waitForTimeout(100);
  assert.equal(await page.locator('#track-context-menu').isVisible(),false);assert.match(await page.locator('#toast').textContent(),/队列已变化/);await page.evaluate(()=>window.rejectQueue=false);
  await go('playlists');await page.locator('.browse-card').click({button:'right'});await choose('设置封面（本地图片…）');assert.equal(await page.evaluate(()=>commands.filter(m=>m.command==='browse').at(-1).operation),'setCover');
  for(const width of [1440,1024,760]){await page.setViewportSize({width,height:960});await go('songs');await open(page.locator('.song-row').first());const box=await page.locator('#track-context-menu').boundingBox();assert.ok(box.x>=0&&box.x+box.width<=width&&box.y>=0&&box.y+box.height<=960);await page.keyboard.press('Escape');}

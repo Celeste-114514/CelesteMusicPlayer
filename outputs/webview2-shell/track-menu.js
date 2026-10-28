@@ -2,7 +2,7 @@
   'use strict';
   const shell = window.CelesteShell, live = typeof window.chrome?.webview?.postMessage === 'function';
   const popup = window.CelestePopup, motion = window.CelesteMotion;
-  const selector = '.song-row,.album-track[data-track-id],.web-queue-row';
+  const selector = '.song-row,.album-track[data-track-id],.web-queue-row,.queue-row';
   const MENU_ID = 'track-context-menu';
 
   // 多选栏：外壳负责居中，内层负责动画。
@@ -26,7 +26,7 @@
 
   let selected = new Set(), scope = null, anchor = null, multi = false, epoch = 0, returnFocus = null, busy = false, barVisible = false;
   const key = row => row.dataset.queueIndex === undefined ? row.dataset.trackId || 'demo-' + row.dataset.index : 'q:' + row.dataset.queueRevision + ':' + row.dataset.queueIndex;
-  const container = row => row.parentElement.closest('#songs-list,#album-tracks,#artist-songs,#browse-tracks,#web-queue-list,#folder-songs') || row.parentElement;
+  const container = row => row.parentElement.closest('#songs-list,#album-tracks,#artist-songs,#browse-tracks,#web-queue-list,#queue-list,#folder-songs') || row.parentElement;
   const rows = () => scope ? [...scope.querySelectorAll(selector)] : [];
   const chosen = () => rows().filter(row => selected.has(key(row)));
 

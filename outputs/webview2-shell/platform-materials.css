@@ -7,21 +7,21 @@
 :root:is([data-material=windows],[data-material=apple]) :is(#transport-dialog,.transport-more-menu,.ui-popup,.ui-listbox,.chain-drawer){background:color-mix(in srgb,var(--menu-bg) calc(var(--material-opacity)*100%),transparent);backdrop-filter:blur(var(--material-blur)) saturate(1.18);border:1px solid var(--material-edge);box-shadow:0 14px 42px var(--material-cast),inset 0 1px 0 #fff2}
 :root:is([data-material=windows],[data-material=apple]) .titlebar{border-bottom:1px solid color-mix(in srgb,var(--line) 65%,transparent)}
 :root:is([data-material=windows],[data-material=apple]) :is(.home-hero,.home-now,.browse-card,.album-card,.artist-card){border-color:color-mix(in srgb,var(--line) 68%,transparent)}
-:root:is([data-material=windows],[data-material=apple]) :is(.song-row,.web-queue-row):hover{background:var(--hover)}
+:root:is([data-material=windows],[data-material=apple]) :is(.song-row,.web-queue-row,.queue-row):hover{background:var(--hover)}
 :root[data-material=windows] body{padding:8px}
 :root[data-material=windows] .shell{border-radius:10px}
 :root[data-material=windows] :is(.main,.home-hero,.browse-card){border-radius:8px}
-:root[data-material=windows] :is(.icon-button,.header-tools button,.header-actions button,.web-queue-row,.search,.set-switch){border-radius:5px}
+:root[data-material=windows] :is(.icon-button,.header-tools button,.header-actions button,.web-queue-row,.queue-row,.search,.set-switch){border-radius:5px}
 :root[data-material=windows] :is(#transport-dialog,.transport-more-menu,.ui-popup,.ui-listbox){border-radius:8px}
 :root[data-material=windows] .player{background:var(--material-wash);backdrop-filter:blur(24px);box-shadow:0 -1px 0 var(--material-edge);border-top:1px solid var(--line)}
-:root[data-material=windows] :is(.song-row.playing,.web-queue-row[aria-current=true]){box-shadow:inset 3px 0 0 var(--accent);border-radius:4px}
+:root[data-material=windows] :is(.song-row.playing,.web-queue-row[aria-current=true],.queue-row[aria-current=true]){box-shadow:inset 3px 0 0 var(--accent);border-radius:4px}
 :root[data-material=windows] :is(button,input,select):focus-visible{outline-width:2px;outline-offset:2px}
 :root[data-material=windows] .now-playing-page[data-player-theme=default]{border-radius:10px;background:color-mix(in srgb,var(--surface) 96%,transparent)}
 :root[data-material=apple] body{padding:12px}
 :root[data-material=apple] .shell{border-radius:26px}
 :root[data-material=apple] .main{border:0;border-radius:20px}
 :root[data-material=apple] :is(.home-hero,.browse-card,.album-card,.artist-card){border-radius:18px;box-shadow:0 6px 22px color-mix(in srgb,var(--shadow) 55%,transparent)}
-:root[data-material=apple] :is(.icon-button,.header-tools button,.header-actions button,.web-queue-row){border-radius:12px}
+:root[data-material=apple] :is(.icon-button,.header-tools button,.header-actions button,.web-queue-row,.queue-row){border-radius:12px}
 :root[data-material=apple] :is(#transport-dialog,.transport-more-menu,.ui-popup,.ui-listbox){border-radius:20px;box-shadow:0 18px 55px var(--material-cast),0 3px 10px #0000000a,inset 0 1px 0 #fff6}
 :root[data-material=apple] .player{margin:0 12px 12px;border-radius:22px;border:1px solid var(--material-edge);background:var(--material-wash);backdrop-filter:blur(var(--material-blur)) saturate(1.22);box-shadow:0 8px 32px var(--material-cast),inset 0 1px 0 #fff5}
 :root[data-material=apple] .transport-buttons .play-button{box-shadow:0 4px 12px color-mix(in srgb,var(--accent) 15%,transparent)}

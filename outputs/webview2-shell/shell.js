@@ -116,7 +116,8 @@
     $('songs-page').hidden = page !== 'songs';
     $('albums-page').hidden = page !== 'albums';
     $('artists-page').hidden = !['artists','albumArtists'].includes(page);
-    $('browse-page').hidden = !['folders','favorites','ratings','recent','mostPlayed','playlists','queue'].includes(page);
+    $('browse-page').hidden = !['folders','favorites','ratings','recent','mostPlayed','playlists'].includes(page);
+    $('queue-page').hidden = page !== 'queue';
     $('settings-page').hidden = page !== 'settings';
     $('category-page').hidden = ['overview','songs','albums','artists','albumArtists','folders','favorites','ratings','recent','mostPlayed','playlists','queue','settings'].includes(page);
     $('search').placeholder = page === 'songs' ? '搜索标题、专辑、艺术家' : page === 'albums' ? '搜索专辑、艺术家、年份' : '搜索你的音乐';

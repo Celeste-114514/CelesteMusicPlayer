@@ -1,0 +1,168 @@
+/* 播放队列整页：顶部当前/下一首卡片 + 真实队列列表。
+   尺寸只参考现有页面（封面 44、行高 60 左右），不另立一套密度。 */
+
+.queue-page{padding-top:14px;padding-bottom:30px}
+.queue-heading{min-height:auto;margin-bottom:12px}
+.queue-actions{flex-wrap:wrap;justify-content:flex-end}
+.queue-search{display:flex;align-items:center;gap:8px;background:var(--input-bg);border:1px solid var(--input-line);
+  border-radius:12px;padding:9px 12px;width:210px;color:var(--muted)}
+.queue-search svg{width:15px;height:15px}
+.queue-search input{border:0;background:none;outline:none;min-width:0;width:100%;
+  font-size:calc(12px * var(--text-scale));color:var(--ink)}
+.queue-search input::placeholder{color:var(--muted)}
+.queue-search:focus-within{box-shadow:0 0 0 3px color-mix(in srgb,var(--focus) 13%,transparent)}
+#queue-locate{margin:0;height:38px;display:inline-flex;align-items:center}
+
+/* ── 当前 / 下一首 ───────────────────────────────────────────────
+   横向一条，不占太多竖向空间：队列页的主角是下面的列表。 */
+.queue-now{display:grid;grid-template-columns:92px minmax(0,1fr) minmax(178px,236px);gap:20px;align-items:center;
+  padding:14px;border-radius:19px;border:1px solid var(--line);background:var(--panel-soft)}
+.queue-now-cover{width:92px;height:92px;border-radius:14px;background-size:cover;background-position:center;
+  /* 没封面时给一块能看出是"封面位"的渐变，别和卡片底色糊成一片 */
+  background-image:linear-gradient(145deg,var(--accent-soft),color-mix(in oklab,var(--accent) 16%,var(--panel-soft)));
+  border:1px solid color-mix(in oklab,var(--accent) 18%,transparent);
+  color:var(--muted);display:grid;place-items:center;text-align:center;line-height:1.8;
+  font-size:calc(9px * var(--text-scale));letter-spacing:2px;overflow:hidden}
+.queue-now-cover:hover{filter:brightness(1.03)}
+/* 有封面就整块铺图，占位文字让开 */
+.queue-now-cover.has-cover>span{display:none}
+.queue-now-copy{min-width:0}
+.queue-now-copy h2{font-size:calc(21px * var(--text-scale));font-weight:600;letter-spacing:-.5px;line-height:1.3;
+  margin-top:2px;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.queue-now-meta{font-size:calc(12px * var(--text-scale));color:var(--accent);margin-top:5px;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.queue-now-quality{font-size:calc(10px * var(--text-scale));color:var(--muted);margin-top:3px;min-height:1.2em;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.queue-progress{display:flex;align-items:center;gap:10px;margin-top:9px}
+.queue-progress span{font-size:calc(10px * var(--text-scale));color:var(--muted);font-variant-numeric:tabular-nums;min-width:30px}
+.queue-progress span:last-child{text-align:right}
+.queue-progress input{flex:1;min-width:0}
+/* 卡片底色就是浅粉，未播部分用 --accent-soft 会整条看不见，这里加深一档 */
+.queue-progress input[type=range]{background:linear-gradient(to right,var(--accent) var(--fill,0%),
+  color-mix(in oklab,var(--accent) 26%,transparent) var(--fill,0%))}
+.queue-now-text{min-width:0}
+.queue-now-top{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.queue-now-tools{display:flex;align-items:center;gap:2px;flex-shrink:0;margin-top:-2px}
+.queue-now-tools .text-button{font-size:calc(11px * var(--text-scale));color:var(--accent)}
+
+.queue-next{min-width:0;border-left:1px solid var(--line);padding-left:22px}
+/* 没在播任何东西：没有"下一首"可言，第三列直接收掉（宽度跟着封面走，各断点都合身） */
+.queue-now.no-next{grid-template-columns:auto minmax(0,1fr)}
+.queue-now.no-next .queue-next{display:none}
+.queue-next .eyebrow{margin-bottom:10px}
+.queue-next-card{display:flex;align-items:center;gap:13px;width:100%;text-align:left;padding:8px;border-radius:14px}
+.queue-next-card:hover{background:var(--hover)}
+.queue-next-cover{width:52px;height:52px;border-radius:11px;background-size:cover;background-position:center;
+  background-image:linear-gradient(145deg,var(--accent-soft),color-mix(in oklab,var(--accent) 16%,var(--panel-soft)));
+  border:1px solid color-mix(in oklab,var(--accent) 18%,transparent);
+  color:var(--muted);display:grid;place-items:center;flex-shrink:0}
+.queue-next-cover svg{width:18px;height:18px;opacity:.7}
+.queue-next-cover.has-cover svg{display:none}
+.queue-next-copy{min-width:0;display:grid;gap:6px}
+.queue-next-copy strong{font-size:calc(13px * var(--text-scale));font-weight:550;overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.queue-next-copy small{font-size:calc(10px * var(--text-scale));color:var(--muted);overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+
+/* ── 播放顺序（和"接下来播放"同一行，省下一整行高度） ─────────────── */
+.queue-order{display:flex;flex-wrap:wrap;gap:6px;margin:0}
+.queue-order button{padding:6px 12px;border-radius:18px;border:1px solid var(--line);
+  font-size:calc(11px * var(--text-scale));color:var(--muted);transition:background calc(160ms * var(--motion-scale)),color calc(160ms * var(--motion-scale))}
+.queue-order button:hover{background:var(--hover);color:var(--accent)}
+.queue-order button[aria-pressed=true]{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+
+.queue-list-heading{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;margin:14px 0 8px}
+.queue-list-title{display:flex;align-items:baseline;gap:12px;min-width:0}
+.queue-list-title h2{font-size:calc(18px * var(--text-scale));font-weight:600;letter-spacing:-.5px;white-space:nowrap}
+.queue-list-title p{font-size:calc(10px * var(--text-scale));color:var(--muted);
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+
+/* ── 列表 ─────────────────────────────────────────────────────── */
+.queue-list{display:grid;gap:2px}
+.queue-row{display:grid;grid-template-columns:16px 34px 44px minmax(0,1fr) 58px 54px;gap:12px;align-items:center;
+  width:100%;padding:9px 14px;border-radius:13px;text-align:left;
+  transition:background calc(160ms * var(--motion-scale)) var(--motion-continuity)}
+.queue-row:hover{background:var(--hover)}
+.queue-row[aria-current=true]{background:var(--accent-soft);color:var(--accent)}
+.queue-grip{color:var(--muted);cursor:grab;display:grid;place-items:center;opacity:.55}
+.queue-grip:active{cursor:grabbing}
+.queue-row:hover .queue-grip{opacity:1}
+.queue-index{font-size:calc(11px * var(--text-scale));color:var(--muted);font-variant-numeric:tabular-nums;text-align:right}
+.queue-row[aria-current=true] .queue-index{color:var(--accent)}
+.queue-cover{width:44px;height:44px;border-radius:9px;object-fit:cover;background:var(--accent-soft)}
+.queue-copy{min-width:0}
+.queue-copy strong{font-size:calc(13px * var(--text-scale));font-weight:550;display:block;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.queue-copy small{display:block;font-size:calc(10px * var(--text-scale));color:var(--muted);margin-top:5px;
+  overflow:hidden;white-space:nowrap;text-overflow:ellipsis}
+.queue-format,.queue-time{font-size:calc(10px * var(--text-scale));color:var(--muted);
+  font-variant-numeric:tabular-nums;text-align:right}
+.queue-time{font-size:calc(11px * var(--text-scale))}
+
+/* 拖动：只给一个"会插到这儿"的横线，不整行挪动（避免每帧排版） */
+.queue-row.is-dragging{opacity:.5}
+.queue-row.drop-before{box-shadow:inset 0 2px 0 var(--accent)}
+.queue-row.drop-after{box-shadow:inset 0 -2px 0 var(--accent)}
+/* 定位当前：只亮一下，不改变选中语义 */
+.queue-row.is-located{box-shadow:inset 0 0 0 2px var(--accent)}
+.queue-list.is-filtered .queue-grip{visibility:hidden;cursor:default}
+
+#queue-more{display:block;margin:14px auto}
+#queue-status{min-height:20px}
+.queue-empty{padding:36px 18px;border:1px dashed var(--accent-soft);border-radius:20px;text-align:center;color:var(--muted)}
+.queue-empty strong{display:block;font-size:calc(15px * var(--text-scale));color:var(--ink);margin-bottom:8px}
+.queue-empty p{font-size:calc(11px * var(--text-scale));line-height:1.8}
+
+/* 矮窗口：先压页头，别让列表一首歌都露不出来 */
+@media(max-height:820px){
+  .queue-page{padding-top:8px}
+  .queue-heading{margin-bottom:10px}
+  .queue-heading h1{font-size:calc(25px * var(--text-scale))}
+  .queue-heading .eyebrow{margin-bottom:4px}
+  .queue-now{grid-template-columns:80px minmax(0,1fr) minmax(158px,206px);gap:16px;padding:12px 14px}
+  .queue-now-cover{width:80px;height:80px;border-radius:12px}
+  .queue-now-copy .eyebrow{margin-bottom:3px}
+  .queue-now-copy h2{font-size:calc(19px * var(--text-scale))}
+  .queue-now-meta{margin-top:4px}
+  .queue-now-quality{margin-top:2px}
+  .queue-progress{margin-top:7px}
+  .queue-next{padding-left:16px}
+  .queue-next .eyebrow{margin-bottom:6px}
+  .queue-list-heading{margin:12px 0 6px}
+  .queue-row{padding:8px 14px}
+}
+@media(max-height:700px){
+  /* 再矮就把码率整行收掉——标题和进度比它重要 */
+  .queue-now-quality{display:none}
+  .queue-now{grid-template-columns:68px minmax(0,1fr) minmax(150px,196px);padding:10px 14px}
+  .queue-now-cover{width:68px;height:68px;border-radius:11px}
+}
+
+@media(max-width:1150px){
+  .queue-now{grid-template-columns:84px minmax(0,1fr) minmax(158px,206px);gap:16px}
+  .queue-now-cover{width:84px;height:84px;border-radius:12px}
+  .queue-row{grid-template-columns:16px 28px 40px minmax(0,1fr) 50px 48px;gap:10px}
+  .queue-cover{width:40px;height:40px}
+}
+@media(max-width:950px){
+  /* 下一首挪到卡片下面一整行 */
+  .queue-now{grid-template-columns:76px minmax(0,1fr)}
+  .queue-now-cover{width:76px;height:76px}
+  .queue-next{grid-column:1/-1;border-left:0;border-top:1px solid var(--line);padding:12px 0 0}
+  .queue-next .eyebrow{margin-bottom:6px}
+  .queue-row{grid-template-columns:16px 28px 40px minmax(0,1fr) 48px}
+  .queue-format{display:none}
+  /* 窄了以后五个顺序按钮挤不下一行，让它们整体换行到标题下面 */
+  .queue-list-heading{gap:10px}
+  .queue-order button{padding:5px 10px}
+}
+@media(max-width:850px){
+  .queue-search{width:170px}
+  .queue-now{grid-template-columns:68px minmax(0,1fr);gap:12px}
+  .queue-now-cover{width:68px;height:68px;border-radius:10px}
+  .queue-now-copy h2{font-size:calc(18px * var(--text-scale))}
+  /* 握柄和序号一起收掉，剩下的三列要跟着改，否则会多出一个空列 */
+  .queue-row{grid-template-columns:40px minmax(0,1fr) 44px;padding:8px 6px}
+  .queue-grip,.queue-index{display:none}
+}
+@media(prefers-reduced-motion:reduce){
+  .queue-order button,.queue-row{transition:none}
+}
