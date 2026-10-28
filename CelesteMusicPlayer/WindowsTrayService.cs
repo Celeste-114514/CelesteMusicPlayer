@@ -167,6 +167,8 @@ namespace CelesteMusicPlayer
         private async Task ShowMenuAsync(List<TrayMenuModel.Item> items, Dictionary<string, string> vars, string mode)
         {
             _opening = true;
+            // 有这一条才能分清"右键根本没到图标"和"到了但菜单没弹出来"。
+            StartupLog.Write("[托盘菜单] 收到右键，IsReady=" + _menu.IsReady);
             try
             {
             bool shown = false;
