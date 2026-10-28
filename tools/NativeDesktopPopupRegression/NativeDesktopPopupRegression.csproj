@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms><Nullable>enable</Nullable></PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../CelesteMusicPlayer/NativeDesktopPopup.cs" Link="NativeDesktopPopup.cs" />
+    <Compile Include="../../CelesteMusicPlayer/DesktopMenuLayout.cs" Link="DesktopMenuLayout.cs" />
+    <Compile Include="../../CelesteMusicPlayer/DesktopPopupDrawing.cs" Link="DesktopPopupDrawing.cs" />
+    <Compile Include="../../CelesteMusicPlayer/TrayMenuWindow.cs" Link="TrayMenuWindow.cs" />
+    <Compile Include="../../CelesteMusicPlayer/TrayMenuModel.cs" Link="TrayMenuModel.cs" />
+    <Compile Include="../../CelesteMusicPlayer/TrayCommandAdapter.cs" Link="TrayCommandAdapter.cs" />
+    <Compile Include="../../CelesteMusicPlayer/TaskbarPlayerWindow.cs" Link="TaskbarPlayerWindow.cs" />
+    <Compile Include="../../CelesteMusicPlayer/TaskbarPlayerLayout.cs" Link="TaskbarPlayerLayout.cs" />
+    <Compile Include="../../CelesteMusicPlayer/PlaybackSnapshot.cs" Link="PlaybackSnapshot.cs" />
+  </ItemGroup>
+</Project>

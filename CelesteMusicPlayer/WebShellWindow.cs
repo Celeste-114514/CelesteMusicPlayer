@@ -234,6 +234,8 @@ namespace CelesteMusicPlayer
             if (!_closed && _ready) _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(message));
         }
 
+        internal void PublishPlaybackState() => SendState();
+
         private void SendState()
         {
             try { Post(new { kind = "celeste.state", version = 1, state = _owner.PlaybackStateSource.Capture() }); }
@@ -768,12 +770,6 @@ namespace CelesteMusicPlayer
                 Post(new { kind = "celeste.recovery", version = 1, data = payload });
             }
             catch (Exception ex) { StartupLog.WriteException("WebShell.PushStartupNotice", ex); }
-        }
-
-        internal void AttachTaskbarCovers(CoreWebView2 core)
-        {
-            core.AddWebResourceRequestedFilter(CoverOrigin + "/cover/*", CoreWebView2WebResourceContext.Image);
-            core.WebResourceRequested += OnCoverRequest;
         }
 
         private async void OnCoverRequest(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)

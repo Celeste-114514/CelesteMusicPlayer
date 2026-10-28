@@ -1,165 +1,85 @@
-using System;
+﻿using System;
+using System.Drawing;
 using System.IO;
 using System.Runtime.InteropServices;
-using System.Text.Json;
-using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Dispatching;
-using Microsoft.Web.WebView2.Core;
 using Microsoft.Win32;
-using Windows.Foundation;
-
 namespace CelesteMusicPlayer
 {
-    // An independent non-activating host positioned inside the taskbar rectangle.
-    // Owns no audio engine and never reparents windows into Explorer.
+    // ECHO-style native renderer. No WebView2 controller, browser or navigation delay.
     internal sealed class TaskbarPlayerWindow : IDisposable
     {
         private readonly MainWindow _owner;
         private readonly DispatcherQueue _queue;
         private readonly DispatcherQueueTimer _timer;
-        private readonly WindowProc _proc;
-        private readonly string _className = "CelesteTaskbarPlayer_" + Guid.NewGuid().ToString("N");
-        private nint _hwnd;
-        private CoreWebView2Controller? _controller;
-        private bool _busy, _disposed, _appBar, _loggedWaitingEnv;
-        private int _failures, _ticks, _ticksTheme;
-        private string _lastStatus = "";
-        // 外观设置里的强调色。任务栏条自己采样任务栏底色做背景（贴任务栏），
-        // 但强调色/进度条用用户在外观设置里选的，换皮时这里跟着变。
-        private string _accent = "";
-        private string _accentStrong = "";
-        private RECT _lastBounds;
+        private readonly NativeDesktopPopup _window = new(false, false);
+        private PlaybackSnapshot _state = new();
+        private Bitmap? _cover;
+        private string _coverTrack = "", _background = "#252525", _accent = "#d9b985", _accentStrong = "#b58c55";
+        private long _appearanceAt;
+        private bool _disposed, _suspended, _shown, _appBar;
+        private int _coverGeneration;
         private nint _taskbarHandle;
-        private bool _suspended, _shown;
-        internal void Suspend(bool value)
+        private RECT _lastBounds;
+        private string _lastStatus = "";
+        internal void Suspend(bool value) { _suspended = value; if (value) { _window.Hide(); _shown = false; } }
+        internal TaskbarPlayerWindow(MainWindow owner, bool suspended)
         {
-            _suspended = value;
-            if (value && _hwnd != 0) { ShowWindow(_hwnd, 0); _shown = false; }
+            _owner = owner; _queue = owner.DispatcherQueue; _suspended = suspended;
+            _window.Paint = Paint;
+            _window.Click = point => { float width = NativeDesktopPopup.Bounds(_window.Handle).Width / _window.Scale; int index = (int)((point.X - (width - 90)) / 27); if (point.X >= width - 90 && index >= 0 && index < 3 && !_state.busy) Queue(new[] { "previous", "togglePlay", "next" }[index]); };
+            _window.DoubleClick = point => { float width = NativeDesktopPopup.Bounds(_window.Handle).Width / _window.Scale; if (point.X < width - 90) Queue("showMain"); };
+            _window.RightClick = _ => _queue.TryEnqueue(() => { if (!_disposed) ShowMenu(); });
+            _window.Failed = ex => StartupLog.WriteException("TaskbarNative.Window", ex);
+            _timer = _queue.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(250); _timer.Tick += (_, _) => Tick(); _timer.Start(); Tick();
         }
-
-        internal TaskbarPlayerWindow(MainWindow owner)
+        private void Queue(string action) => _queue.TryEnqueue(() => { if (!_disposed) new TrayCommandAdapter(_owner).Invoke(action); });
+        private void Tick()
         {
-            _owner = owner; _queue = owner.DispatcherQueue; _proc = WndProc;
-            _timer = _queue.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(500);
-            _timer.Tick += (_, _) =>
-            {
-                var previous = SynchronizationContext.Current;
-                try { SynchronizationContext.SetSynchronizationContext(new DispatcherQueueSynchronizationContext(_queue)); _ = TickAsync(); }
-                finally { SynchronizationContext.SetSynchronizationContext(previous); }
-            };
-            _timer.Start();
-        }
-
-        private async Task TickAsync()
-        {
-            if (_busy || _disposed) return;
-            _busy = true;
+            if (_disposed || _suspended) return;
             try
             {
-                if (_suspended) return;
-                if (_controller == null)
-                {
-                    if (_failures >= 3 || (_failures > 0 && ++_ticks % 10 != 0)) return;
-                    // 和托盘菜单共用同一套 WebView2 环境 —— 一个浏览器进程、一套输入栈。
-                    //
-                    // 2026-10-29 00:31 的日志把关系晒得很清楚：
-                    //   00:31:33 任务栏条自建环境失败并关闭控制器
-                    //   00:31:36/39/42 托盘菜单三次点击全部正常（pointerdown → 收到命令 → 执行命令）
-                    //   00:31:47 任务栏条重新建好控制器 → 托盘菜单从此再也收不到任何点击
-                    // 两套环境 = 两个浏览器进程，第二个一建起来就把第一个的输入抢掉。
-                    // 所以这里不自己建环境，等托盘那边先建好再用它。
-                    CoreWebView2Environment? environment = _owner.PopupWebViewEnvironment;
-                    if (environment == null)
-                    {
-                        if (!_loggedWaitingEnv) { _loggedWaitingEnv = true; Status("等待托盘网页环境"); }
-                        return;
-                    }
-                    CreateHost();
-                    var controller = await environment.CreateCoreWebView2ControllerAsync(CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)_hwnd));
-                    if (_disposed) { controller.Close(); return; }
-                    _controller = controller;
-                    controller.BoundsMode = CoreWebView2BoundsMode.UseRawPixels;
-                    controller.Bounds = new Rect(0, 0, 360, 48);
-                    // 导航前就让它"可见"：Chromium 对不可见/0 尺寸的视口会推迟首次渲染，
-                    // 表现为第一次导航卡满 20 秒超时、失败后重试才成（托盘菜单踩过同一个坑）。
-                    // 窗口本身由 ShowWindow 控制，这里只是别给渲染进程"先别画"的信号。
-                    controller.IsVisible = true;
-                    controller.ZoomFactor = 1;
-                    Status("网页控制器已建（共用托盘环境）");
-                    var core = controller.CoreWebView2;
-                    core.Settings.IsWebMessageEnabled = true;
-                    core.Settings.AreDefaultContextMenusEnabled = false;
-                    core.Settings.AreDevToolsEnabled = false;
-                    core.Settings.IsStatusBarEnabled = false;
-                    core.Settings.IsZoomControlEnabled = false;
-                    core.SetVirtualHostNameToFolderMapping("celeste.taskbar", Path.Combine(AppContext.BaseDirectory, "WebShell"), CoreWebView2HostResourceAccessKind.DenyCors);
-                    _owner.AttachTaskbarCovers(core);
-                    core.WebMessageReceived += (_, args) =>
-                    {
-                        try
-                        {
-                            if (args.Source != "https://celeste.taskbar/taskbar-player.html") return;
-                            using var doc = JsonDocument.Parse(args.WebMessageAsJson);
-                            string? action = doc.RootElement.GetProperty("action").GetString();
-                            if (action is not ("previous" or "togglePlay" or "next" or "showMain" or "menu")) return;
-                            _queue.TryEnqueue(() =>
-                            {
-                                if (_disposed) return;
-                                try
-                                {
-                                    if (action == "menu") ShowMenu();
-                                    else new TrayCommandAdapter(_owner).Invoke(action);
-                                }
-                                catch (Exception ex) { StartupLog.WriteException("TaskbarPlayer.Command", ex); }
-                            });
-                        }
-                        catch (Exception ex) { StartupLog.WriteException("TaskbarPlayer.Message", ex); }
-                    };
-                    // 失败原因要记下来：只写"加载失败"分不清是导航被拒、资源 404 还是别的。
-                    CoreWebView2WebErrorStatus navStatus = CoreWebView2WebErrorStatus.Unknown;
-                    var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                    core.NavigationCompleted += (_, args) => { navStatus = args.WebErrorStatus; ready.TrySetResult(args.IsSuccess); };
-                    core.Navigate("https://celeste.taskbar/taskbar-player.html");
-                    if (await Task.WhenAny(ready.Task, Task.Delay(20000)) != ready.Task)
-                        throw new TimeoutException("任务栏播放条页面 20 秒内没加载完");
-                    if (!await ready.Task)
-                        throw new InvalidOperationException("任务栏播放条页面加载失败 WebErrorStatus=" + navStatus);
-                    if (_disposed) return;
-                    controller.IsVisible = true;
-                }
-                if (_suspended) return;
-                if (!TryPlace(out RECT bounds, out nint taskbar)) { ShowWindow(_hwnd, 0); _shown = false; return; }
-                string color = SampleBackground(taskbar);
-                _controller.DefaultBackgroundColor = ColorHelper.ParseHexColor(color)!.Value;
-                // 外观设置读文件，没必要每 250ms 读一次；两秒刷一次足够跟上换皮。
-                if (_accent.Length == 0 || _ticksTheme++ % 8 == 0) RefreshAppearanceAccent();
-                string payload = JsonSerializer.Serialize(new
-                {
-                    state = _owner.PlaybackStateSource.Capture(),
-                    background = color,
-                    theme = new { accent = _accent, accentStrong = _accentStrong }
-                });
-                _controller.CoreWebView2.PostWebMessageAsJson(payload);
-                if (!_shown || !_lastBounds.Equals(bounds))
-                {
-                    SetWindowPos(_hwnd, new nint(-1), bounds.Left, bounds.Top, bounds.Width, bounds.Height, 0x10 | 0x40);
-                    _controller.Bounds = new Rect(0, 0, bounds.Width, bounds.Height);
-                    _shown = true;
-                }
-                if (!_lastBounds.Equals(bounds)) { _lastBounds = bounds; Status($"显示 {bounds.Left},{bounds.Top} {bounds.Width}x{bounds.Height}"); }
+                if (!TryPlace(out RECT bounds, out nint taskbar)) { _window.Hide(); _shown = false; return; }
+                _state = _owner.PlaybackStateSource.Capture(); _background = SampleBackground(taskbar);
+                if (Environment.TickCount64 - _appearanceAt >= 1000) { _appearanceAt = Environment.TickCount64; RefreshAppearanceAccent(); }
+                if (_coverTrack != _state.trackId) { _coverTrack = _state.trackId; _cover?.Dispose(); _cover = null; int generation = ++_coverGeneration; string? path = _owner.GetCurrentPlayingItem()?.FilePath; _ = LoadCoverAsync(path, generation); }
+                if (!_shown || !_lastBounds.Equals(bounds)) { _window.Show(Rectangle.FromLTRB(bounds.Left, bounds.Top, bounds.Right, bounds.Bottom)); _shown = true; _lastBounds = bounds; Status($"原生显示 {bounds.Left},{bounds.Top} {bounds.Width}x{bounds.Height}"); }
+                _window.Invalidate();
             }
-            catch (Exception ex)
-            {
-                _failures++; Status("初始化失败 " + _failures + "/3");
-                StartupLog.WriteException("TaskbarPlayer.Tick", ex);
-                try { _controller?.Close(); } catch { }
-                _controller = null;
-                if (_hwnd != 0) ShowWindow(_hwnd, 0);
-            }
-            finally { _busy = false; }
+            catch (Exception ex) { StartupLog.WriteException("TaskbarNative.Tick", ex); _window.Hide(); _shown = false; }
         }
-
+        private async Task LoadCoverAsync(string? path, int generation)
+        {
+            Bitmap? image = null;
+            try
+            {
+                image = await Task.Run(async () => { if (string.IsNullOrEmpty(path)) return null; string? file = await CoverArtService.GetDesktopCoverFileAsync(path); if (file == null) return null; using var original = Image.FromFile(file); return new Bitmap(original); }).ConfigureAwait(false);
+                Bitmap? loaded = image;
+                if (!_queue.TryEnqueue(() => { if (_disposed || generation != _coverGeneration) { loaded?.Dispose(); return; } _cover?.Dispose(); _cover = loaded; _window.Invalidate(); })) loaded?.Dispose();
+            }
+            catch (Exception ex) { image?.Dispose(); StartupLog.WriteException("TaskbarNative.Cover", ex); }
+        }
+        private void Paint(Graphics g, float width, float height)
+        {
+            Color background; try { background = ColorTranslator.FromHtml(_background); } catch { background = Color.FromArgb(37, 37, 37); }
+            bool light = background.R * .2126 + background.G * .7152 + background.B * .0722 > 145;
+            Color ink = light ? Color.FromArgb(56, 51, 46) : Color.FromArgb(238, 232, 223), muted = light ? Color.FromArgb(116, 108, 96) : Color.FromArgb(177, 169, 157), accent = light ? Color.FromArgb(155, 120, 75) : Color.FromArgb(217, 185, 133);
+            try { accent = ColorTranslator.FromHtml(light ? _accentStrong : _accent); } catch {/* Keep the readable default when a CSS color is unsupported. */}
+            DesktopPopupDrawing.Fill(g, background, new RectangleF(0, 0, width, height)); float art = Math.Min(34, height - 8), top = (height - art) / 2;
+            if (_cover != null) g.DrawImage(_cover, new RectangleF(8, top, art, art)); else DesktopPopupDrawing.Text(g, "C", 15, muted, new RectangleF(8, top, art, art));
+            DesktopPopupDrawing.Text(g, _state.title, 11, ink, new RectangleF(52, height / 2 - 16, Math.Max(5, width - 148), 16), true);
+            DesktopPopupDrawing.Text(g, _state.artist, 9, muted, new RectangleF(52, height / 2 + 1, Math.Max(5, width - 148), 14));
+            var actions = new[] { "previous", "togglePlay", "next" }; for (int i = 0; i < 3; i++) DesktopPopupDrawing.Icon(g, actions[i], new RectangleF(width - 85 + i * 27, (height - 16) / 2, 16, 16), _state.busy ? muted : ink, _state.playing);
+            double progress = _state.duration > 0 ? Math.Clamp(_state.position / _state.duration, 0, 1) : 0;
+            if (double.IsFinite(progress)) DesktopPopupDrawing.Fill(g, accent, new RectangleF(52, height - 2, (float)((width - 64) * progress), 1));
+        }
+        public void Dispose()
+        {
+            if (_disposed) return; _disposed = true; _timer.Stop(); _coverGeneration++; _cover?.Dispose(); _cover = null;
+            if (_appBar) { var data = new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>(), hWnd = _window.Handle }; SHAppBarMessage(1, ref data); }
+            _window.Dispose();
+        }
         private bool TryPlace(out RECT bounds, out nint taskbar)
         {
             bounds = default; taskbar = FindWindowW("Shell_TrayWnd", null);
@@ -167,7 +87,7 @@ namespace CelesteMusicPlayer
             if (_taskbarHandle != taskbar)
             {
                 _taskbarHandle = taskbar;
-                var registration = new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>(), hWnd = _hwnd };
+                var registration = new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>(), hWnd = _window.Handle };
                 _appBar = SHAppBarMessage(0, ref registration) != 0 || _appBar;
             }
             var data = new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>(), hWnd = taskbar };
@@ -180,7 +100,7 @@ namespace CelesteMusicPlayer
             nint foreground = GetForegroundWindow();
             var className = new System.Text.StringBuilder(128);
             GetClassNameW(foreground, className, className.Capacity);
-            if (foreground != 0 && foreground != taskbar && foreground != _hwnd && GetWindowRect(foreground, out RECT front)
+            if (foreground != 0 && foreground != taskbar && foreground != _window.Handle && GetWindowRect(foreground, out RECT front)
                 && className.ToString() is not ("Progman" or "WorkerW")
                 && front.Left <= info.rcMonitor.Left && front.Top <= info.rcMonitor.Top
                 && front.Right >= info.rcMonitor.Right && front.Bottom >= info.rcMonitor.Bottom)
@@ -233,56 +153,23 @@ namespace CelesteMusicPlayer
             finally { ReleaseDC(0, dc); }
         }
         private void Status(string value) { if (_lastStatus == value) return; _lastStatus = value; StartupLog.Write("[任务栏播放条] " + value); }
-        private void CreateHost()
-        {
-            if (_hwnd != 0) return;
-            var wc = new WNDCLASSEX { cbSize = (uint)Marshal.SizeOf<WNDCLASSEX>(), lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_proc), hInstance = GetModuleHandleW(null), lpszClassName = _className };
-            if (RegisterClassExW(ref wc) == 0) throw new InvalidOperationException("注册任务栏窗口失败");
-            _hwnd = CreateWindowExW(0x80 | 0x08000000 | 8, _className, "CelesteTaskbarPlayer", unchecked((int)0x80000000), 0, 0, 360, 48, 0, 0, wc.hInstance, 0);
-            if (_hwnd == 0) throw new InvalidOperationException("创建任务栏窗口失败");
-            var data = new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>(), hWnd = _hwnd };
-            _appBar = SHAppBarMessage(0, ref data) != 0;
-        }
-        private nint WndProc(nint hwnd, uint msg, nint w, nint l)
-        {
-            if (msg == 0x21) return 3; // MA_NOACTIVATE, do not eat mouse input.
-            if (msg == 0x10) { _queue.TryEnqueue(_owner.HideTaskbarPlayer); return 0; }
-            return DefWindowProcW(hwnd, msg, w, l);
-        }
         private void ShowMenu()
         {
             nint menu = CreatePopupMenu();
             try
             {
                 AppendMenuW(menu, 0, 1, "隐藏播放条"); AppendMenuW(menu, 0, 2, "设置");
-                GetCursorPos(out POINT point); SetForegroundWindow(_hwnd);
-                int command = TrackPopupMenuEx(menu, 0x100 | 2, point.X, point.Y, _hwnd, 0);
+                GetCursorPos(out POINT point); SetForegroundWindow(_window.Handle);
+                int command = TrackPopupMenuEx(menu, 0x100 | 2, point.X, point.Y, _window.Handle, 0);
                 if (command == 1) _owner.HideTaskbarPlayer();
                 if (command == 2) _owner.ShowWebPage("settings");
             }
             finally { DestroyMenu(menu); }
         }
-        public void Dispose()
-        {
-            if (_disposed) return; _disposed = true; _timer.Stop();
-            try { _controller?.Close(); } catch (Exception ex) { StartupLog.WriteException("TaskbarPlayer.Dispose", ex); }
-            _controller = null;
-            if (_appBar) { var data = new APPBARDATA { cbSize = (uint)Marshal.SizeOf<APPBARDATA>(), hWnd = _hwnd }; SHAppBarMessage(1, ref data); }
-            if (_hwnd != 0) { DestroyWindow(_hwnd); _hwnd = 0; }
-            UnregisterClassW(_className, GetModuleHandleW(null));
-        }
-        private delegate nint WindowProc(nint h, uint m, nint w, nint l);
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private struct WNDCLASSEX { public uint cbSize, style; public nint lpfnWndProc; public int clsExtra, wndExtra; public nint hInstance, icon, cursor, background; public string? menuName; public string lpszClassName; public nint iconSmall; }
         [StructLayout(LayoutKind.Sequential)] private struct RECT { public int Left, Top, Right, Bottom; public int Width => Right - Left; public int Height => Bottom - Top; }
         [StructLayout(LayoutKind.Sequential)] private struct POINT { public int X, Y; }
         [StructLayout(LayoutKind.Sequential)] private struct MONITORINFO { public int cbSize; public RECT rcMonitor, rcWork; public uint flags; }
         [StructLayout(LayoutKind.Sequential)] private struct APPBARDATA { public uint cbSize; public nint hWnd; public uint callback, edge; public RECT rect; public nint param; }
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern ushort RegisterClassExW(ref WNDCLASSEX wc);
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern bool UnregisterClassW(string name, nint instance);
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint CreateWindowExW(int ex, string cls, string title, int style, int x, int y, int width, int height, nint parent, nint menu, nint instance, nint param);
-        [DllImport("user32.dll")] private static extern nint DefWindowProcW(nint h, uint m, nint w, nint l);
-        [DllImport("user32.dll")] private static extern bool DestroyWindow(nint h);
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] private static extern nint GetModuleHandleW(string? name);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint FindWindowW(string cls, string? title);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint FindWindowExW(nint parent, nint after, string cls, string? title);
         [DllImport("user32.dll")] private static extern bool GetWindowRect(nint h, out RECT rect);
@@ -292,8 +179,6 @@ namespace CelesteMusicPlayer
         [DllImport("user32.dll")] private static extern nint GetForegroundWindow();
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern int GetClassNameW(nint h, System.Text.StringBuilder name, int length);
         [DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint h);
-        [DllImport("user32.dll")] private static extern bool SetWindowPos(nint h, nint after, int x, int y, int width, int height, uint flags);
-        [DllImport("user32.dll")] private static extern bool ShowWindow(nint h, int command);
         [DllImport("user32.dll")] private static extern bool IsWindowVisible(nint h);
         [DllImport("shell32.dll")] private static extern nint SHAppBarMessage(uint message, ref APPBARDATA data);
         [DllImport("user32.dll")] private static extern nint GetDC(nint h);

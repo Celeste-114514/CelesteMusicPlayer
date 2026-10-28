@@ -1,5 +1,4 @@
 using System;
-using Microsoft.Web.WebView2.Core;
 
 namespace CelesteMusicPlayer
 {
@@ -12,20 +11,19 @@ namespace CelesteMusicPlayer
             _taskbarPlayerSuspended = suspended;
             _taskbarPlayer?.Suspend(suspended);
         }
-        internal void AttachTaskbarCovers(CoreWebView2 core) => _webShellWindow?.AttachTaskbarCovers(core);
         private void ApplyTaskbarPlayerPreference()
         {
             if (AppSettingsStore.Load().TaskbarPlayerEnabled)
             {
                 if (_taskbarPlayer == null)
                 {
-                    _taskbarPlayer = new TaskbarPlayerWindow(this);
-                    _taskbarPlayer.Suspend(_taskbarPlayerSuspended);
+                    _taskbarPlayer = new TaskbarPlayerWindow(this, _taskbarPlayerSuspended);
                     Closed -= CloseTaskbarPlayer;
                     Closed += CloseTaskbarPlayer;
                 }
             }
             else { _taskbarPlayer?.Dispose(); _taskbarPlayer = null; }
+            _webShellWindow?.PublishPlaybackState();
         }
         private void CloseTaskbarPlayer(object sender, Microsoft.UI.Xaml.WindowEventArgs args)
         { _taskbarPlayer?.Dispose(); _taskbarPlayer = null; }

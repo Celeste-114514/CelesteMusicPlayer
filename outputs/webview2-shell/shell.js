@@ -389,7 +389,7 @@
       state.volume=Math.min(100,state.volume); state.position=Math.min(state.duration,state.position);
       ['playing','favorite','shuffle','repeat'].forEach(key=>{if(typeof incoming[key]==='boolean')state[key]=incoming[key]});
       if(orders[incoming.playbackOrder])state.playbackOrder=incoming.playbackOrder;
-      ['desktopLyrics','desktopLyricsLocked'].forEach(key=>{if(typeof incoming[key]==='boolean')state[key]=incoming[key]});
+      ['desktopLyrics','desktopLyricsLocked','taskbarPlayer'].forEach(key=>{if(typeof incoming[key]==='boolean')state[key]=incoming[key]});
       if(typeof incoming.volumeEnabled==='boolean')state.volumeEnabled=incoming.volumeEnabled;
       $('mode-label').textContent='已连接播放器';
       const mode={WasapiShared:'WASAPI 共享',WasapiExclusive:'WASAPI 独占',Asio:'ASIO'}[incoming.outputMode]||'';

@@ -120,6 +120,8 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>拿到该档位的缓存文件路径（必要时生成）。</summary>
+        internal static Task<string?> GetDesktopCoverFileAsync(string audioPath) => GetCachedFileAsync(audioPath, CoverVariant.Thumb);
+
         private static async Task<string?> GetCachedFileAsync(string audioPath, CoverVariant variant)
         {
             byte[]? source = await Task.Run(() => ReadSourceBytes(audioPath));

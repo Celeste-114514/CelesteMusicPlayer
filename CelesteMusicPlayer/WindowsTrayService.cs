@@ -4,15 +4,7 @@ using System.Threading.Tasks;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>
-    /// 托盘服务：通知区图标 + 网页菜单的唯一所有者。
-    ///
-    /// 所有权只能有一个 —— 旧实现（AppTrayIcon / H.NotifyIcon.WinUI）和新实现不能同时注册，
-    /// 否则右下角会出现两个图标、两套回调。MainWindow 里按「新的失败才退回旧的」处理。
-    ///
-    /// 菜单失败不影响图标：WebView2 起不来时自动退到系统原生弹出菜单（TrayMenuWindow 里判），
-    /// 保证「显示主界面 / 播放暂停 / 退出」永远点得到。
-    /// </summary>
+    /// <summary>Win32 notification icon and native themed menu, with deferred command dispatch.</summary>
     internal sealed class WindowsTrayService : ITrayIcon
     {
         private readonly MainWindow _owner;
@@ -23,18 +15,6 @@ namespace CelesteMusicPlayer
         private string? _pendingUpdateVersion;
         private bool _disposed;
         private bool _opening;
-
-        private Task RunWithUiContext(Func<Task> work)
-        {
-            var previous = System.Threading.SynchronizationContext.Current;
-            try
-            {
-                System.Threading.SynchronizationContext.SetSynchronizationContext(
-                    new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(_owner.DispatcherQueue));
-                return work();
-            }
-            finally { System.Threading.SynchronizationContext.SetSynchronizationContext(previous); }
-        }
 
         internal WindowsTrayService(MainWindow owner)
         {
@@ -54,7 +34,7 @@ namespace CelesteMusicPlayer
             };
             _menu.Invoked += actionId =>
             {
-                // Never close a WebView or activate another window inside its callback.
+                // Return from the native mouse callback before disposing or activating windows.
                 _owner.DispatcherQueue.TryEnqueue(() =>
                 {
                     if (_disposed) return;
@@ -66,7 +46,7 @@ namespace CelesteMusicPlayer
 
             StartupLog.Write("托盘: Win32 通知图标已创建 (成功=" + _icon.IsCreated + ")");
             if (!_icon.IsCreated) ScheduleRetry();
-            Prewarm();
+            StartupLog.Write("[托盘原生菜单] 已就绪，无浏览器预热");
         }
 
         /// <summary>
@@ -102,9 +82,6 @@ namespace CelesteMusicPlayer
         }
 
         public bool IsCreated => _icon.IsCreated;
-
-        /// <summary>托盘菜单建的 WebView2 环境，给任务栏播放条共用（进程内只允许一套）。</summary>
-        internal Microsoft.Web.WebView2.Core.CoreWebView2Environment? PopupEnvironment => _menu.PopupEnvironment;
 
         public void Show()
         {
@@ -148,7 +125,7 @@ namespace CelesteMusicPlayer
         private void OnRightClick()
         {
             // Shell_NotifyIcon invokes us inside a native window procedure.
-            // Return to the message loop before entering WebView2 or activating UI.
+            // Return to the message loop before activating UI.
             if (_disposed) return;
             _owner.DispatcherQueue.TryEnqueue(OnRightClickCore);
         }
@@ -162,9 +139,9 @@ namespace CelesteMusicPlayer
                 _owner.SuspendTaskbarPlayer(true);
                 List<TrayMenuModel.Item> items = TrayMenuModel.Build(_owner, _pendingUpdateVersion);
                 (string mode, Dictionary<string, string> vars) = BuildTheme();
-                _ = RunWithUiContext(() => ShowMenuAsync(items, vars, mode));
+                _ = ShowMenuAsync(items, vars, mode);
             }
-            catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.OnRightClick", ex); }
+            catch (Exception ex) { _owner.SuspendTaskbarPlayer(false); StartupLog.WriteException("WindowsTrayService.OnRightClick", ex); }
         }
 
         private async Task ShowMenuAsync(List<TrayMenuModel.Item> items, Dictionary<string, string> vars, string mode)
@@ -174,16 +151,13 @@ namespace CelesteMusicPlayer
             StartupLog.Write("[托盘菜单] 收到右键，IsReady=" + _menu.IsReady);
             try
             {
-            bool shown = false;
-            try { shown = await _menu.ShowAsync(items, vars, mode); }
-            catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.ShowMenu", ex); }
+                bool shown = false;
+                try { shown = await _menu.ShowAsync(items, vars, mode); }
+                catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.ShowMenu", ex); }
 
-            if (shown) return;
+                if (shown) return;
 
-            // 用户 2026-10-28 明确要求：不要任何系统方块菜单。
-            // 所以这里不再降级到 TrackPopupMenu —— 网页菜单没就绪就什么都不弹，只留日志；
-            // 初始化本身在后台继续，下一次右键就有了。
-            StartupLog.Write("[托盘菜单] 本次右键未弹出（网页菜单还没就绪），按用户要求不降级系统菜单");
+                StartupLog.Write("[托盘原生菜单] 显示失败，请查看异常日志");
             }
             finally { _opening = false; if (!_menu.IsVisible) _owner.SuspendTaskbarPlayer(false); }
         }
@@ -205,45 +179,5 @@ namespace CelesteMusicPlayer
             return (mode, values);
         }
 
-        /// <summary>启动后就悄悄把菜单的 WebView 建好，第一次右键才是即开的。</summary>
-        private void Prewarm() => SchedulePrewarm(0);
-
-        /// <summary>
-        /// 预热失败要再试。冷启动时 WebView2 的环境/导航受机器忙碌程度影响，
-        /// 一次没起来就整场没有网页菜单（只剩系统方块菜单）—— 这正是之前"右键菜单变回方块"的来源。
-        /// </summary>
-        private void SchedulePrewarm(int attempt)
-        {
-            try
-            {
-                var queue = _owner.DispatcherQueue;
-                if (queue == null) return;
-                var timer = queue.CreateTimer();
-                // 预热早开始；失败后隔一会儿再试（别太急 —— 急着重建反而会把输入链路搞坏，
-                // 见 TrayMenuWindow.NavigationTimeoutMs 的注释）。
-                timer.Interval = TimeSpan.FromMilliseconds(attempt == 0 ? 1200 : 2000);
-                timer.IsRepeating = false;
-                timer.Tick += (_, _) =>
-                {
-                    timer.Stop();
-                    if (_disposed) return;
-                    _ = RunWithUiContext(() => PrewarmAsync(attempt));
-                };
-                timer.Start();
-            }
-            catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.Prewarm", ex); }
-        }
-
-        private async Task PrewarmAsync(int attempt)
-        {
-            if (_disposed) return;
-            bool ok = false;
-            try { ok = await _menu.PrewarmAsync(); }
-            catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.PrewarmAsync", ex); }
-
-            if (ok) return;
-            StartupLog.Write("[托盘菜单] 预热失败（第 " + (attempt + 1) + " 次），右键时会再试");
-            if (attempt + 1 < 3) SchedulePrewarm(attempt + 1);
-        }
     }
 }

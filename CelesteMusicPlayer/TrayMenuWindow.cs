@@ -1,913 +1,128 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
-using System.IO;
-using System.Runtime.InteropServices;
-using System.Text.Json;
+using System.Drawing;
+using System.Globalization;
+using System.Linq;
 using System.Threading.Tasks;
-using Microsoft.Web.WebView2.Core;
-using Windows.Foundation;
+using Microsoft.UI.Dispatching;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>
-    /// 托盘菜单的承载窗口：一个 Win32 弹出窗 + WebView2 渲染网页菜单。
-    ///
-    /// 为什么不用 WinUI 窗口/MenuFlyout：菜单必须跟网页外壳同一套主题变量与排版，
-    /// 只有让它自己就是一个网页才做得到（MenuFlyout 跑在独立 XAML 树里，主题继承不过去）。
-    ///
-    /// 生命周期：窗口和 WebView 只建一次，之后反复 Show/Hide；关闭菜单不销毁 WebView，
-    /// 这样第二次右键是即开的，不会有"先白一下再出现"的过程。
-    /// </summary>
+    // Native themed menu: direct HWND input, no WebView initialization or JS bridge.
     internal sealed class TrayMenuWindow : IDisposable
     {
-        private const int WS_POPUP = unchecked((int)0x80000000);
-        private const int WS_EX_TOOLWINDOW = 0x00000080;
-        private const int WS_EX_TOPMOST = 0x00000008;
-
-        private const uint SWP_SHOWWINDOW = 0x0040;
-        private const uint SWP_NOACTIVATE = 0x0010;
-        private const int SW_HIDE = 0;
-        private const int GWL_EXSTYLE = -20;
-
-        private const uint WM_ACTIVATE = 0x0006;
-        private const uint WM_CLOSE = 0x0010;
-        private const uint WM_KEYDOWN = 0x0100;
-        private const uint WM_MOUSEACTIVATE = 0x0021;
-        private const uint WM_LBUTTONDOWN = 0x0201;
-        private const int WA_INACTIVE = 0;
-        private const int VK_LBUTTON = 0x01;
-
-        /// <summary>
-        /// 单次导航最多等多久。
-        ///
-        /// ⚠ 别把它调小。2026-10-29 试过 6 秒：一到点就判定失败、关掉网页窗口重建，
-        /// 而重建出来的那个窗口**收不到鼠标点击**（日志里连 pointerdown 都没有）。
-        /// 20 秒虽然慢，但首次导航是渲染进程冷启动，宁可等它一次成功，也不要反复重建。
-        /// </summary>
-        private const int NavigationTimeoutMs = 20000;
-
-        /// <summary>连续失败这么多次才彻底放弃（在此之前每次右键都会重新试）。</summary>
-        private const int MaxInitFailures = 3;
-
-        /// <summary>刚弹出后这段时间内不判"点外面"，避开右键余波与首帧布局。</summary>
-        private const int OutsideGraceMs = 250;
-
-        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-
-        private readonly string _className;
-        private readonly WndProcDelegate _wndProc;
-        private IntPtr _hwnd;
-        private bool _disposed;
-        private bool _visible;
-        private bool _initFailed;
-        private int _initFailures;
-        private bool _ready;
-        private bool _showPending;
-
-        /// <summary>点外面收起的观察器。不再依赖 WM_ACTIVATE —— 那条路会在点击瞬间把菜单收掉。</summary>
-        private Microsoft.UI.Dispatching.DispatcherQueueTimer? _outsideTimer;
-        private int _outsideHits;
+        private readonly NativeDesktopPopup _window = new(true);
+        private readonly DispatcherQueueTimer _outside;
+        private IReadOnlyList<TrayMenuModel.Item> _items = Array.Empty<TrayMenuModel.Item>();
+        private DesktopMenuLayout _layout = new(Array.Empty<bool>(), 1);
+        private int _selected = -1;
+        private float _textScale = 1, _fit = 1;
+        private Color _background = Color.FromArgb(255, 253, 249), _ink = Color.FromArgb(57, 53, 47), _muted = Color.Gray, _accent = Color.FromArgb(155, 120, 75), _hover = Color.FromArgb(240, 233, 223), _line = Color.FromArgb(235, 229, 219);
         private long _shownAt;
-
-        /// <summary>弹出时托盘图标的矩形。右键时鼠标还压在这块上，不能算"点了菜单外面"。</summary>
-        private WindowsTrayIcon.RECT? _anchorIconRect;
-
-        /// <summary>上一次轮询时左键是否按着，用来识别"刚按下"这一下。</summary>
-        private bool _leftPressed;
-
-        /// <summary>最近一次收到网页消息的时刻。点菜单项和"点外面"都算左键按下，
-        /// 唯一区别是前者网页一定会先发消息过来，所以用它给收起判据留一条后路。</summary>
-        private long _lastWebMessageTick;
-
-        /// <summary>命中测试日志的最小间隔，避免按住鼠标时刷屏。</summary>
-        private long _lastHitTestTick;
-
-        /// <summary>收到无法识别的消息只记一次，避免刷屏。</summary>
-        private bool _unknownMessageLogged;
-
-        private CoreWebView2Environment? _environment;
-        private CoreWebView2Controller? _controller;
-        private Task<bool>? _initTask;
-
-        /// <summary>网页回报的菜单内容尺寸（DIP）。</summary>
-        private double _contentWidth = 260, _contentHeight = 320;
-
-        /// <summary>点了某一项。actionId 已由宿主侧校验过白名单。</summary>
+        internal Func<WindowsTrayIcon.RECT?>? IconRectProvider { get; set; }
         internal event Action<string>? Invoked;
         internal event Action? Hidden;
-
-        internal bool IsReady => _ready && _controller != null;
-
-        /// <summary>
-        /// 本菜单自己建的 WebView2 环境。任务栏播放条复用它 ——
-        /// 进程里只能有**一套** WebView2 环境，第二套一建起来就会把第一套的鼠标输入抢掉
-        /// （2026-10-29 00:31 日志实证，见 TaskbarPlayerWindow 里的注释）。
-        /// 注意：这套环境是窗口版 controller 建的，能正常收鼠标；主界面那个 composition
-        /// 环境不行（见 MainWindow.WebShell 的说明）。
-        /// </summary>
-        internal Microsoft.Web.WebView2.Core.CoreWebView2Environment? PopupEnvironment => _environment;
-
-        /// <summary>菜单此刻是否显示着（右键再点一次要能收起）。</summary>
-        internal bool IsVisible => _visible;
-
-        /// <summary>预热：只把 WebView 建好并加载页面，不显示。让第一次右键不再等初始化。</summary>
-        internal Task<bool> PrewarmAsync() => EnsureWebViewAsync();
-
+        internal bool IsReady => true;
+        internal bool IsVisible => _window.Visible;
         internal TrayMenuWindow()
         {
-            _wndProc = WindowProc;
-            _className = "CelesteTrayMenu_" + Guid.NewGuid().ToString("N");
-            CreateWindow();
+            _window.Paint = Paint;
+            _window.Click = point => Invoke(_layout.Hit(point.X / _fit, point.Y / _fit));
+            _window.Hover = point => { int next = _layout.Hit(point.X / _fit, point.Y / _fit); if (next != _selected) { _selected = next; _window.Invalidate(); } };
+            _window.Key = HandleKey;
+            _window.Failed = ex => StartupLog.WriteException("TrayNative.Window", ex);
+            _outside = DispatcherQueue.GetForCurrentThread().CreateTimer(); _outside.Interval = TimeSpan.FromMilliseconds(100);
+            _outside.Tick += (_, _) => CloseOnOutsidePress();
         }
 
-        /// <summary>把菜单弹到光标/托盘图标附近。失败返回 false，由调用方退到系统原生菜单。</summary>
-        internal async Task<bool> ShowAsync(IReadOnlyList<TrayMenuModel.Item> items, Dictionary<string, string> themeVars, string mode)
+        private void HandleKey(int key)
         {
-            if (_disposed || _showPending) return false;
-            _showPending = true;
-            try
+            if (key == 27) { Hide(); return; }
+            if (key == 13) { Invoke(_selected); return; }
+            if (key != 38 && key != 40) return;
+            int step = key == 40 ? 1 : -1;
+            if (_selected < 0 && step < 0) _selected = 0;
+            for (int n = 0; n < _items.Count; n++)
             {
-            // 网页还没就绪时**不要立刻**退到系统方块菜单：先在后台等一小会儿。
-            // 用户右键后马上就变方块菜单，下一次右键又变网页菜单，这种反复最伤观感。
-            if (!_ready)
-            {
-                Task<bool> init = EnsureWebViewAsync();
-                Task first = await Task.WhenAny(init, Task.Delay(3000));
-                if (first != init || !await init) return false;
+                _selected = (_selected + step + _items.Count) % _items.Count;
+                if (!_items[_selected].separator && _items[_selected].enabled) break;
             }
-            else if (!await EnsureWebViewAsync()) return false;
+            _window.Invalidate();
+        }
 
-            try
+        private void CloseOnOutsidePress()
+        {
+            if (!IsVisible || Environment.TickCount64 - _shownAt < 250 || !NativeDesktopPopup.MouseDown()) return;
+            Point cursor = NativeDesktopPopup.Cursor();
+            if (NativeDesktopPopup.Bounds(_window.Handle).Contains(cursor)) return;
+            var icon = IconRectProvider?.Invoke();
+            if (icon is {} r && Rectangle.FromLTRB(r.Left, r.Top, r.Right, r.Bottom).Contains(cursor)) return;
+            Hide();
+        }
+
+        internal void UpdateContent(IReadOnlyList<TrayMenuModel.Item> items, Dictionary<string, string> vars, string mode)
+        {
+            _items = items; _selected = -1;
+            Color Read(string key, Color fallback) { try { return vars.TryGetValue(key, out string? value) && value.StartsWith('#') ? ColorTranslator.FromHtml(value) : fallback; } catch { return fallback; } }
+            bool dark = mode == "dark"; _background = Read("menu-bg", dark ? Color.FromArgb(37, 36, 34) : Color.FromArgb(255, 253, 249));
+            _ink = Read("ink", dark ? Color.Gainsboro : Color.FromArgb(57, 53, 47)); _muted = Read("muted", Color.Gray); _accent = Read("accent", Color.Tan);
+            _hover = Read("hover", dark ? Color.FromArgb(56, 51, 44) : Color.FromArgb(240, 233, 223)); _line = Read("line", dark ? Color.FromArgb(59, 55, 50) : Color.FromArgb(235, 229, 219));
+            _textScale = vars.TryGetValue("text-scale", out string? scale) && float.TryParse(scale, NumberStyles.Float, CultureInfo.InvariantCulture, out float parsed) ? Math.Clamp(parsed, .8f, 1.5f) : 1;
+            _layout = new(items.Select(i => i.separator), _textScale);
+        }
+        internal Task<bool> ShowAsync(IReadOnlyList<TrayMenuModel.Item> items, Dictionary<string, string> vars, string mode)
+        {
+            UpdateContent(items, vars, mode);
+            Point cursor = NativeDesktopPopup.Cursor(); var work = NativeDesktopPopup.WorkArea(cursor); float dpi = NativeDesktopPopup.DpiAt(cursor) / 96f;
+            int width = (int)Math.Ceiling(282 * dpi), height = (int)Math.Ceiling(_layout.Height * dpi);
+            // Fit every row, not a scrolling or clipped viewport, on a short work area.
+            if (height > work.Height - 8) { dpi = (work.Height - 8) / _layout.Height; width = (int)Math.Ceiling(282 * dpi); height = work.Height - 8; }
+            var anchor = IconRectProvider?.Invoke(); int x = (anchor is { } icon ? icon.Left + icon.Width / 2 : cursor.X) - width / 2;
+            int y = (anchor is { } icon2 ? icon2.Top : cursor.Y) - height - 8;
+            if (y < work.Top + 4) y = (anchor is { } icon3 ? icon3.Bottom : cursor.Y) + 8;
+            x = Math.Clamp(x, work.Left + 4, Math.Max(work.Left + 4, work.Right - width - 4)); y = Math.Clamp(y, work.Top + 4, Math.Max(work.Top + 4, work.Bottom - height - 4));
+            _shownAt = Environment.TickCount64; _window.Show(new Rectangle(x, y, width, height)); _fit = height / _window.Scale / _layout.Height; _outside.Start();
+            StartupLog.Write("[托盘原生菜单] 显示，立即可点击 items=" + items.Count);
+            return Task.FromResult(true);
+        }
+        private void Invoke(int index)
+        {
+            if (index < 0 || index >= _items.Count) return; var item = _items[index]; if (item.separator || !item.enabled || !TrayMenuModel.IsKnownAction(item.actionId)) return;
+            Hide(); StartupLog.Write("[托盘原生菜单] 收到命令 " + item.actionId); Invoked?.Invoke(item.actionId);
+        }
+        private void Paint(Graphics g, float width, float height)
+        {
+            // Rendering and hit testing use exactly the same logical geometry.
+            float fit = height / _layout.Height; var saved = g.Save(); g.ScaleTransform(fit, fit); width /= fit;
+            DesktopPopupDrawing.Fill(g, _background, new RectangleF(0, 0, width, _layout.Height));
+            DesktopPopupDrawing.Text(g, "C E L E S T E", 10, _muted, new RectangleF(21, 10, width - 42, 24)); using (var brush = new SolidBrush(_accent)) g.FillEllipse(brush, width - 25, 20, 5, 5);
+            for (int i = 0; i < _items.Count; i++)
             {
-                // WebView2 的窗口版不支持透明背景，所以先把底刷成菜单底色：
-                // 这样页面首帧前不会闪一下白，圆角外面也不会露出白色。
-                if (_controller != null && themeVars.TryGetValue("menu-bg", out string? menuBg)
-                    && ColorHelper.ParseHexColor(menuBg) is { } color)
+                var row = _layout.Rows[i];
+                var item = _items[i];
+                if (row.Separator)
                 {
-                    _controller.DefaultBackgroundColor = color;
+                    DesktopPopupDrawing.Fill(g, _line, new RectangleF(20, row.Top + 7, width - 40, 1));
+                    continue;
                 }
-
-                string payload = JsonSerializer.Serialize(new
+                if (i == _selected && item.enabled)
+                    DesktopPopupDrawing.Fill(g, _hover, new RectangleF(8, row.Top, width - 16, row.Height));
+                Color color = item.enabled ? _ink : _muted;
+                DesktopPopupDrawing.Icon(g, item.actionId,
+                    new RectangleF(21, row.Top + (row.Height - 15) / 2, 15, 15),
+                    i == _selected ? _accent : _muted, item.actionId == "togglePlay" && item.label == "暂停");
+                DesktopPopupDrawing.Text(g, item.label, 12 * _textScale, color,
+                    new RectangleF(48, row.Top, width - 82, row.Height));
+                if (item.@checked == true)
                 {
-                    kind = "celeste.trayTheme",
-                    version = 1,
-                    theme = new { mode, vars = themeVars },
-                    items
-                });
-                // Render and measure in one operation; no stale theme-only size
-                // or fixed 320px fallback can win the asynchronous message race.
-                string measured = await _controller!.CoreWebView2.ExecuteScriptAsync("window.CelesteTray.render(" + payload + ")");
-                using (JsonDocument size = JsonDocument.Parse(measured))
-                {
-                    _contentWidth = size.RootElement.GetProperty("width").GetDouble();
-                    _contentHeight = size.RootElement.GetProperty("height").GetDouble();
-                }
-                if (_disposed) return false;
-                PlaceAndShow();
-                return true;
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("TrayMenuWindow.ShowAsync", ex);
-                return false;
-            }
-            }
-            finally { _showPending = false; }
-        }
-
-        internal void Hide()
-        {
-            StopOutsideWatcher();
-            if (_hwnd == IntPtr.Zero || !_visible) return;
-            _visible = false;
-            ShowWindow(_hwnd, SW_HIDE);
-            // 订阅方（任务栏播放条）出问题不能连累命令执行 —— Hide 之后紧接着就要发 Invoked。
-            try { Hidden?.Invoke(); }
-            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.Hidden", ex); }
-        }
-
-        public void Dispose()
-        {
-            if (_disposed) return;
-            _disposed = true;
-            StopOutsideWatcher();
-            _outsideTimer = null;
-            try
-            {
-                if (_controller != null)
-                {
-                    _controller.Close();
-                }
-            }
-            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.Dispose.WebView", ex); }
-            _controller = null;
-            _environment = null;
-            try
-            {
-                if (_hwnd != IntPtr.Zero) DestroyWindow(_hwnd);
-            }
-            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.Dispose.Window", ex); }
-            _hwnd = IntPtr.Zero;
-        }
-
-        // —— 窗口 ——
-
-        private void CreateWindow()
-        {
-            IntPtr instance = GetModuleHandle(null);
-            var wc = new WNDCLASSEXW
-            {
-                cbSize = (uint)Marshal.SizeOf<WNDCLASSEXW>(),
-                lpfnWndProc = Marshal.GetFunctionPointerForDelegate(_wndProc),
-                hInstance = instance,
-                lpszClassName = _className
-            };
-            RegisterClassExW(ref wc);
-
-            _hwnd = CreateWindowExW(WS_EX_TOOLWINDOW | WS_EX_TOPMOST, _className, "CelesteTrayMenu",
-                WS_POPUP, 0, 0, 320, 400, IntPtr.Zero, IntPtr.Zero, instance, IntPtr.Zero);
-            if (_hwnd == IntPtr.Zero)
-            {
-                StartupLog.Write("[托盘菜单] 创建窗口失败（err=" + Marshal.GetLastWin32Error() + "）");
-                return;
-            }
-
-            // Win11：让 DWM 把弹出窗的四个角裁圆。Win10 上这条属性会被忽略（方角），不影响功能。
-            try
-            {
-                int round = 2; // DWMWCP_ROUND
-                DwmSetWindowAttribute(_hwnd, 33 /* DWMWA_WINDOW_CORNER_PREFERENCE */, ref round, sizeof(int));
-            }
-            catch { }
-        }
-
-        private void PlaceAndShow()
-        {
-            if (_hwnd == IntPtr.Zero) return;
-            double scale = GetDpiForWindow(_hwnd) / 96.0;
-            if (scale <= 0) scale = 1;
-
-            int width = (int)Math.Round(Math.Clamp(_contentWidth, 200, 360) * scale);
-            int height = (int)Math.Round(Math.Clamp(_contentHeight, 60, 1200) * scale);
-
-            RECT work = WorkArea();
-            int anchorX, anchorTop, anchorBottom;
-            if (TrayIconRect(out WindowsTrayIcon.RECT icon))
-            {
-                anchorX = icon.Left + icon.Width / 2;
-                anchorTop = icon.Top;
-                anchorBottom = icon.Bottom;
-                _anchorIconRect = icon;   // 收起判断要用：右键时光标还压在图标上
-            }
-            else
-            {
-                _anchorIconRect = null;
-                GetCursorPos(out POINT cursor);
-                anchorX = cursor.X;
-                anchorTop = cursor.Y;
-                anchorBottom = cursor.Y;
-            }
-
-            int x = anchorX - width / 2;
-            int y = anchorTop - height - 8;                       // 优先贴图标上方（任务栏在底部时）
-            if (y < work.Top + 4) y = anchorBottom + 8;           // 上方放不下就翻到下面（任务栏在顶部时）
-            x = Math.Clamp(x, work.Left + 4, Math.Max(work.Left + 4, work.Right - width - 4));
-            y = Math.Clamp(y, work.Top + 4, Math.Max(work.Top + 4, work.Bottom - height - 4));
-
-            // Resize the parent before sizing its child WebView. Otherwise the
-            // controller can retain the old 260x320 client viewport.
-            // 这里**故意**带激活（不再用 SWP_NOACTIVATE）：未激活窗口收到的第一次点击
-            // 会被 Windows 拿去"激活窗口"而不是送给网页，表现就是"点了全都没反应"。
-            SetWindowPos(_hwnd, HWND_TOPMOST, x, y, width, height, SWP_SHOWWINDOW);
-            if (_controller != null)
-            {
-                _controller.Bounds = new Rect(0, 0, width, height);
-                _controller.IsVisible = true;
-                // 窗口换了位置要告诉 WebView2，它按自己记的位置换算鼠标坐标。
-                // 不通知的话，窗口被移动过之后点击会算到错误的位置上。
-                try { _controller.NotifyParentWindowPositionChanged(); }
-                catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.NotifyParentWindowPositionChanged", ex); }
-            }
-
-            _visible = true;
-            _shownAt = Environment.TickCount64;
-            StartupLog.Write($"[托盘菜单] 布局 content={_contentWidth}x{_contentHeight} scale={scale:F2} window={width}x{height}");
-            ForceForeground();
-            bool active = SetForegroundWindow(_hwnd);
-            SetFocus(_hwnd);
-            _controller?.MoveFocus(CoreWebView2MoveFocusReason.Programmatic);
-            StartupLog.Write("[托盘菜单] 激活 foreground=" + (GetForegroundWindow() == _hwnd) + " setfg=" + active);
-
-            // 再下一轮消息里补设一次尺寸：窗口刚显示时 WebView 子窗口可能还没跟上父窗口的
-            // 物理尺寸，补这一次可以让命中区域和画面严格对齐。
-            Microsoft.UI.Dispatching.DispatcherQueue? queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-            queue?.TryEnqueue(() =>
-            {
-                if (_disposed || !_visible || _controller == null) return;
-                try { _controller.Bounds = new Rect(0, 0, width, height); }
-                catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.PlaceAndShow.Resync", ex); }
-            });
-
-            StartOutsideWatcher();
-
-            // 自己验一次命中：菜单正中间那块，光标底下到底是不是我们自己的窗口。
-            // 不需要用户操作，日志就能回答"菜单是不是被别的窗口盖住了"。
-            SelfHitTest(x + width / 2, y + 40, width, height);
-        }
-
-        /// <summary>菜单显示 400ms 后，检查菜单内部一个点是否真的能命中自己的窗口。</summary>
-        private void SelfHitTest(int x, int y, int width, int height)
-        {
-            Microsoft.UI.Dispatching.DispatcherQueue? queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-            if (queue == null) return;
-            var timer = queue.CreateTimer();
-            timer.Interval = TimeSpan.FromMilliseconds(400);
-            timer.IsRepeating = false;
-            timer.Tick += (_, _) =>
-            {
-                timer.Stop();
-                try
-                {
-                    if (_disposed || !_visible) return;
-                    var probe = new POINT { X = x, Y = y };
-                    IntPtr hit = WindowFromPoint(probe);
-                    var sb = new System.Text.StringBuilder(64);
-                    GetClassNameW(hit, sb, sb.Capacity);
-                    string owner = hit == _hwnd ? "self" : (hit != IntPtr.Zero && IsChild(_hwnd, hit)) ? "child" : "other";
-                    StartupLog.Write($"[托盘菜单] 自检 点({x},{y}) hit={sb}({owner}) 窗口={width}x{height} "
-                        + $"前景={GetForegroundWindow() == _hwnd}");
-                }
-                catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.SelfHitTest", ex); }
-            };
-            timer.Start();
-        }
-
-        /// <summary>给定位用的托盘图标矩形（由 WindowsTrayService 注入，它持有通知图标）。</summary>
-        internal Func<WindowsTrayIcon.RECT?>? IconRectProvider { get; set; }
-
-        private bool TrayIconRect(out WindowsTrayIcon.RECT rect)
-        {
-            rect = default;
-            try
-            {
-                if (IconRectProvider?.Invoke() is { } value) { rect = value; return true; }
-            }
-            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.TrayIconRect", ex); }
-            return false;
-        }
-
-        /// <summary>没抢到前台时菜单会收不到 Esc / 外部点击，用附加线程输入硬抢一次。</summary>
-        private void ForceForeground()
-        {
-            try
-            {
-                IntPtr foreground = GetForegroundWindow();
-                if (foreground == _hwnd) return;
-                uint foregroundThread = foreground == IntPtr.Zero ? 0 : GetWindowThreadProcessId(foreground, out _);
-                uint current = GetCurrentThreadId();
-                bool attached = foregroundThread != 0 && foregroundThread != current
-                    && AttachThreadInput(foregroundThread, current, true);
-                BringWindowToTop(_hwnd);
-                SetForegroundWindow(_hwnd);
-                if (attached) AttachThreadInput(foregroundThread, current, false);
-            }
-            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.ForceForeground", ex); }
-        }
-
-        /// <summary>
-        /// 点菜单外面才收起。判据只有一条：**在菜单和托盘图标之外按下了左键**。
-        ///
-        /// 为什么不再用"光标在不在框里"：右键点托盘图标那一刻，光标正压在图标的矩形上，
-        /// 而图标不在菜单框里 —— 按原来的写法，菜单一弹出来就被自己收掉（用户看到的
-        /// 就是"菜单一闪就没"）。鼠标只是移开、不点，也不该收，系统原生菜单就是这个行为。
-        /// </summary>
-        private void StartOutsideWatcher()
-        {
-            try
-            {
-                if (_outsideTimer == null)
-                {
-                    Microsoft.UI.Dispatching.DispatcherQueue? queue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-                    if (queue == null) return;
-                    _outsideTimer = queue.CreateTimer();
-                    _outsideTimer.Interval = TimeSpan.FromMilliseconds(120);
-                    _outsideTimer.IsRepeating = true;
-                    _outsideTimer.Tick += (_, _) => CheckOutside();
-                }
-                _outsideHits = 0;
-                _leftPressed = false;
-                _outsideTimer.Start();
-            }
-            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.StartOutsideWatcher", ex); }
-        }
-
-        private void StopOutsideWatcher()
-        {
-            try { _outsideTimer?.Stop(); } catch { }
-            _outsideHits = 0;
-            _leftPressed = false;
-        }
-
-        /// <summary>
-        /// 按下鼠标时记录"光标底下是谁"。
-        /// 只有三种可能，日志一看就能分：
-        ///   ① hit=CelesteTrayMenu_xxx（或它的子窗口）→ 点进菜单了，网页却没反应 = 输入链路问题
-        ///   ② hit=别的窗口 → 菜单被挡住（谁挡的一目了然）
-        ///   ③ hit=空 → 坐标根本不在菜单上
-        /// </summary>
-        /// <summary>
-        /// 把菜单窗口的子窗口类名串起来。正常应该有 WebView2 的渲染子窗口
-        /// （Chrome_WidgetWin_0 之类）；如果这里是空的，说明窗口版控制器压根没建出
-        /// 可接收鼠标的子窗口，那"点不动"就不是收起判据的问题了。
-        /// </summary>
-        private string DescribeChildWindows()
-        {
-            try
-            {
-                var names = new List<string>();
-                IntPtr child = GetWindow(_hwnd, GW_CHILD);
-                while (child != IntPtr.Zero && names.Count < 8)
-                {
-                    var sb = new System.Text.StringBuilder(64);
-                    GetClassNameW(child, sb, sb.Capacity);
-                    names.Add(sb.ToString());
-                    child = GetWindow(child, GW_HWNDNEXT);
-                }
-                return "children=[" + string.Join(",", names) + "]";
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("TrayMenuWindow.DescribeChildWindows", ex);
-                return "children=[?]";
-            }
-        }
-
-        private void LogHitTest()
-        {
-            try
-            {
-                if (Environment.TickCount64 - _lastHitTestTick < 400) return;
-                _lastHitTestTick = Environment.TickCount64;
-                if (!GetCursorPos(out POINT cursor)) return;
-                IntPtr hit = WindowFromPoint(cursor);
-                var sb = new System.Text.StringBuilder(64);
-                GetClassNameW(hit, sb, sb.Capacity);
-                string owner = hit == IntPtr.Zero ? "none"
-                    : hit == _hwnd ? "self"
-                    : IsChild(_hwnd, hit) ? "child"
-                    : IsOwnPopup(hit) ? "own-popup"
-                    : "other";
-                StartupLog.Write($"[托盘菜单] 按下 cursor={cursor.X},{cursor.Y} hit={sb}({owner})");
-            }
-            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.LogHitTest", ex); }
-        }
-
-        private void CheckOutside()
-        {
-            if (_disposed || !_visible || _hwnd == IntPtr.Zero) { StopOutsideWatcher(); return; }
-            if (Environment.TickCount64 - _shownAt < OutsideGraceMs) return;
-            try
-            {
-                short state = GetAsyncKeyState(VK_LBUTTON);
-                bool pressing = (state & 0x8000) != 0;
-                bool pressedSinceLastPoll = (state & 0x0001) != 0;
-                bool justPressed = pressing && !_leftPressed;
-                _leftPressed = pressing;
-
-                // 只在"刚按下"这一刻判断，平时不打扰。
-                if (!justPressed && !pressedSinceLastPoll) return;
-
-                // 诊断：按下那一刻光标底下是谁。用来分清「菜单被别的窗口挡住」和
-                // 「点进了 WebView 但网页收不到」这两种完全不同的毛病。
-                LogHitTest();
-
-                // 网页刚发过消息（点了菜单项）—— 这一下是我们的，绝不能收。
-                if (Environment.TickCount64 - _lastWebMessageTick < 300) return;
-
-                if (!GetWindowRect(_hwnd, out RECT bounds) || bounds.Right <= bounds.Left || bounds.Bottom <= bounds.Top)
-                {
-                    // 拿不到窗口矩形就无从判断内外，宁可多留一会儿。
-                    return;
-                }
-
-                GetCursorPos(out POINT cursor);
-                bool insideMenu = cursor.X >= bounds.Left && cursor.X < bounds.Right
-                    && cursor.Y >= bounds.Top && cursor.Y < bounds.Bottom;
-                // 托盘图标本身也算"菜单的一部分"：右键完鼠标就停在那儿。
-                bool insideIcon = _anchorIconRect is { } icon
-                    && cursor.X >= icon.Left && cursor.X < icon.Right
-                    && cursor.Y >= icon.Top && cursor.Y < icon.Bottom;
-                if (insideMenu || insideIcon) return;
-
-                // 前台仍是自己（或自己的子窗口）说明这一下落在了菜单里，只是坐标没算准，别收。
-                IntPtr foreground = GetForegroundWindow();
-                if (foreground == _hwnd || IsOwnPopup(foreground)) return;
-
-                StartupLog.Write($"[托盘菜单] 点在菜单外，收起 cursor={cursor.X},{cursor.Y} "
-                    + $"bounds={bounds.Left},{bounds.Top},{bounds.Right},{bounds.Bottom} fg=0x{foreground.ToInt64():X}");
-                Hide();
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("TrayMenuWindow.CheckOutside", ex);
-                StopOutsideWatcher();
-            }
-        }
-
-        /// <summary>这个窗口是不是本菜单窗口自己或它的后代（WebView2 的子窗口有好几层）。</summary>
-        private bool IsOwnPopup(IntPtr hwnd)
-        {
-            try
-            {
-                for (IntPtr current = hwnd; current != IntPtr.Zero; current = GetParent(current))
-                {
-                    if (current == _hwnd) return true;
+                    using var pen = new Pen(_accent, 1.5f);
+                    float y = row.Top + row.Height / 2;
+                    g.DrawLines(pen, new[] { new PointF(width - 30, y), new PointF(width - 27, y + 3), new PointF(width - 21, y - 4) });
                 }
             }
-            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.IsOwnPopup", ex); }
-            return false;
+            g.Restore(saved);
         }
-
-        private IntPtr WindowProc(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam)
-        {
-            switch (msg)
-            {
-                case WM_MOUSEACTIVATE:
-                    // Activate without discarding the click that opened/focused
-                    // the native WebView child (MA_ACTIVATE, not ACTIVATEANDEAT).
-                    return new IntPtr(1);
-                case WM_ACTIVATE:
-                    // 这里**不再**收起菜单。原先"一失活就隐藏"会在点击穿过 WebView 子窗口的
-                    // 那一瞬间把菜单收掉，网页里的 pointerdown 还没发出去窗口就没了 ——
-                    // 表现就是"点了完全没反应"。收起改由 StartOutsideWatcher 轮询光标位置。
-                    if (_visible)
-                        StartupLog.Write("[托盘菜单] WM_ACTIVATE " + (((int)(wParam.ToInt64() & 0xFFFF)) == WA_INACTIVE ? "INACTIVE(忽略)" : "ACTIVE"));
-                    break;
-                case WM_LBUTTONDOWN:
-                    // 正常情况下鼠标落在 WebView 子窗口上，父窗口收不到这条。
-                    // 收到 = 点在窗口里但没进网页（就是命中区域不对的证据）。
-                    if (_visible) StartupLog.Write("[托盘菜单] WM_LBUTTONDOWN 落在父窗口（未进入网页）");
-                    break;
-                case WM_KEYDOWN:
-                    if ((int)wParam == 0x1B /* VK_ESCAPE */) { Hide(); return IntPtr.Zero; }
-                    break;
-                case WM_CLOSE:
-                    Hide();
-                    return IntPtr.Zero;
-            }
-            return DefWindowProcW(hWnd, msg, wParam, lParam);
-        }
-
-        // —— WebView2 ——
-
-        private async Task<bool> EnsureWebViewAsync()
-        {
-            if (_ready && _controller != null) return true;
-            if (_initFailed) return false;
-            // 预热还在跑的时候右键（启动后头几秒）会进到同一个方法里，
-            // 两次并发建控制器就会在同一个 HWND 上打起来 —— 只允许有一次初始化，后来者等它。
-            if (_initTask != null) return await _initTask;
-
-            _initTask = EnsureWebViewCoreAsync();
-            bool ok;
-            try { ok = await _initTask; }
-            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.EnsureWebViewAsync", ex); ok = false; }
-            finally { _initTask = null; }   // 失败后允许下次右键再试，不再一次失败就整场报废
-
-            if (!ok)
-            {
-                _initFailures++;
-                // 失败原因多半是上一次运行留下的浏览器进程还占着同一个 user data folder，
-                // 或者机器太忙导航超时 —— 都不是永久性的，所以只数次数，不立刻判死。
-                if (_initFailures >= MaxInitFailures)
-                {
-                    _initFailed = true;
-                    StartupLog.Write("[托盘菜单] 连续 " + _initFailures + " 次初始化失败，本次运行改用系统原生菜单");
-                }
-                else
-                {
-                    StartupLog.Write("[托盘菜单] 初始化失败（第 " + _initFailures + " 次），下次右键会重试");
-                }
-            }
-            return ok;
-        }
-
-        private async Task<bool> EnsureWebViewCoreAsync()
-        {
-            if (_hwnd == IntPtr.Zero) { _initFailures = MaxInitFailures; _initFailed = true; return false; }
-
-            try
-            {
-                string folder = Path.Combine(AppContext.BaseDirectory, "WebShell");
-                if (!File.Exists(Path.Combine(folder, "tray-menu.html")))
-                {
-                    StartupLog.Write("[托盘菜单] 找不到 WebShell/tray-menu.html，退到系统原生菜单");
-                    _initFailed = true;
-                    return false;
-                }
-
-                // 独立 user data folder：不跟主界面抢同一个浏览器进程，
-                // 菜单预热/销毁都动不到曲库那边（代价是多一个进程，几百 MB 的页面不存在，很轻）。
-                // ⚠ 这里**不能**复用主界面 WebView2 的 CoreWebView2Environment。
-                // 2026-10-28 22:43/22:53 实测：复用之后菜单能画出来，但鼠标点击全部进不了网页
-                // （日志里连 pointerdown 探针都没有），而同一份代码用独立环境时点击是通的。
-                // 原因推断：WinUI 的 WebView2 控件是用 composition hosting 建的环境，
-                // 拿它去 CreateCoreWebView2ControllerAsync 建窗口版 controller，输入链路对不上。
-                // 所以老老实实自己建一套，只多花一次冷启动。
-                string userData = Path.Combine(
-                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "CelesteMusicPlayer", "TrayWebView2");
-                Directory.CreateDirectory(userData);
-                if (_environment == null)
-                {
-                    try
-                    {
-                        _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, userData, null);
-                    }
-                    catch (Exception ex)
-                    {
-                        // 同一个 user data folder 被另一个实例（双开/上一次没退干净）占着时会失败。
-                        // 换一个备用目录再来一次，菜单本身照常能用。
-                        StartupLog.WriteException("TrayMenuWindow.CreateEnvironment(primary)", ex);
-                        string alt = Path.Combine(
-                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                            "CelesteMusicPlayer", "TrayWebView2-alt");
-                        Directory.CreateDirectory(alt);
-                        _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, alt, null);
-                        StartupLog.Write("[托盘菜单] 主数据目录被占用，已改用备用目录");
-                    }
-                }
-                var windowRef = CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)_hwnd.ToInt64());
-                _controller = await _environment.CreateCoreWebView2ControllerAsync(windowRef);
-                if (_disposed) { _controller.Close(); _controller = null; return false; }
-                _controller.BoundsMode = CoreWebView2BoundsMode.UseRawPixels;
-                _controller.ZoomFactor = 1;
-
-                // ⚠ 先给一个正常视口，再开始加载。
-                // 之前是导航完才设 Bounds，网页视图在加载期间是 0x0 —— Chromium 对 0x0 视口
-                // 会推迟首次渲染，实测第一次导航能卡满 20 秒超时，而重试（环境已建好）只要 5 秒。
-                // 用户看到的就是"开机后第一次右键弹的是系统方块菜单，后面才变网页菜单"。
-                _controller.Bounds = new Rect(0, 0, 282, 471);
-                _controller.IsVisible = true;
-
-                CoreWebView2 core = _controller.CoreWebView2;
-                core.Settings.AreDefaultContextMenusEnabled = false;
-                core.Settings.AreDevToolsEnabled = false;
-                core.Settings.IsStatusBarEnabled = false;
-                core.Settings.AreBrowserAcceleratorKeysEnabled = false;
-                core.Settings.IsZoomControlEnabled = false;
-                core.Settings.IsWebMessageEnabled = true;
-                core.SetVirtualHostNameToFolderMapping("celeste.tray", folder, CoreWebView2HostResourceAccessKind.DenyCors);
-                core.WebMessageReceived += (_, args) => OnWebMessage(args);
-
-                var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-                core.NavigationCompleted += (_, args) =>
-                {
-                    if (!args.IsSuccess)
-                        StartupLog.Write("[托盘菜单] 导航失败 WebErrorStatus=" + args.WebErrorStatus);
-                    ready.TrySetResult(args.IsSuccess);
-                };
-                core.Navigate("https://celeste.tray/tray-menu.html");
-                Task finished = await Task.WhenAny(ready.Task, Task.Delay(NavigationTimeoutMs));
-                if (_disposed) return false;
-                if (finished != ready.Task)
-                    throw new TimeoutException("托盘菜单页面 " + (NavigationTimeoutMs / 1000) + " 秒内没加载完");
-                if (!await ready.Task)
-                    throw new InvalidOperationException("托盘菜单页面加载失败（WebErrorStatus 见上一条日志）");
-
-                if (_controller != null)
-                {
-                    _controller.Bounds = new Rect(0, 0, 260, 320);
-                    // 一直保持"可见"：靠父窗口的显示/隐藏来控制看不看得见。
-                    // 原先在显示时把 IsVisible 从 false 切到 true，WebView 会重建渲染目标，
-                    // 那一瞬间命中区域还停在旧尺寸上 —— 点菜单项落空就是这么来的。
-                    _controller.IsVisible = true;
-                }
-                _ready = true;
-                _initFailures = 0;
-                StartupLog.Write("[托盘菜单] WebView2 菜单已就绪 " + DescribeChildWindows());
-                return true;
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("TrayMenuWindow.EnsureWebView", ex);
-                try { _controller?.Close(); } catch { }
-                _controller = null;
-                return false;
-            }
-        }
-
-        private void PostToWeb(object payload)
-        {
-            try
-            {
-                _controller?.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(payload));
-            }
-            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.PostToWeb", ex); }
-        }
-
-        private void OnWebMessage(CoreWebView2WebMessageReceivedEventArgs args)
-        {
-            try
-            {
-                _lastWebMessageTick = Environment.TickCount64;
-                using JsonDocument doc = JsonDocument.Parse(args.WebMessageAsJson);
-                JsonElement root = doc.RootElement;
-                if (!root.TryGetProperty("kind", out JsonElement kind) || kind.GetString() != "celeste.command")
-                {
-                    if (!_unknownMessageLogged)
-                    {
-                        _unknownMessageLogged = true;
-                        StartupLog.Write("[托盘菜单] 收到无法识别的消息: " + Truncate(args.WebMessageAsJson, 160));
-                    }
-                    return;
-                }
-                if (!root.TryGetProperty("action", out JsonElement action)) return;
-                string? verb = action.GetString();
-                if (verb == "ready") { StartupLog.Write("[托盘菜单] 网页消息通道已连接"); return; }
-
-                if (verb == "probe")
-                {
-                    // 网页在捕获阶段报的"鼠标真的进网页了"。有这条说明输入链路没问题，
-                    // 没有就说明点在窗口上但没进 WebView —— 两种情况修法完全不同。
-                    int px = -1, py = -1;
-                    if (root.TryGetProperty("x", out JsonElement probeX) && probeX.TryGetInt32(out int vx)) px = vx;
-                    if (root.TryGetProperty("y", out JsonElement probeY) && probeY.TryGetInt32(out int vy)) py = vy;
-                    StartupLog.Write("[托盘菜单] 网页收到 pointerdown 于 " + px + "," + py);
-                    return;
-                }
-
-                if (verb == "size")
-                {
-                    // The awaited render result is authoritative. Delayed size
-                    // messages from an earlier render must not overwrite it.
-                    return;
-                }
-                if (verb == "close") { Hide(); return; }
-                if (verb == "blur") return; // 收起由 StartOutsideWatcher 负责，DOM 失焦不算数。
-                if (verb == "invoke")
-                {
-                    string? actionId = root.TryGetProperty("actionId", out JsonElement id) ? id.GetString() : null;
-                    if (string.IsNullOrEmpty(actionId)) return;
-                    // 只在白名单里认 —— 网页传来的任何其它字符串一律丢弃
-                    if (!TrayMenuModel.IsKnownAction(actionId))
-                    {
-                        StartupLog.Write("[托盘菜单] 拒绝未知动作 " + actionId);
-                        return;
-                    }
-                    StartupLog.Write("[托盘菜单] 收到命令 " + actionId);
-                    Hide();
-                    Invoked?.Invoke(actionId!);
-                }
-            }
-            catch (Exception ex) { StartupLog.WriteException("TrayMenuWindow.OnWebMessage", ex); }
-        }
-
-        private static string Truncate(string? text, int max)
-            => string.IsNullOrEmpty(text) ? "" : (text!.Length <= max ? text : text.Substring(0, max));
-
-        // —— P/Invoke ——
-
-        private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool IsChild(IntPtr parent, IntPtr child);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetParent(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr WindowFromPoint(POINT point);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetWindow(IntPtr hWnd, uint command);
-
-        private const uint GW_CHILD = 5;
-        private const uint GW_HWNDNEXT = 2;
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern int GetClassNameW(IntPtr hWnd, System.Text.StringBuilder name, int capacity);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetWindowRect(IntPtr hwnd, out RECT rect);
-
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private struct WNDCLASSEXW
-        {
-            public uint cbSize;
-            public uint style;
-            public IntPtr lpfnWndProc;
-            public int cbClsExtra;
-            public int cbWndExtra;
-            public IntPtr hInstance;
-            public IntPtr hIcon;
-            public IntPtr hCursor;
-            public IntPtr hbrBackground;
-            [MarshalAs(UnmanagedType.LPWStr)] public string? lpszMenuName;
-            [MarshalAs(UnmanagedType.LPWStr)] public string lpszClassName;
-            public IntPtr hIconSm;
-        }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct RECT { public int Left, Top, Right, Bottom; public int Width => Right - Left; }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct POINT { public int X, Y; }
-
-        [StructLayout(LayoutKind.Sequential)]
-        private struct MONITORINFO
-        {
-            public int cbSize;
-            public RECT rcMonitor;
-            public RECT rcWork;
-            public uint dwFlags;
-        }
-
-        private static RECT WorkArea()
-        {
-            try
-            {
-                GetCursorPos(out POINT pt);
-                IntPtr monitor = MonitorFromPoint(pt, 2 /* MONITOR_DEFAULTTONEAREST */);
-                var info = new MONITORINFO { cbSize = Marshal.SizeOf<MONITORINFO>() };
-                if (GetMonitorInfoW(monitor, ref info)) return info.rcWork;
-                return new RECT { Left = 0, Top = 0, Right = 1920, Bottom = 1080 };
-            }
-            catch
-            {
-                return new RECT { Left = 0, Top = 0, Right = 1920, Bottom = 1080 };
-            }
-        }
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern ushort RegisterClassExW(ref WNDCLASSEXW lpwcx);
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern IntPtr CreateWindowExW(int exStyle, string className, string windowName, int style,
-            int x, int y, int width, int height, IntPtr parent, IntPtr menu, IntPtr instance, IntPtr param);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr DefWindowProcW(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool DestroyWindow(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool ShowWindow(IntPtr hWnd, int cmd);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetWindowPos(IntPtr hWnd, IntPtr insertAfter, int x, int y, int cx, int cy, uint flags);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool SetForegroundWindow(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr SetFocus(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern short GetAsyncKeyState(int vKey);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool BringWindowToTop(IntPtr hWnd);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr GetForegroundWindow();
-
-        [DllImport("user32.dll")]
-        private static extern uint GetWindowThreadProcessId(IntPtr hWnd, out uint processId);
-
-        [DllImport("kernel32.dll")]
-        private static extern uint GetCurrentThreadId();
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool AttachThreadInput(uint attach, uint attachTo, [MarshalAs(UnmanagedType.Bool)] bool doAttach);
-
-        [DllImport("user32.dll")]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetCursorPos(out POINT point);
-
-        [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromPoint(POINT point, uint flags);
-
-        [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool GetMonitorInfoW(IntPtr monitor, ref MONITORINFO info);
-
-        [DllImport("user32.dll")]
-        private static extern uint GetDpiForWindow(IntPtr hWnd);
-
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode)]
-        private static extern IntPtr GetModuleHandle(string? name);
-
-        [DllImport("dwmapi.dll")]
-        private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attribute, ref int value, int size);
+        internal void Hide() { if (!IsVisible) return; _outside.Stop(); _window.Hide(); Hidden?.Invoke(); }
+        public void Dispose() { _outside.Stop(); _window.Dispose(); }
     }
 }
