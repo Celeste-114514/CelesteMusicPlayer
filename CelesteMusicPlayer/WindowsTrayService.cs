@@ -215,7 +215,9 @@ namespace CelesteMusicPlayer
                 var queue = _owner.DispatcherQueue;
                 if (queue == null) return;
                 var timer = queue.CreateTimer();
-                timer.Interval = TimeSpan.FromSeconds(attempt == 0 ? 3 : 5);
+                // 第一次别等那么久：用户在窗口出来后马上就可能右键托盘。
+                // 后面几次间隔也压短，失败基本都是这几秒内能恢复的。
+                timer.Interval = TimeSpan.FromMilliseconds(attempt == 0 ? 1200 : 2000);
                 timer.IsRepeating = false;
                 timer.Tick += (_, _) =>
                 {

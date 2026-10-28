@@ -107,7 +107,15 @@ namespace CelesteMusicPlayer
             _showPending = true;
             try
             {
-            if (!await EnsureWebViewAsync()) return false;
+            // 网页还没就绪时**不要立刻**退到系统方块菜单：先在后台等一小会儿。
+            // 用户右键后马上就变方块菜单，下一次右键又变网页菜单，这种反复最伤观感。
+            if (!_ready)
+            {
+                Task<bool> init = EnsureWebViewAsync();
+                Task first = await Task.WhenAny(init, Task.Delay(2000));
+                if (first != init || !await init) return false;
+            }
+            else if (!await EnsureWebViewAsync()) return false;
 
             try
             {
@@ -491,6 +499,13 @@ namespace CelesteMusicPlayer
                 if (_disposed) { _controller.Close(); _controller = null; return false; }
                 _controller.BoundsMode = CoreWebView2BoundsMode.UseRawPixels;
                 _controller.ZoomFactor = 1;
+
+                // ⚠ 先给一个正常视口，再开始加载。
+                // 之前是导航完才设 Bounds，网页视图在加载期间是 0x0 —— Chromium 对 0x0 视口
+                // 会推迟首次渲染，实测第一次导航能卡满 20 秒超时，而重试（环境已建好）只要 5 秒。
+                // 用户看到的就是"开机后第一次右键弹的是系统方块菜单，后面才变网页菜单"。
+                _controller.Bounds = new Rect(0, 0, 282, 471);
+                _controller.IsVisible = true;
 
                 CoreWebView2 core = _controller.CoreWebView2;
                 core.Settings.AreDefaultContextMenusEnabled = false;
