@@ -11,7 +11,10 @@ namespace CelesteMusicPlayer;
 internal static class NetworkLibraryStore
 {
     private static readonly object Gate = new();
-    private static string DbPath => Path.Combine(AppSettingsStore.GetConfigDirectory(), "network-library.db");
+    /// <summary>测试隔离：非空时库文件改用该路径（临时库，避免污染真实数据）。照 LibraryDb.TestDbOverride 先例。</summary>
+    internal static string? DbPathOverride { get; set; }
+
+    private static string DbPath => DbPathOverride ?? Path.Combine(AppSettingsStore.GetConfigDirectory(), "network-library.db");
     private static SqliteConnection Open()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(DbPath)!);

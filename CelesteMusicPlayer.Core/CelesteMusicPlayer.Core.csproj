@@ -1,0 +1,115 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <ImplicitUsings>disable</ImplicitUsings>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="ToolGood.Words.Pinyin" Version="3.1.0" />
+    <PackageReference Include="System.Drawing.Common" Version="10.0.11" />
+    <PackageReference Include="SkiaSharp" Version="3.119.4" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" Version="3.119.4" />
+    <Compile Include="../CelesteMusicPlayer/AppCachePaths.cs" Link="AppCachePaths.cs" />
+    <Compile Include="../CelesteMusicPlayer/AppClosePreferences.cs" Link="AppClosePreferences.cs" />
+    <Compile Include="../CelesteMusicPlayer/AppLog.cs" Link="AppLog.cs" />
+    <Compile Include="../CelesteMusicPlayer/AppSettingsStore.cs" Link="AppSettingsStore.cs" />
+    <Compile Include="../CelesteMusicPlayer/AsioFeederProvider.cs" Link="AsioFeederProvider.cs" />
+    <Compile Include="../CelesteMusicPlayer/AudioChainFormat.cs" Link="AudioChainFormat.cs" />
+    <Compile Include="../CelesteMusicPlayer/AudioInfoFormatter.cs" Link="AudioInfoFormatter.cs" />
+    <Compile Include="../CelesteMusicPlayer/AudioPlaybackEngine.cs" Link="AudioPlaybackEngine.cs" />
+    <Compile Include="../CelesteMusicPlayer/AudioSignalPath.cs" Link="AudioSignalPath.cs" />
+    <Compile Include="../CelesteMusicPlayer/ConvolutionProcessor.cs" Link="ConvolutionProcessor.cs" />
+    <Compile Include="../CelesteMusicPlayer/CoverCacheLayout.cs" Link="CoverCacheLayout.cs" />
+    <Compile Include="../CelesteMusicPlayer/CoverCacheService.cs" Link="CoverCacheService.cs" />
+    <Compile Include="../CelesteMusicPlayer/CoverSourceReader.cs" Link="CoverSourceReader.cs" />
+    <Compile Include="../CelesteMusicPlayer/CoverThumbnailer.cs" Link="CoverThumbnailer.cs" />
+    <Compile Include="../CelesteMusicPlayer/CoverVariants.cs" Link="CoverVariants.cs" />
+    <Compile Include="../CelesteMusicPlayer/CrashReportService.cs" Link="CrashReportService.cs" />
+    <Compile Include="../CelesteMusicPlayer/CueSheetParser.cs" Link="CueSheetParser.cs" />
+    <Compile Include="../CelesteMusicPlayer/CueTrackExpansion.cs" Link="CueTrackExpansion.cs" />
+    <Compile Include="../CelesteMusicPlayer/DsdDopPipeline.cs" Link="DsdDopPipeline.cs" />
+    <Compile Include="../CelesteMusicPlayer/DsdPreloadService.cs" Link="DsdPreloadService.cs" />
+    <Compile Include="../CelesteMusicPlayer/DsdProbe.cs" Link="DsdProbe.cs" />
+    <Compile Include="../CelesteMusicPlayer/DspCoreInterop.cs" Link="DspCoreInterop.cs" />
+    <Compile Include="../CelesteMusicPlayer/DspRackState.cs" Link="DspRackState.cs" />
+    <Compile Include="../CelesteMusicPlayer/DspState.cs" Link="DspState.cs" />
+    <Compile Include="../CelesteMusicPlayer/EqCurveState.cs" Link="EqCurveState.cs" />
+    <Compile Include="../CelesteMusicPlayer/FfmpegDecoderBackend.cs" Link="FfmpegDecoderBackend.cs" />
+    <Compile Include="../CelesteMusicPlayer/FftProcessor.cs" Link="FftProcessor.cs" />
+    <Compile Include="../CelesteMusicPlayer/HiFiOutputBackend.cs" Link="HiFiOutputBackend.cs" />
+    <Compile Include="../CelesteMusicPlayer/IExclusiveOutput.cs" Link="IExclusiveOutput.cs" />
+    <Compile Include="../CelesteMusicPlayer/IWaveSourceProvider.cs" Link="IWaveSourceProvider.cs" />
+    <Compile Include="../CelesteMusicPlayer/JsonFile.cs" Link="JsonFile.cs" />
+    <Compile Include="../CelesteMusicPlayer/LevelMeter.cs" Link="LevelMeter.cs" />
+    <Compile Include="../CelesteMusicPlayer/LyricsLoader.cs" Link="LyricsLoader.cs" />
+    <Compile Include="../CelesteMusicPlayer/ManagedDspSourceProvider.cs" Link="ManagedDspSourceProvider.cs" />
+    <Compile Include="../CelesteMusicPlayer/MemProbe.cs" Link="MemProbe.cs" />
+    <Compile Include="../CelesteMusicPlayer/NativeCoreAudio.cs" Link="NativeCoreAudio.cs" />
+    <Compile Include="../CelesteMusicPlayer/NativeCoreOutput.cs" Link="NativeCoreOutput.cs" />
+    <Compile Include="../CelesteMusicPlayer/NativeWasapi.cs" Link="NativeWasapi.cs" />
+    <Compile Include="../CelesteMusicPlayer/NativeWasapiExclusiveOut.cs" Link="NativeWasapiExclusiveOut.cs" />
+    <Compile Include="../CelesteMusicPlayer/NetworkLibraryModels.cs" Link="NetworkLibraryModels.cs" />
+    <Compile Include="../CelesteMusicPlayer/PcmDither.cs" Link="PcmDither.cs" />
+    <Compile Include="../CelesteMusicPlayer/PcmSampleCodec.cs" Link="PcmSampleCodec.cs" />
+    <Compile Include="../CelesteMusicPlayer/PlaybackPulse.cs" Link="PlaybackPulse.cs" />
+    <Compile Include="../CelesteMusicPlayer/PlaybackSnapshot.cs" Link="PlaybackSnapshot.cs" />
+    <Compile Include="../CelesteMusicPlayer/PlaylistItem.cs" Link="PlaylistItem.cs" />
+    <Compile Include="../CelesteMusicPlayer/ReplayGainState.cs" Link="ReplayGainState.cs" />
+    <Compile Include="../CelesteMusicPlayer/ResamplingSourceProvider.cs" Link="ResamplingSourceProvider.cs" />
+    <Compile Include="../CelesteMusicPlayer/SeamlessWaveProvider.cs" Link="SeamlessWaveProvider.cs" />
+    <Compile Include="../CelesteMusicPlayer/SecretProtector.cs" Link="SecretProtector.cs" />
+    <Compile Include="../CelesteMusicPlayer/SpectrumAnalyzer.cs" Link="SpectrumAnalyzer.cs" />
+    <Compile Include="../CelesteMusicPlayer/SpeedStretch.cs" Link="SpeedStretch.cs" />
+    <Compile Include="../CelesteMusicPlayer/SrcOptions.cs" Link="SrcOptions.cs" />
+    <Compile Include="../CelesteMusicPlayer/StartupLog.cs" Link="StartupLog.cs" />
+    <Compile Include="../CelesteMusicPlayer/StereoDownmixSourceProvider.cs" Link="StereoDownmixSourceProvider.cs" />
+    <Compile Include="../CelesteMusicPlayer/TagColumnLayout.cs" Link="TagColumnLayout.cs" />
+    <Compile Include="../CelesteMusicPlayer/TagEditorService.cs" Link="TagEditorService.cs" />
+    <Compile Include="../CelesteMusicPlayer/TtaTagAccess.cs" Link="TtaTagAccess.cs" />
+    <Compile Include="../CelesteMusicPlayer/UnmanagedMemoryFileStream.cs" Link="UnmanagedMemoryFileStream.cs" />
+    <Compile Include="../CelesteMusicPlayer/UpdateChecker.cs" Link="UpdateChecker.cs" />
+    <Compile Include="../CelesteMusicPlayer/WebDavCache.cs" Link="WebDavCache.cs" />
+    <Compile Include="../CelesteMusicPlayer/WebDavClient.cs" Link="WebDavClient.cs" />
+    <Compile Include="../CelesteMusicPlayer/WebDavLocation.cs" Link="WebDavLocation.cs" />
+    <Compile Include="../CelesteMusicPlayer/WebSettingsSchema.cs" Link="WebSettingsSchema.cs" />
+    <Compile Include="../CelesteMusicPlayer/WebTagEditRules.cs" Link="WebTagEditRules.cs" />
+    <Compile Include="../CelesteMusicPlayer/WebTagSortRules.cs" Link="WebTagSortRules.cs" />
+    <Compile Include="../CelesteMusicPlayer/Widen24To32Provider.cs" Link="Widen24To32Provider.cs" />
+    <Compile Include="../CelesteMusicPlayer/UpdateVersioning.cs" Link="UpdateVersioning.cs" />
+    <Compile Include="../CelesteMusicPlayer/FormatHelper.cs" Link="FormatHelper.cs" />
+    <Compile Include="../CelesteMusicPlayer/HttpClients.cs" Link="HttpClients.cs" />
+    <InternalsVisibleTo Include="CoreBoundaryRegression" />
+    <Compile Include="../CelesteMusicPlayer/PlaybackCommandRouter.cs" Link="PlaybackCommandRouter.cs" />
+    <Compile Include="../CelesteMusicPlayer/MainWindowCoordinator.cs" Link="MainWindowCoordinator.cs" />
+    <Compile Include="../CelesteMusicPlayer/LibraryDb.cs" Link="LibraryDb.cs" />
+    <Compile Include="../CelesteMusicPlayer/LibrarySessionStore.cs" Link="LibrarySessionStore.cs" />
+    <Compile Include="../CelesteMusicPlayer/LibraryWatchService.cs" Link="LibraryWatchService.cs" />
+    <Compile Include="../CelesteMusicPlayer/LibraryPathGuard.cs" Link="LibraryPathGuard.cs" />
+    <Compile Include="../CelesteMusicPlayer/PlaylistLibraryService.cs" Link="PlaylistLibraryService.cs" />
+    <Compile Include="../CelesteMusicPlayer/TrackStatsStore.cs" Link="TrackStatsStore.cs" />
+    <Compile Include="../CelesteMusicPlayer/PlayQueueStore.cs" Link="PlayQueueStore.cs" />
+    <Compile Include="../CelesteMusicPlayer/NamedPlaylistStore.cs" Link="NamedPlaylistStore.cs" />
+    <Compile Include="../CelesteMusicPlayer/UserPlaylistFileStore.cs" Link="UserPlaylistFileStore.cs" />
+    <Compile Include="../CelesteMusicPlayer/RgScanInput.cs" Link="RgScanInput.cs" />
+    <Compile Include="../CelesteMusicPlayer/NetworkLibraryStore.cs" Link="NetworkLibraryStore.cs" />
+    <Compile Include="../CelesteMusicPlayer/M3uPlaylistIO.cs" Link="M3uPlaylistIO.cs" />
+    <Compile Include="../CelesteMusicPlayer/PlaybackSessionStore.cs" Link="PlaybackSessionStore.cs" />
+    <Compile Include="../CelesteMusicPlayer/PlaybackOrderResolver.cs" Link="PlaybackOrderResolver.cs" />
+    <Compile Include="../CelesteMusicPlayer/OpraHistoryStore.cs" Link="OpraHistoryStore.cs" />
+    <Compile Include="../CelesteMusicPlayer/GlobalHotkeyService.cs" Link="GlobalHotkeyService.cs" />
+    <Compile Include="../CelesteMusicPlayer/WebBrowseRules.cs" Link="WebBrowseRules.cs" />
+    <Compile Include="../CelesteMusicPlayer/WebQueueRules.cs" Link="WebQueueRules.cs" />
+    <Compile Include="../CelesteMusicPlayer/NetworkLibraryService.cs" Link="NetworkLibraryService.cs" />
+    <Compile Include="../CelesteMusicPlayer/NetworkSourceProvider.cs" Link="NetworkSourceProvider.cs" />
+    <Compile Include="../CelesteMusicPlayer/BaiduSourceProvider.cs" Link="BaiduSourceProvider.cs" />
+    <Compile Include="../CelesteMusicPlayer/MediaServerSourceProvider.cs" Link="MediaServerSourceProvider.cs" />
+    <Compile Include="../CelesteMusicPlayer/PlaybackSession.cs" Link="PlaybackSession.cs" />
+    <InternalsVisibleTo Include="CelesteThinHost.Poc" />
+  </ItemGroup>
+</Project>

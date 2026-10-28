@@ -948,8 +948,16 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             FileAssociationPromptShown = s.FileAssociationPromptShown
         };
 
+        private static string? _settingsPathOverride;
+        /// <summary>Isolated core host checks only. Never configured by production.</summary>
+        internal static string? SettingsPathOverride
+        {
+            get => _settingsPathOverride;
+            set { lock (Gate) { _settingsPathOverride = value; _cache = null; } }
+        }
         internal static string GetFilePath()
         {
+            if (_settingsPathOverride != null) { Directory.CreateDirectory(Path.GetDirectoryName(_settingsPathOverride)!); return _settingsPathOverride; }
             // 固定使用普通用户目录，规避 MSIX ApplicationData 虚拟化导致的写入不稳定/多路径混乱。
             // 打包与 unpackaged 读写完全同源，杜绝“保存正确却读回默认”的另一文件路径问题。
             string root = Path.Combine(

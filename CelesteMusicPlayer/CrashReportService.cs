@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -439,7 +439,9 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                string? version = Microsoft.Web.WebView2.Core.CoreWebView2Environment.GetAvailableBrowserVersionString();
+                var type = Type.GetType("Microsoft.Web.WebView2.Core.CoreWebView2Environment, Microsoft.Web.WebView2.Core");
+                var method = type?.GetMethod("GetAvailableBrowserVersionString", new[] { typeof(string) });
+                string? version = method?.Invoke(null, new object?[] { null }) as string;
                 return string.IsNullOrWhiteSpace(version) ? "未安装（或读取失败）" : version;
             }
             catch (Exception caught)
