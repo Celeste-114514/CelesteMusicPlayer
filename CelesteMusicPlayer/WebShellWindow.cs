@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
@@ -62,6 +62,18 @@ namespace CelesteMusicPlayer
         private bool _stereoSamplingWanted;
         private OverlappedPresenter? _windowedPresenter;
         private bool _closed, _ready, _dirty = true, _sending;
+        /// <summary>本次运行页面崩溃过几次（崩溃卡上要报"这是第几次"，也是自动重载的节流依据）。</summary>
+        private int _pageCrashCount;
+        /// <summary>崩过一次并已自动重载：等下一次 ready 补一张说明卡。</summary>
+        private bool _pendingCrashNotice;
+        /// <summary>上次自动重载的时间，用来防止"崩→重载→立刻又崩"变成死循环刷屏。</summary>
+        private DateTime _lastCrashReloadUtc = DateTime.MinValue;
+        /// <summary>启动加载走完（曲库恢复到可以用了）：这时候才该告诉用户"上次没正常退出"。</summary>
+        private bool _startupSettled;
+        /// <summary>那条提示已经决定推过（推或判定不该推），别因为重载/re-ready 再推一次。</summary>
+        private bool _startupNoticeQueued;
+        /// <summary>自测开关只触发一次。</summary>
+        private bool _crashDemoFired;
         // Drag sampling must not share the UI dispatcher with library/theme refreshes.
         private const uint SWP_NOSIZE = 0x0001, SWP_NOZORDER = 0x0004, SWP_NOACTIVATE = 0x0010;
         private int _dragGeneration;
@@ -196,7 +208,7 @@ namespace CelesteMusicPlayer
                 core.AddWebResourceRequestedFilter(CoverOrigin + "/cover/*", CoreWebView2WebResourceContext.Image);
                 core.AddWebResourceRequestedFilter(CoverOrigin + "/playlist/*", CoreWebView2WebResourceContext.Image);
                 core.WebResourceRequested += OnCoverRequest;
-                core.ProcessFailed += (_, _) => { _ready = false; _status.Text = "界面进程异常，请重新启动 Celeste。"; _status.Visibility = Visibility.Visible; _reload.Visibility = Visibility.Visible; };
+                core.ProcessFailed += OnWebProcessFailed;
                 core.NavigationCompleted += (_, args) =>
                 {
                     if (!args.IsSuccess) { _status.Text = "页面加载失败：" + args.WebErrorStatus; _status.Visibility = Visibility.Visible; _reload.Visibility = Visibility.Visible; }
@@ -330,9 +342,16 @@ namespace CelesteMusicPlayer
                 switch (command)
                 {
                     case "ready": _ready = true; _metadataSent.Clear(); _status.Visibility = Visibility.Collapsed; _reload.Visibility = Visibility.Collapsed; _dirty = true; _timer.Start(); SendTheme(); SendVisibility(); _ = SendLibraryAsync(); FlushPendingPage();
-                        // 上次没正常退出：主动把恢复页推出来。已经回答过（_recoveryAnswered）就不推了。
-                        var recovery = MainWindow.BuildRecoveryPush();
-                        if (recovery != null) Post(new { kind = "celeste.recovery", version = 1, data = recovery });
+                        // 刚才是崩了才重载的话，界面回来了再补一张卡片说明发生了什么。
+                        // 注意：这不是「上次异常退出」的提示 —— 那条要等启动加载走完才推（NotifyStartupSettled）。
+                        if (_pendingCrashNotice) { _pendingCrashNotice = false; _ = PushCrashNoticeAsync(); }
+                        else _ = TryPushStartupNoticeAsync();
+                        // 自测开关（见 RunCrashDemoAsync）：只认环境变量，默认完全无影响。
+                        if (!_crashDemoFired && Environment.GetEnvironmentVariable("CELESTE_CRASH_DEMO") == "1")
+                        {
+                            _crashDemoFired = true;
+                            _ = RunCrashDemoAsync();
+                        }
                         break;
                     case "trackInfo":
                         var metadataIds = msg.GetProperty("trackIds").EnumerateArray().Take(100).Select(value => value.GetString() ?? "").ToArray();
@@ -648,6 +667,100 @@ namespace CelesteMusicPlayer
                 StartupLog.WriteException("WebShell.Reload", ex);
                 _status.Text = "重新加载失败：" + ex.Message;
             }
+        }
+
+        /// <summary>
+        /// 网页进程崩溃（用户在用的时候界面突然没了）。能自动救的先救一次，
+        /// 救不回来才退回原生文字层 —— 渲染进程都死了，网页自己也画不出恢复页。
+        /// </summary>
+        private void OnWebProcessFailed(CoreWebView2 sender, CoreWebView2ProcessFailedEventArgs args)
+        {
+            string kind = args.ProcessFailedKind.ToString();
+            _pageCrashCount++;
+            _ready = false;
+            StartupLog.Write("[crash] 网页进程异常 kind=" + kind + " 第 " + _pageCrashCount + " 次");
+            MainWindow.RecordPageCrash(kind, _pageCrashCount);
+
+            // 浏览器进程整个没了：重载也没意义，只能靠原生文字层。
+            if (args.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited)
+            {
+                _status.Text = "界面进程退出了（可能是内存不足或显卡驱动异常）。\n点下面重新载入，或关掉窗口重新打开。";
+                _status.Visibility = Visibility.Visible;
+                _reload.Visibility = Visibility.Visible;
+                return;
+            }
+
+            // 渲染进程崩了但外壳还活着：自动重载一次，绝大多数情况就回来了。
+            // 20 秒内刚重载过又崩，说明不是偶发 —— 别再自动重载，免得"崩→载→崩"刷屏。
+            if ((DateTime.UtcNow - _lastCrashReloadUtc).TotalSeconds < 20)
+            {
+                StartupLog.Write("[crash] 20 秒内重复崩溃，停止自动重载");
+                _status.Text = "界面反复崩溃（20 秒内两次）。可以点下面重新载入，或用安全模式再试。";
+                _status.Visibility = Visibility.Visible;
+                _reload.Visibility = Visibility.Visible;
+                return;
+            }
+
+            _lastCrashReloadUtc = DateTime.UtcNow;
+            _pendingCrashNotice = true;
+            ReloadShell();
+        }
+
+        /// <summary>重载回来后补一张卡：说清刚才崩了、已经替你重载，并给后续选项。</summary>
+        private async Task PushCrashNoticeAsync()
+        {
+            try
+            {
+                object? payload = MainWindow.BuildCrashPush(_pageCrashCount);
+                if (payload == null) return;
+                // 等首屏铺完再压卡片，否则会看到"卡片先到、界面后到"的闪一下。
+                await Task.Delay(700).ConfigureAwait(true);
+                if (_closed || !_ready) return;
+                StartupLog.Write("[crash] 已推送崩溃卡 #" + _pageCrashCount);
+                Post(new { kind = "celeste.recovery", version = 1, data = payload });
+            }
+            catch (Exception ex) { StartupLog.WriteException("WebShell.PushCrashNotice", ex); }
+        }
+
+        /// <summary>
+        /// 自测用：设了环境变量 CELESTE_CRASH_DEMO=1，就在进主界面 5 秒后把
+        /// "崩溃 → 自动重载 → 弹崩溃卡"这条自救路径走一遍（不真的弄崩进程），
+        /// 方便肉眼验收卡片长什么样。不设变量时这个方法根本不会被调到。
+        /// </summary>
+        private async Task RunCrashDemoAsync()
+        {
+            await Task.Delay(5000).ConfigureAwait(true);
+            if (_closed) return;
+            _pageCrashCount++;
+            _pendingCrashNotice = true;
+            StartupLog.Write("[crash] 自测触发（CELESTE_CRASH_DEMO=1）：模拟一次页面崩溃");
+            ReloadShell();
+        }
+
+        /// <summary>
+        /// 启动加载走完（曲库恢复到能用了）。"上次没正常退出"的提示攒到这里才推 ——
+        /// 用户要的是"加载动画走完、进了主界面"之后再看到它，而不是刚进来就被拦住。
+        /// </summary>
+        internal void NotifyStartupSettled()
+        {
+            _startupSettled = true;
+            _ = TryPushStartupNoticeAsync();
+        }
+
+        private async Task TryPushStartupNoticeAsync()
+        {
+            if (_startupNoticeQueued || !_ready || !_startupSettled || _closed) return;
+            _startupNoticeQueued = true;
+            try
+            {
+                object? payload = MainWindow.BuildUncleanPush();
+                if (payload == null) return;
+                await Task.Delay(500).ConfigureAwait(true);
+                if (_closed || !_ready) return;
+                StartupLog.Write("[recovery] 已推送「上次没正常退出」提示");
+                Post(new { kind = "celeste.recovery", version = 1, data = payload });
+            }
+            catch (Exception ex) { StartupLog.WriteException("WebShell.PushStartupNotice", ex); }
         }
 
         private async void OnCoverRequest(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)

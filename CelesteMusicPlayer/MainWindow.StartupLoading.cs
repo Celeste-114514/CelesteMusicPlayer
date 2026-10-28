@@ -103,6 +103,11 @@ namespace CelesteMusicPlayer
             if (_startupLoadingHidden) return;
             _startupLoadingHidden = true;
 
+            // 这里就是"加载动画走完、进主界面"的分界点：外壳攒到这一刻才把
+            // 「上次没正常退出」的提示亮出来（崩溃当时那条不走这里）。
+            try { _webShellWindow?.NotifyStartupSettled(); }
+            catch (Exception caught) { StartupLog.WriteException("MainWindow.NotifyStartupSettled", caught); }
+
             try { _loadingSafetyTimer?.Stop(); } catch { /* 停表失败无所谓，反正已经放行了 */ }
 
             try

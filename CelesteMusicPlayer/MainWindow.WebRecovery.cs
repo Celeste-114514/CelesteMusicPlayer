@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -8,25 +8,40 @@ using System.Threading.Tasks;
 namespace CelesteMusicPlayer
 {
     /// <summary>
-    /// 网页「启动恢复」页的桥接层。
+    /// 网页「恢复」卡片的桥接层 —— 这张卡服务两件完全不同的事，别混：
     ///
-    /// 以前这里是一个原生弹窗（"上次可能异常退出"）—— 但它弹在已经被藏起来的主窗口上，
-    /// 用户根本看不见，等于什么都没说。现在换成网页自己画的一张恢复页：
-    /// 判断依据仍只有一处 —— <see cref="CrashReportService"/> 的运行标记与崩溃历史，这里不另存状态。
+    /// ① <b>页面崩溃</b>（mode = crash）：用户正在用的时候网页进程突然挂了。
+    ///    宿主自动重载一次，回来之后推这张卡说明"刚才崩了、已经替你重载"，并给重载 / 安全模式 / 导出诊断。
+    ///    触发点只有一个：WebView2 的 ProcessFailed（见 WebShellWindow.OnWebProcessFailed）。
     ///
-    /// 一次运行只问一次：用户选过怎么办（正常启动 / 安全模式 / 重载界面）之后，
-    /// 即使网页重载也不会再拦一次。
+    /// ② <b>上次没正常退出</b>（mode = unclean）：程序上次没收尾就没了（崩溃 / 强杀 / 断电）。
+    ///    这条**不是**崩溃当时弹的，也不该在刚进主界面时拦人 —— 要等启动加载走完
+    ///    （曲库恢复到能用）之后再告诉用户，见 WebShellWindow.NotifyStartupSettled。
+    ///    判断依据只有一处：CrashReportService 的运行标记与崩溃历史。
+    ///
+    /// 两条都只报一次：用户关掉（dismiss）之后，本次运行不再重复弹。
     /// </summary>
     public sealed partial class MainWindow
     {
-        /// <summary>本次运行已经回答过恢复页，不再重复弹。</summary>
-        private static bool _recoveryAnswered;
+        /// <summary>本次运行已经看过「上次没正常退出」这条，不再重复弹。
+        /// 注意：它**不管**崩溃卡 —— 关掉一条告知，不该让下一次真崩溃时没人管。</summary>
+        private static bool _uncleanDismissed;
+
+        /// <summary>本次运行页面崩溃过几次（崩溃卡上要报"这是第几次"）。</summary>
+        internal static int PageCrashCount { get; private set; }
 
         /// <summary>
         /// 本次运行是否处于安全模式：不自动续播、界面关掉背景层与动效。
         /// 只活在内存里，不写设置 —— 安全模式是"这一次"，不是用户偏好。
         /// </summary>
         internal static bool SafeModeActive { get; private set; }
+
+        /// <summary>页面崩溃记账：宿主外壳每次崩都会调一次，只留结论给卡片和日志用。</summary>
+        internal static void RecordPageCrash(string kind, int sessionCount)
+        {
+            PageCrashCount = Math.Max(PageCrashCount, sessionCount);
+            StartupLog.Write("[crash] 页面崩溃记账 #" + sessionCount + "：" + kind);
+        }
 
         internal async Task<object> WebRecoveryAsync(JsonElement msg)
         {
@@ -36,41 +51,43 @@ namespace CelesteMusicPlayer
             switch (action)
             {
                 case "status":
-                    return RecoveryWire(RecoveryShouldShow());
+                    return NoticeWire(RecoveryShouldShow() ? "unclean" : "none");
 
+                // 「知道了」：只把"上次没正常退出"这条标记为已读，崩溃卡不受影响。
+                case "dismiss":
                 case "normal":
-                    _recoveryAnswered = true;
-                    StartupLog.Write("[recovery] 用户选择正常启动。");
-                    return RecoveryWire(false);
+                    if (ReadString(msg, "mode") != "crash") _uncleanDismissed = true;
+                    StartupLog.Write("[recovery] 用户关掉了提示卡。");
+                    return NoticeWire("none");
 
                 case "safe":
-                    _recoveryAnswered = true;
+                    _uncleanDismissed = true;
                     EnterSafeMode();
-                    return RecoveryWire(false);
+                    return NoticeWire("none");
 
                 case "reload":
-                    // 重载之后如果界面还是坏的，也不该再拦一次恢复页 —— 用户已经做过选择。
-                    _recoveryAnswered = true;
+                    // 重载之后如果界面还是坏的，也不该再拦 —— 用户已经做过选择。
+                    _uncleanDismissed = true;
                     StartupLog.Write("[recovery] 用户要求重载界面。");
                     _webShellWindow?.ReloadShell();
-                    return RecoveryWire(false);
+                    return NoticeWire("none");
 
                 case "export":
-                    return await ExportDiagnosticsAsync("启动恢复页「导出诊断」").ConfigureAwait(true);
+                    return await ExportDiagnosticsAsync("恢复页「导出诊断」").ConfigureAwait(true);
 
                 case "openFolder":
                     OpenDiagnosticsFolder();
-                    return RecoveryWire(false);
+                    return NoticeWire("none");
 
                 default:
                     throw new ArgumentException("未知的恢复操作：" + action);
             }
         }
 
-        /// <summary>这次启动该不该弹恢复页：只看"上次退出时留下了运行标记"，且本次还没回答过。</summary>
+        /// <summary>上次没正常退出、且这次还没告诉过用户。</summary>
         internal static bool RecoveryShouldShow()
         {
-            if (_recoveryAnswered) return false;
+            if (_uncleanDismissed) return false;
             try { return AppSettingsStore.WasUncleanExitLastTime; }
             catch (Exception caught)
             {
@@ -79,8 +96,11 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>给外壳在 ready 时主动推一条恢复页；不该显示返回 null。</summary>
-        internal static object? BuildRecoveryPush() => RecoveryShouldShow() ? RecoveryWire(true) : null;
+        /// <summary>页面崩溃卡：刚崩完、已经自动重载，说明现场并给后续动作。不该显示返回 null。</summary>
+        internal static object? BuildCrashPush(int sessionCount) => CrashWire(sessionCount);
+
+        /// <summary>「上次没正常退出」卡：启动加载走完之后才该调。不该显示返回 null。</summary>
+        internal static object? BuildUncleanPush() => RecoveryShouldShow() ? UncleanWire() : null;
 
         /// <summary>
         /// 安全模式：把"可能惹祸的东西"这一轮都关掉。不做侵入式操作 ——
@@ -94,22 +114,48 @@ namespace CelesteMusicPlayer
 
             try
             {
-                // 已经响起来的情况（曲库比恢复页先跑完）：先停下，让用户自己决定要不要播。
+                // 已经响起来的情况：先停下，让用户自己决定要不要播。
                 if (IsEnginePlayingNow) TogglePlayPausePublic();
             }
             catch (Exception caught) { StartupLog.WriteException("Recovery.SafeMode.pause", caught); }
         }
 
-        private static Dictionary<string, object?> RecoveryWire(bool show)
+        private static Dictionary<string, object?> CrashWire(int sessionCount)
         {
             Dictionary<string, object?> wire = CrashReportService.Snapshot();
             wire["ok"] = true;
-            wire["show"] = show;
+            wire["show"] = true;
+            wire["mode"] = "crash";
+            wire["sessionCrashes"] = Math.Max(1, sessionCount);
+            wire["safeMode"] = SafeModeActive;
+            wire["settingsRecovered"] = AppSettingsStore.SettingsWereRecovered;
+            wire["logsDirectory"] = Path.Combine(CrashReportService.DataRoot, "logs");
+            wire["lastStartText"] = string.Empty;
+            return wire;
+        }
+
+        private static Dictionary<string, object?> UncleanWire()
+        {
+            Dictionary<string, object?> wire = CrashReportService.Snapshot();
+            wire["ok"] = true;
+            wire["show"] = true;
+            wire["mode"] = "unclean";
             wire["safeMode"] = SafeModeActive;
             wire["settingsRecovered"] = AppSettingsStore.SettingsWereRecovered;
             wire["logsDirectory"] = Path.Combine(CrashReportService.DataRoot, "logs");
             // 崩溃记账里的 Marker 是"上一次运行写下的启动时间"，比"几号发现的"更贴近用户记忆。
             wire["lastStartText"] = LastStartText();
+            return wire;
+        }
+
+        /// <summary>status 动作的回包：只报"有没有话要说"，不重复弹卡片。</summary>
+        private static Dictionary<string, object?> NoticeWire(string mode)
+        {
+            Dictionary<string, object?> wire = CrashReportService.Snapshot();
+            wire["ok"] = true;
+            wire["show"] = false;
+            wire["mode"] = mode;
+            wire["safeMode"] = SafeModeActive;
             return wire;
         }
 
