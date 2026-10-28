@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+ <PropertyGroup>
+  <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWindowsForms>true</UseWindowsForms>
+  <Nullable>enable</Nullable><ImplicitUsings>enable</ImplicitUsings><RuntimeIdentifier>win-x64</RuntimeIdentifier><UseWinUI>false</UseWinUI>
+  <AssemblyName>CelesteThinHost.Poc</AssemblyName><ApplicationManifest>app.manifest</ApplicationManifest>
+ </PropertyGroup>
+ <ItemGroup>
+  <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
+  <Compile Include="../../CelesteMusicPlayer/PlaybackCommandRouter.cs" Link="Core/PlaybackCommandRouter.cs" />
+  <Compile Include="../../CelesteMusicPlayer/PlaybackSnapshot.cs" Link="Core/PlaybackSnapshot.cs" />
+  <Compile Include="../../CelesteMusicPlayer/MainWindowCoordinator.cs" Link="Core/MainWindowCoordinator.cs" />
+  <Content Include="Web/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+ </ItemGroup>
+ <Target Name="RemoveUnusedWpfWebViewReference" BeforeTargets="ResolveAssemblyReferences">
+  <ItemGroup><Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" /></ItemGroup>
+ </Target>
+</Project>

@@ -1,0 +1,7 @@
+<!doctype html><html lang="zh-CN"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self';script-src 'self';style-src 'self';object-src 'none';base-uri 'none'">
+<title>W5 薄宿主验证</title><link rel="stylesheet" href="style.css"><script src="app.js" defer></script>
+<body><main><div class="eyebrow">CELESTE / W5</div><h1>独立薄宿主验证</h1><p>Win32 窗口 + WebView2。此处使用模拟会话，不播放音乐，也不连接正式曲库。</p>
+<section><div class="tag" id="connection">正在连接宿主</div><h2 id="track">等待状态</h2><p id="state">—</p><div class="buttons"><button data-action="previous">模拟上一首</button><button data-action="togglePlay">模拟播放 / 暂停</button><button data-action="next">模拟下一首</button></div></section>
+<section><h2>窗口与任务栏</h2><p>调整窗口大小或最小化后从任务栏恢复。悬停本窗口的任务栏图标，可测试三个模拟按钮与进度显示。</p><div class="buttons"><button data-action="window.minimize">最小化</button><button data-action="window.restore">恢复窗口</button><button data-action="window.close">关闭验证窗口</button></div></section>
+<section><h2>验证记录</h2><p>模拟按钮会经过真实的 JavaScript → C# → JavaScript 消息链路。关闭此窗口不影响正式播放器。</p><pre id="log"></pre></section></main></body></html>

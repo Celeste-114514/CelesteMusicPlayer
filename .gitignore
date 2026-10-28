@@ -72,3 +72,5 @@ _tagfixtures/
 
 # Local absolute-path shortcut; regenerate with tools/NewCurrentPlayerShortcut.ps1
 /打开当前播放器.lnk
+/验证W5薄宿主.lnk
+/dist/thin-host-poc/
