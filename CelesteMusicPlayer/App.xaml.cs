@@ -154,6 +154,26 @@ namespace CelesteMusicPlayer
             // 应用资源在启动回调里再注册，供播放列表列宽 Binding 使用
             Resources["PlaylistColumns"] = PlaylistColumnWidths.Instance;
 
+            // 诊断模式：不建窗口、不进曲库，把现场打包成一份文本后直接退出。
+            // 界面起不来的时候用户仍然拿得到报告（这也是这条路径存在的理由）。
+            if (HasCommandLineFlag("--export-diagnostics"))
+            {
+                try
+                {
+                    string reportPath = CrashReportService.Export(
+                        "命令行 --export-diagnostics",
+                        new[] { "以命令行诊断模式运行（本次没有创建主窗口，也没有加载曲库）。" });
+                    StartupLog.Write("[diagnostics] 命令行导出完成：" + reportPath);
+                }
+                catch (Exception caught)
+                {
+                    StartupLog.WriteException("App.OnLaunched.exportDiagnostics", caught);
+                }
+
+                Environment.Exit(0);
+                return;
+            }
+
             // 双击音频文件打开：命令行参数里带的那个音频文件路径（没有就是 null）
             string? externalFile = QuickPlayLauncher.TryGetFileFromCommandLine();
             StartupLog.Write("OnLaunched externalFile=" + (externalFile ?? "(none)"));
@@ -172,6 +192,11 @@ namespace CelesteMusicPlayer
             // 主实例：清掉上次异常退出残留的命令文件，然后开始监听后续双击
             QuickPlayLauncher.ClearStaleRelayFiles();
             QuickPlayLauncher.StartListening(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread(), HandleRelayCommand);
+
+            // 运行标记要在建窗口之前写：一旦进到 XAML 解析阶段就崩，下次启动也能说出来。
+            // 放在单实例判定之后 —— 第二个实例不该把正在跑的那个的标记清掉。
+            try { AppSettingsStore.MarkAppStart(); }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("App.OnLaunched.MarkAppStart", caught); }
 
             // 主题色：必须在窗口创建前覆盖系统强调色资源键（渲染后修改会触发 WinUI 原生崩溃）
             try
@@ -300,6 +325,24 @@ namespace CelesteMusicPlayer
             {
                 global::CelesteMusicPlayer.StartupLog.WriteException("App.ScheduleFirstRunAssociationPrompt", caught);
             }
+        }
+
+        /// <summary>命令行里有没有某个开关（诊断模式这类一次性动作只认这个）。</summary>
+        private static bool HasCommandLineFlag(string flag)
+        {
+            try
+            {
+                foreach (string arg in Environment.GetCommandLineArgs())
+                {
+                    if (string.Equals(arg, flag, StringComparison.OrdinalIgnoreCase)) return true;
+                }
+            }
+            catch
+            {
+                // 取不到命令行就当没有：宁可正常启动，也别误进诊断模式
+            }
+
+            return false;
         }
 
         /// <summary>处理其它进程（后一次双击）转交过来的命令。</summary>

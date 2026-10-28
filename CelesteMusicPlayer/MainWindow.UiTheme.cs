@@ -313,8 +313,8 @@ namespace CelesteMusicPlayer
                 StartupLog.WriteException("ConfigureWindowChrome", ex);
             }
 
-            // 运行标记：检测上次异常退出（崩溃/强杀残留 .running）
-            AppSettingsStore.MarkAppStart();
+            // 运行标记已经在 App.OnLaunched 里写过（建窗口之前写，XAML 解析阶段崩掉也能留下痕迹），
+            // 这里只取结论，不再重复写一遍。
             bool unclean = AppSettingsStore.WasUncleanExitLastTime;
 
             // 设置文件损坏恢复提示：仅本次会话提示一次

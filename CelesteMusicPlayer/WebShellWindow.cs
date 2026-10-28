@@ -431,6 +431,8 @@ namespace CelesteMusicPlayer
                             Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = new { url = openedUri.AbsoluteUri } });
                         }
                         break;
+                    case "diagnostics":
+                        Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = await _owner.WebDiagnosticsAsync(msg) }); break;
                     default: Error("此功能尚未接入当前界面。"); break;
                 }
                 SendState();

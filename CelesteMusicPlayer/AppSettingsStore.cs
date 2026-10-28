@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -949,7 +949,13 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
         /// <summary>上次运行是否异常退出（运行标记残留）。供启动提示。</summary>
         public static bool WasUncleanExitLastTime { get; private set; }
 
-        /// <summary>启动时调用：写入运行标记；若标记已存在则说明上次异常退出。</summary>
+        /// <summary>
+        /// 启动时调用：写入运行标记；若标记已存在则说明上次异常退出。
+        ///
+        /// 标记从「一行时间戳」升级成一小段 JSON（写入时间 + pid + 版本），
+        /// 这样下次启动既能判断「上次没干净退出」，也能在诊断报告里说清是哪一次会话。
+        /// 旧格式的纯时间戳也能读 —— 用户机器上残留的标记不会因为升版就失效。
+        /// </summary>
         public static void MarkAppStart()
         {
             try
@@ -957,11 +963,45 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
                 string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "CelesteMusicPlayer");
                 Directory.CreateDirectory(dir);
                 string marker = Path.Combine(dir, ".running");
-                WasUncleanExitLastTime = File.Exists(marker);
-                File.WriteAllText(marker, DateTime.Now.ToString("o"));
+
+                string? previous = null;
+                if (File.Exists(marker))
+                {
+                    try { previous = File.ReadAllText(marker).Trim(); }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.MarkAppStart.read", caught); }
+                }
+
+                WasUncleanExitLastTime = previous != null;
+
+                // 先记账再覆盖标记：覆盖之后旧内容就没了，崩溃历史只能在这里补。
+                if (WasUncleanExitLastTime)
+                {
+                    try { CrashReportService.RecordUncleanStart(previous); }
+                    catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.MarkAppStart.record", caught); }
+                }
+
+                // 放宽转义：默认编码器会把 + 写成 \u002B，标记是给人看的，别搞成乱码。
+                string now = System.Text.Json.JsonSerializer.Serialize(new
+                {
+                    startedUtc = DateTimeOffset.Now.ToString("O", System.Globalization.CultureInfo.InvariantCulture),
+                    pid = Environment.ProcessId,
+                    version = SafeVersionText()
+                }, MarkerJsonOptions);
+                File.WriteAllText(marker, now);
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("AppSettingsStore.cs", caught); }
         }
+
+        private static string SafeVersionText()
+        {
+            try { return UpdateChecker.CurrentVersionText(); }
+            catch { return "未知"; }
+        }
+
+        private static readonly System.Text.Json.JsonSerializerOptions MarkerJsonOptions = new()
+        {
+            Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping
+        };
 
         /// <summary>正常退出时调用：清除运行标记。</summary>
         public static void MarkAppCleanExit()
