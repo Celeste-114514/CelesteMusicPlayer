@@ -20,7 +20,13 @@ const { chromium } = require('playwright-core');
         addEventListener: (_, fn) => listeners.push(fn),
         postMessage(message) {
           calls.push(message);
-          if (message.command === 'window') { deliver({ kind: 'celeste.window', fullscreen: message.action === 'fullscreen' && message.value }); return; }
+          // 宿主只在窗口状态真的变了才推 celeste.window（WebShellWindow.SendWindowState），
+          // caption-regions 之类不该回一条 fullscreen:false，否则会把刚点亮的全屏按钮又按回去
+          if (message.command === 'window') {
+            if (message.action === 'fullscreen') deliver({ kind: 'celeste.window', fullscreen: !!message.value });
+            else if (message.action === 'state') deliver({ kind: 'celeste.window', fullscreen: false });
+            return;
+          }
           if(message.command==='waveform')deliver({kind:'celeste.waveform',trackId:message.trackId,peaks:Array.from({length:512},(_,i)=>.15+Math.sin(i*.04)**2*.7)});
           if (!message.requestId) return;
           const reply = data => deliver({ kind: 'celeste.reply', requestId: message.requestId, ok: true, data });

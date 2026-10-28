@@ -115,7 +115,12 @@ const state = (overrides = {}) => ({
     // ③ 歌词整首取一次，当前句高亮
     await page.waitForSelector('.np-lyric');
     assert.equal(await page.locator('.np-lyric').count(), 5, '整首歌词都渲染出来');
-    assert.equal(await page.evaluate(() => window.__nowPlayingCalls), 1, '打开时只向宿主取一次');
+    // 打开时有两个消费者各取一次 nowPlaying：详情页 loadLyrics（整首歌词）和
+    // 终端渲染器 sync（采样率/码率等事实）。真正要守的是「不会随 250ms 状态轮询重复取」，
+    // 所以这里断言次数固定，并在一秒之后确认没涨。
+    assert.equal(await page.evaluate(() => window.__nowPlayingCalls), 2, '打开时两个消费者各取一次');
+    await page.waitForTimeout(900);
+    assert.equal(await page.evaluate(() => window.__nowPlayingCalls), 2, '状态轮询不该重复向宿主取歌词');
     const current = await page.evaluate(() => {
       const row = document.querySelector('.np-lyric.is-current');
       return { text: row?.textContent, index: Number(row?.dataset.index) };
