@@ -25,6 +25,12 @@ namespace CelesteMusicPlayer
         {
             StartupLog.Write("App ctor");
 
+            // 桌面歌词要浮在桌面上：WebView2 默认底色是不透明白，而「合成宿主」形态根本没有
+            // DefaultBackgroundColor 属性可设，官方给的唯一办法就是这个环境变量。
+            // ⚠ 必须在任何 WebView2 环境创建之前设置，所以放这儿（App ctor 比所有窗口都早）。
+            try { Environment.SetEnvironmentVariable("WEBVIEW2_DEFAULT_BACKGROUND_COLOR", "0x00000000"); }
+            catch (Exception ex) { StartupLog.WriteException("App.WebView2Transparent", ex); }
+
             // 修复 WinUI3 已知 bug（microsoft-ui-xaml #10805/#11024）：
             // MenuFlyoutItem 等右键菜单控件在非中文首选语言下，中文会走错误字形
             // 渲染路径，显示成「瘦长/斜」的日文样式字形（如「添」「复」等）。

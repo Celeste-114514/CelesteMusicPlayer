@@ -182,6 +182,10 @@ namespace CelesteMusicPlayer
         /// <summary>20–100</summary>
         public int DesktopLyricOpacity { get; set; } = 100;
 
+        public string DesktopLyricDirection { get; set; } = "Horizontal";
+        public string DesktopLyricFontFile { get; set; } = "";
+        public bool DesktopLyricMusicReactive { get; set; } = false;
+        public int DesktopLyricScale { get; set; } = 100;
         public string DesktopLyricColorMode { get; set; } = "Theme";
         public string DesktopLyricGradientStart { get; set; } = "#4F46E5";
         public string DesktopLyricGradientEnd { get; set; } = "#EC4899";
@@ -803,6 +807,10 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DesktopLyricShowUnlockWhenLocked = s.DesktopLyricShowUnlockWhenLocked,
             DesktopLyricClickThrough = s.DesktopLyricClickThrough,
             DesktopLyricOpacity = s.DesktopLyricOpacity,
+            DesktopLyricDirection = s.DesktopLyricDirection,
+            DesktopLyricFontFile = s.DesktopLyricFontFile,
+            DesktopLyricMusicReactive = s.DesktopLyricMusicReactive,
+            DesktopLyricScale = s.DesktopLyricScale,
             DesktopLyricColorMode = s.DesktopLyricColorMode,
             DesktopLyricGradientStart = s.DesktopLyricGradientStart,
             DesktopLyricGradientEnd = s.DesktopLyricGradientEnd,

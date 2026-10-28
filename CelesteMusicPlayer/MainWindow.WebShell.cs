@@ -14,6 +14,9 @@ namespace CelesteMusicPlayer
     {
         private WebShellWindow? _webShellWindow;
 
+        /// <summary>主界面 WebView2 的环境句柄。桌面歌词的合成宿主复用它，免得再起一个浏览器进程。</summary>
+        internal Microsoft.Web.WebView2.Core.CoreWebView2Environment? WebShellEnvironment => _webShellWindow?.WebViewEnvironment;
+
         // Activate is still required to load the legacy playback owner, but its
         // first native frame must never become a visible second window.
         internal void CloakLegacyOwnerBeforeActivation()

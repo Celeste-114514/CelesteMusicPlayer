@@ -1999,6 +1999,18 @@ namespace CelesteMusicPlayer
             // 迷你播放器桥接摘除：主窗口没了，别再往已关的窗口上推状态
             MiniPlayerBridge.Detach(this);
             PersistDesktopLyricPosition();
+            // WebView2 桌面歌词是独立窗口：主窗口关了必须一起收，否则进程被它吊着不退出。
+            try
+            {
+                if (_desktopLyricsWindow != null)
+                {
+                    WebDesktopLyricsOverlay lyrics = _desktopLyricsWindow;
+                    _desktopLyricsWindow = null;
+                    lyrics.ClosedByUser -= OnDesktopLyricsClosedByUser;
+                    lyrics.Dispose();
+                }
+            }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.CloseDesktopLyrics", caught); }
             _taskbarProgress?.Dispose();
             _taskbarProgress = null;
 
@@ -2240,7 +2252,7 @@ namespace CelesteMusicPlayer
             {
                 if (_desktopLyricsWindow != null)
                 {
-                    DesktopLyricsOverlay lyrics = _desktopLyricsWindow;
+                    WebDesktopLyricsOverlay lyrics = _desktopLyricsWindow;
                     _desktopLyricsWindow = null;
                     _desktopLyricsEnabled = false;
                     lyrics.ClosedByUser -= OnDesktopLyricsClosedByUser;

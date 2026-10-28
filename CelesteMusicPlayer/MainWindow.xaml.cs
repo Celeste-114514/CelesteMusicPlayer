@@ -412,7 +412,7 @@ namespace CelesteMusicPlayer
             public POINT ptMinTrackSize;
             public POINT ptMaxTrackSize;
         }
-        private DesktopLyricsOverlay? _desktopLyricsWindow;
+        private WebDesktopLyricsOverlay? _desktopLyricsWindow;
         private bool _desktopLyricsEnabled;
         // 迷你播放器字段已移除（2026-10-19 用户要求删掉重写，见 memory 2026-10-19）
         private DateTime _lastPlaybackPersistUtc = DateTime.MinValue;

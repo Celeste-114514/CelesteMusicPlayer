@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -103,7 +103,7 @@ namespace CelesteMusicPlayer
                 PersistDesktopLyricPosition();
                 if (_desktopLyricsWindow != null)
                 {
-                    DesktopLyricsOverlay closing = _desktopLyricsWindow;
+                    WebDesktopLyricsOverlay closing = _desktopLyricsWindow;
                     _desktopLyricsWindow = null;
                     closing.ClosedByUser -= OnDesktopLyricsClosedByUser;
                     closing.Close();
@@ -127,7 +127,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            _desktopLyricsWindow = new DesktopLyricsOverlay
+            _desktopLyricsWindow = new WebDesktopLyricsOverlay(this)
             {
                 // 引擎路径（HiFi 独占 / ASIO / DSD）下 MediaPlayer.PlaybackSession.Position 不是真实播放位置，
                 // 必须改读 _audioEngine.Position。否则歌词窗口内部 50ms 定时器拿到的是错误位置，
