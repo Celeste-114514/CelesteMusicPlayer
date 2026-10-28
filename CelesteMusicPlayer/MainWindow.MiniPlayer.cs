@@ -15,7 +15,7 @@ namespace CelesteMusicPlayer
     /// </summary>
     public sealed partial class MainWindow
     {
-        private MiniPlayerWindow? _miniPlayerWindow;
+        private WebMiniPlayerWindow? _miniPlayerWindow;
 
         /// <summary>打开（或激活）迷你播放器。单实例：开着就置顶，关了就重建。</summary>
         internal void ShowMiniPlayerWindow()
@@ -24,11 +24,14 @@ namespace CelesteMusicPlayer
             {
                 if (_miniPlayerWindow != null)
                 {
+                    if (_miniPlayerWindow.AppWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter
+                        && presenter.State == Microsoft.UI.Windowing.OverlappedPresenterState.Minimized)
+                        presenter.Restore();
                     _miniPlayerWindow.Activate();
                     return;
                 }
 
-                _miniPlayerWindow = new MiniPlayerWindow();
+                _miniPlayerWindow = new WebMiniPlayerWindow();
                 _miniPlayerWindow.Closed += (_, _) =>
                 {
                     _miniPlayerWindow = null;

@@ -394,6 +394,7 @@ namespace CelesteMusicPlayer
                     case "previous": _owner.ExecutePlaybackCommand(command); break;
                     case "seek": _owner.SeekSourceSeconds(Math.Clamp(Finite(msg, "seconds"), 0, Math.Max(0, _owner.EngineDurationValue.TotalSeconds))); break;
                     case "setVolume": _owner.WebSetVolume(Math.Clamp(Finite(msg, "volume"), 0, 100)); break;
+                    case "miniPlayer": _owner.ShowMiniPlayerWindow(); break;
                     case "favorite": _owner.FavoriteCurrentPublic(); break;
                     case "transport": _owner.WebTransportAction(msg.GetProperty("action").GetString() ?? ""); break;
                     case "setPlaybackOrder": _owner.WebSetPlaybackOrder(msg.GetProperty("order").GetString() ?? ""); break;

@@ -79,7 +79,7 @@
   <script src="recovery.js" defer></script>
   <link rel='stylesheet' href='rhine-albums.css'>
   <script src='rhine-albums.js' defer></script>
-</head>
+<script src="mini-player-entry.js" defer></script></head>
 <body>
   <svg class="icon-defs" xmlns="http://www.w3.org/2000/svg" aria-hidden="true"><defs>
     <symbol id="i-home" viewBox="0 0 24 24"><path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1Z"/></symbol>
@@ -302,7 +302,7 @@
     </div>
 
     <footer class="player" aria-label="播放控制">
-      <div class="now-playing"><button id="now-playing-open" class="mini-cover" type="button" aria-label="打开正在播放" title="打开正在播放"><span>AFTER<br>HOURS</span></button><div class="track-info"><strong id="track-title">Priestess</strong><span id="track-artist">Periphery · Juggernaut: Omega</span><small id="track-quality">演示曲目 · 未连接音频引擎</small></div></div>
+      <div class="now-playing"><button id="mini-player-open" class="icon-button" type="button" aria-label="打开迷你播放器" title="迷你播放器"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M13 12h5v4h-5z"/></svg></button><button id="now-playing-open" class="mini-cover" type="button" aria-label="打开正在播放" title="打开正在播放"><span>AFTER<br>HOURS</span></button><div class="track-info"><strong id="track-title">Priestess</strong><span id="track-artist">Periphery · Juggernaut: Omega</span><small id="track-quality">演示曲目 · 未连接音频引擎</small></div></div>
       <div class="transport">
         <div class="timeline"><span id="elapsed">0:00</span><div class="waveform-seek" id="waveform-seek"><canvas id="progress-waveform" aria-hidden="true"></canvas><input id="progress" type="range" min="0" max="303" value="0" step="0.1" aria-label="播放进度"><span id="waveform-status" class="sr-only" role="status"></span></div><span id="duration">5:03</span></div>
         <!-- 三簇：左簇 | 播放键 | 右簇。左右各自成组，收起/换序只在簇内挪，
