@@ -1,0 +1,139 @@
+/* 启动恢复页：检测到上次未正常退出时由宿主推送唤起。
+ *
+ * 外观与程序完全对齐 —— 用的就是外观设置那套变量：
+ *   --menu-bg（卡片底）/ --line（描边）/ --shadow / --ink / --muted / --panel-soft
+ *   --accent + --on-accent（主按钮）/ --danger（错误文案）/ --text-scale（字号缩放）
+ * 形状照抄程序里 .ui-modal 那一套（20px 圆角、22px 内边距、30px 投影），
+ * 改那边记得回来看一眼这里。
+ *
+ * ⚠ 刻意不复用 .ui-modal / .ui-modal-scrim 这两个类名：恢复页常驻在 DOM 里，
+ *   如果也叫 .ui-modal，任何「取当前那个弹窗」的查询都会先抓到这张隐藏的卡片。
+ */
+.recovery-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: var(--overlay);
+  -webkit-backdrop-filter: blur(3px);
+  backdrop-filter: blur(3px);
+}
+
+.recovery-card {
+  width: min(484px, 100%);
+  display: grid;
+  gap: 12px;
+  padding: 22px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--menu-bg);
+  box-shadow: 0 30px 90px var(--shadow);
+  color: var(--ink);
+  text-align: left;
+}
+
+.recovery-glyph { display: flex; justify-content: center; margin-bottom: 2px; }
+.recovery-glyph svg { width: 42px; height: 42px; stroke: var(--accent); }
+
+#recovery-title {
+  margin: 0;
+  text-align: center;
+  font-size: calc(15px * var(--text-scale));
+  font-weight: 600;
+}
+
+.recovery-detail {
+  margin: 0;
+  color: var(--muted);
+  font-size: calc(12px * var(--text-scale));
+  line-height: 1.85;
+  text-align: center;
+}
+
+.recovery-facts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 6px;
+}
+.recovery-facts:empty { display: none; }
+.recovery-facts li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: calc(11px * var(--text-scale));
+  padding: 7px 11px;
+  border-radius: 9px;
+  background: var(--panel-soft);
+}
+.recovery-facts li span { color: var(--muted); }
+.recovery-facts li strong { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+.recovery-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: calc(10.5px * var(--text-scale));
+  line-height: 1.8;
+}
+
+/* 两行动作：上一行是纯文字的小入口（导出诊断 / 打开日志文件夹），
+   下一行才是真正的选择。窄卡片时允许换行，不会把主按钮挤掉。 */
+.recovery-links {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 18px;
+  margin-top: -2px;
+}
+.recovery-links .text-button {
+  font-size: calc(10.5px * var(--text-scale));
+  color: var(--muted);
+  padding: 4px 2px;
+  border-radius: 8px;
+}
+.recovery-links .text-button:hover { color: var(--accent); }
+
+.recovery-actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+.recovery-actions button {
+  margin: 0;
+  border-radius: 14px;
+  padding: 9px 16px;
+  font-size: calc(11px * var(--text-scale));
+}
+.recovery-actions .primary {
+  margin-top: 0;
+  background: var(--accent);
+  color: var(--on-accent);
+  box-shadow: none;
+}
+.recovery-actions .primary:hover { transform: none; }
+.recovery-actions .secondary {
+  margin-top: 0;
+  border: 1px solid var(--accent-soft);
+  border-radius: 14px;
+  padding: 9px 16px;
+  color: var(--accent);
+}
+
+.recovery-status {
+  margin: 0;
+  min-height: 1em;
+  color: var(--accent);
+  font-size: calc(10.5px * var(--text-scale));
+  text-align: center;
+}
+.recovery-status[data-tone="error"] { color: var(--danger); }
+
+/* 安全模式：这一轮不画背景（视频/封面/图片一律退成纯色），动效压到几乎不可见。
+   用 !important 是为了压住主题推送写进去的行内变量 —— 安全模式要一直有效，
+   不能因为用户中途改一次外观就悄悄把视频背景放回来。 */
+html[data-safe-mode="true"] { --bg-mode: solid !important; --motion-scale: 0.001 !important; }
