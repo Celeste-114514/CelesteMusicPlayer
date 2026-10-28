@@ -236,6 +236,7 @@ namespace CelesteMusicPlayer
                     ? "MainWindow created（待播外部文件）"
                     : "MainWindow created");
 
+                main.CloakLegacyOwnerBeforeActivation();
                 _window.Activate();
                 main.AppWindow.Hide();
                 StartupLog.Write("Web shell session activated; legacy owner hidden");

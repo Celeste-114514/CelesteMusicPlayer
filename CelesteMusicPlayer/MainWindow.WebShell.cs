@@ -15,6 +15,17 @@ namespace CelesteMusicPlayer
         private WebShellWindow? _webShellWindow;
         private bool _webShellOwnerClosing;
 
+        // Activate is still required to load the legacy playback owner, but its
+        // first native frame must never become a visible second window.
+        internal void CloakLegacyOwnerBeforeActivation()
+        {
+            const int DwmwaCloak = 13;
+            int cloak = 1;
+            nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            int result = DwmSetWindowAttributeInt(hwnd, DwmwaCloak, ref cloak, sizeof(int));
+            if (result < 0) System.Runtime.InteropServices.Marshal.ThrowExceptionForHR(result);
+        }
+
         internal void WebTransportAction(string action)
         {
             switch (action)
