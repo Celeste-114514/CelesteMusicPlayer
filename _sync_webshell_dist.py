@@ -8,12 +8,16 @@
    publish 目录实际位置是 CelesteMusicPlayer\bin\Release\...（不带平台段），见 pubxml 的 PublishDir。
 沙箱坑：对已存在文件直接覆盖写会产出「大小正确、内容全零」的假文件 -> 必须先删后写，再 md5 复核。
 """
-import hashlib, os, shutil
+import hashlib, os, shutil, sys
 
 ROOT = r"C:\Users\MSI\source\repos\CelesteMusicPlayer"
 SRC = os.path.join(ROOT, "CelesteMusicPlayer", "bin", "Release",
                    "net10.0-windows10.0.19041.0", "win-x64", "publish")
-DST = os.path.join(ROOT, "dist", "web-shell-dsp-tags-complete")
+# 第三个参数可以指定目标目录（默认仍是 web-shell-dsp-tags-complete）。
+# 目前用户实际启动的是 dist\web-ui-20261028，同步时要显式传过去。
+DST = sys.argv[1] if len(sys.argv) > 1 else os.path.join(ROOT, "dist", "web-shell-dsp-tags-complete")
+if not os.path.isabs(DST):
+    DST = os.path.join(ROOT, DST)
 SKIP_DIRS = {"CelesteMusicPlayer.exe.WebView2", "EBWebView"}
 
 

@@ -7,6 +7,9 @@
   const live = typeof window.chrome?.webview?.postMessage === 'function';
   let items = [], focusIndex = -1;
   let invoking = false;
+  /* 第一次点击时先给宿主报一声"点进 DOM 了"。宿主日志里有没有这一条，
+     能直接分清是"点击没进网页"还是"命令在回程丢了"。 */
+  let probed = false;
   const iconPaths = {
     showMain:'M3 4h14v12H3z M3 8h14', showMini:'M3 4h14v12H3z M10 11h5v3h-5z',
     showScattered:'M8 14V5l8-2v9 M8 8l8-2 M3 14h5 M11 12h5',
@@ -70,7 +73,14 @@
       const label = document.createElement('span'); label.className = 'tray-label'; label.textContent = item.label || '';
       button.append(actionIcon(item), label, check);
       const invoke = () => { if (button.disabled || invoking) return; invoking = true; send({ action: 'invoke', actionId: item.actionId }); };
-      button.addEventListener('pointerdown', event => { if (event.button === 0) { event.preventDefault(); invoke(); } });
+      /* pointerdown 是主路径：菜单可能在 click 之前就被宿主收起，click 不一定等得到。
+         不再 preventDefault —— 那会顺带压掉后续鼠标事件的默认流程，反而有可能让 click 与
+         焦点切换互相卡住；禁止选中文字交给 CSS 的 user-select:none。 */
+      button.addEventListener('pointerdown', event => {
+        if (event.button !== 0) return;
+        if (!probed) { probed = true; send({ action: 'probe' }); }
+        invoke();
+      });
       button.addEventListener('click', invoke); // Keyboard / accessibility activation.
       button.addEventListener('mouseenter', () => { setKeyboardMode(false); });
       menu.append(button);

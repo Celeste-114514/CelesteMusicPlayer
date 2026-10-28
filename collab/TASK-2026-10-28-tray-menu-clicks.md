@@ -1,0 +1,55 @@
+# 托盘网页菜单：点击全失效 + 加载失败退方块菜单
+
+用户 2026-10-28 21:51 反馈：系统托盘右键"选项"反复修不好。确认后的现象是——
+
+- **网页样式的菜单弹出来时，所有选项点了都没反应**（不是只有退出）。
+- 现在多数的右键弹出的是**系统方块菜单**（原生 TrackPopupMenu），方块菜单里各项都正常。
+
+## 日志证据（`%LOCALAPPDATA%\CelesteMusicPlayer\logs\app\2026-10-28.log`）
+
+| 时间 | 事实 |
+|---|---|
+| 21:44:29 / 21:44:58 / 21:45:14 | `[托盘菜单] 布局 content=282x471` 三次，菜单确实显示出来了 |
+| 同期 | `收到命令` **0 条**、`执行命令` **0 条** —— 三下点击没有一次到达宿主 |
+| 21:49:58 / 21:50:21 | `TrayMenuWindow.EnsureWebView | InvalidOperationException: 托盘菜单页面未成功加载` |
+| 21:50:02 | `托盘: ExitFromTray 收到点击` —— 这条来自降级后的**系统原生菜单**，能正常工作 |
+
+结论拆成两件独立的事：① 网页菜单偶尔根本起不来；② 起来之后点击进不了网页。
+"只有退出不生效"的说法不成立，是**整片点击都不到**。
+
+## 改动（`CelesteMusicPlayer/TrayMenuWindow.cs` 为主）
+
+1. **不再用 `WM_ACTIVATE` 收起菜单**。原逻辑在点击穿过 WebView 子窗口那一瞬间可能收到
+   `WA_INACTIVE` 就把窗口藏了，网页的 `pointerdown` 还没发出去窗口已经没了 —— 表现就是
+   "点了完全没反应"。改成 `StartOutsideWatcher()`：120ms 轮询，光标真的在菜单矩形外、
+   且没有左右键按着、连续两次才收起。
+2. **显示窗口时真激活**。`SetWindowPos` 去掉 `SWP_NOACTIVATE`，并显式
+   `SetForegroundWindow` + `SetFocus`，日志记录 `foreground/setfg` 结果。
+   未激活窗口收到的第一次点击会被 Windows 拿去激活窗口，不会送给网页。
+3. **`IsVisible` 不再跟着显示/隐藏切**。原先从 `false` 切到 `true` 时 WebView 重建渲染目标，
+   命中区域会短暂停在旧尺寸（260x320）。现在预热完成就常驻可见，靠父窗口 ShowWindow 控制；
+   显示后再排一次 `Bounds` 补正。
+4. **导航超时 4s → 20s，失败不再一票否决**。`_initFailed` 改为计数，连续 3 次才放弃；
+   每次右键都会重试。`Task.Delay` 超时和 `IsSuccess=false` 分开记日志（后者带 `WebErrorStatus`）。
+5. **user data folder 被占用时换备用目录**。双开或上一实例没退干净时，同一个
+   `TrayWebView2` 目录建环境会直接失败 —— 这正是"右键变方块菜单"的成因之一。
+   现在失败会退到 `TrayWebView2-alt`。
+6. **预热失败自动再试**（3s → 5s → 5s，共 3 次），不靠用户右键来触发。
+7. **诊断日志**：`WM_ACTIVATE` / `WM_LBUTTONDOWN`（父窗口收到 = 点击没进网页）、
+   收到的无法识别消息、拒绝的未知动作，以及网页侧新增的 `probe`。
+
+## 网页侧（`outputs/webview2-shell/tray-menu.js` / `.css`）
+
+- `pointerdown` 第一次点击先发 `{action:'probe'}`，再发 `invoke`。
+  宿主日志里有没有 `网页已收到点击(pointerdown)`，可以一刀切分清是"点没进网页"还是"命令丢了"。
+- 去掉 `pointerdown` 上的 `preventDefault()`（避免压掉后续默认流程），禁选文字改由
+  `body{user-select:none}` 承担。
+
+## 判读指南（下次复测就看这四条）
+
+| 日志看到什么 | 说明 |
+|---|---|
+| `布局 …` + `网页已收到点击` + `收到命令` + `执行命令` | 整条链路通了 |
+| `布局 …` 后面什么都没有 | 点击没进网页 → 看有没有 `WM_LBUTTONDOWN 落在父窗口` 或 `WM_ACTIVATE` |
+| `网页已收到点击` 但无 `收到命令` | 网页发了，回程丢了（消息通道问题） |
+| `初始化失败（第 n 次）` | WebView2 环境/导航问题，看紧跟的异常与 `WebErrorStatus` |

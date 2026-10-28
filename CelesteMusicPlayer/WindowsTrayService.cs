@@ -202,34 +202,42 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>启动后就悄悄把菜单的 WebView 建好，第一次右键才是即开的。</summary>
-        private void Prewarm()
+        private void Prewarm() => SchedulePrewarm(0);
+
+        /// <summary>
+        /// 预热失败要再试。冷启动时 WebView2 的环境/导航受机器忙碌程度影响，
+        /// 一次没起来就整场没有网页菜单（只剩系统方块菜单）—— 这正是之前"右键菜单变回方块"的来源。
+        /// </summary>
+        private void SchedulePrewarm(int attempt)
         {
             try
             {
                 var queue = _owner.DispatcherQueue;
                 if (queue == null) return;
                 var timer = queue.CreateTimer();
-                timer.Interval = TimeSpan.FromSeconds(3);
+                timer.Interval = TimeSpan.FromSeconds(attempt == 0 ? 3 : 5);
                 timer.IsRepeating = false;
                 timer.Tick += (_, _) =>
                 {
                     timer.Stop();
-                    _ = RunWithUiContext(PrewarmAsync);
+                    if (_disposed) return;
+                    _ = RunWithUiContext(() => PrewarmAsync(attempt));
                 };
                 timer.Start();
             }
             catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.Prewarm", ex); }
         }
 
-        private async Task PrewarmAsync()
+        private async Task PrewarmAsync(int attempt)
         {
             if (_disposed) return;
-            try
-            {
-                bool ok = await _menu.PrewarmAsync();
-                if (!ok) StartupLog.Write("[托盘菜单] 预热失败，右键时退到系统原生菜单");
-            }
+            bool ok = false;
+            try { ok = await _menu.PrewarmAsync(); }
             catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.PrewarmAsync", ex); }
+
+            if (ok) return;
+            StartupLog.Write("[托盘菜单] 预热失败（第 " + (attempt + 1) + " 次），右键时会再试");
+            if (attempt + 1 < 3) SchedulePrewarm(attempt + 1);
         }
     }
 }
