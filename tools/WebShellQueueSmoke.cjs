@@ -19,6 +19,7 @@ function queuePayload(offset = 0) {
   return {
     revision: 7, total: tracks.length, offset, currentIndex: 2, order: 'ListLoop',
     summary: { totalSeconds: total, remainingSeconds: rest, hasCurrent: true },
+    previous: { kind: 'track', index: 1, title: tracks[1].title, artist: tracks[1].artist, album: tracks[1].album, duration: tracks[1].duration, coverUrl: '' },
     next: { kind: 'track', index: 3, title: tracks[3].title, artist: tracks[3].artist, album: tracks[3].album, duration: tracks[3].duration, coverUrl: '' },
     tracks: tracks.slice(offset, offset + 200)
   };
@@ -33,12 +34,14 @@ function queuePayload(offset = 0) {
     // 宿主替身：记录网页发出的命令，队列 get 返回分页数据
     await page.addInitScript(list => {
       window.commands = [];
+      window.__queueTracks = list;
       window.queuePayload = (offset = 0) => {
         const total = list.reduce((sum, item) => sum + item.duration, 0);
         const rest = list.slice(3).reduce((sum, item) => sum + item.duration, 0);
         return {
           revision: 7, total: list.length, offset, currentIndex: 2, order: 'ListLoop',
           summary: { totalSeconds: total, remainingSeconds: rest, hasCurrent: true },
+          previous: { kind: 'track', index: 1, title: list[1].title, artist: list[1].artist, album: list[1].album, duration: list[1].duration, coverUrl: '' },
           next: { kind: 'track', index: 3, title: list[3].title, artist: list[3].artist, album: list[3].album, duration: list[3].duration, coverUrl: '' },
           tracks: list.slice(offset, offset + 200)
         };
@@ -88,8 +91,22 @@ function queuePayload(offset = 0) {
     assert.equal(await page.locator('#queue-now-title').textContent(), 'Seventh Wave');
     assert.equal(await page.locator('#queue-now-quality').textContent(), 'FLAC · 24bit/44.1kHz · 1411kbps');
     assert.equal(await page.locator('#queue-next-title').textContent(), '慢速快门');
+    assert.equal(await page.locator('#queue-prev-title').textContent(), '雨中的信号塔');
+    assert.equal(await page.locator('#queue-prev-meta').textContent(), 'Northbound · 4:08');
     assert.equal(await page.locator('#queue-order [aria-pressed="true"]').getAttribute('data-order'), 'ListLoop');
     assert.equal(await page.locator('#queue-more').isVisible(), false);
+    // 位置：上一首在正在播放左边，下一首在右边（两块对称）
+    const band = await page.evaluate(() => {
+      const box = id => document.getElementById(id).getBoundingClientRect();
+      return { prev: box('queue-prev-card').right, cover: box('queue-now-cover').left, copy: box('queue-now-title').left, next: box('queue-next-card').left };
+    });
+    assert.ok(band.prev < band.cover, '上一首卡片应在正在播放的左边');
+    assert.ok(band.next > band.copy, '下一首卡片应在正在播放的右边');
+
+    // ②b 点上一首：交给宿主切歌，网页不自己算"上一首是谁"
+    await page.locator('#queue-prev-card').click();
+    await page.waitForTimeout(700);
+    assert.equal(await page.evaluate(() => window.commands.filter(m => m.command === 'previous').length), 1, '点上一首应发一条 previous');
 
     // ③ 搜索只在页内过滤，且过滤时不给拖
     await page.fill('#queue-search', '林澈');
@@ -97,7 +114,15 @@ function queuePayload(offset = 0) {
     assert.equal(await page.locator('#queue-list .queue-row').count(), 2);
     assert.equal(await page.locator('#queue-filter-note').textContent(), '匹配 2 首 · 清除搜索后可调整顺序');
     assert.equal(await page.locator('#queue-list').evaluate(node => node.classList.contains('is-filtered')), true);
-    assert.equal(await page.locator('#queue-list .queue-row').first().evaluate(node => node.draggable), false);
+    assert.equal(await page.locator('#queue-list .queue-row').first().evaluate(node => getComputedStyle(node.querySelector('.queue-grip')).visibility), 'hidden', '过滤时握柄应收起');
+    // 过滤时按住拖：不该出现跟手浮层，也不该给宿主发 move
+    const filteredBox = await page.locator('#queue-list .queue-row').first().boundingBox();
+    await page.mouse.move(filteredBox.x + 120, filteredBox.y + filteredBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(filteredBox.x + 120, filteredBox.y + filteredBox.height + 40, { steps: 6 });
+    assert.equal(await page.locator('.queue-ghost').count(), 0, '搜索过滤时不该能拖');
+    await page.mouse.up();
+    assert.equal(await page.evaluate(() => window.moved), undefined, '搜索过滤时不该发 move');
     await page.fill('#queue-search', '');
     await page.waitForTimeout(120);
     assert.equal(await page.locator('#queue-list .queue-row').count(), 9);
@@ -111,15 +136,41 @@ function queuePayload(offset = 0) {
     assert.equal(await located.getAttribute('data-queue-index'), '2');
 
     // ⑤ 拖动改顺序：带上 revision 与身份，第 6 行拖到第 2 行
-    await page.evaluate(() => { document.querySelector('.main').scrollTop = 0; });
-    await page.dragAndDrop('.queue-row[data-queue-index="5"]', '.queue-row[data-queue-index="1"]', { targetPosition: { x: 40, y: 4 } });
+    // 先把要拖的那一行滚到列表中间：底栏会盖住最下面，落点必须真的在可视区里
+    await page.locator('.queue-row[data-queue-index="5"]').evaluate(node => node.scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(120);
+    const fromBox = await page.locator('.queue-row[data-queue-index="5"]').boundingBox();
+    const toBox = await page.locator('.queue-row[data-queue-index="1"]').boundingBox();
+    await page.mouse.move(fromBox.x + 120, fromBox.y + fromBox.height / 2);
+    await page.mouse.down();
+    // 走过 4px 阈值才算开始拖：先挪一点点，浮层应出现
+    await page.mouse.move(fromBox.x + 120, fromBox.y + fromBox.height / 2 - 10, { steps: 3 });
+    assert.equal(await page.locator('.queue-ghost').count(), 1, '拖动中应有一份跟手的浮层');
+    assert.equal(await page.locator('.queue-row.is-dragging').getAttribute('data-queue-index'), '5');
+    await page.mouse.move(toBox.x + 120, toBox.y + 6, { steps: 10 });
+    assert.equal(await page.locator('.queue-row.drop-before, .queue-row.drop-after').count(), 1, '拖动中应有一条落点横线');
+    await page.mouse.up();
     await page.waitForTimeout(300);
+    assert.equal(await page.locator('.queue-ghost').count(), 0, '松手后跟手浮层要收掉');
+    assert.equal(await page.locator('.queue-row.is-dragging').count(), 0, '松手后源行的淡化要收掉');
     const moved = await page.evaluate(() => window.moved);
     assert.ok(moved, '拖动应发出 queue move');
     assert.equal(moved.from, 5);
     assert.equal(moved.to, 1);
     assert.equal(moved.trackId, 't5');
     assert.equal(moved.revision, 7);
+
+    // ⑤b 只是单击（没越过阈值）：不该发 move
+    await page.evaluate(() => { window.moved = undefined; });
+    await page.locator('.queue-row[data-queue-index="4"]').evaluate(node => node.scrollIntoView({ block: 'center' }));
+    await page.waitForTimeout(120);
+    const clickBox = await page.locator('.queue-row[data-queue-index="4"]').boundingBox();
+    await page.mouse.move(clickBox.x + 120, clickBox.y + clickBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(clickBox.x + 122, clickBox.y + clickBox.height / 2 + 1);
+    await page.mouse.up();
+    await page.waitForTimeout(150);
+    assert.equal(await page.evaluate(() => window.moved), undefined, '轻轻一点不该改变队列顺序');
 
     // ⑥ 顺序按钮：只该发一条命令（shell.js 已统一管 [data-order]，队列页不再重复挂监听）
     await page.locator('#queue-order [data-order="Random"]').click();
@@ -141,7 +192,29 @@ function queuePayload(offset = 0) {
       assert.ok(fit.listTop >= fit.cardBottom, `窗口 ${width}px 卡片压住列表`);
     }
 
-    // ⑧ 空队列
+    // ⑧ 上一首的边界：顺序播放停在第一首，明确说"没有上一首"，且点了不发命令
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.evaluate(() => {
+      window.commands.length = 0;
+      window.queuePayload = (offset = 0) => ({
+        revision: 9, total: 9, offset, currentIndex: 0, order: 'Sequential',
+        summary: { totalSeconds: 0, remainingSeconds: 0, hasCurrent: true },
+        previous: { kind: 'none' }, next: { kind: 'track', index: 1, title: '雨中的信号塔', artist: 'Northbound', duration: 248, coverUrl: '' },
+        tracks: window.__queueTracks.slice(offset, offset + 200)
+      });
+    });
+    await go('songs'); await go('queue');
+    await page.waitForTimeout(200);
+    assert.equal(await page.locator('#queue-prev-card').isVisible(), true);
+    assert.equal(await page.locator('#queue-prev-title').textContent(), '没有上一首');
+    assert.equal(await page.locator('#queue-prev-meta').textContent(), '已经是队列的第一首');
+    assert.equal(await page.locator('#queue-prev-card').getAttribute('aria-disabled'), 'true');
+    await page.locator('#queue-prev-card').click({ force: true });   // aria-disabled 会被 Playwright 当成不可点，这里就是要验证"点了也不发命令"
+
+    await page.waitForTimeout(120);
+    assert.equal(await page.evaluate(() => window.commands.filter(m => m.command === 'previous').length), 0, '没有上一首时不该发 previous');
+
+    // ⑨ 空队列
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.evaluate(() => {
       window.queuePayload = () => ({ revision: 8, total: 0, offset: 0, currentIndex: -1, order: 'ListLoop', summary: { totalSeconds: 0, remainingSeconds: 0, hasCurrent: false }, next: { kind: 'unknown' }, tracks: [] });
@@ -151,8 +224,10 @@ function queuePayload(offset = 0) {
     assert.equal(await page.locator('#queue-summary').textContent(), '0 首');
     assert.equal(await page.locator('.queue-empty strong').textContent(), '播放队列是空的');
     assert.equal(await page.locator('#queue-list .queue-row').count(), 0);
+    assert.equal(await page.locator('#queue-prev-card').isVisible(), false, '没在播时上一首整块收掉');
+    assert.equal(await page.locator('#queue-next-card').isVisible(), false, '没在播时下一首整块收掉');
 
     assert.deepEqual(errors, []);
-    console.log('PASS: 队列独立页面、真实顺序与摘要、当前条目、下一首预览、页内搜索（过滤时禁拖）、定位当前、拖动 move 带 revision/身份、顺序按钮、窄窗不溢出、空队列。');
+    console.log('PASS: 队列独立页面、真实顺序与摘要、当前条目、上一首/下一首对称预览（上一首点击切歌、第一首时明确没有）、页内搜索（过滤时禁拖）、定位当前、指针拖动（浮层/落点线/单击不改序）带 revision 与身份、顺序按钮、窄窗不溢出、空队列。');
   } finally { await browser.close(); }
 })().catch(error => { console.error(error); process.exitCode = 1; });

@@ -70,6 +70,31 @@
     markCurrent();
   }
 
+  /* 上一首：和"下一首"对称的一块。规则由宿主算（和播放器的上一首按钮同一套），
+     这里只负责把结果画出来；点它就是真的去播那一首，不是"在列表里找一下"。 */
+  function renderPrev() {
+    const prev = queue?.previous || { kind: 'unknown' };
+    const cover = $('queue-prev-cover'), card = $('queue-prev-card');
+    document.querySelector('.queue-now').classList.toggle('no-prev', prev.kind === 'unknown');
+    const clickable = prev.kind === 'track' || prev.kind === 'self';
+    card.setAttribute('aria-disabled', String(!clickable));
+    if (clickable) {
+      $('queue-prev-title').textContent = prev.title || '未知曲目';
+      $('queue-prev-meta').textContent = prev.kind === 'self'
+        ? '队列里只有这一首'
+        : [prev.artist, prev.duration ? time(prev.duration) : ''].filter(Boolean).join(' · ');
+      paintCover(cover, prev.coverUrl || '');
+      card.dataset.queueIndex = String(prev.index ?? '');
+      card.title = '播放上一首';
+    } else {
+      $('queue-prev-title').textContent = '没有上一首';
+      $('queue-prev-meta').textContent = prev.kind === 'none' ? '已经是队列的第一首' : '';
+      paintCover(cover, '');
+      delete card.dataset.queueIndex;
+      card.title = '';
+    }
+  }
+
   function renderNext() {
     const next = queue?.next || { kind: 'unknown' };
     const cover = $('queue-next-cover'), card = $('queue-next-card');
@@ -137,7 +162,6 @@
     row.tabIndex = 0;
     row.setAttribute('role', 'listitem');
     row.setAttribute('aria-label', `第 ${track.index + 1} 首：${track.title}`);
-    row.draggable = live && !filter;
 
     const grip = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
     grip.setAttribute('class', 'queue-grip');
@@ -221,6 +245,7 @@
     if (shell.getPage() !== 'queue') return;
     renderSummary();
     renderList();
+    renderPrev();
     renderNext();
     renderNow();
   }
@@ -252,9 +277,13 @@
       ...track, index, album: track.album || '', duration: track.duration || 0,
       format: (String(track.id || '').length % 2 ? 'FLAC' : 'WAV'), coverUrl: track.coverUrl || ''
     }));
+    const order = shell.getState().playbackOrder || 'ListLoop', last = library.length - 1;
+    const noPrev = order === 'Sequential' || order === 'TrackOnce';
     return {
-      revision: 0, total: library.length, offset, currentIndex: 0, order: shell.getState().playbackOrder || 'ListLoop',
+      revision: 0, total: library.length, offset, currentIndex: 0, order,
       summary: { totalSeconds: library.reduce((sum, t) => sum + (t.duration || 0), 0), remainingSeconds: library.slice(1).reduce((sum, t) => sum + (t.duration || 0), 0), hasCurrent: true },
+      previous: !library.length ? { kind: 'unknown' } : noPrev ? { kind: 'none' }
+        : { kind: last === 0 ? 'self' : 'track', index: last, ...library[last] },
       next: library[1] ? { kind: 'track', index: 1, ...library[1] } : { kind: 'none' },
       tracks: library.slice(offset, offset + PAGE)
     };
@@ -284,43 +313,120 @@
     } finally { moving = false; }
   }
 
-  /* ── 拖动 ─────────────────────────────────────────────────── */
+  /* ── 拖动排序 ─────────────────────────────────────────────────
+     不用浏览器自带的 HTML5 拖放：那是系统的拖放循环，指针一离开列表就变成"禁止"
+     光标，落点也不稳。这里自己跟 pointer 事件（鼠标 / 触屏 / 笔同一套），
+     行内移动超过 4px 才算开始拖，双击播放和点选都不受影响。 */
 
-  function clearDrag() {
-    drag = null;
-    rows().forEach(row => row.classList.remove('is-dragging', 'drop-before', 'drop-after'));
-  }
+  const DRAG_SLOP = 4;
 
   function bindDrag(row, track) {
-    row.addEventListener('dragstart', event => {
-      if (!live || moving || filter) { event.preventDefault(); return; }
-      drag = { from: track.index, trackId: track.id, revision: queue.revision };
-      event.dataTransfer.effectAllowed = 'move';
-      event.dataTransfer.setData('text/plain', String(track.index));
-      row.classList.add('is-dragging');
+    row.addEventListener('pointerdown', event => {
+      if (!live || moving || filter || !queue) return;
+      if (event.button !== 0) return;
+      // 触屏从行身开始拖会和"上下滑列表"打架，只认左侧握柄
+      if (event.pointerType === 'touch' && !event.target.closest('.queue-grip')) return;
+      drag = {
+        row, from: track.index, trackId: track.id, revision: queue.revision,
+        x: event.clientX, y: event.clientY, active: false, target: null, ghost: null
+      };
+      window.addEventListener('pointermove', onDragMove);
+      window.addEventListener('pointerup', onDragEnd);
+      window.addEventListener('pointercancel', onDragEnd);
     });
-    row.addEventListener('dragover', event => {
-      if (!drag || moving) return;
-      event.preventDefault();
-      event.dataTransfer.dropEffect = 'move';
-      rows().forEach(item => item.classList.remove('drop-before', 'drop-after'));
-      const box = row.getBoundingClientRect();
-      row.classList.add(event.clientY > box.top + box.height / 2 ? 'drop-after' : 'drop-before');
-      const main = document.querySelector('.main'), area = main.getBoundingClientRect();
-      if (event.clientY < area.top + 48) main.scrollTop -= 18;
-      if (event.clientY > area.bottom - 48) main.scrollTop += 18;
-    });
-    row.addEventListener('drop', event => {
-      if (!drag) return;
-      event.preventDefault();
-      const { from, revision, trackId } = drag;
-      const box = row.getBoundingClientRect();
-      let to = track.index + (event.clientY > box.top + box.height / 2 ? 1 : 0);
-      if (from < to) to -= 1;
-      clearDrag();
-      move(from, to, trackId);
-    });
-    row.addEventListener('dragend', clearDrag);
+  }
+
+  function onDragMove(event) {
+    if (!drag) return;
+    // 指针在窗口外松开时收不到 pointerup：只要下次移动时按键已全部松开，就当这一拖结束
+    if (drag.active && event.buttons === 0) { onDragEnd(); return; }
+    if (!drag.active) {
+      if (Math.abs(event.clientY - drag.y) < DRAG_SLOP && Math.abs(event.clientX - drag.x) < DRAG_SLOP) return;
+      beginDrag();
+    }
+    event.preventDefault();
+    drag.x = event.clientX;
+    drag.y = event.clientY;
+    paintGhost();
+    paintTarget(event.clientY);
+    autoScroll(event.clientY);
+  }
+
+  function beginDrag() {
+    const row = drag.row, box = row.getBoundingClientRect();
+    drag.active = true;
+    drag.height = box.height;
+    document.body.classList.add('is-reordering');
+    document.getSelection()?.removeAllRanges();
+    row.classList.add('is-dragging');
+
+    const ghost = element('div', undefined, 'queue-ghost');
+    const art = element('span', undefined, 'queue-ghost-art');
+    const source = row.querySelector('.queue-cover');
+    if (source?.getAttribute('src')) art.style.backgroundImage = `url("${source.getAttribute('src')}")`;
+    const copy = element('span', undefined, 'queue-ghost-copy');
+    copy.append(element('strong', row.querySelector('.queue-copy strong')?.textContent || '未知曲目'),
+      element('small', row.querySelector('.queue-copy small')?.textContent || ''));
+    ghost.append(art, copy);
+    ghost.style.width = `${Math.min(box.width, 460)}px`;
+    document.body.append(ghost);
+    drag.ghost = ghost;
+    paintGhost();
+  }
+
+  // 浮层跟手，但偏到指针右下方 14px：正好压在指针底下会盖住落点横线，什么也看不出来
+  function paintGhost() {
+    if (!drag?.ghost) return;
+    const width = drag.ghost.offsetWidth || 320, height = drag.ghost.offsetHeight || drag.height;
+    const left = Math.min(Math.max(drag.x + 14, 8), window.innerWidth - width - 8);
+    const top = Math.min(Math.max(drag.y + 14, 8), window.innerHeight - height - 8);
+    drag.ghost.style.left = `${left}px`;
+    drag.ghost.style.top = `${top}px`;
+  }
+
+  /* 落点：指针压在谁的上半就是"插到它前面"，压在最后一行下半就是"插到队尾"。
+     拖动行自己不算落点 —— 否则在它自己身上晃也会高亮。 */
+  function paintTarget(y) {
+    const others = rows().filter(item => item !== drag.row);
+    let hit = null;
+    for (const item of others) {
+      const box = item.getBoundingClientRect();
+      if (y < box.top + box.height / 2) { hit = { row: item, after: false }; break; }
+    }
+    if (!hit && others.length) hit = { row: others.at(-1), after: true };
+    rows().forEach(item => item.classList.remove('drop-before', 'drop-after'));
+    if (!hit) { drag.target = null; return; }
+    hit.row.classList.add(hit.after ? 'drop-after' : 'drop-before');
+    let to = Number(hit.row.dataset.queueIndex) + (hit.after ? 1 : 0);
+    if (drag.from < to) to -= 1;
+    drag.target = to;
+  }
+
+  function autoScroll(y) {
+    const main = document.querySelector('.main');
+    if (!main) return;
+    const area = main.getBoundingClientRect();
+    if (y < area.top + 56) main.scrollTop -= 16;
+    else if (y > area.bottom - 56) main.scrollTop += 16;
+  }
+
+  function onDragEnd() {
+    const state = drag;
+    endDrag();
+    // 只是点了一下（没越过阈值）或者没挪位置：什么都不发
+    if (!state?.active || state.target === null || state.target === state.from) return;
+    move(state.from, state.target, state.trackId);
+  }
+
+  function endDrag() {
+    drag?.ghost?.remove();
+    if (drag?.row) drag.row.classList.remove('is-dragging');
+    rows().forEach(row => row.classList.remove('drop-before', 'drop-after'));
+    document.body.classList.remove('is-reordering');
+    window.removeEventListener('pointermove', onDragMove);
+    window.removeEventListener('pointerup', onDragEnd);
+    window.removeEventListener('pointercancel', onDragEnd);
+    drag = null;
   }
 
   /* ── 定位当前 ───────────────────────────────────────────────── */
@@ -359,6 +465,14 @@
   });
   $('queue-more').addEventListener('click', () => load(true));
   $('queue-locate').addEventListener('click', locate);
+  $('queue-prev-card').addEventListener('click', () => {
+    const prev = queue?.previous;
+    if (!prev || (prev.kind !== 'track' && prev.kind !== 'self')) return;
+    if (!live) { shell.playDemo(Number(prev.index) || 0); return; }
+    shell.send('previous');
+    // 宿主换歌后当前行会跟着变：稍等一下再拉一次队列，别让"正在播放"那行标错一整拍
+    setTimeout(() => { if (shell.getPage() === 'queue') load(); }, 500);
+  });
   $('queue-next-card').addEventListener('click', () => {
     const index = Number($('queue-next-card').dataset.queueIndex);
     if (!Number.isFinite(index)) return;
@@ -401,7 +515,7 @@
       const result = await request({ operation: 'get', offset: 0 });
       if (current !== token || shell.getPage() !== 'queue') return;
       if (!queue || result.revision !== queue.revision) { queue = result; render(); }
-      else { queue.currentIndex = result.currentIndex; queue.next = result.next; queue.order = result.order; renderNext(); markCurrent(); }
+      else { queue.currentIndex = result.currentIndex; queue.next = result.next; queue.previous = result.previous; queue.order = result.order; renderPrev(); renderNext(); markCurrent(); }
     } catch { }
   }, 5000);
 })();

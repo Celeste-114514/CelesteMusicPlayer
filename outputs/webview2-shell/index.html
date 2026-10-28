@@ -216,6 +216,24 @@
             </div>
           </header>
           <section class="queue-now" aria-label="正在播放">
+            <!-- 两侧邻居包一层：宽窗口用 display:contents 摊平（靠 order 分到两端），
+                 窄窗口这层变成两列网格，上一首/下一首并排挪到卡片下面。 -->
+            <div class="queue-neighbors">
+              <div class="queue-prev">
+                <p class="eyebrow">PREVIOUS</p>
+                <button id="queue-prev-card" class="queue-prev-card" type="button" title="播放上一首">
+                  <span id="queue-prev-cover" class="queue-prev-cover"><svg><use href="#i-note"/></svg></span>
+                  <span class="queue-prev-copy"><strong id="queue-prev-title">队列为空</strong><small id="queue-prev-meta"></small></span>
+                </button>
+              </div>
+              <div class="queue-next">
+                <p class="eyebrow">NEXT UP</p>
+                <button id="queue-next-card" class="queue-next-card" type="button">
+                  <span id="queue-next-cover" class="queue-next-cover"><svg><use href="#i-note"/></svg></span>
+                  <span class="queue-next-copy"><strong id="queue-next-title">队列为空</strong><small id="queue-next-meta"></small></span>
+                </button>
+              </div>
+            </div>
             <button id="queue-now-cover" class="queue-now-cover" type="button" aria-label="打开播放详情"><span>NO<br>MUSIC</span></button>
             <div class="queue-now-copy">
               <div class="queue-now-top">
@@ -235,13 +253,6 @@
                 <input id="queue-seek" type="range" min="0" max="0" step="0.1" value="0" aria-label="播放进度">
                 <span id="queue-duration">0:00</span>
               </div>
-            </div>
-            <div class="queue-next">
-              <p class="eyebrow">NEXT UP</p>
-              <button id="queue-next-card" class="queue-next-card" type="button">
-                <span id="queue-next-cover" class="queue-next-cover"><svg><use href="#i-note"/></svg></span>
-                <span class="queue-next-copy"><strong id="queue-next-title">队列为空</strong><small id="queue-next-meta"></small></span>
-              </button>
             </div>
           </section>
           <div class="queue-list-heading">

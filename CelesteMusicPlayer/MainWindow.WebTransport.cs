@@ -248,6 +248,7 @@ namespace CelesteMusicPlayer
                 revision = _webQueueRevision, total = items.Length, offset, currentIndex = _userPlaylistIndex,
                 order = _orderResolver.Order.ToString(),
                 summary = new { totalSeconds, remainingSeconds, hasCurrent = _userPlaylistIndex >= 0 && _userPlaylistIndex < items.Length },
+                previous = QueuePreviousPreview(items),
                 next = QueueNextPreview(items),
                 tracks = items.Skip(offset).Take(200).Select((item, i) => new
                 {
@@ -268,6 +269,35 @@ namespace CelesteMusicPlayer
             if (item.IsRemote) return "NET";
             string extension = System.IO.Path.GetExtension(item.FilePath).TrimStart('.').ToUpperInvariant();
             return extension.Length is > 0 and <= 5 ? extension : "";
+        }
+
+        /// <summary>
+        /// 队列页的"上一首"预览。索引直接用播放器那套 ResolvePreviousIndex，
+        /// 不在网页里另算一遍 —— 卡片上写哪一首，点下去就必须是那一首。
+        /// 顺序播放走到第一首时没有上一首（kind=none），循环/随机则回卷到队尾。
+        /// </summary>
+        private object QueuePreviousPreview(PlaylistItem[] items)
+        {
+            if (items.Length == 0 || _userPlaylistIndex < 0 || _userPlaylistIndex >= items.Length)
+            {
+                return new { kind = "unknown" };
+            }
+
+            int? index = _orderResolver.ResolvePreviousIndex(items.Length, _userPlaylistIndex);
+            if (index is null || index.Value < 0 || index.Value >= items.Length)
+            {
+                return new { kind = "none" };
+            }
+
+            var item = items[index.Value];
+            return new
+            {
+                // 队列只有一首且允许回卷时，"上一首"就是这首自己
+                kind = index.Value == _userPlaylistIndex ? "self" : "track",
+                index = index.Value, title = item.Title, artist = item.Artist, album = item.Album,
+                duration = item.Duration.TotalSeconds,
+                coverUrl = "https://celeste-cover.internal/cover/" + WebTrackId(item)
+            };
         }
 
         /// <summary>
