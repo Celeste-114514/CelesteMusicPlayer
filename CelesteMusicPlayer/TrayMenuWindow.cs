@@ -43,6 +43,7 @@ namespace CelesteMusicPlayer
         private bool _visible;
         private bool _initFailed;
         private bool _ready;
+        private bool _showPending;
 
         private CoreWebView2Environment? _environment;
         private CoreWebView2Controller? _controller;
@@ -73,7 +74,10 @@ namespace CelesteMusicPlayer
         /// <summary>把菜单弹到光标/托盘图标附近。失败返回 false，由调用方退到系统原生菜单。</summary>
         internal async Task<bool> ShowAsync(IReadOnlyList<TrayMenuModel.Item> items, Dictionary<string, string> themeVars, string mode)
         {
-            if (_disposed) return false;
+            if (_disposed || _showPending) return false;
+            _showPending = true;
+            try
+            {
             if (!await EnsureWebViewAsync()) return false;
 
             try
@@ -98,7 +102,7 @@ namespace CelesteMusicPlayer
                 // 等页面量完高度再定位。等不到就用上一次的尺寸，别让菜单迟迟不出现。
                 Task completed = await Task.WhenAny(_sizeWaiter.Task, Task.Delay(500));
                 _sizeWaiter = null;
-
+                if (_disposed) return false;
                 PlaceAndShow();
                 return true;
             }
@@ -107,6 +111,8 @@ namespace CelesteMusicPlayer
                 StartupLog.WriteException("TrayMenuWindow.ShowAsync", ex);
                 return false;
             }
+            }
+            finally { _showPending = false; }
         }
 
         internal void Hide()
@@ -202,7 +208,7 @@ namespace CelesteMusicPlayer
 
             if (_controller != null)
             {
-                _controller.Bounds = new Rect(0, 0, width / scale, height / scale);
+                _controller.Bounds = new Rect(0, 0, width, height);
                 _controller.IsVisible = true;
             }
 
@@ -249,7 +255,15 @@ namespace CelesteMusicPlayer
             {
                 case WM_ACTIVATE:
                     // 点到菜单外面就收起。子窗口（WebView2）在菜单内部，不会触发失活。
-                    if (((int)(wParam.ToInt64() & 0xFFFF)) == WA_INACTIVE) Hide();
+                    if (((int)(wParam.ToInt64() & 0xFFFF)) == WA_INACTIVE)
+                    {
+                        Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()?.TryEnqueue(() =>
+                        {
+                            if (_disposed) return;
+                            IntPtr foreground = GetForegroundWindow();
+                            if (foreground != _hwnd && !IsChild(_hwnd, foreground)) Hide();
+                        });
+                    }
                     break;
                 case WM_KEYDOWN:
                     if ((int)wParam == 0x1B /* VK_ESCAPE */) { Hide(); return IntPtr.Zero; }
@@ -296,6 +310,7 @@ namespace CelesteMusicPlayer
                 _environment ??= await CoreWebView2Environment.CreateWithOptionsAsync(null, userData, null);
                 var windowRef = CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)_hwnd.ToInt64());
                 _controller = await _environment.CreateCoreWebView2ControllerAsync(windowRef);
+                if (_disposed) { _controller.Close(); _controller = null; return false; }
 
                 CoreWebView2 core = _controller.CoreWebView2;
                 core.Settings.AreDefaultContextMenusEnabled = false;
@@ -309,7 +324,9 @@ namespace CelesteMusicPlayer
                 var ready = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
                 core.NavigationCompleted += (_, args) => ready.TrySetResult(args.IsSuccess);
                 core.Navigate("https://celeste.tray/tray-menu.html");
-                await Task.WhenAny(ready.Task, Task.Delay(4000));
+                Task navigation = await Task.WhenAny(ready.Task, Task.Delay(4000));
+                if (_disposed || navigation != ready.Task || !await ready.Task)
+                    throw new InvalidOperationException("托盘菜单页面未成功加载");
 
                 _controller.Bounds = new Rect(0, 0, 260, 320);
                 _controller.IsVisible = false;
@@ -357,13 +374,14 @@ namespace CelesteMusicPlayer
                     return;
                 }
                 if (verb == "close") { Hide(); return; }
-                if (verb == "blur") { Hide(); return; }
+                if (verb == "blur") return; // WM_ACTIVATE owns native focus dismissal.
                 if (verb == "invoke")
                 {
                     string? actionId = root.TryGetProperty("actionId", out JsonElement id) ? id.GetString() : null;
                     if (string.IsNullOrEmpty(actionId)) return;
                     // 只在白名单里认 —— 网页传来的任何其它字符串一律丢弃
                     if (!TrayMenuModel.IsKnownAction(actionId)) return;
+                    StartupLog.Write("[托盘菜单] 收到命令 " + actionId);
                     Hide();
                     Invoked?.Invoke(actionId!);
                 }
@@ -374,6 +392,10 @@ namespace CelesteMusicPlayer
         // —— P/Invoke ——
 
         private delegate IntPtr WndProcDelegate(IntPtr hWnd, uint msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool IsChild(IntPtr parent, IntPtr child);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         private struct WNDCLASSEXW

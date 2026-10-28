@@ -6,6 +6,7 @@
   const menu = document.getElementById('menu'), empty = document.getElementById('empty');
   const live = typeof window.chrome?.webview?.postMessage === 'function';
   let items = [], focusIndex = -1;
+  let invoking = false;
 
   const send = payload => { if (live) window.chrome.webview.postMessage({ kind: 'celeste.command', version: 1, command: 'trayMenu', ...payload }); };
 
@@ -32,6 +33,7 @@
   }
 
   function render() {
+    invoking = false;
     menu.replaceChildren();
     empty.hidden = items.length > 0;
     items.forEach((item, index) => {
@@ -40,11 +42,14 @@
       button.className = 'tray-item'; button.type = 'button'; button.dataset.index = String(index);
       button.setAttribute('role', 'menuitem'); button.disabled = item.enabled === false;
       if (item.checked !== null && item.checked !== undefined) button.setAttribute('aria-checked', String(!!item.checked));
-      const check = document.createElement('span'); check.className = 'tray-check'; check.textContent = '✓';
+      const check = document.createElementNS('http://www.w3.org/2000/svg','svg'); check.classList.add('tray-check'); check.setAttribute('viewBox','0 0 16 16'); check.setAttribute('aria-hidden','true');
+      const tick=document.createElementNS('http://www.w3.org/2000/svg','path');tick.setAttribute('d','M3 8l3 3 7-7');tick.setAttribute('fill','none');tick.setAttribute('stroke','currentColor');tick.setAttribute('stroke-width','1.6');check.append(tick);
       const label = document.createElement('span'); label.className = 'tray-label'; label.textContent = item.label || '';
       button.append(check, label);
-      button.addEventListener('click', () => send({ action: 'invoke', actionId: item.actionId }));
-      button.addEventListener('mouseenter', () => { setKeyboardMode(false); focusIndex = index; focusAt(focusIndex); });
+      const invoke = () => { if (button.disabled || invoking) return; invoking = true; send({ action: 'invoke', actionId: item.actionId }); };
+      button.addEventListener('pointerdown', event => { if (event.button === 0) { event.preventDefault(); invoke(); } });
+      button.addEventListener('click', invoke); // Keyboard / accessibility activation.
+      button.addEventListener('mouseenter', () => { setKeyboardMode(false); });
       menu.append(button);
     });
     focusIndex = -1;
@@ -78,7 +83,8 @@
     else if (event.key === 'End') { setKeyboardMode(true); focusAt(9999); event.preventDefault(); }
   });
   // 焦点跑出菜单 = 用户点到别处了，让宿主收起（宿主还要判断是不是点到了自己的子窗口）
-  document.addEventListener('focusout', event => { if (!menu.contains(event.relatedTarget)) send({ action: 'blur' }); });
+  // The native parent owns outside-click dismissal. DOM focus changes are not
+  // evidence of leaving the window (especially while clicking the first row).
 
   if (live) {
     window.chrome.webview.addEventListener('message', event => {

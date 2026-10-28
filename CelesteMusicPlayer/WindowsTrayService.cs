@@ -22,6 +22,19 @@ namespace CelesteMusicPlayer
 
         private string? _pendingUpdateVersion;
         private bool _disposed;
+        private bool _opening;
+
+        private Task RunWithUiContext(Func<Task> work)
+        {
+            var previous = System.Threading.SynchronizationContext.Current;
+            try
+            {
+                System.Threading.SynchronizationContext.SetSynchronizationContext(
+                    new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(_owner.DispatcherQueue));
+                return work();
+            }
+            finally { System.Threading.SynchronizationContext.SetSynchronizationContext(previous); }
+        }
 
         internal WindowsTrayService(MainWindow owner)
         {
@@ -41,8 +54,13 @@ namespace CelesteMusicPlayer
             };
             _menu.Invoked += actionId =>
             {
-                try { _commands.Invoke(actionId); }
-                catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.MenuInvoked", ex); }
+                // Never close a WebView or activate another window inside its callback.
+                _owner.DispatcherQueue.TryEnqueue(() =>
+                {
+                    if (_disposed) return;
+                    try { StartupLog.Write("[托盘菜单] 执行命令 " + actionId); _commands.Invoke(actionId); }
+                    catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.MenuInvoked", ex); }
+                });
             };
 
             StartupLog.Write("托盘: Win32 通知图标已创建 (成功=" + _icon.IsCreated + ")");
@@ -125,19 +143,30 @@ namespace CelesteMusicPlayer
 
         private void OnRightClick()
         {
+            // Shell_NotifyIcon invokes us inside a native window procedure.
+            // Return to the message loop before entering WebView2 or activating UI.
             if (_disposed) return;
+            _owner.DispatcherQueue.TryEnqueue(OnRightClickCore);
+        }
+
+        private void OnRightClickCore()
+        {
+            if (_disposed || _opening) return;
             try
             {
                 if (_menu.IsVisible) { _menu.Hide(); return; }
                 List<TrayMenuModel.Item> items = TrayMenuModel.Build(_owner, _pendingUpdateVersion);
                 (string mode, Dictionary<string, string> vars) = BuildTheme();
-                _ = ShowMenuAsync(items, vars, mode);
+                _ = RunWithUiContext(() => ShowMenuAsync(items, vars, mode));
             }
             catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.OnRightClick", ex); }
         }
 
         private async Task ShowMenuAsync(List<TrayMenuModel.Item> items, Dictionary<string, string> vars, string mode)
         {
+            _opening = true;
+            try
+            {
             bool shown = false;
             try { shown = await _menu.ShowAsync(items, vars, mode); }
             catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.ShowMenu", ex); }
@@ -151,6 +180,8 @@ namespace CelesteMusicPlayer
                 if (!string.IsNullOrEmpty(action)) _commands.Invoke(action);
             }
             catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.FallbackMenu", ex); }
+            }
+            finally { _opening = false; }
         }
 
         /// <summary>
@@ -183,7 +214,7 @@ namespace CelesteMusicPlayer
                 timer.Tick += (_, _) =>
                 {
                     timer.Stop();
-                    _ = PrewarmAsync();
+                    _ = RunWithUiContext(PrewarmAsync);
                 };
                 timer.Start();
             }

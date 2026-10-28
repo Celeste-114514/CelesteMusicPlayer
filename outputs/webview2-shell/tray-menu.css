@@ -13,7 +13,7 @@ body{font-family:var(--font-cjk),var(--font-ui),sans-serif;font-size:calc(13px *
    width:max-content 是为了让菜单宽度跟着最长那条文案走 —— 用 %/auto 的话
    宽度等于 WebView 当前视口宽（固定值），量出来的尺寸永远不变，宿主没法按内容定位。
    阴影不画：窗口大小正好等于菜单，画在窗口外的部分会被裁掉，只会留硬边。 */
-.tray-menu{background:var(--menu-bg);border:1px solid var(--line);border-radius:var(--radius);
+.tray-menu{background:var(--menu-bg);border:0;border-radius:0;
   width:max-content;padding:4px;min-width:240px;max-width:280px}
 .tray-menu:empty+.tray-empty{display:block}
 
