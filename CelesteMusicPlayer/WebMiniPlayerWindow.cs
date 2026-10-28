@@ -2,6 +2,10 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Diagnostics;
+using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Windowing;
@@ -17,12 +21,24 @@ internal sealed class WebMiniPlayerWindow : Window
     private bool _closed, _ready;
     private byte[]? _cover;
     private object? _lines = new object();
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _themeTimer;
+    private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _resizeTimer;
+    private readonly Stopwatch _resizeClock = new();
+    private double _height = 188, _fromHeight, _targetHeight;
+    private int _dragGeneration, _themeRevision = -1;
+    private string _themeMode = "";
     internal WebMiniPlayerWindow()
     {
         Title = "Celeste · 迷你播放器";
         WindowIconHelper.Apply(this);
         _root.Children.Add(_web);
         Content = _root;
+        _themeTimer = DispatcherQueue.CreateTimer();
+        _themeTimer.Interval = TimeSpan.FromMilliseconds(500);
+        _themeTimer.Tick += (_, _) => SendTheme();
+        _resizeTimer = DispatcherQueue.CreateTimer();
+        _resizeTimer.Interval = TimeSpan.FromMilliseconds(16);
+        _resizeTimer.Tick += AnimateResize;
         AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
         if (AppWindow.Presenter is OverlappedPresenter p)
@@ -33,12 +49,65 @@ internal sealed class WebMiniPlayerWindow : Window
         Resize(false);
         _root.Loaded += Initialize;
         MiniPlayerBridge.StateChanged += StateChanged;
-        Closed += (_, _) => { _closed = true; MiniPlayerBridge.StateChanged -= StateChanged; _web.Close(); };
+        Closed += (_, _) => { _closed = true; Interlocked.Increment(ref _dragGeneration); _themeTimer.Stop(); StopResize(); MiniPlayerBridge.StateChanged -= StateChanged; _web.Close(); };
     }
     private void Resize(bool expanded)
     {
+        _height = expanded ? 620 : 188;
+        ApplyHeight();
+    }
+    private void ApplyHeight()
+    {
         double scale = _root.XamlRoot?.RasterizationScale ?? 1;
-        AppWindow.ResizeClient(new Windows.Graphics.SizeInt32((int)(400 * scale), (int)((expanded ? 620 : 188) * scale)));
+        AppWindow.ResizeClient(new Windows.Graphics.SizeInt32((int)(400 * scale), (int)(_height * scale)));
+    }
+    private void Expand(bool expanded, bool animate)
+    {
+        StopResize();
+        _fromHeight = _height; _targetHeight = expanded ? 620 : 188;
+        if (!animate) { Resize(expanded); Post(new { kind = "resized", expanded }); return; }
+        _resizeClock.Restart();
+        CompositionTarget.Rendering += AnimateResize;
+        _resizeTimer.Start();
+    }
+    private void AnimateResize(object? sender, object e)
+    {
+        double t = Math.Clamp(_resizeClock.Elapsed.TotalMilliseconds / 260, 0, 1);
+        _height = _fromHeight + (_targetHeight - _fromHeight) * (1 - Math.Pow(1 - t, 3));
+        ApplyHeight();
+        if (t >= 1) { StopResize(); Post(new { kind = "resized", expanded = _targetHeight > 188 }); }
+    }
+    private void StopResize() { CompositionTarget.Rendering -= AnimateResize; _resizeTimer.Stop(); _resizeClock.Stop(); }
+    private void SendTheme()
+    {
+        if (!_ready || _closed) return;
+        var state = WebAppearance.HasDraft() ? WebAppearance.Draft() : WebAppearance.Load();
+        string mode = WebAppearance.ResolveMode(state.mode);
+        if (_themeRevision == WebAppearance.CurrentRevision && _themeMode == mode) return;
+        _themeRevision = WebAppearance.CurrentRevision; _themeMode = mode;
+        Post(new { kind = "theme", mode, light = WebAppearance.Resolve(state, WebAppearance.Light), dark = WebAppearance.Resolve(state, WebAppearance.Dark) });
+    }
+    [StructLayout(LayoutKind.Sequential)] private struct Point { public int X, Y; }
+    [StructLayout(LayoutKind.Sequential)] private struct Rect { public int Left, Top, Right, Bottom; }
+    [DllImport("user32.dll")] private static extern bool GetCursorPos(out Point point);
+    [DllImport("user32.dll")] private static extern bool GetWindowRect(nint hwnd, out Rect rect);
+    [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] private static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int width, int height, uint flags);
+    private void StartDrag()
+    {
+        nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        if (!GetCursorPos(out var cursor) || !GetWindowRect(hwnd, out var rect) || (GetAsyncKeyState(1) & 0x8000) == 0) return;
+        int dx = cursor.X - rect.Left, dy = cursor.Y - rect.Top, ticket = Interlocked.Increment(ref _dragGeneration);
+        new Thread(() =>
+        {
+            int x = rect.Left, y = rect.Top;
+            while (Volatile.Read(ref _dragGeneration) == ticket && (GetAsyncKeyState(1) & 0x8000) != 0)
+            {
+                if (!GetCursorPos(out var point)) break;
+                if (x != point.X - dx || y != point.Y - dy) { x = point.X - dx; y = point.Y - dy; if (!SetWindowPos(hwnd, 0, x, y, 0, 0, 0x0015)) break; }
+                Thread.Sleep(4);
+            }
+        }) { IsBackground = true, Name = "Celeste mini drag" }.Start();
     }
     private async void Initialize(object sender, RoutedEventArgs e)
     {
@@ -65,14 +134,17 @@ internal sealed class WebMiniPlayerWindow : Window
                     var m = doc.RootElement;
                     switch (m.GetProperty("command").GetString())
                     {
-                        case "ready": _ready = true; MiniPlayerBridge.Push(); StateChanged(MiniPlayerBridge.Current); break;
+                        case "ready": _ready = true; _themeRevision = -1; SendTheme(); _themeTimer.Start(); MiniPlayerBridge.Push(); StateChanged(MiniPlayerBridge.Current); break;
+                        case "drag-start": StartDrag(); break;
+                        case "drag-end": Interlocked.Increment(ref _dragGeneration); break;
+                        case "settings": MiniPlayerBridge.OpenAppearanceSettings(); break;
                         case "play": MiniPlayerBridge.TogglePlayPause(); break;
                         case "previous": MiniPlayerBridge.Previous(); break;
                         case "next": MiniPlayerBridge.Next(); break;
                         case "seek": if (m.GetProperty("value").TryGetDouble(out var t) && double.IsFinite(t)) MiniPlayerBridge.Seek(Math.Clamp(t, 0, MiniPlayerBridge.Current.DurationSeconds)); break;
                         case "volume": if (m.GetProperty("value").TryGetDouble(out var v) && double.IsFinite(v)) MiniPlayerBridge.SetVolume(Math.Clamp(v, 0, 100)); break;
                         case "queue": MiniPlayerBridge.PlayQueueAt(m.GetProperty("value").GetInt32()); break;
-                        case "expand": Resize(m.GetProperty("value").GetBoolean()); break;
+                        case "expand": Expand(m.GetProperty("value").GetBoolean(), !m.TryGetProperty("animate", out var animate) || animate.GetBoolean()); break;
                         case "main": MiniPlayerBridge.BringMainWindowToFront(); break;
                         case "close": Close(); break;
                         case "minimize": (AppWindow.Presenter as OverlappedPresenter)?.Minimize(); break;
