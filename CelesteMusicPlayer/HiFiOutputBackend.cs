@@ -11,7 +11,7 @@ using NAudio.Wave.SampleProviders;
 namespace CelesteMusicPlayer
 {
     /// <summary>HiFi 独占输出后端（NAudio）：WASAPI Exclusive / ASIO，从 PCM WAV 流式输出。</summary>
-    public sealed class HiFiOutputBackend : IDisposable
+    public sealed partial class HiFiOutputBackend : IDisposable
     {
         /// <summary>输出模式。</summary>
         public enum OutputMode
@@ -26,7 +26,8 @@ namespace CelesteMusicPlayer
             Asio,
         }
 
-        private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _positionTimer;
+        private readonly IPlaybackPulse _positionTimer;
+        private readonly Func<IWavePlayer>? _sharedOutputFactory;
         // 用 WaveFileReader（IWaveProvider）直出源 PCM，保证严格样本直通（bit-perfect），
         // 且不依赖 ACM（AudioFileReader 读 24bit 等需 ACM，缺 driver 会抛 "NoDriver calling acmFormatSuggest"）。
         private WaveFileReader? _waveFile;
@@ -132,25 +133,12 @@ namespace CelesteMusicPlayer
         /// <summary>失败（初始化/打开/输出）。</summary>
         public event Action<Exception>? Failed;
 
-        /// <summary>
-        /// UI 线程 DispatcherQueue 缓存。由 MainWindow 在 UI 线程构造时设置。
-        /// 本类可能在后台/异步线程（播放引擎续接链路）被懒构造，那时
-        /// DispatcherQueue.GetForCurrentThread() 返回 null，直接 .CreateTimer() 会 NullReferenceException。
-        /// 持有 UI 队列即可在任何线程安全创建计时器（Tick 仍在 UI 线程触发）。
-        /// </summary>
-        public static Microsoft.UI.Dispatching.DispatcherQueue? UiDispatcherQueue { get; set; }
-
-        public HiFiOutputBackend()
+        /// <summary>Creates the playback clock using the host adapter or a headless context clock.</summary>
+        public HiFiOutputBackend() : this(null) {}
+        internal HiFiOutputBackend(Func<IWavePlayer>? sharedOutputFactory)
         {
-            var dispatcher = UiDispatcherQueue ?? Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
-            if (dispatcher == null)
-            {
-                throw new InvalidOperationException(
-                    "HiFiOutputBackend 必须在 UI 线程构造，且 UiDispatcherQueue 尚未设置（请在 MainWindow 构造时赋值）。");
-            }
-            _positionTimer = dispatcher.CreateTimer();
-            _positionTimer.Interval = TimeSpan.FromMilliseconds(200);
-            _positionTimer.Tick += (_, _) => UpdatePosition();
+            _sharedOutputFactory = sharedOutputFactory;
+            _positionTimer = PlaybackPulseFactory.Create(UpdatePosition);
         }
 
         public bool IsPlaying => _isPlaying;
@@ -1506,8 +1494,8 @@ namespace CelesteMusicPlayer
                 switch (mode)
                 {
                     case OutputMode.WasapiShared:
-                        _device = ResolveDeviceForVolume(deviceIdentifier);
-                        _output = CreateWasapiOut(AudioClientShareMode.Shared, deviceIdentifier, OutputBufferMs);
+                        _device = _sharedOutputFactory == null ? ResolveDeviceForVolume(deviceIdentifier) : null;
+                        _output = _sharedOutputFactory?.Invoke() ?? CreateWasapiOut(AudioClientShareMode.Shared, deviceIdentifier, OutputBufferMs);
                         OutputDeviceName = "WASAPI 共享";
                         break;
 
@@ -2660,6 +2648,7 @@ namespace CelesteMusicPlayer
 
         public void Dispose()
         {
+            _positionTimer.Dispose();
             Cleanup(); // 先把 AsioOut/驱动在 STA 宿主线程上释放干净
             ShutdownAsioHost(); // 再关停宿主线程（仅此处关停；播放中途 Cleanup 保留线程，避免驱动反复加载）
         }

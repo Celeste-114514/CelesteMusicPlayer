@@ -4,9 +4,6 @@ using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
-using Microsoft.UI.Dispatching;
-using Windows.Devices.Enumeration;
-using Windows.Media.Devices;
 
 namespace CelesteMusicPlayer
 {
@@ -218,10 +215,13 @@ namespace CelesteMusicPlayer
 
         /// <summary>解码后端（阶段 A：默认 FFmpeg；路线二后续可按设置切换为精简 FFmpeg）。</summary>
         private readonly IDecoderBackend _decoder;
+        private readonly Func<HiFiOutputBackend> _backendFactory;
 
-        public AudioPlaybackEngine()
+        public AudioPlaybackEngine() : this(new FfmpegDecoderBackend(), () => new HiFiOutputBackend()) {}
+        internal AudioPlaybackEngine(IDecoderBackend decoder, Func<HiFiOutputBackend> backendFactory)
         {
-            _decoder = new FfmpegDecoderBackend();
+            _backendFactory = backendFactory;
+            _decoder = decoder;
             _decoder.FailureHandler = ex => RaiseFailed(ex);
         }
 
@@ -485,7 +485,7 @@ namespace CelesteMusicPlayer
             try
             {
                 StopCore();
-                _hifiOut ??= new HiFiOutputBackend();
+                _hifiOut ??= _backendFactory();
                 _hifiOut.PlaybackStopped -= Hifi_PlaybackStopped;
                 _hifiOut.PlaybackStopped += Hifi_PlaybackStopped;
                 _hifiOut.SeamlessTrackChanged -= Hifi_SeamlessTrackChanged;
@@ -682,7 +682,7 @@ namespace CelesteMusicPlayer
             try
             {
                 StopCore();
-                _hifiOut ??= new HiFiOutputBackend();
+                _hifiOut ??= _backendFactory();
                 _hifiOut.PlaybackStopped -= Hifi_PlaybackStopped;
                 _hifiOut.PlaybackStopped += Hifi_PlaybackStopped;
                 _hifiOut.SeamlessTrackChanged -= Hifi_SeamlessTrackChanged;
@@ -733,7 +733,7 @@ namespace CelesteMusicPlayer
         public void Resume()
         {
             _hifiOut?.Resume();
-            _isPlaying = true;
+            _isPlaying = _hifiOut?.IsPlaying == true;
         }
 
         public void Seek(TimeSpan position)
