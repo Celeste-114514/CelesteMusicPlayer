@@ -115,26 +115,38 @@ internal sealed class ProbeForm : Form, IMainWindowSurface
             if(boundary.CloneMismatches>0||boundary.SchemaMismatches>0||boundary.DefsMissingReader>0)
                 throw new Exception("Settings boundary check failed: "+string.Join(" | ",boundary.Details.Take(6)));
 
+            // 下面几块彼此独立：某一块失败不该让后面的块跑不到（以前第一块挂掉就
+            // 只剩一条信息，得反复重跑来逐个发现新问题）。全部跑完后统一判定。
+            var boundaryFailures=new List<string>();
+
             // W6 第二步：曲库/媒体库边界。临时库 + 临时 JSON 目录，全程不碰用户真实曲库/设置。
             LibraryBoundary.Result library=LibraryBoundary.Run();
             Program.Record($"Library boundary: checks={library.Checks} passed={library.Passed}");
             foreach(string line in library.Details)Program.Record("  library: "+line);
-            if(!library.Passed)throw new Exception("Library boundary check failed: "+string.Join(" | ",library.Details.Where(d=>d.Contains("FAIL")).Take(6)));
+            if(!library.Passed)boundaryFailures.Add("Library: "+string.Join(" | ",library.Details.Where(d=>d.Contains("FAIL")).Take(6)));
 
             // W6 第三步：歌词/CUE/M3U 解析链边界。临时目录，全程不碰用户真实文件。
             ParsingBoundary.Result parsing=ParsingBoundary.Run();
             Program.Record($"Parsing boundary: checks={parsing.Checks} passed={parsing.Passed}");
             foreach(string line in parsing.Details)Program.Record("  parsing: "+line);
-            if(!parsing.Passed)throw new Exception("Parsing boundary check failed: "+string.Join(" | ",parsing.Details.Where(d=>d.Contains("FAIL")).Take(6)));
+            if(!parsing.Passed)boundaryFailures.Add("Parsing: "+string.Join(" | ",parsing.Details.Where(d=>d.Contains("FAIL")).Take(6)));
 
             // W6 第四步：播放顺序/队列/浏览规则/续播与 OPRA 历史。纯逻辑 + 临时文件。
             ServicesBoundary.Result services=ServicesBoundary.Run();
             Program.Record($"Services boundary: checks={services.Checks} passed={services.Passed}");
             foreach(string line in services.Details)Program.Record("  services: "+line);
-            if(!services.Passed)throw new Exception("Services boundary check failed: "+string.Join(" | ",services.Details.Where(d=>d.Contains("FAIL")).Take(6)));
+            if(!services.Passed)boundaryFailures.Add("Services: "+string.Join(" | ",services.Details.Where(d=>d.Contains("FAIL")).Take(6)));
+
+            // W6 第五步：封面纯逻辑边界（档位/缓存布局/源字节提取）。素材与临时目录均在自检内自理。
+            CoverBoundary.Result cover=CoverBoundary.Run();
+            Program.Record($"Cover boundary: checks={cover.Checks} passed={cover.Passed}");
+            foreach(string line in cover.Details)Program.Record("  cover: "+line);
+            if(!cover.Passed)boundaryFailures.Add("Cover: "+string.Join(" | ",cover.Details.Where(d=>d.Contains("FAIL")).Take(6)));
+
+            if(boundaryFailures.Count>0)throw new Exception("Boundary check failed: "+string.Join(" || ",boundaryFailures));
 
             Passed=true;Program.Record("PASS: actual WebView2 JS→C#→JS roundtrip using W1 contracts; WinUI not loaded");
-            Program.WriteReport(true,new {runtime=Environment.Version.ToString(),modules,nativeTaskbarApi=_taskbar.ApiReady,settingsBoundary=boundary,libraryBoundary=library,parsingBoundary=parsing,servicesBoundary=services,visibleTaskbarButtons="manual verification pending",simulation=true});
+            Program.WriteReport(true,new {runtime=Environment.Version.ToString(),modules,nativeTaskbarApi=_taskbar.ApiReady,settingsBoundary=boundary,libraryBoundary=library,parsingBoundary=parsing,servicesBoundary=services,coverBoundary=cover,visibleTaskbarButtons="manual verification pending",simulation=true});
         }
         catch(Exception ex){Program.Record(ex.ToString());Program.WriteReport(false,new {error=ex.ToString()});}
         finally{Close();}

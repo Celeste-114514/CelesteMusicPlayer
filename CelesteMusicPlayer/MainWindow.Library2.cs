@@ -1016,9 +1016,9 @@ namespace CelesteMusicPlayer
                 return cached;
             }
 
-            byte[]? inner = TryLoadInnerCover(audioPath);
-            byte[]? outer = TryLoadOuterCover(audioPath);
-            byte[]? result = AppSettingsStore.Load().UseInnerCoverFirst ? inner ?? outer : outer ?? inner;
+            // 2026-10-29：取字节的实现搬到 CoverSourceReader（原 TryLoadInnerCover/TryLoadOuterCover），
+            // 规则不变：按 UseInnerCoverFirst 决定内嵌与外置的先后，缺哪边就用另一边。
+            byte[]? result = CoverSourceReader.Read(audioPath, AppSettingsStore.Load().UseInnerCoverFirst);
 
             if (CoverBytesCache.Count >= CoverBytesCacheMax)
             {

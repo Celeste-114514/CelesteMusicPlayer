@@ -60,7 +60,16 @@
   <Compile Include="../../CelesteMusicPlayer/NetworkSourceProvider.cs" Link="Library/NetworkSourceProvider.cs" />
   <Compile Include="../../CelesteMusicPlayer/BaiduSourceProvider.cs" Link="Library/BaiduSourceProvider.cs" />
   <Compile Include="../../CelesteMusicPlayer/MediaServerSourceProvider.cs" Link="Library/MediaServerSourceProvider.cs" />
+  <!-- W6 第五步：封面纯逻辑边界（档位真值 / 缓存布局 / 源字节提取）。
+       CoverArtService 本身不进：它剩下的部分就是 WinRT 解码 + BitmapImage 装配，
+       那是文档化的平台例外。但封面链路的"处理"半边必须能在这里编过。 -->
+  <Compile Include="../../CelesteMusicPlayer/CoverVariants.cs" Link="Cover/CoverVariants.cs" />
+  <Compile Include="../../CelesteMusicPlayer/CoverCacheLayout.cs" Link="Cover/CoverCacheLayout.cs" />
+  <Compile Include="../../CelesteMusicPlayer/CoverSourceReader.cs" Link="Cover/CoverSourceReader.cs" />
   <Content Include="Web/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  <!-- 封面自检素材：仓库 _tagfixtures 里的"封面双图"测试音频（几 KB，只读），
+       复制成 ASCII 文件名避免中文路径在构建链上出岔子。 -->
+  <Content Include="Fixtures/**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
  </ItemGroup>
  <Target Name="RemoveUnusedWpfWebViewReference" BeforeTargets="ResolveAssemblyReferences">
   <ItemGroup><Reference Remove="@(Reference)" Condition="'%(Reference.Filename)' == 'Microsoft.Web.WebView2.Wpf'" /></ItemGroup>

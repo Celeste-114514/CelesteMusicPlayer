@@ -1,9 +1,9 @@
 // ============================================================================
-// CoverArtService —— 封面分档预生成 + 磁盘缓存（2026-10-16）
+// CoverArtService —— 封面分档预生成 + 磁盘缓存（2026-10-16，2026-10-29 拆分瘦身）
 //
 // 参考 ECHO（用户给的 ECHO-main）的做法：
 //   · 封面不是"每次显示现解码"，而是**按档位预生成**好存盘，以后直接用；
-//   · 三档：Thumb 96（列表小图）/ Album 320（常规）/ Large 768（详情、播放页）；
+//   · 三档：Thumb 160（列表小图）/ Album 320（常规）/ Large 768（详情、播放页）；
 //   · 磁盘缓存，键 = 源图字节的 SHA256（同一张图换文件名也命中，换了图自动失效）；
 //   · 有界并发，避免一次滚出几百首时把 CPU 打满。
 //
@@ -11,20 +11,27 @@
 //   1) 列表里每首歌都要封面时，原来每首都要「读文件 → TagLib 抽内嵌图 → 解码」，
 //      滚动一次重来一次，又慢又容易掉帧；
 //   2) 用户反馈"封面糊"：一部分原因是取到了文件里被压小的那张（已在
-//      MainWindow.Misc.cs 的 TryLoadInnerCover 改成取最大的一张），另一部分是
-//      反复按不同尺寸解码。分档后每档只解一次，之后全是读缓存。
+//      CoverSourceReader 改成取最大的一张），另一部分是反复按不同尺寸解码。
+//      分档后每档只解一次，之后全是读缓存。
 //
 // ⚠️ 只缩不放：源图比目标档小就原样存（放大没有意义，只会更糊）。
 // ⚠️ 全部异步，UI 线程只做最后的 BitmapImage 装配。
-// ============================================================================
+//
+// ---------------------------------------------------------------------------
+// 2026-10-29（W6 第五小步）：把与图像无关的三件事搬出本文件，本文件只剩
+// "WinRT 解码/缩放 + BitmapImage 装配 + 有界并发调度"：
+//   · 档位数值与只缩不放的几何   → CoverVariants.cs（CoverVariant / CoverSizing）
+//   · 缓存根目录、分桶路径、SHA256 键 → CoverCacheLayout.cs
+//   · 从音频文件抠封面原始字节    → CoverSourceReader.cs（原 MainWindow.Misc.cs 的实现）
+// 这样封面链路的"处理"半边不再依赖 WinUI/WinRT，能单独链接进跨平台测试宿主；
+// 剩下这半边的图像管线将来换成 ImageSharp/SkiaSharp 时，本文件是唯一要动的地方。
+// ---------------------------------------------------------------------------
 
 using System;
 using System.Collections.Concurrent;
-using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
-using System.Security.Cryptography;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml.Media.Imaging;
@@ -33,49 +40,16 @@ using Windows.Storage.Streams;
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>封面档位（长边像素）。数值即该档的长边目标尺寸。</summary>
-    internal enum CoverVariant
-    {
-    /// <summary>
-    /// 列表小图 / 播放栏缩略图 / 迷你播放器封面。
-    /// 2026-10-19 由 96 提到 160：播放栏小封面显示 58px，屏幕 150% 缩放就是 87 物理像素、
-    /// 200% 是 116、250% 是 145 —— 96 在 200% 以上会被放大，正好是用户报的
-    /// 「播放栏封面糊，歌曲面板里的却清楚」（歌曲面板走 Album 320 档，所以清楚）。
-    /// 提到 160 后 250% 也仍是缩小显示。改档位同时要把 CacheVersion 升上去，
-    /// 否则磁盘里旧的 96 小图会一直命中，新档位永远生效不了。
-    /// </summary>
-    Thumb = 160,
-
-        /// <summary>常规尺寸（歌单墙、专辑卡）。</summary>
-        Album = 320,
-
-        /// <summary>详情页、播放页大图。</summary>
-        Large = 768,
-    }
-
     internal static class CoverArtService
     {
-        /// <summary>
-        /// 缓存版本号。档位尺寸一改就必须 +1 —— 目录按版本号分开，
-        /// 旧版本目录自然失效（不再被读），不用做迁移。
-        /// v1 = Thumb 96；v2 = Thumb 160（2026-10-19）。
-        /// </summary>
-        private const int CacheVersion = 2;
-
         /// <summary>同一张源图的生成任务去重（并发请求同一张只生成一次）。</summary>
         private static readonly ConcurrentDictionary<string, Task<string?>> InFlight = new(StringComparer.Ordinal);
 
         /// <summary>有界并发：同时最多这么多个缩略图在生成（ECHO 是 1~32，这里取 8 够用）。</summary>
         private static readonly SemaphoreSlim GenerationGate = new(8, 8);
 
-        private static string CacheRoot
-        {
-            get
-            {
-                string root = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                return Path.Combine(root, "CelesteMusicPlayer", "CoverCache", "v" + CacheVersion);
-            }
-        }
+        /// <summary>当前版本的封面缓存根目录（规则见 CoverCacheLayout）。</summary>
+        private static string CacheRoot => CoverCacheLayout.GetRoot();
 
         /// <summary>
         /// 取指定档位的封面（BitmapImage，须在 UI 线程上用）。
@@ -135,9 +109,9 @@ namespace CelesteMusicPlayer
 
         private static async Task<string?> GetCachedFileForBytesAsync(byte[] source, CoverVariant variant)
         {
-            string key = Sha256Hex(source);
-            string dir = Path.Combine(CacheRoot, key.Substring(0, 2), key);
-            string file = Path.Combine(dir, variant.ToString() + ".jpg");
+            string key = CoverCacheLayout.GetKey(source);
+            string dir = CoverCacheLayout.GetEntryDirectory(CacheRoot, key);
+            string file = CoverCacheLayout.GetVariantFile(CacheRoot, key, variant);
 
             if (File.Exists(file) && new FileInfo(file).Length > 0)
             {
@@ -145,14 +119,15 @@ namespace CelesteMusicPlayer
             }
 
             // 并发去重：同一张图被多处同时请求时只生成一次
-            Task<string?> task = InFlight.GetOrAdd(key + "|" + variant, _ => GenerateAsync(source, dir, file, (int)variant));
+            string flightKey = CoverCacheLayout.GetInFlightKey(key, variant);
+            Task<string?> task = InFlight.GetOrAdd(flightKey, _ => GenerateAsync(source, dir, file, CoverSizing.LongEdge(variant)));
             try
             {
                 return await task;
             }
             finally
             {
-                InFlight.TryRemove(key + "|" + variant, out _);
+                InFlight.TryRemove(flightKey, out _);
             }
         }
 
@@ -168,7 +143,7 @@ namespace CelesteMusicPlayer
                 }
 
                 Directory.CreateDirectory(dir);
-                string temp = file + ".tmp";
+                string temp = CoverCacheLayout.GetTempFile(file);
 
                 bool ok = await Task.Run(() => ResizeToJpegAsync(source, temp, longEdge).GetAwaiter().GetResult());
                 if (!ok)
@@ -192,7 +167,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>把源图缩到指定长边并编码成 JPEG。只缩不放。</summary>
+        /// <summary>把源图缩到指定长边并编码成 JPEG。只缩不放（几何由 CoverSizing 算）。</summary>
         private static async Task<bool> ResizeToJpegAsync(byte[] source, string outputPath, int longEdge)
         {
             try
@@ -209,10 +184,10 @@ namespace CelesteMusicPlayer
                     return false;
                 }
 
-                // 只缩不放
-                double scale = Math.Min(1.0, (double)longEdge / Math.Max(srcW, srcH));
-                uint dstW = Math.Max(1, (uint)Math.Round(srcW * scale));
-                uint dstH = Math.Max(1, (uint)Math.Round(srcH * scale));
+                // 只缩不放（这一行算术搬到了 CoverSizing，好让测试宿主能钉住它）
+                (int targetWidth, int targetHeight) = CoverSizing.ComputeTargetSize((int)srcW, (int)srcH, longEdge);
+                uint dstW = (uint)targetWidth;
+                uint dstH = (uint)targetHeight;
 
                 var transform = new BitmapTransform
                 {
@@ -280,13 +255,15 @@ namespace CelesteMusicPlayer
 
         /// <summary>
         /// 读封面源字节：内嵌优先，其次同目录 sidecar。
-        /// 复用主窗口那套取图逻辑（含"取最大的一张"的修正），避免两处各写一份。
+        /// 2026-10-29 起直接走 CoverSourceReader —— 原实现住在 MainWindow.Misc.cs，
+        /// 本服务为了调它反向依赖了主窗口，跨平台测试宿主因此链接不进来。
+        /// 规则与搬出前一致：内嵌优先，内嵌有多张时取像素最大的那张。
         /// </summary>
         private static byte[]? ReadSourceBytes(string audioPath)
         {
             try
             {
-                byte[]? bytes = MainWindow.TryReadCoverBytes(audioPath);
+                byte[]? bytes = CoverSourceReader.Read(audioPath, preferInnerCover: true);
                 return bytes is { Length: > 0 } ? bytes : null;
             }
             catch (Exception ex)
@@ -294,12 +271,6 @@ namespace CelesteMusicPlayer
                 StartupLog.WriteException("CoverArtService.ReadSource", ex);
                 return null;
             }
-        }
-
-        private static string Sha256Hex(byte[] data)
-        {
-            byte[] hash = SHA256.HashData(data);
-            return Convert.ToHexString(hash).ToLowerInvariant();
         }
 
         private static void TryDelete(string path)
@@ -326,9 +297,10 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (Directory.Exists(CacheRoot))
+                string root = CacheRoot;
+                if (Directory.Exists(root))
                 {
-                    Directory.Delete(CacheRoot, recursive: true);
+                    Directory.Delete(root, recursive: true);
                 }
             }
             catch (Exception ex)
@@ -342,12 +314,13 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (!Directory.Exists(CacheRoot))
+                string root = CacheRoot;
+                if (!Directory.Exists(root))
                 {
                     return 0;
                 }
 
-                return Directory.EnumerateFiles(CacheRoot, "*", SearchOption.AllDirectories)
+                return Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
                     .Select(p => new FileInfo(p).Length)
                     .Sum();
             }
