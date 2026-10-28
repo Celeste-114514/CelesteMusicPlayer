@@ -221,9 +221,9 @@ namespace CelesteMusicPlayer
                 var queue = _owner.DispatcherQueue;
                 if (queue == null) return;
                 var timer = queue.CreateTimer();
-                // 预热早开始、失败快重试：第一次导航常常卡在渲染进程冷启动上，
-                // 与其干等 20 秒，不如早超时、马上再来一次（重试通常两秒多就好）。
-                timer.Interval = TimeSpan.FromMilliseconds(attempt == 0 ? 500 : 500);
+                // 预热早开始；失败后隔一会儿再试（别太急 —— 急着重建反而会把输入链路搞坏，
+                // 见 TrayMenuWindow.NavigationTimeoutMs 的注释）。
+                timer.Interval = TimeSpan.FromMilliseconds(attempt == 0 ? 1200 : 2000);
                 timer.IsRepeating = false;
                 timer.Tick += (_, _) =>
                 {

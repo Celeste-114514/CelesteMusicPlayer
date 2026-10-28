@@ -38,10 +38,13 @@ namespace CelesteMusicPlayer
         private const int VK_LBUTTON = 0x01;
 
         /// <summary>
-        /// 单次导航最多等多久。第一次导航常常是渲染进程冷启动，实测撞满 20 秒也没完成，
-        /// 而**紧接着重试一次只要 2.4 秒** —— 所以这里故意设短，靠快速重试取胜。
+        /// 单次导航最多等多久。
+        ///
+        /// ⚠ 别把它调小。2026-10-29 试过 6 秒：一到点就判定失败、关掉网页窗口重建，
+        /// 而重建出来的那个窗口**收不到鼠标点击**（日志里连 pointerdown 都没有）。
+        /// 20 秒虽然慢，但首次导航是渲染进程冷启动，宁可等它一次成功，也不要反复重建。
         /// </summary>
-        private const int NavigationTimeoutMs = 6000;
+        private const int NavigationTimeoutMs = 20000;
 
         /// <summary>连续失败这么多次才彻底放弃（在此之前每次右键都会重新试）。</summary>
         private const int MaxInitFailures = 3;
