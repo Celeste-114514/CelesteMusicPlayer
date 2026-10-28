@@ -2,7 +2,7 @@
 (() => {
   if (!window.chrome?.webview) return;
   let frame=0, last='';
-  const interactive='button,input,select,textarea,a,label,.header-tools,.header-actions,.np-head-actions,.window-actions,.corner-orbit';
+  const interactive='button,input,select,textarea,a,label,.header-tools,.header-actions,.np-head-actions,.window-actions';
   function update(){
     frame=0;
     const rects=[], scale=window.devicePixelRatio||1;
@@ -15,6 +15,8 @@
         let spans=[[r.left,r.right]];
         document.querySelectorAll(interactive).forEach(el=>{
           if(!el.getClientRects().length)return;
+          const style=getComputedStyle(el);
+          if(style.visibility!=='visible'||style.display==='none')return;
           const b=el.getBoundingClientRect();
           if(b.bottom<=r.top||b.top>=r.bottom)return;
           spans=spans.flatMap(([l,h])=>b.right<=l||b.left>=h?[[l,h]]:[[l,Math.max(l,b.left)],[Math.min(h,b.right),h]]).filter(([l,h])=>h-l>2);
@@ -33,5 +35,10 @@
   new MutationObserver(schedule).observe(document.body,{attributes:true,attributeFilter:['class']});
   const detail=document.getElementById('now-playing');if(detail)new MutationObserver(schedule).observe(detail,{attributes:true,attributeFilter:['class','hidden','style']});
   const bar=document.querySelector('.titlebar');if(bar)new ResizeObserver(schedule).observe(bar);
+  const orbit=document.querySelector('.corner-orbit');
+  if(orbit){
+    new MutationObserver(schedule).observe(orbit,{attributes:true,attributeFilter:['class','style']});
+    orbit.addEventListener('transitionend',schedule);
+  }
   schedule();
 })();
