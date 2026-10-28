@@ -27,6 +27,12 @@ namespace CelesteMusicPlayer
         private string _lastStatus = "";
         private RECT _lastBounds;
         private nint _taskbarHandle;
+        private bool _suspended, _shown;
+        internal void Suspend(bool value)
+        {
+            _suspended = value;
+            if (value && _hwnd != 0) { ShowWindow(_hwnd, 0); _shown = false; }
+        }
 
         internal TaskbarPlayerWindow(MainWindow owner)
         {
@@ -47,6 +53,7 @@ namespace CelesteMusicPlayer
             _busy = true;
             try
             {
+                if (_suspended) return;
                 if (_controller == null)
                 {
                     if (_failures >= 3 || (_failures > 0 && ++_ticks % 10 != 0)) return;
@@ -96,13 +103,18 @@ namespace CelesteMusicPlayer
                     if (_disposed) return;
                     controller.IsVisible = true;
                 }
-                if (!TryPlace(out RECT bounds, out nint taskbar)) { ShowWindow(_hwnd, 0); return; }
+                if (_suspended) return;
+                if (!TryPlace(out RECT bounds, out nint taskbar)) { ShowWindow(_hwnd, 0); _shown = false; return; }
                 string color = SampleBackground(taskbar);
                 _controller.DefaultBackgroundColor = ColorHelper.ParseHexColor(color)!.Value;
                 string payload = JsonSerializer.Serialize(new { state = _owner.WebPlaybackState(), background = color });
                 _controller.CoreWebView2.PostWebMessageAsJson(payload);
-                SetWindowPos(_hwnd, new nint(-1), bounds.Left, bounds.Top, bounds.Width, bounds.Height, 0x10 | 0x40);
-                _controller.Bounds = new Rect(0, 0, bounds.Width, bounds.Height);
+                if (!_shown || !_lastBounds.Equals(bounds))
+                {
+                    SetWindowPos(_hwnd, new nint(-1), bounds.Left, bounds.Top, bounds.Width, bounds.Height, 0x10 | 0x40);
+                    _controller.Bounds = new Rect(0, 0, bounds.Width, bounds.Height);
+                    _shown = true;
+                }
                 if (!_lastBounds.Equals(bounds)) { _lastBounds = bounds; Status($"显示 {bounds.Left},{bounds.Top} {bounds.Width}x{bounds.Height}"); }
             }
             catch (Exception ex)

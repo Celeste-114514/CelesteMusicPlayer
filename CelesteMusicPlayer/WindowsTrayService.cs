@@ -63,6 +63,7 @@ namespace CelesteMusicPlayer
                     catch (Exception ex) { StartupLog.WriteException("WindowsTrayService.MenuInvoked", ex); }
                 });
             };
+            _menu.Hidden += () => _owner.SuspendTaskbarPlayer(false);
 
             StartupLog.Write("托盘: Win32 通知图标已创建 (成功=" + _icon.IsCreated + ")");
             if (!_icon.IsCreated) ScheduleRetry();
@@ -156,6 +157,7 @@ namespace CelesteMusicPlayer
             try
             {
                 if (_menu.IsVisible) { _menu.Hide(); return; }
+                _owner.SuspendTaskbarPlayer(true);
                 List<TrayMenuModel.Item> items = TrayMenuModel.Build(_owner, _pendingUpdateVersion);
                 (string mode, Dictionary<string, string> vars) = BuildTheme();
                 _ = RunWithUiContext(() => ShowMenuAsync(items, vars, mode));
@@ -179,7 +181,7 @@ namespace CelesteMusicPlayer
             // 初始化本身在后台继续，下一次右键就有了。
             StartupLog.Write("[托盘菜单] 本次右键未弹出（网页菜单还没就绪），按用户要求不降级系统菜单");
             }
-            finally { _opening = false; }
+            finally { _opening = false; if (!_menu.IsVisible) _owner.SuspendTaskbarPlayer(false); }
         }
 
         /// <summary>

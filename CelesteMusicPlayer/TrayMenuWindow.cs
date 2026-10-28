@@ -84,6 +84,7 @@ namespace CelesteMusicPlayer
 
         /// <summary>点了某一项。actionId 已由宿主侧校验过白名单。</summary>
         internal event Action<string>? Invoked;
+        internal event Action? Hidden;
 
         internal bool IsReady => _ready && _controller != null;
 
@@ -161,6 +162,7 @@ namespace CelesteMusicPlayer
             if (_hwnd == IntPtr.Zero || !_visible) return;
             _visible = false;
             ShowWindow(_hwnd, SW_HIDE);
+            Hidden?.Invoke();
         }
 
         public void Dispose()

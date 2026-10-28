@@ -6,6 +6,12 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
         private TaskbarPlayerWindow? _taskbarPlayer;
+        private bool _taskbarPlayerSuspended;
+        internal void SuspendTaskbarPlayer(bool suspended)
+        {
+            _taskbarPlayerSuspended = suspended;
+            _taskbarPlayer?.Suspend(suspended);
+        }
         internal void AttachTaskbarCovers(CoreWebView2 core) => _webShellWindow?.AttachTaskbarCovers(core);
         private void ApplyTaskbarPlayerPreference()
         {
@@ -14,6 +20,7 @@ namespace CelesteMusicPlayer
                 if (_taskbarPlayer == null)
                 {
                     _taskbarPlayer = new TaskbarPlayerWindow(this);
+                    _taskbarPlayer.Suspend(_taskbarPlayerSuspended);
                     Closed -= CloseTaskbarPlayer;
                     Closed += CloseTaskbarPlayer;
                 }
