@@ -300,6 +300,8 @@
     document.querySelectorAll('[data-order]').forEach(button=>button.setAttribute('aria-pressed',String(button.dataset.order===state.playbackOrder)));
     $('lyrics').setAttribute('aria-pressed',String(state.desktopLyrics));
     $('lyrics-badge').textContent=state.desktopLyrics?(state.desktopLyricsLocked?'锁':'on'):'off';
+    const tp=$('taskbar-player'); const tpBadge=$('taskbar-badge');
+    if(tp){tp.setAttribute('aria-pressed',String(!!state.taskbarPlayer)); if(tpBadge)tpBadge.textContent=state.taskbarPlayer?'on':'off';}
     updateSongRows();
   }
   function chooseTrack(index) { if (live) { const track=libraryTracks[index]; if(track)send('playTrack',{trackId:track.id});return; } state = { ...state, ...samples[index], index, position: 0, playing: true }; selectedSong=index; lastTick=performance.now(); render(); if (panel === 'queue') renderPanel(); }
@@ -322,6 +324,7 @@
   document.addEventListener('keydown',event=>{if(event.key==='Escape')$('order-menu').hidden=true;});
   [['seek-back','seekBack',-5],['seek-forward','seekForward',5]].forEach(([id,action,seconds])=>$(id).addEventListener('click',()=>{if(live)send('transport',{action});else{state.position=Math.max(0,Math.min(state.duration,state.position+seconds));render();}}));
   [['audio-settings','audio'],['transport-more','more'],['queue','queue']].forEach(([id,view])=>$(id).addEventListener('click',()=>window.CelesteTransport?.open(view,$(id))));
+  $('taskbar-player').addEventListener('click',()=>live?send('transport',{action:'toggleTaskbarPlayer'}):notify('任务栏播放条需在桌面预览版中使用'));
   $('lyrics').addEventListener('click',()=>live?send('transport',{action:'desktopLyrics'}):notify('桌面歌词需在桌面预览版中使用'));
   $('lyrics').addEventListener('contextmenu',event=>{event.preventDefault();if(live)send('transport',{action:'unlockLyrics'});});
   $('progress').addEventListener('input', event => { seeking=true; fill(event.target); $('elapsed').textContent=format(Number(event.target.value)); });

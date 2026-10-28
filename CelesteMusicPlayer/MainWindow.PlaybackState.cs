@@ -32,6 +32,7 @@ namespace CelesteMusicPlayer
                 playbackOrder = _orderResolver.Order.ToString(),
                 desktopLyrics = _desktopLyricsEnabled,
                 desktopLyricsLocked = _desktopLyricsWindow?.IsLocked == true,
+                taskbarPlayer = _taskbarPlayer != null,
                 coverUrl = item == null ? "" : "https://celeste-cover.internal/cover/" + WebTrackId(item),
                 quality = item?.FormatInfoLine ?? "",
                 source = item == null ? "" : item.IsRemote ? "NETWORK" : "LOCAL",
@@ -43,6 +44,6 @@ namespace CelesteMusicPlayer
                 busy = _startPlaybackInFlight,
                 error = _audioEngine?.LastError ?? ""
             };
-        }
+        }
     }
 }

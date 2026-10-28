@@ -46,6 +46,7 @@ namespace CelesteMusicPlayer
                 case "seekForward": SeekBySeconds(5); break;
                 case "cycleOrder": CyclePlaybackOrderPublic(); break;
                 case "desktopLyrics": SetDesktopLyricsEnabled(!_desktopLyricsEnabled); break;
+                case "toggleTaskbarPlayer": ToggleTaskbarPlayer(); break;
                 case "unlockLyrics": _desktopLyricsWindow?.SetLocked(false); break;
                 default: throw new ArgumentException("未知的播放栏操作。");
             }

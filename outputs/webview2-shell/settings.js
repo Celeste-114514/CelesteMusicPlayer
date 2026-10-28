@@ -379,9 +379,6 @@
   };
 
   function renderGeneral(host) {
-    const taskbar = section({ title: '任务栏播放控制' });
-    addFields(taskbar, ['TaskbarPlayerEnabled']);
-    host.append(taskbar);
     const start = section({ title: '启动' });
     addFields(start, ['AutoRun', 'StartupCategory']);
     host.append(start);

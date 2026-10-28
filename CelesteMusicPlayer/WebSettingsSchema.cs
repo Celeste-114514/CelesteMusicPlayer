@@ -89,7 +89,6 @@ namespace CelesteMusicPlayer
         internal static readonly Def[] Defs = Build();
 
         private static Def[] Build() => In("general",
-                Bool("TaskbarPlayerEnabled", "任务栏内播放条", "在主显示器任务栏内显示播放控制。自动隐藏任务栏、全屏应用或空间不足时暂时隐藏。默认关闭。"),
                 Bool("AutoRun", "随 Windows 启动", "写入当前用户的启动项；取消勾选会立刻删掉启动项，不是只改数字。"),
                 Sel("StartupCategory", "启动后进入的分类", "UserPlaylist|播放队列;Songs|歌曲;Albums|专辑;Artists|艺术家;AlbumArtists|专辑艺人;Favorites|我喜欢的音乐;Ratings|评分;Recent|最近播放;PlaylistWall|播放列表",
                     "只控制旧主窗口启动时停在哪个分类；网页界面启动时固定进入主页。", scope: "native"),
@@ -246,7 +245,6 @@ namespace CelesteMusicPlayer
             ["DsdOutputMode"] = s => s.DsdOutputMode,
             ["DopContainerMode"] = s => s.DopContainerMode,
             ["DsdPreloadEnabled"] = s => s.DsdPreloadEnabled,
-            ["TaskbarPlayerEnabled"] = s => s.TaskbarPlayerEnabled,
             ["AsioFeederEnabled"] = s => s.AsioFeederEnabled,
             ["DsdCachePath"] = s => s.DsdCachePath,
             ["TranscodeCacheLimitMb"] = s => s.TranscodeCacheLimitMb,
@@ -376,7 +374,6 @@ namespace CelesteMusicPlayer
             ["DsdOutputMode"] = (s, v) => s.DsdOutputMode = One(v, "Pcm", "Dop"),
             ["DopContainerMode"] = (s, v) => s.DopContainerMode = One(v, "Packed24", "Container32"),
             ["DsdPreloadEnabled"] = (s, v) => s.DsdPreloadEnabled = Bool(v),
-            ["TaskbarPlayerEnabled"] = (s, v) => s.TaskbarPlayerEnabled = Bool(v),
             ["AsioFeederEnabled"] = (s, v) => s.AsioFeederEnabled = Bool(v),
             ["DsdCachePath"] = (s, v) => s.DsdCachePath = Text(v, 512),
             ["TranscodeCacheLimitMb"] = (s, v) => s.TranscodeCacheLimitMb = Int(v, 256, 102400),

@@ -22,6 +22,7 @@ namespace CelesteMusicPlayer
         private readonly string _className = "CelesteTaskbarPlayer_" + Guid.NewGuid().ToString("N");
         private nint _hwnd;
         private CoreWebView2Controller? _controller;
+        private CoreWebView2Environment? _environment;
         private bool _busy, _disposed, _appBar;
         private int _failures, _ticks;
         private string _lastStatus = "";
@@ -57,8 +58,18 @@ namespace CelesteMusicPlayer
                 if (_controller == null)
                 {
                     if (_failures >= 3 || (_failures > 0 && ++_ticks % 10 != 0)) return;
-                    var environment = _owner.PopupWebViewEnvironment;
-                    if (environment == null) return;
+                    // 自己建一套环境，不和托盘菜单共用。
+                    // 2026-10-29 实测：共用之后托盘菜单点击完全失灵（日志里连 pointerdown 都没有），
+                    // 任务栏条一显示就把托盘的输入链路带坏了。两个弹出窗口必须各用各的环境。
+                    if (_environment == null)
+                    {
+                        string storage = Path.Combine(
+                            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                            "CelesteMusicPlayer", "TaskbarWebView2");
+                        Directory.CreateDirectory(storage);
+                        _environment = await CoreWebView2Environment.CreateWithOptionsAsync(null, storage, null);
+                    }
+                    var environment = _environment;
                     CreateHost();
                     var controller = await environment.CreateCoreWebView2ControllerAsync(CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)_hwnd));
                     if (_disposed) { controller.Close(); return; }

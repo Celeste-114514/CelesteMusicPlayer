@@ -17,6 +17,8 @@ namespace CelesteMusicPlayer
         public string playbackOrder { get; init; } = "";
         public bool desktopLyrics { get; init; }
         public bool desktopLyricsLocked { get; init; }
+        /// <summary>任务栏播放条的开关状态（开关按钮在播放状态栏，不在设置页）。</summary>
+        public bool taskbarPlayer { get; init; }
         public string coverUrl { get; init; } = "";
         public string quality { get; init; } = "";
         public string source { get; init; } = "";
