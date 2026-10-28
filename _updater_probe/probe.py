@@ -18,7 +18,18 @@ import time
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
-PUBLISH = ROOT.parent / "CelesteMusicPlayer/bin/Release/net10.0-windows10.0.19041.0/win-x64/publish"
+
+
+def _repo_root(start):
+    """往上找仓库根：换个位置放也不会把路径写死。"""
+    for candidate in [start, *start.parents]:
+        if (candidate / "CelesteMusicPlayer/CelesteMusicPlayer.csproj").exists():
+            return candidate
+    return start.parent
+
+
+REPO = _repo_root(ROOT)
+PUBLISH = REPO / "CelesteMusicPlayer/bin/Release/net10.0-windows10.0.19041.0/win-x64/publish"
 UPDATER = PUBLISH / "CelesteUpdater.exe"
 FAKE = ROOT / "fake/bin/single/CelesteMusicPlayer.exe"   # 单文件发布，免去 runtimeconfig 搬运
 DATA = Path(os.environ["LOCALAPPDATA"]) / "CelesteMusicPlayer"
@@ -140,18 +151,18 @@ def main():
         if ready.exists():
             ready.unlink()
     finally:
+        # 先留副本再还原：顺序反了留下来的是历史日志，本次跑的时间线就丢了
+        try:
+            if LOG.exists():
+                shutil.copy2(LOG, ROOT / "updater-run.log")
+        except OSError:
+            pass
         for path in (RESULT, LOG):
             if (backup / path.name).exists():
                 shutil.copy2(backup / path.name, path)
             elif path.exists():
                 path.unlink()
         shutil.rmtree(backup, ignore_errors=True)
-        # 助手日志里留一份副本，方便人工核对整条时间线
-        try:
-            if LOG.exists():
-                shutil.copy2(LOG, ROOT / "updater-run.log")
-        except OSError:
-            pass
 
     print()
     if failures:
