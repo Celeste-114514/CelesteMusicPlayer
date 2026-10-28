@@ -53,3 +53,20 @@ WaveSolidWhiteness / UiStyleMode / GeekPhosphorColor / GeekIconStyle / PlaylistD
 - 正式工程的行为：删 using、移枚举都是等价改动；改常量改成引用真值，值不变。
 - 用户真实设置文件：自检全程只在内存里造对象，不读也不写 `app-settings.json`。
 - 托盘、任务栏条、音频链路一行没动。
+
+## 用户 23:52 拍板：这 9 个字段都不补，继续留在旧界面改
+
+`UiStyleMode`（界面风格）的取值：`Scene` 图景 / `ClassicSystem` 经典·跟随系统（默认）/
+`ClassicLight` 经典浅色 / `ClassicDark` 经典深色 / `Geek` 极客终端风。用户当前是 `Geek`。
+
+**不要再把这些字段往 WebSettingsSchema 里加**，W6 这一小步到此为止。
+
+⚠ 一个没解决的观察：极客磷光色（`GeekPhosphorColor`）和极客图标风格（`GeekIconStyle`）
+除了极客界面自己的几个文件（MainWindow.Geek*）之外，**旧设置窗口里也没有入口**
+（SettingsWindow / SettingsPanelControl 都没引用）—— 目前只能手改配置文件。
+已告知用户，他暂时不动。以后要调这两个再说。
+
+用户当前的真实取值（供以后对照）：UiStyleMode=Geek、GeekPhosphorColor=Amber、
+GeekIconStyle=Icon、PlaylistDensity=Comfortable、WaveColorMode=Solid、
+WaveSolidWhiteness=0.41、LyricSourcePriority=ExternalLrc、MiniPlayerBackground=Cover、
+ScatteredPlayBackground=Frosted、EnableFrostedGlass=True。
