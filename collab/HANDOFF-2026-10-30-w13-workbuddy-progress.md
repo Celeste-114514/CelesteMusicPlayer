@@ -25,6 +25,7 @@
 | `dae9078` | `WebSettingsMisc`（静态） | 缓存统计/清理、文件关联、清「最近播放」标记、关于信息 | 无（原本就是静态） | 回包 about + 74 defs 齐全 |
 | `c00d59d` | `HotkeysService` | 全局热键读写、校验、恢复默认 | 1 个回调（重启注册） | 回包四字段 + 11 条默认绑定 |
 | `e399b65` | `WebSettingsService` + `ISettingsHost` | 设置域剩余 12 个操作（`patch`/`credentials`/`webdav`/`folders`/三个选择器/`export`/`import`/`miniStyles`/`reset`） | `ISettingsHost`（4） | 新增设置域探针，12 项检查全过 |
+| `ae8c1ac` | `WebLibraryBrowseService` | 曲库浏览面：`browse`（列表/播放列表/收藏评分）+ 集合详情音质统计 | 无（只接曲库快照） | 回包**逐字段完全一致**（4041 曲目 + 6 组详情） |
 
 顺带修了两个既有缺陷：
 
@@ -33,9 +34,10 @@
 
 ## 二、当前口径
 
-`IWebPlayerServices` **47 条成员**（原 48，`WebTrackId` 已移出边界），**15 条**走独立服务，32 条仍直连 MainWindow。
+`IWebPlayerServices` **47 条成员**（原 48，`WebTrackId` 已移出边界），**16 条**走独立服务，31 条仍直连 MainWindow。
 设置域已经是「薄壳 + 服务」的形态：`WebSettingsAsync` 只剩一行转发到 `WebSettingsService`，
-17 个命令没有一个还住在 MainWindow 里。
+17 个命令没有一个还住在 MainWindow 里。曲库浏览面同样是薄壳：`WebBrowse` / `WebCollectionOverviewAsync`
+转发到 `WebLibraryBrowseService`（这块零宿主口子，只接曲库快照）。
 
 播放域能安全拆的部分**基本拆完**：投影、队列、台账、媒体控件、输出模式、续播规则。
 剩下的是引擎本体（起播/停止/无缝接续）——那部分必须出声才能验，风险陡增。
@@ -50,6 +52,7 @@
 | `PlaybackAdvanceRegression/` | 库内续播规则用例（14 条） |
 | `PlaybackOrderRegression/` | 顺序解析器用例（24 条 + 边界扫描） |
 | `W13SettingsOpsProbe.cjs` | 设置域逐操作探针：`get`/`patch`（含冲突分支）/`reset`（改写→重置→还原）/`folders`/`webdav`/`credentials`/`hotkeys`/`miniStyles` + 5 条拒绝路径 |
+| `W13BrowseWireProbe.cjs` | 曲库浏览面回包采集：`browse(get)` + 三类集合详情 + 5 条拒绝路径，输出 JSON 用于**搬动前后逐字段比对** |
 
 跑法：`NODE_PATH=C:\Users\MSI\_pwtmp\node_modules node tools/W13InterfaceRegression.cjs [exe]`
 设置域：`NODE_PATH=C:\Users\MSI\_pwtmp\node_modules node tools/W13SettingsOpsProbe.cjs [exe]`
@@ -78,6 +81,20 @@
 ## 六、下一步建议
 
 1. 引擎本体（`PlayExtendedWithEngineAsync` 起播链、`StopEngineIfActive`、无缝接续）：建议一次只动一块，改完实听。
+1b. 还住在 MainWindow 的域，按「能不能自动验」排序（`ae8c1ac` 之后的实测口径）：
+
+   | 域 | 文件（行） | 卡点 | 可否自动验 |
+   |---|---|---|---|
+   | 在线来源 | `WebSources`(167) | `cancelDownload` 要摸引擎的取消令牌；`authorize` 要拉起浏览器 | 部分（`list`/拒绝路径可验） |
+   | 曲目动作 | `WebBrowseActions`(256) | 入队/下一首会动队列与播放 | 可（队列回包比对，不能出声） |
+   | 目录浏览 | `WebFolders`(91) | 扫描 + 播放 + 目录监视 | 部分（本机 0 监视目录，走不到主分支） |
+   | 标签 | `WebTags`(340) + `WebTagTools`(429) | 写真库、可能改文件 | 可但**有破坏性**，要先备份库 |
+   | 网络库 | `WebDav`(473) | 网络凭据 + 缓存 | 本机没配服务器，只验拒绝分支 |
+   | DSP | `WebDsp`(699) + 工具(133) | 直读写原生状态容器 | `dsp get` 可比对，写入路径要小心 |
+   | 引擎 | `WebTransport`(258) + `WebShell`(80) | 真出声才能验 | 可用 `W13PlaybackLedgerProbe` 起播两首 |
+
+   建议顺序：曲目动作 → DSP（只读口径先对）→ 标签（先备份库）→ 在线来源/网络库 → 引擎。
+   每一步都能沿用「先采回包基线、再搬、再逐字段比对」这套（`W13BrowseWireProbe` 就是模板）。
 2. ~~设置域：需要先抽 `ISettingsHost`~~ **已做完**（`e399b65`）。做法与结论：
    - 那 12 个操作「卡在窗口句柄 / UI 线程」这个判断只对了一半 —— 句柄由静态的
      `NativeMainWebWindow.HandleOf(window)` 从调用方窗口取，服务自己就能弹对话框，
