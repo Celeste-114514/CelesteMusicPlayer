@@ -178,44 +178,11 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            switch (_orderResolver.Order)
+            // 决策在 LibraryAdvanceRule（纯函数，可穷举用例），这里只负责起播。
+            int? next = LibraryAdvanceRule.NextIndex(_orderResolver.Order, _playlist.Count, _currentIndex, autoAdvance, _orderResolver.NextRandomIndex);
+            if (next is int index)
             {
-                case PlaybackOrder.TrackOnce:
-                    return; // 单曲播放模式：不自动续播
-
-                case PlaybackOrder.TrackLoop:
-                    PlayLibraryItemAt(_currentIndex, syncUserPlaylistIndex: false);
-                    return;
-
-                case PlaybackOrder.Sequential:
-                    if (_currentIndex + 1 < _playlist.Count)
-                    {
-                        PlayLibraryItemAt(_currentIndex + 1, syncUserPlaylistIndex: false);
-                    }
-
-                    return;
-
-                case PlaybackOrder.Random:
-                    if (_playlist.Count > 1)
-                    {
-                        int r = _orderResolver.NextRandomIndex(_playlist.Count);
-                        if (r == _currentIndex)
-                        {
-                            r = (r + 1) % _playlist.Count;
-                        }
-
-                        PlayLibraryItemAt(r, syncUserPlaylistIndex: false);
-                    }
-                    else if (_playlist.Count == 1)
-                    {
-                        PlayLibraryItemAt(_currentIndex, syncUserPlaylistIndex: false);
-                    }
-
-                    return;
-
-                default: // ListLoop 等：循环到列表尾后回到开头
-                    PlayLibraryItemAt((_currentIndex + 1) % _playlist.Count, syncUserPlaylistIndex: false);
-                    return;
+                PlayLibraryItemAt(index, syncUserPlaylistIndex: false);
             }
         }
 
