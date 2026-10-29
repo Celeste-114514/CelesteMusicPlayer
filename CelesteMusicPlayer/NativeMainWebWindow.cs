@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Threading;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 namespace CelesteMusicPlayer;
@@ -7,9 +8,52 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
 {
     internal NativeTaskbarPreview? TaskbarPreview;
     private static readonly uint TaskbarCreatedMessage = RegisterWindowMessage("TaskbarButtonCreated");
+    // 系统接管拖动（HTCAPTION）的时间戳：网页侧那条 drag-start 轮询要避开这窗口，
+    // 否则两套机制同时移窗口会互相打架。
+    private long _systemDragTicks;
+    internal bool SystemDragActive => Environment.TickCount64 - Interlocked.Read(ref _systemDragTicks) < 400;
     internal event Action? TaskbarRecreated;
     [System.Runtime.InteropServices.DllImport("user32.dll",CharSet=System.Runtime.InteropServices.CharSet.Unicode)] private static extern uint RegisterWindowMessage(string name);
-    protected override void WndProc(ref System.Windows.Forms.Message message) { if ((uint)message.Msg == TaskbarCreatedMessage) { TaskbarPreview?.Enable();TaskbarRecreated?.Invoke(); } if (TaskbarPreview?.Handle((uint)message.Msg,message.LParam)==true) {message.Result=0;return;} if(message.Msg==0x84 && Microsoft.UI.Input.InputNonClientPointerSource.IsCaption(Handle,message.LParam)) { message.Result=(nint)2; return; } base.WndProc(ref message); }
+    protected override void WndProc(ref System.Windows.Forms.Message message)
+    {
+        if ((uint)message.Msg == TaskbarCreatedMessage) { TaskbarPreview?.Enable(); TaskbarRecreated?.Invoke(); }
+        if (TaskbarPreview?.Handle((uint)message.Msg, message.LParam) == true) { message.Result = 0; return; }
+        // 网页自绘 chrome 的窗口没有非客户区，系统给的最大化矩形就是整块显示器（连任务栏一起盖住），
+        // 看起来跟全屏一模一样。这里把它夹回当前显示器的工作区，最大化才是"最大化"。
+        if (message.Msg == 0x0024)   // WM_GETMINMAXINFO
+        {
+            base.WndProc(ref message);
+            ClampMaximizeToWorkArea(message.HWnd, message.LParam);
+            message.Result = 0;
+            return;
+        }
+        if (message.Msg == 0x84 && Microsoft.UI.Input.InputNonClientPointerSource.IsCaption(Handle, message.LParam)) { Interlocked.Exchange(ref _systemDragTicks, Environment.TickCount64); message.Result = (nint)2; return; }
+        base.WndProc(ref message);
+    }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NPoint { public int X, Y; }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NMinMaxInfo { public NPoint Reserved, MaxSize, MaxPosition, MinTrack, MaxTrack; }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NRect { public int Left, Top, Right, Bottom; }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NMonitorInfo { public int Size; public NRect Monitor, Work; public int Flags; }
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern nint MonitorFromWindow(nint hwnd, int flags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool GetMonitorInfoW(nint monitor, ref NMonitorInfo info);
+    private static void ClampMaximizeToWorkArea(nint hwnd, nint lParam)
+    {
+        nint monitor = MonitorFromWindow(hwnd, 2);   // MONITOR_DEFAULTTONEAREST
+        if (monitor == 0) return;
+        var info = new NMonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<NMonitorInfo>() };
+        if (!GetMonitorInfoW(monitor, ref info)) return;
+        var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<NMinMaxInfo>(lParam);
+        // 最大化矩形以显示器左上角为原点，位置要换成工作区相对显示器原点的偏移。
+        mmi.MaxPosition.X = info.Work.Left - info.Monitor.Left;
+        mmi.MaxPosition.Y = info.Work.Top - info.Monitor.Top;
+        mmi.MaxSize.X = info.Work.Right - info.Work.Left;
+        mmi.MaxSize.Y = info.Work.Bottom - info.Work.Top;
+        System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, lParam, false);
+    }
     internal static bool BackgroundVerification => Array.Exists(Environment.GetCommandLineArgs(), a => a == "--w7-background-test");
     internal DispatcherQueue DispatcherQueue { get; }
     internal AppWindow AppWindow { get; }
@@ -30,6 +74,15 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
     }
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")] private static extern int DwmSetWindowAttribute(nint hwnd,int attribute,ref int value,int size);
     internal static void SetMaterial(nint hwnd,int backdrop,int dark) { DwmSetWindowAttribute(hwnd,38,ref backdrop,4); DwmSetWindowAttribute(hwnd,20,ref dark,4); }
+    // 网页自绘 chrome 的窗口收尾：去掉系统那圈 1px 边线，并保留 Win11 圆角。
+    // 边线不关的话，聚焦时窗口四周会浮出一条主题色细线（顶部那条粗带的同源问题）。
+    internal static void SetFrameless(nint hwnd)
+    {
+        int rounded=2;          // DWMWA_WINDOW_CORNER_PREFERENCE = DWMWCP_ROUND
+        DwmSetWindowAttribute(hwnd,33,ref rounded,4);
+        int none=unchecked((int)0xFFFFFFFE);   // DWMWA_COLOR_NONE
+        DwmSetWindowAttribute(hwnd,34,ref none,4);
+    }
     [System.Runtime.InteropServices.DllImport("user32.dll")] private static extern bool SetForegroundWindow(nint hwnd);
     public new void Activate() { if (BackgroundVerification) { AppWindow.Hide(); return; } Show(); base.Activate(); SetForegroundWindow(Handle); }
 }
