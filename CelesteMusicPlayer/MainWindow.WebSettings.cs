@@ -58,7 +58,7 @@ namespace CelesteMusicPlayer
                 case "import": return await ImportPreferencesAsync(host).ConfigureAwait(true);
                 case "reset": return await ResetGroupAsync(msg).ConfigureAwait(true);
                 case "about": return BuildAbout();
-                case "update": return await WebUpdateAsync(msg).ConfigureAwait(true);
+                case "update": return await Update.HandleAsync(msg).ConfigureAwait(true);
                 default: throw new ArgumentException("未知的设置操作：" + operation);
             }
         }
@@ -786,7 +786,7 @@ namespace CelesteMusicPlayer
         {
             // 逻辑已全部搬进 UpdateService（状态机 + 事务目录 + 校验）；这里保留一个薄壳，
             // 免得启动期自动检查和其它调用点各写一份。
-            return BuildUpdateWire(await UpdateService.Shared.CheckAsync().ConfigureAwait(true));
+            return WebUpdateService.BuildWire(await UpdateService.Shared.CheckAsync().ConfigureAwait(true));
         }
     }
 }
