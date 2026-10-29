@@ -9,9 +9,11 @@ namespace CelesteMusicPlayer
     /// <summary>
     /// 应用程序入口。
     /// </summary>
-    public partial class App : Application
+    public partial class App
     {
-        private Window? _window;
+        // W13：不再是 WinUI Application/Window 宿主。这里只保存**业务宿主**引用，
+        // 真正的窗口是原生 HWND（主网页 / 迷你 / 零散各自持有）。
+        private MainWindow? _owner;
         private WebQuickPlayerWindow? _quickWindow;
 
         [DllImport("user32.dll")]
@@ -90,11 +92,7 @@ namespace CelesteMusicPlayer
             }
             catch (Exception ex) { StartupLog.WriteException("App.GCLatencyMode", ex); }
 
-            InitializeComponent();
-            StartupLog.Write("App InitializeComponent done");
-
-            // 注意：不要在构造函数里访问 Application.Resources，
-            // WinUI 此时尚未就绪，会抛 COMException (0x8000FFFF)。
+            // W13：旧的 App.xaml 资源字典随 XAML 一起下线，这里不再 InitializeComponent。
 
             // 非 UI 线程的未处理异常:记录详情以便定位(否则弹实时调试器)
             AppDomain.CurrentDomain.UnhandledException += (_, exArgs) =>
@@ -106,33 +104,14 @@ namespace CelesteMusicPlayer
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("App.xaml.cs", caught); }
             };
 
-            UnhandledException += (sender, e) =>
-            {
-                e.Handled = true;
-                StartupLog.WriteException("App.UnhandledException", e.Exception);
-                Debug.WriteLine("======= 未处理异常 =======");
-                Debug.WriteLine(e.Exception.ToString());
-                Debug.WriteLine("=========================");
-
-                try
-                {
-                    if (_window?.Content?.XamlRoot != null)
-                    {
-                        ContentDialog dialog = new()
-                        {
-                            Title = "程序出错",
-                            Content = e.Exception.GetType().Name + "\n\n" + e.Exception.Message,
-                            CloseButtonText = "确定",
-                            XamlRoot = _window.Content.XamlRoot
-                        };
-                        _ = dialog.ShowAsync();
-                    }
-                }
-                catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("App.xaml.cs", caught); }
-            };
+            // W13：WinUI 的 Application.UnhandledException 随 XAML 一并下线。
+            // UI 线程上的未处理异常同样落到 AppDomain 钩子（下面那个），只记日志不弹原生对话框。
+            // 消息队列里执行的委托由 NativeMessagePump 逐个 try/catch 兜住并写日志，
+            // 不会因为一个回调抛异常就把整个消息循环带走。
         }
 
-        protected override void OnLaunched(Microsoft.UI.Xaml.LaunchActivatedEventArgs args)
+        /// <summary>原生入口（Program.Main 调用）：取代原来的 Application.Start + OnLaunched。</summary>
+        internal void Run(string[] args)
         {
             // 醒目 startup banner:让用户/排错者一眼看出当前跑的是哪个版本、日志在哪
             string procVer = "unknown";
@@ -158,8 +137,8 @@ namespace CelesteMusicPlayer
                 }
             }
             catch (Exception caught) { StartupLog.WriteException("App.OnLaunched.memprobe", caught); }
-            // 应用资源在启动回调里再注册，供播放列表列宽 Binding 使用
-            Resources["PlaylistColumns"] = PlaylistColumnWidths.Instance;
+            // W13：Application.Resources（给 XAML Binding 用的列宽资源）随 XAML 下线；
+            // 列宽实例本身仍由原生标签/播放列表逻辑直接使用。
 
             // 诊断模式：不建窗口、不进曲库，把现场打包成一份文本后直接退出。
             // 界面起不来的时候用户仍然拿得到报告（这也是这条路径存在的理由）。
@@ -245,17 +224,16 @@ namespace CelesteMusicPlayer
 
                 // 双击音频文件：一律打开主界面播放（不再另开独立小窗口）。
                 // 文件路径交给主窗口，等它把曲库恢复流程走完再播，避免和「启动续播」抢同一条播放链路。
+                // W13：MainWindow 现在是**纯业务宿主**（不是窗口），不再 Activate / 隐藏。
                 MainWindow main = new();
                 main.PendingStartupFile = externalFile;
-                _window = main;
+                _owner = main;
                 StartupLog.Write(externalFile != null
-                    ? "MainWindow created（待播外部文件）"
-                    : "MainWindow created");
+                    ? "MainWindow business host created（待播外部文件）"
+                    : "MainWindow business host created");
 
-                main.CloakLegacyOwnerBeforeActivation();
-                _window.Activate();
-                main.AppWindow.Hide();
-                StartupLog.Write("Web shell session activated; legacy owner hidden");
+                main.StartWebShellSession();
+                StartupLog.Write("Web shell session started (native host)");
             }
             catch (Exception ex)
             {
@@ -298,13 +276,13 @@ namespace CelesteMusicPlayer
                     Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
                 if (queue == null)
                 {
-                    if (_window is MainWindow associationOwner) associationOwner.ShowWebPage("settings");
+                    if (_owner is MainWindow associationOwner) associationOwner.ShowWebPage("settings");
                     return;
                 }
 
                 if (!queue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                 {
-                    try { if (_window is MainWindow associationOwner) associationOwner.ShowWebPage("settings"); }
+                    try { if (_owner is MainWindow associationOwner) associationOwner.ShowWebPage("settings"); }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("App.FirstRunAssociation", caught); }
                 }))
                 {
@@ -345,7 +323,7 @@ namespace CelesteMusicPlayer
                 if (command.StartsWith("QUICK:", StringComparison.OrdinalIgnoreCase))
                 {
                     var files = System.Text.Json.JsonSerializer.Deserialize<string[]>(command.Substring(6)) ?? Array.Empty<string>();
-                    if (_window is MainWindow mainOwner) QuickPlayerCoordinator.PauseMain = mainOwner.PrepareForQuickPlayback;
+                    if (_owner is MainWindow mainOwner) QuickPlayerCoordinator.PauseMain = mainOwner.PrepareForQuickPlayback;
                     _ = QuickPlayerCoordinator.Show().EnqueueAsync(files);
                     return;
                 }
@@ -354,7 +332,7 @@ namespace CelesteMusicPlayer
                     string path = command.Substring("PLAY:".Length).Trim();
                     if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path)) return;
 
-                    if (_window is MainWindow mainOwner) QuickPlayerCoordinator.PauseMain = mainOwner.PrepareForQuickPlayback;
+                    if (_owner is MainWindow mainOwner) QuickPlayerCoordinator.PauseMain = mainOwner.PrepareForQuickPlayback;
                     _ = QuickPlayerCoordinator.Show().EnqueueAsync(new[] { path });
                 }
                 else if (command.StartsWith("ACTIVATE:", StringComparison.OrdinalIgnoreCase))
@@ -373,15 +351,8 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (_window is MainWindow main) { main.RestoreMainWindow(); return; }
-                if (_window == null) { _quickWindow?.Activate(); return; }
-
-                nint hWnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
-                if (hWnd == 0) return;
-
-                ShowWindow(hWnd, SwRestore);
-                SetForegroundWindow(hWnd);
-                _window.Activate();
+                if (_owner != null) { _owner.RestoreMainWindow(); return; }
+                _quickWindow?.Activate();
             }
             catch (Exception ex)
             {

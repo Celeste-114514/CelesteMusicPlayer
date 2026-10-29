@@ -292,7 +292,7 @@ namespace CelesteMusicPlayer
             => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
 
-    public sealed partial class MainWindow : Window
+    public sealed partial class MainWindow
     {
 
         private readonly ObservableCollection<PlaylistItem> _playlist = new();
@@ -566,9 +566,8 @@ namespace CelesteMusicPlayer
             Instance = this;
             // 缓存 UI 线程 DispatcherQueue 给引擎层（HiFiOutputBackend）在后台线程构造时取用，
             // 避免 DispatcherQueue.GetForCurrentThread() 返回 null 导致 NullReferenceException。
-            HiFiOutputBackend.UiDispatcherQueue = this.DispatcherQueue;
-            InitializeComponent();
-            StartupLog.Write("MainWindow InitializeComponent done");
+            HiFiOutputBackend.UiDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+            StartupLog.Write("MainWindow ctor: legacy XAML owner removed");
             // 迷你播放器桥接：挂上之后 tick / 命令才有宿主（单向数据流，见 MiniPlayerBridge）
             MiniPlayerBridge.Attach(this);
             // 左分类栏「浮动板块」阴影（2026-10-16 用户要求：视觉上像从主程序左侧浮出的一块板）。
