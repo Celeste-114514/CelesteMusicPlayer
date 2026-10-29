@@ -112,6 +112,8 @@ namespace CelesteMusicPlayer
         private static readonly Windows.UI.Color WhiteColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
         private static readonly Windows.UI.Color RedHeartColor = Windows.UI.Color.FromArgb(255, 232, 17, 35);
 
+        internal nint BoundWindow => _hwnd;
+
         public TaskbarThumbnailButtons(MainWindow owner, IntPtr hwnd)
         {
             _owner = owner ?? throw new ArgumentNullException(nameof(owner));

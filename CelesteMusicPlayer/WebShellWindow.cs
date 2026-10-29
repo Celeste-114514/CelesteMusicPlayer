@@ -64,6 +64,9 @@ namespace CelesteMusicPlayer
         internal WebShellWindow(MainWindow owner) : base(owner.DispatcherQueue)
         {
             _owner = owner;
+            TaskbarPreview = new NativeTaskbarPreview(owner,Handle);
+            owner.BindNativeTaskbar(Handle);
+            TaskbarRecreated += () => owner.BindNativeTaskbar(Handle);
             Title = "Celeste";
             _statusLayer.Controls.Add(_status);
             _statusLayer.Controls.Add(_reload);
@@ -75,7 +78,7 @@ namespace CelesteMusicPlayer
             AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
             AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 960));
             _timer = DispatcherQueue.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(250);
-            _timer.Tick += (_, _) => { if (_ready) { SendState(); SendThemeIfChanged(); if (_dirty) _ = SendLibraryAsync(); } };
+            _timer.Tick += (_, _) => { if (_ready) { TaskbarPreview?.Update(); SendState(); SendThemeIfChanged(); if (_dirty) _ = SendLibraryAsync(); } };
             _library = (INotifyCollectionChanged)owner.LibraryTracks;
             _library.CollectionChanged += LibraryChanged;
             NetworkLibraryService.Changed += SourcesChanged;
@@ -93,6 +96,7 @@ namespace CelesteMusicPlayer
                 WebAppearance.ClearDraft();
                 _waveformCancellation?.Cancel();
                 _overviewCancellation?.Cancel();
+                TaskbarPreview?.Dispose(); TaskbarPreview=null;
                 _web.Dispose();
             };
         }
@@ -536,6 +540,11 @@ namespace CelesteMusicPlayer
         private void WindowBridge(JsonElement msg, string? requestId)
         {
             string action = msg.GetProperty("action").GetString() ?? "";
+            if (action == "taskbarProbe" && NativeMainWebWindow.BackgroundVerification)
+            {
+                bool thumbnail = TaskbarPreview?.Handle(0x323, (nint)((320 << 16) | 180)) == true;
+                Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = new { window = Handle.ToInt64(), buttons = _owner.NativeTaskbarHandle.ToInt64(), thumbnail } }); return;
+            }
             if (action == "state")
             {
                 SendWindowState();

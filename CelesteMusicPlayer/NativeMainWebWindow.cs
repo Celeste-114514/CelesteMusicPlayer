@@ -5,6 +5,11 @@ namespace CelesteMusicPlayer;
 // Native HWND hosts the production web surface. The legacy service adapter remains until W13.
 internal class NativeMainWebWindow : System.Windows.Forms.Form
 {
+    internal NativeTaskbarPreview? TaskbarPreview;
+    private static readonly uint TaskbarCreatedMessage = RegisterWindowMessage("TaskbarButtonCreated");
+    internal event Action? TaskbarRecreated;
+    [System.Runtime.InteropServices.DllImport("user32.dll",CharSet=System.Runtime.InteropServices.CharSet.Unicode)] private static extern uint RegisterWindowMessage(string name);
+    protected override void WndProc(ref System.Windows.Forms.Message message) { if ((uint)message.Msg == TaskbarCreatedMessage) { TaskbarPreview?.Enable();TaskbarRecreated?.Invoke(); } if (TaskbarPreview?.Handle((uint)message.Msg,message.LParam)==true) {message.Result=0;return;} base.WndProc(ref message); }
     internal static bool BackgroundVerification => Array.Exists(Environment.GetCommandLineArgs(), a => a == "--w7-background-test");
     internal DispatcherQueue DispatcherQueue { get; }
     internal AppWindow AppWindow { get; }
