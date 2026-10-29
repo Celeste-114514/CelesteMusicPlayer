@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -16,6 +16,7 @@ namespace CelesteMusicPlayer
     {
         private bool _isPlaying;
         private bool _disposed;
+        private System.Threading.CancellationToken _startCancellation;
 
         /// <summary>当前输出设备 ID（null = 系统默认）。</summary>
         public string? OutputDeviceId { get; private set; }
@@ -273,15 +274,18 @@ namespace CelesteMusicPlayer
         /// 串行入口：播放请求（用户连点/自动切歌/无缝预加载竞态）一律排队，绝不并发起链——
         /// 2026-09-23 15:50 事故：并发请求互相顶掉 WASAPI 独占会话 + 抢 fallback.wav 文件，
         /// 表现为"失败风暴+进度条回跳"。</summary>
-        public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null, double startSeconds = 0, double lengthSeconds = 0)
+        public async Task<bool> PlayFileWithFfmpegAsync(string path, Action<string>? status = null, double startSeconds = 0, double lengthSeconds = 0, System.Threading.CancellationToken cancellationToken = default)
         {
-            await _playGate.WaitAsync().ConfigureAwait(false);
+            await _playGate.WaitAsync(cancellationToken).ConfigureAwait(false);
             try
             {
+                cancellationToken.ThrowIfCancellationRequested();
+                _startCancellation = cancellationToken;
                 return await PlayFileWithFfmpegCoreAsync(path, status, startSeconds, lengthSeconds).ConfigureAwait(false);
             }
             finally
             {
+                _startCancellation = default;
                 _playGate.Release();
             }
         }
@@ -484,6 +488,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                if (_disposed || _startCancellation.IsCancellationRequested) return false;
                 StopCore();
                 _hifiOut ??= _backendFactory();
                 _hifiOut.PlaybackStopped -= Hifi_PlaybackStopped;
@@ -500,6 +505,7 @@ namespace CelesteMusicPlayer
                 _hifiOut.SetResampleTargetRate(st.SrcTargetHz);
                 _hifiOut.SetSrcQuality(st.SrcQuality);
                 _hifiOut.SetSrcDither(st.SrcDither);
+                if (_disposed || _startCancellation.IsCancellationRequested) return false;
                 bool ok = _hifiOut.PlayWavAsync(wavPath, _outputMode, _devicePreference, requireExact: requireExact, sourceIsDsd: sourceIsDsd, dopPayload: dopPayload, tempoShifted: tempoShifted);
                 StartupLog.Write("HiFi播放 mode=" + _outputMode + " 设备=" + (_hifiOut.OutputDeviceName ?? "?") + " (pref=" + (_devicePreference ?? "默认") + ") ok=" + ok + (ok ? "" : " err=" + (_hifiOut.LastError ?? "")));
                 if (!ok)
@@ -681,6 +687,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                if (_disposed || _startCancellation.IsCancellationRequested) return false;
                 StopCore();
                 _hifiOut ??= _backendFactory();
                 _hifiOut.PlaybackStopped -= Hifi_PlaybackStopped;
@@ -690,6 +697,7 @@ namespace CelesteMusicPlayer
                 _hifiOut.PositionChanged -= Hifi_PositionChanged;
                 _hifiOut.PositionChanged += Hifi_PositionChanged;
 
+                if (_disposed || _startCancellation.IsCancellationRequested) return false;
                 bool ok = _hifiOut.PlayDsdAsync(dsdPath, deviceId, seekTo: null, mode: _outputMode);
                 if (!ok)
                 {

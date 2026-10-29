@@ -1,0 +1,9 @@
+/* Shared real-data spectrum. Missing or stale samples remove the region entirely. */
+(()=>{'use strict';const NS='http://www.w3.org/2000/svg';
+class SpectrumLine {
+ constructor(host){this.host=host;host.hidden=true;this.svg=document.createElementNS(NS,'svg');this.svg.setAttribute('viewBox','0 0 600 72');this.svg.setAttribute('preserveAspectRatio','none');this.svg.setAttribute('aria-label','实时音频频谱');this.svg.setAttribute('role','img');this.path=document.createElementNS(NS,'path');this.path.setAttribute('fill','none');this.path.setAttribute('stroke','currentColor');this.path.setAttribute('stroke-width','3.2');this.path.setAttribute('vector-effect','non-scaling-stroke');this.svg.append(this.path);host.append(this.svg);this.values=[];this.target=[];this.frame=0;this.last=0;this.lastDraw=0;this.draw=this.draw.bind(this);}
+ update(data){const bands=data?.bands;if(!data?.available||!Array.isArray(bands)||bands.length<2){this.hide();return;}this.last=performance.now();this.target=bands.map(n=>Number.isFinite(n)?Math.max(0,Math.min(1,n)):0);if(this.values.length!==bands.length)this.values=this.target.map(()=>0);this.host.hidden=false;if(!this.frame)this.frame=requestAnimationFrame(this.draw);}
+ draw(now){this.frame=0;if(document.hidden||now-this.last>500){this.hide();return;}if(now-this.lastDraw>=30){this.lastDraw=now;const count=this.target.length;const points=this.target.map((v,i)=>{this.values[i]+=(v-this.values[i])*(v > this.values[i] ? 0.46 : 0.17);return [((i+.5)/count*600).toFixed(1),(68-Math.sqrt(this.values[i])*62).toFixed(1)]});this.path.setAttribute('d',points.map(p=>'M'+p[0]+',68V'+p[1]).join(' '));}this.frame=requestAnimationFrame(this.draw);}
+ hide(){this.host.hidden=true;cancelAnimationFrame(this.frame);this.frame=0;this.values=[];}
+}
+window.CelesteSpectrumLine=SpectrumLine;})();

@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -75,7 +75,7 @@ namespace CelesteMusicPlayer
                 // 零散播放窗口：开窗（没开就建）+ 入队 + 起播。
                 // 队列和引擎都是窗口自己的，主程序的播放队列/正在播放状态一根头发都不动。
                 ShowScatteredWindow();
-                _scatteredWindow?.EnqueueFiles(new[] { path });
+                if (_scatteredWindow != null) _ = _scatteredWindow.EnqueueAsync(new[] { path });
                 return;
             }
 

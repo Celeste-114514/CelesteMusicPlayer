@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -178,6 +178,7 @@ namespace CelesteMusicPlayer
 
         private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
         {
+            QuickPlayerCoordinator.PauseForMain();
             if (_audioEngine?.IsPlaying == true)
             {
                 _audioEngine.Pause();
@@ -2887,6 +2888,7 @@ namespace CelesteMusicPlayer
         /// <summary>用 FFmpeg 引擎播放扩展格式（APE/WavPack 等）。</summary>
         private async Task PlayExtendedWithEngineAsync(PlaylistItem item)
         {
+            QuickPlayerCoordinator.PauseForMain();
             // 播放历史：切到新歌前，把上一首（若有）记入历史（未播完）
             if (!string.IsNullOrWhiteSpace(_nowPlayingPath)
                 && !string.Equals(_nowPlayingPath, item.FilePath, StringComparison.OrdinalIgnoreCase))

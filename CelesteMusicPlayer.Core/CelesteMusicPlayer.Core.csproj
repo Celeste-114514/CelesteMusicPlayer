@@ -110,6 +110,11 @@
     <Compile Include="../CelesteMusicPlayer/BaiduSourceProvider.cs" Link="BaiduSourceProvider.cs" />
     <Compile Include="../CelesteMusicPlayer/MediaServerSourceProvider.cs" Link="MediaServerSourceProvider.cs" />
     <Compile Include="../CelesteMusicPlayer/PlaybackSession.cs" Link="PlaybackSession.cs" />
+    <Compile Include="../CelesteMusicPlayer/EqualizerState.cs" Link="EqualizerState.cs" />
+    <Compile Include="../CelesteMusicPlayer/QuickStartupIntent.cs" Link="QuickStartupIntent.cs" />
+    <Compile Include="../CelesteMusicPlayer/QuickTrackLoader.cs" Link="QuickTrackLoader.cs" />
+    <Compile Include="../CelesteMusicPlayer/QuickPlaybackSession.cs" Link="QuickPlaybackSession.cs" />
+    <InternalsVisibleTo Include="QuickPlayerRegression" />
     <InternalsVisibleTo Include="CelesteThinHost.Poc" />
   </ItemGroup>
 </Project>

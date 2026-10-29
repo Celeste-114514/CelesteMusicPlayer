@@ -190,7 +190,7 @@ namespace CelesteMusicPlayer
             if (!primary)
             {
                 StartupLog.Write("已有实例在运行，转交命令后退出本进程");
-                QuickPlayLauncher.SendToRunningInstance(externalFile != null ? "PLAY:" + externalFile : "ACTIVATE:");
+                QuickPlayLauncher.SendToRunningInstance(externalFile != null ? "QUICK:" + System.Text.Json.JsonSerializer.Serialize(QuickPlayLauncher.FilesFromCommandLine()) : HasCommandLineFlag("--quick") ? "QUICK:[]" : "ACTIVATE:");
                 Environment.Exit(0);
                 return;
             }
@@ -215,6 +215,15 @@ namespace CelesteMusicPlayer
             // 安装包（NSIS）安装时会直接写 Run 项，设置里关闭后原先不会被清理。
             // 每次启动都同步一次，设置是关的就清掉残留 → 修复「设置里关着却仍开机自启」。
             AutoRunHelper.SyncWithSettings();
+
+            if (externalFile != null || HasCommandLineFlag("--quick"))
+            {
+                var quick = QuickPlayerCoordinator.Show(); _window = quick;
+                quick.Closed += (_, _) => { AppSettingsStore.MarkAppCleanExit(); QuickPlayLauncher.Release(); };
+                _ = quick.EnqueueAsync(QuickPlayLauncher.FilesFromCommandLine(), replace: true);
+                StartupLog.Write("[quick.audit] startup diverted before LibraryDb.EnsureMigrated and MainWindow construction");
+                return;
+            }
 
             // File activation now uses the same web session. The standalone implementation remains archived in source.
 
@@ -265,33 +274,6 @@ namespace CelesteMusicPlayer
         /// 零散直达启动：只开零散播放窗口（引擎 / 队列 / 歌词 / 可视化全部自持，
         /// 不建主窗口、不读曲库）。返回 false = 开窗失败，调用方回落正常主窗口路径。
         /// </summary>
-        private bool TryLaunchScatteredOnly(string externalFile)
-        {
-            try
-            {
-                ScatteredPlayWindow scattered = new();
-                scattered.Activate();
-                _window = scattered;
-                scattered.EnqueueFiles(new[] { externalFile }, playNow: true);
-                StartupLog.Write("零散直达启动（不建主窗口/不读曲库）: " + externalFile);
-                return true;
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("App.TryLaunchScatteredOnly", ex);
-                try
-                {
-                    (_window as ScatteredPlayWindow)?.Close();
-                }
-                catch (Exception caught)
-                {
-                    StartupLog.WriteException("App.TryLaunchScatteredOnly.cleanup", caught);
-                }
-                _window = null;
-                return false;
-            }
-        }
-
         /// <summary>
         /// 首次运行弹出「文件关联」窗口。
         ///
@@ -359,27 +341,20 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.Write("relay command: " + command);
 
+                if (command.StartsWith("QUICK:", StringComparison.OrdinalIgnoreCase))
+                {
+                    var files = System.Text.Json.JsonSerializer.Deserialize<string[]>(command.Substring(6)) ?? Array.Empty<string>();
+                    if (_window is MainWindow mainOwner) QuickPlayerCoordinator.PauseMain = mainOwner.PrepareForQuickPlayback;
+                    _ = QuickPlayerCoordinator.Show().EnqueueAsync(files);
+                    return;
+                }
                 if (command.StartsWith("PLAY:", StringComparison.OrdinalIgnoreCase))
                 {
                     string path = command.Substring("PLAY:".Length).Trim();
                     if (string.IsNullOrWhiteSpace(path) || !System.IO.File.Exists(path)) return;
 
-                    if (_window is ScatteredPlayWindow scattered)
-                    {
-                        // 零散直达模式（冷启动只开了零散窗口）：文件直接进零散窗口，
-                        // 整个过程不建主窗口、不碰曲库
-                        scattered.EnqueueFiles(new[] { path }, playNow: true);
-                        scattered.Activate();
-                        return;
-                    }
-
-                    if (_window is MainWindow main)
-                    {
-                        // 主程序在跑：也只开零散播放窗口。刻意不调 BringCurrentWindowToFront——
-                        // 用户要的是「零散窗口不要影响主程序」，抢焦点/动队列都算影响。
-                        main.OpenWebShell();
-                        main.PlayExternalFileAsync(path, scattered: false);
-                    }
+                    if (_window is MainWindow mainOwner) QuickPlayerCoordinator.PauseMain = mainOwner.PrepareForQuickPlayback;
+                    _ = QuickPlayerCoordinator.Show().EnqueueAsync(new[] { path });
                 }
                 else if (command.StartsWith("ACTIVATE:", StringComparison.OrdinalIgnoreCase))
                 {

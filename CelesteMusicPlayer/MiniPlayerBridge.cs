@@ -1,4 +1,4 @@
-// ============================================================================
+﻿// ============================================================================
 // MiniPlayerBridge —— 迷你播放器的「状态出口 + 命令入口」（2026-10-19 重写）
 //
 // 为什么要多这一层：旧版迷你播放器直接抓着主窗口的内部方法反向调用（全项目 27 处
@@ -127,6 +127,7 @@ namespace CelesteMusicPlayer
                     }
                 }
 
+                if (snap.IsPlaying) QuickPlayerCoordinator.PauseForMain();
                 snap.Volume = host.GetVolumePublic();
 
                 IReadOnlyList<PlaylistItem> queue = host.GetUserPlaylistPublic();

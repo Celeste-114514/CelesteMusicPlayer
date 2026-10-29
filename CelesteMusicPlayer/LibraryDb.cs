@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -17,6 +17,8 @@ namespace CelesteMusicPlayer
         private const string FileName = "library.db";
         private static readonly object Gate = new();
         private static bool _migrated;
+        private static int _openConnectionCount;
+        internal static int OpenConnectionCount => System.Threading.Volatile.Read(ref _openConnectionCount);
 
         /// <summary>测试隔离：非空时数据库文件改用该路径（回归测试用临时库，避免污染真实数据）。</summary>
         internal static string? TestDbOverride { get; set; }
@@ -152,6 +154,7 @@ namespace CelesteMusicPlayer
         {
             SqliteConnection conn = new SqliteConnection("Data Source=" + dbPath);
             conn.Open();
+            System.Threading.Interlocked.Increment(ref _openConnectionCount);
             return conn;
         }
 

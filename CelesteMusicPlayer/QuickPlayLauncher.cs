@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Threading;
@@ -12,7 +12,7 @@ namespace CelesteMusicPlayer
     /// 同时程序同一时刻只应该有一个实例在播（单实例）。
     ///
     /// 三种情况：
-    /// 1) 程序没在跑 + 双击文件  → 本进程成为主实例，打开主界面并在其中播放该文件。
+    /// 1) 程序没在跑 + 双击文件  → 本进程成为主实例，打开独立零散窗口播放，不创建曲库窗口。
     /// 2) 程序已在跑（主界面或独立窗口） + 双击文件 → 把文件路径转交给已运行的实例，本进程立刻退出。
     /// 3) 程序已在跑 + 直接点快捷方式（无文件） → 转交"激活"命令，把已有窗口提到前台，本进程退出。
     ///
@@ -27,6 +27,7 @@ namespace CelesteMusicPlayer
 
         private static Mutex? _mutex;
         private static FileSystemWatcher? _watcher;
+        private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, byte> Delivered = new();
 
         /// <summary>本进程抢到了主实例（true）还是已有别的实例在跑（false）。</summary>
         internal static bool IsPrimaryInstance { get; private set; }
@@ -40,14 +41,7 @@ namespace CelesteMusicPlayer
         /// 改这里就等于同时改了"双击能否被本程序接管"和"文件关联注册哪些格式"，
         /// 保证两处永远一致，不会出现"关联了却播不了"。
         /// </summary>
-        internal static readonly string[] PlayableExtensions =
-        {
-            ".mp3", ".wav", ".m4a", ".flac", ".wma", ".ogg", ".aac",
-            ".ape", ".wv", ".tta", ".mpc", ".tak", ".opus",
-            ".dsf", ".dff", ".iso",
-            ".mp2", ".amr", ".au", ".mod", ".s3m", ".xm",
-            ".aif", ".aiff", ".oga", ".mka", ".cue"
-        };
+        internal static readonly string[] PlayableExtensions = QuickStartupIntent.Extensions;
 
         /// <summary>转交目录。</summary>
         internal static string RelayDirectory =>
@@ -94,30 +88,8 @@ namespace CelesteMusicPlayer
         /// 从命令行参数里找出第一个"本程序能播且真实存在"的文件路径。
         /// 文件关联的命令是 "exe" "%1"，所以参数[1]就是被双击的文件。
         /// </summary>
-        internal static string? TryGetFileFromCommandLine()
-        {
-            try
-            {
-                string[] args = Environment.GetCommandLineArgs();
-                for (int i = 1; i < args.Length; i++)
-                {
-                    string raw = args[i];
-                    if (string.IsNullOrWhiteSpace(raw)) continue;
-
-                    // 去掉可能被二次转义留下的引号
-                    string candidate = raw.Trim().Trim('"');
-                    if (candidate.StartsWith('-') || candidate.StartsWith('/')) continue;
-
-                    if (IsPlayableFile(candidate) && File.Exists(candidate))
-                    {
-                        return Path.GetFullPath(candidate);
-                    }
-                }
-            }
-            catch (Exception ex) { global::CelesteMusicPlayer.StartupLog.WriteException("QuickPlayLauncher.cs", ex); }
-
-            return null;
-        }
+        internal static string[] FilesFromCommandLine() => QuickStartupIntent.Files(Environment.GetCommandLineArgs()[1..]);
+        internal static string? TryGetFileFromCommandLine() => System.Linq.Enumerable.FirstOrDefault(FilesFromCommandLine());
 
         /// <summary>扩展名是音频格式，且文件确实存在。</summary>
         internal static bool IsPlayableFile(string path)
@@ -154,6 +126,8 @@ namespace CelesteMusicPlayer
                 {
                     try
                     {
+                        if (!Delivered.TryAdd(Path.GetFileName(fullPath), 0)) return;
+                        if (Delivered.Count > 4096) { Delivered.Clear(); Delivered.TryAdd(Path.GetFileName(fullPath), 0); }
                         string content = ReadWithRetry(fullPath);
                         if (string.IsNullOrWhiteSpace(content)) return;
 
@@ -171,6 +145,7 @@ namespace CelesteMusicPlayer
                 _watcher.Created += (_, e) => Handle(e.FullPath);
                 _watcher.Renamed += (_, e) => Handle(e.FullPath);
                 _watcher.EnableRaisingEvents = true;
+                foreach (var pending in Directory.GetFiles(RelayDirectory, "*.cmd")) Handle(pending);
             }
             catch (Exception ex) { global::CelesteMusicPlayer.StartupLog.WriteException("QuickPlayLauncher.cs", ex); }
         }
@@ -201,12 +176,12 @@ namespace CelesteMusicPlayer
 
                 foreach (string f in Directory.GetFiles(RelayDirectory, "*.cmd"))
                 {
-                    try { File.Delete(f); } catch { /* 忽略 */ }
+                    try { if (File.GetLastWriteTimeUtc(f) < System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()) File.Delete(f); } catch { /* 忽略 */ }
                 }
 
                 foreach (string f in Directory.GetFiles(RelayDirectory, "*.tmp"))
                 {
-                    try { File.Delete(f); } catch { /* 忽略 */ }
+                    try { if (File.GetLastWriteTimeUtc(f) < System.Diagnostics.Process.GetCurrentProcess().StartTime.ToUniversalTime()) File.Delete(f); } catch { /* 忽略 */ }
                 }
             }
             catch (Exception ex) { global::CelesteMusicPlayer.StartupLog.WriteException("QuickPlayLauncher.cs", ex); }

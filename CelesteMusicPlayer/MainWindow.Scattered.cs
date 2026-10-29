@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace CelesteMusicPlayer
 {
@@ -18,31 +18,16 @@ namespace CelesteMusicPlayer
     /// </summary>
     public sealed partial class MainWindow
     {
-        private ScatteredPlayWindow? _scatteredWindow;
-
-        /// <summary>打开（或激活）零散播放窗口。单实例：开着就置顶，关了就重建。</summary>
+        private WebQuickPlayerWindow? _scatteredWindow;
         internal void ShowScatteredWindow()
         {
-            try
-            {
-                if (_scatteredWindow != null)
-                {
-                    _scatteredWindow.Activate();
-                    return;
-                }
-
-                _scatteredWindow = new ScatteredPlayWindow();
-                _scatteredWindow.Closed += (_, _) =>
-                {
-                    _scatteredWindow = null;
-                };
-                _scatteredWindow.Activate();
-                StartupLog.Write("零散播放窗口已打开");
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.ShowScatteredWindow", caught);
-            }
+            QuickPlayerCoordinator.PauseMain = PrepareForQuickPlayback;
+            _scatteredWindow = QuickPlayerCoordinator.Show();
+        }
+        internal void PrepareForQuickPlayback()
+        {
+            if (IsPlaybackActuallyPlaying()) TogglePlayPausePublic();
+            if (_engineSmtc != null) _engineSmtc.IsEnabled = false;
         }
     }
 }
