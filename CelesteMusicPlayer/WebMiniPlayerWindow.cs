@@ -1,13 +1,11 @@
-﻿using System;
+using Microsoft.UI.Xaml.Media;
+using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.Diagnostics;
-using Microsoft.UI.Xaml.Media;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Windowing;
 using Microsoft.Web.WebView2.Core;
 

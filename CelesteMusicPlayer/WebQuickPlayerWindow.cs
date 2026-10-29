@@ -1,22 +1,20 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Collections.Generic;
 using System.Text.Json;
 using System.Threading.Tasks;
 using System.Runtime.InteropServices.WindowsRuntime;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Windowing;
 using Microsoft.Web.WebView2.Core;
 using Windows.Storage.Pickers;
 using NAudio.CoreAudioApi;
 
 namespace CelesteMusicPlayer;
-internal sealed class WebQuickPlayerWindow : Window
+internal sealed class WebQuickPlayerWindow : NativeMainWebWindow
 {
-    private readonly Grid _root = new();
-    private readonly WebView2 _web = new();
+    private readonly System.Windows.Forms.Panel _root = new() { Dock = System.Windows.Forms.DockStyle.Fill };
+    private readonly NativeWebViewPanel _web = new() { Dock = System.Windows.Forms.DockStyle.Fill };
     internal readonly QuickPlaybackSession Session;
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _timer;
     private bool _ready, _closed, _visible = true, _spectrumWanted = true;
@@ -26,9 +24,9 @@ internal sealed class WebQuickPlayerWindow : Window
     private readonly Windows.Media.Playback.MediaPlayer _mediaHost = new();
     private readonly Windows.Media.SystemMediaTransportControls _smtc;
     private string _lastMediaTitle = "";
-    internal WebQuickPlayerWindow(Action beforePlay)
+    internal WebQuickPlayerWindow(Action beforePlay) : base(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread())
     {
-        Title = "Celeste · 零散播放"; WindowIconHelper.Apply(this);
+        Title = "Celeste · 零散播放"; MinimumSize = new System.Drawing.Size(460,480);
         HiFiOutputBackend.UiDispatcherQueue = DispatcherQueue;
         Session = new QuickPlaybackSession(a => DispatcherQueue.TryEnqueue(() => a()));
         Session.BeforePlay = () => { beforePlay(); _smtc.IsEnabled = true; };
@@ -38,7 +36,7 @@ internal sealed class WebQuickPlayerWindow : Window
         _smtc.IsPlayEnabled = true; _smtc.IsPauseEnabled = true; _smtc.IsNextEnabled = true; _smtc.IsPreviousEnabled = true;
         _smtc.ButtonPressed += MediaButton;
         _smtc.PlaybackPositionChangeRequested += MediaSeek;
-        _root.Children.Add(_web); Content = _root;
+        _root.Controls.Add(_web); Controls.Add(_root);
         _timer = DispatcherQueue.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(66);
         int ticks = 0;
         _timer.Tick += (_, _) => { if (_visible && ++ticks % 3 == 0) Publish(); if (_visible && _spectrumWanted) SendSpectrum(); };
@@ -46,13 +44,13 @@ internal sealed class WebQuickPlayerWindow : Window
         AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
         AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(1000, 740));
         RestoreBounds();
-        _root.Loaded += Initialize;
+        DispatcherQueue.TryEnqueue(Initialize);
         Closed += (_, _) =>
         {
             StartupLog.Write("[quick.audit] close; libraryConnections=" + LibraryDb.OpenConnectionCount);
             SaveBounds(); _closed = true; ++_assetGeneration; _timer.Stop(); Session.Dispose();
             _smtc.ButtonPressed -= MediaButton; _smtc.PlaybackPositionChangeRequested -= MediaSeek;
-            _smtc.IsEnabled = false; _mediaHost.Dispose(); _web.Close();
+            _smtc.IsEnabled = false; _mediaHost.Dispose(); _web.Dispose();
         };
         StartupLog.Write("[quick.audit] independent window created; libraryConnections=" + LibraryDb.OpenConnectionCount);
     }
@@ -63,9 +61,8 @@ internal sealed class WebQuickPlayerWindow : Window
         => DispatcherQueue.TryEnqueue(() => { if (!Session.Busy) Session.Engine.Seek(e.RequestedPlaybackPosition); });
     internal async Task EnqueueAsync(string[] paths, bool replace = false, bool play = true)
     { if (paths.Length == 0) return; try { await Session.AddAsync(paths, replace, play); } catch (Exception ex) { Error(ex); } }
-    private async void Initialize(object sender, RoutedEventArgs args)
+    private async void Initialize()
     {
-        _root.Loaded -= Initialize;
         try
         {
             await _web.EnsureCoreWebView2Async(); if (_closed) return;
@@ -83,7 +80,7 @@ internal sealed class WebQuickPlayerWindow : Window
                 e.Response = core.Environment.CreateWebResourceResponse(bytes == null ? null : new MemoryStream(bytes).AsRandomAccessStream(), bytes == null ? 404 : 200, bytes == null ? "Not Found" : "OK", (bytes != null && bytes.Length > 4 && bytes[0] == 137 && bytes[1] == 80 ? "Content-Type: image/png" : "Content-Type: image/jpeg") + "\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://celeste-quick.internal");
             };
             core.WebMessageReceived += Command;
-            _web.Source = new Uri("https://celeste-quick.internal/quick-player.html");
+            core.Navigate("https://celeste-quick.internal/quick-player.html");
         }
         catch (Exception ex) { Error(ex); }
     }
@@ -163,13 +160,13 @@ internal sealed class WebQuickPlayerWindow : Window
     private async Task PickFiles(bool append)
     {
         var p = new FileOpenPicker(); foreach (var ext in QuickPlayLauncher.PlayableExtensions) p.FileTypeFilter.Add(ext);
-        WinRT.Interop.InitializeWithWindow.Initialize(p, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        WinRT.Interop.InitializeWithWindow.Initialize(p, Handle);
         var files = await p.PickMultipleFilesAsync(); if (files.Count > 0) await EnqueueAsync(files.Select(f => f.Path).ToArray(), !append, !append);
     }
     private async Task ExportQueue()
     {
         var p = new FileSavePicker(); p.FileTypeChoices.Add("临时播放队列", new[] { ".m3u8" }); p.SuggestedFileName = "Celeste-临时队列";
-        WinRT.Interop.InitializeWithWindow.Initialize(p, WinRT.Interop.WindowNative.GetWindowHandle(this));
+        WinRT.Interop.InitializeWithWindow.Initialize(p, Handle);
         var f = await p.PickSaveFileAsync();
         if (f != null) await File.WriteAllLinesAsync(f.Path, new[] { "#EXTM3U" }.Concat(Session.Queue.SelectMany(q => q.IsCueSegment ? new[] { "#EXTINF:" + q.Duration.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) + "," + q.Title, "#CELESTE-CUE-START:" + q.StartTimeSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture), q.FilePath } : new[] { q.FilePath })));
     }

@@ -12,6 +12,7 @@ namespace CelesteMusicPlayer
     public partial class App : Application
     {
         private Window? _window;
+        private WebQuickPlayerWindow? _quickWindow;
 
         [DllImport("user32.dll")]
         private static extern bool SetForegroundWindow(nint hWnd);
@@ -218,8 +219,8 @@ namespace CelesteMusicPlayer
 
             if (externalFile != null || HasCommandLineFlag("--quick"))
             {
-                var quick = QuickPlayerCoordinator.Show(); _window = quick;
-                quick.Closed += (_, _) => { AppSettingsStore.MarkAppCleanExit(); QuickPlayLauncher.Release(); };
+                var quick = QuickPlayerCoordinator.Show(); _quickWindow = quick;
+                quick.Closed += (_, _) => { AppSettingsStore.MarkAppCleanExit(); QuickPlayLauncher.Release(); _quickWindow = null; Exit(); };
                 _ = quick.EnqueueAsync(QuickPlayLauncher.FilesFromCommandLine(), replace: true);
                 StartupLog.Write("[quick.audit] startup diverted before LibraryDb.EnsureMigrated and MainWindow construction");
                 return;
@@ -373,7 +374,7 @@ namespace CelesteMusicPlayer
             try
             {
                 if (_window is MainWindow main) { main.RestoreMainWindow(); return; }
-                if (_window == null) return;
+                if (_window == null) { _quickWindow?.Activate(); return; }
 
                 nint hWnd = WinRT.Interop.WindowNative.GetWindowHandle(_window);
                 if (hWnd == 0) return;
