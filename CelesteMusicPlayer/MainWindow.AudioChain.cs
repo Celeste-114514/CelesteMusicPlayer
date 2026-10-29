@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media.Animation;
@@ -140,80 +140,7 @@ namespace CelesteMusicPlayer
 
         private void OpenAudioChainPanel()
         {
-            try
-            {
-                if (AudioChainPanel == null || AudioChainOverlayHost == null)
-                {
-                    return;
-                }
-
-                // ⚠ 关键（2026-10-17 实测 bug）：收起动画是 0.18s 的，它的 Completed 里才把
-                // Visibility 设回 Collapsed。如果用户收起后马上又点按钮，那条 Completed 会在
-                // 面板重新打开**之后**才执行 → 刚打开的面板被它又折叠掉，表现成"第二次点不显示"。
-                // 所以打开前必须把上一次收起的尾巴清干净：退订 Completed + Stop 动画。
-                CancelPendingChainClose();
-
-                // 关面板的回调只接一次（面板是常驻实例，重复接会重复触发）
-                if (!_audioChainCloseHooked)
-                {
-                    AudioChainPanel.CloseRequested += (_, _) => HideAudioChainPanel();
-                    // 底部「打开音频设置」：标题栏那个按钮改成链路入口之后，设置面板从这里进
-                    AudioChainPanel.OpenAudioSettingsRequested += (_, _) =>
-                    {
-                        HideAudioChainPanel();
-                        OpenAudioSettingsPanel();
-                    };
-                    _audioChainCloseHooked = true;
-                }
-
-                // 每次打开都回到默认折叠态（折叠状态不持久化，免得用户忘了收起觉得乱）
-                AudioChainPanel.ResetGroupStates();
-
-                // 打开本身也是一条链路事件：时间线先有内容，也便于确认面板真的在刷新
-                AudioSignalPath.RecordEvent("system", "打开音频链路面板");
-
-                // B5：窄窗口保护 —— 面板固定 420 在很窄的窗口下会被挤，
-                // 所以按窗口可用宽度收一收（两侧至少留 40px 给遮罩）。
-                double width = ComputeChainPanelWidth();
-                AudioChainPanelHost.Width = width;
-                ApplyChainPanelWidthToStoryboards(width);
-
-                AudioChainOverlayHost.Visibility = Visibility.Visible;
-                AudioChainOverlayHost.IsHitTestVisible = true;
-                AudioChainPanelTransform.TranslateX = width;
-
-                // ⚠ 同族教训（10-16 三次）：XAML 故事板的 TargetName 在本仓有解析失败案，
-                // Begin 会抛 COMException，动画不跑 → 面板停在 420px 偏移处、完全在窗口外看不见。
-                RetargetStoryboard(AudioChainOpenStoryboard, "chainOpen");
-
-                // ⚠ 第二次打开打不出来的根因（2026-10-17 实测）：
-                // 元素刚从 Collapsed 变 Visible 的**同一帧** Begin，动画会被静默吞掉
-                // （日志实证：那次点击后根本没有动画效果，面板停在屏幕外）。
-                // 所以延后一帧再开动画，并在 400ms 后复查一次：还在屏幕外就直接落位兜底。
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    try
-                    {
-                        AudioChainOpenStoryboard?.Begin();
-                    }
-                    catch (Exception sbEx)
-                    {
-                        StartupLog.Write("[链路] 打开动画 Begin 失败，改用直接落位: " + sbEx.Message);
-                        AudioChainPanelTransform.TranslateX = 0;
-                    }
-
-                    ScheduleChainOpenFallback();
-                });
-
-                StartupLog.Write($"[链路] 打开完成 可见={AudioChainOverlayHost.Visibility} TranslateX={AudioChainPanelTransform.TranslateX}");
-
-                // 面板可见期间才跑节拍刷新；收起时立即停（"不可见即停"，绝不空转）
-                AudioChainPanel.StartLiveRefresh(() => AudioSignalPath.Capture(_audioEngine, DspRackGlobalBypassed));
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("MainWindow.OpenAudioChainPanel", caught);
-            }
+            ShowWebPage("dsp");
         }
 
         /// <summary>

@@ -501,7 +501,7 @@ namespace CelesteMusicPlayer
             _activeHoverTip = new ToolTip
             {
                 Content = _hoverTipText,
-                Placement = PlacementMode.Mouse
+                Placement = FlyoutPlacementMode.Auto
             };
             ToolTipService.SetToolTip(_hoverElement, _activeHoverTip);
             _activeHoverTip.IsOpen = true;

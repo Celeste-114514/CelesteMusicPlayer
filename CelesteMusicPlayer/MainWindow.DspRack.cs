@@ -1,4 +1,4 @@
-// MainWindow.DspRack.cs
+﻿// MainWindow.DspRack.cs
 // 新增 DSP 模块的 UI 逻辑：动态压缩器 / 立体声场 / 声道矩阵 / DSP 机架编排，
 // 以及「耳机 Crossfeed 截止频率」的可调化。
 //
@@ -165,7 +165,8 @@ namespace CelesteMusicPlayer
             };
 
             // SetRack：Save(dsp-rack.json) + 实时下发；未播放时仅存状态，下次播放会话应用
-            _audioEngine?.SetRack(rack);
+            if (_audioEngine is { } engine) engine.SetRack(rack);
+            else DspRackStore.Save(rack);
 
             UpdateDspNavIndicators();
         }
@@ -748,7 +749,8 @@ namespace CelesteMusicPlayer
 
             RackState rack = DspRackStore.Load();
             rack.RackOrder = (int[])_dspRackOrderDraft.Clone();
-            _audioEngine?.SetRack(rack);
+            if (_audioEngine is { } engine) engine.SetRack(rack);
+            else DspRackStore.Save(rack);
             RenderDspRackList();
             UpdateDspNavIndicators();
         }

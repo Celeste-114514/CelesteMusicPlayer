@@ -221,7 +221,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
                     return SendMouse(CoreWebView2MouseEventKind.Wheel, CoreWebView2MouseEventVirtualKeys.None, delta, wheelPoint);
                 case WmMouseLeave:
                     _trackingLeave = false;
-                    _controller.SendMouseInput(CoreWebView2MouseEventKind.Leave, CoreWebView2MouseEventVirtualKeys.None, 0, new Windows.Foundation.Point(0, 0));
+                    _controller.SendMouseInput(CoreWebView2MouseEventKind.Leave, CoreWebView2MouseEventVirtualKeys.None, 0, new System.Drawing.Point(0, 0));
                     return true;
                 case WmSetCursor:
                     // 合成宿主的 CoreCursor 拿不到 Win32 句柄，光标统一用窗口类默认箭头。
@@ -237,7 +237,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
     {
         if (_controller == null) return false;
         int x = (short)((long)lParam & 0xFFFF), y = (short)(((long)lParam >> 16) & 0xFFFF);
-        _controller.SendMouseInput(kind, keys, data, new Windows.Foundation.Point(Math.Round(x / _scale), Math.Round(y / _scale)));
+        _controller.SendMouseInput(kind, keys, data, new System.Drawing.Point((int)Math.Round(x / _scale), (int)Math.Round(y / _scale)));
         return true;
     }
 
@@ -262,11 +262,11 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
         _envRetry?.Stop();
         try
         {
-            _controller = await env.CreateCoreWebView2CompositionControllerAsync(CoreWebView2ControllerWindowReference.CreateFromWindowHandle((ulong)_hwnd.ToInt64()));
+            _controller = await env.CreateCoreWebView2CompositionControllerAsync(_hwnd);
             if (_disposed) { _controller?.Close(); _controller = null; return; }
             if (_webVisual != null) _controller.RootVisualTarget = _webVisual;
             // 合成宿主也要靠 Bounds 定网页尺寸（官方文档要求）。只设这一项，IsVisible 之前一起加会崩。
-            _controller.Bounds = new Windows.Foundation.Rect(0, 0, _widthDip, _heightDip);
+            _controller.Bounds = new System.Drawing.Rectangle(0, 0, (int)_widthDip, (int)_heightDip);
             _core = _controller.CoreWebView2;
             _core.Settings.AreDefaultContextMenusEnabled = false;
             _core.Settings.AreDevToolsEnabled = false;
@@ -306,7 +306,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
                 return;
             }
             string mime = ext switch { ".woff" => "font/woff", ".woff2" => "font/woff2", ".otf" => "font/otf", _ => "font/ttf" };
-            e.Response = _core!.Environment.CreateWebResourceResponse(File.OpenRead(fontFile).AsRandomAccessStream(), 200, "OK",
+            e.Response = _core!.Environment.CreateWebResourceResponse(File.OpenRead(fontFile), 200, "OK",
                 "Content-Type: " + mime + "\r\n" + cors + "Cache-Control: no-store");
         }
         catch (Exception ex) { StartupLog.WriteException("DesktopLyrics.Font", ex); }
@@ -475,7 +475,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
         {
             SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, width, height, SwpNoZOrder | SwpNoActivate | 0x0002 /*SWP_NOMOVE*/);
         }
-        if (_controller != null) _controller.Bounds = new Windows.Foundation.Rect(0, 0, _widthDip, _heightDip);
+        if (_controller != null) _controller.Bounds = new System.Drawing.Rectangle(0, 0, (int)_widthDip, (int)_heightDip);
         // 尺寸变了解锁条位置也变了：清掉旧的命中矩形，让页面重新量一次。
         _hintRect = (0, 0, 0, 0);
         Post(new { kind = "resize" });

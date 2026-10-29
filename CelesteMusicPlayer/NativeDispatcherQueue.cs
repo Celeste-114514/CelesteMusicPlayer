@@ -1,4 +1,4 @@
-// W13：用 Win32 消息泵替代 Windows App SDK 的 DispatcherQueue。
+﻿// W13：用 Win32 消息泵替代 Windows App SDK 的 DispatcherQueue。
 // 程序不再有 WinUI Application/Window，UI 线程靠一个隐藏消息窗口驱动：
 // 后台线程 TryEnqueue → PostMessage 到该窗口 → 消息循环里取出并执行。
 // 这样 async/await 回 UI 线程、定时器、跨线程更新都能照旧工作。
@@ -35,7 +35,7 @@ namespace Microsoft.UI.Dispatching
 
         private delegate nint WndProcDelegate(nint hwnd, uint msg, nint wParam, nint lParam);
 
-        [StructLayout(LayoutKind.Sequential)]
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
         private struct WndClassEx
         {
             public uint cbSize;
@@ -64,10 +64,10 @@ namespace Microsoft.UI.Dispatching
             public int ptY;
         }
 
-        [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
         private static extern nint RegisterClassExW(ref WndClassEx lpwcx);
 
-        [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
         private static extern nint CreateWindowExW(uint dwExStyle, string lpClassName, string? lpWindowName,
             uint dwStyle, int x, int y, int nWidth, int nHeight, nint hWndParent, nint hMenu, nint hInstance, nint lpParam);
 
@@ -109,9 +109,11 @@ namespace Microsoft.UI.Dispatching
                 hInstance = GetModuleHandleW(null),
             };
             s_classAtom = RegisterClassExW(ref wc);
+            if(s_classAtom == 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Cannot register native message pump");
             // 消息专用窗口：不显示、不参与任务栏、不走 DWM 合成。
             s_hwnd = CreateWindowExW(0, "CelesteNativePump", null, 0, 0, 0, 0, 0,
                 new nint(-3) /* HWND_MESSAGE */, 0, GetModuleHandleW(null), 0);
+            if(s_hwnd == 0) throw new System.ComponentModel.Win32Exception(Marshal.GetLastWin32Error(), "Cannot create native message pump");
         }
 
         internal static void Enqueue(Action action, DispatcherQueuePriority priority)
@@ -171,7 +173,8 @@ namespace Microsoft.UI.Dispatching
 
     public sealed partial class DispatcherQueue
     {
-        [ThreadStatic] private static DispatcherQueue? t_current;
+        private static DispatcherQueue? t_current;
+        private readonly int _ownerThreadId = Environment.CurrentManagedThreadId;
 
         private DispatcherQueue() { }
 
@@ -185,10 +188,12 @@ namespace Microsoft.UI.Dispatching
             return t_current;
         }
 
-        public static DispatcherQueue? GetForCurrentThreadOrNull() => t_current;
+        public DispatcherQueueTimer CreateTimer() => new();
+
+        public static DispatcherQueue? GetForCurrentThreadOrNull() => t_current?.HasThreadAccess == true ? t_current : null;
 
         /// <summary>UI 线程判定：当前线程就是这个队列所属线程。</summary>
-        public bool HasThreadAccess => ReferenceEquals(t_current, this);
+        public bool HasThreadAccess => Environment.CurrentManagedThreadId == _ownerThreadId;
 
         public bool TryEnqueue(Action callback)
         {
@@ -264,27 +269,27 @@ namespace Microsoft.UI.Dispatching
     public sealed partial class DispatcherQueueTimer
     {
         private Timer? _timer;
+        private int _generation, _pending;
         private readonly DispatcherQueue _queue = DispatcherQueue.GetForCurrentThread();
-
         public TimeSpan Interval { get; set; } = TimeSpan.FromMilliseconds(100);
         public bool IsRunning => _timer != null;
         public bool IsRepeating { get; set; } = true;
         public event global::Microsoft.UI.Xaml.AnyEventHandler? Tick;
-
-        public void Start()
-        {
-            Stop();
-            _timer = new Timer(static state =>
-            {
-                DispatcherQueueTimer self = (DispatcherQueueTimer)state!;
-                self._queue.TryEnqueue(() => self.Tick?.Invoke(self, EventArgs.Empty));
-            }, this, Interval, Interval);
+        public void Start() {
+            Stop(); int generation = _generation;
+            _timer = new Timer(_ => {
+                if (generation != Volatile.Read(ref _generation) || Interlocked.Exchange(ref _pending,1)!=0) return;
+                _queue.TryEnqueue(() => {
+                    Interlocked.Exchange(ref _pending,0);
+                    if(generation != _generation) return;
+                    if(!IsRepeating) Stop();
+                    Tick?.Invoke(this,EventArgs.Empty);
+                });
+            },null,Interval,IsRepeating ? Interval : Timeout.InfiniteTimeSpan);
         }
-
-        public void Stop()
-        {
-            _timer?.Dispose();
-            _timer = null;
+        public void Stop() {
+            Interlocked.Increment(ref _generation); Interlocked.Exchange(ref _pending,0);
+            _timer?.Dispose(); _timer=null;
         }
     }
 }

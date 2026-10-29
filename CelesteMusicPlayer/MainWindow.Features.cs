@@ -62,7 +62,7 @@ namespace CelesteMusicPlayer
 
             _featuresInitialized = true;
 
-            EqualizerWindow.Applied += OnEqualizerApplied;
+            // EQ is applied by the production web DSP commands.
             // TagEditorWindow.TagsSaved 订阅已随旧窗口删除移除：标签板块的 TagsSaved
             // 在 EnsureTagEditUiBuilt 里边创建面板边订阅（面板是延迟创建的）。
 
@@ -157,13 +157,10 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                EqualizerWindow.Applied -= OnEqualizerApplied;
+
                 // 标签面板的 TagsSaved 退订：面板可能还没创建（_tagPanel 为 null 时无从退起，
                 // 随窗口一起销毁，无需处理）。
-                if (_tagPanel != null)
-                {
-                    _tagPanel.TagsSaved -= OnTagsSaved;
-                }
+
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 
@@ -2294,7 +2291,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var picker = new FileOpenPicker();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = NativeHandle;
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.FileTypeFilter.Add(".m3u");
                 picker.FileTypeFilter.Add(".m3u8");
@@ -2333,7 +2330,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var picker = new FileSavePicker();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = NativeHandle;
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.SuggestedFileName = "playlist";
                 picker.FileTypeChoices.Add("M3U8 播放列表", new List<string> { ".m3u8" });
@@ -2361,7 +2358,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var picker = new FileOpenPicker();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = NativeHandle;
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.FileTypeFilter.Add(".cue");
                 Windows.Storage.StorageFile? file = await picker.PickSingleFileAsync();
@@ -2445,7 +2442,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var picker = new FileSavePicker();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = NativeHandle;
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.SuggestedFileName = Path.GetFileNameWithoutExtension(_nowPlayingPath);
                 picker.FileTypeChoices.Add("WAV", new List<string> { ".wav" });

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -465,14 +465,7 @@ namespace CelesteMusicPlayer
         /// <summary>主题 / 皮肤切换后重刷标签板块子导航的强调条。</summary>
         internal void ReapplyTagPanelAccent()
         {
-            try
-            {
-                _tagPanel?.ReapplyAccent();
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("ReapplyTagPanelAccent", ex);
-            }
+            // Tags use the web shell theme tokens.
         }
 
         private void NavTagEditButton_Click(object sender, RoutedEventArgs e)
@@ -493,25 +486,10 @@ namespace CelesteMusicPlayer
         /// </summary>
         internal void OpenTagEditForFiles(IEnumerable<string>? paths)
         {
-            try
-            {
-                DispatcherQueue.TryEnqueue(() =>
-                {
-                    ExitMultiSelectMode();
-                    CommitLibraryNavigation(() =>
-                    {
-                        _currentCategory = "TagEdit";
-                        ApplyCategoryView();
-                    });
-                    NowPlayingText.Text = "标签";
-                    EnsureTagEditUiBuilt();
-                    _tagPanel?.RevealFiles(paths?.Where(p => !string.IsNullOrWhiteSpace(p)).ToList());
-                });
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("OpenTagEditForFiles", ex);
-            }
+            DispatcherQueue.TryEnqueue(() => {
+                OpenWebShell();
+                _webShellWindow?.RevealTagFiles(paths ?? Array.Empty<string>());
+            });
         }
 
         /// <summary>

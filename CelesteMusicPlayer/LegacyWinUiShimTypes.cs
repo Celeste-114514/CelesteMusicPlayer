@@ -1,4 +1,4 @@
-namespace Microsoft.UI.Xaml.Controls
+﻿namespace Microsoft.UI.Xaml.Controls
 {
     public enum ContentDialogButton { None = 0, Primary = 1, Secondary = 2, Close = 3 }
     public enum ContentDialogPlacement { Popup = 0, InPlace = 1 }
@@ -14,7 +14,7 @@ namespace Microsoft.UI.Xaml.Media
 namespace Microsoft.UI.Xaml
 {
     public enum ApplicationTheme { Light = 0, Dark = 1 }
-    public class SystemBackdrop : DependencyObject { }
+
     public class ProtectedCursor
     {
         public static ProtectedCursor? Arrow => null;

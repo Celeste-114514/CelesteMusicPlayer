@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -564,6 +564,8 @@ namespace CelesteMusicPlayer
         {
             StartupLog.Write("MainWindow ctor begin");
             Instance = this;
+            Content = RootShell;
+            InitializeLegacyBusinessState();
             // 缓存 UI 线程 DispatcherQueue 给引擎层（HiFiOutputBackend）在后台线程构造时取用，
             // 避免 DispatcherQueue.GetForCurrentThread() 返回 null 导致 NullReferenceException。
             HiFiOutputBackend.UiDispatcherQueue = Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
@@ -596,7 +598,7 @@ namespace CelesteMusicPlayer
             InitializeFullScreen();
             try
             {
-                _mainWindowHwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                _mainWindowHwnd = NativeHandle;
             }
             catch
             {

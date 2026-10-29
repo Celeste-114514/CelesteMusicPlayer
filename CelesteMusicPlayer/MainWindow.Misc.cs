@@ -183,14 +183,14 @@ namespace CelesteMusicPlayer
         /// 主窗口自己的选取器继续用 this（MainWindow 就是 Window，没问题）。
         /// </summary>
         internal static nint PickerHostHandle()
-            => Instance is MainWindow host ? host._webShellWindow?.Handle ?? WinRT.Interop.WindowNative.GetWindowHandle(host) : 0;
+            => Instance is MainWindow host ? host._webShellWindow?.Handle ?? host.NativeHandle : 0;
 
         private async void OpenFileButton_Click(dynamic sender, dynamic e)
         {
             try
             {
                 FileOpenPicker picker = new();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = NativeHandle;
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
 
                 picker.ViewMode = PickerViewMode.List;
@@ -2922,8 +2922,11 @@ namespace CelesteMusicPlayer
         }
 
 
+        private bool _exitStarted;
         private void ExitApplication()
         {
+            if (_exitStarted) return;
+            _exitStarted = true;
             // 先标记允许关闭，避免任何 Closing 处理器再弹“最小化到托盘还是退出”的对话框
             _allowClose = true;
 
@@ -2948,6 +2951,8 @@ namespace CelesteMusicPlayer
             // 持久化关键状态（干净退出标记 / 续播进度），失败也不影响退出
             try { AppSettingsStore.MarkAppCleanExit(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
             try { PersistPlaybackSession(); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+
+            try { Close(); } catch (Exception ex) { StartupLog.WriteException("MainWindow.ExitCleanup", ex); }
 
             // 直接、强制结束进程。不调用 Close()/Application.Current.Exit()，
             // 因为它们在 WinUI3 里可能卡在窗口拆除或资源释放上几秒，导致

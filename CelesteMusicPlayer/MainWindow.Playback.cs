@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -1557,12 +1557,12 @@ namespace CelesteMusicPlayer
 
             var mediaLibItem = new MenuFlyoutItem { Text = "媒体库" };
             mediaLibItem.Icon = new FontIcon { Glyph = "\uE838" }; // MusicLibrary
-            mediaLibItem.Click += (_, _) => SettingsPanelControl.ShowMediaLibrary();
+            mediaLibItem.Click += (_, _) => ShowWebPage("settings");
             flyout.Items.Add(mediaLibItem);
 
             var settingsItem = new MenuFlyoutItem { Text = "选项设置" };
             settingsItem.Icon = new FontIcon { Glyph = "\uE713" };
-            settingsItem.Click += (_, _) => SettingsPanelControl.ShowOrActivate();
+            settingsItem.Click += (_, _) => ShowWebPage("settings");
             flyout.Items.Add(settingsItem);
 
             flyout.ShowAt(SelectLocalAudioButton, new FlyoutShowOptions
@@ -2127,7 +2127,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlaylistDetailListView_ContainerContentChanging(dynamic sender, dynamic e)
+        private void PlaylistDetailListView_ContainerContentChanging(dynamic sender, dynamic args)
         {
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {
@@ -2267,7 +2267,7 @@ namespace CelesteMusicPlayer
                 picker.FileTypeFilter.Add(".jpg");
                 picker.FileTypeFilter.Add(".jpeg");
                 picker.FileTypeFilter.Add(".png");
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, NativeHandle);
                 var file = await picker.PickSingleFileAsync();
                 if (file == null) return;
                 using var stream = await file.OpenReadAsync();
@@ -2320,7 +2320,7 @@ namespace CelesteMusicPlayer
             var picker = new Windows.Storage.Pickers.FolderPicker();
             picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.MusicLibrary;
             picker.FileTypeFilter.Add("*");
-            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, NativeHandle);
             StorageFolder folder = await picker.PickSingleFolderAsync();
             if (folder == null) return;
             var sb = new System.Text.StringBuilder();
@@ -2478,7 +2478,7 @@ namespace CelesteMusicPlayer
                 var picker = new Windows.Storage.Pickers.FolderPicker();
                 picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.MusicLibrary;
                 picker.FileTypeFilter.Add("*");
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, NativeHandle);
                 StorageFolder folder = await picker.PickSingleFolderAsync();
                 if (folder == null) return;
 

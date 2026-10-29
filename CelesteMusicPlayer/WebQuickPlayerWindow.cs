@@ -77,7 +77,7 @@ internal sealed class WebQuickPlayerWindow : NativeMainWebWindow
             core.WebResourceRequested += (_, e) =>
             {
                 var bytes = _cover;
-                e.Response = core.Environment.CreateWebResourceResponse(bytes == null ? null : new MemoryStream(bytes).AsRandomAccessStream(), bytes == null ? 404 : 200, bytes == null ? "Not Found" : "OK", (bytes != null && bytes.Length > 4 && bytes[0] == 137 && bytes[1] == 80 ? "Content-Type: image/png" : "Content-Type: image/jpeg") + "\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://celeste-quick.internal");
+                e.Response = core.Environment.CreateWebResourceResponse(bytes == null ? null : new MemoryStream(bytes), bytes == null ? 404 : 200, bytes == null ? "Not Found" : "OK", (bytes != null && bytes.Length > 4 && bytes[0] == 137 && bytes[1] == 80 ? "Content-Type: image/png" : "Content-Type: image/jpeg") + "\r\nCache-Control: no-store\r\nAccess-Control-Allow-Origin: https://celeste-quick.internal");
             };
             core.WebMessageReceived += Command;
             core.Navigate("https://celeste-quick.internal/quick-player.html");

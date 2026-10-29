@@ -122,7 +122,7 @@ namespace CelesteMusicPlayer
                 ApplyUiStyleMode(settings); // 界面风格（图景/经典浅色/深色/跟随系统/极客）；图景模式内部回落毛玻璃开关
                 // 极客界面只给终端这一个播放页布局，风格刚切过来要让布局立刻跟上
                 ApplyNowPlayingLayout();
-                SettingsPanelControl.ApplyBackdropIfOpen();
+                // WebAppearanceService applies the native backdrop.
                 ApplyExtendedSettingsLive(settings);
             });
         }

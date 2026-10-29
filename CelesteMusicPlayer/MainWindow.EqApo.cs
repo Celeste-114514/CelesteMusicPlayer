@@ -25,7 +25,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var picker = new FileOpenPicker();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = NativeHandle;
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.FileTypeFilter.Add(".txt");
 
@@ -75,7 +75,7 @@ namespace CelesteMusicPlayer
                 string text = EqualizerApoConverter.Export(curve);
 
                 var picker = new FileSavePicker();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = NativeHandle;
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.SuggestedStartLocation = PickerLocationId.DocumentsLibrary;
                 picker.SuggestedFileName = "config";

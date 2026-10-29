@@ -279,7 +279,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ArtistTrackListView_ContainerContentChanging(dynamic sender, dynamic e)
+        private void ArtistTrackListView_ContainerContentChanging(dynamic sender, dynamic args)
         {
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {
@@ -650,7 +650,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void AlbumTrackListView_ContainerContentChanging(dynamic sender, dynamic e)
+        private void AlbumTrackListView_ContainerContentChanging(dynamic sender, dynamic args)
         {
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {
@@ -1271,36 +1271,14 @@ namespace CelesteMusicPlayer
 
         internal void ShowCurrentPlaylistWindow()
         {
-            if (_currentPlaylistWindow != null)
-            {
-                _currentPlaylistWindow.Activate();
-                return;
-            }
-
-            _currentPlaylistWindow = new CurrentPlaylistWindow(this);
-            _currentPlaylistWindow.Closed += (_, _) => _currentPlaylistWindow = null;
-            _currentPlaylistWindow.Activate();
+            ShowWebPage("queue");
         }
 
 
         /// <summary>打开播放队列窗口（复用主播放列表，聚焦接下来的待播曲目）。</summary>
         internal void ShowPlayQueueWindow()
         {
-            if (QueueWindow != null)
-            {
-                QueueWindow.Activate();
-                return;
-            }
-
-            try
-            {
-                var w = new PlayQueueWindow(this);
-                w.Activate();
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("ShowPlayQueueWindow", ex);
-            }
+            ShowWebPage("queue");
         }
 
 
@@ -1338,7 +1316,7 @@ namespace CelesteMusicPlayer
 
 
         internal void NotifyCurrentPlaylistWindow()
-            => _currentPlaylistWindow?.RefreshFromOwner();
+            => NotifyWebHomeChanged();
 
         internal ObservableCollection<PlaylistItem> UserPlaylist => _userPlaylist;
 
@@ -2309,15 +2287,15 @@ namespace CelesteMusicPlayer
             if (string.IsNullOrEmpty(_nowPlayingPath)
                 && _waveformProgress
                 && e.AddedItems.Count > 0
-                && e.AddedItems[0] is PlaylistItem selItem
-                && !string.Equals(_waveformPath, selItem.FilePath, StringComparison.OrdinalIgnoreCase))
+                && (e.AddedItems[0] as PlaylistItem) != null
+                && !string.Equals(_waveformPath, ((PlaylistItem)e.AddedItems[0]).FilePath, StringComparison.OrdinalIgnoreCase))
             {
-                LoadWaveformForCurrentAsync(selItem.FilePath);
+                LoadWaveformForCurrentAsync(((PlaylistItem)e.AddedItems[0]).FilePath);
             }
         }
 
 
-        private void PlaylistView_ContainerContentChanging(dynamic sender, dynamic e)
+        private void PlaylistView_ContainerContentChanging(dynamic sender, dynamic args)
         {
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {

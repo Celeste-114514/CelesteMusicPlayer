@@ -1,4 +1,4 @@
-#pragma warning disable CS0436
+﻿#pragma warning disable CS0436
 #pragma warning disable CS0102
 #pragma warning disable CS0111
 #pragma warning disable CS0169
@@ -6,10 +6,10 @@
 namespace Microsoft.UI.Xaml.Controls
 {
     public partial class ArtistAvatarEditPanelControl : global::Microsoft.UI.Xaml.DependencyObject { public dynamic? Value { get; set; } }
-    public partial class PointCollection : global::Microsoft.UI.Xaml.DependencyObject { public dynamic? Value { get; set; } }
+    public partial class PointCollection : global::System.Collections.Generic.List<Windows.Foundation.Point> { }
     public partial class QuadraticBezierSegment : global::Microsoft.UI.Xaml.DependencyObject { public dynamic? Value { get; set; } }
     public partial class MenuFlyoutSubItem : global::Microsoft.UI.Xaml.DependencyObject { public dynamic? Value { get; set; } }
-    public partial class PointerUpdateKind : global::Microsoft.UI.Xaml.DependencyObject { public dynamic? Value { get; set; } }
+    public enum PointerUpdateKind { Other, XButton1Pressed, XButton2Pressed }
     public partial class GeneralTransform : global::Microsoft.UI.Xaml.DependencyObject { public dynamic? Value { get; set; } }
     public partial class ItemIndexRange : global::Microsoft.UI.Xaml.DependencyObject { public dynamic? Value { get; set; } }
     public partial class FlyoutShowOptions : global::Microsoft.UI.Xaml.DependencyObject { public dynamic? Value { get; set; } }

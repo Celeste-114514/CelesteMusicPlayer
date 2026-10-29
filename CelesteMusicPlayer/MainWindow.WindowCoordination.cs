@@ -6,13 +6,15 @@ namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
     {
+        public new void Activate() => RestoreMainWindow();
+
         private MainWindowCoordinator? _windowCoordinator;
         private MainWindowCoordinator WindowCoordinator => _windowCoordinator ??= new(new LegacyMainWindowSurface(this));
 
         internal void OpenWebShell() => WindowCoordinator.Show();
 
         /// <summary>W13：启动路径专用。MainWindow 不再是窗口，显式开一次网页会话即可。</summary>
-        internal void StartWebShellSession() => OpenWebShell();
+        internal void StartWebShellSession() { OpenWebShell(); base.Activate(); RootShell.RaiseLoaded(); }
 
         internal void RestoreMainWindow()
         {

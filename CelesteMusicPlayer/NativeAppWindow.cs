@@ -1,4 +1,4 @@
-// W13：用 Win32 直接实现 Microsoft.UI.Windowing 的那套窗口 API。
+﻿// W13：用 Win32 直接实现 Microsoft.UI.Windowing 的那套窗口 API。
 // 原生网页窗口（WinForms Form + WebView2）只用到标题栏/显隐/尺寸/位置/最大化最小化，
 // 这里用 HWND + ShowWindow/SetWindowPos/GetWindowPlacement 等价实现，去掉 AppSDK 依赖。
 #pragma warning disable CS0436
@@ -75,8 +75,14 @@ namespace Microsoft.UI.Windowing
 
     public class AppWindowTitleBar
     {
+        private readonly nint _hwnd;
+        private TitleBarHeightOption _height;
+        internal AppWindowTitleBar(nint hwnd) { _hwnd=hwnd; }
         public bool ExtendsContentIntoTitleBar { get; set; }
-        public TitleBarHeightOption PreferredHeightOption { get; set; }
+        public TitleBarHeightOption PreferredHeightOption { get=>_height; set {
+            _height=value;
+            if(value==TitleBarHeightOption.Collapsed) NativeMethods.ChangeStyle(_hwnd,0x00C00000,false);
+        } }
         public double Height { get; set; }
         public double LeftInset { get; }
         public double RightInset { get; }
@@ -122,10 +128,18 @@ namespace Microsoft.UI.Windowing
             }
         }
 
-        public bool IsMinimizable { get; set; } = true;
-        public bool IsMaximizable { get; set; } = true;
-        public bool IsResizable { get; set; } = true;
-        public bool IsAlwaysOnTop { get; set; }
+        private bool _IsMinimizable=true;
+        public bool IsMinimizable { get=>_IsMinimizable; set { _IsMinimizable=value;NativeMethods.ChangeStyle(_hwnd,0x00020000,value); } }
+        private bool _IsMaximizable=true;
+        public bool IsMaximizable { get=>_IsMaximizable; set { _IsMaximizable=value;NativeMethods.ChangeStyle(_hwnd,0x00010000,value); } }
+        private bool _IsResizable=true;
+        public bool IsResizable { get=>_IsResizable; set { _IsResizable=value;NativeMethods.ChangeStyle(_hwnd,0x00040000,value); } }
+        private bool _alwaysOnTop;
+        public bool IsAlwaysOnTop { get=>_alwaysOnTop; set {
+            _alwaysOnTop=value;
+            if (System.Windows.Forms.Control.FromHandle(_hwnd) is System.Windows.Forms.Form form) form.TopMost=value;
+            else NativeMethods.SetWindowPos(_hwnd,value ? new nint(-1) : new nint(-2),0,0,0,0,0x0013);
+        } }
         public bool HasBorder { get; set; } = true;
         public bool HasTitleBar { get; set; } = true;
 
@@ -136,6 +150,8 @@ namespace Microsoft.UI.Windowing
         {
             HasBorder = hasBorder;
             HasTitleBar = hasTitleBar;
+            NativeMethods.ChangeStyle(_hwnd,0x00C00000,hasTitleBar);
+            NativeMethods.ChangeStyle(_hwnd,0x00800000,hasBorder);
         }
     }
 
@@ -150,11 +166,13 @@ namespace Microsoft.UI.Windowing
         private static readonly Dictionary<nint, AppWindow> s_known = new();
         private readonly nint _hwnd;
         private bool _visible = true;
+        private NativeMethods.Rect? _windowedBounds;
+        private nint _windowedStyle;
 
         internal AppWindow(nint hwnd)
         {
             _hwnd = hwnd;
-            TitleBar = new AppWindowTitleBar();
+            TitleBar = new AppWindowTitleBar(hwnd);
             Presenter = new OverlappedPresenter(hwnd);
         }
 
@@ -213,8 +231,8 @@ namespace Microsoft.UI.Windowing
 
         public nint OwnerWindowHandle { get; set; }
 
-        public event global::Microsoft.UI.Xaml.AnyEventHandler? Changed;
-        public event global::Microsoft.UI.Xaml.AnyEventHandler? Closing;
+        public event Action<AppWindow, AppWindowChangedEventArgs>? Changed;
+        public event Action<AppWindow, AppWindowClosingEventArgs>? Closing;
 
         public void Show()
         {
@@ -262,19 +280,21 @@ namespace Microsoft.UI.Windowing
         }
 
         public void SetPresenter(AppWindowPresenterKind kind)
-        {
-            Presenter = kind switch
-            {
-                AppWindowPresenterKind.FullScreen => new FullScreenPresenter(),
-                _ => new OverlappedPresenter(_hwnd),
-            };
-            RaiseChanged(new AppWindowChangedEventArgs { DidPresenterChange = true });
-        }
-
-        public void SetPresenter(AppWindowPresenter presenter)
-        {
-            Presenter = presenter;
-            RaiseChanged(new AppWindowChangedEventArgs { DidPresenterChange = true });
+            => SetPresenter(kind == AppWindowPresenterKind.FullScreen ? new FullScreenPresenter() : new OverlappedPresenter(_hwnd));
+        public void SetPresenter(AppWindowPresenter presenter) {
+            if(presenter.Kind == AppWindowPresenterKind.FullScreen && Presenter.Kind != AppWindowPresenterKind.FullScreen) {
+                NativeMethods.GetWindowRect(_hwnd,out var bounds);_windowedBounds=bounds;
+                _windowedStyle=NativeMethods.GetWindowLong(_hwnd,-16);
+                NativeMethods.ApplyStyle(_hwnd,(nint)(_windowedStyle.ToInt64() & ~0x00CF0000L));
+                var screen=System.Windows.Forms.Screen.FromHandle(_hwnd).Bounds;
+                NativeMethods.SetWindowPos(_hwnd,0,screen.X,screen.Y,screen.Width,screen.Height,0x0034);
+            } else if(presenter.Kind != AppWindowPresenterKind.FullScreen && _windowedBounds is { } saved) {
+                NativeMethods.ApplyStyle(_hwnd,_windowedStyle);
+                NativeMethods.SetWindowPos(_hwnd,0,saved.Left,saved.Top,saved.Right-saved.Left,saved.Bottom-saved.Top,0x0034);
+                _windowedBounds=null;
+            }
+            Presenter=presenter;
+            RaiseChanged(new AppWindowChangedEventArgs { DidPresenterChange=true,DidSizeChange=true });
         }
 
         public void SetIcon(string iconPath)
@@ -306,19 +326,15 @@ namespace Microsoft.UI.Windowing
         internal void RaiseClosing(AppWindowClosingEventArgs args) => Closing?.Invoke(this, args);
     }
 
-    public sealed class DisplayArea
-    {
-        public static DisplayArea Primary => new();
-        public Windows.Graphics.RectInt32 WorkArea
-        {
-            get
-            {
-                NativeMethods.SystemParametersInfo(NativeMethods.SpiGetWorkArea, 0, out NativeMethods.Rect r, 0);
-                return new Windows.Graphics.RectInt32(r.Left, r.Top, r.Right - r.Left, r.Bottom - r.Top);
-            }
-        }
-        public Windows.Graphics.RectInt32 OuterBounds => WorkArea;
-        public static DisplayArea GetFromWindowId(Microsoft.UI.WindowId id, DisplayAreaFallback fallback) => new();
+    public sealed class DisplayArea {
+        private readonly System.Windows.Forms.Screen _screen;
+        private DisplayArea(System.Windows.Forms.Screen screen) { _screen=screen; }
+        public static DisplayArea Primary => new(System.Windows.Forms.Screen.PrimaryScreen!);
+        private static Windows.Graphics.RectInt32 Rect(System.Drawing.Rectangle r) => new(r.X,r.Y,r.Width,r.Height);
+        public Windows.Graphics.RectInt32 WorkArea => Rect(_screen.WorkingArea);
+        public Windows.Graphics.RectInt32 OuterBounds => Rect(_screen.Bounds);
+        public static DisplayArea GetFromWindowId(Microsoft.UI.WindowId id,DisplayAreaFallback fallback) => new(System.Windows.Forms.Screen.FromHandle((nint)id.Value));
+        public static DisplayArea GetFromPoint(Windows.Graphics.PointInt32 point,DisplayAreaFallback fallback) => new(System.Windows.Forms.Screen.FromPoint(new System.Drawing.Point(point.X,point.Y)));
     }
 
     public enum DisplayAreaFallback
@@ -330,6 +346,14 @@ namespace Microsoft.UI.Windowing
 
     internal static class NativeMethods
     {
+        [DllImport("user32.dll",EntryPoint="SetWindowLongPtrW",ExactSpelling=true)]
+        private static extern nint SetWindowLong(nint hwnd,int index,nint value);
+        internal static void ApplyStyle(nint hwnd,nint style) => SetWindowLong(hwnd,-16,style);
+        internal static void ChangeStyle(nint hwnd,long flag,bool enabled) {
+            long style=GetWindowLong(hwnd,-16).ToInt64();
+            SetWindowLong(hwnd,-16,(nint)(enabled ? style|flag : style&~flag));
+            SetWindowPos(hwnd,0,0,0,0,0,0x0037);
+        }
         internal const int SwShow = 5;
         internal const int SwHide = 0;
         internal const int SwMinimize = 6;
@@ -383,10 +407,10 @@ namespace Microsoft.UI.Windowing
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool AdjustWindowRect(ref Rect rect, uint style, [MarshalAs(UnmanagedType.Bool)] bool menu);
 
-        [DllImport("user32.dll", ExactSpelling = true)]
+        [DllImport("user32.dll", EntryPoint="GetWindowLongPtrW", ExactSpelling = true)]
         internal static extern nint GetWindowLong(nint hwnd, int index);
 
-        [DllImport("user32.dll", ExactSpelling = true)]
+        [DllImport("user32.dll", EntryPoint="SendMessageW", ExactSpelling = true)]
         internal static extern nint SendMessage(nint hwnd, uint msg, nint wParam, nint lParam);
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true)]
@@ -399,7 +423,7 @@ namespace Microsoft.UI.Windowing
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool DestroyWindow(nint hwnd);
 
-        [DllImport("user32.dll", ExactSpelling = true)]
+        [DllImport("user32.dll", EntryPoint="SystemParametersInfoW", ExactSpelling = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
         internal static extern bool SystemParametersInfo(uint action, uint param, out Rect rect, uint update);
     }

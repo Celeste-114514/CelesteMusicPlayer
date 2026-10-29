@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
@@ -23,7 +23,7 @@ namespace CelesteMusicPlayer
         {
             const int DwmwaCloak = 13;
             int cloak = 1;
-            nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            nint hwnd = NativeHandle;
             int result = DwmSetWindowAttributeInt(hwnd, DwmwaCloak, ref cloak, sizeof(int));
             if (result < 0) System.Runtime.InteropServices.Marshal.ThrowExceptionForHR(result);
         }

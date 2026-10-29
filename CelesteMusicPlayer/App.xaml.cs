@@ -44,7 +44,7 @@ namespace CelesteMusicPlayer
             // "zh-Hans-CN"（脚本标签与区域标签不能拼接）。
             try
             {
-                Windows.Globalization.ApplicationLanguages.PrimaryLanguageOverride = "zh-CN";
+                System.Globalization.CultureInfo.CurrentUICulture = System.Globalization.CultureInfo.GetCultureInfo("zh-CN");
             }
             catch (Exception ex) { StartupLog.WriteException("App.PrimaryLanguageOverride", ex); }
 

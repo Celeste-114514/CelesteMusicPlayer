@@ -55,7 +55,7 @@ namespace CelesteMusicPlayer
             try
             {
                 FileOpenPicker picker = new();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = NativeHandle;
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
 
                 picker.ViewMode = PickerViewMode.Thumbnail;
@@ -475,7 +475,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ArtistAlbumGridView_ContainerContentChanging(dynamic sender, dynamic e)
+        private void ArtistAlbumGridView_ContainerContentChanging(dynamic sender, dynamic args)
         {
             if (args.Item is AlbumEntry album && args.ItemContainer is GridViewItem container)
             {
@@ -693,7 +693,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void AlbumGridView_ContainerContentChanging(dynamic sender, dynamic e)
+        private void AlbumGridView_ContainerContentChanging(dynamic sender, dynamic args)
         {
             if (args.Item is AlbumEntry album && args.ItemContainer is GridViewItem container)
             {

@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -272,7 +272,7 @@ namespace CelesteMusicPlayer
             try
             {
                 FolderPicker picker = new();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = NativeHandle;
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
 
                 picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
@@ -1342,7 +1342,7 @@ namespace CelesteMusicPlayer
             try
             {
                 var picker = new FolderPicker();
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = NativeHandle;
                 WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
                 picker.SuggestedStartLocation = PickerLocationId.MusicLibrary;
                 picker.FileTypeFilter.Add("*");
@@ -1678,7 +1678,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void FolderBrowserView_ContainerContentChanging(dynamic sender, dynamic e)
+        private void FolderBrowserView_ContainerContentChanging(dynamic sender, dynamic args)
         {
             if (args.Item is FolderBrowserItem item && args.ItemContainer is ListViewItem container)
             {

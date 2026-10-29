@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
@@ -176,6 +176,8 @@ namespace CelesteMusicPlayer
         // ── 头像页签：在线搜图 + 裁剪 ───────────────────────────────
         private void EnsureArtistAvatarPanel()
         {
+#if LEGACY_XAML_VIEW
+
             if (_artistAvatarPanel != null)
             {
                 return;
@@ -200,6 +202,10 @@ namespace CelesteMusicPlayer
             {
                 ArtistAvatarPanel.Children.Add(_artistAvatarPanel);
             }
+
+#else
+            // The XAML avatar panel is retired.
+#endif
         }
 
         /// <summary>
@@ -210,6 +216,8 @@ namespace CelesteMusicPlayer
         /// </summary>
         internal void OpenArtistAvatarPanel(ArtistEntry artist, string? localPath = null)
         {
+#if LEGACY_XAML_VIEW
+
             try
             {
                 EnsureArtistAvatarPanel();
@@ -261,6 +269,10 @@ namespace CelesteMusicPlayer
                 // 不能静默：面板没打开成功时用户会以为菜单坏了（2026-10-12 实测反馈）
                 _ = ShowErrorAsync("头像面板打开失败", caught.Message);
             }
+
+#else
+            ShowWebPage("artists");
+#endif
         }
 
         /// <summary>

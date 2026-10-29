@@ -110,7 +110,7 @@ namespace CelesteMusicPlayer
 
         private void LibraryChanged(object? sender, NotifyCollectionChangedEventArgs args) => _dirty = true;
 
-        private void BackgroundWindowChanged(dynamic sender, dynamic e)
+        private void BackgroundWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
         {
             // Position changes during a drag do not alter visibility or fullscreen state.
             // Avoid two WebView messages and DOM updates for every native move.
@@ -159,8 +159,20 @@ namespace CelesteMusicPlayer
             Post(new { kind = "celeste.navigate", version = 1, page });
         }
 
+        private string[]? _pendingTagPaths;
+        internal async void RevealTagFiles(IEnumerable<string> paths) {
+            var files=paths.Where(p=>!string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            NavigateTo("tags");
+            if (!_ready) { _pendingTagPaths=files; return; }
+            try {
+                var ids=new List<string>();
+                foreach(var path in files) { var track=_owner.WebTagFromPath(path); var id=MainWindow.WebTrackId(track); _tagExtraTracks[id]=track; ids.Add(id); }
+                await _web.CoreWebView2.ExecuteScriptAsync("window.CelesteTags?.open("+JsonSerializer.Serialize(ids)+")");
+            } catch(Exception ex) { StartupLog.WriteException("WebShell.RevealTags",ex); Error("无法打开标签文件："+ex.Message); }
+        }
         private void FlushPendingPage()
         {
+            if (_pendingTagPaths is { } paths) { _pendingTagPaths=null; RevealTagFiles(paths); }
             if (_pendingPage is not { Length: > 0 } page) return;
             _pendingPage = null;
             Post(new { kind = "celeste.navigate", version = 1, page });
@@ -312,7 +324,7 @@ namespace CelesteMusicPlayer
             finally { _sending = false; }
         }
 
-        private async void OnMessage(dynamic sender, dynamic e)
+        private async void OnMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs args)
         {
             string? requestId = null;
             try
@@ -664,7 +676,7 @@ namespace CelesteMusicPlayer
         /// 网页进程崩溃（用户在用的时候界面突然没了）。能自动救的先救一次，
         /// 救不回来才退回原生文字层 —— 渲染进程都死了，网页自己也画不出恢复页。
         /// </summary>
-        private void OnWebProcessFailed(dynamic sender, dynamic e)
+        private void OnWebProcessFailed(object? sender, CoreWebView2ProcessFailedEventArgs args)
         {
             string kind = args.ProcessFailedKind.ToString();
             _pageCrashCount++;
@@ -754,7 +766,7 @@ namespace CelesteMusicPlayer
             catch (Exception ex) { StartupLog.WriteException("WebShell.PushStartupNotice", ex); }
         }
 
-        private async void OnCoverRequest(dynamic sender, dynamic e)
+        private async void OnCoverRequest(object? sender, CoreWebView2WebResourceRequestedEventArgs args)
         {
             var deferral = args.GetDeferral();
             bool entered = false;
@@ -770,7 +782,7 @@ namespace CelesteMusicPlayer
                 if (playlistCover)
                 {
                     string name = Uri.UnescapeDataString(id);
-                    if (!NamedPlaylistStore.List().Contains(name)) { args.Response = sender.Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); return; }
+                    if (!NamedPlaylistStore.List().Contains(name)) { args.Response = ((CoreWebView2)sender!).Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); return; }
                     customCover = PlaylistLibraryService.CustomCoverPath(name);
                     path = customCover ?? PlaylistLibraryService.FirstExistingTrack(name);
                     coverSize = 480;
@@ -792,18 +804,18 @@ namespace CelesteMusicPlayer
                     }
                     string? cachedRemote = await CoverCacheService.GetAsync(coverBytes, CoverCacheService.ForWebSize(coverSize));
                     if (_closed) return;
-                    args.Response = sender.Environment.CreateWebResourceResponse(cachedRemote == null ? null : File.OpenRead(cachedRemote).AsRandomAccessStream(), cachedRemote == null ? 404 : 200, cachedRemote == null ? "Not Found" : "OK", "Content-Type: image/jpeg\r\nCache-Control: private, max-age=60");
+                    args.Response = ((CoreWebView2)sender!).Environment.CreateWebResourceResponse(cachedRemote == null ? null : File.OpenRead(cachedRemote), cachedRemote == null ? 404 : 200, cachedRemote == null ? "Not Found" : "OK", "Content-Type: image/jpeg\r\nCache-Control: private, max-age=60");
                     return;
                 }
-                if (path == null) { args.Response = sender.Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); return; }
+                if (path == null) { args.Response = ((CoreWebView2)sender!).Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); return; }
                 await _coverGate.WaitAsync(); entered = true;
                 if (_closed) return;
                 byte[]? sourceBytes = await Task.Run(() => customCover == null ? MainWindow.ExtractCoverBytes(path) : File.ReadAllBytes(path));
                 string? cacheFile = await CoverCacheService.GetAsync(sourceBytes, CoverCacheService.ForWebSize(coverSize));
                 if (_closed) return;
-                args.Response = sender.Environment.CreateWebResourceResponse(cacheFile == null ? null : File.OpenRead(cacheFile).AsRandomAccessStream(), cacheFile == null ? 404 : 200, cacheFile == null ? "Not Found" : "OK", "Content-Type: image/jpeg\r\nCache-Control: private, max-age=3600");
+                args.Response = ((CoreWebView2)sender!).Environment.CreateWebResourceResponse(cacheFile == null ? null : File.OpenRead(cacheFile), cacheFile == null ? 404 : 200, cacheFile == null ? "Not Found" : "OK", "Content-Type: image/jpeg\r\nCache-Control: private, max-age=3600");
             }
-            catch (Exception ex) { StartupLog.WriteException("WebShell.Cover", ex); if (!_closed) args.Response = sender.Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); }
+            catch (Exception ex) { StartupLog.WriteException("WebShell.Cover", ex); if (!_closed) args.Response = ((CoreWebView2)sender!).Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); }
             finally { if (entered) _coverGate.Release(); deferral.Complete(); }
         }
 

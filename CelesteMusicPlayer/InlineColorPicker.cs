@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
@@ -50,7 +50,7 @@ namespace CelesteMusicPlayer
             }
 
             bool updatingUi = false;
-            string currentHex = ColorPickerWindow.NormalizeHex(initialHex) ?? "#40B4FF";
+            string currentHex = ColorPickerPalette.NormalizeHex(initialHex) ?? "#40B4FF";
             byte currentAlpha = initialAlpha;
             bool committed = false;
 
@@ -166,14 +166,14 @@ namespace CelesteMusicPlayer
             flyout.Content = shell;
 
             // 预设色块（放在这里建：ApplyHex 已经就绪）
-            foreach (string hex in ColorPickerWindow.GetPresetHexes())
+            foreach (string hex in ColorPickerPalette.GetPresetHexes())
             {
-                if (!ColorPickerWindow.TryParseHex(hex, out Color pc))
+                if (!ColorPickerPalette.TryParseHex(hex, out Color pc))
                 {
                     continue;
                 }
 
-                string normalized = ColorPickerWindow.NormalizeHex(hex) ?? hex;
+                string normalized = ColorPickerPalette.NormalizeHex(hex) ?? hex;
                 var swatch = new Button
                 {
                     Width = 28,
@@ -212,7 +212,7 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                string? normalized = ColorPickerWindow.NormalizeHex(hexBox.Text);
+                string? normalized = ColorPickerPalette.NormalizeHex(hexBox.Text);
                 if (normalized == null)
                 {
                     hexBox.Text = currentHex;
@@ -250,12 +250,12 @@ namespace CelesteMusicPlayer
                 updatingUi = true;
                 try
                 {
-                    if (!ColorPickerWindow.TryParseHex(hex, out Color c))
+                    if (!ColorPickerPalette.TryParseHex(hex, out Color c))
                     {
                         return;
                     }
 
-                    currentHex = ColorPickerWindow.NormalizeHex(hex) ?? currentHex;
+                    currentHex = ColorPickerPalette.NormalizeHex(hex) ?? currentHex;
                     currentAlpha = alpha;
                     picker.Color = Color.FromArgb(withAlpha ? alpha : (byte)255, c.R, c.G, c.B);
                     hexBox.Text = currentHex;

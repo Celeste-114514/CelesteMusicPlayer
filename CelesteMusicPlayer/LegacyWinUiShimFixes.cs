@@ -1,4 +1,4 @@
-// W13 过渡层：手工补齐「语义必须正确」的成员（自动补录用的是 object?，
+﻿// W13 过渡层：手工补齐「语义必须正确」的成员（自动补录用的是 object?，
 // 会让下游的索引、颜色转换、await 等写法连锁报错，这里按真实用法给准确类型）。
 #pragma warning disable CS0436
 #pragma warning disable CS0102
@@ -16,7 +16,6 @@ namespace Microsoft.UI.Dispatching
 {
     public sealed partial class DispatcherQueue
     {
-        public DispatcherQueueTimer CreateTimer() => new DispatcherQueueTimer();
         public void EnqueueIdle(Action callback) => TryEnqueue(callback);
     }
 
@@ -58,7 +57,7 @@ namespace Microsoft.UI.Xaml
     public partial class FrameworkElement
     {
         public dynamic? XamlRoot { get; set; }
-        public ResourceDictionary? Resources { get; set; }
+        public ResourceDictionary Resources { get; set; } = new();
         public dynamic? ProtectedCursor { get; set; }
         public dynamic? ActualTheme { get; set; }
         public bool IsLoaded2 => true;
@@ -113,7 +112,7 @@ namespace Microsoft.UI.Xaml.Controls
         public void Hide() { }
     }
 
-    public sealed partial class ListViewBase
+    public partial class ListViewBase
     {
         public IList<object?> SelectedItems { get; } = new List<object?>();
         public dynamic? SelectionMode { get; set; }
@@ -137,7 +136,7 @@ namespace Microsoft.UI.Xaml.Controls
 
     public sealed partial class ColumnDefinition
     {
-        public dynamic? Width { get; set; }
+        public Microsoft.UI.Xaml.GridLength Width { get; set; } = new(1, Microsoft.UI.Xaml.GridUnitType.Star);
         public double MinWidth { get; set; }
         public double MaxWidth { get; set; }
         public double ActualWidth { get; set; }
@@ -145,7 +144,7 @@ namespace Microsoft.UI.Xaml.Controls
 
     public sealed partial class RowDefinition
     {
-        public dynamic? Height { get; set; }
+        public Microsoft.UI.Xaml.GridLength Height { get; set; } = new(1, Microsoft.UI.Xaml.GridUnitType.Star);
         public double MinHeight { get; set; }
         public double MaxHeight { get; set; }
         public double ActualHeight { get; set; }
@@ -170,14 +169,14 @@ namespace Microsoft.UI.Xaml.Shapes
 
     public sealed partial class Polyline
     {
-        public IList Points { get; } = new List<object?>();
+        public IList Points { get; set; } = new List<object?>();
         public dynamic? StrokeLineJoin { get; set; }
         public dynamic? StrokeDashCap { get; set; }
     }
 
     public sealed partial class Polygon
     {
-        public IList Points { get; } = new List<object?>();
+        public IList Points { get; set; } = new List<object?>();
     }
 }
 

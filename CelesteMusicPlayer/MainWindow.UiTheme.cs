@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -132,7 +132,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+                nint hwnd = NativeHandle;
                 uint dpi = GetDpiForWindow(hwnd);
                 if (dpi == 0)
                 {
@@ -929,7 +929,7 @@ namespace CelesteMusicPlayer
             typeof(Microsoft.UI.Xaml.Controls.TextBox),
             typeof(Microsoft.UI.Xaml.Controls.AutoSuggestBox),
             typeof(Microsoft.UI.Xaml.Controls.PasswordBox),
-            typeof(Microsoft.UI.Xaml.Controls.Primitives.ButtonBase),
+            typeof(Microsoft.UI.Xaml.Controls.ButtonBase),
             typeof(Microsoft.UI.Xaml.Controls.Button),
             typeof(Microsoft.UI.Xaml.Controls.Primitives.ToggleButton),
             typeof(Microsoft.UI.Xaml.Controls.Primitives.RepeatButton),
@@ -2237,49 +2237,10 @@ namespace CelesteMusicPlayer
 
         private void CloseAllChildWindows()
         {
-            try
-            {
-                if (_currentPlaylistWindow != null)
-                {
-                    CurrentPlaylistWindow playlist = _currentPlaylistWindow;
-                    _currentPlaylistWindow = null;
-                    playlist.Close();
-                }
+            if (_desktopLyricsWindow is { } lyrics) {
+                _desktopLyricsWindow = null; _desktopLyricsEnabled = false;
+                lyrics.ClosedByUser -= OnDesktopLyricsClosedByUser; lyrics.Dispose();
             }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            try
-            {
-                if (_desktopLyricsWindow != null)
-                {
-                    WebDesktopLyricsOverlay lyrics = _desktopLyricsWindow;
-                    _desktopLyricsWindow = null;
-                    _desktopLyricsEnabled = false;
-                    lyrics.ClosedByUser -= OnDesktopLyricsClosedByUser;
-                    lyrics.Close();
-                    lyrics.Dispose();
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            try
-            {
-                SettingsPanelControl.CloseIfOpen();
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            // 关窗时顺带关迷你播放器：随迷你播放器一起移除（2026-10-19 删掉重写）
-
-            try
-            {
-                if (_artistAvatarEditorWindow != null)
-                {
-                    ArtistAvatarEditorWindow editor = _artistAvatarEditorWindow;
-                    _artistAvatarEditorWindow = null;
-                    editor.Close();
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
 
 
@@ -2711,7 +2672,7 @@ namespace CelesteMusicPlayer
             {
                 IntPtr hwnd = _mainWindowHwnd != IntPtr.Zero
                     ? _mainWindowHwnd
-                    : WinRT.Interop.WindowNative.GetWindowHandle(this);
+                    : NativeHandle;
                 if (hwnd == IntPtr.Zero)
                 {
                     return;
