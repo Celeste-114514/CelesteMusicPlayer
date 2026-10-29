@@ -297,13 +297,13 @@ namespace CelesteMusicPlayer
                     Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
                 if (queue == null)
                 {
-                    FileAssociationPanelControl.ShowOrActivate();
+                    if (_window is MainWindow associationOwner) associationOwner.ShowWebPage("settings");
                     return;
                 }
 
                 if (!queue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, () =>
                 {
-                    try { FileAssociationPanelControl.ShowOrActivate(); }
+                    try { if (_window is MainWindow associationOwner) associationOwner.ShowWebPage("settings"); }
                     catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("App.FirstRunAssociation", caught); }
                 }))
                 {

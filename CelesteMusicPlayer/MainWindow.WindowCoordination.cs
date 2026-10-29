@@ -50,7 +50,7 @@ namespace CelesteMusicPlayer
                 owner.Closed -= owner.CloseWebShellWithOwner;
                 owner.Closed += owner.CloseWebShellWithOwner;
             }
-            public void Restore() => (owner._webShellWindow?.AppWindow.Presenter as OverlappedPresenter)?.Restore();
+            public void Restore() { if (!NativeMainWebWindow.BackgroundVerification) (owner._webShellWindow?.AppWindow.Presenter as OverlappedPresenter)?.Restore(); }
             public void Show() { if (!NativeMainWebWindow.BackgroundVerification) owner._webShellWindow?.AppWindow.Show(); }
             public void Activate() => owner._webShellWindow?.Activate();
             public void HideLegacyOwner() => owner.AppWindow.Hide();

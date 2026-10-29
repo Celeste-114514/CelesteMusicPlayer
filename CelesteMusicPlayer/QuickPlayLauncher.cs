@@ -129,7 +129,7 @@ namespace CelesteMusicPlayer
                         if (!Delivered.TryAdd(Path.GetFileName(fullPath), 0)) return;
                         if (Delivered.Count > 4096) { Delivered.Clear(); Delivered.TryAdd(Path.GetFileName(fullPath), 0); }
                         string content = ReadWithRetry(fullPath);
-                        if (string.IsNullOrWhiteSpace(content)) return;
+                        if (string.IsNullOrWhiteSpace(content)) { Delivered.TryRemove(Path.GetFileName(fullPath), out _); return; }
 
                         try { File.Delete(fullPath); } catch { /* 删不掉无所谓，下次启动清 */ }
 
@@ -139,10 +139,11 @@ namespace CelesteMusicPlayer
                             catch (Exception ex) { global::CelesteMusicPlayer.StartupLog.WriteException("QuickPlayLauncher.cs", ex); }
                         });
                     }
-                    catch (Exception ex) { global::CelesteMusicPlayer.StartupLog.WriteException("QuickPlayLauncher.cs", ex); }
+                    catch (Exception ex) { Delivered.TryRemove(Path.GetFileName(fullPath), out _); global::CelesteMusicPlayer.StartupLog.WriteException("QuickPlayLauncher.cs", ex); }
                 }
 
                 _watcher.Created += (_, e) => Handle(e.FullPath);
+                _watcher.Changed += (_, e) => Handle(e.FullPath);
                 _watcher.Renamed += (_, e) => Handle(e.FullPath);
                 _watcher.EnableRaisingEvents = true;
                 foreach (var pending in Directory.GetFiles(RelayDirectory, "*.cmd")) Handle(pending);
