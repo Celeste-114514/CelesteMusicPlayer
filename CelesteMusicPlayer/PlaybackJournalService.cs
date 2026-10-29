@@ -56,6 +56,9 @@ namespace CelesteMusicPlayer
         {
             try
             {
+                // 这行是给排查用的：台账三本账是否被调用，一查日志就知道（每首歌一行，不会刷屏）。
+                StartupLog.Write("[journal] 起播记录 key=" + (item.PersistenceKey.Length == 0 ? "<空>" : item.PersistenceKey)
+                    + " file=" + item.FilePath);
                 // B4：切歌 = 链路事件（首次播放与无缝自动下一首都走这里）
                 host.NoteChainTrack(item.Title, item.Artist);
 
@@ -142,11 +145,14 @@ namespace CelesteMusicPlayer
                 string? path = host.NowPlayingPath;
                 if (string.IsNullOrWhiteSpace(path))
                 {
+                    StartupLog.Write("[journal] 跳过历史：当前曲目路径为空（completed=" + completed + "）");
                     return;
                 }
 
                 string title = Path.GetFileNameWithoutExtension(path);
                 double seconds = host.PositionSeconds > 0 ? host.PositionSeconds : 0;
+                StartupLog.Write("[journal] 写历史 sec=" + seconds.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)
+                    + " completed=" + completed + " file=" + path);
                 LibraryDb.RecordPlayback(host.HistoryKey, title, seconds, completed);
                 host.RefreshHomeAfterHistory();
             }
