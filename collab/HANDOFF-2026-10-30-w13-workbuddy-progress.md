@@ -24,6 +24,7 @@
 | `dacee81` | `WebUpdateService` | 更新检查/下载/取消/安装转发 + 26 字段状态翻译 | `IUpdateHost`（4） | 回包 26 字段齐全 |
 | `dae9078` | `WebSettingsMisc`（静态） | 缓存统计/清理、文件关联、清「最近播放」标记、关于信息 | 无（原本就是静态） | 回包 about + 74 defs 齐全 |
 | `c00d59d` | `HotkeysService` | 全局热键读写、校验、恢复默认 | 1 个回调（重启注册） | 回包四字段 + 11 条默认绑定 |
+| `e399b65` | `WebSettingsService` + `ISettingsHost` | 设置域剩余 12 个操作（`patch`/`credentials`/`webdav`/`folders`/三个选择器/`export`/`import`/`miniStyles`/`reset`） | `ISettingsHost`（4） | 新增设置域探针，12 项检查全过 |
 
 顺带修了两个既有缺陷：
 
@@ -33,6 +34,8 @@
 ## 二、当前口径
 
 `IWebPlayerServices` **47 条成员**（原 48，`WebTrackId` 已移出边界），**15 条**走独立服务，32 条仍直连 MainWindow。
+设置域已经是「薄壳 + 服务」的形态：`WebSettingsAsync` 只剩一行转发到 `WebSettingsService`，
+17 个命令没有一个还住在 MainWindow 里。
 
 播放域能安全拆的部分**基本拆完**：投影、队列、台账、媒体控件、输出模式、续播规则。
 剩下的是引擎本体（起播/停止/无缝接续）——那部分必须出声才能验，风险陡增。
@@ -46,8 +49,11 @@
 | `W13PlaybackLedgerProbe.cjs` | 起播两首并退出，用于台账/媒体控件类改动（会出声） |
 | `PlaybackAdvanceRegression/` | 库内续播规则用例（14 条） |
 | `PlaybackOrderRegression/` | 顺序解析器用例（24 条 + 边界扫描） |
+| `W13SettingsOpsProbe.cjs` | 设置域逐操作探针：`get`/`patch`（含冲突分支）/`reset`（改写→重置→还原）/`folders`/`webdav`/`credentials`/`hotkeys`/`miniStyles` + 5 条拒绝路径 |
 
-跑法：`NODE_PATH=C:\Users\MSI\_pwtmp\node_modules node tools/W13InterfaceRegression.cjs`
+跑法：`NODE_PATH=C:\Users\MSI\_pwtmp\node_modules node tools/W13InterfaceRegression.cjs [exe]`
+设置域：`NODE_PATH=C:\Users\MSI\_pwtmp\node_modules node tools/W13SettingsOpsProbe.cjs [exe]`
+（不传 exe 默认跑 publish；验收时显式传 `dist\web-ui-20261028\CelesteMusicPlayer.exe`）
 
 ## 四、没验到的（必须写清）
 
@@ -57,6 +63,9 @@
 3. **输出模式真实切换**：`OutputMode` 在设置页只读，无法用命令驱动，只证明默认路径不变。
 4. **队列为空时的「下一首」**：规则有用例，但真实播放路径没驱动到（探针的 next 命令不生效）。
 5. 未播放音乐验证 Last.fm 回传；未做干净机验收。
+6. **设置域的 5 个对话框操作没跑过**：`pickFolder` / `pickFile` / `pickLyricFont` / `export` / `import`
+   都要弹原生选择器，脚本没有入口（项目禁 UIA 点击冒烟），只证明代码原样搬动 + 编译通过。
+   其中 `export`/`import` 还会覆盖整份设置，属于必须人手点一次的项。
 
 ## 五、踩过的坑（已写进项目记忆）
 
@@ -69,7 +78,13 @@
 ## 六、下一步建议
 
 1. 引擎本体（`PlayExtendedWithEngineAsync` 起播链、`StopEngineIfActive`、无缝接续）：建议一次只动一块，改完实听。
-2. 设置域：已搬走 `cache` / `fileAssoc` / `clearRecent` / `about` / `update` / `hotkeys`。**还剩 12 个**
-   （`patch`、`credentials`、`webdav`、`folders`、三个文件选择器、`export`/`import`、`miniStyles`、`reset`），
-   共同点是都要窗口句柄或 UI 线程 —— 需要先抽一个 `ISettingsHost`，再整体搬，不建议再逐个拆。
+2. ~~设置域：需要先抽 `ISettingsHost`~~ **已做完**（`e399b65`）。做法与结论：
+   - 那 12 个操作「卡在窗口句柄 / UI 线程」这个判断只对了一半 —— 句柄由静态的
+     `NativeMainWebWindow.HandleOf(window)` 从调用方窗口取，服务自己就能弹对话框，
+     不需要宿主转发；真正非宿主不可的只有四条：曲库快照、回 UI 线程、落地改动、重启目录监视。
+   - `ISettingsHost` 就这四条，**别往里面加 MainWindow 的属性**。服务一旦能顺手读宿主状态，
+     就会重新长回宿主身上，等于白搬。
+   - 设置修订号与写入闸门跟着搬成服务里的进程级静态，语义不变（网页靠它判断表单过期）。
+   - 设置域现在的形态：`MainWindow.WebSettings.cs` 一行转发 → `WebSettingsService`（17 命令）
+     + `MainWindow.SettingsHost.cs`（4）→ 副作用仍走原生那套 `ApplySettingsLive` 等入口。
 3. 干净机验收：本机之外跑一次，确认没有隐式依赖用户环境。

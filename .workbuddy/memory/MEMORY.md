@@ -49,10 +49,17 @@
   旧 XAML 全部 `Page/Compile Remove`（**只排除不删文件**，迷你/零散源码留着给用户重构）、
   MainWindow 从 WinUI Window 变纯业务宿主（控件改为状态容器 `MainWindow.LegacyControls.cs`）。
   调度器/窗口 API 用**同名命名空间**顶替（`NativeDispatcherQueue.cs`、`NativeAppWindow.cs`）。
-- ⚠️ **编译未收尾**：约 1450 处错误在 MainWindow 旧界面残留里；未 publish/冒烟 → **不许宣称已去 WinUI**。
-  交接 `collab/RESULT-2026-10-30-w13-remove-winui.md`。
+- ✅ **编译已收尾**（2026-10-30 复验）：`_publish_retry_clean.py` 先移走 obj/x64 再跑，
+  等于全量重建，0 条 `error CS`、产物可启动。**但「已去 WinUI」仍不能宣称**：
+  旧界面残留文件只做了 `Page/Compile Remove`（没删），业务还有一部分住在 MainWindow。
+  进度与提交清单看 `collab/HANDOFF-2026-10-30-w13-workbuddy-progress.md`。
 - ⚠️ **判断编译是否真过必须用 `-t:Rebuild`**（增量编常报「0 错误」假象，已骗三次）；编译器分批暴露错误。
 - ⚠️ 路线：先把业务方法从界面文件搬出、再整批排除界面文件（直接排除会更糟：1450→1980）。工具在 `_w13_tools/`。
+- **设置域已收口**（`e399b65`）：17 个 `appSettings` 命令全在 `WebSettingsService`，
+  `MainWindow.WebSettings.cs` 只剩一行转发，宿主能力抽成 `ISettingsHost`（**只四条**：
+  曲库快照 / 回 UI 线程 / 落地改动 / 重启目录监视）。
+  铁律：**别往 `ISettingsHost` 加 MainWindow 现成属性** —— 服务能顺手读宿主状态就会长回去。
+  句柄类操作（三个选择器、导入导出）不需要宿主传句柄：`NativeMainWebWindow.HandleOf(window)` 是静态的。
 - DSD：用户确认 **DoP 已完成**，只剩 Native DSD 接入。
 
 ## 构建 / 发布
