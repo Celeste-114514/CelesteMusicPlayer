@@ -205,9 +205,9 @@ namespace CelesteMusicPlayer
                 _audioEngine.Resume();
                 // 暂停-恢复本质是一次 seek 重建会话，无缝源 _next 已被清空；
                 // 重新预加载下一首，避免恢复后播到尾因无续接而误切歌。
-                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
                 {
-                    _ = PreloadSeamlessNextAsync(_userPlaylist[_userPlaylistIndex]);
+                    _ = PreloadSeamlessNextAsync(_queue.Items[_queue.Index]);
                 }
 
                 _isEnginePaused = false;
@@ -244,14 +244,14 @@ namespace CelesteMusicPlayer
 
             if (player.Source == null)
             {
-                // 启动续播后就绪但未播（Source 为空）时，恢复的是 _userPlaylistIndex 指向的那首，
+                // 启动续播后就绪但未播（Source 为空）时，恢复的是 _queue.Index 指向的那首，
                 // 不是队列第 0 首 —— 以前靠"预加载进 MediaPlayer"兜出 wasPlaying 判断，
                 // 预加载已删（会弹 SourceNotSupported），这里必须显式按恢复索引起播。
-                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
                 {
-                    PlayUserPlaylistAt(_userPlaylistIndex);
+                    PlayUserPlaylistAt(_queue.Index);
                 }
-                else if (_userPlaylist.Count > 0)
+                else if (_queue.Items.Count > 0)
                 {
                     PlayUserPlaylistAt(0);
                 }
@@ -275,9 +275,9 @@ namespace CelesteMusicPlayer
                 // 启动续播预加载的就绪态（MediaPlayer 有 Source 但未走引擎）：点播放时应转走
                 // 引擎路径，与双击播放一致 —— 否则走 player.Play() 是 MediaPlayer 路径，
                 // 没有 DSP 链 → 实时电平表不显示（LevelMeterChannels 恒 0），SMTC 进度也不对。
-                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
                 {
-                    PlayUserPlaylistAt(_userPlaylistIndex);
+                    PlayUserPlaylistAt(_queue.Index);
                     return;
                 }
 
@@ -371,9 +371,9 @@ namespace CelesteMusicPlayer
                     _audioEngine.Seek(TimeSpan.FromSeconds(ProgressSlider.Value / TempoScale()));
                     // seek 会丢弃无缝源里已预加载的下一首（位置已变，续接会错位）。
                     // 重挂下一首，避免 seek 后播到尾时因 _next 为空而无法无缝续接。
-                    if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                    if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
                     {
-                        _ = PreloadSeamlessNextAsync(_userPlaylist[_userPlaylistIndex]);
+                        _ = PreloadSeamlessNextAsync(_queue.Items[_queue.Index]);
                     }
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
@@ -513,9 +513,9 @@ namespace CelesteMusicPlayer
 
         internal PlaylistItem? GetCurrentPlayingItem()
         {
-            if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+            if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
             {
-                return _userPlaylist[_userPlaylistIndex];
+                return _queue.Items[_queue.Index];
             }
 
             if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
@@ -582,9 +582,9 @@ namespace CelesteMusicPlayer
             string? path = GetCurrentPlayingItem()?.PersistenceKey ?? _nowPlayingPath;
             if (string.IsNullOrWhiteSpace(path))
             {
-                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
                 {
-                    path = _userPlaylist[_userPlaylistIndex].PersistenceKey;
+                    path = _queue.Items[_queue.Index].PersistenceKey;
                 }
                 else if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
                 {
@@ -686,10 +686,10 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>当前播放队列快照。迷你播放器队列面板用。</summary>
-        internal IReadOnlyList<PlaylistItem> GetUserPlaylistPublic() => _userPlaylist;
+        internal IReadOnlyList<PlaylistItem> GetUserPlaylistPublic() => _queue.Items;
 
         /// <summary>队列中正在播放那首的下标（-1 = 没有）。用于给队列面板标出当前项。</summary>
-        internal int GetUserPlaylistIndexPublic() => _userPlaylistIndex;
+        internal int GetUserPlaylistIndexPublic() => _queue.Index;
 
         /// <summary>当前曲目是否已收藏。迷你播放器心形按钮用它显示空心/实心。</summary>
         internal bool IsCurrentFavoritePublic()
@@ -697,9 +697,9 @@ namespace CelesteMusicPlayer
             string? path = GetCurrentPlayingItem()?.PersistenceKey ?? _nowPlayingPath;
             if (string.IsNullOrWhiteSpace(path))
             {
-                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
                 {
-                    path = _userPlaylist[_userPlaylistIndex].PersistenceKey;
+                    path = _queue.Items[_queue.Index].PersistenceKey;
                 }
                 else if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
                 {
@@ -1479,7 +1479,7 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                List<string> paths = _userPlaylist
+                List<string> paths = _queue.Items
                     .Select(p => p.PersistenceKey)
                     .Where(x => !string.IsNullOrWhiteSpace(x))
                     .Distinct(StringComparer.OrdinalIgnoreCase)
@@ -1548,7 +1548,7 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                _userPlaylist.Clear();
+                _queue.Items.Clear();
                 AddSongsToUserPlaylist(items);
                 PlayUserPlaylistAt(0);
                 StartupLog.Write("已载入播放列表到队列: " + name + " (" + items.Count + " 首)");
@@ -1567,22 +1567,22 @@ namespace CelesteMusicPlayer
         internal void RefreshFromPlaylistReorder()
         {
             // 用户播放列表顺序变化由共享 ObservableCollection 自动反映到主窗口;
-            // 这里只需按当前播放曲目重新定位 _userPlaylistIndex,保证下一首播放方向正确。
+            // 这里只需按当前播放曲目重新定位 _queue.Index,保证下一首播放方向正确。
             if (!string.IsNullOrWhiteSpace(_nowPlayingPath))
             {
-                for (int i = 0; i < _userPlaylist.Count; i++)
+                for (int i = 0; i < _queue.Items.Count; i++)
                 {
-                    if (string.Equals(_userPlaylist[i].FilePath, _nowPlayingPath, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(_queue.Items[i].FilePath, _nowPlayingPath, StringComparison.OrdinalIgnoreCase))
                     {
-                        _userPlaylistIndex = i;
+                        _queue.Index = i;
                         return;
                     }
                 }
             }
 
-            if (_userPlaylistIndex >= _userPlaylist.Count)
+            if (_queue.Index >= _queue.Items.Count)
             {
-                _userPlaylistIndex = _userPlaylist.Count - 1;
+                _queue.Index = _queue.Items.Count - 1;
             }
         }
 
@@ -2443,9 +2443,9 @@ namespace CelesteMusicPlayer
             }
 
             // 重挂下一首（seek 丢弃无缝源里的 next）
-            if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+            if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
             {
-                _ = PreloadSeamlessNextAsync(_userPlaylist[_userPlaylistIndex]);
+                _ = PreloadSeamlessNextAsync(_queue.Items[_queue.Index]);
             }
 
             // 立即把高亮切到目标行（点击跳转按原位置，不套用偏移）
@@ -2578,7 +2578,7 @@ namespace CelesteMusicPlayer
             _currentIndex = index;
             if (syncUserPlaylistIndex)
             {
-                _userPlaylistIndex = FindUserPlaylistIndex(item.FilePath);
+                _queue.Index = FindUserPlaylistIndex(item.FilePath);
             }
 
             if (string.Equals(_currentCategory, "Songs", StringComparison.Ordinal)
@@ -2597,12 +2597,12 @@ namespace CelesteMusicPlayer
 
         private void PlayUserPlaylistAt(int index)
         {
-            if (index < 0 || index >= _userPlaylist.Count)
+            if (index < 0 || index >= _queue.Items.Count)
             {
                 return;
             }
 
-            PlaylistItem item = _userPlaylist[index];
+            PlaylistItem item = _queue.Items[index];
 
             // SACD 镜像(.iso)：播放时懒抽取为逐轨 DSF 并就地展开进队列，复用既有 DSD 全链路。
             // 引擎层不感知 .iso，展开后的 DSF 走与本地 DSD 文件完全相同的播放路径（DoP/PCM/续播/持久化）。
@@ -2612,7 +2612,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            _userPlaylistIndex = index;
+            _queue.Index = index;
             _currentIndex = FindLibraryIndex(item.FilePath);
 
             if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
@@ -2645,12 +2645,12 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (isoIndex < 0 || isoIndex >= _userPlaylist.Count)
+                if (isoIndex < 0 || isoIndex >= _queue.Items.Count)
                 {
                     return;
                 }
 
-                string isoPath = _userPlaylist[isoIndex].FilePath;
+                string isoPath = _queue.Items[isoIndex].FilePath;
                 NowPlayingText.Text = "正在读取 SACD 镜像…";
 
                 var tracks = await SacdIsoExtractor.ExtractTracksAsync(isoPath, s =>
@@ -2687,13 +2687,13 @@ namespace CelesteMusicPlayer
                 {
                     try
                     {
-                        _userPlaylist.RemoveAt(isoIndex);
+                        _queue.Items.RemoveAt(isoIndex);
                         for (int k = 0; k < dsItems.Count; k++)
                         {
-                            _userPlaylist.Insert(isoIndex + k, dsItems[k]);
+                            _queue.Items.Insert(isoIndex + k, dsItems[k]);
                         }
 
-                        _userPlaylistIndex = isoIndex;                       // 指向首轨
+                        _queue.Index = isoIndex;                       // 指向首轨
                         _currentIndex = FindLibraryIndex(dsItems[0].FilePath);
                         PlaylistView?.ScrollIntoView(dsItems[0]);
                         StartPlayback(dsItems[0]);
@@ -2768,12 +2768,12 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void StartPlaybackFromPendingPosition(double seconds, bool pauseAfter)
         {
-            if (_userPlaylistIndex < 0 || _userPlaylistIndex >= _userPlaylist.Count)
+            if (_queue.Index < 0 || _queue.Index >= _queue.Items.Count)
             {
                 return;
             }
 
-            PlaylistItem item = _userPlaylist[_userPlaylistIndex];
+            PlaylistItem item = _queue.Items[_queue.Index];
             _pendingStartSeconds = Math.Max(0, seconds);
             _pendingStartPauseAfter = pauseAfter;
             _pendingStartPath = item.FilePath;
@@ -3183,18 +3183,18 @@ namespace CelesteMusicPlayer
         {
             // 无缝预加载预测"即将播放的下一首"：必须遵循当前播放顺序（含随机），
             // 否则随机播放时自动切歌会错误地切到列表顺序的下一首而非随机下一首。
-            if (_userPlaylist.Count > 0)
+            if (_queue.Items.Count > 0)
             {
                 int baseIdx = FindUserPlaylistIndex(current.FilePath);
                 if (baseIdx < 0)
                 {
-                    baseIdx = _userPlaylistIndex >= 0 ? _userPlaylistIndex : 0;
+                    baseIdx = _queue.Index >= 0 ? _queue.Index : 0;
                 }
 
-                int next = _orderResolver.NextIndexByOrder(_userPlaylist.Count, baseIdx, autoAdvance: true);
-                if (next >= 0 && next < _userPlaylist.Count)
+                int next = _orderResolver.NextIndexByOrder(_queue.Items.Count, baseIdx, autoAdvance: true);
+                if (next >= 0 && next < _queue.Items.Count)
                 {
-                    return _userPlaylist[next];
+                    return _queue.Items[next];
                 }
 
                 return null;
@@ -3259,11 +3259,11 @@ namespace CelesteMusicPlayer
         /// <summary>无缝切歌后同步用户播放队列当前索引（命中则设为该项）。</summary>
         private void AdvanceUserPlaylistIndexTo(PlaylistItem item)
         {
-            if (_userPlaylist.Count == 0) return;
+            if (_queue.Items.Count == 0) return;
             int idx = FindUserPlaylistIndex(item.FilePath);
             if (idx >= 0)
             {
-                _userPlaylistIndex = idx;
+                _queue.Index = idx;
                 PlaylistView.SelectedIndex = idx;
             }
         }

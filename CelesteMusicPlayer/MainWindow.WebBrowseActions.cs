@@ -174,16 +174,16 @@ namespace CelesteMusicPlayer
             if (fromQueue)
             {
                 WebQueue(JsonSerializer.SerializeToElement(new { operation = "get" }));
-                if (msg.GetProperty("revision").GetInt32() != _webQueueRevision) throw new InvalidOperationException("播放队列已变化，请重新打开菜单。");
+                if (msg.GetProperty("revision").GetInt32() != _queue.Revision) throw new InvalidOperationException("播放队列已变化，请重新打开菜单。");
                 var refs = msg.GetProperty("entries").EnumerateArray().ToArray();
                 indices = refs.Select(entry => entry.GetProperty("index").GetInt32()).Distinct().ToArray();
                 foreach (var entry in refs)
                 {
                     int index = entry.GetProperty("index").GetInt32();
-                    if (index < 0 || index >= _userPlaylist.Count || WebTrackIdentity.Of(_userPlaylist[index]) != entry.GetProperty("trackId").GetString())
+                    if (index < 0 || index >= _queue.Items.Count || WebTrackIdentity.Of(_queue.Items[index]) != entry.GetProperty("trackId").GetString())
                         throw new InvalidOperationException("播放队列已变化，请重新打开菜单。");
                 }
-                songs = indices.Select(i => _userPlaylist[i]).ToArray();
+                songs = indices.Select(i => _queue.Items[i]).ToArray();
             }
             else
             {
@@ -210,11 +210,11 @@ namespace CelesteMusicPlayer
                 case "removeQueue":
                 {
                     if (!fromQueue) throw new ArgumentException("请在播放队列中操作。");
-                    var playing = _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count ? _userPlaylist[_userPlaylistIndex] : null;
-                    foreach (int index in indices.OrderByDescending(i => i)) _userPlaylist.RemoveAt(index);
-                    if (operation == "pin") for (int i = songs.Length - 1; i >= 0; i--) _userPlaylist.Insert(0, songs[i]);
-                    _userPlaylistIndex = playing == null ? -1 : _userPlaylist.IndexOf(playing);
-                    RenumberCollection(_userPlaylist); NotifyCurrentPlaylistWindow();
+                    var playing = _queue.Index >= 0 && _queue.Index < _queue.Items.Count ? _queue.Items[_queue.Index] : null;
+                    foreach (int index in indices.OrderByDescending(i => i)) _queue.Items.RemoveAt(index);
+                    if (operation == "pin") for (int i = songs.Length - 1; i >= 0; i--) _queue.Items.Insert(0, songs[i]);
+                    _queue.Index = playing == null ? -1 : _queue.Items.IndexOf(playing);
+                    RenumberCollection(_queue.Items); NotifyCurrentPlaylistWindow();
                     if (_currentCategory == "UserPlaylist") ApplyUserPlaylistSearchFilter();
                     break;
                 }
@@ -240,16 +240,16 @@ namespace CelesteMusicPlayer
         {
             foreach (var song in songs.Where(s => s.SourceTrackId.Length > 0)) NetworkLibraryStore.Pin(song.SourceTrackId);
             // CUE tracks share a file. Moving one must not remove its sibling tracks.
-            var playing = _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count ? _userPlaylist[_userPlaylistIndex] : null;
-            var kept = WebBrowseRules.Insert(_userPlaylist.ToArray(), songs, playing, WebTrackIdentity.Of, ClonePlaylistItem, next, AppSettingsStore.Load().InsertPlaylistAtBegin);
-            bool rebind = ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist) || _currentCategory == "UserPlaylist";
+            var playing = _queue.Index >= 0 && _queue.Index < _queue.Items.Count ? _queue.Items[_queue.Index] : null;
+            var kept = WebBrowseRules.Insert(_queue.Items.ToArray(), songs, playing, WebTrackIdentity.Of, ClonePlaylistItem, next, AppSettingsStore.Load().InsertPlaylistAtBegin);
+            bool rebind = ReferenceEquals(PlaylistView.ItemsSource, _queue.Items) || _currentCategory == "UserPlaylist";
             if (rebind) PlaylistView.ItemsSource = null;
-            _userPlaylist = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>(kept);
-            if (rebind) PlaylistView.ItemsSource = _userPlaylist;
-            _userPlaylistIndex = playing == null ? -1 : _userPlaylist.IndexOf(playing);
-            if (_userPlaylistIndex < 0 && playing != null)
-                _userPlaylistIndex = kept.FindIndex(song => WebTrackIdentity.Of(song) == WebTrackIdentity.Of(playing));
-            RenumberCollection(_userPlaylist); NotifyCurrentPlaylistWindow();
+            _queue.Replace(kept);
+            if (rebind) PlaylistView.ItemsSource = _queue.Items;
+            _queue.Index = playing == null ? -1 : _queue.Items.IndexOf(playing);
+            if (_queue.Index < 0 && playing != null)
+                _queue.Index = kept.FindIndex(song => WebTrackIdentity.Of(song) == WebTrackIdentity.Of(playing));
+            RenumberCollection(_queue.Items); NotifyCurrentPlaylistWindow();
             if (_currentCategory == "UserPlaylist") ApplyUserPlaylistSearchFilter();
         }
     }

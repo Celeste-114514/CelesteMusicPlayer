@@ -360,7 +360,7 @@ namespace CelesteMusicPlayer
                 // 这里只是往曲库补歌，不该顺手把播放队列重排一遍。
                 // 2026-10-08 用户实测：启动恢复出的播放队列被自动按标题打乱，就是这条分支干的。
                 // 用户主动点排序按钮走 SortField/SortOrder 那条路径，不受这里影响。
-                RenumberCollection(_userPlaylist);
+                RenumberCollection(_queue.Items);
             }
             else
             {
@@ -1367,9 +1367,9 @@ namespace CelesteMusicPlayer
                     FolderListBorder.Visibility = Visibility.Collapsed;
                     CloseAlbumDetailUi();
                     CloseArtistDetailUi();
-                    PlaylistView.ItemsSource = _userPlaylist;
+                    PlaylistView.ItemsSource = _queue.Items;
                     // 播放列表默认不排序：保持添加顺序（后添加批次在前，批内相对顺序不变）
-                    RenumberCollection(_userPlaylist);
+                    RenumberCollection(_queue.Items);
                     ScrollUserPlaylistToPlaying();
                     break;
 
@@ -1590,7 +1590,7 @@ namespace CelesteMusicPlayer
             }
 
             // 仅「播放队列」分类支持拖拽重排（其它列表保持排序语义不变）
-            PlaylistView.CanReorderItems = ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist);
+            PlaylistView.CanReorderItems = ReferenceEquals(PlaylistView.ItemsSource, _queue.Items);
             PlaylistView.CanDragItems = PlaylistView.CanReorderItems;
 
             // 空状态提示：仅 Favorites / Recent / Ratings 自己管理；其余分类隐藏
@@ -1610,18 +1610,18 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void ScrollUserPlaylistToPlaying()
         {
-            if (PlaylistView == null || _userPlaylist == null || _userPlaylist.Count == 0)
+            if (PlaylistView == null || _queue.Items == null || _queue.Items.Count == 0)
             {
                 return;
             }
 
-            int index = _userPlaylistIndex;
-            if (index < 0 || index >= _userPlaylist.Count)
+            int index = _queue.Index;
+            if (index < 0 || index >= _queue.Items.Count)
             {
                 return;
             }
 
-            PlaylistItem playing = _userPlaylist[index];
+            PlaylistItem playing = _queue.Items[index];
             DispatcherQueue.TryEnqueue(() =>
             {
                 if (!string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
@@ -2264,10 +2264,10 @@ namespace CelesteMusicPlayer
         private (double Start, double Length) CurrentCueRange()
         {
             PlaylistItem? item = null;
-            if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
-                && string.Equals(_userPlaylist[_userPlaylistIndex].FilePath, _nowPlayingPath, StringComparison.OrdinalIgnoreCase))
+            if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count
+                && string.Equals(_queue.Items[_queue.Index].FilePath, _nowPlayingPath, StringComparison.OrdinalIgnoreCase))
             {
-                item = _userPlaylist[_userPlaylistIndex];
+                item = _queue.Items[_queue.Index];
             }
             else if (_currentIndex >= 0 && _currentIndex < _playlist.Count
                 && string.Equals(_playlist[_currentIndex].FilePath, _nowPlayingPath, StringComparison.OrdinalIgnoreCase))
@@ -2971,11 +2971,11 @@ namespace CelesteMusicPlayer
             _waveformPath = path;
 
             // CUE 分轨：没显式带区间时按当前播放条目补（同一文件的多轨要各自的波形）
-            if (startSeconds <= 0 && _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
-                && string.Equals(_userPlaylist[_userPlaylistIndex].FilePath, path, StringComparison.OrdinalIgnoreCase))
+            if (startSeconds <= 0 && _queue.Index >= 0 && _queue.Index < _queue.Items.Count
+                && string.Equals(_queue.Items[_queue.Index].FilePath, path, StringComparison.OrdinalIgnoreCase))
             {
-                startSeconds = _userPlaylist[_userPlaylistIndex].StartTimeSeconds;
-                lengthSeconds = startSeconds > 0 ? _userPlaylist[_userPlaylistIndex].Duration.TotalSeconds : 0;
+                startSeconds = _queue.Items[_queue.Index].StartTimeSeconds;
+                lengthSeconds = startSeconds > 0 ? _queue.Items[_queue.Index].Duration.TotalSeconds : 0;
             }
 
             // 守卫键带区间：同文件切轨时路径相同，靠起点区分
@@ -3236,9 +3236,9 @@ namespace CelesteMusicPlayer
             {
                 case PlaybackOrder.TrackLoop:
                     // IsLooping 为 true 时通常不会触发；兜底再播当前曲
-                    if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                    if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
                     {
-                        PlayUserPlaylistAt(_userPlaylistIndex);
+                        PlayUserPlaylistAt(_queue.Index);
                     }
                     break;
 

@@ -13,8 +13,6 @@ namespace CelesteMusicPlayer
         private WebOutputDevice[] _webOutputDevices = Array.Empty<WebOutputDevice>();
         private string _webDevicesMode = "";
         private bool _webSettingsBusy;
-        private PlaylistItem[] _webQueueSnapshot = Array.Empty<PlaylistItem>();
-        private int _webQueueRevision;
 
         internal async Task<float[]> WebWaveformAsync(string id, System.Threading.CancellationToken cancellation)
         {
@@ -24,7 +22,7 @@ namespace CelesteMusicPlayer
             var item = GetCurrentPlayingItem();
             if (item == null || WebTrackIdentity.Of(item) != id) return Array.Empty<float>();
             double start = item.StartTimeSeconds;
-            bool cue = start > 0 || _userPlaylist.Any(other => other.StartTimeSeconds > 0 && string.Equals(other.FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase));
+            bool cue = start > 0 || _queue.Items.Any(other => other.StartTimeSeconds > 0 && string.Equals(other.FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase));
             return await WaveformDataProvider.GetWaveformAsync(item.FilePath, 120, start, cue ? item.Duration.TotalSeconds : 0, cancellation);
         }
 
@@ -164,13 +162,13 @@ namespace CelesteMusicPlayer
 
         internal object WebQueue(JsonElement msg)
         {
-            var items = _userPlaylist.ToArray();
-            if (!_webQueueSnapshot.SequenceEqual(items)) { _webQueueSnapshot = items; _webQueueRevision++; }
+            // 修订号与快照由队列自己维护：内容变了才 +1，轮询不会把修订号刷爆。
+            var (items, revision) = _queue.WebSnapshot();
             string operation = msg.GetProperty("operation").GetString() ?? "";
             if (operation == "play")
             {
                 int index = msg.GetProperty("index").GetInt32();
-                if (msg.GetProperty("revision").GetInt32() != _webQueueRevision || index < 0 || index >= items.Length
+                if (msg.GetProperty("revision").GetInt32() != revision || index < 0 || index >= items.Length
                     || WebTrackIdentity.Of(items[index]) != msg.GetProperty("trackId").GetString())
                     throw new InvalidOperationException("播放队列已变化，请刷新后重试。");
                 PlayUserPlaylistAt(index);
@@ -178,19 +176,19 @@ namespace CelesteMusicPlayer
             else if (operation == "move")
             {
                 int from = msg.GetProperty("from").GetInt32(), to = msg.GetProperty("to").GetInt32();
-                if (msg.GetProperty("revision").GetInt32() != _webQueueRevision || from < 0 || from >= items.Length
+                if (msg.GetProperty("revision").GetInt32() != revision || from < 0 || from >= items.Length
                     || to < 0 || to >= items.Length || WebTrackIdentity.Of(items[from]) != msg.GetProperty("trackId").GetString())
                     throw new InvalidOperationException("播放队列已变化，请刷新后重新拖动。");
                 if (from != to)
                 {
                     // Preserve the exact occurrence, including duplicate songs and CUE segments. Never restart audio.
-                    _userPlaylistIndex = WebQueueRules.Move(_userPlaylist, from, to, _userPlaylistIndex);
-                    RenumberCollection(_userPlaylist);
+                    _queue.Index = WebQueueRules.Move(_queue.Items, from, to, _queue.Index);
+                    RenumberCollection(_queue.Items);
                     NotifyCurrentPlaylistWindow();
                     if (_currentCategory == "UserPlaylist") ApplyUserPlaylistSearchFilter();
-                    items = _userPlaylist.ToArray();
-                    _webQueueSnapshot = items;
-                    _webQueueRevision++;
+                    items = _queue.Items.ToArray();
+                    _queue.Touch();
+                    revision = _queue.Revision;
                 }
             }
             else if (operation != "get") throw new ArgumentException("未知的队列操作。");
@@ -204,14 +202,14 @@ namespace CelesteMusicPlayer
             {
                 double seconds = Math.Max(0, items[i].Duration.TotalSeconds);
                 totalSeconds += seconds;
-                if (_userPlaylistIndex >= 0 && i > _userPlaylistIndex) remainingSeconds += seconds;
+                if (_queue.Index >= 0 && i > _queue.Index) remainingSeconds += seconds;
             }
 
             return new
             {
-                revision = _webQueueRevision, total = items.Length, offset, currentIndex = _userPlaylistIndex,
+                revision, total = items.Length, offset, currentIndex = _queue.Index,
                 order = _orderResolver.Order.ToString(),
-                summary = new { totalSeconds, remainingSeconds, hasCurrent = _userPlaylistIndex >= 0 && _userPlaylistIndex < items.Length },
+                summary = new { totalSeconds, remainingSeconds, hasCurrent = _queue.Index >= 0 && _queue.Index < items.Length },
                 previous = QueuePreviousPreview(items),
                 next = QueueNextPreview(items),
                 tracks = items.Skip(offset).Take(200).Select((item, i) => new
@@ -242,12 +240,12 @@ namespace CelesteMusicPlayer
         /// </summary>
         private object QueuePreviousPreview(PlaylistItem[] items)
         {
-            if (items.Length == 0 || _userPlaylistIndex < 0 || _userPlaylistIndex >= items.Length)
+            if (items.Length == 0 || _queue.Index < 0 || _queue.Index >= items.Length)
             {
                 return new { kind = "unknown" };
             }
 
-            int? index = _orderResolver.ResolvePreviousIndex(items.Length, _userPlaylistIndex);
+            int? index = _orderResolver.ResolvePreviousIndex(items.Length, _queue.Index);
             if (index is null || index.Value < 0 || index.Value >= items.Length)
             {
                 return new { kind = "none" };
@@ -257,7 +255,7 @@ namespace CelesteMusicPlayer
             return new
             {
                 // 队列只有一首且允许回卷时，"上一首"就是这首自己
-                kind = index.Value == _userPlaylistIndex ? "self" : "track",
+                kind = index.Value == _queue.Index ? "self" : "track",
                 index = index.Value, title = item.Title, artist = item.Artist, album = item.Album,
                 duration = item.Duration.TotalSeconds,
                 coverUrl = "https://celeste-cover.internal/cover/" + WebTrackIdentity.Of(item)
@@ -274,7 +272,7 @@ namespace CelesteMusicPlayer
             const string none = "none";
             string kind;
             int index = -1;
-            if (items.Length == 0 || _userPlaylistIndex < 0 || _userPlaylistIndex >= items.Length)
+            if (items.Length == 0 || _queue.Index < 0 || _queue.Index >= items.Length)
             {
                 kind = "unknown";
             }
@@ -284,18 +282,18 @@ namespace CelesteMusicPlayer
                 {
                     case PlaybackOrder.Random:
                         kind = items.Length == 1 ? "self" : "random";
-                        index = items.Length == 1 ? _userPlaylistIndex : -1;
+                        index = items.Length == 1 ? _queue.Index : -1;
                         break;
                     case PlaybackOrder.TrackLoop:
-                        kind = "self"; index = _userPlaylistIndex; break;
+                        kind = "self"; index = _queue.Index; break;
                     case PlaybackOrder.TrackOnce:
                         kind = none; break;
                     case PlaybackOrder.Sequential:
-                        kind = _userPlaylistIndex + 1 < items.Length ? "track" : none;
-                        index = _userPlaylistIndex + 1;
+                        kind = _queue.Index + 1 < items.Length ? "track" : none;
+                        index = _queue.Index + 1;
                         break;
                     default: // ListLoop：走到末尾就回第一首
-                        kind = "track"; index = (_userPlaylistIndex + 1) % items.Length; break;
+                        kind = "track"; index = (_queue.Index + 1) % items.Length; break;
                 }
             }
 

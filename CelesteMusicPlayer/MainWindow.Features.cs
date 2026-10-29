@@ -795,7 +795,7 @@ namespace CelesteMusicPlayer
             {
                 PlaylistItem fresh = CreatePlaylistItemFromPath(path);
                 ReplaceMetadataInCollection(_playlist, fresh);
-                ReplaceMetadataInCollection(_userPlaylist, fresh);
+                ReplaceMetadataInCollection(_queue.Items, fresh);
                 if (string.Equals(_nowPlayingPath, path, StringComparison.OrdinalIgnoreCase))
                 {
                     _ = UpdateNowPlayingPanelAsync(fresh);
@@ -867,9 +867,9 @@ namespace CelesteMusicPlayer
                     _audioEngine.Seek(TimeSpan.FromSeconds(next / scale));
 
                     // seek 会丢弃无缝源里已预加载的下一首，重挂一次
-                    if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                    if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
                     {
-                        _ = PreloadSeamlessNextAsync(_userPlaylist[_userPlaylistIndex]);
+                        _ = PreloadSeamlessNextAsync(_queue.Items[_queue.Index]);
                     }
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
@@ -936,15 +936,15 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            string? playingPath = _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
-                ? _userPlaylist[_userPlaylistIndex].FilePath
+            string? playingPath = _queue.Index >= 0 && _queue.Index < _queue.Items.Count
+                ? _queue.Items[_queue.Index].FilePath
                 : null;
 
             var incomingPaths = new HashSet<string>(
                 incoming.Select(s => s.FilePath),
                 StringComparer.OrdinalIgnoreCase);
 
-            var withoutIncoming = _userPlaylist
+            var withoutIncoming = _queue.Items
                 .Where(s => !incomingPaths.Contains(s.FilePath))
                 .Select(ClonePlaylistItem)
                 .ToList();
@@ -967,21 +967,21 @@ namespace CelesteMusicPlayer
                 rebuilt[i].Index = i + 1;
             }
 
-            bool rebind = ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist);
+            bool rebind = ReferenceEquals(PlaylistView.ItemsSource, _queue.Items);
             if (rebind)
             {
                 PlaylistView.ItemsSource = null;
             }
 
-            _userPlaylist = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>(rebuilt);
+            _queue.Replace(rebuilt);
             if (rebind || string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
             {
-                PlaylistView.ItemsSource = _userPlaylist;
+                PlaylistView.ItemsSource = _queue.Items;
             }
 
             if (!string.IsNullOrWhiteSpace(playingPath))
             {
-                _userPlaylistIndex = FindUserPlaylistIndex(playingPath);
+                _queue.Index = FindUserPlaylistIndex(playingPath);
             }
 
             NotifyCurrentPlaylistWindow();
@@ -993,9 +993,9 @@ namespace CelesteMusicPlayer
             string? path = _nowPlayingPath;
             if (string.IsNullOrWhiteSpace(path))
             {
-                if (_userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count)
+                if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
                 {
-                    path = _userPlaylist[_userPlaylistIndex].FilePath;
+                    path = _queue.Items[_queue.Index].FilePath;
                 }
                 else if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
                 {
@@ -2340,8 +2340,8 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                var paths = _userPlaylist.Select(s => s.FilePath).ToList();
-                var entries = _userPlaylist
+                var paths = _queue.Items.Select(s => s.FilePath).ToList();
+                var entries = _queue.Items
                     .Select(s => (s.FilePath, s.Title, s.Artist, s.Duration.TotalSeconds))
                     .ToList();
                 M3uPlaylistIO.WriteM3u8(file.Path, paths, entries);

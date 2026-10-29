@@ -296,7 +296,7 @@ namespace CelesteMusicPlayer
     {
 
         private readonly ObservableCollection<PlaylistItem> _playlist = new();
-        private ObservableCollection<PlaylistItem> _userPlaylist = new();
+        private readonly PlaybackQueue _queue = new();
         private TaskbarProgressHelper? _taskbarProgress;
         private IntPtr _mainWindowHwnd;
 

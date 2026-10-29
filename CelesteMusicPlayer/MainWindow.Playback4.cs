@@ -198,9 +198,9 @@ namespace CelesteMusicPlayer
         {
             // 优先按播放队列续播；若队列为空（例如直接从媒体库/文件夹双击播放），
             // 则按媒体库当前列表 (_playlist) 顺序推进，保证播完能自动连续下一首。
-            if (_userPlaylist.Count > 0)
+            if (_queue.Items.Count > 0)
             {
-                int? nextIndex = _orderResolver.ResolveNextIndex(_userPlaylist.Count, _userPlaylistIndex, autoAdvance);
+                int? nextIndex = _orderResolver.ResolveNextIndex(_queue.Items.Count, _queue.Index, autoAdvance);
                 if (nextIndex != null)
                 {
                     PlayUserPlaylistAt(nextIndex.Value);
@@ -265,12 +265,12 @@ namespace CelesteMusicPlayer
 
         private void PlayPrevious()
         {
-            if (_userPlaylist.Count == 0)
+            if (_queue.Items.Count == 0)
             {
                 return;
             }
 
-            int? prevIndex = _orderResolver.ResolvePreviousIndex(_userPlaylist.Count, _userPlaylistIndex);
+            int? prevIndex = _orderResolver.ResolvePreviousIndex(_queue.Items.Count, _queue.Index);
             if (prevIndex == null)
             {
                 return;

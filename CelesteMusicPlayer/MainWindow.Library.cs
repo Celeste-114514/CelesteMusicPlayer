@@ -160,7 +160,7 @@ namespace CelesteMusicPlayer
                 }
                 else if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal))
                 {
-                    RenumberCollection(_userPlaylist);
+                    RenumberCollection(_queue.Items);
                 }
                 else
                 {
@@ -1899,7 +1899,7 @@ namespace CelesteMusicPlayer
                 RemoveFilesFromCurrentPlaylist(deadPaths);
                 RemoveSongsFromUserPlaylist(deadItems);
                 RenumberCollection(_playlist);
-                RenumberCollection(_userPlaylist);
+                RenumberCollection(_queue.Items);
                 NotifyCurrentPlaylistWindow();
 
                 _ = RefreshAlbumViewAsync();

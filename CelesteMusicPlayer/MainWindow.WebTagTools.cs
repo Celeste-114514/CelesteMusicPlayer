@@ -310,7 +310,7 @@ namespace CelesteMusicPlayer
                 });
                 foreach (var job in jobs)
                 {
-                    foreach (var item in tracks.Values.Concat(_playlist).Concat(_userPlaylist).Distinct())
+                    foreach (var item in tracks.Values.Concat(_playlist).Concat(_queue.Items).Distinct())
                         if (string.Equals(item.FilePath, job.Old, StringComparison.OrdinalIgnoreCase)) item.FilePath = job.New;
                     foreach (string playlist in NamedPlaylistStore.List())
                     {

@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
@@ -27,7 +27,7 @@ namespace CelesteMusicPlayer
     /// · 自己的音频引擎实例（FFmpeg 解码 + 与主程序同一套 DSP 底层；主程序设过的
     ///   输出模式/设备/EQ/DSP 配置档等共享设置由引擎与后端自己从盘上读，自动继承）；
     /// · 自己的纯内存队列（_queue）：换歌 / 下一首 / 播完切换全自己管，
-    ///   主程序的播放队列（_userPlaylist）一根头发都不动；
+    ///   主程序的播放队列（_queue.Items）一根头发都不动；
         /// · 扒全播放页：滚动歌词（高亮 + 逐行滚动）+ 可视化（40 段频谱柱 + 峰值帽）；
         /// · 十段均衡器：10 段各一根滑条，写与主程序同一条 equalizer.json；
         /// · 设置菜单：打开文件位置 / 文件属性 / 倍速播放（作用于当前播放的歌）；

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -630,7 +630,7 @@ namespace CelesteMusicPlayer
 
         /// <summary>
         /// 队列预览：当前曲目高亮，后面跟几首。只在签名变化时重建。
-        /// 数据源优先级：真播放队列 _userPlaylist（右键"加入播放队列"或双击整张专辑形成的那个）→
+        /// 数据源优先级：真播放队列 _queue.Items（右键"加入播放队列"或双击整张专辑形成的那个）→
         /// 队列为空时退回媒体库当前列表 _playlist。
         /// 注意不能直接用 _playlist：那是"当前分类视图里的曲目"（例如全部歌曲按字母排序），
         /// 不是播放队列 —— 之前就是错用这个，导致这里显示成一整库按字母排的歌。
@@ -644,9 +644,9 @@ namespace CelesteMusicPlayer
 
             try
             {
-                bool fromQueue = _userPlaylist.Count > 0;
-                var list = fromQueue ? _userPlaylist : _playlist;
-                int index = fromQueue ? _userPlaylistIndex : _currentIndex;
+                bool fromQueue = _queue.Items.Count > 0;
+                var list = fromQueue ? _queue.Items : _playlist;
+                int index = fromQueue ? _queue.Index : _currentIndex;
 
                 int count = list.Count;
                 string signature = (fromQueue ? "Q" : "L") + count + ":" + index;

@@ -62,8 +62,8 @@ namespace CelesteMusicPlayer
         {
             if (tracks.Count == 0 || tracks.Any(item => item.SourceTrackId.Length == 0 && !_playlist.Contains(item)))
                 throw new InvalidOperationException("曲库已变化，请刷新后重试。");
-            _userPlaylist.Clear();
-            _userPlaylistIndex = -1;
+            _queue.Items.Clear();
+            _queue.Index = -1;
             foreach (var track in tracks.Where(t => t.SourceTrackId.Length > 0)) NetworkLibraryStore.Pin(track.SourceTrackId);
             AddSongsToUserPlaylist(tracks);
             PlayUserPlaylistAt(0);

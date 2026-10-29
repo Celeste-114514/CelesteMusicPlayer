@@ -156,7 +156,6 @@ namespace CelesteMusicPlayer
 
         private int _currentIndex = -1;
         /// <summary>当前播放在用户播放列表中的下标（播放顺序以播放列表为准）</summary>
-        private int _userPlaylistIndex = -1;
         private PlaylistItem? _seamlessPreloaded; // 已预加载待无缝接续的下一首记录（供 SeamlessTrackChanged 更新 UI）
         // W13：旧「当前播放列表 / 播放队列」独立窗口随 XAML 界面下线（网页界面自带队列）。
 
@@ -1112,13 +1111,13 @@ namespace CelesteMusicPlayer
                             rebuilt[i].Index = i + 1;
                         }
 
-                        _userPlaylist = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>(rebuilt);
-                        if (ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist) == false)
+                        _queue.Replace(rebuilt);
+                        if (ReferenceEquals(PlaylistView.ItemsSource, _queue.Items) == false)
                         {
-                            PlaylistView.ItemsSource = _userPlaylist;
+                            PlaylistView.ItemsSource = _queue.Items;
                         }
 
-                        int idx = (queue.CurrentIndex >= 0 && queue.CurrentIndex < _userPlaylist.Count)
+                        int idx = (queue.CurrentIndex >= 0 && queue.CurrentIndex < _queue.Items.Count)
                             ? queue.CurrentIndex : 0;
                         await PrepareTrackPausedAsync(idx);
                         return;
@@ -1139,7 +1138,7 @@ namespace CelesteMusicPlayer
                 int userIdx = FindUserPlaylistIndex(path);
                 if (userIdx >= 0)
                 {
-                    item = _userPlaylist[userIdx];
+                    item = _queue.Items[userIdx];
                 }
                 else
                 {
@@ -1174,13 +1173,13 @@ namespace CelesteMusicPlayer
 
         private async Task PrepareTrackPausedAsync(int userPlaylistIndex)
         {
-            if (userPlaylistIndex < 0 || userPlaylistIndex >= _userPlaylist.Count)
+            if (userPlaylistIndex < 0 || userPlaylistIndex >= _queue.Items.Count)
             {
                 return;
             }
 
-            PlaylistItem item = _userPlaylist[userPlaylistIndex];
-            _userPlaylistIndex = userPlaylistIndex;
+            PlaylistItem item = _queue.Items[userPlaylistIndex];
+            _queue.Index = userPlaylistIndex;
             _currentIndex = FindLibraryIndex(item.FilePath);
 
             // ★ 记住上次听到哪儿：存档里存了退出时的进度，点播放时从这里接着播。
@@ -1237,7 +1236,7 @@ namespace CelesteMusicPlayer
             // WAV/FLAC 等）会立刻触发 MediaFailed → 弹「无法播放 SourceNotSupported」，
             // 而双击播放走引擎路径一切正常 —— 这就是启动报错、双击却能播的原因。
             // 就绪态的 SMTC 展示已由 ConfigureEngineSmtc 负责；点播放按钮由
-            // PlayPauseButton_Click 转走引擎路径（按 _userPlaylistIndex 恢复到这首）。
+            // PlayPauseButton_Click 转走引擎路径（按 _queue.Index 恢复到这首）。
             NotifyCurrentPlaylistWindow();
         }
 
@@ -1326,9 +1325,9 @@ namespace CelesteMusicPlayer
                 }
 
                 if (string.Equals(_currentCategory, "UserPlaylist", StringComparison.Ordinal)
-                    && ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist)
+                    && ReferenceEquals(PlaylistView.ItemsSource, _queue.Items)
                     && userPlaylistIndex >= 0
-                    && userPlaylistIndex < _userPlaylist.Count)
+                    && userPlaylistIndex < _queue.Items.Count)
                 {
                     PlaylistView.SelectedIndex = userPlaylistIndex;
                     PlaylistView.ScrollIntoView(item);
@@ -1404,7 +1403,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                if (_userPlaylist.Count == 0)
+                if (_queue.Items.Count == 0)
                 {
                     PlayQueueStore.Clear();
                     return;
@@ -1412,10 +1411,10 @@ namespace CelesteMusicPlayer
 
                 var state = new PlayQueueState
                 {
-                    Paths = new List<string>(_userPlaylist.Count),
-                    CurrentIndex = _userPlaylistIndex
+                    Paths = new List<string>(_queue.Items.Count),
+                    CurrentIndex = _queue.Index
                 };
-                foreach (PlaylistItem p in _userPlaylist)
+                foreach (PlaylistItem p in _queue.Items)
                 {
                     if (!string.IsNullOrWhiteSpace(p.PersistenceKey)
                         && !LibraryPathGuard.IsInternalCacheFile(p.PersistenceKey))
@@ -2183,7 +2182,7 @@ namespace CelesteMusicPlayer
                 }
 
                 if (items.Count == 0) return;
-                _userPlaylist.Clear();
+                _queue.Items.Clear();
                 AddSongsToUserPlaylist(items);
                 int index = FindUserPlaylistIndex(filePath);
                 PlayUserPlaylistAt(index >= 0 ? index : 0);
@@ -2587,16 +2586,16 @@ namespace CelesteMusicPlayer
             string q = _librarySearchText.Trim();
             if (string.IsNullOrEmpty(q))
             {
-                if (!ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist))
+                if (!ReferenceEquals(PlaylistView.ItemsSource, _queue.Items))
                 {
-                    PlaylistView.ItemsSource = _userPlaylist;
+                    PlaylistView.ItemsSource = _queue.Items;
                 }
 
                 RefreshPlaylistSelectionChrome();
                 return;
             }
 
-            List<PlaylistItem> filtered = _userPlaylist
+            List<PlaylistItem> filtered = _queue.Items
                 .Where(p => MatchesPlaylistSearch(p, q))
                 .ToList();
 
@@ -2940,12 +2939,12 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                _userPlaylist.Add(song);
-                RenumberCollection(_userPlaylist);
+                _queue.Items.Add(song);
+                RenumberCollection(_queue.Items);
                 if (_currentCategory == "UserPlaylist")
                 {
                     PlaylistView.ItemsSource = null;
-                    PlaylistView.ItemsSource = _userPlaylist;
+                    PlaylistView.ItemsSource = _queue.Items;
                 }
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
@@ -3036,7 +3035,7 @@ namespace CelesteMusicPlayer
 
             if (replacePlaylist)
             {
-                _userPlaylist.Clear();
+                _queue.Items.Clear();
                 AddSongsToUserPlaylist(tracks);
                 PlayUserPlaylistAt(0);
             }
@@ -3159,7 +3158,7 @@ namespace CelesteMusicPlayer
 
             if (replacePlaylist)
             {
-                _userPlaylist.Clear();
+                _queue.Items.Clear();
                 AddSongsToUserPlaylist(tracks);
                 PlayUserPlaylistAt(0);
             }

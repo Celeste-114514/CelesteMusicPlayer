@@ -348,7 +348,7 @@ namespace CelesteMusicPlayer
                 List<PlaylistItem> items = await System.Threading.Tasks.Task.Run(
                     () => valid.Select(BuildItemFromTag).ToList());
                 AddSongsToUserPlaylist(items);
-                NowPlayingText.Text = $"已加入播放队列 {items.Count} 首（当前队列 {_userPlaylist.Count} 首）";
+                NowPlayingText.Text = $"已加入播放队列 {items.Count} 首（当前队列 {_queue.Items.Count} 首）";
                 StartupLog.Write("排序编号页加入播放队列: " + items.Count + " 首");
             }
             catch (Exception ex)

@@ -78,7 +78,7 @@ public sealed partial class MainWindow
             if (operation == "play" && songs.Count > 0)
             {
                 if (!node.IsFolder) PlayPlaylistItem(songs[0]);
-                else { _userPlaylist.Clear(); _userPlaylistIndex = -1; WebInsertQueue(songs.ToArray(), next: false); PlayUserPlaylistAt(0); }
+                else { _queue.Items.Clear(); _queue.Index = -1; WebInsertQueue(songs.ToArray(), next: false); PlayUserPlaylistAt(0); }
             }
             else if (operation == "queue") WebInsertQueue(songs.ToArray(), next: false);
             return new { nodeId = id, path = node.FullPath, tracks = songs.Select(song => new {
