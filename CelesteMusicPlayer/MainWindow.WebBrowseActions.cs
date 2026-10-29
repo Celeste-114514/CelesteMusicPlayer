@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -22,13 +22,13 @@ namespace CelesteMusicPlayer
             return name;
         }
 
-        internal async Task<object> WebBrowseAsync(JsonElement msg, Window host)
+        internal async Task<object> WebBrowseAsync(JsonElement msg, object host)
         {
             string operation = msg.GetProperty("operation").GetString() ?? "get";
             if (operation is "get" or "createPlaylist" or "favorite" or "rating") return WebBrowse(msg);
             if (_webBrowseBusy) throw new InvalidOperationException("请先完成当前操作。");
             _webBrowseBusy = true;
-            nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(host);
+            nint hwnd = NativeMainWebWindow.HandleOf(host);
             try
             {
                 switch (operation)
@@ -150,24 +150,22 @@ namespace CelesteMusicPlayer
             finally { _webBrowseBusy = false; }
         }
 
-        private async Task<string?> WebPickPlaylistAsync(Window host)
+        private async Task<string?> WebPickPlaylistAsync(object host)
         {
-            var choice = new ComboBox { ItemsSource = NamedPlaylistStore.List().ToArray(), PlaceholderText = "选择已有播放列表", MinWidth = 300 };
-            var nameBox = new TextBox { PlaceholderText = "或输入新播放列表名称", MaxLength = 120 };
-            var panel = new StackPanel { Spacing = 12 }; panel.Children.Add(choice); panel.Children.Add(nameBox);
-            var dialog = new ContentDialog { XamlRoot = host.Content.XamlRoot, Title = "添加到播放列表", Content = panel,
-                PrimaryButtonText = "添加", CloseButtonText = "取消", DefaultButton = ContentDialogButton.Primary };
-            ColorHelper.ApplyDialogAccent(dialog);
-            if (await dialog.ShowAsync() != ContentDialogResult.Primary) return null;
-            string name = nameBox.Text.Trim();
-            if (name.Length == 0) name = choice.SelectedItem as string ?? "";
+            using var dialog = new System.Windows.Forms.Form { Text = "添加到播放列表", Width = 420, Height = 160, StartPosition = System.Windows.Forms.FormStartPosition.CenterParent, FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false };
+            var choice = new System.Windows.Forms.ComboBox { Dock = System.Windows.Forms.DockStyle.Top, MaxLength = 120 };
+            choice.Items.AddRange(NamedPlaylistStore.List().Cast<object>().ToArray());
+            var add = new System.Windows.Forms.Button { Text = "添加", Dock = System.Windows.Forms.DockStyle.Bottom, DialogResult = System.Windows.Forms.DialogResult.OK };
+            dialog.Controls.Add(choice); dialog.Controls.Add(add); dialog.AcceptButton = add;
+            if (dialog.ShowDialog(host as System.Windows.Forms.IWin32Window) != System.Windows.Forms.DialogResult.OK) return null;
+            string name = choice.Text.Trim();
             if (name.Length is < 1 or > 120 || name.Any(char.IsControl)) throw new ArgumentException("请输入有效的播放列表名称。");
             if (!NamedPlaylistStore.List().Contains(name)) NamedPlaylistStore.Create(name);
             return name;
         }
 
         // Context operations resolve the clicked row, never the currently playing track.
-        internal async Task<object> WebTrackActionAsync(JsonElement msg, Window host)
+        internal async Task<object> WebTrackActionAsync(JsonElement msg, object host)
         {
             string operation = msg.GetProperty("operation").GetString() ?? "get";
             bool fromQueue = msg.TryGetProperty("queue", out var q) && q.GetBoolean();
@@ -231,7 +229,7 @@ namespace CelesteMusicPlayer
                 case "copy": var data = new DataPackage(); data.SetText(string.Join(Environment.NewLine, songs.Select(song => song.Title + " - " + song.Artist))); Clipboard.SetContent(data); break;
                 case "delete":
                     if (AppSettingsStore.Load().DisableDeleteFromDisk || songs.Any(song => song.IsRemote)) throw new InvalidOperationException("当前歌曲不允许从磁盘删除。");
-                    foreach (var song in songs.DistinctBy(song => song.FilePath, StringComparer.OrdinalIgnoreCase)) await DeleteSongFromDiskAsync(song, host.Content.XamlRoot);
+                    foreach (var song in songs.DistinctBy(song => song.FilePath, StringComparer.OrdinalIgnoreCase)) await DeleteSongFromDiskAsync(song, Content.XamlRoot);
                     break;
                 default: throw new ArgumentException("未知的歌曲操作。");
             }

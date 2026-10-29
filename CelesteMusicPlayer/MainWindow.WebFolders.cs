@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -27,7 +27,7 @@ public sealed partial class MainWindow
 
     internal string? WebFolderCoverPath(string id) => _webFolderTracks.TryGetValue(id, out var track) ? track.FilePath : null;
 
-    internal async Task<object> WebFoldersAsync(JsonElement msg, Window host)
+    internal async Task<object> WebFoldersAsync(JsonElement msg, object host)
     {
         string operation = msg.GetProperty("operation").GetString() ?? "roots";
         if (operation == "add")
@@ -37,7 +37,7 @@ public sealed partial class MainWindow
             try
             {
                 var picker = new FolderPicker(); picker.FileTypeFilter.Add("*");
-                WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(host));
+                WinRT.Interop.InitializeWithWindow.Initialize(picker, NativeMainWebWindow.HandleOf(host));
                 var folder = await picker.PickSingleFolderAsync();
                 if (folder != null) await AddFolderToLibraryAsync(folder.Path);
             }

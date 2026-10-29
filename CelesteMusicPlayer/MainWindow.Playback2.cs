@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -2083,6 +2083,12 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            if (_webShellWindow != null)
+            {
+                if (System.Windows.Forms.MessageBox.Show(_webShellWindow, $"确定将以下文件移到回收站吗？\n\n{item.FilePath}", "从磁盘删除", System.Windows.Forms.MessageBoxButtons.OKCancel, System.Windows.Forms.MessageBoxIcon.Warning, System.Windows.Forms.MessageBoxDefaultButton.Button2) != System.Windows.Forms.DialogResult.OK) return;
+            }
+            else
+            {
             ContentDialog dialog = new()
             {
                 Title = "从磁盘删除",
@@ -2099,6 +2105,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            }
             try
             {
                 if (!MoveToRecycleBin(item.FilePath))

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -249,9 +249,9 @@ namespace CelesteMusicPlayer
             _ => throw new ArgumentException("不支持该字段。")
         };
 
-        internal async Task<(PlaylistItem[] Tracks, string Directory, bool Canceled)> WebTagAddFilesAsync(bool folder, Microsoft.UI.Xaml.Window host)
+        internal async Task<(PlaylistItem[] Tracks, string Directory, bool Canceled)> WebTagAddFilesAsync(bool folder, object host)
         {
-            nint handle = WinRT.Interop.WindowNative.GetWindowHandle(host);
+            nint handle = NativeMainWebWindow.HandleOf(host);
             string[] paths;
             string directory = "";
             if (folder)

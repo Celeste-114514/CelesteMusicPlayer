@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -183,7 +183,7 @@ namespace CelesteMusicPlayer
         /// 主窗口自己的选取器继续用 this（MainWindow 就是 Window，没问题）。
         /// </summary>
         internal static nint PickerHostHandle()
-            => Instance is MainWindow host ? WinRT.Interop.WindowNative.GetWindowHandle(host._webShellWindow is Window webHost ? webHost : host) : 0;
+            => Instance is MainWindow host ? host._webShellWindow?.Handle ?? WinRT.Interop.WindowNative.GetWindowHandle(host) : 0;
 
         private async void OpenFileButton_Click(object sender, RoutedEventArgs e)
         {

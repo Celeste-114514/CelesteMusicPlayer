@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk">
+﻿<Project Sdk="Microsoft.NET.Sdk">
   <!-- 本地签名密码从 csproj 外置到 CelesteMusicPlayer.signing.props（已被 .gitignore 忽略，不入库）。
        仓库克隆后若需本地 Debug MSIX 自签名，请自行创建该文件填入密码；缺失则 Debug 打包不签名（不影响 Release 自包含）。 -->
   <Import Project="CelesteMusicPlayer.signing.props" Condition="Exists('CelesteMusicPlayer.signing.props')" />
@@ -17,6 +17,7 @@
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
     <UseWinUI>true</UseWinUI>
+
     <WinUISDKReferences>false</WinUISDKReferences>
     <EnableMsixTooling>true</EnableMsixTooling>
     <Nullable>enable</Nullable>
@@ -33,6 +34,7 @@
     -->
   </PropertyGroup>
 
+  <ItemGroup><FrameworkReference Include="Microsoft.WindowsDesktop.App.WindowsForms" /></ItemGroup>
   <!--
     发布形态由 CelesteSelfContainedDistribute 决定（默认不设置 = 框架依赖，体积小）：
       - 框架依赖（默认）：不打包 .NET 10 / Windows App SDK 运行时，产物约少 30–50MB，
@@ -143,7 +145,7 @@
     <!-- WebView2（皮肤系统第 2 步）：界面用网页渲染、音频内核仍是 C#。
          版本与本地 NuGet 缓存一致，避免离线 restore 失败。
          运行时 DLL（Microsoft.Web.WebView2.Core.dll / WebView2Loader.dll）此前已由 WASDK 传递依赖带进产物。 -->
-    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3179.45" GeneratePathProperty="true" />
   </ItemGroup>
 
   <!--

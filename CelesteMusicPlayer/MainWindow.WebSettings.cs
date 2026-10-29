@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -32,7 +32,7 @@ namespace CelesteMusicPlayer
             AppSettingsStore.Changed += () => Interlocked.Increment(ref _settingsRevision);
         }
 
-        internal async Task<object> WebSettingsAsync(JsonElement msg, Microsoft.UI.Xaml.Window host)
+        internal async Task<object> WebSettingsAsync(JsonElement msg, object host)
         {
             EnsureSettingsRevisionHook();
             string operation = ReadString(msg, "operation");
@@ -44,7 +44,7 @@ namespace CelesteMusicPlayer
                 case "pickFolder": return new { canceled = false, path = await PickFolderAsync(host).ConfigureAwait(true) };
                 case "pickLyricFont":
                     var fontPicker=new Windows.Storage.Pickers.FileOpenPicker();foreach(var ext in new[]{".ttf",".otf",".woff",".woff2"})fontPicker.FileTypeFilter.Add(ext);
-                    WinRT.Interop.InitializeWithWindow.Initialize(fontPicker,WinRT.Interop.WindowNative.GetWindowHandle(host));
+                    WinRT.Interop.InitializeWithWindow.Initialize(fontPicker,NativeMainWebWindow.HandleOf(host));
                     var font=await fontPicker.PickSingleFileAsync();return new { canceled=font==null,path=font?.Path??"" };
                 case "pickFile": return new { canceled = false, path = await PickFileAsync(host).ConfigureAwait(true) };
                 case "cache": return await CacheOperationAsync(msg).ConfigureAwait(true);
@@ -290,9 +290,9 @@ namespace CelesteMusicPlayer
 
         // —— 目录 / 文件选择 ——
 
-        private static async Task<string> PickFolderAsync(Microsoft.UI.Xaml.Window host)
+        private static async Task<string> PickFolderAsync(object host)
         {
-            nint handle = WinRT.Interop.WindowNative.GetWindowHandle(host);
+            nint handle = NativeMainWebWindow.HandleOf(host);
             var picker = new FolderPicker();
             picker.FileTypeFilter.Add("*");
             WinRT.Interop.InitializeWithWindow.Initialize(picker, handle);
@@ -300,9 +300,9 @@ namespace CelesteMusicPlayer
             return folder?.Path ?? "";
         }
 
-        private static async Task<string> PickFileAsync(Microsoft.UI.Xaml.Window host)
+        private static async Task<string> PickFileAsync(object host)
         {
-            nint handle = WinRT.Interop.WindowNative.GetWindowHandle(host);
+            nint handle = NativeMainWebWindow.HandleOf(host);
             var picker = new FileOpenPicker();
             foreach (string extension in new[] { ".jpg", ".jpeg", ".png", ".bmp", ".webp" }) picker.FileTypeFilter.Add(extension);
             WinRT.Interop.InitializeWithWindow.Initialize(picker, handle);
@@ -624,7 +624,7 @@ namespace CelesteMusicPlayer
 
         // —— 监视目录 ——
 
-        private async Task<object> WatchFoldersAsync(JsonElement msg, Microsoft.UI.Xaml.Window host)
+        private async Task<object> WatchFoldersAsync(JsonElement msg, object host)
         {
             string action = ReadString(msg, "action");
             AppSettingsState state = AppSettingsStore.Load();
@@ -691,9 +691,9 @@ namespace CelesteMusicPlayer
             };
         }
 
-        private async Task<object> ExportPreferencesAsync(Microsoft.UI.Xaml.Window host)
+        private async Task<object> ExportPreferencesAsync(object host)
         {
-            nint handle = WinRT.Interop.WindowNative.GetWindowHandle(host);
+            nint handle = NativeMainWebWindow.HandleOf(host);
             var picker = new FileSavePicker();
             picker.FileTypeChoices.Add("设置备份", new List<string> { ".json" });
             picker.SuggestedFileName = "celeste-settings-" + DateTime.Now.ToString("yyyyMMdd-HHmm");
@@ -711,9 +711,9 @@ namespace CelesteMusicPlayer
             };
         }
 
-        private async Task<object> ImportPreferencesAsync(Microsoft.UI.Xaml.Window host)
+        private async Task<object> ImportPreferencesAsync(object host)
         {
-            nint handle = WinRT.Interop.WindowNative.GetWindowHandle(host);
+            nint handle = NativeMainWebWindow.HandleOf(host);
             var picker = new FileOpenPicker();
             picker.FileTypeFilter.Add(".json");
             WinRT.Interop.InitializeWithWindow.Initialize(picker, handle);

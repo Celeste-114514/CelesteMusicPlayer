@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -343,9 +343,6 @@ namespace CelesteMusicPlayer
             // 极客：近黑底 + 单一磷光强调色，小圆角、几乎不模糊、几乎没有动效位移，
             // 走派生规则得到冷调中灰边框与文字（制度上仍是「只给基色，其余派生」，不逐值硬写）。
             // ⚠ 这一步只做配色层：等宽 numerals、顶栏 OUT/FMT/FLAG/BUF 之类信息架构是另一件事，见方案第 5 节，尚未动。
-            P("geek-amber", "极客 · 琥珀", "极客", "#ffbe28", "#f2f4f7", "#0b0e12", 6, 2, 1.15, 0.7, 0.35, "compact", 0.98, 1.45),
-            P("geek-green", "极客 · 磷绿", "极客", "#57e389", "#eff3f0", "#080d0a", 6, 2, 1.15, 0.7, 0.35, "compact", 0.98, 1.45),
-            P("geek-cyan", "极客 · 磷青", "极客", "#4fd6e0", "#eef4f6", "#070e10", 6, 2, 1.15, 0.7, 0.35, "compact", 0.98, 1.45),
         };
 
         // —— 颜色工具：预设只存基色，其余按 HSL 派生，明暗各一套 ——

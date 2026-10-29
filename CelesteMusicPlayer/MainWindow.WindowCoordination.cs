@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
 
@@ -51,7 +51,7 @@ namespace CelesteMusicPlayer
                 owner.Closed += owner.CloseWebShellWithOwner;
             }
             public void Restore() => (owner._webShellWindow?.AppWindow.Presenter as OverlappedPresenter)?.Restore();
-            public void Show() => owner._webShellWindow?.AppWindow.Show();
+            public void Show() { if (!NativeMainWebWindow.BackgroundVerification) owner._webShellWindow?.AppWindow.Show(); }
             public void Activate() => owner._webShellWindow?.Activate();
             public void HideLegacyOwner() => owner.AppWindow.Hide();
             public void Navigate(string page) => owner._webShellWindow?.NavigateTo(page);

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.IO;
@@ -18,38 +18,17 @@ using Microsoft.Web.WebView2.Core;
 namespace CelesteMusicPlayer
 {
     /// <summary>Single web view. The MainWindow owner remains the sole audio session.</summary>
-    internal sealed class WebShellWindow : Window
+    internal sealed class WebShellWindow : NativeMainWebWindow
     {
         private const string Origin = "https://celeste.internal";
         // Virtual-host mapped resources bypass WebResourceRequested. Covers use
         // a separate, unmapped host and are served only by this handler.
         private const string CoverOrigin = "https://celeste-cover.internal";
         private readonly MainWindow _owner;
-        private readonly WebView2 _web = new();
-        private readonly TextBlock _status = new()
-        {
-            Text = "正在加载网页界面…",
-            HorizontalAlignment = HorizontalAlignment.Center,
-            TextAlignment = TextAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
-            MaxWidth = 560
-        };
-        // 界面起不来时的唯一出路：不重启程序，把网页重新载一轮。
-        // 原生兜底之所以还需要按钮 —— 白屏的时候网页自己的恢复页根本画不出来。
-        private readonly Button _reload = new()
-        {
-            Content = "重新载入界面",
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Visibility = Visibility.Collapsed
-        };
-        private readonly StackPanel _statusLayer = new()
-        {
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center,
-            Spacing = 18,
-            MaxWidth = 600,
-            Margin = new Thickness(30)
-        };
+        private readonly NativeWebViewPanel _web = new() { Dock = System.Windows.Forms.DockStyle.Fill };
+        private readonly System.Windows.Forms.Label _status = new() { Text = "正在加载网页界面…", AutoSize = false, Dock = System.Windows.Forms.DockStyle.Top, Height = 100, TextAlign = System.Drawing.ContentAlignment.MiddleCenter };
+        private readonly System.Windows.Forms.Button _reload = new() { Text = "重新载入界面", Visible = false, Dock = System.Windows.Forms.DockStyle.Top };
+        private readonly System.Windows.Forms.Panel _statusLayer = new() { Dock = System.Windows.Forms.DockStyle.Fill };
         private readonly DispatcherQueueTimer _timer;
         private readonly INotifyCollectionChanged _library;
         private readonly SemaphoreSlim _coverGate = new(2);
@@ -82,14 +61,14 @@ namespace CelesteMusicPlayer
         private CancellationTokenSource? _waveformCancellation;
         private CancellationTokenSource? _overviewCancellation;
 
-        internal WebShellWindow(MainWindow owner)
+        internal WebShellWindow(MainWindow owner) : base(owner.DispatcherQueue)
         {
             _owner = owner;
             Title = "Celeste";
-            _statusLayer.Children.Add(_status);
-            _statusLayer.Children.Add(_reload);
+            _statusLayer.Controls.Add(_status);
+            _statusLayer.Controls.Add(_reload);
             _reload.Click += (_, _) => ReloadShell();
-            var root = new Grid(); root.Children.Add(_web); root.Children.Add(_statusLayer); Content = root;
+            Controls.Add(_web); Controls.Add(_statusLayer); _statusLayer.BringToFront();
             // One caption only: HTML controls, native resize border and WebView2 draggable regions.
             if (AppWindow.Presenter is OverlappedPresenter chrome) chrome.SetBorderAndTitleBar(true, true);
             AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
@@ -101,7 +80,7 @@ namespace CelesteMusicPlayer
             _library.CollectionChanged += LibraryChanged;
             NetworkLibraryService.Changed += SourcesChanged;
             AppWindow.Changed += BackgroundWindowChanged;
-            root.Loaded += async (_, _) => await InitializeAsync();
+            DispatcherQueue.TryEnqueue(async () => { if (!_closed) await InitializeAsync(); });
             Closed += (_, _) =>
             {
                 _closed = true; _ready = false; _timer.Stop();
@@ -114,7 +93,7 @@ namespace CelesteMusicPlayer
                 WebAppearance.ClearDraft();
                 _waveformCancellation?.Cancel();
                 _overviewCancellation?.Cancel();
-                _web.Close();
+                _web.Dispose();
             };
         }
 
@@ -218,12 +197,12 @@ namespace CelesteMusicPlayer
                 core.ProcessFailed += OnWebProcessFailed;
                 core.NavigationCompleted += (_, args) =>
                 {
-                    if (!args.IsSuccess) { _status.Text = "页面加载失败：" + args.WebErrorStatus; _status.Visibility = Visibility.Visible; _reload.Visibility = Visibility.Visible; }
+                    if (!args.IsSuccess) { _status.Text = "页面加载失败：" + args.WebErrorStatus; _status.Visible = true; _statusLayer.Visible = true; _reload.Visible = true; }
                 };
                 core.Navigate(Origin + "/index.html");
                 StartupLog.Write("[WebShell] initialized");
             }
-            catch (Exception ex) { StartupLog.WriteException("WebShell.Initialize", ex); _status.Text = "网页界面初始化失败：" + ex.Message + "\n可关闭此窗口继续使用旧界面。"; }
+            catch (Exception ex) { StartupLog.WriteException("WebShell.Initialize", ex); _status.Text = "网页界面初始化失败：" + ex.Message + "\n请尝试重新载入界面。"; }
         }
 
         private static bool IsTrusted(string source) => Uri.TryCreate(source, UriKind.Absolute, out var uri)
@@ -251,20 +230,12 @@ namespace CelesteMusicPlayer
                 bool transparent = !values.TryGetValue("material-transparency", out var enabled) || enabled != "0";
                 bool highContrast = new Windows.UI.ViewManagement.AccessibilitySettings().HighContrast;
                 bool glass = style > 0 && transparent && !highContrast;
-                if (Content is FrameworkElement root) root.RequestedTheme = mode == "dark" ? ElementTheme.Dark : ElementTheme.Light;
-                if (glass)
-                {
-                    if (SystemBackdrop is not DesktopAcrylicBackdrop) SystemBackdrop = new DesktopAcrylicBackdrop();
-                    _web.DefaultBackgroundColor = Microsoft.UI.Colors.Transparent;
-                }
-                else
-                {
-                    SystemBackdrop = null;
-                    _web.DefaultBackgroundColor = mode == "dark" ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White;
-                }
+                int backdrop = glass ? 3 : 1; int dark = mode == "dark" ? 1 : 0;
+                NativeMainWebWindow.SetMaterial(Handle, backdrop, dark);
+                _web.DefaultBackgroundColor = glass ? Microsoft.UI.Colors.Transparent : mode == "dark" ? Microsoft.UI.Colors.Black : Microsoft.UI.Colors.White;
                 return glass;
             }
-            catch (Exception ex) { StartupLog.WriteException("WebShell.Material", ex); SystemBackdrop = null; return false; }
+            catch (Exception ex) { StartupLog.WriteException("WebShell.Material", ex); return false; }
         }
 
         private void SendTheme()
@@ -350,7 +321,7 @@ namespace CelesteMusicPlayer
                 if (requestId?.Length > 100) return;
                 switch (command)
                 {
-                    case "ready": _ready = true; _metadataSent.Clear(); _status.Visibility = Visibility.Collapsed; _reload.Visibility = Visibility.Collapsed; _dirty = true; _timer.Start(); SendTheme(); SendVisibility(); _ = SendLibraryAsync(); FlushPendingPage();
+                    case "ready": _ready = true; _metadataSent.Clear(); _status.Visible = false; _statusLayer.Visible = false; _reload.Visible = false; _dirty = true; _timer.Start(); SendTheme(); SendVisibility(); _ = SendLibraryAsync(); FlushPendingPage();
                         // 刚才是崩了才重载的话，界面回来了再补一张卡片说明发生了什么。
                         // 注意：这不是「上次异常退出」的提示 —— 那条要等启动加载走完才推（NotifyStartupSettled）。
                         if (_pendingCrashNotice) { _pendingCrashNotice = false; _ = PushCrashNoticeAsync(); }
@@ -624,7 +595,7 @@ namespace CelesteMusicPlayer
         {
             if (_closed || AppWindow.Presenter is not OverlappedPresenter presenter ||
                 presenter.State == OverlappedPresenterState.Maximized || !IsLeftButtonDown()) return;
-            IntPtr hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            IntPtr hwnd = Handle;
             if (hwnd == IntPtr.Zero || !NativeMethods.GetCursorPos(out var cursor) ||
                 !NativeMethods.GetWindowRect(hwnd, out var bounds)) return;
             int offsetX = cursor.X - bounds.Left, offsetY = cursor.Y - bounds.Top;
@@ -668,8 +639,8 @@ namespace CelesteMusicPlayer
             {
                 _ready = false;
                 _status.Text = "正在重新加载界面…";
-                _status.Visibility = Visibility.Visible;
-                _reload.Visibility = Visibility.Collapsed;
+                _status.Visible = true; _statusLayer.Visible = true;
+                _reload.Visible = false;
                 _web.Reload();
             }
             catch (Exception ex)
@@ -695,8 +666,8 @@ namespace CelesteMusicPlayer
             if (args.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited)
             {
                 _status.Text = "界面进程退出了（可能是内存不足或显卡驱动异常）。\n点下面重新载入，或关掉窗口重新打开。";
-                _status.Visibility = Visibility.Visible;
-                _reload.Visibility = Visibility.Visible;
+                _status.Visible = true; _statusLayer.Visible = true;
+                _reload.Visible = true;
                 return;
             }
 
@@ -706,8 +677,8 @@ namespace CelesteMusicPlayer
             {
                 StartupLog.Write("[crash] 20 秒内重复崩溃，停止自动重载");
                 _status.Text = "界面反复崩溃（20 秒内两次）。可以点下面重新载入，或用安全模式再试。";
-                _status.Visibility = Visibility.Visible;
-                _reload.Visibility = Visibility.Visible;
+                _status.Visible = true; _statusLayer.Visible = true;
+                _reload.Visible = true;
                 return;
             }
 

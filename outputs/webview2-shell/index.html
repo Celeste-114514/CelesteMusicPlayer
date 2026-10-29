@@ -37,7 +37,7 @@
   <script src="appearance.js" defer></script>
   <script src="transport-panels.js" defer></script>
   <!-- 顶部链路读数依赖 transport-panels.js 里的请求通道，必须排在它后面 -->
-  <script src="geek-readout.js" defer></script>
+
   <script src="albums.js" defer></script>
   <script src="waveform.js" defer></script>
   <script src="artists.js" defer></script>
@@ -56,7 +56,7 @@
   <link rel="stylesheet" href="dsp-echo.css">
   <link rel="stylesheet" href="dsp-reference.css">
   <!-- 极客预设的排版补充（等宽读数、顶部链路读数）：只挂 [data-preset^=geek]，放在统一控件层之前 -->
-  <link rel="stylesheet" href="preset-geek.css">
+
   <!-- 统一控件层放在所有页面样式之后：控件外观统一，页面自己的形状/尺寸仍然算数 -->
   <link rel="stylesheet" href="ui-controls.css">
   <script src="dsp-headphones.js" defer></script>
@@ -169,12 +169,6 @@
         <div class="toolbar"><div class="breadcrumbs"><button id="back" class="icon-button" aria-label="返回上一页" disabled><svg><use href="#i-chevron"/></svg></button><nav id="breadcrumb" aria-label="页面路径"></nav></div>
           <!-- 极客预设的输出链路读数：只显示后端确认过的值，拿不到就整块不出现（见 geek-readout.js）。
                放在工具条而不是标题栏：标题栏中间被右上角轮盘压着，读数会跟它叠在一起。 -->
-          <div class="tech-readout" id="tech-readout" aria-label="输出链路读数">
-            <span class="tech-cell" data-tech="out"><small>OUT</small><strong>—</strong></span>
-            <span class="tech-cell" data-tech="fmt"><small>FMT</small><strong>—</strong></span>
-            <span class="tech-cell" data-tech="flag"><small>FLAG</small><strong>—</strong></span>
-            <span class="tech-cell" data-tech="buf"><small>BUF</small><strong>—</strong></span>
-          </div>
           <label class="search"><svg><use href="#i-search"/></svg><input id="search" type="search" placeholder="搜索你的音乐" aria-label="搜索你的音乐"><kbd>/</kbd></label></div>
 
         <section class="page home-page" id="overview-page" aria-labelledby="overview-title">

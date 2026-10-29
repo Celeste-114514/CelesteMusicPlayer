@@ -88,7 +88,7 @@ namespace CelesteMusicPlayer
         private static Def Path(string id, string label, bool file, string? note = null, string scope = "app", bool advanced = false) =>
             new() { id = id, label = label, kind = file ? "file" : "folder", note = note, scope = scope, advanced = advanced };
 
-        internal static readonly Def[] Defs = Build();
+        internal static readonly Def[] Defs = Build().Where(d => d.scope != "native").ToArray();
 
         private static Def[] Build() => In("general",
                 Bool("AutoRun", "随 Windows 启动", "写入当前用户的启动项；取消勾选会立刻删掉启动项，不是只改数字。"),
