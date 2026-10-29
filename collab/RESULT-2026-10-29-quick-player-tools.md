@@ -95,3 +95,31 @@
 - `WebShellQuickPlayerSmoke` 全过、无 pageerror。
 - 重跑 publish（exit 0、0 错误）后再同步：`quick-player.css/js` 在源目录 / publish / dist 三处 md5 一致。
 - 截图：`outputs/quick-eq-fixed-20261029.png`、`quick-speed-fixed-20261029.png`、`quick-eq-fixed-short-20261029.png`（620 高）。
+
+---
+
+# 追加（19:35）：暂停不擦掉频谱 + 文件位置打开错目录
+
+## 1. 频谱暂停时消失
+
+两处一起导致：页面收到 `state.playing=false` 就 `line.hide()`；宿主在暂停时也把 `available` 发成 false，
+共享组件 `spectrum-line.js` 一看到不可用就整块隐藏，500ms 没有新样本还会自己隐藏。
+
+改法：组件加 `hold` 选项（只给零散窗开，主程序详情页行为不变）——
+- 不可用/超时不再隐藏，而是冻结在最后一帧并**停掉 rAF 循环**（不空转）；
+- 页面只在**队列被清空**或用户关掉频谱开关时才隐藏；
+- 窗口最小化时保留画面，恢复后继续。
+
+## 2. 「文件位置」打开的是「文档」
+
+`explorer.exe` 的开关必须写成 `/select,"C:\路径\文件.flac"`（只给路径加引号）。
+原实现用 `ProcessStartInfo.ArgumentList.Add("/select," + path)`，路径带空格时 .NET 会把整串
+再包一层引号变成 `"/select,C:\a b\x.flac"` —— explorer 认不出开关，于是退回打开默认的「文档」。
+改成和主程序 `MainWindow.Misc.cs` 完全相同的写法：`Arguments = "/select,\"" + path + "\""`。
+已确认新字面量 `/select,"` 编进了发布 DLL。
+
+## 复测
+
+- `WebShellQuickPlayerSmoke` 断言改成：暂停后频谱仍可见、清空队列后隐藏、恢复送样后重新出现——全过、无 pageerror。
+- publish 退出 0 / 0 错误；dist 同步 8 个文件 BAD=0，DLL md5 `d8cacf6f…` 与 publish 一致。
+- 未做：真实窗口里点「文件位置」的实机确认（需要在他桌面上弹资源管理器，留给用户点一次）。

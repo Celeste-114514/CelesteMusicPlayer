@@ -100,7 +100,19 @@ internal sealed class WebQuickPlayerWindow : Window
                     var item = Session.Current; if (item == null) break;
                     Post(new { kind = "properties", values = new Dictionary<string,string> { ["标题"] = item.Title, ["艺术家"] = item.Artist ?? "", ["专辑"] = item.Album ?? "", ["时长"] = item.Duration.ToString(@"hh\:mm\:ss"), ["文件路径"] = item.FilePath, ["文件大小"] = new FileInfo(item.FilePath).Length.ToString("N0") + " 字节", ["CUE 起点"] = item.StartTimeSeconds.ToString("0.###") + " 秒" } }); break;
                 case "location":
-                    if (Session.Current is { } current && File.Exists(current.FilePath)) { var info = new System.Diagnostics.ProcessStartInfo("explorer.exe") { UseShellExecute = false }; info.ArgumentList.Add("/select," + current.FilePath); System.Diagnostics.Process.Start(info); } break;
+                    if (Session.Current is { } current && File.Exists(current.FilePath))
+                    {
+                        // explorer 的 /select 只给路径加引号：/select,"C:\a b\x.flac"。
+                        // 之前用 ArgumentList 把 "/select,"+路径 当成一个参数，路径带空格时 .NET 会把整串
+                        // 再包一层引号 → explorer 认不出开关，退回去打开默认的「文档」。
+                        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "explorer.exe",
+                            Arguments = "/select,\"" + current.FilePath + "\"",
+                            UseShellExecute = true
+                        });
+                    }
+                    break;
                 case "eq":
                     var eq = EqualizerStore.Load();
                     if (m.TryGetProperty("preset", out var preset)) {
