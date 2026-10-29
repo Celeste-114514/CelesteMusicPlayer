@@ -937,7 +937,7 @@ namespace CelesteMusicPlayer
 
             SyncLyricsToPosition(position);
             _desktopLyricsWindow?.Sync(position);
-            TickFeaturePlaybackExtras(position);
+            Journal.SampleListenSeconds();
 
             if ((DateTime.UtcNow - _lastPlaybackPersistUtc).TotalSeconds >= 4)
             {
@@ -2721,7 +2721,7 @@ namespace CelesteMusicPlayer
             _anyPlaybackStarted = true;
             // 起播途中：引擎可能还播着上一首，这期间不写进度（避免记串曲目）
             _startPlaybackInFlight = true;
-            ScrobblePreviousIfAny();
+            Journal.ScrobblePrevious();
 
             // 进度条样式(读设置缓存) + 异步加载波形(波形样式用)
             _waveformProgress = AppSettingsStore.Load().WaveformProgress;
@@ -2893,7 +2893,7 @@ namespace CelesteMusicPlayer
             if (!string.IsNullOrWhiteSpace(_nowPlayingPath)
                 && !string.Equals(_nowPlayingPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
             {
-                RecordCurrentTrackHistory(completed: false);
+                Journal.RecordHistory(completed: false);
             }
 
             NowPlayingText.Text = "正在转码：" + item.Title;
@@ -2985,7 +2985,7 @@ namespace CelesteMusicPlayer
                 _ = UpdateNowPlayingPanelAsync(item);
                 UpdateNowPlayingOutputFormat();
                 UpdateSignalChainDisplay();
-                RecordPlaybackStatsOnStart(item);
+                Journal.RecordStart(item);
                 if (PlayPauseIcon != null)
                 {
                     PlayPauseIcon.Glyph = "\uE769";
@@ -3068,7 +3068,7 @@ namespace CelesteMusicPlayer
             _ = DispatcherQueue.TryEnqueue(() =>
             {
                 // 播放历史：自然播完 → 记为已完成
-                RecordCurrentTrackHistory(completed: true);
+                Journal.RecordHistory(completed: true);
                 _isEnginePaused = false;
                 _usingEnginePlayback = false;
                 UpdateWaveformTimerForPlaybackState(false);
@@ -3238,7 +3238,7 @@ namespace CelesteMusicPlayer
                     StartupLog.Write("无缝切歌 波形加载开始: " + next.FilePath + " style=" + (_waveformProgress ? "Waveform" : "Gradient"));
                     LoadWaveformForCurrentAsync(next.FilePath);
                     UpdateNowPlayingOutputFormat();
-                    RecordPlaybackStatsOnStart(next);
+                    Journal.RecordStart(next);
                     if (_audioEngine != null)
                     {
                         // 无缝切歌同样按"原歌曲时间"显示总时长（变速时 WAV 被拉伸过）

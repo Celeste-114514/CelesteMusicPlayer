@@ -40,10 +40,6 @@ namespace CelesteMusicPlayer
         private double _sleepCustomMinutes;
         private AudioPlaybackEngine? _audioEngine;
         private readonly LibraryWatchService _libraryWatch = new();
-        private DateTime _lastListenSampleUtc = DateTime.UtcNow;
-        private string? _listenSamplePath;
-        private PlaylistItem? _lastPlayedForScrobble;
-        private DateTime _lastPlayStartUtc;
         private bool _featuresInitialized;
 
         /// <summary>上次应用到「最近播放」列表的过滤天数（-1=未应用过）。设置变更时对比用。</summary>
@@ -2498,90 +2494,6 @@ namespace CelesteMusicPlayer
 
             await UpdateNowPlayingPanelAsync(item);
             NowPlayingText.Text = "封面已更新";
-        }
-
-        private void ScrobblePreviousIfAny()
-        {
-            try
-            {
-                if (_lastPlayedForScrobble == null || _lastPlayStartUtc == default)
-                {
-                    return;
-                }
-
-                // Last.fm 总开关：关掉时不回传播放记录。早期只门控了「正在播放」广播，
-                // 漏了这里——表现为「关了 Last.fm，个人资料里的播放计数还在涨」。
-                if (!AppSettingsStore.Load().EnableLastFm)
-                {
-                    return;
-                }
-
-                PlaylistItem prev = _lastPlayedForScrobble;
-                LastFmScrobbler.QueueScrobble(new LastFmTrackInfo
-                {
-                    Artist = prev.Artist,
-                    Title = prev.Title,
-                    Album = prev.Album,
-                    DurationSeconds = (int)prev.Duration.TotalSeconds
-                }, _lastPlayStartUtc);
-                _ = LastFmScrobbler.FlushQueueAsync();
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-            finally
-            {
-                _lastPlayedForScrobble = null;
-                _lastPlayStartUtc = default;
-            }
-        }
-
-        private void RecordPlaybackStatsOnStart(PlaylistItem item)
-        {
-            try
-            {
-                // B4：切歌 = 链路事件（首次播放与无缝自动下一首都走这里）
-                NoteChainTrack(item.Title, item.Artist);
-
-                _lastPlayedForScrobble = item;
-                _lastPlayStartUtc = DateTime.UtcNow;
-                TrackStatsStore.RecordPlayStart(item.PersistenceKey);
-                _listenSamplePath = item.PersistenceKey;
-                _lastListenSampleUtc = DateTime.UtcNow;
-                UpdateFavoriteButtonUi();
-
-                if (AppSettingsStore.Load() is { EnableLastFm: true, LastFmNowPlaying: true })
-                {
-                    LastFmScrobbler.QueueNowPlaying(new LastFmTrackInfo
-                    {
-                        Artist = item.Artist,
-                        Title = item.Title,
-                        Album = item.Album,
-                        DurationSeconds = (int)item.Duration.TotalSeconds
-                    });
-                    _ = LastFmScrobbler.FlushQueueAsync();
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-        }
-
-        private void TickFeaturePlaybackExtras(TimeSpan position)
-        {
-            MediaPlayer? player = GetPlayer();
-            if (player?.Source == null)
-            {
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(_listenSamplePath)
-                && player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
-            {
-                DateTime now = DateTime.UtcNow;
-                double delta = (now - _lastListenSampleUtc).TotalSeconds;
-                if (delta >= 1)
-                {
-                    TrackStatsStore.AddListenSeconds(_listenSamplePath, delta);
-                    _lastListenSampleUtc = now;
-                }
-            }
         }
 
         private async Task MaybeAutoDownloadExtrasAsync(PlaylistItem item, List<LyricLine> existingLyrics, byte[]? coverBytes)
