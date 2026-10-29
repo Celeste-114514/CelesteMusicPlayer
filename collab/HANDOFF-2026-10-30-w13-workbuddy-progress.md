@@ -22,7 +22,7 @@
 | `f9be68c` | `LibraryAdvanceRule` | 队列为空时库内「下一首」决策（纯函数） | — | **14 条用例穷举** |
 | `4dc2861` | （给 `PlaybackOrderResolver` 补覆盖） | 下一首/上一首/随机解析 | — | **24 条检查 + 全量边界扫描** |
 | `dacee81` | `WebUpdateService` | 更新检查/下载/取消/安装转发 + 26 字段状态翻译 | `IUpdateHost`（4） | 回包 26 字段齐全 |
-| `f3ae3f7` | `WebSettingsMisc`（静态） | 缓存统计/清理、文件关联、清「最近播放」标记、关于信息 | 无（原本就是静态） | 回包 about + 74 defs 齐全 |
+| `dae9078` | `WebSettingsMisc`（静态） | 缓存统计/清理、文件关联、清「最近播放」标记、关于信息 | 无（原本就是静态） | 回包 about + 74 defs 齐全 |
 
 顺带修了两个既有缺陷：
 
