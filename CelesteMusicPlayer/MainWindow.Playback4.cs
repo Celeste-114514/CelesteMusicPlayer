@@ -45,53 +45,6 @@ namespace CelesteMusicPlayer
 
         /// <summary>引擎播放位置 → 进度条 / 时间 / 任务栏进度。</summary>
         /// <summary>更新 SMTC timeline 属性（进度/时长），让系统媒体小组件(deskbox)显示当前曲目进度并可 seek。</summary>
-        private void UpdateSmtcTimeline(TimeSpan position, TimeSpan? durationOverride = null)
-        {
-            if (_engineSmtc == null)
-            {
-                if (Environment.TickCount64 - _lastSmtcTimelineMs > 3000)
-                {
-                    _lastSmtcTimelineMs = Environment.TickCount64;
-                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] UpdateSmtcTimeline: _engineSmtc 为 null，跳过");
-                }
-                return;
-            }
-
-            try
-            {
-                // 就绪态（引擎还没建）时由调用方把时长传进来，否则系统浮窗没有时间轴。
-                TimeSpan duration = durationOverride ?? (_audioEngine?.Duration ?? TimeSpan.Zero);
-                if (duration <= TimeSpan.Zero)
-                {
-                    if (Environment.TickCount64 - _lastSmtcTimelineMs > 3000)
-                    {
-                        _lastSmtcTimelineMs = Environment.TickCount64;
-                        global::CelesteMusicPlayer.StartupLog.Write("[SMTC] UpdateSmtcTimeline: duration=0，跳过 pos=" + position.TotalSeconds.ToString("F2"));
-                    }
-                    return;
-                }
-
-                var props = new SystemMediaTransportControlsTimelineProperties
-                {
-                    StartTime = TimeSpan.Zero,
-                    EndTime = duration,
-                    MinSeekTime = TimeSpan.Zero,
-                    MaxSeekTime = duration,
-                    Position = position
-                };
-                _engineSmtc.UpdateTimelineProperties(props);
-
-                // 诊断：首次成功写入 timeline 时打点，确认播放中进度同步链路是否真的在跑
-                if (Environment.TickCount64 - _lastSmtcTimelineLogMs > 3000)
-                {
-                    _lastSmtcTimelineLogMs = Environment.TickCount64;
-                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] timeline 已更新: pos=" + position.TotalSeconds.ToString("F2") + " dur=" + duration.TotalSeconds.ToString("F2"));
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
-
-
         private void EnginePositionChanged(TimeSpan position)
         {
             try
@@ -123,7 +76,7 @@ namespace CelesteMusicPlayer
                 if (Environment.TickCount64 - _lastSmtcTimelineMs > 400)
                 {
                     _lastSmtcTimelineMs = Environment.TickCount64;
-                    UpdateSmtcTimeline(position);
+                    MediaSession.UpdateTimeline(position);
                 }
 
                 // 时长变化时同步进度条上限（变速播放按"原歌曲时间"显示：WAV 时长 × 倍率）
@@ -190,7 +143,7 @@ namespace CelesteMusicPlayer
                 _isEnginePaused = false;
                 _usingEnginePlayback = false;
                 UpdateWaveformTimerForPlaybackState(false);
-                UpdateEngineSmtcStatus(MediaPlaybackStatus.Stopped);
+                MediaSession.SetStatus(MediaPlaybackStatus.Stopped);
             }
         }
 

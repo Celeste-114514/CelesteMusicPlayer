@@ -62,7 +62,7 @@ namespace CelesteMusicPlayer
             // TagEditorWindow.TagsSaved 订阅已随旧窗口删除移除：标签板块的 TagsSaved
             // 在 EnsureTagEditUiBuilt 里边创建面板边订阅（面板是延迟创建的）。
 
-            ConfigureSmtcFromSettings();
+            MediaSession.ConfigureFromSettings();
             ApplyPlaybackRateFromSettings();
             RestartGlobalHotkeysFromSettings();
             RestartLibraryWatchFromSettings();
@@ -174,56 +174,6 @@ namespace CelesteMusicPlayer
                 _libraryWatch.Dispose();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
-        }
-
-        private void ConfigureSmtcFromSettings()
-        {
-            AppSettingsState settings = AppSettingsStore.Load();
-            bool enable = settings.EnableSmtc;
-
-            // SMTC 统一走独立宿主 MediaPlayer（挂静音循环源激活播放会话），
-            // 与 ConfigureEngineSmtc 使用同一个宿主，保证按钮开关和元数据指向同一 SMTC 实例。
-            MediaPlayer? host = EnsureSmtcSilentSource();
-            if (host == null)
-            {
-                return;
-            }
-
-            SystemMediaTransportControls smtc = host.SystemMediaTransportControls;
-            smtc.IsEnabled = enable;
-            smtc.IsPlayEnabled = enable;
-            smtc.IsPauseEnabled = enable;
-            smtc.IsNextEnabled = enable;
-            smtc.IsPreviousEnabled = enable;
-            smtc.IsStopEnabled = enable;
-            smtc.ButtonPressed -= Smtc_ButtonPressed;
-            if (enable)
-            {
-                smtc.ButtonPressed += Smtc_ButtonPressed;
-            }
-        }
-
-        private void Smtc_ButtonPressed(SystemMediaTransportControls sender, SystemMediaTransportControlsButtonPressedEventArgs args)
-        {
-            DispatcherQueue.TryEnqueue(() =>
-            {
-                switch (args.Button)
-                {
-                    case SystemMediaTransportControlsButton.Play:
-                    case SystemMediaTransportControlsButton.Pause:
-                        TogglePlayPausePublic();
-                        break;
-                    case SystemMediaTransportControlsButton.Next:
-                        PlayNext();
-                        break;
-                    case SystemMediaTransportControlsButton.Previous:
-                        PlayPrevious();
-                        break;
-                    case SystemMediaTransportControlsButton.Stop:
-                        GetPlayer()?.Pause();
-                        break;
-                }
-            });
         }
 
         /// <summary>
@@ -558,7 +508,7 @@ namespace CelesteMusicPlayer
 
             try
             {
-                ConfigureSmtcFromSettings();
+                MediaSession.ConfigureFromSettings();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
 

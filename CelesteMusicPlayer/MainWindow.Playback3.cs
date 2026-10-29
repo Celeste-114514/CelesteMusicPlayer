@@ -184,7 +184,7 @@ namespace CelesteMusicPlayer
                 _audioEngine.Pause();
                 _isEnginePaused = true;
                 UpdateWaveformTimerForPlaybackState(false);
-                UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
+                MediaSession.SetStatus(MediaPlaybackStatus.Paused);
                 if (PlayPauseIcon != null)
                 {
                     PlayPauseIcon.Glyph = "\uE768";
@@ -212,7 +212,7 @@ namespace CelesteMusicPlayer
 
                 _isEnginePaused = false;
                 UpdateWaveformTimerForPlaybackState(true);
-                UpdateEngineSmtcStatus(MediaPlaybackStatus.Playing);
+                MediaSession.SetStatus(MediaPlaybackStatus.Playing);
                 if (PlayPauseIcon != null)
                 {
                     PlayPauseIcon.Glyph = "\uE769";
@@ -267,7 +267,7 @@ namespace CelesteMusicPlayer
             if (wasPlaying)
             {
                 player.Pause();
-                UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
+                MediaSession.SetStatus(MediaPlaybackStatus.Paused);
                 _taskbarButtons?.UpdatePlayPause(false);   // 暂停后 → 显示"播放"图标
             }
             else
@@ -282,7 +282,7 @@ namespace CelesteMusicPlayer
                 }
 
                 player.Play();
-                UpdateEngineSmtcStatus(MediaPlaybackStatus.Playing);
+                MediaSession.SetStatus(MediaPlaybackStatus.Playing);
                 _taskbarButtons?.UpdatePlayPause(true);    // 播放后 → 显示"暂停"图标
             }
         }
@@ -384,7 +384,7 @@ namespace CelesteMusicPlayer
                     _audioEngine.Pause();
                     _isEnginePaused = true;
                     UpdateWaveformTimerForPlaybackState(false);
-                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
+                    MediaSession.SetStatus(MediaPlaybackStatus.Paused);
                     if (PlayPauseIcon != null)
                     {
                         PlayPauseIcon.Glyph = "\uE768";
@@ -2387,7 +2387,7 @@ namespace CelesteMusicPlayer
                     }
 
                     UpdateWaveformTimerForPlaybackState(true);
-                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Playing);
+                    MediaSession.SetStatus(MediaPlaybackStatus.Playing);
                     if (PlayPauseIcon != null)
                     {
                         PlayPauseIcon.Glyph = "\uE769";
@@ -2406,7 +2406,7 @@ namespace CelesteMusicPlayer
                     _audioEngine.Pause();
                     _isEnginePaused = true;
                     UpdateWaveformTimerForPlaybackState(false);
-                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
+                    MediaSession.SetStatus(MediaPlaybackStatus.Paused);
                     if (PlayPauseIcon != null)
                     {
                         PlayPauseIcon.Glyph = "\uE768";
@@ -2431,13 +2431,13 @@ namespace CelesteMusicPlayer
                         player.Play();
                     }
 
-                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Playing);
+                    MediaSession.SetStatus(MediaPlaybackStatus.Playing);
                     _taskbarButtons?.UpdatePlayPause(true);
                 }
                 else if (player.PlaybackSession.PlaybackState == MediaPlaybackState.Playing)
                 {
                     player.Pause();
-                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
+                    MediaSession.SetStatus(MediaPlaybackStatus.Paused);
                     _taskbarButtons?.UpdatePlayPause(false);
                 }
             }
@@ -2824,7 +2824,7 @@ namespace CelesteMusicPlayer
                 ProgressSlider.Maximum = Math.Max(1, duration * scale);
                 ProgressSlider.Value = startAt;
                 CurrentTimeText.Text = FormatTime(target);
-                UpdateSmtcTimeline(target, TimeSpan.FromSeconds(duration * scale));
+                MediaSession.UpdateTimeline(target, TimeSpan.FromSeconds(duration * scale));
 
                 // 歌词直接跳到该位置对应的那句（别从第一句慢慢滚过去）
                 SyncLyricsToPosition(target, force: true, applyOffset: false);
@@ -2844,7 +2844,7 @@ namespace CelesteMusicPlayer
                     _audioEngine.Pause();
                     _isEnginePaused = true;
                     UpdateWaveformTimerForPlaybackState(false);
-                    UpdateEngineSmtcStatus(MediaPlaybackStatus.Paused);
+                    MediaSession.SetStatus(MediaPlaybackStatus.Paused);
                     if (PlayPauseIcon != null)
                     {
                         PlayPauseIcon.Glyph = "\uE768";
@@ -3006,7 +3006,7 @@ namespace CelesteMusicPlayer
                 ApplyPendingStartPosition(item.FilePath);
 
                 _ = FadeInEngineAsync();
-                ConfigureEngineSmtc(item, playing: true);
+                MediaSession.ConfigureTrack(item, playing: true);
                 _ = PreloadSeamlessNextAsync(item);
                 _startPlaybackInFlight = false;
             }
@@ -3072,7 +3072,7 @@ namespace CelesteMusicPlayer
                 _isEnginePaused = false;
                 _usingEnginePlayback = false;
                 UpdateWaveformTimerForPlaybackState(false);
-                UpdateEngineSmtcStatus(MediaPlaybackStatus.Stopped);
+                MediaSession.SetStatus(MediaPlaybackStatus.Stopped);
                 HandleMediaEnded();
             });
         }
@@ -3248,7 +3248,7 @@ namespace CelesteMusicPlayer
                         ProgressSlider.Value = 0;
                         TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(wavSeconds * scale));
                     }
-                    ConfigureEngineSmtc(next, playing: true);
+                    MediaSession.ConfigureTrack(next, playing: true);
                     AdvanceUserPlaylistIndexTo(next);
                     _ = PreloadSeamlessNextAsync(next);
                 }
@@ -3277,206 +3277,5 @@ namespace CelesteMusicPlayer
         /// 独立宿主不 SetMediaPlayer、不注册主播放器事件，避免静音源触发 Player_MediaOpened 等污染主播放 UI。
         /// Volume=0 保证绝不发声，不干扰引擎（含 WASAPI 独占 / bit-perfect 直通）。
         /// </summary>
-        private MediaPlayer? EnsureSmtcSilentSource()
-        {
-            try
-            {
-                if (_smtcHost == null)
-                {
-                    _smtcHost = new MediaPlayer();
-                    _smtcHost.CommandManager.IsEnabled = false; // 手动控制，禁用内置命令自动关联
-                    _smtcHost.AudioCategory = MediaPlayerAudioCategory.Media;
-                    _smtcHost.Volume = 0.0;              // 绝对静音，绝不发声
-                    _smtcHost.IsLoopingEnabled = true;   // 循环，永不停止
-                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 创建独立宿主 MediaPlayer 完成");
-                }
-
-                // 已挂过占位源就跳过，避免重复重建播放会话导致 SMTC 闪断
-                if (_smtcHost.Source == null)
-                {
-                    byte[] wav = BuildSilentWav();
-                    using var ms = new MemoryStream(wav);
-                    var stream = ms.AsRandomAccessStream();
-                    _smtcHost.Source = MediaSource.CreateFromStream(stream, "audio/wav");
-                    _smtcHost.Play();
-                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 静音占位源已挂载并 Play()，Source=" + (_smtcHost.Source != null ? "有" : "无"));
-                }
-                else
-                {
-                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 静音占位源已存在，跳过重建");
-                }
-
-                return _smtcHost;
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("[SMTC] EnsureSmtcSilentSource", caught); }
-            return null;
-        }
-
-
-        /// <summary>在内存中构造 1 秒 44.1kHz / 16bit / 单声道纯静音 PCM WAV（44 字节头 + 全零采样）。</summary>
-        private static byte[] BuildSilentWav()
-        {
-            const int sampleRate = 44100;
-            const int channels = 1;
-            const int bitsPerSample = 16;
-            const int seconds = 1;
-
-            int bytesPerSample = bitsPerSample / 8;
-            int dataLength = sampleRate * channels * bytesPerSample * seconds; // 88200
-            byte[] wav = new byte[44 + dataLength];
-
-            // RIFF 头
-            wav[0] = (byte)'R'; wav[1] = (byte)'I'; wav[2] = (byte)'F'; wav[3] = (byte)'F';
-            int fileLength = 36 + dataLength;
-            wav[4] = (byte)(fileLength & 0xFF);
-            wav[5] = (byte)((fileLength >> 8) & 0xFF);
-            wav[6] = (byte)((fileLength >> 16) & 0xFF);
-            wav[7] = (byte)((fileLength >> 24) & 0xFF);
-            wav[8] = (byte)'W'; wav[9] = (byte)'A'; wav[10] = (byte)'V'; wav[11] = (byte)'E';
-
-            // fmt 子块
-            wav[12] = (byte)'f'; wav[13] = (byte)'m'; wav[14] = (byte)'t'; wav[15] = (byte)' ';
-            wav[16] = 16; wav[17] = 0; wav[18] = 0; wav[19] = 0; // fmt 长度 16
-            wav[20] = 1; wav[21] = 0; // PCM 编码
-            wav[22] = (byte)channels; wav[23] = 0;
-            wav[24] = (byte)(sampleRate & 0xFF);
-            wav[25] = (byte)((sampleRate >> 8) & 0xFF);
-            wav[26] = (byte)((sampleRate >> 16) & 0xFF);
-            wav[27] = (byte)((sampleRate >> 24) & 0xFF);
-            int byteRate = sampleRate * channels * bytesPerSample;
-            wav[28] = (byte)(byteRate & 0xFF);
-            wav[29] = (byte)((byteRate >> 8) & 0xFF);
-            wav[30] = (byte)((byteRate >> 16) & 0xFF);
-            wav[31] = (byte)((byteRate >> 24) & 0xFF);
-            int blockAlign = channels * bytesPerSample;
-            wav[32] = (byte)blockAlign; wav[33] = 0;
-            wav[34] = (byte)bitsPerSample; wav[35] = 0;
-
-            // data 子块
-            wav[36] = (byte)'d'; wav[37] = (byte)'a'; wav[38] = (byte)'t'; wav[39] = (byte)'a';
-            wav[40] = (byte)(dataLength & 0xFF);
-            wav[41] = (byte)((dataLength >> 8) & 0xFF);
-            wav[42] = (byte)((dataLength >> 16) & 0xFF);
-            wav[43] = (byte)((dataLength >> 24) & 0xFF);
-
-            // 采样数据全零（byte 数组默认就是 0，无需再填）
-
-            return wav;
-        }
-
-
-        /// <summary>配置引擎播放的系统媒体控件（SMTC）。</summary>
-        private void ConfigureEngineSmtc(PlaylistItem item, bool playing)
-        {
-            try
-            {
-                // 任务栏缩略图按钮的播放/暂停图标同步：独立于 SMTC 开关，
-                // 在引擎播放/暂停/就绪时统一刷新，避免启动自动播放时按钮停在「播放」图标。
-                _taskbarButtons?.UpdatePlayPause(playing);
-
-                if (!AppSettingsStore.Load().EnableSmtc)
-                {
-                    return;
-                }
-
-                // Unpackaged 应用不能用 GetForCurrentView()（打包/AppX 专用，非打包下返回 null/抛异常），
-                // 改用 MediaPlayer 自带的 SystemMediaTransportControls。
-                // 但 MediaPlayer 没有真正播放时，其 SMTC 不会在系统浮窗显示数据（系统要求"开始音频播放会话"）。
-                // 因此用独立 SMTC 宿主 MediaPlayer 挂静音循环占位源，激活播放会话，让元数据被系统浮窗认账。
-                MediaPlayer? smtcHost = EnsureSmtcSilentSource();
-                if (smtcHost == null)
-                {
-                    return;
-                }
-
-                _engineSmtc ??= smtcHost.SystemMediaTransportControls;
-                SystemMediaTransportControls smtc = _engineSmtc;
-                if (smtc == null)
-                {
-                    return;
-                }
-
-                smtc.IsEnabled = true;
-                smtc.IsPlayEnabled = true;
-                smtc.IsPauseEnabled = true;
-                smtc.IsNextEnabled = true;
-                smtc.IsPreviousEnabled = true;
-                smtc.IsStopEnabled = true;
-                smtc.ButtonPressed -= Smtc_ButtonPressed;
-                smtc.ButtonPressed += Smtc_ButtonPressed;
-                smtc.PlaybackStatus = playing ? MediaPlaybackStatus.Playing : MediaPlaybackStatus.Paused;
-
-                SystemMediaTransportControlsDisplayUpdater updater = smtc.DisplayUpdater;
-                // 切歌/重设前清空旧元数据，避免 deskbox 等系统小组件残留上一首状态（标题缺失/两状态叠加）。
-                updater.ClearAll();
-                updater.Type = MediaPlaybackType.Music;
-                updater.MusicProperties.Title = item.Title;
-                updater.MusicProperties.Artist = item.Artist;
-                updater.MusicProperties.AlbumTitle = item.Album;
-                updater.Thumbnail = null;
-                updater.Update();
-                global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 元数据已写入: Title=" + item.Title + " Artist=" + item.Artist + " Album=" + item.Album + " Status=" + smtc.PlaybackStatus);
-
-                // 异步补封面缩略图（deskbox/系统媒体浮层可显示专辑封面）
-                _ = LoadAndSetSmtcThumbnailAsync(updater, item);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("[SMTC] ConfigureEngineSmtc", caught); }
-        }
-
-
-        /// <summary>异步读取曲目封面并设置到 SMTC 缩略图（失败静默）。</summary>
-        private async System.Threading.Tasks.Task LoadAndSetSmtcThumbnailAsync(SystemMediaTransportControlsDisplayUpdater updater, PlaylistItem item)
-        {
-            try
-            {
-                if (updater == null || item == null || string.IsNullOrWhiteSpace(item.FilePath)) return;
-                byte[]? bytes = await System.Threading.Tasks.Task.Run(() => ExtractCoverBytes(item.FilePath));
-                if (bytes is not { Length: > 0 })
-                {
-                    global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 封面：未取到封面字节，跳过");
-                    return;
-                }
-
-                // 关键：DataWriter 在 Dispose 时会 DetachStream 并释放其关联的底层流，
-                // 所以必须先用 DetachStream() 把 mem 的所有权拿回来，否则 mem.Seek(0) 抛 ObjectDisposedException。
-                // 而 mem 本身不能被 using 释放——RandomAccessStreamReference 只持引用，系统异步读缩略图时才真正读流。
-                var mem = new Windows.Storage.Streams.InMemoryRandomAccessStream();
-                using (var writer = new Windows.Storage.Streams.DataWriter(mem))
-                {
-                    writer.WriteBytes(bytes);
-                    await writer.StoreAsync();
-                    await writer.FlushAsync();
-                    writer.DetachStream();
-                }
-                mem.Seek(0);
-
-                var reference = Windows.Storage.Streams.RandomAccessStreamReference.CreateFromStream(mem);
-                updater.Thumbnail = reference;
-                updater.Update();
-                global::CelesteMusicPlayer.StartupLog.Write("[SMTC] 封面已设置: " + bytes.Length + " 字节");
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("[SMTC] 封面设置", caught); }
-        }
-
-
-        /// <summary>更新引擎 SMTC 播放状态（暂停/恢复/结束）。</summary>
-        private void UpdateEngineSmtcStatus(MediaPlaybackStatus status)
-        {
-            if (_engineSmtc == null)
-            {
-                return;
-            }
-
-            try
-            {
-                _engineSmtc.PlaybackStatus = status;
-                if (status == MediaPlaybackStatus.Stopped)
-                {
-                    _engineSmtc.IsEnabled = false;
-                }
-
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-        }
     }
 }

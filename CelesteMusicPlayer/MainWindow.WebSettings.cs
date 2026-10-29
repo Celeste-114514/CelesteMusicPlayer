@@ -231,7 +231,7 @@ namespace CelesteMusicPlayer
                     if (ids.Contains("AlwaysOnTop")) ApplyAlwaysOnTopFromSettings();
                     if (ids.Contains("TaskbarPlayerEnabled")) ApplyTaskbarPlayerPreference();
                     if (ids.Contains("EnableGlobalHotkeys") || ids.Contains("CustomHotkeys")) RestartGlobalHotkeysFromSettings();
-                    if (ids.Contains("EnableSmtc")) ConfigureSmtcFromSettings();
+                    if (ids.Contains("EnableSmtc")) MediaSession.ConfigureFromSettings();
                     if (ids.Contains("AutoUpdateLibrary")) RestartLibraryWatchFromSettings();
                     if (ids.Contains("OpenDesktopLyricsOnStartup")) ApplyOverlayPreferenceFromSettings(state);
 

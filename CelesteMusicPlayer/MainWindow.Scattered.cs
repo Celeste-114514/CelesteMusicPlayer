@@ -27,7 +27,7 @@ namespace CelesteMusicPlayer
         internal void PrepareForQuickPlayback()
         {
             if (IsPlaybackActuallyPlaying()) TogglePlayPausePublic();
-            if (_engineSmtc != null) _engineSmtc.IsEnabled = false;
+            MediaSession.Disable();
         }
     }
 }

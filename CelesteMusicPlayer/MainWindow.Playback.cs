@@ -133,11 +133,9 @@ namespace CelesteMusicPlayer
         private bool _waveformProgress;
         // 主题波形强调色（ResolveAccentColor 的缓存，避免频繁解析）
         private static Color _waveAccentColor = Color.FromArgb(255, 0, 120, 212);
-        private SystemMediaTransportControls? _engineSmtc;
         private long _lastSmtcTimelineMs; // SMTC timeline 限频（约 500ms 一次）
         private long _lastSmtcTimelineLogMs; // SMTC timeline 诊断日志限频（约 3s 一次）
         /// <summary>SMTC 专用宿主 MediaPlayer：挂静音循环源激活播放会话，独立于主播放器，避免污染主播放的事件/UI。</summary>
-        private MediaPlayer? _smtcHost;
         private Style? _playlistItemDefaultStyle;
         private Style? _artistTrackItemDefaultStyle;
         private Style? _albumTrackItemDefaultStyle;
@@ -1201,10 +1199,10 @@ namespace CelesteMusicPlayer
 
             // 启动续播时同步写入 SMTC（状态=暂停/就绪），让系统媒体浮窗在启动后即显示歌名/歌手/封面，
             // 与双击播放后的显示保持一致；否则启动恢复上次播放时浮窗只剩程序图标。
-            ConfigureEngineSmtc(item, playing: false);
+            MediaSession.ConfigureTrack(item, playing: false);
             // 顺带把时长/进度写进系统时间轴，这样系统浮窗能显示总时长并可以拖定位
             // （就绪态引擎还没建，时长从曲目标签来，所以显式传进去）。
-            UpdateSmtcTimeline(TimeSpan.FromSeconds(_pendingStartSeconds), item.Duration);
+            MediaSession.UpdateTimeline(TimeSpan.FromSeconds(_pendingStartSeconds), item.Duration);
 
             // 「启动后自动播放」：走引擎路径（与双击播放一致），这样 DSP 链、实时电平表、
             // SMTC 播放状态/进度才会全部正常。此前这里走 MediaPlayer 的 player.Play()，
@@ -1235,7 +1233,7 @@ namespace CelesteMusicPlayer
             // 不再把歌曲预加载进 MediaPlayer：Media Foundation 认不出的格式（DSD、部分高规格
             // WAV/FLAC 等）会立刻触发 MediaFailed → 弹「无法播放 SourceNotSupported」，
             // 而双击播放走引擎路径一切正常 —— 这就是启动报错、双击却能播的原因。
-            // 就绪态的 SMTC 展示已由 ConfigureEngineSmtc 负责；点播放按钮由
+            // 就绪态的 SMTC 展示已由 MediaSessionService.ConfigureTrack 负责；点播放按钮由
             // PlayPauseButton_Click 转走引擎路径（按 _queue.Index 恢复到这首）。
             NotifyCurrentPlaylistWindow();
         }
