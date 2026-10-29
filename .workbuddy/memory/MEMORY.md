@@ -44,6 +44,17 @@
   直接照 reflog 恢复会丢当天工作）→ 验证 parent 链后回写 ref → `rm .git/index` + `git read-tree HEAD` 重建（不 reset --hard，不碰工作区）。
 - ⚠ 别靠删 index 或覆盖 refs 盲修；每次都先验 `git cat-file -t` 与 parent 再动手。
 
+## W13（去 WinUI）现状（2026-10-30）
+- **架构已落地**：`UseWinUI=false`、7 个 AppSDK 包已删、入口改原生消息循环（`Program.Main` + `NativeMessagePump`）、
+  旧 XAML 全部 `Page/Compile Remove`（**只排除不删文件**，迷你/零散源码留着给用户重构）、
+  MainWindow 从 WinUI Window 变纯业务宿主（控件改为状态容器 `MainWindow.LegacyControls.cs`）。
+  调度器/窗口 API 用**同名命名空间**顶替（`NativeDispatcherQueue.cs`、`NativeAppWindow.cs`）。
+- ⚠️ **编译未收尾**：约 1450 处错误在 MainWindow 旧界面残留里；未 publish/冒烟 → **不许宣称已去 WinUI**。
+  交接 `collab/RESULT-2026-10-30-w13-remove-winui.md`。
+- ⚠️ **判断编译是否真过必须用 `-t:Rebuild`**（增量编常报「0 错误」假象，已骗三次）；编译器分批暴露错误。
+- ⚠️ 路线：先把业务方法从界面文件搬出、再整批排除界面文件（直接排除会更糟：1450→1980）。工具在 `_w13_tools/`。
+- DSD：用户确认 **DoP 已完成**，只剩 Native DSD 接入。
+
 ## 构建 / 发布
 - publish 目录 `CelesteMusicPlayer\bin\Release\net10.0-windows10.0.19041.0\win-x64\publish`；同步 dist 必须用 publish 目录（`_sync_webshell_dist.py`，禁从 bin\x64 拷）。
 - ⚠ Roslyn/XamlCompiler 偶发崩溃=环境噪音，原样重试即成，别改代码找原因。
@@ -71,9 +82,16 @@
 - 图标只用已在用的 Segoe 字形；左栏单一真相源 `NavContentAlignment`。
 
 ## 独立窗口
-- ⛔ **用户 2026-10-28 拍板：迷你播放器、桌面歌词、零散播放窗口暂不改** —— 他要自己重构。
-  除他明确要求外，不碰 `MiniPlayerWindow*`、`DesktopLyricsOverlay*`、`ScatteredPlayWindow*`，
+- ⛔ **用户 2026-10-28 拍板：迷你播放器、零散播放窗口暂不改** —— 他要自己重构。
+  除他明确要求外，不碰 `MiniPlayerWindow*`、`ScatteredPlayWindow*`，
   也不拿它们当参考去"顺手统一"。需要这些窗口配合的能力先在接口处留口子，别直接改实现。
+- ✅ **桌面歌词例外，2026-10-29 已按用户要求重做**（`WebDesktopLyricsOverlay.cs`）：必须 WebView2 + **不要 WinUI**。
+  定论：XAML `Window` 拿不到桌面逐像素透明（透明背板会退回 `#202020` 兜底色），
+  只能裸 Win32 窗口 + `Windows.UI.Composition` 的 `DesktopWindowTarget` + WebView2 合成宿主。
+  铁律：合成树两层（根容器相对尺寸 + 网页宿主绝对尺寸）、合成宿主仍要用 `Bounds` 定网页尺寸、
+  网页透明底走进程环境变量 `WEBVIEW2_DEFAULT_BACKGROUND_COLOR`（要在 WebView2 环境创建前设）、
+  `controller.IsVisible=true` 会硬崩别碰。构建必须加 `-p:CsWinRTAotOptimizerEnabled=false`。
+  细节见 `collab/HANDOFF-2026-10-29-desktop-lyrics-win32-host.md` 与 memory/2026-10-29。
 - 零散播放窗：自持引擎、chrome 全自绘、外圈白线原生层收尾、拖动只能轮询定时器、收场发 WM_CLOSE。
 - 迷你播放器：单向数据流（主窗 200ms 推），迷你窗零播放逻辑，480×118+扩展区。
 
@@ -83,4 +101,7 @@
 
 ## 工程约定
 - 用户不懂编程：大白话结论先行、诚实交代未做项。不 rebase/force-push、不 `git add -A`、commit 独立可回退、构建过才推。
-- 日常交付 `dist\run-latest\`；禁 UIA 点击冒烟。待办在 `outputs/待办清单-*.md`。main 领先远端较多未推送。
+- 日常交付 `dist\run-latest\`；禁 UIA 点击冒烟。待办唯一真相源 `outputs/待办清单-<日期>.md`（当前 2026-10-29）。
+- **完整网页样式包**（`.celeste-player` ZIP，detail/mini/quick 三入口 + manifest + 受限上下文）方案原文
+  `collab/PLAN-2026-10-29-player-page-pack.md`，排零散播放器之后，P0 契约→P1 运行时→P2 本地库→P3 小窗→P4 可视化。
+  **P1–P3 未完成前不许把 JSON 改色包说成完整页面包**。
