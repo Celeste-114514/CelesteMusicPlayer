@@ -20,6 +20,9 @@ internal class NativeMainWebWindow : System.Windows.Forms.Form
     internal NativeMainWebWindow(DispatcherQueue dispatcher)
     {
         DispatcherQueue = dispatcher;
+        string iconPath = System.IO.Path.Combine(AppContext.BaseDirectory, "Assets", "AppIcon.ico");
+        if (System.IO.File.Exists(iconPath)) Icon = new System.Drawing.Icon(iconPath);
+
         AutoScaleMode = System.Windows.Forms.AutoScaleMode.Dpi;
         MinimumSize = new System.Drawing.Size(640,480);
         AppWindow = AppWindow.GetFromWindowId(Microsoft.UI.Win32Interop.GetWindowIdFromWindow(Handle));

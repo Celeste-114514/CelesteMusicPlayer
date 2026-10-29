@@ -35,6 +35,8 @@ InstallDirRegKey HKCU "Software\${APP_NAME}" "InstallLocation"
 SetCompressor lzma
 
 ; ---------- Modern UI 2 ----------
+!define MUI_ICON "${__FILEDIR__}\..\CelesteMusicPlayer\Assets\AppIcon.ico"
+!define MUI_UNICON "${__FILEDIR__}\..\CelesteMusicPlayer\Assets\AppIcon.ico"
 !include "MUI2.nsh"
 !include "LogicLib.nsh"
 !include "FileFunc.nsh"

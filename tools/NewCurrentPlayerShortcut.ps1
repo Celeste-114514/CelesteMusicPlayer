@@ -1,4 +1,4 @@
-# Recreate the local shortcut after moving/cloning this repository. Does not launch the app.
+﻿# Recreate the local shortcut after moving/cloning this repository. Does not launch the app.
 $ErrorActionPreference = 'Stop'
 $repository = Split-Path $PSScriptRoot -Parent
 $delivery = Join-Path $repository 'dist/web-ui-20261028'
@@ -9,7 +9,8 @@ $shortcutShell = New-Object -ComObject WScript.Shell
 $shortcut = $shortcutShell.CreateShortcut($shortcutPath)
 $shortcut.TargetPath = $executable
 $shortcut.WorkingDirectory = $delivery
-$shortcut.IconLocation = "$executable,0"
+$iconFile = Join-Path $delivery "Assets/AppIcon.ico"
+$shortcut.IconLocation = "$iconFile,0"
 $shortcut.Description = '当前开发验证版；直接启动 EXE，不经过命令行黑窗'
 $shortcut.Save()
 $verified = $shortcutShell.CreateShortcut($shortcutPath)

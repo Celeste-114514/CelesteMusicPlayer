@@ -1,3 +1,5 @@
+﻿<img src="CelesteMusicPlayer/Assets/AppIcon.png" alt="Celeste" width="80" />
+
 # CelesteMusicPlayer
 
 > 本仓库日常验证入口与目录说明：[先看这里](先看这里-仓库与验证入口.md)。验证最新修改，请用仓库根目录的「打开当前播放器」快捷方式。
