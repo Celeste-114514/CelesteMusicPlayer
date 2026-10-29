@@ -279,7 +279,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ArtistTrackListView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        private void ArtistTrackListView_ContainerContentChanging(dynamic sender, dynamic e)
         {
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {
@@ -650,7 +650,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void AlbumTrackListView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        private void AlbumTrackListView_ContainerContentChanging(dynamic sender, dynamic e)
         {
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {
@@ -2295,7 +2295,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlaylistView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
+        private void PlaylistView_SelectionChromeChanged(dynamic sender, dynamic e)
         {
             if (_suppressSelectionUiUpdates)
             {
@@ -2317,7 +2317,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlaylistView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        private void PlaylistView_ContainerContentChanging(dynamic sender, dynamic e)
         {
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {
@@ -2478,7 +2478,7 @@ namespace CelesteMusicPlayer
         /// 画刷、遍历全部后代设前景，窗口缩放每个 tick 都跑一遍就是「调整大小卡」的根源
         /// （2026-10-13 用户实测）。选中态变化才需要全量刷。
         /// </summary>
-        private void SongListView_SizeChanged(object sender, SizeChangedEventArgs e)
+        private void SongListView_SizeChanged(dynamic sender, dynamic e)
         {
             if (sender is ListView list && list.ActualWidth > 0)
             {

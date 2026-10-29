@@ -113,7 +113,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void OnPointerEntered(object sender, PointerRoutedEventArgs e)
+        private void OnPointerEntered(dynamic sender, dynamic e)
         {
             _pointerInside = true;
             AssertResizeCursor();
@@ -121,7 +121,7 @@ namespace CelesteMusicPlayer
             RestartTipTimer();
         }
 
-        private void OnPointerMoved(object sender, PointerRoutedEventArgs e)
+        private void OnPointerMoved(dynamic sender, dynamic e)
         {
             if (!_pointerInside)
             {
@@ -142,14 +142,14 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void OnPointerExited(object sender, PointerRoutedEventArgs e)
+        private void OnPointerExited(dynamic sender, dynamic e)
         {
             _pointerInside = false;
             _tipTimer?.Stop();
             HideTip();
         }
 
-        private void OnPointerPressed(object sender, PointerRoutedEventArgs e)
+        private void OnPointerPressed(dynamic sender, dynamic e)
         {
             AssertResizeCursor();
             _tipTimer?.Stop();
@@ -166,7 +166,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void TipTimer_Tick(DispatcherQueueTimer sender, object args)
+        private void TipTimer_Tick(dynamic sender, dynamic e)
         {
             if (!_pointerInside || XamlRoot == null)
             {

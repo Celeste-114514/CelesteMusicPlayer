@@ -273,7 +273,7 @@ namespace CelesteMusicPlayer
 
         // ---------- 页面切换 ----------
 
-        private void DspNavButton_Click(object sender, RoutedEventArgs e)
+        private void DspNavButton_Click(dynamic sender, dynamic e)
         {
             if (sender is Button b && b.Tag is int idx)
             {

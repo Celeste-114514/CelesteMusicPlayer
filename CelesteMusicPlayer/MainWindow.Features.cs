@@ -131,7 +131,7 @@ namespace CelesteMusicPlayer
             root.PointerWheelChanged += Root_PointerWheelChanged;
         }
 
-        private void Root_PointerWheelChanged(object sender, PointerRoutedEventArgs e)
+        private void Root_PointerWheelChanged(dynamic sender, dynamic e)
         {
             if (!AppSettingsStore.Load().GlobalMouseWheelVolume)
             {
@@ -360,7 +360,7 @@ namespace CelesteMusicPlayer
             });
         }
 
-        private void OnLibraryWatchDebounceTick(Microsoft.UI.Dispatching.DispatcherQueueTimer sender, object args)
+        private void OnLibraryWatchDebounceTick(dynamic sender, dynamic e)
         {
             if (_libraryRescanInProgress)
             {
@@ -384,7 +384,7 @@ namespace CelesteMusicPlayer
             root.KeyDown += Root_KeyDown;
         }
 
-        private void Root_KeyDown(object sender, KeyRoutedEventArgs e)
+        private void Root_KeyDown(dynamic sender, dynamic e)
         {
             if (e.Handled)
             {
@@ -1558,7 +1558,7 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>真实进度条变化时镜像到悬浮条（镜像期间忽略悬浮条自身的 ValueChanged，避免回环）。</summary>
-        private void ProgressSliderMirror_ValueChanged(object? sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        private void ProgressSliderMirror_ValueChanged(dynamic sender, dynamic e)
         {
             if (NowPlayingProgressSlider == null)
             {
@@ -1589,16 +1589,16 @@ namespace CelesteMusicPlayer
         }
 
         // 悬浮进度条交互：复用真实进度条的拖拽 / 跳转逻辑
-        private void NowPlayingProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
+        private void NowPlayingProgressSlider_PointerPressed(dynamic sender, dynamic e)
         {
             _isUserSeeking = true;
             _seekGestureConsumed = false;
         }
 
-        private void NowPlayingProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
+        private void NowPlayingProgressSlider_PointerReleased(dynamic sender, dynamic e)
             => EndNowPlayingSeekGesture();
 
-        private void NowPlayingProgressSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+        private void NowPlayingProgressSlider_PointerCaptureLost(dynamic sender, dynamic e)
             => EndNowPlayingSeekGesture();
 
         /// <summary>
@@ -1670,7 +1670,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void NowPlayingPaneContent_PointerMoved(object sender, PointerRoutedEventArgs e)
+        private void NowPlayingPaneContent_PointerMoved(dynamic sender, dynamic e)
         {
             if (_nowPlayingPaneOpen)
             {

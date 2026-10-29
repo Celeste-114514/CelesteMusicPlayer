@@ -152,7 +152,7 @@ namespace CelesteMusicPlayer
             return !exclusive || st.HiFiSoftwareVolume;
         }
 
-        private void VolumeSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        private void VolumeSlider_ValueChanged(dynamic sender, dynamic e)
         {
             if (!_volumeUiReady)
             {

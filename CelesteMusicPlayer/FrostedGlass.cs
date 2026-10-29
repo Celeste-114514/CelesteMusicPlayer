@@ -45,7 +45,7 @@ namespace CelesteMusicPlayer
         private static bool ClassicIsLight
             => ClassicMode is "Light" or "ClassicLight"
                || (ClassicMode is "System" or "ClassicSystem"
-                   && Application.Current.RequestedTheme == ApplicationTheme.Light);
+                   && Application.Current.RequestedTheme == ElementTheme.Light);
 
         public static void ApplyWindowBackdrop(Window window)
         {

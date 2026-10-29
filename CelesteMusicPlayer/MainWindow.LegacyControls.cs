@@ -78,8 +78,8 @@ namespace CelesteMusicPlayer
         internal Microsoft.UI.Xaml.Controls.Border ArtistSongsFrostPanel = new();
         internal Microsoft.UI.Xaml.Controls.ListView ArtistTrackListView = new();
         internal Microsoft.UI.Xaml.Controls.TextBlock AsioBufferTipText = new();
-        internal Microsoft.UI.Xaml.Media.Storyboard AudioChainCloseStoryboard = new();
-        internal Microsoft.UI.Xaml.Media.Storyboard AudioChainOpenStoryboard = new();
+        internal Microsoft.UI.Xaml.Media.Animation.Storyboard AudioChainCloseStoryboard = new();
+        internal Microsoft.UI.Xaml.Media.Animation.Storyboard AudioChainOpenStoryboard = new();
         internal Microsoft.UI.Xaml.Controls.Grid AudioChainOverlayHost = new();
         internal Microsoft.UI.Xaml.Controls.Control AudioChainPanel = new();
         internal Microsoft.UI.Xaml.Controls.Border AudioChainPanelHost = new();
@@ -175,9 +175,9 @@ namespace CelesteMusicPlayer
         internal Microsoft.UI.Xaml.Controls.TextBlock AudioProDspChain = new();
         internal Microsoft.UI.Xaml.Controls.TextBlock AudioProPosition = new();
         internal Microsoft.UI.Xaml.Controls.Button AudioSettingsButton = new();
-        internal Microsoft.UI.Xaml.Media.Storyboard AudioSettingsCloseStoryboard = new();
+        internal Microsoft.UI.Xaml.Media.Animation.Storyboard AudioSettingsCloseStoryboard = new();
         internal Microsoft.UI.Xaml.Controls.StackPanel AudioSettingsNavPanel = new();
-        internal Microsoft.UI.Xaml.Media.Storyboard AudioSettingsOpenStoryboard = new();
+        internal Microsoft.UI.Xaml.Media.Animation.Storyboard AudioSettingsOpenStoryboard = new();
         internal Microsoft.UI.Xaml.Controls.Grid AudioSettingsOverlayHost = new();
         internal Microsoft.UI.Xaml.Controls.StackPanel AudioSettingsPageAbLoop = new();
         internal Microsoft.UI.Xaml.Controls.StackPanel AudioSettingsPageOutput = new();
@@ -403,8 +403,8 @@ namespace CelesteMusicPlayer
         internal Microsoft.UI.Xaml.Controls.Control LyricsShift = new();
         internal Microsoft.UI.Xaml.Controls.Border MainBitPerfectBadge = new();
         internal Microsoft.UI.Xaml.Controls.TextBlock MainBitPerfectText = new();
-        internal Microsoft.UI.Xaml.Media.Storyboard MainContentDepthBackStoryboard = new();
-        internal Microsoft.UI.Xaml.Media.Storyboard MainContentDepthRestoreStoryboard = new();
+        internal Microsoft.UI.Xaml.Media.Animation.Storyboard MainContentDepthBackStoryboard = new();
+        internal Microsoft.UI.Xaml.Media.Animation.Storyboard MainContentDepthRestoreStoryboard = new();
         internal Microsoft.UI.Xaml.Controls.Grid MainContentGrid = new();
         internal Microsoft.UI.Xaml.Controls.TextBlock MediaDetailsEmptyHint = new();
         internal Microsoft.UI.Xaml.Controls.TextBlock MediaDetailsHeader = new();
@@ -474,8 +474,8 @@ namespace CelesteMusicPlayer
         internal Microsoft.UI.Xaml.Controls.Image NowPlayingCoverImage = new();
         internal Microsoft.UI.Xaml.Controls.Grid NowPlayingCoverReflection = new();
         internal Microsoft.UI.Xaml.Controls.Image NowPlayingCoverReflectionImage = new();
-        internal Microsoft.UI.Xaml.Media.Storyboard NowPlayingDepthInStoryboard = new();
-        internal Microsoft.UI.Xaml.Media.Storyboard NowPlayingDepthOutStoryboard = new();
+        internal Microsoft.UI.Xaml.Media.Animation.Storyboard NowPlayingDepthInStoryboard = new();
+        internal Microsoft.UI.Xaml.Media.Animation.Storyboard NowPlayingDepthOutStoryboard = new();
         internal Microsoft.UI.Xaml.Controls.Grid NowPlayingFloatingBar = new();
         internal Microsoft.UI.Xaml.Controls.Button NowPlayingLayoutButton = new();
         internal Microsoft.UI.Xaml.Controls.TextBlock NowPlayingLayoutButtonText = new();
@@ -683,8 +683,8 @@ namespace CelesteMusicPlayer
         internal Microsoft.UI.Xaml.Controls.TextBlock TerminalStatusText = new();
         internal Microsoft.UI.Xaml.Controls.StackPanel TitleBarFloatingButtons = new();
         internal Microsoft.UI.Xaml.Controls.TextBlock TotalTimeText = new();
-        internal Microsoft.UI.Xaml.Media.Storyboard TransportArrowInStoryboard = new();
-        internal Microsoft.UI.Xaml.Media.Storyboard TransportArrowOutStoryboard = new();
+        internal Microsoft.UI.Xaml.Media.Animation.Storyboard TransportArrowInStoryboard = new();
+        internal Microsoft.UI.Xaml.Media.Animation.Storyboard TransportArrowOutStoryboard = new();
         internal Microsoft.UI.Xaml.Controls.TextBlock TransportArtistText = new();
         internal Microsoft.UI.Xaml.Controls.Button TransportAudioSettingsButton = new();
         internal Microsoft.UI.Xaml.Controls.Border TransportCoverBorder = new();
@@ -699,7 +699,7 @@ namespace CelesteMusicPlayer
         internal Microsoft.UI.Xaml.Controls.TextBlock TransportTitleText = new();
         internal Microsoft.UI.Xaml.Controls.Grid UserPlaylistActionBar = new();
         internal Microsoft.UI.Xaml.Controls.Button UserPlaylistNavButton = new();
-        internal Microsoft.UI.Xaml.Controls.Path UserPlaylistNavIcon = new();
+        internal Microsoft.UI.Xaml.Shapes.Path UserPlaylistNavIcon = new();
         internal Microsoft.UI.Xaml.Controls.Border UserPlaylistNavIndicator = new();
         internal Microsoft.UI.Xaml.Controls.Control VinylArmRotate = new();
         internal Microsoft.UI.Xaml.Shapes.Ellipse VinylArtEllipse = new();

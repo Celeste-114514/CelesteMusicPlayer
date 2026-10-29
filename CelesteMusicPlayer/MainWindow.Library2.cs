@@ -43,7 +43,7 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
 
-        private async void SelectArtistAvatarMenu_Click(object sender, RoutedEventArgs e)
+        private async void SelectArtistAvatarMenu_Click(dynamic sender, dynamic e)
         {
             if (_avatarContextArtist == null)
             {
@@ -86,7 +86,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private async void RestoreArtistAvatarMenu_Click(object sender, RoutedEventArgs e)
+        private async void RestoreArtistAvatarMenu_Click(dynamic sender, dynamic e)
         {
             if (_avatarContextArtist == null)
             {
@@ -475,7 +475,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void ArtistAlbumGridView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        private void ArtistAlbumGridView_ContainerContentChanging(dynamic sender, dynamic e)
         {
             if (args.Item is AlbumEntry album && args.ItemContainer is GridViewItem container)
             {
@@ -693,7 +693,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void AlbumGridView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        private void AlbumGridView_ContainerContentChanging(dynamic sender, dynamic e)
         {
             if (args.Item is AlbumEntry album && args.ItemContainer is GridViewItem container)
             {

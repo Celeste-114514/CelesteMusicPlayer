@@ -476,7 +476,7 @@ namespace CelesteMusicPlayer
             return false;
         }
 
-        private void GeekVolumeCanvas_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        private void GeekVolumeCanvas_SizeChanged(dynamic sender, dynamic e)
         {
             UpdateGeekVolumeText();
         }

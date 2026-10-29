@@ -551,7 +551,7 @@ namespace CelesteMusicPlayer
             RefreshSelectionChrome();
         }
 
-        private void PlaylistView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        private void PlaylistView_ContainerContentChanging(dynamic sender, dynamic e)
         {
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {

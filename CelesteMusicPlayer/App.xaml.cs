@@ -110,6 +110,15 @@ namespace CelesteMusicPlayer
             // 不会因为一个回调抛异常就把整个消息循环带走。
         }
 
+        /// <summary>W13：结束原生消息循环（原来直接调 WinUI 的 Application.Exit）。</summary>
+        internal void Exit()
+        {
+            try { AppSettingsStore.MarkAppCleanExit(); }
+            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("App.Exit", caught); }
+            StartupLog.Write("App.Exit: quitting native message pump");
+            Microsoft.UI.Dispatching.NativeMessagePump.Quit(0);
+        }
+
         /// <summary>原生入口（Program.Main 调用）：取代原来的 Application.Start + OnLaunched。</summary>
         internal void Run(string[] args)
         {

@@ -158,8 +158,7 @@ namespace CelesteMusicPlayer
         /// <summary>当前播放在用户播放列表中的下标（播放顺序以播放列表为准）</summary>
         private int _userPlaylistIndex = -1;
         private PlaylistItem? _seamlessPreloaded; // 已预加载待无缝接续的下一首记录（供 SeamlessTrackChanged 更新 UI）
-        private CurrentPlaylistWindow? _currentPlaylistWindow;
-        internal PlayQueueWindow? QueueWindow { get; set; }
+        // W13：旧「当前播放列表 / 播放队列」独立窗口随 XAML 界面下线（网页界面自带队列）。
 
 
         private void InitializePlayerAndTimers()
@@ -2128,7 +2127,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlaylistDetailListView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        private void PlaylistDetailListView_ContainerContentChanging(dynamic sender, dynamic e)
         {
             if (args.Item is PlaylistItem song && args.ItemContainer is ListViewItem container)
             {
@@ -2141,7 +2140,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PlaylistDetailListView_SelectionChromeChanged(object sender, SelectionChangedEventArgs e)
+        private void PlaylistDetailListView_SelectionChromeChanged(dynamic sender, dynamic e)
         {
             RefreshRealizedSongListSelectionChrome(PlaylistDetailListView);
         }

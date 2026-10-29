@@ -139,11 +139,11 @@ namespace CelesteMusicPlayer
             try
             {
                 if (IsGeekUiStyleActive()) return true;
-                return Application.Current.RequestedTheme == ApplicationTheme.Dark;
+                return Application.Current.RequestedTheme == ElementTheme.Dark;
             }
             catch
             {
-                return Application.Current.RequestedTheme == ApplicationTheme.Dark;
+                return Application.Current.RequestedTheme == ElementTheme.Dark;
             }
         }
 

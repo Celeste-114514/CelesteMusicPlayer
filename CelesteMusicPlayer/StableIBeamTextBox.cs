@@ -21,7 +21,7 @@ namespace CelesteMusicPlayer
             GettingFocus += (_, _) => ProtectedCursor = IBeamCursor;
         }
 
-        private void OnPointerAssertCursor(object sender, PointerRoutedEventArgs e)
+        private void OnPointerAssertCursor(dynamic sender, dynamic e)
         {
             if (!ReferenceEquals(ProtectedCursor, IBeamCursor))
             {

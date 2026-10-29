@@ -448,7 +448,7 @@ namespace CelesteMusicPlayer
         private double _eqViewMaxGain = 12;
         private int _eqHoverIndex = -1;
 
-        private void AudioFxEqCurve_SizeChanged(object sender, SizeChangedEventArgs e)
+        private void AudioFxEqCurve_SizeChanged(dynamic sender, dynamic e)
         {
             if (_audioFxEqBuilt) RedrawAudioFxEqCurve();
         }

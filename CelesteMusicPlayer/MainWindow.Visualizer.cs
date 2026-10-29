@@ -215,7 +215,7 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>页内可视化菜单：写设置并立即套用。</summary>
-        private void NowPlayingVisualMenuItem_Click(object sender, RoutedEventArgs e)
+        private void NowPlayingVisualMenuItem_Click(dynamic sender, dynamic e)
         {
             try
             {

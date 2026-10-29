@@ -153,7 +153,7 @@ namespace CelesteMusicPlayer
 
             // 回退到内置默认，保证「主题没覆盖」时也有合理值而不是 null。
             // ⚠ FrameworkElement.RequestedTheme 的类型是 ElementTheme（Default/Light/Dark），
-            //   和 Application.RequestedTheme（ApplicationTheme）不是同一个枚举，不能直接比。
+            //   和 Application.RequestedTheme（ElementTheme）不是同一个枚举，不能直接比。
             var def = CelesteTokenCatalog.Find(tokenName);
             if (def?.Type == "color")
             {

@@ -875,7 +875,7 @@ namespace CelesteMusicPlayer
             });
         }
 
-        private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
+        private void ProgressSlider_PointerPressed(dynamic sender, dynamic e)
         {
             // 起拖标志先立：下面的落点赋值会触发 ValueChanged，赶在标志前面的话
             // 时间文本不会跟着跳，看起来就是"点了没反应"。
@@ -917,7 +917,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void ProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
+        private void ProgressSlider_PointerReleased(dynamic sender, dynamic e)
         {
             try
             {
@@ -932,7 +932,7 @@ namespace CelesteMusicPlayer
             CommitSeek();
         }
 
-        private void ProgressSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+        private void ProgressSlider_PointerCaptureLost(dynamic sender, dynamic e)
         {
             CommitSeek();
         }
@@ -997,7 +997,7 @@ namespace CelesteMusicPlayer
 
         private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
 
-        private void VolumeSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        private void VolumeSlider_ValueChanged(dynamic sender, dynamic e)
         {
             if (!_uiReady || _syncingVolume)
             {

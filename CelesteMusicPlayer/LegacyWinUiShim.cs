@@ -4,6 +4,8 @@
 // （DSP 各模块直接读写它们）。本文件用同名命名空间提供等价的纯数据对象，
 // 让业务代码无需改动即可脱离 Microsoft.UI.Xaml。后续按域清理时可整体删除。
 // </auto-generated>
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Text;
 #pragma warning disable CS0436
 #pragma warning disable CS0067
 #pragma warning disable CS0169
@@ -56,12 +58,22 @@ namespace Microsoft.UI.Xaml
         public double Left, Top, Right, Bottom;
         public Thickness(double uniform) { Left = Top = Right = Bottom = uniform; }
         public Thickness(double left, double top, double right, double bottom) { Left = left; Top = top; Right = right; Bottom = bottom; }
+
+        public static bool operator ==(Thickness a, Thickness b) => a.Equals(b);
+        public static bool operator !=(Thickness a, Thickness b) => !a.Equals(b);
+        public override bool Equals(object? obj) => obj is Thickness other && Equals(other);
+        public override int GetHashCode() => 0;
     }
     public struct CornerRadius
     {
         public double TopLeft, TopRight, BottomRight, BottomLeft;
         public CornerRadius(double uniform) { TopLeft = TopRight = BottomRight = BottomLeft = uniform; }
         public CornerRadius(double topLeft, double topRight, double bottomRight, double bottomLeft) { TopLeft = topLeft; TopRight = topRight; BottomRight = bottomRight; BottomLeft = bottomLeft; }
+
+        public static bool operator ==(CornerRadius a, CornerRadius b) => a.Equals(b);
+        public static bool operator !=(CornerRadius a, CornerRadius b) => !a.Equals(b);
+        public override bool Equals(object? obj) => obj is CornerRadius other && Equals(other);
+        public override int GetHashCode() => 0;
     }
     public struct Duration
     {
@@ -69,6 +81,11 @@ namespace Microsoft.UI.Xaml
         public Duration(System.TimeSpan value) { TimeSpan = value; }
         public static Duration Automatic => new Duration(System.TimeSpan.Zero);
         public static Duration Forever => new Duration(System.TimeSpan.MaxValue);
+
+        public static bool operator ==(Duration a, Duration b) => a.Equals(b);
+        public static bool operator !=(Duration a, Duration b) => !a.Equals(b);
+        public override bool Equals(object? obj) => obj is Duration other && Equals(other);
+        public override int GetHashCode() => 0;
     }
     public struct GridLength
     {
@@ -77,23 +94,28 @@ namespace Microsoft.UI.Xaml
         public GridLength(double value) { Value = value; GridUnitType = GridUnitType.Pixel; }
         public GridLength(double value, GridUnitType type) { Value = value; GridUnitType = type; }
         public static GridLength Auto => new GridLength(1, GridUnitType.Auto);
-    }
-    public class RoutedEventArgs : System.EventArgs { public object? OriginalSource { get; set; } public bool Handled { get; set; } }
-    public class SizeChangedEventArgs : RoutedEventArgs { public System.Windows.Size PreviousSize { get; set; } public System.Windows.Size NewSize { get; set; } }
-    public delegate void RoutedEventHandler(object sender, RoutedEventArgs e);
-    public delegate void SizeChangedEventHandler(object sender, SizeChangedEventArgs e);
-    public class DragEventArgs : RoutedEventArgs { public bool AcceptedOperation { get; set; } public object? DataView { get; set; } public System.Windows.Point GetPosition(object? relativeTo) => default; }
-    public delegate void DragEventHandler(object sender, DragEventArgs e);
-    public class TextChangedEventArgs : RoutedEventArgs { }
-    public delegate void TextChangedEventHandler(object sender, TextChangedEventArgs e);
-    public class SelectionChangedEventArgs : RoutedEventArgs { public System.Collections.IList AddedItems { get; } = new System.Collections.Generic.List<object?>(); public System.Collections.IList RemovedItems { get; } = new System.Collections.Generic.List<object?>(); }
-    public delegate void SelectionChangedEventHandler(object sender, SelectionChangedEventArgs e);
-    public class ItemClickEventArgs : RoutedEventArgs { public object? ClickedItem { get; set; } }
-    public delegate void ItemClickEventHandler(object sender, ItemClickEventArgs e);
-    public class ContainerContentChangingEventArgs : RoutedEventArgs { public object? Item { get; set; } public object? ItemContainer { get; set; } public bool InRecycleQueue { get; set; } }
-    public class DependencyProperty { public static object? UnsetValue => null; }
 
-    public class DependencyObject
+        public static bool operator ==(GridLength a, GridLength b) => a.Equals(b);
+        public static bool operator !=(GridLength a, GridLength b) => !a.Equals(b);
+        public override bool Equals(object? obj) => obj is GridLength other && Equals(other);
+        public override int GetHashCode() => 0;
+    }
+    public partial class RoutedEventArgs : System.EventArgs { public object? OriginalSource { get; set; } public bool Handled { get; set; } }
+    public partial class SizeChangedEventArgs : RoutedEventArgs { public Windows.Foundation.Size PreviousSize { get; set; } public Windows.Foundation.Size NewSize { get; set; } }
+    /// <summary>过渡期通用事件委托：参数是 dynamic，能匹配旧界面里五花八门的处理器签名。</summary>
+    public delegate void AnyEventHandler(dynamic sender, dynamic e);
+    public delegate void RoutedEventHandler(dynamic sender, dynamic e);
+    public delegate void SizeChangedEventHandler(dynamic sender, dynamic e);
+    public partial class DragEventArgs : RoutedEventArgs { public bool AcceptedOperation { get; set; } public object? DataView { get; set; } public Windows.Foundation.Point GetPosition(object? relativeTo) => default; }
+    public delegate void DragEventHandler(dynamic sender, dynamic e);
+    public partial class DependencyProperty
+    {
+        public static object? UnsetValue => null;
+        public static DependencyProperty Register(string name, object? propertyType, object? ownerType, object? metadata) => new DependencyProperty();
+        public static DependencyProperty RegisterAttached(string name, object? propertyType, object? ownerType, object? metadata) => new DependencyProperty();
+    }
+
+    public partial class DependencyObject
     {
         public object? GetValue(DependencyProperty? dp) => null;
         public void SetValue(DependencyProperty? dp, object? value) { }
@@ -103,19 +125,19 @@ namespace Microsoft.UI.Xaml
         public void CancelAnimation(DependencyProperty? dp) { }
     }
 
-    public class UIElement : DependencyObject
+    public partial class UIElement : DependencyObject
     {
 
-        public object? Content { get; set; }
-        public object? DataContext { get; set; }
-        public object? Tag { get; set; }
+        public dynamic? Content { get; set; }
+        public dynamic? DataContext { get; set; }
+        public dynamic? Tag { get; set; }
         public string Name { get; set; } = string.Empty;
-        public object? Header { get; set; }
-        public object? Description { get; set; }
-        public object? Title { get; set; }
-        public object? Subtitle { get; set; }
-        public object? Icon { get; set; }
-        public object? PlaceholderText { get; set; }
+        public dynamic? Header { get; set; }
+        public dynamic? Description { get; set; }
+        public dynamic? Title { get; set; }
+        public dynamic? Subtitle { get; set; }
+        public dynamic? Icon { get; set; }
+        public dynamic? PlaceholderText { get; set; }
         public string Text { get; set; } = string.Empty;
         public string Glyph { get; set; } = string.Empty;
         public double Value { get; set; }
@@ -128,9 +150,9 @@ namespace Microsoft.UI.Xaml
         public bool IsOn { get; set; }
         public bool? IsChecked { get; set; }
         public int SelectedIndex { get; set; } = -1;
-        public object? SelectedItem { get; set; }
-        public object? SelectedValue { get; set; }
-        public object? ItemsSource { get; set; }
+        public dynamic? SelectedItem { get; set; }
+        public dynamic? SelectedValue { get; set; }
+        public dynamic? ItemsSource { get; set; }
         public System.Collections.IList Items { get; } = new System.Collections.Generic.List<object?>();
         public System.Collections.IList Children { get; } = new System.Collections.Generic.List<object?>();
         public System.Collections.IList ColumnDefinitions { get; } = new System.Collections.Generic.List<object?>();
@@ -160,7 +182,7 @@ namespace Microsoft.UI.Xaml
         public double ActualWidth { get; set; }
         public double ActualHeight { get; set; }
         public double FontSize { get; set; } = 14d;
-        public Windows.UI.Text.FontWeights FontWeight { get; set; } = new Windows.UI.Text.FontWeights();
+        public Microsoft.UI.Text.FontWeights FontWeight { get; set; } = new Microsoft.UI.Text.FontWeights();
         public FontFamily? FontFamily { get; set; }
         public TextAlignment TextAlignment { get; set; }
         public TextWrapping TextWrapping { get; set; }
@@ -180,7 +202,7 @@ namespace Microsoft.UI.Xaml
         public double StrokeThickness { get; set; }
         public DoubleCollection? StrokeDashArray { get; set; }
         public Brush? BorderBrush { get; set; }
-        public object? Shadow { get; set; }
+        public dynamic? Shadow { get; set; }
         public System.Numerics.Vector3 Translation { get; set; }
         public System.Numerics.Vector3 CenterPoint { get; set; }
         public System.Numerics.Vector3 Scale { get; set; }
@@ -190,17 +212,17 @@ namespace Microsoft.UI.Xaml
         public VerticalAlignment VerticalAlignment { get; set; }
         public HorizontalAlignment HorizontalContentAlignment { get; set; }
         public VerticalAlignment VerticalContentAlignment { get; set; }
-        public object? Source { get; set; }
-        public object? Stretch { get; set; }
+        public dynamic? Source { get; set; }
+        public dynamic? Stretch { get; set; }
         public ElementTheme RequestedTheme { get; set; }
         public ElementTheme ActualTheme { get; set; }
-        public object? Style { get; set; }
-        public object? Resources { get; set; }
-        public object? RenderTransform { get; set; }
-        public object? ContextFlyout { get; set; }
-        public object? Flyout { get; set; }
-        public object? Command { get; set; }
-        public object? CommandParameter { get; set; }
+        public dynamic? Style { get; set; }
+        public dynamic? Resources { get; set; }
+        public dynamic? RenderTransform { get; set; }
+        public dynamic? ContextFlyout { get; set; }
+        public dynamic? Flyout { get; set; }
+        public dynamic? Command { get; set; }
+        public dynamic? CommandParameter { get; set; }
         public int TabIndex { get; set; }
         public int Column { get; set; }
         public int Row { get; set; }
@@ -208,97 +230,96 @@ namespace Microsoft.UI.Xaml
         public int RowSpan { get; set; } = 1;
         public string? ToolTipText { get; set; }
         public double LineHeight { get; set; }
-        public object? BaselineOffset { get; set; }
+        public dynamic? BaselineOffset { get; set; }
 
-        public event RoutedEventHandler? Click;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Click;
 
-        public event RoutedEventHandler? Toggled;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Toggled;
 
-        public event RoutedEventHandler? Loaded;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Loaded;
 
-        public event RoutedEventHandler? Unloaded;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Unloaded;
 
-        public event RoutedEventHandler? SizeChanged;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? SizeChanged;
 
-        public event RoutedEventHandler? LayoutUpdated;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? LayoutUpdated;
 
-        public event RoutedEventHandler? PointerEntered;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? PointerEntered;
 
-        public event RoutedEventHandler? PointerExited;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? PointerExited;
 
-        public event RoutedEventHandler? PointerPressed;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? PointerPressed;
 
-        public event RoutedEventHandler? PointerReleased;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? PointerReleased;
 
-        public event RoutedEventHandler? PointerMoved;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? PointerMoved;
 
-        public event RoutedEventHandler? PointerCaptureLost;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? PointerCaptureLost;
 
-        public event RoutedEventHandler? PointerWheelChanged;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? PointerWheelChanged;
 
-        public event RoutedEventHandler? Tapped;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Tapped;
 
-        public event RoutedEventHandler? DoubleTapped;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? DoubleTapped;
 
-        public event RoutedEventHandler? RightTapped;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? RightTapped;
 
-        public event RoutedEventHandler? GotFocus;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? GotFocus;
 
-        public event RoutedEventHandler? LostFocus;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? LostFocus;
 
-        public event RoutedEventHandler? KeyDown;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? KeyDown;
 
-        public event RoutedEventHandler? KeyUp;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? KeyUp;
 
-        public event RoutedEventHandler? PreviewKeyDown;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? PreviewKeyDown;
 
-        public event RoutedEventHandler? PreviewKeyUp;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? PreviewKeyUp;
 
-        public event RoutedEventHandler? TextChanged;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? TextChanged;
 
-        public event RoutedEventHandler? TextChanging;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? TextChanging;
 
-        public event RoutedEventHandler? SelectionChanged;
 
-        public event RoutedEventHandler? DropDownOpened;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? DropDownOpened;
 
-        public event RoutedEventHandler? DropDownClosed;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? DropDownClosed;
 
-        public event RoutedEventHandler? Checked;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Checked;
 
-        public event RoutedEventHandler? Unchecked;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Unchecked;
 
-        public event RoutedEventHandler? DragEnter;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? DragEnter;
 
-        public event RoutedEventHandler? DragOver;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? DragOver;
 
-        public event RoutedEventHandler? DragLeave;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? DragLeave;
 
-        public event RoutedEventHandler? Drop;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Drop;
 
-        public event RoutedEventHandler? ManipulationStarted;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? ManipulationStarted;
 
-        public event RoutedEventHandler? ManipulationDelta;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? ManipulationDelta;
 
-        public event RoutedEventHandler? ManipulationCompleted;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? ManipulationCompleted;
 
-        public event RoutedEventHandler? ContextRequested;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? ContextRequested;
 
-        public event RoutedEventHandler? DataContextChanged;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? DataContextChanged;
 
-        public event RoutedEventHandler? EffectiveViewportChanged;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? EffectiveViewportChanged;
 
-        public event RoutedEventHandler? IsEnabledChanged;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? IsEnabledChanged;
 
-        public event RoutedEventHandler? ItemClick;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? ItemClick;
 
-        public event RoutedEventHandler? ChoosingItemContainer;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? ChoosingItemContainer;
 
-        public event RoutedEventHandler? ContainerContentChanging;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? ContainerContentChanging;
 
-        public event RoutedEventHandler? ValueChanged;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? ValueChanged;
 
-        public event RoutedEventHandler? SelectionChanged;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? SelectionChanged;
 
 
         public bool Focus(object? value = null) => true;
@@ -332,14 +353,20 @@ namespace Microsoft.UI.Xaml
 
     }
 
-    public class FrameworkElement : UIElement
+    public partial class FrameworkElement : UIElement
     {
+        protected virtual Windows.Foundation.Size MeasureOverride(Windows.Foundation.Size availableSize) => new Windows.Foundation.Size(0, 0);
+        protected virtual Windows.Foundation.Size ArrangeOverride(Windows.Foundation.Size finalSize) => finalSize;
+        protected virtual void OnApplyTemplate() { }
+        public void Measure(Windows.Foundation.Size availableSize) { }
+        public void Arrange(Windows.Foundation.Rect finalRect) { }
+        public Windows.Foundation.Size DesiredSize { get; set; }
 
         public double ActualOffset { get; set; }
 
-        public object? Parent { get; set; }
+        public dynamic? Parent { get; set; }
 
-        public object? Tapped2 { get; set; }
+        public dynamic? Tapped2 { get; set; }
 
         public static readonly DependencyProperty? VisibilityProperty = null;
 
@@ -371,79 +398,75 @@ namespace Microsoft.UI.Xaml
 
     }
 
-    public class Window : FrameworkElement
+    public partial class Window : FrameworkElement
     {
     }
 
-    public class Application : FrameworkElement
+    public sealed partial class Application : FrameworkElement
     {
     }
 
-    public class ResourceDictionary : DependencyObject
+    public sealed partial class ResourceDictionary : DependencyObject
     {
     }
 
-    public class Style : DependencyObject
+    public sealed partial class Style : DependencyObject
     {
     }
 
-    public class Setter : DependencyObject
+    public partial class Setter : DependencyObject
     {
     }
 
-    public class DataTemplate : DependencyObject
+    public partial class DataTemplate : DependencyObject
     {
     }
 
-    public class ControlTemplate : DependencyObject
+    public partial class ControlTemplate : DependencyObject
     {
     }
 
-    public class ItemsPanelTemplate : DependencyObject
+    public partial class ItemsPanelTemplate : DependencyObject
     {
     }
 
-    public class PropertyPath : DependencyObject
+    public partial class PropertyPath : DependencyObject
     {
     }
 
-    public class Binding : DependencyObject
+    public partial class Binding : DependencyObject
     {
     }
 
-    public class BindingBase : DependencyObject
+    public partial class BindingBase : DependencyObject
     {
     }
 
-    public class RelativeSource : DependencyObject
+    public partial class RelativeSource : DependencyObject
     {
     }
 
-    public class ColorHelper : DependencyObject
+    public partial class ColorHelper : DependencyObject
     {
     }
 
-    public class XamlRoot : DependencyObject
+    public partial class XamlRoot : DependencyObject
     {
     }
 
-    public class WindowingHelper : DependencyObject
+    public partial class WindowingHelper : DependencyObject
     {
     }
 
-    public class DispatcherTimer : DependencyObject
+    public partial class Deferral : DependencyObject
     {
     }
 
-    public class Deferral : DependencyObject
-    {
-    }
-
-    public class DispatcherTimer : DependencyObject
+    public partial class DispatcherTimer : DependencyObject
     {
         public System.TimeSpan Interval { get; set; }
         public bool IsEnabled { get; set; }
-        public event System.EventHandler<object>? Tick;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Tick;
         public void Start() { }
         public void Stop() { }
     }
@@ -452,139 +475,139 @@ namespace Microsoft.UI.Xaml
 
 namespace Microsoft.UI.Xaml.Controls
 {
-    public class Control : Microsoft.UI.Xaml.FrameworkElement
+    public partial class Control : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class ContentControl : Control
+    public partial class ContentControl : Control
     {
     }
 
-    public class Panel : Microsoft.UI.Xaml.FrameworkElement
+    public partial class Panel : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class ItemsControl : Control
+    public partial class ItemsControl : Control
     {
     }
 
-    public class Selector : ItemsControl
+    public partial class Selector : ItemsControl
     {
     }
 
-    public class ButtonBase : ContentControl
+    public partial class ButtonBase : ContentControl
     {
     }
 
-    public class Button : Control
+    public partial class Button : Control
     {
     }
 
-    public class ToggleButton : Control
+    public partial class ToggleButton : Control
     {
     }
 
-    public class RepeatButton : Control
+    public partial class RepeatButton : Control
     {
     }
 
-    public class DropDownButton : Control
+    public partial class DropDownButton : Control
     {
     }
 
-    public class SplitButton : Control
+    public partial class SplitButton : Control
     {
     }
 
-    public class HyperlinkButton : Control
+    public partial class HyperlinkButton : Control
     {
     }
 
-    public class TextBlock : Microsoft.UI.Xaml.FrameworkElement
+    public partial class TextBlock : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class RichTextBlock : Microsoft.UI.Xaml.FrameworkElement
+    public partial class RichTextBlock : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class RichEditBox : Control
+    public partial class RichEditBox : Control
     {
     }
 
-    public class TextBox : Control
+    public partial class TextBox : Control
     {
     }
 
-    public class PasswordBox : Control
+    public partial class PasswordBox : Control
     {
     }
 
-    public class AutoSuggestBox : Control
+    public partial class AutoSuggestBox : Control
     {
     }
 
-    public class NumberBox : Control
+    public partial class NumberBox : Control
     {
     }
 
-    public class Slider : Control
+    public partial class Slider : Control
     {
     }
 
-    public class ToggleSwitch : Control
+    public partial class ToggleSwitch : Control
     {
     }
 
-    public class CheckBox : Control
+    public partial class CheckBox : Control
     {
     }
 
-    public class RadioButton : Control
+    public partial class RadioButton : Control
     {
     }
 
-    public class RadioButtons : Selector
+    public partial class RadioButtons : Selector
     {
     }
 
-    public class ComboBox : Selector
+    public partial class ComboBox : Selector
     {
     }
 
-    public class ComboBoxItem : ContentControl
+    public partial class ComboBoxItem : ContentControl
     {
     }
 
-    public class ListBox : Selector
+    public partial class ListBox : Selector
     {
     }
 
-    public class ListBoxItem : ContentControl
+    public partial class ListBoxItem : ContentControl
     {
     }
 
-    public class ListView : Selector
+    public partial class ListView : Selector
     {
     }
 
-    public class ListViewItem : ContentControl
+    public partial class ListViewItem : ContentControl
     {
     }
 
-    public class GridView : Selector
+    public partial class GridView : Selector
     {
     }
 
-    public class GridViewItem : ContentControl
+    public partial class GridViewItem : ContentControl
     {
     }
 
-    public class FlipView : Selector
+    public partial class FlipView : Selector
     {
     }
 
-    public class Grid : Panel
+    public partial class Grid : Panel
     {
 
         public static int GetColumn(Microsoft.UI.Xaml.FrameworkElement? element) => 0;
@@ -597,319 +620,307 @@ namespace Microsoft.UI.Xaml.Controls
         public static void SetRowSpan(Microsoft.UI.Xaml.FrameworkElement? element, int value) { }
     }
 
-    public class StackPanel : Panel
+    public partial class StackPanel : Panel
     {
     }
 
-    public class Canvas : Panel
+    public partial class Canvas : Panel
     {
     }
 
-    public class RelativePanel : Panel
+    public partial class RelativePanel : Panel
     {
     }
 
-    public class VariableSizedWrapGrid : Panel
+    public partial class VariableSizedWrapGrid : Panel
     {
     }
 
-    public class Border : Microsoft.UI.Xaml.FrameworkElement
+    public sealed partial class Border : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class Image : Microsoft.UI.Xaml.FrameworkElement
+    public partial class Image : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class ScrollViewer : Control
+    public partial class ScrollViewer : Control
     {
     }
 
-    public class ProgressBar : Control
+    public partial class ProgressBar : Control
     {
     }
 
-    public class ProgressRing : Control
+    public partial class ProgressRing : Control
     {
     }
 
-    public class Flyout : Microsoft.UI.Xaml.DependencyObject
+    public partial class Flyout : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class MenuFlyout : Microsoft.UI.Xaml.DependencyObject
+    public sealed partial class MenuFlyout : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class MenuFlyoutItem : ContentControl
+    public partial class MenuFlyoutItem : ContentControl
     {
     }
 
-    public class MenuFlyoutSeparator : ContentControl
+    public partial class MenuFlyoutSeparator : ContentControl
     {
     }
 
-    public class MenuBar : Control
+    public partial class MenuBar : Control
     {
     }
 
-    public class MenuBarItem : ContentControl
+    public partial class MenuBarItem : ContentControl
     {
     }
 
-    public class FontIcon : IconElement
+    public partial class FontIcon : IconElement
     {
     }
 
-    public class SymbolIcon : IconElement
+    public partial class SymbolIcon : IconElement
     {
     }
 
-    public class BitmapIcon : IconElement
+    public partial class BitmapIcon : IconElement
     {
     }
 
-    public class IconSourceElement : IconElement
+    public partial class IconSourceElement : IconElement
     {
     }
 
-    public class IconElement : Microsoft.UI.Xaml.FrameworkElement
-    {
-    }
 
-    public class ContentPresenter : Microsoft.UI.Xaml.FrameworkElement
+    public partial class ContentPresenter : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class ItemsPresenter : Microsoft.UI.Xaml.FrameworkElement
+    public partial class ItemsPresenter : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class UserControl : ContentControl
+    public partial class UserControl : ContentControl
     {
     }
 
-    public class Page : ContentControl
+    public partial class Page : ContentControl
     {
     }
 
-    public class Frame : Control
+    public partial class Frame : Control
     {
     }
 
-    public class NavigationView : Control
+    public partial class NavigationView : Control
     {
     }
 
-    public class NavigationViewItem : ContentControl
+    public partial class NavigationViewItem : ContentControl
     {
     }
 
-    public class NavigationViewItemHeader : ContentControl
+    public partial class NavigationViewItemHeader : ContentControl
     {
     }
 
-    public class SplitView : Control
+    public partial class SplitView : Control
     {
     }
 
-    public class TeachingTip : Control
-    {
-    }
 
-    public class InfoBar : Control
+    public partial class InfoBar : Control
     {
     }
 
-    public class Expander : Control
+    public partial class Expander : Control
     {
     }
 
-    public class TabView : Control
+    public partial class TabView : Control
     {
     }
 
-    public class TabViewItem : ContentControl
+    public partial class TabViewItem : ContentControl
     {
     }
 
-    public class Pivot : Control
+    public partial class Pivot : Control
     {
     }
 
-    public class PivotItem : ContentControl
+    public partial class PivotItem : ContentControl
     {
     }
 
-    public class Viewbox : Microsoft.UI.Xaml.FrameworkElement
+    public partial class Viewbox : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class PersonPicture : Control
+    public partial class PersonPicture : Control
     {
     }
 
-    public class SwapChainPanel : Microsoft.UI.Xaml.FrameworkElement
+    public partial class SwapChainPanel : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class MediaPlayerElement : Microsoft.UI.Xaml.FrameworkElement
+    public partial class MediaPlayerElement : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class MediaElement : Microsoft.UI.Xaml.FrameworkElement
+    public partial class MediaElement : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class ColumnDefinition : Microsoft.UI.Xaml.DependencyObject
+    public sealed partial class ColumnDefinition : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class RowDefinition : Microsoft.UI.Xaml.DependencyObject
+    public sealed partial class RowDefinition : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class Run : Microsoft.UI.Xaml.FrameworkElement
-    {
-    }
 
-    public class Inline : Microsoft.UI.Xaml.FrameworkElement
+    public partial class Inline : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class Span : Microsoft.UI.Xaml.FrameworkElement
+    public partial class Span : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class Bold : Microsoft.UI.Xaml.FrameworkElement
+    public partial class Bold : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class Italic : Microsoft.UI.Xaml.FrameworkElement
+    public partial class Italic : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class Underline : Microsoft.UI.Xaml.FrameworkElement
+    public partial class Underline : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class LineBreak : Microsoft.UI.Xaml.FrameworkElement
+    public partial class LineBreak : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class Paragraph : Microsoft.UI.Xaml.FrameworkElement
+    public partial class Paragraph : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class TextBlock2 : Microsoft.UI.Xaml.FrameworkElement
-    {
-    }
 
-    public class ComboBox2 : Control
+    public partial class ComboBox2 : Control
     {
     }
 
-    public class GridSplitter : Microsoft.UI.Xaml.FrameworkElement
+    public partial class GridSplitter : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class ScrollBar : Control
+    public partial class ScrollBar : Control
     {
     }
 
-    public class Thumb : Control
+    public partial class Thumb : Control
     {
     }
 
-    public class TickBar : Control
+    public partial class TickBar : Control
     {
     }
 
-    public class AppBarButton : Control
+    public partial class AppBarButton : Control
     {
     }
 
-    public class AppBarSeparator : Control
+    public partial class AppBarSeparator : Control
     {
     }
 
-    public class CommandBar : Control
+    public partial class CommandBar : Control
     {
     }
 
-    public class TextCommandBarFlyout : Control
+    public partial class TextCommandBarFlyout : Control
     {
     }
 
-    public class RefreshContainer : Control
+    public partial class RefreshContainer : Control
     {
     }
 
-    public class RefreshVisualizer : Microsoft.UI.Xaml.FrameworkElement
+    public partial class RefreshVisualizer : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class SwipeControl : Control
+    public partial class SwipeControl : Control
     {
     }
 
-    public class TreeView : Selector
+    public partial class TreeView : Selector
     {
     }
 
-    public class TreeViewItem : ContentControl
+    public partial class TreeViewItem : ContentControl
     {
     }
 
-    public class BreadcrumbBar : Control
+    public partial class BreadcrumbBar : Control
     {
     }
 
-    public class AnimatedIcon : Microsoft.UI.Xaml.FrameworkElement
+    public partial class AnimatedIcon : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class AnimatedVisualPlayer : Microsoft.UI.Xaml.FrameworkElement
+    public partial class AnimatedVisualPlayer : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class ParallaxView : Microsoft.UI.Xaml.FrameworkElement
+    public partial class ParallaxView : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class RatingControl : Control
+    public partial class RatingControl : Control
     {
     }
 
-    public class SplitButton2 : Control
+    public partial class SplitButton2 : Control
     {
     }
 
-    public class ColorPicker : Control
+    public partial class ColorPicker : Control
     {
     }
 
-    public class ColorSpectrum : Control
+    public partial class ColorSpectrum : Control
     {
     }
 
-    public class TextBlockHighlighter : Microsoft.UI.Xaml.FrameworkElement
+    public partial class TextBlockHighlighter : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class RichTextBlockOverflow : Microsoft.UI.Xaml.FrameworkElement
+    public partial class RichTextBlockOverflow : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class ScrollContentPresenter : Microsoft.UI.Xaml.FrameworkElement
+    public partial class ScrollContentPresenter : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class IconElement : Microsoft.UI.Xaml.FrameworkElement
+    public partial class IconElement : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class ToolTipService
+    public partial class ToolTipService
     {
         public static void SetToolTip(Microsoft.UI.Xaml.DependencyObject? element, object? value) { }
         public static object? GetToolTip(Microsoft.UI.Xaml.DependencyObject? element) => null;
@@ -934,95 +945,89 @@ namespace Microsoft.UI.Xaml.Controls
 
     public enum ContentDialogResult { None = 0, Primary = 1, Secondary = 2 }
 
-    public sealed class ContentDialog : ContentControl
+    public sealed partial class ContentDialog : ContentControl
     {
-        public object? PrimaryButtonText { get; set; }
-        public object? SecondaryButtonText { get; set; }
-        public object? CloseButtonText { get; set; }
+        public dynamic? PrimaryButtonText { get; set; }
+        public dynamic? SecondaryButtonText { get; set; }
+        public dynamic? CloseButtonText { get; set; }
         public ContentDialogResult Result { get; set; }
-        public object? Title2 { get; set; }
+        public dynamic? Title2 { get; set; }
         public System.Threading.Tasks.Task<ContentDialogResult> ShowAsync() => System.Threading.Tasks.Task.FromResult(ContentDialogResult.None);
         public void Hide() { }
     }
 
-    public class TeachingTip : ContentControl
+    public partial class TeachingTip : ContentControl
     {
         public bool IsOpen { get; set; }
         public TeachingTipPlacementMode PreferredPlacement { get; set; }
-        public object? Target { get; set; }
+        public dynamic? Target { get; set; }
         public void IsOpen2(bool v) { IsOpen = v; }
     }
 
-    public class InfoBadge : Microsoft.UI.Xaml.FrameworkElement
+    public partial class InfoBadge : Microsoft.UI.Xaml.FrameworkElement
     {
         public double Value { get; set; }
     }
 
-    public class TextBlock2 : Microsoft.UI.Xaml.FrameworkElement
-    {
-    }
 
 }
 
 namespace Microsoft.UI.Xaml.Controls.Primitives
 {
-    public class ButtonBase : Microsoft.UI.Xaml.Controls.Control
+
+    public partial class ToggleButton : Microsoft.UI.Xaml.Controls.Control
     {
     }
 
-    public class ToggleButton : Microsoft.UI.Xaml.Controls.Control
+    public partial class RepeatButton : Microsoft.UI.Xaml.Controls.Control
     {
     }
 
-    public class RepeatButton : Microsoft.UI.Xaml.Controls.Control
+    public partial class Thumb : Microsoft.UI.Xaml.Controls.Control
     {
     }
 
-    public class Thumb : Microsoft.UI.Xaml.Controls.Control
+    public partial class TickBar : Microsoft.UI.Xaml.Controls.Control
     {
     }
 
-    public class TickBar : Microsoft.UI.Xaml.Controls.Control
+    public partial class ScrollBar : Microsoft.UI.Xaml.Controls.Control
     {
     }
 
-    public class ScrollBar : Microsoft.UI.Xaml.Controls.Control
+    public partial class RangeBase : Microsoft.UI.Xaml.Controls.Control
     {
     }
 
-    public class RangeBase : Microsoft.UI.Xaml.Controls.Control
+    public partial class SelectorItem : Microsoft.UI.Xaml.Controls.ContentControl
     {
     }
 
-    public class SelectorItem : Microsoft.UI.Xaml.Controls.ContentControl
+    public partial class ListViewItemPresenter : Microsoft.UI.Xaml.Controls.ContentControl
     {
     }
 
-    public class ListViewItemPresenter : Microsoft.UI.Xaml.Controls.ContentControl
+    public partial class GridViewItemPresenter : Microsoft.UI.Xaml.Controls.ContentControl
     {
     }
 
-    public class GridViewItemPresenter : Microsoft.UI.Xaml.Controls.ContentControl
+    public partial class FlyoutBase : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class FlyoutBase : Microsoft.UI.Xaml.DependencyObject
+    public partial class MenuFlyoutPresenter : Microsoft.UI.Xaml.Controls.Control
     {
     }
 
-    public class MenuFlyoutPresenter : Microsoft.UI.Xaml.Controls.Control
+    public partial class Popup : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class Popup : Microsoft.UI.Xaml.DependencyObject
+    public partial class CornerRadiusFilterConverter : Microsoft.UI.Xaml.Controls.Control
     {
     }
 
-    public class CornerRadiusFilterConverter : Microsoft.UI.Xaml.Controls.Control
-    {
-    }
-
-    public class ToolTipServiceHelper : Microsoft.UI.Xaml.Controls.Control
+    public partial class ToolTipServiceHelper : Microsoft.UI.Xaml.Controls.Control
     {
     }
 
@@ -1030,138 +1035,138 @@ namespace Microsoft.UI.Xaml.Controls.Primitives
 
 namespace Microsoft.UI.Xaml.Media
 {
-    public class Brush : Microsoft.UI.Xaml.DependencyObject
+    public partial class Brush : Microsoft.UI.Xaml.DependencyObject
     {
         public double Opacity { get; set; } = 1d;
     }
 
-    public class SolidColorBrush : Brush
+    public sealed partial class SolidColorBrush : Brush
     {
         public Windows.UI.Color Color { get; set; }
         public SolidColorBrush() { }
         public SolidColorBrush(Windows.UI.Color color) { Color = color; }
     }
 
-    public class GradientStop : Microsoft.UI.Xaml.DependencyObject
+    public partial class GradientStop : Microsoft.UI.Xaml.DependencyObject
     {
         public Windows.UI.Color Color { get; set; }
         public double Offset { get; set; }
     }
 
-    public class LinearGradientBrush : Brush
+    public partial class LinearGradientBrush : Brush
     {
         public System.Collections.IList GradientStops { get; } = new System.Collections.Generic.List<object?>();
         public double StartPointX { get; set; }
     }
 
-    public class RadialGradientBrush : Brush
+    public partial class RadialGradientBrush : Brush
     {
     }
 
-    public class ImageBrush : Brush
+    public partial class ImageBrush : Brush
     {
     }
 
-    public class AcrylicBrush : Brush
+    public sealed partial class AcrylicBrush : Brush
     {
     }
 
-    public class RevealBorderBrush : Brush
+    public partial class RevealBorderBrush : Brush
     {
     }
 
-    public class XamlCompositionBrushBase : Brush
+    public partial class XamlCompositionBrushBase : Brush
     {
     }
 
-    public class FontFamily : Microsoft.UI.Xaml.DependencyObject
+    public partial class FontFamily : Microsoft.UI.Xaml.DependencyObject
     {
         public string Source { get; set; } = string.Empty;
         public FontFamily() { }
         public FontFamily(string source) { Source = source; }
     }
 
-    public class ThemeShadow : Microsoft.UI.Xaml.DependencyObject
+    public partial class ThemeShadow : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class CompositeTransform : Microsoft.UI.Xaml.DependencyObject
+    public partial class CompositeTransform : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class RotateTransform : Microsoft.UI.Xaml.DependencyObject
+    public partial class RotateTransform : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class TranslateTransform : Microsoft.UI.Xaml.DependencyObject
+    public partial class TranslateTransform : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class ScaleTransform : Microsoft.UI.Xaml.DependencyObject
+    public partial class ScaleTransform : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class SkewTransform : Microsoft.UI.Xaml.DependencyObject
+    public partial class SkewTransform : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class TransformGroup : Microsoft.UI.Xaml.DependencyObject
+    public partial class TransformGroup : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class MatrixTransform : Microsoft.UI.Xaml.DependencyObject
+    public partial class MatrixTransform : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class PlaneProjection : Microsoft.UI.Xaml.DependencyObject
+    public partial class PlaneProjection : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class Geometry : Microsoft.UI.Xaml.DependencyObject
+    public partial class Geometry : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class GeometryGroup : Microsoft.UI.Xaml.DependencyObject
+    public partial class GeometryGroup : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class EllipseGeometry : Microsoft.UI.Xaml.DependencyObject
+    public partial class EllipseGeometry : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class RectangleGeometry : Microsoft.UI.Xaml.DependencyObject
+    public partial class RectangleGeometry : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class PathGeometry : Microsoft.UI.Xaml.DependencyObject
+    public partial class PathGeometry : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class LineGeometry : Microsoft.UI.Xaml.DependencyObject
+    public partial class LineGeometry : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class PathFigure : Microsoft.UI.Xaml.DependencyObject
+    public partial class PathFigure : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class PathSegment : Microsoft.UI.Xaml.DependencyObject
+    public partial class PathSegment : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class LineSegment : Microsoft.UI.Xaml.DependencyObject
+    public partial class LineSegment : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class ArcSegment : Microsoft.UI.Xaml.DependencyObject
+    public partial class ArcSegment : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class BezierSegment : Microsoft.UI.Xaml.DependencyObject
+    public partial class BezierSegment : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class DoubleCollection : System.Collections.Generic.List<double>
+    public partial class DoubleCollection : System.Collections.Generic.List<double>
     {
     }
 
@@ -1181,113 +1186,38 @@ namespace Microsoft.UI.Xaml.Media
         public static System.Collections.IList GetVisualStateGroups(Microsoft.UI.Xaml.FrameworkElement? obj) => new System.Collections.Generic.List<object?>();
     }
 
-    public class VisualStateGroup : Microsoft.UI.Xaml.DependencyObject
+    public partial class VisualStateGroup : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class VisualState : Microsoft.UI.Xaml.DependencyObject
+    public partial class VisualState : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class VisualTransition : Microsoft.UI.Xaml.DependencyObject
+    public partial class VisualTransition : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class Storyboard : Microsoft.UI.Xaml.DependencyObject
-    {
-        public System.Collections.IList Children { get; } = new System.Collections.Generic.List<object?>();
-        public void Begin() { }
-        public void Stop() { }
-        public void Pause() { }
-        public void Resume() { }
-        public void Seek(System.TimeSpan offset) { }
-        public static void SetTarget(object? timeline, object? target) { }
-        public static object? GetTarget(object? timeline) => null;
-        public static void SetTargetProperty(object? timeline, string path) { }
-        public static string? GetTargetProperty(object? timeline) => null;
-        public static string? GetTargetName(object? timeline) => null;
-        public static void SetTargetName(object? timeline, string name) { }
-    }
 
-    public class Timeline : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class DoubleAnimation : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class ColorAnimation : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class DoubleAnimationUsingKeyFrames : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class ObjectAnimationUsingKeyFrames : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class PointAnimation : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class DiscreteObjectKeyFrame : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class EasingDoubleKeyFrame : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class SplineDoubleKeyFrame : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class LinearDoubleKeyFrame : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class EasingFunctionBase : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class CubicEase : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class QuadraticEase : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class SineEase : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class BackEase : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class BounceEase : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class CircleEase : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class ElasticEase : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class ExponentialEase : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
-    public class PowerEase : Microsoft.UI.Xaml.DependencyObject
-    {
-    }
 
     public static class EasingFunctionBase2 { }
 
@@ -1309,31 +1239,31 @@ namespace Microsoft.UI.Xaml.Media
 
     public enum RepeatBehavior { }
 
-    public class AcrylicBackgroundFill { }
-    public class ScalarTransition : Microsoft.UI.Xaml.DependencyObject { public Microsoft.UI.Xaml.Duration Duration { get; set; } }
-    public class BrushTransition : Microsoft.UI.Xaml.DependencyObject { public Microsoft.UI.Xaml.Duration Duration { get; set; } }
+    public partial class AcrylicBackgroundFill { }
+    public partial class ScalarTransition : Microsoft.UI.Xaml.DependencyObject { public Microsoft.UI.Xaml.Duration Duration { get; set; } }
+    public partial class BrushTransition : Microsoft.UI.Xaml.DependencyObject { public Microsoft.UI.Xaml.Duration Duration { get; set; } }
 
 }
 
 namespace Microsoft.UI.Xaml.Media.Imaging
 {
-    public class BitmapImage : Microsoft.UI.Xaml.DependencyObject
+    public sealed partial class BitmapImage : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class BitmapSource : Microsoft.UI.Xaml.DependencyObject
+    public partial class BitmapSource : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class WriteableBitmap : Microsoft.UI.Xaml.DependencyObject
+    public partial class WriteableBitmap : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class RenderTargetBitmap : Microsoft.UI.Xaml.DependencyObject
+    public partial class RenderTargetBitmap : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class SvgImageSource : Microsoft.UI.Xaml.DependencyObject
+    public partial class SvgImageSource : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
@@ -1341,38 +1271,38 @@ namespace Microsoft.UI.Xaml.Media.Imaging
 
 namespace Microsoft.UI.Xaml.Media
 {
-    public class ImageSource : Microsoft.UI.Xaml.DependencyObject
+    public partial class ImageSource : Microsoft.UI.Xaml.DependencyObject
     {
     }
 }
 
 namespace Microsoft.UI.Xaml.Shapes
 {
-    public class Shape : Microsoft.UI.Xaml.FrameworkElement
+    public partial class Shape : Microsoft.UI.Xaml.FrameworkElement
     {
     }
 
-    public class Rectangle : Shape
+    public sealed partial class Rectangle : Shape
     {
     }
 
-    public class Ellipse : Shape
+    public partial class Ellipse : Shape
     {
     }
 
-    public class Line : Shape
+    public sealed partial class Line : Shape
     {
     }
 
-    public class Path : Shape
+    public partial class Path : Shape
     {
     }
 
-    public class Polygon : Shape
+    public sealed partial class Polygon : Shape
     {
     }
 
-    public class Polyline : Shape
+    public sealed partial class Polyline : Shape
     {
     }
 
@@ -1380,86 +1310,86 @@ namespace Microsoft.UI.Xaml.Shapes
 
 namespace Microsoft.UI.Xaml.Input
 {
-    public class PointerRoutedEventArgs : Microsoft.UI.Xaml.RoutedEventArgs
+    public partial class PointerRoutedEventArgs : Microsoft.UI.Xaml.RoutedEventArgs
     {
-        public System.Windows.Point GetCurrentPoint(object? relativeTo) => default;
-        public object? Pointer { get; set; }
+        public dynamic GetCurrentPoint(object? relativeTo) => new Windows.Foundation.Point();
+        public dynamic? Pointer { get; set; }
         public bool Handled2 { get; set; }
         public int MouseWheelDelta { get; set; }
     }
 
-    public delegate void PointerEventHandler(object sender, PointerRoutedEventArgs e);
+    public delegate void PointerEventHandler(dynamic sender, dynamic e);
 
-    public class TappedRoutedEventArgs : Microsoft.UI.Xaml.RoutedEventArgs
+    public partial class TappedRoutedEventArgs : Microsoft.UI.Xaml.RoutedEventArgs
     {
-        public System.Windows.Point GetPosition(object? relativeTo) => default;
+        public Windows.Foundation.Point GetPosition(object? relativeTo) => default;
     }
 
-    public delegate void TappedEventHandler(object sender, TappedRoutedEventArgs e);
+    public delegate void TappedEventHandler(dynamic sender, dynamic e);
 
-    public class RightTappedRoutedEventArgs : Microsoft.UI.Xaml.RoutedEventArgs
+    public partial class RightTappedRoutedEventArgs : Microsoft.UI.Xaml.RoutedEventArgs
     {
-        public System.Windows.Point GetPosition(object? relativeTo) => default;
+        public Windows.Foundation.Point GetPosition(object? relativeTo) => default;
     }
 
-    public delegate void RightTappedEventHandler(object sender, RightTappedRoutedEventArgs e);
+    public delegate void RightTappedEventHandler(dynamic sender, dynamic e);
 
-    public class DoubleTappedRoutedEventArgs : Microsoft.UI.Xaml.RoutedEventArgs
+    public partial class DoubleTappedRoutedEventArgs : Microsoft.UI.Xaml.RoutedEventArgs
     {
-        public System.Windows.Point GetPosition(object? relativeTo) => default;
+        public Windows.Foundation.Point GetPosition(object? relativeTo) => default;
     }
 
-    public delegate void DoubleTappedEventHandler(object sender, DoubleTappedRoutedEventArgs e);
+    public delegate void DoubleTappedEventHandler(dynamic sender, dynamic e);
 
-    public class KeyRoutedEventArgs : Microsoft.UI.Xaml.RoutedEventArgs
+    public partial class KeyRoutedEventArgs : RoutedEventArgs
     {
-        public object? Key { get; set; }
+        public global::Windows.System.VirtualKey Key { get; set; }
         public string? OriginalKey { get; set; }
     }
 
-    public delegate void KeyEventHandler(object sender, KeyRoutedEventArgs e);
+    public delegate void KeyEventHandler(dynamic sender, dynamic e);
 
-    public class Pointer : Microsoft.UI.Xaml.DependencyObject
+    public partial class Pointer : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class PointerPoint : Microsoft.UI.Xaml.DependencyObject
+    public partial class PointerPoint : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class GettingFocusEventArgs : Microsoft.UI.Xaml.DependencyObject
+    public partial class GettingFocusEventArgs : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class LosingFocusEventArgs : Microsoft.UI.Xaml.DependencyObject
+    public partial class LosingFocusEventArgs : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class BringIntoViewOptions : Microsoft.UI.Xaml.DependencyObject
+    public partial class BringIntoViewOptions : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class KeyboardAccelerator : Microsoft.UI.Xaml.DependencyObject
+    public partial class KeyboardAccelerator : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class KeyboardAcceleratorInvokedEventArgs : Microsoft.UI.Xaml.DependencyObject
+    public partial class KeyboardAcceleratorInvokedEventArgs : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class XamlUICommand : Microsoft.UI.Xaml.DependencyObject
+    public partial class XamlUICommand : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class StandardUICommand : Microsoft.UI.Xaml.DependencyObject
+    public partial class StandardUICommand : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class InputScope : Microsoft.UI.Xaml.DependencyObject
+    public partial class InputScope : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class InputScopeName : Microsoft.UI.Xaml.DependencyObject
+    public partial class InputScopeName : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
@@ -1475,14 +1405,14 @@ namespace Microsoft.UI.Xaml.Input
 
 namespace Microsoft.UI.Xaml.Data
 {
-    public class Binding : Microsoft.UI.Xaml.DependencyObject
+    public partial class Binding : Microsoft.UI.Xaml.DependencyObject
     {
-        public object? Path { get; set; }
-        public object? Source { get; set; }
-        public object? Mode { get; set; }
-        public object? Converter { get; set; }
-        public object? ConverterParameter { get; set; }
-        public object? UpdateSourceTrigger { get; set; }
+        public dynamic? Path { get; set; }
+        public dynamic? Source { get; set; }
+        public dynamic? Mode { get; set; }
+        public dynamic? Converter { get; set; }
+        public dynamic? ConverterParameter { get; set; }
+        public dynamic? UpdateSourceTrigger { get; set; }
     }
     public enum BindingMode { OneWay = 1, OneTime = 2, TwoWay = 3 }
     public enum UpdateSourceTrigger { Default = 0, PropertyChanged = 1, LostFocus = 2, Explicit = 3 }
@@ -1490,49 +1420,49 @@ namespace Microsoft.UI.Xaml.Data
 
 namespace Microsoft.UI.Xaml.Navigation
 {
-    public class NavigationEventArgs : Microsoft.UI.Xaml.RoutedEventArgs
+    public partial class NavigationEventArgs : Microsoft.UI.Xaml.RoutedEventArgs
     {
-        public object? Parameter { get; set; }
-        public object? SourcePageType { get; set; }
+        public dynamic? Parameter { get; set; }
+        public dynamic? SourcePageType { get; set; }
     }
 }
 
 namespace Microsoft.UI.Xaml.Documents
 {
 
-    public class Run : Microsoft.UI.Xaml.DependencyObject
+    public partial class Run : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class Span : Microsoft.UI.Xaml.DependencyObject
+    public partial class Span : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class Bold : Microsoft.UI.Xaml.DependencyObject
+    public partial class Bold : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class Italic : Microsoft.UI.Xaml.DependencyObject
+    public partial class Italic : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class Underline : Microsoft.UI.Xaml.DependencyObject
+    public partial class Underline : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class LineBreak : Microsoft.UI.Xaml.DependencyObject
+    public partial class LineBreak : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class Paragraph : Microsoft.UI.Xaml.DependencyObject
+    public partial class Paragraph : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class Hyperlink : Microsoft.UI.Xaml.DependencyObject
+    public partial class Hyperlink : Microsoft.UI.Xaml.DependencyObject
     {
     }
 
-    public class Inline : Microsoft.UI.Xaml.DependencyObject
+    public partial class Inline : Microsoft.UI.Xaml.DependencyObject
     {
     }
 

@@ -298,20 +298,20 @@ namespace CelesteMusicPlayer
         // 进度条 / 音量
         // =====================================================================
 
-        private void ProgressSlider_PointerPressed(object sender, PointerRoutedEventArgs e)
+        private void ProgressSlider_PointerPressed(dynamic sender, dynamic e)
         {
             _isUserSeeking = true;
             _seekGestureConsumed = false;
         }
 
 
-        private void ProgressSlider_PointerReleased(object sender, PointerRoutedEventArgs e)
+        private void ProgressSlider_PointerReleased(dynamic sender, dynamic e)
         {
             EndSeekGesture();
         }
 
 
-        private void ProgressSlider_PointerCaptureLost(object sender, PointerRoutedEventArgs e)
+        private void ProgressSlider_PointerCaptureLost(dynamic sender, dynamic e)
         {
             EndSeekGesture();
         }
@@ -413,7 +413,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void VolumeSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        private void VolumeSlider_ValueChanged(dynamic sender, dynamic e)
         {
             // 极客模式的字符音量条（VOL ███░░）跟着滑块走
             UpdateGeekVolumeText();
@@ -460,7 +460,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void OnVolumeSaveTick(DispatcherQueueTimer sender, object args)
+        private void OnVolumeSaveTick(dynamic sender, dynamic e)
         {
             try
             {
@@ -889,7 +889,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void PositionTimer_Tick(DispatcherQueueTimer sender, object args)
+        private void PositionTimer_Tick(dynamic sender, dynamic e)
         {
             // 播放/暂停按钮的图标同步必须放在所有早退之前：
             // 引擎播放、无源、用户拖动进度条这几种情况下定时器都会提前 return，
@@ -951,7 +951,7 @@ namespace CelesteMusicPlayer
         // 右侧：正在播放信息 / 波形 / 歌词
         // =====================================================================
 
-                private void ProgressStyleCanvas_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+                private void ProgressStyleCanvas_SizeChanged(dynamic sender, dynamic e)
         {
             RedrawProgressStyle();
         }
@@ -1108,7 +1108,7 @@ namespace CelesteMusicPlayer
             UpdateTransportProgressCentering();
         }
 
-        private void BottomTransportBar_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        private void BottomTransportBar_SizeChanged(dynamic sender, dynamic e)
         {
             UpdateTransportProgressCentering();
         }
@@ -1660,7 +1660,7 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>音量条点击/拖动定位。</summary>
-        private void VolumeStyleCanvas_PointerPressed(object sender, PointerRoutedEventArgs e)
+        private void VolumeStyleCanvas_PointerPressed(dynamic sender, dynamic e)
         {
             SetVolumeFromPointer(e);
             try
@@ -1671,7 +1671,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void VolumeStyleCanvas_PointerMoved(object sender, PointerRoutedEventArgs e)
+        private void VolumeStyleCanvas_PointerMoved(dynamic sender, dynamic e)
         {
             if (VolumeStyleCanvas.PointerCaptures != null && VolumeStyleCanvas.PointerCaptures.Count > 0)
             {
@@ -1680,7 +1680,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void VolumeStyleCanvas_PointerReleased(object sender, PointerRoutedEventArgs e)
+        private void VolumeStyleCanvas_PointerReleased(dynamic sender, dynamic e)
         {
             try
             {
@@ -1713,7 +1713,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void VolumeStyleCanvas_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        private void VolumeStyleCanvas_SizeChanged(dynamic sender, dynamic e)
         {
             DrawVolumeStyle();
         }
@@ -2087,7 +2087,7 @@ namespace CelesteMusicPlayer
 
 
         /// <summary>点击专辑超链接：收起播放面板并跳转到对应专辑详情页。</summary>
-        private void NowPlayingAlbumLinkButton_Click(object sender, RoutedEventArgs e)
+        private void NowPlayingAlbumLinkButton_Click(dynamic sender, dynamic e)
         {
             string albumName = NowPlayingAlbumText?.Text?.Trim() ?? "";
             if (string.IsNullOrWhiteSpace(albumName))
@@ -2461,7 +2461,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void LyricScrollTimer_Tick(DispatcherQueueTimer sender, object args)
+        private void LyricScrollTimer_Tick(dynamic sender, dynamic e)
         {
             double elapsed = Environment.TickCount64 - _lyricScrollStartMs;
             double t = Math.Clamp(elapsed / LyricScrollDurationMs, 0, 1);
@@ -2481,7 +2481,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void WaveformTimer_Tick(DispatcherQueueTimer sender, object args)
+        private void WaveformTimer_Tick(dynamic sender, dynamic e)
         {
             MediaPlayer? player = GetPlayer();
             bool enginePlaying = _audioEngine?.IsPlaying == true;

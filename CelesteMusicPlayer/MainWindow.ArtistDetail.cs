@@ -30,7 +30,7 @@ namespace CelesteMusicPlayer
         /// </summary>
         private bool _artistAvatarOpen;
 
-        private ArtistAvatarEditPanelControl? _artistAvatarPanel;
+        // W13：头像编辑面板（XAML 控件）随旧界面下线，头像改走网页侧。
 
         /// <summary>艺术家概览缓存（联网拿一次就存着，切来切去不再重复请求）。</summary>
         private static readonly Dictionary<string, string?> ArtistOverviewCache =
@@ -170,7 +170,7 @@ namespace CelesteMusicPlayer
                 current = VisualTreeHelper.GetParent(current);
             }
 
-            return Application.Current.RequestedTheme == ApplicationTheme.Light;
+            return Application.Current.RequestedTheme == ElementTheme.Light;
         }
 
         // ── 头像页签：在线搜图 + 裁剪 ───────────────────────────────

@@ -11,6 +11,9 @@ namespace CelesteMusicPlayer
 
         internal void OpenWebShell() => WindowCoordinator.Show();
 
+        /// <summary>W13：启动路径专用。MainWindow 不再是窗口，显式开一次网页会话即可。</summary>
+        internal void StartWebShellSession() => OpenWebShell();
+
         internal void RestoreMainWindow()
         {
             if (!DispatcherQueue.HasThreadAccess) { DispatcherQueue.TryEnqueue(RestoreMainWindow); return; }
@@ -27,7 +30,7 @@ namespace CelesteMusicPlayer
             });
         }
 
-        private void CloseWebShellWithOwner(object sender, WindowEventArgs args)
+        private void CloseWebShellWithOwner(dynamic sender, dynamic e)
         {
             Closed -= CloseWebShellWithOwner;
             WindowCoordinator.Close();

@@ -1,0 +1,166 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+  <!-- 本地签名密码从 csproj 外置到 CelesteMusicPlayer.signing.props（已被 .gitignore 忽略，不入库）。
+       仓库克隆后若需本地 Debug MSIX 自签名，请自行创建该文件填入密码；缺失则 Debug 打包不签名（不影响 Release 自包含）。 -->
+  <Import Project="CelesteMusicPlayer.signing.props" Condition="Exists('CelesteMusicPlayer.signing.props')" />
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>CelesteMusicPlayer</RootNamespace>
+    <Version>26.10.2.0</Version>
+    <AssemblyVersion>26.10.2.0</AssemblyVersion>
+    <FileVersion>26.10.2.0</FileVersion>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Assets\AppIcon.ico</ApplicationIcon>
+    <Platforms>x86;x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
+    <PublishProfile>win-$(Platform).pubxml</PublishProfile>
+    <UseWinUI>true</UseWinUI>
+    <WinUISDKReferences>false</WinUISDKReferences>
+    <EnableMsixTooling>true</EnableMsixTooling>
+    <Nullable>enable</Nullable>
+    <!-- DspCoreInterop 用 fixed 指针直通 celeste_dsp_core.process（交错 float32 原地处理，
+         避免每块 P/Invoke 数组拷贝；float* 签名见 DspCoreInterop.cs） -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <!-- 始终使用 Program.cs 入口（启动前固定工作目录到 exe 目录） -->
+    <DefineConstants>$(DefineConstants);DISABLE_XAML_GENERATED_MAIN</DefineConstants>
+    <!--
+      Debug：保持 MSIX，供 VS「Package」配置 F5（生成 AppxManifest）。
+      Release / CelesteSelfContainedDistribute：非打包 + 内嵌 Windows App SDK，
+      可直接双击 bin\Release 下的 exe，也可整夹发给别人。
+      Release 在 VS 里调试请选「CelesteMusicPlayer (Unpackaged)」。
+    -->
+  </PropertyGroup>
+
+  <!--
+    发布形态由 CelesteSelfContainedDistribute 决定（默认不设置 = 框架依赖，体积小）：
+      - 框架依赖（默认）：不打包 .NET 9 / Windows App SDK 运行时，产物约少 30–50MB，
+        目标机需先装 .NET 9 桌面运行时 + Windows App SDK 运行时（缺失时启动会弹窗提示，见 Program.cs）。
+      - 自包含：dotnet publish -c Release -r win-x64 -p:CelesteSelfContainedDistribute=true，
+        运行时随包走，可整夹发给没装运行时的机器（体积大）。
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release' or '$(CelesteSelfContainedDistribute)' == 'true'">
+    <WindowsPackageType>None</WindowsPackageType>
+    <WindowsAppSDKSelfContained>$(CelesteSelfContainedDistribute)</WindowsAppSDKSelfContained>
+    <SelfContained>$(CelesteSelfContainedDistribute)</SelfContained>
+    <!-- 非打包自包含下关闭 DeploymentManager 自动初始化，避免 0xC000027B 闪退 -->
+    <WindowsAppSdkDeploymentManagerInitialize>false</WindowsAppSdkDeploymentManagerInitialize>
+  </PropertyGroup>
+
+    <ItemGroup>
+        <Content Include="Assets\AppIcon.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <Content Include="Assets\ffmpeg\ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <!-- ECHO 核心音频 DLL（独占输出内核 A/B 开关的 "echo" 项；内含 ECHO audio-host 代码，LGPL-3.0，
+             源码见 native/echo-core/，本文件即"可替换的动态链接库"。
+             LGPL 合规要件（源码可获取声明 + 关于页署名）见 native/echo-core/README-LGPL.md。
+             仅 x64 构建随包（native/echo-core/build.bat 只编 x64；x86/ARM64 下选中 echo 会回退自研）。
+             DLL 本体随仓库分发（可用 build.bat 重新生成）；加 Exists 条件防止文件缺失时构建直接失败，
+             缺失时只是 echo 项不可用（选中会得到友好错误并回退自研）。 -->
+        <Content Include="..\native\echo-core\build\celeste_audio_core.dll" Link="celeste_audio_core.dll" Condition="Exists('..\native\echo-core\build\celeste_audio_core.dll')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <!-- 自研原生内核音频 DLL（独占输出内核三选一的 "native2" 项；MIT，源码见 native/celeste-core/，
+             用 build.sh 重新生成。仅 x64 构建随包；x86/ARM64 下选中 native2 会回退自研。
+             DLL 本体随仓库分发；加 Exists 条件防止文件缺失时构建直接失败，
+             缺失时只是 native2 项不可用（选中会得到友好错误并回退自研）。 -->
+        <Content Include="..\native\celeste-core\build\celeste_core.dll" Link="celeste_core.dll" Condition="Exists('..\native\celeste-core\build\celeste_core.dll')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+        <!-- DSP 机架内核 celeste_dsp_core.dll（Stage B 起统一 DSP 链的运算核心；C ABI 桥接，
+             源码见 native/dsp-core/，build.bat 重新生成。x64 构建随包；x86/ARM64 下缺失时
+             ManagedDspSourceProvider 创建引擎失败 → 自动回退「DSP 全关」直通（日志记录），
+             不崩播放。DLL 本体暂不入库（.gitignore），Stage D 打包时随安装包分发）。 -->
+        <Content Include="..\native\dsp-core\build\celeste_dsp_core.dll" Link="celeste_dsp_core.dll" Condition="Exists('..\native\dsp-core\build\celeste_dsp_core.dll')" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <!-- SACD 解码外部工具 sacd_extract.exe：不随包发布，用户自行放到 Assets\sacd\ 后构建自动带上（通配空目录不报错） -->
+    <Content Include="Assets\sacd\**" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\AppIcon.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\AppIconSource.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\SplashScreen.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\SplashScreen.scale-200.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\LockScreenLogo.scale-200.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\Square150x150Logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\Square150x150Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\Square44x44Logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\Square44x44Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\Square44x44Logo.targetsize-24_altform-unplated.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\StoreLogo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\Wide310x150Logo.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\Wide310x150Logo.scale-200.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Manifest Include="$(ApplicationManifest)" />
+  </ItemGroup>
+
+  <!-- 允许 EQ 声道隔离回归测试工程访问 internal 类型 -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="EqRegression" />
+  </ItemGroup>
+
+  <!--
+    独立更新助手 CelesteUpdater：随主程序一起发布到 publish 目录（NSIS 用 File /r 整目录打包带走）。
+    应用内「下载更新」完成后会把 CelesteUpdater.* 复制到临时目录再启动它，
+    由它等主程序退出 → 跑安装包 → 自动重启主程序，用户全程无需手动找安装包路径。
+  -->
+  <ItemGroup>
+    <ProjectReference Include="..\CelesteUpdater\CelesteUpdater.csproj" />
+  </ItemGroup>
+
+  <!--
+    Defining the "Msix" ProjectCapability here allows the Single-project MSIX Packaging
+    Tools extension to be activated for this project even if the Windows App SDK Nuget
+    package has not yet been restored.
+  -->
+  <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <ProjectCapability Include="Msix" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="H.NotifyIcon.WinUI" Version="2.3.0" />
+    <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
+    <!-- 2.2+ 存在 TextBox/自定义标题栏光标闪烁回归；1.8 已修复 ExtendsContentIntoTitleBar 指针问题。
+         主包 nuspec 期望的所有子包版本如下（精确版本号，feature bands 设计使主包和子包版本号不同步是正常的）；
+         必须把每个子包都显式锁版本，否则 nuget restore 会挑同大版本号 1.8 下的最新子包，
+         与主包 Runtime 期望对不上 → ComponentReference.targets 116 报错 → WMC9999 兜底。
+         没有第三方包传递依赖这些子包（只有 WinAppSDK 自己的新子包 nuspec 互相依赖），所以锁死安全。 -->
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251106002" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Base" Version="1.8.250831001" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="1.8.251104000" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="1.8.251104001" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.251105000" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.DWrite" Version="1.8.25090401" />
+    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="1.8.251106002" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+    <PackageReference Include="ToolGood.Words.Pinyin" Version="3.1.0" />
+    <PackageReference Include="System.Drawing.Common" Version="9.0.1" />
+    <PackageReference Include="TagLibSharp" Version="2.3.0" />
+  </ItemGroup>
+
+  <!--
+    Debug 打包（MSIX）需要有效代码签名证书，否则 VS「Package」F5 部署会因包未签名而失败
+    （0x87E80034 / 0x800B0100 / 0x800B0109），表现为主界面无响应、无报错。
+    这里用项目内自签名证书（CN=admin）对 x64 Debug 包自动签名。
+  -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Debug' and '$(Platform)' == 'x64' and '$(EnableMsixTooling)' == 'true'">
+    <AppxPackageSigningEnabled>true</AppxPackageSigningEnabled>
+    <PackageCertificateKeyFile>CelesteMusicPlayer_TemporaryKey.pfx</PackageCertificateKeyFile>
+    <PackageCertificatePassword>$(PackageCertificatePassword)</PackageCertificatePassword>
+  </PropertyGroup>
+
+  <!--
+    Defining the "HasPackageAndPublishMenuAddedByProject" property here allows the Solution
+    Explorer "Package and Publish" context menu entry to be enabled for this project even if
+    the Windows App SDK Nuget package has not yet been restored.
+  -->
+  <PropertyGroup Condition="'$(DisableHasPackageAndPublishMenuAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
+    <HasPackageAndPublishMenu>true</HasPackageAndPublishMenu>
+  </PropertyGroup>
+
+  <!-- Publish Properties -->
+  <!--
+    WinUI / Windows App SDK 大量使用反射与 COM 互操作，
+    IL Trimmer 与 ReadyToRun 在非打包 Release 下易导致 0xC000027B（黑窗闪退）。
+  -->
+  <PropertyGroup>
+    <PublishReadyToRun>false</PublishReadyToRun>
+    <PublishTrimmed>False</PublishTrimmed>
+  </PropertyGroup>
+</Project>

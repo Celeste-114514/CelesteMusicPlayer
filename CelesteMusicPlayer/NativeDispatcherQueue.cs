@@ -169,7 +169,7 @@ namespace Microsoft.UI.Dispatching
         internal static void Quit(int exitCode = 0) => PostQuitMessage(exitCode);
     }
 
-    public sealed class DispatcherQueue
+    public sealed partial class DispatcherQueue
     {
         [ThreadStatic] private static DispatcherQueue? t_current;
 
@@ -204,14 +204,14 @@ namespace Microsoft.UI.Dispatching
             return true;
         }
 
-        public event EventHandler? ShutdownStarting;
-        public event EventHandler? ShutdownCompleted;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? ShutdownStarting;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? ShutdownCompleted;
 
         internal void RaiseShutdownStarting() => ShutdownStarting?.Invoke(this, EventArgs.Empty);
         internal void RaiseShutdownCompleted() => ShutdownCompleted?.Invoke(this, EventArgs.Empty);
     }
 
-    public sealed class DispatcherQueueController
+    public sealed partial class DispatcherQueueController
     {
         public DispatcherQueue DispatcherQueue { get; } = DispatcherQueue.GetForCurrentThread();
 
@@ -225,7 +225,7 @@ namespace Microsoft.UI.Dispatching
     }
 
     /// <summary>把 await 的延续回投到原生消息泵（替代 WinUI 的同名类型）。</summary>
-    public sealed class DispatcherQueueSynchronizationContext : SynchronizationContext
+    public sealed partial class DispatcherQueueSynchronizationContext : SynchronizationContext
     {
         private readonly DispatcherQueue _queue;
 
@@ -261,14 +261,15 @@ namespace Microsoft.UI.Dispatching
         public override SynchronizationContext CreateCopy() => new DispatcherQueueSynchronizationContext(_queue);
     }
 
-    public sealed class DispatcherQueueTimer
+    public sealed partial class DispatcherQueueTimer
     {
         private Timer? _timer;
         private readonly DispatcherQueue _queue = DispatcherQueue.GetForCurrentThread();
 
         public TimeSpan Interval { get; set; } = TimeSpan.FromMilliseconds(100);
         public bool IsRunning => _timer != null;
-        public event EventHandler? Tick;
+        public bool IsRepeating { get; set; } = true;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Tick;
 
         public void Start()
         {

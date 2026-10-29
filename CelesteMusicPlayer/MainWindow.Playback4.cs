@@ -488,7 +488,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void HoverTipTimer_Tick(DispatcherQueueTimer sender, object args)
+        private void HoverTipTimer_Tick(dynamic sender, dynamic e)
         {
             sender.Stop();
             if (_hoverElement == null || string.IsNullOrWhiteSpace(_hoverTipText))

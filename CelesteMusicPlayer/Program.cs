@@ -104,15 +104,19 @@ namespace CelesteMusicPlayer
             {
                 ComWrappersSupport.InitializeComWrappers();
                 StartupLog.Write("ComWrappers initialized");
-                Application.Start(static _ =>
-                {
-                    DispatcherQueueSynchronizationContext context =
-                        new(DispatcherQueue.GetForCurrentThread());
-                    SynchronizationContext.SetSynchronizationContext(context);
-                    StartupLog.Write("Creating App");
-                    new App();
-                });
-                StartupLog.Write("Application.Start returned");
+
+                // W13：不再走 WinUI 的 Application.Start —— 直接建 App（业务宿主），
+                // 再跑原生消息泵（隐藏消息窗口驱动），DispatcherQueue 由 NativeDispatcherQueue 提供。
+                Microsoft.UI.Dispatching.DispatcherQueue queue =
+                    Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread();
+                SynchronizationContext.SetSynchronizationContext(
+                    new Microsoft.UI.Dispatching.DispatcherQueueSynchronizationContext(queue));
+                StartupLog.Write("Creating App");
+                App app = new();
+                app.Run(args);
+                StartupLog.Write("App.Run done, entering native message loop");
+                Microsoft.UI.Dispatching.NativeMessagePump.Run();
+                StartupLog.Write("Message loop exited");
             }
             catch (Exception ex)
             {

@@ -416,7 +416,7 @@ namespace CelesteMusicPlayer
         private bool _desktopLyricsEnabled;
         // 迷你播放器字段已移除（2026-10-19 用户要求删掉重写，见 memory 2026-10-19）
         private DateTime _lastPlaybackPersistUtc = DateTime.MinValue;
-        private ArtistAvatarEditorWindow? _artistAvatarEditorWindow;
+        // W13：艺术家头像编辑独立窗口随 XAML 界面下线。
         private ITrayIcon? _trayIcon;
         private TaskbarThumbnailButtons? _taskbarButtons;
         // 任务栏缩略图按钮专用：宿主 WinUI 矢量 / FontIcon 的隐藏 Canvas（在视觉树中、Opacity=0、

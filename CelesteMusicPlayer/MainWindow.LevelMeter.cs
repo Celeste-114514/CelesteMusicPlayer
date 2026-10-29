@@ -51,7 +51,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private void LevelMeterTimer_Tick(DispatcherQueueTimer sender, object args)
+        private void LevelMeterTimer_Tick(dynamic sender, dynamic e)
         {
             try
             {

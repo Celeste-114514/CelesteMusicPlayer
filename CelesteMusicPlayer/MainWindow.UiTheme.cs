@@ -47,7 +47,7 @@ namespace CelesteMusicPlayer
         internal static MainWindow? Instance { get; private set; }
 
 
-        private void MainWindow_Loaded(object sender, RoutedEventArgs e)
+        private void MainWindow_Loaded(dynamic sender, dynamic e)
         {
             StartupLog.Write("MainWindow_Loaded begin");
             try
@@ -470,7 +470,7 @@ namespace CelesteMusicPlayer
                 bool darkClassic = geek
                     || mode == "ClassicDark"
                     || (mode is "ClassicSystem"
-                        && Application.Current.RequestedTheme == ApplicationTheme.Dark);
+                        && Application.Current.RequestedTheme == ElementTheme.Dark);
 
                 if (Content is FrameworkElement root)
                 {
@@ -1989,7 +1989,7 @@ namespace CelesteMusicPlayer
         private Brush ResolveAccentForegroundBrush()
             => ColorHelper.ResolveContrastingForeground(ResolveAccentBrush());
 
-        private void MainWindow_Closed(object sender, WindowEventArgs args)
+        private void MainWindow_Closed(dynamic sender, dynamic e)
         {
             _sourcePlaybackCancellation?.Cancel();
             _sourcePlaybackLease?.Dispose(); _sourcePreloadLease?.Dispose();

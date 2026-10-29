@@ -200,7 +200,7 @@ namespace CelesteMusicPlayer
             catch { _keyTarget = null; _keyHandler = null; }
         }
 
-        private void OnKeyDown(object sender, KeyRoutedEventArgs e)
+        private void OnKeyDown(dynamic sender, dynamic e)
         {
             if (e.Key == Windows.System.VirtualKey.Escape)
             {

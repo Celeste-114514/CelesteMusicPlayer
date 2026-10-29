@@ -299,27 +299,12 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
         /// <summary>并入主 UI 的「选项设置」面板（阶段 3）。延迟创建：第一次点「设置」才造，不拖慢启动。</summary>
-        private SettingsPanelControl? _settingsPanel;
+        // W13：原生设置面板随 XAML 界面下线（网页设置页取代）。
         private bool _settingsUiBuilt;
 
         private void EnsureSettingsUiBuilt()
         {
-            if (_settingsUiBuilt)
-            {
-                return;
-            }
-
-            _settingsUiBuilt = true;
-
-            try
-            {
-                _settingsPanel = new SettingsPanelControl();
-                SettingsPanelHost.Children.Add(_settingsPanel);
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("EnsureSettingsUiBuilt", ex);
-            }
+            // W13：原生设置面板已下线，设置改走网页设置页；保留方法让旧调用点不用动。
         }
 
         /// <summary>
@@ -332,36 +317,13 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>并入主 UI 的「标签」板块（2026-10-13 阶段 5a）。延迟创建：第一次点「标签」才造。</summary>
-        private TagPanelControl? _tagPanel;
+        // W13：原生标签面板随 XAML 界面下线（网页标签页取代）。
         private bool _tagUiBuilt;
 
         private void EnsureTagEditUiBuilt()
         {
-            if (_tagUiBuilt)
-            {
-                return;
-            }
-
-            _tagUiBuilt = true;
-
-            try
-            {
-                // 强调色外部注入（取色只认一个入口铁律）：与音效处理共用 DspAccentBrush。
-                // 宿主窗口句柄必须从 MainWindow 传（UserControl 自己取会抛 CCW cast 异常，
-                // 2026-10-13 用户实测）；_mainWindowHwnd 在 ctor 里已缓存，Zero 时面板内会提示。
-                _tagPanel = new TagPanelControl(() => DspAccentBrush(), _mainWindowHwnd);
-                // 标签写盘后刷新曲库元数据（取代旧 TagEditorWindow.TagsSaved）
-                _tagPanel.TagsSaved += OnTagsSaved;
-                // 「排序编号」页的三个加入动作（面板只发路径，主窗口负责落地）
-                _tagPanel.PlayQueueAddRequested += OnTagPanelPlayQueueAdd;
-                _tagPanel.LibraryAddRequested += OnTagPanelLibraryAdd;
-                _tagPanel.NamedPlaylistAddRequested += OnTagPanelNamedPlaylistAdd;
-                TagPanelHost.Children.Add(_tagPanel);
-            }
-            catch (Exception ex)
-            {
-                StartupLog.WriteException("EnsureTagEditUiBuilt", ex);
-            }
+            // W13：原生标签面板（XAML 控件）随旧界面下线，标签编辑改走网页标签页。
+            // 这里保留方法是为了让旧调用点不用动，但不再构造任何 XAML 控件。
         }
 
         /// <summary>

@@ -162,20 +162,20 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>进度一变就跟着刷（播放推进 / 拖动 / 切歌都会触发滑块的 ValueChanged）。</summary>
-        private void GeekProgressSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
+        private void GeekProgressSlider_ValueChanged(dynamic sender, dynamic e)
         {
             UpdateGeekProgressText();
             UpdateGeekTransportStatus();
         }
 
         /// <summary>宽度变了要重排字符进度条：格数按宽度算，铺满整行才跟手。</summary>
-        private void GeekProgressText_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        private void GeekProgressText_SizeChanged(dynamic sender, dynamic e)
         {
             UpdateGeekProgressText();
         }
 
         /// <summary>滑块尺寸变了（首次布局 / 窗口缩放）也要重排：字符条以滑块宽度为基准。</summary>
-        private void GeekProgressRef_SizeChanged(object sender, Microsoft.UI.Xaml.SizeChangedEventArgs e)
+        private void GeekProgressRef_SizeChanged(dynamic sender, dynamic e)
         {
             UpdateGeekProgressText();
             UpdateGeekTransportStatus();

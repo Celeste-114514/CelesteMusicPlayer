@@ -267,7 +267,7 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// 选择文件夹：递归扫描其中所有支持的音频，再交给 LoadAndAddFiles。
         /// </summary>
-        private async void OpenFolderButton_Click(object sender, RoutedEventArgs e)
+        private async void OpenFolderButton_Click(dynamic sender, dynamic e)
         {
             try
             {
@@ -313,7 +313,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private async void RescanLocalLibraryButton_Click(object sender, RoutedEventArgs e)
+        private async void RescanLocalLibraryButton_Click(dynamic sender, dynamic e)
         {
             if (_libraryRescanInProgress)
             {
@@ -899,7 +899,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void LibraryPaneRoot_PointerPressed(object sender, PointerRoutedEventArgs e)
+        private void LibraryPaneRoot_PointerPressed(dynamic sender, dynamic e)
         {
             PointerUpdateKind kind = e.GetCurrentPoint(LibraryPaneRoot).Properties.PointerUpdateKind;
             if (kind == PointerUpdateKind.XButton1Pressed)
@@ -1678,7 +1678,7 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void FolderBrowserView_ContainerContentChanging(ListViewBase sender, ContainerContentChangingEventArgs args)
+        private void FolderBrowserView_ContainerContentChanging(dynamic sender, dynamic e)
         {
             if (args.Item is FolderBrowserItem item && args.ItemContainer is ListViewItem container)
             {

@@ -185,7 +185,7 @@ namespace CelesteMusicPlayer
         internal static nint PickerHostHandle()
             => Instance is MainWindow host ? host._webShellWindow?.Handle ?? WinRT.Interop.WindowNative.GetWindowHandle(host) : 0;
 
-        private async void OpenFileButton_Click(object sender, RoutedEventArgs e)
+        private async void OpenFileButton_Click(dynamic sender, dynamic e)
         {
             try
             {

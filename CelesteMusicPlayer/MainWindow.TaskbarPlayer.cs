@@ -25,7 +25,7 @@ namespace CelesteMusicPlayer
             else { _taskbarPlayer?.Dispose(); _taskbarPlayer = null; }
             _webShellWindow?.PublishPlaybackState();
         }
-        private void CloseTaskbarPlayer(object sender, Microsoft.UI.Xaml.WindowEventArgs args)
+        private void CloseTaskbarPlayer(dynamic sender, dynamic e)
         { _taskbarPlayer?.Dispose(); _taskbarPlayer = null; }
         /// <summary>
         /// 播放状态栏那个开关按钮走这里（设置页的入口已经按用户要求删掉了）。

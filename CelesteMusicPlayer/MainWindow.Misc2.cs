@@ -155,7 +155,7 @@ namespace CelesteMusicPlayer
             _fitColumnsTimer.Start();
         }
 
-        private void FitColumnsTimer_Tick(DispatcherQueueTimer sender, object e)
+        private void FitColumnsTimer_Tick(dynamic sender, dynamic e)
         {
             sender.Stop();
             FitColumnsToAvailableWidth();

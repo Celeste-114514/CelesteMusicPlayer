@@ -1,0 +1,1 @@
+Unhandled exception. System.MissingMethodException: Entry point not found in assembly 'Microsoft.UI.Xaml.Markup.Compiler, Version=3.0.0.2511, Culture=neutral, PublicKeyToken=de31ebe4ad15742b'.

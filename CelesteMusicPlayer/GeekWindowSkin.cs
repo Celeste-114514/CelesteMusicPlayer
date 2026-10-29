@@ -117,7 +117,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private static void OnWindowClosed(object sender, WindowEventArgs args)
+        private static void OnWindowClosed(dynamic sender, dynamic e)
         {
             if (sender is not Window window)
             {

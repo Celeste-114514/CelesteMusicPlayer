@@ -594,7 +594,7 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>页内布局菜单：写设置（会触发 Changed → 本页实时套用）。</summary>
-        private void NowPlayingLayoutMenuItem_Click(object sender, RoutedEventArgs e)
+        private void NowPlayingLayoutMenuItem_Click(dynamic sender, dynamic e)
         {
             try
             {

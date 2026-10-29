@@ -57,7 +57,7 @@ namespace CelesteMusicPlayer
             }
         }
 
-        private static void OnSelectionChanged(object sender, SelectionChangedEventArgs e)
+        private static void OnSelectionChanged(dynamic sender, dynamic e)
         {
             if (_suppressDepth > 0)
             {

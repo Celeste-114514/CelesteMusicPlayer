@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <!-- 本地签名密码从 csproj 外置到 CelesteMusicPlayer.signing.props（已被 .gitignore 忽略，不入库）。
        仓库克隆后若需本地 Debug MSIX 自签名，请自行创建该文件填入密码；缺失则 Debug 打包不签名（不影响 Release 自包含）。 -->
   <Import Project="CelesteMusicPlayer.signing.props" Condition="Exists('CelesteMusicPlayer.signing.props')" />
@@ -16,10 +16,12 @@
     <Platforms>x86;x64;ARM64</Platforms>
     <RuntimeIdentifiers>win-x86;win-x64;win-arm64</RuntimeIdentifiers>
     <PublishProfile>win-$(Platform).pubxml</PublishProfile>
-    <UseWinUI>true</UseWinUI>
+    <!-- W13：正式项目不再使用 WinUI。界面全部走原生 HWND + WebView2，
+         旧的 XAML 界面（含 App.xaml）从编译中排除，源码保留在仓库里便于回退/参照。 -->
+    <UseWinUI>false</UseWinUI>
 
     <WinUISDKReferences>false</WinUISDKReferences>
-    <EnableMsixTooling>true</EnableMsixTooling>
+    <EnableMsixTooling>false</EnableMsixTooling>
     <Nullable>enable</Nullable>
     <!-- DspCoreInterop 用 fixed 指针直通 celeste_dsp_core.process（交错 float32 原地处理，
          避免每块 P/Invoke 数组拷贝；float* 签名见 DspCoreInterop.cs） -->
@@ -115,6 +117,64 @@
   <ItemGroup Condition="'$(DisableMsixProjectCapabilityAddedByProject)'!='true' and '$(EnableMsixTooling)'=='true'">
     <ProjectCapability Include="Msix" />
   </ItemGroup>
+  <!--
+    W13：旧原生界面（XAML 窗口与面板）不再参与编译。
+    注意 —— 不删文件，只从编译项里排除：迷你播放器 / 零散播放窗口用户明确说过要自己重构，
+    源码必须原样留在仓库里；其余窗口属于已被网页界面取代的死界面，同样保留以便随时对照。
+  -->
+  <ItemGroup>
+    <Page Remove="App.xaml" />
+    <Page Remove="ArtistAvatarEditPanelControl.xaml" />
+    <Page Remove="ArtistAvatarEditorWindow.xaml" />
+    <Page Remove="ArtistAvatarSearchWindow.xaml" />
+    <Page Remove="AudioChainPanelControl.xaml" />
+    <Page Remove="ColorPickerWindow.xaml" />
+    <Page Remove="CurrentPlaylistWindow.xaml" />
+    <Page Remove="CustomSortOrderWindow.xaml" />
+    <Page Remove="EqualizerWindow.xaml" />
+    <Page Remove="FileAssociationPanelControl.xaml" />
+    <Page Remove="MiniPlayerWindow.xaml" />
+    <Page Remove="PlayQueueWindow.xaml" />
+    <Page Remove="ReplayGainScanWindow.xaml" />
+    <Page Remove="RoomCorrectionWindow.xaml" />
+    <Page Remove="ScatteredPlayWindow.xaml" />
+    <Page Remove="SettingsPanelControl.xaml" />
+    <Page Remove="SettingsWindow.xaml" />
+    <Page Remove="TagPanelControl.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="ArtistAvatarEditPanelControl.xaml.cs" />
+    <Compile Remove="ArtistAvatarEditorWindow.xaml.cs" />
+    <Compile Remove="ArtistAvatarSearchWindow.xaml.cs" />
+    <Compile Remove="AudioChainPanelControl.xaml.cs" />
+    <Compile Remove="ColorPickerWindow.xaml.cs" />
+    <Compile Remove="CurrentPlaylistWindow.xaml.cs" />
+    <Compile Remove="CustomSortOrderWindow.xaml.cs" />
+    <Compile Remove="EqualizerWindow.xaml.cs" />
+    <Compile Remove="FileAssociationPanelControl.xaml.cs" />
+    <Compile Remove="MiniPlayerWindow.xaml.cs" />
+    <Compile Remove="PlayQueueWindow.xaml.cs" />
+    <Compile Remove="ReplayGainScanWindow.xaml.cs" />
+    <Compile Remove="RoomCorrectionWindow.xaml.cs" />
+    <Compile Remove="ScatteredPlayWindow.xaml.cs" />
+    <Compile Remove="SettingsPanelControl.xaml.cs" />
+    <Compile Remove="SettingsPanelControl.WebDav.cs" />
+    <Compile Remove="SettingsWindow.xaml.cs" />
+    <Compile Remove="SettingsWindow.WebDav.cs" />
+    <Compile Remove="TagPanelControl.xaml.cs" />
+
+    <Compile Remove="MiniPlayerWindow.Chrome.cs" />
+    <Compile Remove="ScatteredPlayWindow.Chrome.cs" />
+    <Compile Remove="ScatteredPlayWindow.Eq.cs" />
+    <Compile Remove="ScatteredPlayWindow.Lyrics.cs" />
+    <Compile Remove="ScatteredPlayWindow.Playback.cs" />
+    <Compile Remove="ScatteredPlayWindow.Settings.cs" />
+    <Compile Remove="ScatteredPlayWindow.Visualizer.cs" />
+    <Compile Remove="SettingsWindow.About.cs" />
+    <Compile Remove="SettingsPanelControl.About.cs" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
     <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.28000.2526" />
@@ -123,13 +183,6 @@
          必须把每个子包都显式锁版本，否则 nuget restore 会挑同大版本号 1.8 下的最新子包，
          与主包 Runtime 期望对不上 → ComponentReference.targets 116 报错 → WMC9999 兜底。
          没有第三方包传递依赖这些子包（只有 WinAppSDK 自己的新子包 nuspec 互相依赖），所以锁死安全。 -->
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251106002" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Base" Version="1.8.250831001" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Foundation" Version="1.8.251104000" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.InteractiveExperiences" Version="1.8.251104001" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.WinUI" Version="1.8.251105000" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.DWrite" Version="1.8.25090401" />
-    <PackageReference Include="Microsoft.WindowsAppSDK.Runtime" Version="1.8.251106002" />
     <PackageReference Include="NAudio" Version="2.2.1" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
     <PackageReference Include="ToolGood.Words.Pinyin" Version="3.1.0" />
@@ -141,7 +194,6 @@
     <!-- 标签板块文件表格（2026-10-13 第四轮定稿换 DataGrid）：原生列宽/排序/格内编辑，
          替掉四轮反馈 bug 不断的自绘 15 列表格。7.1.2 是唯一稳定版（7.1.1 仅 preview），
          最初在 WinAppSDK 1.8.251106002 / net9.0 下验证；升级 .NET 10 时继续保留该控件版本。 -->
-    <PackageReference Include="CommunityToolkit.WinUI.UI.Controls.DataGrid" Version="7.1.2" />
     <!-- WebView2（皮肤系统第 2 步）：界面用网页渲染、音频内核仍是 C#。
          版本与本地 NuGet 缓存一致，避免离线 restore 失败。
          运行时 DLL（Microsoft.Web.WebView2.Core.dll / WebView2Loader.dll）此前已由 WASDK 传递依赖带进产物。 -->

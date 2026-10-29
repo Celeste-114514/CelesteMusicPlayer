@@ -110,7 +110,7 @@ namespace CelesteMusicPlayer
 
         private void LibraryChanged(object? sender, NotifyCollectionChangedEventArgs args) => _dirty = true;
 
-        private void BackgroundWindowChanged(AppWindow sender, AppWindowChangedEventArgs args)
+        private void BackgroundWindowChanged(dynamic sender, dynamic e)
         {
             // Position changes during a drag do not alter visibility or fullscreen state.
             // Avoid two WebView messages and DOM updates for every native move.
@@ -312,7 +312,7 @@ namespace CelesteMusicPlayer
             finally { _sending = false; }
         }
 
-        private async void OnMessage(CoreWebView2 sender, CoreWebView2WebMessageReceivedEventArgs args)
+        private async void OnMessage(dynamic sender, dynamic e)
         {
             string? requestId = null;
             try
@@ -664,7 +664,7 @@ namespace CelesteMusicPlayer
         /// 网页进程崩溃（用户在用的时候界面突然没了）。能自动救的先救一次，
         /// 救不回来才退回原生文字层 —— 渲染进程都死了，网页自己也画不出恢复页。
         /// </summary>
-        private void OnWebProcessFailed(CoreWebView2 sender, CoreWebView2ProcessFailedEventArgs args)
+        private void OnWebProcessFailed(dynamic sender, dynamic e)
         {
             string kind = args.ProcessFailedKind.ToString();
             _pageCrashCount++;
@@ -754,7 +754,7 @@ namespace CelesteMusicPlayer
             catch (Exception ex) { StartupLog.WriteException("WebShell.PushStartupNotice", ex); }
         }
 
-        private async void OnCoverRequest(CoreWebView2 sender, CoreWebView2WebResourceRequestedEventArgs args)
+        private async void OnCoverRequest(dynamic sender, dynamic e)
         {
             var deferral = args.GetDeferral();
             bool entered = false;

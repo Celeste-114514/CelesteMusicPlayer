@@ -95,7 +95,7 @@ namespace Microsoft.UI.Windowing
         public Windows.UI.Color ButtonInactiveBackgroundColor { get; set; }
 
         /// <summary>WinUI 里需要系统支持自定义标题栏；原生窗口自绘标题栏，恒为 true。</summary>
-        public static bool IsCustomizationSupported => true;
+        public static bool IsCustomizationSupported() => true;
         public void ResetToDefault() { }
     }
 
@@ -213,8 +213,8 @@ namespace Microsoft.UI.Windowing
 
         public nint OwnerWindowHandle { get; set; }
 
-        public event EventHandler<AppWindowChangedEventArgs>? Changed;
-        public event EventHandler<AppWindowClosingEventArgs>? Closing;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Changed;
+        public event global::Microsoft.UI.Xaml.AnyEventHandler? Closing;
 
         public void Show()
         {
