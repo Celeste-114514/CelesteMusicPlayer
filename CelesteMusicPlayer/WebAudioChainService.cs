@@ -6,20 +6,23 @@ using System.Threading.Tasks;
 namespace CelesteMusicPlayer
 {
     /// <summary>
-    /// 网页端「音频链路」面板的后端桥接（2026-10-26）。
+    /// 网页端「音频链路」面板的后端投影。
     ///
-    /// 分工与原生面板一致：本文件只负责抓快照并序列化，**不做任何口径判断**——
+    /// 分工与原生面板一致：这里只负责抓快照并序列化，**不做任何口径判断**——
     /// 节点状态、格式、诊断、DAC 图谱全部来自 <see cref="AudioSignalPath.Capture"/>，
     /// 网页端只负责渲染。铁律不变：拿不到的值是 null/空，前端显示"—"或整块收起，绝不编数。
     ///
-    /// 抓取走调用方（UI 线程）而不是后台线程：Capture 会读引擎属性与各 Store 的内存缓存，
+    /// 抓取走调用方（UI 线程）：Capture 会读引擎属性与各 Store 的内存缓存，
     /// 原生面板的 200ms 节拍就是在 UI 线程跑的，照做即可。
+    ///
+    /// W13：从 MainWindow.WebAudioChain.cs 搬出来。取快照用一支委托注入——
+    /// 引擎和 DSP 全局旁路开关的所有权还在 MainWindow。
     /// </summary>
-    public sealed partial class MainWindow
+    internal sealed class WebAudioChainService(Func<AudioSignalPath> capture)
     {
-        internal Task<object> WebAudioChainAsync()
+        internal Task<object> ChainAsync()
         {
-            var path = AudioSignalPath.Capture(_audioEngine, DspRackGlobalBypassed);
+            var path = capture();
             return Task.FromResult<object>(new
             {
                 summaryLine = path.SummaryLine,
@@ -66,8 +69,6 @@ namespace CelesteMusicPlayer
             });
         }
 
-        private static object ChainField(ChainField field) => new { label = field.Label, value = field.Value, note = field.Note };
-
         /// <summary>
         /// 极客预设顶部那排技术读数（OUT / FMT / FLAG / BUF）。
         ///
@@ -75,9 +76,9 @@ namespace CelesteMusicPlayer
         /// 所以这里不做任何推断，只把链路快照里已有的字段拣出来；拿不到就是 null，
         /// 前端显示"—"，而不是拿源文件规格冒充输出规格。
         /// </summary>
-        internal object WebAudioReadout()
+        internal object Readout()
         {
-            AudioSignalPath path = AudioSignalPath.Capture(_audioEngine, DspRackGlobalBypassed);
+            AudioSignalPath path = capture();
             string? Field(string label)
             {
                 foreach (ChainField field in path.Fields)
@@ -98,6 +99,8 @@ namespace CelesteMusicPlayer
                 reason = path.VerdictReason
             };
         }
+
+        private static object ChainField(ChainField field) => new { label = field.Label, value = field.Value, note = field.Note };
 
         /// <summary>节点状态文案，与原生面板 AudioChainPanelControl 完全一致（Unknown 返回空串 = 不显示）。</summary>
         private static string ChainStateText(SignalNodeState state) => state switch

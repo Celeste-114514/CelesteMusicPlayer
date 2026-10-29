@@ -27,8 +27,8 @@ internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerSe
     public System.Collections.ObjectModel.ObservableCollection<PlaylistItem> UserPlaylist => backend.UserPlaylist;
     public WebAlbumEntry[] WebAlbums(IReadOnlyList<PlaylistItem> source) => WebLibraryService.Albums(source);
     public PlaylistItem[] WebAllTracks() => backend.Library.AllTracks();
-    public Task<object> WebAudioChainAsync() => backend.WebAudioChainAsync();
-    public object WebAudioReadout() => backend.WebAudioReadout();
+    public Task<object> WebAudioChainAsync() => backend.AudioChainService.ChainAsync();
+    public object WebAudioReadout() => backend.AudioChainService.Readout();
     public Task<object> WebAudioSettingsAsync(JsonElement msg) => backend.WebAudioSettingsAsync(msg);
     public Task<object> WebBrowseAsync(JsonElement msg, object host) => backend.WebBrowseAsync(msg, host);
     public Task<object> WebCollectionOverviewAsync(string category, string name, CancellationToken cancellation) => backend.WebCollectionOverviewAsync(category, name, cancellation);
