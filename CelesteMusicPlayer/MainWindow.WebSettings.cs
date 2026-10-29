@@ -51,7 +51,7 @@ namespace CelesteMusicPlayer
                 case "webdav": return await WebDavSettingsAsync(msg).ConfigureAwait(true);
                 case "credentials": return await CredentialsAsync(msg).ConfigureAwait(true);
                 case "fileAssoc": return WebSettingsMisc.FileAssoc(msg);
-                case "hotkeys": return HotkeysOperation(msg);
+                case "hotkeys": return Hotkeys.Handle(msg);
                 case "folders": return await WatchFoldersAsync(msg, host).ConfigureAwait(true);
                 case "clearRecent": return WebSettingsMisc.ClearRecentlyPlayed();
                 case "export": return await ExportPreferencesAsync(host).ConfigureAwait(true);
@@ -96,7 +96,7 @@ namespace CelesteMusicPlayer
                     fanartTvApiKey = !string.IsNullOrWhiteSpace(state.FanartTvApiKey),
                     webdavPassword = !string.IsNullOrWhiteSpace(state.WebDavPassword)
                 },
-                hotkeys = BuildHotkeys(),
+                hotkeys = Hotkeys.Handle(default),
                 folderCount = new { watch = state.LibraryWatchFolders.Count, manual = state.ManualLibraryFiles.Count },
                 about = WebSettingsMisc.BuildAbout()
             };
@@ -450,59 +450,6 @@ namespace CelesteMusicPlayer
         // —— 文件关联 ——
 
         // —— 全局热键 ——
-
-        private object HotkeysOperation(JsonElement msg)
-        {
-            string action = ReadString(msg, "action");
-            if (action == "get") return BuildHotkeys();
-
-            if (action == "reset")
-            {
-                AppSettingsStore.Update(state => state.CustomHotkeys.Clear());
-                DispatcherQueue.TryEnqueue(RestartGlobalHotkeysFromSettings);
-                return BuildHotkeys();
-            }
-
-            if (action != "set") throw new ArgumentException("未知的热键操作。");
-
-            var bindings = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-            if (msg.TryGetProperty("bindings", out JsonElement element) && element.ValueKind == JsonValueKind.Object)
-            {
-                foreach (JsonProperty property in element.EnumerateObject())
-                {
-                    string value = (property.Value.ValueKind == JsonValueKind.String ? property.Value.GetString() ?? "" : "").Trim();
-                    if (string.Equals(value, "__clear__", StringComparison.Ordinal)) continue; // 留空=回到默认
-                    if (value.Length == 0) continue;
-                    if (!Enum.TryParse(property.Name, ignoreCase: true, out HotkeyAction _))
-                        throw new ArgumentException("未知的热键动作：" + property.Name);
-                    if (!GlobalHotkeyService.TryParseHotkey(value, out _, out _))
-                        throw new ArgumentException("热键格式不认识：" + value + "（例如 Ctrl+Alt+P）");
-                    bindings[property.Name] = value;
-                }
-            }
-
-            AppSettingsStore.Update(state =>
-            {
-                state.CustomHotkeys.Clear();
-                foreach (KeyValuePair<string, string> pair in bindings) state.CustomHotkeys[pair.Key] = pair.Value;
-            });
-            DispatcherQueue.TryEnqueue(RestartGlobalHotkeysFromSettings);
-            return BuildHotkeys();
-        }
-
-        private object BuildHotkeys()
-        {
-            AppSettingsState state = AppSettingsStore.Load();
-            var defaults = GlobalHotkeyService.DefaultBindings.ToDictionary(pair => pair.Key.ToString(), pair => pair.Value, StringComparer.OrdinalIgnoreCase);
-            var custom = state.CustomHotkeys.ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.OrdinalIgnoreCase);
-            return new
-            {
-                defaults,
-                custom,
-                enabled = state.EnableGlobalHotkeys,
-                hint = "留空表示使用默认组合。改完会重启热键注册；有没有真正抢到，取决于当时有没有别的软件占用同一个组合。"
-            };
-        }
 
         // —— 监视目录 ——
 

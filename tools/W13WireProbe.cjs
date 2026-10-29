@@ -32,7 +32,8 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
       audioChain: await CelesteTransport.request('audioChain', {}),
       audioReadout: await CelesteTransport.request('audioReadout', {}),
       settings: await CelesteTransport.request('appSettings', { operation: 'get' }),
-      updateStatus: await CelesteTransport.request('appSettings', { operation: 'update', action: 'status' })
+      updateStatus: await CelesteTransport.request('appSettings', { operation: 'update', action: 'status' }),
+      hotkeys: await CelesteTransport.request('appSettings', { operation: 'hotkeys', action: 'get' })
     }));
     fs.writeFileSync(out, JSON.stringify(data, null, 2));
     console.log('WROTE', out, 'queueTracks=', data.queue?.tracks?.length, 'previous=', JSON.stringify(data.queue?.previous), 'next=', JSON.stringify(data.queue?.next));
