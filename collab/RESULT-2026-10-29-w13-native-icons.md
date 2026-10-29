@@ -1,0 +1,7 @@
+# W13 第一步：移除活动任务栏XAML图标依赖
+
+TaskbarThumbnailButtons不再访问ThumbIconHostCanvas或调用TaskbarIconFactory/字体回退。NativeTaskbarIconFactory用GDI+矢量绘制六种图标，超采样后转预乘BGRA，复用成熟的DIB/AND mask/CreateIconIndirect资源管理逻辑。失败时清理已生成HICON；正常生命周期沿用任务栏控制器销毁六个图标。
+
+NativeTaskbarPreviewRegression扩展实际HICON创建600次、销毁和绘制预览。outputs/w13-native-icons.png已查看，无黑底/缺图。w13-native-icons-final.log自包含publish成功，实际生产后台W10TaskbarSmoke两轮（含reload）通过，主窗与按钮绑定591736同一HWND，曲库4095首、设置和封面均正常。此前三项Bug修复包含在本产物中；外观应用/撤销已经真实跨进程验证并恢复用户原外观。
+
+W13不是仅删包引用。隐藏MainWindow与DispatcherQueue业务适配尚在，本轮不宣称整个项目已经脱离WinUI。下一步是业务接口和正式会话所有权迁出。没有抢焦点、播放音频或清系统缓存。

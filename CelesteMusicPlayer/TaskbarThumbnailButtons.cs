@@ -1,53 +1,13 @@
 ﻿using System;
 using System.Runtime.InteropServices;
 using Microsoft.UI.Dispatching;
-using Microsoft.UI.Xaml.Controls;
+
 
 namespace CelesteMusicPlayer
 {
-    /// <summary>
-    /// 任务栏缩略图按钮（Thumbnail Toolbar Buttons）：鼠标悬停任务栏图标时，
-    /// 在预览小窗口下方显示 上一首 / 播放暂停 / 下一首 / 添加到我喜欢 四个按钮。
-    ///
-    /// 本版实施要点：
-    /// - **6 个按钮图标全部走 TaskbarIconFactory 的矢量自绘路径**：
-    ///   图标不再是字体字形，而是自写 PathGeometry 描述在 24×24 设计网格上的
-    ///   上一首 / 播放 / 暂停 / 下一首 / 空心心 / 实心心，再经
-    ///   RenderTargetBitmap 超采样渲染 → 预乘 alpha 的 32bpp DIB → CreateIconIndirect 成 HICON。
-    ///   这么做的原因（旧版两大顽疾）：
-    ///     1. **描边字形粗细不可控**：旧版用 Segoe Fluent Icons 码点渲染，其中空心心 EB51
-    ///        是**描边字形**（细线），缩到 16px 后线宽失控，且和填充字形放一起视觉重量不一致。
-    ///        字形笔画粗细由字体设计者定死，**没法调粗**。
-    ///     2. **GDI+ Bitmap.GetHicon() 黑边**：GetHicon 产出的颜色位图是非预乘（straight alpha）
-    ///        BGRA，而 Windows 合成 32bpp 图标按**预乘 alpha** 处理；透明像素 RGB 仍是 (0,0,0)，
-    ///        抗锯齿边缘就被当成"半透明黑色"参与混合 → 空心心那圈细描边黑边特别明显。
-    ///   矢量自绘 + 手动构造 HICON 两个问题一起解决：笔画粗细由 StrokeThickness 精确控制
-    ///   （各图标统一），且透明像素被正确预乘成 0，合成不带黑色。
-    /// - 收藏状态：未收藏 = 描边粗环空心心，已收藏 = 实心红心。两者用**同一条心形几何**，
-    ///   切换收藏时心形轮廓不会"跳形"。
-    /// - **结构体 marshal**：ThumbBarAddButtons / ThumbBarUpdateButtons 用
-    ///   [MarshalAs(UnmanagedType.LPArray)] THUMBBUTTON[] 数组参数。
-    ///   之前 [In] ref THUMBBUTTON pButton 在 64-bit COM interop 下只 marshal 单元素
-    ///   （= sizeof(THUMBBUTTON)），explorer 实际只看到 1 个按钮的 iId/hIcon，
-    ///   剩 3 个按钮位置 iId=0/hIcon=NULL → 不渲染、不响应点击。
-    ///   LPArray 让 marshaler 按 cButtons * sizeof(THUMBBUTTON) 把整个数组写到 unmanaged，
-    ///   explorer 才能读到全部 4 个按钮的 iId/hIcon。
-    /// - **dwMask 只设 ThbIcon | ThbTooltip | ThbFlags**：
-    ///   之前双设 ThbBitmap | ThbIcon 会让 explorer 走 iBitmap=0 的 bitmap fallback，
-    ///   导致 4 个按钮位置全部显示默认/不正确的图标。修掉。
-    /// - **空心 / 实心心形两套 HICON**：未收藏 = EB51 轮廓心，
-    ///   已收藏 = EB52 实心心。ToggleFavorite 后调 UpdateFavorite 切换。
-    /// - 子类化：SetWindowSubclass(comctl32) 而不是 SetWindowLongPtr，
-    ///   WinUI 框架会替换 WndProc，SetWindowLongPtr 几小时就失效；comctl32 子类化栈
-    ///   在框架之前，过滤规则明确。
-    /// - WM_COMMAND：按钮 ID 在 LOWORD(wParam)；HIWORD 是通知码 (THBN_CLICKED=0x1800)。
-    /// - 所有 ITaskbarList3 调用一律 [PreserveSig] 返回 int，失败 hr 直接写日志。
-    /// - **播放/暂停图标状态同步**：TryAddButtonsOnce 在把按钮第一次加到任务栏时，
-    ///   必须读当前 _isPlaying / _isFavorite 决定初始图标，否则启动自动播放时按钮会
-    ///   永远停在「播放」图标（应为「暂停」）；UpdatePlayPause/UpdateFavorite 在 Win11 上
-    ///   对单次 ThumbBarUpdateButtons 偶发漏画，故经 DispatcherQueue 再排一次强制重画，
-    ///   且不依赖只在 ~10s 内运行的 Pump timer。
-    /// </summary>
+    /// <summary>Native taskbar toolbar: four playback commands, owned HICONs,
+    /// HWND subclass dispatch and deferred registration. Icons use GDI+ vector
+    /// drawing and premultiplied DIBs; no XAML Canvas or font-render fallback.</summary>
     internal sealed class TaskbarThumbnailButtons : IDisposable
     {
         public const int BtnPrev = 1001;
@@ -109,8 +69,6 @@ namespace CelesteMusicPlayer
         private readonly System.Threading.SemaphoreSlim _pumpGate = new System.Threading.SemaphoreSlim(1, 1);
 
         // 颜色：按钮用白色，心形用与主界面 HeartFill 一致的红（= 用户原话"我喜欢按钮自绘"#E81123 红心）
-        private static readonly Windows.UI.Color WhiteColor = Windows.UI.Color.FromArgb(255, 255, 255, 255);
-        private static readonly Windows.UI.Color RedHeartColor = Windows.UI.Color.FromArgb(255, 232, 17, 35);
 
         internal nint BoundWindow => _hwnd;
 
@@ -149,56 +107,9 @@ namespace CelesteMusicPlayer
                     bool subclassed = SetWindowSubclass(_hwnd, _subclassDelegate, _subclassId, IntPtr.Zero);
                     StartupLog.Write("[thumb] SetWindowSubclass ok=" + subclassed + " err=" + Marshal.GetLastWin32Error());
 
-                    // 6 个 HICON 全部走 TaskbarIconFactory：
-                    //   矢量 Path（自绘几何，笔画粗细可控且各图标统一）→ RenderTargetBitmap 超采样渲染
-                    //   → 预乘 alpha 的 32bpp DIB → CreateIconIndirect。
-                    // 不再用「Segoe 字形 + GDI+ Bitmap.GetHicon()」：
-                    //   - 字形 EB51 空心心本身是细描边字形，缩到 16px 后粗细失控、和填充字形不搭；
-                    //   - GetHicon() 产出非预乘 BGRA，Windows 按预乘合成 → 抗锯齿边缘发黑（明显黑边）。
-                    Canvas? host = _owner.ThumbIconHostCanvas;
-                    if (host == null)
-                    {
-                        StartupLog.Write("[thumb] 渲染失败：主窗口图标宿主 Canvas 尚未就绪，等待下轮重试");
-                    }
-                    else
-                    {
-                        TaskbarIconFactory.IconSet icons =
-                            await TaskbarIconFactory.CreateAsync(host, WhiteColor, RedHeartColor).ConfigureAwait(true);
-
-                        // 矢量路径失败时（例如 RenderTargetBitmap 在隐藏宿主上渲染出空位图），
-                        // 回退到系统字体字形 + GDI+ GetHicon()：掩码由 GDI 依 alpha 自动生成，
-                        // 保证任务栏按钮至少有正确图标，而不是 4 个黑方块。
-                        if (!icons.AllValid)
-                        {
-                            StartupLog.Write("[thumb] 矢量图标未全部渲染成功，回退到字体字形路径");
-                            TaskbarIconFactory.IconSet fallback =
-                                await CreateFontIconFallbackAsync().ConfigureAwait(true);
-                            if (fallback.AllValid)
-                            {
-                                icons = fallback;
-                                StartupLog.Write("[thumb] 字体字形回退成功");
-                            }
-                            else
-                            {
-                                StartupLog.Write("[thumb] 字体字形回退也失败，等待下轮重试");
-                            }
-                        }
-
-                        _hPrev = icons.Prev;
-                        _hPlay = icons.Play;
-                        _hPause = icons.Pause;
-                        _hNext = icons.Next;
-                        _hHeartEmpty = icons.HeartEmpty;
-                        _hHeartFilled = icons.HeartFilled;
-
-                        StartupLog.Write("[thumb] HICON 渲染完成 (矢量 Path): prev=0x" + _hPrev.ToString("X")
-                            + " play=0x" + _hPlay.ToString("X")
-                            + " pause=0x" + _hPause.ToString("X")
-                            + " next=0x" + _hNext.ToString("X")
-                            + " heartEmpty=0x" + _hHeartEmpty.ToString("X")
-                            + " heartFilled=0x" + _hHeartFilled.ToString("X"));
-                    }
-
+                    var icons = NativeTaskbarIconFactory.Create();
+                    _hPrev=icons.Prev;_hPlay=icons.Play;_hPause=icons.Pause;_hNext=icons.Next;_hHeartEmpty=icons.HeartEmpty;_hHeartFilled=icons.HeartFilled;
+                    StartupLog.Write("[thumb] native icons created without XAML");
                     if (_hPrev != IntPtr.Zero && _hPlay != IntPtr.Zero && _hPause != IntPtr.Zero
                         && _hNext != IntPtr.Zero && _hHeartFilled != IntPtr.Zero && _hHeartEmpty != IntPtr.Zero)
                     {
@@ -249,33 +160,6 @@ namespace CelesteMusicPlayer
         /// 缺点是描边字形（如空心心 EB51）笔画粗细不可控、缩到 16px 偏细。
         /// 因此只在矢量路径失败时启用，保证任务栏按钮始终有正确图标。
         /// </summary>
-        private async System.Threading.Tasks.Task<TaskbarIconFactory.IconSet> CreateFontIconFallbackAsync()
-        {
-            const double fontSize = 20.0;
-            return new TaskbarIconFactory.IconSet
-            {
-                Prev = await RenderGlyphHiconAsync("\uE892", fontSize, WhiteColor),
-                Play = await RenderGlyphHiconAsync("\uE768", fontSize, WhiteColor),
-                Pause = await RenderGlyphHiconAsync("\uE769", fontSize, WhiteColor),
-                Next = await RenderGlyphHiconAsync("\uE893", fontSize, WhiteColor),
-                HeartEmpty = await RenderGlyphHiconAsync("\uEB51", fontSize, RedHeartColor),
-                HeartFilled = await RenderGlyphHiconAsync("\uEB52", fontSize, RedHeartColor),
-            };
-        }
-
-        private async System.Threading.Tasks.Task<IntPtr> RenderGlyphHiconAsync(string glyph, double fontSize, Windows.UI.Color color)
-        {
-            try
-            {
-                return await _owner.RenderFontIconHiconAsync(glyph, fontSize, color);
-            }
-            catch (Exception caught)
-            {
-                StartupLog.WriteException("TaskbarThumbnailButtons.RenderGlyphHiconAsync", caught);
-                return IntPtr.Zero;
-            }
-        }
-
         private void TryForceUpdateAllButtons()
         {
             try
