@@ -19,7 +19,7 @@ namespace CelesteMusicPlayer
 
         private static readonly string[] BandLabels =
         {
-            "31", "62", "125", "250", "500", "1K", "2K", "4K", "8K", "16K"
+            "32", "64", "125", "250", "500", "1K", "2K", "4K", "8K", "16K"
         };
 
         private static readonly (EqualizerPreset Preset, string Label)[] PresetOptions =

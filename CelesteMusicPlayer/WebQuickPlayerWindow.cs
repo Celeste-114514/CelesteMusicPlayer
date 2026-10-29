@@ -105,7 +105,7 @@ internal sealed class WebQuickPlayerWindow : Window
                     var eq = EqualizerStore.Load();
                     if (m.TryGetProperty("preset", out var preset)) {
                         if (Session.Engine.IsDsdDirectOut) throw new InvalidOperationException("DSD 直出不支持均衡器。");
-                        if (preset.GetString() == "Custom") { var gains = m.GetProperty("gains").EnumerateArray().Select(v => v.GetDouble()).ToArray(); if (gains.Length != 10 || gains.Any(v => !double.IsFinite(v))) throw new ArgumentException("无效均衡器参数"); eq.BandGains = gains.Select(v => Math.Clamp(v, -12, 12)).ToArray(); }
+                        if (preset.GetString() == "Custom") { var gains = m.GetProperty("gains").EnumerateArray().Select(v => v.GetDouble()).ToArray(); if (gains.Length != 10 || gains.Any(v => !double.IsFinite(v))) throw new ArgumentException("无效均衡器参数"); eq.BandGains = gains.Select(v => Math.Clamp(v, -15, 15)).ToArray(); }
                         else if (Enum.TryParse<EqualizerPreset>(preset.GetString(), out var ep) && Enum.IsDefined(ep)) eq.ApplyPreset(ep); else throw new ArgumentException("无效预设");
                         EqualizerStore.Save(eq); Session.Engine.SetEqualizer(eq.BandGains);
                     }
@@ -212,7 +212,23 @@ internal sealed class WebQuickPlayerWindow : Window
             queue = Session.Queue.Select(q => new { title = q.Title, artist = q.Artist, duration = q.Duration.TotalSeconds }).ToArray() });
         var appearance = WebAppearance.HasDraft() ? WebAppearance.Draft() : WebAppearance.Load(); string mode = WebAppearance.ResolveMode(appearance.mode);
         string key = mode + WebAppearance.CurrentRevision;
-        if (key != _themeKey) { _themeKey = key; Post(new { kind = "theme", mode, palette = WebAppearance.Resolve(appearance, mode) }); }
+        if (key != _themeKey)
+        {
+            _themeKey = key;
+            // 动效偏好一起下发：零散窗用主程序同一套 motion.js 令牌，速度/幅度/回弹/分类开关必须跟外观设置一致。
+            Post(new
+            {
+                kind = "theme", mode, palette = WebAppearance.Resolve(appearance, mode),
+                motion = new
+                {
+                    mode = appearance.motionMode,
+                    speed = WebAppearance.EffectiveMotionSpeed(appearance),
+                    strength = WebAppearance.EffectiveMotionStrength(appearance),
+                    bounce = appearance.motionBounce,
+                    off = string.Join(",", WebAppearance.MotionOffList(appearance))
+                }
+            });
+        }
     }
     private void Post(object message)
     { if (_closed || !_ready) return; try { _web.CoreWebView2?.PostWebMessageAsJson(JsonSerializer.Serialize(message)); } catch (Exception ex) { StartupLog.WriteException("Quick.Post", ex); } }

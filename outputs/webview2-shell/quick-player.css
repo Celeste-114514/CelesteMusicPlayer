@@ -8,4 +8,36 @@ input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;heigh
 
 #progress::-webkit-slider-runnable-track{background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--fill,0%),color-mix(in srgb,var(--accent) 25%,var(--panel)) var(--fill,0%),color-mix(in srgb,var(--accent) 25%,var(--panel)) 100%)}
 
-.extra-tools{display:flex;justify-content:center;gap:12px;margin-bottom:8px;color:var(--muted);font-size:12px}.extra-tools button{padding:5px 8px}.eq-panel{width:min(440px,calc(100% - 40px))}#eq-bands label{display:grid;grid-template-columns:50px 1fr 45px;align-items:center;gap:12px;margin:8px 0}#eq-bands output{text-align:right;font-variant-numeric:tabular-nums}#file-properties{overflow-wrap:anywhere;user-select:text}#file-properties dt{color:var(--muted);margin-top:12px}#file-properties dd{margin:4px 0}.eq-panel p{font-size:12px;color:var(--muted)}
+.extra-tools{display:flex;justify-content:center;gap:12px;margin-bottom:8px;color:var(--muted);font-size:12px}.extra-tools button{padding:5px 8px}
+#file-properties{overflow-wrap:anywhere;user-select:text}#file-properties dt{color:var(--muted);margin-top:12px}#file-properties dd{margin:4px 0}
+.panel-note{font-size:11px;color:var(--muted);margin:12px 0 0;line-height:1.5}
+
+/* —— 动效接线：时长一律取 motion.css 的语义令牌，这里不写死毫秒 —— */
+body{transition:background-color var(--dur-theme) var(--ease-continuity),color var(--dur-theme) var(--ease-continuity)}
+button{transition:background-color var(--dur-control) var(--ease-continuity),color var(--dur-control) var(--ease-continuity),opacity var(--dur-control) var(--ease-continuity)}
+#play{transition:background-color var(--dur-control) var(--ease-continuity),transform var(--dur-tap) var(--ease-continuity)}
+.panel{transform-origin:bottom right;will-change:transform,opacity}
+.lyrics button{transition:color var(--dur-list) var(--ease-continuity),font-size var(--dur-list) var(--ease-continuity),opacity var(--dur-list) var(--ease-continuity)}
+#queue-list button{transition:background-color var(--dur-list) var(--ease-continuity),color var(--dur-list) var(--ease-continuity)}
+#cover{transition:opacity var(--dur-cover) var(--ease-continuity)}
+
+/* —— 十段均衡器：横排十根竖条（对齐主程序「均衡器」窗口的排布） —— */
+.eq-panel{width:min(560px,calc(100% - 40px))}
+#eq-preset{padding:6px 8px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;font:inherit;font-size:12px}
+#eq-bands{display:flex;align-items:flex-end;justify-content:space-between;gap:2px;margin-top:16px;padding-bottom:2px;overflow-x:auto}
+.eq-band{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1 1 0;min-width:30px}
+.eq-band output{float:none;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
+.eq-band .freq{font-size:10px;color:var(--muted);letter-spacing:.2px}
+.eq-band .slider-host{width:16px;height:132px;display:grid;place-items:center}
+.eq-band input[type=range]{width:132px;height:14px;transform:rotate(-90deg);accent-color:var(--accent)}
+.eq-band input[type=range]:disabled{opacity:.4}
+
+/* —— 播放速度：和主程序底栏同一条 0.5–2.00× 滑条 —— */
+.speed-panel{width:min(380px,calc(100% - 40px))}
+.rate-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 2px}
+.rate-heading output{float:none;font-size:20px;font-variant-numeric:tabular-nums}
+.rate-heading button{padding:4px 8px;font-size:11px;color:var(--muted)}
+.rate-ticks{display:flex;justify-content:space-between;color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums;margin-top:2px}
+.pitch-options{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:12px;color:var(--muted)}
+.pitch-options label{display:inline-flex;align-items:center;gap:6px;margin:0}
+.pitch-options input{accent-color:var(--accent)}

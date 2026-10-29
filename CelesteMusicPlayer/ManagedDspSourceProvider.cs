@@ -189,7 +189,8 @@ namespace CelesteMusicPlayer
         public void UpdateEq(double[]? gainsDb)
         {
             var curve = new EqCurveState { Enabled = true, PreampDb = 0, PresetId = "custom", PresetName = "自定义" };
-            double[] stdFreq = { 31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 };
+            // 十段频点与参数 EQ 页的默认轴（EqCurveState / EqAxisTickFreqs）保持一致：32/64 而不是 31/62。
+            double[] stdFreq = { 32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 };
             if (gainsDb != null)
             {
                 for (int i = 0; i < stdFreq.Length; i++)

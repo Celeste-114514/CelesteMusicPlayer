@@ -19,7 +19,7 @@ namespace CelesteMusicPlayer
         private readonly int _bytesPerSample;
         private readonly bool _isFloat;
 
-        private static readonly float[] Centers = { 31f, 62f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f };
+        private static readonly float[] Centers = { 32f, 64f, 125f, 250f, 500f, 1000f, 2000f, 4000f, 8000f, 16000f };
 
         public Eq10WaveProvider(IWaveProvider source, double[]? gainsDb)
         {

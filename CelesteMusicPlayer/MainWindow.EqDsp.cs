@@ -1325,7 +1325,7 @@ namespace CelesteMusicPlayer
 
         private static void AppendSimple(EqCurveState s, string tone, double strength)
         {
-            double[] fr = { 31, 62, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 };
+            double[] fr = { 32, 64, 125, 250, 500, 1000, 2000, 4000, 8000, 16000 };
             foreach (double f in fr)
             {
                 double g = 0;
