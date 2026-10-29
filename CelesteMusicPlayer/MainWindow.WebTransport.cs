@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -15,20 +15,6 @@ namespace CelesteMusicPlayer
         private bool _webSettingsBusy;
         private PlaylistItem[] _webQueueSnapshot = Array.Empty<PlaylistItem>();
         private int _webQueueRevision;
-
-        internal sealed class WebAlbumEntry
-        {
-            public string id { get; init; } = "";
-            public string title { get; init; } = "";
-            public string sourceId { get; init; } = "";
-            public string artist { get; init; } = "";
-            public uint year { get; init; }
-            public int added { get; init; }
-            public int trackCount { get; init; }
-            public double duration { get; init; }
-            public string coverUrl { get; init; } = "";
-            public string[] trackIds { get; init; } = Array.Empty<string>();
-        }
 
         internal static WebAlbumEntry[] WebAlbums(IReadOnlyList<PlaylistItem> source)
         {

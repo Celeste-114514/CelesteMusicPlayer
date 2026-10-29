@@ -7,10 +7,10 @@ using System.Threading.Tasks;
 namespace CelesteMusicPlayer;
 internal sealed class NativeTaskbarPreview : IDisposable
 {
-    private readonly MainWindow _owner; private readonly nint _hwnd;
+    private readonly IWebPlayerServices _owner; private readonly nint _hwnd;
     private Bitmap? _cover; private PlaybackSnapshot _state = new();
     private string _track = "!", _key = ""; private int _generation; private bool _disposed;
-    internal NativeTaskbarPreview(MainWindow owner,nint hwnd) { _owner=owner;_hwnd=hwnd;Enable();Update(); }
+    internal NativeTaskbarPreview(IWebPlayerServices owner,nint hwnd) { _owner=owner;_hwnd=hwnd;Enable();Update(); }
     internal void Enable(){int yes=1;DwmSetWindowAttribute(_hwnd,7,ref yes,4);DwmSetWindowAttribute(_hwnd,10,ref yes,4);}
     internal void Update(){if(_disposed)return;_state=_owner.PlaybackStateSource.Capture();if(_track!=_state.trackId){_track=_state.trackId;_cover?.Dispose();_cover=null;int version=++_generation;_ = LoadCover(_owner.GetCurrentPlayingItem()?.FilePath,version);}string key=_track+_state.playing+_state.favorite+(int)_state.position;if(key!=_key){_key=key;DwmInvalidateIconicBitmaps(_hwnd);}}
     private async Task LoadCover(string? path,int version){Bitmap? image=null;try{image=await Task.Run(async()=>{if(string.IsNullOrEmpty(path))return null;var file=await CoverArtService.GetDesktopCoverFileAsync(path);if(file==null)return null;using var source=Image.FromFile(file);return new Bitmap(source);});if(_disposed||version!=_generation){image?.Dispose();return;}_cover?.Dispose();_cover=image;DwmInvalidateIconicBitmaps(_hwnd);}catch(Exception e){image?.Dispose();StartupLog.WriteException("NativeTaskbarPreview.Cover",e);}}

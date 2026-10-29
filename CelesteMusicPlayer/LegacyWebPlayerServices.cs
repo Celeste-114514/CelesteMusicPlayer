@@ -1,0 +1,58 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Text.Json;
+namespace CelesteMusicPlayer;
+// Transitional adapter. It deliberately keeps the legacy dependency explicit here,
+// rather than claiming that the formal playback-session migration is complete.
+internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerServices {
+    public void BindNativeTaskbar(nint hwnd) => backend.BindNativeTaskbar(hwnd);
+    public object? BuildCrashPush(int sessionCount) => MainWindow.BuildCrashPush(sessionCount);
+    public object? BuildUncleanPush() => MainWindow.BuildUncleanPush();
+    public Microsoft.UI.Dispatching.DispatcherQueue DispatcherQueue => backend.DispatcherQueue;
+    public TimeSpan EngineDurationValue => backend.EngineDurationValue;
+    public bool ExecutePlaybackCommand(string? command) => backend.ExecutePlaybackCommand(command);
+    public byte[]? ExtractCoverBytes(string audioPath) => MainWindow.ExtractCoverBytes(audioPath);
+    public void FavoriteCurrentPublic() => backend.FavoriteCurrentPublic();
+    public PlaylistItem? GetCurrentPlayingItem() => backend.GetCurrentPlayingItem();
+    public IReadOnlyList<PlaylistItem> LibraryTracks => backend.LibraryTracks;
+    public nint NativeTaskbarHandle => backend.NativeTaskbarHandle;
+    public IPlaybackStateSource PlaybackStateSource => backend.PlaybackStateSource;
+    public void RecordPageCrash(string kind, int sessionCount) => MainWindow.RecordPageCrash(kind, sessionCount);
+    public PlaylistItem? ResolveSourceTrack(string id) => MainWindow.ResolveSourceTrack(id);
+    public void SeekSourceSeconds(double seconds) => backend.SeekSourceSeconds(seconds);
+    public void SetStereoSampling(string owner, bool wanted) => backend.SetStereoSampling(owner, wanted);
+    public void ShowMiniPlayerWindow() => backend.ShowMiniPlayerWindow();
+    public System.Collections.ObjectModel.ObservableCollection<PlaylistItem> UserPlaylist => backend.UserPlaylist;
+    public WebAlbumEntry[] WebAlbums(IReadOnlyList<PlaylistItem> source) => MainWindow.WebAlbums(source);
+    public PlaylistItem[] WebAllTracks() => backend.WebAllTracks();
+    public Task<object> WebAudioChainAsync() => backend.WebAudioChainAsync();
+    public object WebAudioReadout() => backend.WebAudioReadout();
+    public Task<object> WebAudioSettingsAsync(JsonElement msg) => backend.WebAudioSettingsAsync(msg);
+    public Task<object> WebBrowseAsync(JsonElement msg, object host) => backend.WebBrowseAsync(msg, host);
+    public Task<object> WebCollectionOverviewAsync(string category, string name, CancellationToken cancellation) => backend.WebCollectionOverviewAsync(category, name, cancellation);
+    public Task<object> WebDiagnosticsAsync(JsonElement msg) => backend.WebDiagnosticsAsync(msg);
+    public Task<object> WebDspAsync(JsonElement msg) => backend.WebDspAsync(msg);
+    public string? WebFolderCoverPath(string id) => backend.WebFolderCoverPath(id);
+    public Task<object> WebFoldersAsync(JsonElement msg, object host) => backend.WebFoldersAsync(msg, host);
+    public Task<object> WebHomeAsync(JsonElement msg) => backend.WebHomeAsync(msg);
+    public object WebMore(JsonElement msg) => backend.WebMore(msg);
+    public object WebNowPlaying() => backend.WebNowPlaying();
+    public object WebNowPlayingVisual() => backend.WebNowPlayingVisual();
+    public void WebPlayAll(IReadOnlyList<PlaylistItem> tracks) => backend.WebPlayAll(tracks);
+    public void WebPlayTrack(PlaylistItem item) => backend.WebPlayTrack(item);
+    public object WebQueue(JsonElement msg) => backend.WebQueue(msg);
+    public Task<object> WebRecoveryAsync(JsonElement msg) => backend.WebRecoveryAsync(msg);
+    public void WebSetPlaybackOrder(string value) => backend.WebSetPlaybackOrder(value);
+    public void WebSetVolume(double volume) => backend.WebSetVolume(volume);
+    public Task<object> WebSettingsAsync(JsonElement msg, object host) => backend.WebSettingsAsync(msg, host);
+    public Task<object> WebSourcesAsync(JsonElement msg) => backend.WebSourcesAsync(msg);
+    public Task<(PlaylistItem[] Tracks, string Directory, bool Canceled)> WebTagAddFilesAsync(bool folder, object host) => backend.WebTagAddFilesAsync(folder, host);
+    public PlaylistItem WebTagFromPath(string path) => backend.WebTagFromPath(path);
+    public Task<object> WebTagsAsync(JsonElement msg, IReadOnlyDictionary<string, PlaylistItem> tracks) => backend.WebTagsAsync(msg, tracks);
+    public Task<object> WebTrackActionAsync(JsonElement msg, object host) => backend.WebTrackActionAsync(msg, host);
+    public string WebTrackId(PlaylistItem item) => MainWindow.WebTrackId(item);
+    public void WebTransportAction(string action) => backend.WebTransportAction(action);
+    public Task<float[]> WebWaveformAsync(string id, System.Threading.CancellationToken cancellation) => backend.WebWaveformAsync(id, cancellation);
+}

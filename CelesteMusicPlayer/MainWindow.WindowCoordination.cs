@@ -45,7 +45,7 @@ namespace CelesteMusicPlayer
             public void Create()
             {
                 if (!owner.DispatcherQueue.HasThreadAccess) throw new InvalidOperationException("窗口创建必须经 UI 队列执行。");
-                var shell = new WebShellWindow(owner);
+                var shell = new WebShellWindow(new LegacyWebPlayerServices(owner));
                 owner._webShellWindow = shell;
                 shell.Closed += (_, _) =>
                 {

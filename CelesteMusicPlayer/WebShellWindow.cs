@@ -24,7 +24,7 @@ namespace CelesteMusicPlayer
         // Virtual-host mapped resources bypass WebResourceRequested. Covers use
         // a separate, unmapped host and are served only by this handler.
         private const string CoverOrigin = "https://celeste-cover.internal";
-        private readonly MainWindow _owner;
+        private readonly IWebPlayerServices _owner;
         private readonly WebAppearanceService _appearance = new();
         private readonly NativeWebViewPanel _web = new() { Dock = System.Windows.Forms.DockStyle.Fill };
         private readonly System.Windows.Forms.Label _status = new() { Text = "正在加载网页界面…", AutoSize = false, Dock = System.Windows.Forms.DockStyle.Top, Height = 100, TextAlign = System.Drawing.ContentAlignment.MiddleCenter };
@@ -62,7 +62,7 @@ namespace CelesteMusicPlayer
         private CancellationTokenSource? _waveformCancellation;
         private CancellationTokenSource? _overviewCancellation;
 
-        internal WebShellWindow(MainWindow owner) : base(owner.DispatcherQueue)
+        internal WebShellWindow(IWebPlayerServices owner) : base(owner.DispatcherQueue)
         {
             _owner = owner;
             TaskbarPreview = new NativeTaskbarPreview(owner,Handle);
@@ -73,10 +73,16 @@ namespace CelesteMusicPlayer
             _statusLayer.Controls.Add(_reload);
             _reload.Click += (_, _) => ReloadShell();
             Controls.Add(_web); Controls.Add(_statusLayer); _statusLayer.BringToFront();
-            // One caption only: HTML controls, native resize border and WebView2 draggable regions.
-            if (AppWindow.Presenter is OverlappedPresenter chrome) chrome.SetBorderAndTitleBar(true, true);
+            // 网页自绘 chrome，原生一层一点都不留：标题栏、细边框、可调大小边框全部去掉。
+            // ⚠ 实测（2026-10-30）：只要留着 WS_THICKFRAME，窗口聚焦时系统就会在顶部画出
+            //   一条 7px 的主题色横带（DWM 的 BORDER_COLOR / NCRP / ExtendFrame 都抹不掉）。
+            //   代价是丢掉系统自带的边缘改大小，改为网页侧发 resize-start + 宿主轮询实现，
+            //   与拖动同一条路子（见 window-drag.js 与下方 StartWindowResize）。
+            if (AppWindow.Presenter is OverlappedPresenter chrome) chrome.SetBorderAndTitleBar(false, false);
+            Microsoft.UI.Windowing.NativeMethods.ChangeStyle(Handle, 0x00040000, false);   // WS_THICKFRAME
             AppWindow.TitleBar.ExtendsContentIntoTitleBar = true;
             AppWindow.TitleBar.PreferredHeightOption = TitleBarHeightOption.Collapsed;
+            SetFrameless(Handle);
             AppWindow.Resize(new Windows.Graphics.SizeInt32(1440, 960));
             _timer = DispatcherQueue.CreateTimer(); _timer.Interval = TimeSpan.FromMilliseconds(250);
             _timer.Tick += (_, _) => { if (_ready) { TaskbarPreview?.Update(); SendState(); SendThemeIfChanged(); if (_dirty) _ = SendLibraryAsync(); } };
@@ -166,7 +172,7 @@ namespace CelesteMusicPlayer
             if (!_ready) { _pendingTagPaths=files; return; }
             try {
                 var ids=new List<string>();
-                foreach(var path in files) { var track=_owner.WebTagFromPath(path); var id=MainWindow.WebTrackId(track); _tagExtraTracks[id]=track; ids.Add(id); }
+                foreach(var path in files) { var track=_owner.WebTagFromPath(path); var id=_owner.WebTrackId(track); _tagExtraTracks[id]=track; ids.Add(id); }
                 await _web.CoreWebView2.ExecuteScriptAsync("window.CelesteTags?.open("+JsonSerializer.Serialize(ids)+")");
             } catch(Exception ex) { StartupLog.WriteException("WebShell.RevealTags",ex); Error("无法打开标签文件："+ex.Message); }
         }
@@ -297,7 +303,7 @@ namespace CelesteMusicPlayer
             {
                 var snapshot = _owner.WebAllTracks();
                 _tracks.Clear();
-                foreach (var item in snapshot) _tracks[MainWindow.WebTrackId(item)] = item;
+                foreach (var item in snapshot) _tracks[_owner.WebTrackId(item)] = item;
                 var copies = _tracks.Select(pair => (Id: pair.Key, Item: pair.Value.Clone())).ToArray();
                 Post(new { kind = "celeste.library", version = 1, phase = "begin", revision, total = copies.Length });
                 for (int offset = 0; offset < copies.Length; offset += 100)
@@ -316,7 +322,7 @@ namespace CelesteMusicPlayer
                     if (_closed || !_ready) return;
                     Post(new { kind = "celeste.library", version = 1, phase = "batch", revision, tracks = rows });
                 }
-                var albums = MainWindow.WebAlbums(snapshot);
+                var albums = _owner.WebAlbums(snapshot);
                 Post(new { kind = "celeste.library", version = 1, phase = "end", revision, total = copies.Length, albums });
                 StartupLog.Write("[WebShell] library sent tracks=" + copies.Length);
             }
@@ -432,14 +438,14 @@ namespace CelesteMusicPlayer
                         {
                             var added = await _owner.WebTagAddFilesAsync(tagOperation != "addFiles", this);
                             if (!added.Canceled && tagOperation == "changeDirectory") _tagExtraTracks.Clear();
-                            foreach (var track in added.Tracks) _tagExtraTracks[MainWindow.WebTrackId(track)] = track;
-                            tags = new { count = added.Tracks.Length, ids = added.Tracks.Select(MainWindow.WebTrackId).ToArray(), directory = added.Directory, canceled = added.Canceled };
+                            foreach (var track in added.Tracks) _tagExtraTracks[_owner.WebTrackId(track)] = track;
+                            tags = new { count = added.Tracks.Length, ids = added.Tracks.Select(_owner.WebTrackId).ToArray(), directory = added.Directory, canceled = added.Canceled };
                         }
                         else
                         {
                             var tagTracks = new Dictionary<string, PlaylistItem>(_tracks, StringComparer.Ordinal);
                             foreach (var pair in _tagExtraTracks) tagTracks[pair.Key] = pair.Value;
-                            foreach (var track in _owner.UserPlaylist) tagTracks.TryAdd(MainWindow.WebTrackId(track), track);
+                            foreach (var track in _owner.UserPlaylist) tagTracks.TryAdd(_owner.WebTrackId(track), track);
                             if (msg.TryGetProperty("scopeIds", out var tagScope) && tagScope.ValueKind == JsonValueKind.Array)
                                 foreach (var idElement in tagScope.EnumerateArray().Take(20000))
                                 {
@@ -453,9 +459,9 @@ namespace CelesteMusicPlayer
                             if (tagOperation == "rename")
                             {
                                 var extras = _tagExtraTracks.Values.ToArray(); _tagExtraTracks.Clear();
-                                foreach (var track in extras) _tagExtraTracks[MainWindow.WebTrackId(track)] = track;
+                                foreach (var track in extras) _tagExtraTracks[_owner.WebTrackId(track)] = track;
                                 var currentTracks = _tracks.Values.ToArray(); _tracks.Clear();
-                                foreach (var track in currentTracks) _tracks[MainWindow.WebTrackId(track)] = track;
+                                foreach (var track in currentTracks) _tracks[_owner.WebTrackId(track)] = track;
                             }
                         }
                         if (tagOperation is "write" or "rename" or "lyricSave" || tagOperation.StartsWith("cover", StringComparison.Ordinal))
@@ -463,7 +469,7 @@ namespace CelesteMusicPlayer
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = tags }); break;
                     case "queue":
                         _queueCoverPaths.Clear();
-                        foreach (var track in _owner.UserPlaylist) _queueCoverPaths[MainWindow.WebTrackId(track)] = track.FilePath;
+                        foreach (var track in _owner.UserPlaylist) _queueCoverPaths[_owner.WebTrackId(track)] = track.FilePath;
                         var queue = _owner.WebQueue(msg);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = queue }); break;
                     case "more":
@@ -495,7 +501,7 @@ namespace CelesteMusicPlayer
         }
 
         private PlaylistItem Resolve(string? id) => id != null && _tracks.TryGetValue(id, out var item)
-            ? item : id != null && MainWindow.ResolveSourceTrack(id) is PlaylistItem remote ? remote : throw new InvalidOperationException("曲目已不在当前曲库中，请稍后重试。");
+            ? item : id != null && _owner.ResolveSourceTrack(id) is PlaylistItem remote ? remote : throw new InvalidOperationException("曲目已不在当前曲库中，请稍后重试。");
 
         private async Task<object> ReadOverviewAsync(string category, string name)
         {
@@ -578,6 +584,14 @@ namespace CelesteMusicPlayer
                     .SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Caption, regions.ToArray());
                 return;
             }
+            // 原生可调大小边框已经去掉（见构造函数），改大小由网页侧发边名、宿主轮询实现。
+            if (action == "resize-start")
+            {
+                string edge = msg.TryGetProperty("edge", out JsonElement raw) && raw.ValueKind == JsonValueKind.String
+                    ? raw.GetString() ?? "" : "";
+                DispatcherQueue.TryEnqueue(() => StartWindowResize(edge));
+                return;
+            }
             bool value = msg.TryGetProperty("value", out JsonElement flag) && flag.ValueKind == JsonValueKind.True;
             WindowCommand(action, value);
         }
@@ -617,6 +631,8 @@ namespace CelesteMusicPlayer
         {
             if (_closed || AppWindow.Presenter is not OverlappedPresenter presenter ||
                 presenter.State == OverlappedPresenterState.Maximized || !IsLeftButtonDown()) return;
+            // 原生 HTCAPTION 已经接管这次拖动时不要再起轮询线程，两套一起移窗口会抖。
+            if (SystemDragActive) return;
             IntPtr hwnd = Handle;
             if (hwnd == IntPtr.Zero || !NativeMethods.GetCursorPos(out var cursor) ||
                 !NativeMethods.GetWindowRect(hwnd, out var bounds)) return;
@@ -649,6 +665,56 @@ namespace CelesteMusicPlayer
 
         private static bool IsLeftButtonDown() => (NativeMethods.GetAsyncKeyState(NativeMethods.VK_LBUTTON) & 0x8000) != 0;
         private void StopWindowDrag() => Interlocked.Increment(ref _dragGeneration);
+
+        /// <summary>
+        /// 自绘边缘改大小：网页在离窗口边 6px 内按下时发 edge（n/s 与 e/w 可组合），
+        /// 这里起一条后台线程按光标位移重算窗口矩形。和拖动同源：靠 GetAsyncKeyState 判活，
+        /// 因为按住期间 WebView 收不到 pointerup。与拖动共用 _dragGeneration，
+        /// 新的拖动/改大小会立刻顶掉上一个循环。
+        /// </summary>
+        private void StartWindowResize(string edge)
+        {
+            if (_closed || string.IsNullOrEmpty(edge) ||
+                AppWindow.Presenter is not OverlappedPresenter presenter ||
+                presenter.State == OverlappedPresenterState.Maximized || !IsLeftButtonDown()) return;
+            IntPtr hwnd = Handle;
+            if (hwnd == IntPtr.Zero || !NativeMethods.GetCursorPos(out var cursor) ||
+                !NativeMethods.GetWindowRect(hwnd, out var bounds)) return;
+            bool west = edge.Contains('w'), east = edge.Contains('e');
+            bool north = edge.Contains('n'), south = edge.Contains('s');
+            if (!west && !east && !north && !south) return;
+            int startX = cursor.X, startY = cursor.Y;
+            int left0 = bounds.Left, top0 = bounds.Top;
+            int width0 = bounds.Right - bounds.Left, height0 = bounds.Bottom - bounds.Top;
+            int minWidth = MinimumSize.Width, minHeight = MinimumSize.Height;
+            int ticket = Interlocked.Increment(ref _dragGeneration);
+            new Thread(() =>
+            {
+                bool preciseTimer = NativeMethods.timeBeginPeriod(1) == 0;
+                try
+                {
+                    int lastX = left0, lastY = top0, lastW = width0, lastH = height0;
+                    while (Volatile.Read(ref _dragGeneration) == ticket && IsLeftButtonDown())
+                    {
+                        if (!NativeMethods.GetCursorPos(out var point)) break;
+                        int dx = point.X - startX, dy = point.Y - startY;
+                        int x = left0, y = top0, w = width0, h = height0;
+                        if (west) { x = left0 + dx; w = width0 - dx; if (w < minWidth) { w = minWidth; x = left0 + width0 - minWidth; } }
+                        else if (east) { w = Math.Max(minWidth, width0 + dx); }
+                        if (north) { y = top0 + dy; h = height0 - dy; if (h < minHeight) { h = minHeight; y = top0 + height0 - minHeight; } }
+                        else if (south) { h = Math.Max(minHeight, height0 + dy); }
+                        if (x != lastX || y != lastY || w != lastW || h != lastH)
+                        {
+                            if (!NativeMethods.SetWindowPos(hwnd, IntPtr.Zero, x, y, w, h,
+                                SWP_NOZORDER | SWP_NOACTIVATE)) break;
+                            lastX = x; lastY = y; lastW = w; lastH = h;
+                        }
+                        Thread.Sleep(4);
+                    }
+                }
+                finally { if (preciseTimer) NativeMethods.timeEndPeriod(1); }
+            }) { IsBackground = true, Name = "Celeste window resize" }.Start();
+        }
         private void Error(string message) => Post(new { kind = "celeste.error", version = 1, message });
 
         /// <summary>
@@ -682,7 +748,7 @@ namespace CelesteMusicPlayer
             _pageCrashCount++;
             _ready = false;
             StartupLog.Write("[crash] 网页进程异常 kind=" + kind + " 第 " + _pageCrashCount + " 次");
-            MainWindow.RecordPageCrash(kind, _pageCrashCount);
+            _owner.RecordPageCrash(kind, _pageCrashCount);
 
             // 浏览器进程整个没了：重载也没意义，只能靠原生文字层。
             if (args.ProcessFailedKind == CoreWebView2ProcessFailedKind.BrowserProcessExited)
@@ -714,7 +780,7 @@ namespace CelesteMusicPlayer
         {
             try
             {
-                object? payload = MainWindow.BuildCrashPush(_pageCrashCount);
+                object? payload = _owner.BuildCrashPush(_pageCrashCount);
                 if (payload == null) return;
                 // 等首屏铺完再压卡片，否则会看到"卡片先到、界面后到"的闪一下。
                 await Task.Delay(700).ConfigureAwait(true);
@@ -756,7 +822,7 @@ namespace CelesteMusicPlayer
             _startupNoticeQueued = true;
             try
             {
-                object? payload = MainWindow.BuildUncleanPush();
+                object? payload = _owner.BuildUncleanPush();
                 if (payload == null) return;
                 await Task.Delay(500).ConfigureAwait(true);
                 if (_closed || !_ready) return;
@@ -788,7 +854,7 @@ namespace CelesteMusicPlayer
                     coverSize = 480;
                 }
                 else path = _tracks.TryGetValue(id, out var item) ? item.FilePath
-                    : current != null && MainWindow.WebTrackId(current) == id ? current.FilePath
+                    : current != null && _owner.WebTrackId(current) == id ? current.FilePath
                     : _queueCoverPaths.TryGetValue(id, out var queuePath) ? queuePath : _owner.WebFolderCoverPath(id);
                 if (!playlistCover && NetworkLibraryStore.Track(id) is NetworkTrack remoteTrack && remoteTrack.SourceId.Length > 0 && (path == null || !File.Exists(path)))
                 {
@@ -810,7 +876,7 @@ namespace CelesteMusicPlayer
                 if (path == null) { args.Response = ((CoreWebView2)sender!).Environment.CreateWebResourceResponse(null, 404, "Not Found", ""); return; }
                 await _coverGate.WaitAsync(); entered = true;
                 if (_closed) return;
-                byte[]? sourceBytes = await Task.Run(() => customCover == null ? MainWindow.ExtractCoverBytes(path) : File.ReadAllBytes(path));
+                byte[]? sourceBytes = await Task.Run(() => customCover == null ? _owner.ExtractCoverBytes(path) : File.ReadAllBytes(path));
                 string? cacheFile = await CoverCacheService.GetAsync(sourceBytes, CoverCacheService.ForWebSize(coverSize));
                 if (_closed) return;
                 args.Response = ((CoreWebView2)sender!).Environment.CreateWebResourceResponse(cacheFile == null ? null : File.OpenRead(cacheFile), cacheFile == null ? 404 : 200, cacheFile == null ? "Not Found" : "OK", "Content-Type: image/jpeg\r\nCache-Control: private, max-age=3600");
