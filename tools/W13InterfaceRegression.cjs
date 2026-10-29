@@ -61,6 +61,8 @@ function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
         out.queue = await call('queue', { operation: 'get' });
         out.nowPlaying = await call('nowPlaying', {});
         out.diagnostics = await call('diagnostics', {});
+        out.recovery = await call('recovery', { action: 'status' });
+        out.diagnosticsExport = await call('diagnostics', { action: 'export' });
         out.more = await call('more', { operation: 'get' });
         const brief = {};
         for (const k of Object.keys(out)) {

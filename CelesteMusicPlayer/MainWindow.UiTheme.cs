@@ -325,7 +325,7 @@ namespace CelesteMusicPlayer
 
             // 设置文件损坏恢复提示：仅本次会话提示一次。
             // 恢复页也会带一句同样的说明，同时出现就是同一件事说两遍，所以让给恢复页。
-            if (AppSettingsStore.SettingsWereRecovered && !RecoveryShouldShow())
+            if (AppSettingsStore.SettingsWereRecovered && !Recovery.ShouldShow())
             {
                 DispatcherQueue.TryEnqueue(async () =>
                 {

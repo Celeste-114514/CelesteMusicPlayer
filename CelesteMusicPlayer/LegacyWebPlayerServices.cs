@@ -8,8 +8,8 @@ namespace CelesteMusicPlayer;
 // rather than claiming that the formal playback-session migration is complete.
 internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerServices {
     public void BindNativeTaskbar(nint hwnd) => backend.BindNativeTaskbar(hwnd);
-    public object? BuildCrashPush(int sessionCount) => MainWindow.BuildCrashPush(sessionCount);
-    public object? BuildUncleanPush() => MainWindow.BuildUncleanPush();
+    public object? BuildCrashPush(int sessionCount) => backend.Recovery.BuildCrashPush(sessionCount);
+    public object? BuildUncleanPush() => backend.Recovery.BuildUncleanPush();
     public Microsoft.UI.Dispatching.DispatcherQueue DispatcherQueue => backend.DispatcherQueue;
     public TimeSpan EngineDurationValue => backend.EngineDurationValue;
     public bool ExecutePlaybackCommand(string? command) => backend.ExecutePlaybackCommand(command);
@@ -19,7 +19,7 @@ internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerSe
     public IReadOnlyList<PlaylistItem> LibraryTracks => backend.LibraryTracks;
     public nint NativeTaskbarHandle => backend.NativeTaskbarHandle;
     public IPlaybackStateSource PlaybackStateSource => backend.PlaybackStateSource;
-    public void RecordPageCrash(string kind, int sessionCount) => MainWindow.RecordPageCrash(kind, sessionCount);
+    public void RecordPageCrash(string kind, int sessionCount) => backend.Recovery.RecordPageCrash(kind, sessionCount);
     public PlaylistItem? ResolveSourceTrack(string id) => MainWindow.ResolveSourceTrack(id);
     public void SeekSourceSeconds(double seconds) => backend.SeekSourceSeconds(seconds);
     public void SetStereoSampling(string owner, bool wanted) => backend.SetStereoSampling(owner, wanted);
@@ -32,7 +32,7 @@ internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerSe
     public Task<object> WebAudioSettingsAsync(JsonElement msg) => backend.WebAudioSettingsAsync(msg);
     public Task<object> WebBrowseAsync(JsonElement msg, object host) => backend.WebBrowseAsync(msg, host);
     public Task<object> WebCollectionOverviewAsync(string category, string name, CancellationToken cancellation) => backend.WebCollectionOverviewAsync(category, name, cancellation);
-    public Task<object> WebDiagnosticsAsync(JsonElement msg) => backend.WebDiagnosticsAsync(msg);
+    public Task<object> WebDiagnosticsAsync(JsonElement msg) => backend.Recovery.DiagnosticsAsync(msg);
     public Task<object> WebDspAsync(JsonElement msg) => backend.WebDspAsync(msg);
     public string? WebFolderCoverPath(string id) => backend.WebFolderCoverPath(id);
     public Task<object> WebFoldersAsync(JsonElement msg, object host) => backend.WebFoldersAsync(msg, host);
@@ -43,7 +43,7 @@ internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerSe
     public void WebPlayAll(IReadOnlyList<PlaylistItem> tracks) => backend.WebPlayAll(tracks);
     public void WebPlayTrack(PlaylistItem item) => backend.WebPlayTrack(item);
     public object WebQueue(JsonElement msg) => backend.WebQueue(msg);
-    public Task<object> WebRecoveryAsync(JsonElement msg) => backend.WebRecoveryAsync(msg);
+    public Task<object> WebRecoveryAsync(JsonElement msg) => backend.Recovery.HandleAsync(msg);
     public void WebSetPlaybackOrder(string value) => backend.WebSetPlaybackOrder(value);
     public void WebSetVolume(double volume) => backend.WebSetVolume(volume);
     public Task<object> WebSettingsAsync(JsonElement msg, object host) => backend.WebSettingsAsync(msg, host);

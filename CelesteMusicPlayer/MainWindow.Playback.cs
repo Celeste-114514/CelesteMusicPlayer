@@ -1072,7 +1072,7 @@ namespace CelesteMusicPlayer
             {
                 // 安全模式（启动恢复页选的"安全模式"）：这一轮连队列都不恢复，
                 // 免得一进来就先读一堆文件、把嫌疑范围搅浑。用户想听自己点就行。
-                if (SafeModeActive)
+                if (Recovery.SafeModeActive)
                 {
                     StartupLog.Write("[recovery] 安全模式：跳过自动续播与队列恢复。");
                     return;
