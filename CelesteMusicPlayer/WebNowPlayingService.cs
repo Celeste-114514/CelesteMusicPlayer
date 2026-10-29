@@ -1,10 +1,37 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 
 namespace CelesteMusicPlayer
 {
-    public sealed partial class MainWindow
+    /// <summary>
+    /// 「正在播放」详情页需要的宿主事实。服务不碰引擎、不碰歌词解析，
+    /// 只从这里取当前曲目、播放状态、频谱/采样、歌词行。
+    /// </summary>
+    internal interface INowPlayingHost
+    {
+        bool IsPlaying { get; }
+        PlaylistItem? CurrentItem { get; }
+        bool TryGetSpectrum(float[] values, out int sampleRate);
+        bool TryGetSamples(float[] samples);
+        bool TryGetStereoSamples(float[] left, float[] right);
+        void SetStereoCapture(bool enabled);
+        IReadOnlyList<LyricLine> LyricLines { get; }
+        int CurrentLyricIndex { get; }
+    }
+
+    /// <summary>
+    /// 网页「正在播放」的两个只读投影：
+    /// ① <see cref="Snapshot"/> —— 曲目身份 + 音频参数 + 整首歌词；
+    /// ② <see cref="Visual"/> —— 频谱 / 波形 / 立体声快照（终端详情页与李萨如图用）。
+    ///
+    /// W13：从 MainWindow.WebNowPlaying.cs 搬出来。这里只有计算，取数据全部走宿主口子。
+    ///
+    /// 为什么快照不带播放进度：网页每 250ms 收一次 celeste.state，进度和时间都在里面，
+    /// 当前句由前端按时间自己算。每帧跨宿主取一次会把这条消息链打爆。
+    /// </summary>
+    internal sealed class WebNowPlayingService(INowPlayingHost host)
     {
         // —— 立体声采样的订阅：引用计数 ——
         // 采集开关是全引擎一把的（SetStereoCapture 只是 bool），
@@ -12,6 +39,12 @@ namespace CelesteMusicPlayer
         // 另一个还在看的消费者一起关掉。
         private static readonly object StereoGate = new();
         private static readonly HashSet<string> StereoOwners = new(StringComparer.Ordinal);
+
+        // —— 快照的代次：曲目一换就 +1，网页据此丢弃旧响应，避免上一首的采样串到这一首 ——
+        private string _visualTrackId = "";
+        private long _visualGeneration, _visualSequence;
+        private readonly float[] _visualLeft = new float[512];
+        private readonly float[] _visualRight = new float[512];
 
         /// <summary>网页可视化订阅/退订立体声采样。owner 用调用方的名字（如 "web.nowPlaying"）。</summary>
         internal void SetStereoSampling(string owner, bool wanted)
@@ -24,35 +57,24 @@ namespace CelesteMusicPlayer
                 desired = StereoOwners.Count > 0;
             }
 
-            try { _audioEngine?.SetStereoCapture(desired); }
+            try { host.SetStereoCapture(desired); }
             catch (Exception ex) { StartupLog.WriteException("WebNowPlaying.SetStereoSampling", ex); }
         }
 
-        // —— 快照的代次：曲目一换就 +1，网页据此丢弃旧响应，避免上一首的采样串到这一首 ——
-        private string _visualTrackId = "";
-        private long _visualGeneration, _visualSequence;
-        private readonly float[] _visualLeft = new float[512];
-        private readonly float[] _visualRight = new float[512];
         /// <summary>
-        /// 网页「正在播放」详情页要的一份快照：曲目身份 + 整首歌词 + 当前句。
-        ///
-        /// 为什么这里不带播放进度：网页每 250ms 收一次 celeste.state，进度和时间都在里面，
-        /// 当前句由前端按时间自己算。每帧跨宿主取一次会把这条消息链打爆，
-        /// 也没必要为一个高亮位置多开一条 RPC。
-        ///
-        /// 歌词为空不区分「还没解析完」和「这首歌确实没有」——网页那边看到空会重试两次，
-        /// 之后才显示「没有找到歌词」，因为解析是异步的。
+        /// 网页详情页的频谱/采样快照。
+        /// 歌词为空不区分「还没解析完」和「这首歌确实没有」——网页那边看到空会重试两次。
         /// </summary>
-        internal object WebNowPlayingVisual()
+        internal object Visual()
         {
             var values = new float[140];
             int sampleRate = 0;
-            bool playing = IsPlaybackActuallyPlaying();
-            bool available = playing && (_audioEngine?.TryGetDetailedSpectrum(values, out sampleRate) ?? false);
+            bool playing = host.IsPlaying;
+            bool available = playing && host.TryGetSpectrum(values, out sampleRate);
             var samples = new float[256];
-            bool samplesAvailable = playing && (_audioEngine?.TryGetSamples(samples) ?? false);
+            bool samplesAvailable = playing && host.TryGetSamples(samples);
 
-            string trackId = GetCurrentPlayingItem() is { } current ? WebTrackIdentity.Of(current) : "";
+            string trackId = host.CurrentItem is { } current ? WebTrackIdentity.Of(current) : "";
             // 换曲就把代次 +1：网页那边用 (trackId, generation) 判断手里的采样是不是这一首的，
             // 旧响应不能盖到新的选择上。
             if (!string.Equals(trackId, _visualTrackId, StringComparison.Ordinal))
@@ -64,7 +86,7 @@ namespace CelesteMusicPlayer
             // 真实的左右声道：必须同一时刻、同一处理阶段的一对样本。
             // 这里取 DSP 之后的输出抽头（"post-dsp"），不拿单声道副本冒充右声道。
             // 没采到就全零 + available=false，网页据此显示空网格，不许画假对角线。
-            bool stereo = playing && (_audioEngine?.TryGetStereoSamples(_visualLeft, _visualRight) ?? false);
+            bool stereo = playing && host.TryGetStereoSamples(_visualLeft, _visualRight);
             double sumLL = 0, sumRR = 0, sumLR = 0;
             float peakLeft = 0, peakRight = 0;
             if (stereo)
@@ -116,19 +138,20 @@ namespace CelesteMusicPlayer
             };
         }
 
-        internal object WebNowPlaying()
+        /// <summary>曲目身份 + 音频参数 + 整首歌词。</summary>
+        internal object Snapshot()
         {
-            var item = GetCurrentPlayingItem();
+            var item = host.CurrentItem;
             string trackId = item == null ? string.Empty : WebTrackIdentity.Of(item);
             int rate = 0, bits = 0, kbps = 0, channels = 0;
             long fileSize = 0;
             if (item != null)
             {
                 AudioInfoFormatter.TryGetFacts(item.FilePath, out rate, out bits, out kbps, out channels);
-                try { if (System.IO.File.Exists(item.FilePath)) fileSize = new System.IO.FileInfo(item.FilePath).Length; }
-                catch (System.IO.IOException) { }
+                try { if (File.Exists(item.FilePath)) fileSize = new FileInfo(item.FilePath).Length; }
+                catch (IOException) { }
             }
-            var lines = GetLyricLinesPublic();
+            var lines = host.LyricLines;
             var rows = lines
                 .Select(line => new
                 {
@@ -142,7 +165,7 @@ namespace CelesteMusicPlayer
                 trackId,
                 audio = new { sampleRate = rate, bitDepth = bits, kbps, channels, fileSize },
                 lyricState = rows.Length > 0 ? "ready" : "none",
-                currentIndex = GetCurrentLyricIndexPublic(),
+                currentIndex = host.CurrentLyricIndex,
                 lines = rows
             };
         }

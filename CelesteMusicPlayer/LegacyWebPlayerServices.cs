@@ -22,7 +22,7 @@ internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerSe
     public void RecordPageCrash(string kind, int sessionCount) => backend.Recovery.RecordPageCrash(kind, sessionCount);
     public PlaylistItem? ResolveSourceTrack(string id) => MainWindow.ResolveSourceTrack(id);
     public void SeekSourceSeconds(double seconds) => backend.SeekSourceSeconds(seconds);
-    public void SetStereoSampling(string owner, bool wanted) => backend.SetStereoSampling(owner, wanted);
+    public void SetStereoSampling(string owner, bool wanted) => backend.NowPlayingService.SetStereoSampling(owner, wanted);
     public void ShowMiniPlayerWindow() => backend.ShowMiniPlayerWindow();
     public System.Collections.ObjectModel.ObservableCollection<PlaylistItem> UserPlaylist => backend.UserPlaylist;
     public WebAlbumEntry[] WebAlbums(IReadOnlyList<PlaylistItem> source) => WebLibraryService.Albums(source);
@@ -38,8 +38,8 @@ internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerSe
     public Task<object> WebFoldersAsync(JsonElement msg, object host) => backend.WebFoldersAsync(msg, host);
     public Task<object> WebHomeAsync(JsonElement msg) => backend.Home.HandleAsync(msg);
     public object WebMore(JsonElement msg) => backend.WebMore(msg);
-    public object WebNowPlaying() => backend.WebNowPlaying();
-    public object WebNowPlayingVisual() => backend.WebNowPlayingVisual();
+    public object WebNowPlaying() => backend.NowPlayingService.Snapshot();
+    public object WebNowPlayingVisual() => backend.NowPlayingService.Visual();
     public void WebPlayAll(IReadOnlyList<PlaylistItem> tracks) => backend.WebPlayAll(tracks);
     public void WebPlayTrack(PlaylistItem item) => backend.WebPlayTrack(item);
     public object WebQueue(JsonElement msg) => backend.WebQueue(msg);
