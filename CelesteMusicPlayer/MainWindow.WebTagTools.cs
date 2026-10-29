@@ -327,7 +327,7 @@ namespace CelesteMusicPlayer
                     InvalidateCoverCache(job.Old); OnTagsSaved(job.New);
                 }
                 SavePlayQueue();
-                return new { ok = true, count = jobs.Length, remap = tracks.Where(pair => pair.Key != WebTrackId(pair.Value)).ToDictionary(pair => pair.Key, pair => WebTrackId(pair.Value)) };
+                return new { ok = true, count = jobs.Length, remap = tracks.Where(pair => pair.Key != WebTrackIdentity.Of(pair.Value)).ToDictionary(pair => pair.Key, pair => WebTrackIdentity.Of(pair.Value)) };
             }
             finally { _webTagWriteGate.Release(); }
         }

@@ -51,17 +51,10 @@ namespace CelesteMusicPlayer
 
         private void WebShellButton_Click(object sender, RoutedEventArgs args) => OpenWebShell();
 
-        internal static string WebTrackId(PlaylistItem item)
-        {
-            if (item.SourceTrackId.Length > 0) return item.SourceTrackId;
-            string key = item.FilePath.ToUpperInvariant() + "\n" + item.StartTimeSeconds.ToString("R", CultureInfo.InvariantCulture);
-            return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(key))).ToLowerInvariant();
-        }
-
         internal void WebPlayTrack(PlaylistItem item)
         {
             if (item.SourceTrackId.Length == 0 && !_playlist.Contains(item)) throw new InvalidOperationException("曲库已变化，请刷新后重试。");
-            StartupLog.Write("[WebShell] PlayTrack id=" + WebTrackId(item) + " output=" + AppSettingsStore.Load().OutputMode);
+            StartupLog.Write("[WebShell] PlayTrack id=" + WebTrackIdentity.Of(item) + " output=" + AppSettingsStore.Load().OutputMode);
             PlayPlaylistItem(item);
         }
 

@@ -25,8 +25,8 @@ internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerSe
     public void SetStereoSampling(string owner, bool wanted) => backend.SetStereoSampling(owner, wanted);
     public void ShowMiniPlayerWindow() => backend.ShowMiniPlayerWindow();
     public System.Collections.ObjectModel.ObservableCollection<PlaylistItem> UserPlaylist => backend.UserPlaylist;
-    public WebAlbumEntry[] WebAlbums(IReadOnlyList<PlaylistItem> source) => MainWindow.WebAlbums(source);
-    public PlaylistItem[] WebAllTracks() => backend.WebAllTracks();
+    public WebAlbumEntry[] WebAlbums(IReadOnlyList<PlaylistItem> source) => WebLibraryService.Albums(source);
+    public PlaylistItem[] WebAllTracks() => backend.Library.AllTracks();
     public Task<object> WebAudioChainAsync() => backend.WebAudioChainAsync();
     public object WebAudioReadout() => backend.WebAudioReadout();
     public Task<object> WebAudioSettingsAsync(JsonElement msg) => backend.WebAudioSettingsAsync(msg);
@@ -34,7 +34,7 @@ internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerSe
     public Task<object> WebCollectionOverviewAsync(string category, string name, CancellationToken cancellation) => backend.WebCollectionOverviewAsync(category, name, cancellation);
     public Task<object> WebDiagnosticsAsync(JsonElement msg) => backend.Recovery.DiagnosticsAsync(msg);
     public Task<object> WebDspAsync(JsonElement msg) => backend.WebDspAsync(msg);
-    public string? WebFolderCoverPath(string id) => backend.WebFolderCoverPath(id);
+    public string? WebFolderCoverPath(string id) => backend.Library.CoverPath(id);
     public Task<object> WebFoldersAsync(JsonElement msg, object host) => backend.WebFoldersAsync(msg, host);
     public Task<object> WebHomeAsync(JsonElement msg) => backend.Home.HandleAsync(msg);
     public object WebMore(JsonElement msg) => backend.WebMore(msg);
@@ -52,7 +52,6 @@ internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerSe
     public PlaylistItem WebTagFromPath(string path) => backend.WebTagFromPath(path);
     public Task<object> WebTagsAsync(JsonElement msg, IReadOnlyDictionary<string, PlaylistItem> tracks) => backend.WebTagsAsync(msg, tracks);
     public Task<object> WebTrackActionAsync(JsonElement msg, object host) => backend.WebTrackActionAsync(msg, host);
-    public string WebTrackId(PlaylistItem item) => MainWindow.WebTrackId(item);
     public void WebTransportAction(string action) => backend.WebTransportAction(action);
     public Task<float[]> WebWaveformAsync(string id, System.Threading.CancellationToken cancellation) => backend.WebWaveformAsync(id, cancellation);
 }

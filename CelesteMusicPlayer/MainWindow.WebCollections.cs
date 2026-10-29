@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
@@ -96,7 +96,7 @@ namespace CelesteMusicPlayer
         {
             if (name.Length > 2048 || category is not ("artists" or "albumArtists" or "albums")) throw new ArgumentException("未知的曲库分类。");
             string Key(PlaylistItem item) => category == "albums" ? item.Album : category == "albumArtists" ? item.AlbumArtist : item.Artist;
-            var tracks = WebAllTracks().Where(item => string.Equals(Key(item), name, StringComparison.CurrentCultureIgnoreCase)).Select(item => item.Clone()).ToArray();
+            var tracks = Library.AllTracks().Where(item => string.Equals(Key(item), name, StringComparison.CurrentCultureIgnoreCase)).Select(item => item.Clone()).ToArray();
             if (tracks.Length == 0) throw new InvalidOperationException("曲库已变化，请重新打开详情。");
             return await Task.Run<object>(() =>
             {

@@ -180,7 +180,7 @@ namespace CelesteMusicPlayer
                 foreach (var entry in refs)
                 {
                     int index = entry.GetProperty("index").GetInt32();
-                    if (index < 0 || index >= _userPlaylist.Count || WebTrackId(_userPlaylist[index]) != entry.GetProperty("trackId").GetString())
+                    if (index < 0 || index >= _userPlaylist.Count || WebTrackIdentity.Of(_userPlaylist[index]) != entry.GetProperty("trackId").GetString())
                         throw new InvalidOperationException("播放队列已变化，请重新打开菜单。");
                 }
                 songs = indices.Select(i => _userPlaylist[i]).ToArray();
@@ -188,8 +188,8 @@ namespace CelesteMusicPlayer
             else
             {
                 var ids = msg.GetProperty("trackIds").EnumerateArray().Select(id => id.GetString()).ToArray();
-                var map = WebAllTracks().GroupBy(WebTrackId).ToDictionary(group => group.Key, group => group.First());
-                foreach (var entry in _webFolderTracks) if (!map.ContainsKey(entry.Key) && File.Exists(entry.Value.FilePath)) map[entry.Key] = entry.Value;
+                var map = Library.AllTracks().GroupBy(WebTrackIdentity.Of).ToDictionary(group => group.Key, group => group.First());
+                foreach (var entry in Library.FolderTracks) if (!map.ContainsKey(entry.Key) && File.Exists(entry.Value.FilePath)) map[entry.Key] = entry.Value;
                 songs = ids.Distinct().Select(id => id != null && map.TryGetValue(id, out var song) ? song : throw new InvalidOperationException("歌曲已不在曲库中，请刷新。")).ToArray();
             }
             if (songs.Length is < 1 or > 50000) throw new ArgumentException("请选择歌曲。");
@@ -241,14 +241,14 @@ namespace CelesteMusicPlayer
             foreach (var song in songs.Where(s => s.SourceTrackId.Length > 0)) NetworkLibraryStore.Pin(song.SourceTrackId);
             // CUE tracks share a file. Moving one must not remove its sibling tracks.
             var playing = _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count ? _userPlaylist[_userPlaylistIndex] : null;
-            var kept = WebBrowseRules.Insert(_userPlaylist.ToArray(), songs, playing, WebTrackId, ClonePlaylistItem, next, AppSettingsStore.Load().InsertPlaylistAtBegin);
+            var kept = WebBrowseRules.Insert(_userPlaylist.ToArray(), songs, playing, WebTrackIdentity.Of, ClonePlaylistItem, next, AppSettingsStore.Load().InsertPlaylistAtBegin);
             bool rebind = ReferenceEquals(PlaylistView.ItemsSource, _userPlaylist) || _currentCategory == "UserPlaylist";
             if (rebind) PlaylistView.ItemsSource = null;
             _userPlaylist = new System.Collections.ObjectModel.ObservableCollection<PlaylistItem>(kept);
             if (rebind) PlaylistView.ItemsSource = _userPlaylist;
             _userPlaylistIndex = playing == null ? -1 : _userPlaylist.IndexOf(playing);
             if (_userPlaylistIndex < 0 && playing != null)
-                _userPlaylistIndex = kept.FindIndex(song => WebTrackId(song) == WebTrackId(playing));
+                _userPlaylistIndex = kept.FindIndex(song => WebTrackIdentity.Of(song) == WebTrackIdentity.Of(playing));
             RenumberCollection(_userPlaylist); NotifyCurrentPlaylistWindow();
             if (_currentCategory == "UserPlaylist") ApplyUserPlaylistSearchFilter();
         }

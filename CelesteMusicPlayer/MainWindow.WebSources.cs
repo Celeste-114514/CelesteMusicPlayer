@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -13,42 +13,12 @@ public sealed partial class MainWindow
     private CancellationTokenSource? _sourcePlaybackCancellation;
     private IDisposable? _sourcePlaybackLease;
     private IDisposable? _sourcePreloadLease;
-    internal PlaylistItem[] WebAllTracks()
-    {
-        var local = LibraryTracks.ToArray();
-        // Capture local CUE references so a playlist can restore one segment even outside the current folder.
-        var cues = local.Where(t => t.IsCueSegment && t.SourceId.Length == 0 && t.SourceTrackId.Length > 0).Select(t => new NetworkTrack
-        {
-            Id = t.SourceTrackId, LocalPath = t.FilePath, Cue = true, StartFrame = (long)Math.Round(t.StartTimeSeconds * 75),
-            EndFrame = t.Duration.TotalSeconds > 0 ? (long)Math.Round((t.StartTimeSeconds + t.Duration.TotalSeconds) * 75) : 0,
-            Title = t.Title, Artist = t.Artist, Track = (int)t.Track,
-            Entry = new NetworkEntry { Name = Path.GetFileName(t.FilePath), Title = t.Title, Artist = t.Artist, Album = t.Album, AlbumArtist = t.AlbumArtist, Track = (int)t.Track, Disc = (int)t.Disc }
-        }).ToArray();
-        if (cues.Length > 0) NetworkLibraryStore.Put(cues.Select(cue => { cue.Pinned = NetworkLibraryStore.Track(cue.Id)?.Pinned ?? false; return cue; }));
-        var localIds = local.Select(WebTrackId).ToHashSet(StringComparer.Ordinal);
-        var sources = NetworkLibraryStore.Sources().ToDictionary(s => s.Id);
-        var remote = NetworkLibraryStore.Tracks().Where(t => !localIds.Contains(t.Id) && (t.Indexed || t.Pinned))
-            .Select(t => SourcePlaylistItem(t, sources.GetValueOrDefault(t.SourceId)));
-        return local.Concat(remote).ToArray();
-    }
-    private static PlaylistItem SourcePlaylistItem(NetworkTrack track, NetworkSource? source = null)
-    {
-        string title = track.Title.Length > 0 ? track.Title : track.Entry.Title.Length > 0 ? track.Entry.Title : Path.GetFileNameWithoutExtension(track.Entry.Name);
-        double duration = track.Cue ? Math.Max(0, (track.EndFrame - track.StartFrame) / 75.0) : track.Entry.Duration;
-        return new PlaylistItem { SourceId = track.SourceId, SourceTrackId = track.Id, SourceName = source?.Name ?? (track.SourceId.Length == 0 ? "本地" : "已停用来源"),
-            FilePath = NetworkLibraryService.CachedPath(track), RemotePath = track.SourceId.Length > 0 ? track.Entry.Path : "", IsCueSegment = track.Cue,
-            StartTimeSeconds = track.StartFrame / 75.0, Duration = TimeSpan.FromSeconds(duration), Title = title,
-            Artist = track.Artist.Length > 0 ? track.Artist : track.Entry.Artist.Length > 0 ? track.Entry.Artist : "未知艺术家",
-            Album = track.Entry.Album.Length > 0 ? track.Entry.Album : source?.Name ?? "未知专辑", AlbumArtist = track.Entry.AlbumArtist.Length > 0 ? track.Entry.AlbumArtist : track.Entry.Artist,
-            Track = (uint)Math.Max(0, track.Track > 0 ? track.Track : track.Entry.Track), Disc = (uint)Math.Max(0, track.Entry.Disc),
-            RemoteHint = track.Missing ? "文件缺失" : File.Exists(NetworkLibraryService.CachedPath(track)) ? "已缓存" : "未缓存" };
-    }
     internal static PlaylistItem? ResolveSourceTrack(string id)
     {
         var record = NetworkLibraryStore.Track(id);
         if (record == null) return null;
         var source = record.SourceId.Length == 0 ? null : NetworkLibraryStore.Sources().FirstOrDefault(s => s.Id == record.SourceId);
-        return SourcePlaylistItem(record, source);
+        return WebLibraryService.FromNetwork(record, source);
     }
     private static string SourceReferenceId(string path) => Path.GetExtension(path).Equals(".ref", StringComparison.OrdinalIgnoreCase)
         && Path.GetFullPath(path).StartsWith(Path.Combine(AppSettingsStore.GetConfigDirectory(), "track-refs") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
@@ -163,7 +133,7 @@ public sealed partial class MainWindow
                     if (NetworkLibraryStore.Source(id).Revision != source.Revision) throw new InvalidOperationException("来源已修改，请重新浏览。");
                     NetworkLibraryStore.Put(tracks);
                     return new { sourceId = id, path, folders = entries.Where(e => e.Folder).Select(e => new { path = e.Key, name = e.Name }).ToArray(),
-                        tracks = tracks.Select(t => { var item = SourcePlaylistItem(t, source); return new { id = t.Id, title = item.Title, artist = item.Artist, album = item.Album,
+                        tracks = tracks.Select(t => { var item = WebLibraryService.FromNetwork(t, source); return new { id = t.Id, title = item.Title, artist = item.Artist, album = item.Album,
                             duration = item.Duration.TotalSeconds, cue = t.Cue, cached = File.Exists(item.FilePath), coverUrl = "https://celeste-cover.internal/cover/" + t.Id }; }).ToArray() };
                 }
                 case "pin": NetworkLibraryStore.Pin(ReadString(msg, "trackId")); NetworkLibraryService.NotifyChanged(); return SourceSnapshot(id);

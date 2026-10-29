@@ -1975,7 +1975,7 @@ namespace CelesteMusicPlayer
             List<PlaylistItem> incoming = songs
                 .Where(s => !string.IsNullOrWhiteSpace(s.FilePath))
                 // 分组键带 CUE 分轨起点：同一文件的多轨路径相同，只按路径去重会折叠成一条
-                .GroupBy(WebTrackId, StringComparer.Ordinal)
+                .GroupBy(WebTrackIdentity.Of, StringComparer.Ordinal)
                 .Select(g => g.First())
                 .ToList();
             if (incoming.Count == 0)
@@ -1984,18 +1984,18 @@ namespace CelesteMusicPlayer
             }
 
             string? playingPath = _userPlaylistIndex >= 0 && _userPlaylistIndex < _userPlaylist.Count
-                ? WebTrackId(_userPlaylist[_userPlaylistIndex])
+                ? WebTrackIdentity.Of(_userPlaylist[_userPlaylistIndex])
                 : null;
 
             var incomingPaths = new HashSet<string>(
-                incoming.Select(WebTrackId),
+                incoming.Select(WebTrackIdentity.Of),
                 StringComparer.OrdinalIgnoreCase);
 
             // 保留未出现在本批次中的旧项（相对顺序不变）
             var kept = new List<PlaylistItem>(_userPlaylist.Count);
             foreach (PlaylistItem existing in _userPlaylist)
             {
-                if (!incomingPaths.Contains(WebTrackId(existing)))
+                if (!incomingPaths.Contains(WebTrackIdentity.Of(existing)))
                 {
                     kept.Add(existing);
                 }
@@ -2042,7 +2042,7 @@ namespace CelesteMusicPlayer
 
             if (!string.IsNullOrWhiteSpace(playingPath))
             {
-                _userPlaylistIndex = _userPlaylist.ToList().FindIndex(item => WebTrackId(item) == playingPath);
+                _userPlaylistIndex = _userPlaylist.ToList().FindIndex(item => WebTrackIdentity.Of(item) == playingPath);
             }
 
             NotifyCurrentPlaylistWindow();

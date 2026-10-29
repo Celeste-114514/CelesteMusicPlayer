@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 
 namespace CelesteMusicPlayer
 {
@@ -23,7 +23,7 @@ namespace CelesteMusicPlayer
             }
             return new PlaybackSnapshot
             {
-                trackId = item == null ? "" : WebTrackId(item),
+                trackId = item == null ? "" : WebTrackIdentity.Of(item),
                 title = item?.Title ?? "未在播放", artist = item?.Artist ?? "", album = item?.Album ?? "",
                 duration = Math.Max(0, duration), position = Math.Max(0, position),
                 playing = IsPlaybackActuallyPlaying(), volume = GetVolumePublic(),
@@ -34,7 +34,7 @@ namespace CelesteMusicPlayer
                 miniPlayer = _miniPlayerWindow != null,
                 desktopLyricsLocked = _desktopLyricsWindow?.IsLocked == true,
                 taskbarPlayer = AppSettingsStore.Load().TaskbarPlayerEnabled,
-                coverUrl = item == null ? "" : "https://celeste-cover.internal/cover/" + WebTrackId(item),
+                coverUrl = item == null ? "" : "https://celeste-cover.internal/cover/" + WebTrackIdentity.Of(item),
                 quality = item?.FormatInfoLine ?? "",
                 source = item == null ? "" : item.IsRemote ? "NETWORK" : "LOCAL",
                 trackNumber = item?.Track ?? 0,

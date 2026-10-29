@@ -16,35 +16,13 @@ namespace CelesteMusicPlayer
         private PlaylistItem[] _webQueueSnapshot = Array.Empty<PlaylistItem>();
         private int _webQueueRevision;
 
-        internal static WebAlbumEntry[] WebAlbums(IReadOnlyList<PlaylistItem> source)
-        {
-            return source.GroupBy(item => (Album: item.Album ?? "", Artist: item.AlbumArtist ?? item.Artist ?? "", Source: item.SourceId))
-                .Select((group, index) =>
-                {
-                    var tracks = group.ToArray();
-                    var cover = tracks.FirstOrDefault(item => (item.Disc == 0 || item.Disc == 1) && item.Track == 1) ?? tracks[0];
-                    string artist = string.IsNullOrWhiteSpace(group.Key.Artist) ? "未知艺术家" : group.Key.Artist;
-                    string id = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes("album\n" + group.Key.Source + "\n" + group.Key.Album.ToUpperInvariant() + "\n" + artist.ToUpperInvariant()))).ToLowerInvariant();
-                    return new WebAlbumEntry
-                    {
-                        id = id, sourceId = group.Key.Source, title = group.Key.Album, artist = artist, year = tracks.Where(item => item.Year > 0).Select(item => item.Year).DefaultIfEmpty(0u).Max(),
-                        added = index, trackCount = tracks.Length, duration = tracks.Sum(item => item.Duration.TotalSeconds),
-                        coverUrl = "https://celeste-cover.internal/cover/" + WebTrackId(cover) + "?size=480",
-                        trackIds = tracks.OrderBy(item => item.Disc == 0 ? 1u : item.Disc)
-                            .ThenBy(item => item.Track == 0 ? uint.MaxValue : item.Track)
-                            .ThenBy(item => item.FilePath, StringComparer.OrdinalIgnoreCase).ThenBy(item => item.StartTimeSeconds)
-                            .Select(WebTrackId).ToArray()
-                    };
-                }).ToArray();
-        }
-
         internal async Task<float[]> WebWaveformAsync(string id, System.Threading.CancellationToken cancellation)
         {
             // Leave the initial playback/transcode burst alone. The existing provider
             // uses the same 120 buckets and cache as the native transport.
             await Task.Delay(1200, cancellation);
             var item = GetCurrentPlayingItem();
-            if (item == null || WebTrackId(item) != id) return Array.Empty<float>();
+            if (item == null || WebTrackIdentity.Of(item) != id) return Array.Empty<float>();
             double start = item.StartTimeSeconds;
             bool cue = start > 0 || _userPlaylist.Any(other => other.StartTimeSeconds > 0 && string.Equals(other.FilePath, item.FilePath, StringComparison.OrdinalIgnoreCase));
             return await WaveformDataProvider.GetWaveformAsync(item.FilePath, 120, start, cue ? item.Duration.TotalSeconds : 0, cancellation);
@@ -193,7 +171,7 @@ namespace CelesteMusicPlayer
             {
                 int index = msg.GetProperty("index").GetInt32();
                 if (msg.GetProperty("revision").GetInt32() != _webQueueRevision || index < 0 || index >= items.Length
-                    || WebTrackId(items[index]) != msg.GetProperty("trackId").GetString())
+                    || WebTrackIdentity.Of(items[index]) != msg.GetProperty("trackId").GetString())
                     throw new InvalidOperationException("播放队列已变化，请刷新后重试。");
                 PlayUserPlaylistAt(index);
             }
@@ -201,7 +179,7 @@ namespace CelesteMusicPlayer
             {
                 int from = msg.GetProperty("from").GetInt32(), to = msg.GetProperty("to").GetInt32();
                 if (msg.GetProperty("revision").GetInt32() != _webQueueRevision || from < 0 || from >= items.Length
-                    || to < 0 || to >= items.Length || WebTrackId(items[from]) != msg.GetProperty("trackId").GetString())
+                    || to < 0 || to >= items.Length || WebTrackIdentity.Of(items[from]) != msg.GetProperty("trackId").GetString())
                     throw new InvalidOperationException("播放队列已变化，请刷新后重新拖动。");
                 if (from != to)
                 {
@@ -238,13 +216,13 @@ namespace CelesteMusicPlayer
                 next = QueueNextPreview(items),
                 tracks = items.Skip(offset).Take(200).Select((item, i) => new
                 {
-                    id = WebTrackId(item), index = offset + i, title = item.Title, artist = item.Artist,
+                    id = WebTrackIdentity.Of(item), index = offset + i, title = item.Title, artist = item.Artist,
                     album = item.Album, duration = item.Duration.TotalSeconds,
                     // 容器格式用扩展名判（不做位深/码率解析：那要逐个读文件，200 行会让宿主卡住）。
                     // 位深和采样率这种要真读文件的，只在当前播放卡片上给（见 celeste.state.quality）。
                     format = QueueFormatLabel(item),
                     remote = item.IsRemote,
-                    coverUrl = "https://celeste-cover.internal/cover/" + WebTrackId(item)
+                    coverUrl = "https://celeste-cover.internal/cover/" + WebTrackIdentity.Of(item)
                 }).ToArray()
             };
         }
@@ -282,7 +260,7 @@ namespace CelesteMusicPlayer
                 kind = index.Value == _userPlaylistIndex ? "self" : "track",
                 index = index.Value, title = item.Title, artist = item.Artist, album = item.Album,
                 duration = item.Duration.TotalSeconds,
-                coverUrl = "https://celeste-cover.internal/cover/" + WebTrackId(item)
+                coverUrl = "https://celeste-cover.internal/cover/" + WebTrackIdentity.Of(item)
             };
         }
 
@@ -328,7 +306,7 @@ namespace CelesteMusicPlayer
                 {
                     kind, index, title = item.Title, artist = item.Artist, album = item.Album,
                     duration = item.Duration.TotalSeconds,
-                    coverUrl = "https://celeste-cover.internal/cover/" + WebTrackId(item)
+                    coverUrl = "https://celeste-cover.internal/cover/" + WebTrackIdentity.Of(item)
                 };
             }
             return new { kind };
@@ -340,7 +318,7 @@ namespace CelesteMusicPlayer
             string operation = msg.GetProperty("operation").GetString() ?? "";
             if (operation == "get") return new { playlists = NamedPlaylistStore.List().ToArray() };
             if (current == null) throw new InvalidOperationException("请先选择一首歌曲。");
-            if (msg.GetProperty("trackId").GetString() != WebTrackId(current)) throw new InvalidOperationException("当前歌曲已变化，请重新打开菜单。");
+            if (msg.GetProperty("trackId").GetString() != WebTrackIdentity.Of(current)) throw new InvalidOperationException("当前歌曲已变化，请重新打开菜单。");
             switch (operation)
             {
                 case "copy":

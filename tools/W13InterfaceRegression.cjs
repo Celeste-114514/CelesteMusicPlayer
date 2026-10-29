@@ -52,6 +52,11 @@ function wait(ms) { return new Promise(r => setTimeout(r, ms)); }
         const out = { library: window.CelesteShell.getLibrary().length };
         out.home = await call('home', { operation: 'get', offsetMinutes: 0, today: new Date().toISOString().slice(0, 10) });
         out.folders = await call('folders', { operation: 'roots' });
+        // 节点登记簿是刚搬进 WebLibraryService 的状态机：拿到 roots 的 id 再下一层，
+        // 验证 epoch / id 查表仍然对得上（旧 id 应被拒、新 id 应能展开）。
+        const rootsData = out.folders.ok ? out.folders.data : null;
+        const firstNode = rootsData && Array.isArray(rootsData.nodes) && rootsData.nodes.length ? rootsData.nodes[0] : null;
+        if (firstNode && firstNode.folder) out.folderChildren = await call('folders', { operation: 'children', nodeId: firstNode.id });
         out.sources = await call('sources', { operation: 'list' });
         out.settings = await call('appSettings', { operation: 'get' });
         out.dsp = await call('dsp', { operation: 'get' });

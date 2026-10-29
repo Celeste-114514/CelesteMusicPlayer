@@ -3133,7 +3133,7 @@ namespace CelesteMusicPlayer
                 {
                     _sourcePreloadLease = NetworkLibraryService.Lease(NetworkLibraryService.CachedPath(nextTrack));
                     next.FilePath = await NetworkLibraryService.ResolveAsync(nextTrack, System.Threading.CancellationToken.None);
-                    if (GetCurrentPlayingItem() is not PlaylistItem stillPlaying || WebTrackId(stillPlaying) != WebTrackId(current)) return;
+                    if (GetCurrentPlayingItem() is not PlaylistItem stillPlaying || WebTrackIdentity.Of(stillPlaying) != WebTrackIdentity.Of(current)) return;
                 }
                 if (next == null || string.IsNullOrWhiteSpace(next.FilePath) || !System.IO.File.Exists(next.FilePath))
                 {

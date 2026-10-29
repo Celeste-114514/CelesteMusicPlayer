@@ -172,7 +172,7 @@ namespace CelesteMusicPlayer
             if (!_ready) { _pendingTagPaths=files; return; }
             try {
                 var ids=new List<string>();
-                foreach(var path in files) { var track=_owner.WebTagFromPath(path); var id=_owner.WebTrackId(track); _tagExtraTracks[id]=track; ids.Add(id); }
+                foreach(var path in files) { var track=_owner.WebTagFromPath(path); var id=WebTrackIdentity.Of(track); _tagExtraTracks[id]=track; ids.Add(id); }
                 await _web.CoreWebView2.ExecuteScriptAsync("window.CelesteTags?.open("+JsonSerializer.Serialize(ids)+")");
             } catch(Exception ex) { StartupLog.WriteException("WebShell.RevealTags",ex); Error("无法打开标签文件："+ex.Message); }
         }
@@ -303,7 +303,7 @@ namespace CelesteMusicPlayer
             {
                 var snapshot = _owner.WebAllTracks();
                 _tracks.Clear();
-                foreach (var item in snapshot) _tracks[_owner.WebTrackId(item)] = item;
+                foreach (var item in snapshot) _tracks[WebTrackIdentity.Of(item)] = item;
                 var copies = _tracks.Select(pair => (Id: pair.Key, Item: pair.Value.Clone())).ToArray();
                 Post(new { kind = "celeste.library", version = 1, phase = "begin", revision, total = copies.Length });
                 for (int offset = 0; offset < copies.Length; offset += 100)
@@ -438,14 +438,14 @@ namespace CelesteMusicPlayer
                         {
                             var added = await _owner.WebTagAddFilesAsync(tagOperation != "addFiles", this);
                             if (!added.Canceled && tagOperation == "changeDirectory") _tagExtraTracks.Clear();
-                            foreach (var track in added.Tracks) _tagExtraTracks[_owner.WebTrackId(track)] = track;
-                            tags = new { count = added.Tracks.Length, ids = added.Tracks.Select(_owner.WebTrackId).ToArray(), directory = added.Directory, canceled = added.Canceled };
+                            foreach (var track in added.Tracks) _tagExtraTracks[WebTrackIdentity.Of(track)] = track;
+                            tags = new { count = added.Tracks.Length, ids = added.Tracks.Select(WebTrackIdentity.Of).ToArray(), directory = added.Directory, canceled = added.Canceled };
                         }
                         else
                         {
                             var tagTracks = new Dictionary<string, PlaylistItem>(_tracks, StringComparer.Ordinal);
                             foreach (var pair in _tagExtraTracks) tagTracks[pair.Key] = pair.Value;
-                            foreach (var track in _owner.UserPlaylist) tagTracks.TryAdd(_owner.WebTrackId(track), track);
+                            foreach (var track in _owner.UserPlaylist) tagTracks.TryAdd(WebTrackIdentity.Of(track), track);
                             if (msg.TryGetProperty("scopeIds", out var tagScope) && tagScope.ValueKind == JsonValueKind.Array)
                                 foreach (var idElement in tagScope.EnumerateArray().Take(20000))
                                 {
@@ -459,9 +459,9 @@ namespace CelesteMusicPlayer
                             if (tagOperation == "rename")
                             {
                                 var extras = _tagExtraTracks.Values.ToArray(); _tagExtraTracks.Clear();
-                                foreach (var track in extras) _tagExtraTracks[_owner.WebTrackId(track)] = track;
+                                foreach (var track in extras) _tagExtraTracks[WebTrackIdentity.Of(track)] = track;
                                 var currentTracks = _tracks.Values.ToArray(); _tracks.Clear();
-                                foreach (var track in currentTracks) _tracks[_owner.WebTrackId(track)] = track;
+                                foreach (var track in currentTracks) _tracks[WebTrackIdentity.Of(track)] = track;
                             }
                         }
                         if (tagOperation is "write" or "rename" or "lyricSave" || tagOperation.StartsWith("cover", StringComparison.Ordinal))
@@ -469,7 +469,7 @@ namespace CelesteMusicPlayer
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = tags }); break;
                     case "queue":
                         _queueCoverPaths.Clear();
-                        foreach (var track in _owner.UserPlaylist) _queueCoverPaths[_owner.WebTrackId(track)] = track.FilePath;
+                        foreach (var track in _owner.UserPlaylist) _queueCoverPaths[WebTrackIdentity.Of(track)] = track.FilePath;
                         var queue = _owner.WebQueue(msg);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = queue }); break;
                     case "more":
@@ -854,7 +854,7 @@ namespace CelesteMusicPlayer
                     coverSize = 480;
                 }
                 else path = _tracks.TryGetValue(id, out var item) ? item.FilePath
-                    : current != null && _owner.WebTrackId(current) == id ? current.FilePath
+                    : current != null && WebTrackIdentity.Of(current) == id ? current.FilePath
                     : _queueCoverPaths.TryGetValue(id, out var queuePath) ? queuePath : _owner.WebFolderCoverPath(id);
                 if (!playlistCover && NetworkLibraryStore.Track(id) is NetworkTrack remoteTrack && remoteTrack.SourceId.Length > 0 && (path == null || !File.Exists(path)))
                 {

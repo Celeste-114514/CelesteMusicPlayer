@@ -13,19 +13,8 @@ namespace CelesteMusicPlayer;
 
 public sealed partial class MainWindow
 {
-    private readonly Dictionary<string, FolderBrowserItem> _webFolderNodes = new(StringComparer.Ordinal);
-    private readonly Dictionary<string, PlaylistItem> _webFolderTracks = new(StringComparer.Ordinal);
-    private int _webFolderEpoch;
-
-    private static string WebFolderId(string path) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(path).ToUpperInvariant()))).ToLowerInvariant();
-    private object WebFolderNode(FolderBrowserItem item)
-    {
-        string id = WebFolderId(item.FullPath);
-        _webFolderNodes[id] = item;
-        return new { id, name = item.DisplayName, path = item.FullPath, folder = item.IsFolder };
-    }
-
-    internal string? WebFolderCoverPath(string id) => _webFolderTracks.TryGetValue(id, out var track) ? track.FilePath : null;
+    // W13：节点登记簿、曲目 id 与封面路径都在 WebLibraryService 里；这里只管命令与播放。
+    internal string? WebFolderCoverPath(string id) => Library.CoverPath(id);
 
     internal async Task<object> WebFoldersAsync(JsonElement msg, object host)
     {
@@ -46,30 +35,28 @@ public sealed partial class MainWindow
         }
         if (operation == "roots")
         {
-            _webFolderEpoch++;
-            _webFolderNodes.Clear();
-            _webFolderTracks.Clear();
+            Library.ResetNodes();
             var roots = (AppSettingsStore.Load().LibraryWatchFolders ?? new()).Where(Directory.Exists)
                 .Select(Path.GetFullPath).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             object[] nodes;
-            if (roots.Length > 0) nodes = roots.Select(root => WebFolderNode(new FolderBrowserItem { DisplayName = root, FullPath = root, IsFolder = true })).ToArray();
+            if (roots.Length > 0) nodes = roots.Select(root => Library.RegisterNode(new FolderBrowserItem { DisplayName = root, FullPath = root, IsFolder = true })).ToArray();
             else if (!string.IsNullOrWhiteSpace(_browseFolderPath) && Directory.Exists(_browseFolderPath))
             {
                 var children = await Task.Run(() => EnumerateFolderChildren(_browseFolderPath, 0));
-                nodes = children.Select(WebFolderNode).ToArray();
+                nodes = children.Select(Library.RegisterNode).ToArray();
             }
             else nodes = Array.Empty<object>();
             return new { nodes, total = LibraryTracks.Count, rootCount = roots.Length };
         }
         string id = msg.GetProperty("nodeId").GetString() ?? "";
-        if (!_webFolderNodes.TryGetValue(id, out var node)) throw new InvalidOperationException("目录已刷新，请重新选择。");
-        int epoch = _webFolderEpoch;
+        if (!Library.TryGetNode(id, out var node)) throw new InvalidOperationException("目录已刷新，请重新选择。");
+        int epoch = Library.Epoch;
         if (operation == "children")
         {
             if (!node.IsFolder) throw new ArgumentException("该条目不是文件夹。");
             var children = await Task.Run(() => EnumerateFolderChildren(node.FullPath, 0));
-            if (epoch != _webFolderEpoch) throw new InvalidOperationException("目录已刷新。");
-            return new { nodes = children.Select(WebFolderNode).ToArray() };
+            if (epoch != Library.Epoch) throw new InvalidOperationException("目录已刷新。");
+            return new { nodes = children.Select(Library.RegisterNode).ToArray() };
         }
         if (operation is "songs" or "play" or "queue")
         {
@@ -86,9 +73,8 @@ public sealed partial class MainWindow
                 }
                 return OrderAlbumTracks(result);
             });
-            if (epoch != _webFolderEpoch) throw new InvalidOperationException("目录已刷新，请重新选择。");
-            if (_webFolderTracks.Count > 8000) _webFolderTracks.Clear();
-            foreach (var song in songs) _webFolderTracks[WebTrackId(song)] = song;
+            if (epoch != Library.Epoch) throw new InvalidOperationException("目录已刷新，请重新选择。");
+            Library.RememberTracks(songs);
             if (operation == "play" && songs.Count > 0)
             {
                 if (!node.IsFolder) PlayPlaylistItem(songs[0]);
@@ -96,8 +82,8 @@ public sealed partial class MainWindow
             }
             else if (operation == "queue") WebInsertQueue(songs.ToArray(), next: false);
             return new { nodeId = id, path = node.FullPath, tracks = songs.Select(song => new {
-                id = WebTrackId(song), title = Path.GetFileName(song.FilePath), songTitle = song.Title, artist = song.Artist, album = song.Album,
-                duration = song.Duration.TotalSeconds, coverUrl = "https://celeste-cover.internal/cover/" + WebTrackId(song)
+                id = WebTrackIdentity.Of(song), title = Path.GetFileName(song.FilePath), songTitle = song.Title, artist = song.Artist, album = song.Album,
+                duration = song.Duration.TotalSeconds, coverUrl = "https://celeste-cover.internal/cover/" + WebTrackIdentity.Of(song)
             }).ToArray() };
         }
         throw new ArgumentException("未知的文件夹操作。");

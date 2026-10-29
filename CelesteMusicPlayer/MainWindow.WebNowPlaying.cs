@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 
@@ -52,7 +52,7 @@ namespace CelesteMusicPlayer
             var samples = new float[256];
             bool samplesAvailable = playing && (_audioEngine?.TryGetSamples(samples) ?? false);
 
-            string trackId = GetCurrentPlayingItem() is { } current ? WebTrackId(current) : "";
+            string trackId = GetCurrentPlayingItem() is { } current ? WebTrackIdentity.Of(current) : "";
             // 换曲就把代次 +1：网页那边用 (trackId, generation) 判断手里的采样是不是这一首的，
             // 旧响应不能盖到新的选择上。
             if (!string.Equals(trackId, _visualTrackId, StringComparison.Ordinal))
@@ -119,7 +119,7 @@ namespace CelesteMusicPlayer
         internal object WebNowPlaying()
         {
             var item = GetCurrentPlayingItem();
-            string trackId = item == null ? string.Empty : WebTrackId(item);
+            string trackId = item == null ? string.Empty : WebTrackIdentity.Of(item);
             int rate = 0, bits = 0, kbps = 0, channels = 0;
             long fileSize = 0;
             if (item != null)

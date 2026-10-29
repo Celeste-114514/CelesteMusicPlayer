@@ -51,7 +51,6 @@ internal interface IWebPlayerServices {
     PlaylistItem WebTagFromPath(string path);
     Task<object> WebTagsAsync(JsonElement msg, IReadOnlyDictionary<string, PlaylistItem> tracks);
     Task<object> WebTrackActionAsync(JsonElement msg, object host);
-    string WebTrackId(PlaylistItem item);
     void WebTransportAction(string action);
     Task<float[]> WebWaveformAsync(string id, System.Threading.CancellationToken cancellation);
 }

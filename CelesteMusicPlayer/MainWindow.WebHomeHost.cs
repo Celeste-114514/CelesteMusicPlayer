@@ -1,4 +1,4 @@
-using System.Threading;
+﻿using System.Threading;
 
 namespace CelesteMusicPlayer
 {
@@ -13,6 +13,6 @@ namespace CelesteMusicPlayer
         private WebHomeService? _webHome;
 
         internal WebHomeService Home =>
-            LazyInitializer.EnsureInitialized(ref _webHome, () => new WebHomeService(WebAllTracks, WebAlbums, WebTrackId));
+            LazyInitializer.EnsureInitialized(ref _webHome, () => new WebHomeService(() => Library.AllTracks(), WebLibraryService.Albums, WebTrackIdentity.Of));
     }
 }
