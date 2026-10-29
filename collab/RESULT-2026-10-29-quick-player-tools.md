@@ -45,3 +45,53 @@
 
 - 源码：revert 本提交。
 - 运行目录：完全退出播放器后，把 `dist/_prev_20261029-quick-tools` 里的文件按相对路径复制回 `dist/web-ui-20261028`。
+
+---
+
+# 追加（19:25）：三处错位修复
+
+用户看实际窗口后报：均衡器错位、速度条不重合、频谱和分隔线重合。三个都是真 bug，根因各不相同：
+
+## 1. 均衡器竖条整体右偏
+
+`.slider-host` 只有 16px 宽，里面塞 132px 宽的 `input`，用 grid 的 `place-items:center` 居中——
+**子项比容器宽时 CSS Grid 按"安全"策略退化成起始对齐**，输入框左端贴着容器左边溢出，旋转 -90° 后
+整根竖条往右偏了 60px（实测：值/标签中心 462.4，滑块中心 522.4）。
+
+改法：`.slider-host{position:relative}` + `input{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%) rotate(-90deg)}`。
+现在十列的数值、竖条、频率中心完全重合，`#eq-bands` 也不再横向溢出（scrollWidth == clientWidth）。
+
+## 2. 速度条短一截、刻度和滑块对不上
+
+两件事叠在一起：
+- `<input type=range>` 没写宽度 → 用默认 129px，刻度行却有 346px，视觉上就是"一条短条 + 一排长刻度"。
+- 刻度用 `justify-content:space-between` 排 → 1.00× 落在 50%，而 0.5–2.0 的线性轨道上 1.00× 其实在 **1/3** 处。
+
+改法：`#speed-rate{width:100%}`；刻度改成绝对定位 `0 / calc(33.333% + 1.333px) / 右端`——
+和主程序 `collections.css` 里的写法一字不差。实测滑块中心 734、1.00× 刻度中心 733.7。
+
+## 3. 频谱压住分隔线、按钮点不到
+
+`.album`（封面 + 信息 + 频谱）是固定尺寸堆叠：封面 344 + 信息 133 + 频谱 74 = 551，
+而 740 高的窗口 body 只有 537（减内边距只剩 484），**整列溢出到 footer 上**：
+频谱横穿分隔线；更严重的是歌词列也跟着溢出，直接**盖住底栏按钮**（Playwright 点"均衡器"被 `section.lyrics` 拦截）。
+
+改法：
+- 封面按窗口高度收：`.album{max-width:min(360px, calc(100vh - 448px))}`；
+  频谱关闭时用 `:root[data-spectrum="off"]` 把高度让回来（`100vh - 382px`），默认状态封面仍是 344，和之前一样。
+- `#spectrum` 的 `hidden` 用 MutationObserver 同步到 `html[data-spectrum]`（频谱是数据驱动显隐的）。
+- 顺手收了一点纵向留白（body padding 28/25→22/18、标题外边距、频谱 62→56）。
+- `.body{overflow:hidden}` 兜底：任何情况下都不许再压到底栏。
+
+## 4. 顺带：弹层贴底栏
+
+面板原来写死 `bottom:142px`，而底栏实际 149px → 面板下沿压在分隔线上。
+改成 `bottom:var(--panel-offset)`，由 `ResizeObserver` 盯 footer 算出来（状态栏出现时底栏会变高）。
+
+## 复测
+
+- 1000×740 / 1000×620 / 880×560 三档实测：`album` 都没有溢出（over=0），频谱底边 565 < 分隔线 591；
+  弹层下沿始终在 footer 上方 10px；十列滑块中心与数值/标签完全一致；滑块中心与 1.00× 刻度差 0.3px。
+- `WebShellQuickPlayerSmoke` 全过、无 pageerror。
+- 重跑 publish（exit 0、0 错误）后再同步：`quick-player.css/js` 在源目录 / publish / dist 三处 md5 一致。
+- 截图：`outputs/quick-eq-fixed-20261029.png`、`quick-speed-fixed-20261029.png`、`quick-eq-fixed-short-20261029.png`（620 高）。

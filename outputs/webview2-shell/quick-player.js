@@ -31,3 +31,9 @@ document.addEventListener('dragover',e=>e.preventDefault());document.addEventLis
 web?.addEventListener('message',e=>receive(e.data));send('ready');visibility();motion?.page?.(document.querySelector('.body'));})();
 
 (()=>{const header=document.querySelector('header');function caption(){const r=header.getBoundingClientRect(),b=header.querySelector('button').getBoundingClientRect(),s=devicePixelRatio||1;window.chrome?.webview?.postMessage({command:'caption',x:Math.round(r.left*s),y:Math.round(r.top*s),width:Math.max(0,Math.floor((b.left-r.left)*s)),height:Math.floor(r.height*s)});}new ResizeObserver(caption).observe(header);window.addEventListener('resize',caption);caption();})();
+
+/* 弹层贴着底栏上沿：底栏高度会随状态栏/换行变化，写死 142px 会让面板压住分隔线。 */
+(()=>{const footer=document.querySelector('footer');function sync(){document.documentElement.style.setProperty('--panel-offset',(footer.getBoundingClientRect().height+10)+'px');}if(typeof ResizeObserver==='function')new ResizeObserver(sync).observe(footer);window.addEventListener('resize',sync);sync();})();
+
+/* 频谱开着时封面要留出它的高度，关掉就还回来（否则要么封面白小一圈，要么频谱压住分隔线）。 */
+(()=>{const spectrum=document.getElementById('spectrum');function sync(){document.documentElement.dataset.spectrum=spectrum.hidden?'off':'on';}if(typeof MutationObserver==='function')new MutationObserver(sync).observe(spectrum,{attributes:true,attributeFilter:['hidden']});sync();})();

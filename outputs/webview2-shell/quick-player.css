@@ -24,20 +24,39 @@ button{transition:background-color var(--dur-control) var(--ease-continuity),col
 /* —— 十段均衡器：横排十根竖条（对齐主程序「均衡器」窗口的排布） —— */
 .eq-panel{width:min(560px,calc(100% - 40px))}
 #eq-preset{padding:6px 8px;color:var(--ink);background:var(--bg);border:1px solid var(--line);border-radius:6px;font:inherit;font-size:12px}
-#eq-bands{display:flex;align-items:flex-end;justify-content:space-between;gap:2px;margin-top:16px;padding-bottom:2px;overflow-x:auto}
+#eq-bands{display:flex;align-items:flex-end;justify-content:space-between;gap:2px;margin-top:16px;padding-bottom:2px;overflow-x:auto;overflow-y:hidden}
 .eq-band{display:flex;flex-direction:column;align-items:center;gap:6px;flex:1 1 0;min-width:30px}
 .eq-band output{float:none;font-size:10px;color:var(--muted);font-variant-numeric:tabular-nums;white-space:nowrap}
 .eq-band .freq{font-size:10px;color:var(--muted);letter-spacing:.2px}
-.eq-band .slider-host{width:16px;height:132px;display:grid;place-items:center}
-.eq-band input[type=range]{width:132px;height:14px;transform:rotate(-90deg);accent-color:var(--accent)}
+/* 竖条：wrapper 固定 16×132，输入框绝对定位居中后再转 -90°。
+   不能用 grid 的 place-items 居中——132 宽的输入框比 16 宽的容器宽，grid 会按
+   start 溢出对齐，整根竖条会偏到右边去（表现为和数值/频率标签错位）。 */
+.eq-band .slider-host{position:relative;width:16px;height:132px}
+.eq-band input[type=range]{position:absolute;left:50%;top:50%;width:132px;height:14px;margin:0;transform:translate(-50%,-50%) rotate(-90deg);accent-color:var(--accent)}
 .eq-band input[type=range]:disabled{opacity:.4}
 
 /* —— 播放速度：和主程序底栏同一条 0.5–2.00× 滑条 —— */
 .speed-panel{width:min(380px,calc(100% - 40px))}
+#speed-rate{display:block;width:100%;margin:0}
 .rate-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:12px 0 2px}
 .rate-heading output{float:none;font-size:20px;font-variant-numeric:tabular-nums}
 .rate-heading button{padding:4px 8px;font-size:11px;color:var(--muted)}
-.rate-ticks{display:flex;justify-content:space-between;color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums;margin-top:2px}
+/* 刻度用绝对定位钉在真实数值位置上（1.00× 在 1/3 处，不是居中），
+   写法同主程序 collections.css：0 / 33.333%+半个滑块 / 右端。 */
+.rate-ticks{position:relative;display:block;height:14px;color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums;margin-top:2px}
+.rate-ticks span{position:absolute;top:0;white-space:nowrap}
+.rate-ticks span:first-child{left:0}
+.rate-ticks span:nth-child(2){left:calc(33.333333% + 1.333333px);transform:translateX(-50%)}
+.rate-ticks span:last-child{right:0}
 .pitch-options{display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin-top:14px;font-size:12px;color:var(--muted)}
 .pitch-options label{display:inline-flex;align-items:center;gap:6px;margin:0}
 .pitch-options input{accent-color:var(--accent)}
+
+/* —— 版面收口：弹层贴着底栏上沿；封面按窗口高度收，别让频谱压到分隔线上 —— */
+.panel{bottom:var(--panel-offset,152px)}
+.body{overflow:hidden}
+.album{max-width:min(360px,calc(100vh - 448px));min-height:0}
+:root[data-spectrum="off"] .album{max-width:min(360px,calc(100vh - 382px))}
+.body{padding:22px 7% 18px}
+.meta h1{margin:16px 0 6px}
+.player-spectrum{height:56px;margin-top:10px}
