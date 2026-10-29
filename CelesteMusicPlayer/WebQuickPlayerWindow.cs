@@ -96,6 +96,28 @@ internal sealed class WebQuickPlayerWindow : Window
             double Value() => m.TryGetProperty("value", out var v) && v.TryGetDouble(out var n) && double.IsFinite(n) ? n : throw new ArgumentException("无效的操作值");
             switch (m.GetProperty("command").GetString())
             {
+                case "properties":
+                    var item = Session.Current; if (item == null) break;
+                    Post(new { kind = "properties", values = new Dictionary<string,string> { ["标题"] = item.Title, ["艺术家"] = item.Artist ?? "", ["专辑"] = item.Album ?? "", ["时长"] = item.Duration.ToString(@"hh\:mm\:ss"), ["文件路径"] = item.FilePath, ["文件大小"] = new FileInfo(item.FilePath).Length.ToString("N0") + " 字节", ["CUE 起点"] = item.StartTimeSeconds.ToString("0.###") + " 秒" } }); break;
+                case "location":
+                    if (Session.Current is { } current && File.Exists(current.FilePath)) { var info = new System.Diagnostics.ProcessStartInfo("explorer.exe") { UseShellExecute = false }; info.ArgumentList.Add("/select," + current.FilePath); System.Diagnostics.Process.Start(info); } break;
+                case "eq":
+                    var eq = EqualizerStore.Load();
+                    if (m.TryGetProperty("preset", out var preset)) {
+                        if (Session.Engine.IsDsdDirectOut) throw new InvalidOperationException("DSD 直出不支持均衡器。");
+                        if (preset.GetString() == "Custom") { var gains = m.GetProperty("gains").EnumerateArray().Select(v => v.GetDouble()).ToArray(); if (gains.Length != 10 || gains.Any(v => !double.IsFinite(v))) throw new ArgumentException("无效均衡器参数"); eq.BandGains = gains.Select(v => Math.Clamp(v, -12, 12)).ToArray(); }
+                        else if (Enum.TryParse<EqualizerPreset>(preset.GetString(), out var ep) && Enum.IsDefined(ep)) eq.ApplyPreset(ep); else throw new ArgumentException("无效预设");
+                        EqualizerStore.Save(eq); Session.Engine.SetEqualizer(eq.BandGains);
+                    }
+                    Post(new { kind = "eq", gains = eq.BandGains, preset = m.TryGetProperty("preset", out var requested) ? requested.GetString() : eq.Preset.ToString() }); break;
+                case "speed":
+                    var settings = AppSettingsStore.Load();
+                    if (m.TryGetProperty("value", out _)) { if (Session.Engine.IsDsdDirectOut) throw new InvalidOperationException("DSD 直出不支持变速。"); var rate = Math.Clamp(Value(), .5, 2); var pitch = m.GetProperty("pitch").GetBoolean(); AppSettingsStore.Update(v => { v.PlaybackRate = rate; v.PlaybackRatePreservePitch = pitch; }); Session.Engine.SetPlaybackSpeed(rate, pitch); settings = AppSettingsStore.Load(); }
+                    Post(new { kind = "speed", rate = settings.PlaybackRate, pitch = settings.PlaybackRatePreservePitch }); break;
+                case "caption":
+                    var rect = new Windows.Graphics.RectInt32(m.GetProperty("x").GetInt32(), m.GetProperty("y").GetInt32(), m.GetProperty("width").GetInt32(), m.GetProperty("height").GetInt32());
+                    Microsoft.UI.Input.InputNonClientPointerSource.GetForWindowId(AppWindow.Id).SetRegionRects(Microsoft.UI.Input.NonClientRegionKind.Caption, new[] { rect });
+                    break;
                 case "ready": _ready = true; _timer.Start(); Publish(); LoadAssets(); SendDevices(); break;
                 case "visible": _visible = m.GetProperty("value").GetBoolean(); break;
                 case "spectrum": _spectrumWanted = m.GetProperty("value").GetBoolean(); if (!_spectrumWanted) Post(new { kind = "spectrum", available = false, bands = Array.Empty<float>() }); break;
@@ -174,7 +196,7 @@ internal sealed class WebQuickPlayerWindow : Window
     }
     private void SendSpectrum()
     {
-        var bands = new float[96]; bool available = Session.Engine.IsPlaying && Session.Engine.TryGetSpectrum(bands);
+        var bands = new float[96]; bool available = Session.Engine.IsPlaying && Session.Engine.TryGetDetailedSpectrum(bands, out _);
         Post(new { kind = "spectrum", available, bands = bands.Select(v => available && float.IsFinite(v) ? Math.Clamp(v, 0, 1) : 0).ToArray() });
     }
     private void Publish()

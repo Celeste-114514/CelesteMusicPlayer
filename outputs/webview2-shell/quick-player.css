@@ -5,3 +5,7 @@
 input[type=range]{-webkit-appearance:none;appearance:none;border:0;box-shadow:none;background:transparent;outline-offset:3px}
 input[type=range]::-webkit-slider-runnable-track{height:4px;background:color-mix(in srgb,var(--accent) 25%,var(--panel));border:0;border-radius:4px;box-shadow:none}
 input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:12px;height:12px;margin-top:-4px;border:0;border-radius:50%;background:var(--accent);box-shadow:none}
+
+#progress::-webkit-slider-runnable-track{background:linear-gradient(to right,var(--accent) 0%,var(--accent) var(--fill,0%),color-mix(in srgb,var(--accent) 25%,var(--panel)) var(--fill,0%),color-mix(in srgb,var(--accent) 25%,var(--panel)) 100%)}
+
+.extra-tools{display:flex;justify-content:center;gap:12px;margin-bottom:8px;color:var(--muted);font-size:12px}.extra-tools button{padding:5px 8px}.eq-panel{width:min(440px,calc(100% - 40px))}#eq-bands label{display:grid;grid-template-columns:50px 1fr 45px;align-items:center;gap:12px;margin:8px 0}#eq-bands output{text-align:right;font-variant-numeric:tabular-nums}#file-properties{overflow-wrap:anywhere;user-select:text}#file-properties dt{color:var(--muted);margin-top:12px}#file-properties dd{margin:4px 0}.eq-panel p{font-size:12px;color:var(--muted)}

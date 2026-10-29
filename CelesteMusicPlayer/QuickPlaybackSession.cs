@@ -31,6 +31,7 @@ internal sealed class QuickPlaybackSession : IDisposable
         _dispatch = dispatch; Engine = engine ?? new AudioPlaybackEngine(new FfmpegDecoderBackend(), () =>
         {
             var b = new HiFiOutputBackend(); var settings = AppSettingsStore.Load();
+            b.SetPlaybackSpeed(settings.PlaybackRate, settings.PlaybackRatePreservePitch);
             b.SoftwareVolumeEnabled = settings.HiFiSoftwareVolume; b.SetVolume((float)(Volume / 100));
             b.SetEqualizer(EqualizerStore.Load().BandGains); b.SetEqCurve(EqCurveStore.Load());
             var extra = DspExtraStore.Load(); b.SetChannelBalance(extra.ChannelBalance); b.SetSafety(extra.Safety);
