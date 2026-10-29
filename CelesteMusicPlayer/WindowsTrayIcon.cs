@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
@@ -255,7 +255,8 @@ namespace CelesteMusicPlayer
                 {
                     int size = GetSystemMetrics(49 /* SM_CXSMICON */);
                     IntPtr handle = LoadImageW(IntPtr.Zero, path, IMAGE_ICON, size, size, LR_LOADFROMFILE);
-                    if (handle != IntPtr.Zero) return handle;
+                    if (handle != IntPtr.Zero) { StartupLog.Write("[tray.icon] loaded application ICO " + size + "px"); return handle; }
+                    StartupLog.Write("[tray.icon] LoadImageW failed err=" + Marshal.GetLastWin32Error());
                 }
             }
             catch (Exception ex) { StartupLog.WriteException("WindowsTrayIcon.LoadTrayIcon", ex); }
@@ -350,7 +351,7 @@ namespace CelesteMusicPlayer
         [DllImport("user32.dll", SetLastError = true)]
         private static extern uint RegisterWindowMessage(string name);
 
-        [DllImport("user32.dll", SetLastError = true)]
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, ExactSpelling = true, SetLastError = true)]
         private static extern IntPtr LoadImageW(IntPtr instance, string name, uint type, int cx, int cy, uint load);
 
         [DllImport("user32.dll", SetLastError = true)]
