@@ -8,7 +8,10 @@ namespace CelesteMusicPlayer
     /// </summary>
     internal sealed class PlaybackOrderResolver
     {
-        private readonly Random _random = new();
+        private readonly Random _random;
+
+        /// <param name="random">随机源；默认新建。测试可注入固定序列以得到确定结果。</param>
+        internal PlaybackOrderResolver(Random? random = null) => _random = random ?? new Random();
 
         /// <summary>当前播放顺序。默认 ListLoop（与原先 MainWindow 里那个播放顺序字段的初值一致）。</summary>
         public PlaybackOrder Order { get; set; } = PlaybackOrder.ListLoop;
