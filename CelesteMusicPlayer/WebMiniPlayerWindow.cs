@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -14,13 +14,14 @@ using Microsoft.Web.WebView2.Core;
 namespace CelesteMusicPlayer;
 
 /// <summary>Web presentation only; all audio commands use the existing mini bridge.</summary>
-internal sealed class WebMiniPlayerWindow : Window
+internal sealed class WebMiniPlayerWindow : NativeMainWebWindow
 {
     // Keep the browser surface stable: resizing it every frame recreates browser
     // layout/surface work. The native client bounds clip this fixed canvas.
-    private readonly WebView2 _web = new() { Height = 620, VerticalAlignment = VerticalAlignment.Top };
-    private readonly Grid _root = new();
+    private readonly NativeWebViewPanel _web = new() { Height = 620, Dock = System.Windows.Forms.DockStyle.Top };
+    private readonly System.Windows.Forms.Panel _root = new() { Dock = System.Windows.Forms.DockStyle.Fill };
     private bool _closed, _ready;
+    internal bool IsReady => _ready;
     private byte[]? _cover;
     private object? _lines = new object();
     private readonly Microsoft.UI.Dispatching.DispatcherQueueTimer _themeTimer;
@@ -32,12 +33,12 @@ internal sealed class WebMiniPlayerWindow : Window
     private int _styleRevision = -1;
     private int _lastPixelHeight = -1, _lastPixelWidth = -1;
     private double _lastResizeFrame = -100;
-    internal WebMiniPlayerWindow()
+    internal WebMiniPlayerWindow() : base(Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread())
     {
         Title = "Celeste · 迷你播放器";
-        WindowIconHelper.Apply(this);
-        _root.Children.Add(_web);
-        Content = _root;
+        MinimumSize = System.Drawing.Size.Empty;
+        _root.Controls.Add(_web);
+        Controls.Add(_root);
         _themeTimer = DispatcherQueue.CreateTimer();
         _themeTimer.Interval = TimeSpan.FromMilliseconds(500);
         _themeTimer.Tick += (_, _) => { SyncWindowSettings(); SendTheme(); };
@@ -52,9 +53,9 @@ internal sealed class WebMiniPlayerWindow : Window
             p.IsAlwaysOnTop = AppSettingsStore.Load().MiniPlayerAlwaysOnTop;
         }
         Resize(false);
-        _root.Loaded += Initialize;
+        DispatcherQueue.TryEnqueue(Initialize);
         MiniPlayerBridge.StateChanged += StateChanged;
-        Closed += (_, _) => { _closed = true; Interlocked.Increment(ref _dragGeneration); _themeTimer.Stop(); StopResize(); MiniPlayerBridge.StateChanged -= StateChanged; _web.Close(); };
+        Closed += (_, _) => { _closed = true; Interlocked.Increment(ref _dragGeneration); _themeTimer.Stop(); StopResize(); MiniPlayerBridge.StateChanged -= StateChanged; _web.Dispose(); };
     }
     private void Resize(bool expanded)
     {
@@ -63,7 +64,7 @@ internal sealed class WebMiniPlayerWindow : Window
     }
     private void ApplyHeight()
     {
-        double scale = _root.XamlRoot?.RasterizationScale ?? 1;
+        double scale = DeviceDpi / 96.0;
         int width = (int)Math.Round(400 * scale), height = (int)Math.Round(_height * scale);
         if (width == _lastPixelWidth && height == _lastPixelHeight) return;
         AppWindow.ResizeClient(new Windows.Graphics.SizeInt32(width, height));
@@ -126,7 +127,7 @@ internal sealed class WebMiniPlayerWindow : Window
                 : palette.TryGetValue("bg", out var bg) ? bg : "#fcf9f8";
             var color = Windows.UI.Color.FromArgb(255,
                 Convert.ToByte(value.Substring(1, 2), 16), Convert.ToByte(value.Substring(3, 2), 16), Convert.ToByte(value.Substring(5, 2), 16));
-            _root.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(color);
+            _root.BackColor = System.Drawing.Color.FromArgb(color.A,color.R,color.G,color.B);
             if (_web.CoreWebView2 != null) _web.DefaultBackgroundColor = color;
         }
         catch (Exception ex) { StartupLog.WriteException("WebMiniPlayer.SetNativeBackground", ex); }
@@ -139,7 +140,7 @@ internal sealed class WebMiniPlayerWindow : Window
     [DllImport("user32.dll")] private static extern bool SetWindowPos(nint hwnd, nint after, int x, int y, int width, int height, uint flags);
     private void StartDrag()
     {
-        nint hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        nint hwnd = Handle;
         if (!GetCursorPos(out var cursor) || !GetWindowRect(hwnd, out var rect) || (GetAsyncKeyState(1) & 0x8000) == 0) return;
         int dx = cursor.X - rect.Left, dy = cursor.Y - rect.Top, ticket = Interlocked.Increment(ref _dragGeneration);
         new Thread(() =>
@@ -153,9 +154,8 @@ internal sealed class WebMiniPlayerWindow : Window
             }
         }) { IsBackground = true, Name = "Celeste mini drag" }.Start();
     }
-    private async void Initialize(object sender, RoutedEventArgs e)
+    private async void Initialize()
     {
-        _root.Loaded -= Initialize;
         Resize(false);
         try
         {
@@ -204,10 +204,10 @@ internal sealed class WebMiniPlayerWindow : Window
         catch (Exception ex)
         {
             StartupLog.WriteException("WebMiniPlayer.initialize", ex);
-            _root.Children.Clear();
-            var retry = new Button { Content = "加载失败，点击重新加载", HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-            retry.Click += (_, _) => { _root.Children.Clear(); _root.Children.Add(_web); Initialize(_root, new RoutedEventArgs()); };
-            _root.Children.Add(retry);
+            _root.Controls.Clear();
+            var retry = new System.Windows.Forms.Button { Text = "加载失败，点击重新加载", Dock = System.Windows.Forms.DockStyle.Fill };
+            retry.Click += (_, _) => { _root.Controls.Clear(); _root.Controls.Add(_web); Initialize(); };
+            _root.Controls.Add(retry);
         }
     }
     private void Post(object value) { if (_ready && !_closed) _web.CoreWebView2.PostWebMessageAsJson(JsonSerializer.Serialize(value)); }

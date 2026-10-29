@@ -29,6 +29,13 @@
     { id: 'row-active', label: '选中行' }
   ];
 
+  const actions=node('div',undefined,'settings-apply-bar');
+  const applyAppearance=node('button','应用','primary'),revertAppearance=node('button','撤销','secondary'),applyNote=node('span','外观已应用');
+  applyAppearance.id='settings-apply';revertAppearance.id='settings-revert';applyAppearance.disabled=true;revertAppearance.disabled=true;
+  actions.append(applyNote,applyAppearance,revertAppearance);$('settings-page').append(actions);
+  applyAppearance.onclick=async()=>{try{await request('commit');render();}catch(e){status(e.message,'err')}};
+  revertAppearance.onclick=async()=>{try{await request('cancel');render();}catch(e){status(e.message,'err')}};
+
   let data = null;             // 宿主快照
   let editing = 'light';       // 正在编辑哪一套明暗
   let dirty = false;
@@ -100,6 +107,7 @@
   function accept(result) {
     data = result;
     dirty = !!result.draft;
+    applyAppearance.disabled=!dirty;revertAppearance.disabled=!dirty;applyNote.textContent=dirty?"外观有未应用的改动":"外观已应用";
     paint();
     window.CelestePlayerLayout?.apply?.(result.playerButtons);
     window.CelesteNavLayout?.apply?.(result.navItems);
