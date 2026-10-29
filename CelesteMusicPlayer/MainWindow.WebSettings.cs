@@ -41,6 +41,10 @@ namespace CelesteMusicPlayer
                 case "get": return BuildSettingsSnapshot();
                 case "patch": return await PatchSettingsAsync(msg).ConfigureAwait(true);
                 case "pickFolder": return new { canceled = false, path = await PickFolderAsync(host).ConfigureAwait(true) };
+                case "pickLyricFont":
+                    var fontPicker=new Windows.Storage.Pickers.FileOpenPicker();foreach(var ext in new[]{".ttf",".otf",".woff",".woff2"})fontPicker.FileTypeFilter.Add(ext);
+                    WinRT.Interop.InitializeWithWindow.Initialize(fontPicker,WinRT.Interop.WindowNative.GetWindowHandle(host));
+                    var font=await fontPicker.PickSingleFileAsync();return new { canceled=font==null,path=font?.Path??"" };
                 case "pickFile": return new { canceled = false, path = await PickFileAsync(host).ConfigureAwait(true) };
                 case "cache": return await CacheOperationAsync(msg).ConfigureAwait(true);
                 case "webdav": return await WebDavSettingsAsync(msg).ConfigureAwait(true);
@@ -114,8 +118,8 @@ namespace CelesteMusicPlayer
                     options = themes.Select(name => name.Length == 0 ? "|内置默认配色" : name + "|" + name).ToArray();
                 yield return new
                 {
-                    id = def.id, group = def.group, label = def.label, kind = def.kind, note = def.note,
-                    scope = def.scope, options, min = def.min, max = def.max, step = def.step,
+                    id = def.id, group = def.id.StartsWith("DesktopLyric") || def.id == "OpenDesktopLyricsOnStartup" ? "desktopLyrics" : def.group, label = def.label, kind = def.kind, note = def.note,
+                    scope = def.id.StartsWith("DesktopLyric") || def.id == "OpenDesktopLyricsOnStartup" ? "web" : def.scope, options, min = def.min, max = def.max, step = def.step,
                     unit = def.unit, advanced = def.advanced, readOnly = IsReadOnly(def.id)
                 };
             }

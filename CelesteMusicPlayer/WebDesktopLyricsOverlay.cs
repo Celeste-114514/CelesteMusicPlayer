@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -66,7 +66,8 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
     public event Action? ClosedByUser;
     public bool IsLocked => _locked;
     public bool IsVisible => !_disposed && _hwnd != IntPtr.Zero && IsWindowVisible(_hwnd);
-    public (int X, int Y) CurrentPosition => GetWindowRect(_hwnd, out var r) ? (r.Left, r.Top) : (0, 0);
+    private (int X, int Y) _lastPosition;
+    public (int X, int Y) CurrentPosition => GetWindowRect(_hwnd, out var r) ? (r.Left, r.Top) : _lastPosition;
 
     public WebDesktopLyricsOverlay(MainWindow owner)
     {
@@ -173,6 +174,9 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
                 DestroyWindow(_hwnd);
                 return true;
             case WmDestroy:
+                _lastPosition = CurrentPosition;
+                EndDrag();
+                _envRetry?.Stop();
                 _disposed = true;
                 _timer.Stop();
                 lock (WindowGate) Instances.Remove(_hwnd);
@@ -182,26 +186,39 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
                 ClosedByUser?.Invoke();
                 return true;
         }
+        if (message == 0x0215 /*WM_CAPTURECHANGED*/) _dragging = false;
         if (_controller == null) return false;
         try
         {
             switch (message)
             {
                 case WmMouseMove:
+                    if (_dragging)
+                    {
+                        if (GetCursorPos(out var cursor))
+                            SetWindowPos(_hwnd, IntPtr.Zero, _dragOrigin.Left + cursor.X - _dragStart.X,
+                                _dragOrigin.Top + cursor.Y - _dragStart.Y, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
+                        return true;
+                    }
                     TrackLeave();
                     return SendMouse(CoreWebView2MouseEventKind.Move, CoreWebView2MouseEventVirtualKeys.None, 0, lParam);
                 case WmLeftButtonDown:
-                    return SendMouse(CoreWebView2MouseEventKind.LeftButtonDown, CoreWebView2MouseEventVirtualKeys.LeftButton, 1, lParam);
+                    return SendMouse(CoreWebView2MouseEventKind.LeftButtonDown, CoreWebView2MouseEventVirtualKeys.LeftButton, 0, lParam);
                 case WmLeftButtonUp:
+                    EndDrag();
                     return SendMouse(CoreWebView2MouseEventKind.LeftButtonUp, CoreWebView2MouseEventVirtualKeys.None, 0, lParam);
                 case WmRightButtonDown:
-                    return SendMouse(CoreWebView2MouseEventKind.RightButtonDown, CoreWebView2MouseEventVirtualKeys.RightButton, 2, lParam);
+                    return SendMouse(CoreWebView2MouseEventKind.RightButtonDown, CoreWebView2MouseEventVirtualKeys.RightButton, 0, lParam);
                 case WmRightButtonUp:
                     return SendMouse(CoreWebView2MouseEventKind.RightButtonUp, CoreWebView2MouseEventVirtualKeys.None, 0, lParam);
                 case WmMouseWheel:
-                    // mouseData 高位是滚轮增量，单位 1/120 格
-                    uint delta = (uint)((long)wParam >> 16) & 0xFFFF;
-                    return SendMouse(CoreWebView2MouseEventKind.Wheel, CoreWebView2MouseEventVirtualKeys.None, delta << 16, lParam);
+                    // WebView2 takes the signed delta itself, not the packed Win32 high word.
+                    uint delta = unchecked((uint)(short)(((long)wParam >> 16) & 0xFFFF));
+                    int wheelX = (short)((long)lParam & 0xFFFF), wheelY = (short)(((long)lParam >> 16) & 0xFFFF);
+                    var client = new PointStruct { X = wheelX, Y = wheelY };
+                    ScreenToClient(_hwnd, ref client);
+                    var wheelPoint = new IntPtr((client.Y << 16) | (client.X & 0xFFFF));
+                    return SendMouse(CoreWebView2MouseEventKind.Wheel, CoreWebView2MouseEventVirtualKeys.None, delta, wheelPoint);
                 case WmMouseLeave:
                     _trackingLeave = false;
                     _controller.SendMouseInput(CoreWebView2MouseEventKind.Leave, CoreWebView2MouseEventVirtualKeys.None, 0, new Windows.Foundation.Point(0, 0));
@@ -236,7 +253,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
 
     private async void Initialize()
     {
-        if (_initializing) return;
+        if (_initializing || _disposed) return;
         // 只复用主界面那个 WebView2 环境：同样是合成环境，省一个浏览器进程。
         // 外壳可能比歌词晚就绪，所以拿不到时由重试定时器再来，而不是自己另建一个环境。
         CoreWebView2Environment? env = _owner.WebShellEnvironment;
@@ -305,7 +322,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
             {
                 case "ready": _ready = true; StartupLog.Write("[桌面歌词] 页面就绪"); PublishLines(); ApplySettings(_settings); _timer.Start(); Tick(); break;
                 case "drag": StartDrag(); break;
-                case "drag-end": _dragging = false; break;
+                case "drag-end": EndDrag(); break;
                 case "close": Close(); break;
                 case "lock": SetLocked(!_locked); break;
                 case "unlock": SetLocked(false); break;
@@ -386,6 +403,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
 
     public void SetLocked(bool locked)
     {
+        EndDrag();
         _locked = locked;
         if (!locked) _hintHot = false;
         Post(new { kind = "lock", locked });
@@ -432,6 +450,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
         {
             SetWindowPos(_hwnd, IntPtr.Zero, 0, 0, width, height, SwpNoZOrder | SwpNoActivate | 0x0002 /*SWP_NOMOVE*/);
         }
+        if (_controller != null) _controller.Bounds = new Windows.Foundation.Rect(0, 0, _widthDip, _heightDip);
         // 尺寸变了解锁条位置也变了：清掉旧的命中矩形，让页面重新量一次。
         _hintRect = (0, 0, 0, 0);
         Post(new { kind = "resize" });
@@ -487,28 +506,29 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
     [DllImport("user32.dll")] private static extern short GetAsyncKeyState(int key);
     [DllImport("user32.dll")] private static extern bool SetWindowPos(IntPtr h, IntPtr after, int x, int y, int w, int height, uint flags);
 
-    /// <summary>
-    /// 拖动：网页 pointerdown 到宿主中间隔一次 IPC，等宿主收到时按键可能早松了，
-    /// 所以循环终点只认 GetAsyncKeyState，不认网页说的 "drag-end"。
-    /// </summary>
+    private PointStruct _dragStart;
+    private RectStruct _dragOrigin;
+
+    // Capture keeps receiving movement and release even outside the transparent window.
+    // Move on the UI thread: cross-thread SetWindowPos can block the input pump.
     private void StartDrag()
     {
-        if (_locked || _hwnd == IntPtr.Zero) return;
-        if (!GetCursorPos(out var start)) return;
-        GetWindowRect(_hwnd, out var begin);
-        IntPtr hwnd = _hwnd;
+        if (_locked || _hwnd == IntPtr.Zero || (GetAsyncKeyState(1) & 0x8000) == 0) return;
+        if (!GetCursorPos(out _dragStart) || !GetWindowRect(_hwnd, out _dragOrigin)) return;
         _dragging = true;
-        System.Threading.Tasks.Task.Run(() =>
-        {
-            while (_dragging && !_disposed && (GetAsyncKeyState(1) & 0x8000) != 0)
-            {
-                if (!GetCursorPos(out var p)) break;
-                SetWindowPos(hwnd, IntPtr.Zero, begin.Left + p.X - start.X, begin.Top + p.Y - start.Y, 0, 0, 0x0015);
-                System.Threading.Thread.Sleep(8);
-            }
-            _dragging = false;
-        });
+        SetCapture(_hwnd);
     }
+
+    private void EndDrag()
+    {
+        if (!_dragging) return;
+        _dragging = false;
+        ReleaseCapture();
+    }
+
+    [DllImport("user32.dll")] private static extern bool ScreenToClient(IntPtr hwnd, ref PointStruct point);
+    [DllImport("user32.dll")] private static extern IntPtr SetCapture(IntPtr hwnd);
+    [DllImport("user32.dll")] private static extern bool ReleaseCapture();
 
     // —————————————————— 结构体 / 导入 ——————————————————
 

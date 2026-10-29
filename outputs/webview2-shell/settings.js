@@ -30,6 +30,12 @@
   let snapshot = null;          // 后端整份快照（含 defs / values / accounts / hotkeys / about）
   let revision = 0;
   let group = 'general';
+  document.addEventListener('celeste:settings-group', event => {
+    if (event.detail !== 'desktopLyrics') return;
+    group = 'desktopLyrics'; query = '';
+    if (searchInput) searchInput.value = '';
+    if (snapshot) { renderNav(); render(); }
+  });
   let query = '';
   let busy = false;
   let updateStatusHandler = null;   // 关于卡片的推送监听只留一个，切页不叠加
@@ -319,7 +325,7 @@
     input.setAttribute('aria-label', def.label);
     wrap.append(input);
     wrap.append(button('浏览…', async () => {
-      const result = await request(def.kind === 'file' ? 'pickFile' : 'pickFolder');
+      const result = await request(def.id === 'DesktopLyricFontFile' ? 'pickLyricFont' : def.kind === 'file' ? 'pickFile' : 'pickFolder');
       if (!result || !result.path) return;
       input.value = result.path;
       await patch({ [def.id]: result.path });
@@ -461,7 +467,7 @@
     host.append(source);
 
     const desktop = section({ title: '桌面歌词', note: '桌面歌词是独立的一条原生歌词窗，和网页里的歌词页不是同一套渲染。' });
-    addFields(desktop, ['OpenDesktopLyricsOnStartup', 'DesktopLyricHideWithoutLyric', 'DesktopLyricHideWhenPaused', 'DesktopLyricLockOnStart', 'DesktopLyricShowUnlockWhenLocked', 'DesktopLyricHideTranslation', 'DesktopLyricShowBackgroundBar', 'DesktopLyricVisibleLines', 'DesktopLyricLineSpacing', 'DesktopLyricOpacity', 'DesktopLyricFontSize', 'DesktopLyricSecondaryFontSize', 'DesktopLyricFontFamily', 'DesktopLyricColorMode', 'DesktopLyricGradientStart', 'DesktopLyricGradientEnd', 'DesktopLyricPlayedColor', 'DesktopLyricUnplayedColor', 'DesktopLyricOutlineColor', 'DesktopLyricOutlineWidth', 'DesktopLyricShadowStrength', 'DesktopLyricAlign', 'DesktopLyricBackgroundColor', 'DesktopLyricClickThrough']);
+    addFields(desktop, ['OpenDesktopLyricsOnStartup', 'DesktopLyricHideWithoutLyric', 'DesktopLyricHideWhenPaused', 'DesktopLyricLockOnStart', 'DesktopLyricShowUnlockWhenLocked', 'DesktopLyricHideTranslation', 'DesktopLyricShowBackgroundBar', 'DesktopLyricVisibleLines', 'DesktopLyricLineSpacing', 'DesktopLyricOpacity', 'DesktopLyricDirection', 'DesktopLyricFontFile', 'DesktopLyricMusicReactive', 'DesktopLyricScale', 'DesktopLyricFontSize', 'DesktopLyricSecondaryFontSize', 'DesktopLyricFontFamily', 'DesktopLyricColorMode', 'DesktopLyricGradientStart', 'DesktopLyricGradientEnd', 'DesktopLyricPlayedColor', 'DesktopLyricUnplayedColor', 'DesktopLyricOutlineColor', 'DesktopLyricOutlineWidth', 'DesktopLyricShadowStrength', 'DesktopLyricAlign', 'DesktopLyricBackgroundColor', 'DesktopLyricClickThrough']);
     host.append(desktop);
 
     const fetchGradual = section({ title: '自动获取与保存' });
@@ -471,6 +477,11 @@
     const tools = section({ title: '标签工具默认值', note: '这些是「标签」页里下载歌词时的默认选择，不是全局歌词处理规则。' });
     addFields(tools, ['LyricPageSource', 'LyricBatchPageSource', 'LyricPageWriteTarget', 'LyricPageIncludeTranslation', 'WriteId3v23']);
     host.append(tools);
+  }
+
+  function renderDesktopLyrics(host) {
+    const desktop=section({title:'桌面歌词',note:'WebView2 独立歌词。锁定穿透后，可右键主播放栏歌词按钮解除锁定。'});
+    addFields(desktop, snapshot.defs.filter(d=>d.group==='desktopLyrics').map(d=>d.id));host.append(desktop);
   }
 
   async function renderLibrary(host) {
@@ -1045,6 +1056,7 @@
     audio: renderAudio,
     playback: renderPlayback,
     appearance: renderAppearance,
+    desktopLyrics: renderDesktopLyrics,
     lyrics: renderLyrics,
     library: renderLibrary,
     network: renderNetwork,

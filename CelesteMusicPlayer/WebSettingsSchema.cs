@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -53,6 +53,7 @@ namespace CelesteMusicPlayer
             new() { id = "audio", label = "音频输出", description = "输出方式、缓冲与 DSD 高级兼容。具体音效在「音效处理」页。", icon = "wave" },
             new() { id = "playback", label = "播放行为", description = "换曲、淡化、变速与队列插入位置。", icon = "play" },
             new() { id = "appearance", label = "外观", description = "界面风格、配色、背景与列表密度。", icon = "disc" },
+            new() { id = "desktopLyrics", label = "桌面歌词", description = "WebView2 歌词：显示、字体、竖排与音乐响应。", icon = "lyrics" },
             new() { id = "lyrics", label = "歌词与封面", description = "歌词来源与样式、桌面歌词、自动获取与保存规则。", icon = "lyrics" },
             new() { id = "library", label = "媒体库", description = "监视目录、扫描规则与删除保护。", icon = "folder" },
             new() { id = "network", label = "网络与在线服务", description = "WebDAV 网络音乐库与在线账号凭据。", icon = "cloud" },
@@ -175,6 +176,10 @@ namespace CelesteMusicPlayer
                 Slider("DesktopLyricLineSpacing", "桌面歌词行距", 0, 24, 1, "px", scope: "native"),
                 Slider("DesktopLyricOpacity", "桌面歌词不透明度", 20, 100, 1, "%", scope: "native"),
                 Slider("DesktopLyricFontSize", "桌面歌词字号", 14, 64, 1, "px", scope: "native"),
+                Sel("DesktopLyricDirection", "文字方向", "Horizontal|横排;Vertical|竖排"),
+                Path("DesktopLyricFontFile", "自定义字体文件", true, "支持 TTF、OTF、WOFF、WOFF2；失败时回退系统字体。"),
+                Bool("DesktopLyricMusicReactive", "音乐响应光晕", "使用真实输出采样；无采样时不显示。"),
+                Slider("DesktopLyricScale", "整体缩放", 50, 150, 5, "%"),
                 Sel("DesktopLyricColorMode", "桌面歌词配色模式", "Theme|跟随主程序（ECHO 风格）;Solid|自定义纯色;Gradient|自定义渐变", "当前歌词使用主题渐变或自定义颜色；未唱部分仍可单独设置。"),
                 Col("DesktopLyricGradientStart", "歌词渐变起点"),
                 Col("DesktopLyricGradientEnd", "歌词渐变终点"),
@@ -313,6 +318,10 @@ namespace CelesteMusicPlayer
             ["DesktopLyricVisibleLines"] = s => s.DesktopLyricVisibleLines,
             ["DesktopLyricLineSpacing"] = s => s.DesktopLyricLineSpacing,
             ["DesktopLyricOpacity"] = s => s.DesktopLyricOpacity,
+            ["DesktopLyricDirection"] = s => s.DesktopLyricDirection,
+            ["DesktopLyricFontFile"] = s => s.DesktopLyricFontFile,
+            ["DesktopLyricMusicReactive"] = s => s.DesktopLyricMusicReactive,
+            ["DesktopLyricScale"] = s => s.DesktopLyricScale,
             ["DesktopLyricColorMode"] = s => s.DesktopLyricColorMode,
             ["DesktopLyricGradientStart"] = s => s.DesktopLyricGradientStart,
             ["DesktopLyricGradientEnd"] = s => s.DesktopLyricGradientEnd,
@@ -444,6 +453,10 @@ namespace CelesteMusicPlayer
             ["DesktopLyricVisibleLines"] = (s, v) => s.DesktopLyricVisibleLines = Int(v, 1, 3),
             ["DesktopLyricLineSpacing"] = (s, v) => s.DesktopLyricLineSpacing = Num(v, 0, 24),
             ["DesktopLyricOpacity"] = (s, v) => s.DesktopLyricOpacity = Int(v, 20, 100),
+            ["DesktopLyricDirection"] = (s,v) => s.DesktopLyricDirection = Text(v,20)=="Vertical"?"Vertical":"Horizontal",
+            ["DesktopLyricFontFile"] = (s,v) => s.DesktopLyricFontFile = Text(v,2000),
+            ["DesktopLyricMusicReactive"] = (s,v) => s.DesktopLyricMusicReactive = Bool(v),
+            ["DesktopLyricScale"] = (s,v) => s.DesktopLyricScale = Int(v,50,150),
             ["DesktopLyricColorMode"] = (s, v) => s.DesktopLyricColorMode = Text(v, 20) is "Solid" ? "Solid" : Text(v, 20) is "Gradient" ? "Gradient" : "Theme",
             ["DesktopLyricGradientStart"] = (s, v) => s.DesktopLyricGradientStart = Color(v),
             ["DesktopLyricGradientEnd"] = (s, v) => s.DesktopLyricGradientEnd = Color(v),
