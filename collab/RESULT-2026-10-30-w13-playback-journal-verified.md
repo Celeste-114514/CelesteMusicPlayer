@@ -50,3 +50,20 @@ MediaPlayer 状态改成引擎播放状态。这属于行为改动，需要单�
   未改动；如果要在退出时补记，属于新增行为。
 - 未做干净机验收。
 - 未验证 Last.fm 回传（需要真实账号与网络）。
+
+## 补记（同日 07:07）：`ListenSeconds` 恒 0 已修复
+
+提交 `ac11abc`。两处原因叠加，都属于「旧实现的判据停在 MediaPlayer 时代」：
+
+1. **采样入口挂错了地方**。`Journal.SampleListenSeconds()` 只在 `PositionTimer_Tick`（旧界面进度定时器）里调，
+   而正式播放由 HiFi 引擎接管，那个定时器根本不跑 → 采样函数一次都没被调用（不是条件不满足，是没人调）。
+   现在改挂在引擎心跳 `EnginePositionChanged` 上，内部仍按「距上次 ≥1 秒」限流。
+2. **宿主事实问错了对象**。`HasSource` / `IsPlaying` 原来问 MediaPlayer（引擎播放时它没有源），
+   现在改问引擎活动状态与 `IsPlaybackActuallyPlaying()`。
+
+实听验证（同一首 Epilogue.m4a）：
+
+- 修复前：`PlayCount` 递增，`ListenSeconds` 恒 **0**
+- 修复后：`ListenSeconds` = **11.44 秒**；日志 `[journal] 采样 has=True playing=True path=Epilogue.m4a`
+
+顺带确认：采样日志按 1 分钟节流（每 60 次采样一行），不会刷屏。
