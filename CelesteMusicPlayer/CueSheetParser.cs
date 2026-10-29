@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
@@ -12,6 +12,10 @@ namespace CelesteMusicPlayer
         public string Title { get; set; } = string.Empty;
 
         public string Artist { get; set; } = string.Empty;
+
+        public string Album { get; set; } = string.Empty;
+        public string AlbumArtist { get; set; } = string.Empty;
+        public int Number { get; set; }
 
         public TimeSpan StartTime { get; set; }
 
@@ -49,7 +53,7 @@ namespace CelesteMusicPlayer
             }
 
             string cueDir = Path.GetDirectoryName(Path.GetFullPath(cuePath)) ?? string.Empty;
-            string[] lines = File.ReadAllLines(cuePath);
+            string[] lines = ReadCueText(cuePath).Split(new[] { "\r\n", "\n", "\r" }, StringSplitOptions.None);
 
             string? currentFile = null;
             string? sheetPerformer = null;
@@ -110,7 +114,7 @@ namespace CelesteMusicPlayer
                         tracks.Add(currentTrack);
                     }
 
-                    currentTrack = new CueTrack();
+                    currentTrack = new CueTrack { FilePath = currentFile ?? "", Number = int.Parse(trackMatch.Groups["num"].Value, CultureInfo.InvariantCulture) };
                     continue;
                 }
 
@@ -176,8 +180,23 @@ namespace CelesteMusicPlayer
             }
         }
 
+        private static string ReadCueText(string path)
+        {
+            System.Text.Encoding.RegisterProvider(System.Text.CodePagesEncodingProvider.Instance);
+            byte[] bytes = File.ReadAllBytes(path);
+            if (bytes.Length >= 2 && ((bytes[0] == 255 && bytes[1] == 254) || (bytes[0] == 254 && bytes[1] == 255))) return File.ReadAllText(path);
+            var candidates = new[] { System.Text.Encoding.UTF8, System.Text.Encoding.GetEncoding(936), System.Text.Encoding.GetEncoding(950) };
+            string dir = Path.GetDirectoryName(path) ?? "";
+            return candidates.Select(e => e.GetString(bytes).TrimStart('\uFEFF')).OrderByDescending(text =>
+                text.Split('\n').Select(l => FileRegex.Match(l.Trim())).Where(m => m.Success)
+                    .Count(m => File.Exists(ResolveAudioPath(m.Groups["path"].Value, dir))))
+                .ThenBy(text => text.Count(c => c == '\uFFFD')).First();
+        }
+
         private static void FinalizeTrack(CueTrack track, string? audioFile, string? sheetPerformer, string? sheetTitle)
         {
+            track.Album = sheetTitle ?? "";
+            track.AlbumArtist = sheetPerformer ?? "";
             if (string.IsNullOrWhiteSpace(track.Artist) && !string.IsNullOrWhiteSpace(sheetPerformer))
             {
                 track.Artist = sheetPerformer;
@@ -188,7 +207,7 @@ namespace CelesteMusicPlayer
                 track.Title = sheetTitle;
             }
 
-            if (!string.IsNullOrWhiteSpace(audioFile))
+            if (string.IsNullOrWhiteSpace(track.FilePath) && !string.IsNullOrWhiteSpace(audioFile))
             {
                 track.FilePath = audioFile;
             }

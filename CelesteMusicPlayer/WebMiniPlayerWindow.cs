@@ -29,6 +29,7 @@ internal sealed class WebMiniPlayerWindow : Window
     private double _height = 188, _fromHeight, _targetHeight;
     private int _dragGeneration, _themeRevision = -1;
     private string _themeMode = "";
+    private int _styleRevision = -1;
     private int _lastPixelHeight = -1, _lastPixelWidth = -1;
     private double _lastResizeFrame = -100;
     internal WebMiniPlayerWindow()
@@ -39,7 +40,7 @@ internal sealed class WebMiniPlayerWindow : Window
         Content = _root;
         _themeTimer = DispatcherQueue.CreateTimer();
         _themeTimer.Interval = TimeSpan.FromMilliseconds(500);
-        _themeTimer.Tick += (_, _) => SendTheme();
+        _themeTimer.Tick += (_, _) => { SyncWindowSettings(); SendTheme(); };
         _resizeTimer = DispatcherQueue.CreateTimer();
         _resizeTimer.Interval = TimeSpan.FromMilliseconds(16);
         _resizeTimer.Tick += AnimateResize;
@@ -91,17 +92,31 @@ internal sealed class WebMiniPlayerWindow : Window
         if (t >= 1) { StopResize(); Post(new { kind = "resized", expanded = _targetHeight > 188 }); }
     }
     private void StopResize() { CompositionTarget.Rendering -= AnimateResize; _resizeTimer.Stop(); _resizeClock.Stop(); }
+    private void SyncWindowSettings()
+    {
+        if (_closed) return;
+        if (AppWindow.Presenter is OverlappedPresenter presenter)
+        {
+            bool pinned = AppSettingsStore.Load().MiniPlayerAlwaysOnTop;
+            if (presenter.IsAlwaysOnTop != pinned) presenter.IsAlwaysOnTop = pinned;
+        }
+    }
     private void SendTheme()
     {
         if (!_ready || _closed) return;
         var state = WebAppearance.HasDraft() ? WebAppearance.Draft() : WebAppearance.Load();
         string mode = WebAppearance.ResolveMode(state.mode);
-        if (_themeRevision == WebAppearance.CurrentRevision && _themeMode == mode) return;
+        var miniStyle = MiniPlayerStyles.Current;
+        if (miniStyle.mode != "follow") mode = miniStyle.mode;
+        if (_themeRevision == WebAppearance.CurrentRevision && _themeMode == mode && _styleRevision == MiniPlayerStyles.Revision) return;
+        _styleRevision = MiniPlayerStyles.Revision;
         _themeRevision = WebAppearance.CurrentRevision; _themeMode = mode;
         var light = WebAppearance.Resolve(state, WebAppearance.Light);
         var dark = WebAppearance.Resolve(state, WebAppearance.Dark);
-        SetNativeBackground(mode == "dark" ? dark : light);
-        Post(new { kind = "theme", mode, light, dark });
+        var nativePalette = new System.Collections.Generic.Dictionary<string,string>(mode == "dark" ? dark : light);
+        if (miniStyle.colors.TryGetValue("background", out var customBackground)) nativePalette["shell"] = customBackground;
+        SetNativeBackground(nativePalette);
+        Post(new { kind = "theme", mode, light, dark, miniStyle });
     }
     private void SetNativeBackground(System.Collections.Generic.Dictionary<string, string> palette)
     {

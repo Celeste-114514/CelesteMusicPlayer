@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -2411,7 +2411,16 @@ namespace CelesteMusicPlayer
                     cueItem.AlbumArtist = cueTrack.Artist;
                 }
 
-                cueItem.StartTimeSeconds = cueTrack.StartTime.TotalSeconds;
+                cueItem.Album = string.IsNullOrWhiteSpace(cueTrack.Album) ? cueItem.Album : cueTrack.Album;
+                cueItem.AlbumArtist = string.IsNullOrWhiteSpace(cueTrack.AlbumArtist) ? cueItem.AlbumArtist : cueTrack.AlbumArtist;
+                cueItem.Track = (uint)cueTrack.Number;
+                cueItem.IsCueSegment = true;
+                cueItem.SourceTrackId = "cue-" + NetworkIdentity.Hash(Path.GetFullPath(cueItem.FilePath).ToUpperInvariant() + "\n" + cueItem.Track);
+                double start = cueTrack.StartTime.TotalSeconds;
+                var nextCue = tracks.FirstOrDefault(t => t.FilePath == cueTrack.FilePath && t.StartTime > cueTrack.StartTime);
+                double end = nextCue?.StartTime.TotalSeconds ?? cueItem.Duration.TotalSeconds;
+                cueItem.Duration = TimeSpan.FromSeconds(Math.Max(0, end - start));
+                cueItem.StartTimeSeconds = start;
                 cueItems.Add(cueItem);
             }
 

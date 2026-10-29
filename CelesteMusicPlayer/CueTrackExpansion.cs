@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -40,6 +40,7 @@ namespace CelesteMusicPlayer
                     continue;
                 }
 
+                if (item.IsCueSegment) { result.Add(item); continue; }
                 List<CueTrack>? tracks = null;
                 try
                 {
@@ -80,6 +81,8 @@ namespace CelesteMusicPlayer
                         track.AlbumArtist = t.Artist;
                     }
 
+                    if (!string.IsNullOrWhiteSpace(t.Album)) track.Album = t.Album;
+                    if (!string.IsNullOrWhiteSpace(t.AlbumArtist)) track.AlbumArtist = t.AlbumArtist;
                     track.StartTimeSeconds = start;
                     track.Duration = TimeSpan.FromSeconds(length);
                     track.Track = (uint)(i + 1); // 分轨序号即音轨号，保证专辑视图顺序正确

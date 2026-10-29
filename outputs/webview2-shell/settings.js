@@ -30,12 +30,7 @@
   let snapshot = null;          // 后端整份快照（含 defs / values / accounts / hotkeys / about）
   let revision = 0;
   let group = 'general';
-  document.addEventListener('celeste:settings-group', event => {
-    if (event.detail !== 'desktopLyrics') return;
-    group = 'desktopLyrics'; query = '';
-    if (searchInput) searchInput.value = '';
-    if (snapshot) { renderNav(); render(); }
-  });
+
   let query = '';
   let busy = false;
   let updateStatusHandler = null;   // 关于卡片的推送监听只留一个，切页不叠加
@@ -440,35 +435,20 @@
       window.CelesteAppearance.mount(workspace).catch(error => status('外观工作区加载失败：' + error.message, 'err'));
     }
 
-    const style = section({ title: '旧界面的外观（不影响网页这一层）', note: '这些只作用于旧主窗口和独立原生窗。网页的外观请用上面的预设库与元素细调。' });
-    addFields(style, ['UiStyleMode', 'CelesteThemeName', 'EnableFrostedGlass', 'AccentSource', 'CustomAccentColor']);
-    host.append(style);
+    const pages = section({ title: '独立窗口', note: '迷你播放器的样式已移至左侧「迷你播放器」。' });
+    addFields(pages, ['ScatteredPlayBackground', 'TaskbarPlayerEnabled']);host.append(pages);
+  }
 
-    const background = section({ title: '背景（旧界面）' });
-    addFields(background, ['EnableBackground', 'AlbumCoverAsBackground', 'BackgroundGaussBlur', 'GaussBlurRadius', 'BackgroundPreset', 'BackgroundPresetMotion', 'CustomBackgroundPath']);
-    host.append(background);
-
-    const list = section({ title: '列表' });
-    addFields(list, ['PlaylistDensity', 'ShowPlaylistTitle', 'ShowPlaylistArtist', 'ShowPlaylistAlbum', 'ShowPlaylistYear', 'ShowPlaylistDuration']);
-    host.append(list);
-
-    const nav = section({ title: '导航' });
-    addFields(nav, ['ShowNavFavorites', 'ShowNavRecent', 'ShowNavGenre', 'ShowNavYear', 'NavEmojiIcons']);
-    host.append(nav);
-
-    const pages = section({ title: '播放页与独立窗口' });
-    addFields(pages, ['NowPlayingLayout', 'NowPlayingVisual', 'MiniPlayerBackground', 'MiniPlayerAlwaysOnTop', 'OpenMiniPlayerOnStartup', 'ScatteredPlayBackground', 'TaskbarPlayerEnabled']);
-    host.append(pages);
+  function renderMini(host) {
+    const card=section({title:'迷你播放器样式',note:'选择预设，或调整颜色后另存为用户样式。样式文件可以自己编辑、导入和分享。'});
+    host.append(card);window.CelesteMiniStyles?.mount(card);
+    const behavior=section({title:'窗口行为'});addFields(behavior,['MiniPlayerAlwaysOnTop','OpenMiniPlayerOnStartup']);host.append(behavior);
   }
 
   function renderLyrics(host) {
     const source = section({ title: '歌词来源与排版' });
     addFields(source, ['LyricSourcePriority', 'LyricFuzzyMatch', 'HideBlankLyricLines', 'LyricAlign', 'LyricLineSpacing', 'LyricOffsetMs', 'MainLyricFontSize', 'MainLyricFontFamily', 'ShowLyricTranslate', 'LyricSavePolicy']);
     host.append(source);
-
-    const desktop = section({ title: '桌面歌词', note: '桌面歌词是独立的一条原生歌词窗，和网页里的歌词页不是同一套渲染。' });
-    addFields(desktop, ['OpenDesktopLyricsOnStartup', 'DesktopLyricHideWithoutLyric', 'DesktopLyricHideWhenPaused', 'DesktopLyricLockOnStart', 'DesktopLyricShowUnlockWhenLocked', 'DesktopLyricHideTranslation', 'DesktopLyricShowBackgroundBar', 'DesktopLyricVisibleLines', 'DesktopLyricLineSpacing', 'DesktopLyricOpacity', 'DesktopLyricDirection', 'DesktopLyricFontFile', 'DesktopLyricMusicReactive', 'DesktopLyricScale', 'DesktopLyricFontSize', 'DesktopLyricSecondaryFontSize', 'DesktopLyricFontFamily', 'DesktopLyricColorMode', 'DesktopLyricGradientStart', 'DesktopLyricGradientEnd', 'DesktopLyricPlayedColor', 'DesktopLyricUnplayedColor', 'DesktopLyricOutlineColor', 'DesktopLyricOutlineWidth', 'DesktopLyricShadowStrength', 'DesktopLyricAlign', 'DesktopLyricBackgroundColor', 'DesktopLyricClickThrough']);
-    host.append(desktop);
 
     const fetchGradual = section({ title: '自动获取与保存' });
     addFields(fetchGradual, ['AutoDownloadLyrics', 'AutoDownloadCover', 'AutoDownloadOnlyWhenTagFull', 'SaveLyricToSongFolder', 'SaveCoverToSongFolder', 'LyricFolder', 'CoverFolder', 'UseInnerCoverFirst']);
@@ -1056,8 +1036,9 @@
     audio: renderAudio,
     playback: renderPlayback,
     appearance: renderAppearance,
-    desktopLyrics: renderDesktopLyrics,
+    mini: renderMini,
     lyrics: renderLyrics,
+    desktopLyrics: renderDesktopLyrics,
     library: renderLibrary,
     network: renderNetwork,
     system: renderSystem,
@@ -1184,6 +1165,11 @@
   }
 
   let loaded = false;
+  document.addEventListener('celeste:settings-group', event => {
+    if (!['mini','desktopLyrics'].includes(event.detail)) return;
+    group = event.detail; query = ''; if (searchInput) searchInput.value = '';
+    if (snapshot) { renderNav(); render(); }
+  });
   async function ensureLoaded() {
     if (loaded && snapshot) return;
     loaded = true;

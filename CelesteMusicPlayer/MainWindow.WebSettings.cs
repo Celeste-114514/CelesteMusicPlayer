@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -39,6 +39,7 @@ namespace CelesteMusicPlayer
             switch (operation)
             {
                 case "get": return BuildSettingsSnapshot();
+                case "miniStyles": return await MiniStylesAsync(msg, host).ConfigureAwait(true);
                 case "patch": return await PatchSettingsAsync(msg).ConfigureAwait(true);
                 case "pickFolder": return new { canceled = false, path = await PickFolderAsync(host).ConfigureAwait(true) };
                 case "pickLyricFont":
@@ -113,13 +114,18 @@ namespace CelesteMusicPlayer
 
             foreach (WebSettingsSchema.Def def in WebSettingsSchema.Defs)
             {
+                // 只隐藏「网页设置页已经不渲染、且只服务旧主窗口界面」的项。
+                // ⚠ 别写成「scope==native 一律隐藏」：那会把置顶、关闭行为、滚轮音量、启动分类、
+                // 任务栏进度这 5 项一起吞掉，网页设置页还在渲染它们，于是界面上悄悄少几行、还不报错。
+                if (def.group == "appearance" && !NativeStillUsedByWeb.Contains(def.id)) continue;
+                if (def.scope == "native" && !NativeStillUsedByWeb.Contains(def.id) && !def.id.StartsWith("DesktopLyric")) continue;
                 object? options = def.options;
                 if (def.id == "CelesteThemeName")
                     options = themes.Select(name => name.Length == 0 ? "|内置默认配色" : name + "|" + name).ToArray();
                 yield return new
                 {
-                    id = def.id, group = def.id.StartsWith("DesktopLyric") || def.id == "OpenDesktopLyricsOnStartup" ? "desktopLyrics" : def.group, label = def.label, kind = def.kind, note = def.note,
-                    scope = def.id.StartsWith("DesktopLyric") || def.id == "OpenDesktopLyricsOnStartup" ? "web" : def.scope, options, min = def.min, max = def.max, step = def.step,
+                    id = def.id, group = def.id.StartsWith("DesktopLyric") || def.id=="OpenDesktopLyricsOnStartup" ? "desktopLyrics" : def.id is "MiniPlayerAlwaysOnTop" or "OpenMiniPlayerOnStartup" ? "mini" : def.group, label = def.label, kind = def.kind, note = def.note,
+                    scope = def.id.StartsWith("DesktopLyric") || def.id=="OpenDesktopLyricsOnStartup" ? "web" : def.id is "MiniPlayerAlwaysOnTop" or "OpenMiniPlayerOnStartup" ? "web" : def.scope, options, min = def.min, max = def.max, step = def.step,
                     unit = def.unit, advanced = def.advanced, readOnly = IsReadOnly(def.id)
                 };
             }
@@ -127,6 +133,17 @@ namespace CelesteMusicPlayer
 
         /// <summary>这些项的后端入口在别处（底栏音频面板/设备切换），这里只给读，避免两处能写同一件事。</summary>
         private static bool IsReadOnly(string id) => id == "OutputMode";
+
+        /// <summary>
+        /// 作用域标成 native（原本只给旧主窗口用），但网页设置页仍在渲染、且仍然有效的项。
+        /// DesktopLyric* 由调用处单独放行。要删项先确认 outputs/webview2-shell/settings.js 里也没人再引用它。
+        /// </summary>
+        private static readonly HashSet<string> NativeStillUsedByWeb = new(StringComparer.Ordinal)
+        {
+            "MiniPlayerAlwaysOnTop", "OpenMiniPlayerOnStartup", "ScatteredPlayBackground", "TaskbarPlayerEnabled",
+            "OpenDesktopLyricsOnStartup", "AlwaysOnTop", "CloseAction", "StartupCategory",
+            "GlobalMouseWheelVolume", "ShowTaskbarProgress",
+        };
 
         // —— patch ——
 

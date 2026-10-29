@@ -179,7 +179,7 @@ namespace CelesteMusicPlayer
         public static void SetVolume(double value0To100) => Run(h => h.SetVolumePublic(value0To100));
 
         public static void PlayQueueAt(int index) => Run(h => h.PlayUserPlaylistAtPublic(index));
-        public static void OpenAppearanceSettings() => Run(h => h.ShowWebPage("settings"));
+        public static void OpenAppearanceSettings() => Run(h => h.ShowWebPage("mini-settings"));
 
         /// <summary>双击迷你窗口 → 把主窗口叫到前台。</summary>
         public static void BringMainWindowToFront()

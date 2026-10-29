@@ -23,3 +23,6 @@ body.expanded main{clip-path:inset(0);opacity:1}
 body.expanded footer{transform:translateY(432px)}
 .popup{transform:translateY(-432px)}body.expanded .popup{transform:none}
 @media(prefers-reduced-motion:reduce){main,footer{transition:none}}
+#lyrics button{font-size:var(--mini-lyric-size,21px)}
+
+header img,#placeholder{width:var(--mini-cover-size,62px);height:var(--mini-cover-size,62px);border-radius:var(--mini-radius,7px)}.caption{text-align:var(--mini-text-align,center)}:root[data-layout=cover-right] header>.caption{order:-1}:root[data-layout=text-only] #cover,:root[data-layout=text-only] #placeholder{display:none}

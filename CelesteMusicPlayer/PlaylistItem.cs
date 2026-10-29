@@ -1,5 +1,6 @@
-using System;
+﻿using System;
 using System.IO;
+using System.Linq;
 namespace CelesteMusicPlayer
 {
     public partial class PlaylistItem
@@ -90,7 +91,7 @@ namespace CelesteMusicPlayer
         /// 播放歌曲状态条第三行显示的短格式信息："ALAC · 24bit/44kHz · 1411kbps"（由路径实时读取，读失败为空）。
         /// </summary>
         public string FormatInfoLine =>
-            string.IsNullOrWhiteSpace(FilePath) ? string.Empty : AudioInfoFormatter.FormatShortLine(FilePath);
+            string.IsNullOrWhiteSpace(FilePath) ? string.Empty : (IsCueSegment ? "CUE/PCM · " + string.Join(" · ", AudioInfoFormatter.FormatShortLine(FilePath).Split(" · ").Skip(1)) : AudioInfoFormatter.FormatShortLine(FilePath));
 
         /// <summary>
         /// 歌曲面板显示的标题：一律使用音频内嵌标题标签（Tag.Title），

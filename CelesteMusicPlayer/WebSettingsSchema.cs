@@ -53,6 +53,7 @@ namespace CelesteMusicPlayer
             new() { id = "audio", label = "音频输出", description = "输出方式、缓冲与 DSD 高级兼容。具体音效在「音效处理」页。", icon = "wave" },
             new() { id = "playback", label = "播放行为", description = "换曲、淡化、变速与队列插入位置。", icon = "play" },
             new() { id = "appearance", label = "外观", description = "界面风格、配色、背景与列表密度。", icon = "disc" },
+            new() { id = "mini", label = "迷你播放器", description = "选择样式、制作自己的配色，或导入与导出样式文件。", icon = "play" },
             new() { id = "desktopLyrics", label = "桌面歌词", description = "WebView2 歌词：显示、字体、竖排与音乐响应。", icon = "lyrics" },
             new() { id = "lyrics", label = "歌词与封面", description = "歌词来源与样式、桌面歌词、自动获取与保存规则。", icon = "lyrics" },
             new() { id = "library", label = "媒体库", description = "监视目录、扫描规则与删除保护。", icon = "folder" },
@@ -566,3 +567,4 @@ namespace CelesteMusicPlayer
         }
     }
 }
+
