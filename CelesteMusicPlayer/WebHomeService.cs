@@ -8,29 +8,38 @@ using System.Threading.Tasks;
 
 namespace CelesteMusicPlayer
 {
-    public sealed partial class MainWindow
+    /// <summary>
+    /// 网页「主页」的聚合计算：最近在听、听歌统计、最近专辑、本周活跃热力图。
+    ///
+    /// W13：从 MainWindow 搬出来。这里只做「读曲库快照 + 读统计 + 算聚合」，
+    /// 不碰控件、不碰播放，曲库从构造时注入的三支委托取（曲目表、专辑分组、曲目 id）。
+    /// </summary>
+    internal sealed class WebHomeService(
+        Func<PlaylistItem[]> allTracks,
+        Func<IReadOnlyList<PlaylistItem>, WebAlbumEntry[]> albumsOf,
+        Func<PlaylistItem, string> trackId)
     {
-        internal async Task<object> WebHomeAsync(JsonElement msg)
+        internal async Task<object> HandleAsync(JsonElement msg)
         {
             string operation = msg.GetProperty("operation").GetString() ?? "get";
             int offsetMinutes = Math.Clamp(msg.GetProperty("offsetMinutes").GetInt32(), -840, 840);
             var offset = TimeSpan.FromMinutes(-offsetMinutes);
             if (operation == "dayHistory")
             {
-                var dayTracks = WebAllTracks();
-                return await Task.Run(() => WebHomeDay(msg, offset, dayTracks));
+                var dayTracks = allTracks();
+                return await Task.Run(() => DayHistory(msg, offset, dayTracks));
             }
             if (operation != "get") throw new ArgumentException("未知的主页操作。");
 
             // Capture UI-owned collections before leaving the UI thread.
-            var tracks = WebAllTracks();
+            var tracks = allTracks();
             var stats = TrackStatsStore.Load();
-            var albums = WebAlbums(tracks);
+            var albums = albumsOf(tracks);
             string today = msg.GetProperty("today").GetString() ?? "";
-            return await Task.Run(() => WebHomeSnapshot(tracks, stats, albums, today, offset));
+            return await Task.Run(() => Snapshot(tracks, stats, albums, today, offset));
         }
 
-        private static object WebHomeSnapshot(PlaylistItem[] tracks, Dictionary<string, TrackStatsEntry> stats,
+        private object Snapshot(PlaylistItem[] tracks, Dictionary<string, TrackStatsEntry> stats,
             WebAlbumEntry[] albums, string today, TimeSpan offset)
         {
             var byPath = tracks.GroupBy(track => Path.GetFullPath(track.PersistenceKey), StringComparer.OrdinalIgnoreCase)
@@ -44,7 +53,7 @@ namespace CelesteMusicPlayer
                 foreach (var history in recent)
                 {
                     if (!byPath.TryGetValue(Path.GetFullPath(history.FilePath), out var track)) continue;
-                    string id = WebTrackId(track);
+                    string id = trackId(track);
                     var album = albums.FirstOrDefault(candidate => candidate.trackIds.Contains(id));
                     if (album != null && !recentAlbumIds.Contains(album.id)) recentAlbumIds.Add(album.id);
                     if (recentAlbumIds.Count >= 12) break;
@@ -54,11 +63,11 @@ namespace CelesteMusicPlayer
             var topArtists = tracks.Select(track => new { track, count = StatsFor(stats, track)?.PlayCount ?? 0 })
                 .Where(item => item.count > 0).GroupBy(item => item.track.Artist ?? "未知艺术家", StringComparer.CurrentCultureIgnoreCase)
                 .Select(group => new { name = group.First().track.Artist ?? "未知艺术家", count = group.Sum(item => item.count),
-                    coverUrl = group.First().track == null ? "" : "https://celeste-cover.internal/cover/" + WebTrackId(group.First().track) })
+                    coverUrl = group.First().track == null ? "" : "https://celeste-cover.internal/cover/" + trackId(group.First().track) })
                 .OrderByDescending(item => item.count).ThenBy(item => item.name, StringComparer.CurrentCultureIgnoreCase).Take(5).ToArray();
             // Indexed by assignment, not ToDictionary: a cue-split file can yield duplicate ids and must not throw.
             var trackById = new Dictionary<string, PlaylistItem>(StringComparer.Ordinal);
-            foreach (var track in tracks) trackById[WebTrackId(track)] = track;
+            foreach (var track in tracks) trackById[trackId(track)] = track;
             var topAlbums = albums.Select(album => new { album.id, album.title, album.artist, album.coverUrl,
                 count = album.trackIds.Sum(id => trackById.TryGetValue(id, out var track) ? StatsFor(stats, track)?.PlayCount ?? 0 : 0) })
                 .Where(album => album.count > 0).OrderByDescending(album => album.count).ThenBy(album => album.title, StringComparer.CurrentCultureIgnoreCase).Take(4).ToArray();
@@ -82,7 +91,7 @@ namespace CelesteMusicPlayer
             {
                 revision = tracks.Length + ":" + stats.Values.Sum(item => item.PlayCount) + ":" + recent.Count,
                 favoriteCount = tracks.Count(track => StatsFor(stats, track)?.IsFavorite == true),
-                lastTrackId = lastTrack == null ? "" : WebTrackId(lastTrack), lastTrackTitle = lastTrack?.Title ?? "",
+                lastTrackId = lastTrack == null ? "" : trackId(lastTrack), lastTrackTitle = lastTrack?.Title ?? "",
                 lastTrackArtist = lastTrack?.Artist ?? "", lastTrackAlbum = lastTrack?.Album ?? "",
                 recentAlbumIds = recentAlbumIds.ToArray(), topArtists, topAlbums, dailyCounts = daily, activityError
             };
@@ -91,7 +100,7 @@ namespace CelesteMusicPlayer
         private static TrackStatsEntry? StatsFor(Dictionary<string, TrackStatsEntry> stats, PlaylistItem track)
             => stats.TryGetValue(Path.GetFullPath(track.PersistenceKey), out var entry) ? entry : null;
 
-        private static object WebHomeDay(JsonElement msg, TimeSpan offset, PlaylistItem[] current)
+        private object DayHistory(JsonElement msg, TimeSpan offset, PlaylistItem[] current)
         {
             DateTime date = DateTime.SpecifyKind(DateOnly.ParseExact(msg.GetProperty("date").GetString() ?? "", "yyyy-MM-dd", CultureInfo.InvariantCulture).ToDateTime(TimeOnly.MinValue), DateTimeKind.Unspecified);
             int cursor = Math.Max(0, msg.GetProperty("cursor").GetInt32());
@@ -105,7 +114,7 @@ namespace CelesteMusicPlayer
                 tracks = page.Select(item =>
                 {
                     var track = current.FirstOrDefault(candidate => string.Equals(candidate.PersistenceKey, item.FilePath, StringComparison.OrdinalIgnoreCase));
-                    return new { trackId = track == null ? "" : WebTrackId(track), title = item.Title,
+                    return new { trackId = track == null ? "" : trackId(track), title = item.Title,
                         artist = track?.Artist ?? "", fileName = Path.GetFileName(item.FilePath),
                         time = (item.PlayedAtUtc.ToUniversalTime() + offset).ToString("HH:mm", CultureInfo.InvariantCulture) };
                 }).ToArray()

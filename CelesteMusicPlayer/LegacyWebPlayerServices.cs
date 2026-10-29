@@ -36,7 +36,7 @@ internal sealed class LegacyWebPlayerServices(MainWindow backend) : IWebPlayerSe
     public Task<object> WebDspAsync(JsonElement msg) => backend.WebDspAsync(msg);
     public string? WebFolderCoverPath(string id) => backend.WebFolderCoverPath(id);
     public Task<object> WebFoldersAsync(JsonElement msg, object host) => backend.WebFoldersAsync(msg, host);
-    public Task<object> WebHomeAsync(JsonElement msg) => backend.WebHomeAsync(msg);
+    public Task<object> WebHomeAsync(JsonElement msg) => backend.Home.HandleAsync(msg);
     public object WebMore(JsonElement msg) => backend.WebMore(msg);
     public object WebNowPlaying() => backend.WebNowPlaying();
     public object WebNowPlayingVisual() => backend.WebNowPlayingVisual();
