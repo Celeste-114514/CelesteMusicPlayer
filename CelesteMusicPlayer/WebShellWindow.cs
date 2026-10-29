@@ -25,6 +25,7 @@ namespace CelesteMusicPlayer
         // a separate, unmapped host and are served only by this handler.
         private const string CoverOrigin = "https://celeste-cover.internal";
         private readonly MainWindow _owner;
+        private readonly WebAppearanceService _appearance = new();
         private readonly NativeWebViewPanel _web = new() { Dock = System.Windows.Forms.DockStyle.Fill };
         private readonly System.Windows.Forms.Label _status = new() { Text = "正在加载网页界面…", AutoSize = false, Dock = System.Windows.Forms.DockStyle.Top, Height = 100, TextAlign = System.Drawing.ContentAlignment.MiddleCenter };
         private readonly System.Windows.Forms.Button _reload = new() { Text = "重新载入界面", Visible = false, Dock = System.Windows.Forms.DockStyle.Top };
@@ -179,7 +180,7 @@ namespace CelesteMusicPlayer
                 core.SetVirtualHostNameToFolderMapping("celeste.internal", folder, CoreWebView2HostResourceAccessKind.DenyCors);
                 // 背景图：用户选的图片先被拷进这个受控目录，再以虚拟主机地址给网页。
                 // 直接把本机路径塞进 CSS 是不行的 —— CSP 不许 file://，WebView2 也不会去读。
-                core.SetVirtualHostNameToFolderMapping(MainWindow.BackgroundAssetHost, MainWindow.BackgroundFolder, CoreWebView2HostResourceAccessKind.DenyCors);
+                core.SetVirtualHostNameToFolderMapping(WebAppearanceService.BackgroundAssetHost, WebAppearanceService.BackgroundFolder, CoreWebView2HostResourceAccessKind.DenyCors);
                 core.Settings.AreDefaultContextMenusEnabled = false;
                 core.Settings.IsStatusBarEnabled = false;
                 core.Settings.AreDevToolsEnabled = false;
@@ -384,7 +385,7 @@ namespace CelesteMusicPlayer
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = sources });
                         break;
                     case "theme":
-                        var theme = await _owner.WebAppearanceAsync(msg).ConfigureAwait(true);
+                        var theme = await _appearance.ExecuteAsync(msg,Handle).ConfigureAwait(true);
                         Post(new { kind = "celeste.reply", version = 1, requestId, ok = true, data = theme });
                         // 外观改完立刻回推一份快照，不等 250ms 的轮询；网页拿到的永远是刚算好的那套。
                         SendTheme(); break;

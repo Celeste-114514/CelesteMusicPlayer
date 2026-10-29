@@ -10,7 +10,7 @@ const readline = require('node:readline');
 const { chromium } = require('playwright-core');
 const root = path.resolve(__dirname, '..');
 const temp = fs.mkdtempSync(path.join(os.tmpdir(), 'celeste-appearance-'));
-const child = spawn('dotnet', [path.join(__dirname, 'AppearanceRegression/bin/Release/net10.0/AppearanceRegression.dll'), temp]);
+const child = spawn('dotnet', [process.env.APPEARANCE_REGRESSION_DLL || path.join(__dirname, 'AppearanceRegression/bin/Release/net10.0/AppearanceRegression.dll'), temp]);
 const waiting = [];
 readline.createInterface({ input: child.stdout }).on('line', line => {
   const result = JSON.parse(line), next = waiting.shift();
@@ -60,7 +60,7 @@ let browser;
   });
   const state = () => rpc({ operation: 'get' });
   const value = name => page.evaluate(name => getComputedStyle(document.documentElement).getPropertyValue('--' + name).trim(), name);
-  const click = label => page.getByRole('button', { name: label, exact: true }).click();
+  const click = label => label === '撤销' ? page.locator('#history-undo').click() : page.getByRole('button', { name: label, exact: true }).click();
   const waitValue = (name, expected) => page.waitForFunction(({ name, expected }) => getComputedStyle(document.documentElement).getPropertyValue('--' + name).trim() === expected, { name, expected });
   const before = await state();
   assert(before.presets.some(p => p.id === 'windows-fluent'));

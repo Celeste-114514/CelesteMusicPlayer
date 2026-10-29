@@ -4,6 +4,7 @@
     <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../CelesteMusicPlayer/WebAppearanceService.cs" Link="WebAppearanceService.cs" />
     <Compile Include="../../CelesteMusicPlayer/WebAppearance.cs" Link="WebAppearance.cs" />
     <Compile Include="../../CelesteMusicPlayer/MainWindow.WebAppearance.cs" Link="MainWindow.WebAppearance.cs" />
   </ItemGroup>
