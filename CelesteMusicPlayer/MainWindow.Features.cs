@@ -2847,7 +2847,7 @@ namespace CelesteMusicPlayer
         private async Task ChangeOutputModeAsync(string mode)
         {
             AppSettingsStore.Update(s => s.OutputMode = mode);
-            ApplyEngineOutputMode(AppSettingsStore.Load());
+            OutputMode.Apply(AppSettingsStore.Load());
             UpdateModeCardHighlight(mode);
             if (string.Equals(mode, "Asio", StringComparison.OrdinalIgnoreCase))
             {

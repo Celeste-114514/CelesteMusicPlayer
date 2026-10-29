@@ -2899,7 +2899,7 @@ namespace CelesteMusicPlayer
             NowPlayingText.Text = "正在转码：" + item.Title;
             _audioEngine ??= new AudioPlaybackEngine();
             AppSettingsState hifiSettings = AppSettingsStore.Load();
-            ApplyEngineOutputMode(hifiSettings);
+            OutputMode.Apply(hifiSettings);
             _audioEngine.SetOutputDevicePreference(string.IsNullOrWhiteSpace(hifiSettings.OutputDeviceId) ? null : hifiSettings.OutputDeviceId);
             _audioEngine.PlaybackEnded -= OnEnginePlaybackEnded;
             _audioEngine.PlaybackEnded += OnEnginePlaybackEnded;

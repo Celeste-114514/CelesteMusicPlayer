@@ -43,22 +43,6 @@ namespace CelesteMusicPlayer
     public sealed partial class MainWindow
     {
 
-        /// <summary>把设置里的输出模式映射到引擎 HiFi 后端（Shared / WasapiExclusive / Asio）。</summary>
-        private void ApplyEngineOutputMode(AppSettingsState settings)
-        {
-            HiFiOutputBackend.OutputMode mode = string.Equals(settings.OutputMode, "WasapiExclusive", System.StringComparison.OrdinalIgnoreCase)
-                ? HiFiOutputBackend.OutputMode.WasapiExclusive
-                : string.Equals(settings.OutputMode, "Asio", System.StringComparison.OrdinalIgnoreCase)
-                    ? HiFiOutputBackend.OutputMode.Asio
-                    : HiFiOutputBackend.OutputMode.WasapiShared;
-
-            // B4：输出模式切换 = 链路事件（启动恢复首次调用只记值，不算"切换"）
-            NoteChainMode(settings.OutputMode);
-
-            _audioEngine?.SetOutputMode(mode);
-        }
-
-
         /// <summary>设置页变更后即时生效。</summary>
         internal void ApplySettingsLive(AppSettingsState settings)
         {

@@ -324,7 +324,7 @@ namespace CelesteMusicPlayer
             }
 
             _ = ApplyOutputDeviceAsync(settings.OutputDeviceId);
-            ApplyEngineOutputMode(settings);
+            OutputMode.Apply(settings);
         }
 
 
