@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -219,6 +219,7 @@ namespace CelesteMusicPlayer
         public string DesktopLyricColorPreset { get; set; } = "Custom";
 
         /// <summary>桌面歌词里是否显示译文行（对照歌词的翻译行）。关掉后只显示原文。</summary>
+        public bool DesktopLyricShowRomanization { get; set; } = true;
         public bool DesktopLyricHideTranslation { get; set; }
 
         /// <summary>Left / Center / Right</summary>
@@ -823,6 +824,7 @@ public Dictionary<string, string> CustomHotkeys { get; set; } = new();
             DesktopLyricOutlineColor = s.DesktopLyricOutlineColor,
             DesktopLyricShadowStrength = s.DesktopLyricShadowStrength,
             DesktopLyricColorPreset = s.DesktopLyricColorPreset,
+            DesktopLyricShowRomanization = s.DesktopLyricShowRomanization,
             DesktopLyricHideTranslation = s.DesktopLyricHideTranslation,
             DesktopLyricAlign = s.DesktopLyricAlign,
             DesktopLyricVisibleLines = s.DesktopLyricVisibleLines,

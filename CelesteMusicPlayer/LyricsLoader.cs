@@ -15,6 +15,8 @@ namespace CelesteMusicPlayer
 
         public string Text { get; init; } = string.Empty;
 
+        public string? Romanization { get; set; }
+
         /// <summary>逐字开始时间（可选）。长度与 Text 的 UTF-16 长度一致；null 表示无逐字数据。</summary>
         public IReadOnlyList<TimeSpan>? CharTimes { get; init; }
 
@@ -60,11 +62,32 @@ namespace CelesteMusicPlayer
 
                 if (lines.Count > 0)
                 {
-                    return PostProcess(lines, settings);
+                    return AttachRomanization(PostProcess(lines, settings), audioPath);
                 }
             }
 
-            return PostProcess(lines, settings);
+            return AttachRomanization(PostProcess(lines, settings), audioPath);
+        }
+
+        // Optional timed romanization is separate from translations and never replaces the original text.
+        private static List<LyricLine> AttachRomanization(List<LyricLine> lines, string audioPath)
+        {
+            foreach (string suffix in new[] { ".romaji.lrc", ".romanized.lrc" })
+            {
+                string path = System.IO.Path.ChangeExtension(audioPath, suffix);
+                if (!File.Exists(path)) continue;
+                try
+                {
+                    if (new FileInfo(path).Length > 2 * 1024 * 1024) continue;
+                    var readings = ParseLrc(File.ReadAllText(path, DetectEncoding(path)))
+                        .GroupBy(l => l.Time).ToDictionary(g => g.Key, g => g.First().Text);
+                    foreach (var line in lines.Where(l => !l.IsTranslation))
+                        if (readings.TryGetValue(line.Time, out string? reading)) line.Romanization = reading;
+                    break;
+                }
+                catch (Exception ex) { StartupLog.WriteException("Lyrics.Romanization", ex); }
+            }
+            return lines;
         }
 
         /// <summary>选中的来源排最前，其余按 外挂→内嵌同步→内嵌未同步 补位。</summary>
@@ -267,6 +290,7 @@ namespace CelesteMusicPlayer
                 string key = NormalizeKey(baseName);
                 foreach (string file in files)
                 {
+                    if (file.EndsWith(".romaji.lrc", StringComparison.OrdinalIgnoreCase) || file.EndsWith(".romanized.lrc", StringComparison.OrdinalIgnoreCase)) continue;
                     string n = NormalizeKey(Path.GetFileNameWithoutExtension(file));
                     if (n.Contains(key, StringComparison.OrdinalIgnoreCase)
                         || key.Contains(n, StringComparison.OrdinalIgnoreCase))

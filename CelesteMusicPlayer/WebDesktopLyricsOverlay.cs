@@ -312,7 +312,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
         catch (Exception ex) { StartupLog.WriteException("DesktopLyrics.Font", ex); }
     }
 
-    private void OnWebMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
+    private async void OnWebMessage(object? sender, CoreWebView2WebMessageReceivedEventArgs e)
     {
         if (!e.Source.StartsWith("https://celeste-lyrics.internal/", StringComparison.Ordinal)) return;
         try
@@ -329,6 +329,31 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
                 case "play": MiniPlayerBridge.TogglePlayPause(); break;
                 case "previous": MiniPlayerBridge.Previous(); break;
                 case "next": MiniPlayerBridge.Next(); break;
+                case "stylePatch":
+                    DesktopLyricStyles.Apply(doc.RootElement.GetProperty("changes"));
+                    ApplySettings(AppSettingsStore.Load());
+                    break;
+                case "styleList": Post(new { kind = "styles", items = DesktopLyricStyles.List() }); break;
+                case "styleSave":
+                    DesktopLyricStyles.Save(doc.RootElement.GetProperty("name").GetString() ?? "我的样式");
+                    Post(new { kind = "styles", items = DesktopLyricStyles.List() }); break;
+                case "styleSelect":
+                    DesktopLyricStyles.Select(doc.RootElement.GetProperty("id").GetString() ?? "");
+                    ApplySettings(AppSettingsStore.Load()); break;
+                case "styleImport":
+                    var picker = new Windows.Storage.Pickers.FileOpenPicker(); picker.FileTypeFilter.Add(".json");
+                    WinRT.Interop.InitializeWithWindow.Initialize(picker, _hwnd);
+                    var input = await picker.PickSingleFileAsync();
+                    if (input != null) { DesktopLyricStyles.Import(input.Path); Post(new { kind = "styles", items = DesktopLyricStyles.List() }); }
+                    break;
+                case "styleExport":
+                    var savePicker = new Windows.Storage.Pickers.FileSavePicker();
+                    savePicker.FileTypeChoices.Add("桌面歌词样式", new[] { ".json" }); savePicker.SuggestedFileName = "celeste-lyrics-style";
+                    WinRT.Interop.InitializeWithWindow.Initialize(savePicker, _hwnd);
+                    var output = await savePicker.PickSaveFileAsync();
+                    if (output != null) await File.WriteAllTextAsync(output.Path, DesktopLyricStyles.Export());
+                    break;
+                case "resetPosition": ResizeForDirection(placeDefault: true); break;
                 case "settings": _owner.ShowWebPage("desktop-lyrics-settings"); break;
                 // 锁定 + 穿透时页面收不到任何输入，宿主自己盯着光标：指到解锁条上就临时撤掉穿透。
                 case "hintRect":
@@ -339,7 +364,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
                     break;
             }
         }
-        catch (Exception ex) { StartupLog.WriteException("DesktopLyrics.Command", ex); }
+        catch (Exception ex) { StartupLog.WriteException("DesktopLyrics.Command", ex); Post(new { kind = "error", message = ex.Message }); }
     }
 
     // —————————————————— 对外接口（和原来的 XAML 版一致） ——————————————————
@@ -378,7 +403,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
     }
 
     public void SetLyrics(IReadOnlyList<LyricLine> lines) { _lines = lines; PublishLines(); }
-    private void PublishLines() => Post(new { kind = "lyrics", lines = _lines.Select(l => new { t = l.Time.TotalSeconds, text = l.Text, tr = l.IsTranslation, chars = l.CharTimes?.Select(t => t.TotalSeconds) }) });
+    private void PublishLines() => Post(new { kind = "lyrics", lines = _lines.Select(l => new { t = l.Time.TotalSeconds, text = l.Text, romanization = l.Romanization, tr = l.IsTranslation, chars = l.CharTimes?.Select(t => t.TotalSeconds) }) });
     public void Sync(TimeSpan time) => Post(new { kind = "clock", time = time.TotalSeconds, paused = _paused, rate = _owner.DesktopLyricsPlaybackRate });
     public void SetPlaybackPaused(bool paused) { _paused = paused; Tick(); }
 
@@ -480,7 +505,7 @@ internal sealed class WebDesktopLyricsOverlay : IDisposable
             s.DesktopLyricFontFile, s.DesktopLyricDirection, s.DesktopLyricScale, s.DesktopLyricMusicReactive,
             s.DesktopLyricShowUnlockWhenLocked, s.DesktopLyricColorMode, s.DesktopLyricGradientStart, s.DesktopLyricGradientEnd,
             s.DesktopLyricPlayedColor, s.DesktopLyricUnplayedColor, s.DesktopLyricOutlineColor, s.DesktopLyricOutlineWidth,
-            s.DesktopLyricShadowStrength, s.DesktopLyricOpacity, s.DesktopLyricVisibleLines, s.DesktopLyricHideTranslation,
+            s.DesktopLyricShadowStrength, s.DesktopLyricOpacity, s.DesktopLyricVisibleLines, s.DesktopLyricHideTranslation, s.DesktopLyricShowRomanization,
             s.DesktopLyricAlign, s.DesktopLyricLineSpacing, s.DesktopLyricShowBackgroundBar, s.DesktopLyricBackgroundColor,
             s.LyricOffsetMs, s.LyricKaraokeStyle, locked = _locked, geek, phosphor, palette
         };
