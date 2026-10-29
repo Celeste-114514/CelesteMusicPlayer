@@ -210,8 +210,8 @@ namespace CelesteMusicPlayer
                 revision, total = items.Length, offset, currentIndex = _queue.Index,
                 order = _orderResolver.Order.ToString(),
                 summary = new { totalSeconds, remainingSeconds, hasCurrent = _queue.Index >= 0 && _queue.Index < items.Length },
-                previous = QueuePreviousPreview(items),
-                next = QueueNextPreview(items),
+                previous = WebQueuePreview.Previous(items, _queue.Index, _orderResolver),
+                next = WebQueuePreview.Next(items, _queue.Index, _orderResolver),
                 tracks = items.Skip(offset).Take(200).Select((item, i) => new
                 {
                     id = WebTrackIdentity.Of(item), index = offset + i, title = item.Title, artist = item.Artist,
@@ -231,83 +231,6 @@ namespace CelesteMusicPlayer
             if (item.IsRemote) return "NET";
             string extension = System.IO.Path.GetExtension(item.FilePath).TrimStart('.').ToUpperInvariant();
             return extension.Length is > 0 and <= 5 ? extension : "";
-        }
-
-        /// <summary>
-        /// 队列页的"上一首"预览。索引直接用播放器那套 ResolvePreviousIndex，
-        /// 不在网页里另算一遍 —— 卡片上写哪一首，点下去就必须是那一首。
-        /// 顺序播放走到第一首时没有上一首（kind=none），循环/随机则回卷到队尾。
-        /// </summary>
-        private object QueuePreviousPreview(PlaylistItem[] items)
-        {
-            if (items.Length == 0 || _queue.Index < 0 || _queue.Index >= items.Length)
-            {
-                return new { kind = "unknown" };
-            }
-
-            int? index = _orderResolver.ResolvePreviousIndex(items.Length, _queue.Index);
-            if (index is null || index.Value < 0 || index.Value >= items.Length)
-            {
-                return new { kind = "none" };
-            }
-
-            var item = items[index.Value];
-            return new
-            {
-                // 队列只有一首且允许回卷时，"上一首"就是这首自己
-                kind = index.Value == _queue.Index ? "self" : "track",
-                index = index.Value, title = item.Title, artist = item.Artist, album = item.Album,
-                duration = item.Duration.TotalSeconds,
-                coverUrl = "https://celeste-cover.internal/cover/" + WebTrackIdentity.Of(item)
-            };
-        }
-
-        /// <summary>
-        /// 队列页的"下一首"预览。只按当前播放顺序推算，不看、也不推进随机数发生器 ——
-        /// 随机模式下真去摇一次，等于把真正要播的那首摇走了，预览和实际就对不上。
-        /// 随机就如实说随机，单曲循环就如实说这首会继续循环。
-        /// </summary>
-        private object QueueNextPreview(PlaylistItem[] items)
-        {
-            const string none = "none";
-            string kind;
-            int index = -1;
-            if (items.Length == 0 || _queue.Index < 0 || _queue.Index >= items.Length)
-            {
-                kind = "unknown";
-            }
-            else
-            {
-                switch (_orderResolver.Order)
-                {
-                    case PlaybackOrder.Random:
-                        kind = items.Length == 1 ? "self" : "random";
-                        index = items.Length == 1 ? _queue.Index : -1;
-                        break;
-                    case PlaybackOrder.TrackLoop:
-                        kind = "self"; index = _queue.Index; break;
-                    case PlaybackOrder.TrackOnce:
-                        kind = none; break;
-                    case PlaybackOrder.Sequential:
-                        kind = _queue.Index + 1 < items.Length ? "track" : none;
-                        index = _queue.Index + 1;
-                        break;
-                    default: // ListLoop：走到末尾就回第一首
-                        kind = "track"; index = (_queue.Index + 1) % items.Length; break;
-                }
-            }
-
-            if (index >= 0 && index < items.Length)
-            {
-                var item = items[index];
-                return new
-                {
-                    kind, index, title = item.Title, artist = item.Artist, album = item.Album,
-                    duration = item.Duration.TotalSeconds,
-                    coverUrl = "https://celeste-cover.internal/cover/" + WebTrackIdentity.Of(item)
-                };
-            }
-            return new { kind };
         }
 
         internal object WebMore(JsonElement msg)
