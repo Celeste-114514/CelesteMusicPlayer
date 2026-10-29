@@ -19,9 +19,11 @@ namespace CelesteMusicPlayer
 
         string IPlaybackJournalHost.HistoryKey => GetCurrentPlayingItem()?.PersistenceKey ?? _nowPlayingPath ?? "";
 
-        bool IPlaybackJournalHost.HasSource => GetPlayer()?.Source != null;
+        // 采样判据必须两条播放路径都问：正式播放走引擎（HiFi），MediaPlayer 此时没有源。
+        // 旧实现只问 MediaPlayer，导致引擎播放时采样被早退跳过 —— 「累计收听秒数」恒为 0。
+        bool IPlaybackJournalHost.HasSource => IsEngineActiveNow || GetPlayer()?.Source != null;
 
-        bool IPlaybackJournalHost.IsPlaying => GetPlayer()?.PlaybackSession.PlaybackState == Windows.Media.Playback.MediaPlaybackState.Playing;
+        bool IPlaybackJournalHost.IsPlaying => IsPlaybackActuallyPlaying();
 
         void IPlaybackJournalHost.NoteChainTrack(string title, string artist) => NoteChainTrack(title, artist);
 

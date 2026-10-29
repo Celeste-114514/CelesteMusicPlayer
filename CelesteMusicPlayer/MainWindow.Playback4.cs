@@ -109,6 +109,10 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
+                // 收听时长采样挂引擎心跳：正式播放不跑界面进度定时器，
+                // 只在 PositionTimer_Tick 里采样等于永远采不到（旧实现的「累计收听秒数恒为 0」就是这么来的）。
+                Journal.SampleListenSeconds();
+
                 // 用户正在拖动/点击进度条时不覆盖，避免跳动
                 if (_isUserSeeking)
                 {

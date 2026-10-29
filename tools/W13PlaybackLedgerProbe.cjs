@@ -32,7 +32,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     console.log('选中:', JSON.stringify(picked));
 
     await page.evaluate(id => CelesteShell.send('playTrack', { trackId: id }), picked[0].id);
-    await wait(5000);
+    await wait(Number(process.env.PLAY_MS || 5000));
     const state1 = await page.evaluate(async () => await CelesteTransport.request('queue', { operation: 'get' }));
     console.log('第一首后 currentIndex=', state1.currentIndex, 'tracks=', state1.tracks.length);
 

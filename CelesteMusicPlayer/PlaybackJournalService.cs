@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.IO;
 
 namespace CelesteMusicPlayer
@@ -123,6 +123,14 @@ namespace CelesteMusicPlayer
         /// <summary>听歌秒数采样：每 ≥1 秒累加一次实际经过的时间（暂停/无源时不记）。</summary>
         internal void SampleListenSeconds()
         {
+            // 每 60 次采样打一行（约 1 分钟），用来区分「采样没被调用」和「调用了但条件不满足」。
+            bool trace = ++_sampleCalls % 60 == 0;
+            if (trace)
+            {
+                StartupLog.Write("[journal] 采样 has=" + host.HasSource + " playing=" + host.IsPlaying
+                    + " path=" + (_listenSamplePath is { Length: > 0 } samplePath ? Path.GetFileName(samplePath) : "<空>"));
+            }
+
             if (!host.HasSource) return;
 
             if (!string.IsNullOrWhiteSpace(_listenSamplePath) && host.IsPlaying)
@@ -136,6 +144,8 @@ namespace CelesteMusicPlayer
                 }
             }
         }
+
+        private long _sampleCalls;
 
         /// <summary>记录当前正在播放的曲目（切歌/播完/停止时调用）。completed=true 表示自然播完。</summary>
         internal void RecordHistory(bool completed)
