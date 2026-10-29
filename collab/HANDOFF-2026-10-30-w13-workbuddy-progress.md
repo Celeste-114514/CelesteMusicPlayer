@@ -3,7 +3,7 @@
 接手时状态：编译发布已完成，但 `IWebPlayerServices` 那批接口改造**没有回归证据**，
 业务仍住在 `MainWindow` 里，审计判定「W13 整体未完成」。
 
-这一轮做了 23 个提交，全部可单独回退。下面按「搬了什么 / 怎么验的 / 没验到什么」列清楚。
+这一轮做了 24 个提交，全部可单独回退。下面按「搬了什么 / 怎么验的 / 没验到什么」列清楚。
 
 ## 一、搬出去的业务（都已提交）
 
@@ -23,6 +23,7 @@
 | `4dc2861` | （给 `PlaybackOrderResolver` 补覆盖） | 下一首/上一首/随机解析 | — | **24 条检查 + 全量边界扫描** |
 | `dacee81` | `WebUpdateService` | 更新检查/下载/取消/安装转发 + 26 字段状态翻译 | `IUpdateHost`（4） | 回包 26 字段齐全 |
 | `dae9078` | `WebSettingsMisc`（静态） | 缓存统计/清理、文件关联、清「最近播放」标记、关于信息 | 无（原本就是静态） | 回包 about + 74 defs 齐全 |
+| `c00d59d` | `HotkeysService` | 全局热键读写、校验、恢复默认 | 1 个回调（重启注册） | 回包四字段 + 11 条默认绑定 |
 
 顺带修了两个既有缺陷：
 
@@ -68,5 +69,7 @@
 ## 六、下一步建议
 
 1. 引擎本体（`PlayExtendedWithEngineAsync` 起播链、`StopEngineIfActive`、无缝接续）：建议一次只动一块，改完实听。
-2. 设置域（`WebSettings.cs` 792 行）：18 个操作各带重依赖（文件选择器/DPAPI/WebDAV），需要按操作拆，不要整体搬。
+2. 设置域：已搬走 `cache` / `fileAssoc` / `clearRecent` / `about` / `update` / `hotkeys`。**还剩 12 个**
+   （`patch`、`credentials`、`webdav`、`folders`、三个文件选择器、`export`/`import`、`miniStyles`、`reset`），
+   共同点是都要窗口句柄或 UI 线程 —— 需要先抽一个 `ISettingsHost`，再整体搬，不建议再逐个拆。
 3. 干净机验收：本机之外跑一次，确认没有隐式依赖用户环境。
