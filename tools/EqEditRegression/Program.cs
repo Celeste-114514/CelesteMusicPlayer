@@ -193,6 +193,55 @@ Check(MtxNum("DspMatrixRrSlider",0.75) && Math.Abs(mtxp.Current.RightToRight-0.7
 var mtxDesc=System.Text.Json.JsonSerializer.SerializeToElement(mtxp.Describe("DspMatrixLrSlider"));
 Check(mtxDesc.GetProperty("min").GetDouble()==-2 && mtxDesc.GetProperty("max").GetDouble()==2 && mtxDesc.GetProperty("step").GetDouble()==0.05,"matrix model owns slider metadata");
 Check(mtxp.Owns("DspPowerMatrix") && mtxp.Owns("DspMatrixRrSlider") && !mtxp.Owns("DspFieldWidthSlider"),"matrix model owns only its own controls");
+
+// ---- room correction (FIR) model ----
+var firp=new DspFirParameters();
+firp.Load(new RoomCorrectionState{Enabled=true,GainDb=99,TrimDb=99});
+Check(firp.Current.GainDb==12 && firp.Current.TrimDb==6,"fir load clamps gain and trim");
+firp.Load(new RoomCorrectionState{GainDb=-99,TrimDb=-99});
+Check(firp.Current.GainDb==-12 && firp.Current.TrimDb==-24,"fir load clamps lower bounds");
+var firSaved=new RoomCorrectionState{GainDb=3,TrimDb=-4};
+firp.Load(firSaved);firSaved.GainDb=9;
+Check(firp.Current.GainDb==3,"fir load isolates input");
+var firSnap=firp.Snapshot();firSnap.GainDb=9;
+Check(firp.Current.GainDb==3,"fir snapshot isolates output");
+bool FirNum(string name,double value) => firp.Set(name,System.Text.Json.JsonSerializer.SerializeToElement(new {value}));
+bool FirSwitch(string name,bool value) => firp.Set(name,System.Text.Json.JsonSerializer.SerializeToElement(new {value}));
+bool FirRejects(string name,bool value){try{firp.Set(name,System.Text.Json.JsonSerializer.SerializeToElement(new {value}));return false;}catch(InvalidOperationException){return true;}}
+Check(FirNum("RoomIrGainSlider",4.5) && firp.Current.GainDb==4.5,"fir gain within range");
+Check(!FirNum("RoomIrGainSlider",4.5),"fir gain same value no mutation");
+Check(FirNum("RoomIrGainSlider",999) && firp.Current.GainDb==12,"fir gain clamped on set");
+Check(FirNum("RoomTrimSlider",-6.27) && firp.Current.TrimDb==-6.3,"fir trim rounded to one decimal");
+Check(FirNum("RoomTrimSlider",-99) && firp.Current.TrimDb==-24,"fir trim clamped on set");
+Check(FirRejects("RoomIrEnabledToggle",true) && !firp.Current.Enabled,"fir enable without IR rejected");
+string firFile=System.IO.Path.GetTempFileName();
+try
+{
+    firp.SetIr(firFile);
+    Check(firp.HasIr && firp.Current.IrTapCount==0,"fir path change leaves loader metadata alone");
+    firp.SetIrMetadata(1024,48000,2);
+    Check(firp.HasIr && firp.IrReady && firp.Current.IrName==System.IO.Path.GetFileName(firFile),"fir set IR stores metadata");
+    Check(firp.Current.IrTapCount==1024 && firp.Current.IrSampleRate==48000 && firp.Current.IrChannels==2,"fir set IR keeps taps rate channels");
+    Check(FirSwitch("RoomIrEnabledToggle",true) && firp.Current.Enabled && firp.Effective,"fir enable with IR");
+    Check(!FirSwitch("RoomIrEnabledToggle",true),"fir enable same value no mutation");
+    Check(FirSwitch("DspPowerFir",false) && !firp.Current.Enabled && !firp.Effective,"fir power off");
+    Check(FirSwitch("DspPowerFir",true) && firp.Current.Enabled,"fir power on");
+    var firPowerDesc=System.Text.Json.JsonSerializer.SerializeToElement(firp.Describe("DspPowerFir"));
+    Check(firPowerDesc.GetProperty("value").GetBoolean() && firPowerDesc.GetProperty("enabled").GetBoolean(),"fir power mirrors effective state");
+}
+finally { System.IO.File.Delete(firFile); }
+Check(!firp.IrReady,"fir missing file is not ready");
+Check(FirSwitch("DspPowerFir",false),"fir power off keeps IR path");
+Check(!FirSwitch("DspPowerFir",true) && !firp.Current.Enabled && firp.HasIr,"fir power ignores enable when IR file is gone");
+Check(FirRejects("RoomIrEnabledToggle",true),"fir enable rejected when IR file is gone");
+firp.ClearIr();
+Check(!firp.HasIr && !firp.Current.Enabled && firp.Current.IrTapCount==0 && firp.Current.IrName.Length==0,"fir clear drops IR and disables");
+var firGainDesc=System.Text.Json.JsonSerializer.SerializeToElement(firp.Describe("RoomIrGainSlider"));
+Check(firGainDesc.GetProperty("min").GetDouble()==-12 && firGainDesc.GetProperty("max").GetDouble()==12 && firGainDesc.GetProperty("step").GetDouble()==0.5,"fir model owns gain metadata");
+var firTrimDesc=System.Text.Json.JsonSerializer.SerializeToElement(firp.Describe("RoomTrimSlider"));
+Check(firTrimDesc.GetProperty("min").GetDouble()==-24 && firTrimDesc.GetProperty("max").GetDouble()==6,"fir model owns trim metadata");
+Check(System.Text.Json.JsonSerializer.SerializeToElement(firp.Describe("DspPowerFir")).GetProperty("enabled").GetBoolean()==false,"fir power disabled without IR");
+Check(firp.Owns("DspPowerFir") && firp.Owns("RoomIrEnabledToggle") && !firp.Owns("DspFieldToggle"),"fir model owns only its own controls");
 Console.WriteLine($"PASS {checks} total EQ, delivery and parameter checks");
 sealed class RecordingOutput(List<string> calls, EqCurveState curve, DspExtraState extra, RoomCorrectionState room) : IDspParameterTarget
 {

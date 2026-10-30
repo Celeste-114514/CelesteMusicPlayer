@@ -560,6 +560,7 @@ namespace CelesteMusicPlayer
                     else if (CompParameters.Owns(name)) ApplyCompParameters();
                     else if (FieldParameters.Owns(name)) ApplyFieldParameters();
                     else if (MatrixParameters.Owns(name)) ApplyMatrixParameters();
+                    else if (FirParameters.Owns(name)) ApplyFirParameters();
                     else ApplyDspToEngine();
                 }
                 return;
@@ -599,8 +600,6 @@ namespace CelesteMusicPlayer
                 default:
                     throw new ArgumentException("这个控件不支持从网页修改：" + name);
             }
-            if (name is "RoomIrEnabledToggle" or "RoomIrGainSlider" or "RoomTrimSlider" or "DspPowerFir")
-                WebDspSaveRoom();
         }
 
         private static string ReadString(JsonElement msg, string property)

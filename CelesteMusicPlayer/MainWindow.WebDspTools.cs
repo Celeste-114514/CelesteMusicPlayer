@@ -26,47 +26,23 @@ namespace CelesteMusicPlayer
                 if (file == null) return new { canceled = true };
                 await PreloadRoomIrAsync(file.Path);
                 if (_roomIrLoaded == null) throw new InvalidOperationException("无法读取该脉冲响应，请选择 PCM WAV 文件。");
-                RoomIrPathBox.Text = file.Path;
-                WebDspSaveRoom();
+                ApplyFirParameters();
                 return new { ok = true };
             }
             if (operation == "firClear")
             {
-                RoomIrPathBox.Text = ""; RoomIrEnabledToggle.IsOn = false;
+                FirParameters.ClearIr();
                 _roomIrLoaded = null; _roomIrLoadedRate = 0;
-                WebDspSaveRoom();
+                ApplyFirParameters();
                 return new { ok = true };
             }
-            if (operation == "firApply") { WebDspSaveRoom(); return new { ok = true }; }
+            if (operation == "firApply") { ApplyFirParameters(); return new { ok = true }; }
             return WebDsp(msg);
-        }
-
-        private void WebDspSaveRoom()
-        {
-            string path = RoomIrPathBox?.Text?.Trim() ?? "";
-            if (RoomIrEnabledToggle.IsOn && (path.Length == 0 || !File.Exists(path)))
-                throw new InvalidOperationException("请先导入有效的脉冲响应文件。");
-            var previous = RoomCorrectionStore.Load();
-            var state = new RoomCorrectionState
-            {
-                Enabled = RoomIrEnabledToggle.IsOn,
-                IrPath = path,
-                GainDb = RoomIrGainSlider.Value,
-                TrimDb = RoomTrimSlider.Value,
-                IrName = Path.GetFileName(path),
-                IrTapCount = _roomIrLoaded is { Length: > 0 } ? _roomIrLoaded[0].Length : previous.IrTapCount,
-                IrSampleRate = _roomIrLoadedRate > 0 ? _roomIrLoadedRate : previous.IrSampleRate,
-                IrChannels = _roomIrLoaded?.Length ?? previous.IrChannels
-            };
-            RoomCorrectionStore.Save(state);
-            ApplyRoomCorrection(state);
-            RefreshRoomCorrectionInfo();
-            SyncDspPowerSwitches();
         }
 
         private object WebDspModuleInfo(string module)
         {
-            var room = RoomCorrectionStore.Load();
+            var room = FirParameters.Snapshot();
             return new
             {
                 module,

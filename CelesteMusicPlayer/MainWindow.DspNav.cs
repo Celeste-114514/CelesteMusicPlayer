@@ -422,7 +422,7 @@ namespace CelesteMusicPlayer
             int srcHz = SrcParameters.TargetHz;
 
             bool eq = EqState.Current != null && EqState.Current.Enabled && EqState.Current.HasEffect();
-            bool fir = RoomCorrectionStore.Load().Enabled;
+            bool fir = FirParameters.Current.Enabled;
             bool ch = ExtraParameters.Channel.Enabled;
             bool rg = RgParameters.Current.Mode != ReplayGainMode.Off;
 
@@ -571,9 +571,10 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            if (RoomTrimSlider != null)
+            if (SetModelControl("RoomTrimSlider", NumberMessage(db)))
             {
-                RoomTrimSlider.Value = Math.Clamp(db, RoomTrimSlider.Minimum, RoomTrimSlider.Maximum);
+                ProjectExtraParameters();
+                ApplyFirParameters();
             }
         }
 
@@ -586,8 +587,8 @@ namespace CelesteMusicPlayer
         /// <summary>安全启用卷积核心（网页「音效处理」页直接调）。</summary>
         internal void FirSafeEnableCore()
         {
-            RoomCorrectionState st = RoomCorrectionStore.Load();
-            if (string.IsNullOrWhiteSpace(st.IrPath))
+            // IrReady = 已选 IR 且文件还在盘上（原来只看路径非空，文件被删时也会照样开起来）
+            if (!FirParameters.IrReady)
             {
                 if (RoomClipRiskText != null)
                 {
@@ -597,15 +598,11 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            st.Enabled = true;
-            st.TrimDb = Math.Min(Math.Round(st.TrimDb, 1), -6.0);
-            RoomCorrectionStore.Save(st);
-            _audioEngine?.SetRoomCorrection(st);
-
-            if (RoomTrimSlider != null)
-            {
-                RoomTrimSlider.Value = st.TrimDb;
-            }
+            double trim = Math.Min(Math.Round(FirParameters.Current.TrimDb, 1), -6.0);
+            SetModelControl("RoomTrimSlider", NumberMessage(trim));
+            SetModelControl("RoomIrEnabledToggle", SwitchMessage(true));
+            ProjectExtraParameters();
+            ApplyFirParameters();
 
             RefreshRoomCorrectionInfo();
             UpdateDspNavIndicators();
@@ -720,37 +717,30 @@ namespace CelesteMusicPlayer
 
         private void RoomTrimSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
-            if (RoomTrimLabel != null)
-            {
-                RoomTrimLabel.Text = "微调余量 (trim)：" + FormatHelper.FormatAudioFxDb(e.NewValue) + " dB";
-            }
-
             if (_audioFxLoading || !_audioFxPanelReady)
             {
                 return;
             }
 
-            RoomCorrectionState st = RoomCorrectionStore.Load();
-            st.TrimDb = Math.Round(e.NewValue, 1);
-            RoomCorrectionStore.Save(st);
-            _audioEngine?.SetRoomCorrection(st);
+            // trim 是「实时生效」的那一个：拖动即进模型并落盘下发（与旧行为一致）
+            ImportExtraParameterInput(sender);
+            UpdateRoomTrimLabel();
+            ApplyFirParameters();
             UpdateDspBitPerfectUi();
         }
 
-        /// <summary>从持久化状态初始化 trim 滑杆（只在加载面板时调用一次，避免打断拖动）。</summary>
+        /// <summary>从模型初始化 trim 滑杆（只在加载面板时调用一次，避免打断拖动）。</summary>
         private void InitRoomCorrectionTrimUi()
         {
-            RoomCorrectionState st = RoomCorrectionStore.Load();
+            // 面板初始化这一步就是模型的首次装载点（进入 FIR 页时 LoadRoomCorrectionIntoPanel 会再装一次，幂等）
+            FirParameters.Load(RoomCorrectionStore.Load());
+
             if (RoomTrimSlider != null)
             {
-                RoomTrimSlider.Value = Math.Clamp(st.TrimDb, -24, 6);
+                RoomTrimSlider.Value = Math.Clamp(FirParameters.Current.TrimDb, -24, 6);
             }
 
-            if (RoomTrimLabel != null)
-            {
-                RoomTrimLabel.Text = "微调余量 (trim)：" + FormatHelper.FormatAudioFxDb(st.TrimDb) + " dB";
-            }
-
+            UpdateRoomTrimLabel();
             RefreshRoomCorrectionInfo();
         }
 
@@ -762,7 +752,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            RoomCorrectionState st = RoomCorrectionStore.Load();
+            RoomCorrectionState st = FirParameters.Current;
             if (!st.Enabled || string.IsNullOrWhiteSpace(st.IrPath))
             {
                 RoomIrInfoText.Text = "未导入 IR：在上面「脉冲响应（IR）文件」卡片里点「浏览…」选一个 .wav。";

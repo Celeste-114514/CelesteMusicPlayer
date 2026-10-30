@@ -17,12 +17,14 @@ public sealed partial class MainWindow
     private readonly DspCompParameters CompParameters = new();
     private readonly DspFieldParameters FieldParameters = new();
     private readonly DspMatrixParameters MatrixParameters = new();
+    private readonly DspFirParameters FirParameters = new();
 
     /// <summary>Modules whose business values already live in a model instead of their controls.</summary>
     private IEnumerable<string> ProjectedControls => WebDspModuleControls["channel"]
         .Concat(WebDspModuleControls["headroom"]).Concat(WebDspModuleControls["rg"])
         .Concat(WebDspModuleControls["src"]).Concat(WebDspModuleControls["comp"])
-        .Concat(WebDspModuleControls["stereo"]).Concat(WebDspModuleControls["matrix"]);
+        .Concat(WebDspModuleControls["stereo"]).Concat(WebDspModuleControls["matrix"])
+        .Concat(WebDspModuleControls["fir"]);
 
     /// <summary>Which model owns a control name (null = still on the legacy control adapter).</summary>
     private IDspParameterModel? ModelOf(string name)
@@ -32,7 +34,8 @@ public sealed partial class MainWindow
         if (SrcParameters.Owns(name)) return SrcParameters;
         if (CompParameters.Owns(name)) return CompParameters;
         if (FieldParameters.Owns(name)) return FieldParameters;
-        return MatrixParameters.Owns(name) ? MatrixParameters : null;
+        if (MatrixParameters.Owns(name)) return MatrixParameters;
+        return FirParameters.Owns(name) ? FirParameters : null;
     }
 
     private bool ModelOwns(string name) => ModelOf(name) != null;
@@ -44,6 +47,8 @@ public sealed partial class MainWindow
         (ModelOf(name) ?? throw new ArgumentException(name)).Set(name, message);
 
     private static JsonElement SwitchMessage(bool value) => JsonSerializer.SerializeToElement(new { value });
+
+    private static JsonElement NumberMessage(double value) => JsonSerializer.SerializeToElement(new { value });
 
     // Presentation adapter only. Guarded writes cannot feed back into the parameter model.
     private void ProjectExtraParameters()
@@ -69,6 +74,7 @@ public sealed partial class MainWindow
         RefreshCrossfeedCutoffReadout(); RefreshDspXfeedLevelReadout(); RedrawDspXfeedCurve(); UpdateDspChannelBars();
         AudioFxRgPreampLabel.Text = "额外增益 (dB)：" + FormatHelper.FormatAudioFxDb(RgParameters.Current.PreampDb);
         RefreshAudioFxRgInfo();
+        RefreshFirReadouts();
     }
 
     // Legacy editors may still raise input events. Import only the field that changed,

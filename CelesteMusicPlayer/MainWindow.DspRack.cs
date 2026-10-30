@@ -613,7 +613,7 @@ namespace CelesteMusicPlayer
                 case DspCoreInterop.RackEqualizer:
                     return EqState.Current != null && EqState.Current.Enabled && EqState.Current.HasEffect();
                 case DspCoreInterop.RackConvolution:
-                    return RoomCorrectionStore.Load().Enabled;
+                    return FirParameters.Current.Enabled;
                 case DspCoreInterop.RackReplayGain:
                     return RgParameters.Current.Mode != ReplayGainMode.Off;
                 case DspCoreInterop.RackCompressor:

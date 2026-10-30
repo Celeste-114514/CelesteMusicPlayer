@@ -232,29 +232,18 @@ namespace CelesteMusicPlayer
 
             // ⑪ FIR / 房间校正：开关 = 卷积启用且已导入 IR；没导 IR 时禁用
             AddPower(DspPowerFir, DspPowerFirHint,
-                () =>
-                {
-                    RoomCorrectionState st = RoomCorrectionStore.Load();
-                    return st.Enabled && !string.IsNullOrWhiteSpace(st.IrPath);
-                },
+                () => FirParameters.Effective,
                 on =>
                 {
-                    RoomCorrectionState st = RoomCorrectionStore.Load();
-                    if (string.IsNullOrWhiteSpace(st.IrPath))
+                    if (!SetModelControl("DspPowerFir", SwitchMessage(on)))
                     {
                         return;
                     }
 
-                    st.Enabled = on;
-                    RoomCorrectionStore.Save(st);
-                    _audioEngine?.SetRoomCorrection(st);
-                    RefreshRoomCorrectionInfo();
+                    ProjectExtraParameters();
+                    ApplyFirParameters();
                 },
-                () =>
-                {
-                    RoomCorrectionState st = RoomCorrectionStore.Load();
-                    return string.IsNullOrWhiteSpace(st.IrPath) ? "先导入脉冲响应 (IR)" : null;
-                });
+                () => FirParameters.HasIr ? null : "先导入脉冲响应 (IR)");
         }
 
         private void AddPower(ToggleSwitch? sw, TextBlock? hint, Func<bool> isOn, Action<bool> apply, Func<string?>? disabledHint = null)

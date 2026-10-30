@@ -12,6 +12,9 @@ namespace CelesteMusicPlayer
     /// 「音效处理 → FIR / 房间校正」页里选文件 / 开关 / 应用。
     /// 校验与应用口径照搬原窗口：加载成功才允许启用，应用后立刻对播放生效。
     /// 下面那块「IR 信息与微调」管的是 trim（防削波余量），与本页的输出增益不是一回事。
+    ///
+    /// 2026-10-30 W13：参数搬到 <see cref="DspFirParameters"/>，本文件只剩三件事 ——
+    /// 选文件（写模型）、把模型投影到控件、落盘并下发。面板自己不再保存任何业务值。
     /// </summary>
     public sealed partial class MainWindow
     {
@@ -21,7 +24,7 @@ namespace CelesteMusicPlayer
         private float[][]? _roomIrLoaded;
         private int _roomIrLoadedRate;
 
-        /// <summary>进入 FIR 页时把已保存的设置填进面板（幂等，可反复调用）。</summary>
+        /// <summary>进入 FIR 页时把存档装进模型并投影到面板（幂等，可反复调用）。</summary>
         internal void LoadRoomCorrectionIntoPanel()
         {
             if (RoomIrPathBox == null)
@@ -29,27 +32,80 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            RoomCorrectionState s = RoomCorrectionStore.Load();
-            RoomIrPathBox.Text = s.IrPath ?? string.Empty;
+            FirParameters.Load(RoomCorrectionStore.Load());
+            _roomIrUiReady = true;
+            ProjectFirParameters();
 
-            if (RoomIrGainSlider != null)
+            if (FirParameters.HasIr)
             {
-                RoomIrGainSlider.Value = Math.Clamp(s.GainDb, -12, 12);
+                _ = PreloadRoomIrAsync(FirParameters.Current.IrPath);
+            }
+        }
+
+        /// <summary>模型 → 控件（路径框 / 增益滑杆 / 模块开关 / trim 滑杆 + 两条读数）。</summary>
+        private void ProjectFirParameters()
+        {
+            bool loading = _audioFxLoading;
+            _audioFxLoading = true;
+            try
+            {
+                if (RoomIrPathBox != null)
+                {
+                    RoomIrPathBox.Text = FirParameters.Current.IrPath ?? string.Empty;
+                }
+
+                if (RoomIrGainSlider != null)
+                {
+                    RoomIrGainSlider.Value = Math.Clamp(FirParameters.Current.GainDb, -12, 12);
+                }
+
+                if (RoomIrEnabledToggle != null)
+                {
+                    RoomIrEnabledToggle.IsOn = FirParameters.Current.Enabled;
+                }
+
+                if (RoomTrimSlider != null)
+                {
+                    RoomTrimSlider.Value = Math.Clamp(FirParameters.Current.TrimDb, -24, 6);
+                }
+            }
+            finally
+            {
+                _audioFxLoading = loading;
             }
 
             UpdateRoomIrGainText();
+            UpdateRoomTrimLabel();
+        }
 
-            if (RoomIrEnabledToggle != null)
+        /// <summary>投影之后补一次：路径框与两条读数（滑杆/开关由通用投影负责）。</summary>
+        private void RefreshFirReadouts()
+        {
+            if (RoomIrPathBox != null)
             {
-                RoomIrEnabledToggle.IsOn = s.Enabled;
+                RoomIrPathBox.Text = FirParameters.Current.IrPath ?? string.Empty;
             }
 
-            _roomIrUiReady = true;
+            UpdateRoomIrGainText();
+            UpdateRoomTrimLabel();
+        }
 
-            if (!string.IsNullOrWhiteSpace(s.IrPath))
+        /// <summary>把模型里的房间校正参数落盘并实时下发（网页命令 / 页头电源开关 / 面板「应用」共用）。</summary>
+        private void ApplyFirParameters()
+        {
+            // IR 元数据（taps / 源采样率 / 声道数）沿用最近一次成功加载的结果：
+            // 没重新加载过时保留盘中旧值 —— 与旧版「保存时才回写」的口径一致
+            if (_roomIrLoaded is { Length: > 0 })
             {
-                _ = PreloadRoomIrAsync(s.IrPath);
+                int rate = _roomIrLoadedRate > 0 ? _roomIrLoadedRate : FirParameters.Current.IrSampleRate;
+                FirParameters.SetIrMetadata(_roomIrLoaded[0].Length, rate, _roomIrLoaded.Length);
             }
+
+            RoomCorrectionState state = FirParameters.Snapshot();
+            RoomCorrectionStore.Save(state);
+            ApplyRoomCorrection(state);
+            RefreshRoomCorrectionInfo();
+            SyncDspPowerSwitches();
         }
 
         private async void RoomIrBrowseButton_Click(object sender, RoutedEventArgs e)
@@ -70,11 +126,7 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                if (RoomIrPathBox != null)
-                {
-                    RoomIrPathBox.Text = file.Path;
-                }
-
+                // 只读入模型 + 投影，落盘仍要按「应用」（与旧面板一致）
                 await PreloadRoomIrAsync(file.Path);
             }
             catch (Exception ex)
@@ -86,18 +138,11 @@ namespace CelesteMusicPlayer
 
         private void RoomIrClearButton_Click(object sender, RoutedEventArgs e)
         {
-            if (RoomIrPathBox != null)
-            {
-                RoomIrPathBox.Text = string.Empty;
-            }
-
+            FirParameters.ClearIr();
             _roomIrLoaded = null;
             _roomIrLoadedRate = 0;
+            ProjectFirParameters();
             RoomIrStatus("已清除。");
-            if (RoomIrEnabledToggle != null)
-            {
-                RoomIrEnabledToggle.IsOn = false;
-            }
         }
 
         private void RoomIrEnabledToggle_Toggled(object sender, RoutedEventArgs e)
@@ -107,56 +152,52 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // 没有 IR 就不允许开：开了也是空卷积，白占算力还让人以为生效了
-            if (RoomIrEnabledToggle.IsOn && string.IsNullOrWhiteSpace(RoomIrPathBox?.Text))
+            try
+            {
+                // 没有 IR 就不允许开：开了也是空卷积，白占算力还让人以为生效了
+                ImportExtraParameterInput(sender);
+            }
+            catch (InvalidOperationException ex)
             {
                 RoomIrEnabledToggle.IsOn = false;
-                RoomIrStatus("请先选择脉冲响应文件");
+                RoomIrStatus(ex.Message);
             }
         }
 
         private void RoomIrGainSlider_ValueChanged(object sender, Microsoft.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
+            // 增益只进模型与读数，落盘要按「应用」（与旧面板一致）
+            ImportExtraParameterInput(sender);
             UpdateRoomIrGainText();
         }
 
         private void UpdateRoomIrGainText()
         {
-            if (RoomIrGainValueText == null || RoomIrGainSlider == null)
+            if (RoomIrGainValueText == null)
             {
                 return;
             }
 
-            double g = RoomIrGainSlider.Value;
+            double g = FirParameters.Current.GainDb;
             RoomIrGainValueText.Text = (g >= 0 ? "+" : "") + g.ToString("0.0") + " dB";
+        }
+
+        private void UpdateRoomTrimLabel()
+        {
+            if (RoomTrimLabel == null)
+            {
+                return;
+            }
+
+            RoomTrimLabel.Text = "微调余量 (trim)：" + FormatHelper.FormatAudioFxDb(FirParameters.Current.TrimDb) + " dB";
         }
 
         private void RoomIrApplyButton_Click(object sender, RoutedEventArgs e)
         {
             try
             {
-                string irPath = RoomIrPathBox?.Text?.Trim() ?? string.Empty;
-                RoomCorrectionState prev = RoomCorrectionStore.Load();
-                RoomCorrectionState state = new()
-                {
-                    Enabled = RoomIrEnabledToggle?.IsOn == true,
-                    IrPath = irPath,
-                    GainDb = Math.Round(RoomIrGainSlider?.Value ?? 0, 1),
-                    // trim 不在本卡片调整，沿用上次设置（下面「IR 信息与微调」那块管它）
-                    TrimDb = prev.TrimDb,
-                    IrName = string.IsNullOrWhiteSpace(irPath) ? string.Empty : System.IO.Path.GetFileName(irPath),
-                    IrTapCount = _roomIrLoaded != null ? _roomIrLoaded[0].Length : prev.IrTapCount,
-                    IrSampleRate = _roomIrLoadedRate > 0 ? _roomIrLoadedRate : prev.IrSampleRate,
-                    IrChannels = _roomIrLoaded != null ? _roomIrLoaded.Length : prev.IrChannels
-                };
-
-                RoomCorrectionStore.Save(state);
-
-                // 播放中实时生效 + 刷新 bit-perfect 提示
-                ApplyRoomCorrection(state);
-                RefreshRoomCorrectionInfo();
-
-                RoomIrStatus(state.Enabled
+                ApplyFirParameters();
+                RoomIrStatus(FirParameters.Current.Enabled
                     ? "✓ 已应用并启用卷积。换歌后仍会保留该设置。"
                     : "已保存，卷积已关闭。");
             }
@@ -197,6 +238,11 @@ namespace CelesteMusicPlayer
 
             _roomIrLoaded = ir;
             _roomIrLoadedRate = rate;
+
+            // 读成功才把这份 IR 的路径写进模型（taps 等元数据等落盘时再回写，见 ApplyFirParameters）
+            FirParameters.SetIr(path);
+            ProjectFirParameters();
+
             RoomIrStatus($"✓ 读取成功：{ir.Length} 声道，脉冲 {ir[0].Length} 采样"
                 + (rate > 0 ? $"（源 {rate} Hz，播放时自动重采样）" : "") + "。");
         }
