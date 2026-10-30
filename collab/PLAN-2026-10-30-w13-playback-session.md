@@ -130,3 +130,26 @@ internal sealed record StartOptions(double StartSeconds = 0, bool PauseAfter = f
 - 每刀一个 commit，改前记下 `git rev-parse HEAD`。
 - 起播探针与接口回归的"改动前后"结果都留在 `_w13_*.json`，可回放比对。
 - 声卡出问题时先看日志 `HiFi播放 … ok=` 与 `设备=`，再怀疑代码。
+
+---
+
+## 执行记录
+
+### 第一刀已落地（`bae89ae`，2026-10-30）
+
+`PlaybackSession` 现在持有引擎，`PrepareAsync(item)` 接管了段 3、4：
+建引擎、输出模式、设备偏好、EQ 曲线、声道平衡与限幅、房间校正 FIR、ReplayGain。
+返回 `PlaybackPreparation`（设置快照 / RG 数据 / 是否已应用）。
+
+- 引擎事件改为**创建时挂一次**（原来是每次起播 `-=` 再 `+=`）。
+- `_audioEngine` 从字段变只读属性；销毁走 `ResetPlaybackEngine()`。
+  ⚠ 别在退出路径上直接调 `Session.ResetEngine()` —— 会话懒建，会凭空造引擎再销毁。
+- 旧 `PlaybackSession.cs`（84 行、无构造点）已删：它就是任务书里那个"受控会话"，
+  没有 EQ/DSP/FIR/RG/DSD/无缝，留着只会让人误以为已经有正式会话。
+- 验证：编译 0 error；接口回归 0 失败；起播日志三行齐全；无缝预载仍在读下一首。
+  ⚠ **EQ/FIR/RG 是否听得出没验**，只证明调用路径与 DSP 链挂载照旧。
+
+### 下一刀（第二刀）
+
+`StartAsync`：段 5（`PlayFileWithFfmpegAsync` + CUE 区间）与段 7 的时长/位置事件搬进会话，
+返回 `PlaybackStartResult`；MainWindow 只按结果渲染文案与失败弹窗。
