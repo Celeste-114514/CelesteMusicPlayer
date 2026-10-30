@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.IO;
@@ -2380,6 +2380,40 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // SeamlessWaveProvider releases the previous reader on the render thread.
+            // Adopt the new reader BEFORE reading Position: _waveFile may already be disposed.
+            // NAudio WasapiOut/AsioOut 在数据源自然播放到末尾时，若不主动 Stop，PlaybackStopped 事件不会触发
+            // （实测 HasReachedEnd=true 但 PlaybackState 仍为 Playing），导致“播完不自动下一首”。
+            // 若共享/ASIO 已预加载同格式下一首，则由无缝源自动续接（不 Stop → gapless），并通知上层切换。
+            if (_seamless != null && _seamless.SwitchedToNext)
+            {
+                StartupLog.Write($"[无缝诊断] 已无缝续接到下一首 (initiator={(_useNative?"独占native":"naudio")})");
+                // 2026-10-07 内存排查：旧 PCM 在此刻被顶替。若泄漏已修，这里应当出现
+                // 「已释放被换下的旧 reader」，且非托管内存不出现 +136MB 的跳增。
+                MemProbe.Log("无缝切换到下一首后");
+                _seamless.ResetSwitchFlag(); // 允许下一次无缝切换
+                // 同步到已无缝切入的下一首：源 reader / 时长 / 位置，保证 Position/Duration 继续正确
+                var nextReader = _seamless.Current;
+                if (nextReader != null && !ReferenceEquals(nextReader, _waveFile))
+                {
+                    _waveFile?.Dispose();
+                    _waveFile = nextReader;
+                    // 无缝续接到下一首：_sourceDuration 是上一首歌的残留（无缝路径从不重新探测新歌时长），
+                    // 继续沿用会把新歌 Duration 错钳成上一首时长 → 进度条卡死、播完不切歌。这里清空，
+                    // 让 Duration 取新 reader 的真实 WAV 时长。
+                    _sourceDuration = TimeSpan.Zero;
+                    Duration = _waveFile.TotalTime;
+                }
+                // 无缝续接到下一首：位置基准重置为当前累计帧，使下一首从 0 起算（不跨曲累加）。
+                if (_native != null)
+                {
+                    _nativePosBaselineFrames = _native.FramesWritten;
+                }
+
+                Position = TimeSpan.Zero;
+                SeamlessTrackChanged?.Invoke();
+            }
+
             if (_useNative && _native != null)
             {
                 // 用数据源 reader 的实时游标作为位置（渲染线程读取同一 reader，反映真实播放进度）：
@@ -2458,38 +2492,6 @@ namespace CelesteMusicPlayer
             else
             {
                 return;
-            }
-
-            // NAudio WasapiOut/AsioOut 在数据源自然播放到末尾时，若不主动 Stop，PlaybackStopped 事件不会触发
-            // （实测 HasReachedEnd=true 但 PlaybackState 仍为 Playing），导致“播完不自动下一首”。
-            // 若共享/ASIO 已预加载同格式下一首，则由无缝源自动续接（不 Stop → gapless），并通知上层切换。
-            if (_seamless != null && _seamless.SwitchedToNext)
-            {
-                StartupLog.Write($"[无缝诊断] 已无缝续接到下一首 (initiator={(_useNative?"独占native":"naudio")})");
-                // 2026-10-07 内存排查：旧 PCM 在此刻被顶替。若泄漏已修，这里应当出现
-                // 「已释放被换下的旧 reader」，且非托管内存不出现 +136MB 的跳增。
-                MemProbe.Log("无缝切换到下一首后");
-                _seamless.ResetSwitchFlag(); // 允许下一次无缝切换
-                // 同步到已无缝切入的下一首：源 reader / 时长 / 位置，保证 Position/Duration 继续正确
-                var nextReader = _seamless.Current;
-                if (nextReader != null && !ReferenceEquals(nextReader, _waveFile))
-                {
-                    _waveFile?.Dispose();
-                    _waveFile = nextReader;
-                    // 无缝续接到下一首：_sourceDuration 是上一首歌的残留（无缝路径从不重新探测新歌时长），
-                    // 继续沿用会把新歌 Duration 错钳成上一首时长 → 进度条卡死、播完不切歌。这里清空，
-                    // 让 Duration 取新 reader 的真实 WAV 时长。
-                    _sourceDuration = TimeSpan.Zero;
-                    Duration = _waveFile.TotalTime;
-                }
-                // 无缝续接到下一首：位置基准重置为当前累计帧，使下一首从 0 起算（不跨曲累加）。
-                if (_native != null)
-                {
-                    _nativePosBaselineFrames = _native.FramesWritten;
-                }
-
-                Position = TimeSpan.Zero;
-                SeamlessTrackChanged?.Invoke();
             }
 
             bool sourceExhausted = false;

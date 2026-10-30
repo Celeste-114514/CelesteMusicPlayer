@@ -2933,18 +2933,7 @@ namespace CelesteMusicPlayer
             _currentRgData = preparation.ReplayGain;
             if (preparation.ReplayGainApplied) DispatcherQueue.TryEnqueue(RefreshAudioFxRgInfo);
 
-            // ⚠ 这里必须保留"每次起播直接挂一遍"的老接线。
-            // 会话里也挂了一份转发（PlaybackSession.EnsureEngine），但实测那条链路没有把
-            // 引擎的无缝换轨/播完事件送过来（13:01 现场：引擎已切轨，[会话] 一条事件日志都没有），
-            // 结果就是自动切歌后界面不换曲。多挂一次最多触发两遍，第二遍看到 _seamlessPreloaded 为空直接返回。
-            if (_audioEngine != null)
-            {
-                _audioEngine.PlaybackEnded -= OnEnginePlaybackEnded;
-                _audioEngine.PlaybackEnded += OnEnginePlaybackEnded;
-                _audioEngine.SeamlessTrackChanged -= OnSeamlessTrackChanged;
-                _audioEngine.SeamlessTrackChanged += OnSeamlessTrackChanged;
-            }
-
+            // Engine events are wired once by PlaybackSession; do not handle each transition twice.
             // CUE 分轨与起播本身也在会话里：会话只回"成没成、是不是 DoP 直出、转了 PCM 没有、多长"。
             PlaybackStartResult result = await Session
                 .StartAsync(item, s => DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }))
