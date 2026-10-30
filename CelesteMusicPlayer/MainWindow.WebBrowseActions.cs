@@ -5,15 +5,16 @@ using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
 using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Controls;
 using Windows.ApplicationModel.DataTransfer;
-using Windows.Storage.Pickers;
 
 namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
     {
         private bool _webBrowseBusy;
+
+        /// <summary>播放列表的封面/导入导出/复制：零播放零队列，已经在 <see cref="WebPlaylistMediaService"/> 里。</summary>
+        private WebPlaylistMediaService PlaylistMedia { get; } = new();
 
         private static string WebPlaylistName(JsonElement msg)
         {
@@ -28,118 +29,24 @@ namespace CelesteMusicPlayer
             if (operation is "get" or "createPlaylist" or "favorite" or "rating") return WebBrowse(msg);
             if (_webBrowseBusy) throw new InvalidOperationException("请先完成当前操作。");
             _webBrowseBusy = true;
-            nint hwnd = NativeMainWebWindow.HandleOf(host);
             try
             {
                 switch (operation)
                 {
-                    case "setCover":
-                    {
-                        string name = WebPlaylistName(msg);
-                        var picker = new FileOpenPicker();
-                        foreach (string ext in new[] { ".jpg", ".jpeg", ".png" }) picker.FileTypeFilter.Add(ext);
-                        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-                        var file = await picker.PickSingleFileAsync();
-                        if (file == null) break;
-                        byte[] bytes = await File.ReadAllBytesAsync(file.Path);
-                        if (bytes.Length > 20_000_000) throw new ArgumentException("请选择小于 20MB 的图片。");
-                        using (var stream = new MemoryStream(bytes)) using (var image = System.Drawing.Image.FromStream(stream)) { }
-                        WebPlaylistName(msg); // The picker may have been open while the native UI changed the list.
-                        PlaylistLibraryService.WriteCustomCover(name, bytes);
-                        break;
-                    }
-                    case "resetCover": PlaylistLibraryService.ClearCustomCover(WebPlaylistName(msg)); break;
-                    case "searchCover":
-                    {
-                        string name = WebPlaylistName(msg);
-                        string? url = await OnlineMusicApi.SearchArtistAvatarUrlAsync(name);
-                        if (string.IsNullOrWhiteSpace(url)) throw new InvalidOperationException("未找到封面。");
-                        using var http = new System.Net.Http.HttpClient { Timeout = TimeSpan.FromSeconds(20) };
-                        http.DefaultRequestHeaders.TryAddWithoutValidation("User-Agent", "CelesteMusicPlayer/1.0");
-                        byte[] bytes = await http.GetByteArrayAsync(url);
-                        if (bytes.Length > 20_000_000) throw new ArgumentException("封面图片过大。");
-                        using (var stream = new MemoryStream(bytes)) using (var image = System.Drawing.Image.FromStream(stream)) { }
-                        WebPlaylistName(msg);
-                        PlaylistLibraryService.WriteCustomCover(name, bytes);
-                        break;
-                    }
-                    case "playPlaylist": await LoadNamedPlaylistToQueueAndPlayAsync(WebPlaylistName(msg)); break;
+                    case "setCover": await PlaylistMedia.SetCoverAsync(msg, host).ConfigureAwait(true); break;
+                    case "resetCover": PlaylistMedia.ResetCover(msg); break;
+                    case "searchCover": await PlaylistMedia.SearchCoverAsync(msg).ConfigureAwait(true); break;
+                    case "playPlaylist": await LoadNamedPlaylistToQueueAndPlayAsync(WebPlaylistName(msg)).ConfigureAwait(true); break;
                     case "queuePlaylist": AddNamedPlaylistToQueue(WebPlaylistName(msg)); break;
-                    case "copyPlaylist":
-                    {
-                        var paths = NamedPlaylistStore.LoadSongs(WebPlaylistName(msg));
-                        string? target = await WebPickPlaylistAsync(host);
-                        if (target != null) NamedPlaylistStore.SaveSongs(target, NamedPlaylistStore.LoadSongs(target).Concat(paths).Distinct(StringComparer.OrdinalIgnoreCase));
-                        break;
-                    }
-                    case "exportPlaylist":
-                    {
-                        string name = WebPlaylistName(msg);
-                        var paths = NamedPlaylistStore.LoadSongs(name);
-                        if (paths.Count == 0) throw new InvalidOperationException("播放列表为空。");
-                        var picker = new FileSavePicker { SuggestedFileName = string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)) };
-                        bool portable = paths.Any(path => SourceReferenceId(path).Length > 0);
-                        picker.FileTypeChoices.Add(portable ? "Celeste 混合播放列表（保留来源与 CUE）" : "M3U8 播放列表", new List<string> { portable ? ".json" : ".m3u8" });
-                        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-                        var file = await picker.PickSaveFileAsync();
-                        if (file != null)
-                        {
-                            if (portable)
-                            {
-                                var records = paths.Select(SourceFromReference).Where(item => item != null).Select(item => NetworkLibraryStore.Track(item!.SourceTrackId)).Where(track => track != null).ToArray();
-                                var sourceIds = records.Select(track => track!.SourceId).ToHashSet();
-                                var sources = NetworkLibraryStore.Sources().Where(source => sourceIds.Contains(source.Id)).Select(source => new { source.Id, source.Provider, source.Name, source.Endpoint, source.Root }).ToArray();
-                                await File.WriteAllTextAsync(file.Path, JsonSerializer.Serialize(new { format = "celeste-playlist", version = 1, references = paths, tracks = records, sources }, new JsonSerializerOptions { WriteIndented = true }));
-                            }
-                            else M3uPlaylistIO.WriteM3u8(file.Path, paths);
-                        }
-                        break;
-                    }
-                    case "importM3u":
-                    {
-                        var picker = new FileOpenPicker(); picker.FileTypeFilter.Add(".m3u"); picker.FileTypeFilter.Add(".m3u8"); picker.FileTypeFilter.Add(".json");
-                        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
-                        var file = await picker.PickSingleFileAsync();
-                        if (file == null) break;
-                        string[] paths;
-                        if (Path.GetExtension(file.Path).Equals(".json", StringComparison.OrdinalIgnoreCase))
-                        {
-                            if (new FileInfo(file.Path).Length > 20_000_000) throw new ArgumentException("播放列表文件过大。");
-                            using var portable = JsonDocument.Parse(await File.ReadAllTextAsync(file.Path));
-                            var root = portable.RootElement;
-                            if (root.GetProperty("format").GetString() != "celeste-playlist" || root.GetProperty("version").GetInt32() != 1) throw new ArgumentException("不支持的播放列表格式版本。");
-                            var knownSources = NetworkLibraryStore.Sources().Select(source => source.Id).ToHashSet();
-                            foreach (var source in root.GetProperty("sources").EnumerateArray())
-                            {
-                                string sourceId = source.GetProperty("Id").GetString() ?? "";
-                                if (!System.Text.RegularExpressions.Regex.IsMatch(sourceId, "^[a-zA-Z0-9-]{1,64}$")) throw new ArgumentException("来源编号无效。");
-                                if (knownSources.Contains(sourceId)) continue;
-                                // Imported sources contain no credentials and stay disabled until explicitly configured.
-                                NetworkLibraryStore.SaveSource(new NetworkSource { Id = sourceId, Provider = source.GetProperty("Provider").GetString() ?? "webdav", Name = (source.GetProperty("Name").GetString() ?? "导入来源") + "（请配置连接）", Endpoint = source.GetProperty("Endpoint").GetString() ?? "", Root = source.GetProperty("Root").GetString() ?? "", Enabled = false });
-                            }
-                            var remap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-                            foreach (var raw in root.GetProperty("tracks").EnumerateArray())
-                            {
-                                var track = raw.Deserialize<NetworkTrack>() ?? throw new ArgumentException("无效曲目。");
-                                if (!System.Text.RegularExpressions.Regex.IsMatch(track.Id, "^(source-|cue-)[a-f0-9]{64}$")) throw new ArgumentException("曲目编号无效。");
-                                if (NetworkLibraryStore.Track(track.Id) == null) { track.Indexed = false; track.Pinned = true; NetworkLibraryStore.Put(new[] { track }); }
-                                remap[track.Id] = NetworkIdentity.Reference(track.Id);
-                            }
-                            paths = root.GetProperty("references").EnumerateArray().Select(entry => entry.GetString() ?? "").Where(path => path.Length > 0)
-                                .Select(path => remap.TryGetValue(Path.GetFileNameWithoutExtension(path), out var reference) ? reference : path).ToArray();
-                        }
-                        else paths = M3uPlaylistIO.Parse(file.Path, existingOnly: false).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
-                        if (paths.Length == 0) throw new InvalidOperationException("文件中没有歌曲条目。");
-                        string? target = await WebPickPlaylistAsync(host);
-                        if (target != null) NamedPlaylistStore.SaveSongs(target, NamedPlaylistStore.LoadSongs(target).Concat(paths).Distinct(StringComparer.OrdinalIgnoreCase));
-                        break;
-                    }
+                    case "copyPlaylist": await PlaylistMedia.CopyAsync(msg, host).ConfigureAwait(true); break;
+                    case "exportPlaylist": await PlaylistMedia.ExportAsync(msg, host).ConfigureAwait(true); break;
+                    case "importM3u": await PlaylistMedia.ImportAsync(msg, host).ConfigureAwait(true); break;
                     case "openCue":
                     {
-                        var picker = new FileOpenPicker(); picker.FileTypeFilter.Add(".cue");
-                        WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+                        var picker = new Windows.Storage.Pickers.FileOpenPicker(); picker.FileTypeFilter.Add(".cue");
+                        WinRT.Interop.InitializeWithWindow.Initialize(picker, NativeMainWebWindow.HandleOf(host));
                         var file = await picker.PickSingleFileAsync();
-                        if (file != null) await PlayCueFileAsync(file.Path);
+                        if (file != null) await PlayCueFileAsync(file.Path).ConfigureAwait(true);
                         break;
                     }
                     default: throw new ArgumentException("未知的曲库操作。");
@@ -148,20 +55,6 @@ namespace CelesteMusicPlayer
                 return WebBrowse(JsonSerializer.SerializeToElement(new { operation = "get" }));
             }
             finally { _webBrowseBusy = false; }
-        }
-
-        private async Task<string?> WebPickPlaylistAsync(object host)
-        {
-            using var dialog = new System.Windows.Forms.Form { Text = "添加到播放列表", Width = 420, Height = 160, StartPosition = System.Windows.Forms.FormStartPosition.CenterParent, FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog, MinimizeBox = false, MaximizeBox = false };
-            var choice = new System.Windows.Forms.ComboBox { Dock = System.Windows.Forms.DockStyle.Top, MaxLength = 120 };
-            choice.Items.AddRange(NamedPlaylistStore.List().Cast<object>().ToArray());
-            var add = new System.Windows.Forms.Button { Text = "添加", Dock = System.Windows.Forms.DockStyle.Bottom, DialogResult = System.Windows.Forms.DialogResult.OK };
-            dialog.Controls.Add(choice); dialog.Controls.Add(add); dialog.AcceptButton = add;
-            if (dialog.ShowDialog(host as System.Windows.Forms.IWin32Window) != System.Windows.Forms.DialogResult.OK) return null;
-            string name = choice.Text.Trim();
-            if (name.Length is < 1 or > 120 || name.Any(char.IsControl)) throw new ArgumentException("请输入有效的播放列表名称。");
-            if (!NamedPlaylistStore.List().Contains(name)) NamedPlaylistStore.Create(name);
-            return name;
         }
 
         // Context operations resolve the clicked row, never the currently playing track.
@@ -202,7 +95,7 @@ namespace CelesteMusicPlayer
                 case "addQueue": WebInsertQueue(songs, next: false); break;
                 case "addPlaylist":
                 {
-                    string? target = await WebPickPlaylistAsync(host);
+                    string? target = await PlaylistMedia.PickTargetPlaylistAsync(host).ConfigureAwait(true);
                     if (target != null) NamedPlaylistStore.SaveSongs(target, NamedPlaylistStore.LoadSongs(target).Concat(songs.Select(song => song.PersistenceKey)).Distinct(StringComparer.OrdinalIgnoreCase));
                     PlaylistLibraryService.Refresh(); break;
                 }
@@ -229,7 +122,7 @@ namespace CelesteMusicPlayer
                 case "copy": var data = new DataPackage(); data.SetText(string.Join(Environment.NewLine, songs.Select(song => song.Title + " - " + song.Artist))); Clipboard.SetContent(data); break;
                 case "delete":
                     if (AppSettingsStore.Load().DisableDeleteFromDisk || songs.Any(song => song.IsRemote)) throw new InvalidOperationException("当前歌曲不允许从磁盘删除。");
-                    foreach (var song in songs.DistinctBy(song => song.FilePath, StringComparer.OrdinalIgnoreCase)) await DeleteSongFromDiskAsync(song, Content.XamlRoot);
+                    foreach (var song in songs.DistinctBy(song => song.FilePath, StringComparer.OrdinalIgnoreCase)) await DeleteSongFromDiskAsync(song, Content.XamlRoot).ConfigureAwait(true);
                     break;
                 default: throw new ArgumentException("未知的歌曲操作。");
             }

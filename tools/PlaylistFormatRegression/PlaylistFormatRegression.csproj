@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>PlaylistFormatRegression</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../CelesteMusicPlayer/PortablePlaylistFormat.cs" Link="PortablePlaylistFormat.cs" />
+    <Compile Include="../../CelesteMusicPlayer/NetworkLibraryModels.cs" Link="NetworkLibraryModels.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <!-- 模型文件里的 NetworkSource 用 DPAPI 保护凭据；版本与主工程保持一致，直接用本地缓存。 -->
+    <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />
+  </ItemGroup>
+</Project>

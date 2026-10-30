@@ -13,20 +13,10 @@ public sealed partial class MainWindow
     private CancellationTokenSource? _sourcePlaybackCancellation;
     private IDisposable? _sourcePlaybackLease;
     private IDisposable? _sourcePreloadLease;
-    internal static PlaylistItem? ResolveSourceTrack(string id)
-    {
-        var record = NetworkLibraryStore.Track(id);
-        if (record == null) return null;
-        var source = record.SourceId.Length == 0 ? null : NetworkLibraryStore.Sources().FirstOrDefault(s => s.Id == record.SourceId);
-        return WebLibraryService.FromNetwork(record, source);
-    }
-    private static string SourceReferenceId(string path) => Path.GetExtension(path).Equals(".ref", StringComparison.OrdinalIgnoreCase)
-        && Path.GetFullPath(path).StartsWith(Path.Combine(AppSettingsStore.GetConfigDirectory(), "track-refs") + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase)
-        ? Path.GetFileNameWithoutExtension(path) : "";
-    private static PlaylistItem? SourceFromReference(string path)
-    {
-        string id = SourceReferenceId(path); return id.Length == 0 ? null : ResolveSourceTrack(id);
-    }
+    // 「.ref → 曲目 id → 曲库快照」的解析在 TrackReference（静态、无实例状态）；
+    // 这里只留转发，播放域和网页命令都还认这两个名字。
+    internal static PlaylistItem? ResolveSourceTrack(string id) => TrackReference.Resolve(id);
+    private static PlaylistItem? SourceFromReference(string path) => TrackReference.FromReference(path);
     private void PrepareSourcePlayback(PlaylistItem item)
     {
         _sourcePlaybackCancellation?.Cancel();
