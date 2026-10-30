@@ -102,7 +102,7 @@
    | ~~曲目动作~~ | ~~`WebBrowseActions`~~ | 队列规则已抽纯函数（`b35a0c2`）；剩 play/delete/tags 等宿主职责留在原地 | 队列回包逐字段一致 |
    | 目录浏览 | `WebFolders`(91) | 扫描 + 播放 + 目录监视 | 部分（本机 0 监视目录，走不到主分支） |
    | ~~标签~~ | ~~`WebTags` + `WebTagTools`~~ | 文件 I/O 核心已进 `WebTagFileService`（`45c090c`），事务语义有 fixture 用例；剩在线搜索/歌词编排 | xUnit 49 条 + 双冒烟 |
-   | 网络库 | `WebDav`(473) | 网络凭据 + 缓存 | 本机没配服务器，只验拒绝分支 |
+   | ~~网络库~~ | ~~`WebDav`~~ | **域早已是七来源服务**（webdav/baidu/jellyfin/emby/smb/sshfs/subsonic，配置/同步/缓存全在 NetworkLibraryService 等独立类）；MW 只剩旧树形 UI + 纯逻辑，后者已进 `WebDavBrowseRules`（`a53e241`） | NetworkRegression 7 provider + 12 条规则用例 |
    | DSP | `WebDsp`(699) + 工具(133) | **评估后不建议按"抽接口"搬**：业务本身就是直读写原生控件树（`_webDspControls`、`RoomIrPathBox` 等），抽出来要么宿主接口几十条、要么只剩空壳。要动就该连"原生状态容器"一起删，那是另一个课题 | 只读部分可比对 |
    | 引擎 | `WebTransport`(258) + `WebShell`(80) | 真出声才能验 | 可用 `W13PlaybackLedgerProbe` 起播两首 |
 
