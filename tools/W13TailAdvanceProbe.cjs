@@ -38,6 +38,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
 
     await page.evaluate(id => CelesteShell.send('playTrack', { trackId: id }), target.id);
     await wait(2500);
+    // 详情页开着才暴露真实场景（歌词面板、频谱采样都会跑）
+    const opened = await page.evaluate(() => { try { window.CelesteNowPlaying?.open?.(); return !!window.CelesteNowPlaying?.isOpen?.(); } catch { return false; } });
+    console.log('详情页已打开=', opened);
     const seekTo = Math.max(0, target.duration - 5);
     await page.evaluate(s => CelesteShell.send('seek', { seconds: s }), seekTo);
     console.log('已快进到', seekTo.toFixed(1), '秒，等它自然接下一首…');
@@ -48,10 +51,17 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
       const snap = await page.evaluate(async () => {
         const st = (window.CelesteShell?.getState?.() || {});
         const q = await CelesteTransport.request('queue', { operation: 'get' }).catch(() => null);
+        const np = await CelesteTransport.request('nowPlaying', {}).catch(() => null);
+        const npTitle = document.getElementById('np-title')?.textContent || '';
+        const lyric = document.querySelector('#np-lyrics .np-lyric')?.textContent || '';
         return {
           trackId: String(st.trackId || '').slice(0, 10),
           stateTitle: st.title || '',
           barTitle: document.getElementById('track-title')?.textContent || '',
+          npTitle,
+          lyric: String(lyric).slice(0, 18),
+          hostTrackId: np ? String(np.trackId || '').slice(0, 10) : '',
+          lyricState: np ? np.lyricState : '',
           playing: !!st.playing,
           pos: Math.round(st.position || 0),
           queueIndex: q ? q.currentIndex : null,
@@ -66,9 +76,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     console.log('\n变化点（秒 / state曲目 / 底栏 / state标题 / 队列下标 / 位置）:');
     for (const s of samples) {
       if (!s) continue;
-      const key = s.trackId + '|' + s.barTitle + '|' + s.queueIndex + '|' + s.playing;
+      const key = s.trackId + '|' + s.npTitle + '|' + s.hostTrackId + '|' + s.lyric + '|' + s.queueIndex;
       if (key !== prev) {
-        console.log(`  ${String(s.t).padStart(5)}s  ${s.trackId || '-'}  底栏=[${s.barTitle}]  state=[${s.stateTitle}]  qIdx=${s.queueIndex}/${s.queueLen}  pos=${s.pos}  playing=${s.playing}`);
+        console.log(`  ${String(s.t).padStart(5)}s  state=${s.trackId || '-'}  详情页标题=[${s.npTitle}]  宿主nowPlaying=${s.hostTrackId}(${s.lyricState})  歌词=[${s.lyric}]  qIdx=${s.queueIndex}/${s.queueLen}  pos=${s.pos}  playing=${s.playing}`);
         prev = key;
       }
     }

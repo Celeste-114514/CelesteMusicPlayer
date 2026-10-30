@@ -513,18 +513,48 @@ namespace CelesteMusicPlayer
 
         internal PlaylistItem? GetCurrentPlayingItem()
         {
+            PlaylistItem? indexed = null;
             if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
             {
-                return _queue.Items[_queue.Index];
+                indexed = _queue.Items[_queue.Index];
             }
-
-            if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
+            else if (_currentIndex >= 0 && _currentIndex < _playlist.Count)
             {
-                return _playlist[_currentIndex];
+                indexed = _playlist[_currentIndex];
             }
 
-            return null;
+            // 自动续播有两条路：队列推进（改 _queue.Index）和曲库推进（只改 _currentIndex）。
+            // 两个下标各管各的，谁"看起来有效"谁就赢 —— 于是播放已经走到下一首、队列下标还停在上一首时，
+            // 网页拿到的 trackId/标题/时长就全停在上一首（12:38 现场：音频是 The Great Gig，界面还是 Time）。
+            // 这里以"最近一次真正起播的文件"为准；CUE 分轨共享同一路径，那种情况下标更精确，仍然用下标。
+            string playing = _nowPlayingPath ?? "";
+            if (playing.Length > 0 && (indexed == null || !string.Equals(indexed.FilePath, playing, StringComparison.OrdinalIgnoreCase)))
+            {
+                bool cueShared = _queue.Items.Any(item => item.StartTimeSeconds > 0
+                    && string.Equals(item.FilePath, playing, StringComparison.OrdinalIgnoreCase));
+                if (!cueShared)
+                {
+                    PlaylistItem? match = _queue.Items.FirstOrDefault(item => string.Equals(item.FilePath, playing, StringComparison.OrdinalIgnoreCase))
+                        ?? _playlist.FirstOrDefault(item => string.Equals(item.FilePath, playing, StringComparison.OrdinalIgnoreCase));
+                    if (match != null)
+                    {
+                        string signature = playing + "|" + (indexed?.FilePath ?? "");
+                        if (!string.Equals(signature, _stateMismatchLogged, StringComparison.Ordinal))
+                        {
+                            _stateMismatchLogged = signature;
+                            StartupLog.Write("[状态] 下标与正在播放不一致，按正在播放为准：下标曲目=" + (indexed?.Title ?? "<无>")
+                                + " 实际在播=" + match.Title + " 队列下标=" + _queue.Index + " 曲库下标=" + _currentIndex);
+                        }
+                        return match;
+                    }
+                }
+            }
+
+            return indexed;
         }
+
+        /// <summary>下标与实际播放不一致的日志签名，避免每秒刷屏。</summary>
+        private string _stateMismatchLogged = "";
 
 
         internal ImageSource? GetCurrentCoverImage() => _lastCoverImage;
