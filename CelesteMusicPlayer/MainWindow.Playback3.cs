@@ -2897,55 +2897,12 @@ namespace CelesteMusicPlayer
             }
 
             NowPlayingText.Text = "正在转码：" + item.Title;
-            _audioEngine ??= new AudioPlaybackEngine();
-            AppSettingsState hifiSettings = AppSettingsStore.Load();
-            OutputMode.Apply(hifiSettings);
-            _audioEngine.SetOutputDevicePreference(string.IsNullOrWhiteSpace(hifiSettings.OutputDeviceId) ? null : hifiSettings.OutputDeviceId);
-            _audioEngine.PlaybackEnded -= OnEnginePlaybackEnded;
-            _audioEngine.PlaybackEnded += OnEnginePlaybackEnded;
-            _audioEngine.SeamlessTrackChanged -= OnSeamlessTrackChanged;
-            _audioEngine.SeamlessTrackChanged += OnSeamlessTrackChanged;
 
-            try
-            {
-                _audioEngine.SetEqCurve(EqCurveStore.Load());
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            // 应用 DSP 附加状态（声道平衡 + 安全限幅）到引擎，使持久化设置在新歌播放即生效
-            try
-            {
-                DspExtraState _dspExtra = DspExtraStore.Load();
-                _audioEngine.SetChannelBalance(_dspExtra.ChannelBalance);
-                _audioEngine.SetSafety(_dspExtra.Safety);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            // 应用房间校正（卷积 FIR）：持久化状态 → 引擎 → DSP 链
-            try
-            {
-                _audioEngine.SetRoomCorrection(RoomCorrectionStore.Load());
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            // 应用 ReplayGain 响度归一化：从源文件读 track/album 增益与 peak，按持久化 mode 由 DSP 链处理。
-            try
-            {
-                ReplayGainState rg = ReplayGainStore.Load();
-                var rgData = await Task.Run(() => ReplayGainReader.ReadForAudio(item.FilePath));
-                _currentRgData = rgData;
-                if (rgData.HasValue)
-                {
-                    _audioEngine.SetReplayGain(rg, rgData.Value.TrackGainDb, rgData.Value.AlbumGainDb, rgData.Value.Peak);
-                }
-                else
-                {
-                    _audioEngine.SetReplayGain(rg, 0, 0, 1.0);
-                }
-
-                DispatcherQueue.TryEnqueue(RefreshAudioFxRgInfo);
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
+            // 引擎接线（建引擎 / 输出模式 / 设备 / EQ / DSP / 房间校正 / ReplayGain）全部在会话里。
+            // 这里只要两样：给面板用的 ReplayGain 数据，以及"能不能刷读数"。
+            PlaybackPreparation preparation = await Session.PrepareAsync(item).ConfigureAwait(true);
+            _currentRgData = preparation.ReplayGain;
+            if (preparation.ReplayGainApplied) DispatcherQueue.TryEnqueue(RefreshAudioFxRgInfo);
 
             // CUE 分轨：按 [起点, 起点+时长] 区间转码 —— 引擎看到的就是"这一轨的完整流"，
             // 进度 / 播完切换 / 拖动 seek / SMTC 全部天然按轨口径，无需上层做时间换算。

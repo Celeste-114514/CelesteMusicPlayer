@@ -2066,8 +2066,7 @@ namespace CelesteMusicPlayer
 
             try
             {
-                _audioEngine?.Dispose();
-                _audioEngine = null;
+                ResetPlaybackEngine();
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 

@@ -38,7 +38,7 @@ namespace CelesteMusicPlayer
         private int _sleepTracksRemaining;
         private int _sleepMinutes;   // AfterMinutes 模式下的分钟数（0=未设置）；面板回显用
         private double _sleepCustomMinutes;
-        private AudioPlaybackEngine? _audioEngine;
+        // 引擎由 PlaybackSession 持有，这里只留转发属性（见 MainWindow.PlaybackHost.cs）。
         private readonly LibraryWatchService _libraryWatch = new();
         private bool _featuresInitialized;
 

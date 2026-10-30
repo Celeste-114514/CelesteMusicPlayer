@@ -1,84 +1,98 @@
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading;
 using System.Threading.Tasks;
-namespace CelesteMusicPlayer;
-/// <summary>Host-neutral session state and queue commands for the W7 host. Owns no controls or windows.</summary>
-internal sealed class PlaybackSession : IAsyncDisposable
+
+namespace CelesteMusicPlayer
 {
-    private readonly AudioPlaybackEngine _engine;
-    private readonly SemaphoreSlim _commands=new(1,1);
-    private readonly object _stateGate=new();
-    private List<PlaylistItem> _queue=new();
-    private int _index=-1,_request;
-    private bool _disposed,_starting;
-    private string _error="";
-    private double _volume=100;
-    internal PlaybackSession(AudioPlaybackEngine engine)
+    /// <summary>
+    /// 正式播放会话（W13 第一刀）。持有引擎，**不持有任何控件**。
+    ///
+    /// 这一刀只接管「起播前必须下发到引擎的配置」：建引擎、输出模式、设备偏好，
+    /// 以及 EQ 曲线 / 声道平衡与限幅 / 房间校正 FIR / ReplayGain。
+    /// 起播本身（`PlayFileWithFfmpegAsync`）、无缝接续、失败文案仍留在调用方，后续两刀再搬。
+    ///
+    /// ⚠ 三条约束：
+    /// 1. 别把 `TextBlock` / `Slider` 这类东西传进来 —— 会话返回事实，界面自己决定怎么说。
+    /// 2. 每段配置下发都单独 try/catch：一段坏（比如 FIR 文件被删）不能拖垮整首起播。
+    /// 3. 引擎是会话的私有财产，外部只读不算删；销毁走 <see cref="ResetEngine"/>。
+    /// </summary>
+    internal sealed class PlaybackSession(OutputModeService outputMode)
     {
-        _engine=engine;_engine.PositionChanged+=OnPosition;_engine.PlaybackEnded+=OnEnded;_engine.Failed+=OnFailed;
-    }
-    internal event Action<PlaybackSnapshot>? Changed;
-    internal void SetQueue(IEnumerable<PlaylistItem> items)
-    {
-        lock(_stateGate){if(_disposed)throw new ObjectDisposedException(nameof(PlaybackSession));if(_starting||_engine.IsPlaying)throw new InvalidOperationException("请先停止播放再替换队列");_queue=items.Select(x=>x.Clone()).ToList();_index=-1;}
-    }
-    internal PlaybackSnapshot Capture()
-    {
-        lock(_stateGate){var item=_index>=0&&_index<_queue.Count?_queue[_index]:null;return new PlaybackSnapshot{
-            trackId=item?.PersistenceKey??"",title=item?.DisplayTitle??"未在播放",artist=item?.Artist??"",album=item?.Album??"",
-            duration=_engine.Duration.TotalSeconds,position=_engine.Position.TotalSeconds,playing=_engine.IsPlaying,volume=_volume,
-            playbackOrder="Sequential",busy=_starting,error=_error,volumeEnabled=true,source=item?.IsRemote==true?"NETWORK":"LOCAL"
-        };}
-    }
-    internal async Task<bool> PlayAtAsync(int index)
-    {
-        int ticket=Interlocked.Increment(ref _request);await _commands.WaitAsync().ConfigureAwait(false);
-        try
+        private AudioPlaybackEngine? _engine;
+
+        /// <summary>引擎实例；首次 <see cref="PrepareAsync"/> 之前是 null（外部只读）。</summary>
+        internal AudioPlaybackEngine? Engine => _engine;
+
+        /// <summary>播完（自然结束或无缝切轨失败等）。宿主自己决定是"下一首"还是"停"。</summary>
+        internal event Action? Ended;
+
+        /// <summary>无缝接续真的换轨了（此时引擎已经开始放下一首）。</summary>
+        internal event Action? SeamlessChanged;
+
+        private AudioPlaybackEngine EnsureEngine()
         {
-            PlaylistItem item;
-            lock(_stateGate){if(_disposed||ticket!=_request||index<0||index>=_queue.Count)return false;item=_queue[index];_starting=true;_error="";}
-            Publish();bool ok=await _engine.PlayFileWithFfmpegAsync(item.FilePath,startSeconds:item.StartTimeSeconds,lengthSeconds:item.IsCueSegment?item.Duration.TotalSeconds:0).ConfigureAwait(false);
-            lock(_stateGate){_starting=false;if(_disposed||ticket!=_request){_engine.Stop();return false;}if(ok)_index=index;else _error=_engine.LastError??"无法播放";}
-            Publish();return ok;
+            if (_engine != null) return _engine;
+            _engine = new AudioPlaybackEngine();
+            // 事件只在创建时挂一次：以前每次起播都 -= 再 +=，同一路事件能挂多次。
+            _engine.PlaybackEnded += () => Ended?.Invoke();
+            _engine.SeamlessTrackChanged += () => SeamlessChanged?.Invoke();
+            return _engine;
         }
-        finally{_commands.Release();}
-    }
-    internal Task<bool> NextAsync(){lock(_stateGate)return PlayAtAsync(_index+1);}
-    internal Task<bool> PreviousAsync(){lock(_stateGate)return PlayAtAsync(Math.Max(0,_index-1));}
-    internal async Task ExecuteAsync(string command,double value=0)
-    {
-        if(command=="next"){await NextAsync().ConfigureAwait(false);return;}
-        if(command=="previous"){await PreviousAsync().ConfigureAwait(false);return;}
-        if(command is "play" or "togglePlay" && _index<0){await PlayAtAsync(0).ConfigureAwait(false);return;}
-        await _commands.WaitAsync().ConfigureAwait(false);
-        try
+
+        /// <summary>
+        /// 起播前把该下发的配置全部下发。返回给界面渲染用的快照。
+        /// 顺序与原来一致：输出模式 → 设备 → EQ → DSP → FIR → ReplayGain。
+        /// </summary>
+        internal async Task<PlaybackPreparation> PrepareAsync(PlaylistItem item)
         {
-            if(_disposed)return;
-            switch(command)
+            AppSettingsState settings = AppSettingsStore.Load();
+            AudioPlaybackEngine engine = EnsureEngine();
+
+            outputMode.Apply(settings);
+            engine.SetOutputDevicePreference(string.IsNullOrWhiteSpace(settings.OutputDeviceId) ? null : settings.OutputDeviceId);
+
+            ApplySafely("EQ", () => engine.SetEqCurve(EqCurveStore.Load()));
+            ApplySafely("DSP", () =>
             {
-                case "play":if(!_engine.IsPlaying)_engine.Resume();break;
-                case "pause":_engine.Pause();break;
-                case "togglePlay":if(_engine.IsPlaying)_engine.Pause();else _engine.Resume();break;
-                case "stop":Interlocked.Increment(ref _request);_engine.Stop();break;
-                case "seek":if(double.IsFinite(value))_engine.Seek(TimeSpan.FromSeconds(Math.Clamp(value,0,_engine.Duration.TotalSeconds)));break;
-                case "volume":if(double.IsFinite(value)){_volume=Math.Clamp(value,0,100);_engine.SetVolume(_volume/100);}break;
-                default:throw new ArgumentException("未知播放命令",nameof(command));
+                DspExtraState extra = DspExtraStore.Load();
+                engine.SetChannelBalance(extra.ChannelBalance);
+                engine.SetSafety(extra.Safety);
+            });
+            ApplySafely("FIR", () => engine.SetRoomCorrection(RoomCorrectionStore.Load()));
+
+            (double TrackGainDb, double AlbumGainDb, double Peak)? replayGain = null;
+            bool replayGainApplied = false;
+            try
+            {
+                ReplayGainState state = ReplayGainStore.Load();
+                replayGain = await Task.Run(() => ReplayGainReader.ReadForAudio(item.FilePath)).ConfigureAwait(true);
+                if (replayGain.HasValue)
+                    engine.SetReplayGain(state, replayGain.Value.TrackGainDb, replayGain.Value.AlbumGainDb, replayGain.Value.Peak);
+                else
+                    engine.SetReplayGain(state, 0, 0, 1.0);   // 没有标签就是 0dB，别沿用上一首的增益
+                replayGainApplied = true;
             }
-            Publish();
+            catch (Exception caught) { StartupLog.WriteException("PlaybackSession.cs", caught); }
+
+            return new PlaybackPreparation(settings, replayGain, replayGainApplied);
         }
-        finally{_commands.Release();}
+
+        /// <summary>销毁引擎。调用方必须先把播放进度落盘 —— 引擎一没，位置就读不出来了。</summary>
+        internal void ResetEngine()
+        {
+            try { _engine?.Dispose(); }
+            finally { _engine = null; }
+        }
+
+        private static void ApplySafely(string what, Action action)
+        {
+            try { action(); }
+            catch (Exception caught) { StartupLog.WriteException("PlaybackSession." + what, caught); }
+        }
     }
-    private void OnPosition(TimeSpan position){if(!_starting&&!_disposed)Publish();}
-    private void OnFailed(Exception ex){_error=ex.Message;if(!_disposed)Publish();}
-    private async void OnEnded(){try{if(!_disposed&&!_starting)await NextAsync().ConfigureAwait(false);}catch(Exception ex){OnFailed(ex);}}
-    private void Publish(){if(!_disposed)Changed?.Invoke(Capture());}
-    public async ValueTask DisposeAsync()
-    {
-        lock(_stateGate){if(_disposed)return;_disposed=true;Interlocked.Increment(ref _request);}
-        await _commands.WaitAsync().ConfigureAwait(false);
-        try{_engine.PositionChanged-=OnPosition;_engine.PlaybackEnded-=OnEnded;_engine.Failed-=OnFailed;_engine.Dispose();}
-        finally{_commands.Release();}
-    }
+
+    /// <summary>起播前下发的配置结果。界面拿它渲染读数，不再自己回头读设置。</summary>
+    internal sealed record PlaybackPreparation(
+        AppSettingsState Settings,
+        (double TrackGainDb, double AlbumGainDb, double Peak)? ReplayGain,
+        bool ReplayGainApplied);
 }
