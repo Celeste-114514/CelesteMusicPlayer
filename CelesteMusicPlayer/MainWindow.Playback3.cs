@@ -3111,6 +3111,15 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
+                // ⚠ 预载是异步的：这一路 await（读源/转码）期间用户可能已经切歌。
+                // 若此时仍把预载结果记下来，等无缝换轨事件到达时就会拿"上一首的下一首"去更新界面
+                // —— 表现就是"实际在放新的那首，界面还停在别的曲目"。所以落记录前必须再确认一次。
+                if (GetCurrentPlayingItem() is not PlaylistItem stillOn || WebTrackIdentity.Of(stillOn) != WebTrackIdentity.Of(current))
+                {
+                    StartupLog.Write("预加载: 期间已切歌，丢弃这次预载 \"" + next.Title + "\"（当前=" + (GetCurrentPlayingItem()?.Title ?? "<无>") + "）");
+                    return;
+                }
+
                 bool ok = await _audioEngine.PrepareNextSeamless(wav);
                 StartupLog.Write("预加载: \"" + current.Title + "\" → \"" + next.Title + "\" wav=" + System.IO.Path.GetFileName(wav) + " 采纳无缝=" + ok);
                 if (ok)
@@ -3178,7 +3187,18 @@ namespace CelesteMusicPlayer
             {
                 PlaylistItem? next = _seamlessPreloaded;
                 _seamlessPreloaded = null;
-                if (next != null)
+                if (next == null)
+                {
+                    // 换轨事件到了但没有预载记录：引擎已经在放下一首了，界面不能装作没发生。
+                    // 这里没有可靠的"当前是哪首"来源（引擎不暴露正在播的文件、事件也不带载荷），
+                    // 所以只把状态标对并留下现场，等下一刀把无缝搬进会话时由会话自己记账。
+                    _isEnginePaused = false;
+                    _usingEnginePlayback = true;
+                    StartupLog.Write("[无缝] 换轨事件到达但预载记录为空：界面未切换（队列下标=" + _queue.Index
+                        + " 记录在播=" + (_nowPlayingPath ?? "<空>") + "）");
+                    return;
+                }
+                else
                 {
                     _isEnginePaused = false;
                     _usingEnginePlayback = true;
