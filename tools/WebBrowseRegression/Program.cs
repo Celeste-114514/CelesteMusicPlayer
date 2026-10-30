@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using CelesteMusicPlayer;
 
@@ -22,5 +23,49 @@ var appended=WebBrowseRules.Insert(source,new[]{b,b},a,t=>t.Id,t=>new Track(t.Id
 Check(appended.Select(t=>t.Id).SequenceEqual(new[]{a.Id,c.Id,b.Id}), "append deduplicates by track including cue offset");
 var prepended=WebBrowseRules.Insert(source,new[]{c},a,t=>t.Id,t=>new Track(t.Id),false,true);
 Check(prepended.Select(t=>t.Id).SequenceEqual(new[]{c.Id,a.Id,b.Id}), "insert-at-begin preference");
-Console.WriteLine("PASS: root/direct/nested/case/UNC/boundary/collision folder paths; CUE identity, current entry, next/append/prepend queue rules.");
+// —— 曲目动作规则（2026-10-30 从 WebTrackActionAsync 抽出）——
+static void CheckThrow(string name, Action action, string contains)
+{
+    try { action(); Console.WriteLine("FAIL " + name + "（没抛）"); }
+    catch (Exception ex)
+    {
+        bool ok = ex.Message.Contains(contains);
+        Console.WriteLine((ok ? "PASS " : "FAIL ") + name);
+        if (!ok) Console.WriteLine("   实际消息: " + ex.Message);
+    }
+}
+
+// ResolveQueueIndices：修订号 / 越界 / 身份不符 / 去重
+var queue = new List<Track> { new("q1"), new("q2"), new("q3") };
+Check(WebBrowseRules.ResolveQueueIndices(queue, 7, 7, new[] { (1, "q2"), (0, "q1") }, t => t.Id).SequenceEqual(new[] { 1, 0 }), "indices valid, first-seen order");
+Check(WebBrowseRules.ResolveQueueIndices(queue, 7, 7, new[] { (2, "q3"), (2, "q3"), (0, "q1") }, t => t.Id).SequenceEqual(new[] { 2, 0 }), "duplicate refs deduped");
+CheckThrow("revision mismatch", () => WebBrowseRules.ResolveQueueIndices(queue, 8, 7, new[] { (0, "q1") }, t => t.Id), "播放队列已变化");
+CheckThrow("index out of range", () => WebBrowseRules.ResolveQueueIndices(queue, 7, 7, new[] { (3, "q1") }, t => t.Id), "播放队列已变化");
+CheckThrow("identity mismatch (CUE sibling)", () => WebBrowseRules.ResolveQueueIndices(queue, 7, 7, new[] { (1, "q1") }, t => t.Id), "播放队列已变化");
+
+// ResolveById：命中 / 缺失 / 去重 / null 拒绝
+var map = new Dictionary<string, Track> { ["a"] = queue[0], ["b"] = queue[1] };
+Check(WebBrowseRules.ResolveById(new[] { "a", "b", "a" }, map).Select(t => t.Id).SequenceEqual(new[] { "q1", "q2" }), "byId distinct keeps first-seen");
+CheckThrow("byId missing", () => WebBrowseRules.ResolveById(new[] { "a", "zz" }, map), "歌曲已不在曲库中");
+CheckThrow("byId null id", () => WebBrowseRules.ResolveById(new string?[] { "a", null }, map), "歌曲已不在曲库中");
+
+// RemoveAndPin：原地移除、置顶顺序、播放下标重算
+var items = new List<Track> { new("p0"), new("r1"), new("p2"), new("r3") };
+Track playingItem = items[2];
+int newIdx = WebBrowseRules.RemoveAndPin(items, new[] { 1, 3 }, Array.Empty<Track>(), playingItem);
+Check(items.Select(t => t.Id).SequenceEqual(new[] { "p0", "p2" }) && newIdx == 1, "remove keeps others, playing index recomputed");
+Track pin1 = new("pinA"), pin2 = new("pinB");
+newIdx = WebBrowseRules.RemoveAndPin(items, Array.Empty<int>(), new[] { pin1, pin2 }, playingItem);
+Check(items.Select(t => t.Id).SequenceEqual(new[] { "pinA", "pinB", "p0", "p2" }) && newIdx == 3, "pin to front preserves order");
+Check(WebBrowseRules.RemoveAndPin(items, new[] { 3 }, Array.Empty<Track>(), playingItem) == -1, "playing removed -> -1");
+Check(WebBrowseRules.RemoveAndPin(items, Array.Empty<int>(), Array.Empty<Track>(), null) == -1, "nothing playing -> -1");
+
+// RemoveAndPin 语义钉死：置顶项若同时在移除名单里 = 移除后重新插回队首（右键"置顶"）
+var moved2 = new List<Track> { new("m0"), new("m1"), new("m2") };
+Track pinned = moved2[2];
+WebBrowseRules.RemoveAndPin(moved2, new[] { 2 }, new[] { pinned }, null);
+Check(moved2.Select(t => t.Id).SequenceEqual(new[] { "m2", "m0", "m1" }), "pin item removed then reinserted at top");
+
+Console.WriteLine("PASS: root/direct/nested/case/UNC/boundary/collision folder paths; CUE identity, current entry, next/append/prepend queue rules;");
+Console.WriteLine("PASS: track-action rules (queue refs / byId / remove+pin).");
 sealed record Track(string Id);

@@ -67,15 +67,10 @@ namespace CelesteMusicPlayer
             if (fromQueue)
             {
                 WebQueue(JsonSerializer.SerializeToElement(new { operation = "get" }));
-                if (msg.GetProperty("revision").GetInt32() != _queue.Revision) throw new InvalidOperationException("播放队列已变化，请重新打开菜单。");
-                var refs = msg.GetProperty("entries").EnumerateArray().ToArray();
-                indices = refs.Select(entry => entry.GetProperty("index").GetInt32()).Distinct().ToArray();
-                foreach (var entry in refs)
-                {
-                    int index = entry.GetProperty("index").GetInt32();
-                    if (index < 0 || index >= _queue.Items.Count || WebTrackIdentity.Of(_queue.Items[index]) != entry.GetProperty("trackId").GetString())
-                        throw new InvalidOperationException("播放队列已变化，请重新打开菜单。");
-                }
+                var refs = msg.GetProperty("entries").EnumerateArray()
+                    .Select(entry => (entry.GetProperty("index").GetInt32(), entry.GetProperty("trackId").GetString() ?? ""))
+                    .ToArray();
+                indices = WebBrowseRules.ResolveQueueIndices(_queue.Items, _queue.Revision, msg.GetProperty("revision").GetInt32(), refs, WebTrackIdentity.Of);
                 songs = indices.Select(i => _queue.Items[i]).ToArray();
             }
             else
@@ -83,7 +78,7 @@ namespace CelesteMusicPlayer
                 var ids = msg.GetProperty("trackIds").EnumerateArray().Select(id => id.GetString()).ToArray();
                 var map = Library.AllTracks().GroupBy(WebTrackIdentity.Of).ToDictionary(group => group.Key, group => group.First());
                 foreach (var entry in Library.FolderTracks) if (!map.ContainsKey(entry.Key) && File.Exists(entry.Value.FilePath)) map[entry.Key] = entry.Value;
-                songs = ids.Distinct().Select(id => id != null && map.TryGetValue(id, out var song) ? song : throw new InvalidOperationException("歌曲已不在曲库中，请刷新。")).ToArray();
+                songs = WebBrowseRules.ResolveById(ids, map).ToArray();
             }
             if (songs.Length is < 1 or > 50000) throw new ArgumentException("请选择歌曲。");
             switch (operation)
@@ -104,9 +99,9 @@ namespace CelesteMusicPlayer
                 {
                     if (!fromQueue) throw new ArgumentException("请在播放队列中操作。");
                     var playing = _queue.Index >= 0 && _queue.Index < _queue.Items.Count ? _queue.Items[_queue.Index] : null;
-                    foreach (int index in indices.OrderByDescending(i => i)) _queue.Items.RemoveAt(index);
-                    if (operation == "pin") for (int i = songs.Length - 1; i >= 0; i--) _queue.Items.Insert(0, songs[i]);
-                    _queue.Index = playing == null ? -1 : _queue.Items.IndexOf(playing);
+                    // 原地改列表（视图事件照常发）；置顶用的 songs 是移除前解析出的对象，被移除再插回队首 = 置顶语义。
+                    _queue.Index = WebBrowseRules.RemoveAndPin(_queue.Items, indices,
+                        operation == "pin" ? songs : Array.Empty<PlaylistItem>(), playing);
                     RenumberCollection(_queue.Items); NotifyCurrentPlaylistWindow();
                     if (_currentCategory == "UserPlaylist") ApplyUserPlaylistSearchFilter();
                     break;
