@@ -32,9 +32,13 @@
   const actions=node('div',undefined,'settings-apply-bar');
   const applyAppearance=node('button','应用','primary'),revertAppearance=node('button','撤销','secondary'),applyNote=node('span','外观已应用');
   applyAppearance.id='settings-apply';revertAppearance.id='settings-revert';applyAppearance.disabled=true;revertAppearance.disabled=true;
-  actions.append(applyNote,applyAppearance,revertAppearance);$('settings-page').append(actions);
-  applyAppearance.onclick=async()=>{try{await request('commit');render();}catch(e){status(e.message,'err')}};
-  revertAppearance.onclick=async()=>{try{await request('cancel');render();}catch(e){status(e.message,'err')}};
+  const resetSettings=node('button','恢复默认设置','secondary');
+  actions.append(applyNote,resetSettings,revertAppearance,applyAppearance);$('settings-page').append(actions);
+  function refreshActions(){const changed=dirty||!!window.CelesteSettingsDraft?.dirty;applyAppearance.disabled=!changed;revertAppearance.disabled=!changed;applyNote.textContent=changed?'设置有未应用的改动':'设置已应用';}
+  document.addEventListener('celeste:settings-draft',refreshActions);
+  applyAppearance.onclick=async()=>{try{await window.CelesteSettingsDraft?.commit();if(dirty)await request('commit');render();refreshActions();}catch(e){status(e.message,'err')}};
+  revertAppearance.onclick=async()=>{try{await window.CelesteSettingsDraft?.cancel();if(dirty)await request('cancel');render();refreshActions();}catch(e){status(e.message,'err')}};
+  resetSettings.onclick=async()=>{try{await window.CelesteSettingsDraft?.reset();await request('reset',{scope:'all'});render();refreshActions();}catch(e){status(e.message,'err')}};
 
   let data = null;             // 宿主快照
   let editing = 'light';       // 正在编辑哪一套明暗
@@ -107,7 +111,7 @@
   function accept(result) {
     data = result;
     dirty = !!result.draft;
-    applyAppearance.disabled=!dirty;revertAppearance.disabled=!dirty;applyNote.textContent=dirty?"外观有未应用的改动":"外观已应用";
+    refreshActions();
     paint();
     window.CelestePlayerLayout?.apply?.(result.playerButtons);
     window.CelesteNavLayout?.apply?.(result.navItems);

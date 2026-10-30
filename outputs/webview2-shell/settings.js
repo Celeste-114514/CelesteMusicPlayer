@@ -79,7 +79,30 @@
     return task;
   }
 
+  let baseline = null;
+  let pending = {};
+  function refreshDraft() { document.dispatchEvent(new Event('celeste:settings-draft')); }
   async function submit(changes) {
+    if (!baseline) baseline = structuredClone(snapshot.values);
+    applyValues(changes);
+    for (const [id,value] of Object.entries(changes)) {
+      if (JSON.stringify(value) === JSON.stringify(baseline[id])) delete pending[id];
+      else pending[id] = value;
+    }
+    refreshDraft(); status('设置有未应用的改动', 'warn'); return true;
+  }
+  window.CelesteSettingsDraft = {
+    get dirty() { return Object.keys(pending).length > 0; },
+    async commit() {
+      await queue;
+      if (Object.keys(pending).length && !await persist(pending)) throw new Error('设置已被其他窗口修改，请重新检查');
+      pending = {}; baseline = structuredClone(snapshot.values); refreshDraft();
+    },
+    async cancel() { await queue; pending = {}; baseline = null; await reload(); refreshDraft(); },
+    async reset() { await queue; const result = await request('defaults'); await submit(result.values); render(); }
+  };
+
+  async function persist(changes) {
     busy = true;
     try {
       const result = await request('patch', { revision, changes });
@@ -98,9 +121,7 @@
     } finally { busy = false; }
   }
 
-  const commitDebounced = debounce((id, value) => {
-    patch({ [id]: value }).catch(() => {});
-  }, 320);
+  const commitDebounced = (id, value) => { patch({ [id]: value }).catch(() => {}); };
 
   function applyValues(values) {
     Object.entries(values).forEach(([id, value]) => {
@@ -1158,6 +1179,8 @@
 
   async function reload() {
     snapshot = await request('get');
+    if (!Object.keys(pending).length) baseline = structuredClone(snapshot.values);
+    else Object.assign(snapshot.values, pending);
     revision = snapshot.revision || 0;
     rows.clear();
     renderNav();
@@ -1180,7 +1203,7 @@
     status('正在读取设置…', '');
     try {
       await reload();
-      status('设置已加载。改动会立刻写入并同步到底层服务。', 'ok');
+      status('设置已加载。改动后点击应用保存；撤销可放弃尚未应用的改动。', 'ok');
     } catch (error) {
       loaded = false;
       status('读取设置失败：' + error.message, 'err');

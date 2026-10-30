@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -43,6 +43,9 @@ namespace CelesteMusicPlayer
             switch (operation)
             {
                 case "get": return BuildSettingsSnapshot();
+                case "defaults":
+                    var defaults = new AppSettingsState();
+                    return new { values = WebSettingsSchema.Readers.Where(x => WebSettingsSchema.Writers.ContainsKey(x.Key) && !IsReadOnly(x.Key)).ToDictionary(x => x.Key, x => x.Value(defaults)) };
                 case "miniStyles": return await MiniStylesAsync(msg, window).ConfigureAwait(true);
                 case "patch": return await PatchSettingsAsync(msg).ConfigureAwait(true);
                 case "pickFolder": return new { canceled = false, path = await PickFolderAsync(window).ConfigureAwait(true) };
