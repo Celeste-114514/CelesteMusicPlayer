@@ -27,6 +27,7 @@
 | `e399b65` | `WebSettingsService` + `ISettingsHost` | 设置域剩余 12 个操作（`patch`/`credentials`/`webdav`/`folders`/三个选择器/`export`/`import`/`miniStyles`/`reset`） | `ISettingsHost`（4） | 新增设置域探针，12 项检查全过 |
 | `ae8c1ac` | `WebLibraryBrowseService` | 曲库浏览面：`browse`（列表/播放列表/收藏评分）+ 集合详情音质统计 | 无（只接曲库快照） | 回包**逐字段完全一致**（4041 曲目 + 6 组详情） |
 | `3ae096a` | `WebPlaylistMediaService` + `PortablePlaylistFormat` + `TrackReference` | 播放列表封面/导入导出/复制/选目标列表；混合播放列表格式抽成纯函数 | 无 | **17 条纯函数用例** + 浏览面回包一致 |
+| `4315a5b` | `WebSourcesService` | 在线来源 11 个操作（增改/开关/同步/取消/清缓存/测试/浏览/钉住/百度授权/授权码/取消下载） | `ISourcePlaybackHost`（1） | 回包一致（7 provider + 8 拒绝路径）+ **真实起播回归** |
 
 顺带修了两个既有缺陷：
 
@@ -35,10 +36,11 @@
 
 ## 二、当前口径
 
-`IWebPlayerServices` **47 条成员**（原 48，`WebTrackId` 已移出边界），**16 条**走独立服务，31 条仍直连 MainWindow。
+`IWebPlayerServices` **47 条成员**（原 48，`WebTrackId` 已移出边界），**17 条**走独立服务，30 条仍直连 MainWindow。
 设置域已经是「薄壳 + 服务」的形态：`WebSettingsAsync` 只剩一行转发到 `WebSettingsService`，
 17 个命令没有一个还住在 MainWindow 里。曲库浏览面同样是薄壳：`WebBrowse` / `WebCollectionOverviewAsync`
 转发到 `WebLibraryBrowseService`（这块零宿主口子，只接曲库快照）。
+在线来源的 `WebSourcesAsync` 转发到 `WebSourcesService`，宿主口子只有「取消下载」一条。
 
 播放域能安全拆的部分**基本拆完**：投影、队列、台账、媒体控件、输出模式、续播规则。
 剩下的是引擎本体（起播/停止/无缝接续）——那部分必须出声才能验，风险陡增。
@@ -55,6 +57,7 @@
 | `W13SettingsOpsProbe.cjs` | 设置域逐操作探针：`get`/`patch`（含冲突分支）/`reset`（改写→重置→还原）/`folders`/`webdav`/`credentials`/`hotkeys`/`miniStyles` + 5 条拒绝路径 |
 | `W13BrowseWireProbe.cjs` | 曲库浏览面回包采集：`browse(get)` + 三类集合详情 + 5 条拒绝路径，输出 JSON 用于**搬动前后逐字段比对** |
 | `PlaylistFormatRegression/` | 混合播放列表格式用例（17 条）：往返、中文、引用重映射、版本/编号拒绝、空文档、**导出不得含密码令牌** |
+| `W13SourcesWireProbe.cjs` | 在线来源回包采集：`sources list` + 8 条拒绝路径 + `cancelDownload`，用于搬动前后比对 |
 
 跑法：`NODE_PATH=C:\Users\MSI\_pwtmp\node_modules node tools/W13InterfaceRegression.cjs [exe]`
 设置域：`NODE_PATH=C:\Users\MSI\_pwtmp\node_modules node tools/W13SettingsOpsProbe.cjs [exe]`
@@ -73,6 +76,12 @@
    其中 `export`/`import` 还会覆盖整份设置，属于必须人手点一次的项。
 7. **播放列表的封面 / 导入 / 导出成功路径**（`3ae096a`）同样要弹对话框：格式逻辑有 17 条用例兜底，
    但「点选文件 → 写盘」这一段没有任何自动证据。
+8. **在线来源的增删改成功路径**（`4315a5b`）：本机 0 个来源，`save`/`toggle` 的成功分支没跑过 ——
+   跑一次会在用户的来源列表里留下测试数据，没有删除入口，所以刻意没做。只钉住了 8 条拒绝路径。
+
+顺带补了一次**跨全部重构的真实起播回归**（`W13PlaybackLedgerProbe`）：起播两首、切一首、正常退出，
+引擎日志 `HiFi播放 mode=WasapiShared ok=True` 且写入 `[journal] 起播记录`，说明这些搬动没有破坏发声链路。
+⚠ 该探针的 `transport next` 不会让曲目变化（改动前后一致），别拿它验「下一首」。
 
 ## 五、踩过的坑（已写进项目记忆）
 
@@ -89,15 +98,15 @@
 
    | 域 | 文件（行） | 卡点 | 可否自动验 |
    |---|---|---|---|
-   | 在线来源 | `WebSources`(167) | `cancelDownload` 要摸引擎的取消令牌；`authorize` 要拉起浏览器 | 部分（`list`/拒绝路径可验） |
+   | ~~在线来源~~ | ~~`WebSources`~~ | **已搬**（`4315a5b`），宿主口子 1 条 | 回包一致 |
    | 曲目动作 | `WebBrowseActions`(206) | 媒体部分已切走（`3ae096a`）；剩下入队/播放/删除/队列改序要动引擎与列表控件 | 部分（队列回包可比对） |
    | 目录浏览 | `WebFolders`(91) | 扫描 + 播放 + 目录监视 | 部分（本机 0 监视目录，走不到主分支） |
    | 标签 | `WebTags`(340) + `WebTagTools`(429) | 写真库、可能改文件 | 可但**有破坏性**，要先备份库 |
    | 网络库 | `WebDav`(473) | 网络凭据 + 缓存 | 本机没配服务器，只验拒绝分支 |
-   | DSP | `WebDsp`(699) + 工具(133) | 直读写原生状态容器 | `dsp get` 可比对，写入路径要小心 |
+   | DSP | `WebDsp`(699) + 工具(133) | **评估后不建议按"抽接口"搬**：业务本身就是直读写原生控件树（`_webDspControls`、`RoomIrPathBox` 等），抽出来要么宿主接口几十条、要么只剩空壳。要动就该连"原生状态容器"一起删，那是另一个课题 | 只读部分可比对 |
    | 引擎 | `WebTransport`(258) + `WebShell`(80) | 真出声才能验 | 可用 `W13PlaybackLedgerProbe` 起播两首 |
 
-   建议顺序：曲目动作 → DSP（只读口径先对）→ 标签（先备份库）→ 在线来源/网络库 → 引擎。
+   建议顺序：曲目动作（余下队列/播放/删除）→ 标签（先备份库）→ 网络库 → 引擎。
    每一步都能沿用「先采回包基线、再搬、再逐字段比对」这套（`W13BrowseWireProbe` 就是模板）。
 2. ~~设置域：需要先抽 `ISettingsHost`~~ **已做完**（`e399b65`）。做法与结论：
    - 那 12 个操作「卡在窗口句柄 / UI 线程」这个判断只对了一半 —— 句柄由静态的
