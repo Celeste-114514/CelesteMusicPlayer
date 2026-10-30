@@ -301,7 +301,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            bool bypass = RackParameters.Bypassed;
             bool wasSyncing = _dspPowerSyncing;
             _dspPowerSyncing = true;
             try

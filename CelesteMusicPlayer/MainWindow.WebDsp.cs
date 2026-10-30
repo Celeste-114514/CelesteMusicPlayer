@@ -116,8 +116,7 @@ namespace CelesteMusicPlayer
                     if (at >= 0) inner.Profiles[at] = fresh; else inner.Profiles.Add(fresh);
                     inner.ActiveProfile = target.Name;
                 });
-                _dspProfileActiveName = target.Name;
-                _dspProfileLeftName = string.Empty;
+                ProfileCoordinator.Apply(target.Name, DspProfileCoordinator.Fingerprint(fresh));
                 RefreshDspProfileUi();
                 UpdateDspNavIndicators();
                 return WebDspProfilesPayload();
@@ -126,7 +125,7 @@ namespace CelesteMusicPlayer
             if (operation == "profileDelete")
             {
                 string name = ReadString(msg, "name");
-                bool wasActive = string.Equals(_dspProfileActiveName, name, StringComparison.OrdinalIgnoreCase);
+                bool wasActive = string.Equals(ProfileCoordinator.ActiveName, name, StringComparison.OrdinalIgnoreCase);
                 DspProfileStore.Update(inner =>
                 {
                     inner.Profiles.RemoveAll(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
@@ -135,9 +134,7 @@ namespace CelesteMusicPlayer
                 });
                 if (wasActive)
                 {
-                    _dspProfileActiveName = string.Empty;
-                    _dspProfileLeftName = string.Empty;
-                    _dspProfileRefKey = string.Empty;
+                    ProfileCoordinator.Clear();
                 }
                 RefreshDspProfileUi();
                 UpdateDspNavIndicators();
@@ -152,20 +149,11 @@ namespace CelesteMusicPlayer
             {
                 int index = ReadInt(msg, "index", -1);
                 int delta = ReadInt(msg, "delta", 0);
-                var rack = DspRackStore.Load();
-                int[] order = rack.RackOrder ?? Array.Empty<int>();
-                int target = index + delta;
-                if (index < 0 || target < 0 || index >= order.Length || target >= order.Length)
+                // 顺序改在模型里（原生面板与网页共用一份），再由 Commit 统一下发
+                if (!RackParameters.Move(index, delta))
                     throw new ArgumentException("这一行不能再移动了。");
 
-                int[] next = (int[])order.Clone();
-                (next[index], next[target]) = (next[target], next[index]);
-                rack.RackOrder = next;
-                DspRackStore.Save(rack);
-                _audioEngine?.SetRack(rack);      // persists through DspRackStore inside SetRack
-                _dspRackOrderDraft = next;        // keep the native page's draft in step
-                RefreshDspRackRows();
-                UpdateDspNavIndicators();
+                CommitDspRackOrder();
                 return WebDspRackPayload();
             }
 
@@ -181,7 +169,7 @@ namespace CelesteMusicPlayer
                 float peak = _audioEngine?.OutputPeakDbfs ?? float.NegativeInfinity;
                 int clip = _audioEngine?.OutputClipCount ?? 0;
                 bool risk = _audioEngine?.ConvolutionClippingRisk ?? false;
-                bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+                bool bypass = RackParameters.Bypassed;
 
                 int channels = _audioEngine?.LevelMeterChannels ?? 0;
                 double leftPeak = double.NegativeInfinity, rightPeak = double.NegativeInfinity;
@@ -245,14 +233,14 @@ namespace CelesteMusicPlayer
 
             // ---- 总旁路（页面标题右侧那颗开关） -------------------------------------------------
             if (operation == "bypass")
-                return new { bypass = DspBypassToggle != null && DspBypassToggle.IsOn };
+                return new { bypass = RackParameters.Bypassed };
 
             if (operation == "setBypass")
             {
                 bool next = msg.TryGetProperty("value", out var bypassElement) && bypassElement.ValueKind == JsonValueKind.True;
-                if (DspBypassToggle != null && DspBypassToggle.IsOn != next)
+                if (RackParameters.Bypassed != next)
                     DspBypassToggle.IsOn = next;   // fires the native handler: SetBypassAll + bit-perfect UI
-                return new { bypass = DspBypassToggle != null && DspBypassToggle.IsOn };
+                return new { bypass = RackParameters.Bypassed };
             }
 
             if (operation is "set" or "preview")
@@ -683,9 +671,8 @@ namespace CelesteMusicPlayer
 
         private object WebDspRackPayload()
         {
-            var rack = DspRackStore.Load();
-            int[] order = rack.RackOrder ?? Array.Empty<int>();
-            int[] defaults = DefaultDspRackOrder();
+            int[] order = RackParameters.Order;
+            int[] defaults = DspRackParameters.DefaultOrder();
             var modules = order.Select((id, index) => new
             {
                 index,

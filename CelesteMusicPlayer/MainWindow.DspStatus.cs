@@ -1,4 +1,4 @@
-using Microsoft.UI.Xaml;
+﻿using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System;
 using System.Collections.Generic;
@@ -71,7 +71,7 @@ namespace CelesteMusicPlayer
                     chips.Add("变速 " + scale.ToString("0.##") + "x");
                 }
 
-                bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+                bool bypass = RackParameters.Bypassed;
                 chips.Add(bypass || !IsDspActiveForBadge() ? "直通" : "DSP 生效");
 
                 DspSessionFormatText.Text = head + " · " + string.Join(" · ", chips);

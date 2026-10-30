@@ -3305,7 +3305,7 @@ namespace CelesteMusicPlayer
         /// 限幅单独开/关都只待命不计数；DSP 总旁路优先视为直通。</summary>
         private bool IsBitPerfectPure(out string activeText)
         {
-            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            bool bypass = RackParameters.Bypassed;
             if (bypass) { activeText = string.Empty; return true; }
 
             bool eqOn = EqCurveStore.Load().HasEffect();
@@ -3357,7 +3357,7 @@ namespace CelesteMusicPlayer
             var causes = new System.Collections.Generic.List<string>();
 
             // 1) DSP 是否真正参与处理
-            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            bool bypass = RackParameters.Bypassed;
             if (!bypass)
             {
                 // 2026-09-22 修：旧条件写反成 IsBitPerfectPure(...) && dspText 非空——

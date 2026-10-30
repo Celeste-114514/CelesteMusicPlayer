@@ -1093,7 +1093,7 @@ namespace CelesteMusicPlayer
 
             if (AudioFxEqPillPerfectText != null)
             {
-                AudioFxEqPillPerfectText.Text = DspBypassToggle != null && DspBypassToggle.IsOn
+                AudioFxEqPillPerfectText.Text = RackParameters.Bypassed
                     ? "bit-perfect 直通（DSP 已旁路）"
                     : (IsDspActiveForBadge() ? "输出非 bit-perfect（DSP 生效）" : "输出 bit-perfect 直出");
             }
@@ -1989,7 +1989,7 @@ namespace CelesteMusicPlayer
             RefreshMainBitPerfectBadge();
 
             // DSP 总旁路（A/B 对比）优先显示：旁路时输出 bit-perfect，无论 DSP 设置如何
-            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            bool bypass = RackParameters.Bypassed;
             if (bypass)
             {
                 AudioFxBitPerfectStatusText.Text = "bit-perfect 直通（DSP 已旁路）";
@@ -2046,6 +2046,7 @@ namespace CelesteMusicPlayer
         private void DspBypassToggle_Toggled(object sender, RoutedEventArgs e)
         {
             bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            RackParameters.SetBypass(bypass);
             _audioEngine?.SetBypassAll(bypass);
             UpdateDspBitPerfectUi();
             StartupLog.Write("[DSP] 总旁路切换: " + (bypass ? "开（bit-perfect）" : "关（DSP 恢复）"));

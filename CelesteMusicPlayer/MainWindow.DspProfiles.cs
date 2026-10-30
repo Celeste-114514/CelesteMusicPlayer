@@ -22,16 +22,8 @@ namespace CelesteMusicPlayer
 {
     public sealed partial class MainWindow
     {
-        /// <summary>当前生效方案名（空 = 手动设置）。盘上 ActiveProfile 的内存镜像，见 RefreshDspProfileUi。</summary>
-        private string _dspProfileActiveName = string.Empty;
-
-        /// <summary>刚脱离的那份方案名：只用于页面提示「已从方案 X 改出去」，不落盘。</summary>
-        private string _dspProfileLeftName = string.Empty;
-
-        /// <summary>生效方案的内容指纹（自盘上快照算出）。空 = 当前无生效方案。</summary>
-        private string _dspProfileRefKey = string.Empty;
-
-        /// <summary>列表当前展示的方案，下标与 DspProfileList 的行一一对应。</summary>
+        /// <summary>「当前设置属于哪份方案」的判定住在 <see cref="DspProfileCoordinator"/>（见 DspStateHost.cs），
+        /// 这里只留页面的行缓存。</summary>
         private readonly List<DspProfile> _dspProfileRows = new();
 
         // ─────────────────────────────────────────────────────────────
@@ -44,7 +36,7 @@ namespace CelesteMusicPlayer
             try
             {
                 DspProfileBook book = DspProfileStore.Load();
-                _dspProfileActiveName = book.ActiveProfile ?? string.Empty;
+                string activeName = book.ActiveProfile ?? string.Empty;
 
                 _dspProfileRows.Clear();
                 var rows = new List<string>(book.Profiles.Count);
@@ -52,14 +44,14 @@ namespace CelesteMusicPlayer
                 foreach (DspProfile p in book.Profiles)
                 {
                     _dspProfileRows.Add(p);
-                    if (string.Equals(p.Name, _dspProfileActiveName, StringComparison.OrdinalIgnoreCase))
+                    if (string.Equals(p.Name, activeName, StringComparison.OrdinalIgnoreCase))
                     {
                         active = p;
                     }
                 }
 
-                // 生效方案的内容指纹：用来判断"应用之后又被改过没有"
-                _dspProfileRefKey = active == null ? string.Empty : DspProfileFingerprint(active);
+                // 生效方案的内容指纹：用来判断"应用之后又被改过没有"（判定本身由协调器持有）
+                ProfileCoordinator.Load(activeName, active == null ? string.Empty : DspProfileCoordinator.Fingerprint(active));
 
                 // 进页面 / 保存后先判定漂移，再生成行文本（行的 ● 标记与「已存 N 份」都要用最终状态）
                 EnsureDspProfileFresh();
@@ -75,7 +67,7 @@ namespace CelesteMusicPlayer
                     int restore = -1;
                     for (int i = 0; i < _dspProfileRows.Count; i++)
                     {
-                        if (string.Equals(_dspProfileRows[i].Name, _dspProfileActiveName, StringComparison.OrdinalIgnoreCase))
+                        if (string.Equals(_dspProfileRows[i].Name, ProfileCoordinator.ActiveName, StringComparison.OrdinalIgnoreCase))
                         {
                             restore = i;
                             break;
@@ -99,7 +91,7 @@ namespace CelesteMusicPlayer
         /// <summary>列表单行文本：生效方案带 ● 前缀并标注「当前」。</summary>
         private string FormatDspProfileRow(DspProfile p, int index)
         {
-            bool active = string.Equals(p.Name, _dspProfileActiveName, StringComparison.OrdinalIgnoreCase);
+            bool active = string.Equals(p.Name, ProfileCoordinator.ActiveName, StringComparison.OrdinalIgnoreCase);
             string stamp = FormatDspProfileStamp(p.ModifiedUtc, p.CreatedUtc);
             string head = active ? "● " : (index + 1).ToString(CultureInfo.InvariantCulture) + ". ";
             return stamp.Length == 0
@@ -128,11 +120,11 @@ namespace CelesteMusicPlayer
             if (DspProfileStatusText != null)
             {
                 int count = _dspProfileRows.Count;
-                string now = string.IsNullOrEmpty(_dspProfileActiveName)
-                    ? (string.IsNullOrEmpty(_dspProfileLeftName)
+                string now = string.IsNullOrEmpty(ProfileCoordinator.ActiveName)
+                    ? (string.IsNullOrEmpty(ProfileCoordinator.LeftName)
                         ? "当前：手动设置（未套用任何方案）"
-                        : "当前：手动设置（已从方案「" + _dspProfileLeftName + "」改出去）")
-                    : "当前：方案「" + _dspProfileActiveName + "」正在生效";
+                        : "当前：手动设置（已从方案「" + ProfileCoordinator.LeftName + "」改出去）")
+                    : "当前：方案「" + ProfileCoordinator.ActiveName + "」正在生效";
                 DspProfileStatusText.Text = now + "　｜　已存 " + count + " 份方案";
             }
 
@@ -145,14 +137,14 @@ namespace CelesteMusicPlayer
             {
                 DspProfileHintText.Text = "还没有方案。先把各模块调到你满意的声音，再在上面起个名字点「保存为方案」。";
             }
-            else if (!string.IsNullOrEmpty(_dspProfileActiveName))
+            else if (!string.IsNullOrEmpty(ProfileCoordinator.ActiveName))
             {
-                DspProfileHintText.Text = "当前设置来自方案「" + _dspProfileActiveName
+                DspProfileHintText.Text = "当前设置来自方案「" + ProfileCoordinator.ActiveName
                     + "」。应用后再改任一模块就会自动脱离该方案（方案本身不变，要留住改动点「更新为当前设置」）。";
             }
-            else if (!string.IsNullOrEmpty(_dspProfileLeftName))
+            else if (!string.IsNullOrEmpty(ProfileCoordinator.LeftName))
             {
-                DspProfileHintText.Text = "当前是手动设置：已从方案「" + _dspProfileLeftName
+                DspProfileHintText.Text = "当前是手动设置：已从方案「" + ProfileCoordinator.LeftName
                     + "」改出去。想留住这次改动，选中那份方案点「更新为当前设置」，或另存为新方案。";
             }
             else
@@ -190,13 +182,13 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            if (string.IsNullOrEmpty(_dspProfileActiveName))
+            if (string.IsNullOrEmpty(ProfileCoordinator.ActiveName))
             {
                 SetDspBadgeState(DspBadgeProfiles, DspBadgeProfilesText, "off", "手动设置");
             }
             else
             {
-                SetDspBadgeState(DspBadgeProfiles, DspBadgeProfilesText, "on", "方案「" + _dspProfileActiveName + "」");
+                SetDspBadgeState(DspBadgeProfiles, DspBadgeProfilesText, "on", "方案「" + ProfileCoordinator.ActiveName + "」");
             }
         }
 
@@ -207,35 +199,14 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void EnsureDspProfileFresh()
         {
-            if (string.IsNullOrEmpty(_dspProfileActiveName) || !DspProfileDrifted())
+            // 判定与降级都由协调器做；宿主只负责它说"已经偏离"之后的落盘与刷新
+            if (!ProfileCoordinator.Refresh(CaptureCurrentDspProfile))
             {
                 return;
             }
 
-            _dspProfileLeftName = _dspProfileActiveName;
-            _dspProfileActiveName = string.Empty;
-            _dspProfileRefKey = string.Empty;
             DspProfileStore.MarkCustom();
             UpdateDspProfileTexts();
-        }
-
-        /// <summary>当前设置是否已偏离生效方案。无生效方案 / 指纹未就绪时返回 false。</summary>
-        private bool DspProfileDrifted()
-        {
-            if (string.IsNullOrEmpty(_dspProfileRefKey))
-            {
-                return false;
-            }
-
-            try
-            {
-                return !string.Equals(_dspProfileRefKey, DspProfileFingerprint(CaptureCurrentDspProfile()), StringComparison.Ordinal);
-            }
-            catch (Exception caught)
-            {
-                global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.DspProfiles.cs", caught);
-                return false;
-            }
         }
 
         // ─────────────────────────────────────────────────────────────
@@ -276,92 +247,6 @@ namespace CelesteMusicPlayer
             };
         }
 
-        /// <summary>
-        /// 方案内容指纹：只取"用户可调的设置值"，用于判断当前设置是否还等于某份方案。
-        /// 刻意不含 IR 的 taps / 采样率 / 声道数这类"加载后回写"字段 —— 它们会被播放过程改写，
-        /// 放进来会让刚应用完的方案立刻被误判成"已改动"。
-        /// </summary>
-        private static string DspProfileFingerprint(DspProfile p)
-        {
-            var b = new StringBuilder(1024);
-            void Num(double v) => b.Append(v.ToString("0.####", CultureInfo.InvariantCulture)).Append('|');
-            void Flag(bool v) => b.Append(v ? '1' : '0').Append('|');
-
-            // 机架：顺序 + 压缩器 + 立体声场 + 声道矩阵
-            RackState? rack = p.Rack;
-            if (rack?.RackOrder != null)
-            {
-                foreach (int id in rack.RackOrder)
-                {
-                    b.Append(id).Append(',');
-                }
-            }
-
-            b.Append('|');
-            if (rack?.Compressor is { } c)
-            {
-                Flag(c.Enabled); Num(c.ThresholdDb); Num(c.Ratio); Num(c.AttackMs);
-                Num(c.ReleaseMs); Num(c.KneeDb); Num(c.MakeupDb); Num(c.Mix);
-            }
-
-            if (rack?.StereoField is { } f)
-            {
-                Flag(f.Enabled); Num(f.Width); Num(f.CenterGainDb); Num(f.SideGainDb);
-            }
-
-            if (rack?.Matrix is { } m)
-            {
-                Flag(m.Enabled); Num(m.LeftToLeft); Num(m.RightToLeft); Num(m.LeftToRight); Num(m.RightToRight);
-            }
-
-            // EQ 曲线（含耳机校正写进来的那条）
-            if (p.Eq is { } eq)
-            {
-                Flag(eq.Enabled); Num(eq.PreampDb); b.Append(eq.PresetId).Append('|');
-                foreach (EqBand band in eq.Bands)
-                {
-                    Flag(band.Enabled); Num(band.FrequencyHz); Num(band.GainDb); Num(band.Q);
-                    b.Append((int)band.FilterType).Append('|');
-                }
-            }
-
-            // 声道工具 + 输出安全
-            if (p.Extra?.ChannelBalance is { } ch)
-            {
-                Flag(ch.Enabled); Num(ch.Balance); Num(ch.LeftGainDb); Num(ch.RightGainDb);
-                Flag(ch.InvertLeft); Flag(ch.InvertRight); Flag(ch.SwapChannels);
-                b.Append(ch.MonoMode).Append('|');
-                Num(ch.LeftDelayMs); Num(ch.RightDelayMs);
-                Flag(ch.CrossfeedEnabled); b.Append(ch.CrossfeedLevel).Append('|'); Num(ch.CrossfeedCutoffHz);
-            }
-
-            if (p.Extra?.Safety is { } safety)
-            {
-                Num(safety.HeadroomDb); Flag(safety.EnableLimiter);
-            }
-
-            // ReplayGain
-            if (p.ReplayGain is { } rg)
-            {
-                b.Append((int)rg.Mode).Append('|'); Num(rg.PreampDb); Flag(rg.PreventClipping);
-            }
-
-            // 房间校正：只比用户设定 + IR 路径（长度/采样率是加载后回写的，见方法注释）
-            if (p.Room is { } room)
-            {
-                Flag(room.Enabled); b.Append(room.IrPath).Append('|'); Num(room.GainDb); Num(room.TrimDb);
-            }
-
-            // 简单模式四滑杆
-            if (p.SimpleEq is { } se)
-            {
-                Num(se.Bass); Num(se.Vocal); Num(se.Air); Num(se.Warm);
-            }
-
-            // 升频三件套
-            b.Append(p.SrcTargetHz).Append('|').Append(p.SrcQuality).Append('|').Append(p.SrcDither);
-            return b.ToString();
-        }
 
         // ─────────────────────────────────────────────────────────────
         // 应用：一份方案快照 → store → 面板 → 引擎
@@ -411,8 +296,7 @@ namespace CelesteMusicPlayer
                 AppSettingsStore.Save(settings);
 
                 // 生效方案先记上（含盘），再重载面板：重载期间的状态刷新就已经是"属于这份方案"了
-                _dspProfileActiveName = profile.Name;
-                _dspProfileLeftName = string.Empty;
+                ProfileCoordinator.Apply(profile.Name, DspProfileCoordinator.Fingerprint(profile));
                 DspProfileStore.SetActive(profile.Name);
 
                 // 2) 面板从盘重载（启动期同一条路径：面板始终以 store 为唯一真值）
@@ -522,8 +406,7 @@ namespace CelesteMusicPlayer
                     book.ActiveProfile = name;
                 });
 
-                _dspProfileActiveName = name;
-                _dspProfileLeftName = string.Empty;
+                ProfileCoordinator.Apply(name, DspProfileCoordinator.Fingerprint(fresh));
                 if (DspProfileNameBox != null)
                 {
                     DspProfileNameBox.Text = string.Empty;
@@ -604,8 +487,7 @@ namespace CelesteMusicPlayer
                     book.ActiveProfile = name;
                 });
 
-                _dspProfileActiveName = name;
-                _dspProfileLeftName = string.Empty;
+                ProfileCoordinator.Apply(name, DspProfileCoordinator.Fingerprint(fresh));
                 if (DspProfileSaveHintText != null)
                 {
                     DspProfileSaveHintText.Text = "方案「" + name + "」已更新为当前设置。";
@@ -639,7 +521,7 @@ namespace CelesteMusicPlayer
                 }
 
                 string name = row.Name;
-                bool wasActive = string.Equals(_dspProfileActiveName, name, StringComparison.OrdinalIgnoreCase);
+                bool wasActive = string.Equals(ProfileCoordinator.ActiveName, name, StringComparison.OrdinalIgnoreCase);
 
                 DspProfileStore.Update(book =>
                 {
@@ -652,9 +534,7 @@ namespace CelesteMusicPlayer
 
                 if (wasActive)
                 {
-                    _dspProfileActiveName = string.Empty;
-                    _dspProfileLeftName = string.Empty;
-                    _dspProfileRefKey = string.Empty;
+                    ProfileCoordinator.Clear();
                 }
 
                 if (DspProfileSaveHintText != null)

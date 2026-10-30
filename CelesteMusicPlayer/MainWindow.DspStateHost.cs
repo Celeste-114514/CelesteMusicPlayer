@@ -18,6 +18,8 @@ public sealed partial class MainWindow
     private readonly DspFieldParameters FieldParameters = new();
     private readonly DspMatrixParameters MatrixParameters = new();
     private readonly DspFirParameters FirParameters = new();
+    private readonly DspRackParameters RackParameters = new();
+    private readonly DspProfileCoordinator ProfileCoordinator = new();
 
     /// <summary>Modules whose business values already live in a model instead of their controls.</summary>
     private IEnumerable<string> ProjectedControls => WebDspModuleControls["channel"]

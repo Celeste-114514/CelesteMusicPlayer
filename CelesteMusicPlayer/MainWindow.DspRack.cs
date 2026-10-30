@@ -532,23 +532,17 @@ namespace CelesteMusicPlayer
         private List<DspRackRow> _dspRackRows = new();
 
         /// <summary>当前是否被 DSP 总旁路（总旁路时机架行一律显示"已旁路"）。</summary>
-        private bool DspRackGlobalBypassed => DspBypassToggle != null && DspBypassToggle.IsOn;
+        private bool DspRackGlobalBypassed => RackParameters.Bypassed;
 
         // ─────────────────────────────────────────────────────────────
         // 事件：机架编排
         // ─────────────────────────────────────────────────────────────
 
-        /// <summary>当前在编辑的机架顺序（模块 ID）。始终与盘上值一致 —— 每次操作立即下发。</summary>
-        private int[]? _dspRackOrderDraft;
-
+        /// <summary>机架顺序现在住在 <see cref="DspRackParameters"/>（原生面板与网页命令共用一份），
+        /// 这里只负责把盘上值交给它装载 —— 每次操作立即下发，始终与盘上值一致。</summary>
         private void RefreshDspRackList(int[] order)
         {
-            if (DspRackList == null)
-            {
-                return;
-            }
-
-            _dspRackOrderDraft = (int[])order.Clone();
+            RackParameters.Load(order);
             RenderDspRackList();
         }
 
@@ -560,7 +554,7 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void RenderDspRackList()
         {
-            if (DspRackList == null || _dspRackOrderDraft == null)
+            if (DspRackList == null)
             {
                 return;
             }
@@ -568,10 +562,11 @@ namespace CelesteMusicPlayer
             bool bypassed = DspRackGlobalBypassed;
             List<DspRackRow> rows = new();
 
-            // 8 个内核模块：当前草稿顺序（可上下移）
-            for (int i = 0; i < _dspRackOrderDraft.Length && i < RackModuleNames.Length; i++)
+            // 8 个内核模块：模型里的当前顺序（可上下移）
+            int[] order = RackParameters.Order;
+            for (int i = 0; i < order.Length && i < RackModuleNames.Length; i++)
             {
-                int id = _dspRackOrderDraft[i];
+                int id = order[i];
                 DspRackState state = RackModuleActive(id)
                     ? (bypassed ? DspRackState.Bypassed : DspRackState.On)
                     : DspRackState.Off;
@@ -659,7 +654,7 @@ namespace CelesteMusicPlayer
         /// <summary>仅重刷行状态（不动顺序）：导航指示刷新 / 皮肤切换时调用。</summary>
         private void RefreshDspRackRows()
         {
-            if (DspRackList == null || _dspRackOrderDraft == null)
+            if (DspRackList == null)
             {
                 return;
             }
@@ -720,26 +715,18 @@ namespace CelesteMusicPlayer
         /// 机架里只有 8 个可排序模块，没有固定行。</summary>
         private void MoveDspRackEntry(int delta)
         {
-            if (DspRackList == null || _dspRackOrderDraft == null)
+            if (DspRackList == null)
             {
                 return;
             }
 
-            int i = DspRackList.SelectedIndex;
             // 行下标即机架下标：0..7 一一对应 8 个内核模块
-            if (i < 0 || i >= _dspRackOrderDraft.Length)
+            int i = DspRackList.SelectedIndex;
+            if (!RackParameters.Move(i, delta))
             {
                 return;
             }
 
-            int rackIndex = i;
-            int j = rackIndex + delta;
-            if (rackIndex < 0 || rackIndex >= _dspRackOrderDraft.Length || j < 0 || j >= _dspRackOrderDraft.Length)
-            {
-                return;
-            }
-
-            (_dspRackOrderDraft[rackIndex], _dspRackOrderDraft[j]) = (_dspRackOrderDraft[j], _dspRackOrderDraft[rackIndex]);
             CommitDspRackOrder();
         }
 
@@ -751,34 +738,17 @@ namespace CelesteMusicPlayer
         /// <summary>恢复默认机架顺序核心（网页「音效处理」页直接调）。</summary>
         internal void ResetDspRackOrderCore()
         {
-            // 直接恢复 ECHO 默认顺序并下发；CommitDspRackOrder 内部会 load→save→重绘
-            _dspRackOrderDraft = DefaultDspRackOrder();
+            // 恢复出厂顺序并下发；CommitDspRackOrder 内部会 load→save→重绘
+            RackParameters.Reset();
             CommitDspRackOrder();
         }
 
-        private static int[] DefaultDspRackOrder() => new[]
-        {
-            DspCoreInterop.RackEqualizer,
-            DspCoreInterop.RackConvolution,
-            DspCoreInterop.RackReplayGain,
-            DspCoreInterop.RackCompressor,
-            DspCoreInterop.RackCrossfeed,
-            DspCoreInterop.RackStereoField,
-            DspCoreInterop.RackChannelMatrix,
-            DspCoreInterop.RackChannelBalance
-        };
-
-        /// <summary>把当前草稿顺序写回 store 并下发内核。顺序合法（0..7 的排列）由
-        /// RackState.Normalize 兜底；内核若拒绝会自行回退默认并记日志。</summary>
+        /// <summary>把模型里的顺序写回 store 并下发内核。顺序合法（0..7 的排列）由模型与
+        /// RackState.Normalize 双重兜底；内核若拒绝会自行回退默认并记日志。</summary>
         private void CommitDspRackOrder()
         {
-            if (_dspRackOrderDraft == null)
-            {
-                return;
-            }
-
             RackState rack = DspRackStore.Load();
-            rack.RackOrder = (int[])_dspRackOrderDraft.Clone();
+            rack.RackOrder = RackParameters.Snapshot();
             if (_audioEngine is { } engine) engine.SetRack(rack);
             else DspRackStore.Save(rack);
             RenderDspRackList();
@@ -813,24 +783,7 @@ namespace CelesteMusicPlayer
         }
 
         /// <summary>机架页始终视为"在看"，不点亮"生效"（顺序不是效果开关）。</summary>
-        private bool DspRackOrderIsDefault()
-        {
-            if (_dspRackOrderDraft == null)
-            {
-                return true;
-            }
-
-            int[] dflt = DefaultDspRackOrder();
-            for (int i = 0; i < dflt.Length && i < _dspRackOrderDraft.Length; i++)
-            {
-                if (_dspRackOrderDraft[i] != dflt[i])
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
+        private bool DspRackOrderIsDefault() => RackParameters.IsDefault;
     }
 
     /// <summary>

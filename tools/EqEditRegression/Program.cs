@@ -242,6 +242,46 @@ var firTrimDesc=System.Text.Json.JsonSerializer.SerializeToElement(firp.Describe
 Check(firTrimDesc.GetProperty("min").GetDouble()==-24 && firTrimDesc.GetProperty("max").GetDouble()==6,"fir model owns trim metadata");
 Check(System.Text.Json.JsonSerializer.SerializeToElement(firp.Describe("DspPowerFir")).GetProperty("enabled").GetBoolean()==false,"fir power disabled without IR");
 Check(firp.Owns("DspPowerFir") && firp.Owns("RoomIrEnabledToggle") && !firp.Owns("DspFieldToggle"),"fir model owns only its own controls");
+
+// ---- rack order and global bypass ----
+var rkp=new DspRackParameters();
+Check(rkp.IsDefault,"rack starts at factory order");
+Check(!rkp.Bypassed,"rack starts not bypassed");
+int[] rackStart=rkp.Snapshot();   // Order 是内部数组的视图，先拷一份再动
+Check(rkp.Move(0,1) && rkp.Order[0]==rackStart[1] && rkp.Order[1]==rackStart[0],"rack move swaps neighbours");
+Check(!rkp.Move(0,-1) && !rkp.Move(8,1) && !rkp.Move(-1,1),"rack move refuses out of range");
+Check(!rkp.IsDefault,"rack detects custom order");
+Check(rkp.Reset() && rkp.IsDefault,"rack reset restores factory");
+Check(!rkp.Reset(),"rack reset no-op when already default");
+rkp.Load([0,0,1,2,3,4,5,6]);
+Check(rkp.IsDefault,"rack load rejects a non permutation");
+rkp.Load([7,6,5,4,3,2,1,0]);
+Check(!rkp.IsDefault && rkp.Order[0]==7,"rack load keeps a valid order");
+int[] rackSnap=rkp.Snapshot();rackSnap[0]=0;
+Check(rkp.Order[0]==7,"rack snapshot isolates output");
+Check(rkp.SetBypass(true) && rkp.Bypassed,"rack bypass on");
+Check(!rkp.SetBypass(true),"rack bypass same value no mutation");
+Check(rkp.SetBypass(false) && !rkp.Bypassed,"rack bypass off");
+Check(DspRackParameters.DefaultOrder().Length==DspCoreInterop.RackModuleCount,"rack default covers every module");
+Check(DspCoreInterop.RackModuleCount==8,"rack module count matches the kernel");
+
+// ---- listening profile coordination ----
+var pc=new DspProfileCoordinator();
+Check(!pc.Refresh(()=>new DspProfile()),"profile coordinator idle without an active profile");
+string pcKey=DspProfileCoordinator.Fingerprint(new DspProfile());
+pc.Load("A",pcKey);
+Check(pc.ActiveName=="A" && !pc.Refresh(()=>new DspProfile()),"profile coordinator keeps a matching profile");
+var pcDrifted=new DspProfile{Rack=new RackState{Compressor=new CompressorSettings{MakeupDb=3}}};
+Check(pc.Refresh(()=>pcDrifted) && pc.ActiveName.Length==0 && pc.LeftName=="A","profile coordinator drops to custom on drift");
+pc.Apply("B",DspProfileCoordinator.Fingerprint(pcDrifted));
+Check(pc.ActiveName=="B" && pc.LeftName.Length==0 && !pc.Refresh(()=>pcDrifted),"profile coordinator adopts the applied profile");
+pc.Clear();
+Check(pc.ActiveName.Length==0 && pc.LeftName.Length==0 && pc.RefKey.Length==0,"profile coordinator clears both names");
+Check(string.Equals(DspProfileCoordinator.Fingerprint(new DspProfile{Room=new RoomCorrectionState{IrTapCount=999}}),
+      DspProfileCoordinator.Fingerprint(new DspProfile{Room=new RoomCorrectionState{IrTapCount=1}}),StringComparison.Ordinal),
+      "fingerprint ignores loader metadata");
+Check(!string.Equals(DspProfileCoordinator.Fingerprint(new DspProfile()),
+      DspProfileCoordinator.Fingerprint(pcDrifted),StringComparison.Ordinal),"fingerprint catches a changed module");
 Console.WriteLine($"PASS {checks} total EQ, delivery and parameter checks");
 sealed class RecordingOutput(List<string> calls, EqCurveState curve, DspExtraState extra, RoomCorrectionState room) : IDspParameterTarget
 {

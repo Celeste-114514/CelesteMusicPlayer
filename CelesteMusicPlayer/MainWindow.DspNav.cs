@@ -399,7 +399,7 @@ namespace CelesteMusicPlayer
             // 未就绪时 handler 一律忽略（XAML 解析期秒崩铁律的同款守卫）。
             InitDspPowerEntries();
 
-            // 先备好方案页状态（徽章/圆点要用 _dspProfileActiveName），再统一刷指示
+            // 先备好方案页状态（徽章/圆点要用协调器里的生效方案名），再统一刷指示
             RefreshDspProfileUi();
             UpdateDspNavIndicators();
             _dspPowerReady = true;
@@ -441,7 +441,7 @@ namespace CelesteMusicPlayer
 
             return new[]
             {
-                !string.IsNullOrEmpty(_dspProfileActiveName), false, headroom, rg, srcHz > 0, eq,
+                !string.IsNullOrEmpty(ProfileCoordinator.ActiveName), false, headroom, rg, srcHz > 0, eq,
                 comp, ch, field, matrix, fir, true
             };
         }
@@ -504,7 +504,7 @@ namespace CelesteMusicPlayer
 
             int safetyIndex = DspPageSafetyIndex;
             bool[] active = DspModuleActive();
-            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            bool bypass = RackParameters.Bypassed;
 
             // 末位是监控页，恒亮（它显示的是状态而不是处理模块）
             for (int i = 0; i < badges.Length; i++)
@@ -647,7 +647,7 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            bool bypass = RackParameters.Bypassed;
 
             string src = SrcSessionStateText != null ? SrcSessionStateText.Text : string.Empty;
             DspChainInputText.Text = (!string.IsNullOrWhiteSpace(src) && src != "—")
@@ -838,7 +838,7 @@ namespace CelesteMusicPlayer
                 on.Insert(eqAt >= 0 ? eqAt + 1 : on.Count, "耳机校正");
             }
 
-            bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            bool bypass = RackParameters.Bypassed;
             OutMonitorActiveDspText.Text = bypass
                 ? "无（DSP 总旁路中）"
                 : (on.Count == 0 ? "无" : string.Join("、", on));
