@@ -9,5 +9,6 @@
   <ItemGroup>
     <Compile Include="../../CelesteMusicPlayer/LibraryAdvanceRule.cs" Link="LibraryAdvanceRule.cs" />
     <Compile Include="../../CelesteMusicPlayer/PlaybackSnapshot.cs" Link="PlaybackSnapshot.cs" />
+    <Compile Include="../../CelesteMusicPlayer/PlaybackKindRule.cs" Link="PlaybackKindRule.cs" />
   </ItemGroup>
 </Project>

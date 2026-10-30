@@ -76,6 +76,35 @@ namespace CelesteMusicPlayer
             return new PlaybackPreparation(settings, replayGain, replayGainApplied);
         }
 
+        /// <summary>
+        /// 起播：把"能不能放、放的是什么"说清楚，不负责说给用户听。
+        /// CUE 分轨在引擎眼里就是一整条流（[起点, 起点+时长] 区间转码），进度/seek/SMTC 天然按轨口径。
+        /// </summary>
+        /// <param name="progress">转码进度文案。会话只回调字符串，怎么写由界面决定。</param>
+        internal async Task<PlaybackStartResult> StartAsync(PlaylistItem item, Action<string>? progress = null)
+        {
+            AudioPlaybackEngine engine = EnsureEngine();
+            double cueStart = item.StartTimeSeconds > 0 ? item.StartTimeSeconds : 0;
+            double cueLength = cueStart > 0 ? Math.Max(0, item.Duration.TotalSeconds) : 0;
+            bool ok = await engine.PlayFileWithFfmpegAsync(item.FilePath, s => progress?.Invoke(s), cueStart, cueLength).ConfigureAwait(true);
+            if (!ok)
+            {
+                string? reason = engine.LastError;
+                return new PlaybackStartResult(false, reason, PlaybackKind.Pcm, "", false, TimeSpan.Zero,
+                    reason != null && reason.Contains("未找到内置 ffmpeg.exe"));
+            }
+
+            bool direct = engine.IsDsdDirectOut;
+            return new PlaybackStartResult(
+                Ok: true,
+                FailureReason: null,
+                Kind: PlaybackKindRule.Of(direct, AudioPlaybackEngine.IsDsdFile(item.FilePath)),
+                PcmDescription: PlaybackKindRule.PcmDescription(engine.SourceFormatDescription, engine.ActualOutputFormat),
+                TempoActive: FfmpegDecoderBackend.IsTempoActive(FfmpegDecoderBackend.GetTempoRate()),
+                Duration: engine.Duration,
+                NeedFfmpegHint: false);
+        }
+
         /// <summary>销毁引擎。调用方必须先把播放进度落盘 —— 引擎一没，位置就读不出来了。</summary>
         internal void ResetEngine()
         {
@@ -95,4 +124,17 @@ namespace CelesteMusicPlayer
         AppSettingsState Settings,
         (double TrackGainDb, double AlbumGainDb, double Peak)? ReplayGain,
         bool ReplayGainApplied);
+
+    /// <summary>
+    /// 起播结果。会话只说事实：成没成、失败原因、是不是 DoP 直出、转了 PCM 没有、时长多少。
+    /// **文案怎么写由界面决定** —— 所以这里没有一句中文提示。
+    /// </summary>
+    internal sealed record PlaybackStartResult(
+        bool Ok,
+        string? FailureReason,
+        PlaybackKind Kind,
+        string PcmDescription,
+        bool TempoActive,
+        TimeSpan Duration,
+        bool NeedFfmpegHint);
 }

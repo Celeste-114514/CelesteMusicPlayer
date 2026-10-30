@@ -2904,36 +2904,31 @@ namespace CelesteMusicPlayer
             _currentRgData = preparation.ReplayGain;
             if (preparation.ReplayGainApplied) DispatcherQueue.TryEnqueue(RefreshAudioFxRgInfo);
 
-            // CUE 分轨：按 [起点, 起点+时长] 区间转码 —— 引擎看到的就是"这一轨的完整流"，
-            // 进度 / 播完切换 / 拖动 seek / SMTC 全部天然按轨口径，无需上层做时间换算。
-            double cueStart = item.StartTimeSeconds > 0 ? item.StartTimeSeconds : 0;
-            double cueLength = cueStart > 0 ? Math.Max(0, item.Duration.TotalSeconds) : 0;
-            bool ok = await _audioEngine.PlayFileWithFfmpegAsync(item.FilePath, s =>
-                DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }), cueStart, cueLength);
-            if (ok)
+            // CUE 分轨与起播本身也在会话里：会话只回"成没成、是不是 DoP 直出、转了 PCM 没有、多长"。
+            PlaybackStartResult result = await Session
+                .StartAsync(item, s => DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }))
+                .ConfigureAwait(true);
+            if (result.Ok)
             {
                 _isEnginePaused = false;
                 _usingEnginePlayback = true;
                 NowPlayingText.Text = "正在播放（引擎）：" + item.Title + " - " + item.Artist;
                 // DSD：以输出后端的结构化标志位为准——守卫全过且 DoP 直出已起播才提示直出；
                 // 守卫拒绝（DFF/DST/DSD512/多声道/共享/DSP 未关）或设备协商失败 → 已回退 PCM，如实提示转码。
-                bool dsdDop = _audioEngine?.IsDsdDirectOut == true;
-                if (dsdDop)
+                if (result.Kind == PlaybackKind.DsdDirect)
                 {
                     NowPlayingText.Text = "DSD DoP 直出（bit-perfect）· " + item.Title + " - " + item.Artist;
                     // 变速诚实性（2026-10-16 起口径变了）：DoP 直出 = 1-bit 位流直通设备，
                     // 不经 DSP 链，托管实时变速够不着 → 倍率≠1 时如实说明按 1x 播。
-                    if (FfmpegDecoderBackend.IsTempoActive(FfmpegDecoderBackend.GetTempoRate()))
+                    if (result.TempoActive)
                     {
                         NowPlayingText.Text += "（DoP 直出不变速，按 1x 播放）";
                     }
                 }
-                else if (IsDsdFile(item.FilePath))
+                else if (result.Kind == PlaybackKind.DsdTranscoded)
                 {
-                    string pcmDesc = string.IsNullOrWhiteSpace(_audioEngine?.SourceFormatDescription)
-                        ? (_audioEngine?.ActualOutputFormat ?? "PCM") : _audioEngine!.SourceFormatDescription!;
-                    NowPlayingText.Text = "已转码为 " + pcmDesc + " 输出";
-                    StartupLog.Write("DSD 已转码 PCM 输出: " + item.FilePath + " → " + (_audioEngine?.SourceFormatDescription ?? "?"));
+                    NowPlayingText.Text = "已转码为 " + result.PcmDescription + " 输出";
+                    StartupLog.Write("DSD 已转码 PCM 输出: " + item.FilePath + " → " + result.PcmDescription);
                     // 转成 PCM 的 DSD 走的就是普通 PCM 链路，实时变速对它有效（2026-10-16 起），
                     // 不再需要"不支持变速"的提示。
                 }
@@ -2950,7 +2945,7 @@ namespace CelesteMusicPlayer
 
                 // 引擎桥接：时长 / 进度条 / 波形（变速时进度条按"原歌曲时间"：WAV 时长 × 倍率）
                 double tempoScale = TempoScale();
-                double totalWav = _audioEngine.Duration.TotalSeconds;
+                double totalWav = result.Duration.TotalSeconds;
                 ProgressSlider.Maximum = Math.Max(1, totalWav * tempoScale);
                 ProgressSlider.Value = 0;
                 TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(totalWav * tempoScale));
@@ -2974,12 +2969,12 @@ namespace CelesteMusicPlayer
                 _pendingStartPauseAfter = false;
                 _pendingStartPath = null;
 
-                string? reason = _audioEngine?.LastError;
+                string? reason = result.FailureReason;
                 NowPlayingText.Text = string.IsNullOrWhiteSpace(reason)
                     ? "播放失败（FFmpeg 转码或打开出错）"
                     : "播放失败：" + reason;
 
-                if (reason != null && reason.Contains("未找到内置 ffmpeg.exe"))
+                if (result.NeedFfmpegHint)
                 {
                     _ = ShowErrorAsync(
                         "无法播放该格式",

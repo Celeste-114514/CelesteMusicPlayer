@@ -38,5 +38,29 @@ Check("随机 撞到末尾回卷", LibraryAdvanceRule.NextIndex(PlaybackOrder.Ra
 Check("空列表", LibraryAdvanceRule.NextIndex(PlaybackOrder.ListLoop, 0, 0, true, Fixed(0)), null);
 Check("无在播下标", LibraryAdvanceRule.NextIndex(PlaybackOrder.ListLoop, 3, -1, true, Fixed(0)), null);
 
+// —— 起播结果分类（PlaybackKindRule，W13 第二刀抽出的纯规则）——
+void CheckKind(string name, PlaybackKind actual, PlaybackKind expected)
+{
+    bool ok = actual == expected; if (!ok) failures++;
+    Console.WriteLine((ok ? "PASS " : "FAIL ") + name + " 实际=" + actual + " 期望=" + expected);
+}
+void CheckText(string name, string actual, string expected)
+{
+    bool ok = actual == expected; if (!ok) failures++;
+    Console.WriteLine((ok ? "PASS " : "FAIL ") + name + " 实际=[" + actual + "]");
+}
+
+// DoP 直出优先：只要后端说直出，就不能再报"转码"
+CheckKind("DoP 直出", PlaybackKindRule.Of(true, true), PlaybackKind.DsdDirect);
+CheckKind("DoP 直出不看源标记", PlaybackKindRule.Of(true, false), PlaybackKind.DsdDirect);
+CheckKind("DSD 回退 PCM", PlaybackKindRule.Of(false, true), PlaybackKind.DsdTranscoded);
+CheckKind("普通 PCM", PlaybackKindRule.Of(false, false), PlaybackKind.Pcm);
+
+// 格式描述的三级回退：源 → 实际输出 → "PCM"，任何情况都不吐空串
+CheckText("描述 源优先", PlaybackKindRule.PcmDescription("DSD 1-bit 原生（已转 PCM）", "32bit/384kHz"), "DSD 1-bit 原生（已转 PCM）");
+CheckText("描述 退到实际输出", PlaybackKindRule.PcmDescription(null, "32bit/384kHz"), "32bit/384kHz");
+CheckText("描述 全空说 PCM", PlaybackKindRule.PcmDescription("  ", null), "PCM");
+CheckText("描述 空串不吐空格", PlaybackKindRule.PcmDescription(null, ""), "PCM");
+
 Console.WriteLine(failures == 0 ? "ALL PASS" : ("FAILURES=" + failures));
 return failures == 0 ? 0 : 1;

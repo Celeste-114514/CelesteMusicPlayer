@@ -590,8 +590,8 @@ namespace CelesteMusicPlayer
             PositionChanged?.Invoke(pos);
         }
 
-        /// <summary>是否为 DSD 文件（DSF/DFF）。</summary>
-        private static bool IsDsdFile(string path)
+        /// <summary>是否为 DSD 文件（DSF/DFF）。会话起播后要用它判断"是直出还是转码"，所以是 internal。</summary>
+        internal static bool IsDsdFile(string path)
         {
             string ext = System.IO.Path.GetExtension(path ?? string.Empty).ToLowerInvariant();
             return ext is ".dsf" or ".dff";
