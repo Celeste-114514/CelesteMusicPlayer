@@ -11,17 +11,9 @@ namespace CelesteMusicPlayer
     {
         // Web bridge for the DSP rack.
         //
-        // Two layers here:
-        //   - EQ has its own state object (EqCurveState) because the curve is a data structure, not a
-        //     set of widgets. That path reuses ApplyEqCurveToPlayer so undo/persistence still work.
-        //   - Every other module IS a set of widgets, and the native page has exactly one apply path:
-        //     ApplyDspToEngine() reads the XAML controls. So instead of inventing a second state model
-        //     (which would drift from the native page the first time either side changes), the bridge
-        //     reads and writes those same controls. Setting a slider fires its own ValueChanged handler,
-        //     which runs the same persist + push-to-kernel path the user gets when dragging it natively.
-        //
-        // Control names are looked up through RootShell.FindName, the same way the rest of the window
-        // resolves elements by name at runtime.
+        // EQ editing state and channel/safety parameters are authoritative model objects.
+        // Web channel/safety reads and writes do not route through control events. Other DSP
+        // modules still use the legacy control adapter pending their individual migrations.
         internal object WebDsp(JsonElement msg)
         {
             string operation = "get";
@@ -498,6 +490,12 @@ namespace CelesteMusicPlayer
 
         private IEnumerable<object> WebDspDescribeControl(string name)
         {
+            if (ExtraParameters.Owns(name))
+            {
+                yield return ExtraParameters.Describe(name);
+                yield break;
+            }
+
             if (WebDspControl(name) is not FrameworkElement element)
                 yield break;
 
@@ -552,6 +550,16 @@ namespace CelesteMusicPlayer
 
         private void WebDspApplyControl(string name, JsonElement msg)
         {
+            if (ExtraParameters.Owns(name))
+            {
+                if (ExtraParameters.Set(name, msg))
+                {
+                    ProjectExtraParameters();
+                    ApplyDspToEngine();
+                }
+                return;
+            }
+
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("缺少控件名。");
             if (WebDspControl(name) is not FrameworkElement element)

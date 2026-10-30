@@ -1098,6 +1098,7 @@ namespace CelesteMusicPlayer
                 RefreshAudioFxEqBandEditor();
 
                 DspExtraState extra = DspExtraStore.Load();
+                ExtraParameters.Load(extra);
                 var ch = extra.ChannelBalance;
                 ReplayGainState rglog = ReplayGainStore.Load();
                 StartupLog.Write($"[DSP] 加载读盘 eq.Enabled={EqState.Current.Enabled} limiter={extra.Safety?.EnableLimiter} rg.Mode={rglog.Mode}");
@@ -1245,18 +1246,21 @@ namespace CelesteMusicPlayer
 
         private void AudioFxChannelMono_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            ImportExtraParameterInput(sender);
             if (!_audioFxLoading) ApplyDspToEngine();
         }
 
 
         private void AudioFxChannelSwap_Toggled(object sender, RoutedEventArgs e)
         {
+            ImportExtraParameterInput(sender);
             if (!_audioFxLoading) ApplyDspToEngine();
         }
 
 
         private void AudioFxSafetyHeadroom_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
+            ImportExtraParameterInput(sender);
             if (_audioFxLoading) return;
             if (AudioFxSafetyHeadroomLabel != null)
             {

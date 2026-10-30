@@ -28,10 +28,10 @@ namespace CelesteMusicPlayer
         private bool _dspPowerSyncing;
 
         // 各「开关关掉再打开」要恢复的上次值（0/关闭 = 电源断开，记忆的是断开前的档位）
-        private double _dspHeadroomMemory = -3.0;
+        private double _dspHeadroomMemory { get => ExtraParameters.HeadroomMemory; set => ExtraParameters.HeadroomMemory = value; }
         private int _dspSrcMemoryIndex = 4;   // 96 kHz
         private int _dspRgMemoryIndex = 1;    // 单曲 (Track)
-        private double _dspXfeedMemory = 25.0; // 耳机 Crossfeed 的强度百分比
+        private double _dspXfeedMemory { get => ExtraParameters.CrossfeedMemory; set => ExtraParameters.CrossfeedMemory = value; } // 耳机 Crossfeed 的强度百分比
 
         private sealed class DspPowerEntry
         {
@@ -334,6 +334,7 @@ namespace CelesteMusicPlayer
             }
 
             bool bypass = DspBypassToggle != null && DspBypassToggle.IsOn;
+            bool wasSyncing = _dspPowerSyncing;
             _dspPowerSyncing = true;
             try
             {
@@ -388,7 +389,7 @@ namespace CelesteMusicPlayer
             }
             finally
             {
-                _dspPowerSyncing = false;
+                _dspPowerSyncing = wasSyncing;
             }
         }
     }

@@ -1822,10 +1822,11 @@ namespace CelesteMusicPlayer
         }
 
 
-        private void AudioFxChannel_Toggled(object sender, RoutedEventArgs e) => ApplyDspToEngine();
+        private void AudioFxChannel_Toggled(object sender, RoutedEventArgs e) { ImportExtraParameterInput(sender); if (!_audioFxLoading) ApplyDspToEngine(); }
 
         private void AudioFxChannelSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
+            ImportExtraParameterInput(sender);
             if (!_audioFxLoading) ApplyDspToEngine();
             // 左右偏差条与声道滑杆同源，跟着一起动
             UpdateDspChannelBars();
@@ -1834,6 +1835,7 @@ namespace CelesteMusicPlayer
 
         private void AudioFxChannelCrossfeed_Toggled(object sender, RoutedEventArgs e)
         {
+            ImportExtraParameterInput(sender);
             if (!_audioFxLoading) ApplyDspToEngine();
             // 独立页顶部的电源开关镜像这一个，一起同步
             SyncDspPowerSwitches();
@@ -1843,6 +1845,7 @@ namespace CelesteMusicPlayer
 
         private void AudioFxChannelCrossfeedSlider_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
+            ImportExtraParameterInput(sender);
             // 拖动曲线上的截止竖线期间不落盘：一次拖动会触发几百次本事件，
             // 每次 ApplyDspToEngine 都要写一遍 DspExtraStore 并下发内核。松手时统一补一次。
             if (!_audioFxLoading && !_dspXfeedSuppressPush) ApplyDspToEngine();
@@ -1855,6 +1858,7 @@ namespace CelesteMusicPlayer
 
         private void AudioFxSafetyLimiter_Toggled(object sender, RoutedEventArgs e)
         {
+            ImportExtraParameterInput(sender);
             if (!_audioFxLoading) ApplyDspToEngine();
         }
 
@@ -1900,32 +1904,10 @@ namespace CelesteMusicPlayer
             }
             catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
-            var ch = new ChannelBalanceState
-            {
-                // Crossfeed 是声道平衡模块的子能力，必须模块启用才生效；勾选 Crossfeed 时自动点亮模块。
-                Enabled = AudioFxChannelToggle.IsOn || AudioFxChannelCrossfeedToggle.IsOn,
-                Balance = AudioFxChannelBalanceSlider.Value,
-                LeftGainDb = AudioFxChannelLeftGainSlider.Value,
-                RightGainDb = AudioFxChannelRightGainSlider.Value,
-                SwapChannels = AudioFxChannelSwapToggle.IsOn,
-                InvertLeft = AudioFxChannelInvertLToggle.IsOn,
-                InvertRight = AudioFxChannelInvertRToggle.IsOn,
-                MonoMode = CurrentAudioFxMonoMode(),
-                LeftDelayMs = AudioFxChannelLeftDelaySlider.Value,
-                RightDelayMs = AudioFxChannelRightDelaySlider.Value,
-                CrossfeedEnabled = AudioFxChannelCrossfeedToggle.IsOn,
-                CrossfeedLevel = (int)Math.Round(AudioFxChannelCrossfeedSlider.Value),
-                CrossfeedCutoffHz = AudioFxChannelCrossfeedCutoffSlider.Value
-            };
-
-            var safety = new DspSafetyState
-            {
-                HeadroomDb = AudioFxSafetyHeadroomSlider.Value,
-                EnableLimiter = AudioFxSafetyLimiterToggle.IsOn
-            };
-
-            DspApply.Apply(EqState.Current, EqState.Previewing,
-                new DspExtraState { ChannelBalance = ch, Safety = safety }, _audioEngine);
+            DspExtraState extra = ExtraParameters.Snapshot();
+            var ch = extra.ChannelBalance;
+            var safety = extra.Safety;
+            DspApply.Apply(EqState.Current, EqState.Previewing, extra, _audioEngine);
             StartupLog.Write($"[DSP] 已保存 eq(Enabled={EqState.Current.Enabled},bands={EqState.Current.Bands.Count}) ch(Enabled={ch.Enabled}) limiter={safety.EnableLimiter}  触发={trigger}");
 
             UpdateDspBitPerfectUi();

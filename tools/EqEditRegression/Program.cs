@@ -48,6 +48,32 @@ Check(string.Join(",", calls)=="saveExtra,eq,channel,safety,loadRoom,room", "pre
 calls.Clear();apply.Apply(curve,false,extra,null);
 Check(string.Join(",",calls)=="saveEq,saveExtra", "stopped saves without loading room");
 Console.WriteLine($"PASS {checks} total editing and DSP application checks");
+
+var parameters = new DspExtraParameters();
+var saved = new DspExtraState { ChannelBalance = new() { Balance=0.2, CrossfeedCutoffHz=900 }, Safety = new() { HeadroomDb=-4, EnableLimiter=false } };
+parameters.Load(saved);saved.ChannelBalance.Balance=0.9;
+Check(parameters.Channel.Balance==0.2,"load isolates input");
+var snapshot=parameters.Snapshot();snapshot.Safety.EnableLimiter=true;
+Check(!parameters.Safety.EnableLimiter,"snapshot isolates output");
+bool Set(string name, object value) => parameters.Set(name,System.Text.Json.JsonSerializer.SerializeToElement(new {value}));
+Check(Set("AudioFxChannelCrossfeedToggle",true) && !parameters.Channel.Enabled && parameters.Snapshot().ChannelBalance.Enabled,"crossfeed effective enabled differs from raw switch");
+Check(Set("AudioFxChannelCrossfeedSlider",33.3) && parameters.Snapshot().ChannelBalance.CrossfeedLevel==33,"level rounding only in snapshot");
+Check(Set("AudioFxChannelBalanceSlider",100) && parameters.Channel.Balance==1,"upper clamp");
+Check(Set("AudioFxChannelBalanceSlider",-100) && parameters.Channel.Balance==-1,"lower clamp");
+Check(!Set("AudioFxChannelBalanceSlider",-1),"same value no mutation");
+Check(!parameters.Set("AudioFxChannelMonoCombo",System.Text.Json.JsonSerializer.SerializeToElement(new {index=999})),"invalid mono ignored");
+Check(parameters.Set("AudioFxChannelMonoCombo",System.Text.Json.JsonSerializer.SerializeToElement(new {index=2})) && parameters.Channel.MonoMode=="right","mono index mapping");
+Set("DspPowerHeadroom",false);Check(parameters.Safety.HeadroomDb==0,"headroom off");
+Set("DspPowerHeadroom",true);Check(parameters.Safety.HeadroomDb==-4,"headroom restore");
+Set("AudioFxChannelCrossfeedToggle",false);Set("AudioFxChannelCrossfeedSlider",0);
+Set("DspPowerXfeed",true);Check(parameters.Channel.Enabled && parameters.Channel.CrossfeedEnabled && parameters.Snapshot().ChannelBalance.CrossfeedLevel==25,"power enables parent and restores default level");
+Set("AudioFxChannelCrossfeedSlider",45);Set("DspPowerXfeed",false);Set("AudioFxChannelCrossfeedSlider",0);Set("DspPowerXfeed",true);
+Check(parameters.Snapshot().ChannelBalance.CrossfeedLevel==45,"crossfeed restore memory");
+var description=System.Text.Json.JsonSerializer.SerializeToElement(parameters.Describe("AudioFxChannelBalanceSlider"));
+Check(description.GetProperty("min").GetDouble()==-1 && description.GetProperty("step").GetDouble()==0.05,"model owns slider metadata");
+parameters.Load(new());Check(parameters.Channel.Balance==0 && !parameters.Safety.EnableLimiter,"profile reload replaces model");
+Check(!System.Text.Json.JsonSerializer.SerializeToElement(parameters.Describe("DspPowerXfeed")).GetProperty("enabled").GetBoolean(),"crossfeed power presentation gated by parent");
+Console.WriteLine($"PASS {checks} total EQ, delivery and parameter checks");
 sealed class RecordingOutput(List<string> calls, EqCurveState curve, DspExtraState extra, RoomCorrectionState room) : IDspParameterTarget
 {
  public void SetEqCurve(EqCurveState? c){if(!ReferenceEquals(c,curve))throw new Exception("eq");calls.Add("eq");}

@@ -417,7 +417,7 @@ namespace CelesteMusicPlayer
             // 圆点语义 = "正在参与处理"。余量(负增益)才是安全模块真正逐样本处理的情形；
             // 限幅开关单独开着只待命（源 PCM 不超 ±1 时无需削波），不能点亮圆点
             // （2026-09-22 用户实测"限幅没开却显示开了"的同类口径问题，已对齐）。
-            bool headroom = AudioFxSafetyHeadroomSlider != null && Math.Abs(AudioFxSafetyHeadroomSlider.Value) > 0.01;
+            bool headroom = Math.Abs(ExtraParameters.Safety.HeadroomDb) > 0.01;
 
             int srcHz = 0;
             if (SrcRateCombo != null && SrcRateCombo.SelectedIndex >= 0 && SrcRateCombo.SelectedIndex < SrcRateOptions.Length)
@@ -427,7 +427,7 @@ namespace CelesteMusicPlayer
 
             bool eq = EqState.Current != null && EqState.Current.Enabled && EqState.Current.HasEffect();
             bool fir = RoomCorrectionStore.Load().Enabled;
-            bool ch = AudioFxChannelToggle != null && AudioFxChannelToggle.IsOn;
+            bool ch = ExtraParameters.Channel.Enabled;
             bool rg = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
 
             // 顺序与 BuildDspNav 元数据表一致（具名下标见 DspActive* 常量）：

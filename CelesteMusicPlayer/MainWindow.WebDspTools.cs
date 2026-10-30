@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
@@ -73,8 +73,8 @@ namespace CelesteMusicPlayer
                 session = _audioEngine?.LevelMeterChannels > 0,
                 src = SrcSessionStateText?.Text ?? "",
                 srcTarget = AppSettingsStore.Load().SrcTargetHz,
-                headroom = AudioFxSafetyHeadroomSlider.Value,
-                limiter = AudioFxSafetyLimiterToggle.IsOn,
+                headroom = ExtraParameters.Safety.HeadroomDb,
+                limiter = ExtraParameters.Safety.EnableLimiter,
                 irName = room.IrName ?? "",
                 irPath = room.IrPath ?? "",
                 taps = room.IrTapCount,
