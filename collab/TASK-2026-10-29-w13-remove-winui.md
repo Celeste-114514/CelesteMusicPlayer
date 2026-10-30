@@ -138,3 +138,16 @@
 移走实测：接口回归全过、真实起播照旧出声（`HiFi播放 … ok=True` + `[journal] 起播记录`）→ 确认是死重量。
 新增 `_strip_appsdk_residue.py`（默认只报告，`--apply` 才移到备份；deps.json 一旦再依赖 AppSDK 会拒绝执行）。
 publish 与 `dist/web-ui-20261028` 均已清理，交付目录 1135 → 1116 个文件。
+
+## 2026-10-30 第十一块：播放会话第二刀（`24e2607`）
+
+起播（含 CUE 区间）搬进 `PlaybackSession.StartAsync`，返回 `PlaybackStartResult`；
+新增纯函数 `PlaybackKindRule`（DoP 直出 / DSD 转码 / 普通 PCM + 格式描述三级回退），
+8 条用例并进 `PlaybackAdvanceRegression`（共 22 条）。
+
+实证据：真放了 Pink Floyd《Dark Side Of The Moon》的 DSF，
+`源=DSD 1-bit 原生（已转 PCM）` 与 `DSD 已转码 PCM 输出 … 44100hz / 16bit / 2声道` 都在日志里。
+⚠ DoP 直出分支仍无证据（共享输出不会直出）。
+
+探针踩坑（已写进记忆）：网页侧曲库镜像的路径字段是 **`sortPath`**，不是 `filePath`；
+库里实际有 **20 首 DSD**。按 `filePath` 找会得到 0 条并误判"库里没有 DSD"。

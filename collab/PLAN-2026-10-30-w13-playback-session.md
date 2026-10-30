@@ -153,3 +153,23 @@ internal sealed record StartOptions(double StartSeconds = 0, bool PauseAfter = f
 
 `StartAsync`：段 5（`PlayFileWithFfmpegAsync` + CUE 区间）与段 7 的时长/位置事件搬进会话，
 返回 `PlaybackStartResult`；MainWindow 只按结果渲染文案与失败弹窗。
+
+### 第二刀已落地（`24e2607`，2026-10-30）
+
+`StartAsync` 接管段 5（`PlayFileWithFfmpegAsync` + CUE 区间）与"成没成"的判定，
+返回 `PlaybackStartResult`；`MainWindow` 退化成"拿结果拼文案"。
+
+- 会话里**一句中文提示都没有** —— 这是这刀的核心：以后改文案不用碰出声的代码。
+- 新增 `PlaybackKindRule`（纯函数）：DsdDirect / DsdTranscoded / Pcm 判定 +
+  格式描述三级回退。顺带修掉"实际输出为空串时吐出『已转码为  输出』（两个空格）"。
+- 8 条新用例（`PlaybackAdvanceRegression` 现共 22 条）。
+- **实证据**：真放了一首 DSF（Pink Floyd / Dark Side Of The Moon），日志出现
+  `源=DSD 1-bit 原生（已转 PCM）` → `DSD 已转码 PCM 输出: … → 44100hz / 16bit / 2声道`。
+  交付目录的 exe 也复验过（12:13:21）。
+
+### 第三刀（还剩这一刀）
+
+无缝接续：`PreloadSeamlessNextAsync` / `OnSeamlessTrackChanged` / `OnEnginePlaybackEnded`
+搬进会话。**最危险**：接续失败的表现是"播完就停"，只有实听跨曲能发现。
+建议验证：起播一首短曲 + 等它自然播完，确认下一首自动接上且标题跟着换；日志看 seamless 记录。
+⚠ 探针的 `transport next` 不会换曲（既有毛病），别拿它验。
