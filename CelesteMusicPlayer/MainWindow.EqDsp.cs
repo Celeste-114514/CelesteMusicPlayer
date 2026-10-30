@@ -1,4 +1,4 @@
-using Microsoft.UI;
+﻿using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -95,7 +95,6 @@ namespace CelesteMusicPlayer
         };
 
 
-        private EqCurveState _audioFxEq = EqCurveState.Default();
         private int _audioFxEqSelected = -1;
         private bool _audioFxEqDragging;
         private bool _audioFxEqBuilt;
@@ -110,16 +109,6 @@ namespace CelesteMusicPlayer
         private bool _audioFxPanelReady;
 
         // ---- ECHO 化增强状态：撤销/重做、A/B 对比、实时频谱背景 ----
-        private readonly List<EqCurveState> _eqUndoStack = new();
-        private readonly List<EqCurveState> _eqRedoStack = new();
-        private DateTime _eqUndoStamp = DateTime.MinValue;
-        private const int EqUndoStackMax = 40;
-
-        private EqCurveState? _eqAbSnapshot;   // A/B 参考曲线（armed 后非空）
-        private EqCurveState? _eqAbLive;       // 切到 A 时暂存的现场曲线 B
-        private bool _eqAbShowingA;
-        private bool _eqAbPreviewing;          // true = 正在试听 A（不落盘）
-
         private readonly float[] _eqSpectrumBands = new float[FormatHelper.WaveBarCount];
         private DispatcherQueueTimer? _eqSpectrumTimer;
         private bool _eqSpectrumOn = true;
@@ -214,7 +203,7 @@ namespace CelesteMusicPlayer
 
             curve.Enabled = true;
             PushEqUndoSnapshot();
-            _audioFxEq = curve;
+            EqState.Current = curve;
             EqCurveStore.Save(curve);
 
             // 若音效面板已构建，同步其 EQ 显示（打开 OPRA 面板前通常已打开音效工作台）。
@@ -274,10 +263,10 @@ namespace CelesteMusicPlayer
             // 固定项里没有这个 id：外部曲线（耳机校正 / APO 导入等）动态挂一项，让下拉显示
             // 真实曲线名而不是回落「平坦」——后者会让用户以为曲线没应用上（2026-10-01 反馈）
             if (!string.IsNullOrEmpty(presetId)
-                && _audioFxEq != null
-                && string.Equals(_audioFxEq.PresetId, presetId, StringComparison.Ordinal))
+                && EqState.Current != null
+                && string.Equals(EqState.Current.PresetId, presetId, StringComparison.Ordinal))
             {
-                SelectAudioFxEqExternalItem(_audioFxEq);
+                SelectAudioFxEqExternalItem(EqState.Current);
                 return;
             }
 
@@ -374,7 +363,7 @@ namespace CelesteMusicPlayer
             {
                 // 复位到当前实际预设，避免下拉停在管理项上
                 _audioFxLoading = true;
-                try { SelectAudioFxEqPreset(string.IsNullOrWhiteSpace(_audioFxEq?.PresetId) ? "flat" : _audioFxEq.PresetId); }
+                try { SelectAudioFxEqPreset(string.IsNullOrWhiteSpace(EqState.Current?.PresetId) ? "flat" : EqState.Current.PresetId); }
                 finally { _audioFxLoading = false; }
                 await DeleteAudioFxUserPresetFlow();
                 return;
@@ -390,30 +379,30 @@ namespace CelesteMusicPlayer
                     var user = EqUserPresetStore.FindById(presetId);
                     if (user != null)
                     {
-                        _audioFxEq = user;
-                        _audioFxEq.Enabled = AudioFxEqEnableToggle.IsOn;
+                        EqState.Current = user;
+                        EqState.Current.Enabled = AudioFxEqEnableToggle.IsOn;
                     }
                 }
                 else if (!string.Equals(presetId, "custom", StringComparison.Ordinal)
                          && !string.Equals(presetId, "simple", StringComparison.Ordinal))
                 {
-                    _audioFxEq = EqCurveState.CreatePreset(presetId);
-                    _audioFxEq.Enabled = AudioFxEqEnableToggle.IsOn;
+                    EqState.Current = EqCurveState.CreatePreset(presetId);
+                    EqState.Current.Enabled = AudioFxEqEnableToggle.IsOn;
                 }
                 else
                 {
                     var cur = EqCurveStore.Load();
-                    _audioFxEq = cur;
+                    EqState.Current = cur;
                     // 简单模式曲线保留盘上原值（勿改 id/名，避免后续按 custom fallback 误判）
                     if (!string.Equals(presetId, "simple", StringComparison.Ordinal))
                     {
-                        _audioFxEq.PresetId = "custom";
-                        _audioFxEq.PresetName = "自定义";
+                        EqState.Current.PresetId = "custom";
+                        EqState.Current.PresetName = "自定义";
                     }
                 }
 
                 SyncAudioFxEqSimpleFromState();
-                SelectAudioFxEqBand(_audioFxEq.Bands.Count > 0 ? 0 : -1);
+                SelectAudioFxEqBand(EqState.Current.Bands.Count > 0 ? 0 : -1);
                 RedrawAudioFxEqCurve();
                 RefreshAudioFxEqBandEditor();
             }
@@ -470,7 +459,7 @@ namespace CelesteMusicPlayer
         private double ComputeEqViewMaxGain()
         {
             double maxAbs = 0;
-            foreach (var b in _audioFxEq.Bands)
+            foreach (var b in EqState.Current.Bands)
             {
                 if (b is { Enabled: true }) maxAbs = Math.Max(maxAbs, Math.Abs(b.GainDb));
             }
@@ -515,7 +504,7 @@ namespace CelesteMusicPlayer
         private double SumEnabledBandGainAt(double f)
         {
             double g = 0;
-            foreach (var b in _audioFxEq.Bands)
+            foreach (var b in EqState.Current.Bands)
             {
                 if (b is { Enabled: true }) g += ApproxBandGain(f, b);
             }
@@ -725,9 +714,9 @@ namespace CelesteMusicPlayer
                          ? new[] { _audioFxEqSelected }
                          : new[] { _eqHoverIndex, _audioFxEqSelected })
             {
-                if (hi < 0 || hi >= _audioFxEq.Bands.Count) continue;
-                double hx = X(_audioFxEq.Bands[hi].FrequencyHz);
-                double hy = Y(_audioFxEq.Bands[hi].GainDb);
+                if (hi < 0 || hi >= EqState.Current.Bands.Count) continue;
+                double hx = X(EqState.Current.Bands[hi].FrequencyHz);
+                double hy = Y(EqState.Current.Bands[hi].GainDb);
                 children.Add(new Shapes.Line
                 {
                     X1 = hx, Y1 = padT, X2 = hx, Y2 = padT + plotH,
@@ -744,10 +733,10 @@ namespace CelesteMusicPlayer
 
             // 6. 节点（字形 P/S/F/N 对齐 ECHO）+ 频率标签（42px 防重叠，选中/hover 优先）
             var labelCandidates = new List<(int index, double prio)>();
-            for (int i = 0; i < _audioFxEq.Bands.Count; i++)
+            for (int i = 0; i < EqState.Current.Bands.Count; i++)
             {
-                double prio = EqFreqToX(_audioFxEq.Bands[i].FrequencyHz) * 0.001
-                              + Math.Abs(_audioFxEq.Bands[i].GainDb) * 10
+                double prio = EqFreqToX(EqState.Current.Bands[i].FrequencyHz) * 0.001
+                              + Math.Abs(EqState.Current.Bands[i].GainDb) * 10
                               + ((i == _audioFxEqSelected || i == _eqHoverIndex) ? 100000 : 0);
                 labelCandidates.Add((i, prio));
             }
@@ -756,7 +745,7 @@ namespace CelesteMusicPlayer
             var placedLabels = new List<Windows.Foundation.Point>();
             foreach (var (i, _) in labelCandidates)
             {
-                var b = _audioFxEq.Bands[i];
+                var b = EqState.Current.Bands[i];
                 double bx = X(b.FrequencyHz), by = Y(b.GainDb);
                 bool sel = i == _audioFxEqSelected, hov = i == _eqHoverIndex;
                 double size = sel ? 20 : 16;
@@ -854,10 +843,10 @@ namespace CelesteMusicPlayer
             try { AudioFxEqCurveCanvas.Focus(FocusState.Pointer); } catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
             var pos = e.GetCurrentPoint(AudioFxEqCurveCanvas).Position;
             // 优先命中已有拖点（半径 20px）
-            for (int i = 0; i < _audioFxEq.Bands.Count; i++)
+            for (int i = 0; i < EqState.Current.Bands.Count; i++)
             {
-                double bx = EqFreqToX(_audioFxEq.Bands[i].FrequencyHz);
-                double by = EqGainToY(_audioFxEq.Bands[i].GainDb);
+                double bx = EqFreqToX(EqState.Current.Bands[i].FrequencyHz);
+                double by = EqGainToY(EqState.Current.Bands[i].GainDb);
                 double dx = pos.X - bx, dy = pos.Y - by;
                 if (dx * dx + dy * dy <= 20 * 20)
                 {
@@ -879,9 +868,9 @@ namespace CelesteMusicPlayer
         {
             var pos = e.GetCurrentPoint(AudioFxEqCurveCanvas).Position;
 
-            if (_audioFxEqDragging && _audioFxEqSelected >= 0 && _audioFxEqSelected < _audioFxEq.Bands.Count)
+            if (_audioFxEqDragging && _audioFxEqSelected >= 0 && _audioFxEqSelected < EqState.Current.Bands.Count)
             {
-                var b = _audioFxEq.Bands[_audioFxEqSelected];
+                var b = EqState.Current.Bands[_audioFxEqSelected];
                 var (padL, _, padT, padB, plotW, plotH) = GetEqPlotRect();
                 double nf = EqXToFreq(Math.Clamp(pos.X, padL, padL + plotW));
                 // Shift = 0.1dB 精细 / 常规 0.5dB 量化（对齐 ECHO）
@@ -909,10 +898,10 @@ namespace CelesteMusicPlayer
 
             // 悬停：命中节点 → 高亮 + 十字线 + 读数；未命中 → 仅读数
             int hit = -1;
-            for (int i = 0; i < _audioFxEq.Bands.Count; i++)
+            for (int i = 0; i < EqState.Current.Bands.Count; i++)
             {
-                double bx = EqFreqToX(_audioFxEq.Bands[i].FrequencyHz);
-                double by = EqGainToY(_audioFxEq.Bands[i].GainDb);
+                double bx = EqFreqToX(EqState.Current.Bands[i].FrequencyHz);
+                double by = EqGainToY(EqState.Current.Bands[i].GainDb);
                 double dx = pos.X - bx, dy = pos.Y - by;
                 if (dx * dx + dy * dy <= 20 * 20) { hit = i; break; }
             }
@@ -925,7 +914,7 @@ namespace CelesteMusicPlayer
 
             if (hit >= 0)
             {
-                var b = _audioFxEq.Bands[hit];
+                var b = EqState.Current.Bands[hit];
                 double total = SumEnabledBandGainAt(b.FrequencyHz);
                 AudioFxEqReadoutText.Text = FormatHelper.FormatAudioFxFreq(b.FrequencyHz)
                     + " · 总响应 " + FormatHelper.FormatAudioFxDb(total) + " dB"
@@ -980,8 +969,8 @@ namespace CelesteMusicPlayer
 
         private void MarkAudioFxEqCustom()
         {
-            _audioFxEq.PresetId = "custom";
-            _audioFxEq.PresetName = "自定义";
+            EqState.Current.PresetId = "custom";
+            EqState.Current.PresetName = "自定义";
             _audioFxLoading = true;
             try { SelectAudioFxEqPreset("custom"); }
             finally { _audioFxLoading = false; }
@@ -1033,7 +1022,7 @@ namespace CelesteMusicPlayer
         private void SyncBandEditorFromState()
         {
             bool pro = AudioFxEqModeRadio.SelectedIndex == 0;
-            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count)
+            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= EqState.Current.Bands.Count)
             {
                 AudioFxEqBandEditor.Visibility = Visibility.Collapsed;
                 AudioFxEqStepperRow.Visibility = Visibility.Collapsed;
@@ -1042,7 +1031,7 @@ namespace CelesteMusicPlayer
 
             AudioFxEqBandEditor.Visibility = pro ? Visibility.Visible : Visibility.Collapsed;
             AudioFxEqStepperRow.Visibility = pro ? Visibility.Visible : Visibility.Collapsed;
-            var b = _audioFxEq.Bands[_audioFxEqSelected];
+            var b = EqState.Current.Bands[_audioFxEqSelected];
             _audioFxLoading = true;
             try
             {
@@ -1066,7 +1055,7 @@ namespace CelesteMusicPlayer
         {
             SyncBandEditorFromState();
             // preamp 文本 + 滑杆 + 快捷状态条一并同步
-            SetAudioFxEqPreampDisplay(_audioFxEq.PreampDb);
+            SetAudioFxEqPreampDisplay(EqState.Current.PreampDb);
             UpdateAudioFxEqQuickStrip();
         }
 
@@ -1096,9 +1085,9 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            bool on = AudioFxEqEnableToggle != null && AudioFxEqEnableToggle.IsOn && _audioFxEq.HasEffect();
+            bool on = AudioFxEqEnableToggle != null && AudioFxEqEnableToggle.IsOn && EqState.Current.HasEffect();
             AudioFxEqPillStatusText.Text = on
-                ? "EQ 生效中（" + _audioFxEq.Bands.Count(b => b.Enabled) + " 段）"
+                ? "EQ 生效中（" + EqState.Current.Bands.Count(b => b.Enabled) + " 段）"
                 : "EQ 直通";
             AudioFxEqPillStatusText.Opacity = on ? 1 : 0.75;
 
@@ -1111,7 +1100,7 @@ namespace CelesteMusicPlayer
 
             if (AudioFxEqPillPreampText != null)
             {
-                AudioFxEqPillPreampText.Text = "预增益 " + FormatHelper.FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
+                AudioFxEqPillPreampText.Text = "预增益 " + FormatHelper.FormatAudioFxDb(EqState.Current.PreampDb) + " dB";
             }
 
             if (AudioFxEqPillHeadroomText != null && AudioFxSafetyHeadroomSlider != null)
@@ -1121,7 +1110,7 @@ namespace CelesteMusicPlayer
 
             if (AudioFxEqPillPresetText != null)
             {
-                AudioFxEqPillPresetText.Text = "预设 " + (string.IsNullOrWhiteSpace(_audioFxEq.PresetName) ? "平坦" : _audioFxEq.PresetName);
+                AudioFxEqPillPresetText.Text = "预设 " + (string.IsNullOrWhiteSpace(EqState.Current.PresetName) ? "平坦" : EqState.Current.PresetName);
             }
         }
 
@@ -1129,7 +1118,7 @@ namespace CelesteMusicPlayer
         /// <summary>是否有任一 DSP 真正破坏 bit-perfect（口径与 <see cref="UpdateDspBitPerfectUi"/> 一致）。</summary>
         private bool IsDspActiveForBadge()
         {
-            bool eqActive = _audioFxEq != null && _audioFxEq.HasEffect();
+            bool eqActive = EqState.Current != null && EqState.Current.HasEffect();
             bool chActive = AudioFxChannelToggle.IsOn || AudioFxChannelCrossfeedToggle.IsOn;
             bool headroomActive = AudioFxSafetyHeadroomSlider != null && Math.Abs(AudioFxSafetyHeadroomSlider.Value) > 0.01;
             bool rgActive = ReplayGainStore.Load().Mode != ReplayGainMode.Off;
@@ -1155,14 +1144,14 @@ namespace CelesteMusicPlayer
 
         private void AudioFxEqBandType_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            if (_audioFxLoading || _audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count
+            if (_audioFxLoading || _audioFxEqSelected < 0 || _audioFxEqSelected >= EqState.Current.Bands.Count
                 || AudioFxEqBandTypeCombo.SelectedItem is not ComboBoxItem { Tag: EqFilterType t })
             {
                 return;
             }
 
             PushEqUndoSnapshot();
-            _audioFxEq.Bands[_audioFxEqSelected].FilterType = t;
+            EqState.Current.Bands[_audioFxEqSelected].FilterType = t;
             MarkAudioFxEqCustom();
             RedrawAudioFxEqCurve();
             ApplyDspToEngine();
@@ -1171,9 +1160,9 @@ namespace CelesteMusicPlayer
 
         private void AudioFxEqBandFreq_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
-            if (_audioFxLoading || _audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count) return;
+            if (_audioFxLoading || _audioFxEqSelected < 0 || _audioFxEqSelected >= EqState.Current.Bands.Count) return;
             PushEqUndoSnapshot(coalesce: true);
-            var b = _audioFxEq.Bands[_audioFxEqSelected];
+            var b = EqState.Current.Bands[_audioFxEqSelected];
             b.FrequencyHz = Math.Clamp(Math.Pow(2, e.NewValue), 20, 20000);
             AudioFxEqBandFreqLabel.Text = FormatHelper.FormatAudioFxFreq(b.FrequencyHz);
             MarkAudioFxEqCustom();
@@ -1184,9 +1173,9 @@ namespace CelesteMusicPlayer
 
         private void AudioFxEqBandGain_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
-            if (_audioFxLoading || _audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count) return;
+            if (_audioFxLoading || _audioFxEqSelected < 0 || _audioFxEqSelected >= EqState.Current.Bands.Count) return;
             PushEqUndoSnapshot(coalesce: true);
-            var b = _audioFxEq.Bands[_audioFxEqSelected];
+            var b = EqState.Current.Bands[_audioFxEqSelected];
             b.GainDb = e.NewValue;
             b.Enabled = Math.Abs(b.GainDb) > 0.01;
             AudioFxEqBandGainLabel.Text = FormatHelper.FormatAudioFxDb(b.GainDb) + " dB";
@@ -1199,9 +1188,9 @@ namespace CelesteMusicPlayer
 
         private void AudioFxEqBandQ_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
-            if (_audioFxLoading || _audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count) return;
+            if (_audioFxLoading || _audioFxEqSelected < 0 || _audioFxEqSelected >= EqState.Current.Bands.Count) return;
             PushEqUndoSnapshot(coalesce: true);
-            var b = _audioFxEq.Bands[_audioFxEqSelected];
+            var b = EqState.Current.Bands[_audioFxEqSelected];
             b.Q = e.NewValue;
             AudioFxEqBandQLabel.Text = b.Q.ToString("0.##");
             MarkAudioFxEqCustom();
@@ -1212,9 +1201,9 @@ namespace CelesteMusicPlayer
 
         private void AudioFxEqBandEnable_Toggled(object sender, RoutedEventArgs e)
         {
-            if (_audioFxLoading || _audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count) return;
+            if (_audioFxLoading || _audioFxEqSelected < 0 || _audioFxEqSelected >= EqState.Current.Bands.Count) return;
             PushEqUndoSnapshot();
-            _audioFxEq.Bands[_audioFxEqSelected].Enabled = AudioFxEqBandEnableToggle.IsOn;
+            EqState.Current.Bands[_audioFxEqSelected].Enabled = AudioFxEqBandEnableToggle.IsOn;
             RedrawAudioFxEqCurve();
             ApplyDspToEngine();
         }
@@ -1228,11 +1217,11 @@ namespace CelesteMusicPlayer
         /// <summary>删除选中频段核心（网页「音效处理」页直接调）。</summary>
         internal void DeleteAudioFxEqBandCore()
         {
-            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count) return;
+            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= EqState.Current.Bands.Count) return;
             PushEqUndoSnapshot();
-            _audioFxEq.Bands.RemoveAt(_audioFxEqSelected);
-            _audioFxEqSelected = _audioFxEq.Bands.Count > 0 ? Math.Min(_audioFxEqSelected, _audioFxEq.Bands.Count - 1) : -1;
-            if (_audioFxEq.Bands.Count == 0) _audioFxEq.Bands.Add(new EqBand());
+            EqState.Current.Bands.RemoveAt(_audioFxEqSelected);
+            _audioFxEqSelected = EqState.Current.Bands.Count > 0 ? Math.Min(_audioFxEqSelected, EqState.Current.Bands.Count - 1) : -1;
+            if (EqState.Current.Bands.Count == 0) EqState.Current.Bands.Add(new EqBand());
             MarkAudioFxEqCustom();
             RedrawAudioFxEqCurve();
             RefreshAudioFxEqBandEditor();
@@ -1249,14 +1238,14 @@ namespace CelesteMusicPlayer
         internal void AddAudioFxEqBandCore()
         {
             double freq = 1000;
-            if (_audioFxEqSelected >= 0 && _audioFxEqSelected < _audioFxEq.Bands.Count)
+            if (_audioFxEqSelected >= 0 && _audioFxEqSelected < EqState.Current.Bands.Count)
             {
-                freq = Math.Clamp(_audioFxEq.Bands[_audioFxEqSelected].FrequencyHz * 2, 20, 20000);
+                freq = Math.Clamp(EqState.Current.Bands[_audioFxEqSelected].FrequencyHz * 2, 20, 20000);
             }
 
             PushEqUndoSnapshot();
-            _audioFxEq.Bands.Add(new EqBand { Enabled = true, FrequencyHz = freq, GainDb = 0, Q = 1.0, FilterType = EqFilterType.Peaking });
-            _audioFxEqSelected = _audioFxEq.Bands.Count - 1;
+            EqState.Current.Bands.Add(new EqBand { Enabled = true, FrequencyHz = freq, GainDb = 0, Q = 1.0, FilterType = EqFilterType.Peaking });
+            _audioFxEqSelected = EqState.Current.Bands.Count - 1;
             MarkAudioFxEqCustom();
             RedrawAudioFxEqCurve();
             RefreshAudioFxEqBandEditor();
@@ -1270,7 +1259,7 @@ namespace CelesteMusicPlayer
         {
             if (_audioFxLoading) return;
             PushEqUndoSnapshot();
-            _audioFxEq.Enabled = AudioFxEqEnableToggle.IsOn;
+            EqState.Current.Enabled = AudioFxEqEnableToggle.IsOn;
             RedrawAudioFxEqCurve();
             RefreshAudioFxEqBandEditor();
             ApplyDspToEngine();
@@ -1447,7 +1436,7 @@ namespace CelesteMusicPlayer
                 return bad;
             }
 
-            var toSave = _audioFxEq.Clone();
+            var toSave = EqState.Current.Clone();
             toSave.PresetName = name.Length > 40 ? name.Substring(0, 40) : name;
             toSave.PresetId = "user:" + Guid.NewGuid().ToString("N").Substring(0, 8);
             string newId = EqUserPresetStore.Upsert(toSave);
@@ -1478,16 +1467,16 @@ namespace CelesteMusicPlayer
             for (int i = 0; i <= 200; i++)
             {
                 double g = 0;
-                foreach (var b in _audioFxEq.Bands) { if (b is { Enabled: true }) g += ApproxBandGain(f, b); }
+                foreach (var b in EqState.Current.Bands) { if (b is { Enabled: true }) g += ApproxBandGain(f, b); }
                 peak = Math.Max(peak, g);
                 f *= dAddFreq;
             }
 
             double preampDb = -Math.Max(0, peak);
-            _audioFxEq.PreampDb = Math.Clamp(preampDb, -24, 24);
+            EqState.Current.PreampDb = Math.Clamp(preampDb, -24, 24);
             RefreshAudioFxEqBandEditor();
             ApplyDspToEngine();
-            string msg = "自动增益：preamp = " + FormatHelper.FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
+            string msg = "自动增益：preamp = " + FormatHelper.FormatAudioFxDb(EqState.Current.PreampDb) + " dB";
             NowPlayingText.Text = msg;
             return msg;
         }
@@ -1499,12 +1488,12 @@ namespace CelesteMusicPlayer
             _audioFxLoading = true;
             try
             {
-                _audioFxEq = EqCurveState.CreatePreset("flat");
+                EqState.Current = EqCurveState.CreatePreset("flat");
                 AudioFxEqEnableToggle.IsOn = false;
-                _audioFxEq.Enabled = false;
+                EqState.Current.Enabled = false;
                 AudioFxEqPreampText.Text = "预增益 (preamp)：0.0 dB";
                 SelectAudioFxEqPreset("flat");
-                _audioFxEqSelected = _audioFxEq.Bands.Count > 0 ? 0 : -1;
+                _audioFxEqSelected = EqState.Current.Bands.Count > 0 ? 0 : -1;
                 SyncAudioFxEqSimpleFromState(restoreFromStore: false);
             }
             finally
@@ -1535,29 +1524,14 @@ namespace CelesteMusicPlayer
         /// <summary>推一份「修改前」快照进撤销栈。coalesce=true 时 400ms 内的连续编辑算一步（滑杆拖动 / 连击）。</summary>
         private void PushEqUndoSnapshot(bool coalesce = false)
         {
-            DateTime now = DateTime.UtcNow;
-            if (coalesce && (now - _eqUndoStamp).TotalMilliseconds < 400)
-            {
-                _eqUndoStamp = now;
-                return;
-            }
-
-            _eqUndoStamp = now;
-            _eqUndoStack.Add(_audioFxEq.Clone());
-            if (_eqUndoStack.Count > EqUndoStackMax)
-            {
-                _eqUndoStack.RemoveAt(0);
-            }
-
-            _eqRedoStack.Clear();
-            UpdateEqUndoUi();
+            if (EqState.PushUndo(coalesce)) UpdateEqUndoUi();
         }
 
 
         private void UpdateEqUndoUi()
         {
-            if (AudioFxEqUndoButton != null) AudioFxEqUndoButton.IsEnabled = _eqUndoStack.Count > 0;
-            if (AudioFxEqRedoButton != null) AudioFxEqRedoButton.IsEnabled = _eqRedoStack.Count > 0;
+            if (AudioFxEqUndoButton != null) AudioFxEqUndoButton.IsEnabled = EqState.CanUndo;
+            if (AudioFxEqRedoButton != null) AudioFxEqRedoButton.IsEnabled = EqState.CanRedo;
         }
 
 
@@ -1569,15 +1543,9 @@ namespace CelesteMusicPlayer
         /// <summary>撤销 EQ 修改核心（网页「音效处理」页直接调）。返回结果消息。</summary>
         internal string UndoAudioFxEqCore()
         {
-            if (_eqUndoStack.Count == 0) return "没有可撤销的 EQ 修改";
-            EqCurveState target = _eqUndoStack[^1];
-            _eqUndoStack.RemoveAt(_eqUndoStack.Count - 1);
-            _eqRedoStack.Add(_audioFxEq.Clone());
-            // 撤销/重做会真正替换现场曲线，退出 A/B 试听态（保留参考曲线 A 本身）
-            _eqAbPreviewing = false;
-            _eqAbLive = null;
-            SetAudioFxEqFromSnapshot(target);
-            string msg = "已撤销 EQ 修改（还可撤销 " + _eqUndoStack.Count + " 步）";
+            if (!EqState.Undo()) return "没有可撤销的 EQ 修改";
+            SetAudioFxEqFromSnapshot(EqState.Current);
+            string msg = "已撤销 EQ 修改（还可撤销 " + EqState.UndoCount + " 步）";
             NowPlayingText.Text = msg;
             return msg;
         }
@@ -1591,13 +1559,8 @@ namespace CelesteMusicPlayer
         /// <summary>重做 EQ 修改核心（网页「音效处理」页直接调）。返回结果消息。</summary>
         internal string RedoAudioFxEqCore()
         {
-            if (_eqRedoStack.Count == 0) return "没有可重做的 EQ 修改";
-            EqCurveState target = _eqRedoStack[^1];
-            _eqRedoStack.RemoveAt(_eqRedoStack.Count - 1);
-            _eqUndoStack.Add(_audioFxEq.Clone());
-            _eqAbPreviewing = false;
-            _eqAbLive = null;
-            SetAudioFxEqFromSnapshot(target);
+            if (!EqState.Redo()) return "没有可重做的 EQ 修改";
+            SetAudioFxEqFromSnapshot(EqState.Current);
             const string msg = "已重做 EQ 修改";
             NowPlayingText.Text = msg;
             return msg;
@@ -1611,7 +1574,7 @@ namespace CelesteMusicPlayer
             _audioFxLoading = true;
             try
             {
-                _audioFxEq = snapshot;
+                EqState.Current = snapshot;
                 AudioFxEqEnableToggle.IsOn = snapshot.Enabled;
                 SetAudioFxEqPreampDisplay(snapshot.PreampDb);
                 SelectAudioFxEqPreset(string.IsNullOrWhiteSpace(snapshot.PresetId) ? "flat" : snapshot.PresetId);
@@ -1641,50 +1604,30 @@ namespace CelesteMusicPlayer
         /// <summary>A/B 对比核心（网页「音效处理」页直接调；网页点击不含 Shift，走普通分支）。返回结果消息。</summary>
         internal string ToggleAudioFxEqAbCore()
         {
-            if (_eqAbSnapshot != null && IsShiftDown())
-            {
-                _eqAbSnapshot = null;
-                _eqAbLive = null;
-                _eqAbShowingA = false;
-                _eqAbPreviewing = false;
-                AudioFxEqAbButton.Content = "A/B 对比";
-                const string cancel = "A/B 对比已取消";
-                NowPlayingText.Text = cancel;
-                ApplyDspToEngine();
-                return cancel;
-            }
-
-            if (_eqAbSnapshot == null)
-            {
-                _eqAbSnapshot = _audioFxEq.Clone();
-                AudioFxEqAbButton.Content = "试听 A（参考）";
-                const string saved = "已把当前曲线存为参考 A；继续随意调整，再点本按钮在 A / 调整后 B 间切换试听";
-                NowPlayingText.Text = saved;
-                return saved;
-            }
-
-            _eqAbShowingA = !_eqAbShowingA;
-            EqCurveState target;
+            EqAbTransition change = EqState.ToggleAb(IsShiftDown());
             string msg;
-            if (_eqAbShowingA)
+            switch (change)
             {
-                _eqAbPreviewing = true;
-                _eqAbLive = _audioFxEq.Clone();      // 暂存现场 B
-                target = _eqAbSnapshot.Clone();
-                AudioFxEqAbButton.Content = "回到 B（调整后）";
-                msg = "A/B 对比：正在试听参考曲线 A（此刻改曲线只作用于 A）";
+                case EqAbTransition.Cancelled:
+                    AudioFxEqAbButton.Content = "A/B 对比";
+                    msg = "A/B 对比已取消";
+                    ApplyDspToEngine();
+                    break;
+                case EqAbTransition.Armed:
+                    AudioFxEqAbButton.Content = "试听 A（参考）";
+                    msg = "已把当前曲线存为参考 A；继续随意调整，再点本按钮在 A / 调整后 B 间切换试听";
+                    break;
+                case EqAbTransition.ShowingA:
+                    AudioFxEqAbButton.Content = "回到 B（调整后）";
+                    msg = "A/B 对比：正在试听参考曲线 A（此刻改曲线只作用于 A）";
+                    SetAudioFxEqFromSnapshot(EqState.Current);
+                    break;
+                default:
+                    AudioFxEqAbButton.Content = "试听 A（参考）";
+                    msg = "A/B 对比：已回到你的曲线 B";
+                    SetAudioFxEqFromSnapshot(EqState.Current);
+                    break;
             }
-            else
-            {
-                _eqAbPreviewing = false;
-                _eqAbSnapshot = _audioFxEq.Clone();  // 收回在 A 上的修改
-                target = _eqAbLive ?? _audioFxEq.Clone();
-                _eqAbLive = null;
-                AudioFxEqAbButton.Content = "试听 A（参考）";
-                msg = "A/B 对比：已回到你的曲线 B";
-            }
-
-            SetAudioFxEqFromSnapshot(target);
             NowPlayingText.Text = msg;
             return msg;
         }
@@ -1698,14 +1641,14 @@ namespace CelesteMusicPlayer
         /// <summary>选中段频率微调：每步 2^(1/3) 个八度（≈1.26 倍，对齐 ECHO 粗步进）。</summary>
         private void StepAudioFxEqBandFreq(int dir)
         {
-            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count)
+            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= EqState.Current.Bands.Count)
             {
                 NowPlayingText.Text = "先在曲线上选中一个频段";
                 return;
             }
 
             PushEqUndoSnapshot(coalesce: true);
-            var b = _audioFxEq.Bands[_audioFxEqSelected];
+            var b = EqState.Current.Bands[_audioFxEqSelected];
             b.FrequencyHz = Math.Clamp(b.FrequencyHz * Math.Pow(2, dir / 3.0), EqCurveFreqMin, EqCurveFreqMax);
             MarkAudioFxEqCustom();
             SyncBandEditorFromState();
@@ -1726,13 +1669,13 @@ namespace CelesteMusicPlayer
         /// <summary>选中段增益微调（dB）。低通/高通/切除不调增益（对齐 ECHO gainEditable）。</summary>
         private void StepAudioFxEqBandGain(double delta)
         {
-            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count)
+            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= EqState.Current.Bands.Count)
             {
                 NowPlayingText.Text = "先在曲线上选中一个频段";
                 return;
             }
 
-            var b = _audioFxEq.Bands[_audioFxEqSelected];
+            var b = EqState.Current.Bands[_audioFxEqSelected];
             if (b.FilterType is not (EqFilterType.Peaking or EqFilterType.LowShelf or EqFilterType.HighShelf))
             {
                 NowPlayingText.Text = "低通 / 高通 / 切除段不调整增益";
@@ -1758,14 +1701,14 @@ namespace CelesteMusicPlayer
 
         private void StepAudioFxEqBandQ(int preset)
         {
-            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count)
+            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= EqState.Current.Bands.Count)
             {
                 NowPlayingText.Text = "先在曲线上选中一个频段";
                 return;
             }
 
             PushEqUndoSnapshot(coalesce: true);
-            _audioFxEq.Bands[_audioFxEqSelected].Q = EqQPresets[preset];
+            EqState.Current.Bands[_audioFxEqSelected].Q = EqQPresets[preset];
             MarkAudioFxEqCustom();
             SyncBandEditorFromState();
             RedrawAudioFxEqCurve();
@@ -1776,7 +1719,7 @@ namespace CelesteMusicPlayer
         /// <summary>曲线键盘微调：↑↓ 增益 ±0.5dB，←→ 频率 2^(1/3) 倍（先点选节点再按键）。</summary>
         private void AudioFxEqCurve_KeyDown(object sender, KeyRoutedEventArgs e)
         {
-            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= _audioFxEq.Bands.Count) return;
+            if (_audioFxEqSelected < 0 || _audioFxEqSelected >= EqState.Current.Bands.Count) return;
             switch (e.Key)
             {
                 case Windows.System.VirtualKey.Up: StepAudioFxEqBandGain(0.5); e.Handled = true; break;
@@ -1790,11 +1733,11 @@ namespace CelesteMusicPlayer
         private void AudioFxEqPreamp_ValueChanged(object sender, RangeBaseValueChangedEventArgs e)
         {
             if (_audioFxLoading) return;
-            _audioFxEq.PreampDb = Math.Clamp(e.NewValue, -24, 24);
+            EqState.Current.PreampDb = Math.Clamp(e.NewValue, -24, 24);
             PushEqUndoSnapshot(coalesce: true);
             if (AudioFxEqPreampText != null)
             {
-                AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatHelper.FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
+                AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatHelper.FormatAudioFxDb(EqState.Current.PreampDb) + " dB";
             }
 
             UpdateAudioFxEqQuickStrip();
@@ -1936,9 +1879,9 @@ namespace CelesteMusicPlayer
 
             // DSP 面板 EQ：曲线状态持久化 + 应用到引擎（HiFi 输出，各输出模式均走统一 DSP 链）
             // A/B 试听 A 期间不落盘（只让引擎走预览曲线），切回 B / 撤销时再持久化
-            if (!_eqAbPreviewing)
+            if (!EqState.Previewing)
             {
-                EqCurveStore.Save(_audioFxEq);
+                EqCurveStore.Save(EqState.Current);
             }
 
             // 诊断：记录触发保存的调用来源，便于定位“关闭后又变回打开”是被谁触发的。
@@ -1989,9 +1932,9 @@ namespace CelesteMusicPlayer
             };
 
             DspExtraStore.Save(new DspExtraState { ChannelBalance = ch, Safety = safety });
-            StartupLog.Write($"[DSP] 已保存 eq(Enabled={_audioFxEq.Enabled},bands={_audioFxEq.Bands.Count}) ch(Enabled={ch.Enabled}) limiter={safety.EnableLimiter}  触发={trigger}");
+            StartupLog.Write($"[DSP] 已保存 eq(Enabled={EqState.Current.Enabled},bands={EqState.Current.Bands.Count}) ch(Enabled={ch.Enabled}) limiter={safety.EnableLimiter}  触发={trigger}");
 
-            _audioEngine?.SetEqCurve(_audioFxEq);
+            _audioEngine?.SetEqCurve(EqState.Current);
             _audioEngine?.SetChannelBalance(ch);
             _audioEngine?.SetSafety(safety);
             _audioEngine?.SetRoomCorrection(RoomCorrectionStore.Load());

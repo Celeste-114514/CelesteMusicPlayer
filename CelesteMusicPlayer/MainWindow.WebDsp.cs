@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
@@ -30,7 +30,7 @@ namespace CelesteMusicPlayer
 
             EnsureWebDspUiReady();
 
-            var curve = _audioFxEq ?? EqCurveState.Default();
+            var curve = EqState.Current ?? EqCurveState.Default();
 
             if (operation == "get")
             {
@@ -40,10 +40,10 @@ namespace CelesteMusicPlayer
                     preampDb = curve.PreampDb,
                     presetId = curve.PresetId ?? "flat",
                     presetName = curve.PresetName ?? "",
-                    undo = _eqUndoStack.Count > 0,
-                    redo = _eqRedoStack.Count > 0,
-                    ab = _eqAbSnapshot != null,
-                    abShowingA = _eqAbShowingA,
+                    undo = EqState.CanUndo,
+                    redo = EqState.CanRedo,
+                    ab = EqState.AbArmed,
+                    abShowingA = EqState.ShowingA,
                     simple = SimpleEqStore.Load(),
                     userPresets = EqUserPresetStore.Load().Select(p => new { id = p.PresetId, name = p.PresetName }).ToArray(),
                     bands = curve.Bands.Select(band => new
@@ -602,7 +602,7 @@ namespace CelesteMusicPlayer
         /// <summary>
         /// The native DSP page only fills itself in when the user visits 音效处理 once:
         /// LoadAudioFxUiFromStore is what loads the store values into the sliders, populates the
-        /// combos, sets _audioFxEq, and flips _dspRackReady so the handlers stop ignoring input.
+        /// combos, sets EqState.Current, and flips _dspRackReady so the handlers stop ignoring input.
         /// A user who opens the web shell straight after launch never went there, so every slider
         /// the page shows would be a dead XAML default. Forcing the same load on first use keeps
         /// one code path instead of a second set of defaults.

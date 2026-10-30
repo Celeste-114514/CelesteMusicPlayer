@@ -888,10 +888,10 @@ namespace CelesteMusicPlayer
             if (r != ContentDialogResult.Primary) return;
 
             EqUserPresetStore.Delete(presetId);
-            if (string.Equals(_audioFxEq.PresetId, presetId, StringComparison.Ordinal))
+            if (string.Equals(EqState.Current.PresetId, presetId, StringComparison.Ordinal))
             {
-                _audioFxEq.PresetId = "custom";
-                _audioFxEq.PresetName = "自定义";
+                EqState.Current.PresetId = "custom";
+                EqState.Current.PresetName = "自定义";
             }
 
             RefreshAudioFxUserPresetItems();

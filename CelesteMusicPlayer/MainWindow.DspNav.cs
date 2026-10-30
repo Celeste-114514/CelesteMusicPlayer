@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -78,7 +78,7 @@ namespace CelesteMusicPlayer
         /// 2026-10-01 由「应用时置位的字段」改为按曲线 id 直读：换预设 / 重置 / 应用方案
         /// 切走曲线后，链路条与监控页不会再留陈旧态。只有 opra- 前缀的曲线才算
         /// （与 MainWindow.DspProfiles 应用方案时同口径）。</summary>
-        private bool _opraApplied => _audioFxEq?.PresetId?.StartsWith("opra-", StringComparison.OrdinalIgnoreCase) == true;
+        private bool _opraApplied => EqState.Current?.PresetId?.StartsWith("opra-", StringComparison.OrdinalIgnoreCase) == true;
 
         /// <summary>导航项运行时态：标题 / 所属组 / 右侧页面 / 徽章控件。</summary>
         private sealed class DspNavEntry
@@ -425,7 +425,7 @@ namespace CelesteMusicPlayer
                 srcHz = SrcRateOptions[SrcRateCombo.SelectedIndex].Hz;
             }
 
-            bool eq = _audioFxEq != null && _audioFxEq.Enabled && _audioFxEq.HasEffect();
+            bool eq = EqState.Current != null && EqState.Current.Enabled && EqState.Current.HasEffect();
             bool fir = RoomCorrectionStore.Load().Enabled;
             bool ch = AudioFxChannelToggle != null && AudioFxChannelToggle.IsOn;
             bool rg = ReplayGainStore.Load().Mode != ReplayGainMode.Off;

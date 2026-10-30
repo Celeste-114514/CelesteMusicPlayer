@@ -68,8 +68,8 @@ namespace CelesteMusicPlayer
             try
             {
                 // 优先导出面板里正在编辑的曲线（可能有未落盘的改动）
-                EqCurveState curve = (_audioFxEqBuilt && _audioFxEq != null)
-                    ? _audioFxEq.Clone()
+                EqCurveState curve = (_audioFxEqBuilt && EqState.Current != null)
+                    ? EqState.Current.Clone()
                     : EqCurveStore.Load();
 
                 string text = EqualizerApoConverter.Export(curve);

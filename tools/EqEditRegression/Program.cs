@@ -1,0 +1,35 @@
+using CelesteMusicPlayer;
+int checks = 0;
+void Check(bool value, string name) { if (!value) throw new Exception(name); checks++; }
+DateTime now = new(2026, 1, 1);
+var state = new EqEditSession(() => now);
+Check(!state.Undo() && !state.Redo(), "empty history");
+state.Current.PreampDb = -1;
+state.PushUndo();
+state.Current.PreampDb = -2;
+Check(state.Undo() && state.Current.PreampDb == -1, "deep undo snapshot");
+Check(state.Redo() && state.Current.PreampDb == -2, "redo current");
+now = now.AddMilliseconds(399);
+Check(!state.PushUndo(true), "399ms coalesces");
+now = now.AddMilliseconds(399);
+Check(!state.PushUndo(true), "sliding window");
+now = now.AddMilliseconds(400);
+Check(state.PushUndo(true), "400ms new snapshot");
+Check(!state.CanRedo, "new edit clears redo");
+for (int i=0;i<60;i++) {state.PushUndo();state.Current.PreampDb=i;}
+Check(state.UndoCount==40, "40 snapshot limit");
+Check(state.ToggleAb(false)==EqAbTransition.Armed && state.AbArmed && !state.Previewing, "arm without preview");
+double a=state.Current.PreampDb;
+state.Current.PreampDb=-4;
+Check(state.ToggleAb(false)==EqAbTransition.ShowingA && state.Previewing && state.Current.PreampDb==a, "A isolates B");
+state.Current.PreampDb=-8;
+Check(state.ToggleAb(false)==EqAbTransition.ShowingB && !state.Previewing && state.Current.PreampDb==-4, "return B");
+Check(state.ToggleAb(false)==EqAbTransition.ShowingA && state.Current.PreampDb==-8, "retain edits in A");
+state.PushUndo();state.Current.PreampDb=-9;
+Check(state.Undo() && !state.Previewing && state.AbArmed, "undo exits preview keeps reference");
+Check(state.ShowingA, "legacy showing-A flag retained across undo");
+Check(state.Redo() && !state.Previewing, "redo exits preview");
+var before=state.Current;
+Check(state.ToggleAb(true)==EqAbTransition.Cancelled && !state.AbArmed && !state.ShowingA && !state.Previewing && ReferenceEquals(before,state.Current), "cancel retains current");
+Check(state.ToggleAb(true)==EqAbTransition.Armed, "cancel flag without armed reference arms");
+Console.WriteLine($"PASS {checks} EQ editing checks");

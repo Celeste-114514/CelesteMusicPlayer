@@ -1087,10 +1087,10 @@ namespace CelesteMusicPlayer
             _audioFxLoading = true;
             try
             {
-                _audioFxEq = EqCurveStore.Load();
-                AudioFxEqEnableToggle.IsOn = _audioFxEq.Enabled;
-                AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatHelper.FormatAudioFxDb(_audioFxEq.PreampDb) + " dB";
-                SelectAudioFxEqPreset(_audioFxEq.PresetId);
+                EqState.Current = EqCurveStore.Load();
+                AudioFxEqEnableToggle.IsOn = EqState.Current.Enabled;
+                AudioFxEqPreampText.Text = "预增益 (preamp)：" + FormatHelper.FormatAudioFxDb(EqState.Current.PreampDb) + " dB";
+                SelectAudioFxEqPreset(EqState.Current.PresetId);
                 AudioFxEqModeRadio.SelectedIndex = 0; // 专业
                 SyncAudioFxEqSimpleFromState();
                 SelectAudioFxEqBand(_audioFxEqSelected);
@@ -1100,7 +1100,7 @@ namespace CelesteMusicPlayer
                 DspExtraState extra = DspExtraStore.Load();
                 var ch = extra.ChannelBalance;
                 ReplayGainState rglog = ReplayGainStore.Load();
-                StartupLog.Write($"[DSP] 加载读盘 eq.Enabled={_audioFxEq.Enabled} limiter={extra.Safety?.EnableLimiter} rg.Mode={rglog.Mode}");
+                StartupLog.Write($"[DSP] 加载读盘 eq.Enabled={EqState.Current.Enabled} limiter={extra.Safety?.EnableLimiter} rg.Mode={rglog.Mode}");
                 AudioFxChannelToggle.IsOn = ch.Enabled;
                 AudioFxChannelBalanceSlider.Value = ch.Balance;
                 AudioFxChannelLeftGainSlider.Value = ch.LeftGainDb;
@@ -1194,7 +1194,7 @@ namespace CelesteMusicPlayer
         private void ApplySimpleTones()
         {
             PushEqUndoSnapshot(coalesce: true);
-            var s = new EqCurveState { Enabled = AudioFxEqEnableToggle.IsOn, PreampDb = _audioFxEq.PreampDb, PresetId = "simple", PresetName = "简单模式" };
+            var s = new EqCurveState { Enabled = AudioFxEqEnableToggle.IsOn, PreampDb = EqState.Current.PreampDb, PresetId = "simple", PresetName = "简单模式" };
             SimpleEqStore.Save(new SimpleEqState { Bass = _eqSimpleBass, Vocal = _eqSimpleVocal, Air = _eqSimpleAir, Warm = _eqSimpleWarm });
             if (_eqSimpleBass > 0.01) AppendSimple(s, "bass", _eqSimpleBass);
             if (_eqSimpleVocal > 0.01) AppendSimple(s, "vocal", _eqSimpleVocal);
@@ -1202,8 +1202,8 @@ namespace CelesteMusicPlayer
             if (_eqSimpleWarm > 0.01) AppendSimple(s, "warm", _eqSimpleWarm);
             if (s.Bands.Count == 0) s.Bands.Add(new EqBand { Enabled = true, FrequencyHz = 1000, GainDb = 0 });
 
-            _audioFxEq = s;
-            _audioFxEqSelected = _audioFxEq.Bands.Count > 0 ? 0 : -1;
+            EqState.Current = s;
+            _audioFxEqSelected = EqState.Current.Bands.Count > 0 ? 0 : -1;
             RedrawAudioFxEqCurve();
             RefreshAudioFxEqBandEditor();
             ApplyDspToEngine();

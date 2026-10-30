@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Linq;
 using System.Text.Json;
 using System.Threading.Tasks;
@@ -13,7 +13,7 @@ public sealed partial class MainWindow
         if (operation is "opraInit" or "opraRefresh")
         {
             var history = OpraHistoryStore.Load();
-            return new { status, vendors = _opra.GetTopVendors(10000).Select(v => new { id=v.Id, name=v.Name, count=_opra.GetProductCountByVendor(v.Id) }), recent=history.Recent, favorites=history.Favorites, enabled=_opraApplied && _audioFxEq.Enabled, activeName=_opraApplied ? _audioFxEq.PresetName : "" };
+            return new { status, vendors = _opra.GetTopVendors(10000).Select(v => new { id=v.Id, name=v.Name, count=_opra.GetProductCountByVendor(v.Id) }), recent=history.Recent, favorites=history.Favorites, enabled=_opraApplied && EqState.Current.Enabled, activeName=_opraApplied ? EqState.Current.PresetName : "" };
         }
         if (operation == "opraSearch")
             return new { products = await _opra.SearchAsync(ReadString(msg,"query"), 200) };

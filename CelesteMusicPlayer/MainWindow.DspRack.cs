@@ -581,7 +581,7 @@ namespace CelesteMusicPlayer
             switch (moduleId)
             {
                 case DspCoreInterop.RackEqualizer:
-                    return _audioFxEq != null && _audioFxEq.Enabled && _audioFxEq.HasEffect();
+                    return EqState.Current != null && EqState.Current.Enabled && EqState.Current.HasEffect();
                 case DspCoreInterop.RackConvolution:
                     return RoomCorrectionStore.Load().Enabled;
                 case DspCoreInterop.RackReplayGain:

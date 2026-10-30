@@ -1,4 +1,4 @@
-// MainWindow.DspProfiles.cs
+﻿// MainWindow.DspProfiles.cs
 // 听音方案页：把「当前整套 DSP 链路设置」存成命名方案，一键保存 / 应用 / 更新 / 删除。
 //
 // 边界（不新造参数格式、不新开下发通道）：
@@ -250,7 +250,7 @@ namespace CelesteMusicPlayer
             AppSettingsState settings = AppSettingsStore.Load();
 
             // EQ 用面板内存态（A/B 试听预览期间盘上还是旧曲线，界面看到的才算"当前设置"）
-            EqCurveState eq = _audioFxEq != null ? _audioFxEq.Clone() : EqCurveStore.Load();
+            EqCurveState eq = EqState.Current != null ? EqState.Current.Clone() : EqCurveStore.Load();
 
             return new DspProfile
             {
