@@ -153,8 +153,6 @@ namespace CelesteMusicPlayer
         private Brush? _cachedMultiSelectFrostBrush;
 
         private int _currentIndex = -1;
-        /// <summary>当前播放在用户播放列表中的下标（播放顺序以播放列表为准）</summary>
-        private PlaylistItem? _seamlessPreloaded; // 已预加载待无缝接续的下一首记录（供 SeamlessTrackChanged 更新 UI）
         // W13：旧「当前播放列表 / 播放队列」独立窗口随 XAML 界面下线（网页界面自带队列）。
 
 

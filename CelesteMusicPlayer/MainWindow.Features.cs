@@ -813,10 +813,7 @@ namespace CelesteMusicPlayer
                     _audioEngine.Seek(TimeSpan.FromSeconds(next / scale));
 
                     // seek 会丢弃无缝源里已预加载的下一首，重挂一次
-                    if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
-                    {
-                        _ = PreloadSeamlessNextAsync(_queue.Items[_queue.Index]);
-                    }
+                    _ = Session.PreloadNextAsync();
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.Features.cs", caught); }
                 return;

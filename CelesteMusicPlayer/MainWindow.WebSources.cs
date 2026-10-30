@@ -12,7 +12,7 @@ public sealed partial class MainWindow : ISourcePlaybackHost
 {
     private CancellationTokenSource? _sourcePlaybackCancellation;
     private IDisposable? _sourcePlaybackLease;
-    private IDisposable? _sourcePreloadLease;
+    // 预载租约搬进 PlaybackSession（_preloadLease）：它只服务无缝预载，退出走 ReleasePreloadLease()。
     // 「.ref → 曲目 id → 曲库快照」的解析在 TrackReference（静态、无实例状态）；
     // 这里只留转发，播放域和网页命令都还认这两个名字。
     internal static PlaylistItem? ResolveSourceTrack(string id) => TrackReference.Resolve(id);

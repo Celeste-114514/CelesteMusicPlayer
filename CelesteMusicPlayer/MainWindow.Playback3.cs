@@ -1,4 +1,4 @@
-﻿using Microsoft.UI;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
 using Microsoft.UI.Xaml;
@@ -205,10 +205,7 @@ namespace CelesteMusicPlayer
                 _audioEngine.Resume();
                 // 暂停-恢复本质是一次 seek 重建会话，无缝源 _next 已被清空；
                 // 重新预加载下一首，避免恢复后播到尾因无续接而误切歌。
-                if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
-                {
-                    _ = PreloadSeamlessNextAsync(_queue.Items[_queue.Index]);
-                }
+                _ = Session.PreloadNextAsync();
 
                 _isEnginePaused = false;
                 UpdateWaveformTimerForPlaybackState(true);
@@ -371,10 +368,7 @@ namespace CelesteMusicPlayer
                     _audioEngine.Seek(TimeSpan.FromSeconds(ProgressSlider.Value / TempoScale()));
                     // seek 会丢弃无缝源里已预加载的下一首（位置已变，续接会错位）。
                     // 重挂下一首，避免 seek 后播到尾时因 _next 为空而无法无缝续接。
-                    if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
-                    {
-                        _ = PreloadSeamlessNextAsync(_queue.Items[_queue.Index]);
-                    }
+                    _ = Session.PreloadNextAsync();
                 }
                 catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
 
@@ -545,8 +539,8 @@ namespace CelesteMusicPlayer
             return indexed;
         }
 
-        /// <summary>StartPlayback 记下的"这一首就是当前在播"，停止时清空。别用下标推断它。</summary>
-        private PlaylistItem? _currentPlayingItem;
+        // ⚠ _currentPlayingItem 已是属性（MainWindow.PlaybackHost.cs）：存储在 PlaybackSession.CurrentItem，
+        //   StartPlayback 钉下、无缝换轨由会话推进。别在这里再声明同名字段。
 
         /// <summary>下标与实际播放不一致的日志签名，避免每秒刷屏。</summary>
         private string _stateMismatchLogged = "";
@@ -2469,10 +2463,7 @@ namespace CelesteMusicPlayer
             }
 
             // 重挂下一首（seek 丢弃无缝源里的 next）
-            if (_queue.Index >= 0 && _queue.Index < _queue.Items.Count)
-            {
-                _ = PreloadSeamlessNextAsync(_queue.Items[_queue.Index]);
-            }
+            _ = Session.PreloadNextAsync();
 
             // 立即把高亮切到目标行（点击跳转按原位置，不套用偏移）
             global::CelesteMusicPlayer.StartupLog.Write(
@@ -2989,7 +2980,7 @@ namespace CelesteMusicPlayer
 
                 _ = FadeInEngineAsync();
                 MediaSession.ConfigureTrack(item, playing: true);
-                _ = PreloadSeamlessNextAsync(item);
+                _ = Session.PreloadNextAsync();
                 _startPlaybackInFlight = false;
             }
             else
@@ -3062,115 +3053,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>预加载节流用：上次预加载的时刻与目标路径。</summary>
-        private long _lastPreloadTick;
-        private string? _lastPreloadPath;
-
-        /// <summary>引擎开播后预加载下一首到无缝源（共享/ASIO、顺序播放）。同格式可无缝续接，否则由上层重建。</summary>
-        private async System.Threading.Tasks.Task PreloadSeamlessNextAsync(PlaylistItem current)
-        {
-            if (_audioEngine == null || current == null)
-            {
-                return;
-            }
-
-            // 节流（2026-09-21）：预加载 = spawn 一次 ffmpeg 整轨转码 + 把 ≤64MB 的 WAV 整读进内存（大对象堆）。
-            // 它有 6 个调用点（开播、无缝切歌后、拖动进度条、扫描歌词…），拖动一次进度条就触发一轮，
-            // 连着拖就是连着转码 + 连着大对象分配 → GC 一暂停，独占渲染线程就断音。
-            // 规则：同一首 5 秒内不重复预载；任意两次预载间隔 <800ms 直接跳过（专治拖动风暴）。
-            long preloadNow = System.Environment.TickCount64;
-            bool sameTarget = !string.IsNullOrWhiteSpace(_lastPreloadPath)
-                && string.Equals(_lastPreloadPath, current.FilePath, System.StringComparison.OrdinalIgnoreCase);
-            if (preloadNow - _lastPreloadTick < 800 || (sameTarget && preloadNow - _lastPreloadTick < 5000))
-            {
-                StartupLog.Write("预加载: 节流跳过 (<800ms 或同一首<5s) path=" + System.IO.Path.GetFileName(current.FilePath ?? ""));
-                return;
-            }
-
-            _lastPreloadTick = preloadNow;
-            _lastPreloadPath = current.FilePath;
-
-            // DSD 播完自动切歌优先：DSD 源不参与无缝预加载（走原 Stop→PlayNext，避免无缝与 DSD 时长修正冲突）
-            string curExt = System.IO.Path.GetExtension(current.FilePath).ToLowerInvariant();
-            if (curExt is ".dsf" or ".dff")
-            {
-                _seamlessPreloaded = null;
-                return;
-            }
-
-            // 变速激活时不参与无缝预加载（2026-10-15）：SpeedStretch 的 FIFO 里往往还压着
-            // 上一曲尾部，无缝续接会把两曲的信号搅在同一段分析窗里（拖腔/回声）。
-            // AB 循环同理（2026-10-16）：循环里压根不该切下一首，预载了反而会在 B 点前
-            // 被续接逻辑抢走。倍率回 1.0 / 关掉循环后预载自动恢复，gapless 不受影响。
-            if (_audioEngine?.SpeedActive == true || _audioEngine?.IsAbLoopActive == true)
-            {
-                _seamlessPreloaded = null;
-                StartupLog.Write("预加载: 变速/AB循环中，跳过无缝预载（避免跨曲搅混/抢切）");
-                return;
-            }
-
-            try
-            {
-                PlaylistItem? next = ResolveSequentialNextItem(current);
-                _sourcePreloadLease?.Dispose(); _sourcePreloadLease = null;
-                if (next?.SourceId.Length > 0 && NetworkLibraryStore.Track(next.SourceTrackId) is NetworkTrack nextTrack)
-                {
-                    _sourcePreloadLease = NetworkLibraryService.Lease(NetworkLibraryService.CachedPath(nextTrack));
-                    next.FilePath = await NetworkLibraryService.ResolveAsync(nextTrack, System.Threading.CancellationToken.None);
-                    if (GetCurrentPlayingItem() is not PlaylistItem stillPlaying || WebTrackIdentity.Of(stillPlaying) != WebTrackIdentity.Of(current)) return;
-                }
-                if (next == null || string.IsNullOrWhiteSpace(next.FilePath) || !System.IO.File.Exists(next.FilePath))
-                {
-                    StartupLog.Write("预加载: 无下一首 or 文件不存在 next=" + (next?.Title ?? "<null>"));
-                    _seamlessPreloaded = null;
-                    return;
-                }
-
-                // CUE 分轨不参与无缝预加载：同文件多轨的"下一首"要靠区间转码重新起播，
-                // 无缝续接会从当前位置直接续播整文件（等于跳过轨边界），且无缝换轨事件
-                // 不携带分轨信息，UI 会整轨错位。分轨一律走 Stop→PlayNext 常规路径。
-                if (current.StartTimeSeconds > 0 || next.StartTimeSeconds > 0)
-                {
-                    _seamlessPreloaded = null;
-                    return;
-                }
-
-                string? wav = await _audioEngine.EnsureCachedWavAsync(next.FilePath);
-                if (string.IsNullOrWhiteSpace(wav))
-                {
-                    StartupLog.Write("预加载: 转码失败 无WAV next=" + next.Title);
-                    _seamlessPreloaded = null;
-                    return;
-                }
-
-                // ⚠ 预载是异步的：这一路 await（读源/转码）期间用户可能已经切歌。
-                // 若此时仍把预载结果记下来，等无缝换轨事件到达时就会拿"上一首的下一首"去更新界面
-                // —— 表现就是"实际在放新的那首，界面还停在别的曲目"。所以落记录前必须再确认一次。
-                if (GetCurrentPlayingItem() is not PlaylistItem stillOn || WebTrackIdentity.Of(stillOn) != WebTrackIdentity.Of(current))
-                {
-                    StartupLog.Write("预加载: 期间已切歌，丢弃这次预载 \"" + next.Title + "\"（当前=" + (GetCurrentPlayingItem()?.Title ?? "<无>") + "）");
-                    return;
-                }
-
-                bool ok = await _audioEngine.PrepareNextSeamless(wav);
-                StartupLog.Write("预加载: \"" + current.Title + "\" → \"" + next.Title + "\" wav=" + System.IO.Path.GetFileName(wav) + " 采纳无缝=" + ok);
-                if (ok)
-                {
-                    _seamlessPreloaded = next;
-                }
-                else
-                {
-                    _seamlessPreloaded = null; // 格式不同等：无缝不启用，后续走重建
-                }
-            }
-            catch (Exception ex)
-            {
-                StartupLog.Write("预加载: 异常 " + ex.Message);
-                _seamlessPreloaded = null;
-            }
-        }
-
-
         /// <summary>顺序播放时确定"当前曲目之后"的一首（播放队列优先，否则媒体库列表）。</summary>
         private PlaylistItem? ResolveSequentialNextItem(PlaylistItem current)
         {
@@ -3212,54 +3094,50 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>无缝切到预加载的下一首：更新正在播放信息与索引，并继续预加载下下首。</summary>
-        private void OnSeamlessTrackChanged()
+        /// <summary>
+        /// 无缝切到预加载的下一首：更新正在播放信息与索引，并继续预加载下下首。
+        /// 预载记录与"当前在播哪首"的推进都在会话里；这里只做界面的事。
+        /// </summary>
+        private void OnSeamlessAdvanced(PlaylistItem? next)
         {
             _ = DispatcherQueue.TryEnqueue(() =>
             {
-                PlaylistItem? next = _seamlessPreloaded;
-                _seamlessPreloaded = null;
                 if (next == null)
                 {
-                    // 换轨事件到了但没有预载记录：引擎已经在放下一首了，界面不能装作没发生。
-                    // 这里没有可靠的"当前是哪首"来源（引擎不暴露正在播的文件、事件也不带载荷），
-                    // 所以只把状态标对并留下现场，等下一刀把无缝搬进会话时由会话自己记账。
+                    // 换轨事件到了但会话没有预载记录可对账：引擎已经在放下一首了，界面不能装作没发生。
+                    // 这里没有可靠的"当前是哪首"来源（引擎不暴露正在播的文件），只把状态标对并留下现场。
                     _isEnginePaused = false;
                     _usingEnginePlayback = true;
                     StartupLog.Write("[无缝] 换轨事件到达但预载记录为空：界面未切换（队列下标=" + _queue.Index
                         + " 记录在播=" + (_nowPlayingPath ?? "<空>") + "）");
                     return;
                 }
-                else
+
+                // 权威记录会话已推进（SeamlessAdvanced 之前）；这里再钉一次让来源显式。
+                _currentPlayingItem = next;
+                _isEnginePaused = false;
+                _usingEnginePlayback = true;
+                NowPlayingText.Text = "正在播放（引擎）：" + next.Title + " - " + next.Artist;
+                _ = UpdateNowPlayingPanelAsync(next);
+                // 无缝续接后重新加载下一首的波形/进度条样式（否则会残留上一首的波形与时长）
+                _waveformProgress = AppSettingsStore.Load().WaveformProgress;
+                _waveformPath = null;
+                StartupLog.Write("无缝切歌 波形加载开始: " + next.FilePath + " style=" + (_waveformProgress ? "Waveform" : "Gradient"));
+                LoadWaveformForCurrentAsync(next.FilePath);
+                UpdateNowPlayingOutputFormat();
+                Journal.RecordStart(next);
+                if (_audioEngine != null)
                 {
-                    // 无缝换轨是引擎内部完成的：没有走 StartPlayback，所以这里必须自己把
-                    // "当前在播哪首"记下来，否则网页状态会一直停在上一次 StartPlayback 的曲目
-                    // —— 手动切歌正常、只有自动切歌后界面不换，就是这个原因。
-                    _currentPlayingItem = next;
-                    _isEnginePaused = false;
-                    _usingEnginePlayback = true;
-                    NowPlayingText.Text = "正在播放（引擎）：" + next.Title + " - " + next.Artist;
-                    _ = UpdateNowPlayingPanelAsync(next);
-                    // 无缝续接后重新加载下一首的波形/进度条样式（否则会残留上一首的波形与时长）
-                    _waveformProgress = AppSettingsStore.Load().WaveformProgress;
-                    _waveformPath = null;
-                    StartupLog.Write("无缝切歌 波形加载开始: " + next.FilePath + " style=" + (_waveformProgress ? "Waveform" : "Gradient"));
-                    LoadWaveformForCurrentAsync(next.FilePath);
-                    UpdateNowPlayingOutputFormat();
-                    Journal.RecordStart(next);
-                    if (_audioEngine != null)
-                    {
-                        // 无缝切歌同样按"原歌曲时间"显示总时长（变速时 WAV 被拉伸过）
-                        double scale = TempoScale();
-                        double wavSeconds = _audioEngine.Duration.TotalSeconds;
-                        ProgressSlider.Maximum = Math.Max(1, wavSeconds * scale);
-                        ProgressSlider.Value = 0;
-                        TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(wavSeconds * scale));
-                    }
-                    MediaSession.ConfigureTrack(next, playing: true);
-                    AdvanceUserPlaylistIndexTo(next);
-                    _ = PreloadSeamlessNextAsync(next);
+                    // 无缝切歌同样按"原歌曲时间"显示总时长（变速时 WAV 被拉伸过）
+                    double scale = TempoScale();
+                    double wavSeconds = _audioEngine.Duration.TotalSeconds;
+                    ProgressSlider.Maximum = Math.Max(1, wavSeconds * scale);
+                    ProgressSlider.Value = 0;
+                    TotalTimeText.Text = FormatTime(TimeSpan.FromSeconds(wavSeconds * scale));
                 }
+                MediaSession.ConfigureTrack(next, playing: true);
+                AdvanceUserPlaylistIndexTo(next);
+                _ = Session.PreloadNextAsync();
             });
         }
 
