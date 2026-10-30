@@ -222,6 +222,12 @@
         setLyrics(data.lines, 'ready');
         return;
       }
+      // 宿主说"这首的歌词还在读"：多等一会儿，别急着判成"没有歌词"
+      //（刚换歌时宿主那边的歌词装载要比曲目身份晚几百毫秒）
+      if (data && data.lyricState === 'loading' && attempt < 12) {
+        setTimeout(() => { if (open && openGeneration === generation) loadLyrics(trackId, attempt + 1); }, 500);
+        return;
+      }
       // 歌词是异步解析的：刚换歌时可能还没好，稍等再问两次
       if (attempt < 3) { setTimeout(() => { if (open && openGeneration === generation) loadLyrics(trackId, attempt + 1); }, 600); return; }
       lyricTrackId = trackId;

@@ -19,6 +19,12 @@ namespace CelesteMusicPlayer
         void SetStereoCapture(bool enabled);
         IReadOnlyList<LyricLine> LyricLines { get; }
         int CurrentLyricIndex { get; }
+
+        /// <summary>
+        /// 当前这份歌词属于哪个文件。歌词是异步读的，换歌后会有几百毫秒"曲目已经换了、
+        /// 歌词还是上一首"的窗口；取歌词时必须拿它对一下，否则网页会把上一首的词显示在新歌下面。
+        /// </summary>
+        string LyricsTrackPath { get; }
     }
 
     /// <summary>
@@ -143,6 +149,12 @@ namespace CelesteMusicPlayer
         {
             var item = host.CurrentItem;
             string trackId = item == null ? string.Empty : WebTrackIdentity.Of(item);
+            // 歌词是异步读的：刚换歌时 _lyricLines 还是上一首的。只有它确实属于当前曲目才交出去，
+            // 否则网页只能凭 trackId 判断，就会把上一首的词挂在新歌下面。
+            string currentPath = item?.FilePath ?? "";
+            string lyricsPath = host.LyricsTrackPath ?? "";
+            bool lyricsBelongHere = item != null && currentPath.Length > 0 && lyricsPath.Length > 0
+                && string.Equals(Path.GetFullPath(lyricsPath), Path.GetFullPath(currentPath), StringComparison.OrdinalIgnoreCase);
             int rate = 0, bits = 0, kbps = 0, channels = 0;
             long fileSize = 0;
             if (item != null)
@@ -151,7 +163,7 @@ namespace CelesteMusicPlayer
                 try { if (File.Exists(item.FilePath)) fileSize = new FileInfo(item.FilePath).Length; }
                 catch (IOException) { }
             }
-            var lines = host.LyricLines;
+            var lines = lyricsBelongHere ? host.LyricLines : Array.Empty<LyricLine>();
             var rows = lines
                 .Select(line => new
                 {
@@ -164,8 +176,9 @@ namespace CelesteMusicPlayer
             {
                 trackId,
                 audio = new { sampleRate = rate, bitDepth = bits, kbps, channels, fileSize },
-                lyricState = rows.Length > 0 ? "ready" : "none",
-                currentIndex = host.CurrentLyricIndex,
+                // 还没轮到这份歌词：告诉前端"在等"，让它多试几次，而不是当成"这首没歌词"。
+                lyricState = lyricsBelongHere ? (rows.Length > 0 ? "ready" : "none") : (item == null ? "none" : "loading"),
+                currentIndex = lyricsBelongHere ? host.CurrentLyricIndex : -1,
                 lines = rows
             };
         }

@@ -38,6 +38,8 @@ namespace CelesteMusicPlayer
 
         IReadOnlyList<LyricLine> INowPlayingHost.LyricLines => GetLyricLinesPublic();
 
+        string INowPlayingHost.LyricsTrackPath => _lyricsLoadedPath;
+
         int INowPlayingHost.CurrentLyricIndex => GetCurrentLyricIndexPublic();
     }
 }

@@ -63,6 +63,10 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
         spectrumIndex: order.findIndex(c => String(c).includes('np-spectrum')),
         progressIndex: order.findIndex(c => String(c).includes('np-progress')),
         spectrumAboveProgress: !!(rS && rP && rS.bottom <= rP.top + 1),
+        spectrumLeft: rS ? Math.round(rS.left) : 0,
+        progressLeft: rP ? Math.round(rP.left) : 0,
+        coverLeft: Math.round(left.querySelector('.np-artwork')?.getBoundingClientRect().left || 0),
+        spectrumStrokeWidth: left.querySelector('.np-spectrum path')?.getAttribute('stroke-width') || '',
         spectrumHeight: rS ? Math.round(rS.height) : 0,
         progressTop: rP ? Math.round(rP.top) : 0,
         spectrumBottom: rS ? Math.round(rS.bottom) : 0
