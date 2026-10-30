@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text.Json;
 
 namespace CelesteMusicPlayer;
@@ -7,7 +7,7 @@ namespace CelesteMusicPlayer;
 /// Only the three user choices live here (target rate / quality / dither) plus the "last powered rate"
 /// memory; the actual source rate, the output device capabilities and the automatic fallback are
 /// per-playback facts owned by the engine, never by this model.</summary>
-internal sealed class DspSrcParameters
+internal sealed class DspSrcParameters : IDspParameterModel
 {
     internal readonly record struct State(int TargetHz, string Quality, string Dither);
 
@@ -102,10 +102,10 @@ internal sealed class DspSrcParameters
         return new State(TargetHz, Quality, Dither);
     }
 
-    internal bool Owns(string name) => name is "DspPowerSrc" or "SrcRateCombo"
+    public bool Owns(string name) => name is "DspPowerSrc" or "SrcRateCombo"
         or "SrcQualityCombo" or "SrcDitherCombo";
 
-    internal object Describe(string name) => name switch
+    public object Describe(string name) => name switch
     {
         "DspPowerSrc" => new { name, kind = "switch", value = Enabled, enabled = true },
         "SrcRateCombo" => new { name, kind = "combo", index = RateIndex, items = RateLabels, enabled = true },
@@ -114,7 +114,7 @@ internal sealed class DspSrcParameters
         _ => throw new ArgumentException(name)
     };
 
-    internal bool Set(string name, JsonElement message)
+    public bool Set(string name, JsonElement message)
     {
         if (!Owns(name)) throw new ArgumentException(name);
 

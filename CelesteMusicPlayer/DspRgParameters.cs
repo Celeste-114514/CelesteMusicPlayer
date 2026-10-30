@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text.Json;
 
 namespace CelesteMusicPlayer;
@@ -8,7 +8,7 @@ namespace CelesteMusicPlayer;
 /// only the user's mode, preamp and clipping guard live here.
 /// Preamp range matches the panel (-12..12); the store's Normalize() allows -24..24, so a hand-edited
 /// file is clamped here exactly like the slider used to clamp it on load.</summary>
-internal sealed class DspRgParameters
+internal sealed class DspRgParameters : IDspParameterModel
 {
     internal ReplayGainState Current { get; private set; } = new();
 
@@ -26,7 +26,7 @@ internal sealed class DspRgParameters
 
     internal ReplayGainState Snapshot() => Current.Clone();
 
-    internal bool Owns(string name) => name is "DspPowerRg" or "AudioFxRgModeCombo"
+    public bool Owns(string name) => name is "DspPowerRg" or "AudioFxRgModeCombo"
         or "AudioFxRgPreampSlider" or "AudioFxRgPreventClippingToggle";
 
     private object Value(string name) => name switch
@@ -38,7 +38,7 @@ internal sealed class DspRgParameters
         _ => throw new ArgumentException(name)
     };
 
-    internal object Describe(string name) => name switch
+    public object Describe(string name) => name switch
     {
         "DspPowerRg" => new { name, kind = "switch", value = Current.Mode != ReplayGainMode.Off, enabled = true },
         "AudioFxRgModeCombo" => new { name, kind = "combo", index = (int)Current.Mode, items = ModeLabels, enabled = true },
@@ -47,7 +47,7 @@ internal sealed class DspRgParameters
         _ => throw new ArgumentException(name)
     };
 
-    internal bool Set(string name, JsonElement message)
+    public bool Set(string name, JsonElement message)
     {
         if (!Owns(name)) throw new ArgumentException(name);
         string key = name == "AudioFxRgModeCombo" ? "index" : "value";

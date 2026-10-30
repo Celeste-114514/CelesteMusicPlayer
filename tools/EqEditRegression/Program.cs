@@ -159,6 +159,40 @@ var compDesc=System.Text.Json.JsonSerializer.SerializeToElement(compp.Describe("
 Check(compDesc.GetProperty("min").GetDouble()==-60 && compDesc.GetProperty("max").GetDouble()==0 && compDesc.GetProperty("step").GetDouble()==0.5,"comp model owns threshold metadata");
 var compMixDesc=System.Text.Json.JsonSerializer.SerializeToElement(compp.Describe("DspCompMixSlider"));
 Check(compMixDesc.GetProperty("value").GetDouble()==0 && compMixDesc.GetProperty("max").GetDouble()==100 && compMixDesc.GetProperty("step").GetDouble()==1,"comp mix described in percent");
+
+// ---- stereo field model ----
+var fldp=new DspFieldParameters();
+var fldSaved=new StereoFieldSettings{Enabled=true,Width=9.0,CenterGainDb=-99,SideGainDb=99};
+fldp.Load(fldSaved);
+Check(Math.Abs(fldp.Current.Width-2.0)<1e-9 && fldp.Current.CenterGainDb==-18 && fldp.Current.SideGainDb==18,"field load clamps to slider ranges");
+fldSaved.Width=0;Check(Math.Abs(fldp.Current.Width-2.0)<1e-9,"field load isolates input");
+var fldSnap=fldp.Snapshot();fldSnap.Width=0;Check(Math.Abs(fldp.Current.Width-2.0)<1e-9,"field snapshot isolates output");
+bool FldNum(string name,double value) => fldp.Set(name,System.Text.Json.JsonSerializer.SerializeToElement(new {value}));
+bool FldSwitch(bool value) => fldp.Set("DspPowerField",System.Text.Json.JsonSerializer.SerializeToElement(new {value}));
+Check(FldNum("DspFieldWidthSlider",130) && Math.Abs(fldp.Current.Width-1.3)<1e-9,"field width stored as ratio");
+Check(!FldNum("DspFieldWidthSlider",130),"field width same value no mutation");
+Check(FldNum("DspFieldWidthSlider",-5) && fldp.Current.Width==0,"field width clamped to zero");
+Check(FldNum("DspFieldCenterSlider",-3.5) && fldp.Current.CenterGainDb==-3.5,"field center within range");
+Check(FldSwitch(false) && !fldp.Current.Enabled && !FldSwitch(false),"field power toggles once");
+var fldDesc=System.Text.Json.JsonSerializer.SerializeToElement(fldp.Describe("DspFieldWidthSlider"));
+Check(fldDesc.GetProperty("value").GetDouble()==0 && fldDesc.GetProperty("max").GetDouble()==200 && fldDesc.GetProperty("step").GetDouble()==1,"field width described in percent");
+Check(fldp.Owns("DspFieldToggle") && !fldp.Owns("DspMatrixToggle"),"field model owns only its own controls");
+
+// ---- channel matrix model ----
+var mtxp=new DspMatrixParameters();
+var mtxSaved=new ChannelMatrixSettings{Enabled=true,LeftToLeft=9,RightToLeft=-9,LeftToRight=0.5,RightToRight=-2.5};
+mtxp.Load(mtxSaved);
+Check(mtxp.Current.LeftToLeft==2 && mtxp.Current.RightToLeft==-2 && mtxp.Current.RightToRight==-2,"matrix load clamps coefficients");
+Check(Math.Abs(mtxp.Current.LeftToRight-0.5)<1e-9,"matrix load keeps in-range coefficient");
+bool MtxNum(string name,double value) => mtxp.Set(name,System.Text.Json.JsonSerializer.SerializeToElement(new {value}));
+Check(MtxNum("DspMatrixLlSlider",0) && mtxp.Current.LeftToLeft==0,"matrix coefficient within range");
+Check(!MtxNum("DspMatrixLlSlider",0),"matrix same coefficient no mutation");
+Check(MtxNum("DspMatrixRlSlider",0),"matrix coefficient reset away from the clamp edge");
+Check(MtxNum("DspMatrixRlSlider",-9) && mtxp.Current.RightToLeft==-2,"matrix coefficient clamped on set");
+Check(MtxNum("DspMatrixRrSlider",0.75) && Math.Abs(mtxp.Current.RightToRight-0.75)<1e-9,"matrix coefficient fractional value");
+var mtxDesc=System.Text.Json.JsonSerializer.SerializeToElement(mtxp.Describe("DspMatrixLrSlider"));
+Check(mtxDesc.GetProperty("min").GetDouble()==-2 && mtxDesc.GetProperty("max").GetDouble()==2 && mtxDesc.GetProperty("step").GetDouble()==0.05,"matrix model owns slider metadata");
+Check(mtxp.Owns("DspPowerMatrix") && mtxp.Owns("DspMatrixRrSlider") && !mtxp.Owns("DspFieldWidthSlider"),"matrix model owns only its own controls");
 Console.WriteLine($"PASS {checks} total EQ, delivery and parameter checks");
 sealed class RecordingOutput(List<string> calls, EqCurveState curve, DspExtraState extra, RoomCorrectionState room) : IDspParameterTarget
 {

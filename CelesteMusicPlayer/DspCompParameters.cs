@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Text.Json;
 
 namespace CelesteMusicPlayer;
@@ -6,7 +6,7 @@ namespace CelesteMusicPlayer;
 /// <summary>Authoritative compressor parameters and web metadata. No control dependencies.
 /// Only the user's choices live here; the live gain reduction, input level and GR history are
 /// per-playback meter facts owned by the engine and drawn by the compressor page.</summary>
-internal sealed class DspCompParameters
+internal sealed class DspCompParameters : IDspParameterModel
 {
     private sealed record SliderSpec(string Name, double Min, double Max, double Step);
 
@@ -37,7 +37,7 @@ internal sealed class DspCompParameters
     internal CompressorSettings Snapshot() => Current.Clone();
 
     /// <summary>压缩器页里归模型管的控件。表头「峰值/GR」显示模式不属于 DSP 参数，仍走旧适配。</summary>
-    internal bool Owns(string name) => name is "DspPowerComp" or "DspCompToggle" || Spec(name) != null;
+    public bool Owns(string name) => name is "DspPowerComp" or "DspCompToggle" || Spec(name) != null;
 
     private static SliderSpec? Spec(string name)
     {
@@ -76,7 +76,7 @@ internal sealed class DspCompParameters
         }
     }
 
-    internal object Describe(string name)
+    public object Describe(string name)
     {
         if (name is "DspPowerComp" or "DspCompToggle")
         {
@@ -87,7 +87,7 @@ internal sealed class DspCompParameters
         return new { name, kind = "slider", value = GetValue(name), min = spec.Min, max = spec.Max, step = spec.Step, enabled = true };
     }
 
-    internal bool Set(string name, JsonElement message)
+    public bool Set(string name, JsonElement message)
     {
         if (!Owns(name)) throw new ArgumentException(name);
 

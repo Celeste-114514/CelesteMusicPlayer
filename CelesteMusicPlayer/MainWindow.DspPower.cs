@@ -205,23 +205,29 @@ namespace CelesteMusicPlayer
                 });
 
             AddPower(DspPowerField, DspPowerFieldHint,
-                () => DspFieldToggle != null && DspFieldToggle.IsOn,
+                () => FieldParameters.Current.Enabled,
                 on =>
                 {
-                    if (DspFieldToggle != null)
+                    if (!SetModelControl("DspPowerField", SwitchMessage(on)))
                     {
-                        DspFieldToggle.IsOn = on;
+                        return;
                     }
+
+                    ProjectExtraParameters();
+                    ApplyFieldParameters();
                 });
 
             AddPower(DspPowerMatrix, DspPowerMatrixHint,
-                () => DspMatrixToggle != null && DspMatrixToggle.IsOn,
+                () => MatrixParameters.Current.Enabled,
                 on =>
                 {
-                    if (DspMatrixToggle != null)
+                    if (!SetModelControl("DspPowerMatrix", SwitchMessage(on)))
                     {
-                        DspMatrixToggle.IsOn = on;
+                        return;
                     }
+
+                    ProjectExtraParameters();
+                    ApplyMatrixParameters();
                 });
 
             // ⑪ FIR / 房间校正：开关 = 卷积启用且已导入 IR；没导 IR 时禁用

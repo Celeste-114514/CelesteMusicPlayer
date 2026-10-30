@@ -558,6 +558,8 @@ namespace CelesteMusicPlayer
                     if (RgParameters.Owns(name)) ApplyReplayGainToEngine();
                     else if (SrcParameters.Owns(name)) ApplySrcSettings();
                     else if (CompParameters.Owns(name)) ApplyCompParameters();
+                    else if (FieldParameters.Owns(name)) ApplyFieldParameters();
+                    else if (MatrixParameters.Owns(name)) ApplyMatrixParameters();
                     else ApplyDspToEngine();
                 }
                 return;

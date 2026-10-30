@@ -7,7 +7,7 @@ namespace CelesteMusicPlayer;
 /// <summary>Authoritative channel/safety parameters and web metadata. No control dependencies.
 /// Channel.Enabled tracks the module switch; snapshots enable processing when crossfeed alone is on,
 /// matching the existing storage contract.</summary>
-internal sealed class DspExtraParameters
+internal sealed class DspExtraParameters : IDspParameterModel
 {
     internal ChannelBalanceState Channel { get; private set; } = ChannelBalanceState.Default();
     internal DspSafetyState Safety { get; private set; } = DspSafetyState.Default();
@@ -41,7 +41,7 @@ internal sealed class DspExtraParameters
         ["AudioFxChannelCrossfeedSlider"] = new(0,100,5),
         ["AudioFxChannelCrossfeedCutoffSlider"] = new(100,4000,50)
     };
-    internal bool Owns(string name) => Sliders.ContainsKey(name) || name is
+    public bool Owns(string name) => Sliders.ContainsKey(name) || name is
         "AudioFxChannelMonoCombo" or "AudioFxChannelToggle" or "AudioFxChannelSwapToggle" or
         "AudioFxChannelInvertLToggle" or "AudioFxChannelInvertRToggle" or "AudioFxChannelCrossfeedToggle" or
         "AudioFxSafetyLimiterToggle" or "DspPowerChannel" or "DspPowerHeadroom" or "DspPowerXfeed";
@@ -66,13 +66,13 @@ internal sealed class DspExtraParameters
         "AudioFxChannelMonoCombo" => Array.IndexOf(MonoModes,Channel.MonoMode),
         _ => throw new ArgumentException(name)
     };
-    internal object Describe(string name)
+    public object Describe(string name)
     {
         if (Sliders.TryGetValue(name,out var d)) return new {name,kind="slider",value=(double)Value(name),min=d.Min,max=d.Max,step=d.Step,enabled=true};
         if (name=="AudioFxChannelMonoCombo") return new {name,kind="combo",index=(int)Value(name),items=MonoLabels,enabled=true};
         return new {name,kind="switch",value=(bool)Value(name),enabled=name!="DspPowerXfeed"||Channel.Enabled};
     }
-    internal bool Set(string name, JsonElement message)
+    public bool Set(string name, JsonElement message)
     {
         if (!Owns(name)) throw new ArgumentException(name);
         string key=name=="AudioFxChannelMonoCombo"?"index":"value";

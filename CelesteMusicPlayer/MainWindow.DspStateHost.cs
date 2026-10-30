@@ -15,27 +15,33 @@ public sealed partial class MainWindow
     private readonly DspRgParameters RgParameters = new();
     private readonly DspSrcParameters SrcParameters = new();
     private readonly DspCompParameters CompParameters = new();
+    private readonly DspFieldParameters FieldParameters = new();
+    private readonly DspMatrixParameters MatrixParameters = new();
 
     /// <summary>Modules whose business values already live in a model instead of their controls.</summary>
     private IEnumerable<string> ProjectedControls => WebDspModuleControls["channel"]
         .Concat(WebDspModuleControls["headroom"]).Concat(WebDspModuleControls["rg"])
-        .Concat(WebDspModuleControls["src"]).Concat(WebDspModuleControls["comp"]);
+        .Concat(WebDspModuleControls["src"]).Concat(WebDspModuleControls["comp"])
+        .Concat(WebDspModuleControls["stereo"]).Concat(WebDspModuleControls["matrix"]);
 
-    private bool ModelOwns(string name) =>
-        ExtraParameters.Owns(name) || RgParameters.Owns(name) || SrcParameters.Owns(name)
-        || CompParameters.Owns(name);
+    /// <summary>Which model owns a control name (null = still on the legacy control adapter).</summary>
+    private IDspParameterModel? ModelOf(string name)
+    {
+        if (ExtraParameters.Owns(name)) return ExtraParameters;
+        if (RgParameters.Owns(name)) return RgParameters;
+        if (SrcParameters.Owns(name)) return SrcParameters;
+        if (CompParameters.Owns(name)) return CompParameters;
+        if (FieldParameters.Owns(name)) return FieldParameters;
+        return MatrixParameters.Owns(name) ? MatrixParameters : null;
+    }
+
+    private bool ModelOwns(string name) => ModelOf(name) != null;
 
     private object DescribeModelControl(string name) =>
-        ExtraParameters.Owns(name) ? ExtraParameters.Describe(name)
-        : RgParameters.Owns(name) ? RgParameters.Describe(name)
-        : SrcParameters.Owns(name) ? SrcParameters.Describe(name)
-        : CompParameters.Describe(name);
+        (ModelOf(name) ?? throw new ArgumentException(name)).Describe(name);
 
     private bool SetModelControl(string name, JsonElement message) =>
-        ExtraParameters.Owns(name) ? ExtraParameters.Set(name, message)
-        : RgParameters.Owns(name) ? RgParameters.Set(name, message)
-        : SrcParameters.Owns(name) ? SrcParameters.Set(name, message)
-        : CompParameters.Set(name, message);
+        (ModelOf(name) ?? throw new ArgumentException(name)).Set(name, message);
 
     private static JsonElement SwitchMessage(bool value) => JsonSerializer.SerializeToElement(new { value });
 

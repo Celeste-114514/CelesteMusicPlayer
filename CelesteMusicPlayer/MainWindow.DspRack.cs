@@ -91,18 +91,19 @@ namespace CelesteMusicPlayer
                 DspCompMakeupSlider.Value = CompParameters.Current.MakeupDb;
                 DspCompMixSlider.Value = CompParameters.Current.Mix * 100.0;
 
-                var f = rack.StereoField;
-                DspFieldToggle.IsOn = f.Enabled;
-                DspFieldWidthSlider.Value = f.Width * 100.0;
-                DspFieldCenterSlider.Value = f.CenterGainDb;
-                DspFieldSideSlider.Value = f.SideGainDb;
+                // 声场 / 矩阵：同样先装载模型，控件照模型投影
+                FieldParameters.Load(rack.StereoField);
+                DspFieldToggle.IsOn = FieldParameters.Current.Enabled;
+                DspFieldWidthSlider.Value = FieldParameters.Current.Width * 100.0;
+                DspFieldCenterSlider.Value = FieldParameters.Current.CenterGainDb;
+                DspFieldSideSlider.Value = FieldParameters.Current.SideGainDb;
 
-                var m = rack.Matrix;
-                DspMatrixToggle.IsOn = m.Enabled;
-                DspMatrixLlSlider.Value = m.LeftToLeft;
-                DspMatrixRlSlider.Value = m.RightToLeft;
-                DspMatrixLrSlider.Value = m.LeftToRight;
-                DspMatrixRrSlider.Value = m.RightToRight;
+                MatrixParameters.Load(rack.Matrix);
+                DspMatrixToggle.IsOn = MatrixParameters.Current.Enabled;
+                DspMatrixLlSlider.Value = MatrixParameters.Current.LeftToLeft;
+                DspMatrixRlSlider.Value = MatrixParameters.Current.RightToLeft;
+                DspMatrixLrSlider.Value = MatrixParameters.Current.LeftToRight;
+                DspMatrixRrSlider.Value = MatrixParameters.Current.RightToRight;
 
                 RefreshDspCompReadouts();
                 RefreshDspFieldReadouts();
@@ -136,25 +137,10 @@ namespace CelesteMusicPlayer
 
             RackState rack = DspRackStore.Load();
 
-            // 压缩器参数来自模型；声场/矩阵仍走控件适配（各自的迁移刀还没做）。
+            // 三个模块的参数现在都来自模型；控件只是它们的显示投影。
             rack.Compressor = CompParameters.Snapshot();
-
-            rack.StereoField = new StereoFieldSettings
-            {
-                Enabled = DspFieldToggle.IsOn,
-                Width = DspFieldWidthSlider.Value / 100.0,
-                CenterGainDb = DspFieldCenterSlider.Value,
-                SideGainDb = DspFieldSideSlider.Value
-            };
-
-            rack.Matrix = new ChannelMatrixSettings
-            {
-                Enabled = DspMatrixToggle.IsOn,
-                LeftToLeft = DspMatrixLlSlider.Value,
-                RightToLeft = DspMatrixRlSlider.Value,
-                LeftToRight = DspMatrixLrSlider.Value,
-                RightToRight = DspMatrixRrSlider.Value
-            };
+            rack.StereoField = FieldParameters.Snapshot();
+            rack.Matrix = MatrixParameters.Snapshot();
 
             // SetRack：Save(dsp-rack.json) + 实时下发；未播放时仅存状态，下次播放会话应用
             if (_audioEngine is { } engine) engine.SetRack(rack);
@@ -352,12 +338,25 @@ namespace CelesteMusicPlayer
 
         private void DspField_Toggled(object sender, RoutedEventArgs e)
         {
+            if (!_dspRackLoading)
+            {
+                ImportExtraParameterInput(sender);
+            }
+
             if (_dspRackLoading)
             {
                 return;
             }
 
             // 关掉时圆环变灰、读数显示「旁路」，必须重画
+            RedrawDspFieldRing();
+            PushDspRackToEngine();
+        }
+
+        /// <summary>把模型里的声场参数下发（网页命令与页头电源开关共用）。</summary>
+        private void ApplyFieldParameters()
+        {
+            RefreshDspFieldReadouts();
             RedrawDspFieldRing();
             PushDspRackToEngine();
         }
@@ -370,6 +369,10 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            if (!_dspRackLoading)
+            {
+                ImportExtraParameterInput(sender);
+            }
             RefreshDspFieldReadouts();
 
             // 圆环上的手柄位置是这三个参数的函数，动一条就得重画
@@ -416,12 +419,25 @@ namespace CelesteMusicPlayer
 
         private void DspMatrix_Toggled(object sender, RoutedEventArgs e)
         {
+            if (!_dspRackLoading)
+            {
+                ImportExtraParameterInput(sender);
+            }
+
             if (_dspRackLoading)
             {
                 return;
             }
 
             // 关掉时流图退化为「旁路的样子」（左→左、右→右 直通），要同步画出来
+            RedrawDspMatrixFlow();
+            PushDspRackToEngine();
+        }
+
+        /// <summary>把模型里的矩阵参数下发（网页命令与页头电源开关共用）。</summary>
+        private void ApplyMatrixParameters()
+        {
+            RefreshDspMatrixReadouts();
             RedrawDspMatrixFlow();
             PushDspRackToEngine();
         }
@@ -434,6 +450,10 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            if (!_dspRackLoading)
+            {
+                ImportExtraParameterInput(sender);
+            }
             RefreshDspMatrixReadouts();
 
             // 矩阵流图跟着四个系数走（画图内部有 null 守卫，面板未构建时安全返回）
@@ -777,29 +797,19 @@ namespace CelesteMusicPlayer
 
         private bool DspFieldActive()
         {
-            if (DspFieldToggle == null)
-            {
-                return false;
-            }
-
-            return DspFieldToggle.IsOn
-                && (Math.Abs(DspFieldWidthSlider.Value - 100.0) > 0.5
-                    || Math.Abs(DspFieldCenterSlider.Value) > 0.05
-                    || Math.Abs(DspFieldSideSlider.Value) > 0.05);
+            return FieldParameters.Current.Enabled
+                && (Math.Abs(FieldParameters.Current.Width - 1.0) > 0.005
+                    || Math.Abs(FieldParameters.Current.CenterGainDb) > 0.05
+                    || Math.Abs(FieldParameters.Current.SideGainDb) > 0.05);
         }
 
         private bool DspMatrixActive()
         {
-            if (DspMatrixToggle == null)
-            {
-                return false;
-            }
-
-            return DspMatrixToggle.IsOn
-                && (Math.Abs(DspMatrixLlSlider.Value - 1.0) > 0.005
-                    || Math.Abs(DspMatrixRlSlider.Value) > 0.005
-                    || Math.Abs(DspMatrixLrSlider.Value) > 0.005
-                    || Math.Abs(DspMatrixRrSlider.Value - 1.0) > 0.005);
+            return MatrixParameters.Current.Enabled
+                && (Math.Abs(MatrixParameters.Current.LeftToLeft - 1.0) > 0.005
+                    || Math.Abs(MatrixParameters.Current.RightToLeft) > 0.005
+                    || Math.Abs(MatrixParameters.Current.LeftToRight) > 0.005
+                    || Math.Abs(MatrixParameters.Current.RightToRight - 1.0) > 0.005);
         }
 
         /// <summary>机架页始终视为"在看"，不点亮"生效"（顺序不是效果开关）。</summary>
