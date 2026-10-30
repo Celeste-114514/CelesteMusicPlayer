@@ -173,3 +173,31 @@ internal sealed record StartOptions(double StartSeconds = 0, bool PauseAfter = f
 搬进会话。**最危险**：接续失败的表现是"播完就停"，只有实听跨曲能发现。
 建议验证：起播一首短曲 + 等它自然播完，确认下一首自动接上且标题跟着换；日志看 seamless 记录。
 ⚠ 探针的 `transport next` 不会换曲（既有毛病），别拿它验。
+
+### 第三刀已落地（`7eab66f`，2026-10-30）
+
+无缝接续的状态机搬进会话。**前提是 codex 在 `af70b8b` 修掉引擎 bug**（切轨后读旧 reader
+抛 NRE，事件永远发不出来）——17:15 实测事件链路已通，这一刀才下得去。
+
+- 会话新增：`CurrentItem`（权威当前曲目，StartPlayback 钉下、换轨由会话推进）、
+  `PreloadNextAsync`（节流/跳过规则/网络租约/落账确认，行为逐行一致）、
+  `SeamlessAdvanced` 事件**带载荷**（换到哪首，null=无预载记录）。
+- 宿主口子定稿为三条：`NextResolver`（队列/曲库/随机规则住宿主）、`Ended`、`SeamlessAdvanced`。
+- 删除：`_seamlessPreloaded`、预载节流字段、`_sourcePreloadLease`、`PreloadSeamlessNextAsync`
+  方法体；5 个调用点变一行 `Session.PreloadNextAsync()`。
+- `OnEnginePlaybackEnded` 留宿主：历史落盘/SMTC/推进全是宿主职责。
+- 验证：编译 0 error；SeamlessTransitionRegression PASS；PlaybackAdvanceRegression 22 条 ALL PASS；
+  实播 1s Hi! → 7.1s Speak to Me 全跟随，换轨后立即预载下下首（采纳无缝=True）；
+  接口回归 0 失败 0 JS 异常。
+
+### 三刀全部完成 —— 会话形态定稿
+
+```
+PlaybackSession（~370 行，零 UI、零文案）
+├─ 持有引擎（EnsureEngine / ResetEngine）
+├─ PrepareAsync：输出模式/设备/EQ/平衡限幅/FIR/ReplayGain
+├─ StartAsync：起播（含 CUE 区间）→ PlaybackStartResult
+├─ PreloadNextAsync：无缝预载状态机（NextResolver 由宿主注入）
+├─ CurrentItem：权威当前曲目（StartPlayback 钉下、换轨自推进）
+└─ 事件：Ended / SeamlessAdvanced(PlaylistItem?) / 进度回调
+```
