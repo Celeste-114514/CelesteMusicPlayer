@@ -33,8 +33,18 @@ namespace CelesteMusicPlayer
             if (_engine != null) return _engine;
             _engine = new AudioPlaybackEngine();
             // 事件只在创建时挂一次：以前每次起播都 -= 再 +=，同一路事件能挂多次。
-            _engine.PlaybackEnded += () => Ended?.Invoke();
-            _engine.SeamlessTrackChanged += () => SeamlessChanged?.Invoke();
+            // 这两行带日志是故意的：引擎事件是否真的到达会话，只能靠日志证，猜不出来。
+            _engine.PlaybackEnded += () =>
+            {
+                StartupLog.Write("[会话] 引擎 PlaybackEnded 事件");
+                Ended?.Invoke();
+            };
+            _engine.SeamlessTrackChanged += () =>
+            {
+                StartupLog.Write("[会话] 引擎 SeamlessTrackChanged 事件");
+                SeamlessChanged?.Invoke();
+            };
+            StartupLog.Write("[会话] 引擎已创建并挂好事件（实例=" + _engine.GetHashCode() + "）");
             return _engine;
         }
 

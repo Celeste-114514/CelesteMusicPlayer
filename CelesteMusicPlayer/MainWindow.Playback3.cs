@@ -523,35 +523,30 @@ namespace CelesteMusicPlayer
                 indexed = _playlist[_currentIndex];
             }
 
-            // 自动续播有两条路：队列推进（改 _queue.Index）和曲库推进（只改 _currentIndex）。
-            // 两个下标各管各的，谁"看起来有效"谁就赢 —— 于是播放已经走到下一首、队列下标还停在上一首时，
-            // 网页拿到的 trackId/标题/时长就全停在上一首（12:38 现场：音频是 The Great Gig，界面还是 Time）。
-            // 这里以"最近一次真正起播的文件"为准；CUE 分轨共享同一路径，那种情况下标更精确，仍然用下标。
-            string playing = _nowPlayingPath ?? "";
-            if (playing.Length > 0 && (indexed == null || !string.Equals(indexed.FilePath, playing, StringComparison.OrdinalIgnoreCase)))
+            // 「当前在播哪首」只有一个权威答案：StartPlayback 那一刻记下来的这首。
+            // 队列下标和曲库下标是两套独立事实（自动续播走队列、手动点歌可能走曲库），
+            // 谁"看起来有效"谁就赢会让网页停在上一首 —— 手动切歌正常、自动切歌卡住就是这个原因。
+            PlaylistItem? playing = _currentPlayingItem;
+            if (playing != null)
             {
-                bool cueShared = _queue.Items.Any(item => item.StartTimeSeconds > 0
-                    && string.Equals(item.FilePath, playing, StringComparison.OrdinalIgnoreCase));
-                if (!cueShared)
+                if (indexed != null && !string.Equals(indexed.FilePath, playing.FilePath, StringComparison.OrdinalIgnoreCase))
                 {
-                    PlaylistItem? match = _queue.Items.FirstOrDefault(item => string.Equals(item.FilePath, playing, StringComparison.OrdinalIgnoreCase))
-                        ?? _playlist.FirstOrDefault(item => string.Equals(item.FilePath, playing, StringComparison.OrdinalIgnoreCase));
-                    if (match != null)
+                    string signature = playing.FilePath + "|" + indexed.FilePath;
+                    if (!string.Equals(signature, _stateMismatchLogged, StringComparison.Ordinal))
                     {
-                        string signature = playing + "|" + (indexed?.FilePath ?? "");
-                        if (!string.Equals(signature, _stateMismatchLogged, StringComparison.Ordinal))
-                        {
-                            _stateMismatchLogged = signature;
-                            StartupLog.Write("[状态] 下标与正在播放不一致，按正在播放为准：下标曲目=" + (indexed?.Title ?? "<无>")
-                                + " 实际在播=" + match.Title + " 队列下标=" + _queue.Index + " 曲库下标=" + _currentIndex);
-                        }
-                        return match;
+                        _stateMismatchLogged = signature;
+                        StartupLog.Write("[状态] 下标与正在播放不一致，按正在播放为准：下标曲目=" + indexed.Title
+                            + " 实际在播=" + playing.Title + " 队列下标=" + _queue.Index + " 曲库下标=" + _currentIndex);
                     }
                 }
+                return playing;
             }
 
             return indexed;
         }
+
+        /// <summary>StartPlayback 记下的"这一首就是当前在播"，停止时清空。别用下标推断它。</summary>
+        private PlaylistItem? _currentPlayingItem;
 
         /// <summary>下标与实际播放不一致的日志签名，避免每秒刷屏。</summary>
         private string _stateMismatchLogged = "";
@@ -1796,6 +1791,7 @@ namespace CelesteMusicPlayer
             _waveformPath = null;
             RedrawProgressStyle();
             _nowPlayingPath = null;
+            _currentPlayingItem = null;   // 停止/清空：权威记录一起清，别再按旧下标猜
             NowPlayingTitleText.Text = "未在播放";
             ResetNowPlayingArtistAlbumLinks();
             NowPlayingCoverImage.Source = null;
@@ -2745,6 +2741,9 @@ namespace CelesteMusicPlayer
 
         private void StartPlayback(PlaylistItem item)
         {
+            // 所有起播（手点、自动续播、无缝重建、命令行）都经过这里：
+            // 在这里把"当前在播哪首"钉死，网页状态就不必再去猜队列下标还是曲库下标。
+            _currentPlayingItem = item;
             if (item.SourceId.Length > 0 && !System.IO.File.Exists(item.FilePath)) { _ = PlaySourceAsync(item); return; }
             PrepareSourcePlayback(item);
             // 标记"用户主动开播过"：之后 MediaPlayer 报错才值得弹「无法播放」对话框。
@@ -2934,6 +2933,18 @@ namespace CelesteMusicPlayer
             _currentRgData = preparation.ReplayGain;
             if (preparation.ReplayGainApplied) DispatcherQueue.TryEnqueue(RefreshAudioFxRgInfo);
 
+            // ⚠ 这里必须保留"每次起播直接挂一遍"的老接线。
+            // 会话里也挂了一份转发（PlaybackSession.EnsureEngine），但实测那条链路没有把
+            // 引擎的无缝换轨/播完事件送过来（13:01 现场：引擎已切轨，[会话] 一条事件日志都没有），
+            // 结果就是自动切歌后界面不换曲。多挂一次最多触发两遍，第二遍看到 _seamlessPreloaded 为空直接返回。
+            if (_audioEngine != null)
+            {
+                _audioEngine.PlaybackEnded -= OnEnginePlaybackEnded;
+                _audioEngine.PlaybackEnded += OnEnginePlaybackEnded;
+                _audioEngine.SeamlessTrackChanged -= OnSeamlessTrackChanged;
+                _audioEngine.SeamlessTrackChanged += OnSeamlessTrackChanged;
+            }
+
             // CUE 分轨与起播本身也在会话里：会话只回"成没成、是不是 DoP 直出、转了 PCM 没有、多长"。
             PlaybackStartResult result = await Session
                 .StartAsync(item, s => DispatcherQueue.TryEnqueue(() => { NowPlayingText.Text = s; }))
@@ -3049,6 +3060,8 @@ namespace CelesteMusicPlayer
         {
             _ = DispatcherQueue.TryEnqueue(() =>
             {
+                StartupLog.Write("[播放] 引擎播完事件到达，准备推进（在播=" + (_currentPlayingItem?.Title ?? "<无>")
+                    + " 队列下标=" + _queue.Index + "）");
                 // 播放历史：自然播完 → 记为已完成
                 Journal.RecordHistory(completed: true);
                 _isEnginePaused = false;
@@ -3230,6 +3243,10 @@ namespace CelesteMusicPlayer
                 }
                 else
                 {
+                    // 无缝换轨是引擎内部完成的：没有走 StartPlayback，所以这里必须自己把
+                    // "当前在播哪首"记下来，否则网页状态会一直停在上一次 StartPlayback 的曲目
+                    // —— 手动切歌正常、只有自动切歌后界面不换，就是这个原因。
+                    _currentPlayingItem = next;
                     _isEnginePaused = false;
                     _usingEnginePlayback = true;
                     NowPlayingText.Text = "正在播放（引擎）：" + next.Title + " - " + next.Artist;

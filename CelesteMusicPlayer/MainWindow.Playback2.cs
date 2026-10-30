@@ -2096,6 +2096,7 @@ namespace CelesteMusicPlayer
                 if (string.Equals(_nowPlayingPath, item.FilePath, StringComparison.OrdinalIgnoreCase))
                 {
                     _nowPlayingPath = null;
+                    _currentPlayingItem = null;
                     _currentIndex = -1;
                     try
                     {
