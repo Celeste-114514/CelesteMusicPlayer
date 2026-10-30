@@ -80,15 +80,16 @@ namespace CelesteMusicPlayer
             _dspRackLoading = true;
             try
             {
-                var c = rack.Compressor;
-                DspCompToggle.IsOn = c.Enabled;
-                DspCompThresholdSlider.Value = c.ThresholdDb;
-                DspCompRatioSlider.Value = c.Ratio;
-                DspCompAttackSlider.Value = c.AttackMs;
-                DspCompReleaseSlider.Value = c.ReleaseMs;
-                DspCompKneeSlider.Value = c.KneeDb;
-                DspCompMakeupSlider.Value = c.MakeupDb;
-                DspCompMixSlider.Value = c.Mix * 100.0;
+                // 压缩器：先装载模型，控件照模型投影（模型是唯一参数来源）
+                CompParameters.Load(rack.Compressor);
+                DspCompToggle.IsOn = CompParameters.Current.Enabled;
+                DspCompThresholdSlider.Value = CompParameters.Current.ThresholdDb;
+                DspCompRatioSlider.Value = CompParameters.Current.Ratio;
+                DspCompAttackSlider.Value = CompParameters.Current.AttackMs;
+                DspCompReleaseSlider.Value = CompParameters.Current.ReleaseMs;
+                DspCompKneeSlider.Value = CompParameters.Current.KneeDb;
+                DspCompMakeupSlider.Value = CompParameters.Current.MakeupDb;
+                DspCompMixSlider.Value = CompParameters.Current.Mix * 100.0;
 
                 var f = rack.StereoField;
                 DspFieldToggle.IsOn = f.Enabled;
@@ -135,17 +136,8 @@ namespace CelesteMusicPlayer
 
             RackState rack = DspRackStore.Load();
 
-            rack.Compressor = new CompressorSettings
-            {
-                Enabled = DspCompToggle.IsOn,
-                ThresholdDb = DspCompThresholdSlider.Value,
-                Ratio = DspCompRatioSlider.Value,
-                AttackMs = DspCompAttackSlider.Value,
-                ReleaseMs = DspCompReleaseSlider.Value,
-                KneeDb = DspCompKneeSlider.Value,
-                MakeupDb = DspCompMakeupSlider.Value,
-                Mix = DspCompMixSlider.Value / 100.0
-            };
+            // 压缩器参数来自模型；声场/矩阵仍走控件适配（各自的迁移刀还没做）。
+            rack.Compressor = CompParameters.Snapshot();
 
             rack.StereoField = new StereoFieldSettings
             {
@@ -232,12 +224,25 @@ namespace CelesteMusicPlayer
 
         private void DspComp_Toggled(object sender, RoutedEventArgs e)
         {
+            if (!_dspRackLoading)
+            {
+                ImportExtraParameterInput(sender);
+            }
+
             if (_dspRackLoading)
             {
                 return;
             }
 
             // 关掉时曲线退化为「输出 = 输入」的斜线，打开时恢复压缩曲线 —— 必须重画
+            RedrawDspCompTransferCurve();
+            PushDspRackToEngine();
+        }
+
+        /// <summary>把模型里的压缩器参数下发（网页命令与页头电源开关共用）。</summary>
+        private void ApplyCompParameters()
+        {
+            RefreshDspCompReadouts();
             RedrawDspCompTransferCurve();
             PushDspRackToEngine();
         }
@@ -253,6 +258,11 @@ namespace CelesteMusicPlayer
                 return;
             }
 
+            // 只把被拖动的这一条导入模型（LoadDspRackUi 期间由它自己装载，别回写）。
+            if (!_dspRackLoading)
+            {
+                ImportExtraParameterInput(sender);
+            }
             RefreshDspCompReadouts();
 
             // 传递曲线是参数的函数，任何一条滑杆动了都得重画（曲线的形状会跟着变）
@@ -762,12 +772,7 @@ namespace CelesteMusicPlayer
 
         private bool DspCompActive()
         {
-            if (DspCompToggle == null)
-            {
-                return false;
-            }
-
-            return DspCompToggle.IsOn && DspCompMixSlider.Value > 0.1;
+            return CompParameters.Current.Enabled && CompParameters.Current.Mix > 0.001;
         }
 
         private bool DspFieldActive()

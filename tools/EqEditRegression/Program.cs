@@ -132,6 +132,33 @@ var srcDithDesc=System.Text.Json.JsonSerializer.SerializeToElement(srcp.Describe
 Check(srcDithDesc.GetProperty("items").GetArrayLength()==4,"src model owns dither labels");
 Check(System.Text.Json.JsonSerializer.SerializeToElement(srcp.Describe("DspPowerSrc")).GetProperty("value").GetBoolean(),"src power mirrors rate");
 Check(DspSrcParameters.IndexOfHz(96000)==4 && DspSrcParameters.IndexOfHz(44100)==1,"src rate index lookup");
+
+// ---- compressor model ----
+var compp=new DspCompParameters();
+var compSaved=new CompressorSettings{Enabled=true,ThresholdDb=-999,Ratio=999,AttackMs=0.01,ReleaseMs=99999,KneeDb=-5,MakeupDb=99,Mix=2.0};
+compp.Load(compSaved);
+Check(compp.Current.ThresholdDb==-60 && compp.Current.Ratio==20 && compp.Current.AttackMs==0.1,"comp load clamps upper and lower bounds");
+Check(compp.Current.ReleaseMs==2000 && compp.Current.KneeDb==0 && compp.Current.MakeupDb==24,"comp load clamps release knee makeup");
+Check(Math.Abs(compp.Current.Mix-1.0)<1e-9,"comp load clamps mix to full wet");
+compSaved.ThresholdDb=0;Check(compp.Current.ThresholdDb==-60,"comp load isolates input");
+var compSnap=compp.Snapshot();compSnap.ThresholdDb=0;Check(compp.Current.ThresholdDb==-60,"comp snapshot isolates output");
+bool CompNum(string name,double value) => compp.Set(name,System.Text.Json.JsonSerializer.SerializeToElement(new {value}));
+bool CompSwitch(string name,bool value) => compp.Set(name,System.Text.Json.JsonSerializer.SerializeToElement(new {value}));
+Check(CompNum("DspCompThresholdSlider",-30) && compp.Current.ThresholdDb==-30,"comp threshold within range");
+Check(!CompNum("DspCompThresholdSlider",-30),"comp threshold same value no mutation");
+Check(CompNum("DspCompThresholdSlider",-999) && compp.Current.ThresholdDb==-60,"comp threshold clamped on set");
+Check(CompNum("DspCompRatioSlider",4) && compp.Current.Ratio==4,"comp ratio within range");
+Check(CompNum("DspCompRatioSlider",999) && compp.Current.Ratio==20,"comp ratio clamped on set");
+Check(CompNum("DspCompMixSlider",50) && Math.Abs(compp.Current.Mix-0.5)<1e-9,"comp mix stored as 0..1");
+Check(CompNum("DspCompMixSlider",-5) && compp.Current.Mix==0,"comp mix clamped to zero");
+Check(CompSwitch("DspCompToggle",false) && !compp.Current.Enabled,"comp toggle disables");
+Check(!CompSwitch("DspPowerComp",false),"comp power mirrors toggle state");
+Check(CompSwitch("DspPowerComp",true) && compp.Current.Enabled,"comp power enables");
+Check(!compp.Owns("DspCompPeakToggle") && compp.Owns("DspCompMixSlider") && compp.Owns("DspPowerComp"),"comp model owns only dsp parameters");
+var compDesc=System.Text.Json.JsonSerializer.SerializeToElement(compp.Describe("DspCompThresholdSlider"));
+Check(compDesc.GetProperty("min").GetDouble()==-60 && compDesc.GetProperty("max").GetDouble()==0 && compDesc.GetProperty("step").GetDouble()==0.5,"comp model owns threshold metadata");
+var compMixDesc=System.Text.Json.JsonSerializer.SerializeToElement(compp.Describe("DspCompMixSlider"));
+Check(compMixDesc.GetProperty("value").GetDouble()==0 && compMixDesc.GetProperty("max").GetDouble()==100 && compMixDesc.GetProperty("step").GetDouble()==1,"comp mix described in percent");
 Console.WriteLine($"PASS {checks} total EQ, delivery and parameter checks");
 sealed class RecordingOutput(List<string> calls, EqCurveState curve, DspExtraState extra, RoomCorrectionState room) : IDspParameterTarget
 {

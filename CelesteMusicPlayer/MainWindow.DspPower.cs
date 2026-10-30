@@ -134,13 +134,16 @@ namespace CelesteMusicPlayer
 
             // ⑥ 动态压缩器：镜像页内模块开关
             AddPower(DspPowerComp, DspPowerCompHint,
-                () => DspCompToggle != null && DspCompToggle.IsOn,
+                () => CompParameters.Current.Enabled,
                 on =>
                 {
-                    if (DspCompToggle != null)
+                    if (!SetModelControl("DspPowerComp", SwitchMessage(on)))
                     {
-                        DspCompToggle.IsOn = on;
+                        return;
                     }
+
+                    ProjectExtraParameters();
+                    ApplyCompParameters();
                 });
 
             // ⑦ 耳机 Crossfeed：它是「声道平衡」模块的子能力 —— ManagedDspSourceProvider.UpdateChannel

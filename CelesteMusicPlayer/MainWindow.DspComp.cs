@@ -186,9 +186,10 @@ namespace CelesteMusicPlayer
         /// </summary>
         private void UpdateDspCompInputMeter(double grDb)
         {
-            bool compOn = DspCompToggle != null && DspCompToggle.IsOn;
-            double makeup = DspCompMakeupSlider?.Value ?? 0.0;
-            double mix = (DspCompMixSlider?.Value ?? 100.0) / 100.0;
+            // 估算用的补偿/干湿比从参数模型取（不再回头读滑杆）。
+            bool compOn = CompParameters.Current.Enabled;
+            double makeup = CompParameters.Current.MakeupDb;
+            double mix = CompParameters.Current.Mix;
 
             double outLinear = 0.0;
             bool hasSignal = false;
@@ -449,12 +450,13 @@ namespace CelesteMusicPlayer
                     return;
                 }
 
-                double threshold = DspCompThresholdSlider.Value;
-                double ratio = DspCompRatioSlider.Value;
-                double knee = DspCompKneeSlider.Value;
-                double makeup = DspCompMakeupSlider.Value;
-                double mix = DspCompMixSlider.Value / 100.0;
-                bool enabled = DspCompToggle != null && DspCompToggle.IsOn;
+                // 曲线是参数的函数：参数从模型取，不再回头读滑杆（投影只是显示）。
+                double threshold = CompParameters.Current.ThresholdDb;
+                double ratio = CompParameters.Current.Ratio;
+                double knee = CompParameters.Current.KneeDb;
+                double makeup = CompParameters.Current.MakeupDb;
+                double mix = CompParameters.Current.Mix;
+                bool enabled = CompParameters.Current.Enabled;
 
                 double minDb = CompCurveMinDb, maxDb = CompCurveMaxDb;
                 double X(double db) => padL + (db - minDb) / (maxDb - minDb) * plotW;

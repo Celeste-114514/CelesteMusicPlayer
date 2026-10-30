@@ -14,24 +14,28 @@ public sealed partial class MainWindow
     private readonly DspExtraParameters ExtraParameters = new();
     private readonly DspRgParameters RgParameters = new();
     private readonly DspSrcParameters SrcParameters = new();
+    private readonly DspCompParameters CompParameters = new();
 
     /// <summary>Modules whose business values already live in a model instead of their controls.</summary>
     private IEnumerable<string> ProjectedControls => WebDspModuleControls["channel"]
         .Concat(WebDspModuleControls["headroom"]).Concat(WebDspModuleControls["rg"])
-        .Concat(WebDspModuleControls["src"]);
+        .Concat(WebDspModuleControls["src"]).Concat(WebDspModuleControls["comp"]);
 
     private bool ModelOwns(string name) =>
-        ExtraParameters.Owns(name) || RgParameters.Owns(name) || SrcParameters.Owns(name);
+        ExtraParameters.Owns(name) || RgParameters.Owns(name) || SrcParameters.Owns(name)
+        || CompParameters.Owns(name);
 
     private object DescribeModelControl(string name) =>
         ExtraParameters.Owns(name) ? ExtraParameters.Describe(name)
         : RgParameters.Owns(name) ? RgParameters.Describe(name)
-        : SrcParameters.Describe(name);
+        : SrcParameters.Owns(name) ? SrcParameters.Describe(name)
+        : CompParameters.Describe(name);
 
     private bool SetModelControl(string name, JsonElement message) =>
         ExtraParameters.Owns(name) ? ExtraParameters.Set(name, message)
         : RgParameters.Owns(name) ? RgParameters.Set(name, message)
-        : SrcParameters.Set(name, message);
+        : SrcParameters.Owns(name) ? SrcParameters.Set(name, message)
+        : CompParameters.Set(name, message);
 
     private static JsonElement SwitchMessage(bool value) => JsonSerializer.SerializeToElement(new { value });
 
