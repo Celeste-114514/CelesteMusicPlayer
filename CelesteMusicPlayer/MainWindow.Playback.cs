@@ -57,13 +57,8 @@ namespace CelesteMusicPlayer
             ? TimeSpan.Zero
             : TimeSpan.FromSeconds(_audioEngine.Duration.TotalSeconds * TempoScale());
 
-        private static readonly string[] AudioExtensions =
-        {
-            ".mp3", ".wav", ".m4a", ".flac", ".wma", ".ogg", ".aac",
-            ".ape", ".wv", ".tta", ".mpc", ".tak", ".opus",
-            ".dsf", ".dff",
-            ".mp2", ".amr", ".au", ".mod", ".s3m", ".xm"
-        };
+        /// <summary>受支持的音频扩展名：单一真相源在 LibraryFolderScan（这里只是给本文件的老调用点留个名字）。</summary>
+        private static readonly string[] AudioExtensions = LibraryFolderScan.AudioExtensions;
 
 
         [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW", CharSet = CharSet.Unicode)]
@@ -2691,7 +2686,7 @@ namespace CelesteMusicPlayer
             _ = System.Threading.Tasks.Task.Run(() =>
             {
                 string[] paths = isFolder
-                    ? EnumerateAudioFiles(loadedPath).ToArray()
+                    ? LibraryFolderScan.AudioFiles(loadedPath).ToArray()
                     : (System.IO.File.Exists(loadedPath) ? new[] { loadedPath } : Array.Empty<string>());
 
                 var songs = new List<PlaylistItem>();
@@ -2711,7 +2706,7 @@ namespace CelesteMusicPlayer
                 }
 
                 // 按专辑真实顺序（Disc → Track）排列，避免纯文件名字母序把第 1 首排到别处
-                songs = OrderAlbumTracks(songs);
+                songs = LibraryFolderScan.OrderAlbumTracks(songs);
 
                 for (int i = 0; i < songs.Count; i++)
                 {
@@ -3009,7 +3004,7 @@ namespace CelesteMusicPlayer
 
         private void PlayFolderAudio(string folderPath, bool replacePlaylist)
         {
-            List<string> paths = EnumerateAudioFilesRecursiveOrdered(folderPath);
+            List<string> paths = LibraryFolderScan.AudioFilesRecursiveOrdered(folderPath);
             List<PlaylistItem> tracks = GetOrImportTracksByPaths(paths);
             if (tracks.Count == 0)
             {
@@ -3018,7 +3013,7 @@ namespace CelesteMusicPlayer
 
             // 按专辑真实顺序播放：优先 Disc（碟号）→ Track（轨道号），
             // 无轨道号的曲目回退到标题排序并排在末尾（避免纯文件名字母序把第 1 首排到别处）。
-            tracks = OrderAlbumTracks(tracks);
+            tracks = LibraryFolderScan.OrderAlbumTracks(tracks);
 
             if (replacePlaylist)
             {
@@ -3033,30 +3028,6 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>
-        /// 按专辑真实顺序排序：有轨道号的按 Disc → Track；无轨道号（Track==0）回退到
-        /// 标题排序并统一排在末尾。这样多 CD 合辑也能按碟序连续播放。
-        /// </summary>
-        private static List<PlaylistItem> OrderAlbumTracks(List<PlaylistItem> tracks)
-        {
-            bool anyTrack = tracks.Any(t => t.Track > 0);
-            if (!anyTrack)
-            {
-                // 整组都没有轨道号：退回标题排序（比纯文件名字母序更接近用户预期）
-                return tracks
-                    .OrderBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
-                    .ToList();
-            }
-
-            return tracks
-                .OrderBy(t => t.Track == 0 ? 1 : 0)          // 有轨道号的在前
-                .ThenBy(t => t.Disc)                         // 碟号
-                .ThenBy(t => t.Track)                        // 轨道号
-                .ThenBy(t => t.Title, StringComparer.CurrentCultureIgnoreCase)
-                .ToList();
-        }
-
-
         private List<PlaylistItem> CollectTracksFromSelectedFolderItems(IEnumerable<FolderBrowserItem> items)
         {
             var paths = new List<string>();
@@ -3065,7 +3036,7 @@ namespace CelesteMusicPlayer
             {
                 if (item.IsFolder)
                 {
-                    foreach (string path in EnumerateAudioFilesRecursiveOrdered(item.FullPath))
+                    foreach (string path in LibraryFolderScan.AudioFilesRecursiveOrdered(item.FullPath))
                     {
                         if (seen.Add(path))
                         {
@@ -3079,7 +3050,7 @@ namespace CelesteMusicPlayer
                 }
             }
 
-            return OrderAlbumTracks(GetOrImportTracksByPaths(paths));
+            return LibraryFolderScan.OrderAlbumTracks(GetOrImportTracksByPaths(paths));
         }
 
 

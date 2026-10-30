@@ -91,7 +91,7 @@ namespace CelesteMusicPlayer
                     var list = new List<string>();
                     foreach (string root in roots)
                     {
-                        list.AddRange(FilterLibraryPaths(EnumerateAudioFiles(root)));
+                        list.AddRange(FilterLibraryPaths(LibraryFolderScan.AudioFiles(root)));
                     }
 
                     return list;
@@ -219,7 +219,7 @@ namespace CelesteMusicPlayer
                     && Directory.Exists(state.FolderPath))
                 {
                     string folderPath = state.FolderPath;
-                    paths = await Task.Run(() => EnumerateAudioFiles(folderPath).ToArray());
+                    paths = await Task.Run(() => LibraryFolderScan.AudioFiles(folderPath).ToArray());
                     if (paths.Length == 0)
                     {
                         await RestoreLastPlayingTrackAsync();
@@ -290,7 +290,7 @@ namespace CelesteMusicPlayer
                 _browseFolderPath = folderPath;
 
                 string[] paths = await System.Threading.Tasks.Task.Run(() =>
-                    EnumerateAudioFiles(folderPath).ToArray());
+                    LibraryFolderScan.AudioFiles(folderPath).ToArray());
 
                 LibrarySessionStore.SaveFolder(folderPath, paths);
                 if (_currentCategory == "Folders")
@@ -358,7 +358,7 @@ namespace CelesteMusicPlayer
                 {
                     string scanRoot = folderPath!;
                     _browseFolderPath = scanRoot;
-                    paths = await Task.Run(() => FilterLibraryPaths(EnumerateAudioFiles(scanRoot)));
+                    paths = await Task.Run(() => FilterLibraryPaths(LibraryFolderScan.AudioFiles(scanRoot)));
                     LibrarySessionStore.SaveFolder(scanRoot, paths);
                 }
                 else
@@ -762,67 +762,6 @@ namespace CelesteMusicPlayer
             catch (System.Exception ex)
             {
                 StartupLog.Write($"[library] 索引写回失败（不影响播放）：{ex.Message}");
-            }
-        }
-
-
-        /// <summary>递归枚举文件夹内所有音频路径</summary>
-        private static IEnumerable<string> EnumerateAudioFiles(string folderPath)
-        {
-            if (!Directory.Exists(folderPath))
-            {
-                yield break;
-            }
-
-            // 内部缓存目录（DSD DoP 缓存 / 转码缓存 / WebDAV 缓存）不是用户音乐，一律不扫
-            if (LibraryPathGuard.IsInternalCacheDir(folderPath))
-            {
-                yield break;
-            }
-
-            // 逐目录递归:某个受保护子目录(无权限)只跳过该目录,不影响其它文件
-            foreach (string path in EnumerateAudioFilesRecursive(folderPath))
-            {
-                yield return path;
-            }
-        }
-
-
-        private static IEnumerable<string> EnumerateAudioFilesRecursive(string folder)
-        {
-            string[] subDirs;
-            string[] files;
-            try
-            {
-                subDirs = Directory.GetDirectories(folder);
-                files = Directory.GetFiles(folder);
-            }
-            catch
-            {
-                yield break;
-            }
-
-            foreach (string path in files)
-            {
-                string ext = Path.GetExtension(path);
-                if (AudioExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase)
-                    && !LibraryPathGuard.IsLibraryExcludedFile(path))
-                {
-                    yield return path;
-                }
-            }
-
-            foreach (string sub in subDirs)
-            {
-                if (LibraryPathGuard.IsInternalCacheDir(sub))
-                {
-                    continue;
-                }
-
-                foreach (string path in EnumerateAudioFilesRecursive(sub))
-                {
-                    yield return path;
-                }
             }
         }
 
@@ -1326,7 +1265,7 @@ namespace CelesteMusicPlayer
             }
 
             // 把该文件夹的音频加入主库（枚举走后台线程，避免大盘文件夹卡 UI）
-            string[] paths = await System.Threading.Tasks.Task.Run(() => EnumerateAudioFiles(folderPath).ToArray());
+            string[] paths = await System.Threading.Tasks.Task.Run(() => LibraryFolderScan.AudioFiles(folderPath).ToArray());
             LoadAndAddFiles(paths, persist: false);
 
             if (isNew)
@@ -1511,78 +1450,17 @@ namespace CelesteMusicPlayer
         }
 
 
-        /// <summary>枚举一层：子文件夹 + 支持的音频文件（不递归）</summary>
+        /// <summary>枚举一层，转成界面用的节点（扫描逻辑在 LibraryFolderScan，这里只做类型映射）。</summary>
         private static List<FolderBrowserItem> EnumerateFolderChildren(string folderPath, int depth)
-        {
-            var result = new List<FolderBrowserItem>();
-            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
-            {
-                return result;
-            }
-
-            try
-            {
-                foreach (string dir in Directory.EnumerateDirectories(folderPath)
-                             .OrderBy(p => Path.GetFileName(p), StringComparer.CurrentCultureIgnoreCase))
+            => LibraryFolderScan.Children(folderPath, depth)
+                .Select(entry => new FolderBrowserItem
                 {
-                    string name = Path.GetFileName(dir);
-                    if (string.IsNullOrEmpty(name))
-                    {
-                        continue;
-                    }
-
-                    try
-                    {
-                        System.IO.FileAttributes attrs = System.IO.File.GetAttributes(dir);
-                        if ((attrs & System.IO.FileAttributes.Hidden) != 0 ||
-                            (attrs & System.IO.FileAttributes.System) != 0)
-                        {
-                            continue;
-                        }
-                    }
-                    catch
-                    {
-                        continue;
-                    }
-
-                    result.Add(new FolderBrowserItem
-                    {
-                        DisplayName = name,
-                        FullPath = dir,
-                        IsFolder = true,
-                        Depth = depth
-                    });
-                }
-            }
-            catch
-            {
-                // 无权限等：跳过子目录
-            }
-
-            try
-            {
-                foreach (string file in Directory.EnumerateFiles(folderPath)
-                             .OrderBy(p => Path.GetFileName(p), StringComparer.CurrentCultureIgnoreCase))
-                {
-                    string ext = Path.GetExtension(file);
-                    if (!AudioExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase))
-                    {
-                        continue;
-                    }
-
-                    result.Add(new FolderBrowserItem
-                    {
-                        DisplayName = Path.GetFileName(file),
-                        FullPath = file,
-                        IsFolder = false,
-                        Depth = depth
-                    });
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            return result;
-        }
+                    DisplayName = entry.DisplayName,
+                    FullPath = entry.FullPath,
+                    IsFolder = entry.IsFolder,
+                    Depth = entry.Depth
+                })
+                .ToList();
 
 
         private void FolderBrowserView_DoubleTapped(object sender, DoubleTappedRoutedEventArgs e)
@@ -1807,7 +1685,7 @@ namespace CelesteMusicPlayer
                     if (r == ContentDialogResult.Primary)
                     {
                         // 删除源文件（移到回收站）
-                        foreach (string p in EnumerateAudioFiles(folderRef.FullPath))
+                        foreach (string p in LibraryFolderScan.AudioFiles(folderRef.FullPath))
                         {
                             if (System.IO.File.Exists(p))
                             {
@@ -1933,69 +1811,6 @@ namespace CelesteMusicPlayer
             {
                 flyout.ShowAt(FolderBrowserView, e.GetPosition(FolderBrowserView));
             }
-        }
-
-
-        /// <summary>深度优先：子文件夹顺序与界面一致，文件夹内音频按文件名排序。</summary>
-        private static List<string> EnumerateAudioFilesRecursiveOrdered(string folderPath)
-        {
-            var result = new List<string>();
-            CollectAudioFilesRecursiveOrdered(folderPath, result);
-            return result;
-        }
-
-
-        private static void CollectAudioFilesRecursiveOrdered(string folderPath, List<string> sink)
-        {
-            if (string.IsNullOrWhiteSpace(folderPath) || !Directory.Exists(folderPath))
-            {
-                return;
-            }
-
-            // 内部缓存目录（DSD DoP 缓存 / 转码缓存 / WebDAV 缓存）不是用户音乐，一律跳过
-            if (LibraryPathGuard.IsInternalCacheDir(folderPath))
-            {
-                return;
-            }
-
-            try
-            {
-                foreach (string dir in Directory.EnumerateDirectories(folderPath)
-                             .OrderBy(p => Path.GetFileName(p), StringComparer.CurrentCultureIgnoreCase))
-                {
-                    try
-                    {
-                        System.IO.FileAttributes attrs = System.IO.File.GetAttributes(dir);
-                        if ((attrs & System.IO.FileAttributes.Hidden) != 0 ||
-                            (attrs & System.IO.FileAttributes.System) != 0)
-                        {
-                            continue;
-                        }
-                    }
-                    catch
-                    {
-                        continue;
-                    }
-
-                    CollectAudioFilesRecursiveOrdered(dir, sink);
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
-
-            try
-            {
-                foreach (string file in Directory.EnumerateFiles(folderPath)
-                             .OrderBy(p => Path.GetFileName(p), StringComparer.CurrentCultureIgnoreCase))
-                {
-                    string ext = Path.GetExtension(file);
-                    if (AudioExtensions.Contains(ext, StringComparer.OrdinalIgnoreCase)
-                        && !LibraryPathGuard.IsLibraryExcludedFile(file))
-                    {
-                        sink.Add(file);
-                    }
-                }
-            }
-            catch (Exception caught) { global::CelesteMusicPlayer.StartupLog.WriteException("MainWindow.xaml.cs", caught); }
         }
 
 

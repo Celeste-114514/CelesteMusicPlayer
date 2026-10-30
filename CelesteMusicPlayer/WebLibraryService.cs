@@ -21,7 +21,7 @@ namespace CelesteMusicPlayer
         // ---- 文件夹浏览的节点登记簿 -------------------------------------------------
         // 网页只能拿 id 说话（路径不能塞进 url），所以浏览时把节点记下来，回包只给 id。
         // 每次 roots 刷新就整批作废（epoch +1），避免旧 id 指向已经变了的目录。
-        private readonly Dictionary<string, FolderBrowserItem> _nodes = new(StringComparer.Ordinal);
+        private readonly Dictionary<string, FolderScanEntry> _nodes = new(StringComparer.Ordinal);
         private readonly Dictionary<string, PlaylistItem> _folderTracks = new(StringComparer.Ordinal);
 
         /// <summary>节点登记簿的纪元。刷新 roots 时 +1，旧回包据此拒绝执行。</summary>
@@ -34,14 +34,14 @@ namespace CelesteMusicPlayer
             Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(Path.GetFullPath(path).ToUpperInvariant()))).ToLowerInvariant();
 
         /// <summary>把节点记进登记簿，返回网页认识的形状。</summary>
-        internal object RegisterNode(FolderBrowserItem item)
+        internal object RegisterNode(FolderScanEntry item)
         {
             string id = FolderId(item.FullPath);
             _nodes[id] = item;
             return new { id, name = item.DisplayName, path = item.FullPath, folder = item.IsFolder };
         }
 
-        internal bool TryGetNode(string id, out FolderBrowserItem node) => _nodes.TryGetValue(id, out node!);
+        internal bool TryGetNode(string id, out FolderScanEntry node) => _nodes.TryGetValue(id, out node);
 
         /// <summary>roots 刷新：整批作废旧节点与旧曲目。</summary>
         internal void ResetNodes()
