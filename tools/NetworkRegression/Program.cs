@@ -135,18 +135,47 @@ try
     Check(NetworkLibraryService.Job(web.Id).Phase == "cancelled" && NetworkLibraryStore.Tracks(web.Id).Count(t => t.Indexed && !t.Missing) == indexed, "Cancel preserves old index");
     var parsed = CueSourceParser.Parse("FILE \"one.wav\" WAVE\nTRACK 01 AUDIO\nINDEX 01 00:00:00\nFILE \"two.wav\" WAVE\nTRACK 02 AUDIO\nINDEX 01 00:00:00");
     Check(parsed.Length == 2 && parsed[0].File != parsed[1].File, "Multiple FILE CUE");
-    var bridge = new MainWindow();
-    var dto = JsonSerializer.SerializeToElement(await bridge.WebSourcesAsync(JsonSerializer.SerializeToElement(new { operation = "list" })));
-    var firstSource = dto.GetProperty("sources")[0];
-    Check(firstSource.GetProperty("job").TryGetProperty("running", out _), "Browser progress schema uses camel-case fields");
-    Check(!dto.ToString().Contains("ProtectedSecret") && !dto.ToString().Contains(protectedSecret), "No stored credentials in browser snapshots");
-    Check(bridge.WebAllTracks().Any(item => item.SourceId.Length > 0 && item.PersistenceKey != item.FilePath), "Unified snapshot separates identity from cache path");
-    try
+    // sources 命令（list/save/revision 冲突/凭据不外泄/统一快照）的线上回包校验
+    // 已由 tools/W13SourcesWireProbe.cjs 对真 exe 负责（命令本体在 WebSourcesService，
+    // 本工程的桩空壳测不到它 —— 别在这里伪造 schema 再自证）。
+    // —— WebDAV 浏览纯规则（2026-10-30 从 MainWindow.WebDav.cs 抽出）——
+    Check(WebDavBrowseRules.CombineRemotePath("", "a/b") == "a/b", "root parent joins bare");
+    Check(WebDavBrowseRules.CombineRemotePath("music", "music/sub/song.flac") == "music/sub/song.flac", "server full path not double-joined");
+    Check(WebDavBrowseRules.CombineRemotePath("/music/", "/sub") == "music/sub", "slashes trimmed both sides");
+    Check(WebDavBrowseRules.GetRemoteParent("a/b/c.flac") == "a/b", "parent of nested");
+    Check(WebDavBrowseRules.GetRemoteParent("top.flac") == "" && WebDavBrowseRules.GetRemoteParent("") == "", "parent of root is empty");
+
+    var davSettings = new AppSettingsState { WebDavUrl = "http://127.0.0.1/dav", WebDavDisplayName = "规则测试" };
+    WebDavLocation davLoc = WebDavLocation.FromSettings(davSettings);
+    Check(davLoc.IsConfigured, "dav location configured from stub settings");
+
+    string davRoot = WebDavCache.GetRoot(davLoc);
+    WebDavEntry[] davEntries =
     {
-        await bridge.WebSourcesAsync(JsonSerializer.SerializeToElement(new { operation = "save", sourceId = web.Id, revision = -1, provider = "webdav", name = "wrong", endpoint }));
-        throw new Exception("Stale edit accepted");
-    }
-    catch (InvalidOperationException) { }
+        new() { Name = "钢琴曲.flac", RelativePath = "钢琴曲.flac", IsFolder = false, Size = 12345678 },
+        new() { Name = "cover.jpg", RelativePath = "cover.jpg", IsFolder = false, Size = 99 },
+        new() { Name = "子目录", RelativePath = "子目录", IsFolder = true },
+        new() { Name = "第二首.mp3", RelativePath = "第二首.mp3", IsFolder = false, Size = 0 }
+    };
+    string[] davAudio = { ".mp3", ".flac", ".m4a", ".ogg" };
+    List<PlaylistItem> songs = WebDavBrowseRules.BuildSongList(davLoc, davEntries, "", davAudio,
+        file => new PlaylistItem { FilePath = file, Title = "标签:" + Path.GetFileNameWithoutExtension(file) });
+    Check(songs.Count == 2, "folders and non-audio filtered");
+    Check(songs[0].Title == "钢琴曲" && songs[0].Artist == "网络音乐库" && songs[0].Album == "规则测试", "uncached item shape");
+    Check(songs[0].RemoteHint == WebDavCache.FormatSize(12345678), "size hint formatted");
+    Check(songs[1].RemoteHint == "未缓存" && songs[1].RemotePath == "第二首.mp3", "zero-size hint falls back to uncached");
+
+    // 缓存命中（读本地标签）与坏缓存回退（半截下载 → 当未缓存）
+    string cachedPath = WebDavCache.GetCachePath(davLoc, "钢琴曲.flac");
+    Directory.CreateDirectory(Path.GetDirectoryName(cachedPath)!);
+    File.WriteAllText(cachedPath, "这不是音频文件");
+    List<PlaylistItem> broken = WebDavBrowseRules.BuildSongList(davLoc, davEntries, "", davAudio,
+        file => throw new InvalidDataException("坏缓存也要能走到"));
+    Check(broken[0].Title == "钢琴曲" && broken[0].RemoteHint == WebDavCache.FormatSize(12345678), "corrupt cache falls back to uncached shape");
+    File.Delete(cachedPath);
+
+    Check(WebDavBrowseRules.DescribeFailure(new WebDavException("连不上", "超时")) == "连不上：超时", "dav failure headline");
+    Check(WebDavBrowseRules.DescribeFailure(new AggregateException(new WebDavException("包装", "内层"))) == "包装：内层", "aggregate unwrapped");
     Console.WriteLine("PASS scan failure / cancellation / multi-FILE / encrypted persistence; all seven providers covered by local fixtures (not real account certification)");
 }
 finally { listener.Stop(); await serving; }
@@ -183,7 +212,22 @@ namespace CelesteMusicPlayer
         public string WebDavUrl = "", WebDavDisplayName = "", WebDavUser = "", WebDavPassword = "", WebDavProxyMode = "System", WebDavProxyHost = "";
         public int WebDavProxyPort = 7890;
         public int WebDavCacheLimitMb = 4096;
+        public string WebDavCacheDir = "";
         public bool AutoApplyCueOnScan = true;
     }
-    internal static class StartupLog { internal static void WriteException(string name, Exception ex) => Console.Error.WriteLine(name + ": " + ex.Message); }
+    internal static class StartupLog { internal static void WriteException(string name, Exception ex) => Console.Error.WriteLine(name + ": " + ex.Message);
+        internal static void Write(string text) { } }
+    // W13 搬动后的桩：MainWindow.WebSources.cs 现在把配置/浏览/同步转发给 WebSourcesService，
+    // 起播/下载留在这里 —— 本工程只测纯逻辑，服务与宿主接口给空壳。
+    internal interface ISourcePlaybackHost { void CancelSourceDownload(); }
+    internal sealed class WebSourcesService
+    {
+        public WebSourcesService(object host) { }
+        internal Task<object> HandleAsync(System.Text.Json.JsonElement msg) => Task.FromResult<object>(new { });
+    }
+    // TrackReference 只为让 MainWindow.WebSources.cs 编过；FromNetwork 的真身在 WebLibraryService（拖旧界面模型，不进桩台）。
+    internal static class WebLibraryService
+    {
+        internal static PlaylistItem? FromNetwork(NetworkTrack track, NetworkSource? source = null) => null;
+    }
 }

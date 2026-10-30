@@ -6,6 +6,10 @@
     <Compile Include="../../CelesteMusicPlayer/BaiduSourceProvider.cs" Link="Production/BaiduSourceProvider.cs" />
     <Compile Include="../../CelesteMusicPlayer/WebDavClient.cs" Link="Production/WebDavClient.cs" />
     <Compile Include="../../CelesteMusicPlayer/WebDavLocation.cs" Link="Production/WebDavLocation.cs" />
+    <Compile Include="../../CelesteMusicPlayer/WebDavCache.cs" Link="Production/WebDavCache.cs" />
+    <Compile Include="../../CelesteMusicPlayer/WebDavBrowseRules.cs" Link="Production/WebDavBrowseRules.cs" />
+    <Compile Include="../../CelesteMusicPlayer/AppCachePaths.cs" Link="Production/AppCachePaths.cs" />
+    <Compile Include="../../CelesteMusicPlayer/TrackReference.cs" Link="Production/TrackReference.cs" />
     <Compile Include="../../CelesteMusicPlayer/MainWindow.WebSources.cs" Link="Production/MainWindow.WebSources.cs" />
     <PackageReference Include="Microsoft.Data.Sqlite" Version="10.0.11" />
     <PackageReference Include="System.Security.Cryptography.ProtectedData" Version="8.0.0" />

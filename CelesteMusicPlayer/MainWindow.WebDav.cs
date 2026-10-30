@@ -31,25 +31,10 @@ namespace CelesteMusicPlayer
             return loc.IsConfigured ? loc : null;
         }
 
-        /// <summary>拼出「相对服务器根目录」的完整路径（WebDavEntry.RelativePath 只是相对当前目录的一段）。</summary>
-        private static string CombineRemotePath(string parent, string child)
-        {
-            string p = (parent ?? string.Empty).Trim('/');
-            string c = (child ?? string.Empty).Trim('/');
-            if (c.StartsWith(p + "/", StringComparison.Ordinal) && !string.IsNullOrEmpty(p))
-            {
-                return c; // 服务器已经返回了完整路径，别重复拼
-            }
-
-            return string.IsNullOrEmpty(p) ? c : p + "/" + c;
-        }
-
-        private static string GetRemoteParent(string path)
-        {
-            string p = (path ?? string.Empty).Trim('/');
-            int slash = p.LastIndexOf('/');
-            return slash < 0 ? string.Empty : p.Substring(0, slash);
-        }
+        // 路径数学与失败翻译在 WebDavBrowseRules（纯函数，NetworkRegression 有用例）。
+        private static string CombineRemotePath(string parent, string child) => WebDavBrowseRules.CombineRemotePath(parent, child);
+        private static string GetRemoteParent(string path) => WebDavBrowseRules.GetRemoteParent(path);
+        private static string DescribeWebDavFailure(Exception ex) => WebDavBrowseRules.DescribeFailure(ex);
 
         // =====================================================================
         // 左侧条目
@@ -307,32 +292,7 @@ namespace CelesteMusicPlayer
                 {
                     using WebDavClient client = loc.CreateClient();
                     IReadOnlyList<WebDavEntry> entries = await client.ListAsync(folderPath);
-
-                    var list = new List<PlaylistItem>();
-                    foreach (WebDavEntry e in entries)
-                    {
-                        if (e.IsFolder)
-                        {
-                            continue;
-                        }
-
-                        if (!AudioExtensions.Contains(Path.GetExtension(e.Name), StringComparer.OrdinalIgnoreCase))
-                        {
-                            continue;
-                        }
-
-                        string rel = CombineRemotePath(folderPath, e.RelativePath);
-                        list.Add(CreateRemotePlaylistItem(loc, new WebDavEntry
-                        {
-                            Name = e.Name,
-                            RelativePath = rel,
-                            IsFolder = false,
-                            Size = e.Size,
-                            ModifiedUtc = e.ModifiedUtc
-                        }, folderPath));
-                    }
-
-                    return list;
+                    return WebDavBrowseRules.BuildSongList(loc, entries, folderPath, AudioExtensions, CreatePlaylistItemFromPath);
                 });
 
                 for (int i = 0; i < songs.Count; i++)
@@ -353,43 +313,6 @@ namespace CelesteMusicPlayer
                 MediaDetailsEmptyHint.Text = "读取失败：" + DescribeWebDavFailure(caught);
                 MediaDetailsEmptyHint.Visibility = Visibility.Visible;
             }
-        }
-
-        /// <summary>
-        /// 造一个网络曲目条目。已经缓存过的直接读本地标签（曲目信息、时长都是真的）；
-        /// 没缓存的只显示文件名和大小 —— 不为了显示时长去下一整首歌。
-        /// </summary>
-        private static PlaylistItem CreateRemotePlaylistItem(WebDavLocation loc, WebDavEntry entry, string folderPath)
-        {
-            string localPath = WebDavCache.GetCachePath(loc, entry.RelativePath);
-
-            if (WebDavCache.IsCached(loc, entry, out string cached))
-            {
-                try
-                {
-                    PlaylistItem tagged = CreatePlaylistItemFromPath(cached);
-                    tagged.RemotePath = entry.RelativePath;
-                    tagged.RemoteHint = "已缓存";
-                    return tagged;
-                }
-                catch (Exception caught)
-                {
-                    // 缓存文件坏了（上次没下完等）：当作未缓存处理，下面走通用分支。
-                    StartupLog.WriteException("MainWindow.WebDav.cs", caught);
-                }
-            }
-
-            return new PlaylistItem
-            {
-                Title = Path.GetFileNameWithoutExtension(entry.Name),
-                Artist = "网络音乐库",
-                Album = string.IsNullOrWhiteSpace(folderPath)
-                    ? loc.LibraryName
-                    : Path.GetFileName(folderPath.TrimEnd('/')),
-                FilePath = localPath,
-                RemotePath = entry.RelativePath,
-                RemoteHint = entry.Size > 0 ? WebDavCache.FormatSize(entry.Size) : "未缓存"
-            };
         }
 
         // =====================================================================
@@ -454,20 +377,5 @@ namespace CelesteMusicPlayer
             }
         }
 
-        /// <summary>把 WebDAV 异常翻译成一句人话。</summary>
-        private static string DescribeWebDavFailure(Exception ex)
-        {
-            if (ex is WebDavException webDav)
-            {
-                return webDav.Headline + "：" + webDav.Message;
-            }
-
-            if (ex is AggregateException agg && agg.InnerException != null)
-            {
-                return DescribeWebDavFailure(agg.InnerException);
-            }
-
-            return ex.Message;
-        }
     }
 }
