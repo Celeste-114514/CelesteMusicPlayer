@@ -124,3 +124,17 @@
 24 条检查全过。
 
 价值：以前「随机会不会连播同一首」「末尾会不会越界」只能靠真放歌碰运气，现在编译期穷举。
+
+## 2026-10-30 第十块：播放会话盘点 + AppSDK 残留清理
+
+**盘点**（不写代码）：`collab/PLAN-2026-10-30-w13-playback-session.md`。
+核心结论：`AudioPlaybackEngine`（888 行）本身干净、零 UI；脏的是 `PlayExtendedWithEngineAsync`
+（147 行）里"物理起播"和"界面文案"混在一个方法里。文档给出了状态三分表（引擎态 / 会话态 / 界面残留）、
+接口草案（`StartAsync` 返回 `PlaybackStartResult`，宿主只要三条口子）、三刀计划与每刀的验证四关。
+⚠ 现有 `PlaybackSession.cs`（84 行）是零散窗用的精简会话，**不是**正式会话，别改名了事。
+
+**AppSDK 残留清理**：`deps.json` 里早已一处 `Microsoft.UI` 都没有，但 publish 目录从不清空，
+18 个 `Microsoft.UI.*`（含整个 `Microsoft.ui.xaml.dll` 运行时）一直躺在产物里并被同步进交付目录。
+移走实测：接口回归全过、真实起播照旧出声（`HiFi播放 … ok=True` + `[journal] 起播记录`）→ 确认是死重量。
+新增 `_strip_appsdk_residue.py`（默认只报告，`--apply` 才移到备份；deps.json 一旦再依赖 AppSDK 会拒绝执行）。
+publish 与 `dist/web-ui-20261028` 均已清理，交付目录 1135 → 1116 个文件。
