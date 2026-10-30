@@ -26,6 +26,7 @@
 | `c00d59d` | `HotkeysService` | 全局热键读写、校验、恢复默认 | 1 个回调（重启注册） | 回包四字段 + 11 条默认绑定 |
 | `e399b65` | `WebSettingsService` + `ISettingsHost` | 设置域剩余 12 个操作（`patch`/`credentials`/`webdav`/`folders`/三个选择器/`export`/`import`/`miniStyles`/`reset`） | `ISettingsHost`（4） | 新增设置域探针，12 项检查全过 |
 | `ae8c1ac` | `WebLibraryBrowseService` | 曲库浏览面：`browse`（列表/播放列表/收藏评分）+ 集合详情音质统计 | 无（只接曲库快照） | 回包**逐字段完全一致**（4041 曲目 + 6 组详情） |
+| `3ae096a` | `WebPlaylistMediaService` + `PortablePlaylistFormat` + `TrackReference` | 播放列表封面/导入导出/复制/选目标列表；混合播放列表格式抽成纯函数 | 无 | **17 条纯函数用例** + 浏览面回包一致 |
 
 顺带修了两个既有缺陷：
 
@@ -53,6 +54,7 @@
 | `PlaybackOrderRegression/` | 顺序解析器用例（24 条 + 边界扫描） |
 | `W13SettingsOpsProbe.cjs` | 设置域逐操作探针：`get`/`patch`（含冲突分支）/`reset`（改写→重置→还原）/`folders`/`webdav`/`credentials`/`hotkeys`/`miniStyles` + 5 条拒绝路径 |
 | `W13BrowseWireProbe.cjs` | 曲库浏览面回包采集：`browse(get)` + 三类集合详情 + 5 条拒绝路径，输出 JSON 用于**搬动前后逐字段比对** |
+| `PlaylistFormatRegression/` | 混合播放列表格式用例（17 条）：往返、中文、引用重映射、版本/编号拒绝、空文档、**导出不得含密码令牌** |
 
 跑法：`NODE_PATH=C:\Users\MSI\_pwtmp\node_modules node tools/W13InterfaceRegression.cjs [exe]`
 设置域：`NODE_PATH=C:\Users\MSI\_pwtmp\node_modules node tools/W13SettingsOpsProbe.cjs [exe]`
@@ -69,6 +71,8 @@
 6. **设置域的 5 个对话框操作没跑过**：`pickFolder` / `pickFile` / `pickLyricFont` / `export` / `import`
    都要弹原生选择器，脚本没有入口（项目禁 UIA 点击冒烟），只证明代码原样搬动 + 编译通过。
    其中 `export`/`import` 还会覆盖整份设置，属于必须人手点一次的项。
+7. **播放列表的封面 / 导入 / 导出成功路径**（`3ae096a`）同样要弹对话框：格式逻辑有 17 条用例兜底，
+   但「点选文件 → 写盘」这一段没有任何自动证据。
 
 ## 五、踩过的坑（已写进项目记忆）
 
@@ -86,7 +90,7 @@
    | 域 | 文件（行） | 卡点 | 可否自动验 |
    |---|---|---|---|
    | 在线来源 | `WebSources`(167) | `cancelDownload` 要摸引擎的取消令牌；`authorize` 要拉起浏览器 | 部分（`list`/拒绝路径可验） |
-   | 曲目动作 | `WebBrowseActions`(256) | 入队/下一首会动队列与播放 | 可（队列回包比对，不能出声） |
+   | 曲目动作 | `WebBrowseActions`(206) | 媒体部分已切走（`3ae096a`）；剩下入队/播放/删除/队列改序要动引擎与列表控件 | 部分（队列回包可比对） |
    | 目录浏览 | `WebFolders`(91) | 扫描 + 播放 + 目录监视 | 部分（本机 0 监视目录，走不到主分支） |
    | 标签 | `WebTags`(340) + `WebTagTools`(429) | 写真库、可能改文件 | 可但**有破坏性**，要先备份库 |
    | 网络库 | `WebDav`(473) | 网络凭据 + 缓存 | 本机没配服务器，只验拒绝分支 |
