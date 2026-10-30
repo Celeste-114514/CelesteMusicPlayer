@@ -1,4 +1,4 @@
-using CelesteMusicPlayer;
+﻿using CelesteMusicPlayer;
 int checks = 0;
 void Check(bool value, string name) { if (!value) throw new Exception(name); checks++; }
 DateTime now = new(2026, 1, 1);
@@ -33,3 +33,25 @@ var before=state.Current;
 Check(state.ToggleAb(true)==EqAbTransition.Cancelled && !state.AbArmed && !state.ShowingA && !state.Previewing && ReferenceEquals(before,state.Current), "cancel retains current");
 Check(state.ToggleAb(true)==EqAbTransition.Armed, "cancel flag without armed reference arms");
 Console.WriteLine($"PASS {checks} EQ editing checks");
+
+var calls = new List<string>();
+var curve = EqCurveState.Default();
+var extra = new DspExtraState();
+var room = new RoomCorrectionState();
+var apply = new DspApplyService(c => { Check(ReferenceEquals(c, curve), "persist selected curve"); calls.Add("saveEq"); },
+    e => { Check(ReferenceEquals(e,extra), "persist explicit extra"); calls.Add("saveExtra"); }, () => {calls.Add("loadRoom");return room;});
+var output = new RecordingOutput(calls,curve,extra,room);
+apply.Apply(curve,false,extra,output);
+Check(string.Join(",", calls)=="saveEq,saveExtra,eq,channel,safety,loadRoom,room", "persist then output order");
+calls.Clear();apply.Apply(curve,true,extra,output);
+Check(string.Join(",", calls)=="saveExtra,eq,channel,safety,loadRoom,room", "preview skips EQ save only");
+calls.Clear();apply.Apply(curve,false,extra,null);
+Check(string.Join(",",calls)=="saveEq,saveExtra", "stopped saves without loading room");
+Console.WriteLine($"PASS {checks} total editing and DSP application checks");
+sealed class RecordingOutput(List<string> calls, EqCurveState curve, DspExtraState extra, RoomCorrectionState room) : IDspParameterTarget
+{
+ public void SetEqCurve(EqCurveState? c){if(!ReferenceEquals(c,curve))throw new Exception("eq");calls.Add("eq");}
+ public void SetChannelBalance(ChannelBalanceState? c){if(!ReferenceEquals(c,extra.ChannelBalance))throw new Exception("channel");calls.Add("channel");}
+ public void SetSafety(DspSafetyState? c){if(!ReferenceEquals(c,extra.Safety))throw new Exception("safety");calls.Add("safety");}
+ public void SetRoomCorrection(RoomCorrectionState? c){if(!ReferenceEquals(c,room))throw new Exception("room");calls.Add("room");}
+}

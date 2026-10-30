@@ -12,7 +12,7 @@ namespace CelesteMusicPlayer
     /// 2026-09-24：移除阶段 1 的 AudioGraph 旧输出路径（IsHiFiMode 恒 true 后该路径本就不可达，
     /// 仅存「音频引擎预览」后门，随 PreviewWithEngineAsync 一并删除）。
     /// </summary>
-    public sealed class AudioPlaybackEngine : IDisposable
+    public sealed class AudioPlaybackEngine : IDisposable, IDspParameterTarget
     {
         private bool _isPlaying;
         private bool _disposed;

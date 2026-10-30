@@ -151,3 +151,11 @@ publish 与 `dist/web-ui-20261028` 均已清理，交付目录 1135 → 1116 个
 
 探针踩坑（已写进记忆）：网页侧曲库镜像的路径字段是 **`sortPath`**，不是 `filePath`；
 库里实际有 **20 首 DSD**。按 `filePath` 找会得到 0 条并误判"库里没有 DSD"。
+
+## 2026-10-30 Codex 接手：EQ 状态与 DSP 下发两刀
+
+已校正独立窗口阻碍的判断：旧设置/迷你/零散/队列窗口代码已被 Compile Remove。按实际 Compile 清单，当前 MainWindow partial 为 91 个/47308 行；原文件统计需纠正，引用计数不能证明可达性。
+
+EqEditSession 接管曲线、撤销/重做、400ms 合并/40 条历史及 A/B 状态（b3cbb8a）；DspApplyService 接管显式参数的持久化和引擎下发。25 项回归、迁移前后真实 DSP 回包逐字段比对、接口冷启动/重载、实际起播及自动续播通过。日常目录已同步，回退 DLL/PDB：dist/web-ui-20261028-pre-w13-eq-20261030。
+
+整体 W13 继续进行：控件采集尚在 MainWindow，下步迁 WebDsp 声道/安全参数至统一参数模型，再分模块去控件依赖。详情 RESULT-2026-10-30-w13-eq-edit-session.md 与 RESULT-2026-10-30-w13-dsp-apply.md。不要把这两刀称为 W13 全部完成。

@@ -1877,13 +1877,6 @@ namespace CelesteMusicPlayer
                 return;
             }
 
-            // DSP 面板 EQ：曲线状态持久化 + 应用到引擎（HiFi 输出，各输出模式均走统一 DSP 链）
-            // A/B 试听 A 期间不落盘（只让引擎走预览曲线），切回 B / 撤销时再持久化
-            if (!EqState.Previewing)
-            {
-                EqCurveStore.Save(EqState.Current);
-            }
-
             // 诊断：记录触发保存的调用来源，便于定位“关闭后又变回打开”是被谁触发的。
             string trigger = "";
             try
@@ -1931,13 +1924,9 @@ namespace CelesteMusicPlayer
                 EnableLimiter = AudioFxSafetyLimiterToggle.IsOn
             };
 
-            DspExtraStore.Save(new DspExtraState { ChannelBalance = ch, Safety = safety });
+            DspApply.Apply(EqState.Current, EqState.Previewing,
+                new DspExtraState { ChannelBalance = ch, Safety = safety }, _audioEngine);
             StartupLog.Write($"[DSP] 已保存 eq(Enabled={EqState.Current.Enabled},bands={EqState.Current.Bands.Count}) ch(Enabled={ch.Enabled}) limiter={safety.EnableLimiter}  触发={trigger}");
-
-            _audioEngine?.SetEqCurve(EqState.Current);
-            _audioEngine?.SetChannelBalance(ch);
-            _audioEngine?.SetSafety(safety);
-            _audioEngine?.SetRoomCorrection(RoomCorrectionStore.Load());
 
             UpdateDspBitPerfectUi();
             // 任何 DSP 改动都同步刷新左侧导航圆点 / 模块页徽章 / 左右偏差条
